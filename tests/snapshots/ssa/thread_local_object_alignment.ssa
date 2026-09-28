@@ -107,11 +107,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v77  TlsAddr(16)                                      -> x1
     v78  Load { addr=v53, disp=0, kind=I8 }               -> x1
     v79  Binop { op=add, lhs=v76, rhs=v78 }               -> x0
-    v80  Extend { value=v79, kind=I32 }                   -> x1
+    v80  Extend { value=v79, kind=I32, nsw }              -> x1
     v81  TlsAddr(48)                                      -> x1
     v82  Load { addr=v55, disp=0, kind=I8 }               -> x1
     v83  Binop { op=add, lhs=v79, rhs=v82 }               -> x0
-    v84  Extend { value=v83, kind=I32 }                   -> x1
+    v84  Extend { value=v83, kind=I32, nsw }              -> x1
     v85  BinopI { op=ne, lhs=v83, rhs_imm=6 }             -> x0
     terminator Bz { cond=v85, target=b14, fall=b13 }   (exit_acc=v85)
   block 13  start_pc=0
@@ -240,15 +240,15 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v86  TlsAddr(8)                                       -> x1
     v87  Load { addr=v86, disp=0, kind=I8 }               -> x1
     v88  Binop { op=add, lhs=v85, rhs=v87 }               -> x0
-    v89  Extend { value=v88, kind=I32 }                   -> x1
+    v89  Extend { value=v88, kind=I32, nsw }              -> x1
     v90  TlsAddr(16)                                      -> x1
     v91  Load { addr=v57, disp=0, kind=I8 }               -> x1
     v92  Binop { op=add, lhs=v88, rhs=v91 }               -> x0
-    v93  Extend { value=v92, kind=I32 }                   -> x1
+    v93  Extend { value=v92, kind=I32, nsw }              -> x1
     v94  TlsAddr(48)                                      -> x1
     v95  Load { addr=v59, disp=0, kind=I8 }               -> x1
     v96  Binop { op=add, lhs=v92, rhs=v95 }               -> x0
-    v97  Extend { value=v96, kind=I32 }                   -> x1
+    v97  Extend { value=v96, kind=I32, nsw }              -> x1
     v98  BinopI { op=ne, lhs=v96, rhs_imm=10 }            -> x0
     terminator Bz { cond=v98, target=b15, fall=b14 }   (exit_acc=v98)
   block 14  start_pc=0

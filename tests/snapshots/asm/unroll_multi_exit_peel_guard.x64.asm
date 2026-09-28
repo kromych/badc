@@ -26,48 +26,8 @@ Disassembly of section .text:
                	int3
 
 <tier_idx>:
-               	xorl	%eax, %eax
-               	movq	%rax, %rcx
-               	incq	%rcx
-               	movl	$0x1, %eax
-               	testl	%eax, %eax
-               	jle	<addr>
-               	movq	%rcx, %rsi
-               	shlq	%rsi
-               	movl	$0x1, %eax
-               	xorl	%ecx, %ecx
-               	movq	%rax, %rdx
-               	addq	$0xa, %rcx
-               	movl	$0x2, %edx
-               	cmpl	$0x1, %edx
-               	jle	<addr>
-               	leaq	(%rcx,%rcx,2), %rcx
-               	cmpq	%rsi, %rcx
-               	jg	<addr>
-               	decq	%rax
-               	retq
-               	movl	$0x2, %eax
-               	xorl	%ecx, %ecx
-               	movq	%rax, %rdx
-               	addq	$0x64, %rcx
-               	movl	$0x3, %edx
-               	cmpl	$0x2, %edx
-               	jle	<addr>
-               	leaq	(%rcx,%rcx,2), %rcx
-               	cmpq	%rsi, %rcx
-               	jle	<addr>
                	movl	$0x3, %eax
-               	xorl	%ecx, %ecx
-               	movq	%rax, %rdx
-               	addq	$0x3e8, %rcx            # imm = 0x3E8
-               	movl	$0x4, %edx
-               	cmpl	$0x3, %edx
-               	jle	<addr>
-               	leaq	(%rcx,%rcx,2), %rcx
-               	cmpq	%rsi, %rcx
-               	jle	<addr>
-               	movl	$0x4, %eax
-               	jmp	<addr>
+               	retq
 
 <tier_span>:
                	xorl	%eax, %eax

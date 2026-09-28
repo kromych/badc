@@ -33,10 +33,10 @@ Disassembly of section .text:
                	leaq	-0x90(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	testl	%eax, %eax
+               	movq	%rax, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	leaq	<rip>, %rdi
-               	movslq	%eax, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax

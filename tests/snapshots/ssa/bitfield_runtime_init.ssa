@@ -112,6 +112,7 @@ fn ent_pc=0 n_params=4 variadic=false locals=0
     v94  Phi { incoming=[b7:v67, b5:v91], kind=I64 }      -> x0
     v95  Imm(0)                                           -> x1
     v96  Extend { value=v94, kind=I32 }                   -> x1
+    v97  LifetimeEnd(0)                                   -> -
     terminator Return(v94)   (exit_acc=v94)
   block 7  start_pc=0
     terminator Jmp(b6)
@@ -246,6 +247,7 @@ fn ent_pc=1 n_params=5 variadic=false locals=2
     v103 Phi { incoming=[b9:v79, b7:v100], kind=I64 }     -> x0
     v104 Imm(0)                                           -> x1
     v105 Extend { value=v103, kind=I32 }                  -> x1
+    v106 LifetimeEnd(-2)                                  -> -
     terminator Return(v103)   (exit_acc=v103)
   block 9  start_pc=0
     terminator Jmp(b8)

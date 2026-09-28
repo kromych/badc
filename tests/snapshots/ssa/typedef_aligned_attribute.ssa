@@ -14,24 +14,28 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v7)
   block 1  start_pc=0
     v8   Imm(2)                                           -> x0
+    v9   LifetimeEnd(0)                                   -> -
+    v10  LifetimeEnd(-3)                                  -> -
     terminator Return(v8)   (exit_acc=v8)
   block 2  start_pc=0
-    v9   Imm(0)                                           -> x0
-    v10  Imm(7)                                           -> x0
     v11  Imm(0)                                           -> x0
-    v12  Imm(0)                                           -> x0
+    v12  Imm(7)                                           -> x0
     v13  Imm(0)                                           -> x0
-    v14  Imm(1234605616436508552)                         -> x0
+    v14  Imm(0)                                           -> x0
     v15  Imm(0)                                           -> x0
-    v16  Imm(0)                                           -> x0
-    v17  Imm(7)                                           -> x0
+    v16  Imm(1234605616436508552)                         -> x0
+    v17  Imm(0)                                           -> x0
     v18  Imm(0)                                           -> x0
-    v19  Imm(0)                                           -> x0
+    v19  Imm(7)                                           -> x0
     v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0
     v22  Imm(0)                                           -> x0
     v23  Imm(0)                                           -> x0
-    terminator Return(v23)   (exit_acc=v23)
+    v24  Imm(0)                                           -> x0
+    v25  Imm(0)                                           -> x0
+    v26  LifetimeEnd(0)                                   -> -
+    v27  LifetimeEnd(-3)                                  -> -
+    terminator Return(v25)   (exit_acc=v25)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

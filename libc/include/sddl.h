@@ -13,6 +13,6 @@
 #pragma binding(advapi32::ConvertStringSecurityDescriptorToSecurityDescriptorW, "ConvertStringSecurityDescriptorToSecurityDescriptorW")
 
 BOOL ConvertStringSecurityDescriptorToSecurityDescriptorW(
-    const unsigned short *StringSecurityDescriptor, DWORD StringSDRevision,
-    void **SecurityDescriptor, ULONG *SecurityDescriptorSize);
+    LPCWSTR StringSecurityDescriptor, DWORD StringSDRevision,
+    PSECURITY_DESCRIPTOR *SecurityDescriptor, PULONG SecurityDescriptorSize);
 #endif

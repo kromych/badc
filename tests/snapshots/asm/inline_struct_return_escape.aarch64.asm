@@ -14,18 +14,8 @@ Disassembly of section .text:
                	brk	#0x1
 
 <mkesc>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x2, #0x2a               // =42
-               	str	x2, [x1]
-               	sub	x0, x29, #0x8
-               	str	xzr, [x0]
-               	str	x2, [x0]
-               	mov	x16, x0
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x0, #0x2a               // =42
+               	str	x0, [x1]
                	ret
 
 <main>:
@@ -36,8 +26,6 @@ Disassembly of section .text:
                	mov	x0, #0x2a               // =42
                	sub	x1, x29, #0x8
                	bl	<addr>
-               	stur	x0, [x29, #-0x10]
-               	ldur	x0, [x29, #-0x10]
                	cmp	x0, #0x2a
                	b.ne	<addr>
                	ldur	x0, [x29, #-0x8]

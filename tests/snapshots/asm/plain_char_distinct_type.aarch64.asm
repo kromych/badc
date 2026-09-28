@@ -1,0 +1,27 @@
+
+plain_char_distinct_type.aarch64:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+<.text>:
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, <entry_off>
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
+
+<main>:
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0xff               // =255
+               	strb	w1, [x0]
+               	ldrb	w0, [x0]
+               	eor	x0, x0, #0xff
+               	cbnz	w0, <addr>
+               	mov	x0, #0x0                // =0
+               	ret
+               	mov	x0, #0xa                // =10
+               	ret

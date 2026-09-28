@@ -26,18 +26,13 @@ Disassembly of section .text:
                	int3
 
 <fib>:
+               	cmpl	$0x2, %edi
+               	jl	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	pushq	%r12
                	pushq	%rbx
-               	movslq	%edi, %rbx
-               	cmpl	$0x2, %ebx
-               	jge	<addr>
-               	movq	%rbx, %rax
-               	popq	%rbx
-               	popq	%r12
-               	popq	%rbp
-               	retq
+               	movq	%rdi, %rbx
                	leaq	-0x1(%rbx), %rdi
                	callq	<addr>
                	movq	%rax, %r12
@@ -47,6 +42,8 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%rbp
+               	retq
+               	movslq	%edi, %rax
                	retq
 
 <main>:

@@ -17,7 +17,12 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ret
 
+<halt>:
+               	b	<addr>
+
 <main>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
                	add	x0, x0, #0x10
@@ -28,6 +33,8 @@ Disassembly of section .text:
                	mov	x0, x1
                	cmp	w0, #0xb
                	b.eq	<addr>
-               	b	<addr>
+               	bl	<addr>
+               	brk	#0x1
                	mov	x0, #0x0                // =0
+               	ldp	x29, x30, [sp], #0x10
                	ret

@@ -217,8 +217,8 @@ impl<'a> Walker<'a> {
             let rv = self.walk_expr_rvalue(b, rhs)?;
             return Ok(self.walk_fp_binop(b, op, lv, rv));
         }
-        // The signed renormalization the parser spells as `Shl K; Shr K`
-        // is one `Inst::Extend`, which the builder would otherwise reach
+        // The signed narrowing a cast spells as `Shl K; Shr K` is one
+        // `Inst::Extend`, which the builder would otherwise reach
         // only after materializing the shift, leaving it behind as a
         // dead instruction the later passes still walk.
         if let Some(v) = self.walk_sign_narrow_pair(b, op, lhs, rhs)? {
@@ -236,14 +236,14 @@ impl<'a> Walker<'a> {
         }
         let lv = self.walk_expr_rvalue(b, lhs)?;
         // The parser already pushes the narrowing (a mask, or a signed
-        // `Shl K; Shr K` pair) as further `Expr::Binary` nodes, so
-        // repeating it here would apply it twice.
+        // `Renormalize` node) as further nodes, so repeating it here
+        // would apply it twice.
         self.walk_int_binop(b, op, lv, lhs, rhs, ty)
     }
 
     /// `(x << K) >> K` with `K` one of 32 / 48 / 56 -- the signed
-    /// narrowing `convert::renormalize_to_width` and the cast lowering
-    /// emit -- read straight off the AST as `Inst::Extend` over `x`.
+    /// narrowing the cast lowering emits -- read straight off the AST as
+    /// `Inst::Extend` over `x`.
     fn walk_sign_narrow_pair(
         &mut self,
         b: &mut SsaBuilder,
@@ -455,7 +455,8 @@ impl<'a> Walker<'a> {
         Ok(self.narrow_int_to_ty(b, value, rhs_ty, ty))
     }
 
-    /// C99 6.5.16.2 compound assignment.
+    /// C99 6.5.16.2 compound assignment. `nsw`: the operation's overflow
+    /// is undefined (C99 6.5p5).
     pub(super) fn walk_compound_assign(
         &mut self,
         b: &mut SsaBuilder,
@@ -463,6 +464,7 @@ impl<'a> Walker<'a> {
         lhs: ExprId,
         rhs: ExprId,
         ty: i64,
+        nsw: bool,
     ) -> Result<ValueId, WalkError> {
         // C99 6.5.16.2p3: `E1 op= E2` is `E1 = E1 op E2` with E1
         // evaluated once, and its value is the post-op value.
@@ -511,7 +513,7 @@ impl<'a> Walker<'a> {
         } else {
             self.walk_int_binop(b, op, old, lhs, rhs, ty)?
         };
-        place.store(b, new_val, store_kind, vol);
+        place.store_marked(b, new_val, store_kind, vol, nsw);
         // C99 6.5.16.2p3: the value is the post-update value in E1's
         // type, so a sub-64-bit lvalue reloads through `load_kind`
         // rather than returning the unnarrowed 64-bit binop result. A

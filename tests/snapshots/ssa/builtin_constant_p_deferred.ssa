@@ -52,7 +52,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v46  Imm(0)                                           -> x2
     v47  Extend { value=v44, kind=I32 }                   -> x2
     v48  Binop { op=add, lhs=v44, rhs=v44 }               -> x1
-    v49  Extend { value=v48, kind=I32 }                   -> x2
+    v49  Extend { value=v48, kind=I32, nsw }              -> x2
     v50  Extend { value=v48, kind=I32 }                   -> x2
     v51  Extend { value=v48, kind=I32 }                   -> x2
     v52  Imm(0)                                           -> x2

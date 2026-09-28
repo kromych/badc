@@ -19,7 +19,7 @@ use super::super::ast::{Expr, ExprId, SrcPos, UnOp};
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::ir::LoadKind;
-use super::super::symbol::Symbol;
+use super::super::symbol::{BindingInfo, Symbol};
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{is_bool_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, load_op_for};
@@ -113,6 +113,20 @@ impl Compiler {
         }
     }
 
+    /// Undo a speculative parse: drop the data it staged, then return the
+    /// lexer to `snap`. The order is the contract: `restore_lex` re-records
+    /// the boundary of a restored string literal, and a boundary pushed
+    /// ahead of the truncation lands above the stale ones the truncation
+    /// must pop from the tail, which then survive past the new end.
+    pub(super) fn rewind_speculation(
+        &mut self,
+        snap: crate::c5::lexer::LexerSnapshot,
+        data_len: usize,
+    ) {
+        self.truncate_data(data_len);
+        self.restore_lex(snap);
+    }
+
     /// Truncate the data segment (a speculative parse is being undone)
     /// and drop everything recorded past the new end: later growth
     /// reuses those offsets for unrelated bytes, so a stale literal
@@ -161,6 +175,7 @@ impl Compiler {
             sym.defined_here = false;
             sym.has_initializer = false;
             sym.is_compound_literal = false;
+            sym.is_string_literal = false;
         }
         // The retired `__func__` storage is gone, so a later reference
         // must materialise it again rather than resolve to the offset.
@@ -367,6 +382,19 @@ impl Compiler {
         self.ast_binop(binop);
     }
 
+    /// [`Self::emit_binop_with_imm`] with the run-time byte count of a
+    /// variable-length array, kept in `size_slot`, as the right-hand operand.
+    pub(super) fn emit_binop_with_vla_size(
+        &mut self,
+        binop: super::super::ir::BinOp,
+        size_slot: i64,
+    ) {
+        self.ast_psh();
+        self.mark_emit_other();
+        self.ast_emit_vla_sizeof(size_slot);
+        self.ast_binop(binop);
+    }
+
     /// Immediate carrying a string-literal / global address. The
     /// surrounding caller records the originating symbol idx into
     /// `glo_imm_refs` so the linker can rebase the address
@@ -517,13 +545,13 @@ impl Compiler {
     /// only.
     pub(super) fn take_last_loaded_local(&mut self) -> Option<usize> {
         let idx = self.pending.last_loaded_local.take()?;
-        self.symbols[idx].was_read = self.pending.last_loaded_local_prior_was_read;
-        self.symbols[idx].pending_stores =
+        self.symbols[idx].binding.was_read = self.pending.last_loaded_local_prior_was_read;
+        self.symbols[idx].binding.pending_stores =
             core::mem::take(&mut self.pending.last_loaded_local_prior_pending);
         // If the restored list is non-empty, make sure the
         // symbol is back on the function-level pending list so a
         // later control-flow op can flush it.
-        if !self.symbols[idx].pending_stores.is_empty()
+        if !self.symbols[idx].binding.pending_stores.is_empty()
             && !self.pending_store_symbols.contains(&idx)
         {
             self.pending_store_symbols.push(idx);
@@ -551,7 +579,7 @@ impl Compiler {
         // the resulting pointer can escape into surrounding
         // code that the unused-symbol analysis can't follow.
         if let Some(idx) = self.take_last_loaded_local() {
-            self.symbols[idx].address_escaped = true;
+            self.symbols[idx].binding.address_escaped = true;
         }
         // The address producer's value now stays in the
         // accumulator; wrap it in `Expr::Unary { op: AddrOf,
@@ -779,8 +807,13 @@ impl Compiler {
         s.h_val = s.val;
         s.h_fn_ptr_indirection = s.fn_ptr_indirection;
         s.h_fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
+        s.h_ret_fn = s.ret_fn.clone();
         s.h_params = s.params.clone();
         s.h_is_variadic = s.is_variadic;
+        s.h_prototyped = s.prototyped;
+        s.h_param_enum_tags = s.param_enum_tags.clone();
+        // The inner binding's type records its own enum tag.
+        s.h_incomplete_enum_tag = s.incomplete_enum_tag.take();
         s.h_conv = s.conv;
         s.h_array_size = s.array_size;
         s.h_type_align = s.type_align;
@@ -827,6 +860,7 @@ impl Compiler {
         s.const_object_value = None;
         s.h_static_local_record = s.static_local_record;
         s.static_local_record = None;
+        s.h_binding = Self::save_binding(&mut s.binding);
     }
 
     /// Inverse of [`Self::shadow_symbol`]: restore the saved outer
@@ -846,13 +880,19 @@ impl Compiler {
             sym.static_local_record = sym.h_static_local_record;
             return;
         }
+        let same_function = sym.class == Token::Fun as i64 && sym.h_class == Token::Fun as i64;
+        Self::restore_binding(&mut sym.binding, sym.h_binding.clone(), same_function);
         sym.class = sym.h_class;
         sym.type_ = sym.h_type;
         sym.val = sym.h_val;
         sym.fn_ptr_indirection = sym.h_fn_ptr_indirection;
         sym.fn_ptr_ret_indirection = sym.h_fn_ptr_ret_indirection;
+        sym.ret_fn = sym.h_ret_fn.take();
         sym.params = core::mem::take(&mut sym.h_params);
         sym.is_variadic = sym.h_is_variadic;
+        sym.prototyped = sym.h_prototyped;
+        sym.param_enum_tags = core::mem::take(&mut sym.h_param_enum_tags);
+        sym.incomplete_enum_tag = sym.h_incomplete_enum_tag.take();
         sym.conv = sym.h_conv;
         sym.array_size = sym.h_array_size;
         sym.type_align = sym.h_type_align;
@@ -881,6 +921,22 @@ impl Compiler {
         // being unbound, never to the restored outer symbol.
     }
 
+    /// Take the outer binding's info, dropping its pending stores as a branch does.
+    pub(super) fn save_binding(live: &mut BindingInfo) -> BindingInfo {
+        let mut outer = core::mem::take(live);
+        outer.pending_stores.clear();
+        outer
+    }
+
+    /// Restore the outer binding's info. A function declaration names the
+    /// function it shadows (C99 6.2.2p4-p5), which keeps the uses made through it.
+    pub(super) fn restore_binding(live: &mut BindingInfo, outer: BindingInfo, same_function: bool) {
+        let inner = core::mem::replace(live, outer);
+        if same_function {
+            live.absorb_uses(&inner);
+        }
+    }
+
     /// Whether [`Self::restore_shadowed_symbol`] would leave `sym`
     /// unchanged, i.e. its shadow slots already mirror its live
     /// binding. True for a symbol that binds itself (a compiler-made
@@ -893,8 +949,12 @@ impl Compiler {
             && sym.val == sym.h_val
             && sym.fn_ptr_indirection == sym.h_fn_ptr_indirection
             && sym.fn_ptr_ret_indirection == sym.h_fn_ptr_ret_indirection
+            && sym.ret_fn == sym.h_ret_fn
             && sym.params == sym.h_params
             && sym.is_variadic == sym.h_is_variadic
+            && sym.prototyped == sym.h_prototyped
+            && sym.param_enum_tags == sym.h_param_enum_tags
+            && sym.incomplete_enum_tag == sym.h_incomplete_enum_tag
             && sym.conv == sym.h_conv
             && sym.array_size == sym.h_array_size
             && sym.type_align == sym.h_type_align
@@ -1041,6 +1101,7 @@ impl Compiler {
     /// entry.
     pub(super) fn ast_reset(&mut self) {
         self.ast = super::super::ast::Ast::new();
+        self.expr_fns.clear();
         self.ast_acc = None;
         self.ast_vstack.clear();
         self.pending_label_relocs.clear();
@@ -1068,6 +1129,7 @@ impl Compiler {
         n_params: usize,
         is_variadic: bool,
         param_tys: alloc::vec::Vec<i64>,
+        param_arrival_tys: alloc::vec::Vec<i64>,
         param_local_slots: alloc::vec::Vec<i64>,
         returns_struct: bool,
         return_struct_size: i64,
@@ -1081,6 +1143,7 @@ impl Compiler {
         // invariant would fail.
         self.next_ent_pc += 1;
         self.rewrite_loop_idioms();
+        self.expr_fns.clear();
         let finished = super::super::ast::FinishedFunction {
             ast: core::mem::take(&mut self.ast),
             ent_pc,
@@ -1091,10 +1154,12 @@ impl Compiler {
             is_always_inline: self.pending_is_always_inline,
             is_noinline: self.pending_is_noinline,
             is_naked: self.pending_is_naked,
+            is_noreturn: self.current_func_is_noreturn,
             conv: self.current_func_conv,
             n_locals: self.max_loc_offs,
             name: self.current_function_name.clone(),
             param_tys,
+            param_arrival_tys,
             param_local_slots,
             returns_struct,
             return_struct_size,
@@ -1115,6 +1180,7 @@ impl Compiler {
         self.pending_is_noinline = false;
         self.pending_is_naked = false;
         self.current_func_conv = crate::c5::codegen::CallConv::Target;
+        self.current_func_is_noreturn = false;
         self.finished_functions.push(finished);
     }
 
@@ -1174,7 +1240,8 @@ impl Compiler {
     /// node -- the conversion is implicit in the AST shape.
     pub(super) fn ast_emit_ident(&mut self, sym: u32, ty: i64) -> ExprId {
         let pos = self.ast_src_pos();
-        let s = &self.symbols[sym as usize];
+        let idx = sym as usize;
+        let s = &self.symbols[idx];
         let class = s.class;
         let val = s.val;
         let is_thread_local = s.is_thread_local;
@@ -1214,6 +1281,7 @@ impl Compiler {
         if block_extern {
             self.ast.block_extern_refs.push(id);
         }
+        self.record_ident_fn(id, idx);
         self.ast_acc = Some(id);
         id
     }
@@ -1225,7 +1293,16 @@ impl Compiler {
     /// have to recompute it.
     pub(super) fn ast_emit_pre_inc(&mut self, lvalue: ExprId, by: i64, ty: i64) {
         let pos = self.ast_src_pos();
-        let id = self.ast.push_expr(Expr::PreInc { lvalue, by, ty }, pos);
+        let nsw = self.overflow_undefined(crate::c5::ir::BinOp::Add, ty);
+        let id = self.ast.push_expr(
+            Expr::PreInc {
+                lvalue,
+                by,
+                ty,
+                nsw,
+            },
+            pos,
+        );
         self.ast_acc = Some(id);
     }
 
@@ -1234,7 +1311,16 @@ impl Compiler {
     /// expression's result per C99 6.5.2.4p3.
     pub(super) fn ast_emit_post_inc(&mut self, lvalue: ExprId, by: i64, ty: i64) {
         let pos = self.ast_src_pos();
-        let id = self.ast.push_expr(Expr::PostInc { lvalue, by, ty }, pos);
+        let nsw = self.overflow_undefined(crate::c5::ir::BinOp::Add, ty);
+        let id = self.ast.push_expr(
+            Expr::PostInc {
+                lvalue,
+                by,
+                ty,
+                nsw,
+            },
+            pos,
+        );
         self.ast_acc = Some(id);
     }
 
@@ -1247,6 +1333,14 @@ impl Compiler {
     pub(super) fn ast_emit_cast(&mut self, child: ExprId, to_ty: i64) {
         let pos = self.ast_src_pos();
         let id = self.ast.push_expr(Expr::Cast { child, to_ty }, pos);
+        self.ast_acc = Some(id);
+    }
+
+    /// Push `Expr::Comma { lhs, rhs, ty }`: `lhs` evaluated for its effect,
+    /// then `rhs`'s value (C99 6.5.17).
+    pub(super) fn ast_emit_comma(&mut self, lhs: ExprId, rhs: ExprId, ty: i64) {
+        let pos = self.ast_src_pos();
+        let id = self.ast.push_expr(Expr::Comma { lhs, rhs, ty }, pos);
         self.ast_acc = Some(id);
     }
 
@@ -1355,21 +1449,28 @@ impl Compiler {
         self.ast_acc = Some(id);
     }
 
-    /// Push `Expr::CompoundAssign { op, lhs, rhs, ty }`. C99
-    /// 6.5.16.2p3: `E1 op= E2` is `E1 = E1 op E2` with E1
-    /// evaluated once; the walker spills the lhs address, loads
-    /// it, applies the binop with rhs, and stores back.
+    /// Push `Expr::CompoundAssign`. C99 6.5.16.2p3: `E1 op= E2` is
+    /// `E1 = E1 op E2` with E1 evaluated once; the walker spills the lhs
+    /// address, loads it, applies the binop with rhs, and stores back.
     pub(super) fn ast_emit_compound_assign(
         &mut self,
         op: super::super::ir::BinOp,
         lhs: ExprId,
         rhs: ExprId,
         ty: i64,
+        nsw: bool,
     ) {
         let pos = self.ast_src_pos();
-        let id = self
-            .ast
-            .push_expr(Expr::CompoundAssign { op, lhs, rhs, ty }, pos);
+        let id = self.ast.push_expr(
+            Expr::CompoundAssign {
+                op,
+                lhs,
+                rhs,
+                ty,
+                nsw,
+            },
+            pos,
+        );
         self.ast_acc = Some(id);
     }
 
@@ -1527,7 +1628,7 @@ impl Compiler {
         let val = s.val;
         let is_thread_local = s.is_thread_local;
         let array_size = s.array_size;
-        self.ast.push_expr(
+        let id = self.ast.push_expr(
             Expr::Ident {
                 sym,
                 ty,
@@ -1537,7 +1638,9 @@ impl Compiler {
                 array_size,
             },
             pos,
-        )
+        );
+        self.record_ident_fn(id, sym as usize);
+        id
     }
 
     /// Snapshot the current `ast.stmts` length. Used by the
@@ -1813,7 +1916,9 @@ impl Compiler {
         if !self.label_is_defined(&name) {
             self.unresolved_gotos.push(name.clone());
         }
-        Ok(self.ast_label_by_name(&name))
+        let label = self.ast_label_by_name(&name);
+        self.note_label_addr(label);
+        Ok(label)
     }
 
     /// Push a `Stmt::Return(value)` node into the per-function
@@ -2027,20 +2132,19 @@ mod tests {
         );
     }
 
-    /// `int main(void) { return 7 + 3 * 2; }` -- the parser emits
-    /// `Imm 7; Psh; Imm 3; Psh; Imm 2; Mul; [mask]; Add; [mask]`.
-    /// `[mask]` is the C99 6.3.1.8 signed-int width truncation
-    /// pair `Psh; Imm 32; Shl; Psh; Imm 32; Shr` the parser drops
-    /// after every signed arithmetic op. Confirm the AST captures:
+    /// `int main(void) { return 7 + 3 * 2; }` -- the parser reduces each
+    /// signed `int` result to its width with a `Renormalize` node, marked
+    /// since the overflow of `+` and `*` is undefined. Confirm the AST
+    /// captures:
     ///   * three source-level IntLits (7, 3, 2) in source order,
     ///   * a `Binary{Mul, IntLit(3), IntLit(2)}` for the inner `*`,
-    ///   * a `Binary{Add, IntLit(7), <masked-Mul-result>}` for the
+    ///   * a `Binary{Add, IntLit(7), Unary{Renormalize, Mul}}` for the
     ///     outer `+`,
     /// and that the parser-side vstack didn't drift across the
-    /// intervening mask sequences.
+    /// intervening renormalizations.
     #[test]
     fn binop_three_operand_capture() {
-        use super::super::super::ast::Expr;
+        use super::super::super::ast::{Expr, UnOp};
         use super::super::super::ir::BinOp;
 
         let src = alloc::string::String::from("int main(void) { return 7 + 3 * 2; }\n");
@@ -2052,7 +2156,7 @@ mod tests {
             .exprs
             .iter()
             .filter_map(|e| match e {
-                Expr::IntLit { val, .. } if *val != 32 => Some(*val),
+                Expr::IntLit { val, .. } => Some(*val),
                 _ => None,
             })
             .collect();
@@ -2086,22 +2190,21 @@ mod tests {
                 "Add lhs not IntLit(7): {:?}",
                 ast.exprs[*lhs as usize],
             );
-            // The Add rhs reaches the inner Mul through one or
-            // more Shl/Shr masking binops -- chase the binop chain
-            // and confirm the leaf is the Mul.
-            let mut current = *rhs;
-            for _ in 0..6 {
-                match &ast.exprs[current as usize] {
-                    Expr::Binary { op: BinOp::Mul, .. } => return,
-                    Expr::Binary {
-                        op: BinOp::Shl | BinOp::Shr,
-                        lhs,
-                        ..
-                    } => current = *lhs,
-                    other => panic!("unexpected node walking Add rhs: {other:?}"),
-                }
+            match &ast.exprs[*rhs as usize] {
+                Expr::Unary {
+                    op: UnOp::Renormalize { nsw: true },
+                    child,
+                    ..
+                } => assert!(
+                    matches!(
+                        &ast.exprs[*child as usize],
+                        Expr::Binary { op: BinOp::Mul, .. }
+                    ),
+                    "Renormalize child not the Mul: {:?}",
+                    ast.exprs[*child as usize],
+                ),
+                other => panic!("Add rhs not a marked Renormalize: {other:?}"),
             }
-            panic!("did not reach Mul through Add rhs masking chain");
         }
     }
 
@@ -2265,12 +2368,11 @@ mod tests {
 
     /// `int add(int a, int b) { return a + b; }` -- the AST
     /// should land two distinct `Expr::Ident` nodes (one per
-    /// parameter), with an outer `Binary{Add, Ident, Ident}`
-    /// reaching the rhs Ident through the post-Add width-mask
-    /// chain.
+    /// parameter) under a `Binary{Add, Ident, Ident}`, which a
+    /// marked `Renormalize` node reduces to `int`.
     #[test]
     fn ident_load_captures_two_params() {
-        use super::super::super::ast::Expr;
+        use super::super::super::ast::{Expr, UnOp};
         use super::super::super::ir::BinOp;
 
         let src = alloc::string::String::from(
@@ -2304,27 +2406,25 @@ mod tests {
         let add = ast
             .exprs
             .iter()
-            .find(|e| matches!(e, Expr::Binary { op: BinOp::Add, .. }))
+            .position(|e| matches!(e, Expr::Binary { op: BinOp::Add, .. }))
             .expect("Add node missing");
-        if let Expr::Binary { lhs, rhs, .. } = add {
-            assert!(
-                matches!(&ast.exprs[*lhs as usize], Expr::Ident { .. }),
-                "Add lhs not an Ident: {:?}",
-                ast.exprs[*lhs as usize],
-            );
-            let mut current = *rhs;
-            for _ in 0..6 {
-                match &ast.exprs[current as usize] {
-                    Expr::Ident { .. } => return,
-                    Expr::Binary {
-                        op: BinOp::Shl | BinOp::Shr,
-                        lhs,
-                        ..
-                    } => current = *lhs,
-                    other => panic!("unexpected node walking Add rhs: {other:?}"),
-                }
+        if let Expr::Binary { lhs, rhs, .. } = &ast.exprs[add] {
+            for side in [*lhs, *rhs] {
+                assert!(
+                    matches!(&ast.exprs[side as usize], Expr::Ident { .. }),
+                    "Add operand not an Ident: {:?}",
+                    ast.exprs[side as usize],
+                );
             }
-            panic!("did not reach Ident through Add rhs masking chain");
         }
+        assert!(
+            ast.exprs.iter().any(|e| matches!(
+                e,
+                Expr::Unary { op: UnOp::Renormalize { nsw: true }, child, .. }
+                    if *child as usize == add
+            )),
+            "no marked Renormalize over the Add: {:?}",
+            ast.exprs,
+        );
     }
 }

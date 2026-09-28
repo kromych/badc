@@ -41,24 +41,23 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x2, #0x0                // =0
-               	mov	x1, #0x1                // =1
-               	str	w1, [x3]
-               	mov	x1, #0x4                // =4
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x1                // =1
+               	str	w2, [x3]
+               	mov	x2, #0x4                // =4
                	mov	x4, #0x2                // =2
                	str	w4, [x3, #0x4]
-               	str	w1, [x3, #0x8]
-               	mov	x1, x3
+               	str	w2, [x3, #0x8]
+               	mov	x2, x3
                	add	x4, x3, #0xc
-               	cmp	x1, x4
+               	cmp	x2, x4
                	b.hs	<addr>
-               	ldrsw	x4, [x1]
-               	add	x2, x2, x4
-               	add	x1, x1, #0x4
+               	ldrsw	x4, [x2]
+               	add	x1, x1, x4
+               	add	x2, x2, #0x4
                	add	x4, x3, #0xc
-               	cmp	x1, x4
+               	cmp	x2, x4
                	b.lo	<addr>
-               	sxtw	x1, w2
                	bl	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10

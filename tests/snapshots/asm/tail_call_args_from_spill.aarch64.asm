@@ -61,7 +61,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
                	bl	<addr>
-               	sxtw	x20, w0
+               	mov	x20, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, x20

@@ -55,7 +55,9 @@ struct S7 {
 } __attribute__((aligned(64)));
 
 // `#pragma pack(N)` clamps a member's finished alignment, the explicit
-// request included; a request above 16 packs nothing.
+// request included; a request above 16 packs nothing. The MS layout, which
+// the PE targets take, keeps the request (clang for the windows-msvc
+// triples).
 #pragma pack(1)
 struct P1 {
     char c;
@@ -131,8 +133,13 @@ int main(void) {
     if (off(&g_arr[0], &g_arr[3]) != 192) return 12;
 
     // pack interactions.
+#if defined(_WIN32)
+    if (sizeof(struct P1) != 128 || _Alignof(struct P1) != 64) return 13;
+    if (sizeof(struct P2) != 128 || _Alignof(struct P2) != 64) return 14;
+#else
     if (sizeof(struct P1) != 9 || _Alignof(struct P1) != 1) return 13;
     if (sizeof(struct P2) != 16 || _Alignof(struct P2) != 8) return 14;
+#endif
     if (sizeof(struct P3) != 128 || _Alignof(struct P3) != 64) return 15;
     if (sizeof(struct P4) != 128 || _Alignof(struct P4) != 64) return 16;
 

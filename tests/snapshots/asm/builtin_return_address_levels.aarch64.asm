@@ -50,9 +50,8 @@ Disassembly of section .text:
                	ret
 
 <f2>:
-               	str	x20, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x30, [x29, #0x8]
@@ -63,10 +62,10 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adr	x1, <addr>
                	str	x1, [x0]
-               	adrp	x20, <page>
-               	add	x20, x20, <lo12>
                	bl	<addr>
-               	str	w0, [x20]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	str	w0, [x1]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adr	x1, <addr>
@@ -75,14 +74,12 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
                	add	x0, x0, #0x1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <f1>:
-               	str	x20, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x30, [x29, #0x8]
@@ -93,10 +90,10 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	adr	x1, <addr>
                	str	x1, [x0]
-               	adrp	x20, <page>
-               	add	x20, x20, <lo12>
                	bl	<addr>
-               	str	w0, [x20]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	str	w0, [x1]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adr	x1, <addr>
@@ -105,8 +102,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
                	add	x0, x0, #0x1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:

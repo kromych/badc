@@ -40,12 +40,8 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax
                	leaq	-0x10(%rbp), %rcx
-               	pushq	%rdx
-               	movq	(%rax), %rdx
-               	movq	%rdx, (%rcx)
-               	movq	0x8(%rax), %rdx
-               	movq	%rdx, 0x8(%rcx)
-               	popq	%rdx
+               	movups	(%rax), %xmm14
+               	movups	%xmm14, (%rcx)
                	jmp	<addr>
                	leaq	-0x10(%rbp), %rax
                	movq	(%rax), %rcx

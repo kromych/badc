@@ -31,6 +31,11 @@ fn marshal_args(
     m.sse_aggs(code)?;
     m.int_args(code)?;
     m.agg_eightbytes(code);
+    // Once every argument register holds its value: no source is read from
+    // an integer register a copy writes.
+    for &(x, r) in &plan.fp_mirrors {
+        super::encode::emit_movq_r_xmm(code, Reg(r), Reg(x));
+    }
     Ok(())
 }
 
@@ -59,18 +64,6 @@ fn agg_base_reg(regs: &[super::ClassReg; 4], n: u8) -> Option<u8> {
         .map(|c| c.reg)
 }
 
-/// Class of register slot `k` of an aggregate. The planner builds the
-/// `regs` array from this same list, so the index is always in range.
-fn slot_class(
-    classes: &[super::abi_classify::RegClass],
-    k: usize,
-) -> super::abi_classify::RegClass {
-    classes
-        .get(k)
-        .copied()
-        .unwrap_or(super::abi_classify::RegClass::Sse)
-}
-
 impl Marshal<'_> {
     fn arg_place(&self, i: usize) -> Place {
         place_of(self.alloc, self.args[i])
@@ -78,6 +71,16 @@ impl Marshal<'_> {
 
     /// Register slot classes of argument `i`, empty when it is not an
     /// aggregate passed in registers.
+    /// The bytes of argument `i`'s aggregate from `off` its eightbyte slot
+    /// carries: eight, or what the aggregate holds past `off` at its end.
+    fn part_width(&self, i: usize, off: i32) -> u32 {
+        let size = match self.aggs.get(i) {
+            Some(Some(a)) => a.size,
+            _ => 8,
+        };
+        size.saturating_sub(off as u32).clamp(1, 8)
+    }
+
     fn arg_classes(&self, i: usize) -> &[super::abi_classify::RegClass] {
         match self.aggs.get(i) {
             Some(Some(a)) => match &a.class {
@@ -212,21 +215,19 @@ impl Marshal<'_> {
             if self.arg_into(code, i, SCRATCH_R10).is_err() {
                 return self.fail("fp aggregate base not in int reg / spill");
             }
-            let classes = self.arg_classes(i);
-            let mut disp = 0i32;
-            for (k, cr) in regs.iter().take(n as usize).enumerate() {
-                let class = slot_class(classes, k);
+            let slots = super::abi_classify::register_slots(self.arg_classes(i));
+            for ((class, off), cr) in slots.zip(regs.iter().take(n as usize)) {
                 emit_agg_load_slot_sse(
                     code,
                     class,
                     Reg(cr.reg),
                     SCRATCH_R10,
-                    disp,
+                    off as i32,
+                    self.part_width(i, off as i32),
                     align,
                     self.abi.strict_align,
                     SCRATCH_R11,
                 );
-                disp += class.width() as i32;
             }
         }
         Ok(())
@@ -299,57 +300,64 @@ impl Marshal<'_> {
     /// `sse_aggs` takes it.
     fn agg_eightbytes(&self, code: &mut Vec<u8>) {
         let strict = self.abi.strict_align;
-        for &placement in self.plan.placements.iter() {
+        for (i, &placement) in self.plan.placements.iter().enumerate() {
             let super::ArgPlacement::StructRegs { regs, n, align } = placement else {
                 continue;
             };
             let Some(base) = agg_base_reg(&regs, n) else {
                 continue;
             };
-            for (k, cr) in regs.iter().take(n as usize).enumerate() {
+            let slots: Vec<(super::ClassReg, i32)> =
+                super::abi_classify::register_slots(self.arg_classes(i))
+                    .zip(regs.iter().take(n as usize))
+                    .map(|((_, off), &cr)| (cr, off as i32))
+                    .collect();
+            for &(cr, off) in &slots {
                 if cr.is_fp {
                     emit_agg_load_sse(
                         code,
                         Reg(cr.reg),
                         Reg(base),
-                        (k as i32) * 8,
+                        off,
+                        self.part_width(i, off),
                         align,
                         strict,
                         SCRATCH_R10,
                     );
                 }
             }
-            for (k, cr) in regs.iter().take(n as usize).enumerate().rev() {
+            for &(cr, off) in slots.iter().rev() {
                 if !cr.is_fp && cr.reg != base {
                     emit_agg_load_int(
                         code,
                         Reg(cr.reg),
                         Reg(base),
-                        (k as i32) * 8,
-                        8,
+                        off,
+                        self.part_width(i, off),
                         align,
                         strict,
                         SCRATCH_R10,
                     );
                 }
             }
-            let base_off = regs
+            let disp = slots
                 .iter()
-                .take(n as usize)
-                .position(|c| !c.is_fp && c.reg == base)
-                .unwrap_or(0);
-            let disp = (base_off as i32) * 8;
+                .find(|(cr, _)| !cr.is_fp && cr.reg == base)
+                .map_or(0, |&(_, off)| off);
+            let width = self.part_width(i, disp);
             // The base's own eightbyte overwrites the base, so a composed
             // one accumulates in scratch first.
-            if super::super::access_unit(disp as u32, 8, align, strict) == 8 {
-                emit_mov_r_mem(code, Reg(base), Reg(base), disp);
+            if width.is_power_of_two()
+                && super::super::access_unit(disp as u32, width, align, strict) == width
+            {
+                emit_load_unit(code, width, Reg(base), Reg(base), disp);
             } else {
                 emit_agg_load_int(
                     code,
                     SCRATCH_R10,
                     Reg(base),
                     disp,
-                    8,
+                    width,
                     align,
                     strict,
                     SCRATCH_R11,
@@ -362,36 +370,30 @@ impl Marshal<'_> {
 
 #[allow(clippy::too_many_arguments)]
 /// Store a register-classed <= 16-byte aggregate return into the caller's
-/// result temp at `[rbp + base]`: INTEGER eightbytes from rax:rdx, SSE from
+/// result temp at `[base + disp]`: INTEGER eightbytes from rax:rdx, SSE from
 /// xmm0:xmm1 (System V AMD64 3.2.3); Win64 returns one INTEGER eightbyte.
 fn store_agg_return(
     code: &mut Vec<u8>,
     desc: &super::super::ir::AggDesc,
-    base: i64,
+    (base, disp): (Reg, i64),
     abi: super::Abi,
 ) {
-    let eb_classes = match super::abi_classify::classify_aggregate(
-        desc.size,
-        desc.align,
-        &desc.fields,
-        abi,
-        true,
-    ) {
+    let eb_classes = match super::abi_classify::classify_aggregate(desc, abi, true) {
         super::abi_classify::AggClass::Regs(c) => c,
         _ => alloc::vec::Vec::new(),
     };
     let int_ret = [Reg::RAX, Reg::RDX];
     let mut int_i = 0usize;
     let mut sse_i = 0u8;
-    let mut off = 0i64;
-    for class in eb_classes.iter() {
-        let disp = (base + off) as i32;
-        off += class.width() as i64;
-        if *class == super::abi_classify::RegClass::Integer {
-            emit_mov_mem_r(code, Reg::RBP, disp, int_ret[int_i]);
+    for (class, off) in super::abi_classify::register_slots(&eb_classes) {
+        let disp = (disp + i64::from(off)) as i32;
+        if class == super::abi_classify::RegClass::X87 {
+            super::encode::emit_fstp_m80(code, base, disp);
+        } else if class == super::abi_classify::RegClass::Integer {
+            emit_mov_mem_r(code, base, disp, int_ret[int_i]);
             int_i += 1;
         } else {
-            emit_agg_store_slot_sse(code, *class, Reg::RBP, disp, Reg(Reg::XMM0.0 + sse_i));
+            emit_agg_store_slot_sse(code, class, base, disp, Reg(Reg::XMM0.0 + sse_i));
             sse_i += 1;
         }
     }
@@ -413,7 +415,11 @@ fn store_ret_agg(
     let Some(ai) = ret_agg else {
         return false;
     };
-    let base = local_slot_off(ret_slot_local, func, frame, abi);
+    // No result slot: the call's `RetPart`s read the registers.
+    if ret_slot_local == 0 {
+        return true;
+    }
+    let base = local_slot_base_disp(ret_slot_local, func, frame, abi);
     store_agg_return(code, &agg_descs[ai as usize], base, abi);
     true
 }
@@ -512,19 +518,26 @@ pub(super) fn emit_call(
     // reduces to the scalar placement, so every branch runs the aggregate
     // planner.
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
-    // A variadic callee follows the host ABI: Win64 passes every argument on
-    // the integer side, by position then on the stack at 8-byte stride (the
-    // walker widened the FP arguments to double with `fp_arg_mask` 0); System
-    // V AMD64 uses the standard banks and reports the XMM count in `al`. The
+    // A variadic callee follows the host ABI: Win64 places every argument by
+    // position, a floating-point one in both banks, as it does for a call
+    // without a prototype (fewer named arguments than arguments); System V
+    // AMD64 uses the standard banks and reports the XMM count in `al`. The
     // internal convention uses both banks; `fp_arg_mask` comes from the
     // argument types, since an FP constant rides an integer register.
-    let (plan, site, xmm_count) = if callee_is_variadic && abi.position_indexed_args {
-        let plan =
-            super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
+    let unnamed = callee_is_variadic || fixed_args < args.len();
+    let (plan, site, xmm_count) = if unnamed && abi.position_indexed_args {
+        let plan = super::plan_mirrored_call(args.len(), fp_arg_mask, abi, &aggs);
         (plan, "Call (Win64 variadic)", None)
     } else if callee_is_variadic && abi.variadic_zero_xmm_count && !abi.position_indexed_args {
-        let plan =
-            super::plan_call_args_aggs(args.len(), fixed_args, fp_arg_mask, abi, &aggs, false);
+        let plan = super::plan_call_args_aggs(
+            args.len(),
+            fixed_args,
+            fp_arg_mask,
+            abi,
+            &aggs,
+            false,
+            crate::c5::ir::ArgWidths::default(),
+        );
         let xmm_used = xmm_arg_count(&plan);
         (plan, "Call (SysV variadic)", Some(xmm_used))
     } else if callee_is_variadic {
@@ -532,8 +545,15 @@ pub(super) fn emit_call(
         // without the host variadic register protocol.
         return fail("Call: variadic callee not matched by a host-ABI branch");
     } else {
-        let plan =
-            super::plan_call_args_aggs(args.len(), args.len(), fp_arg_mask, abi, &aggs, false);
+        let plan = super::plan_call_args_aggs(
+            args.len(),
+            args.len(),
+            fp_arg_mask,
+            abi,
+            &aggs,
+            false,
+            crate::c5::ir::ArgWidths::default(),
+        );
         (plan, "Call", None)
     };
     if plan.scratch_bytes > 0 {
@@ -595,7 +615,19 @@ pub(super) fn emit_call_ext(
     // `plan_call_args` placement; a tagged aggregate rides through the
     // host-ABI argument-register packing instead.
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
-    let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
+    let plan = if imp.is_variadic && abi.position_indexed_args {
+        super::plan_mirrored_call(args.len(), fp_arg_mask, abi, &aggs)
+    } else {
+        super::plan_call_args_aggs(
+            args.len(),
+            fixed,
+            fp_arg_mask,
+            abi,
+            &aggs,
+            false,
+            crate::c5::ir::ArgWidths::default(),
+        )
+    };
     let xmm_used = xmm_arg_count(&plan);
     if plan.scratch_bytes > 0 {
         emit_stack_alloc(code, plan.scratch_bytes, None);
@@ -623,32 +655,16 @@ pub(super) fn emit_call_ext(
         emit_add_rsp(code, plan.scratch_bytes);
     }
     // A register-returned aggregate (System V AMD64 3.2.3) stores into the
-    // caller's result temp; > 16-byte returns take the out-pointer path.
+    // caller's result temp -- a `long double` from st(0) among them; > 16-byte
+    // returns take the out-pointer path.
     if store_ret_agg(code, ret_agg, agg_descs, ret_slot_local, func, frame, abi) {
         return Ok(());
     }
     // A sub-word integer return is extended into rax; an FP return arrives
-    // in xmm0 and routes to the allocated place. A System V long double
-    // arrives in st0: `fstp QWORD PTR [rsp]` rounds it to the f64 c5 stores
-    // in its 8-byte slot.
+    // in xmm0 and routes to the allocated place.
     use crate::c5::compiler::types as ty_helpers;
     let return_type_tag = imp.return_type_tag;
     let bare = ty_helpers::strip_unsigned(return_type_tag);
-    let returns_long_double = imp.returns_long_double;
-    if returns_long_double && matches!(target, Target::LinuxX64) {
-        emit_sub_rsp(code, 16);
-        // fstp QWORD PTR [rsp] -- `DD /3`, mod=00, rm=100 (SIB
-        // follows), SIB = 0x24 (base = rsp, no index).
-        code.extend_from_slice(&[0xDD, 0x1C, 0x24]);
-        let scratch = match dst {
-            Place::IntReg(r) if r != Reg::RAX.0 => Reg(r),
-            _ => SCRATCH_R10,
-        };
-        emit_mov_r_mem(code, scratch, Reg::RSP, 0);
-        emit_add_rsp(code, 16);
-        int_result_to_dst(code, dst, scratch, frame);
-        return Ok(());
-    }
     if ty_helpers::is_float_ty(bare) || ty_helpers::is_double_ty(bare) {
         // An f32 result is the single in the low 32 bits of xmm0, the form the
         // FP casts and `StoreLocal F32` consume, so it routes without widening.
@@ -673,6 +689,7 @@ pub(super) fn callee_abi(abi: super::Abi, target: Target, conv: super::CallConv)
         variadic_int_only: row.variadic_int_only,
         position_indexed_args: row.position_indexed_args,
         pair_align16_gprs: row.pair_align16_gprs,
+        packed_stack_args: row.packed_stack_args,
         natural_composite_align: row.natural_composite_align,
         variadic_zero_xmm_count: row.variadic_zero_xmm_count,
         ..abi
@@ -686,7 +703,6 @@ pub(super) fn emit_call_indirect(
     target: u32,
     args: &[u32],
     callee_variadic: bool,
-    fixed_args: usize,
     alloc: &Allocation,
     frame: Frame,
     abi: super::Abi,
@@ -700,18 +716,24 @@ pub(super) fn emit_call_indirect(
     extern_sites: &mut Vec<super::UserExternCallSite>,
 ) -> Emit {
     let target_place = place_of(alloc, target);
-    // A Win64 variadic indirect call splits the arguments into the named
-    // prefix, placed by position, and the variadic tail at 8-byte stride past
-    // the home area; every other dialect treats all arguments as fixed.
-    let fixed = if callee_variadic && abi.position_indexed_args {
-        fixed_args.min(args.len())
-    } else {
-        args.len()
-    };
-    // A tagged by-value aggregate rides `plan_call_args_aggs`; with none the
-    // plan is the scalar placement.
+    // A Win64 indirect call to a variadic or unprototyped callee places every
+    // argument by position, a floating-point one in both banks; every other
+    // dialect treats all arguments as fixed. A tagged by-value aggregate
+    // rides `plan_call_args_aggs`; with none the plan is the scalar placement.
     let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
-    let plan = super::plan_call_args_aggs(args.len(), fixed, fp_arg_mask, abi, &aggs, false);
+    let plan = if callee_variadic && abi.position_indexed_args {
+        super::plan_mirrored_call(args.len(), fp_arg_mask, abi, &aggs)
+    } else {
+        super::plan_call_args_aggs(
+            args.len(),
+            args.len(),
+            fp_arg_mask,
+            abi,
+            &aggs,
+            false,
+            crate::c5::ir::ArgWidths::default(),
+        )
+    };
     // The staged target must avoid every register the marshal reads (the
     // argument sources) or writes (every integer register the plan fills,
     // and the r10 staging scratch).
@@ -822,12 +844,14 @@ pub(super) fn emit_call_indirect(
 }
 
 /// System V AMD64 `va_arg` (ABI 3.5.7). `args[0]` is the `__va_list_tag`
-/// pointer, `args[1]` the packed `(kind << 16) | size` descriptor. Returns
-/// the address of the slot holding the next argument and advances the
-/// matching field: an integer class comes from the register save area at
-/// `gp_offset` (< 48, step 8), a floating-point one at `fp_offset` (< 176,
-/// step 16), else from `overflow_arg_area` (step 8). Layout: gp_offset at
-/// +0, fp_offset at +4, overflow_arg_area at +8, reg_save_area at +16.
+/// pointer, `args[1]` the packed `VaArgDesc`. Returns the address of the
+/// slot holding the next argument and advances the matching field: an
+/// integer class comes from the register save area at `gp_offset` (< 48,
+/// step 8), a floating-point one at `fp_offset` (< 176, step 16), else from
+/// `overflow_arg_area` (step 8). An aggregate whose eightbytes are not all
+/// INTEGER is copied eightbyte by eightbyte from both areas into the
+/// temporary `args[2]` names, whose address is returned. Layout: gp_offset
+/// at +0, fp_offset at +4, overflow_arg_area at +8, reg_save_area at +16.
 pub(super) fn emit_va_arg_sysv(
     code: &mut Vec<u8>,
     args: &[u32],
@@ -836,17 +860,23 @@ pub(super) fn emit_va_arg_sysv(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
-    if args.len() != 2 {
-        return fail("VaArg: expected 2 args (ap, descriptor)");
-    }
+    use crate::c5::op::VaArgDesc;
     // Recover the packed descriptor from the `Inst::Imm` the parser
     // folded for the type operand.
-    let descriptor = match func.insts.get(args[1] as usize) {
+    let descriptor = match func
+        .insts
+        .get(args.get(1).copied().unwrap_or(u32::MAX) as usize)
+    {
         Some(Inst::Imm(d)) => *d,
         _ => return fail("VaArg: descriptor operand is not a constant"),
     };
-    let desc = crate::c5::op::VaArgDesc::unpack(descriptor);
-    let is_fp = desc.kind != crate::c5::op::VaArgDesc::INT;
+    let desc = VaArgDesc::unpack(descriptor);
+    let composed = desc.kind == VaArgDesc::EIGHTBYTES;
+    if args.len() != 2 + usize::from(composed) {
+        return fail("VaArg: expected (ap, descriptor) and a composed aggregate's temporary");
+    }
+    let memory = desc.kind == crate::c5::op::VaArgDesc::MEMORY;
+    let is_fp = desc.kind != crate::c5::op::VaArgDesc::INT && !memory;
     // Cursor pointer (struct address) held in r11, outside the
     // allocator's banks. The result address is computed in r10; both
     // are disjoint from the allocator-chosen `dst`.
@@ -868,8 +898,6 @@ pub(super) fn emit_va_arg_sysv(
     // A by-value integer-class aggregate spans `ceil(size/8)` consecutive gp
     // slots and rides the save area only when all of them fit; an FP
     // argument is a single double or a vector, each one 16-byte save slot.
-    // TODO: an HFA's members ride consecutive slots; the descriptor classes
-    // every other aggregate as general-register.
     let aligned = ((desc.size as i32 + 7) & !7).max(8);
     let (off_disp, bound, step): (i32, i32, i32) = if is_fp {
         (4, 176, 16)
@@ -879,8 +907,11 @@ pub(super) fn emit_va_arg_sysv(
     // The sequence touches only r10 / r11 and the in-memory fields, so no
     // allocated value is clobbered.
     let mut jmp_rel32_at = None;
-    // A MEMORY-class aggregate (3.2.3) is passed on the stack alone.
-    if is_fp || desc.size <= 16 {
+    if composed {
+        let temp = args.get(2).map_or(Place::None, |&t| place_of(alloc, t));
+        jmp_rel32_at = Some(emit_va_arg_eightbytes(code, desc, ap, temp, frame)?);
+    } else if !memory && (is_fp || desc.size <= 16) {
+        // A MEMORY-class argument (3.2.3) is passed on the stack alone.
         super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
         // cmp r10d, bound ; jae use_overflow
         super::encode::emit_ri(code, Mnem::Cmp, 8, SCRATCH_R10, bound);
@@ -918,6 +949,66 @@ pub(super) fn emit_va_arg_sysv(
     Ok(())
 }
 
+/// The register path of a composed System V `va_arg`: branch to the
+/// overflow path (emitted next, at the returned `jmp`'s end) unless every
+/// eightbyte's register fits in its save area, else copy each eightbyte from
+/// its slot into `temp` -- an INTEGER one from `gp_offset`, an SSE one and
+/// the SSEUP after it from one 16-byte slot at `fp_offset` -- advance both
+/// offsets and leave `temp` in r10. rax is borrowed around the copy. Returns
+/// the offset of the rel32 of the `jmp` to the join.
+fn emit_va_arg_eightbytes(
+    code: &mut Vec<u8>,
+    desc: crate::c5::op::VaArgDesc,
+    ap: Reg,
+    temp: Place,
+    frame: Frame,
+) -> Emit<usize> {
+    use crate::c5::op::VaArgDesc;
+    let n = desc.size.div_ceil(8);
+    let count = |class| (0..n).filter(|&k| desc.eightbyte(k) == class).count() as i32;
+    let (num_gp, num_fp) = (count(VaArgDesc::EB_INTEGER), count(VaArgDesc::EB_SSE));
+    let mut to_overflow = Vec::new();
+    for (num, off_disp, limit, slot) in [(num_gp, 0, 48, 8), (num_fp, 4, 176, 16)] {
+        if num > 0 {
+            super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
+            super::encode::emit_ri(code, Mnem::Cmp, 8, SCRATCH_R10, limit - slot * num);
+            super::encode::emit_jcc_rel32(code, Cc::A, 0);
+            to_overflow.push(code.len() - 4);
+        }
+    }
+    let borrow = Reg::RAX;
+    super::encode::emit_push_r(code, borrow);
+    let Some(base) = materialize_int_shifted(code, temp, borrow, frame, 8) else {
+        return fail("VaArg: composed aggregate's temporary not in int reg / spill");
+    };
+    for k in 0..n {
+        let (off_disp, step, parts) = match desc.eightbyte(k) {
+            VaArgDesc::EB_INTEGER => (0, 8, 1),
+            VaArgDesc::EB_SSE if k + 1 < n && desc.eightbyte(k + 1) == VaArgDesc::EB_SSEUP => {
+                (4, 16, 2)
+            }
+            VaArgDesc::EB_SSE => (4, 16, 1),
+            _ => continue,
+        };
+        for part in 0..parts {
+            super::encode::emit_mov_r32_mem(code, SCRATCH_R10, ap, off_disp);
+            super::encode::emit_rm(code, Mnem::Add, 8, SCRATCH_R10, ap, 16);
+            emit_mov_r_mem(code, SCRATCH_R10, SCRATCH_R10, 8 * part);
+            emit_mov_mem_r(code, base, (8 * (k + part as u32)) as i32, SCRATCH_R10);
+        }
+        super::encode::emit_mi(code, Mnem::Add, 4, ap, off_disp, step);
+    }
+    emit_mov_rr(code, SCRATCH_R10, base);
+    super::encode::emit_pop_r(code, borrow);
+    super::encode::emit_jmp_rel32(code, 0);
+    let jmp_at = code.len() - 4;
+    for at in to_overflow {
+        let rel = (code.len() - (at + 4)) as i32;
+        code[at..at + 4].copy_from_slice(&rel.to_le_bytes());
+    }
+    Ok(jmp_at)
+}
+
 /// `Some((call_pc, target_pc, args))` when `block` returns the value of
 /// its last instruction, a direct `Inst::Call` the epilogue can replace by
 /// a jump: the arguments fit the host argument-register window, this
@@ -941,23 +1032,27 @@ pub(super) fn detect_tail_call<'a>(
     if v == super::super::ir::NO_VALUE {
         return None;
     }
-    // An empty block whose range starts after another block's trailing call
-    // also satisfies `v + 1 == end`; that call belongs to its own block.
-    if v < block.inst_range.start || v + 1 != block.inst_range.end {
+    // The call ends the block but for lifetime markers, which the frame
+    // teardown makes moot.
+    if !block.inst_range.contains(&v)
+        || !(v + 1..block.inst_range.end).all(|p| func.insts[p as usize].is_lifetime_marker())
+    {
         return None;
     }
-    let (target_pc, args, arg_aggs, fp_arg_mask) = match &func.insts[v as usize] {
+    let (target_pc, args, arg_aggs, fp_arg_mask, fixed_args) = match &func.insts[v as usize] {
         Inst::Call {
             target_pc,
             args,
             arg_aggs,
             fp_arg_mask,
+            fixed_args,
             ..
         } => (
             *target_pc,
             args.as_slice(),
             arg_aggs.as_slice(),
             fp_arg_mask,
+            *fixed_args,
         ),
         _ => return None,
     };
@@ -978,8 +1073,9 @@ pub(super) fn detect_tail_call<'a>(
     if func.is_variadic {
         return None;
     }
-    // A variadic callee takes the c5-stack argument convention.
-    if variadic_targets.contains(&target_pc) {
+    // A variadic callee, or one called with fewer named arguments than
+    // arguments (without a prototype on Win64), takes its own placement.
+    if variadic_targets.contains(&target_pc) || fixed_args < args.len() {
         return None;
     }
     // A callee on another convention wants a different argument window,

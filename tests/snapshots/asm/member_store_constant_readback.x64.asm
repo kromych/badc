@@ -39,43 +39,41 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	xorl	%ebx, %ebx
                	leaq	<rip>, %rdi
                	movb	$0x20, 0x1(%rdi)
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
-               	movl	$0x2, %ebx
+               	movl	$0x2, %ecx
                	leaq	<rip>, %rax
                	movb	$0x1, (%rax)
                	movb	$0x2, 0x1(%rax)
                	movb	$0x3, (%rax)
-               	leaq	<rip>, %rcx
-               	movq	%rax, (%rcx)
+               	leaq	<rip>, %rdx
+               	movq	%rax, (%rdx)
                	movb	$0x4, (%rax)
                	movb	$0x9, (%rax)
                	movb	$0x4, (%rax)
                	movb	$0x9, 0x1(%rax)
                	movb	$0x5, (%rax)
-               	movq	(%rcx), %rcx
-               	movb	$0x7, (%rcx)
-               	leaq	<rip>, %rcx
-               	movslq	(%rcx), %rdx
-               	incq	%rdx
-               	movl	%edx, (%rcx)
+               	movq	(%rdx), %rdx
+               	movb	$0x7, (%rdx)
+               	leaq	<rip>, %rdx
+               	movslq	(%rdx), %rsi
+               	incq	%rsi
+               	movl	%esi, (%rdx)
                	movzbq	(%rax), %rax
                	cmpl	$0x7, %eax
                	je	<addr>
-               	orq	$0x20, %rbx
+               	orq	$0x20, %rcx
                	leaq	<rip>, %rax
                	movb	$0x6, (%rax)
                	movzbq	(%rax), %rax
                	cmpl	$0x6, %eax
                	je	<addr>
-               	orq	$0x40, %rbx
-               	movq	%rbx, %rax
-               	popq	%rbx
-               	leave
+               	orq	$0x40, %rcx
+               	movq	%rcx, %rax
+               	popq	%rbp
                	retq
+               	xorl	%ecx, %ecx
+               	jmp	<addr>

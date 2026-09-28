@@ -688,7 +688,7 @@ static int scenario_truetype(void) {
      * the runtime path needs a real .ttf payload (not bundled
      * here -- stbtt_FindGlyphIndex on a zeroed stbtt_fontinfo
      * dereferences NULL inside the font byte table). */
-    int (*entry)(stbtt_fontinfo *, int) = stbtt_FindGlyphIndex;
+    int (*entry)(const stbtt_fontinfo *, int) = stbtt_FindGlyphIndex;
     if (entry == NULL) return 1;
     printf("truetype OK: symbol resolves\n");
     return 0;

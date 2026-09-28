@@ -28,7 +28,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v22  Imm(0)                                           -> x2
     v23  Imm(0)                                           -> x2
     v24  Imm(1)                                           -> x2
-    v25  Imm(0)                                           -> x2
+    v25  Imm(1)                                           -> x2
     v26  Imm(1)                                           -> x2
     v27  Imm(1)                                           -> x2
     v28  Imm(0)                                           -> x2 [f32]
@@ -47,7 +47,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v41  Imm(0)                                           -> x2
     v42  Imm(1)                                           -> x2
     v43  Imm(2)                                           -> x2
-    v44  Imm(0)                                           -> x2
+    v44  Imm(2)                                           -> x2
     v45  Imm(2)                                           -> x2
     v46  Imm(1)                                           -> x2
     v47  Imm(0)                                           -> x2 [f32]
@@ -66,7 +66,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v60  Imm(0)                                           -> x2
     v61  Imm(2)                                           -> x2
     v62  Imm(3)                                           -> x2
-    v63  Imm(0)                                           -> x2
+    v63  Imm(3)                                           -> x2
     v64  Imm(3)                                           -> x2
     v65  Imm(1)                                           -> x2
     v66  Imm(0)                                           -> x2 [f32]
@@ -85,7 +85,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v79  Imm(0)                                           -> x0
     v80  Imm(3)                                           -> x0
     v81  Imm(4)                                           -> x0
-    v82  Imm(0)                                           -> x0
+    v82  Imm(4)                                           -> x0
     v83  Imm(4)                                           -> x0
     v84  Imm(1)                                           -> x0
     v85  Imm(0)                                           -> x0 [f32]
@@ -104,7 +104,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v98  Imm(0)                                           -> x2
     v99  Imm(4)                                           -> x2
     v100 Imm(5)                                           -> x2
-    v101 Imm(0)                                           -> x2
+    v101 Imm(5)                                           -> x2
     v102 Imm(5)                                           -> x2
     v103 Imm(1)                                           -> x2
     v104 Imm(0)                                           -> x2 [f32]
@@ -123,7 +123,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v117 Imm(0)                                           -> x2
     v118 Imm(5)                                           -> x2
     v119 Imm(6)                                           -> x2
-    v120 Imm(0)                                           -> x2
+    v120 Imm(6)                                           -> x2
     v121 Imm(6)                                           -> x2
     v122 Imm(1)                                           -> x2
     v123 Imm(0)                                           -> x2 [f32]
@@ -142,7 +142,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v136 Imm(0)                                           -> x2
     v137 Imm(6)                                           -> x2
     v138 Imm(7)                                           -> x2
-    v139 Imm(0)                                           -> x2
+    v139 Imm(7)                                           -> x2
     v140 Imm(7)                                           -> x2
     v141 Imm(1)                                           -> x2
     v142 Imm(0)                                           -> x2 [f32]
@@ -161,7 +161,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v155 Imm(0)                                           -> x1
     v156 Imm(7)                                           -> x1
     v157 Imm(8)                                           -> x1
-    v158 Imm(0)                                           -> x1
+    v158 Imm(8)                                           -> x1
     v159 Imm(8)                                           -> x1
     v160 Imm(0)                                           -> x1
     v161 Imm(0)                                           -> x1 [f32]

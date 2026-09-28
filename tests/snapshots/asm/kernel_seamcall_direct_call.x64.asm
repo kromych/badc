@@ -23,7 +23,7 @@ Disassembly of section .text:
                	movl	$0xa, %ebx
                	jmp	<addr>
                	decq	%rbx
-               	testl	%ebx, %ebx
+               	testq	%rbx, %rbx
                	je	<addr>
                	addl	$0x1, (%rip)            # <addr>
 		R_X86_64_PC32	preempt_count-0x5

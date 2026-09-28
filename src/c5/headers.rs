@@ -681,6 +681,15 @@ mod tests {
     }
 
     #[test]
+    fn header_declaring_finds_functions_a_header_defines() {
+        // A library function a header provides as a `static inline`
+        // definition rather than a prototype is found the same way.
+        assert_eq!(header_declaring("copysign"), Some("math.h"));
+        assert_eq!(header_declaring("strnlen"), Some("string.h"));
+        assert_eq!(header_declaring("imaxabs"), Some("inttypes.h"));
+    }
+
+    #[test]
     fn header_declaring_returns_none_for_unknown() {
         assert_eq!(header_declaring("definitely_not_in_any_header"), None);
     }
@@ -720,6 +729,81 @@ mod tests {
         assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 
+    /// The C99 and POSIX functions of no parameters are declared with a
+    /// prototype, so a call passing an argument is diagnosed (C99
+    /// 6.5.2.2p2), and the POSIX id functions return uid_t, gid_t and pid_t,
+    /// the ids unsigned on Linux and macOS as their C libraries have them.
+    #[test]
+    fn parameterless_library_functions_are_prototyped() {
+        use crate::{CompileOptions, Compiler, Target};
+        let c99 = ["getchar", "rand", "clock", "errno_location", "abort"];
+        let posix = [
+            "getuid",
+            "geteuid",
+            "getgid",
+            "getegid",
+            "getpid",
+            "getppid",
+            "fork",
+            "vfork",
+            "sync",
+            "dlerror",
+            "pthread_self",
+            "getpwent",
+            "setpwent",
+            "endpwent",
+        ];
+        let shadow = ["getspent", "setspent", "endspent"];
+        for target in Target::ALL {
+            let posix_target = !target.is_windows();
+            let linux = matches!(target, Target::LinuxX64 | Target::LinuxAarch64);
+            let mut src = alloc::string::String::from(
+                "#include <errno.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <time.h>\n",
+            );
+            let mut names: alloc::vec::Vec<&str> = alloc::vec::Vec::new();
+            if posix_target {
+                src.push_str(
+                    "#include <dlfcn.h>\n#include <pthread.h>\n#include <pwd.h>\n\
+                     #include <unistd.h>\n\
+                     _Static_assert((uid_t)-1 > 0 && (gid_t)-1 > 0, \"unsigned ids\");\n\
+                     _Static_assert(_Generic(getuid(), uid_t: 1, default: 0)\n\
+                       && _Generic(geteuid(), uid_t: 1, default: 0)\n\
+                       && _Generic(getgid(), gid_t: 1, default: 0)\n\
+                       && _Generic(getegid(), gid_t: 1, default: 0)\n\
+                       && _Generic(getpid(), pid_t: 1, default: 0)\n\
+                       && _Generic(fork(), pid_t: 1, default: 0), \"id types\");\n",
+                );
+                names.extend(posix);
+            }
+            if linux {
+                src.push_str("#include <shadow.h>\n");
+                names.extend(shadow);
+            }
+            names.extend(c99);
+            src.push_str("void calls(void) {\n");
+            for name in &names {
+                src.push_str(&alloc::format!("    (void){name}(0);\n"));
+            }
+            src.push_str("}\n");
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            let program = Compiler::with_options(src.clone(), target, opts)
+                .compile()
+                .unwrap_or_else(|e| panic!("{}: {e}\n{src}", target.id_str()));
+            let warnings: alloc::vec::Vec<_> =
+                program.warnings.iter().map(|w| w.to_string()).collect();
+            for name in &names {
+                let text = alloc::format!(
+                    "too many arguments to `{name}` (expected 0, got at least 1) [B3005]"
+                );
+                assert!(
+                    warnings.iter().any(|w| w.contains(&text)),
+                    "{}: {name}: {warnings:?}",
+                    target.id_str()
+                );
+            }
+        }
+    }
+
     /// A program may repeat the C99 and POSIX prototypes after the bundled
     /// headers on every target with no redeclaration diagnostic.
     #[test]
@@ -729,6 +813,32 @@ mod tests {
         const SRC: &str = include_str!("../../tests/fixtures/libc/standard_prototypes.h");
         let mut failures = alloc::vec::Vec::new();
         for target in Target::ALL {
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            match Compiler::with_options(SRC.into(), target, opts).compile() {
+                Err(err) => failures.push(alloc::format!("{}: {err}", target.id_str())),
+                Ok(program) => failures.extend(
+                    program
+                        .warnings
+                        .iter()
+                        .filter(|w| w.code == Code::REDECLARATION_MISMATCH)
+                        .map(|w| alloc::format!("{}: {w}", target.id_str())),
+                ),
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    /// A program may repeat the Win32 prototypes after the bundled
+    /// `<windows.h>` with the SDK's types, spelled through the SDK's
+    /// typedefs or out in full as raylib does, with no redeclaration
+    /// diagnostic on either Windows target.
+    #[test]
+    fn win32_redeclarations_compose_with_the_bundled_windows_h() {
+        use crate::c5::diag::Code;
+        use crate::{CompileOptions, Compiler, Target};
+        const SRC: &str = include_str!("../../tests/fixtures/libc/win32_prototypes.h");
+        let mut failures = alloc::vec::Vec::new();
+        for target in [Target::WindowsX64, Target::WindowsAarch64] {
             let opts = CompileOptions::default().with_no_entry_point(true);
             match Compiler::with_options(SRC.into(), target, opts).compile() {
                 Err(err) => failures.push(alloc::format!("{}: {err}", target.id_str())),

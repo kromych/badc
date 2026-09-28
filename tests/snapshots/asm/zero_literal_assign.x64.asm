@@ -58,12 +58,8 @@ Disassembly of section .text:
 <zero_chained>:
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
-               	pushq	%rax
-               	movq	(%rdi), %rax
-               	movq	%rax, (%rsi)
-               	movq	0x8(%rdi), %rax
-               	movq	%rax, 0x8(%rsi)
-               	popq	%rax
+               	movups	(%rdi), %xmm14
+               	movups	%xmm14, (%rsi)
                	retq
 
 <zero_above_bound>:

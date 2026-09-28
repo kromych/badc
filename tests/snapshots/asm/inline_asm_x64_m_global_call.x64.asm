@@ -34,18 +34,11 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	callq	*<rip>
-               	movl	%eax, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rcx
+               	movq	%rax, %rcx
                	leaq	<rip>, %rax
                	leaq	-<rip>, %rdx       # <addr>
                	movq	%rdx, 0x8(%rax)
                	callq	*<rip>
-               	movl	%eax, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rax
                	addq	%rcx, %rax
-               	leave
                	retq

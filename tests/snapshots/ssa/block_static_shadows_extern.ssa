@@ -15,17 +15,17 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
   block 1  start_pc=0
     v13  Extend { value=v9, kind=I32 }                    -> x2
     v14  BinopI { op=shl, lhs=v9, rhs_imm=4 }             -> x1
-    v15  Extend { value=v14, kind=I32 }                   -> x2
+    v15  Extend { value=v14, kind=I32, nsw }              -> x2
     v16  Imm(0)                                           -> x2
     v17  Extend { value=v8, kind=I32 }                    -> x2
     v18  Binop { op=add, lhs=v1, rhs=v8 }                 -> x2
     v19  LoadIndexed { base=v1, index=v8, scale=1, kind=U8 } -> x2
     v20  Binop { op=add, lhs=v14, rhs=v19 }               -> x1
-    v21  Extend { value=v20, kind=I32 }                   -> x2
+    v21  Extend { value=v20, kind=I32, nsw }              -> x2
     v22  Imm(0)                                           -> x2
     v23  Extend { value=v8, kind=I32 }                    -> x2
     v24  BinopI { op=add, lhs=v8, rhs_imm=1 }             -> x0
-    v25  Imm(0)                                           -> x2
+    v25  Extend { value=v24, kind=I32, nsw }              -> x2
     terminator Jmp(b2)   (exit_acc=v24)
   block 2  start_pc=0
     v8   Phi { incoming=[b0:v5, b1:v24], kind=I64 }       -> x0

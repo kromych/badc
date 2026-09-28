@@ -32,12 +32,8 @@ Disassembly of section .text:
                	retq
 
 <copy_pair>:
-               	pushq	%rax
-               	movq	(%rsi), %rax
-               	movq	%rax, (%rdi)
-               	movq	0x8(%rsi), %rax
-               	movq	%rax, 0x8(%rdi)
-               	popq	%rax
+               	movups	(%rsi), %xmm14
+               	movups	%xmm14, (%rdi)
                	retq
 
 <clamp>:

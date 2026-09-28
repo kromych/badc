@@ -21,7 +21,7 @@ Disassembly of section .text:
                	mov	x1, #0x7f               // =127
                	movk	x1, #0x100, lsl #16
                	str	w1, [x0]
-               	ldr	x0, [x0]
+               	ldr	w0, [x0]
                	bl	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -36,7 +36,7 @@ Disassembly of section .text:
                	mov	x1, #0xa8c0             // =43200
                	movk	x1, #0x101, lsl #16
                	str	w1, [x0]
-               	ldr	x0, [x0]
+               	ldr	w0, [x0]
                	bl	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>

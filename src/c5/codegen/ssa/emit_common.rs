@@ -61,8 +61,14 @@ pub(crate) struct EmitCtx<'a> {
     /// `ent_pc`; the debug-info emitter places the formal parameters with it.
     pub(crate) param_frame_offsets:
         &'a mut alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+    /// Where each over-aligned region member's storage is, by `ent_pc`
+    /// (`Build::region_frame_offsets`).
+    pub(crate) region_frame_offsets:
+        &'a mut alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, Option<i64>>>,
     /// Offsets of the `-pg` call sites `-mrecord-mcount` records.
     pub(crate) mcount_sites: &'a mut alloc::vec::Vec<usize>,
+    /// The functions that return ahead of their frame.
+    pub(crate) early_returns: &'a mut alloc::vec::Vec<super::EarlyReturn>,
 }
 
 /// Round `n` up to the next 16-byte multiple. AAPCS64, SysV
@@ -211,82 +217,137 @@ pub(crate) fn check_frame_limits(
     Ok(())
 }
 
-/// True when the emitted form of `inst` addresses the locals region
-/// (negative slot offset): slot loads / stores / address-takes, a
-/// non-zero `AllocaInit` (its reserved slot keeps the locals region
-/// live), and a call gathering an aggregate return into its
-/// result-temp slot. Purely structural; whether the
+/// Where each over-aligned region member's storage is
+/// (`Build::region_frame_offsets`); `align_region_off` is the static
+/// region's frame-base offset, 0 when the region is not in the static frame.
+pub(crate) fn region_frame_offsets(
+    func: &super::super::ir::FunctionSsa,
+    align_region_off: i64,
+) -> alloc::collections::BTreeMap<i64, Option<i64>> {
+    func.over_aligned
+        .iter()
+        .map(|m| {
+            (
+                m.slot,
+                (align_region_off != 0).then_some(align_region_off + m.off),
+            )
+        })
+        .collect()
+}
+
+/// The local slot (negative offset) the emitted form of `inst` addresses:
+/// a slot load / store / address-take, the alloca-top slot a non-zero
+/// `AllocaInit` names by its positive index, and the result temp a call
+/// gathers an aggregate return into. Purely structural; whether the
 /// instruction is emitted at all is `is_dead_pure`'s decision, and the
-/// frame gate below combines the two so it cannot disagree with the
-/// per-inst emit skip.
-fn inst_addresses_local(inst: &super::super::ir::Inst) -> bool {
+/// frame gate combines the two so it cannot disagree with the per-inst
+/// emit skip.
+fn local_named(inst: &super::super::ir::Inst) -> Option<i64> {
     use super::super::ir::Inst;
-    match inst {
-        Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } | Inst::LocalAddr(off) => {
-            *off < 0
-        }
-        Inst::AllocaInit(slot) => *slot != 0,
+    let off = match *inst {
+        Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } | Inst::LocalAddr(off) => off,
+        Inst::AllocaInit(slot) => -slot.abs(),
         Inst::Call { ret_slot_local, .. }
         | Inst::CallIndirect { ret_slot_local, .. }
-        | Inst::CallExt { ret_slot_local, .. } => *ret_slot_local < 0,
-        _ => false,
+        | Inst::CallExt { ret_slot_local, .. } => ret_slot_local,
+        _ => 0,
+    };
+    (off < 0).then_some(off)
+}
+
+/// The locals an inline-asm statement reaches through a static operand,
+/// whose `LocalAddr` may be dead.
+fn asm_locals(
+    func: &super::super::ir::FunctionSsa,
+    inst: &super::super::ir::Inst,
+    note: &mut impl FnMut(i64),
+) {
+    let super::super::ir::Inst::InlineAsm { asm, args } = inst else {
+        return;
+    };
+    for (op, &a) in asm.operands.iter().zip(args) {
+        if op.static_arg
+            && let Some(crate::c5::asm::StaticOperand::Frame(off)) =
+                crate::c5::asm::asm_operand_static(func, a)
+            && off < 0
+        {
+            note(off);
+        }
     }
 }
 
-/// An inline-asm statement reaching a user local through a static operand,
-/// whose `LocalAddr` may be dead.
-fn asm_addresses_local(
-    func: &super::super::ir::FunctionSsa,
-    inst: &super::super::ir::Inst,
-) -> bool {
-    let super::super::ir::Inst::InlineAsm { asm, args } = inst else {
-        return false;
-    };
-    asm.operands.iter().zip(args).any(|(op, &a)| {
-        op.static_arg
-            && matches!(
-                crate::c5::asm::asm_operand_static(func, a),
-                Some(crate::c5::asm::StaticOperand::Frame(off)) if off < 0
-            )
-    })
+/// The frame regions both targets size identically, each a 16-byte aligned
+/// byte count.
+pub(crate) struct FrameBase {
+    pub(crate) locals: u32,
+    /// The over-aligned region when it joins the static frame (alignment 16).
+    pub(crate) static_region: u32,
+    pub(crate) spills: u32,
+    pub(crate) saved_gprs: u32,
 }
 
-/// The frame regions both targets size identically: the locals region, the
-/// allocator spill region, and the saved callee-GPR region, each a 16-byte
-/// aligned byte count. The locals region is zero when no emitted instruction
-/// references a user local (negative `off`); after mem2reg and dead-store
-/// elimination such an object is never observed and needs no storage
-/// (C99 6.2.4p2). An instruction the per-inst dispatch skips as dead pure
-/// (`is_dead_pure`) produces no machine code and therefore no access; the
-/// same predicate gates both decisions. Param cells use non-negative `off`
-/// and are sized separately.
+impl FrameBase {
+    /// Whether the frame holds an object a canary could guard: a local or
+    /// an over-aligned one, in the static region or a realigned one.
+    pub(crate) fn has_objects(&self, func: &super::super::ir::FunctionSsa) -> bool {
+        self.locals > 0 || self.static_region > 0 || func.frame_align > 16
+    }
+}
+
+/// The locals region is zero when no emitted instruction references a user
+/// local (negative `off`), and the static over-aligned region when none
+/// references a region member; after mem2reg and dead-store elimination such
+/// an object is never observed and needs no storage (C99 6.2.4p2). An
+/// instruction the per-inst dispatch skips as dead pure (`is_dead_pure`)
+/// produces no machine code and therefore no access; the same predicate
+/// gates both decisions. Param cells use non-negative `off` and are sized
+/// separately.
 pub(crate) fn compute_frame_base(
     func: &super::super::ir::FunctionSsa,
     alloc: &super::reg_alloc::Allocation,
-) -> (u32, u32, u32) {
-    let declared_locals_bytes = slots16(func.locals.max(0) as u32);
-    // Two prologue paths reach the locals region through FunctionSsa fields
-    // rather than instructions and count as accesses on their own: saving
-    // the caller-supplied indirect-result pointer into `indirect_result_slot`,
-    // and scattering a by-value aggregate parameter into its body local.
-    let any_local_access = func.indirect_result_slot < 0
-        || func
-            .param_aggs
-            .iter()
-            .zip(func.param_local_slots.iter())
-            .any(|(agg, slot)| agg.is_some() && *slot < 0)
-        || func.insts.iter().enumerate().any(|(idx, i)| {
-            (inst_addresses_local(i) && !is_dead_pure(i, idx as super::super::ir::ValueId, alloc))
-                || asm_addresses_local(func, i)
-        });
-    let locals_bytes = if any_local_access {
-        declared_locals_bytes
-    } else {
-        0
+) -> FrameBase {
+    let (mut local, mut region) = (false, false);
+    let mut note = |off: i64| {
+        if func.over_aligned.iter().any(|m| m.slot == off) {
+            region = true;
+        } else {
+            local = true;
+        }
     };
-    let alloc_spill_bytes = slots16(alloc.spill_count);
-    let saved_gpr_bytes = slots16(alloc.gpr_used.len() as u32);
-    (locals_bytes, alloc_spill_bytes, saved_gpr_bytes)
+    // Two prologue paths reach a local through FunctionSsa fields rather
+    // than instructions and count as accesses on their own: saving the
+    // caller-supplied indirect-result pointer into `indirect_result_slot`,
+    // and scattering a by-value aggregate parameter into its body local.
+    if func.indirect_result_slot < 0 {
+        note(func.indirect_result_slot);
+    }
+    for (agg, &slot) in func.param_aggs.iter().zip(func.param_local_slots.iter()) {
+        if agg.is_some() && slot < 0 {
+            note(slot);
+        }
+    }
+    for (idx, i) in func.insts.iter().enumerate() {
+        if let Some(off) = local_named(i)
+            && !is_dead_pure(i, idx as super::super::ir::ValueId, alloc)
+        {
+            note(off);
+        }
+        asm_locals(func, i, &mut note);
+    }
+    FrameBase {
+        locals: if local {
+            slots16(func.locals.max(0) as u32)
+        } else {
+            0
+        },
+        static_region: if region && func.frame_align == 16 {
+            func.realign_region_bytes.max(0) as u32
+        } else {
+            0
+        },
+        spills: slots16(alloc.spill_count),
+        saved_gprs: slots16(alloc.gpr_used.len() as u32),
+    }
 }
 
 /// Classify the function's parameter cells (`off >= 2`) by how the body uses
@@ -1165,7 +1226,15 @@ pub(crate) fn param_plan(
     named: usize,
 ) -> super::CallPlan {
     let aggs = build_arg_aggs(&func.param_aggs, &func.agg_descs, abi);
-    super::plan_call_args_aggs(func.n_params, named, &func.param_fp_mask, abi, &aggs, false)
+    super::plan_call_args_aggs(
+        func.n_params,
+        named,
+        &func.param_fp_mask,
+        abi,
+        &aggs,
+        false,
+        func.param_widths,
+    )
 }
 
 /// Resolve each call argument's aggregate descriptor to its ABI classification
@@ -1236,6 +1305,34 @@ pub(crate) fn time_pass_arch<R>(_label: &str, _arch: &str, f: impl FnOnce() -> R
     f()
 }
 
+/// How one lowering runs its passes: each under its timing label, and
+/// with `verify` set, followed by the SSA checks naming it.
+#[derive(Clone, Copy)]
+pub(crate) struct Pipeline {
+    pub arch: &'static str,
+    pub verify: bool,
+}
+
+impl Pipeline {
+    pub(crate) fn run<R>(
+        self,
+        label: &str,
+        funcs: &mut alloc::vec::Vec<super::super::ir::FunctionSsa>,
+        pass: impl FnOnce(&mut alloc::vec::Vec<super::super::ir::FunctionSsa>) -> R,
+    ) -> R {
+        let r = time_pass_arch(label, self.arch, || pass(funcs));
+        self.check(funcs, label);
+        r
+    }
+
+    /// With `verify` set, the SSA checks of what the step named `label` left.
+    pub(crate) fn check(self, funcs: &[super::super::ir::FunctionSsa], label: &str) {
+        if self.verify {
+            super::verify::after_pass(funcs, label);
+        }
+    }
+}
+
 /// A form outside the implemented subset and the reason the emit named
 /// for it; the reason reaches the diagnostic verbatim.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1299,21 +1396,30 @@ pub(crate) fn c5_slot_to_fp_offset(off: i64, param_stride: i64, canary_bytes: u3
     }
 }
 
-/// Bytes the stack-protector region adds to the frame. `locals_bytes` is
-/// the declared-locals region size `compute_frame_base` returned, which is
-/// zero when no local access survives -- there is then nothing in the frame
-/// for a canary to guard, and only `-fstack-protector-all` still asks for
-/// one. A naked function emits no prologue and can carry no canary.
+/// Bytes the stack-protector region adds to the frame. With no object in
+/// the frame (`FrameBase::has_objects`) there is nothing for a canary to
+/// guard, and only `-fstack-protector-all` still asks for one. A naked
+/// function emits no prologue and can carry no canary.
 pub(crate) fn canary_bytes(
     func: &super::super::ir::FunctionSsa,
-    locals_bytes: u32,
+    base: &FrameBase,
     ssp: super::super::StackProtect,
 ) -> u32 {
-    let has_frame = locals_bytes > 0 || uses_dynamic_alloca(func);
-    if func.is_naked || !ssp.protects(func.ssp, has_frame) {
+    let has_frame = base.has_objects(func) || uses_dynamic_alloca(func);
+    if !protected(func, ssp, has_frame) {
         return 0;
     }
     super::super::CANARY_REGION_BYTES
+}
+
+/// Whether `func` carries a canary under `ssp`: a naked function emits no
+/// prologue to hold one, and `no_stack_protector` opts the body out.
+pub(crate) fn protected(
+    func: &super::super::ir::FunctionSsa,
+    ssp: super::super::StackProtect,
+    has_frame: bool,
+) -> bool {
+    !func.is_naked && !func.no_stack_protector && ssp.protects(func.ssp, has_frame)
 }
 
 /// Frame-base-relative byte offset of the canary slot: the topmost 8 bytes
@@ -1376,6 +1482,40 @@ pub(crate) fn record_inst_src(
         return;
     }
     ssa_line_rows.push((code_len, line, file_idx));
+}
+
+/// The row of `block`'s test placed apart from it: the line of the value its
+/// branch reads.
+pub(crate) fn record_test_src(
+    func: &super::super::ir::FunctionSsa,
+    block: super::super::ir::BlockId,
+    code_len: usize,
+    ssa_line_rows: &mut alloc::vec::Vec<(usize, u32, u32)>,
+) {
+    use super::super::ir::Terminator;
+    if let Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } =
+        func.blocks[block as usize].terminator
+    {
+        record_inst_src(func, cond, code_len, ssa_line_rows);
+    }
+}
+
+/// The row of code placed apart from `block` that computes what it does:
+/// the line of the block's first instruction that carries one.
+pub(crate) fn record_block_src(
+    func: &super::super::ir::FunctionSsa,
+    block: super::super::ir::BlockId,
+    code_len: usize,
+    ssa_line_rows: &mut alloc::vec::Vec<(usize, u32, u32)>,
+) {
+    let sourced = |&v: &u32| {
+        func.inst_src
+            .get(v as usize)
+            .is_some_and(|&(line, _)| line != 0)
+    };
+    if let Some(v) = func.blocks[block as usize].inst_range.clone().find(sourced) {
+        record_inst_src(func, v, code_len, ssa_line_rows);
+    }
 }
 
 /// Record the byte offset of the first post-prologue instruction,
@@ -1460,6 +1600,70 @@ pub(crate) fn extern_fn_targets(
     out
 }
 
+/// The registers of `candidates` a lowering may write at `v`, in the
+/// candidates' order and split in two: the free ones -- none of `taken`,
+/// none `-ffixed-` reserves, none holding a value live across `v`
+/// (`Allocation::holds_live_across`) -- and the ones holding a live value,
+/// which a save around the lowering can still borrow.
+pub(crate) fn site_registers(
+    alloc: &super::reg_alloc::Allocation,
+    v: super::super::ir::ValueId,
+    candidates: &[u8],
+    taken: &[u8],
+    fixed: super::super::FixedRegs,
+) -> (alloc::vec::Vec<u8>, alloc::vec::Vec<u8>) {
+    let mut free = alloc::vec::Vec::new();
+    let mut held = alloc::vec::Vec::new();
+    for &r in candidates {
+        if taken.contains(&r) || fixed.has_gpr(r) {
+            continue;
+        }
+        if alloc.holds_live_across(v, r) {
+            held.push(r);
+        } else {
+            free.push(r);
+        }
+    }
+    (free, held)
+}
+
+/// The direct-call targets on a convention other than the target's own,
+/// by entry: the unit's definitions and its cross-TU function
+/// declarations, the sources the call emitters read theirs from
+/// (`LowerTarget::note_callees`, `LowerTarget::note_extern_callee`).
+pub(crate) fn callee_conventions(
+    program: &super::super::program::Program,
+    funcs: &[super::super::ir::FunctionSsa],
+) -> alloc::collections::BTreeMap<usize, super::CallConv> {
+    let mut out: alloc::collections::BTreeMap<usize, super::CallConv> = funcs
+        .iter()
+        .filter(|f| f.conv != super::CallConv::Target)
+        .map(|f| (f.ent_pc, f.conv))
+        .collect();
+    let extern_pcs: alloc::collections::BTreeSet<usize> = program
+        .extern_function_imports
+        .iter()
+        .map(|(pc, _)| *pc)
+        .collect();
+    for sym in &program.symbols {
+        if sym.is_fun_entity()
+            && !sym.defined_here
+            && extern_pcs.contains(&(sym.val as usize))
+            && sym.conv != super::CallConv::Target
+        {
+            out.insert(sym.val as usize, sym.conv);
+        }
+    }
+    out
+}
+
+/// Accesses a transfer of `bytes` takes at `widest` bytes (a power of two)
+/// per access, the tail through halving widths.
+pub(crate) fn transfer_accesses(bytes: u32, widest: u32) -> u32 {
+    debug_assert!(widest.is_power_of_two());
+    bytes / widest + (bytes % widest).count_ones()
+}
+
 /// True when an SSA inst can be skipped entirely because its
 /// result has no consumers and the inst itself has no side effects.
 /// Per-arch emit dispatch checks this before invoking `emit_inst`;
@@ -1472,6 +1676,37 @@ pub(crate) fn is_dead_pure(
     alloc: &super::reg_alloc::Allocation,
 ) -> bool {
     is_dead_pure_counts(inst, v, &alloc.use_counts)
+}
+
+/// The parameter reads the entry parallel copy may place: the `ParamRef`s
+/// and `ParamPart`s opening the entry block, ahead of every instruction
+/// that writes a register the allocator hands out. The allocator reckons a
+/// read from its own position, so a read written at entry past such an
+/// instruction can share its home with a value defined there. `use_counts`
+/// name the unread instructions, which write none.
+pub(crate) fn entry_read_run(
+    func: &super::super::ir::FunctionSsa,
+    use_counts: &[u32],
+) -> alloc::vec::Vec<usize> {
+    use super::super::ir::Inst;
+    let mut run = alloc::vec::Vec::new();
+    let Some(entry) = func.blocks.first() else {
+        return run;
+    };
+    for v in entry.inst_range.clone() {
+        let inst = &func.insts[v as usize];
+        let unread = use_counts.get(v as usize) == Some(&0);
+        match inst {
+            Inst::ParamRef { .. } | Inst::ParamPart { .. } => run.push(v as usize),
+            Inst::AllocaInit(_) | Inst::LifetimeEnd(_) => {}
+            // A frame store writes a register besides the scratch only
+            // when its value is read.
+            Inst::StoreLocal { .. } if unread => {}
+            _ if unread && inst.is_pure() => {}
+            _ => break,
+        }
+    }
+    run
 }
 
 /// Whether `inst` lowers to no machine code and records nothing: a phi,
@@ -1538,6 +1773,7 @@ pub(crate) struct LowerState {
     pub(crate) func_ends: alloc::vec::Vec<usize>,
     pub(crate) patchable_entries: alloc::vec::Vec<super::EntryArea>,
     pub(crate) mcount_sites: alloc::vec::Vec<usize>,
+    pub(crate) early_returns: alloc::vec::Vec<super::EarlyReturn>,
     pub(crate) func_names: alloc::vec::Vec<alloc::string::String>,
     pub(crate) func_prologue_native: alloc::collections::BTreeMap<usize, usize>,
     pub(crate) ssa_line_rows: alloc::vec::Vec<(usize, u32, u32)>,
@@ -1559,6 +1795,8 @@ pub(crate) struct LowerState {
     pub(crate) canary_frame_bytes: alloc::collections::BTreeMap<usize, u32>,
     pub(crate) frame_stack: alloc::collections::BTreeMap<usize, FrameStack>,
     pub(crate) param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+    pub(crate) region_frame_offsets:
+        alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, Option<i64>>>,
     /// Entry PC to code offset, `usize::MAX` for a PC with no instruction.
     pub(crate) pc_to_native: alloc::vec::Vec<usize>,
     pub(crate) rodata: super::RodataBuild,
@@ -1572,6 +1810,7 @@ impl LowerState {
             func_ends: alloc::vec::Vec::new(),
             patchable_entries: alloc::vec::Vec::new(),
             mcount_sites: alloc::vec::Vec::new(),
+            early_returns: alloc::vec::Vec::new(),
             func_names: alloc::vec::Vec::new(),
             func_prologue_native: alloc::collections::BTreeMap::new(),
             ssa_line_rows: alloc::vec::Vec::new(),
@@ -1593,6 +1832,7 @@ impl LowerState {
             canary_frame_bytes: alloc::collections::BTreeMap::new(),
             frame_stack: alloc::collections::BTreeMap::new(),
             param_frame_offsets: alloc::collections::BTreeMap::new(),
+            region_frame_offsets: alloc::collections::BTreeMap::new(),
             pc_to_native: alloc::vec::Vec::new(),
             rodata: super::RodataBuild::default(),
         }
@@ -1622,7 +1862,9 @@ impl LowerState {
                 canary_frame_bytes: &mut self.canary_frame_bytes,
                 frame_stack: &mut self.frame_stack,
                 param_frame_offsets: &mut self.param_frame_offsets,
+                region_frame_offsets: &mut self.region_frame_offsets,
                 mcount_sites: &mut self.mcount_sites,
+                early_returns: &mut self.early_returns,
             },
             rodata: &mut self.rodata,
             asm_text_labels: &mut self.asm_text_labels,
@@ -1674,7 +1916,11 @@ pub(crate) trait LowerTarget {
     const FILE_ASM_COMMENTS: crate::c5::asm::AsmComments;
 
     /// Optimizer passes this target runs at the end of the -O pipeline.
-    fn late_opt_passes(&mut self, funcs: &mut alloc::vec::Vec<super::super::ir::FunctionSsa>);
+    fn late_opt_passes(
+        &mut self,
+        funcs: &mut alloc::vec::Vec<super::super::ir::FunctionSsa>,
+        pipeline: Pipeline,
+    );
 
     /// Per-callee tables the target derives from the finished bodies.
     fn note_callees(&mut self, funcs: &[super::super::ir::FunctionSsa]);
@@ -1784,12 +2030,12 @@ fn function_loc(
         s.class == Token::Fun as i64
             && s.defined_here
             && s.val as usize == ent_pc
-            && s.decl_line > 0
+            && s.binding.decl_line > 0
     })?;
-    let file = program.source_files.get(sym.decl_file as usize)?;
+    let file = program.source_files.get(sym.binding.decl_file as usize)?;
     Some(crate::c5::diag::Loc::new(
         file.clone(),
-        sym.decl_line as u32,
+        sym.binding.decl_line as u32,
     ))
 }
 
@@ -1843,6 +2089,10 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // post-inline bodies directly; the walk and the -O passes that produced
     // them are skipped, the rest of the pipeline runs unchanged.
     let walked = prebuilt.is_none();
+    let pipeline = Pipeline {
+        arch: B::ARCH,
+        verify: cfg!(debug_assertions) || native.verify_ssa,
+    };
     let (mut ssa_funcs, prebuilt_promoted, prebuilt_owners, mut param_ranges) = match prebuilt {
         Some(p) => (
             p.funcs,
@@ -1867,6 +2117,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // The walk's own output is the reachable set the -O passes below
     // start from; they rewrite the call graph, so the post-inline DCE
     // cannot re-derive it.
+    pipeline.check(&ssa_funcs, "ssa::produce_ssa_funcs");
     let reachable_owners =
         prebuilt_owners.unwrap_or_else(|| ssa_funcs.iter().map(|f| f.ent_pc).collect());
     // A final image is its own link step: bind import placeholders a
@@ -1892,8 +2143,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // phi-substitute slots never overlap. The pass runs regardless of debug
     // info so the emitted code is identical with and without -g.
     if !native.optimize && walked {
-        let coalesce_dwarf = time_pass_arch("ssa::slot_coalesce::run", B::ARCH, || {
-            super::slot_coalesce::run(&mut ssa_funcs, false, native.stack_protect)
+        let coalesce_dwarf = pipeline.run("ssa::slot_coalesce::run", &mut ssa_funcs, |funcs| {
+            super::slot_coalesce::run(funcs, false, native.stack_protect)
         });
         record_coalesced_slots(
             coalesce_dwarf,
@@ -1914,17 +2165,20 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // can drop their now-stale frame location.
     if native.optimize && walked {
         // Every computed goto of a function through one dispatch block.
-        time_pass_arch("passes::factor_gotos::run", B::ARCH, || {
-            super::super::passes::factor_gotos::run(&mut ssa_funcs);
+        pipeline.run("passes::factor_gotos::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::factor_gotos::run(funcs);
         });
-        // Vector slots become `V128` slot accesses for mem2reg to promote.
-        time_pass_arch("ssa::vector_slots::run", B::ARCH, || {
-            for f in &mut ssa_funcs {
+        // Vector slots become `V128` slot accesses, and inline-asm register
+        // outputs into slots the statements' own values, for mem2reg to
+        // promote.
+        pipeline.run("ssa::vector_slots::run", &mut ssa_funcs, |funcs| {
+            for f in funcs.iter_mut() {
                 super::vector_slots::run(f);
+                super::asm_outputs::run(f);
             }
         });
-        time_pass_arch("ssa::mem2reg::run", B::ARCH, || {
-            for f in &mut ssa_funcs {
+        pipeline.run("ssa::mem2reg::run", &mut ssa_funcs, |funcs| {
+            for f in funcs.iter_mut() {
                 let promoted = super::mem2reg::run(f);
                 if !promoted.is_empty() {
                     promoted_local_slots.insert(f.ent_pc, promoted);
@@ -1939,26 +2193,30 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // `resolve_constant_p` stays false: a deferred
         // `__builtin_constant_p` must survive for the inliner's argument
         // substitution.
-        time_pass_arch("passes::simplify_branches::pre_inline", B::ARCH, || {
-            super::super::passes::simplify_branches::run(&mut ssa_funcs);
-        });
+        pipeline.run(
+            "passes::simplify_branches::pre_inline",
+            &mut ssa_funcs,
+            |funcs| {
+                super::super::passes::simplify_branches::run(funcs);
+            },
+        );
         // Unroll constant-trip loops after mem2reg (the loop-carried
         // values are phis by then) and before the inliner, so a helper
         // whose body was a short loop becomes a single-block inline
         // candidate and the cloned call sites join the inliner's
         // worklist. The post-inline constant folder then collapses the
         // per-copy `Extend(Imm)` / `BinopI(Imm, k)` index chains.
-        time_pass_arch("passes::unroll::run", B::ARCH, || {
-            super::super::passes::unroll::run(&mut ssa_funcs);
+        pipeline.run("passes::unroll::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::unroll::run(funcs);
         });
         // Merge byte-at-a-time memory idioms after the unroll, which
         // straight-lines the per-byte loops they are often written as,
         // and before the inliner: a helper that collapses to one wide
         // access becomes a single-block candidate the inliner takes,
         // and its call sites see the merged body.
-        time_pass_arch("passes::byteload::run", B::ARCH, || {
+        pipeline.run("passes::byteload::run", &mut ssa_funcs, |funcs| {
             super::super::passes::byteload::run(
-                &mut ssa_funcs,
+                funcs,
                 target.is_little_endian(),
                 native.strict_align,
             );
@@ -1971,10 +2229,10 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // what reaches the bodies that stay out of line.
         // Interprocedural parameter ranges, by entry PC; read by the
         // range analysis inside the branch-fold fixed point below.
-        param_ranges = time_pass_arch("passes::ipa_const_param::run", B::ARCH, || {
+        param_ranges = pipeline.run("passes::ipa_const_param::run", &mut ssa_funcs, |funcs| {
             let escaping =
-                super::super::passes::ipa_const_param::escaping_functions(&ssa_funcs, program);
-            super::super::passes::ipa_const_param::run(&mut ssa_funcs, &escaping)
+                super::super::passes::ipa_const_param::escaping_functions(funcs, program);
+            super::super::passes::ipa_const_param::run(funcs, &escaping)
         });
         // Inline after mem2reg so the candidate filter sees the
         // promoted form: dead cell loads / stores are gone and the
@@ -1982,9 +2240,9 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // map feeds the pass's indirect-call devirtualization.
         let code_syms = defined_fn_syms(program);
         let extern_fns = extern_fn_targets(program);
-        time_pass_arch("passes::inline::run", B::ARCH, || {
+        pipeline.run("passes::inline::run", &mut ssa_funcs, |funcs| {
             super::super::passes::inline::run(
-                &mut ssa_funcs,
+                funcs,
                 native.inline_cap,
                 target.abi(),
                 &code_syms,
@@ -1994,23 +2252,23 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         });
         // Turn self-tail-recursion into a loop back edge on the
         // post-inline bodies, before the phi-sensitive passes below.
-        time_pass_arch("passes::tailrec::run", B::ARCH, || {
-            super::super::passes::tailrec::run(&mut ssa_funcs);
+        pipeline.run("passes::tailrec::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::tailrec::run(funcs);
         });
         // Forward an inlined one-word struct return out of its frame slot:
         // a single full-width store + slot reads collapse to the stored
         // register value. Runs after the inliner produces the slot and
         // before store-forwarding cleans up any second-hop reload.
-        time_pass_arch("passes::struct_return_reg::run", B::ARCH, || {
-            super::super::passes::struct_return_reg::run(&mut ssa_funcs, native.strict_align);
+        pipeline.run("passes::struct_return_reg::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::struct_return_reg::run(funcs, native.strict_align);
         });
         // Constant folding over the post-inline tape: `Extend(Imm)` /
         // `Binop(Imm, Imm)` chains left by parameter substitution fold
         // to plain `Imm`, and immediate-operand binops take `BinopI`
         // form, so the rotate matcher and the branch folder see
         // constants.
-        time_pass_arch("passes::constfold::run", B::ARCH, || {
-            super::super::passes::constfold::run(&mut ssa_funcs);
+        pipeline.run("passes::constfold::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::constfold::run(funcs);
         });
         // Re-run mem2reg on callers the inliner spliced into. A relocated
         // callee local can land on an address-free, single-width slot that
@@ -2019,10 +2277,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // folded into the `"i"`-constrained inline-asm operand that reads it.
         // Confined to inlined callers by the did_inline gate; promoted slots
         // feed the same debug-info location drop as the initial mem2reg.
-        time_pass_arch("ssa::mem2reg::run post-inline", B::ARCH, || {
-            for f in &mut ssa_funcs {
+        pipeline.run("ssa::mem2reg::run post-inline", &mut ssa_funcs, |funcs| {
+            for f in funcs.iter_mut() {
                 if f.did_inline {
                     super::vector_slots::run(f);
+                    super::asm_outputs::run(f);
                     let promoted = super::mem2reg::run(f);
                     if !promoted.is_empty() {
                         promoted_local_slots
@@ -2033,23 +2292,29 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 }
             }
         });
+        // The register transfers of an aggregate parameter or return join
+        // the tape, so the object below is one sroa can split.
+        pipeline.run("passes::agg_parts::run", &mut ssa_funcs, |funcs| {
+            let conv_of = callee_conventions(program, funcs);
+            super::super::passes::agg_parts::run(funcs, target, &conv_of);
+        });
         // Split address-taken local aggregates into per-field slots and
         // re-run mem2reg to promote them to SSA values, in every function
         // holding a candidate object; the promoted field slots feed the
         // same debug-info location drop as the initial mem2reg.
-        time_pass_arch("passes::sroa::run", B::ARCH, || {
+        pipeline.run("passes::sroa::run", &mut ssa_funcs, |funcs| {
             let usable_gpr = super::reg_alloc::usable_gpr_count(target, native.fixed_regs);
             let caller_gpr = super::reg_alloc::caller_gpr_count(target, native.fixed_regs);
             // What each function does with its pointer parameters, so a
             // call taking an object's address gives up only the fields
             // it can reach. Derived once over the whole unit, and only
             // where some function holds a candidate.
-            let footprints = if ssa_funcs.iter().any(|f| !f.multi_cell_slots.is_empty()) {
-                super::super::passes::sroa::param_footprints(&ssa_funcs)
+            let footprints = if funcs.iter().any(|f| !f.multi_cell_slots.is_empty()) {
+                super::super::passes::sroa::param_footprints(funcs)
             } else {
                 Default::default()
             };
-            for f in &mut ssa_funcs {
+            for f in funcs.iter_mut() {
                 let budget = super::super::passes::sroa::Budget {
                     usable: usable_gpr,
                     caller: caller_gpr,
@@ -2067,29 +2332,29 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // built in the destination instead. Runs after sroa, whose
         // register budget leaves the wider objects in memory, and
         // before the frame is packed, so the temporary's cells go.
-        time_pass_arch("passes::copy_elide::run", B::ARCH, || {
-            super::super::passes::copy_elide::run(&mut ssa_funcs);
+        pipeline.run("passes::copy_elide::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::copy_elide::run(funcs);
         });
         // Rotate idiom recognition: collapses `(x >> c) | (x << (W -
         // c))` chains to `BinopI(Ror, x, c)`. Runs after the inliner
         // so post-inline parameter substitutions expose the constant
         // rotate counts.
-        time_pass_arch("passes::rotate::run", B::ARCH, || {
-            super::super::passes::rotate::run(&mut ssa_funcs);
+        pipeline.run("passes::rotate::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::rotate::run(funcs);
         });
         // Fused multiply-add contraction (C99 6.5p8 / FP_CONTRACT ON at
         // -O). Runs after the inliner so products exposed by parameter
         // substitution into an add/sub become contractible.
-        time_pass_arch("passes::fma::run", B::ARCH, || {
-            super::super::passes::fma::run(&mut ssa_funcs);
+        pipeline.run("passes::fma::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::fma::run(funcs);
         });
         // Prove a null comparison of a const array's relocated pointer
         // member false. Runs after constfold has folded the constant
         // member offset (`ARRAY_SIZE(a) - 1` -> a fixed index), so the
         // branch fold below deletes the unreachable arm (e.g. an inlined
         // build-time-unreachable guard).
-        time_pass_arch("passes::const_global_fold::run", B::ARCH, || {
-            super::super::passes::const_global_fold::run(&mut ssa_funcs, program);
+        pipeline.run("passes::const_global_fold::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::const_global_fold::run(funcs, program);
         });
         // Fold constant-condition branches and delete the blocks that
         // leaves unreachable (so their calls and extern references are
@@ -2100,9 +2365,9 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // data inside the same fixed point, so an inlined table lookup
         // whose index just became constant decides the next branch (a
         // build-time-assert guard reading a const table).
-        time_pass_arch("passes::simplify_branches::run", B::ARCH, || {
+        pipeline.run("passes::simplify_branches::run", &mut ssa_funcs, |funcs| {
             super::super::passes::simplify_branches::run_with_const_data(
-                &mut ssa_funcs,
+                funcs,
                 program,
                 &param_ranges,
             );
@@ -2117,9 +2382,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // pipeline orphaned; the passes below run on prebuilt bodies too, so a
     // recompaction retry re-runs them and re-checks the report is empty.
     if native.optimize {
-        orphaned_data = time_pass_arch("ssa::shadow::drop_unreachable_statics", B::ARCH, || {
-            super::shadow::drop_unreachable_statics(&mut ssa_funcs, program, &reachable_owners)
-        });
+        orphaned_data = pipeline.run(
+            "ssa::shadow::drop_unreachable_statics",
+            &mut ssa_funcs,
+            |funcs| super::shadow::drop_unreachable_statics(funcs, program, &reachable_owners),
+        );
         if let Some(o) = &mut orphaned_data {
             o.ssa.promoted_local_slots = promoted_local_slots.clone();
             o.ssa.param_ranges = param_ranges.clone();
@@ -2139,54 +2406,62 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // survivors repacked, so a spliced-then-promoted callee region
         // stops occupying the frame. Before `index_fold`, whose derived
         // address forms the compactor does not model.
-        let coalesce_dwarf = time_pass_arch("ssa::slot_coalesce::run -O", B::ARCH, || {
-            super::slot_coalesce::run(&mut ssa_funcs, true, native.stack_protect)
+        let coalesce_dwarf = pipeline.run("ssa::slot_coalesce::run -O", &mut ssa_funcs, |funcs| {
+            super::slot_coalesce::run(funcs, true, native.stack_protect)
         });
         record_coalesced_slots(
             coalesce_dwarf,
             &mut coalesced_slot_remap,
             &mut promoted_local_slots,
         );
-        time_pass_arch("passes::split_crit_edges::run", B::ARCH, || {
-            super::super::passes::split_crit_edges::run(&mut ssa_funcs);
+        pipeline.run("passes::split_crit_edges::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::split_crit_edges::run(funcs);
         });
-        time_pass_arch("passes::drop_redundant_extend::run", B::ARCH, || {
-            super::super::passes::drop_redundant_extend::run(&mut ssa_funcs);
-        });
+        pipeline.run(
+            "passes::drop_redundant_extend::run",
+            &mut ssa_funcs,
+            |funcs| {
+                super::super::passes::drop_redundant_extend::run(funcs);
+            },
+        );
         // Expand the divides by a constant the walker and the constant
         // folder left whole. After the range rule above has read their
         // bounds; before the value numbering, which merges the quotient a
         // division and a remainder over the same operands both compute.
-        time_pass_arch("passes::divmod_const::run", B::ARCH, || {
-            super::super::passes::divmod_const::run(&mut ssa_funcs, &param_ranges);
+        pipeline.run("passes::divmod_const::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::divmod_const::run(funcs, &param_ranges);
         });
         // Indexed addressing: fold `base + index*scale` into the load /
         // store. Runs after every pass that reads the address arithmetic;
         // of the later ones only the store forwarding models the indexed
         // forms.
-        time_pass_arch("passes::index_fold::run", B::ARCH, || {
-            super::super::passes::index_fold::run(&mut ssa_funcs);
+        pipeline.run("passes::index_fold::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::index_fold::run(funcs);
         });
         // Dominator-scoped CSE of pure arithmetic and address values.
         // After the index fold, so merging cannot weld two `base + K`
         // addresses the fold would have turned into displacements; the
         // canonical bases then feed store forwarding.
-        time_pass_arch("passes::cse::run", B::ARCH, || {
+        pipeline.run("passes::cse::run", &mut ssa_funcs, |funcs| {
             let caps = super::reg_alloc::bank_capacity(target, native.fixed_regs);
-            super::super::passes::cse::run(&mut ssa_funcs, caps);
+            super::super::passes::cse::run(funcs, caps);
         });
         // Fold a frame address into the one access that consumes it.
         // After the value numbering, which merges the per-access
         // `LocalAddr` duplicates the builder emits, so the use count
         // tells a sole consumer from a shared base.
-        time_pass_arch("passes::index_fold::fold_slot_addresses", B::ARCH, || {
-            super::super::passes::index_fold::fold_slot_addresses(&mut ssa_funcs);
-        });
+        pipeline.run(
+            "passes::index_fold::fold_slot_addresses",
+            &mut ssa_funcs,
+            |funcs| {
+                super::super::passes::index_fold::fold_slot_addresses(funcs);
+            },
+        );
         // Rebuild the single modulo where the builder's split quotient
         // found no division to share with. After the value numbering,
         // which is what can still supply that second consumer.
-        time_pass_arch("passes::divmod_pair::run", B::ARCH, || {
-            super::super::passes::divmod_pair::run(&mut ssa_funcs);
+        pipeline.run("passes::divmod_pair::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::divmod_pair::run(funcs);
         });
         // Store-to-load and load-to-load forwarding within a block. Runs
         // after the index fold so a struct field's store and load address
@@ -2194,26 +2469,26 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // to the same `(base, index, scale)`. Bounded by live-range
         // extension so it does not pin scattered re-reads in a
         // register-starved unrolled loop.
-        time_pass_arch("passes::store_forward::run", B::ARCH, || {
-            super::super::passes::store_forward::run(&mut ssa_funcs);
+        pipeline.run("passes::store_forward::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::store_forward::run(funcs);
         });
-        b.late_opt_passes(&mut ssa_funcs);
+        b.late_opt_passes(&mut ssa_funcs, pipeline);
         // Rewrite `CallIndirect`-of-`ImmCode` pairs the passes since the
         // inline run exposed -- the post-inline promotions and the
         // forwarding above turn function-pointer cell reads into
         // `ImmCode` values -- so the emit issues direct calls. Last of
         // the passes that change call targets.
-        time_pass_arch("passes::inline::devirtualize", B::ARCH, || {
+        pipeline.run("passes::inline::devirtualize", &mut ssa_funcs, |funcs| {
             let code_syms = defined_fn_syms(program);
             let extern_fns = extern_fn_targets(program);
-            super::super::passes::inline::devirtualize(&mut ssa_funcs, &code_syms, &extern_fns);
+            super::super::passes::inline::devirtualize(funcs, &code_syms, &extern_fns);
         });
         // Block layout: fallthrough chains, loop rotation to
         // bottom-test. Reorders blocks and remaps block ids only, so it
         // runs last; the emit elides jumps to the next block in the new
         // order.
-        time_pass_arch("passes::layout::run", B::ARCH, || {
-            super::super::passes::layout::run(&mut ssa_funcs);
+        pipeline.run("passes::layout::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::layout::run(funcs);
         });
     }
     // Upper bound on ent_pcs the lowering will reference. The walker stamps
@@ -2255,19 +2530,27 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // Branch on a zero test's operand directly. Immediately before
     // allocation so every mid-end fold keyed on the compare shape has
     // run.
+    let abs32 = native.abs32_addrs(target);
+    let extern_abs = abs32 && native.code_model == super::super::CodeModel::Kernel;
     for f in ssa_funcs.iter_mut() {
         super::super::passes::constfold_branch::strip_zero_test_conds(f);
         crate::c5::asm::mark_static_operands(f);
+        if abs32 {
+            super::super::passes::index_fold::mark_abs_bases(f, extern_abs);
+        }
     }
-    // At -O each function is allocated, then reallocated with the
-    // spilled values' call-free reuse runs split out; the split is kept
-    // only when it lowers the function's loop-weighted spill traffic.
+    // At -O the operand-free values are set again past the calls they
+    // would otherwise cross, then each function is allocated and
+    // reallocated with its loop-invariant materializations hoisted and
+    // with the spilled values' call-free reuse runs split out; a retry
+    // is kept only when it lowers the function's loop-weighted cost.
     let ssa_allocs: alloc::vec::Vec<super::reg_alloc::Allocation> =
-        time_pass_arch("ssa::reg_alloc::allocate", B::ARCH, || {
-            ssa_funcs
+        pipeline.run("ssa::reg_alloc::allocate", &mut ssa_funcs, |funcs| {
+            funcs
                 .iter_mut()
                 .map(|f| {
                     if native.optimize {
+                        super::remat::split_across_calls(f, target);
                         super::licm::allocate_hoisted(f, target, native.fixed_regs)
                     } else {
                         super::reg_alloc::allocate(f, target, native.fixed_regs)
@@ -2543,6 +2826,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         text_data_ranges: st.text_data_ranges,
         asm_section_text_refs: st.asm_section_text_refs,
         asm_text_abs_refs: alloc::vec::Vec::new(),
+        abs_addr_refs: alloc::vec::Vec::new(),
         asm_sym_fixups: st.asm_sym_fixups,
         asm_text_labels: st.asm_text_labels,
         copy_relocs: alloc::vec::Vec::new(),
@@ -2571,12 +2855,14 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         func_ends: st.func_ends,
         patchable_entries: st.patchable_entries,
         mcount_sites: st.mcount_sites,
+        early_returns: st.early_returns,
         func_names: st.func_names,
         func_prologue_native: st.func_prologue_native,
         promoted_local_slots,
         coalesced_slot_remap,
         canary_frame_bytes: st.canary_frame_bytes,
         param_frame_offsets: st.param_frame_offsets,
+        region_frame_offsets: st.region_frame_offsets,
         fn_unwind: alloc::vec::Vec::new(),
         reloc_call_sites,
         user_extern_call_sites,
@@ -2603,7 +2889,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         dynamic_exports: alloc::vec::Vec::new(),
         output_kind: super::OutputKind::Executable,
         pic_link: native.pic || native.pic_link,
-        freestanding: false,
+        exec_form: Default::default(),
 
         code_model: native.code_model,
         elf_class: native.elf_class,
@@ -2651,6 +2937,60 @@ fn record_coalesced_slots(
 mod tests {
     use super::super::super::ir::LoadKind;
     use super::super::reg_alloc::Place;
+
+    /// The run ends at the first instruction that writes a register: a
+    /// value the body reads, or a frame store whose value is read. A
+    /// marker, an unread store and an unread pure value leave it open.
+    #[test]
+    fn entry_read_run_ends_at_the_first_register_write() {
+        use super::super::super::ir::{Block, FunctionSsa, Inst, StoreKind, Terminator};
+        use super::super::reg_alloc::compute_use_counts;
+        let part = |idx| Inst::ParamPart {
+            idx,
+            part: 0,
+            kind: LoadKind::I64,
+        };
+        let insts = alloc::vec![
+            Inst::AllocaInit(0),
+            part(0),
+            Inst::StoreLocal {
+                off: -1,
+                value: 1,
+                kind: StoreKind::I64,
+                volatile: false,
+                nsw: false,
+            },
+            Inst::Imm(7),
+            Inst::ParamRef {
+                idx: 1,
+                kind: LoadKind::I64,
+            },
+            Inst::LocalAddr(-2),
+            part(2),
+            Inst::Store {
+                addr: 5,
+                disp: 0,
+                value: 6,
+                kind: StoreKind::I64,
+                volatile: false,
+                align: 0,
+            },
+        ];
+        let func = |ret| FunctionSsa {
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..insts.len() as u32,
+                terminator: Terminator::Return(ret),
+                exit_acc: ret,
+            }],
+            insts: insts.clone(),
+            ..Default::default()
+        };
+        let f = func(4);
+        assert_eq!(super::entry_read_run(&f, &compute_use_counts(&f)), [1, 4]);
+        let f = func(2);
+        assert_eq!(super::entry_read_run(&f, &compute_use_counts(&f)), [1]);
+    }
     use super::{EmitBackend, PlaceMove, Unsupported, schedule_place_moves, unsupported_error};
     use alloc::vec::Vec;
 

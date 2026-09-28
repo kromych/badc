@@ -37,7 +37,7 @@ use alloc::vec::Vec;
 
 use crate::c5::codegen::{
     AddrPart, Build, CopyRelocReq, DataFixup, DynamicExport, DynamicExportSection, EmitStream,
-    EmittedFinalReloc, FuncFixup, GotFixup, OutputKind, ResolvedDylib, ResolvedImport,
+    EmittedFinalReloc, ExecForm, FuncFixup, GotFixup, OutputKind, ResolvedDylib, ResolvedImport,
     ResolvedImports, Target,
 };
 use crate::c5::error::C5Error;
@@ -82,15 +82,15 @@ pub fn write_native_image_from_merged(
         false,
         false,
         false,
-        false,
+        ExecForm::Pie,
     )
 }
 
 /// As [`write_native_image_from_merged`], plus `--export-all` /
 /// `--export-data`: for an ELF executable, add every defined non-static
 /// function (`export_all`) and/or data global (`export_data`) to
-/// `.dynsym` for `dlopen` resolution. `freestanding` is the image of a
-/// `--freestanding` link, see [`Build::freestanding`].
+/// `.dynsym` for `dlopen` resolution. `exec_form` is an executable's
+/// form, see [`ExecForm`].
 #[allow(clippy::too_many_arguments)]
 pub fn write_native_image_from_merged_ex(
     merged: &MergedNative,
@@ -103,7 +103,7 @@ pub fn write_native_image_from_merged_ex(
     export_all: bool,
     export_data: bool,
     emit_relocs: bool,
-    freestanding: bool,
+    exec_form: ExecForm,
 ) -> Result<Vec<u8>, C5Error> {
     let (program, build) = synth_program_and_build(
         merged,
@@ -116,7 +116,7 @@ pub fn write_native_image_from_merged_ex(
         export_all,
         export_data,
         emit_relocs,
-        freestanding,
+        exec_form,
     )?;
     write_native_image(&program, &build, target)
 }
@@ -133,7 +133,7 @@ fn synth_program_and_build(
     export_all: bool,
     export_data: bool,
     emit_relocs: bool,
-    freestanding: bool,
+    exec_form: ExecForm,
 ) -> Result<(Program, Build), C5Error> {
     check_target_machine(target, merged.machine)?;
     // A shared library has no process entry point (ELF ET_DYN sets
@@ -155,7 +155,7 @@ fn synth_program_and_build(
     } = synth_fixups(
         merged,
         plt,
-        TextAbsolute::for_output(target, output_kind, freestanding),
+        TextAbsolute::for_output(target, output_kind, exec_form),
     )?;
 
     let (data_relocs, code_relocs) = synth_relocs(merged);
@@ -179,6 +179,16 @@ fn synth_program_and_build(
     );
     let functions = function_table(merged, pc_to_native);
     let fn_unwind = x86_64_unwind(merged, target, &functions);
+    let mut early_returns: Vec<crate::c5::codegen::EarlyReturn> = merged
+        .early_returns
+        .iter()
+        .map(|(&begin, &(frame, exit))| crate::c5::codegen::EarlyReturn {
+            begin: begin as u32,
+            frame: (frame - begin) as u32,
+            exit: (exit - begin) as u32,
+        })
+        .collect();
+    early_returns.sort_unstable_by_key(|e| e.begin);
     let copy_relocs = synth_copy_relocs(merged, target)?;
     let dynamic_exports =
         synth_dynamic_exports(merged, target, output_kind, export_all, export_data);
@@ -197,6 +207,7 @@ fn synth_program_and_build(
         asm_sections: Vec::new(),
         asm_section_text_refs: Vec::new(),
         asm_text_abs_refs: Vec::new(),
+        abs_addr_refs: Vec::new(),
         asm_text_labels: Vec::new(),
         asm_sym_fixups: Vec::new(),
         asm_sym_decls: Vec::new(),
@@ -209,7 +220,7 @@ fn synth_program_and_build(
         data_ro_len: merged.data_ro_len,
         data_relro_len: merged.data_relro_len,
         pic_link: false,
-        freestanding,
+        exec_form,
         code_model: Default::default(),
 
         elf_class: Default::default(),
@@ -236,12 +247,14 @@ fn synth_program_and_build(
         func_ends: Vec::new(),
         patchable_entries: Vec::new(),
         mcount_sites: Vec::new(),
+        early_returns,
         func_ent_pcs: functions.ent_pcs,
         func_names: functions.names,
         func_prologue_native: functions.prologue_native,
         promoted_local_slots: alloc::collections::BTreeMap::new(),
         canary_frame_bytes: alloc::collections::BTreeMap::new(),
         param_frame_offsets: alloc::collections::BTreeMap::new(),
+        region_frame_offsets: alloc::collections::BTreeMap::new(),
         coalesced_slot_remap: alloc::collections::BTreeMap::new(),
         fn_unwind,
         reloc_call_sites: Vec::new(),
@@ -453,11 +466,16 @@ fn x86_64_unwind(
                 .get(&(begin as usize))
                 .map(|&p| p as u32)
                 .unwrap_or(begin);
+            let frame_start = merged
+                .early_returns
+                .get(&u64::from(begin))
+                .map_or(0, |&(frame, _)| frame as u32);
             crate::c5::codegen::decode_x86_64_prologue_unwind(
                 &merged.text,
                 begin,
                 end,
                 prologue_end,
+                frame_start,
             )
         })
         .collect()
@@ -828,7 +846,6 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
             is_variadic: false,
             fixed_args: 0,
             return_type_tag: 0,
-            returns_long_double: false,
             param_types: Vec::new(),
         });
     }
@@ -1063,8 +1080,9 @@ enum TextAbsolute {
     /// PE: `.reloc` base relocations cover every section, so a plain
     /// field rides a [`crate::c5::codegen::TextAbsReloc`] to the writer.
     Representable,
-    /// A freestanding ELF executable at its link address: a plain field
-    /// and an aarch64 MOVW group both take the address at link time.
+    /// An ELF executable at its link address (`-no-pie`,
+    /// `--freestanding`): a plain field and an aarch64 MOVW group both
+    /// take the address at link time.
     Placed,
     /// ELF `ET_DYN` and Mach-O `MH_PIE`: the loader picks the base and
     /// neither format admits a relocation against an executable
@@ -1073,10 +1091,11 @@ enum TextAbsolute {
 }
 
 impl TextAbsolute {
-    fn for_output(target: Target, output_kind: OutputKind, freestanding: bool) -> Self {
+    fn for_output(target: Target, output_kind: OutputKind, exec_form: ExecForm) -> Self {
         let shared = output_kind == OutputKind::SharedLibrary;
-        let placed_elf =
-            freestanding && !shared && matches!(target, Target::LinuxAarch64 | Target::LinuxX64);
+        let placed_elf = exec_form.placed()
+            && !shared
+            && matches!(target, Target::LinuxAarch64 | Target::LinuxX64);
         if target.is_windows() {
             TextAbsolute::Representable
         } else if placed_elf {
@@ -1438,6 +1457,7 @@ mod tests {
             debug_info_data_relocs: alloc::vec![],
             debug_line_text_relocs: alloc::vec![],
             prologue_ends: hashbrown::HashMap::new(),
+            early_returns: hashbrown::HashMap::new(),
             local_funcs: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
             tls_init_size: 0,

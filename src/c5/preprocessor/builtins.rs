@@ -1,9 +1,11 @@
 //! The compiler builtins badc provides.
 //!
-//! One table records how each name is supplied; the intrinsic registry
-//! seeded at preprocessor construction, the `#pragma intrinsic` name
-//! lookup, `__has_builtin` and the parser's library-alias binding are
-//! all derived from it, so they cannot drift apart.
+//! Two tables record how each name is supplied: the builtins badc lowers
+//! or parses itself, and the library functions whose `__builtin_` spelling
+//! is the function. The intrinsic registry seeded at preprocessor
+//! construction, the `#pragma intrinsic` name lookup, `__has_builtin` and
+//! the parser's library-alias binding are all derived from them, so they
+//! cannot drift apart.
 
 use crate::c5::codegen::Target;
 use crate::c5::op::Intrinsic;
@@ -20,13 +22,6 @@ pub(super) enum Supply {
     /// Supplied without the registry -- recognized by the parser at the
     /// call site, or predefined as a macro. Also usable with no header.
     Direct,
-    /// Equivalent to the library function named here. The parser binds
-    /// the call site to that function through the symbol table, so a
-    /// translation unit that defines a macro of the library name does
-    /// not capture the builtin spelling -- the guarantee gcc and clang
-    /// give, and the reason a fortified header can call the builtin to
-    /// reach the unfortified function.
-    Alias(&'static str),
     /// A library function that a bundled header binds with
     /// `#pragma intrinsic`; it is not a builtin until that header is
     /// included.
@@ -57,17 +52,6 @@ const fn direct(name: &'static str) -> Builtin {
         name,
         supply: Supply::Direct,
     }
-}
-
-/// `__builtin_<fn>` standing for the library function `<fn>`; the two
-/// spellings are derived from one another so they cannot disagree.
-macro_rules! alias {
-    ($fn_name:literal) => {
-        Builtin {
-            name: concat!("__builtin_", $fn_name),
-            supply: Supply::Alias($fn_name),
-        }
-    };
 }
 
 const fn library(name: &'static str, kind: Intrinsic) -> Builtin {
@@ -155,37 +139,16 @@ pub(super) const BUILTINS: &[Builtin] = &[
     direct("__builtin_memcpy"),
     direct("__builtin_memmove"),
     direct("__builtin_memset"),
-    // Builtins equivalent to a library function. `abs` / `labs` / `llabs`
-    // and the string comparisons fold with constant arguments; every one
-    // of them is otherwise a call to the named function.
-    alias!("abs"),
-    alias!("labs"),
-    alias!("llabs"),
-    alias!("memcmp"),
-    alias!("memchr"),
-    alias!("strcpy"),
-    alias!("strncpy"),
-    alias!("strcat"),
-    alias!("strncat"),
-    alias!("strcmp"),
-    alias!("strncmp"),
-    alias!("strlen"),
-    alias!("strchr"),
-    alias!("strrchr"),
-    alias!("strstr"),
-    alias!("strpbrk"),
-    alias!("strspn"),
-    alias!("strcspn"),
-    alias!("abort"),
-    alias!("malloc"),
-    alias!("calloc"),
-    alias!("realloc"),
-    alias!("free"),
     // Hints with no code-generation effect: predefined as macros, either
     // by the preprocessor or by the auto-included <_builtins.h>.
     direct("__builtin_expect"),
     direct("__builtin_prefetch"),
     direct("__builtin_assume_aligned"),
+    // Locale-independent classifications, folded from the operand as gcc
+    // folds them whatever the library: macros in <_builtins.h>.
+    direct("__builtin_isdigit"),
+    direct("__builtin_isascii"),
+    direct("__builtin_toascii"),
     // Library names a bundled header binds; a unit that has not included
     // the header may define its own function under the same name.
     library("alloca", Intrinsic::Alloca),
@@ -219,6 +182,49 @@ pub(super) const BUILTINS: &[Builtin] = &[
     library("__c5_aarch64_longjmp", Intrinsic::LongjmpAArch64),
 ];
 
+/// Library functions whose `__builtin_` spelling gcc or clang provide as the
+/// function itself, among those the bundled headers declare or define. The
+/// parser binds such a call to the function through the symbol table, so a
+/// translation unit that defines a macro of the library name does not
+/// capture the builtin spelling -- the guarantee gcc and clang give, and the
+/// reason a fortified header can call the builtin to reach the unfortified
+/// function. `abs` / `labs` / `llabs` and the string comparisons fold with
+/// constant arguments. Excluded: `setjmp` / `longjmp`, whose builtins take
+/// gcc's five-word buffer, the classification macros of <math.h>, and the
+/// classifications gcc folds from the operand, which the table supplies.
+/// Sorted for the binary search.
+#[rustfmt::skip]
+pub(super) const LIBRARY_BUILTINS: &[&str] = &[
+    "__clear_cache", "_exit", "abort", "abs", "acos", "acosf", "acosh", "acoshf", "acoshl", "acosl",
+    "aligned_alloc", "asin", "asinf", "asinh", "asinhf", "asinhl", "asinl", "atan", "atan2",
+    "atan2f", "atan2l", "atanf", "atanh", "atanhf", "atanhl", "atanl", "bcmp", "bcopy", "bzero",
+    "calloc", "cbrt", "cbrtf", "cbrtl", "ceil", "ceilf", "ceill", "copysign", "copysignf",
+    "copysignl", "cos", "cosf", "cosh", "coshl", "cosl", "dcgettext", "dgettext", "erf", "erfc",
+    "erfcf", "erfcl", "erff", "erfl", "execl", "execle", "execlp", "execv", "execve", "execvp",
+    "exit", "exp", "exp2", "exp2f", "exp2l", "expf", "expl", "expm1", "expm1f", "expm1l", "fabs",
+    "fabsf", "fabsl", "fdim", "fdimf", "fdiml", "feclearexcept", "fegetround", "feraiseexcept",
+    "fesetround", "fetestexcept", "floor", "floorf", "floorl", "fma", "fmaf", "fmal", "fmax",
+    "fmaxf", "fmaxl", "fmin", "fminf", "fminl", "fmod", "fmodf", "fmodl", "fork", "fprintf",
+    "fputc", "fputs", "free", "frexp", "frexpl", "fscanf", "fwrite", "gettext", "hypot", "hypotf",
+    "hypotl", "ilogb", "ilogbf", "ilogbl", "imaxabs", "index", "isalnum", "isalpha", "iscntrl",
+    "isgraph", "islower", "isprint", "ispunct", "isspace", "isupper", "iswalnum", "iswalpha",
+    "iswblank", "iswcntrl", "iswdigit", "iswgraph", "iswlower", "iswprint", "iswpunct", "iswspace",
+    "iswupper", "iswxdigit", "isxdigit", "labs", "ldexp", "ldexpl", "llabs", "llrint", "llrintl",
+    "llround", "llroundl", "log", "log10", "log10f", "log10l", "log1p", "log1pf", "log1pl", "log2",
+    "log2l", "logf", "logl", "lrint", "lrintl", "lround", "lroundl", "malloc", "memchr", "memcmp",
+    "mempcpy", "modf", "modfl", "nearbyint", "nearbyintf", "nearbyintl", "nextafter", "nextafterf",
+    "nextafterl", "posix_memalign", "pow", "powf", "powl", "printf", "putc", "putc_unlocked",
+    "putchar", "puts", "realloc", "remainder", "remainderf", "remainderl", "rindex", "rint",
+    "rintf", "rintl", "round", "roundf", "roundl", "scalbln", "scalblnf", "scalblnl", "scalbn",
+    "scalbnf", "scalbnl", "scanf", "sin", "sinf", "sinh", "sinhl", "sinl", "snprintf", "sprintf",
+    "sqrt", "sqrtf", "sqrtl", "sscanf", "strcasecmp", "strcat", "strchr", "strcmp", "strcpy",
+    "strcspn", "strdup", "strftime", "strlen", "strncasecmp", "strncat", "strncmp", "strncpy",
+    "strndup", "strnlen", "strpbrk", "strrchr", "strspn", "strstr", "tan", "tanf", "tanh", "tanhl",
+    "tanl", "tgamma", "tgammaf", "tgammal", "tolower", "toupper", "towlower", "towupper", "trunc",
+    "truncf", "truncl", "vfprintf", "vprintf", "vsnprintf", "vsprintf", "vsscanf", "wcschr",
+    "wcscmp", "wcslen", "wcsncmp", "wmemchr", "wmemcmp", "wmemcpy", "wmemmove",
+];
+
 fn lookup(name: &str) -> Option<&'static Builtin> {
     BUILTINS.iter().find(|b| b.name == name)
 }
@@ -231,7 +237,7 @@ fn registry_id(supply: Supply, target: Target) -> Option<i64> {
         } else {
             llp64 as i64
         }),
-        Supply::Direct | Supply::Alias(_) => None,
+        Supply::Direct => None,
     }
 }
 
@@ -242,7 +248,7 @@ pub(super) fn preseeded(target: Target) -> impl Iterator<Item = (&'static str, i
         Supply::Registry(_) | Supply::RegistryByLong { .. } => {
             registry_id(b.supply, target).map(|id| (b.name, id))
         }
-        Supply::Direct | Supply::Alias(_) | Supply::Library(_) => None,
+        Supply::Direct | Supply::Library(_) => None,
     })
 }
 
@@ -251,10 +257,9 @@ pub(super) fn preseeded(target: Target) -> impl Iterator<Item = (&'static str, i
 /// that function directly, which is what keeps the builtin out of reach
 /// of a translation unit's macro of the library name.
 pub(crate) fn library_alias(name: &str) -> Option<&'static str> {
-    match lookup(name)?.supply {
-        Supply::Alias(fn_name) => Some(fn_name),
-        _ => None,
-    }
+    let fn_name = name.strip_prefix("__builtin_")?;
+    let at = LIBRARY_BUILTINS.binary_search(&fn_name).ok()?;
+    Some(LIBRARY_BUILTINS[at])
 }
 
 /// `#pragma intrinsic(name)`: the registry discriminant to record, or
@@ -267,7 +272,7 @@ pub(super) fn intrinsic_id(name: &str, target: Target) -> Option<i64> {
 
 /// Whether `name` is a builtin at all, in any supply route.
 pub(super) fn is_builtin(name: &str) -> bool {
-    lookup(name).is_some()
+    lookup(name).is_some() || library_alias(name).is_some()
 }
 
 /// `__has_builtin(name)` (C23 6.10.1, clang/gcc practice): 1 when a
@@ -275,7 +280,7 @@ pub(super) fn is_builtin(name: &str) -> bool {
 pub(super) fn has_builtin(name: &str) -> bool {
     match lookup(name) {
         Some(b) => !matches!(b.supply, Supply::Library(_)),
-        None => false,
+        None => library_alias(name).is_some(),
     }
 }
 

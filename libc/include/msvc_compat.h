@@ -191,7 +191,7 @@
 // windows.h binds the same name via its own pragma; both
 // declarations resolve to the same kernel32 Sys symbol.
 #pragma binding(kernel32::GetCurrentProcessId, "GetCurrentProcessId")
-int GetCurrentProcessId(void);
+unsigned long GetCurrentProcessId(void);
 static int getpid(void) {
     return (int)GetCurrentProcessId();
 }

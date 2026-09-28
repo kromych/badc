@@ -33,28 +33,28 @@ fn ent_pc=6 n_params=0 variadic=false locals=55
     v27  Imm(1)                                           -> x1
     v28  Imm(0)                                           -> x1
     v29  Imm(1)                                           -> x1
-    v30  Imm(0)                                           -> x1
-    v31  Imm(1)                                           -> x1
-    v32  Imm(0)                                           -> x1
-    v33  Imm(2779096485)                                  -> x1
-    v34  StoreLocal { off=-13, value=v1, kind=I32 }       -> -
-    v35  StoreLocal { off=-14, value=v1, kind=I32 }       -> -
-    v36  StoreLocal { off=-15, value=v1, kind=I32 }       -> -
-    v37  StoreLocal { off=-16, value=v1, kind=I32 }       -> -
-    v38  Imm(2147483647)                                  -> x1
-    v39  LocalAddr(-13)                                   -> x1
-    v40  LocalAddr(-14)                                   -> x1
-    v41  LocalAddr(-15)                                   -> x1
-    v42  LocalAddr(-16)                                   -> x1
-    v43  Imm(1)                                           -> x1
-    v44  Imm(0)                                           -> x1
-    v45  Imm(0)                                           -> x1
-    v46  Imm(2779096485)                                  -> x1
+    v30  LifetimeEnd(-4)                                  -> -
+    v31  LifetimeEnd(-3)                                  -> -
+    v32  LifetimeEnd(-2)                                  -> -
+    v33  LifetimeEnd(-1)                                  -> -
+    v34  Imm(0)                                           -> x1
+    v35  Imm(1)                                           -> x1
+    v36  Imm(0)                                           -> x1
+    v37  Imm(2779096485)                                  -> x1
+    v38  StoreLocal { off=-13, value=v1, kind=I32 }       -> -
+    v39  StoreLocal { off=-14, value=v1, kind=I32 }       -> -
+    v40  StoreLocal { off=-15, value=v1, kind=I32 }       -> -
+    v41  StoreLocal { off=-16, value=v1, kind=I32 }       -> -
+    v42  Imm(2147483647)                                  -> x1
+    v43  LocalAddr(-13)                                   -> x1
+    v44  LocalAddr(-14)                                   -> x1
+    v45  LocalAddr(-15)                                   -> x1
+    v46  LocalAddr(-16)                                   -> x1
     v47  Imm(1)                                           -> x1
     v48  Imm(0)                                           -> x1
-    v49  Imm(2779096485)                                  -> x1
-    v50  Imm(1)                                           -> x1
-    v51  Imm(0)                                           -> x1
+    v49  Imm(0)                                           -> x1
+    v50  Imm(2779096485)                                  -> x1
+    v51  Imm(1)                                           -> x1
     v52  Imm(0)                                           -> x1
     v53  Imm(2779096485)                                  -> x1
     v54  Imm(1)                                           -> x1
@@ -63,54 +63,54 @@ fn ent_pc=6 n_params=0 variadic=false locals=55
     v57  Imm(2779096485)                                  -> x1
     v58  Imm(1)                                           -> x1
     v59  Imm(0)                                           -> x1
-    v60  Imm(1)                                           -> x1
-    v61  Imm(0)                                           -> x1
+    v60  Imm(0)                                           -> x1
+    v61  Imm(2779096485)                                  -> x1
     v62  Imm(1)                                           -> x1
     v63  Imm(0)                                           -> x1
-    v64  Imm(2779096485)                                  -> x1
-    v65  StoreLocal { off=-25, value=v1, kind=I32 }       -> -
-    v66  StoreLocal { off=-26, value=v1, kind=I32 }       -> -
-    v67  StoreLocal { off=-27, value=v1, kind=I32 }       -> -
-    v68  StoreLocal { off=-28, value=v1, kind=I32 }       -> -
-    v69  Imm(4294967295)                                  -> x0
-    v70  LocalAddr(-25)                                   -> x0
-    v71  LocalAddr(-26)                                   -> x0
-    v72  LocalAddr(-27)                                   -> x0
-    v73  LocalAddr(-28)                                   -> x0
-    v74  Imm(1)                                           -> x0
-    v75  Imm(0)                                           -> x0
-    v76  Imm(0)                                           -> x0
-    v77  Imm(2779096485)                                  -> x0
-    v78  Imm(1)                                           -> x0
-    v79  Imm(0)                                           -> x0
-    v80  Imm(2779096485)                                  -> x0
-    v81  Imm(1)                                           -> x0
-    v82  Imm(0)                                           -> x0
+    v64  Imm(1)                                           -> x1
+    v65  LifetimeEnd(-16)                                 -> -
+    v66  LifetimeEnd(-15)                                 -> -
+    v67  LifetimeEnd(-14)                                 -> -
+    v68  LifetimeEnd(-13)                                 -> -
+    v69  Imm(0)                                           -> x1
+    v70  Imm(1)                                           -> x1
+    v71  Imm(0)                                           -> x1
+    v72  Imm(2779096485)                                  -> x1
+    v73  StoreLocal { off=-25, value=v1, kind=I32 }       -> -
+    v74  StoreLocal { off=-26, value=v1, kind=I32 }       -> -
+    v75  StoreLocal { off=-27, value=v1, kind=I32 }       -> -
+    v76  StoreLocal { off=-28, value=v1, kind=I32 }       -> -
+    v77  Imm(4294967295)                                  -> x0
+    v78  LocalAddr(-25)                                   -> x0
+    v79  LocalAddr(-26)                                   -> x0
+    v80  LocalAddr(-27)                                   -> x0
+    v81  LocalAddr(-28)                                   -> x0
+    v82  Imm(1)                                           -> x0
     v83  Imm(0)                                           -> x0
-    v84  Imm(2779096485)                                  -> x0
-    v85  Imm(1)                                           -> x0
-    v86  Imm(0)                                           -> x0
+    v84  Imm(0)                                           -> x0
+    v85  Imm(2779096485)                                  -> x0
+    v86  Imm(1)                                           -> x0
     v87  Imm(0)                                           -> x0
     v88  Imm(2779096485)                                  -> x0
     v89  Imm(1)                                           -> x0
     v90  Imm(0)                                           -> x0
-    v91  Imm(1)                                           -> x0
-    v92  Imm(0)                                           -> x0
+    v91  Imm(0)                                           -> x0
+    v92  Imm(2779096485)                                  -> x0
     v93  Imm(1)                                           -> x0
     v94  Imm(0)                                           -> x0
-    v95  Imm(2779096485)                                  -> x0
-    v96  Imm(0)                                           -> x0
-    v97  Imm(0)                                           -> x0
+    v95  Imm(0)                                           -> x0
+    v96  Imm(2779096485)                                  -> x0
+    v97  Imm(1)                                           -> x0
     v98  Imm(0)                                           -> x0
-    v99  Imm(0)                                           -> x0
-    v100 Imm(0)                                           -> x0
-    v101 Imm(0)                                           -> x0
-    v102 Imm(0)                                           -> x0
-    v103 Imm(0)                                           -> x0
-    v104 Imm(1)                                           -> x0
-    v105 Imm(0)                                           -> x0
+    v99  Imm(1)                                           -> x0
+    v100 LifetimeEnd(-28)                                 -> -
+    v101 LifetimeEnd(-27)                                 -> -
+    v102 LifetimeEnd(-26)                                 -> -
+    v103 LifetimeEnd(-25)                                 -> -
+    v104 Imm(0)                                           -> x0
+    v105 Imm(1)                                           -> x0
     v106 Imm(0)                                           -> x0
-    v107 Imm(0)                                           -> x0
+    v107 Imm(2779096485)                                  -> x0
     v108 Imm(0)                                           -> x0
     v109 Imm(0)                                           -> x0
     v110 Imm(0)                                           -> x0
@@ -119,18 +119,38 @@ fn ent_pc=6 n_params=0 variadic=false locals=55
     v113 Imm(0)                                           -> x0
     v114 Imm(0)                                           -> x0
     v115 Imm(0)                                           -> x0
-    v116 Imm(0)                                           -> x0
+    v116 Imm(1)                                           -> x0
     v117 Imm(0)                                           -> x0
-    v118 Imm(1)                                           -> x0
+    v118 Imm(0)                                           -> x0
     v119 Imm(0)                                           -> x0
     v120 Imm(0)                                           -> x0
-    v121 Imm(1)                                           -> x0
+    v121 Imm(0)                                           -> x0
     v122 Imm(0)                                           -> x0
     v123 Imm(0)                                           -> x0
-    v124 Imm(1)                                           -> x0
-    v125 Imm(1)                                           -> x0
+    v124 Imm(0)                                           -> x0
+    v125 Imm(0)                                           -> x0
     v126 Imm(0)                                           -> x0
-    terminator Return(v126)   (exit_acc=v126)
+    v127 Imm(0)                                           -> x0
+    v128 Imm(0)                                           -> x0
+    v129 Imm(0)                                           -> x0
+    v130 Imm(1)                                           -> x0
+    v131 Imm(0)                                           -> x0
+    v132 Imm(0)                                           -> x0
+    v133 Imm(1)                                           -> x0
+    v134 Imm(0)                                           -> x0
+    v135 Imm(0)                                           -> x0
+    v136 Imm(1)                                           -> x0
+    v137 Imm(1)                                           -> x0
+    v138 LifetimeEnd(-44)                                 -> -
+    v139 LifetimeEnd(-43)                                 -> -
+    v140 LifetimeEnd(-42)                                 -> -
+    v141 LifetimeEnd(-41)                                 -> -
+    v142 LifetimeEnd(-40)                                 -> -
+    v143 LifetimeEnd(-39)                                 -> -
+    v144 LifetimeEnd(-38)                                 -> -
+    v145 LifetimeEnd(-37)                                 -> -
+    v146 Imm(0)                                           -> x0
+    terminator Return(v146)   (exit_acc=v146)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

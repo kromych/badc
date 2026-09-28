@@ -37,7 +37,9 @@
 //!
 //! A fifth case works on value ranges: `drop_fitting` redirects an
 //! `Extend`, or an `And` by a constant, that is the identity on every
-//! value its operand can hold where the instruction reads it.
+//! value its operand can hold where the instruction reads it, or, for an
+//! induction variable (`value_range::iv`), in a defined execution where
+//! only addresses and comparisons read the upper half.
 //!
 //! Finally, `drop_call_arg_reextends` removes the caller-side
 //! re-extension of an argument to a direct internal call whose callee
@@ -60,8 +62,9 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
         // read at 32 bits stops observing its operands' upper half,
         // which is what makes the renormalizations feeding it dead.
         super::narrow::mark_compares(func);
+        let assumed = super::value_range::iv::assumptions(func);
         run_one(func);
-        drop_fitting(func);
+        drop_fitting(func, &assumed);
     }
     drop_call_arg_reextends(funcs);
 }
@@ -74,6 +77,15 @@ fn observe(hi: &mut [bool], work: &mut Vec<ValueId>, v: ValueId) {
     }
 }
 
+/// Observe the arguments of a call outside its `low_word_args`.
+fn observe_args(hi: &mut [bool], work: &mut Vec<ValueId>, args: &[ValueId], low_word_args: u64) {
+    for (i, &a) in args.iter().enumerate() {
+        if i >= 64 || low_word_args >> i & 1 == 0 {
+            observe(hi, work, a);
+        }
+    }
+}
+
 /// For every value, whether any consumer reads bits at or above bit 32.
 ///
 /// An `Add`/`Sub`/`Mul`/`And`/`Or`/`Xor`/`Shl` result's low 32 bits depend only
@@ -81,21 +93,21 @@ fn observe(hi: &mut [bool], work: &mut Vec<ValueId>, v: ValueId) {
 /// arithmetic), and a `Phi` selects one operand, so these forward the consumer's
 /// observation to their operands and are transparent to the low word. A right
 /// shift, divide/modulo, rotate, ordered/equality compare, 64-bit store, address
-/// operand, call argument, FP cast, atomic, or branch condition reads the full
-/// register, so it observes the upper bits directly. `Inst::Extend` reads only the
-/// low `kind`-width bits, so it never observes its source's upper bits. An `And`
-/// with a constant whose high word is clear forwards none: its result's high word
-/// is clear whatever the other operand holds. A return observes the full register
-/// unless the declared return type is narrower than it on every target
-/// (`return_is_low_word`), in which case the result rides the low word and the
-/// reading side widens it.
+/// operand, FP cast, atomic, branch condition, or call argument outside the call's
+/// `low_word_args` reads the full register, so it observes the upper bits directly.
+/// `Inst::Extend` reads only the low `kind`-width bits, so it never observes its
+/// source's upper bits. An `And` with a constant whose high word is clear forwards
+/// none: its result's high word is clear whatever the other operand holds. A
+/// return observes the full register unless the declared return type is narrower
+/// than it on every target (`return_is_low_word`), in which case the result rides
+/// the low word and the reading side widens it.
 /// Anything not positively classified as low-word-only is treated as observing,
 /// so the result is a conservative over-approximation. Shared with the allocator,
 /// which consults it to skip a `ParamRef` entry sign-extension whose result is
 /// never read above bit 31 (the parameter's low word already holds the C99
 /// 6.5.2.2p4-converted value).
 pub(crate) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
-    compute_high_observed_through(func, &[])
+    compute_high_observed_through(func, &[], false)
 }
 
 /// `compute_high_observed`, with the extends flagged in `collapsing`
@@ -103,13 +115,27 @@ pub(crate) fn compute_high_observed(func: &FunctionSsa) -> Vec<bool> {
 /// about to be replaced by its operand in all 64 bits, so it hands its
 /// own consumers' observation down: without that, the operand's low-word
 /// rule could fire against a consumer set the collapse is going to widen.
-fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec<bool> {
+/// With `addressing`, addresses, comparisons and branch conditions do not
+/// observe either.
+fn compute_high_observed_through(
+    func: &FunctionSsa,
+    collapsing: &[bool],
+    addressing: bool,
+) -> Vec<bool> {
     let n = func.insts.len();
     let mut hi = alloc::vec![false; n];
     let mut work: Vec<ValueId> = Vec::new();
+    let observe_addr = |hi: &mut [bool], work: &mut Vec<ValueId>, v: ValueId| {
+        if !addressing {
+            observe(hi, work, v);
+        }
+    };
 
     for (i, inst) in func.insts.iter().enumerate() {
-        let cmp32 = super::narrow::is_cmp32(&func.cmp32, i as ValueId);
+        let cmp32 = super::narrow::is_cmp32(&func.cmp32, i as ValueId)
+            || addressing
+                && matches!(inst, Inst::Binop { op, .. } | Inst::BinopI { op, .. }
+                    if crate::c5::ir::is_comparison_op(*op));
         match inst {
             Inst::Imm(_)
             | Inst::ImmData(_)
@@ -123,9 +149,16 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             | Inst::AllocaInit(_)
             | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. }
+            | Inst::ParamPart { .. }
+            | Inst::RetPart { .. }
+            | Inst::AsmOut { .. }
             | Inst::Extend { .. } => {}
+            // A part is returned whole in its register.
+            Inst::AggParts { parts, .. } => {
+                parts.iter().for_each(|&p| observe(&mut hi, &mut work, p))
+            }
             Inst::Copy { value, .. } => observe(&mut hi, &mut work, *value),
-            Inst::Load { addr, .. } => observe(&mut hi, &mut work, *addr),
+            Inst::Load { addr, .. } => observe_addr(&mut hi, &mut work, *addr),
             // An extending access reads the low word of its index.
             Inst::LoadIndexed {
                 base,
@@ -133,15 +166,15 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 index_ext,
                 ..
             } => {
-                observe(&mut hi, &mut work, *base);
+                observe_addr(&mut hi, &mut work, *base);
                 if *index_ext == IndexExt::None {
-                    observe(&mut hi, &mut work, *index);
+                    observe_addr(&mut hi, &mut work, *index);
                 }
             }
             Inst::Store {
                 addr, value, kind, ..
             } => {
-                observe(&mut hi, &mut work, *addr);
+                observe_addr(&mut hi, &mut work, *addr);
                 if *kind == StoreKind::I64 {
                     observe(&mut hi, &mut work, *value);
                 }
@@ -168,9 +201,9 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 kind,
                 ..
             } => {
-                observe(&mut hi, &mut work, *base);
+                observe_addr(&mut hi, &mut work, *base);
                 if *index_ext == IndexExt::None {
-                    observe(&mut hi, &mut work, *index);
+                    observe_addr(&mut hi, &mut work, *index);
                 }
                 if *kind == StoreKind::I64 {
                     observe(&mut hi, &mut work, *value);
@@ -179,6 +212,16 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
             // Same low-word rule as the `Mul` / `Add` / `Sub` pair it
             // contracts: the result's low bytes need only the operands'.
             Inst::MulAdd { .. } => {}
+            // A quotient depends on every bit of its operands.
+            Inst::Udiv128 {
+                hi: h,
+                lo: l,
+                divisor: d,
+            } => {
+                observe(&mut hi, &mut work, *h);
+                observe(&mut hi, &mut work, *l);
+                observe(&mut hi, &mut work, *d);
+            }
             Inst::Binop { op, lhs, rhs } => match op {
                 BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor => {}
                 BinOp::Shl => observe(&mut hi, &mut work, *rhs),
@@ -216,40 +259,62 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 observe(&mut hi, &mut work, *b);
                 observe(&mut hi, &mut work, *c);
             }
-            Inst::Call { args, .. }
-            | Inst::CallExt { args, .. }
-            | Inst::Intrinsic { args, .. }
+            Inst::Intrinsic { args, .. }
             | Inst::X86Simd { args, .. }
             | Inst::InlineAsm { args, .. } => {
                 for a in args {
                     observe(&mut hi, &mut work, *a);
                 }
             }
-            Inst::CallIndirect { target, args, .. } => {
+            Inst::Call {
+                args,
+                low_word_args,
+                ..
+            }
+            | Inst::CallExt {
+                args,
+                low_word_args,
+                ..
+            } => observe_args(&mut hi, &mut work, args, *low_word_args),
+            Inst::CallIndirect {
+                target,
+                args,
+                low_word_args,
+                ..
+            } => {
                 observe(&mut hi, &mut work, *target);
-                for a in args {
-                    observe(&mut hi, &mut work, *a);
-                }
+                observe_args(&mut hi, &mut work, args, *low_word_args);
             }
             Inst::Mcpy { dst, src, .. } => {
                 observe(&mut hi, &mut work, *dst);
                 observe(&mut hi, &mut work, *src);
             }
             Inst::Mzero { dst, .. } => observe(&mut hi, &mut work, *dst),
-            Inst::AtomicRmw { addr, value, .. } | Inst::AtomicStore { addr, value, .. } => {
+            // A narrow atomic reads only its operands' low `width` bytes.
+            Inst::AtomicRmw {
+                addr, value, width, ..
+            }
+            | Inst::AtomicStore {
+                addr, value, width, ..
+            } => {
                 observe(&mut hi, &mut work, *addr);
-                observe(&mut hi, &mut work, *value);
+                if *width == 8 {
+                    observe(&mut hi, &mut work, *value);
+                }
             }
             Inst::AtomicLoad { addr, .. } => observe(&mut hi, &mut work, *addr),
             Inst::AtomicCas {
                 addr,
-                expected_addr,
+                expected,
                 desired,
+                width,
                 ..
             } => {
                 observe(&mut hi, &mut work, *addr);
-                observe(&mut hi, &mut work, *expected_addr);
-                observe(&mut hi, &mut work, *desired);
+                if *width == 8 {
+                    observe(&mut hi, &mut work, *expected);
+                    observe(&mut hi, &mut work, *desired);
+                }
             }
             Inst::Phi { .. } => {}
         }
@@ -261,7 +326,13 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
     // and reads none.
     let ret_low_word = crate::c5::codegen::return_is_low_word(func.ret_type_tag);
     for (b, block) in func.blocks.iter().enumerate() {
-        if func.low_word_tests.get(b).copied().unwrap_or(false) {
+        if func.low_word_tests.get(b).copied().unwrap_or(false)
+            || addressing
+                && matches!(
+                    block.terminator,
+                    Terminator::Bz { .. } | Terminator::Bnz { .. }
+                )
+        {
             continue;
         }
         if ret_low_word && matches!(block.terminator, Terminator::Return(_)) {
@@ -324,6 +395,15 @@ fn compute_high_observed_through(func: &FunctionSsa, collapsing: &[bool]) -> Vec
                 observe(&mut hi, &mut work, *a);
                 observe(&mut hi, &mut work, *b);
                 observe(&mut hi, &mut work, *c);
+            }
+            Inst::Udiv128 {
+                hi: h,
+                lo: l,
+                divisor: d,
+            } => {
+                observe(&mut hi, &mut work, *h);
+                observe(&mut hi, &mut work, *l);
+                observe(&mut hi, &mut work, *d);
             }
             Inst::Extend { value, .. } if collapsing.get(r as usize).copied().unwrap_or(false) => {
                 observe(&mut hi, &mut work, *value)
@@ -436,7 +516,7 @@ fn dedup_dominated_extends(func: &FunctionSsa, redirect: &mut [Option<ValueId>])
     }
     let mut groups: HashMap<(ValueId, LoadKind), Vec<ValueId>> = HashMap::new();
     for (idx, inst) in func.insts.iter().enumerate() {
-        let Inst::Extend { value, kind } = inst else {
+        let Inst::Extend { value, kind, .. } = inst else {
             continue;
         };
         if redirect[idx].is_some() {
@@ -641,8 +721,8 @@ fn param_reextend_kinds(func: &FunctionSsa) -> Vec<Option<LoadKind>> {
 /// width no wider than `kind` (see [`param_reextend_kinds`]). The bits
 /// the drop changes are above the extend's width, and the callee reads
 /// none of them. Restricted to `Inst::Call`: an external or indirect
-/// callee's entry behavior is unknown, so those keep the canonical
-/// C99 6.5.2.2p4-converted argument value.
+/// callee's entry behavior is unknown, so those keep the argument's low
+/// word as C99 6.5.2.2p4 converts it.
 fn drop_call_arg_reextends(funcs: &mut [FunctionSsa]) {
     use hashbrown::HashMap;
     let mut by_ent: HashMap<usize, Vec<Option<LoadKind>>> = HashMap::new();
@@ -677,7 +757,7 @@ fn drop_call_arg_reextends(funcs: &mut [FunctionSsa]) {
                 if arg_aggs.get(k).copied().flatten().is_some() {
                     continue;
                 }
-                let Some(Inst::Extend { value, kind }) = func.insts.get(a as usize) else {
+                let Some(Inst::Extend { value, kind, .. }) = func.insts.get(a as usize) else {
                     continue;
                 };
                 let (Some(ext_bits), Some(param_kind)) =
@@ -781,7 +861,7 @@ fn run_one(func: &mut FunctionSsa) {
     // the upper half then fails (2) instead of being redirected under it.
     let mut collapsing = alloc::vec![false; n];
     for (idx, inst) in func.insts.iter().enumerate() {
-        let Inst::Extend { value, kind } = inst else {
+        let Inst::Extend { value, kind, .. } = inst else {
             continue;
         };
         let Some(Inst::Extend { kind: inner, .. }) = func.insts.get(*value as usize) else {
@@ -791,7 +871,7 @@ fn run_one(func: &mut FunctionSsa) {
             .zip(narrow_kind_bits(*kind))
             .is_some_and(|(ibits, ebits)| ibits <= ebits);
     }
-    let high = compute_high_observed_through(func, &collapsing);
+    let high = compute_high_observed_through(func, &collapsing, false);
     let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; n];
     for (idx, inst) in func.insts.iter().enumerate() {
         // (2) for the unsigned renormalization: the mask changes bits
@@ -802,7 +882,7 @@ fn run_one(func: &mut FunctionSsa) {
             redirect[idx] = Some(operand);
             continue;
         }
-        let Inst::Extend { value, kind } = inst else {
+        let Inst::Extend { value, kind, .. } = inst else {
             continue;
         };
         let load_covers = narrow_int_load(&func.insts, *value)
@@ -819,22 +899,26 @@ fn run_one(func: &mut FunctionSsa) {
         }
     }
     dedup_dominated_extends(func, &mut redirect);
-    if redirect.iter().all(|r| r.is_none()) {
+    apply_redirects(func, &redirect);
+}
+
+/// Rewrite every operand, terminator value, and block accumulator. A
+/// redirected instruction is dead; its operand follows the redirects too,
+/// so it keeps no redirected value live.
+fn apply_redirects(func: &mut FunctionSsa, redirect: &[Option<ValueId>]) {
+    if redirect.iter().all(Option::is_none) {
         return;
     }
-    // Rewrite every operand, terminator value, and block accumulator. A
-    // redirected instruction is dead; its operand follows the redirects
-    // too, so it keeps no redirected value live.
     for inst in func.insts.iter_mut() {
-        inst.for_each_operand_mut(|op| *op = resolve(&redirect, *op));
+        inst.for_each_operand_mut(|op| *op = resolve(redirect, *op));
     }
     for block in func.blocks.iter_mut() {
         if block.exit_acc != NO_VALUE {
-            block.exit_acc = resolve(&redirect, block.exit_acc);
+            block.exit_acc = resolve(redirect, block.exit_acc);
         }
         block
             .terminator
-            .for_each_operand_mut(|v| *v = resolve(&redirect, *v));
+            .for_each_operand_mut(|v| *v = resolve(redirect, *v));
     }
 }
 
@@ -867,7 +951,10 @@ pub(crate) fn compute_high_clear(func: &FunctionSsa) -> Vec<bool> {
 /// After `run_one`: the ranges describe the registers as that pass left
 /// them, and a renormalization it dropped for an unread upper half is not
 /// kept alive by a range that would rest on it.
-fn drop_fitting(func: &mut FunctionSsa) {
+/// Then, under the `assumed` induction facts, an `I32` extension whose upper
+/// half only addresses and comparisons read; any other reader keeps it and
+/// sees the value wrapped in every execution.
+fn drop_fitting(func: &mut FunctionSsa, assumed: &[Option<LoadKind>]) {
     let narrows = |i: &Inst| {
         matches!(
             i,
@@ -899,6 +986,7 @@ fn drop_fitting(func: &mut FunctionSsa) {
                 Inst::Extend {
                     value,
                     kind: kind @ (LoadKind::I8 | LoadKind::I16 | LoadKind::I32),
+                    ..
                 } => ranges.at(b, value).fits(kind).then_some(value),
                 Inst::BinopI {
                     op: BinOp::And,
@@ -919,20 +1007,30 @@ fn drop_fitting(func: &mut FunctionSsa) {
             };
         }
     }
-    if redirect.iter().all(Option::is_none) {
+    apply_redirects(func, &redirect);
+    if !assumed.iter().any(Option::is_some) {
         return;
     }
-    for inst in func.insts.iter_mut() {
-        inst.for_each_operand_mut(|op| *op = resolve(&redirect, *op));
-    }
-    for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            block.exit_acc = resolve(&redirect, block.exit_acc);
+    let ranges = super::value_range::Ranges::compute_assuming(func, &[], assumed);
+    let escaping = compute_high_observed_through(func, &[], true);
+    let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; func.insts.len()];
+    for (b, block) in func.blocks.iter().enumerate() {
+        for idx in block.inst_range.clone() {
+            if let Some(&Inst::Extend {
+                value,
+                kind: LoadKind::I32,
+                ..
+            }) = func.insts.get(idx as usize)
+                && !escaping[idx as usize]
+                && ranges
+                    .at(b as crate::c5::ir::BlockId, value)
+                    .fits(LoadKind::I32)
+            {
+                redirect[idx as usize] = Some(value);
+            }
         }
-        block
-            .terminator
-            .for_each_operand_mut(|v| *v = resolve(&redirect, *v));
     }
+    apply_redirects(func, &redirect);
 }
 
 #[cfg(test)]
@@ -954,10 +1052,12 @@ mod tests {
             is_always_inline: false,
             is_noinline: false,
             is_naked: false,
+            is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             section: None,
             patchable_entry: None,
             no_instrument: false,
+            no_stack_protector: false,
             is_weak: false,
             is_internal: false,
             const_params: 0,
@@ -966,6 +1066,7 @@ mod tests {
             cmp32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
+            param_widths: crate::c5::ir::ArgWidths::default(),
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
@@ -1013,6 +1114,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
             ],
             vec![Block {
@@ -1049,6 +1151,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
             ],
             vec![Block {
@@ -1085,6 +1188,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
             ],
             vec![Block {
@@ -1119,6 +1223,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I8,
+                    nsw: false,
                 },
             ],
             vec![Block {
@@ -1150,6 +1255,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I64,
+                    nsw: false,
                 },
             ],
             vec![Block {
@@ -1179,6 +1285,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
             ],
             vec![Block {
@@ -1230,6 +1337,7 @@ mod tests {
                 Inst::Extend {
                     value: 2,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
                 Inst::Store {
                     addr: 0,
@@ -1479,11 +1587,14 @@ mod tests {
                 index_ext: IndexExt::None,
                 scale: 4,
                 kind: LoadKind::I32,
+                abs_base: false,
             },
             Inst::CallExt {
                 binding_idx: 0,
                 args: vec![2],
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                low_word_args: 0,
+                arg_widths: crate::c5::ir::ArgWidths::default(),
                 fp_return: false,
                 arg_aggs: Vec::new(),
                 ret_agg: None,
@@ -1622,14 +1733,26 @@ mod tests {
                     lhs: 0,
                     rhs: 0,
                 },
-                Inst::Extend { value: 1, kind: k0 },
-                Inst::Extend { value: 1, kind: k1 },
+                Inst::Extend {
+                    value: 1,
+                    kind: k0,
+                    nsw: false,
+                },
+                Inst::Extend {
+                    value: 1,
+                    kind: k1,
+                    nsw: false,
+                },
                 Inst::BinopI {
                     op: BinOp::Add,
                     lhs: 3,
                     rhs_imm: 1,
                 },
-                Inst::Extend { value: 1, kind: k0 },
+                Inst::Extend {
+                    value: 1,
+                    kind: k0,
+                    nsw: false,
+                },
                 Inst::BinopI {
                     op: BinOp::Add,
                     lhs: 5,
@@ -1703,6 +1826,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I8,
+                    nsw: false,
                 },
                 Inst::BinopI {
                     op: BinOp::Add,
@@ -1712,6 +1836,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I8,
+                    nsw: false,
                 },
                 Inst::BinopI {
                     op: BinOp::Add,
@@ -1770,10 +1895,12 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I8,
+                    nsw: false,
                 },
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I8,
+                    nsw: false,
                 },
                 Inst::Call {
                     target_pc: 99,
@@ -1781,6 +1908,8 @@ mod tests {
                     fixed_args: 1,
                     fp_return: false,
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                    low_word_args: 0,
+                    arg_widths: crate::c5::ir::ArgWidths::default(),
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
@@ -1837,6 +1966,7 @@ mod tests {
                     'E' => Inst::Extend {
                         value: 0,
                         kind: LoadKind::I32,
+                        nsw: false,
                     },
                     _ => Inst::Call {
                         target_pc: 99,
@@ -1844,6 +1974,8 @@ mod tests {
                         fixed_args: 0,
                         fp_return: false,
                         fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                        low_word_args: 0,
+                        arg_widths: crate::c5::ir::ArgWidths::default(),
                         arg_aggs: Vec::new(),
                         ret_agg: None,
                         ret_slot_local: 0,
@@ -1954,6 +2086,7 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
                 Inst::Call {
                     target_pc: 7,
@@ -1961,6 +2094,8 @@ mod tests {
                     fixed_args: 1,
                     fp_return: false,
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                    low_word_args: 0,
+                    arg_widths: crate::c5::ir::ArgWidths::default(),
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
@@ -2041,11 +2176,14 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
                 Inst::CallExt {
                     binding_idx: 0,
                     args: alloc::vec![2],
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                    low_word_args: 0,
+                    arg_widths: crate::c5::ir::ArgWidths::default(),
                     fp_return: false,
                     arg_aggs: Vec::new(),
                     ret_agg: None,
@@ -2093,6 +2231,7 @@ mod tests {
                 Inst::Extend {
                     value: 2,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
                 Inst::BinopI {
                     op: BinOp::Lt,
@@ -2131,6 +2270,7 @@ mod tests {
                 Inst::Extend {
                     value: 0,
                     kind: LoadKind::I32,
+                    nsw: false,
                 },
                 Inst::MulAdd {
                     a: 2,
@@ -2167,10 +2307,12 @@ mod tests {
                 Inst::Extend {
                     value: 1,
                     kind: inner,
+                    nsw: false,
                 },
                 Inst::Extend {
                     value: 2,
                     kind: outer,
+                    nsw: false,
                 },
             ],
             vec![Block {
@@ -2304,7 +2446,7 @@ mod tests {
                 },
             ],
         );
-        drop_fitting(&mut f);
+        drop_fitting(&mut f, &[]);
         assert!(
             matches!(f.insts[7], Inst::Binop { lhs: 3, rhs: 3, .. })
                 && matches!(f.insts[8], Inst::Binop { lhs: 7, rhs: 6, .. }),
@@ -2323,7 +2465,7 @@ mod tests {
             },
             vec![and(3, 0xff)],
         );
-        drop_fitting(&mut f);
+        drop_fitting(&mut f, &[]);
         assert!(matches!(f.blocks[2].terminator, Terminator::Return(4)));
     }
 
@@ -2333,14 +2475,16 @@ mod tests {
             let tail = vec![Inst::Extend {
                 value: 3,
                 kind: LoadKind::I8,
+                nsw: false,
             }];
             let mut f = join(Inst::Imm(-3), v2, tail);
-            drop_fitting(&mut f);
+            drop_fitting(&mut f, &[]);
             f.blocks[2].terminator
         };
         let sext = Inst::Extend {
             value: 0,
             kind: LoadKind::I8,
+            nsw: false,
         };
         assert!(matches!(byte(sext), Terminator::Return(3)));
         // A masked byte reaches 0xff, which a signed char does not hold.
@@ -2362,12 +2506,14 @@ mod tests {
         let ext = |value| Inst::Extend {
             value,
             kind: LoadKind::I32,
+            nsw: false,
         };
         let store = |value| Inst::StoreLocal {
             off: -1,
             value,
             kind: StoreKind::I64,
             volatile: false,
+            nsw: false,
         };
         let insts = vec![
             n,
@@ -2423,7 +2569,7 @@ mod tests {
         };
         for narrow_compare in [false, true] {
             let mut f = decrement_on_both_sides(n.clone(), narrow_compare);
-            drop_fitting(&mut f);
+            drop_fitting(&mut f, &[]);
             assert!(
                 matches!(f.insts[4], Inst::StoreLocal { value: 2, .. }),
                 "narrow={narrow_compare}: {:?}",
@@ -2450,7 +2596,7 @@ mod tests {
         };
         for narrow_compare in [true, false] {
             let mut f = decrement_on_both_sides(wide.clone(), narrow_compare);
-            drop_fitting(&mut f);
+            drop_fitting(&mut f, &[]);
             assert!(matches!(f.insts[4], Inst::StoreLocal { value: 3, .. }));
             assert!(matches!(f.insts[7], Inst::StoreLocal { value: 6, .. }));
         }
@@ -2506,7 +2652,7 @@ mod tests {
                 block(7..8, Terminator::Return(7)),
             ],
         );
-        drop_fitting(&mut f);
+        drop_fitting(&mut f, &[]);
         assert!(
             matches!(f.insts[5], Inst::BinopI { lhs: 3, .. })
                 && matches!(f.insts[6], Inst::Binop { lhs: 5, rhs: 0, .. })

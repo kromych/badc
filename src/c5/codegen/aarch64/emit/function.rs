@@ -97,6 +97,7 @@ struct EmitSnapshot {
     text_align: usize,
     asm_text_labels: usize,
     asm_section_text_refs: usize,
+    early_returns: usize,
     text_map_state: Option<super::super::map_syms::MapClass>,
 }
 
@@ -115,6 +116,12 @@ struct FunctionEmitter<'a, 'b> {
     fcx: FnCtx<'a>,
     abs_jump_tables: bool,
     entry: super::FunctionEntry,
+    /// The return taken ahead of the frame, when the function has one.
+    early_exit: Option<super::ssa::early_exit::EarlyExit>,
+    /// The entry's test branches to that return through a `B`.
+    early_far: bool,
+    /// The test's branch to patch, and where the frame path starts.
+    early_site: (usize, usize),
     snapshot: EmitSnapshot,
     /// Which blocks are emitted and where each branch lands.
     plan: super::ssa::block_plan::BlockPlan,
@@ -206,6 +213,12 @@ pub(crate) fn emit_function(
                 .collect(),
         );
     }
+    if !func.over_aligned.is_empty() {
+        cx.region_frame_offsets.insert(
+            func.ent_pc,
+            super::ssa::emit_common::region_frame_offsets(func, frame.align_region_off),
+        );
+    }
     if frame.frame_bytes > super::ssa::emit_common::MAX_FRAME_BYTES {
         return fail(super::ssa::emit_common::frame_too_large_msg(
             frame.frame_bytes as i64,
@@ -215,6 +228,18 @@ pub(crate) fn emit_function(
         .insert(func.ent_pc, frame_stack(func, frame, alloc));
     let scratch = ScratchPool::new();
     let param_plan = param_placements(func, abi);
+    // A full leaf builds no frame to leave ahead of; the evaluation may need
+    // more temporaries than it has.
+    let early_exit = if repeat_tests && !is_full_leaf(frame, alloc) {
+        super::ssa::early_exit::early_exit(func, alloc, &param_plan).filter(|exit| {
+            emit_early_test(&mut Vec::new(), exit, false).is_some()
+                && emit_early_return(&mut Vec::new(), exit)
+        })
+    } else {
+        None
+    };
+    let plan =
+        super::ssa::block_plan::BlockPlan::build(func, alloc, repeat_tests, early_exit.as_ref());
     let snapshot = EmitSnapshot {
         code: cx.code.len(),
         fixups: fixups.len(),
@@ -234,6 +259,7 @@ pub(crate) fn emit_function(
         text_align: *cx.text_align,
         asm_text_labels: asm_text_labels.len(),
         asm_section_text_refs: asm_section_text_refs.len(),
+        early_returns: cx.early_returns.len(),
         text_map_state: *text_map_state,
     };
     let mut em = FunctionEmitter {
@@ -263,8 +289,11 @@ pub(crate) fn emit_function(
         },
         abs_jump_tables,
         entry,
+        early_exit,
+        early_far: false,
+        early_site: (0, 0),
         snapshot,
-        plan: super::ssa::block_plan::BlockPlan::build(func, alloc, repeat_tests),
+        plan,
         prebatched: Vec::new(),
         block_offsets: alloc::vec![0; func.blocks.len()],
         branch_fixups: Vec::new(),
@@ -302,9 +331,12 @@ impl FunctionEmitter<'_, '_> {
             self.place_int_params()?;
             self.place_fp_params();
             self.emit_blocks()?;
-            if !self.mark_far_branches() {
+            let early_far = !self.emit_early_return();
+            let grew = self.mark_far_branches();
+            if !grew && !early_far {
                 return Ok(());
             }
+            self.early_far |= early_far;
             self.restore_outputs();
             self.block_offsets.fill(0);
             self.branch_fixups.clear();
@@ -314,6 +346,34 @@ impl FunctionEmitter<'_, '_> {
             self.fp_literals.clear();
             self.deferred_regions.clear();
         }
+    }
+
+    /// The early return after the body, the test pointed at it; `false`
+    /// where the test's conditional branch does not reach it.
+    fn emit_early_return(&mut self) -> bool {
+        let Some(exit) = &self.early_exit else {
+            return true;
+        };
+        let exit_at = self.cx.code.len();
+        super::ssa::emit_common::record_block_src(
+            self.fcx.func,
+            exit.exit_block,
+            exit_at,
+            self.cx.ssa_line_rows,
+        );
+        let emitted = emit_early_return(self.cx.code, exit);
+        debug_assert!(emitted, "the return fit its temporaries at planning");
+        let (site, frame) = self.early_site;
+        if !patch_early_branch(self.cx.code, site, exit_at, self.early_far) {
+            return false;
+        }
+        let begin = self.snapshot.code;
+        self.cx.early_returns.push(super::EarlyReturn {
+            begin: begin as u32,
+            frame: (frame - begin) as u32,
+            exit: (exit_at - begin) as u32,
+        });
+        true
     }
 
     /// Mark the owner of every conditional branch whose displacement does
@@ -366,6 +426,7 @@ impl FunctionEmitter<'_, '_> {
         *self.cx.text_align = s.text_align;
         self.asm_text_labels.truncate(s.asm_text_labels);
         self.asm_section_text_refs.truncate(s.asm_section_text_refs);
+        self.cx.early_returns.truncate(s.early_returns);
         *self.text_map_state = s.text_map_state;
     }
 
@@ -466,9 +527,9 @@ impl FunctionEmitter<'_, '_> {
         }
     }
 
-    /// The landing pad, patchable-entry NOPs, return-address signing and the
-    /// prologue. A naked function's inline-asm body is the whole function,
-    /// so it takes only the NOPs.
+    /// The landing pad, patchable-entry NOPs, the test of the early return,
+    /// return-address signing and the prologue. A naked function's inline-asm
+    /// body is the whole function, so it takes only the NOPs.
     fn emit_entry(&mut self) {
         let FnCtx {
             func,
@@ -486,7 +547,8 @@ impl FunctionEmitter<'_, '_> {
             // x16/x17, so it takes a `BTI C`; `PACIASP` accepts both BTYPEs
             // itself and stands in for the pad where it is the first
             // instruction.
-            if abi.hardening.bti && (self.entry.nops_after > 0 || !signs) {
+            let pad = self.entry.nops_after > 0 || !signs || self.early_exit.is_some();
+            if abi.hardening.bti && pad {
                 emit(self.cx.code, super::encode::BTI_C);
             }
         }
@@ -494,6 +556,17 @@ impl FunctionEmitter<'_, '_> {
         // precede the rest of the entry, as gcc orders them.
         for _ in 0..self.entry.nops_after {
             emit(self.cx.code, super::encode::NOP);
+        }
+        if let Some(exit) = &self.early_exit {
+            super::ssa::emit_common::record_test_src(
+                func,
+                exit.test_block,
+                self.cx.code.len(),
+                self.cx.ssa_line_rows,
+            );
+            let site = emit_early_test(self.cx.code, exit, self.early_far);
+            debug_assert!(site.is_some(), "the test fit its temporaries at planning");
+            self.early_site = (site.unwrap_or(0), self.cx.code.len());
         }
         if !func.is_naked {
             if signs {
@@ -515,12 +588,14 @@ impl FunctionEmitter<'_, '_> {
         );
     }
 
-    /// Place the integer `Inst::ParamRef` values from their argument
-    /// registers into the allocator's homes as one parallel copy, so no home
-    /// clobbers a later parameter's incoming register. Applies only when the
-    /// homes are distinct; otherwise `emit_inst` places each in program order,
-    /// which the allocator's self-home hint keeps sound
-    /// (`param-shuffle-clobber` in `verify_allocation`).
+    /// Place the integer reads opening the entry block
+    /// (`emit_common::entry_read_run`) from their argument registers into
+    /// the allocator's homes as one parallel copy, so no home clobbers a
+    /// later parameter's incoming register. Applies only when the homes are
+    /// distinct; otherwise, and for every other read, `emit_inst` places
+    /// each at its position, where the allocator's incoming-register forbid
+    /// keeps its source intact (`param-shuffle-clobber` in
+    /// `verify_allocation`).
     fn place_int_params(&mut self) -> Emit {
         let FnCtx {
             func,
@@ -533,8 +608,9 @@ impl FunctionEmitter<'_, '_> {
         let mut moves: Vec<PlaceMove> = Vec::new();
         let mut vids: Vec<usize> = Vec::new();
         let mut homes: Vec<Place> = Vec::new();
-        for (vid, inst) in func.insts.iter().enumerate() {
-            let Inst::ParamRef { idx, kind } = inst else {
+        for vid in super::ssa::emit_common::entry_read_run(func, &alloc.use_counts) {
+            let inst = &func.insts[vid];
+            let (Inst::ParamRef { kind, .. } | Inst::ParamPart { kind, .. }) = inst else {
                 continue;
             };
             let v = vid as super::super::ir::ValueId;
@@ -547,8 +623,7 @@ impl FunctionEmitter<'_, '_> {
             }
             // A stack-passed integer parameter has no register source and
             // stays on the per-inst home-cell path.
-            let Some(super::ArgPlacement::IntReg(src)) = param_plan.get(*idx as usize).copied()
-            else {
+            let Some((false, src)) = super::ssa::reg_alloc::incoming_reg(param_plan, inst) else {
                 continue;
             };
             moves.push(PlaceMove {
@@ -583,8 +658,9 @@ impl FunctionEmitter<'_, '_> {
         let mut fp_moves: Vec<(Place, Place, bool)> = Vec::new();
         let mut fp_vids: Vec<usize> = Vec::new();
         let mut fp_homes: Vec<Place> = Vec::new();
-        for (vid, inst) in func.insts.iter().enumerate() {
-            let Inst::ParamRef { idx, kind } = inst else {
+        for vid in super::ssa::emit_common::entry_read_run(func, &alloc.use_counts) {
+            let inst = &func.insts[vid];
+            let (Inst::ParamRef { kind, .. } | Inst::ParamPart { kind, .. }) = inst else {
                 continue;
             };
             if !matches!(kind, LoadKind::F32 | LoadKind::F64) {
@@ -598,8 +674,7 @@ impl FunctionEmitter<'_, '_> {
             if !matches!(dst, Place::FpReg(_) | Place::Spill(_)) {
                 continue;
             }
-            let Some(super::ArgPlacement::FpReg(src)) = param_plan.get(*idx as usize).copied()
-            else {
+            let Some((true, src)) = super::ssa::reg_alloc::incoming_reg(param_plan, inst) else {
                 continue;
             };
             fp_moves.push((Place::FpReg(src), dst, false));
@@ -646,6 +721,9 @@ impl FunctionEmitter<'_, '_> {
                 self.assert_emits_nothing(block_idx)?;
                 continue;
             }
+            if self.plan.is_dead(block_idx) {
+                continue;
+            }
             let bti = bti_targets.contains(&(block_idx as BlockId));
             if bti {
                 self.align_stream();
@@ -661,7 +739,9 @@ impl FunctionEmitter<'_, '_> {
                 emit(self.cx.code, super::encode::BTI_J);
             }
             for v in block.inst_range.clone() {
-                self.emit_block_inst(block, v)?;
+                if self.plan.lowers(block_idx, v) {
+                    self.emit_block_inst(block, v)?;
+                }
             }
             // The phi moves and the terminator are instructions, except for
             // a naked function's synthetic return, which emits nothing.
@@ -901,20 +981,25 @@ impl FunctionEmitter<'_, '_> {
             imports,
             ..
         } = self.fcx;
+        if let Some(arm) = self.plan.entry_jump(block_idx) {
+            return self.branch_unless_next(block_idx, arm);
+        }
         match block.terminator {
             // A naked function's inline-asm body provides its own return.
             Terminator::Return(_) if func.is_naked => {}
-            Terminator::Return(v) => emit_return(
-                self.cx.code,
-                v,
-                alloc,
-                frame,
-                scratch,
-                func,
-                abi,
-                self.cx.asm_extern_call_sites,
-                self.cx.user_extern_data_refs,
-            ),
+            Terminator::Return(v) => {
+                return emit_return(
+                    self.cx.code,
+                    v,
+                    alloc,
+                    frame,
+                    scratch,
+                    func,
+                    abi,
+                    self.cx.asm_extern_call_sites,
+                    self.cx.user_extern_data_refs,
+                );
+            }
             Terminator::Jmp(t) | Terminator::FallThrough(t) => {
                 return self.branch_unless_next(block_idx, t);
             }
@@ -1378,40 +1463,30 @@ fn emit_prologue(
     // argument that landed in one must reach the save area for `va_arg`)
     // into the register save area above the saved fp/lr; see
     // `emit_register_save_area`. Neither is a full leaf, so the frame record
-    // follows.
-    if win_arm64_variadic_callee(func, abi) {
+    // follows, and every step after it applies to one as well.
+    let win = win_arm64_variadic_callee(func, abi);
+    let variadic = win || aarch64_host_variadic_callee(func, abi);
+    if win {
         debug_assert_eq!(
             frame.va_save_bytes, WIN_ARM64_GR_SAVE_BYTES,
             "win-arm64 variadic prologue must reserve the full gr-save area"
         );
-        emit_register_save_area(code, alloc, frame, abi, extern_data_refs, false);
-        emit_struct_param_scatter(code, func, abi, frame);
-        return;
-    }
-    if aarch64_host_variadic_callee(func, abi) {
+        emit_register_save_area(code, frame, abi, false);
+    } else if variadic {
         debug_assert_eq!(
             frame.va_save_bytes, AARCH64_VA_SAVE_BYTES,
             "aapcs64 variadic prologue must reserve the full register save area"
         );
-        emit_register_save_area(code, alloc, frame, abi, extern_data_refs, true);
-        emit_struct_param_scatter(code, func, abi, frame);
-        return;
-    }
-    if is_full_leaf(frame, alloc) {
+        emit_register_save_area(code, frame, abi, true);
+    } else if is_full_leaf(frame, alloc) {
         return;
     }
     emit_frame_and_saves(code, alloc, frame);
     if func.indirect_result_slot != 0 {
         // AAPCS64 6.9: save the caller-supplied x8 indirect-result pointer
         // into its body local; `return s;` writes the aggregate through it.
-        let _ = emit_local_addr_fp(
-            code,
-            Place::IntReg(16),
-            func.indirect_result_slot,
-            func,
-            frame,
-        );
-        emit(code, enc_str_imm(Reg(8), Reg(16), 0));
+        let slot = local_slot(func.indirect_result_slot, func, frame);
+        emit_frame_mem(code, super::encode::STR_X, 8, slot, Reg(16));
     }
     // The canary slot is fp-relative, so it is stored before the sp
     // realignment (C11 6.7.5), which uses x16 alone and so leaves the
@@ -1422,7 +1497,10 @@ fn emit_prologue(
     if frame.realign_align > 0 {
         emit_realign_sp(code, frame);
     }
-    emit_param_homes(code, func, alloc, frame);
+    // A variadic callee reads its named parameters from the save area.
+    if !variadic {
+        emit_param_homes(code, func, alloc, frame);
+    }
     emit_struct_param_scatter(code, func, abi, frame);
 }
 
@@ -1431,14 +1509,7 @@ fn emit_prologue(
 /// q0..q7 at a 16-byte stride after them. Under `no_fp_regs` the
 /// vector half stays reserved but unwritten (the store would fault) and
 /// `va_start` marks it exhausted.
-fn emit_register_save_area(
-    code: &mut Vec<u8>,
-    alloc: &Allocation,
-    frame: Frame,
-    abi: super::Abi,
-    extern_data_refs: &mut Vec<super::UserExternDataRef>,
-    vector: bool,
-) {
+fn emit_register_save_area(code: &mut Vec<u8>, frame: Frame, abi: super::Abi, vector: bool) {
     emit_sub_sp_imm(code, frame.va_save_bytes);
     for (i, &r) in abi.int_arg_regs.iter().enumerate() {
         emit(code, enc_str_imm(Reg(r), Reg(31), (i as u32) * 8));
@@ -1455,8 +1526,6 @@ fn emit_register_save_area(
             );
         }
     }
-    emit_frame_and_saves(code, alloc, frame);
-    emit_canary_store(code, frame, abi, extern_data_refs);
 }
 
 /// Store each register-passed scalar parameter into its home
@@ -1472,24 +1541,19 @@ fn emit_param_homes(code: &mut Vec<u8>, func: &FunctionSsa, alloc: &Allocation, 
         if dead[i] {
             continue;
         }
-        let home = param_home_off(i, func, frame);
+        // An FP register stores its low 8 bytes, the bytes an `fmov`ed
+        // general register would; x17 builds an address past the offset forms.
+        let home = FrameLoc::at_fp(frame, param_home_off(i, func, frame));
         match *placement {
-            super::ArgPlacement::IntReg(r) => emit_fp_store_x(code, Reg(r), home),
-            super::ArgPlacement::FpReg(d) => emit_fp_store_d(code, d, home),
+            super::ArgPlacement::IntReg(r) => {
+                emit_frame_mem(code, super::encode::STR_X, r, home, Reg(17))
+            }
+            super::ArgPlacement::FpReg(d) => {
+                emit_frame_mem(code, super::encode::STR_D, d, home, Reg(17))
+            }
             _ => {}
         }
     }
-}
-
-/// Store `rt` at `[fp + off]`, through x17 past the offset forms.
-fn emit_fp_store_x(code: &mut Vec<u8>, rt: Reg, off: i64) {
-    emit_mem(code, super::encode::STR_X, rt.0, Reg(29), off, Reg(17));
-}
-
-/// Store the low 8 bytes of `dt` at `[fp + off]`. Same bytes as a
-/// `fmov`ed general register, without the transfer.
-fn emit_fp_store_d(code: &mut Vec<u8>, dt: u8, off: i64) {
-    emit_mem(code, super::encode::STR_D, dt, Reg(29), off, Reg(17));
 }
 
 /// Store each register-passed aggregate parameter's argument registers
@@ -1525,7 +1589,7 @@ fn emit_struct_param_scatter(
                 // 8-byte HFA member, s for a 4-byte one. x16 is never an
                 // argument register.
                 let desc = &func.agg_descs[*agg_idx as usize];
-                let members = super::abi_classify::fp_member_layout(desc.size, &desc.fields);
+                let members = super::abi_classify::fp_member_layout(desc);
                 let member = |k: usize| {
                     members
                         .as_ref()
@@ -1540,8 +1604,8 @@ fn emit_struct_param_scatter(
                         (super::encode::STR_X, (k as u32) * 8)
                     }
                 });
-                let (base, disp) = local_slot_base(slot, func, frame);
-                let (base, disp) = object_base(code, base, disp, accesses, Reg(16));
+                let (base, disp) =
+                    frame_object_base(code, local_slot(slot, func, frame), accesses, Reg(16));
                 for (k, cr) in regs.iter().enumerate() {
                     if cr.is_fp {
                         let (off, msize) = member(k);
@@ -1978,16 +2042,16 @@ pub(super) fn emit_return(
     abi: super::Abi,
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
-) {
+) -> Emit {
     if let Some(ai) = func.ret_agg {
-        emit_aggregate_return(code, value, ai, alloc, frame, scratch, func, abi);
+        emit_aggregate_return(code, value, ai, alloc, frame, scratch, func, abi)?;
     } else if value != super::super::ir::NO_VALUE {
         emit_scalar_return(code, value, alloc, frame, scratch, func);
     }
     // A full leaf saved nothing.
     if is_full_leaf(frame, alloc) {
         emit(code, enc_ret(Reg(30)));
-        return;
+        return Ok(());
     }
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
     restore_dynamic_sp(code, frame);
@@ -2014,13 +2078,64 @@ pub(super) fn emit_return(
         emit(code, super::encode::AUTIASP);
     }
     emit(code, enc_ret(Reg(30)));
+    Ok(())
+}
+
+/// A return in registers: each part moves into its class's register
+/// (AAPCS64 6.9), the integer parts as one parallel copy through x16 /
+/// x17, the floating-point ones through d16 / d17, and a constant's bit
+/// pattern crossing banks between the two.
+fn emit_parts_return(
+    code: &mut Vec<u8>,
+    parts: &[super::super::ir::ValueId],
+    fp_mask: &super::super::ir::FpMask,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    let regs = super::ssa::reg_alloc::agg_part_regs(fp_mask, parts.len(), (&[0, 1], &[0, 1, 2, 3]));
+    let mut int_moves: Vec<PlaceMove> = Vec::new();
+    let mut fp_moves: Vec<(Place, Place, bool)> = Vec::new();
+    let mut cross: Vec<(u8, Reg)> = Vec::new();
+    for (&p, &(is_fp, r)) in parts.iter().zip(&regs) {
+        let src = place_of(alloc, p);
+        match (is_fp, src) {
+            (false, Place::IntReg(_) | Place::Spill(_)) => {
+                int_moves.push(PlaceMove::copy(src, Place::IntReg(r)));
+            }
+            (true, Place::FpReg(_) | Place::Spill(_)) => {
+                fp_moves.push((src, Place::FpReg(r), false))
+            }
+            (true, Place::IntReg(s)) => cross.push((r, Reg(s))),
+            _ => return fail("AggParts: part not in a register or spill slot of its bank"),
+        }
+    }
+    super::ssa::emit_common::schedule_fp_place_moves(
+        &super::ssa::emit_common::Aarch64Backend::default(),
+        code,
+        &mut fp_moves,
+        frame,
+        17,
+        16,
+    );
+    for (d, s) in cross {
+        emit(code, enc_fmov_x_to_d(d, s));
+    }
+    schedule_place_moves(
+        code,
+        &mut int_moves,
+        frame,
+        scratch.primary,
+        scratch.secondary,
+    )
 }
 
 /// Host-ABI aggregate return (AAPCS64 6.9). `value` is the struct's
-/// address. An HFA returns member k in v[k]; an aggregate of at most 16
-/// bytes returns its eightbytes in x0/x1; a larger one is copied through
-/// the caller-supplied x8 pointer (saved to `indirect_result_slot` by the
-/// prologue) and that pointer is returned in x0.
+/// address, or an `AggParts` of the registers' values. An HFA returns
+/// member k in v[k]; an aggregate of at most 16 bytes returns its
+/// eightbytes in x0/x1; a larger one is copied through the caller-supplied
+/// x8 pointer (saved to `indirect_result_slot` by the prologue) and that
+/// pointer is returned in x0.
 #[allow(clippy::too_many_arguments)]
 fn emit_aggregate_return(
     code: &mut Vec<u8>,
@@ -2031,7 +2146,10 @@ fn emit_aggregate_return(
     scratch: &ScratchPool,
     func: &FunctionSsa,
     abi: super::Abi,
-) {
+) -> Emit {
+    if let Some(Inst::AggParts { parts, fp_mask, .. }) = func.insts.get(value as usize) {
+        return emit_parts_return(code, parts, fp_mask, alloc, frame, scratch);
+    }
     let desc = &func.agg_descs[ai as usize];
     let size = desc.size;
     let saddr = materialize_int(code, place_of(alloc, value), scratch.primary, frame)
@@ -2040,7 +2158,7 @@ fn emit_aggregate_return(
         emit_mov_reg(code, scratch.primary, saddr);
     }
     let base = scratch.primary;
-    if let Some(members) = super::abi_classify::fp_member_layout(desc.size, &desc.fields) {
+    if let Some(members) = super::abi_classify::fp_member_layout(desc) {
         for (k, (off, msize)) in members.iter().enumerate() {
             emit_agg_load_fp(
                 code,
@@ -2053,7 +2171,7 @@ fn emit_aggregate_return(
                 scratch.secondary,
             );
         }
-        return;
+        return Ok(());
     }
     if size <= 16 {
         if size > 8 {
@@ -2062,7 +2180,7 @@ fn emit_aggregate_return(
                 Reg(1),
                 base,
                 8,
-                8,
+                size - 8,
                 desc.align,
                 abi.strict_align,
                 scratch.secondary,
@@ -2073,38 +2191,26 @@ fn emit_aggregate_return(
             Reg(0),
             base,
             0,
-            8,
+            size.min(8),
             desc.align,
             abi.strict_align,
             scratch.secondary,
         );
-        return;
+        return Ok(());
     }
     let dst = scratch.secondary;
-    let _ = emit_local_addr_fp(
-        code,
-        Place::IntReg(dst.0),
-        func.indirect_result_slot,
-        func,
-        frame,
-    );
-    emit(code, enc_ldr_imm(dst, dst, 0));
+    let slot = local_slot(func.indirect_result_slot, func, frame);
+    emit_frame_mem(code, super::encode::LDR_X, dst.0, slot, dst);
     // The caller's object bounds the transfer unit.
     let unit = super::super::access_chunk(desc.align, abi.strict_align, 8);
-    emit_block_copy(code, unit, Reg(0), base, dst, size);
-    if size > COPY_WINDOW {
+    // x0 and x1 carry nothing until the pointer moves into x0.
+    if emit_block_copy(code, unit, &[Reg(0), Reg(1)], base, dst, size) {
         // The advanced `dst` no longer names the caller's buffer; re-read
         // the saved indirect-result pointer to return it.
-        let _ = emit_local_addr_fp(
-            code,
-            Place::IntReg(dst.0),
-            func.indirect_result_slot,
-            func,
-            frame,
-        );
-        emit(code, enc_ldr_imm(dst, dst, 0));
+        emit_frame_mem(code, super::encode::LDR_X, dst.0, slot, dst);
     }
     emit_mov_reg(code, Reg(0), dst);
+    Ok(())
 }
 
 /// Move a scalar return value into its register: d0 for a floating-point

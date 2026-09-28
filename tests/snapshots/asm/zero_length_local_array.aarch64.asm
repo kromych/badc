@@ -45,14 +45,14 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0x18
+               	sub	x1, x29, #0x10
                	mov	x0, #0x5                // =5
                	str	w0, [x1]
                	mov	x3, #0x6                // =6
                	str	w3, [x1, #0x4]
                	mov	x4, #0x7                // =7
                	str	w4, [x1, #0x8]
-               	sub	x4, x29, #0x8
+               	sub	x4, x29, #0x18
                	cmp	x4, x1
                	b.eq	<addr>
                	ldrsw	x0, [x1]

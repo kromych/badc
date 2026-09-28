@@ -29,7 +29,8 @@ enum ptr_enum { PE_A } __attribute__((mode(pointer)));
 
 // An all-non-negative enum keeps the unsigned underlying type, so the
 // full 8-bit range round-trips; one with a negative enumerator stays
-// signed.
+// signed. The PE targets make every enum `int` (MSVC's rule), so there the
+// mode narrows a signed type.
 enum u8_enum { U8_MAX = 255 } __attribute__((mode(byte)));
 enum s8_enum { S8_MIN = -128, S8_MAX = 127 } __attribute__((mode(byte)));
 
@@ -77,7 +78,11 @@ int main(void) {
 
     {
         enum u8_enum u = U8_MAX;
+#if defined(_WIN32)
+        if ((long) u != -1) return 16;
+#else
         if ((long) u != 255) return 16;
+#endif
         if (sizeof(enum u8_enum) != 1) return 17;
     }
     {

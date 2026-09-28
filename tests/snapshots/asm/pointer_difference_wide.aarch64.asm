@@ -47,15 +47,15 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x60]
                	add	x29, sp, #0x60
                	mov	x0, #0x100000000000     // =17592186044416
-               	stur	x0, [x29, #-0x38]
-               	ldur	x20, [x29, #-0x38]
+               	stur	x0, [x29, #-0x8]
+               	ldur	x20, [x29, #-0x8]
                	mov	x17, #0x600000000       // =25769803776
                	add	x21, x20, x17
                	mov	x17, #0x800000000       // =34359738368
                	add	x22, x20, x17
                	mov	x17, #0x3ffffffffc      // =274877906940
                	add	x23, x20, x17
-               	sub	x0, x29, #0x30
+               	sub	x0, x29, #0x38
                	add	x1, x0, #0x24
                	sub	x3, x1, x0
                	mov	x2, #0xaaab             // =43691

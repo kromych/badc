@@ -32,18 +32,10 @@ Disassembly of section .text:
                	sub	x1, x29, #0x10
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x10, [sp, #-0x10]!
-               	ldr	x10, [x0]
-               	str	x10, [x1]
-               	ldrb	w10, [x0, #0x8]
-               	strb	w10, [x1, #0x8]
-               	ldrb	w10, [x0, #0x9]
-               	strb	w10, [x1, #0x9]
-               	ldrb	w10, [x0, #0xa]
-               	strb	w10, [x1, #0xa]
-               	ldrb	w10, [x0, #0xb]
-               	strb	w10, [x1, #0xb]
-               	ldr	x10, [sp], #0x10
+               	ldr	x16, [x0]
+               	str	x16, [x1]
+               	ldr	w16, [x0, #0x8]
+               	str	w16, [x1, #0x8]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0

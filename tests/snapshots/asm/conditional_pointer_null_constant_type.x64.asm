@@ -57,7 +57,5 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	jmp	<addr>
-               	xorl	%eax, %eax
-               	jmp	<addr>
                	xorl	%ecx, %ecx
                	jmp	<addr>

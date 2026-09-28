@@ -16,7 +16,9 @@ Each lane:
      which builds + fetches its own. The macOS lane is the host itself
      and runs in the working tree, so it has no sync.
   2. Build release with `cargo build --release --locked`.
-  3. Run `cargo test --release` (all test targets).
+  3. Run `cargo test --release` (all test targets), then `cargo test`, the
+     debug build CI's test jobs run on every platform: `debug_assert!`
+     invariants exist only there.
   4. On Linux lanes, rerun the lib suite under the register-pressure caps
      (`BADC_MAX_GPR=2 BADC_MAX_FPR=2`, `--lib --features "codegen_test full"`),
      the same scope as CI's pressure matrix, which runs on Linux only.
@@ -527,6 +529,10 @@ def posix_steps(
     steps += [
         "step cargo build --release --locked --features full",
         "step cargo test --release --features full",
+        # CI's test jobs build debug on every platform, and a
+        # `debug_assert!` holds only there: a violated invariant passes the
+        # release run and fails CI (c13fed07f reached CI that way).
+        "step cargo test --features full",
     ]
     if box.kind == "linux":
         # CI additionally runs the suite under register-pressure caps
@@ -593,6 +599,7 @@ def windows_inner(box: Box, demos: bool, jobs: int) -> str:
     named = [
         ("cargo build", "cargo build --release --locked --features full"),
         ("cargo test", "cargo test --release --features full"),
+        ("cargo test (debug)", "cargo test --features full"),
     ]
     if demos:
         named.append(("demo phase", demo_command(box, jobs, "python")))

@@ -46,13 +46,13 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, %r12
-               	movslq	%ebx, %rdi
                	movl	$0x9, %edx
+               	movq	%rbx, %rdi
                	movq	%r12, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
                	movb	$0x0, 0x9(%r12)
-               	movslq	%ebx, %rdi
+               	movq	%rbx, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%eax, %eax

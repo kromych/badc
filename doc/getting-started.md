@@ -141,7 +141,9 @@ Process 19800 stopped
 ```
 
 For the SSA IR plus the register allocator's per-value placement, pass
-`--dump-ssa`; it prints to stderr before lowering.
+`--dump-ssa`; it prints to stderr before lowering. `--verify-ssa` checks
+the SSA form after each pass and stops at the first pass that breaks it,
+as a debug build of badc always does.
 
 ## C as a script
 

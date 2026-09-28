@@ -7,10 +7,8 @@
 // AArch64 outline atomics (GCC `-moutline-atomics`, the default on many
 // aarch64 toolchains): instead of emitting an LSE instruction or an LL/SC
 // loop inline, the compiler calls `__aarch64_<op><size>_<order>`. Each helper
-// here wraps the corresponding atomic builtin. badc's atomic lowering saves
-// the general-purpose scratch it uses, so the emitted body clobbers only
-// x0/x1/x2, x16/x17 and the flags -- within the registers the outline-atomics
-// calling convention permits a helper to clobber.
+// here wraps the corresponding atomic builtin. gcc and clang emit the call as
+// an ordinary AAPCS64 call, so a helper may use any caller-saved register.
 //
 // `__atomic_*` memory-order arguments (C11 / GCC): 0 relaxed, 2 acquire,
 // 3 release, 4 acq_rel. A compare-exchange failure order drops the release

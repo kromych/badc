@@ -67,6 +67,21 @@ pub(crate) fn is_unsigned_ty(ty: i64) -> bool {
     (ty & UNSIGNED_BIT) != 0
 }
 
+/// High-bit flag marking a character type spelled plain `char`. C99
+/// 6.2.5p15 makes it a type distinct from `signed char` and `unsigned
+/// char` with the representation of one of them, so the tag keeps the
+/// target's [`UNSIGNED_BIT`] for loads, stores and promotions and this
+/// bit for identity: generic selection, compatibility and type names
+/// see three types. Stripped by [`strip_unsigned`] like the other
+/// markers. Sits above [`CONST_BIT`].
+pub(crate) const PLAIN_CHAR_BIT: i64 = 1 << 61;
+
+/// The tag of plain `char`, `signed` on a target whose plain char is.
+pub(crate) fn plain_char_ty(signed: bool) -> i64 {
+    let ty = Ty::Char as i64 | PLAIN_CHAR_BIT;
+    if signed { ty } else { ty | UNSIGNED_BIT }
+}
+
 /// High-bit flag marking a type tag `volatile`-qualified (C99 6.7.3).
 /// Orthogonal to the band scheme like [`UNSIGNED_BIT`]: stripped by
 /// [`strip_unsigned`] before any band classifier consults the tag. The
@@ -195,13 +210,11 @@ const SEG_LVL_MASK: i64 = 0x1FF << SEG_LVL_SHIFT;
 pub(crate) const VOID_BIT: i64 = 1 << 28;
 
 /// High-bit flag marking a type tag whose base type was spelled `long
-/// double`. c5 gives `long double` the `double` band's binary64
-/// representation on every target (see doc/std-conformance.md), so the
-/// bit carries only the spelling. Stripped by [`strip_unsigned`] like
-/// the other orthogonal markers, which keeps every band classifier,
-/// layout query, and codegen path reading a plain `double`;
-/// identity-sensitive sites ([`is_long_double_ty`], the libc-argument
-/// ABI diagnostic) test the bit.
+/// double`: a `double`-band type whose storage follows the target
+/// (`Target::long_double`, see doc/std-conformance.md). Stripped by
+/// [`strip_unsigned`] like the other orthogonal markers, so band
+/// classifiers see a `double`; the layout, the load and store kinds and
+/// the identity-sensitive sites ([`is_long_double_ty`]) test the bit.
 ///
 /// Sits above [`SEG_LVL_MASK`]'s 9-bit field (bits 34..43).
 pub(crate) const LONG_DOUBLE_BIT: i64 = 1 << 43;
@@ -395,8 +408,9 @@ pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i
     }
 }
 
-/// Drop the qualifier bits (`UNSIGNED_BIT`, `VOLATILE_BIT`,
-/// `VOLATILE_INNER_BIT`, `VOID_BIT`, the segment and `const` fields).
+/// Drop the qualifier bits (`UNSIGNED_BIT`, `PLAIN_CHAR_BIT`,
+/// `VOLATILE_BIT`, `VOLATILE_INNER_BIT`, `VOID_BIT`, the segment and
+/// `const` fields).
 /// Use to recover the bare band-encoded type before
 /// consulting a helper that classifies by band. Most of the helpers in
 /// this module call this at their entry; outside callers only need it
@@ -404,6 +418,7 @@ pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i
 /// (e.g., switch-table comparisons against `Ty::Int as i64`).
 pub(crate) fn strip_unsigned(ty: i64) -> i64 {
     ty & !(UNSIGNED_BIT
+        | PLAIN_CHAR_BIT
         | VOLATILE_BIT
         | VOLATILE_INNER_BIT
         | SEG_MASK
@@ -412,6 +427,14 @@ pub(crate) fn strip_unsigned(ty: i64) -> i64 {
         | LONG_DOUBLE_BIT
         | CONST_LVL_MASK
         | CONST_BIT)
+}
+
+/// `ty`, declared through an enum tag before its definition and so built on
+/// `int`, over the integer type `underlying` the definition chose: the same
+/// derivations and qualifiers.
+pub(crate) fn rebase_placeholder_int(ty: i64, underlying: i64) -> i64 {
+    let bare = strip_unsigned(ty);
+    (bare - Ty::Int as i64 + strip_unsigned(underlying)) | (ty ^ bare) | (underlying & UNSIGNED_BIT)
 }
 
 /// The scalar `void` type tag.
@@ -490,18 +513,42 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
     if bare >= STRUCT_BASE {
         let id = struct_id_of(bare);
         let depth = struct_ptr_depth(bare) as usize;
+        // The aggregate that models a pointer-to-array pointee.
+        if let Some(f) = structs.get(id).filter(|s| s.is_array).map(|s| &s.fields[0]) {
+            let dims = if f.array_dims.len() >= 2 {
+                f.array_dims.clone()
+            } else {
+                alloc::vec![f.array_size]
+            };
+            let dim = |&d: &i64| if d < 0 { "[]".into() } else { format!("[{d}]") };
+            let dims: alloc::string::String = dims.iter().map(dim).collect();
+            return format!(
+                "{} ({}){dims}",
+                format_type(f.ty, structs),
+                "*".repeat(depth)
+            );
+        }
         let name = structs
             .get(id)
             .map(|s| s.name.as_str())
             .filter(|n| !n.is_empty())
             .map(alloc::string::ToString::to_string)
             .unwrap_or_else(|| format!("@{id}"));
-        return format!("{prefix}struct {name}{}", ptr_suffix(ty, depth));
+        let kw = if structs.get(id).is_some_and(|s| s.is_union) {
+            "union"
+        } else {
+            "struct"
+        };
+        return format!("{prefix}{kw} {name}{}", ptr_suffix(ty, depth));
     }
     let (base, leaf) = if in_band(bare, Ty::Float as i64) {
         (Ty::Float as i64, "float")
     } else if in_band(bare, Ty::Double as i64) {
-        (Ty::Double as i64, "double")
+        let long = ty & LONG_DOUBLE_BIT != 0;
+        (
+            Ty::Double as i64,
+            if long { "long double" } else { "double" },
+        )
     } else if in_band(bare, Ty::Long as i64) {
         (Ty::Long as i64, "long")
     } else if in_band(bare, Ty::Short as i64) {
@@ -511,11 +558,21 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
     } else if in_band(bare, Ty::Bool as i64) {
         (Ty::Bool as i64, "_Bool")
     } else if (0..100).contains(&bare) {
-        // Integer family: char = 0, int = 1, then +2 per `*` level.
+        // Integer family: char = 0, int = 1, then +2 per `*` level. Each
+        // character type spells its own signedness.
         let depth = (bare / 2) as usize;
-        let leaf_char = bare % 2 == 0;
-        let name = if leaf_char { "char" } else { "int" };
-        return format!("{prefix}{name}{}", ptr_suffix(ty, depth));
+        let suffix = ptr_suffix(ty, depth);
+        if bare % 2 != 0 {
+            return format!("{prefix}int{suffix}");
+        }
+        let name = if ty & PLAIN_CHAR_BIT != 0 {
+            "char"
+        } else if unsigned {
+            "unsigned char"
+        } else {
+            "signed char"
+        };
+        return format!("{base_const}{name}{suffix}");
     } else {
         return format!("{prefix}ty@{bare}");
     };
@@ -534,22 +591,56 @@ pub(super) fn format_signature(
     is_variadic: bool,
     structs: &[super::StructDef],
 ) -> alloc::string::String {
-    use alloc::format;
-    use alloc::string::ToString;
+    alloc::format!(
+        "{} ({})",
+        format_type(return_ty, structs),
+        format_params(params, is_variadic, structs)
+    )
+}
+
+/// Render function type `f` with `depth` pointer levels above it, whose
+/// innermost return type is `ret`: `double (*)(double)`, `int (*)()` for
+/// one with no prototype.
+pub(super) fn format_fn_type(
+    ret: i64,
+    f: &crate::c5::symbol::FnType,
+    depth: i64,
+    structs: &[super::StructDef],
+) -> alloc::string::String {
+    let mut decl = alloc::string::String::new();
+    let mut level = Some((f, depth));
+    while let Some((f, depth)) = level {
+        let params = if f.params.prototyped {
+            format_params(&f.params.types, f.params.variadic, structs)
+        } else {
+            alloc::string::String::new()
+        };
+        decl = if depth == 0 && decl.is_empty() {
+            alloc::format!("({params})")
+        } else {
+            alloc::format!("({}{decl})({params})", "*".repeat(depth as usize))
+        };
+        level = f.ret.as_ref().map(|(r, d)| (&**r, *d));
+    }
+    alloc::format!("{} {decl}", format_type(ret, structs))
+}
+
+/// A parameter list as a prototype spells it; an empty one is `void`.
+fn format_params(
+    params: &[i64],
+    is_variadic: bool,
+    structs: &[super::StructDef],
+) -> alloc::string::String {
     let mut parts: alloc::vec::Vec<alloc::string::String> =
         params.iter().map(|&p| format_type(p, structs)).collect();
     if is_variadic {
-        parts.push("...".to_string());
+        parts.push("...".into());
     }
-    let inside = if parts.is_empty() {
-        // Empty here means "explicit zero-param" at the call site --
-        // C99's "no information" prototype is filtered out before
-        // we get here; just print `(void)` for clarity.
-        "void".to_string()
+    if parts.is_empty() {
+        "void".into()
     } else {
         parts.join(", ")
-    };
-    format!("{} ({inside})", format_type(return_ty, structs))
+    }
 }
 
 pub(crate) fn is_struct_ty(ty: i64) -> bool {
@@ -969,13 +1060,13 @@ pub(super) fn pointee_size_no_struct(ty: i64) -> i64 {
     }
 }
 
-/// Result type for a binary FP operation. Both operands are
-/// floating-point scalars; if either is `double`, the result is
-/// `double`, otherwise `float`. Mirrors the C standard's "usual
-/// arithmetic conversions" for FP operands. Internally both flow
-/// through f64 ops anyway -- the type is purely for downstream
-/// type-warning bookkeeping.
+/// Result type for a binary operation with a floating operand: C99
+/// 6.3.1.8p1 takes `long double` if either operand is one, else `double`
+/// if either is, else `float`.
 pub(super) fn fp_result_ty(lhs: i64, rhs: i64) -> i64 {
+    if is_long_double_scalar(lhs) || is_long_double_scalar(rhs) {
+        return Ty::Double as i64 | LONG_DOUBLE_BIT;
+    }
     let lhs = strip_unsigned(lhs);
     let rhs = strip_unsigned(rhs);
     if lhs == Ty::Double as i64 || rhs == Ty::Double as i64 {

@@ -481,7 +481,9 @@ def build(target: str, do_link: bool, log) -> Path | None:
     # and mistakes for a fresh successful build.
     (out / ("python.exe" if win else "python")).unlink(missing_ok=True)
     dbg = ["-g"] if os.environ.get("BADC_PY_G") else []
-    opt = ["-O"]
+    # configure's BASECFLAGS carry -fno-strict-overflow unless
+    # --with-strict-overflow.
+    opt = ["-O", "-fno-strict-overflow"]
 
     entries = _entries(target)
     jobs = [(badc, target, src, defs, incs, dbg, opt, str(out), str(SRC)) for src, defs, incs in entries]

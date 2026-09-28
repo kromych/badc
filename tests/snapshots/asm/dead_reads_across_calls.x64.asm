@@ -44,6 +44,8 @@ Disassembly of section .text:
                	retq
 
 <unread_in_loop>:
+               	testl	%edx, %edx
+               	jle	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	pushq	%r14
@@ -54,8 +56,6 @@ Disassembly of section .text:
                	movq	%rdx, %r14
                	xorl	%ebx, %ebx
                	movq	%rbx, %r12
-               	cmpl	%r14d, %ebx
-               	jge	<addr>
                	leaq	(%r13,%rbx), %rdi
                	callq	<addr>
                	addq	%rax, %r12
@@ -68,6 +68,8 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%rbp
+               	retq
+               	movq	%rdi, %rax
                	retq
 
 <six>:
@@ -102,13 +104,13 @@ Disassembly of section .text:
                	retq
 
 <digit_calls>:
+               	testq	%rdi, %rdi
+               	jle	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	pushq	%r12
                	pushq	%rbx
                	xorl	%ecx, %ecx
-               	testq	%rdi, %rdi
-               	jle	<addr>
                	movabsq	$0x6666666666666667, %rsi # imm = 0x6666666666666667
                	movq	%rdi, %rax
                	imulq	%rsi
@@ -129,6 +131,8 @@ Disassembly of section .text:
                	popq	%rbx
                	popq	%r12
                	popq	%rbp
+               	retq
+               	xorl	%eax, %eax
                	retq
 
 <main>:
@@ -230,11 +234,11 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	movl	$0xd89e, %ebx           # imm = 0xD89E
                	leaq	<rip>, %rax
                	movq	0x30(%rax), %rdi
                	callq	<addr>
-               	cmpq	%rbx, %rax
+               	movl	$0xd89e, %ecx           # imm = 0xD89E
+               	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbx
@@ -262,7 +266,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax
-               	movq	%rbx, (%rax)
+               	movq	$0xd89e, (%rax)         # imm = 0xD89E
                	xorl	%eax, %eax
                	popq	%rbx
                	popq	%r12

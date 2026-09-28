@@ -418,8 +418,10 @@ pub(crate) fn eval_value(
     let narrow = super::narrow::is_cmp32(cmp32, v);
     let r = match func.insts.get(v as usize)? {
         Inst::Imm(k) => Some(*k),
-        Inst::Extend { value, kind } => eval_value(func, *value, state, cache, depth + 1, cmp32)
-            .map(|x| eval::eval_extend(x, *kind)),
+        Inst::Extend { value, kind, .. } => {
+            eval_value(func, *value, state, cache, depth + 1, cmp32)
+                .map(|x| eval::eval_extend(x, *kind))
+        }
         Inst::BinopI { op, lhs, rhs_imm } => eval_value(func, *lhs, state, cache, depth + 1, cmp32)
             .and_then(|l| fold_at_width(*op, l, *rhs_imm, narrow)),
         Inst::Binop { op, lhs, rhs } => eval_value(func, *lhs, state, cache, depth + 1, cmp32)
@@ -1784,6 +1786,8 @@ mod tests {
                     fixed_args: 1,
                     fp_return: false,
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                    low_word_args: 0,
+                    arg_widths: crate::c5::ir::ArgWidths::default(),
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,

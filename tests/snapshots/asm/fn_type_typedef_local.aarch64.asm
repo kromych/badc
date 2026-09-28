@@ -14,21 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <make>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	sxtw	x1, w0
-               	sub	x0, x29, #0x10
-               	stp	xzr, xzr, [x0]
-               	str	x1, [x0]
-               	lsl	x1, x1, #1
+               	sxtw	x0, w0
+               	lsl	x1, x0, #1
                	sxtw	x1, w1
-               	str	x1, [x0, #0x8]
-               	mov	x16, x0
-               	ldr	x1, [x16, #0x8]
-               	ldr	x0, [x16]
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:
@@ -41,9 +29,6 @@ Disassembly of section .text:
                	ldur	x1, [x29, #-0x8]
                	mov	x0, #0x5                // =5
                	blr	x1
-               	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
-               	ldur	x0, [x29, #-0x10]
                	cmp	x0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

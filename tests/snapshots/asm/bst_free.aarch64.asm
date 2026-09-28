@@ -14,14 +14,11 @@ Disassembly of section .text:
                	brk	#0x1
 
 <free_tree>:
+               	cbz	x0, <addr>
                	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	mov	x20, x0
-               	cbnz	x20, <addr>
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
                	ldr	x0, [x20, #0x8]
                	bl	<addr>
                	ldr	x0, [x20, #0x10]
@@ -30,6 +27,7 @@ Disassembly of section .text:
                	bl	<addr>
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
+               	ret
                	ret
 
 <insert>:

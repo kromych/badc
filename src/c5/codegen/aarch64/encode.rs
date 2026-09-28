@@ -142,88 +142,88 @@ pub(crate) fn enc_bl(imm26: i32) -> u32 {
     0x9400_0000 | ((imm26 as u32) & 0x03FF_FFFF)
 }
 
-/// `STP <Xt1>, <Xt2>, [<Xn|SP>, #imm]!` -- store-pair, pre-indexed.
-/// `imm` is the byte offset; it must be a multiple of 8 (the stp encoding
-/// scales the on-disk imm7 by 8) and fit in `[-512, 504]` after scaling.
-///
-/// Used in function prologues: `stp x29, x30, [sp, #-16]!` saves the
-/// caller's frame pointer + link register and bumps sp in one go.
-pub(crate) fn enc_stp_pre(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    assert!(imm % 8 == 0, "stp: imm must be 8-byte aligned, got {imm}");
-    let imm7 = imm / 8;
+/// The addressing forms of the general-register `LDP` / `STP`.
+#[derive(Clone, Copy)]
+enum PairForm {
+    Offset = 0x2900_0000,
+    Post = 0x2880_0000,
+    Pre = 0x2980_0000,
+}
+
+/// `LDP` / `STP` of two `width`-byte (8 or 4) general registers at `rn`:
+/// `imm` is the byte offset, a multiple of `width` whose scaled value fits
+/// the 7-bit field, so 8-byte pairs reach `[-512, 504]` and 4-byte pairs
+/// `[-256, 252]`.
+fn enc_pair(load: bool, form: PairForm, width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+    debug_assert!(matches!(width, 4 | 8));
+    assert!(
+        imm % width as i32 == 0,
+        "ldp/stp: imm {imm} is not a multiple of {width}"
+    );
+    let imm7 = imm / width as i32;
     assert!(
         (-64..64).contains(&imm7),
-        "stp: offset {imm} (scaled {imm7}) out of range"
+        "ldp/stp: offset {imm} (scaled {imm7}) out of range"
     );
-    0xA980_0000
+    let opc = if width == 8 { 0x8000_0000 } else { 0 };
+    opc | form as u32
+        | (u32::from(load) << 22)
         | (((imm7 as u32) & 0x7F) << 15)
         | ((rt2.0 as u32) << 10)
         | ((rn.0 as u32) << 5)
         | (rt.0 as u32)
+}
+
+/// `STP <Xt1>, <Xt2>, [<Xn|SP>, #imm]!` -- store-pair, pre-indexed.
+///
+/// Used in function prologues: `stp x29, x30, [sp, #-16]!` saves the
+/// caller's frame pointer + link register and bumps sp in one go.
+pub(crate) fn enc_stp_pre(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+    enc_pair(false, PairForm::Pre, 8, rt, rt2, rn, imm)
 }
 
 /// `LDP <Xt1>, <Xt2>, [<Xn|SP>], #imm` -- load-pair, post-indexed.
 /// Mirror of [`enc_stp_pre`] for function epilogues:
 /// `ldp x29, x30, [sp], #16` restores fp/lr and bumps sp back.
 pub(crate) fn enc_ldp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    assert!(imm % 8 == 0, "ldp: imm must be 8-byte aligned, got {imm}");
-    let imm7 = imm / 8;
-    assert!(
-        (-64..64).contains(&imm7),
-        "ldp: offset {imm} (scaled {imm7}) out of range"
-    );
-    0xA8C0_0000
-        | (((imm7 as u32) & 0x7F) << 15)
-        | ((rt2.0 as u32) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rt.0 as u32)
+    enc_pair(true, PairForm::Post, 8, rt, rt2, rn, imm)
 }
 
-/// `STP <Xt1>, <Xt2>, [<Xn|SP>], #imm` -- store-pair, post-indexed; scaled as [`enc_stp_pre`].
+/// `STP <Xt1>, <Xt2>, [<Xn|SP>], #imm` -- store-pair, post-indexed.
 pub(crate) fn enc_stp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    assert!(imm % 8 == 0, "stp: imm must be 8-byte aligned, got {imm}");
-    let imm7 = imm / 8;
-    assert!(
-        (-64..64).contains(&imm7),
-        "stp: offset {imm} (scaled {imm7}) out of range"
-    );
-    0xA880_0000
-        | (((imm7 as u32) & 0x7F) << 15)
-        | ((rt2.0 as u32) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rt.0 as u32)
+    enc_pair(false, PairForm::Post, 8, rt, rt2, rn, imm)
 }
 
 /// `STP <Xt1>, <Xt2>, [<Xn|SP>, #imm]` -- store-pair, signed offset
-/// (no writeback). Same scaling / range as [`enc_stp_pre`].
+/// (no writeback).
 pub(crate) fn enc_stp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    assert!(imm % 8 == 0, "stp: imm must be 8-byte aligned, got {imm}");
-    let imm7 = imm / 8;
-    assert!(
-        (-64..64).contains(&imm7),
-        "stp: offset {imm} (scaled {imm7}) out of range"
-    );
-    0xA900_0000
-        | (((imm7 as u32) & 0x7F) << 15)
-        | ((rt2.0 as u32) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rt.0 as u32)
+    enc_pair(false, PairForm::Offset, 8, rt, rt2, rn, imm)
 }
 
 /// `LDP <Xt1>, <Xt2>, [<Xn|SP>, #imm]` -- load-pair, signed offset
 /// (no writeback). Mirror of [`enc_stp_off`].
 pub(crate) fn enc_ldp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    assert!(imm % 8 == 0, "ldp: imm must be 8-byte aligned, got {imm}");
-    let imm7 = imm / 8;
-    assert!(
-        (-64..64).contains(&imm7),
-        "ldp: offset {imm} (scaled {imm7}) out of range"
-    );
-    0xA940_0000
-        | (((imm7 as u32) & 0x7F) << 15)
-        | ((rt2.0 as u32) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rt.0 as u32)
+    enc_pair(true, PairForm::Offset, 8, rt, rt2, rn, imm)
+}
+
+/// `LDP` of two `width`-byte (8 or 4) registers at `[rn, #imm]`.
+pub(crate) fn enc_ldp_unit_off(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+    enc_pair(true, PairForm::Offset, width, rt, rt2, rn, imm)
+}
+
+/// `STP` of two `width`-byte (8 or 4) registers at `[rn, #imm]`.
+pub(crate) fn enc_stp_unit_off(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+    enc_pair(false, PairForm::Offset, width, rt, rt2, rn, imm)
+}
+
+/// `LDP` of two `width`-byte (8 or 4) registers at `[rn], #imm`, post-indexed.
+pub(crate) fn enc_ldp_unit_post(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+    enc_pair(true, PairForm::Post, width, rt, rt2, rn, imm)
+}
+
+/// `STP` of two `width`-byte (8 or 4) registers at `[rn], #imm`, post-indexed.
+pub(crate) fn enc_stp_unit_post(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
+    enc_pair(false, PairForm::Post, width, rt, rt2, rn, imm)
 }
 
 /// Shared field packer for the LDP / STP (SIMD&FP, 64-bit) forms below.
@@ -1671,15 +1671,13 @@ pub(crate) fn enc_strb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
     enc_mem(STRB, rt.0, rn, STRB.scaled(imm))
 }
 
-// ---- Exclusive-monitor load / store (ARM ARM C6.2). Used by the
-//      atomic read-modify-write and compare-exchange lowering: a
-//      LDAXR / STLXR retry loop needs no feature detection, unlike the
-//      LSE atomics. `width` selects the access size variant
-//      (B / H / W / X). The acquire (LDAXR) / release (STLXR) ordering
-//      gives the sequentially-consistent semantics C11 7.17.3 requires
-//      for the default memory order.
+// ---- Ordered and atomic accesses (ARM ARM C6.2): load-acquire and
+//      store-release registers, the RCpc load-acquire (FEAT_LRCPC) and
+//      the LSE read-modify-writes and compare-exchange (FEAT_LSE), all in
+//      the ARMv8.4-A baseline. `width` selects the access size variant
+//      (B / H / W / X).
 
-/// Size field (bits[31:30]) for an exclusive load / store of `width`
+/// Size field (bits[31:30]) for an ordered or atomic access of `width`
 /// bytes: 00 byte, 01 halfword, 10 word, 11 doubleword.
 fn excl_size(width: u8) -> u32 {
     match width {
@@ -1690,21 +1688,69 @@ fn excl_size(width: u8) -> u32 {
     }
 }
 
-/// `LDAXR{B,H} <Wt>, [<Xn|SP>]` / `LDAXR <Wt|Xt>, [<Xn|SP>]` --
-/// load-acquire exclusive register of `width` bytes. No offset.
-pub(crate) fn enc_ldaxr(rt: Reg, rn: Reg, width: u8) -> u32 {
-    0x085F_FC00 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+/// An LSE atomic memory operation (ARM ARM C6.2, FEAT_LSE).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LseOp {
+    /// `LDADD`: add.
+    Add,
+    /// `LDCLR`: clear the operand's bits, an and with its complement.
+    Clr,
+    /// `LDEOR`: exclusive or.
+    Eor,
+    /// `LDSET`: set the operand's bits, an or.
+    Set,
+    /// `SWP`: exchange.
+    Swp,
 }
 
-/// `STLXR{B,H} <Ws>, <Wt>, [<Xn|SP>]` / `STLXR <Ws>, <Wt|Xt>,
-/// [<Xn|SP>]` -- store-release exclusive register of `width` bytes.
-/// `rs` receives 0 on success and 1 when the monitor was lost.
-pub(crate) fn enc_stlxr(rs: Reg, rt: Reg, rn: Reg, width: u8) -> u32 {
-    0x0800_FC00
+/// `LD<op>{A}{L}{B,H} <Ws>, <Wt>, [<Xn|SP>]`, `SWP{A}{L}{B,H}` and the X
+/// forms -- combine the `width`-byte memory at `rn` with `rs` and load
+/// its prior contents, zero-extended, into `rt`. `acq` / `rel` select the
+/// acquire and release forms; a load into the zero register does not
+/// acquire.
+pub(crate) fn enc_lse(
+    op: LseOp,
+    acq: bool,
+    rel: bool,
+    rs: Reg,
+    rt: Reg,
+    rn: Reg,
+    width: u8,
+) -> u32 {
+    let opc = match op {
+        LseOp::Add => 0x0000,
+        LseOp::Clr => 0x1000,
+        LseOp::Eor => 0x2000,
+        LseOp::Set => 0x3000,
+        LseOp::Swp => 0x8000,
+    };
+    0x3820_0000
         | (excl_size(width) << 30)
+        | (u32::from(acq) << 23)
+        | (u32::from(rel) << 22)
+        | ((rs.0 as u32) << 16)
+        | opc
+        | ((rn.0 as u32) << 5)
+        | (rt.0 as u32)
+}
+
+/// `CAS{A}{L}{B,H} <Ws>, <Wt>, [<Xn|SP>]` and the X form -- compare the
+/// `width`-byte memory at `rn` with `rs`, store `rt` on a match, and load
+/// the prior contents, zero-extended, into `rs` (FEAT_LSE).
+pub(crate) fn enc_cas(acq: bool, rel: bool, rs: Reg, rt: Reg, rn: Reg, width: u8) -> u32 {
+    0x08A0_7C00
+        | (excl_size(width) << 30)
+        | (u32::from(acq) << 22)
+        | (u32::from(rel) << 15)
         | ((rs.0 as u32) << 16)
         | ((rn.0 as u32) << 5)
         | (rt.0 as u32)
+}
+
+/// `LDAPR{B,H} <Wt>, [<Xn|SP>]` / `LDAPR <Xt>, [<Xn|SP>]` -- load-acquire
+/// RCpc register of `width` bytes, zero-extended (FEAT_LRCPC).
+pub(crate) fn enc_ldapr(rt: Reg, rn: Reg, width: u8) -> u32 {
+    0x38BF_C000 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
 /// `LDAR{B,H} <Wt>, [<Xn|SP>]` / `LDAR <Wt|Xt>, [<Xn|SP>]` --
@@ -1927,6 +1973,11 @@ pub(crate) fn enc_ldr_post(rt: Reg, rn: Reg, imm: i32) -> u32 {
     0xF840_0400 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
 }
 
+/// `LDR <Wt>, [<Xn|SP>], #imm` / `LDRH` / `LDRB` -- post-indexed load of `width` 4, 2 or 1.
+pub(crate) fn enc_ldr_w_post(width: u8, rt: Reg, rn: Reg, imm: i32) -> u32 {
+    enc_str_w_post(width, rt, rn, imm) | 0x0040_0000
+}
+
 /// `STR <Wt>, [<Xn|SP>], #imm` / `STRH` / `STRB` -- post-indexed store of `width` 4, 2 or 1.
 pub(crate) fn enc_str_w_post(width: u8, rt: Reg, rn: Reg, imm: i32) -> u32 {
     assert!(
@@ -2132,11 +2183,15 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
     /// matching reads the `base + index * scale` shape a fused node would
     /// hide, and after the divide pairing, which is what leaves `n - q*d`
     /// behind.
-    fn late_opt_passes(&mut self, funcs: &mut Vec<crate::c5::ir::FunctionSsa>) {
-        super::ssa::emit_common::time_pass_arch("passes::index_ext::run", Self::ARCH, || {
+    fn late_opt_passes(
+        &mut self,
+        funcs: &mut Vec<crate::c5::ir::FunctionSsa>,
+        pipeline: super::ssa::emit_common::Pipeline,
+    ) {
+        pipeline.run("passes::index_ext::run", funcs, |funcs| {
             crate::c5::codegen::passes::index_ext::run(funcs);
         });
-        super::ssa::emit_common::time_pass_arch("passes::mul_add::run", Self::ARCH, || {
+        pipeline.run("passes::mul_add::run", funcs, |funcs| {
             crate::c5::codegen::passes::mul_add::run(funcs);
         });
     }
@@ -2695,6 +2750,28 @@ mod tests {
         assert_eq!(enc_ldp_post(Reg::X29, Reg::X30, Reg::SP, 16), 0xA8C1_7BFD);
     }
 
+    /// The pair forms at both widths and the post-indexed narrow loads,
+    /// against clang's encodings.
+    #[test]
+    fn pair_and_post_indexed_unit_forms() {
+        let (x1, x2, x3) = (Reg(1), Reg(2), Reg(3));
+        // ldp w1, w2, [x3, #8]; stp w1, w2, [x3, #-8]
+        assert_eq!(enc_ldp_unit_off(4, x1, x2, x3, 8), 0x2941_0861);
+        assert_eq!(enc_stp_unit_off(4, x1, x2, x3, -8), 0x293F_0861);
+        // ldp x16, x17, [x1, #504]
+        assert_eq!(enc_ldp_unit_off(8, Reg(16), Reg(17), x1, 504), 0xA95F_C430);
+        // ldp x1, x2, [x3], #16; stp x1, x2, [x3], #16
+        assert_eq!(enc_ldp_unit_post(8, x1, x2, x3, 16), 0xA8C1_0861);
+        assert_eq!(enc_stp_unit_post(8, x1, x2, x3, 16), 0xA881_0861);
+        // ldp w1, w2, [x3], #8; stp w1, w2, [x3], #8
+        assert_eq!(enc_ldp_unit_post(4, x1, x2, x3, 8), 0x28C1_0861);
+        assert_eq!(enc_stp_unit_post(4, x1, x2, x3, 8), 0x2881_0861);
+        // ldr w1, [x3], #4; ldrh w1, [x3], #2; ldrb w1, [x3], #1
+        assert_eq!(enc_ldr_w_post(4, x1, x3, 4), 0xB840_4461);
+        assert_eq!(enc_ldr_w_post(2, x1, x3, 2), 0x7840_2461);
+        assert_eq!(enc_ldr_w_post(1, x1, x3, 1), 0x3840_1461);
+    }
+
     #[test]
     fn mov_x0_x19() {
         // mov x0, x19  =  orr x0, xzr, x19  ->  0xAA1303E0
@@ -3185,27 +3262,56 @@ mod tests {
         }
     }
 
-    // The exclusive-monitor encodings below were cross-checked against
-    // `clang -target aarch64-linux-gnu` + `objdump -d`:
-    //   ldaxr x1,[x2]=c85ffc41  ldaxr w1,[x2]=885ffc41
-    //   ldaxrh w1,[x2]=485ffc41 ldaxrb w1,[x2]=085ffc41
-    //   stlxr w0,x1,[x2]=c800fc41  stlxr w0,w1,[x2]=8800fc41
-    //   stlxrh w0,w1,[x2]=4800fc41 stlxrb w0,w1,[x2]=0800fc41
-
+    // The LSE and RCpc encodings below were cross-checked against
+    // `clang -target aarch64-linux-gnu -march=armv8.4-a -c` + `objdump -d`.
     #[test]
-    fn ldaxr_all_widths() {
-        assert_eq!(enc_ldaxr(Reg(1), Reg(2), 8), 0xC85F_FC41);
-        assert_eq!(enc_ldaxr(Reg(1), Reg(2), 4), 0x885F_FC41);
-        assert_eq!(enc_ldaxr(Reg(1), Reg(2), 2), 0x485F_FC41);
-        assert_eq!(enc_ldaxr(Reg(1), Reg(2), 1), 0x085F_FC41);
+    fn lse_rmw_orders_widths_and_operations() {
+        let lse = |op, acq, rel, s, t, n, w| enc_lse(op, acq, rel, Reg(s), Reg(t), Reg(n), w);
+        // ldadd / ldadda / ldaddl / ldaddal x1, x0, [x0]
+        assert_eq!(lse(LseOp::Add, false, false, 1, 0, 0, 8), 0xF821_0000);
+        assert_eq!(lse(LseOp::Add, true, false, 1, 0, 0, 8), 0xF8A1_0000);
+        assert_eq!(lse(LseOp::Add, false, true, 1, 0, 0, 8), 0xF861_0000);
+        assert_eq!(lse(LseOp::Add, true, true, 1, 0, 0, 8), 0xF8E1_0000);
+        // ldaddalb / ldaddalh / ldaddal w3, w4, [x5]
+        assert_eq!(lse(LseOp::Add, true, true, 3, 4, 5, 1), 0x38E3_00A4);
+        assert_eq!(lse(LseOp::Add, true, true, 3, 4, 5, 2), 0x78E3_00A4);
+        assert_eq!(lse(LseOp::Add, true, true, 3, 4, 5, 4), 0xB8E3_00A4);
+        // ldclral / ldeoral / ldsetal / swpal x9, x10, [x11]
+        assert_eq!(lse(LseOp::Clr, true, true, 9, 10, 11, 8), 0xF8E9_116A);
+        assert_eq!(lse(LseOp::Eor, true, true, 9, 10, 11, 8), 0xF8E9_216A);
+        assert_eq!(lse(LseOp::Set, true, true, 9, 10, 11, 8), 0xF8E9_316A);
+        assert_eq!(lse(LseOp::Swp, true, true, 9, 10, 11, 8), 0xF8E9_816A);
+        // swpb / swpah w9, w10, [x11]; swpl w9, w10, [sp]
+        assert_eq!(lse(LseOp::Swp, false, false, 9, 10, 11, 1), 0x3829_816A);
+        assert_eq!(lse(LseOp::Swp, true, false, 9, 10, 11, 2), 0x78A9_816A);
+        assert_eq!(lse(LseOp::Swp, false, true, 9, 10, 31, 4), 0xB869_83EA);
+        // stadd x1, [x0] / staddl w1, [x2]: the zero register as Rt.
+        assert_eq!(lse(LseOp::Add, false, false, 1, 31, 0, 8), 0xF821_001F);
+        assert_eq!(lse(LseOp::Add, false, true, 1, 31, 2, 4), 0xB861_005F);
     }
 
     #[test]
-    fn stlxr_all_widths() {
-        assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 8), 0xC800_FC41);
-        assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 4), 0x8800_FC41);
-        assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 2), 0x4800_FC41);
-        assert_eq!(enc_stlxr(Reg(0), Reg(1), Reg(2), 1), 0x0800_FC41);
+    fn cas_orders_and_widths() {
+        let cas = |acq, rel, s, t, n, w| enc_cas(acq, rel, Reg(s), Reg(t), Reg(n), w);
+        // cas / casa / casl / casal x8, x2, [x0]
+        assert_eq!(cas(false, false, 8, 2, 0, 8), 0xC8A8_7C02);
+        assert_eq!(cas(true, false, 8, 2, 0, 8), 0xC8E8_7C02);
+        assert_eq!(cas(false, true, 8, 2, 0, 8), 0xC8A8_FC02);
+        assert_eq!(cas(true, true, 8, 2, 0, 8), 0xC8E8_FC02);
+        // casalb / casalh / casal w8, w2, [x0]; casb w17, w16, [x15]
+        assert_eq!(cas(true, true, 8, 2, 0, 1), 0x08E8_FC02);
+        assert_eq!(cas(true, true, 8, 2, 0, 2), 0x48E8_FC02);
+        assert_eq!(cas(true, true, 8, 2, 0, 4), 0x88E8_FC02);
+        assert_eq!(cas(false, false, 17, 16, 15, 1), 0x08B1_7DF0);
+    }
+
+    #[test]
+    fn ldapr_widths() {
+        assert_eq!(enc_ldapr(Reg(0), Reg(0), 8), 0xF8BF_C000);
+        assert_eq!(enc_ldapr(Reg(1), Reg(2), 4), 0xB8BF_C041);
+        assert_eq!(enc_ldapr(Reg(1), Reg(2), 2), 0x78BF_C041);
+        assert_eq!(enc_ldapr(Reg(1), Reg(2), 1), 0x38BF_C041);
+        assert_eq!(enc_ldapr(Reg(3), Reg(31), 8), 0xF8BF_C3E3);
     }
 
     // Cross-checked against `clang -c` + `otool -t` (aarch64):

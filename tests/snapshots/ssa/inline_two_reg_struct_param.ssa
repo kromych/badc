@@ -25,6 +25,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v19  Imm(12034)                                       -> x0
     v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0
+    v22  LifetimeEnd(0)                                   -> -
     terminator Return(v21)   (exit_acc=v21)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

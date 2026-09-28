@@ -393,7 +393,6 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	xorl	%ebx, %ebx
                	movl	$0x5, %edi
                	movl	$0x1, %esi
                	movl	$0x2, %edx
@@ -546,3 +545,5 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
+               	xorl	%ebx, %ebx
+               	jmp	<addr>

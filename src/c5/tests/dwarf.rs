@@ -663,6 +663,78 @@ fn lldb_backtrace_has_no_duplicate_caller_frame() {
     );
 }
 
+/// At `-O` the base case of `fib` returns without the frame: the entry's
+/// test branches to a return after the body. A stop at the test and one at
+/// that return each unwind through every caller once, and stepping out of
+/// the return lands in the calling `fib` with the returned value.
+#[test]
+fn lldb_steps_out_of_a_return_ahead_of_the_frame() {
+    const SRC: &str = r#"
+        long fib(int n) {
+            if (n < 2) return n;
+            return fib(n - 1) + fib(n - 2);
+        }
+        int main(void) { return (int)fib(5); }
+        "#;
+    let program = Compiler::new(super::with_prelude(SRC))
+        .compile()
+        .expect("compile");
+    let options = crate::NativeOptions::new()
+        .with_debug_info(true)
+        .with_optimize();
+    let build =
+        crate::c5::codegen::lower_for(&program, Target::MacOSAarch64, options).expect("lower");
+    let [early] = build.early_returns[..] else {
+        panic!(
+            "fib alone returns ahead of its frame: {:?}",
+            build.early_returns
+        );
+    };
+    let path = build_signed_mach_o_opt(SRC, "early_return_bt", true);
+    let at_return = alloc::format!(
+        "breakpoint set -n fib --skip-prologue false -R {}",
+        early.exit
+    );
+    let Some(out) = lldb_batch(
+        &path,
+        &[
+            "breakpoint set -n fib --skip-prologue false -c '(int)$x0 < 2'",
+            "run",
+            "bt",
+            "breakpoint delete 1",
+            &at_return,
+            "continue",
+            "bt",
+            "finish",
+            "bt",
+            "register read x0",
+        ],
+    ) else {
+        eprintln!("lldb not on PATH -- skipping early-return backtrace test");
+        let _ = std::fs::remove_file(&path);
+        return;
+    };
+    let _ = std::fs::remove_file(&path);
+    let frames = |bt: &str, name: &str| {
+        bt.lines()
+            .filter(|l| l.contains("frame #") && l.contains(&alloc::format!("`{name}")))
+            .count()
+    };
+    let counts: alloc::vec::Vec<(usize, usize)> = out
+        .split("(lldb) bt")
+        .skip(1)
+        .map(|t| t.split("(lldb) ").next().unwrap_or(""))
+        .map(|t| (frames(t, "fib"), frames(t, "main")))
+        .collect();
+    // fib(1) under fib(5)..fib(2) under main, at the test and at the return;
+    // then fib(2).
+    assert_eq!(counts, [(5, 1), (5, 1), (4, 1)], "{out}");
+    assert!(
+        out.contains("x0 = 0x0000000000000001"),
+        "fib(1) returned 1:\n{out}"
+    );
+}
+
 /// Per-statement granularity in the line program: a function with
 /// N straight-line statements must produce at least N distinct
 /// `(addr, line)` rows so a debugger can stop on each one. Before
@@ -753,6 +825,43 @@ fn promoted_local_has_empty_location() {
         loc_of("keep").contains("DW_OP_fbreg"),
         "address-taken local `keep` should keep an fbreg location, got:\n{}",
         loc_of("keep"),
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+/// An over-aligned automatic's location is its storage in the over-aligned
+/// region: a lone 528-byte object aligned 16 sits right below the frame
+/// record, at fp - 528. One past a realignment has no frame-base offset, so
+/// its location is empty rather than a slot that holds nothing of it.
+#[test]
+fn over_aligned_local_is_located_in_its_region() {
+    let src = "struct st16 { _Alignas(16) unsigned char v[512]; unsigned fpsr, fpcr; };\
+               void *seen;\
+               __attribute__((noinline)) void use(void *p) { seen = p; }\
+               void one16(void) { struct st16 s; use(&s); }\
+               void one64(void) { _Alignas(64) unsigned char w[64]; use(w); }\
+               int main(void){ one16(); one64(); return 0; }";
+    let path = build_signed_mach_o(src, "over_aligned_local_loc");
+    let Some(out) = dwarfdump_debug_info(&path) else {
+        return;
+    };
+    let loc_of = |name: &str| {
+        let at = out
+            .find(&format!("(\"{name}\")"))
+            .unwrap_or_else(|| panic!("no `{name}` variable in:\n{out}"));
+        let after = &out[at..];
+        let end = after.find("DW_TAG").unwrap_or(after.len());
+        &after[..end]
+    };
+    assert!(
+        loc_of("s").contains("DW_OP_fbreg -528"),
+        "`s` should be located in its region, got:\n{}",
+        loc_of("s"),
+    );
+    assert!(
+        loc_of("w").contains("DW_AT_location\t(<empty>)"),
+        "`w` past a realignment should have an empty location, got:\n{}",
+        loc_of("w"),
     );
     let _ = std::fs::remove_file(&path);
 }

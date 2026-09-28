@@ -26,133 +26,55 @@ Disassembly of section .text:
                	int3
 
 <port_out_bytes>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%rdi, -0x30(%rbp)
-               	movq	%rsi, -0x20(%rbp)
-               	movq	%rdx, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movq	%rax, %rdx
-               	movq	-0x30(%rbp), %rsi
-               	movq	-0x20(%rbp), %rcx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	movq	%rsi, %rcx
+               	movq	%rdi, %rsi
                	rep		outsb	(%rsi), %dx
-               	movq	%rsi, -0x30(%rbp)
-               	movq	%rcx, -0x20(%rbp)
-               	leave
                	retq
 
 <port_out_words>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%rdi, -0x30(%rbp)
-               	movq	%rsi, -0x20(%rbp)
-               	movq	%rdx, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movq	%rax, %rdx
-               	movq	-0x30(%rbp), %rsi
-               	movq	-0x20(%rbp), %rcx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	movq	%rsi, %rcx
+               	movq	%rdi, %rsi
                	rep		outsw	(%rsi), %dx
-               	movq	%rsi, -0x30(%rbp)
-               	movq	%rcx, -0x20(%rbp)
-               	leave
                	retq
 
 <port_out_dwords>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%rdi, -0x30(%rbp)
-               	movq	%rsi, -0x20(%rbp)
-               	movq	%rdx, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movq	%rax, %rdx
-               	movq	-0x30(%rbp), %rsi
-               	movq	-0x20(%rbp), %rcx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	movq	%rsi, %rcx
+               	movq	%rdi, %rsi
                	rep		outsl	(%rsi), %dx
-               	movq	%rsi, -0x30(%rbp)
-               	movq	%rcx, -0x20(%rbp)
-               	leave
                	retq
 
 <port_in_bytes>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%rdi, -0x30(%rbp)
-               	movq	%rsi, -0x20(%rbp)
-               	movq	%rdx, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movq	%rax, %rdx
-               	movq	-0x30(%rbp), %rdi
-               	movq	-0x20(%rbp), %rcx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	movq	%rsi, %rcx
                	rep		insb	%dx, %es:(%rdi)
-               	movq	%rdi, -0x30(%rbp)
-               	movq	%rcx, -0x20(%rbp)
-               	leave
                	retq
 
 <port_in_words>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%rdi, -0x30(%rbp)
-               	movq	%rsi, -0x20(%rbp)
-               	movq	%rdx, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movq	%rax, %rdx
-               	movq	-0x30(%rbp), %rdi
-               	movq	-0x20(%rbp), %rcx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	movq	%rsi, %rcx
                	rep		insw	%dx, %es:(%rdi)
-               	movq	%rdi, -0x30(%rbp)
-               	movq	%rcx, -0x20(%rbp)
-               	leave
                	retq
 
 <port_in_dwords>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%rdi, -0x30(%rbp)
-               	movq	%rsi, -0x20(%rbp)
-               	movq	%rdx, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movq	%rax, %rdx
-               	movq	-0x30(%rbp), %rdi
-               	movq	-0x20(%rbp), %rcx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	movq	%rsi, %rcx
                	rep		insl	%dx, %es:(%rdi)
-               	movq	%rdi, -0x30(%rbp)
-               	movq	%rcx, -0x20(%rbp)
-               	leave
                	retq
 
 <port_out_one>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rdi, -0x20(%rbp)
-               	movq	%rsi, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movq	%rax, %rdx
-               	movq	-0x20(%rbp), %rsi
+               	movq	%rsi, %rdx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	movq	%rdi, %rsi
                	outsb	(%rsi), %dx
-               	movq	%rsi, -0x20(%rbp)
-               	leave
                	retq
 
 <port_in_one>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movq	%rdi, -0x20(%rbp)
-               	movq	%rsi, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	movq	%rax, %rdx
-               	movq	-0x20(%rbp), %rdi
+               	movq	%rsi, %rdx
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
                	insb	%dx, %es:(%rdi)
-               	movq	%rdi, -0x20(%rbp)
-               	leave
                	retq
 
 <main>:

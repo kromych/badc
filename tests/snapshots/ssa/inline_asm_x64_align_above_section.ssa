@@ -4,30 +4,26 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-1)                                    -> x0
-    v2   InlineAsm { template=".p2align 6\n\t1:\n\tleaq 1b(%%rip), %0", ops=1, args=[v1] } -> -
-    v3   LoadLocal { off=-1, kind=I64 }                   -> x0
-    v4   Imm(64)                                          -> x1
-    v5   BinopI { op=and, lhs=v3, rhs_imm=63 }            -> x0
-    v6   BinopI { op=ne, lhs=v5, rhs_imm=0 }              -> x1
-    terminator Bz { cond=v5, target=b2, fall=b1 }   (low word)   (exit_acc=v6)
+    v1   InlineAsm { template=".p2align 6\n\t1:\n\tleaq 1b(%%rip), %0", ops=1, args=[-] } -> x0
+    v2   Imm(64)                                          -> x1
+    v3   BinopI { op=and, lhs=v1, rhs_imm=63 }            -> x0
+    v4   BinopI { op=ne, lhs=v3, rhs_imm=0 }              -> x1
+    terminator Bz { cond=v3, target=b2, fall=b1 }   (low word)   (exit_acc=v4)
   block 1  start_pc=0
-    v7   Imm(1)                                           -> x0
-    terminator Return(v7)   (exit_acc=v7)
+    v5   Imm(1)                                           -> x0
+    terminator Return(v5)   (exit_acc=v5)
   block 2  start_pc=0
-    v10  LocalAddr(-1)                                    -> x0
-    v11  InlineAsm { template=".balign 32\n\t1:\n\tleaq 1b(%%rip), %0", ops=1, args=[v10] } -> -
-    v12  LoadLocal { off=-1, kind=I64 }                   -> x0
-    v13  Imm(32)                                          -> x1
-    v14  BinopI { op=and, lhs=v12, rhs_imm=31 }           -> x0
-    v15  BinopI { op=ne, lhs=v14, rhs_imm=0 }             -> x1
-    terminator Bz { cond=v14, target=b4, fall=b3 }   (low word)   (exit_acc=v15)
+    v8   InlineAsm { template=".balign 32\n\t1:\n\tleaq 1b(%%rip), %0", ops=1, args=[-] } -> x0
+    v9   Imm(32)                                          -> x1
+    v10  BinopI { op=and, lhs=v8, rhs_imm=31 }            -> x0
+    v11  BinopI { op=ne, lhs=v10, rhs_imm=0 }             -> x1
+    terminator Bz { cond=v10, target=b4, fall=b3 }   (low word)   (exit_acc=v11)
   block 3  start_pc=0
-    v8   Imm(2)                                           -> x0
-    terminator Return(v8)   (exit_acc=v8)
+    v6   Imm(2)                                           -> x0
+    terminator Return(v6)   (exit_acc=v6)
   block 4  start_pc=0
-    v9   Imm(42)                                          -> x0
-    terminator Return(v9)   (exit_acc=v9)
+    v7   Imm(42)                                          -> x0
+    terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

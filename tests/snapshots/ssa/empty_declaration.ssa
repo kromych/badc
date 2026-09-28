@@ -69,15 +69,23 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v63  Load { addr=v57, disp=0, kind=I32 }              -> x1
     v64  Imm(12)                                          -> x2
     v65  BinopI { op=add, lhs=v63, rhs_imm=12 }           -> x1
-    v66  Extend { value=v65, kind=I32 }                   -> x2
+    v66  Extend { value=v65, kind=I32, nsw }              -> x2
     v67  BinopI { op=ne, lhs=v65, rhs_imm=23 }            -> x1
     terminator Bz { cond=v67, target=b2, fall=b1 }   (exit_acc=v67)
   block 1  start_pc=0
-    v73  Imm(11)                                          -> x1
+    v93  Imm(11)                                          -> x1
+    v94  LifetimeEnd(0)                                   -> -
+    v95  LifetimeEnd(0)                                   -> -
+    v96  LifetimeEnd(0)                                   -> -
+    v97  LifetimeEnd(0)                                   -> -
     terminator Return(v58)   (exit_acc=v58)
   block 2  start_pc=0
-    v74  Imm(0)                                           -> x0
-    terminator Return(v74)   (exit_acc=v74)
+    v98  Imm(0)                                           -> x0
+    v99  LifetimeEnd(0)                                   -> -
+    v100 LifetimeEnd(0)                                   -> -
+    v101 LifetimeEnd(0)                                   -> -
+    v102 LifetimeEnd(0)                                   -> -
+    terminator Return(v98)   (exit_acc=v98)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

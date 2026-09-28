@@ -341,51 +341,51 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	%rax, %r13
                	jne	<addr>
-               	movl	%ebx, %edi
+               	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
-               	movl	%ebx, %edi
                	movl	$0xf0f0f0f, %esi        # imm = 0xF0F0F0F
+               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpl	%eax, %r13d
                	jne	<addr>
-               	movl	%ebx, %edi
+               	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
-               	movl	%ebx, %edi
                	movl	$0x80000000, %esi       # imm = 0x80000000
+               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpl	%eax, %r13d
                	jne	<addr>
-               	movl	%ebx, %edi
+               	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
-               	movl	%ebx, %edi
                	movl	$0xff00ff, %esi         # imm = 0xFF00FF
+               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpl	%eax, %r13d
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
-               	movl	%ebx, %edi
                	movl	$0xffffff00, %esi       # imm = 0xFFFFFF00
+               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpl	%eax, %r13d
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
-               	movl	%ebx, %edi
                	movl	$0x55555555, %esi       # imm = 0x55555555
+               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpl	%eax, %r13d
                	jne	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	movq	%rax, %r13
-               	movl	%ebx, %edi
                	movl	$0x33333333, %esi       # imm = 0x33333333
+               	movq	%rbx, %rdi
                	callq	<addr>
                	cmpl	%eax, %r13d
                	jne	<addr>
@@ -523,16 +523,8 @@ Disassembly of section .text:
                	retq
                	leaq	-0x30(%rbp), %rdi
                	leaq	<rip>, %rax
-               	pushq	%rcx
-               	movzbq	(%rax), %rcx
-               	movb	%cl, (%rdi)
-               	movzbq	0x1(%rax), %rcx
-               	movb	%cl, 0x1(%rdi)
-               	movzbq	0x2(%rax), %rcx
-               	movb	%cl, 0x2(%rdi)
-               	movzbq	0x3(%rax), %rcx
-               	movb	%cl, 0x3(%rdi)
-               	popq	%rcx
+               	movl	(%rax), %r10d
+               	movl	%r10d, (%rdi)
                	movl	$0x12345, -0x28(%rbp)   # imm = 0x12345
                	movl	-0x28(%rbp), %esi
                	callq	<addr>

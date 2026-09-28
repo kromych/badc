@@ -32,7 +32,7 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	movslq	%edi, %rbx
+               	movq	%rdi, %rbx
                	movq	%rdx, %r12
                	movq	%rbx, %rdi
                	callq	*%rsi
@@ -49,7 +49,6 @@ Disassembly of section .text:
 <apply1>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%esi, %rsi
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax

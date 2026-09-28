@@ -162,6 +162,7 @@ fn fmt_inst(inst: &Inst) -> String {
             value,
             kind,
             volatile,
+            ..
         } => format!(
             "StoreLocal {{ off={off}, value=v{value}, kind={}{} }}",
             fmt_store_kind(*kind),
@@ -173,8 +174,10 @@ fn fmt_inst(inst: &Inst) -> String {
             index_ext,
             scale,
             kind,
+            abs_base,
         } => format!(
-            "LoadIndexed {{ base=v{base}, index=v{index}{}, scale={scale}, kind={} }}",
+            "LoadIndexed {{ base=v{base}{}, index=v{index}{}, scale={scale}, kind={} }}",
+            fmt_abs_base(*abs_base),
             fmt_index_ext(*index_ext),
             fmt_load_kind(*kind),
         ),
@@ -185,8 +188,10 @@ fn fmt_inst(inst: &Inst) -> String {
             scale,
             value,
             kind,
+            abs_base,
         } => format!(
-            "StoreIndexed {{ base=v{base}, index=v{index}{}, scale={scale}, value=v{value}, kind={} }}",
+            "StoreIndexed {{ base=v{base}{}, index=v{index}{}, scale={scale}, value=v{value}, kind={} }}",
+            fmt_abs_base(*abs_base),
             fmt_index_ext(*index_ext),
             fmt_store_kind(*kind),
         ),
@@ -208,14 +213,21 @@ fn fmt_inst(inst: &Inst) -> String {
         } => format!(
             "Fma {{ a=v{a}, b=v{b}, c=v{c}, neg_product={neg_product}, neg_addend={neg_addend} }}"
         ),
+        Udiv128 { hi, lo, divisor } => {
+            format!("Udiv128 {{ hi=v{hi}, lo=v{lo}, divisor=v{divisor} }}")
+        }
         MulAdd {
             a,
             b,
             c,
             neg_product,
         } => format!("MulAdd {{ a=v{a}, b=v{b}, c=v{c}, neg_product={neg_product} }}"),
-        Extend { value, kind } => {
-            format!("Extend {{ value=v{value}, kind={} }}", fmt_load_kind(*kind))
+        Extend { value, kind, nsw } => {
+            let mark = if *nsw { ", nsw" } else { "" };
+            format!(
+                "Extend {{ value=v{value}, kind={}{mark} }}",
+                fmt_load_kind(*kind)
+            )
         }
         Bswap { value, width } => format!("Bswap {{ value=v{value}, width={width} }}"),
         BitCount { op, value, width } => {
@@ -276,14 +288,19 @@ fn fmt_inst(inst: &Inst) -> String {
             addr,
             value,
             width,
-        } => format!("AtomicRmw {{ op={op:?}, addr=v{addr}, value=v{value}, width={width} }}"),
+            order,
+        } => format!(
+            "AtomicRmw {{ op={op:?}, addr=v{addr}, value=v{value}, width={width}, order={order:?} }}"
+        ),
         AtomicCas {
             addr,
-            expected_addr,
+            expected,
             desired,
             width,
+            order,
         } => format!(
-            "AtomicCas {{ addr=v{addr}, expected_addr=v{expected_addr}, desired=v{desired}, width={width} }}"
+            "AtomicCas {{ addr=v{addr}, expected=v{expected}, desired=v{desired}, width={width}, \
+             order={order:?} }}"
         ),
         AtomicLoad { addr, width, order } => {
             format!("AtomicLoad {{ addr=v{addr}, width={width}, order={order:?} }}")
@@ -316,6 +333,22 @@ fn fmt_inst(inst: &Inst) -> String {
         AllocaInit(slot) => format!("AllocaInit({slot})"),
         LifetimeEnd(slot) => format!("LifetimeEnd({slot})"),
         ParamRef { idx, kind } => format!("ParamRef({idx}, kind={})", fmt_load_kind(*kind)),
+        ParamPart { idx, part, kind } => {
+            format!(
+                "ParamPart({idx}, part={part}, kind={})",
+                fmt_load_kind(*kind)
+            )
+        }
+        RetPart { slot, kind } => format!("RetPart({slot}, kind={})", fmt_load_kind(*kind)),
+        AsmOut { op, kind } => format!("AsmOut({op}, kind={})", fmt_load_kind(*kind)),
+        AggParts {
+            desc,
+            parts,
+            fp_mask,
+        } => format!(
+            "AggParts {{ desc={desc}, parts=[{}], fp_mask={fp_mask:#x} }}",
+            fmt_value_list(parts)
+        ),
         Phi { incoming, kind } => {
             let mut parts = String::new();
             for (i, (b, v)) in incoming.iter().enumerate() {
@@ -389,6 +422,11 @@ fn fmt_place(p: Place) -> String {
 /// Rendered only when set so non-volatile dumps are unchanged.
 fn fmt_volatile(v: bool) -> &'static str {
     if v { ", volatile" } else { "" }
+}
+
+/// ` abs` for a base carried as the access's absolute displacement.
+fn fmt_abs_base(abs: bool) -> &'static str {
+    if abs { " abs" } else { "" }
 }
 
 /// Follows the index operand; empty for a full-width index.

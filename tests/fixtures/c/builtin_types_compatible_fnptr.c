@@ -12,10 +12,13 @@ typedef int (*noproto_t)();
 typedef long (*retlong_t)(void);
 typedef int (*oneparam_t)(int);
 typedef int (fn_t)(void);
+typedef int (noproto_fn_t)();
 
 int f(void);
 int g(int);
 long h(void);
+int np();
+int (*np_obj)();
 
 // A function-pointer typedef against the address of a matching function,
 // spelled directly and through the `typeof`-of-both-operands form a
@@ -49,6 +52,15 @@ _Static_assert(__builtin_types_compatible_p(int (*)(), int (*)(void)) == 1, "() 
 _Static_assert(__builtin_types_compatible_p(int (*)(), int (*)(int)) == 1, "() ~ (int)");
 _Static_assert(__builtin_types_compatible_p(int (*)(), int (*)(char)) == 0, "() !~ (char)");
 _Static_assert(__builtin_types_compatible_p(int (*)(), int (*)(int, ...)) == 0, "() !~ variadic");
+
+// A typedef, `typeof` and `&` name whether the type has a prototype.
+_Static_assert(__builtin_types_compatible_p(noproto_t, oneparam_t) == 1, "() alias ~ (int)");
+_Static_assert(__builtin_types_compatible_p(noproto_t, int (*)(char)) == 0, "() alias !~ (char)");
+_Static_assert(__builtin_types_compatible_p(noproto_fn_t *, int (*)(int)) == 1, "() fn alias");
+_Static_assert(__builtin_types_compatible_p(__typeof__(np_obj), int (*)(double)) == 1, "typeof");
+_Static_assert(__builtin_types_compatible_p(__typeof__(np_obj), int (*)(float)) == 0, "typeof !~");
+_Static_assert(__builtin_types_compatible_p(__typeof__(&np), int (*)(long)) == 1, "&np ~ (long)");
+_Static_assert(__builtin_types_compatible_p(__typeof__(&f), int (*)(long)) == 0, "&f !~ (long)");
 
 // Pointer depth participates: a function type is not its own pointer, and
 // an extra level of indirection is a distinct type.

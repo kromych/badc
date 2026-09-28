@@ -904,7 +904,6 @@ impl Preprocessor {
             is_variadic: false,
             fixed_args: 0,
             return_type_tag: 0,
-            returns_long_double: false,
             param_types: Vec::new(),
             local_name: local_name.to_string(),
             real_symbol: real_symbol.to_string(),
@@ -1067,7 +1066,7 @@ impl WarningAction {
 
 /// True when `args` is the head of a `pack(...)` pragma -- the
 /// preprocessor passes those through verbatim so the lexer can
-/// fold them into its `pack_stack` at the right source position
+/// fold them into its pack state at the right source position
 /// (see the `Directive::Pragma` arm in `process_named`).
 pub(super) fn pragma_is_pack(args: &str) -> bool {
     let trimmed = args.trim_start();

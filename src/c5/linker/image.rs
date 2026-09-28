@@ -1377,6 +1377,7 @@ mod tests {
             debug_info_data_relocs: alloc::vec![],
             debug_line_text_relocs: alloc::vec![],
             prologue_ends: hashbrown::HashMap::new(),
+            early_returns: hashbrown::HashMap::new(),
             local_funcs: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
             tls_abs_relocs: alloc::vec![],

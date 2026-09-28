@@ -6,6 +6,10 @@
 // it holds on every data model. The absolute offsets asserted alongside it use
 // only `char`/`short`/`int`, whose sizes do not vary across the supported
 // targets; the `long` shape is checked against its named counterpart only.
+// The PE targets lay bit-fields out by the MS rules, where a bit-field keeps a
+// whole unit of its declared type under `packed` as well, and an alignment a
+// member's type asks for stands under `packed`; their absolute values for
+// those shapes are clang's for the windows-msvc triples.
 //
 // A non-zero exit code is the ordinal of the failing check.
 
@@ -162,14 +166,24 @@ int main(void) {
     CHECK(offsetof(struct bo_anon, a) == offsetof(struct bo_named, m.a));
     CHECK(offsetof(struct bo_anon, b) == offsetof(struct bo_named, m.b));
     CHECK(offsetof(struct bo_anon, t) == offsetof(struct bo_named, t));
+#if defined(_WIN32)
+    CHECK(sizeof(struct bo_anon) == 14);
+    CHECK(offsetof(struct bo_anon, b) == 5);
+    CHECK(offsetof(struct bo_anon, t) == 13);
+#else
     CHECK(sizeof(struct bo_anon) == 11);
     CHECK(offsetof(struct bo_anon, b) == 5);
     CHECK(offsetof(struct bo_anon, t) == 10);
+#endif
 
     SAME(struct lb_anon, struct lb_named);
     CHECK(offsetof(struct lb_anon, a) == offsetof(struct lb_named, m.a));
     CHECK(offsetof(struct lb_anon, t) == offsetof(struct lb_named, t));
+#if defined(_WIN32)
+    CHECK(offsetof(struct lb_anon, a) == 5);
+#else
     CHECK(offsetof(struct lb_anon, a) == 2);
+#endif
 
     SAME(struct nb_anon, struct nb_named);
     CHECK(offsetof(struct nb_anon, t) == offsetof(struct nb_named, t));
@@ -177,17 +191,29 @@ int main(void) {
     SAME(struct al_anon, struct al_named);
     CHECK(offsetof(struct al_anon, a) == offsetof(struct al_named, m.a));
     CHECK(offsetof(struct al_anon, t) == offsetof(struct al_named, t));
+#if defined(_WIN32)
+    CHECK(sizeof(struct al_anon) == 24);
+    CHECK(_Alignof(struct al_anon) == 8);
+    CHECK(offsetof(struct al_anon, a) == 8);
+#else
     CHECK(sizeof(struct al_anon) == 10);
     CHECK(_Alignof(struct al_anon) == 1);
     CHECK(offsetof(struct al_anon, a) == 1);
+#endif
 
     SAME(struct in_anon, struct in_named);
     CHECK(offsetof(struct in_anon, a) == offsetof(struct in_named, m.a));
     CHECK(offsetof(struct in_anon, b) == offsetof(struct in_named, m.b));
     CHECK(offsetof(struct in_anon, t) == offsetof(struct in_named, t));
+#if defined(_WIN32)
+    CHECK(sizeof(struct in_anon) == 64);
+    CHECK(_Alignof(struct in_anon) == 16);
+    CHECK(offsetof(struct in_anon, b) == 32);
+#else
     CHECK(sizeof(struct in_anon) == 34);
     CHECK(_Alignof(struct in_anon) == 1);
     CHECK(offsetof(struct in_anon, b) == 17);
+#endif
 
     SAME(union w_anon, union w_named);
     CHECK(offsetof(union w_anon, a) == offsetof(union w_named, m.a));

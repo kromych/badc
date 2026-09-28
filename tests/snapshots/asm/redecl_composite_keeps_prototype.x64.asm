@@ -26,46 +26,23 @@ Disassembly of section .text:
                	int3
 
 <take_wrap>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
-               	incq	%rax
-               	leave
+               	leaq	0x1(%rdi), %rax
                	retq
 
 <take_wrap2>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
-               	addq	$0x2, %rax
-               	leave
+               	leaq	0x2(%rdi), %rax
                	retq
 
 <take_wrap3>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
-               	addq	$0x3, %rax
-               	leave
+               	leaq	0x3(%rdi), %rax
                	retq
 
 <take_pairw>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movl	0x4(%rax), %ecx
-               	shlq	$0x20, %rcx
-               	movl	(%rax), %eax
+               	movq	%rdi, %rax
+               	shrq	$0x20, %rax
+               	shlq	$0x20, %rax
+               	movl	%edi, %ecx
                	orq	%rcx, %rax
-               	leave
                	retq
 
 <add2>:

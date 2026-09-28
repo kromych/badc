@@ -480,7 +480,6 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	mov	x20, #0x0               // =0
                	mov	x0, #0x5                // =5
                	mov	x1, #0x1                // =1
                	mov	x2, #0x2                // =2
@@ -594,3 +593,5 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
+               	mov	x20, #0x0               // =0
+               	b	<addr>

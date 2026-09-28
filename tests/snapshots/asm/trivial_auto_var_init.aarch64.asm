@@ -101,24 +101,24 @@ Disassembly of section .text:
 <scalar_long_double>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	sub	x0, x29, #0x20
+               	sub	sp, sp, #0x10
+               	sub	x0, x29, #0x10
                	stp	xzr, xzr, [x0]
                	mov	x1, #0x10               // =16
                	bl	<addr>
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <scalar_int128>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x20
-               	sub	x0, x29, #0x20
+               	sub	sp, sp, #0x10
+               	sub	x0, x29, #0x10
                	stp	xzr, xzr, [x0]
                	mov	x1, #0x10               // =16
                	bl	<addr>
-               	add	sp, sp, #0x20
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 

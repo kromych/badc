@@ -33,7 +33,6 @@ Disassembly of section .text:
 <apply>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x1, w1
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
@@ -43,7 +42,6 @@ Disassembly of section .text:
 <apply2>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x1, w1
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
@@ -53,7 +51,6 @@ Disassembly of section .text:
 <deref_call>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x1, w1
                	ldr	x0, [x0]
                	mov	x9, x0
                	mov	x0, x1
@@ -64,7 +61,6 @@ Disassembly of section .text:
 <grouped>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x1, w1
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
@@ -74,7 +70,6 @@ Disassembly of section .text:
 <via_alias>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x1, w1
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
@@ -86,9 +81,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	mov	x0, #0x5                // =5
-               	stur	w0, [x29, #-0x8]
+               	stur	w0, [x29, #-0x10]
                	mov	x0, #0x0                // =0
-               	sub	x1, x29, #0x8
+               	sub	x1, x29, #0x10
                	mov	x2, #0x2a               // =42
                	bl	<addr>
                	adrp	x1, <page>
@@ -105,9 +100,9 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	stur	x0, [x29, #-0x10]
+               	stur	x0, [x29, #-0x8]
                	mov	x0, #0x3                // =3
-               	ldur	x1, [x29, #-0x10]
+               	ldur	x1, [x29, #-0x8]
                	blr	x1
                	cmp	w0, #0x4
                	b.eq	<addr>
@@ -115,7 +110,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x1, [x29, #-0x10]
+               	ldur	x1, [x29, #-0x8]
                	mov	x0, #0x4                // =4
                	blr	x1
                	cmp	w0, #0x5
@@ -124,7 +119,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x1, [x29, #-0x10]
+               	ldur	x1, [x29, #-0x8]
                	mov	x0, #0x5                // =5
                	blr	x1
                	cmp	w0, #0x6

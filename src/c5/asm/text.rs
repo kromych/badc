@@ -73,6 +73,127 @@ pub(crate) fn scan_label_names(text: &str) -> alloc::vec::Vec<&str> {
     names
 }
 
+/// Give each definition of a numeric local label the template defines more
+/// than once a number of its own, and rewrite every `Nb` / `Nf` reference to
+/// the definition GNU as binds it to: the nearest one before it, or after it,
+/// in the text. The section blocks and the deferred replacement region look a
+/// label up by number, not by where the reference sits, so after this a
+/// number names one definition wherever it is read. The new numbers lie above
+/// every number the text names. `None` when no numeric label repeats.
+pub(crate) fn number_local_labels_apart(text: &str) -> Option<alloc::string::String> {
+    use alloc::collections::BTreeMap;
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit());
+    let mut defs: BTreeMap<u32, u32> = BTreeMap::new();
+    let mut top = 0u32;
+    for piece in split_asm_statements(text) {
+        let mut p = piece.trim();
+        while let Some((name, rest)) = split_label_def(p) {
+            if digits(name)
+                && let Ok(n) = name.parse::<u32>()
+            {
+                *defs.entry(n).or_default() += 1;
+                top = top.max(n);
+            }
+            p = rest.trim();
+        }
+    }
+    defs.retain(|_, k| *k > 1);
+    if defs.is_empty() {
+        return None;
+    }
+    let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
+    let b = text.as_bytes();
+    // A reference may name a number no definition carries; stay above it too.
+    let mut i = 0;
+    while i < b.len() {
+        let start = i;
+        while i < b.len() && ident(b[i]) {
+            i += 1;
+        }
+        if i == start {
+            i += 1;
+            continue;
+        }
+        let tok = &text[start..i];
+        if let Some(n) = tok
+            .strip_suffix(['b', 'f'])
+            .filter(|d| digits(d))
+            .and_then(|d| d.parse::<u32>().ok())
+        {
+            top = top.max(n);
+        }
+    }
+    // The instances of each repeated number, in definition order.
+    let mut fresh: BTreeMap<u32, alloc::vec::Vec<u32>> = BTreeMap::new();
+    for (&n, &k) in &defs {
+        let first = top + 1;
+        top += k;
+        fresh.insert(n, (first..first + k).collect());
+    }
+    let mut seen: BTreeMap<u32, usize> = BTreeMap::new();
+    let mut out: alloc::vec::Vec<u8> = alloc::vec::Vec::with_capacity(text.len() + 16);
+    let (mut i, mut stmt_start, mut quoted) = (0usize, true, false);
+    while i < b.len() {
+        let c = b[i];
+        if quoted || !ident(c) {
+            out.push(c);
+            i += 1;
+            if quoted {
+                // A string ends at its quote, or at the line, as a statement does.
+                quoted = !matches!(c, b'"' | b'\n');
+                stmt_start = c == b'\n';
+            } else {
+                quoted = c == b'"';
+                stmt_start = matches!(c, b'\n' | b';') || (stmt_start && c.is_ascii_whitespace());
+            }
+            continue;
+        }
+        let start = i;
+        while i < b.len() && ident(b[i]) {
+            i += 1;
+        }
+        let tok = &text[start..i];
+        let is_def = stmt_start && b.get(i) == Some(&b':') && b.get(i + 1) != Some(&b':');
+        let renamed = if is_def && digits(tok) {
+            tok.parse::<u32>().ok().and_then(|n| {
+                let names = fresh.get(&n)?;
+                let k = seen.entry(n).or_default();
+                *k += 1;
+                Some(names[*k - 1])
+            })
+        } else {
+            tok.strip_suffix(['b', 'f'])
+                .filter(|d| digits(d))
+                .and_then(|d| d.parse::<u32>().ok())
+                .and_then(|n| {
+                    let names = fresh.get(&n)?;
+                    let k = seen.get(&n).copied().unwrap_or(0);
+                    let at = if tok.ends_with('b') {
+                        k.checked_sub(1)?
+                    } else {
+                        k
+                    };
+                    names.get(at).copied()
+                })
+        };
+        match renamed {
+            Some(m) if is_def => out.extend_from_slice(alloc::format!("{m}").as_bytes()),
+            Some(m) => {
+                out.extend_from_slice(alloc::format!("{m}{}", &tok[tok.len() - 1..]).as_bytes())
+            }
+            None => out.extend_from_slice(tok.as_bytes()),
+        }
+        // A label definition keeps the statement open for another one.
+        stmt_start = is_def;
+        if is_def {
+            out.push(b':');
+            i += 1;
+        }
+    }
+    // Only whole tokens were replaced, by ASCII digits, so the text stays UTF-8.
+    alloc::string::String::from_utf8(out).ok()
+}
+
 /// The first named label a template's code text defines twice. A name has
 /// one definition in GNU as, which rejects a second; a numeric local may
 /// repeat, and each reference binds by direction.
@@ -687,6 +808,8 @@ mod asm_noop_tests {
                     seg: AsmSeg::None,
                     static_arg: false,
                     value: false,
+                    volatile_object: false,
+                    early_clobber: false,
                 })
                 .collect(),
             clobber_regs: 0x8,

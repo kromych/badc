@@ -88,12 +88,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	adrp	x20, <page>
-               	add	x20, x20, <lo12>
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	mov	x1, x0
-               	mov	x0, x20
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x0

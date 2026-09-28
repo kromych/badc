@@ -19,12 +19,14 @@ tree is re-extracted on every run, so the result is deterministic:
      compiles as-is.
   2. ``mill_go_()`` switches to the new coroutine stack with a
      one-instruction asm sp move (guarded by MILL_BADC_SETSP) instead
-     of upstream's stack-pointer-displacing VLA. TODO(badc): VLA and
-     alloca allocate from a fixed 8 KiB frame arena and trap (brk #1)
-     on larger sizes, so the VLA form cannot move sp. The move parks
-     sp 64 bytes below the aligned stack top; badc keeps its asm
-     operand scratch in the caller's frame (rbp-relative), so nothing
-     it needs sits below the moved sp and the gap is plain headroom.
+     of upstream's VLA as large as the distance to the coroutine
+     stack. badc probes each page a VLA steps sp across, so the
+     displacement faults at the thread stack's guard page: tests/go.c
+     built without the define stops at the probe store on
+     linux-aarch64, linux-x64 and macOS, as Apple clang's
+     ``___chkstk_darwin`` does on the stock tree. The move parks sp 64
+     bytes below the aligned stack top; the frame is then addressed
+     through the frame pointer.
 
 Without -DMILL_BADC_SETSP and -DMILL_ARCH_FALLBACK the patched tree
 still builds with gcc/clang exactly as upstream does.

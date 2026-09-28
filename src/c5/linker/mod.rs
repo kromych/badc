@@ -68,6 +68,8 @@ pub(crate) mod relocatable;
 mod synth_build;
 #[cfg(feature = "std")]
 pub(crate) mod target_libc;
+#[cfg(feature = "std")]
+mod tls_relax;
 
 /// A link failure that is badc's own: an invariant the linker relies on
 /// did not hold. `module` prefixes the message with the module's name.
@@ -115,8 +117,8 @@ pub use lds_link::{
 #[allow(unused_imports)]
 pub use link::{
     MergedNative, MergedSymbol, PendingImportReloc, PltTrampoline, SectionContribution, SectionMap,
-    emit_aarch64_plt, emit_x86_64_plt, link_native_objects, link_native_objects_with_options,
-    link_native_objects_with_shared_libs, link_synthesized_symbol,
+    copy_candidates, emit_aarch64_plt, emit_x86_64_plt, link_native_objects,
+    link_native_objects_with_options, link_native_objects_with_shared_libs, link_resolves_symbol,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

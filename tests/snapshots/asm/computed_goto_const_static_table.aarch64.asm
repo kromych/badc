@@ -24,29 +24,25 @@ Disassembly of section .text:
                	add	x4, x4, <lo12>
                	ldr	x3, [x3, x5, lsl #3]
                	br	x3
-               	sxtw	x1, w1
                	add	x3, x1, #0x1
                	ldrb	w1, [x2, x1]
                	add	x0, x0, x1
-               	sxtw	x3, w3
                	add	x1, x3, #0x1
                	ldrb	w3, [x2, x3]
                	ldr	x3, [x4, x3, lsl #3]
                	br	x3
-               	sxtw	x1, w1
                	add	x3, x1, #0x1
                	ldrb	w1, [x2, x1]
                	sub	x0, x0, x1
-               	sxtw	x3, w3
                	add	x1, x3, #0x1
                	ldrb	w3, [x2, x3]
                	ldr	x3, [x4, x3, lsl #3]
                	br	x3
                	add	x0, x0, x0
-               	sxtw	x3, w1
-               	add	x1, x3, #0x1
-               	ldrb	w3, [x2, x3]
-               	ldr	x3, [x4, x3, lsl #3]
+               	add	x5, x1, #0x1
+               	ldrb	w1, [x2, x1]
+               	ldr	x3, [x4, x1, lsl #3]
+               	mov	x1, x5
                	br	x3
                	ret
 
@@ -61,29 +57,25 @@ Disassembly of section .text:
                	add	x4, x4, <lo12>
                	ldr	x3, [x3, x5, lsl #3]
                	br	x3
-               	sxtw	x1, w1
                	add	x3, x1, #0x1
                	ldrb	w1, [x2, x1]
                	add	x0, x0, x1
-               	sxtw	x3, w3
                	add	x1, x3, #0x1
                	ldrb	w3, [x2, x3]
                	ldr	x3, [x4, x3, lsl #3]
                	br	x3
-               	sxtw	x1, w1
                	add	x3, x1, #0x1
                	ldrb	w1, [x2, x1]
                	sub	x0, x0, x1
-               	sxtw	x3, w3
                	add	x1, x3, #0x1
                	ldrb	w3, [x2, x3]
                	ldr	x3, [x4, x3, lsl #3]
                	br	x3
                	add	x0, x0, x0
-               	sxtw	x3, w1
-               	add	x1, x3, #0x1
-               	ldrb	w3, [x2, x3]
-               	ldr	x3, [x4, x3, lsl #3]
+               	add	x5, x1, #0x1
+               	ldrb	w1, [x2, x1]
+               	ldr	x3, [x4, x1, lsl #3]
+               	mov	x1, x5
                	br	x3
                	ret
 
@@ -98,29 +90,25 @@ Disassembly of section .text:
                	add	x4, x4, <lo12>
                	ldr	x3, [x3, x5, lsl #3]
                	br	x3
-               	sxtw	x1, w1
                	add	x3, x1, #0x1
                	ldrb	w1, [x2, x1]
                	add	x0, x0, x1
-               	sxtw	x3, w3
                	add	x1, x3, #0x1
                	ldrb	w3, [x2, x3]
                	ldr	x3, [x4, x3, lsl #3]
                	br	x3
-               	sxtw	x1, w1
                	add	x3, x1, #0x1
                	ldrb	w1, [x2, x1]
                	sub	x0, x0, x1
-               	sxtw	x3, w3
                	add	x1, x3, #0x1
                	ldrb	w3, [x2, x3]
                	ldr	x3, [x4, x3, lsl #3]
                	br	x3
                	add	x0, x0, x0
-               	sxtw	x3, w1
-               	add	x1, x3, #0x1
-               	ldrb	w3, [x2, x3]
-               	ldr	x3, [x4, x3, lsl #3]
+               	add	x5, x1, #0x1
+               	ldrb	w1, [x2, x1]
+               	ldr	x3, [x4, x1, lsl #3]
+               	mov	x1, x5
                	br	x3
                	ret
 

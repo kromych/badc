@@ -46,12 +46,9 @@ Disassembly of section .text:
                	b	<addr>
 
 <search>:
+               	cbz	x0, <addr>
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	cbnz	x0, <addr>
-               	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	ldr	x2, [x0]
                	cmp	x2, x1
                	b.ne	<addr>
@@ -68,6 +65,8 @@ Disassembly of section .text:
                	ldr	x0, [x0, #0x10]
                	bl	<addr>
                	ldp	x29, x30, [sp], #0x10
+               	ret
+               	mov	x0, #0x0                // =0
                	ret
 
 <main>:

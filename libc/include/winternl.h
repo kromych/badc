@@ -12,8 +12,6 @@
 #ifdef _WIN32
 #include <windows.h>
 
-typedef ULONG ACCESS_MASK;
-
 struct _UNICODE_STRING {
     USHORT Length;          // bytes, excluding the trailing nul
     USHORT MaximumLength;

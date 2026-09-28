@@ -16,7 +16,7 @@ Disassembly of section .text:
 <locals_at_shifted_slots>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x60
+               	sub	sp, sp, #0x10
                	sub	sp, sp, #0x60
                	mov	x16, sp
                	and	sp, x16, #0xffffffffffffffe0
@@ -37,7 +37,7 @@ Disassembly of section .text:
                	add	x5, sp, #0x50
                	mov	x0, #0x6                // =6
                	strb	w0, [x5]
-               	sub	x0, x29, #0x58
+               	sub	x0, x29, #0x8
                	mov	x6, #0x7                // =7
                	strb	w6, [x0]
                	mov	x6, #0x8                // =8
@@ -46,50 +46,50 @@ Disassembly of section .text:
                	and	x6, x6, #0xf
                	cbz	w6, <addr>
                	mov	x0, #0x1e               // =30
-               	sub	sp, x29, #0x60
-               	add	sp, sp, #0x60
+               	sub	sp, x29, #0x10
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	and	x6, x1, #0xf
                	cbz	w6, <addr>
                	mov	x0, #0x1f               // =31
-               	sub	sp, x29, #0x60
-               	add	sp, sp, #0x60
+               	sub	sp, x29, #0x10
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	and	x6, x2, #0x1f
                	cbz	w6, <addr>
                	mov	x0, #0x20               // =32
-               	sub	sp, x29, #0x60
-               	add	sp, sp, #0x60
+               	sub	sp, x29, #0x10
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	and	x6, x3, #0xf
                	cbz	w6, <addr>
                	mov	x0, #0x21               // =33
-               	sub	sp, x29, #0x60
-               	add	sp, sp, #0x60
+               	sub	sp, x29, #0x10
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	and	x6, x4, #0xf
                	cbz	w6, <addr>
                	mov	x0, #0x22               // =34
-               	sub	sp, x29, #0x60
-               	add	sp, sp, #0x60
+               	sub	sp, x29, #0x10
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	and	x6, x5, #0xf
                	cbz	w6, <addr>
                	mov	x0, #0x23               // =35
-               	sub	sp, x29, #0x60
-               	add	sp, sp, #0x60
+               	sub	sp, x29, #0x10
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	and	x6, x0, #0x7
                	cbz	w6, <addr>
                	mov	x0, #0x24               // =36
-               	sub	sp, x29, #0x60
-               	add	sp, sp, #0x60
+               	sub	sp, x29, #0x10
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrsw	x6, [sp, #0x10]
@@ -110,8 +110,8 @@ Disassembly of section .text:
                	add	x0, x1, x0
                	sub	x0, x0, #0x9
                	sub	x0, x0, #0x24
-               	sub	sp, x29, #0x60
-               	add	sp, sp, #0x60
+               	sub	sp, x29, #0x10
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -120,7 +120,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	mov	x0, #0x1                // =1
-               	stur	w0, [x29, #-0x10]
+               	stur	w0, [x29, #-0x8]
                	fmov	d0, #2.00000000
                	fmov	d1, #3.00000000
                	stur	d1, [x29, #-0x20]
@@ -137,7 +137,7 @@ Disassembly of section .text:
                	fadd	d0, d0, d1
                	fcvtzs	x0, d0
                	sub	x0, x0, #0x6
-               	ldursw	x1, [x29, #-0x10]
+               	ldursw	x1, [x29, #-0x8]
                	sub	x1, x1, #0x1
                	add	x0, x0, x1
                	add	sp, sp, #0x20

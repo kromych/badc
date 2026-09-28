@@ -39,6 +39,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v23  Extend { value=v22, kind=I32 }                   -> x0
     v24  LoadLocal { off=-1, kind=I64 }                   -> x0
     v25  Extend { value=v24, kind=I32 }                   -> x1
+    v26  LifetimeEnd(-1)                                  -> -
+    v27  LifetimeEnd(-2)                                  -> -
     terminator Return(v24)   (exit_acc=v24)
 pthread_create.c:7: warning: integer assigned to pointer in return (declared=int*, returned=int) [B3001] [-Wint-conversion]
     return 11;

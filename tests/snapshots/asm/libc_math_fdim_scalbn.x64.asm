@@ -28,7 +28,6 @@ Disassembly of section .text:
 <scalbn>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edi, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	popq	%rbp

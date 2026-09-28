@@ -55,9 +55,9 @@ pub(crate) use crate::c5::codegen::lower_for;
 #[cfg(feature = "native-emit")]
 pub(crate) use crate::c5::codegen::{
     Abi, AddrPart, Build, CopyRelocReq, DataFixup, DwarfTextReloc, DynamicExportSection,
-    ElfTpoffFixup, ElfTpoffTarget, FnUnwind, FuncFixup, GotFixup, Machine, MachoTlvDescriptor,
-    MachoTlvFixup, NativeOptions, OutputKind, ResolvedImport, ResolvedImports, Target,
-    TlsIndexFixup, aarch64, x86_64,
+    EarlyReturn, ElfTpoffFixup, ElfTpoffTarget, ExecForm, FnUnwind, FuncFixup, GotFixup, Machine,
+    MachoTlvDescriptor, MachoTlvFixup, NativeOptions, OutputKind, ResolvedImport, ResolvedImports,
+    Target, TlsIndexFixup, aarch64, x86_64,
 };
 
 /// Write the runtime address of a text-targeting DWARF placeholder over its
@@ -214,7 +214,6 @@ fn route_single_tu_data_imports(build: &mut Build, target: Target) {
                 is_variadic: false,
                 fixed_args: 0,
                 return_type_tag: 0,
-                returns_long_double: false,
                 param_types: Vec::new(),
             });
             i
@@ -1060,6 +1059,11 @@ fn write_for(program: &Program, build: &Build, target: Target) -> Result<Vec<u8>
             "Relocatable output requires the `std` feature",
         ));
     }
+    if !build.abs_addr_refs.is_empty() {
+        return Err(C5Error::internal(
+            "an absolute address field reached an image writer",
+        ));
+    }
     match target {
         Target::MacOSAarch64 => mach_o::write(program, build),
         Target::LinuxAarch64 => elf::write(program, build, Machine::Aarch64),
@@ -1145,6 +1149,7 @@ pub(crate) mod test_support {
             asm_sections: Vec::new(),
             asm_section_text_refs: Vec::new(),
             asm_text_abs_refs: Vec::new(),
+            abs_addr_refs: Vec::new(),
             asm_sym_fixups: Vec::new(),
             asm_text_labels: Vec::new(),
             asm_sym_decls: Vec::new(),
@@ -1154,7 +1159,7 @@ pub(crate) mod test_support {
             data_ro_len: 0,
             data_relro_len: 0,
             pic_link: false,
-            freestanding: false,
+            exec_form: Default::default(),
 
             code_model: Default::default(),
             elf_class: Default::default(),
@@ -1175,12 +1180,14 @@ pub(crate) mod test_support {
             func_ends: Vec::new(),
             patchable_entries: Vec::new(),
             mcount_sites: Vec::new(),
+            early_returns: Vec::new(),
             func_names: Vec::new(),
             func_prologue_native: BTreeMap::new(),
             promoted_local_slots: BTreeMap::new(),
             coalesced_slot_remap: BTreeMap::new(),
             canary_frame_bytes: BTreeMap::new(),
             param_frame_offsets: BTreeMap::new(),
+            region_frame_offsets: BTreeMap::new(),
             fn_unwind: Vec::new(),
             reloc_call_sites: Vec::new(),
             user_extern_call_sites: Vec::new(),

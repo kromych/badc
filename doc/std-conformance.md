@@ -56,35 +56,27 @@ for bit including the noncanonical encodings; on linux-aarch64, which
 has no quad-precision unit, through open-coded integer sequences that
 match gcc's `__extenddftf2` / `__trunctfdf2` bit for bit.
 
-Two consequences remain on both Linux targets:
+Calls follow each platform's convention. System V AMD64 passes a `long
+double`, and an aggregate whose only member is one, in memory as its x87
+image -- fixed or variadic, 16-byte aligned -- and returns it in `st(0)`.
+AAPCS64 passes and returns binary128 in a whole vector register, fixed or
+variadic, and an aggregate of up to four as a homogeneous floating-point
+aggregate. So the type crosses the boundary with code built by the
+platform toolchain, `printf("%Lf", x)` and `strtold` included.
+
+One consequence remains:
 
 * **Precision.** Arithmetic is carried out at binary64 precision on
   every target, so a value needing more than 53 significand bits does
   not round-trip -- `(unsigned long long)(long double)((1ULL<<53)+1)`
-  loses the low bit where the platform types keep it. On linux-x64 the
-  stored object holds the full 64-bit significand, but a value that
-  passes through the compute path has already been rounded.
-* **Argument passing.** Where a `long double` reaches a platform-libc
-  callee still typed `long double`, the callee decodes it in the
-  platform's calling convention -- a 16-byte stack slot on System V
-  x86-64, a vector register on AAPCS64 -- while badc supplies the
-  binary64 it computes with in the FP argument bank. That is the
-  variadic tail: `printf("%Lf", 1.0L)` prints `nan` on linux-x64 and
-  `0.000000` on linux-aarch64. Each such argument draws a compile-time
-  warning naming the platform format, so the mismatch is not silent. The
-  fixed parameters are unaffected -- `<math.h>` binds the two `l` entry
-  points it declares, `ldexpl` and `fabsl`, to their `double`
-  counterparts, so the argument converts to a `double` parameter exactly
-  and the ABI matches. The rest of C99 7.12's `l` family is not declared.
-* **Returns** are handled: the libc-boundary readers narrow the wider
-  platform return into the FP64 slot (x87 `fstp QWORD PTR [rsp]` and a
-  `__trunctfdf2` libgcc call respectively), so `strtold` and friends
-  round-trip to FP64 precision.
+  loses the low bit where the platform types keep it. The stored object
+  holds the full significand of its format, but a value that passes
+  through the compute path has already been rounded. `<math.h>` binds
+  C99 7.12's `l` functions to libm's `l` entry points on Linux, so the
+  library computes at the format's precision, and the caller rounds the
+  result to binary64 as it reads it.
 
-The remaining work is the argument / return conventions (a MEMORY-class
-16-byte stack slot and an `st(0)` return on System V, a Q register on
-AAPCS64) and extended-precision arithmetic. TODO: extended-precision
-`long double`.
+TODO: extended-precision `long double`.
 
 Byte order is little-endian on every target: `__BYTE_ORDER__` expands to
 `__ORDER_LITTLE_ENDIAN__` and `__LITTLE_ENDIAN__` is defined.
@@ -264,6 +256,47 @@ unversioned. A version at the floor can name a compatibility
 implementation whose semantics differ from the header badc ships for that
 name. TODO: hold the bound version and the declared interface in step.
 
+### An eightbyte of unnamed bit-fields takes no register, severity 5
+
+The System V AMD64 psABI (3.2.3) does not say whether an unnamed bit-field
+is a field when an eightbyte is classified. badc follows clang: an unnamed
+bit-field has no class, so an eightbyte only unnamed bit-fields cover
+takes no register, and one sharing an eightbyte with named fields leaves
+their class alone. gcc gives such a bit-field the INTEGER class, so the two
+shapes below cross a call to or from gcc-compiled x86-64 code in different
+registers:
+
+- `struct { int :32; int :32; double d; }`: badc and clang pass `d` in
+  xmm0 and the next integer argument in rdi; gcc passes the first
+  eightbyte in rdi, `d` in xmm0 and the next integer in rsi.
+- `struct { float a; int :8; float b; }`: badc and clang pass `a` in xmm0
+  and `b` in xmm1; gcc passes the eightbyte holding `a` in rdi and `b` in
+  xmm0, and the next integer in rsi rather than rdi.
+
+The divergence is System V AMD64's alone: AAPCS64 passes both shapes in
+general-purpose registers under either compiler, and the Microsoft x64
+convention passes them by reference.
+
+### A floating-point vector of one element goes to memory, severity 5
+
+The System V AMD64 psABI (3.2.3) classes the `__m64`, `__m128` and wider
+vector types; a `float` or `double` with a `vector_size` of its own width is
+none of them. badc follows gcc: such a vector is MEMORY class, bare or as a
+member of a struct, union or array, so it is passed on the stack and
+returned through the pointer the caller passes in rdi. clang passes the
+`float` vector in a general-purpose register, a struct holding it too, and
+returns a bare `double` vector in xmm0, while passing that one, and a
+struct holding it, in memory as gcc does. A call to or from clang-compiled
+x86-64 code therefore misplaces:
+
+- `float __attribute__((vector_size(4)))`, bare or in an aggregate, as an
+  argument or a result;
+- a bare `double __attribute__((vector_size(8)))` result.
+
+AAPCS64 passes a struct holding the `float` vector in general-purpose
+registers and the `double` vector in d0 under either compiler, and the
+Microsoft x64 convention places both by size.
+
 ## Extensions implemented
 
 ### C11 / C23
@@ -315,9 +348,11 @@ name. TODO: hold the bound version and the declared interface in step.
   `__DATA,__thread_vars` descriptor whose getter slot dyld binds to
   libSystem's `__tlv_bootstrap`, with the per-thread image in
   `__thread_data` / `__thread_bss` (libSystem is added to the dylib list
-  when nothing else pulls it in). File-scope initializers are limited to
-  scalars and NULL, and an initializer on a block-scope `_Thread_local`
-  object is rejected.
+  when nothing else pulls it in). A thread-local object takes the
+  initializers of an object with static storage duration (C11 6.7.9) at
+  file and block scope -- arrays, a deferred size, structs, string
+  literals and address constants -- into the per-thread image every
+  thread starts from, except a label address.
 - Anonymous `struct` / `union` members (C11 6.7.2.1p13).
 - The `u8` encoding prefix (C11 6.4.5p2), alongside C99's `L` and C11's
   `u` and `U`; a universal character name in a literal encodes as UTF-8
@@ -345,7 +380,10 @@ name. TODO: hold the bound version and the declared interface in step.
 - Computed goto / labels as values: `&&label` and `goto *expr`, including a
   `&&label` element in an automatic or static array initializer (the
   dispatch-table idiom; a static table is filled by runtime stores since a
-  block address is not a link-time constant).
+  block address is not a link-time constant). A computed goto may reach any
+  label whose address is taken: it runs the `cleanup` functions of the
+  scopes it leaves when every such label leaves the same ones, and is
+  rejected otherwise; gcc runs none of them, clang rejects the jump.
 - The array range designator `[a ... b] = value`.
 - Zero-length arrays (`T x[0]`) accepted as flexible array members.
 - `__int128` / `unsigned __int128`, with `__SIZEOF_INT128__` defined as 16.
@@ -378,11 +416,17 @@ name. TODO: hold the bound version and the declared interface in step.
   operation too, and select `bswap` on x86_64 and `rev` on aarch64.
   `__builtin_unreachable` lowers to a trap, so reaching one aborts.
   `__builtin_has_attribute` is accepted and always folds to 0.
-  The remaining string, allocation and absolute-value `__builtin_`
-  spellings are equivalent to the library function of the same name, which
-  the parser binds them to through the symbol table -- a unit that defines
-  a macro of the library name (as the fortified string headers do) still
-  gets the builtin from the `__builtin_` spelling. A few
+  The `__builtin_` spelling of a library function that gcc or clang provides
+  as the function itself (the stdio, stdlib, string, ctype, wide-character
+  and math sets among them, 254 in all) is equivalent to the library
+  function of the same name, which the parser binds it to through the
+  symbol table: the call takes the function's declaration, a header the
+  unit did not include is included as for the plain name, and a unit that
+  defines a macro of the library name (as the fortified string headers do)
+  still gets the builtin from the `__builtin_` spelling. gcc's
+  `__builtin_setjmp` / `__builtin_longjmp`, which take a five-word buffer,
+  are not among them, and `__builtin_isdigit`, `__builtin_isascii` and
+  `__builtin_toascii` fold from their operand as gcc folds them. A few
   (`__builtin_strlen`, `strcmp`, `strncmp`, `memcmp`, `abs` and its wider
   forms) additionally constant-fold on literal operands. The hints with no
   code-generation effect and the infinity / NaN constants stay macros in
@@ -449,7 +493,9 @@ name. TODO: hold the bound version and the declared interface in step.
   `always_inline`, `noinline`, `gnu_inline`, `ms_abi` / `sysv_abi` (the
   x86_64 calling convention of a function or of a function pointer's
   pointee; x86-only, inert elsewhere, as in GCC),
-  `cleanup(fn)` (the function runs on scope exit), `constructor` /
+  `cleanup(fn)` (the function runs on every exit from the scope, `goto`
+  and `asm goto` included; a jump past the declaration into the scope is
+  rejected, as by clang, where gcc accepts it), `constructor` /
   `destructor` (run before / after `main`, optional priority), `noreturn`,
   `unused` / `maybe_unused`, `vector_size(N)` (modeled as an aggregate),
   `transparent_union`, `no_instrument_function`, `uninitialized`,
@@ -471,13 +517,12 @@ name. TODO: hold the bound version and the declared interface in step.
   same bank, counted in `al` on System V and read back from the vector
   save area. Windows x64 passes a 16-byte vector by an implicit
   reference, as its convention states, and macOS arm64 puts variadic
-  arguments on the stack, as its divergence from AAPCS64 states. Two
-  cases stay off the register path: a vector wider than a register (32
-  bytes and up) goes to memory on System V, as gcc places it without
-  `-mavx`, and by reference on AAPCS64; and a struct of two to four
-  vectors -- an AAPCS64 homogeneous vector aggregate -- takes the
-  composite rules instead of `v0`-`v3`. TODO: homogeneous vector
-  aggregates.
+  arguments on the stack, as its divergence from AAPCS64 states. On
+  System V a vector wider than a register (32 bytes and up) goes to
+  memory, as gcc places it without `-mavx` (by reference on AAPCS64), and
+  so does a floating-point vector of one element, as its divergence
+  states. A struct of two to four vectors of one width -- an AAPCS64
+  homogeneous vector aggregate -- takes one of `v0`-`v7` per vector.
 - GCC named-rest variadic macro (`#define foo(args...)`).
 - The GNU89 inline linkage model, per function via `__attribute__((gnu_inline))`
   and per unit via `-fgnu89-inline`: `extern inline` provides no external

@@ -5,7 +5,10 @@
 // preservation, static and runtime initializers, the compound
 // assignments and increments, and the C99 6.3.1.1p2 promotion that
 // makes a field of 32 bits or fewer read as `int`. Every expected value
-// is what gcc -O0 / -O2 and clang -O2 produce.
+// is what gcc -O0 / -O2 and clang -O2 produce. The MS layout, which the
+// PE targets take, gives each field of a different type size its own
+// unit, so there `D` and `G` are 32 and 48 bytes (clang for the
+// windows-msvc triples).
 // Each check returns a distinct non-zero code on failure.
 
 typedef unsigned __int128 u128;
@@ -63,12 +66,21 @@ int main(void) {
     if (sizeof(struct B) != 16 || sizeof(struct C) != 32) {
         return 2;
     }
+#if defined(_WIN32)
+    if (sizeof(struct D) != 32 || sizeof(struct E) != 16) {
+        return 3;
+    }
+    if (sizeof(struct F) != 16 || sizeof(struct G) != 48) {
+        return 4;
+    }
+#else
     if (sizeof(struct D) != 16 || sizeof(struct E) != 16) {
         return 3;
     }
     if (sizeof(struct F) != 16 || sizeof(struct G) != 16) {
         return 4;
     }
+#endif
 
     // Static initializers merge into the unit's bytes.
     if ((r = chk(sa.f, 0x800000000ULL, 0x1234, 10))) {

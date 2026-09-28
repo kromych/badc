@@ -59,18 +59,24 @@ fn ent_pc=11 n_params=0 variadic=false locals=2
     terminator Bz { cond=v28, target=b2, fall=b1 }   (exit_acc=v28)
   block 1  start_pc=0
     v29  Imm(1)                                           -> x0
+    v30  LifetimeEnd(-1)                                  -> -
+    v31  LifetimeEnd(-2)                                  -> -
     terminator Return(v29)   (exit_acc=v29)
   block 2  start_pc=0
-    v30  TlsAddr(0)                                       -> x0
-    v31  Load { addr=v30, disp=0, kind=I32 }              -> x0
-    v32  BinopI { op=ne, lhs=v31, rhs_imm=1 }             -> x0
-    terminator Bz { cond=v32, target=b4, fall=b3 }   (exit_acc=v32)
+    v32  TlsAddr(0)                                       -> x0
+    v33  Load { addr=v32, disp=0, kind=I32 }              -> x0
+    v34  BinopI { op=ne, lhs=v33, rhs_imm=1 }             -> x0
+    terminator Bz { cond=v34, target=b4, fall=b3 }   (exit_acc=v34)
   block 3  start_pc=0
-    v33  Imm(2)                                           -> x0
-    terminator Return(v33)   (exit_acc=v33)
+    v35  Imm(2)                                           -> x0
+    v36  LifetimeEnd(-1)                                  -> -
+    v37  LifetimeEnd(-2)                                  -> -
+    terminator Return(v35)   (exit_acc=v35)
   block 4  start_pc=0
-    v34  Imm(0)                                           -> x0
-    terminator Return(v34)   (exit_acc=v34)
+    v38  Imm(0)                                           -> x0
+    v39  LifetimeEnd(-1)                                  -> -
+    v40  LifetimeEnd(-2)                                  -> -
+    terminator Return(v38)   (exit_acc=v38)
 thread_local_per_thread.c:28: warning: integer assigned to pointer in return (declared=int*, returned=int) [B3001] [-Wint-conversion]
     if (counter != 0) return 0xbad1;
 thread_local_per_thread.c:30: warning: integer assigned to pointer in return (declared=int*, returned=int) [B3001] [-Wint-conversion]

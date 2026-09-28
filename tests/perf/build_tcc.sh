@@ -45,6 +45,17 @@ case "$(uname -s)" in
     ;;
 esac
 
+# Chosen outside the heredoc: bash 3.2, macOS's /bin/bash, closes a `$( )`
+# inside a here-document at the first `)` of a case pattern.
+case "$(uname -m)" in
+  x86_64|amd64) arch_define="#define TCC_TARGET_X86_64 1" ;;
+  arm64|aarch64) arch_define="#define TCC_TARGET_ARM64 1" ;;
+  *)
+    echo "unsupported host arch: $(uname -m)" >&2
+    exit 1
+    ;;
+esac
+
 # Synthesize a config.h that hides the badc-specific compile-time
 # knobs (`config.h` in demos/tinycc/ is set up for badc to build
 # tcc, not for clang). Mirrors the upstream defaults used by the
@@ -54,11 +65,7 @@ cat > "$build_dir/config.h" <<EOF
 #define CC_NAME CC_clang
 #define GCC_MAJOR 0
 #define GCC_MINOR 0
-$( case "$(uname -m)" in
-     x86_64|amd64) echo '#define TCC_TARGET_X86_64 1' ;;
-     arm64|aarch64) echo '#define TCC_TARGET_ARM64 1' ;;
-     *) echo "unsupported host arch: $(uname -m)" >&2; exit 1 ;;
-   esac )
+$arch_define
 $target_define
 #define CONFIG_TCC_PREDEFS 0
 #define CONFIG_TCC_SEMLOCK 0

@@ -173,6 +173,33 @@ fn far_conditional_branch_is_the_inverted_test_over_b() {
     );
 }
 
+/// At `-O` the test of a return taken ahead of the frame branches over the
+/// body to that return, the function's last instruction here; with the hole
+/// in the body it is the inverted test over a `B`.
+#[test]
+fn far_early_return_is_the_inverted_test_over_b() {
+    let src = format!(
+        "long g(long);\nlong far_early(long n) {{ if (n < 2) return n; {HOLE} return g(n) + 1; }}"
+    );
+    let ws = words(&src, "far_early", true);
+    assert!(conditional_branches_land_inside(&ws));
+    let test = ws
+        .iter()
+        .position(|&w| cond_form(w).is_some())
+        .expect("the test");
+    let far = far_pairs(&ws);
+    let &(_, _, d) = far
+        .iter()
+        .find(|&&(i, _, _)| i == test)
+        .unwrap_or_else(|| panic!("the test is not a far pair: {far:?}"));
+    assert_eq!(
+        test as i64 + 1 + d,
+        ws.len() as i64 - 1,
+        "`B` to the return"
+    );
+    assert_eq!(ws.last(), Some(&0xD65F_03C0), "`ret`");
+}
+
 /// `tbz` / `tbnz` carry a 14-bit word displacement (+-32 KiB). A bit test
 /// over a hole past that is the inverted test over a `B`; over a short
 /// one it stays one instruction. Either way it tests bit 2.

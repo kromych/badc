@@ -22,6 +22,7 @@ use super::strtab::build_string_table;
 use super::{AddrPart, Build};
 use crate::c5::CodeModel;
 use crate::c5::asm::{AsmSymDecl, AsmSymValue};
+use crate::c5::codegen::AbsAddrTarget;
 use crate::c5::layout::{round_up, write_struct};
 // Relocation types this writer emits. `R_AARCH64_ADR_GOT_PAGE` /
 // `R_AARCH64_LD64_GOT_LO12_NC` take a dylib-routed import's address through
@@ -92,6 +93,7 @@ const NT_BADC_MACHO_TLV_DESC_SYM: u32 = 9;
 const NT_BADC_ELF_TPOFF: u32 = 10;
 const NT_BADC_PROLOGUE_END: u32 = 11;
 const NT_BADC_EXTERN_DATA: u32 = 12;
+const NT_BADC_EARLY_RETURN: u32 = 13;
 const RODATA_SECTION: &str = ".rodata";
 const DATA_REL_RO_SECTION: &str = ".data.rel.ro";
 
@@ -1014,6 +1016,9 @@ struct Symtab<'a> {
     func_symidx_by_name: BTreeMap<String, u32>,
     asm_label_symidx: BTreeMap<&'a str, u32>,
     prologue_end_pairs: Vec<(u64, u64)>,
+    /// `(entry, frame path, early return)` `.text` offsets of each function
+    /// that returns ahead of its frame.
+    early_returns: Vec<(u64, u64, u64)>,
     alias_syms: Vec<Option<(u8, Elf64Sym)>>,
     defined_data_local_symidx: BTreeMap<&'a str, u64>,
     defined_tls_symidx: BTreeMap<&'a str, u64>,
@@ -1961,10 +1966,10 @@ impl<'a> RelocWriter<'a> {
             && !names.asm_extern_names.contains(&n)
     }
 
-    /// Cross-TU data names (code references and pointer-to-extern-data
-    /// initializers resolve against the same UNDEF), the inline-asm operand
-    /// and section-reloc names no other table covers, and the `.globl`
-    /// names that surface nowhere else.
+    /// Cross-TU data names (code references, absolute address fields and
+    /// pointer-to-extern-data initializers resolve against the same UNDEF),
+    /// the inline-asm operand and section-reloc names no other table
+    /// covers, and the `.globl` names that surface nowhere else.
     fn collect_undefined_names(&mut self) {
         use crate::c5::asm::AsmSectionTarget;
         let (program, build) = (self.program, self.build);
@@ -1978,12 +1983,17 @@ impl<'a> RelocWriter<'a> {
                 self.names.user_extern_data_names.push(s);
             }
         }
-        for r in build
+        let abs_names = build.abs_addr_refs.iter().filter_map(|r| match &r.target {
+            AbsAddrTarget::Extern(name) => Some(name.as_str()),
+            _ => None,
+        });
+        for s in build
             .extern_data_relocs
             .iter()
             .chain(&build.tls_extern_data_relocs)
+            .map(|r| r.symbol_name.as_str())
+            .chain(abs_names)
         {
-            let s = r.symbol_name.as_str();
             if !self.names.asm_defined_labels.contains(s)
                 && !self.defines_alias(s)
                 && !self.unit_defines(s)
@@ -2403,6 +2413,14 @@ impl<'a> RelocWriter<'a> {
             let (post_shndx, post_off) = self.text_place(post_native as u64);
             if fn_shndx == SHIDX_TEXT && post_shndx == SHIDX_TEXT {
                 self.syms.prologue_end_pairs.push((fn_off, post_off));
+            }
+        }
+        let build = self.build;
+        for e in &build.early_returns {
+            let place = |at: u32| self.text_place(u64::from(e.begin + at));
+            let [(a, entry), (b, frame), (c, exit)] = [place(0), place(e.frame), place(e.exit)];
+            if [a, b, c] == [SHIDX_TEXT; 3] {
+                self.syms.early_returns.push((entry, frame, exit));
             }
         }
         Ok(())
@@ -3094,22 +3112,7 @@ impl<'a> RelocWriter<'a> {
             )?;
         }
         for fx in &build.rodata.addr_fixups {
-            let spans = build.rodata.literals.spans;
-            let within =
-                |k: usize| (spans[k].0..spans[k].0 + spans[k].1).contains(&fx.rodata_offset);
-            let (placed, from) = match (0..2).find(|&k| within(k)) {
-                Some(k) => (self.layout.literal_placements[k], spans[k].0),
-                None => (self.layout.jt_placement, 0),
-            };
-            let (e, base) = placed.ok_or_else(|| {
-                Self::internal(String::from(
-                    "elf_reloc: read-only fixup recorded without its bytes",
-                ))
-            })?;
-            let (sym, addend) = (
-                self.layout.carve.sym_idx[e],
-                (base + fx.rodata_offset - from) as i64,
-            );
+            let (sym, addend) = self.rodata_ref(fx.rodata_offset)?;
             // A literal load's in-page offset scales by its access size.
             if matches!(machine, Machine::Aarch64)
                 && let Some(size) = a64_in_page_access(&build.text, fx.code_offset)
@@ -3270,8 +3273,36 @@ impl<'a> RelocWriter<'a> {
                 r.target_offset as i64,
             );
         }
+        for r in &build.abs_addr_refs {
+            let (sym, addend) = match &r.target {
+                AbsAddrTarget::Data(off) => self.data_section_ref(*off as i64),
+                AbsAddrTarget::Extern(name) => self.extern_data_ref(name),
+                AbsAddrTarget::Rodata(off) => self.rodata_ref(*off)?,
+            };
+            Self::push_rela(&mut table, r.field_offset as u64, sym, R_X86_64_32S, addend);
+        }
         self.relocs.text = table;
         Ok(())
+    }
+
+    /// The section symbol and addend of a byte of the read-only blob: a
+    /// literal pool's placement, else the switch tables'.
+    fn rodata_ref(&self, rodata_offset: u64) -> Result<(u64, i64), C5Error> {
+        let spans = self.build.rodata.literals.spans;
+        let within = |k: usize| (spans[k].0..spans[k].0 + spans[k].1).contains(&rodata_offset);
+        let (placed, from) = match (0..2).find(|&k| within(k)) {
+            Some(k) => (self.layout.literal_placements[k], spans[k].0),
+            None => (self.layout.jt_placement, 0),
+        };
+        let (e, base) = placed.ok_or_else(|| {
+            Self::internal(String::from(
+                "elf_reloc: read-only fixup recorded without its bytes",
+            ))
+        })?;
+        Ok((
+            self.layout.carve.sym_idx[e],
+            (base + rodata_offset - from) as i64,
+        ))
     }
 
     /// Where a name an inline-asm operand or section field references
@@ -3830,6 +3861,7 @@ impl<'a> RelocWriter<'a> {
             &self.names.defined_tls_globals,
             &build.elf_tpoff_fixups,
             &self.syms.prologue_end_pairs,
+            &self.syms.early_returns,
             &self.names.user_extern_data_names,
         );
         let (layout, relocs) = (&self.layout, &self.relocs);
@@ -4268,10 +4300,18 @@ impl<'a> RelocWriter<'a> {
                 sh_addralign: crate::c5::layout::tls_image_align(program.tls_align) as u64,
                 ..Default::default()
             };
-            out.place(
-                tls(out.fixed_name(SHIDX_TDATA), SHT_PROGBITS),
-                &program.tls_data[..tls_init_size],
-            );
+            // A slot `.rela.tdata` patches holds zero, as one `.rela.data`
+            // patches does: the addend is in the relocation.
+            let mut tdata = program.tls_data[..tls_init_size].to_vec();
+            let patched = (program.tls_data_relocs.iter().map(|r| r.data_offset))
+                .chain(program.tls_code_relocs.iter().map(|r| r.data_offset))
+                .chain(program.tls_extern_data_relocs.iter().map(|r| r.data_offset));
+            for off in patched {
+                if let Some(slot) = tdata.get_mut(off as usize..off as usize + 8) {
+                    slot.fill(0);
+                }
+            }
+            out.place(tls(out.fixed_name(SHIDX_TDATA), SHT_PROGBITS), &tdata);
             out.place_nobits(
                 tls(out.fixed_name(SHIDX_TBSS), SHT_NOBITS),
                 (program.tls_data.len() - tls_init_size) as u64,
@@ -4583,6 +4623,7 @@ fn build_badc_note(
     tls_symbols: &[(&str, i64, u64)],
     elf_tpoff_fixups: &[super::ElfTpoffFixup],
     prologue_ends: &[(u64, u64)],
+    early_returns: &[(u64, u64, u64)],
     extern_data_names: &[&str],
 ) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
@@ -4705,6 +4746,16 @@ fn build_badc_note(
             desc.extend_from_slice(&post.to_le_bytes());
         }
         push_note_record(&mut out, NT_BADC_PROLOGUE_END, &desc);
+    }
+
+    if !early_returns.is_empty() {
+        let mut desc: Vec<u8> = Vec::new();
+        for &(entry, frame, exit) in early_returns {
+            for at in [entry, frame, exit] {
+                desc.extend_from_slice(&at.to_le_bytes());
+            }
+        }
+        push_note_record(&mut out, NT_BADC_EARLY_RETURN, &desc);
     }
 
     if !imports.data_bindings.is_empty() {

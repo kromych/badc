@@ -7,7 +7,9 @@
 // opened a new unit on every base-type change, which shifted every
 // field after a mixed-base bitfield run (it mislaid a real-world
 // header whose `uint32_t len:31; uint8_t is_wide:1;` pair must share
-// one 4-byte unit).
+// one 4-byte unit). The MS layout, which the PE targets take, opens a
+// new unit whenever the declared type's size changes: there `Hdr` is 24
+// bytes, as MSVC and clang for the windows-msvc triples lay it out.
 
 #include <stdint.h>
 
@@ -24,7 +26,11 @@ struct Hdr {
 int main(void) {
     // The two mixed-base bitfield pairs share one 4-byte unit each, so
     // `next` sits at offset 8 and `data` at offset 12 (total size 16).
+#if defined(_WIN32)
+    if (sizeof(struct Hdr) != 24) return 1;
+#else
     if (sizeof(struct Hdr) != 16) return 1;
+#endif
 
     struct Hdr h;
     h.len = 0x7FFFFFFF; // all 31 bits

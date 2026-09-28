@@ -85,7 +85,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   Binop { op=add, lhs=v1, rhs=v3 }                 -> x0
-    v8   Extend { value=v7, kind=I32 }                    -> x1
+    v8   Extend { value=v7, kind=I32, nsw }               -> x1
     v9   Extend { value=v7, kind=I32 }                    -> x1
     terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=8 ---
@@ -101,7 +101,7 @@ fn ent_pc=8 n_params=2 variadic=false locals=0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   Binop { op=add, lhs=v1, rhs=v3 }                 -> x0
-    v8   Extend { value=v7, kind=I32 }                    -> x1
+    v8   Extend { value=v7, kind=I32, nsw }               -> x1
     v9   Extend { value=v7, kind=I32 }                    -> x1
     terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=9 ---
@@ -212,7 +212,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v69  Extend { value=v66, kind=I32 }                   -> x7
     v70  Extend { value=v68, kind=I32 }                   -> x7
     v71  Binop { op=add, lhs=v66, rhs=v68 }               -> x1
-    v72  Extend { value=v71, kind=I32 }                   -> x6
+    v72  Extend { value=v71, kind=I32, nsw }              -> x6
     v73  Extend { value=v71, kind=I32 }                   -> x6
     v74  Extend { value=v71, kind=I32 }                   -> x6
     v75  BinopI { op=ne, lhs=v71, rhs_imm=110 }           -> x1
@@ -228,7 +228,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v81  Extend { value=v78, kind=I32 }                   -> x2
     v82  Extend { value=v80, kind=I32 }                   -> x2
     v83  Binop { op=add, lhs=v78, rhs=v80 }               -> x0
-    v84  Extend { value=v83, kind=I32 }                   -> x1
+    v84  Extend { value=v83, kind=I32, nsw }              -> x1
     v85  Extend { value=v83, kind=I32 }                   -> x1
     v86  Extend { value=v83, kind=I32 }                   -> x1
     v87  BinopI { op=ne, lhs=v83, rhs_imm=121 }           -> x0

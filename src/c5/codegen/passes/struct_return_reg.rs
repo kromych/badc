@@ -469,6 +469,7 @@ fn promote_once(func: &mut FunctionSsa, strict_align: bool) -> bool {
                             Inst::Extend {
                                 value: u.word,
                                 kind: lk,
+                                nsw: false,
                             },
                         ));
                     }
@@ -633,9 +634,11 @@ fn piece_fwd(p: &Piece, at: i64, kind: LoadKind) -> Option<PieceFwd> {
         _ => return None,
     };
     Some(match kind {
-        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => {
-            PieceFwd::Rewrite(Inst::Extend { value, kind })
-        }
+        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => PieceFwd::Rewrite(Inst::Extend {
+            value,
+            kind,
+            nsw: false,
+        }),
         // `Inst::Extend` sign-extends; an unsigned width reads back as
         // the stored value masked to its bytes.
         LoadKind::U8 | LoadKind::U16 | LoadKind::U32 => PieceFwd::Rewrite(Inst::BinopI {

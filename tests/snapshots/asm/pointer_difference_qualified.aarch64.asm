@@ -51,8 +51,8 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x50
-               	sub	x0, x29, #0x48
+               	sub	sp, sp, #0x20
+               	sub	x0, x29, #0x20
                	add	x1, x0, #0x18
                	sub	x1, x1, x0
                	asr	x2, x1, #63
@@ -73,21 +73,19 @@ Disassembly of section .text:
                	add	x3, x1, #0x5
                	sub	x1, x3, x1
                	sub	x1, x1, #0x5
-               	add	x2, x2, x1
-               	sub	x1, x29, #0x28
-               	add	x3, x1, #0x10
-               	sub	x1, x3, x1
-               	asr	x3, x1, #63
-               	lsr	x3, x3, #61
-               	add	x1, x1, x3
-               	asr	x1, x1, #3
-               	sub	x1, x1, #0x2
-               	add	x1, x2, x1
-               	add	x2, x0, #0x10
-               	sub	x2, x2, #0x10
-               	cmp	x2, x0
+               	add	x3, x2, x1
+               	add	x1, x0, #0x10
+               	sub	x2, x1, x0
+               	asr	x4, x2, #63
+               	lsr	x4, x4, #61
+               	add	x2, x2, x4
+               	asr	x2, x2, #3
+               	sub	x2, x2, #0x2
+               	add	x2, x3, x2
+               	sub	x1, x1, #0x10
+               	cmp	x1, x0
                	cset	x0, ne
-               	add	x0, x1, x0
-               	add	sp, sp, #0x50
+               	add	x0, x2, x0
+               	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

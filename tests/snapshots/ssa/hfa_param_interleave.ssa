@@ -72,63 +72,81 @@ fn ent_pc=1 n_params=0 variadic=false locals=4
     terminator Bz { cond=v65, target=b2, fall=b1 }   (exit_acc=v65)
   block 1  start_pc=0
     v66  Imm(1)                                           -> x0
+    v67  LifetimeEnd(0)                                   -> -
+    v68  LifetimeEnd(0)                                   -> -
+    v69  LifetimeEnd(-1)                                  -> -
+    v70  LifetimeEnd(-2)                                  -> -
+    v71  LifetimeEnd(-3)                                  -> -
+    v72  LifetimeEnd(-4)                                  -> -
     terminator Return(v66)   (exit_acc=v66)
   block 2  start_pc=0
-    v67  Imm(0)                                           -> x0
-    v68  Imm(0)                                           -> x0 [f32]
-    v69  Imm(0)                                           -> x1
-    v70  Imm(0)                                           -> x1 [f32]
-    v71  Imm(0)                                           -> x1
-    v72  Imm(0)                                           -> x1
-    v73  Imm(0)                                           -> x1
-    v74  Imm(0)                                           -> x1
+    v73  Imm(0)                                           -> x0
+    v74  Imm(0)                                           -> x0 [f32]
     v75  Imm(0)                                           -> x1
-    v76  Imm(1048576000)                                  -> x1 [f32]
-    v77  Imm(0)                                           -> x2
-    v78  Imm(0)                                           -> x2 [f32]
-    v79  Imm(0)                                           -> x2
-    v80  Imm(0)                                           -> x2 [f32]
-    v81  Binop { op=fadd, lhs=v68, rhs=v68 }              -> d1 [f32]
-    v82  Imm(0)                                           -> x2 [f32]
-    v83  Binop { op=fadd, lhs=v81, rhs=v68 }              -> d1 [f32]
-    v84  Imm(0)                                           -> x2
-    v85  Imm(0)                                           -> x2 [f32]
-    v86  Binop { op=fadd, lhs=v83, rhs=v68 }              -> d1 [f32]
-    v87  Imm(0)                                           -> x2 [f32]
-    v88  Binop { op=fadd, lhs=v86, rhs=v68 }              -> d1 [f32]
-    v89  Imm(0)                                           -> x2
-    v90  Imm(0)                                           -> x2 [f32]
-    v91  Binop { op=fadd, lhs=v88, rhs=v68 }              -> d1 [f32]
-    v92  Imm(0)                                           -> x2 [f32]
-    v93  Binop { op=fadd, lhs=v91, rhs=v68 }              -> d1 [f32]
-    v94  Imm(0)                                           -> x2
-    v95  Imm(0)                                           -> x2 [f32]
-    v96  Binop { op=fadd, lhs=v93, rhs=v68 }              -> d1 [f32]
-    v97  Binop { op=fadd, lhs=v96, rhs=v76 }              -> d1 [f32]
-    v98  Imm(1)                                           -> x0
-    v99  Imm(0)                                           -> x0
-    v100 Imm(2)                                           -> x0
-    v101 Imm(3)                                           -> x0
-    v102 Imm(3)                                           -> x0
-    v103 Imm(0)                                           -> x0
-    v104 Imm(3)                                           -> x0
-    v105 Imm(6)                                           -> x0
-    v106 Imm(6)                                           -> x0
-    v107 Imm(0)                                           -> x0
-    v108 Imm(4)                                           -> x0
-    v109 Imm(10)                                          -> x0
-    v110 Imm(10)                                          -> x0
-    v111 FpCast { kind=IntToFp, value=v61 }               -> d2 [f32]
-    v112 Binop { op=fadd, lhs=v97, rhs=v62 }              -> d0 [f32]
-    v113 Imm(1092878336)                                  -> x0 [f32]
-    v114 Binop { op=fne, lhs=v112, rhs=v113 }             -> x0
-    terminator Bz { cond=v114, target=b4, fall=b3 }   (exit_acc=v114)
+    v76  Imm(0)                                           -> x1 [f32]
+    v77  Imm(0)                                           -> x1
+    v78  Imm(0)                                           -> x1
+    v79  Imm(0)                                           -> x1
+    v80  Imm(0)                                           -> x1
+    v81  Imm(0)                                           -> x1
+    v82  Imm(1048576000)                                  -> x1 [f32]
+    v83  Imm(0)                                           -> x2
+    v84  Imm(0)                                           -> x2 [f32]
+    v85  Imm(0)                                           -> x2
+    v86  Imm(0)                                           -> x2 [f32]
+    v87  Binop { op=fadd, lhs=v74, rhs=v74 }              -> d1 [f32]
+    v88  Imm(0)                                           -> x2 [f32]
+    v89  Binop { op=fadd, lhs=v87, rhs=v74 }              -> d1 [f32]
+    v90  Imm(0)                                           -> x2
+    v91  Imm(0)                                           -> x2 [f32]
+    v92  Binop { op=fadd, lhs=v89, rhs=v74 }              -> d1 [f32]
+    v93  Imm(0)                                           -> x2 [f32]
+    v94  Binop { op=fadd, lhs=v92, rhs=v74 }              -> d1 [f32]
+    v95  Imm(0)                                           -> x2
+    v96  Imm(0)                                           -> x2 [f32]
+    v97  Binop { op=fadd, lhs=v94, rhs=v74 }              -> d1 [f32]
+    v98  Imm(0)                                           -> x2 [f32]
+    v99  Binop { op=fadd, lhs=v97, rhs=v74 }              -> d1 [f32]
+    v100 Imm(0)                                           -> x2
+    v101 Imm(0)                                           -> x2 [f32]
+    v102 Binop { op=fadd, lhs=v99, rhs=v74 }              -> d1 [f32]
+    v103 Binop { op=fadd, lhs=v102, rhs=v82 }             -> d1 [f32]
+    v104 Imm(1)                                           -> x0
+    v105 Imm(0)                                           -> x0
+    v106 Imm(2)                                           -> x0
+    v107 Imm(3)                                           -> x0
+    v108 Imm(3)                                           -> x0
+    v109 Imm(0)                                           -> x0
+    v110 Imm(3)                                           -> x0
+    v111 Imm(6)                                           -> x0
+    v112 Imm(6)                                           -> x0
+    v113 Imm(0)                                           -> x0
+    v114 Imm(4)                                           -> x0
+    v115 Imm(10)                                          -> x0
+    v116 Imm(10)                                          -> x0
+    v117 FpCast { kind=IntToFp, value=v61 }               -> d2 [f32]
+    v118 Binop { op=fadd, lhs=v103, rhs=v62 }             -> d0 [f32]
+    v119 Imm(1092878336)                                  -> x0 [f32]
+    v120 Binop { op=fne, lhs=v118, rhs=v119 }             -> x0
+    terminator Bz { cond=v120, target=b4, fall=b3 }   (exit_acc=v120)
   block 3  start_pc=0
-    v115 Imm(2)                                           -> x0
-    terminator Return(v115)   (exit_acc=v115)
+    v121 Imm(2)                                           -> x0
+    v122 LifetimeEnd(0)                                   -> -
+    v123 LifetimeEnd(0)                                   -> -
+    v124 LifetimeEnd(-1)                                  -> -
+    v125 LifetimeEnd(-2)                                  -> -
+    v126 LifetimeEnd(-3)                                  -> -
+    v127 LifetimeEnd(-4)                                  -> -
+    terminator Return(v121)   (exit_acc=v121)
   block 4  start_pc=0
-    v116 Imm(0)                                           -> x0
-    terminator Return(v116)   (exit_acc=v116)
+    v128 Imm(0)                                           -> x0
+    v129 LifetimeEnd(0)                                   -> -
+    v130 LifetimeEnd(0)                                   -> -
+    v131 LifetimeEnd(-1)                                  -> -
+    v132 LifetimeEnd(-2)                                  -> -
+    v133 LifetimeEnd(-3)                                  -> -
+    v134 LifetimeEnd(-4)                                  -> -
+    terminator Return(v128)   (exit_acc=v128)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

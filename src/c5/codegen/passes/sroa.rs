@@ -104,10 +104,11 @@ const FOOTPRINT_ROUNDS: usize = 32;
 /// A parameter is listed only when every use of its value is an access
 /// at a constant offset -- the address expressions [`resolve_base`]
 /// tracks -- or a fixed argument of another same-unit call, whose
-/// footprint it inherits. Any other use, a variadic body, and a body
-/// that keeps a parameter in a frame cell (where the value reaches its
-/// uses through memory this walk does not follow) leave the parameter
-/// out of the map.
+/// footprint it inherits. Any other use, a variadic body, a naked body
+/// (whose asm reads the arguments where the convention left them), and
+/// a body that keeps a parameter in a frame cell (where the value
+/// reaches its uses through memory this walk does not follow) leave the
+/// parameter out of the map.
 /// A caller parameter inheriting a callee parameter's footprint,
 /// shifted by the offset the argument carries.
 type InheritEdge = ((usize, usize), (usize, usize), i64);
@@ -122,8 +123,9 @@ pub(crate) fn param_footprints(funcs: &[FunctionSsa]) -> FootprintMap {
             continue;
         }
         // The va machinery reads a variadic body's arguments off the
-        // stack rather than through a `ParamRef`.
-        if func.is_variadic {
+        // stack rather than through a `ParamRef`, and a naked body's asm
+        // reads them where the convention left them.
+        if func.is_variadic || func.is_naked {
             continue;
         }
         let n = func.insts.len();
@@ -1219,6 +1221,7 @@ fn split_objects(
                         value,
                         kind,
                         volatile: false,
+                        nsw: false,
                     };
                 }
             }
@@ -1252,7 +1255,7 @@ fn split_objects(
     // place: its fields are at most a machine word wide and live in plain
     // slots, so its region record goes, and the region with the last one.
     func.over_aligned
-        .retain(|&(s, _)| !slots_of.contains_key(&s) || address_live.contains(&s));
+        .retain(|m| !slots_of.contains_key(&m.slot) || address_live.contains(&m.slot));
     if func.over_aligned.is_empty() {
         func.frame_align = 0;
         func.realign_region_bytes = 0;
@@ -1474,6 +1477,7 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
                             value: kept_value,
                             kind,
                             volatile: false,
+                            nsw: false,
                         });
                         new_src.push(loc);
                         new_f32.push(false);
@@ -1496,6 +1500,7 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
                             value: loaded,
                             kind: c.store,
                             volatile: false,
+                            nsw: false,
                         });
                         new_src.push(loc);
                         new_src.push(loc);
@@ -3140,6 +3145,8 @@ mod tests {
                 fixed_args: 0,
                 fp_return: false,
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                low_word_args: 0,
+                arg_widths: crate::c5::ir::ArgWidths::default(),
                 arg_aggs: Vec::new(),
                 ret_agg: Some(0),
                 ret_slot_local: -2,
@@ -3167,7 +3174,8 @@ mod tests {
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
-                volatile: false
+                volatile: false,
+                nsw: false
             }, // v1  a[1] through the slot
             Inst::LocalAddr(-2), // v2
             store(2, 0),  // v3  a[0] through the address
@@ -3284,6 +3292,8 @@ mod tests {
             args,
             fp_return: false,
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -3344,9 +3354,14 @@ mod tests {
             is_variadic: true,
             ..callee(200, alloc::vec![param()], Terminator::Return(0))
         };
-        let fps = param_footprints(&[escaping, variadic]);
+        let naked = FunctionSsa {
+            is_naked: true,
+            ..callee(300, alloc::vec![Inst::Imm(0)], Terminator::Return(0))
+        };
+        let fps = param_footprints(&[escaping, variadic, naked]);
         assert!(!fps.contains_key(&(100, 0)), "a stored pointer is opaque");
         assert!(!fps.contains_key(&(200, 0)), "a variadic body is opaque");
+        assert!(!fps.contains_key(&(300, 0)), "a naked body is opaque");
     }
 
     /// Caller holding a two-cell object at -2: field 0 written then
@@ -3523,8 +3538,14 @@ mod tests {
     /// storage and the record with it.
     #[test]
     fn over_aligned_object_splits_and_drops_its_region_record() {
+        let member = |slot| crate::c5::ir::RegionMember {
+            slot,
+            off: 0,
+            align: 16,
+            size: 16,
+        };
         let mut f = two_elem_array();
-        f.over_aligned = alloc::vec![(-2, 0)];
+        f.over_aligned = alloc::vec![member(-2)];
         f.frame_align = 16;
         f.realign_region_bytes = 16;
         let split = split_objects(&mut f, 64);
@@ -3553,7 +3574,7 @@ mod tests {
         let fps = param_footprints(&[reader]);
         let mut f = caller_passing_object(100);
         let base = f.multi_cell_slots[0].0;
-        f.over_aligned = alloc::vec![(base, 0)];
+        f.over_aligned = alloc::vec![member(base)];
         f.frame_align = 16;
         f.realign_region_bytes = 16;
         let split =
@@ -3562,7 +3583,7 @@ mod tests {
         assert!(split[0].address_live);
         assert_eq!(
             f.over_aligned,
-            alloc::vec![(base, 0)],
+            alloc::vec![member(base)],
             "an object a call reaches keeps its region storage"
         );
         assert_eq!(f.frame_align, 16);

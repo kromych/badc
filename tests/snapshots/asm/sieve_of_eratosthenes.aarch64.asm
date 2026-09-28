@@ -19,21 +19,19 @@ Disassembly of section .text:
                	movk	x2, #0x1, lsl #16
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	sxtw	x0, w1
-               	ldrb	w0, [x3, x0]
-               	cbnz	w0, <addr>
                	mul	x0, x1, x1
+               	ldrb	w4, [x3, x1]
+               	cbnz	w4, <addr>
                	cmp	w0, w2
                	b.ge	<addr>
                	mov	x4, #0x1                // =1
-               	strb	w4, [x3, w0, sxtw]
+               	strb	w4, [x3, x0]
                	add	x0, x0, x1
                	cmp	w0, w2
                	b.lt	<addr>
                	add	x1, x1, #0x1
-               	sxtw	x0, w1
-               	mul	x4, x0, x0
-               	cmp	x4, x2
+               	mul	x0, x1, x1
+               	cmp	x0, x2
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	mov	x1, #0x2                // =2

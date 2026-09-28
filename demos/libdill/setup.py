@@ -5,27 +5,22 @@ Pins the head of `sustrik/libdill@master` by full commit SHA and
 verifies a sha256 before extraction; the tree lands under
 ``demos/libdill/.cache/libdill-<sha>/``.
 
-After extraction two source patches are applied so badc can build
-the coroutine core; each is an exact-match string replacement and the
-tree is re-extracted on every run, so the result is deterministic:
+On x86-64 the build takes upstream's native asm context switch as is:
+badc compiles the `%=` template escape, `lea <label>(%rip), reg`,
+explicit-register memory operands, `.cfi_*` directives and the
+multi-alternative `"rax"` constraint, and its ``dill_setsp`` moves rsp
+in asm, after which the frame is addressed through rbp.
 
-  1. Both ``dill_setsp`` definitions (the native x86-64 one and the
-     fallback one) gain an explicit one-instruction asm sp move under
-     ``DILL_BADC_SETSP``. On x86-64 the build uses upstream's native
-     asm dill_setjmp/dill_longjmp (badc compiles the `%=` template
-     escape, `lea <label>(%rip), reg`, explicit-register memory
-     operands, `.cfi_*` directives, and the multi-alternative `"rax"`
-     constraint); elsewhere it uses the ``DILL_ARCH_FALLBACK``
-     sigsetjmp switch. TODO(badc): the stock sp moves cannot work --
-     alloca draws from a fixed 8 KiB frame arena and traps (brk #1)
-     beyond it, so alloca arithmetic never displaces sp. The
-     replacement move parks sp 64 bytes below the aligned stack top;
-     badc keeps its asm operand scratch in the caller's frame
-     (rbp-relative), so nothing it needs sits below the moved sp and
-     the gap is plain headroom.
-
-Without -DDILL_BADC_SETSP the patched tree builds with gcc/clang
-exactly as upstream does.
+Elsewhere it takes upstream's ``DILL_ARCH_FALLBACK`` sigsetjmp switch,
+whose ``dill_setsp`` displaces sp with an alloca as large as the
+distance to the coroutine stack. badc probes each page an alloca steps
+sp across, so the displacement faults at the thread stack's guard page:
+tests/go1.c built without a patch stops at the probe store on
+linux-aarch64 and macOS. One source patch, an exact-match string
+replacement applied to a tree re-extracted on every run, gives that
+``dill_setsp`` a one-instruction asm sp move under ``DILL_BADC_SETSP``;
+it parks sp 64 bytes below the aligned stack top. Without the define the
+patched tree builds with gcc/clang exactly as upstream does.
 
 Idempotent: safe to call from CI before each smoke run. Output is
 suppressed unless something fails -- pass ``-v`` to see every step.
@@ -70,22 +65,7 @@ SETSP_BADC = """#if defined DILL_BADC_SETSP
 #endif
 #endif"""
 
-SETSP_X64_STOCK = """#define dill_setsp(x) \\
-    asm(""::"r"(alloca(sizeof(size_t))));\\
-    asm volatile("leaq (%%rax), %%rsp"::"rax"(x));"""
-
-SETSP_X64_BADC = """#if defined DILL_BADC_SETSP
-#include <stdint.h>
-#define dill_setsp(x) \\
-    asm volatile("mov %0, %%rsp" : : "r"((void*)(((uintptr_t)(x) & ~(uintptr_t)15) - 64)));
-#else
-""" + SETSP_X64_STOCK + """
-#endif"""
-
-PATCHES = (
-    ("libdill.h", SETSP_X64_STOCK, SETSP_X64_BADC),
-    ("libdill.h", SETSP_STOCK, SETSP_BADC),
-)
+PATCHES = (("libdill.h", SETSP_STOCK, SETSP_BADC),)
 
 
 def apply_patches(src: Path, log) -> None:

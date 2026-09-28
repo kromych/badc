@@ -398,7 +398,11 @@ pub(super) fn local_slot_base_disp(
 ) -> (Reg, i64) {
     if off < 0
         && (frame.align_region_off != 0 || frame.realign_align > 0)
-        && let Some(&(_, region_off)) = func.over_aligned.iter().find(|&&(s, _)| s == off)
+        && let Some(region_off) = func
+            .over_aligned
+            .iter()
+            .find(|m| m.slot == off)
+            .map(|m| m.off)
     {
         if frame.align_region_off != 0 {
             (Reg::RBP, frame.align_region_off + region_off)
@@ -756,17 +760,9 @@ pub(super) fn emit_zero_test_of_load(code: &mut Vec<u8>, inst: &Inst, fcx: &FnCt
     Ok(())
 }
 
-/// A store the allocator marked in `Allocation::imm_store`: `mov mem, imm`
-/// of the constant's low bytes at the store's width. The `Imm` was never
-/// materialized, and the store's own value is unread.
-pub(super) fn emit_store_of_imm(
-    code: &mut Vec<u8>,
-    inst: &Inst,
-    func: &FunctionSsa,
-    alloc: &Allocation,
-    frame: Frame,
-    abi: super::Abi,
-) -> Emit {
+/// The width and the immediate of a store the allocator marked in
+/// `Allocation::imm_store`.
+fn store_imm_operand(inst: &Inst, func: &FunctionSsa) -> Emit<(u8, i32)> {
     let (value, kind) = match inst {
         Inst::Store { value, kind, .. }
         | Inst::SegStore { value, kind, .. }
@@ -791,6 +787,21 @@ pub(super) fn emit_store_of_imm(
         },
         _ => return fail("immediate store: value not an Imm"),
     };
+    Ok((width, imm))
+}
+
+/// A store the allocator marked in `Allocation::imm_store`: `mov mem, imm`
+/// of the constant's low bytes at the store's width. The `Imm` was never
+/// materialized, and the store's own value is unread.
+pub(super) fn emit_store_of_imm(
+    code: &mut Vec<u8>,
+    inst: &Inst,
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+    abi: super::Abi,
+) -> Emit {
+    let (width, imm) = store_imm_operand(inst, func)?;
     match inst {
         Inst::Store {
             addr, disp, align, ..
@@ -838,6 +849,114 @@ pub(super) fn emit_store_of_imm(
         }
         _ => unreachable!(),
     }
+    Ok(())
+}
+
+/// The `ImmData` an `abs_base` access names, through the copies a hoist or
+/// a live-range split may have placed in front of it.
+fn abs_base_data(func: &FunctionSsa, mut v: u32) -> Option<u32> {
+    for _ in 0..func.insts.len() {
+        match func.insts.get(v as usize)? {
+            Inst::ImmData(_) => return Some(v),
+            Inst::Copy { value, .. } => v = *value,
+            _ => return None,
+        }
+    }
+    None
+}
+
+/// Lower an indexed access marked `abs_base`: the base's link-time address
+/// is the displacement of `sym(,%index,scale)`, recorded in `refs` for the
+/// writer's `R_X86_64_32S`. The allocator's fused forms apply as to the
+/// register-based access: a zero test and an immediate store.
+pub(super) fn emit_abs_indexed(
+    code: &mut Vec<u8>,
+    refs: &mut Vec<super::AbsAddrRef>,
+    inst: &Inst,
+    v: u32,
+    dst: Place,
+    fcx: &FnCtx,
+) -> Emit {
+    let FnCtx {
+        func,
+        alloc,
+        frame,
+        extern_data_names,
+        ..
+    } = *fcx;
+    let (base, index, scale, width) = match inst {
+        Inst::LoadIndexed {
+            base,
+            index,
+            index_ext: IndexExt::None,
+            scale,
+            kind,
+            ..
+        } => (*base, *index, *scale, int_load_shape(*kind).0),
+        Inst::StoreIndexed {
+            base,
+            index,
+            index_ext: IndexExt::None,
+            scale,
+            kind,
+            ..
+        } => (*base, *index, *scale, int_store_width(*kind)),
+        _ => return fail("indexed access: absolute base on a widening index"),
+    };
+    if width == 0 || u32::from(scale) != width {
+        return fail("indexed access: absolute base on a non-integer or rescaled access");
+    }
+    let target = match abs_base_data(func, base) {
+        Some(d) => match (extern_data_names.get(&d), &func.insts[d as usize]) {
+            (Some(name), _) => super::AbsAddrTarget::Extern(name.clone()),
+            (None, Inst::ImmData(off)) => super::AbsAddrTarget::Data(*off as u64),
+            (None, _) => unreachable!(),
+        },
+        None => return fail("indexed access: absolute base not a data address"),
+    };
+    let Some(ri) = materialize_int(code, place_of(alloc, index), SCRATCH_R10, frame) else {
+        return fail("indexed access: index not int reg / spill");
+    };
+    let marked = |set: &[bool]| set.get(v as usize).copied().unwrap_or(false);
+    let width = width as u8;
+    let field = if marked(&alloc.branch_fused) {
+        super::encode::emit_mi_index_abs(code, Mnem::Cmp, width, (ri, scale), 0)
+    } else if marked(&alloc.imm_store) {
+        let (_, imm) = store_imm_operand(inst, func)?;
+        super::encode::emit_mi_index_abs(code, Mnem::Mov, width, (ri, scale), imm)
+    } else {
+        match inst {
+            Inst::LoadIndexed { kind, .. } => {
+                let Some(rd) = int_or_spill_dst(dst) else {
+                    return fail("LoadIndexed: dst not int reg / spill");
+                };
+                let field = super::encode::emit_load_index_abs(code, *kind, rd, ri, scale);
+                spill_dst_to_slot(code, dst, rd, frame);
+                field
+            }
+            Inst::StoreIndexed { value, kind, .. } => {
+                // r11 is free: the index took r10 at most.
+                let rv = match place_of(alloc, *value) {
+                    Place::FpReg(x) if *kind == StoreKind::I64 => {
+                        super::encode::emit_movq_r_xmm(code, SCRATCH_R11, Reg(x));
+                        SCRATCH_R11
+                    }
+                    p => match materialize_int(code, p, SCRATCH_R11, frame) {
+                        Some(r) => r,
+                        None => return fail("StoreIndexed: value not int reg / spill"),
+                    },
+                };
+                let field = super::encode::emit_store_index_abs(code, width, ri, scale, rv);
+                mirror_int_dst(code, dst, rv, frame);
+                field
+            }
+            _ => unreachable!(),
+        }
+    };
+    refs.push(super::AbsAddrRef {
+        field_offset: field,
+        target,
+    });
     Ok(())
 }
 
@@ -1021,6 +1140,72 @@ pub(super) fn emit_copy_unit(
     emit_store_unit(code, width, dst, disp, temp);
 }
 
+/// Registers a lowering borrows at one site: the free ones of its
+/// candidate list (`site_registers`) first, then ones holding a live
+/// value, each pushed and popped again by [`Self::restore`]. No call
+/// intervenes, so the transient stack misalignment is harmless.
+pub(super) struct SiteRegs {
+    free: Vec<u8>,
+    held: Vec<u8>,
+    next_free: usize,
+    saved: Vec<Reg>,
+}
+
+impl SiteRegs {
+    pub(super) fn new(
+        alloc: &Allocation,
+        v: super::super::ir::ValueId,
+        candidates: &[u8],
+        taken: &[u8],
+        fixed: super::FixedRegs,
+    ) -> Self {
+        let (free, held) =
+            super::ssa::emit_common::site_registers(alloc, v, candidates, taken, fixed);
+        Self {
+            free,
+            held,
+            next_free: 0,
+            saved: Vec::new(),
+        }
+    }
+
+    /// The next free register, if any.
+    pub(super) fn free(&mut self) -> Option<Reg> {
+        let r = self.free.get(self.next_free).copied()?;
+        self.next_free += 1;
+        Some(Reg(r))
+    }
+
+    /// The next free register, else one pushed on the stack; none once the
+    /// candidates are exhausted.
+    pub(super) fn take(&mut self, code: &mut Vec<u8>) -> Option<Reg> {
+        if let Some(r) = self.free() {
+            return Some(r);
+        }
+        let r = Reg(self.held.get(self.saved.len()).copied()?);
+        emit_push_r(code, r);
+        self.saved.push(r);
+        Some(r)
+    }
+
+    /// Pop the saved registers, the last pushed first.
+    pub(super) fn restore(&self, code: &mut Vec<u8>) {
+        for &r in self.saved.iter().rev() {
+            emit_pop_r(code, r);
+        }
+    }
+
+    /// Whether `r` is a pushed register, which the restore overwrites.
+    pub(super) fn borrowed(&self, r: Reg) -> bool {
+        self.saved.contains(&r)
+    }
+
+    /// The bytes the pushes moved rsp down by.
+    pub(super) fn saved_bytes(&self) -> u32 {
+        8 * self.saved.len() as u32
+    }
+}
+
 /// Store the low `width` bytes (8, 4, 2 or 1) of `src` to
 /// `[base + disp]`.
 pub(super) fn emit_store_unit(code: &mut Vec<u8>, width: u32, base: Reg, disp: i32, src: Reg) {
@@ -1073,26 +1258,34 @@ pub(super) fn emit_agg_load_int(
     }
 }
 
-/// [`emit_agg_load_int`] into an SSE register: the eightbyte composes in
-/// `tmp` and moves across with `movq`; the second composition register is
-/// borrowed from the stack, nothing between the push and the pop
-/// addressing rsp. `base` and `tmp` are never `rax`.
+/// [`emit_agg_load_int`] into an SSE register: `width` 8 for a `double` or
+/// two `float`s, 4 for the lone `float` ending an aggregate. Below the
+/// natural access the value composes in `tmp` and moves across with
+/// `movq`; the second composition register is borrowed from the stack,
+/// nothing between the push and the pop addressing rsp. `base` and `tmp`
+/// are never `rax`.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_agg_load_sse(
     code: &mut Vec<u8>,
     dst: Reg,
     base: Reg,
     disp: i32,
+    width: u32,
     align: u32,
     strict_align: bool,
     tmp: Reg,
 ) {
-    if super::super::access_unit(disp.max(0) as u32, 8, align, strict_align) == 8 {
-        emit_movsd_xmm_mem(code, dst, base, disp);
+    if super::super::access_unit(disp.max(0) as u32, width, align, strict_align) == width {
+        if width == 4 {
+            super::encode::emit_movss_xmm_mem(code, dst, base, disp);
+        } else {
+            emit_movsd_xmm_mem(code, dst, base, disp);
+        }
         return;
     }
     debug_assert!(base.0 != Reg::RAX.0 && tmp.0 != Reg::RAX.0);
     emit_push_r(code, Reg::RAX);
-    emit_agg_load_int(code, tmp, base, disp, 8, align, strict_align, Reg::RAX);
+    emit_agg_load_int(code, tmp, base, disp, width, align, strict_align, Reg::RAX);
     super::encode::emit_movq_xmm_r(code, dst, tmp);
     emit_pop_r(code, Reg::RAX);
 }
@@ -1101,7 +1294,7 @@ pub(super) fn emit_agg_load_sse(
 /// disp]`. A `Vector` slot is the whole 128 bits the System V SSE +
 /// SSEUP pair occupies (psABI 3.2.3); `movups` carries no alignment
 /// requirement, so it needs no narrowing. Any other class is the low
-/// eightbyte.
+/// `width` bytes, the eightbyte or what of it the aggregate holds.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_agg_load_slot_sse(
     code: &mut Vec<u8>,
@@ -1109,6 +1302,7 @@ pub(super) fn emit_agg_load_slot_sse(
     dst: Reg,
     base: Reg,
     disp: i32,
+    width: u32,
     align: u32,
     strict_align: bool,
     tmp: Reg,
@@ -1117,7 +1311,7 @@ pub(super) fn emit_agg_load_slot_sse(
         super::encode::emit_movups_xmm_mem(code, dst, base, disp);
         return;
     }
-    emit_agg_load_sse(code, dst, base, disp, align, strict_align, tmp);
+    emit_agg_load_sse(code, dst, base, disp, width, align, strict_align, tmp);
 }
 
 /// The partner of [`emit_agg_load_slot_sse`]: store the slot back to

@@ -22,12 +22,8 @@ Disassembly of section .text:
                	lsr	x3, x3, #62
                	lsl	x3, x3, #2
                	add	x2, x2, x3
-               	str	x10, [sp, #-0x10]!
-               	ldrb	w10, [x2]
-               	strb	w10, [x0]
-               	ldrb	w10, [x2, #0x1]
-               	strb	w10, [x0, #0x1]
-               	ldr	x10, [sp], #0x10
+               	ldrh	w16, [x2]
+               	strh	w16, [x0]
                	ldrsw	x0, [x1, #0x8]
                	ldrb	w3, [x2, #0x2]
                	add	x0, x0, x3

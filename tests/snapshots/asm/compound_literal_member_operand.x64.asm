@@ -29,7 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
+               	movl	%edi, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
                	cmpl	$-0x1, %eax
                	setne	%al
@@ -41,7 +41,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
+               	movl	%edi, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
                	cmpl	$-0x1, %eax
                	sete	%al
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
+               	movl	%edi, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
                	decq	%rax
                	leave
@@ -63,7 +63,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
+               	movl	%edi, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rax
                	cmpl	$-0x1, %eax
                	setne	%al

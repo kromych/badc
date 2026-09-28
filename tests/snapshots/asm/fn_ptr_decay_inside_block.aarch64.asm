@@ -21,15 +21,9 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x30]!
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	mov	x20, #0xcb              // =203
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	cbz	x1, <addr>
                	mov	x0, #0x3                // =3
-               	blr	x1
-               	add	x20, x20, x0
-               	mov	x1, #0x0                // =0
-               	cbnz	x1, <addr>
+               	bl	<addr>
+               	add	x20, x0, #0xcb
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	stur	x0, [x29, #-0x8]

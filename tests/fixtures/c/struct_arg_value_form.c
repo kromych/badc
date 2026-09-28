@@ -1,16 +1,17 @@
 // C99 6.5.2.2p6: a call whose callee has no declared parameter list in
 // scope passes each argument by the default promotions, so a by-value
 // aggregate of at most one machine word travels as that word rather
-// than as the address of the caller's copy. A parameterless function
-// typedef (`typedef unsigned fn_t();`) redeclaring a defined function
-// is one way to reach that state; the Linux kernel's `typeof`-based
-// redeclarations are another.
+// than as the address of the caller's copy. The callee's own definition
+// still declares an aggregate parameter, so it reads the object out of a
+// body local, and both ends have to agree: the SSA interpreter used to
+// treat the value form's word as an address and fault copying from it.
 //
-// The callee's own definition still declares an aggregate parameter, so
-// it reads the object out of a body local. The two forms differ only in
-// what the argument word holds, and both ends have to agree: the SSA
-// interpreter used to treat the value form's word as an address and
-// fault copying from it.
+// A parameterless function typedef (`typedef unsigned fn_t();`)
+// redeclaring a defined function once erased the parameter list and put
+// these calls in the value form. The composite type (C99 6.2.7p4) keeps
+// the list, so the sites below are the address form and pin that; the
+// interpreter's value-form support stays as the guard for a callee whose
+// parameter list the unit never supplies.
 
 typedef struct {
     unsigned val;
@@ -26,7 +27,7 @@ typedef unsigned long long fn2_t();
 unsigned take_kuid(kuid_t k) { return k.val; }
 unsigned long long take_pair(pair_t p) { return ((unsigned long long)p.hi << 32) | p.lo; }
 
-/* The declared parameter list goes out of scope at the call site. */
+/* Redeclared through a function type with an empty list. */
 extern fn1_t take_kuid;
 extern fn2_t take_pair;
 

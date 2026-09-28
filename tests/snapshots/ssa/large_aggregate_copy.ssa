@@ -28,7 +28,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1126
     v23  StoreIndexed { base=v18, index=v15, scale=1, value=v21, kind=I8 } -> -
     v24  Extend { value=v15, kind=I32 }                   -> x1
     v25  BinopI { op=add, lhs=v15, rhs_imm=1 }            -> x0
-    v26  Imm(0)                                           -> x1
+    v26  Extend { value=v25, kind=I32, nsw }              -> x1
     terminator Jmp(b2)   (exit_acc=v25)
   block 2  start_pc=0
     v15  Phi { incoming=[b0:v13, b1:v25], kind=I64 }      -> x0
@@ -114,31 +114,43 @@ fn ent_pc=0 n_params=0 variadic=false locals=1126
     v102 Imm(0)                                           -> x6
     terminator Bnz { cond=v100, target=b5, fall=b4 }   (low word)   (exit_acc=v101)
   block 4  start_pc=0
-    v105 Imm(0)                                           -> x1
-    v106 Imm(8192)                                        -> x1
-    v107 Imm(0)                                           -> x1
-    v108 Extend { value=v35, kind=I8 }                    -> x1
-    v109 Imm(0)                                           -> x2
-    v110 BinopI { op=ne, lhs=v108, rhs_imm=0 }            -> x2
-    v111 Imm(0)                                           -> x2
-    v112 Imm(0)                                           -> x2
-    v113 Imm(0)                                           -> x2
-    terminator Bz { cond=v108, target=b6, fall=b5 }   (low word)   (exit_acc=v110)
-  block 5  start_pc=0
-    v114 Imm(3)                                           -> x0
-    terminator Return(v114)   (exit_acc=v114)
-  block 6  start_pc=0
+    v113 Imm(0)                                           -> x1
+    v114 Imm(8192)                                        -> x1
     v115 Imm(0)                                           -> x1
-    v116 Imm(0)                                           -> x1
-    v117 Extend { value=v37, kind=I32 }                   -> x1
-    v118 BinopI { op=ne, lhs=v37, rhs_imm=1234 }          -> x0
-    terminator Bz { cond=v118, target=b8, fall=b7 }   (exit_acc=v118)
+    v116 Extend { value=v35, kind=I8 }                    -> x1
+    v117 Imm(0)                                           -> x2
+    v118 BinopI { op=ne, lhs=v116, rhs_imm=0 }            -> x2
+    v119 Imm(0)                                           -> x2
+    v120 Imm(0)                                           -> x2
+    v121 Imm(0)                                           -> x2
+    terminator Bz { cond=v116, target=b6, fall=b5 }   (low word)   (exit_acc=v118)
+  block 5  start_pc=0
+    v122 Imm(3)                                           -> x0
+    v123 LifetimeEnd(0)                                   -> -
+    v124 LifetimeEnd(-1126)                               -> -
+    v125 LifetimeEnd(0)                                   -> -
+    v126 LifetimeEnd(0)                                   -> -
+    terminator Return(v122)   (exit_acc=v122)
+  block 6  start_pc=0
+    v127 Imm(0)                                           -> x1
+    v128 Imm(0)                                           -> x1
+    v129 Extend { value=v37, kind=I32 }                   -> x1
+    v130 BinopI { op=ne, lhs=v37, rhs_imm=1234 }          -> x0
+    terminator Bz { cond=v130, target=b8, fall=b7 }   (exit_acc=v130)
   block 7  start_pc=0
-    v119 Imm(4)                                           -> x0
-    terminator Return(v119)   (exit_acc=v119)
+    v131 Imm(4)                                           -> x0
+    v132 LifetimeEnd(0)                                   -> -
+    v133 LifetimeEnd(-1126)                               -> -
+    v134 LifetimeEnd(0)                                   -> -
+    v135 LifetimeEnd(0)                                   -> -
+    terminator Return(v131)   (exit_acc=v131)
   block 8  start_pc=0
-    v120 Imm(0)                                           -> x0
-    terminator Return(v120)   (exit_acc=v120)
+    v136 Imm(0)                                           -> x0
+    v137 LifetimeEnd(0)                                   -> -
+    v138 LifetimeEnd(-1126)                               -> -
+    v139 LifetimeEnd(0)                                   -> -
+    v140 LifetimeEnd(0)                                   -> -
+    terminator Return(v136)   (exit_acc=v136)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=main
 fn ent_pc=1 n_params=0 variadic=false locals=0

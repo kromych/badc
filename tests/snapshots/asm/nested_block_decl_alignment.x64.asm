@@ -28,7 +28,6 @@ Disassembly of section .text:
 <nested_auto>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	subq	$0x40, %rsp
                	andq	$-0x40, %rsp
                	leaq	(%rsp), %rcx
@@ -37,14 +36,13 @@ Disassembly of section .text:
                	testb	$0x3f, %cl
                	jne	<addr>
                	movl	$0x1, %eax
-               	leaq	-0x10(%rbp), %rsp
-               	leave
+               	leaq	(%rbp), %rsp
+               	popq	%rbp
                	retq
 
 <nested_auto_typed>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
                	subq	$0x40, %rsp
                	andq	$-0x40, %rsp
                	leaq	(%rsp), %rcx
@@ -57,8 +55,8 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	leaq	-0x50(%rbp), %rsp
-               	leave
+               	leaq	(%rbp), %rsp
+               	popq	%rbp
                	retq
 
 <main>:

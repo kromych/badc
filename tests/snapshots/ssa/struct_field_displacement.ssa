@@ -4,9 +4,9 @@ fn ent_pc=9 n_params=0 variadic=false locals=4
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-3)                                    -> x0
-    v2   StoreLocal { off=-4, value=v1, kind=I64, volatile } -> -
-    v3   LoadLocal { off=-4, kind=I64, volatile }         -> x0
+    v1   LocalAddr(-4)                                    -> x0
+    v2   StoreLocal { off=-1, value=v1, kind=I64, volatile } -> -
+    v3   LoadLocal { off=-1, kind=I64, volatile }         -> x0
     v4   Imm(0)                                           -> x1
     v5   Imm(0)                                           -> x1
     v6   Imm(1)                                           -> x1
@@ -80,6 +80,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=4
     v74  Imm(6)                                           -> x0
     v75  Imm(0)                                           -> x0
     v76  Imm(0)                                           -> x0
+    v77  LifetimeEnd(-4)                                  -> -
     terminator Return(v76)   (exit_acc=v76)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

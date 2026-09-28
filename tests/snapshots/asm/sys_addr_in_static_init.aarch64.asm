@@ -38,7 +38,7 @@ Disassembly of section .text:
                	mov	x9, x2
                	mov	x2, x1
                	blr	x9
-               	sxtw	x20, w0
+               	mov	x20, x0
                	cmp	w20, #0x0
                	b.ge	<addr>
                	mov	x0, #0x2                // =2

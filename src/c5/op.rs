@@ -293,7 +293,8 @@ pub enum Intrinsic {
 }
 
 /// The type operand of [`Intrinsic::VaArg`], one constant packed as
-/// `by_ref << 25 | (align == 16) << 24 | kind << 16 | size`.
+/// `eightbytes << 29 | elements << 26 | by_ref << 25 | (align == 16) << 24 |
+/// kind << 16 | size`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct VaArgDesc {
     pub size: u32,
@@ -302,15 +303,41 @@ pub(crate) struct VaArgDesc {
     pub align: u32,
     /// The argument's slot holds the address of a copy, not its bytes.
     pub by_ref: bool,
+    /// The element count of a [`Self::HOMOGENEOUS`] aggregate, 0 for the other kinds.
+    pub elements: u8,
+    /// The class of each eightbyte of an [`Self::EIGHTBYTES`] aggregate, two
+    /// bits apiece from the first: 0 for none, else [`Self::EB_INTEGER`],
+    /// [`Self::EB_SSE`] or [`Self::EB_SSEUP`].
+    pub eightbytes: u8,
 }
 
 impl VaArgDesc {
     pub(crate) const INT: u8 = 0;
     pub(crate) const FLOAT: u8 = 1;
     pub(crate) const VECTOR: u8 = 2;
+    /// Passed in memory whatever registers are left: the System V MEMORY
+    /// class a `long double` takes (X87 + X87UP).
+    pub(crate) const MEMORY: u8 = 3;
+    /// An AAPCS64 homogeneous aggregate: one SIMD register per element,
+    /// each saved in its own 16-byte slot of the vector area.
+    pub(crate) const HOMOGENEOUS: u8 = 4;
+    /// A System V aggregate in registers whose eightbytes are not all
+    /// INTEGER: each comes from the save area of its class (3.5.7).
+    pub(crate) const EIGHTBYTES: u8 = 5;
+
+    pub(crate) const EB_INTEGER: u8 = 1;
+    pub(crate) const EB_SSE: u8 = 2;
+    pub(crate) const EB_SSEUP: u8 = 3;
+
+    /// The class of eightbyte `k` of an [`Self::EIGHTBYTES`] aggregate.
+    pub(crate) fn eightbyte(self, k: u32) -> u8 {
+        (self.eightbytes >> (2 * k)) & 3
+    }
 
     pub(crate) fn pack(self) -> i64 {
-        (i64::from(self.by_ref) << 25)
+        (i64::from(self.eightbytes & 0xf) << 29)
+            | (i64::from(self.elements & 7) << 26)
+            | (i64::from(self.by_ref) << 25)
             | (i64::from(self.align > 8) << 24)
             | (i64::from(self.kind) << 16)
             | i64::from(self.size & 0xffff)
@@ -322,6 +349,8 @@ impl VaArgDesc {
             kind: ((d >> 16) & 0xff) as u8,
             align: if (d >> 24) & 1 != 0 { 16 } else { 8 },
             by_ref: (d >> 25) & 1 != 0,
+            elements: ((d >> 26) & 7) as u8,
+            eightbytes: ((d >> 29) & 0xf) as u8,
         }
     }
 }

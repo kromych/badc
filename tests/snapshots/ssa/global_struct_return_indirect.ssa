@@ -52,37 +52,40 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Bz { cond=v38, target=b4, fall=b3 }   (exit_acc=v38)
   block 3  start_pc=0
     v42  Imm(1)                                           -> x0
+    v43  LifetimeEnd(0)                                   -> -
     terminator Return(v42)   (exit_acc=v42)
   block 4  start_pc=0
-    v43  Imm(0)                                           -> x1
     v44  Imm(0)                                           -> x1
     v45  Imm(0)                                           -> x1
-    v46  ImmData(8)                                       -> x1
-    v47  Load { addr=v4, disp=0, kind=U32 }               -> x1
-    v48  Imm(0)                                           -> x2
+    v46  Imm(0)                                           -> x1
+    v47  ImmData(8)                                       -> x1
+    v48  Load { addr=v4, disp=0, kind=U32 }               -> x1
     v49  Imm(0)                                           -> x2
-    v50  BinopI { op=and, lhs=v47, rhs_imm=4294967295 }   -> x2
-    v51  Imm(0)                                           -> x2
+    v50  Imm(0)                                           -> x2
+    v51  BinopI { op=and, lhs=v48, rhs_imm=4294967295 }   -> x2
     v52  Imm(0)                                           -> x2
     v53  Imm(0)                                           -> x2
-    v54  ImmData(8)                                       -> x2
-    v55  Load { addr=v4, disp=16, kind=U32 }              -> x0
-    v56  Imm(0)                                           -> x2
+    v54  Imm(0)                                           -> x2
+    v55  ImmData(8)                                       -> x2
+    v56  Load { addr=v4, disp=16, kind=U32 }              -> x0
     v57  Imm(0)                                           -> x2
     v58  Imm(0)                                           -> x2
-    v59  Extend { value=v55, kind=I32 }                   -> x2
-    v60  Binop { op=add, lhs=v47, rhs=v55 }               -> x0
-    v61  BinopI { op=and, lhs=v60, rhs_imm=4294967295 }   -> x1
-    v62  Imm(0)                                           -> x1
-    v63  Extend { value=v60, kind=I32 }                   -> x1
-    v64  BinopI { op=ne, lhs=v60, rhs_imm=6 }             -> x0
-    terminator Bz { cond=v64, target=b6, fall=b5 }   (exit_acc=v64)
+    v59  Imm(0)                                           -> x2
+    v60  Extend { value=v56, kind=I32 }                   -> x2
+    v61  Binop { op=add, lhs=v48, rhs=v56 }               -> x0
+    v62  BinopI { op=and, lhs=v61, rhs_imm=4294967295 }   -> x1
+    v63  Imm(0)                                           -> x1
+    v64  Extend { value=v61, kind=I32 }                   -> x1
+    v65  BinopI { op=ne, lhs=v61, rhs_imm=6 }             -> x0
+    terminator Bz { cond=v65, target=b6, fall=b5 }   (exit_acc=v65)
   block 5  start_pc=0
-    v65  Imm(2)                                           -> x0
-    terminator Return(v65)   (exit_acc=v65)
-  block 6  start_pc=0
-    v66  Imm(0)                                           -> x0
+    v66  Imm(2)                                           -> x0
+    v67  LifetimeEnd(0)                                   -> -
     terminator Return(v66)   (exit_acc=v66)
+  block 6  start_pc=0
+    v68  Imm(0)                                           -> x0
+    v69  LifetimeEnd(0)                                   -> -
+    terminator Return(v68)   (exit_acc=v68)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

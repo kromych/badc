@@ -26,17 +26,9 @@ Disassembly of section .text:
                	int3
 
 <sum_pair>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rcx
-               	movslq	(%rcx), %rax
-               	movslq	0x4(%rcx), %rdx
-               	addq	%rdx, %rax
-               	movl	$0xffffffff, (%rcx)     # imm = 0xFFFFFFFF
-               	movl	$0xffffffff, 0x4(%rcx)  # imm = 0xFFFFFFFF
-               	leave
+               	movq	%rdi, %rax
+               	shrq	$0x20, %rax
+               	addq	%rdi, %rax
                	retq
 
 <main>:

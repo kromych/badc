@@ -107,7 +107,7 @@ catalog! {
         "an initializer names a `static` function this unit declares and never defines";
     2007, "redeclaration-mismatch", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a redeclaration whose signature differs from the previous one";
+        "a function redeclaration incompatible under C99 that GNU C accepts: a qualified return type, an implicit `int` body for a `void` declaration, an old-style definition matching its prototype only before promotion";
     2008, "attributes", ["ignored-attributes"], Warning, Controllable,
         [DEFAULT], Live,
         "an attribute the declaration cannot carry, so it is ignored";
@@ -140,12 +140,12 @@ catalog! {
         "control reaches the end of a value-returning function";
     3004, "too-few-arguments", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a call passing fewer arguments than the prototype declares";
+        "a call passing fewer arguments than an old-style definition or a libc binding's prototype declares";
     3005, "too-many-arguments", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a call passing more arguments than the prototype declares";
+        "a call passing more arguments than an old-style definition or a libc binding's prototype declares";
     3006, "long-double-abi", ["psabi"], Warning, Controllable,
-        [DEFAULT], Live,
+        [DEFAULT], Retired,
         "a `long double` argument passed in a format this target's ABI does not use";
     3007, "dead-store", [], Ignore, Controllable,
         [], Live,
@@ -161,10 +161,10 @@ catalog! {
         "an initializer C99 6.7.8 rejects: a mismatched brace form, a designator naming nothing, an index out of range";
     3023, "invalid-arguments", [], Error, Hard,
         [], Live,
-        "a builtin or intrinsic called with arguments it does not take";
+        "a call with arguments its callee does not take: a count other than a prototype's, or a builtin's or intrinsic's operand it rejects";
     3024, "invalid-statement", [], Error, Hard,
         [], Live,
-        "a statement outside the construct it needs: `break` outside a loop, `case` outside a switch, a `goto` to no label";
+        "a statement outside the construct it needs: `break` outside a loop, `case` outside a switch, a `goto` to no label, a jump into a statement expression or into the scope of a variably modified or cleanup object";
     3025, "incompatible-types", [], Error, Hard,
         [], Live,
         "a value of a type no implicit conversion takes to the type required: an aggregate assigned, passed or returned as another";
@@ -177,6 +177,9 @@ catalog! {
     3028, "controlling-expression", [], Error, Hard,
         [], Live,
         "a controlling expression of a type its statement does not take: a non-scalar `if`, `while`, `do` or `for` condition, a non-integer `switch` expression";
+    3029, "incompatible-pointer-types", ["incompatible-function-pointer-types"], Error, Controllable,
+        [DEFAULT], Live,
+        "a pointer to a function assigned, initialized or returned as a pointer to an incompatible function type";
     4001, "unsupported", [], Error, Hard,
         [], Live,
         "a well-formed construct badc does not implement";
@@ -390,6 +393,7 @@ impl Code {
     pub const RETURN_MISMATCH: Code = Code::new(3026);
     pub const VOID_VALUE: Code = Code::new(3027);
     pub const CONTROLLING_EXPRESSION: Code = Code::new(3028);
+    pub const INCOMPATIBLE_POINTER_TYPES: Code = Code::new(3029);
     pub const UNSUPPORTED: Code = Code::new(4001);
     pub const LIMIT: Code = Code::new(4002);
     pub const INLINE: Code = Code::new(4003);

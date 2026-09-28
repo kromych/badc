@@ -89,7 +89,7 @@
 char *dlopen(char *path, int flags);
 char *dlsym(char *handle, char *name);
 int dlclose(char *handle);
-char *dlerror();
+char *dlerror(void);
 
 #ifndef __BADC_WINDOWS__
 // Symbol / module lookup for an address (POSIX `dladdr`).

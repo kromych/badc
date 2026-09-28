@@ -14,57 +14,46 @@ Disassembly of section .text:
                	brk	#0x1
 
 <leaves_by_patched_branch>:
-               	str	x20, [sp, #-0x30]!
-               	stp	x29, x30, [sp, #0x20]
-               	add	x29, sp, #0x20
-               	mov	x2, x0
-               	adr	x0, <addr>
-               	str	x2, [sp, #0x10]
-               	str	x0, [sp, #0x18]
-               	ldr	x0, [sp, #0x10]
-               	ldr	x1, [sp, #0x18]
+               	str	x20, [sp, #-0x20]!
+               	stp	x29, x30, [sp, #0x10]
+               	add	x29, sp, #0x10
+               	adr	x1, <addr>
                	mov	x20, xzr
                	br	x1
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x20, [sp], #0x30
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	x20, [sp], #0x20
                	ret
-               	add	x0, x2, #0x1
-               	ldp	x29, x30, [sp, #0x20]
-               	ldr	x20, [sp], #0x30
+               	add	x0, x0, #0x1
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	x20, [sp], #0x20
                	ret
 
 <main>:
-               	str	x20, [sp, #-0x40]!
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
-               	stur	xzr, [x29, #-0x8]
+               	str	x20, [sp, #-0x30]!
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	mov	x0, #0x6                // =6
                	bl	<addr>
                	cmp	x0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x20, [sp], #0x40
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
-               	str	x30, [sp, #0x18]
-               	sub	x16, x29, #0x8
-               	str	x16, [sp, #0x10]
+               	str	x30, [sp, #0x10]
                	mov	x20, #0x65              // =101
                	mov	x0, #0x6                // =6
                	bl	<addr>
                	add	x1, x0, x20
-               	ldr	x16, [sp, #0x10]
-               	str	x1, [x16]
-               	ldr	x30, [sp, #0x18]
-               	ldur	x0, [x29, #-0x8]
-               	cmp	x0, #0x6c
+               	ldr	x30, [sp, #0x10]
+               	cmp	x1, #0x6c
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x20, [sp], #0x40
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret
                	mov	x0, #0x2a               // =42
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x20, [sp], #0x40
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	x20, [sp], #0x30
                	ret

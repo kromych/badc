@@ -120,6 +120,13 @@ pub(crate) fn fold_binop(op: BinOp, lhs: i64, rhs: i64) -> Option<i64> {
     apply_binop(op, lhs, rhs).ok()
 }
 
+/// `Inst::Udiv128`; `None` where the quotient passes 64 bits (`hi >=
+/// divisor`, zero included), where x86-64 `div` faults.
+pub(crate) fn udiv128(hi: i64, lo: i64, divisor: i64) -> Option<i64> {
+    let (hi, lo, divisor) = (hi as u64, lo as u64, divisor as u64);
+    (hi < divisor).then(|| ((u128::from(hi) << 64 | u128::from(lo)) / u128::from(divisor)) as i64)
+}
+
 /// `Inst::Extend`: discard the bits above `kind`'s width and
 /// replicate the sign bit (C99 6.3.1.3). Kinds outside the signed
 /// narrow set pass through unchanged.

@@ -1331,12 +1331,19 @@ fn split_asm_subsections_lifts_supported_shape() {
     assert!(main.contains("tpidr_el1") && main.contains(".altinstructions"));
     assert!(deferred.contains("tpidr_el2") && deferred.contains("663:"));
     assert!(!deferred.contains("tpidr_el1"));
+    // Chained regions all lift, ordered by subsection number and then by
+    // position, as GNU as lays the subsections of a section out.
+    let chained = "nop\n.subsection 2\nisb\n.previous\nmov x0, x1\n.subsection 1\n\
+                   dmb osh\n.previous\n.subsection 1\nldar x0, [x1]\n.previous\n";
+    let (main, deferred) = split_asm_subsections(chained);
+    assert_eq!(main, "nop\nmov x0, x1\n\n");
+    assert_eq!(deferred, "dmb osh\nldar x0, [x1]\nisb\n");
     // Shapes the split does not lift are left intact for the backstop: an
-    // open region (no `.previous`), a second region, and a `.subsection`
-    // nested in a `.pushsection`.
+    // open region (no `.previous`), a region inside a region, and a
+    // `.subsection` nested in a `.pushsection`.
     for unlifted in [
         "nop\n.subsection 1\nnop\n",
-        ".subsection 1\nnop\n.previous\n.subsection 1\nnop\n.previous\n",
+        ".subsection 1\nnop\n.subsection 2\nnop\n.previous\n",
         ".pushsection .x,\"ax\"\n.subsection 1\nnop\n.previous\n.popsection\n",
     ] {
         let (main, deferred) = split_asm_subsections(unlifted);
@@ -1347,6 +1354,39 @@ fn split_asm_subsections_lifts_supported_shape() {
     let (main, deferred) = split_asm_subsections("nop\nret\n");
     assert_eq!(main, "nop\nret\n");
     assert!(deferred.is_empty());
+}
+
+#[test]
+fn repeated_numeric_labels_are_numbered_apart_by_position() {
+    // Two chained ALTERNATIVEs define 661..664 twice. Each reference takes
+    // the definition GNU as binds it to -- `Nb` the nearest before it, `Nf`
+    // the nearest after -- under a number above every one the text names.
+    let text = "661:\n\tnop\n662:\n.word 661b - .\n.word 663f - .\n.byte 662b-661b\n\
+                .subsection 1\n663:\n\tdmb osh\n664:\n.previous\n\
+                661:\n\tldr x0, [x1]\n662:\n.word 661b - .\n.word 663f - .\n\
+                .subsection 1\n663:\n\tldar x0, [x1]\n664: .byte 664b-663b\n.previous\n\
+                1: b 1b; 1: b 1f; 1: ret\n";
+    let out = number_local_labels_apart(text).expect("repeated labels");
+    assert_eq!(
+        out,
+        "668:\n\tnop\n670:\n.word 668b - .\n.word 672f - .\n.byte 670b-668b\n\
+         .subsection 1\n672:\n\tdmb osh\n674:\n.previous\n\
+         669:\n\tldr x0, [x1]\n671:\n.word 669b - .\n.word 673f - .\n\
+         .subsection 1\n673:\n\tldar x0, [x1]\n675: .byte 675b-673b\n.previous\n\
+         665: b 665b; 666: b 667f; 667: ret\n"
+    );
+    // Hex literals are not label references, quoted text (UTF-8 included) is
+    // kept, and a template without a repeated label is left alone.
+    let lits = "1: mov x0, #0x1b\n1: .ascii \"1b\"\nb 1b\n";
+    assert_eq!(
+        number_local_labels_apart(lits).as_deref(),
+        Some("2: mov x0, #0x1b\n3: .ascii \"1b\"\nb 3b\n")
+    );
+    assert_eq!(
+        number_local_labels_apart("1: nop\n.ascii \"\u{e9}1b\"\n1: b 1b\n").as_deref(),
+        Some("2: nop\n.ascii \"\u{e9}1b\"\n3: b 3b\n")
+    );
+    assert_eq!(number_local_labels_apart("1: nop\nb 1b\n2: b 2b\n"), None);
 }
 
 #[test]

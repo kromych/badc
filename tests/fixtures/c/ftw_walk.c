@@ -37,6 +37,11 @@ int main(void) {
         fclose(f);
     }
     int r = ftw(dir, visit, 16);
+    for (int i = 0; i < 3; i++) {
+        snprintf(path, sizeof path, "%s/f%d", dir, i);
+        remove(path);
+    }
+    remove(dir);
     // The directory itself plus its three files: at least four entries.
     return (r == 0 && seen >= 4) ? 0 : 3;
 }

@@ -29,39 +29,33 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	xorl	%eax, %eax
                	leaq	0x8(%rcx), %rdx
-               	movslq	%eax, %rsi
-               	cmpq	$0x0, (%rdx,%rsi,8)
+               	cmpq	$0x0, (%rdx,%rax,8)
                	je	<addr>
                	incq	%rax
                	leaq	0x8(%rcx), %rdx
-               	movslq	%eax, %rsi
-               	cmpq	$0x0, (%rdx,%rsi,8)
+               	cmpq	$0x0, (%rdx,%rax,8)
                	jne	<addr>
                	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rcx
                	xorl	%eax, %eax
                	leaq	0x8(%rcx), %rdx
-               	movslq	%eax, %rsi
-               	cmpq	$0x0, (%rdx,%rsi,8)
+               	cmpq	$0x0, (%rdx,%rax,8)
                	je	<addr>
                	incq	%rax
                	leaq	0x8(%rcx), %rdx
-               	movslq	%eax, %rsi
-               	cmpq	$0x0, (%rdx,%rsi,8)
+               	cmpq	$0x0, (%rdx,%rax,8)
                	jne	<addr>
                	cmpl	$0x1, %eax
                	jne	<addr>
                	leaq	<rip>, %rcx
                	xorl	%eax, %eax
                	leaq	0x8(%rcx), %rdx
-               	movslq	%eax, %rsi
-               	cmpq	$0x0, (%rdx,%rsi,8)
+               	cmpq	$0x0, (%rdx,%rax,8)
                	je	<addr>
                	incq	%rax
                	leaq	0x8(%rcx), %rdx
-               	movslq	%eax, %rsi
-               	cmpq	$0x0, (%rdx,%rsi,8)
+               	cmpq	$0x0, (%rdx,%rax,8)
                	jne	<addr>
                	cmpl	$0x2, %eax
                	je	<addr>
@@ -69,12 +63,10 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rcx
                	xorl	%eax, %eax
-               	movslq	%eax, %rdx
-               	cmpb	$0x0, (%rcx,%rdx)
+               	cmpb	$0x0, (%rcx,%rax)
                	je	<addr>
                	incq	%rax
-               	movslq	%eax, %rdx
-               	cmpb	$0x0, (%rcx,%rdx)
+               	cmpb	$0x0, (%rcx,%rax)
                	jne	<addr>
                	addq	$0x27, %rax
                	subq	$0x2, %rax

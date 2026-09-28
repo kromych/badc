@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=main
-fn ent_pc=0 n_params=0 variadic=false locals=2
+fn ent_pc=0 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -13,7 +13,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
-    v10  LocalAddr(-2)                                    -> x0
+    v10  LocalAddr(-1)                                    -> x0
     v11  Imm(0)                                           -> x0
     v12  Imm(0)                                           -> x0
     v13  Imm(0)                                           -> x0
@@ -65,7 +65,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v59  Imm(0)                                           -> x0
     v60  Imm(0)                                           -> x0
     v61  Imm(0)                                           -> x0
-    v62  LocalAddr(-2)                                    -> x0
+    v62  LocalAddr(-1)                                    -> x0
     v63  Imm(0)                                           -> x0
     v64  Imm(0)                                           -> x0
     v65  Imm(0)                                           -> x0
@@ -217,6 +217,15 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v211 Imm(0)                                           -> x0
     v212 Imm(0)                                           -> x0
     v213 Imm(0)                                           -> x0
+    v214 LifetimeEnd(0)                                   -> -
+    v215 LifetimeEnd(0)                                   -> -
+    v216 LifetimeEnd(0)                                   -> -
+    v217 LifetimeEnd(0)                                   -> -
+    v218 LifetimeEnd(0)                                   -> -
+    v219 LifetimeEnd(0)                                   -> -
+    v220 LifetimeEnd(0)                                   -> -
+    v221 LifetimeEnd(-1)                                  -> -
+    v222 LifetimeEnd(-1)                                  -> -
     terminator Return(v213)   (exit_acc=v213)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

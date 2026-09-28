@@ -26,81 +26,54 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
-               	pushq	%rbx
-               	movl	$0x7, %ebx
-               	movl	$0x7, %ecx
-               	cmpq	%rcx, %rbx
+               	movl	$0x7, %r10d
+               	movl	$0x7, %r11d
+               	cmpq	%r11, %r10
                	pushfq
                	popq	%rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	testb	$0x40, %al
                	jne	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
-               	leave
                	retq
-               	movl	$0x7, %ebx
-               	movl	$0x9, %ecx
-               	cmpq	%rcx, %rbx
+               	movl	$0x7, %r10d
+               	movl	$0x9, %r11d
+               	cmpq	%r11, %r10
                	pushfq
                	popq	%rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	testb	$0x40, %al
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbx
-               	leave
                	retq
-               	movl	$0x1234, %ebx           # imm = 0x1234
-               	pushw	%bx
+               	movl	$0x1234, %r10d          # imm = 0x1234
+               	pushw	%r10w
                	popw	%ax
-               	movw	%ax, -0x8(%rbp)
-               	movzwq	-0x8(%rbp), %rax
+               	andq	$0xffff, %rax           # imm = 0xFFFF
                	xorq	$0x1234, %rax           # imm = 0x1234
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbx
-               	leave
                	retq
-               	movl	$0xbeef, %ebx           # imm = 0xBEEF
-               	pushw	%bx
+               	movl	$0xbeef, %r10d          # imm = 0xBEEF
+               	pushw	%r10w
                	popw	%ax
-               	movw	%ax, -0x8(%rbp)
-               	movzwq	-0x8(%rbp), %rax
+               	andq	$0xffff, %rax           # imm = 0xFFFF
                	xorq	$0xbeef, %rax           # imm = 0xBEEF
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbx
-               	leave
                	retq
-               	movl	$0x3, %ebx
-               	movl	$0x3, %ecx
-               	cmpq	%rcx, %rbx
+               	movl	$0x3, %r10d
+               	movl	$0x3, %r11d
+               	cmpq	%r11, %r10
                	pushfq
                	popq	%rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
-               	movq	%rax, %rbx
-               	pushq	%rbx
+               	pushq	%rax
                	popfq
                	pushfq
                	popq	%rax
-               	movq	%rax, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rax
                	testb	$0x40, %al
                	jne	<addr>
                	movl	$0x5, %eax
-               	popq	%rbx
-               	leave
                	retq
                	xorl	%eax, %eax
-               	popq	%rbx
-               	leave
                	retq

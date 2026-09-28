@@ -49,7 +49,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movq	%rsi, %rdx
                	callq	*%rax
-               	movslq	%eax, %rbx
+               	movq	%rax, %rbx
                	testl	%ebx, %ebx
                	jge	<addr>
                	movl	$0x2, %eax

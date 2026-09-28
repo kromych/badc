@@ -1215,10 +1215,12 @@ pub(crate) fn split_top_commas(s: &str) -> alloc::vec::Vec<&str> {
 /// `.subsection` replacement code GNU as appends to the section after the
 /// main content. The kernel `ALTERNATIVE` macro places the replacement in
 /// `.subsection 1` bracketed by `.previous`, out of the main sequence's
-/// fall-through path. Returns `(main, deferred)`; `deferred` is empty (and
-/// `main` is `text` unchanged) when there is no `.subsection` or when its
-/// shape is one this pass does not lift: nested in a `.pushsection`, without
-/// a closing `.previous`, a second region in the same template, or a
+/// fall-through path, and a template may chain several. Returns `(main,
+/// deferred)`: `deferred` holds every region, ordered by subsection number
+/// and then by position, as GNU as lays a section's subsections out. It is
+/// empty (and `main` is `text` unchanged) when there is no `.subsection` or
+/// when a shape is one this pass does not lift: nested in a `.pushsection`,
+/// without a closing `.previous`, nested in another region, or a
 /// non-numeric subsection number. `extract_asm_sections` then rejects the
 /// left-in `.subsection` rather than this dropping it silently.
 pub(crate) fn split_asm_subsections(text: &str) -> (alloc::string::String, alloc::string::String) {
@@ -1232,12 +1234,12 @@ pub(crate) fn split_asm_subsections(text: &str) -> (alloc::string::String, alloc
         return unchanged();
     }
     let mut main = alloc::string::String::with_capacity(text.len());
-    let mut deferred = alloc::string::String::new();
+    // Each region's subsection number and lines, in source order.
+    let mut regions: alloc::vec::Vec<(u32, alloc::string::String)> = alloc::vec::Vec::new();
     // `.pushsection` / `.popsection` nesting; a `.subsection` is a code-stream
-    // directive only at depth 0. `seen` guards against a second region.
+    // directive only at depth 0.
     let mut push_depth: i32 = 0;
     let mut in_deferred = false;
-    let mut seen = false;
     for line in text.split('\n') {
         let t = line.trim();
         let tok = t.split(char::is_whitespace).next().unwrap_or("");
@@ -1248,16 +1250,15 @@ pub(crate) fn split_asm_subsections(text: &str) -> (alloc::string::String, alloc
             ".popsection" if !in_deferred => {
                 push_depth -= 1;
             }
-            ".subsection" if push_depth == 0 && !in_deferred && !seen => {
+            ".subsection" if push_depth == 0 && !in_deferred => {
                 let n = t[tok.len()..].trim();
                 match n.parse::<u32>() {
-                    Ok(0) => return unchanged(),
-                    Ok(_) => {
+                    Ok(0) | Err(_) => return unchanged(),
+                    Ok(n) => {
                         in_deferred = true;
-                        seen = true;
+                        regions.push((n, alloc::string::String::new()));
                         continue;
                     }
-                    Err(_) => return unchanged(),
                 }
             }
             ".subsection" => return unchanged(),
@@ -1267,17 +1268,18 @@ pub(crate) fn split_asm_subsections(text: &str) -> (alloc::string::String, alloc
             }
             _ => {}
         }
-        if in_deferred {
-            deferred.push_str(line);
-            deferred.push('\n');
-        } else {
-            main.push_str(line);
-            main.push('\n');
-        }
+        let out = match regions.last_mut() {
+            Some((_, lines)) if in_deferred => lines,
+            _ => &mut main,
+        };
+        out.push_str(line);
+        out.push('\n');
     }
     // A region left open (no `.previous`) is a shape this pass does not lift.
     if in_deferred {
         return unchanged();
     }
+    regions.sort_by_key(|&(n, _)| n);
+    let deferred = regions.into_iter().map(|(_, lines)| lines).collect();
     (main, deferred)
 }

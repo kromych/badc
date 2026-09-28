@@ -28,20 +28,14 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x38, %rsp
+               	subq	$0x8, %rsp
                	pushq	%rbx
                	xorl	%eax, %eax
                	cpuid
-               	movl	%eax, -0x10(%rbp)
-               	movl	-0x10(%rbp), %esi
+               	movq	%rax, %rsi
                	xorl	%eax, %eax
                	xorl	%ecx, %ecx
                	cpuid
-               	movl	%eax, -0x10(%rbp)
-               	movl	%ebx, -0x18(%rbp)
-               	movl	%ecx, -0x20(%rbp)
-               	movl	%edx, -0x28(%rbp)
-               	movl	-0x10(%rbp), %eax
                	cmpl	%eax, %esi
                	jne	<addr>
                	xorl	%eax, %eax

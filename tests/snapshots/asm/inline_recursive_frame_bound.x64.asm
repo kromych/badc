@@ -39,7 +39,7 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %r14
-               	movslq	%esi, %r12
+               	movq	%rsi, %r12
                	xorl	%ebx, %ebx
                	leaq	-0x100(%rbp), %r13
                	leaq	(%r12,%rbx), %rdi

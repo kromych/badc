@@ -72,10 +72,8 @@ Disassembly of section .text:
                	retq
                	leaq	-0x8(%rbp), %rax
                	leaq	<rip>, %rcx
-               	pushq	%rdx
-               	movq	(%rcx), %rdx
-               	movq	%rdx, (%rax)
-               	popq	%rdx
+               	movq	(%rcx), %r10
+               	movq	%r10, (%rax)
                	movl	(%rax), %ecx
                	movl	0x4(%rax), %eax
                	cmpl	$0x7, %ecx

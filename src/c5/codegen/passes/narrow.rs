@@ -248,11 +248,13 @@ mod tests {
             Inst::Imm(0),
             Inst::Extend {
                 value: 0,
-                kind: LoadKind::I32
+                kind: LoadKind::I32,
+                nsw: false
             },
             Inst::Extend {
                 value: 0,
-                kind: LoadKind::I32
+                kind: LoadKind::I32,
+                nsw: false
             },
             Inst::Binop {
                 op: BinOp::Lt,
@@ -269,7 +271,8 @@ mod tests {
             Inst::Imm(0),
             Inst::Extend {
                 value: 0,
-                kind: LoadKind::I32
+                kind: LoadKind::I32,
+                nsw: false
             },
             load(LoadKind::I64),
             Inst::Binop {
@@ -296,7 +299,8 @@ mod tests {
             },
             Inst::Extend {
                 value: 0,
-                kind: LoadKind::I32
+                kind: LoadKind::I32,
+                nsw: false
             },
             Inst::Binop {
                 op: BinOp::Ult,
@@ -316,7 +320,8 @@ mod tests {
             Inst::Imm(0),
             Inst::Extend {
                 value: 0,
-                kind: LoadKind::I32
+                kind: LoadKind::I32,
+                nsw: false
             },
             load(LoadKind::U32),
             Inst::Binop {
@@ -344,7 +349,8 @@ mod tests {
             Inst::Imm(-8589934588),
             Inst::Extend {
                 value: 0,
-                kind: LoadKind::I32
+                kind: LoadKind::I32,
+                nsw: false
             },
             Inst::Binop {
                 op: BinOp::Ne,
@@ -389,7 +395,8 @@ mod tests {
             Inst::Imm(0),
             Inst::Extend {
                 value: 0,
-                kind: LoadKind::I32
+                kind: LoadKind::I32,
+                nsw: false
             },
             Inst::BinopI {
                 op: BinOp::Lt,
@@ -482,7 +489,8 @@ mod tests {
             Inst::Imm(1),
             Inst::Extend {
                 value: 0,
-                kind: LoadKind::I32
+                kind: LoadKind::I32,
+                nsw: false
             },
             Inst::Binop {
                 op: BinOp::Add,

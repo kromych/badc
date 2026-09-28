@@ -22,9 +22,9 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x3, x0
                	mov	x2, x0
-               	mov	x6, sp
                	ldursw	x1, [x29, #-0x10]
                	lsl	x4, x1, #18
+               	mov	x6, sp
                	add	x17, x4, #0xf
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x1, sp

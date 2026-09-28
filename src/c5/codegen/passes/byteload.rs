@@ -114,7 +114,7 @@ fn eval_const(func: &FunctionSsa, v: ValueId, depth: u32) -> Option<i64> {
             let r = eval_const(func, *rhs, depth + 1)?;
             apply(*op, l, r)
         }
-        Inst::Extend { value, kind } => {
+        Inst::Extend { value, kind, .. } => {
             let x = eval_const(func, *value, depth + 1)?;
             Some(match kind {
                 LoadKind::I8 => x as i8 as i64,
@@ -260,7 +260,7 @@ impl Assembly<'_> {
                 let (lhs, keep) = (*lhs, *rhs_imm as u64);
                 self.clear(node, lhs, keep, shift, depth)
             }
-            Some(Inst::Extend { value, kind }) => match zext_mask(*kind) {
+            Some(Inst::Extend { value, kind, .. }) => match zext_mask(*kind) {
                 Some(keep) => {
                     let value = *value;
                     self.clear(node, value, keep, shift, depth)
@@ -480,7 +480,7 @@ fn resolve_stored_byte(func: &FunctionSsa, value: ValueId) -> (ValueId, u32) {
                 lhs,
                 rhs_imm,
             }) if byte_survives(*rhs_imm as u64, shift) => cur = *lhs,
-            Some(Inst::Extend { value, kind })
+            Some(Inst::Extend { value, kind, .. })
                 if extend_keeps_low(*kind).is_some_and(|w| shift + 8 <= w) =>
             {
                 cur = *value
@@ -766,10 +766,12 @@ mod tests {
             is_always_inline: false,
             is_noinline: false,
             is_naked: false,
+            is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             section: None,
             patchable_entry: None,
             no_instrument: false,
+            no_stack_protector: false,
             is_weak: false,
             is_internal: false,
             const_params: 0,
@@ -778,6 +780,7 @@ mod tests {
             cmp32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
+            param_widths: crate::c5::ir::ArgWidths::default(),
             agg_descs: Vec::new(),
             param_aggs: Vec::new(),
             param_local_slots: Vec::new(),
@@ -1058,6 +1061,8 @@ mod tests {
                     fixed_args: 0,
                     fp_return: false,
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                    low_word_args: 0,
+                    arg_widths: crate::c5::ir::ArgWidths::default(),
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,

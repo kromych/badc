@@ -7,19 +7,16 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %rbx
                	movq	%rsp, %rax
                	callq	*(%rip)                 # <addr>
 		R_X86_64_PC32	pv_ops-0x4
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %r12
+               	movq	%rax, %r12
                	movq	%rsp, %rax
                	callq	*(%rip)                 # <addr>
 		R_X86_64_PC32	pv_ops+0x4
-               	movq	%rax, -0x8(%rbp)
                	movq	%rbx, %rdi
                	callq	<addr>
 		R_X86_64_PLT32	raw_spin_trylock-0x4
@@ -31,14 +28,14 @@ Disassembly of section .text:
                	movq	%r12, %rax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	popq	%rbp
                	retq
 
 <spin_unlock_irqrestore>:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x8, %rsp
                	pushq	%rbx
                	movq	%rsi, %rbx
                	callq	<addr>
@@ -48,7 +45,6 @@ Disassembly of section .text:
                	movq	%rsp, %rax
                	callq	*(%rip)                 # <addr>
 		R_X86_64_PC32	pv_ops+0xc
-               	movq	%rax, -0x8(%rbp)
                	popq	%rbx
                	leave
                	retq
@@ -57,22 +53,18 @@ Disassembly of section .text:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movq	%rsp, %rax
                	callq	*(%rip)                 # <addr>
 		R_X86_64_PC32	pv_ops+0xc
-               	movq	%rax, -0x8(%rbp)
-               	leave
+               	popq	%rbp
                	retq
 
 <local_irq_disable>:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movq	%rsp, %rax
                	callq	*(%rip)                 # <addr>
 		R_X86_64_PC32	pv_ops+0x4
-               	movq	%rax, -0x8(%rbp)
-               	leave
+               	popq	%rbp
                	retq

@@ -10,7 +10,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
   block 1  start_pc=0
     v5   Imm(0)                                           -> x1
     v6   BinopI { op=sub, lhs=v10, rhs_imm=1 }            -> x1
-    v7   Extend { value=v6, kind=I32 }                    -> x2
+    v7   Extend { value=v6, kind=I32, nsw }               -> x2
     v8   Extend { value=v6, kind=I8 }                     -> x2
     v9   Binop { op=add, lhs=v11, rhs=v10 }               -> x0
     terminator Jmp(b2)

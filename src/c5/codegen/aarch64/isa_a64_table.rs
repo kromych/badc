@@ -3,7 +3,8 @@
 //
 // The A64 GP catalogue interpreted by `super::table::encode`: every
 // database row whose written-operand signature maps onto the field
-// model. Some database rows are corrected and some dropped before
+// model, and the SVE rows that read and write general-purpose registers
+// only. Some database rows are corrected and some dropped before
 // parsing (see tools/gen_isa_a64.py DB_FIXES / EXCLUDED_ROWS).
 
 use super::table::{A64Op, A64Op::*, Field, Field::*, Form};
@@ -22,6 +23,7 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "add", ops: &[X, X, RegAny, OptExt], base: 0x8B200000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Extend { op: 3, rm: 2, is64: true }] },  // add Xd|SP, Xn|SP, Rm, {extend #n}
     Form { mnemonic: "add", ops: &[W, W, Imm, OptLsl], base: 0x11000000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, AddSubImm { op: 2, shift_op: 3 }] },  // add Wd|WSP, Wn|WSP, #immZ, {lsl #n=0|12}
     Form { mnemonic: "add", ops: &[X, X, Imm, OptLsl], base: 0x91000000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, AddSubImm { op: 2, shift_op: 3 }] },  // add Xd|SP, Xn|SP, #immZ, {lsl #n=0|12}
+    Form { mnemonic: "addpl", ops: &[X, X, Imm], base: 0x04605000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, SImm { op: 2, shift: 5, width: 6 }] },  // addpl Xd|SP, Xn|SP, #immS
     Form { mnemonic: "addpt", ops: &[X, X, X], base: 0x9A002000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // addpt Xd|SP, Xn|SP, Xm, {lsl #n}
     Form { mnemonic: "adds", ops: &[W, W, W, OptShift], base: 0x2B000000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Shift { op: 3, is64: false, ror: false }] },  // adds Wd, Wn, Wm, {lsl|lsr|asr #n}
     Form { mnemonic: "adds", ops: &[X, X, X, OptShift], base: 0xAB000000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Shift { op: 3, is64: true, ror: false }] },  // adds Xd, Xn, Xm, {lsl|lsr|asr #n}
@@ -29,6 +31,7 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "adds", ops: &[X, X, RegAny, OptExt], base: 0xAB200000, sp: 0x02, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Extend { op: 3, rm: 2, is64: true }] },  // adds Xd, Xn|SP, Rm, {extend #n}
     Form { mnemonic: "adds", ops: &[W, W, Imm, OptLsl], base: 0x31000000, sp: 0x02, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, AddSubImm { op: 2, shift_op: 3 }] },  // adds Wd, Wn|WSP, #immZ, {lsl #n=0|12}
     Form { mnemonic: "adds", ops: &[X, X, Imm, OptLsl], base: 0xB1000000, sp: 0x02, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, AddSubImm { op: 2, shift_op: 3 }] },  // adds Xd, Xn|SP, #immZ, {lsl #n=0|12}
+    Form { mnemonic: "addvl", ops: &[X, X, Imm], base: 0x04205000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, SImm { op: 2, shift: 5, width: 6 }] },  // addvl Xd|SP, Xn|SP, #immS
     Form { mnemonic: "and", ops: &[W, W, W, OptShift], base: 0x0A000000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Shift { op: 3, is64: false, ror: true }] },  // and Wd, Wn, Wm, {sop #n}
     Form { mnemonic: "and", ops: &[X, X, X, OptShift], base: 0x8A000000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Shift { op: 3, is64: true, ror: true }] },  // and Xd, Xn, Xm, {sop #n}
     Form { mnemonic: "and", ops: &[W, W, Imm], base: 0x12000000, sp: 0x01, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, LogicalImm { op: 2, is64: false }] },  // and Wd|WSP, Wn, #imm
@@ -127,6 +130,10 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "cmpp", ops: &[X, X], base: 0xBAC0001F, sp: 0x03, fields: &[Reg { op: 0, shift: 5 }, Reg { op: 1, shift: 16 }] },  // cmpp Xn|SP, Xm|SP
     Form { mnemonic: "cnt", ops: &[W, W], base: 0x5AC01C00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // cnt Wd, Wn
     Form { mnemonic: "cnt", ops: &[X, X], base: 0xDAC01C00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // cnt Xd, Xn
+    Form { mnemonic: "cntb", ops: &[X, OptPattern, OptMul], base: 0x0420E000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // cntb Xd, {#pattern}, {mul #imm}
+    Form { mnemonic: "cntd", ops: &[X, OptPattern, OptMul], base: 0x04E0E000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // cntd Xd, {#pattern}, {mul #imm}
+    Form { mnemonic: "cnth", ops: &[X, OptPattern, OptMul], base: 0x0460E000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // cnth Xd, {#pattern}, {mul #imm}
+    Form { mnemonic: "cntw", ops: &[X, OptPattern, OptMul], base: 0x04A0E000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // cntw Xd, {#pattern}, {mul #imm}
     Form { mnemonic: "crc32b", ops: &[W, W, W], base: 0x1AC04000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // crc32b Wd, Wn, Wm
     Form { mnemonic: "crc32cb", ops: &[W, W, W], base: 0x1AC05000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // crc32cb Wd, Wn, Wm
     Form { mnemonic: "crc32ch", ops: &[W, W, W], base: 0x1AC05400, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // crc32ch Wd, Wn, Wm
@@ -150,6 +157,10 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "csneg", ops: &[X, X, X, A64Op::Cond], base: 0xDA800400, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Field::Cond { op: 3, inv: false }] },  // csneg Xd, Xn, Xm, #cond
     Form { mnemonic: "ctz", ops: &[W, W], base: 0x5AC01800, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // ctz Wd, Wn
     Form { mnemonic: "ctz", ops: &[X, X], base: 0xDAC01800, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // ctz Xd, Xn
+    Form { mnemonic: "decb", ops: &[X, OptPattern, OptMul], base: 0x0430E400, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // decb Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "decd", ops: &[X, OptPattern, OptMul], base: 0x04F0E400, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // decd Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "dech", ops: &[X, OptPattern, OptMul], base: 0x0470E400, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // dech Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "decw", ops: &[X, OptPattern, OptMul], base: 0x04B0E400, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // decw Xdn, {#pattern}, {mul #imm}
     Form { mnemonic: "dgh", ops: &[], base: 0xD50320DF, sp: 0x00, fields: &[] },  // dgh
     Form { mnemonic: "drps", ops: &[], base: 0xD6BF03E0, sp: 0x00, fields: &[] },  // drps
     Form { mnemonic: "eon", ops: &[W, W, W, OptShift], base: 0x4A200000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Shift { op: 3, is64: false, ror: true }] },  // eon Wd, Wn, Wm, {sop #n}
@@ -180,6 +191,10 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "hint", ops: &[Imm], base: 0xD503201F, sp: 0x00, fields: &[UImm { op: 0, shift: 5, width: 7 }] },  // hint #imm
     Form { mnemonic: "hlt", ops: &[Imm], base: 0xD4400000, sp: 0x00, fields: &[UImm { op: 0, shift: 5, width: 16 }] },  // hlt #imm
     Form { mnemonic: "hvc", ops: &[Imm], base: 0xD4000002, sp: 0x00, fields: &[UImm { op: 0, shift: 5, width: 16 }] },  // hvc #imm
+    Form { mnemonic: "incb", ops: &[X, OptPattern, OptMul], base: 0x0430E000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // incb Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "incd", ops: &[X, OptPattern, OptMul], base: 0x04F0E000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // incd Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "inch", ops: &[X, OptPattern, OptMul], base: 0x0470E000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // inch Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "incw", ops: &[X, OptPattern, OptMul], base: 0x04B0E000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // incw Xdn, {#pattern}, {mul #imm}
     Form { mnemonic: "irg", ops: &[X, X, X], base: 0x9AC01000, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // irg Xd|SP, Xn|SP, Xm
     Form { mnemonic: "ldadd", ops: &[W, W, Mem], base: 0xB8200000, sp: 0x04, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // ldadd Ws, Wd, [Xn|SP]
     Form { mnemonic: "ldadd", ops: &[X, X, Mem], base: 0xF8200000, sp: 0x04, fields: &[Reg { op: 0, shift: 16 }, Reg { op: 1, shift: 0 }, Reg { op: 2, shift: 5 }] },  // ldadd Xs, Xd, [Xn|SP]
@@ -463,6 +478,8 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "msubpt", ops: &[X, X, X, X], base: 0x9B608000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Reg { op: 3, shift: 10 }] },  // msubpt Xd, Xn, Xm, Xa
     Form { mnemonic: "mul", ops: &[W, W, W], base: 0x1B007C00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // mul Wd, Wn, Wm
     Form { mnemonic: "mul", ops: &[X, X, X], base: 0x9B007C00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // mul Xd, Xn, Xm
+    Form { mnemonic: "mvn", ops: &[W, W, OptShift], base: 0x2A2003E0, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Shift { op: 2, is64: false, ror: true }] },  // mvn Wd, Wm, {sop #n}
+    Form { mnemonic: "mvn", ops: &[X, X, OptShift], base: 0xAA2003E0, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Shift { op: 2, is64: true, ror: true }] },  // mvn Xd, Xm, {sop #n}
     Form { mnemonic: "neg", ops: &[W, W, OptShift], base: 0x4B0003E0, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Shift { op: 2, is64: false, ror: false }] },  // neg Wd, Wm, {lsl|lsr|asr #n}
     Form { mnemonic: "neg", ops: &[X, X, OptShift], base: 0xCB0003E0, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Shift { op: 2, is64: true, ror: false }] },  // neg Xd, Xm, {lsl|lsr|asr #n}
     Form { mnemonic: "negs", ops: &[W, W, OptShift], base: 0x6B0003E0, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Shift { op: 2, is64: false, ror: false }] },  // negs Wd, Wm, {lsl|lsr|asr #n}
@@ -555,6 +572,7 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "rcwswppa", ops: &[X, X, Mem], base: 0x19A0A000, sp: 0x04, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Reg { op: 2, shift: 5 }] },  // rcwswppa Xt, Xt2, [Xn|SP]
     Form { mnemonic: "rcwswppal", ops: &[X, X, Mem], base: 0x19E0A000, sp: 0x04, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Reg { op: 2, shift: 5 }] },  // rcwswppal Xt, Xt2, [Xn|SP]
     Form { mnemonic: "rcwswppl", ops: &[X, X, Mem], base: 0x1960A000, sp: 0x04, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 16 }, Reg { op: 2, shift: 5 }] },  // rcwswppl Xt, Xt2, [Xn|SP]
+    Form { mnemonic: "rdvl", ops: &[X, Imm], base: 0x04BF5000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SImm { op: 1, shift: 5, width: 6 }] },  // rdvl Xd, #immS
     Form { mnemonic: "ret", ops: &[X], base: 0xD65F0000, sp: 0x00, fields: &[Reg { op: 0, shift: 5 }] },  // ret Xn
     Form { mnemonic: "retaa", ops: &[], base: 0xD65F0BFF, sp: 0x00, fields: &[] },  // retaa
     Form { mnemonic: "retab", ops: &[], base: 0xD65F0FFF, sp: 0x00, fields: &[] },  // retab
@@ -596,6 +614,22 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "smsubl", ops: &[X, W, W, X], base: 0x9B208000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Reg { op: 3, shift: 10 }] },  // smsubl Xd, Wn, Wm, Xa
     Form { mnemonic: "smulh", ops: &[X, X, X], base: 0x9B407C00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // smulh Xd, Xn, Xm
     Form { mnemonic: "smull", ops: &[X, W, W], base: 0x9B207C00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // smull Xd, Wn, Wm
+    Form { mnemonic: "sqdecb", ops: &[X, W, OptPattern, OptMul], base: 0x0420F800, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SameReg { op: 1, first: 0 }, SvePattern { op: 2, shift: 5 }, SveMul { op: 3, shift: 16 }] },  // sqdecb Xdn, Wdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "sqdecb", ops: &[X, OptPattern, OptMul], base: 0x0430F800, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // sqdecb Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "sqdecd", ops: &[X, W, OptPattern, OptMul], base: 0x04E0F800, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SameReg { op: 1, first: 0 }, SvePattern { op: 2, shift: 5 }, SveMul { op: 3, shift: 16 }] },  // sqdecd Xdn, Wdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "sqdecd", ops: &[X, OptPattern, OptMul], base: 0x04F0F800, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // sqdecd Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "sqdech", ops: &[X, W, OptPattern, OptMul], base: 0x0460F800, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SameReg { op: 1, first: 0 }, SvePattern { op: 2, shift: 5 }, SveMul { op: 3, shift: 16 }] },  // sqdech Xdn, Wdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "sqdech", ops: &[X, OptPattern, OptMul], base: 0x0470F800, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // sqdech Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "sqdecw", ops: &[X, W, OptPattern, OptMul], base: 0x04A0F800, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SameReg { op: 1, first: 0 }, SvePattern { op: 2, shift: 5 }, SveMul { op: 3, shift: 16 }] },  // sqdecw Xdn, Wdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "sqdecw", ops: &[X, OptPattern, OptMul], base: 0x04B0F800, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // sqdecw Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "sqincb", ops: &[X, W, OptPattern, OptMul], base: 0x0420F000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SameReg { op: 1, first: 0 }, SvePattern { op: 2, shift: 5 }, SveMul { op: 3, shift: 16 }] },  // sqincb Xdn, Wdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "sqincb", ops: &[X, OptPattern, OptMul], base: 0x0430F000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // sqincb Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "sqincd", ops: &[X, W, OptPattern, OptMul], base: 0x04E0F000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SameReg { op: 1, first: 0 }, SvePattern { op: 2, shift: 5 }, SveMul { op: 3, shift: 16 }] },  // sqincd Xdn, Wdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "sqincd", ops: &[X, OptPattern, OptMul], base: 0x04F0F000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // sqincd Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "sqinch", ops: &[X, W, OptPattern, OptMul], base: 0x0460F000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SameReg { op: 1, first: 0 }, SvePattern { op: 2, shift: 5 }, SveMul { op: 3, shift: 16 }] },  // sqinch Xdn, Wdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "sqinch", ops: &[X, OptPattern, OptMul], base: 0x0470F000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // sqinch Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "sqincw", ops: &[X, W, OptPattern, OptMul], base: 0x04A0F000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SameReg { op: 1, first: 0 }, SvePattern { op: 2, shift: 5 }, SveMul { op: 3, shift: 16 }] },  // sqincw Xdn, Wdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "sqincw", ops: &[X, OptPattern, OptMul], base: 0x04B0F000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // sqincw Xdn, {#pattern}, {mul #imm}
     Form { mnemonic: "ssbb", ops: &[], base: 0xD503309F, sp: 0x00, fields: &[] },  // ssbb
     Form { mnemonic: "st2g", ops: &[X, Mem], base: 0xD9A00800, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledSImm { op: 1, shift: 12, width: 9, scale: 16 }] },  // st2g Xs|SP, [Xn|SP, #offS*16]
     Form { mnemonic: "st2g", ops: &[X, MemPre], base: 0xD9A00C00, sp: 0x03, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, ScaledSImm { op: 1, shift: 12, width: 9, scale: 16 }] },  // st2g Xs|SP, [Xn|SP, #offS*16]!
@@ -808,6 +842,22 @@ pub(crate) static FORMS: &[Form] = &[
     Form { mnemonic: "umsubl", ops: &[X, W, W, X], base: 0x9BA08000, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }, Reg { op: 3, shift: 10 }] },  // umsubl Xd, Wn, Wm, Xa
     Form { mnemonic: "umulh", ops: &[X, X, X], base: 0x9BC07C00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // umulh Xd, Xn, Xm
     Form { mnemonic: "umull", ops: &[X, W, W], base: 0x9BA07C00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }, Reg { op: 2, shift: 16 }] },  // umull Xd, Wn, Wm
+    Form { mnemonic: "uqdecb", ops: &[W, OptPattern, OptMul], base: 0x0420FC00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // uqdecb Wdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "uqdecb", ops: &[X, OptPattern, OptMul], base: 0x0430FC00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // uqdecb Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "uqdecd", ops: &[W, OptPattern, OptMul], base: 0x04E0FC00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // uqdecd Wdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "uqdecd", ops: &[X, OptPattern, OptMul], base: 0x04F0FC00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // uqdecd Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "uqdech", ops: &[W, OptPattern, OptMul], base: 0x0460FC00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // uqdech Wdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "uqdech", ops: &[X, OptPattern, OptMul], base: 0x0470FC00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // uqdech Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "uqdecw", ops: &[W, OptPattern, OptMul], base: 0x04A0FC00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // uqdecw Wdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "uqdecw", ops: &[X, OptPattern, OptMul], base: 0x04B0FC00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // uqdecw Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "uqincb", ops: &[W, OptPattern, OptMul], base: 0x0420F400, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // uqincb Wdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "uqincb", ops: &[X, OptPattern, OptMul], base: 0x0430F400, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // uqincb Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "uqincd", ops: &[W, OptPattern, OptMul], base: 0x04E0F400, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // uqincd Wdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "uqincd", ops: &[X, OptPattern, OptMul], base: 0x04F0F400, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // uqincd Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "uqinch", ops: &[W, OptPattern, OptMul], base: 0x0460F400, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // uqinch Wdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "uqinch", ops: &[X, OptPattern, OptMul], base: 0x0470F400, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // uqinch Xdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "uqincw", ops: &[W, OptPattern, OptMul], base: 0x04A0F400, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // uqincw Wdn, {#pattern}, {mul #imm}
+    Form { mnemonic: "uqincw", ops: &[X, OptPattern, OptMul], base: 0x04B0F400, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, SvePattern { op: 1, shift: 5 }, SveMul { op: 2, shift: 16 }] },  // uqincw Xdn, {#pattern}, {mul #imm}
     Form { mnemonic: "uxtb", ops: &[W, W], base: 0x53001C00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // uxtb Wd, Wn
     Form { mnemonic: "uxth", ops: &[W, W], base: 0x53003C00, sp: 0x00, fields: &[Reg { op: 0, shift: 0 }, Reg { op: 1, shift: 5 }] },  // uxth Wd, Wn
     Form { mnemonic: "wfe", ops: &[], base: 0xD503205F, sp: 0x00, fields: &[] },  // wfe

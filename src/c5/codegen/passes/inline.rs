@@ -17,6 +17,8 @@
 //!   which is what a site pays;
 //! * callee runs none of the `va_start` family, so a variadic one reads
 //!   only its named parameters;
+//! * callee returns: one declared `_Noreturn`, or whose body no path
+//!   returns from, stays out of line unless the request is mandatory;
 //! * callee's body contains no `TailExt` and no aggregate-returning
 //!   nested call -- otherwise the straight-line shapes whose
 //!   `for_each_operand` walks a known set of `ValueId` fields. A
@@ -571,6 +573,8 @@ fn devirtualize_indirect_calls(
                 fixed_args,
                 fp_return,
                 fp_arg_mask,
+                low_word_args,
+                arg_widths,
                 arg_aggs,
                 ret_agg,
                 ret_slot_local,
@@ -585,6 +589,8 @@ fn devirtualize_indirect_calls(
                 fixed_args,
                 fp_return,
                 fp_arg_mask,
+                low_word_args,
+                arg_widths,
                 arg_aggs,
                 ret_agg,
                 ret_slot_local,
@@ -682,7 +688,11 @@ fn out_ptr_return(c: &FunctionSsa) -> Option<OutPtrReturn> {
     ) {
         return None;
     }
-    let copy = block.inst_range.end.checked_sub(1)?;
+    let copy = block
+        .inst_range
+        .clone()
+        .rev()
+        .find(|&i| !c.insts[i as usize].is_lifetime_marker())?;
     let Some(Inst::Mcpy { dst, src, size, .. }) = c.insts.get(copy as usize) else {
         return None;
     };
@@ -897,7 +907,7 @@ fn is_inline_candidate(
             say(format_args!("aggregate descriptor {i} out of range"));
             return false;
         };
-        let class = classify_aggregate(d.size, d.align, &d.fields, abi, true);
+        let class = classify_aggregate(d, abi, true);
         let reproducible = matches!(class, AggClass::ReturnIndirect)
             || matches!(class, AggClass::Regs(ref regs) if !regs.is_empty());
         if !reproducible {
@@ -949,11 +959,21 @@ fn is_inline_candidate(
             | Terminator::Bnz { .. } => {}
         }
     }
-    // A body no path returns from -- every exit traps or calls a
-    // `_Noreturn` function -- has no value to merge into the call's
-    // result and splices as-is, leaving the site's continuation
-    // unreachable. Admitted for a void callee only: the call then
-    // defines no value a spliced body would have to supply.
+    // A call to a function that never returns ends the path it is on.
+    // gcc (PRED_NORETURN) and clang (the unreachable heuristic) predict
+    // that path cold and keep the call: the body would grow the caller
+    // for nothing on the paths that return, and the annotations that
+    // describe it name the out-of-line function. Held out of line for a
+    // callee declared `_Noreturn` (C11 6.7.4) and for one no path
+    // returns from -- every exit traps or calls a `_Noreturn` function --
+    // unless the request is mandatory.
+    if (func.is_noreturn || return_blocks == 0) && !func.is_always_inline {
+        say(format_args!("never returns"));
+        return false;
+    }
+    // A mandatory request for a body no path returns from splices it
+    // as-is, leaving the site's continuation unreachable. It has no value
+    // to merge into the call's result, so a void callee only.
     if return_blocks == 0 && !crate::c5::compiler::types::is_void_ty(func.ret_type_tag) {
         say(format_args!("no Return block"));
         return false;
@@ -1120,8 +1140,8 @@ fn is_inline_candidate(
             | Inst::ImmExtCode(_)
             | Inst::ParamRef { .. }
             | Inst::AllocaInit(_)
-            // The splice drops a lifetime marker rather than relocating
-            // it, so it constrains nothing the body must reproduce.
+            // A lifetime marker moves with its object or goes with a
+            // redirected slot, so it constrains nothing.
             | Inst::LifetimeEnd(_)
             | Inst::Binop { .. }
             | Inst::BinopI { .. }
@@ -1132,9 +1152,12 @@ fn is_inline_candidate(
             | Inst::Fneg(_)
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }
+            | Inst::Udiv128 { .. }
             | Inst::FpCast { .. }
             | Inst::Load { .. }
-            | Inst::LoadIndexed { .. } => {}
+            | Inst::LoadIndexed { .. }
+            // Travels with its statement, admitted below on the reloc path.
+            | Inst::AsmOut { .. } => {}
             Inst::LocalAddr(s) => {
                 // On the reloc path the splice relocates a callee's own local
                 // slot (negative) and a frame-kept parameter cell -- spilled
@@ -2032,7 +2055,9 @@ fn param_agg_slots(c: &FunctionSsa) -> BTreeSet<i64> {
 /// writes the caller's object for the body's duration (C99 6.5.2.2p4:
 /// the parameter holds the argument's value as of the call). The pass
 /// has no alias analysis, so any write the body makes outside its own
-/// frame slots is taken to reach that object and forces the copy.
+/// frame slots is taken to reach that object and forces the copy. The
+/// binding reaches the cell's `LocalAddr` reads only, so a `LoadLocal` of
+/// the cell -- a `long double` parameter's read -- forces it too.
 ///
 /// The match is exhaustive by design: a new instruction must be
 /// classified here rather than defaulting to "cannot write".
@@ -2054,9 +2079,13 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         Inst::Copy { .. } => false,
         // A scaled index can leave the base object.
         Inst::StoreIndexed { .. } => true,
-        Inst::StoreLocal { off, .. } => agg_slots.contains(off),
+        Inst::StoreLocal { off, .. } | Inst::LoadLocal { off, .. } => agg_slots.contains(off),
         Inst::AtomicRmw { .. } | Inst::AtomicCas { .. } | Inst::AtomicStore { .. } => true,
-        Inst::AtomicLoad { .. } => false,
+        Inst::AtomicLoad { .. }
+        | Inst::ParamPart { .. }
+        | Inst::RetPart { .. }
+        | Inst::AsmOut { .. }
+        | Inst::AggParts { .. } => false,
         Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } | Inst::TailExt(_) => {
             true
         }
@@ -2086,7 +2115,6 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::LocalAddr(_)
         | Inst::TlsAddr(_)
         | Inst::Load { .. }
-        | Inst::LoadLocal { .. }
         | Inst::LoadIndexed { .. }
         | Inst::SegLoad { .. }
         | Inst::Binop { .. }
@@ -2095,6 +2123,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::Fneg(_)
         | Inst::Fma { .. }
         | Inst::MulAdd { .. }
+        | Inst::Udiv128 { .. }
         | Inst::Extend { .. }
         | Inst::Bswap { .. }
         | Inst::BitCount { .. }
@@ -2664,12 +2693,14 @@ fn splice_multi_block(
                         callee_remap[ce_pc as usize] = at;
                         at += 1;
                     }
-                    // A spliced body's objects live in a region the caller
-                    // may reuse for another splice, so the callee's own
-                    // lifetime markers are dropped: the region's single-
-                    // activation rule already bounds them, and a marker
-                    // relocated onto shared region cells would speak for
-                    // another callee's object too.
+                    // A callee object's marker moves with the object. The
+                    // region's other occupants are the objects of splices
+                    // that ran before this one or run after it, never
+                    // during it, so the end it states holds for them too.
+                    Inst::LifetimeEnd(off) if *off < 0 => {
+                        callee_remap[ce_pc as usize] = at;
+                        at += 1;
+                    }
                     Inst::LoadLocal { .. }
                     | Inst::StoreLocal { .. }
                     | Inst::AllocaInit(_)
@@ -2808,6 +2839,7 @@ fn splice_multi_block(
                 value,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             });
             new_inst_src.push((0, 0));
             new_f32.push(false);
@@ -3057,6 +3089,7 @@ fn splice_multi_block(
                         value,
                         kind,
                         volatile,
+                        ..
                     } if *off < 0 || param_cell_reloc.contains_key(off) => {
                         let off = if *off < 0 {
                             off - region_base
@@ -3069,7 +3102,15 @@ fn splice_multi_block(
                             value: map_v(*value, &callee_remap),
                             kind: *kind,
                             volatile: *volatile,
+                            nsw: false,
                         });
+                        new_inst_src.push((0, 0));
+                        new_f32.push(false);
+                        continue;
+                    }
+                    Inst::LifetimeEnd(off) if *off < 0 => {
+                        callee_remap[ce_pc as usize] = new_insts.len() as u32;
+                        new_insts.push(Inst::LifetimeEnd(off - region_base));
                         new_inst_src.push((0, 0));
                         new_f32.push(false);
                         continue;
@@ -3286,9 +3327,13 @@ fn splice_multi_block(
     if !callee.over_aligned.is_empty() {
         let base_off = merged_region_bytes;
         let mut appended = false;
-        for &(slot, region_off) in &callee.over_aligned {
-            let rec = (slot - region_base, base_off + region_off);
-            if !merged_over_aligned.iter().any(|&(s, _)| s == rec.0) {
+        for m in &callee.over_aligned {
+            let rec = crate::c5::ir::RegionMember {
+                slot: m.slot - region_base,
+                off: base_off + m.off,
+                ..*m
+            };
+            if !merged_over_aligned.iter().any(|o| o.slot == rec.slot) {
                 merged_over_aligned.push(rec);
                 appended = true;
             }
@@ -3334,7 +3379,9 @@ fn splice_multi_block(
         section: original.section,
         patchable_entry: original.patchable_entry,
         no_instrument: original.no_instrument,
+        no_stack_protector: original.no_stack_protector,
         is_naked: original.is_naked,
+        is_noreturn: original.is_noreturn,
         conv: original.conv,
         is_weak: original.is_weak,
         is_internal: original.is_internal,
@@ -3351,6 +3398,7 @@ fn splice_multi_block(
         cmp32: Vec::new(),
         low_word_tests: Vec::new(),
         param_fp_mask: original.param_fp_mask,
+        param_widths: original.param_widths,
         // The caller's own layouts, plus the callee's (merged above so a
         // spliced call's `arg_aggs` can name them).
         agg_descs: original.agg_descs,
@@ -3411,7 +3459,11 @@ fn splice_param_ref(
     new_f32: &mut Vec<bool>,
 ) -> ValueId {
     let inst = match kind {
-        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Inst::Extend { value: arg, kind },
+        LoadKind::I8 | LoadKind::I16 | LoadKind::I32 => Inst::Extend {
+            value: arg,
+            kind,
+            nsw: false,
+        },
         LoadKind::U8 | LoadKind::U16 | LoadKind::U32 => Inst::BinopI {
             op: BinOp::And,
             lhs: arg,
@@ -4395,6 +4447,8 @@ mod tests {
             fixed_args: 0,
             fp_return: false,
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -4422,6 +4476,8 @@ mod tests {
                         seg: AsmSeg::None,
                         static_arg: false,
                         value: false,
+                        volatile_object: false,
+                        early_clobber: false,
                     }],
                     clobber_regs: 0,
                     clobber_fp_regs: 0,
@@ -4463,6 +4519,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             call_to(inner_pc),
             Inst::LoadLocal {
@@ -4626,6 +4683,7 @@ mod tests {
                 value: 0,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::Imm(0x4000),
             Inst::CallIndirect {
@@ -4636,6 +4694,8 @@ mod tests {
                 fixed_args: 0,
                 fp_return: false,
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                low_word_args: 0,
+                arg_widths: crate::c5::ir::ArgWidths::default(),
                 arg_aggs: alloc::vec![],
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -4899,6 +4959,7 @@ mod tests {
                         value: 0,
                         kind: StoreKind::I64,
                         volatile: true,
+                        nsw: false,
                     },
                 ]
             })
@@ -5129,6 +5190,8 @@ mod tests {
             fixed_args: 0,
             fp_return: false,
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -5683,6 +5746,7 @@ mod tests {
                         value: 0,
                         kind: StoreKind::I32,
                         volatile,
+                        nsw: false,
                     },
                     Inst::Imm(4),
                 ],
@@ -5723,6 +5787,8 @@ mod tests {
                 seg: AsmSeg::None,
                 static_arg: false,
                 value: false,
+                volatile_object: false,
+                early_clobber: false,
             }],
             clobber_regs: 0,
             clobber_fp_regs: 0,
@@ -5744,6 +5810,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    nsw: false,
                 });
             }
             let addr = insts.len() as u32;
@@ -5805,6 +5872,8 @@ mod tests {
                             seg: AsmSeg::None,
                             static_arg: false,
                             value: false,
+                            volatile_object: false,
+                            early_clobber: false,
                         }],
                         clobber_regs: 0,
                         clobber_fp_regs: 0,
@@ -5985,6 +6054,52 @@ mod tests {
         assert_eq!(reason, "naked function");
     }
 
+    /// A callee that never returns stays out of line: one declared
+    /// `_Noreturn`, whatever its body's shape, and one whose body has no
+    /// `Return` block. A mandatory request overrides both.
+    #[test]
+    fn a_callee_that_never_returns_is_not_inlined_unless_mandatory() {
+        let abi = Target::LinuxX64.abi();
+        let leaf =
+            |terminator: Terminator, is_noreturn: bool, is_always_inline: bool| FunctionSsa {
+                is_noreturn,
+                is_always_inline,
+                ret_type_tag: crate::c5::compiler::types::void_ty(),
+                insts: alloc::vec![Inst::Imm(0)],
+                inst_src: alloc::vec![(0, 0)],
+                f32_values: alloc::vec![false],
+                blocks: alloc::vec![Block {
+                    start_pc: 0,
+                    inst_range: 0..1,
+                    terminator,
+                    exit_acc: NO_VALUE,
+                }],
+                ..Default::default()
+            };
+        let mut reason = alloc::string::String::new();
+        let candidate = |f: &FunctionSsa, reason: &mut alloc::string::String| {
+            is_inline_candidate(f, 32, abi, Some(reason))
+        };
+        let returns = Terminator::Return(NO_VALUE);
+        assert!(
+            candidate(&leaf(returns, false, false), &mut reason),
+            "{reason}"
+        );
+        assert!(!candidate(&leaf(returns, true, false), &mut reason));
+        assert_eq!(reason, "never returns");
+        assert!(
+            candidate(&leaf(returns, true, true), &mut reason),
+            "{reason}"
+        );
+        let sealed = Terminator::Unreachable;
+        assert!(!candidate(&leaf(sealed, false, false), &mut reason));
+        assert_eq!(reason, "never returns");
+        assert!(
+            candidate(&leaf(sealed, false, true), &mut reason),
+            "{reason}"
+        );
+    }
+
     /// `unhonoured_inline` flags a called-but-uninlinable always_inline
     /// callee with its reason and omits an uncalled one.
     #[test]
@@ -5999,6 +6114,8 @@ mod tests {
                 fixed_args: 0,
                 fp_return: false,
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                low_word_args: 0,
+                arg_widths: crate::c5::ir::ArgWidths::default(),
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -6085,6 +6202,8 @@ mod tests {
             fixed_args: 0,
             fp_return: false,
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -6156,6 +6275,7 @@ mod tests {
                     value: 0,
                     kind: StoreKind::I64,
                     volatile: false,
+                    nsw: false,
                 },
                 Inst::LoadLocal {
                     off: 3,
@@ -6225,7 +6345,8 @@ mod tests {
             insts[0],
             Inst::Extend {
                 value: 5,
-                kind: LoadKind::I32
+                kind: LoadKind::I32,
+                ..
             }
         ));
         let (v, insts) = emit(LoadKind::U16);
@@ -6249,6 +6370,7 @@ mod tests {
                 value: 3,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             }),
         );
         let used = value_use_mask(&written);
@@ -6285,6 +6407,7 @@ mod tests {
                 value: 3,
                 kind: StoreKind::F64,
                 volatile: false,
+                nsw: false,
             }),
         );
         let used = value_use_mask(&fp);
@@ -6318,6 +6441,7 @@ mod tests {
                 value: 1,
                 kind: StoreKind::I64,
                 volatile: false,
+                nsw: false,
             },
             Inst::LoadLocal {
                 off: 2,
@@ -6352,6 +6476,8 @@ mod tests {
             fixed_args: 1,
             fp_return: false,
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -6398,7 +6524,7 @@ mod tests {
                     off,
                     value,
                     kind: StoreKind::I64,
-                    volatile: false,
+                    volatile: false, ..
                 } => {
                     if matches!(caller.insts.get(*value as usize), Some(Inst::Imm(k)) if *k == 41 || *k == 7)
                     {
@@ -6497,12 +6623,18 @@ mod tests {
     #[test]
     fn region_16_callee_merges_into_caller() {
         let abi = Target::LinuxX64.abi();
+        let member = |slot, off| crate::c5::ir::RegionMember {
+            slot,
+            off,
+            align: 16,
+            size: 16,
+        };
         let mut callee = asm_callee(100, 2);
-        callee.over_aligned = alloc::vec![(-1, 0)];
+        callee.over_aligned = alloc::vec![member(-1, 0)];
         callee.frame_align = 16;
         callee.realign_region_bytes = 16;
         let mut caller = multi_call_caller(1, 2, 100, 2);
-        caller.over_aligned = alloc::vec![(-2, 0)];
+        caller.over_aligned = alloc::vec![member(-2, 0)];
         caller.frame_align = 16;
         caller.realign_region_bytes = 16;
         let mut funcs = alloc::vec![caller, callee];
@@ -6516,7 +6648,7 @@ mod tests {
         );
         assert_eq!(
             funcs[0].over_aligned,
-            alloc::vec![(-2, 0), (-3, 16)],
+            alloc::vec![member(-2, 0), member(-3, 16)],
             "callee entry must relocate behind the caller's region"
         );
         assert_eq!(funcs[0].frame_align, 16);
@@ -6532,7 +6664,12 @@ mod tests {
     fn region_above_16_callee_stays_out_of_line() {
         let abi = Target::LinuxX64.abi();
         let mut callee = asm_callee(100, 2);
-        callee.over_aligned = alloc::vec![(-1, 0)];
+        callee.over_aligned = alloc::vec![crate::c5::ir::RegionMember {
+            slot: -1,
+            off: 0,
+            align: 32,
+            size: 32,
+        }];
         callee.frame_align = 32;
         callee.realign_region_bytes = 32;
         let mut funcs = alloc::vec![multi_call_caller(1, 2, 100, 1), callee];
@@ -6557,6 +6694,8 @@ mod tests {
                 fixed_args: 0,
                 fp_return: false,
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+                low_word_args: 0,
+                arg_widths: crate::c5::ir::ArgWidths::default(),
                 callee_conv: crate::c5::codegen::CallConv::Target,
                 arg_aggs: alloc::vec![],
                 ret_agg: None,

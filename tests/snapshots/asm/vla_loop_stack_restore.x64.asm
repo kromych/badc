@@ -33,10 +33,10 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rax, %rsi
                	movq	%rax, %rdx
-               	movq	%rsp, %r8
                	movslq	-0x10(%rbp), %rcx
                	movq	%rcx, %rdi
                	shlq	$0x12, %rdi
+               	movq	%rsp, %r8
                	movq	%rdi, %r11
                	addq	$0xf, %r11
                	andq	$-0x10, %r11

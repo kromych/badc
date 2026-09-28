@@ -178,12 +178,14 @@ impl SsaBuilder {
             is_always_inline: false,
             is_noinline: false,
             is_naked: false,
+            is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             is_weak: false,
             is_internal: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,
+            no_stack_protector: false,
             const_params: 0,
             insts: Vec::new(),
             inst_src: Vec::new(),
@@ -196,6 +198,7 @@ impl SsaBuilder {
             cmp32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
+            param_widths: crate::c5::ir::ArgWidths::default(),
             agg_descs: alloc::vec::Vec::new(),
             param_aggs: alloc::vec::Vec::new(),
             param_local_slots: alloc::vec::Vec::new(),
@@ -270,13 +273,37 @@ impl SsaBuilder {
         self.defer_divmod = on;
     }
 
-    /// Record the over-aligned frame region for over-aligned automatic
-    /// objects: the `(slot_off, region_off)` placements, the region alignment,
-    /// and its byte size. Consumed by the per-arch frame layout and the VM.
-    pub(crate) fn set_realign(&mut self, placed: Vec<(i64, i64)>, align: i64, region_bytes: i64) {
+    /// Make the `size`-byte automatic object at `slot`, aligned above the
+    /// 8-byte frame slot, a member of the over-aligned frame region (C11
+    /// 6.7.5). [`Self::place_region_members`] lays the region out.
+    pub(crate) fn add_region_member(&mut self, slot: i64, align: i64, size: i64) {
+        self.func.over_aligned.push(crate::c5::ir::RegionMember {
+            slot,
+            off: 0,
+            align,
+            size,
+        });
+    }
+
+    /// Lay out the over-aligned region over the members added so far,
+    /// recording the placements, the region alignment and its byte size for
+    /// the per-arch frame layout and the VM. Returns the region alignment,
+    /// 0 when there is no member.
+    pub(crate) fn place_region_members(&mut self) -> i64 {
+        if self.func.over_aligned.is_empty() {
+            return 0;
+        }
+        let blocks = self
+            .func
+            .over_aligned
+            .iter()
+            .map(|&m| alloc::vec![m])
+            .collect();
+        let (placed, align, region_bytes) = crate::c5::ir::place_region(blocks);
         self.func.over_aligned = placed;
         self.func.frame_align = align;
         self.func.realign_region_bytes = region_bytes;
+        align
     }
 
     /// Record the front end's stack-protector classification of the
@@ -393,6 +420,11 @@ impl SsaBuilder {
         self.func.n_params = n;
     }
 
+    /// Record [`FunctionSsa::param_widths`].
+    pub(crate) fn set_param_widths(&mut self, widths: crate::c5::ir::ArgWidths) {
+        self.func.param_widths = widths;
+    }
+
     /// Record that the function returns a floating-point scalar. See
     /// [`FunctionSsa::ret_is_fp`].
     pub(crate) fn set_ret_is_fp(&mut self, is_fp: bool) {
@@ -469,6 +501,37 @@ impl SsaBuilder {
     /// Attach the per-argument aggregate map to the call instruction
     /// whose result is `v` (its index in `insts`). The metadata
     /// travels with the instruction through the optimizer.
+    /// Record the result object an out-pointer call writes through its
+    /// first argument, `ret_agg` left unset.
+    pub(crate) fn set_call_out_slot(&mut self, v: ValueId, slot: i64) {
+        if let Inst::Call { ret_slot_local, .. }
+        | Inst::CallIndirect { ret_slot_local, .. }
+        | Inst::CallExt { ret_slot_local, .. } = &mut self.func.insts[v as usize]
+        {
+            *ret_slot_local = slot;
+        }
+    }
+
+    /// Record the call's [`Inst::Call::arg_widths`].
+    pub(crate) fn set_call_arg_widths(&mut self, v: ValueId, widths: crate::c5::ir::ArgWidths) {
+        match &mut self.func.insts[v as usize] {
+            Inst::Call { arg_widths, .. }
+            | Inst::CallIndirect { arg_widths, .. }
+            | Inst::CallExt { arg_widths, .. } => *arg_widths = widths,
+            _ => {}
+        }
+    }
+
+    /// Record the call's [`Inst::Call::low_word_args`].
+    pub(crate) fn set_call_low_word_args(&mut self, v: ValueId, mask: u64) {
+        match &mut self.func.insts[v as usize] {
+            Inst::Call { low_word_args, .. }
+            | Inst::CallIndirect { low_word_args, .. }
+            | Inst::CallExt { low_word_args, .. } => *low_word_args = mask,
+            _ => {}
+        }
+    }
+
     pub(crate) fn set_call_arg_aggs(&mut self, v: ValueId, arg_aggs: Vec<Option<u32>>) {
         match &mut self.func.insts[v as usize] {
             Inst::Call { arg_aggs: a, .. }
@@ -861,12 +924,26 @@ impl SsaBuilder {
         kind: StoreKind,
         volatile: bool,
     ) -> ValueId {
+        self.store_local_marked(off, value, kind, volatile, false)
+    }
+
+    /// [`Self::store_local_vol`] carrying the `nsw` mark of
+    /// [`Inst::StoreLocal`].
+    pub(crate) fn store_local_marked(
+        &mut self,
+        off: i64,
+        value: ValueId,
+        kind: StoreKind,
+        volatile: bool,
+        nsw: bool,
+    ) -> ValueId {
         self.local_cache.retain(|e| e.off != off);
         self.push(Inst::StoreLocal {
             off,
             value,
             kind,
             volatile,
+            nsw,
         })
     }
 
@@ -1176,6 +1253,12 @@ impl SsaBuilder {
     /// (`I8`, `I16`, `I32`). A constant operand folds to the
     /// sign-extended constant. See [`Inst::Extend`].
     pub(crate) fn extend(&mut self, value: ValueId, kind: LoadKind) -> ValueId {
+        self.extend_marked(value, kind, false)
+    }
+
+    /// [`Self::extend`] carrying the `nsw` mark of [`Inst::Extend`]. A
+    /// cached copy keeps the conjunction of the two marks.
+    pub(crate) fn extend_marked(&mut self, value: ValueId, kind: LoadKind, nsw: bool) -> ValueId {
         let bits = match kind {
             LoadKind::I8 => 8,
             LoadKind::I16 => 16,
@@ -1190,9 +1273,12 @@ impl SsaBuilder {
         }
         let key = PureKey::Extend { value, kind };
         if let Some(cached) = self.lookup_pure(key) {
+            if let Some(Inst::Extend { nsw: mark, .. }) = self.func.insts.get_mut(cached as usize) {
+                *mark &= nsw;
+            }
             return cached;
         }
-        let id = self.push(Inst::Extend { value, kind });
+        let id = self.push(Inst::Extend { value, kind, nsw });
         self.pure_cache.insert(key, id);
         id
     }
@@ -1302,6 +1388,8 @@ impl SsaBuilder {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -1327,6 +1415,8 @@ impl SsaBuilder {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -1355,6 +1445,8 @@ impl SsaBuilder {
             fixed_args,
             fp_return,
             fp_arg_mask,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             callee_conv,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
@@ -1384,17 +1476,29 @@ impl SsaBuilder {
         self.push(Inst::Mzero { dst, size, align })
     }
 
+    /// `Inst::Udiv128`, folded when all three operands are constants.
+    pub(crate) fn udiv128(&mut self, hi: ValueId, lo: ValueId, divisor: ValueId) -> ValueId {
+        if let (Some(h), Some(l), Some(d)) =
+            (self.peek_imm(hi), self.peek_imm(lo), self.peek_imm(divisor))
+            && let Some(q) = crate::c5::vm::eval::udiv128(h, l, d)
+        {
+            return self.imm(q);
+        }
+        self.push(Inst::Udiv128 { hi, lo, divisor })
+    }
+
     /// `Inst::AtomicRmw` -- atomic read-modify-write on the `width`-byte
-    /// object at `addr` (C11 7.17.7). Returns the inst's id; its value
-    /// is the object's prior contents. Atomics are not pure and must
-    /// not be CSE'd, and they write through `addr` (which may alias an
-    /// escaped local), so the CSE cache is invalidated.
+    /// object at `addr` (C11 7.17.7) carrying `order`. Returns the inst's
+    /// id; its value is the object's prior contents. Atomics are not pure
+    /// and must not be CSE'd, and they write through `addr` (which may
+    /// alias an escaped local), so the CSE cache is invalidated.
     pub(crate) fn atomic_rmw(
         &mut self,
         op: AtomicRmwOp,
         addr: ValueId,
         value: ValueId,
         width: u8,
+        order: MemOrder,
     ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::AtomicRmw {
@@ -1402,6 +1506,7 @@ impl SsaBuilder {
             addr,
             value,
             width,
+            order,
         })
     }
 
@@ -1434,23 +1539,25 @@ impl SsaBuilder {
     }
 
     /// `Inst::AtomicCas` -- atomic compare-and-exchange on the
-    /// `width`-byte object at `addr` (C11 7.17.7.4). Returns the inst's
-    /// id; its value is 1 on success and 0 on failure, where a failure
-    /// stores the current `*addr` into `*expected_addr`. Writes through
-    /// both pointers, so the CSE cache is invalidated.
+    /// `width`-byte object at `addr` (C11 7.17.7.4) carrying `order`.
+    /// Returns the inst's id; its value is the prior contents,
+    /// zero-extended. Writes through `addr`, so the CSE cache is
+    /// invalidated.
     pub(crate) fn atomic_cas(
         &mut self,
         addr: ValueId,
-        expected_addr: ValueId,
+        expected: ValueId,
         desired: ValueId,
         width: u8,
+        order: MemOrder,
     ) -> ValueId {
         self.local_cache.clear();
         self.push(Inst::AtomicCas {
             addr,
-            expected_addr,
+            expected,
             desired,
             width,
+            order,
         })
     }
 
@@ -1529,8 +1636,9 @@ impl SsaBuilder {
     /// Reserve `ceil(size/8)` contiguous 8-byte slots and return the
     /// base (most-negative) slot, whose address is the lowest of the
     /// group. A whole-struct `Mcpy` from that address covers the
-    /// reserved bytes. Used for an aggregate result temporary.
-    pub(crate) fn alloc_synthetic_struct(&mut self, size: i64) -> i64 {
+    /// reserved bytes. Used for an aggregate temporary; an `align` above
+    /// the slot's 8 bytes places it in the over-aligned region.
+    pub(crate) fn alloc_synthetic_struct(&mut self, size: i64, align: i64) -> i64 {
         let nslots = (size + 7) / 8;
         let mut base = 0;
         for k in 0..nslots {
@@ -1543,6 +1651,9 @@ impl SsaBuilder {
         // interior cells, which carry no instruction reference.
         if nslots >= 1 {
             self.func.multi_cell_slots.push((base, nslots));
+            if align > 8 {
+                self.add_region_member(base, align, nslots * 8);
+            }
         }
         base
     }
@@ -1560,6 +1671,8 @@ impl SsaBuilder {
             binding_idx,
             args,
             fp_arg_mask,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             fp_return,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
@@ -2149,7 +2262,7 @@ mod tests {
             b.return_(res);
             let func = b.finish();
             assert!(
-                matches!(func.insts[res as usize], Inst::Extend { value, kind: rk }
+                matches!(func.insts[res as usize], Inst::Extend { value, kind: rk, .. }
                     if value == v && rk == kind),
                 "Shr(Shl(v,{k}),{k}) must become Extend{{v, {kind:?}}}, got {:?}",
                 func.insts[res as usize],

@@ -12,10 +12,14 @@
 //! The condition is the phi, its zero test, or a computation of the merge
 //! block's phis. The merge block and the straight line of jumps from it to
 //! the branch hold only phis and pure values. A threaded edge feeds the
-//! successors' phis from the predecessor's own values; any other reader of
-//! the line keeps the edge, unless the edge was the line's last way in: the
-//! line (a loop its entry values skip) then dies with it, and a surviving
-//! reader of a merge phi reads the edge's value.
+//! successors' phis from the predecessor's own values. A merge phi read
+//! past the line is renamed at each read to the definition reaching it,
+//! the phi or the edge's value, merged where both do (`ssa::repair`): a
+//! run-once `for (done = 0; !done; done = 1)` loop whose body assigns a
+//! value read after it leaves through its latch that way. Another value of
+//! the line read past it keeps the edge, unless the edge was the line's
+//! last way in: the line (a loop its entry values skip) then dies with it,
+//! and a surviving reader of a merge phi reads the edge's value.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
@@ -25,6 +29,7 @@ use super::constfold_branch::{block_index, edge_truth};
 use super::merge_blocks::reads_alike;
 use super::unroll::{bind_phis, eval_value};
 use crate::c5::codegen::ssa::mem2reg::{predecessors, successors};
+use crate::c5::codegen::ssa::repair;
 use crate::c5::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, Terminator, ValueId};
 
 /// A branch decided per predecessor of the block whose phis it reads.
@@ -66,7 +71,8 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
         if decided.is_empty() || !chain_is_pure(func, &site) {
             continue;
         }
-        let contained = values_stay_in(func, &block_of, &site);
+        let escaping = escaping_phis(func, &block_of, &site);
+        let contained = escaping.as_ref().is_some_and(BTreeSet::is_empty);
         for (p, succ) in decided {
             if contained {
                 if thread(func, &block_of, &site, p, succ) {
@@ -83,9 +89,79 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
                 forward(func, &to);
                 return true;
             }
+            if let Some(phis) = &escaping
+                && rethread(func, &block_of, &preds, &site, (p, succ), phis)
+            {
+                return true;
+            }
         }
     }
     changed
+}
+
+/// Move `p`'s edge to `succ` when head phis are read past the chain: each
+/// read then takes the phi or its incoming from `p`, whichever reaches it.
+fn rethread(
+    func: &mut FunctionSsa,
+    block_of: &[BlockId],
+    preds: &[Vec<BlockId>],
+    site: &Site,
+    (p, succ): (BlockId, BlockId),
+    phis: &BTreeSet<ValueId>,
+) -> bool {
+    // A second edge from `p` would give `succ`'s phis two values from it.
+    if preds[succ as usize].contains(&p) {
+        return false;
+    }
+    let mut after = preds.to_vec();
+    after[site.head as usize].retain(|&q| q != p);
+    after[succ as usize].push(p);
+    // An edge into a cycle through the head would enter the loop past its
+    // header.
+    if reaches(&after, succ, site.head) {
+        return false;
+    }
+    let mut items = Vec::new();
+    for &phi in phis {
+        let Inst::Phi { incoming, kind } = &func.insts[phi as usize] else {
+            return false;
+        };
+        let Some(&(_, v)) = incoming.iter().find(|&&(q, _)| q == p) else {
+            return false;
+        };
+        if phis.contains(&v) {
+            return false;
+        }
+        items.push(repair::Redefined {
+            value: phi,
+            kind: *kind,
+            home: site.chain.clone(),
+            edges: alloc::vec![(p, succ, v)],
+        });
+    }
+    let Some(plans) = repair::plan(func, &after, &items) else {
+        return false;
+    };
+    if !thread(func, block_of, site, p, succ) {
+        return false;
+    }
+    repair::apply(func, &items, &plans);
+    true
+}
+
+/// Whether `from` reaches `to` over the predecessor lists `preds`.
+fn reaches(preds: &[Vec<BlockId>], from: BlockId, to: BlockId) -> bool {
+    let mut seen = alloc::vec![false; preds.len()];
+    let mut stack = alloc::vec![to];
+    while let Some(b) = stack.pop() {
+        if b == from {
+            return true;
+        }
+        if !core::mem::replace(&mut seen[b as usize], true) {
+            stack.extend(&preds[b as usize]);
+        }
+    }
+    false
 }
 
 /// The site whose branch block `b` is: a phi, its zero test, or another
@@ -164,7 +240,8 @@ fn takes_constant(func: &FunctionSsa, b: BlockId, pred: Option<BlockId>) -> bool
         .any(|&(q, x)| pred.is_none_or(|p| p == q) && imm(x))
 }
 
-/// Whether the chain holds only phis (in `head`) and pure values.
+/// Whether the chain holds only phis (in `head`), pure values and lifetime
+/// markers, which a threaded edge skips: their objects stay reserved on it.
 fn chain_is_pure(func: &FunctionSsa, site: &Site) -> bool {
     site.chain.iter().all(|&c| {
         func.blocks[c as usize]
@@ -172,7 +249,7 @@ fn chain_is_pure(func: &FunctionSsa, site: &Site) -> bool {
             .clone()
             .all(|i| match &func.insts[i as usize] {
                 Inst::Phi { .. } => c == site.head,
-                inst => inst.is_pure(),
+                inst => inst.is_pure() || inst.is_lifetime_marker(),
             })
     })
 }
@@ -213,9 +290,13 @@ fn phi_condition(func: &FunctionSsa, cond: ValueId) -> Option<(ValueId, bool)> {
     }
 }
 
-/// Whether no value of the chain is read outside it, other than by a
-/// successor phi on the branch block's edge that a phi of `head` feeds.
-fn values_stay_in(func: &FunctionSsa, block_of: &[BlockId], site: &Site) -> bool {
+/// The head phis read outside the chain, other than by a successor phi on
+/// the branch block's edge, or `None` when another value of the chain is.
+fn escaping_phis(
+    func: &FunctionSsa,
+    block_of: &[BlockId],
+    site: &Site,
+) -> Option<BTreeSet<ValueId>> {
     let defined: BTreeSet<ValueId> = site
         .chain
         .iter()
@@ -226,39 +307,52 @@ fn values_stay_in(func: &FunctionSsa, block_of: &[BlockId], site: &Site) -> bool
         block_of.get(v as usize) == Some(&site.head)
             && matches!(func.insts.get(v as usize), Some(Inst::Phi { .. }))
     };
+    let mut phis = BTreeSet::new();
+    let mut read = |v: ValueId| {
+        if !defined.contains(&v) {
+            true
+        } else if head_phi(v) {
+            phis.insert(v);
+            true
+        } else {
+            false
+        }
+    };
     for (i, inst) in func.insts.iter().enumerate() {
         let b = block_of[i];
-        if b == BlockId::MAX || in_chain(b) {
+        if b == BlockId::MAX {
             continue;
         }
+        let mut stays = true;
         if let Inst::Phi { incoming, .. } = inst {
+            // Read at the end of the predecessor, the chain's own phis
+            // from a latch included.
             let patched = b == site.zero || b == site.nonzero;
-            if incoming.iter().any(|&(pred, v)| {
-                defined.contains(&v) && !(patched && pred == site.branch && head_phi(v))
-            }) {
-                return false;
+            for &(pred, v) in incoming {
+                if pred == site.branch && patched {
+                    stays &= !defined.contains(&v) || head_phi(v);
+                } else if !in_chain(pred) {
+                    stays &= read(v);
+                }
             }
-            continue;
+        } else if !in_chain(b) {
+            inst.for_each_operand(|v| stays &= read(v));
         }
-        let mut escapes = false;
-        inst.for_each_operand(|v| escapes |= defined.contains(&v));
-        if escapes {
-            return false;
+        if !stays {
+            return None;
         }
     }
     for (b, block) in func.blocks.iter().enumerate() {
         if in_chain(b as BlockId) {
             continue;
         }
-        let mut escapes = defined.contains(&block.exit_acc);
-        block
-            .terminator
-            .for_each_operand(|v| escapes |= defined.contains(&v));
-        if escapes {
-            return false;
+        let mut stays = read(block.exit_acc);
+        block.terminator.for_each_operand(|v| stays &= read(v));
+        if !stays {
+            return None;
         }
     }
-    true
+    Some(phis)
 }
 
 /// Whether the branch condition is non-zero on the edge `p -> head`,
@@ -553,6 +647,20 @@ mod tests {
         assert!(!run_one(&mut f));
     }
 
+    /// An inlined callee's lifetime marker in the chain does not stop it.
+    #[test]
+    fn a_lifetime_marker_in_the_chain_is_passed() {
+        let mut f = inlined_check(Inst::LifetimeEnd(-1));
+        f.blocks[4].terminator = Terminator::Bnz {
+            cond: 2,
+            target: 6,
+            fall_through: 5,
+        };
+        assert!(run_one(&mut f));
+        assert_eq!(f.blocks[1].terminator, Terminator::Jmp(5));
+        assert_eq!(f.blocks[3].terminator, Terminator::Jmp(6));
+    }
+
     #[test]
     fn a_zero_test_of_the_phi_inverts_the_arms() {
         let mut f = inlined_check(Inst::BinopI {
@@ -582,7 +690,7 @@ mod tests {
     }
 
     #[test]
-    fn a_merge_value_read_outside_the_chain_is_kept() {
+    fn a_merge_value_read_past_the_chain_moves_with_the_edge() {
         let mut f = inlined_check(Inst::BinopI {
             op: BinOp::Ne,
             lhs: 2,
@@ -593,8 +701,73 @@ mod tests {
             lhs: 2,
             rhs_imm: 1,
         };
-        assert!(!run_one(&mut f));
-        assert_eq!(f.blocks[1].terminator, Terminator::Jmp(2));
+        // b1's 0 selects b5, which reads nothing of the chain; b6, the
+        // reader, is still reached only through it.
+        assert!(run_one(&mut f));
+        assert_eq!(f.blocks[1].terminator, Terminator::Jmp(5));
+        assert!(matches!(f.insts[6], Inst::BinopI { lhs: 2, .. }));
+    }
+
+    /// `for (done = 0; !done; done = 1) len = f(len);` then `return len`:
+    /// b1 merges `done` (v2) and `len` (v3) from the entry and the latch
+    /// b2, which sets `done` to 1; b3 returns `len`.
+    fn run_once() -> FunctionSsa {
+        fresh(
+            vec![
+                Inst::Imm(0),
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                phi(vec![(0, 0), (2, 5)]),
+                phi(vec![(0, 1), (2, 6)]),
+                Inst::Imm(0),
+                Inst::Imm(1),
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 3,
+                    rhs_imm: 7,
+                },
+            ],
+            vec![
+                block(0..2, Terminator::Jmp(1)),
+                block(
+                    2..5,
+                    Terminator::Bnz {
+                        cond: 2,
+                        target: 3,
+                        fall_through: 2,
+                    },
+                ),
+                block(5..7, Terminator::Jmp(1)),
+                block(7..7, Terminator::Return(3)),
+            ],
+        )
+    }
+
+    #[test]
+    fn a_latch_that_decides_the_exit_leaves_the_loop() {
+        let mut f = run_once();
+        assert!(run_one(&mut f));
+        // The latch leaves for b3; the entry's decided edge into the body
+        // stays, since it would enter the loop past its header.
+        assert_eq!(f.blocks[2].terminator, Terminator::Jmp(3));
+        assert_eq!(f.blocks[0].terminator, Terminator::Jmp(1));
+        // b3 merges `len` from the header and the latch's next value.
+        let Terminator::Return(r) = f.blocks[3].terminator else {
+            panic!("b3 returns");
+        };
+        assert_eq!(f.blocks[3].inst_range, r..r + 1);
+        let Inst::Phi { incoming, .. } = &f.insts[r as usize] else {
+            panic!("b3 returns a phi");
+        };
+        let len = f.blocks[1].inst_range.start + 1;
+        let next = f.blocks[2].inst_range.end - 1;
+        assert!(matches!(
+            f.insts[next as usize],
+            Inst::BinopI { op: BinOp::Add, .. }
+        ));
+        assert_eq!(incoming, &vec![(1, len), (2, next)]);
     }
 
     #[test]
@@ -733,6 +906,7 @@ mod tests {
         let ext = Inst::Extend {
             value: 3,
             kind: LoadKind::I32,
+            nsw: false,
         };
         let mut f = merge_tested(1 << 32, ext);
         assert!(run_one(&mut f));
@@ -791,7 +965,7 @@ mod tests {
     }
 
     #[test]
-    fn a_loop_that_outlives_its_entry_keeps_it() {
+    fn a_loop_that_outlives_its_entry_is_left_from_it() {
         // A second entry, from the parameter's arm.
         let mut f = counted(20, 2);
         f.blocks[0].terminator = Terminator::Bnz {
@@ -804,7 +978,25 @@ mod tests {
         f.f32_values.push(false);
         f.blocks.push(block(5..6, Terminator::Jmp(1)));
         f.insts[2] = phi(vec![(0, 0), (2, 4), (4, 1)]);
-        assert!(!run_one(&mut f));
+        // b0's 20 leaves for the exit, which then merges the counter from
+        // the loop and b0's entry value; b4's 0 would enter the body past
+        // the header and stays.
+        assert!(run_one(&mut f));
+        assert_eq!(
+            f.blocks[0].terminator,
+            Terminator::Bnz {
+                cond: 1,
+                target: 4,
+                fall_through: 3,
+            }
+        );
+        let Terminator::Return(r) = f.blocks[3].terminator else {
+            panic!("b3 returns");
+        };
+        assert!(
+            matches!(&f.insts[r as usize], Inst::Phi { incoming, .. } if incoming.contains(&(0, 0)))
+        );
+        assert_eq!(f.blocks[4].terminator, Terminator::Jmp(1));
         // The compare, not a phi, is read past the loop.
         assert!(!run_one(&mut counted(20, 3)));
     }
@@ -861,6 +1053,7 @@ mod tests {
             value: 2,
             kind: crate::c5::ir::StoreKind::I64,
             volatile: false,
+            nsw: false,
         };
         f.blocks[1].inst_range = 2..5;
         f.blocks[2] = block(5..5, Terminator::Jmp(1));

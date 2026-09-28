@@ -191,6 +191,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v185 Imm(0)                                           -> x0
     v186 Imm(0)                                           -> x0
     v187 Imm(0)                                           -> x0
+    v188 LifetimeEnd(0)                                   -> -
+    v189 LifetimeEnd(0)                                   -> -
     terminator Return(v187)   (exit_acc=v187)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

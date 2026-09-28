@@ -16,28 +16,20 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x50
+               	sub	sp, sp, #0x40
                	sub	x0, x29, #0x40
                	stp	xzr, xzr, [x0]
                	stp	xzr, xzr, [x0, #0x10]
                	stp	xzr, xzr, [x0, #0x20]
                	stp	xzr, xzr, [x0, #0x30]
                	sub	x16, x29, #0x40
-               	str	x16, [sp]
-               	ldr	x0, [sp]
-               	prfm	pldl1keep, [x0]
+               	prfm	pldl1keep, [x16]
                	sub	x16, x29, #0x40
-               	str	x16, [sp]
-               	ldr	x0, [sp]
-               	prfm	pstl1strm, [x0, #0x10]
+               	prfm	pstl1strm, [x16, #0x10]
                	sub	x16, x29, #0x40
-               	str	x16, [sp]
-               	mov	x16, #0x8               // =8
-               	str	x16, [sp, #0x8]
-               	ldr	x0, [sp]
-               	ldr	x1, [sp, #0x8]
-               	prfm	pldl2keep, [x0, x1]
+               	mov	x17, #0x8               // =8
+               	prfm	pldl2keep, [x16, x17]
                	mov	x0, #0x2a               // =42
-               	add	sp, sp, #0x50
+               	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -3,7 +3,15 @@
 // any struct that embeds it. A real-world shape interleaves several
 // packed-enum fields with uint16/uint8, so honoring the size is required for a
 // correct layout -- not just parsing the attribute. Sizes and offsets here
-// match GCC/clang exactly. Returns 0 on success; distinct non-zero per fail.
+// match GCC/clang exactly. The PE targets take MSVC's rule, where an enum
+// stays `int` under `packed`, as clang for the windows-msvc triples keeps it.
+// Returns 0 on success; distinct non-zero per fail.
+
+#if defined(_WIN32)
+#define NARROW(n) 4
+#else
+#define NARROW(n) (n)
+#endif
 
 typedef enum __attribute__((packed)) { U0 = 0, U7 = 7 } E8u;      // unsigned char
 typedef enum __attribute__((packed)) { W0 = 0, W256 = 256 } E16u; // unsigned short
@@ -15,8 +23,8 @@ typedef enum { P0 = 0, P7 = 7 } EPlain;                           // int (unpack
 // underlying width must be recorded on the tag so a later bare `enum Tag`
 // reference (sizeof, a variable declaration) keeps the sub-int size.
 enum tag8 { T0 = 0, T7 = 7 } __attribute__((packed));
-_Static_assert(sizeof(enum tag8) == 1, "packed tag via bare reference is 1 byte");
-_Static_assert(_Alignof(enum tag8) == 1, "packed tag alignment follows size");
+_Static_assert(sizeof(enum tag8) == NARROW(1), "packed tag via bare reference is 1 byte");
+_Static_assert(_Alignof(enum tag8) == NARROW(1), "packed tag alignment follows size");
 
 // A plain tagged enum stays 4 bytes (zero drift).
 enum tagp { Q0 = 0, Q7 = 7 };
@@ -32,14 +40,15 @@ struct layout {
 };
 
 int main(void) {
-    if (sizeof(E8u) != 1 || sizeof(E16u) != 2 || sizeof(E8s) != 1) {
+    if (sizeof(E8u) != NARROW(1) || sizeof(E16u) != NARROW(2) || sizeof(E8s) != NARROW(1)) {
         return 1;
     }
     if (sizeof(E32s) != 4 || sizeof(EPlain) != 4) {
         return 2;
     }
-    // Layout: flags@0(2), round_mode@2(1), prec@3(1), pattern@4(1), wide@6(2).
-    if (sizeof(struct layout) != 8) {
+    // Layout: flags@0(2), round_mode@2(1), prec@3(1), pattern@4(1), wide@6(2);
+    // with `int` enums, flags@0, round_mode@4, prec@8, pattern@12, wide@16.
+    if (sizeof(struct layout) != (NARROW(1) == 1 ? 8 : 20)) {
         return 3;
     }
     struct layout l;
@@ -62,7 +71,7 @@ int main(void) {
     struct { enum tag8 e; char c; } tp;
     tp.e = t;
     tp.c = 'z';
-    if (sizeof(t) != 1 || sizeof(tp) != 2 || tp.e != 7 || tp.c != 'z') {
+    if (sizeof(t) != NARROW(1) || sizeof(tp) != 2 * NARROW(1) || tp.e != 7 || tp.c != 'z') {
         return 6;
     }
     return 0;

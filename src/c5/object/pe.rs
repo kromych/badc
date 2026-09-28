@@ -453,6 +453,7 @@ impl<'a> PeWriter<'a> {
             l.pdata_rva,
             self.text_prologue_len,
             &build.fn_unwind,
+            &build.early_returns,
         );
         l.pdata_directory_size = pdata.directory_size;
         l.pdata_raw_size = round_up(pdata.bytes.len() as u32, FILE_ALIGNMENT);
@@ -2169,11 +2170,17 @@ fn build_pdata(
     pdata_rva: u32,
     text_prologue_len: u32,
     fn_unwind: &[super::FnUnwind],
+    early_returns: &[super::EarlyReturn],
 ) -> Pdata {
     match machine {
-        Machine::X86_64 => {
-            build_x86_64_pdata(text_rva, text_size, pdata_rva, text_prologue_len, fn_unwind)
-        }
+        Machine::X86_64 => build_x86_64_pdata(
+            text_rva,
+            text_size,
+            pdata_rva,
+            text_prologue_len,
+            fn_unwind,
+            early_returns,
+        ),
         Machine::Aarch64 => build_aarch64_pdata(text_rva, text_size),
     }
 }
@@ -2234,32 +2241,34 @@ fn push_alloc_code(codes: &mut Vec<u8>, code_offset: u8, size: u32) {
 /// (prologue, epilogue and the decoder in lockstep, plus an 8*count shift of
 /// the rbp-relative offsets). badc emits no exception-using code today, so
 /// execution is unaffected until then.
-fn build_unwind_codes(uw: &super::FnUnwind) -> (Vec<u8>, u8, u8) {
+fn build_unwind_codes(uw: &super::FnUnwind, frame_start: u32) -> (Vec<u8>, u8, u8) {
     if uw.leaf {
         return (Vec::new(), 0, 0);
     }
     let mut codes = Vec::new();
-    // The `*_end` offsets are already relative to the function's first byte
-    // (the CodeOffset domain). A Win64 frame of a page or more lowers to a
-    // stack-probe loop with no single `sub`; it is left undescribed because
-    // the probe runs after the frame pointer is established, so
-    // `UWOP_SET_FPREG` recovers RSP exactly at any fault past it.
+    // The `*_end` offsets count from the function's first byte, CodeOffset
+    // from the table entry's, `frame_start` (`build_x86_64_pdata`). A
+    // Win64 frame of a page or more lowers to a stack-probe loop with no
+    // single `sub`; it is left undescribed because the probe runs after the
+    // frame pointer is established, so `UWOP_SET_FPREG` recovers RSP
+    // exactly at any fault past it.
+    let at = |end: u32| (end - frame_start) as u8;
     if uw.frame_alloc_end != 0 {
-        push_alloc_code(&mut codes, uw.frame_alloc_end as u8, uw.frame_bytes);
+        push_alloc_code(&mut codes, at(uw.frame_alloc_end), uw.frame_bytes);
     }
-    codes.push(uw.set_fpreg_end as u8);
+    codes.push(at(uw.set_fpreg_end));
     codes.push(UWOP_SET_FPREG & 0x0F);
-    codes.push(uw.push_rbp_end as u8);
+    codes.push(at(uw.push_rbp_end));
     codes.push((UWOP_PUSH_NONVOL & 0x0F) | (UNWIND_REG_RBP << 4));
     // SizeOfProlog need only reach past `mov rbp,rsp` so the unwinder
     // classifies the pre-frame-pointer region (push rbp) as prolog and the
     // rest as body; PCs past `mov rbp,rsp` unwind correctly through the
     // frame pointer whether labelled prolog or body.
-    let size_of_prolog = if uw.frame_alloc_end != 0 {
+    let size_of_prolog = at(if uw.frame_alloc_end != 0 {
         uw.frame_alloc_end
     } else {
         uw.set_fpreg_end
-    } as u8;
+    });
     (codes, size_of_prolog, UNWIND_REG_RBP)
 }
 
@@ -2270,6 +2279,7 @@ fn build_x86_64_pdata(
     pdata_rva: u32,
     text_prologue_len: u32,
     fn_unwind: &[super::FnUnwind],
+    early_returns: &[super::EarlyReturn],
 ) -> Pdata {
     const RUNTIME_FUNCTION_SIZE: u32 = 12;
     if fn_unwind.is_empty() {
@@ -2291,13 +2301,27 @@ fn build_x86_64_pdata(
     let mut entries: Vec<&super::FnUnwind> = fn_unwind.iter().collect();
     entries.sort_by_key(|u| u.begin);
 
+    // A test ahead of the frame and the return it branches to are left out
+    // of the entry, which covers the frame path alone: code no entry covers
+    // is a leaf, its return address at rsp.
+    let spans: Vec<(u32, u32)> = entries
+        .iter()
+        .map(|uw| {
+            early_returns
+                .iter()
+                .find(|e| e.begin == uw.begin)
+                .map_or((uw.begin, uw.end), |e| {
+                    (uw.begin + e.frame, uw.begin + e.exit)
+                })
+        })
+        .collect();
     let array_size = entries.len() as u32 * RUNTIME_FUNCTION_SIZE;
     let blobs_rva = round_up(pdata_rva + array_size, 4);
     let mut blobs: Vec<u8> = Vec::new();
     let mut info_rvas: Vec<u32> = Vec::with_capacity(entries.len());
-    for uw in &entries {
+    for (uw, &(begin, _)) in entries.iter().zip(&spans) {
         info_rvas.push(blobs_rva + blobs.len() as u32);
-        let (codes, size_of_prolog, frame_reg) = build_unwind_codes(uw);
+        let (codes, size_of_prolog, frame_reg) = build_unwind_codes(uw, begin - uw.begin);
         let count_of_codes = (codes.len() / 2) as u8;
         blobs.push(0x01); // Version 1, Flags 0.
         blobs.push(size_of_prolog);
@@ -2312,9 +2336,9 @@ fn build_x86_64_pdata(
     }
 
     let mut bytes = Vec::with_capacity((array_size + blobs.len() as u32) as usize);
-    for (i, uw) in entries.iter().enumerate() {
-        let begin = text_rva + text_prologue_len + uw.begin;
-        let end = text_rva + text_prologue_len + uw.end;
+    for (i, &(begin, end)) in spans.iter().enumerate() {
+        let begin = text_rva + text_prologue_len + begin;
+        let end = text_rva + text_prologue_len + end;
         bytes.extend_from_slice(&begin.to_le_bytes());
         bytes.extend_from_slice(&end.to_le_bytes());
         bytes.extend_from_slice(&info_rvas[i].to_le_bytes());
@@ -3047,6 +3071,69 @@ mod tests {
         }
     }
 
+    /// A return taken ahead of the frame and its test are left out of the
+    /// function's `RUNTIME_FUNCTION`, which spans the frame path from
+    /// `push rbp` to the early return; its codes count from `push rbp`.
+    #[test]
+    fn pdata_entry_begins_at_the_frame_past_an_early_return_x64() {
+        use crate::Compiler;
+        let src = "
+            long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }
+            int main(int argc, char **argv) { (void)argv; return (int)fib(argc); }
+        ";
+        let program = Compiler::new(super::super::super::tests::with_prelude(src))
+            .compile()
+            .expect("compile");
+        let target = super::super::Target::WindowsX64;
+        let options = super::super::NativeOptions {
+            optimize: true,
+            ..Default::default()
+        };
+        let build = lower_for(&program, target, options).expect("lower");
+        let early = build.early_returns[0];
+        let uw = build
+            .fn_unwind
+            .iter()
+            .find(|uw| uw.begin == early.begin)
+            .expect("fib's unwind record");
+        let begin = early.begin as usize;
+        let (frame, exit) = (begin + early.frame as usize, begin + early.exit as usize);
+        assert_eq!(build.text[frame], 0x55, "the frame opens with `push rbp`");
+        assert_eq!(build.text[exit - 1], 0xC3, "the frame path ends in `ret`");
+        assert_eq!(
+            build.text[uw.end as usize - 1],
+            0xC3,
+            "so does the early return"
+        );
+        let bytes = write(&program, &build, Machine::X86_64, target).expect("write PE");
+        let body = &build.text[begin..uw.end as usize];
+        let at = bytes
+            .windows(body.len())
+            .position(|w| w == body)
+            .expect("fib in the image");
+        let (exc_rva, exc_size) = read_data_directory(&bytes, DATA_DIRECTORY_EXCEPTION);
+        let pdata_off = rva_to_file_off(&bytes, exc_rva).expect("the exception directory");
+        let field = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+        let entry = (0..exc_size as usize / 12)
+            .map(|i| pdata_off + i * 12)
+            .find(|&e| rva_to_file_off(&bytes, field(e)) == Some(at + early.frame as usize))
+            .expect("a RUNTIME_FUNCTION begins at the frame");
+        assert_eq!(
+            rva_to_file_off(&bytes, field(entry + 4)),
+            Some(at + early.exit as usize),
+            "and ends at the early return"
+        );
+        let info_rva = u32::from_le_bytes(bytes[entry + 8..entry + 12].try_into().unwrap());
+        let info = rva_to_file_off(&bytes, info_rva).expect("UNWIND_INFO");
+        let count = bytes[info + 2] as usize;
+        let codes = &bytes[info + 4..info + 4 + 2 * count];
+        assert_eq!(
+            &codes[2 * count - 2..],
+            &[1, UWOP_PUSH_NONVOL | (UNWIND_REG_RBP << 4)],
+            "`push rbp` ends one byte into the entry"
+        );
+    }
+
     /// The two `FnUnwind` producers -- the structured single-TU path
     /// (`emit_prologue`) and the link path's prologue-grammar decoder
     /// (`decode_x86_64_prologue_unwind`) -- must agree, so a function
@@ -3096,11 +3183,17 @@ mod tests {
                     .filter(|p| (uw.begin..uw.end).contains(p))
                     .min()
                     .unwrap_or(uw.begin);
+                let frame_start = build
+                    .early_returns
+                    .iter()
+                    .find(|e| e.begin == uw.begin)
+                    .map_or(0, |e| uw.begin + e.frame);
                 let decoded = super::super::x86_64::decode_x86_64_prologue_unwind(
                     &build.text,
                     uw.begin,
                     uw.end,
                     prologue_end,
+                    frame_start,
                 );
                 assert_eq!(
                     (uw.leaf, uw.push_rbp_end, uw.set_fpreg_end),
@@ -3114,7 +3207,7 @@ mod tests {
                     "{target:?}: allocation of the function at {:#x}",
                     uw.begin
                 );
-                assert_eq!(build_unwind_codes(uw), build_unwind_codes(&decoded));
+                assert_eq!(build_unwind_codes(uw, 0), build_unwind_codes(&decoded, 0));
                 framed += usize::from(!uw.leaf);
                 allocs += usize::from(uw.frame_alloc_end != 0);
                 bare += usize::from(!uw.leaf && uw.frame_alloc_end == 0);
@@ -3179,7 +3272,7 @@ mod tests {
                 continue;
             }
             saw_non_leaf = true;
-            let (codes, _size_of_prolog, frame_reg) = build_unwind_codes(uw);
+            let (codes, _size_of_prolog, frame_reg) = build_unwind_codes(uw, 0);
             assert_eq!(frame_reg, UNWIND_REG_RBP);
             let ops = ops_of(&codes);
             assert!(

@@ -7,7 +7,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v1   Imm(42)                                          -> x0
     v2   StoreLocal { off=-1, value=v1, kind=I32, volatile } -> -
     v3   LoadLocal { off=-1, kind=I32, volatile }         -> x0
-    v4   Extend { value=v3, kind=I32 }                    -> x1
+    v4   Extend { value=v3, kind=I32, nsw }               -> x1
     v5   Imm(0)                                           -> x1
     v6   Imm(0)                                           -> x1
     v7   BinopI { op=ne, lhs=v3, rhs_imm=42 }             -> x0

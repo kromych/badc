@@ -1,4 +1,6 @@
+use std::collections::VecDeque;
 use std::io::IsTerminal;
+use std::iter::Peekable;
 use std::path::PathBuf;
 
 use badc::Target;
@@ -88,6 +90,9 @@ pub(crate) struct FrontEnd {
     pub(crate) strict_flex_arrays: u8,
     pub(crate) short_wchar: bool,
     pub(crate) char_signed: Option<bool>,
+    /// `-fwrapv` / `-fno-strict-overflow` against `-fno-wrapv` /
+    /// `-fstrict-overflow`, the last one given winning.
+    pub(crate) wrapv: bool,
     pub(crate) auto_var_init: badc::AutoVarInit,
     pub(crate) nostdinc: bool,
     pub(crate) no_builtin: bool,
@@ -124,6 +129,7 @@ pub(crate) struct Codegen {
     /// reported against; `None` reports nothing.
     pub(crate) frame_larger_than: Option<u64>,
     pub(crate) dump_ssa: bool,
+    pub(crate) verify_ssa: bool,
     pub(crate) no_fp_regs: bool,
     pub(crate) strict_align: bool,
     pub(crate) jump_tables: bool,
@@ -154,6 +160,7 @@ impl Default for Codegen {
             inline_cap: 64,
             frame_larger_than: None,
             dump_ssa: false,
+            verify_ssa: false,
             no_fp_regs: false,
             strict_align: false,
             jump_tables: true,
@@ -173,10 +180,23 @@ impl Default for Codegen {
     }
 }
 
+/// A link input list entry besides the positional files.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum LinkMarker {
+    /// `-l<name>`.
+    Lib(String),
+    /// `--start-group` / `-(` when true, `--end-group` / `-)` when false.
+    Group(bool),
+    /// `--whole-archive` when true, `--no-whole-archive` when false.
+    WholeArchive(bool),
+}
+
 /// Options that shape a link.
 #[derive(Clone)]
 pub(crate) struct Link {
-    pub(crate) lib_names: Vec<String>,
+    /// The `-l`, group and `--whole-archive` entries in command-line
+    /// order, each with the index of the positional input it precedes.
+    pub(crate) markers: Vec<(usize, LinkMarker)>,
     pub(crate) library_paths: Vec<String>,
     /// `-T` / `--script`: switches to the per-input-section engine.
     pub(crate) script_path: Option<PathBuf>,
@@ -204,15 +224,49 @@ pub(crate) struct Link {
     pub(crate) subsystem: Option<badc::Subsystem>,
     pub(crate) map_path: Option<PathBuf>,
     pub(crate) print_map: bool,
-    /// `--whole-archive` spans, as half-open ranges over the positional
-    /// input indexes.
-    pub(crate) whole_archive: Vec<(usize, usize)>,
+    /// The last of `-pie` / `-no-pie`: whether an executable is
+    /// position-independent. `None` keeps the link's default.
+    pub(crate) pie: Option<bool>,
+}
+
+impl Link {
+    /// The `-l` names, in command-line order.
+    pub(crate) fn lib_names(&self) -> impl Iterator<Item = &str> {
+        self.markers.iter().filter_map(|(_, m)| match m {
+            LinkMarker::Lib(name) => Some(name.as_str()),
+            _ => None,
+        })
+    }
+
+    /// Group bounds pair up without nesting, as GNU ld requires of the
+    /// command line; a group a linker script opens may sit inside one.
+    fn check_groups(&self) -> Result<(), ParseError> {
+        let mut open = false;
+        for (_, m) in &self.markers {
+            let msg = match m {
+                LinkMarker::Group(true) if open => "--start-group may not be nested",
+                LinkMarker::Group(false) if !open => "--end-group without --start-group",
+                LinkMarker::Group(start) => {
+                    open = *start;
+                    continue;
+                }
+                _ => continue,
+            };
+            return Err(ParseError::diag(format!("badc: error: {msg}")));
+        }
+        if open {
+            return Err(ParseError::diag(
+                "badc: error: --start-group without --end-group",
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl Default for Link {
     fn default() -> Self {
         Self {
-            lib_names: Vec::new(),
+            markers: Vec::new(),
             library_paths: Vec::new(),
             script_path: None,
             orphan_handling: badc::OrphanHandling::Place,
@@ -231,7 +285,7 @@ impl Default for Link {
             subsystem: None,
             map_path: None,
             print_map: false,
-            whole_archive: Vec::new(),
+            pie: None,
         }
     }
 }
@@ -287,6 +341,58 @@ struct DepFlags {
     target_from_output: bool,
 }
 
+impl Cli {
+    /// The form of the executable a link writes; see [`badc::ExecForm`].
+    pub(crate) fn exec_form(&self) -> badc::ExecForm {
+        if self.freestanding {
+            badc::ExecForm::Freestanding
+        } else if self.link.pie == Some(false) {
+            badc::ExecForm::Placed
+        } else {
+            badc::ExecForm::Pie
+        }
+    }
+}
+
+/// The arguments a run of `-Wl,<arg>[,<arg>...]` / `-Xlinker <arg>`
+/// groups hands the linker, in order. gcc passes the groups' arguments
+/// as one list, so an option's operand may come from the next group.
+struct LinkerArgs<'a, I: Iterator<Item = String>> {
+    pieces: VecDeque<String>,
+    rest: &'a mut Peekable<I>,
+    /// An `-Xlinker` ended the command line.
+    dangling: bool,
+}
+
+/// Whether `arg` opens a group of linker arguments.
+fn linker_group(arg: &str) -> bool {
+    arg.starts_with("-Wl,") || arg == "-Xlinker"
+}
+
+impl<I: Iterator<Item = String>> LinkerArgs<'_, I> {
+    fn queue(&mut self, group: &str) {
+        if let Some(list) = group.strip_prefix("-Wl,") {
+            self.pieces.extend(list.split(',').map(String::from));
+        } else if let Some(arg) = self.rest.next() {
+            self.pieces.push_back(arg);
+        } else {
+            self.dangling = true;
+        }
+    }
+}
+
+impl<I: Iterator<Item = String>> Iterator for LinkerArgs<'_, I> {
+    type Item = String;
+
+    fn next(&mut self) -> Option<String> {
+        while self.pieces.is_empty() && !self.dangling {
+            let group = self.rest.next_if(|a| linker_group(a))?;
+            self.queue(&group);
+        }
+        self.pieces.pop_front()
+    }
+}
+
 /// Argument-vector state while the option loop runs. The fields only
 /// the post-loop checks read stay here rather than in [`Cli`].
 #[derive(Default)]
@@ -323,7 +429,6 @@ struct Parser {
     ssp_guard_kind: Option<&'static str>,
     ssp_guard_reg: Option<String>,
     ssp_guard_offset: Option<i32>,
-    whole_archive_open: Option<usize>,
     /// The `-gdwarf` family's request, checked against what the
     /// emitter produces once the whole line is read.
     dwarf: DwarfRequest,
@@ -331,10 +436,10 @@ struct Parser {
     pressure_caps: Vec<(&'static str, String)>,
 }
 
-type Args = dyn Iterator<Item = String>;
+type Args<'a> = dyn Iterator<Item = String> + 'a;
 
 /// The operand of an option that takes a separate argument.
-fn operand(iter: &mut Args, missing: &str) -> Result<String, ParseError> {
+fn operand(iter: &mut Args<'_>, missing: &str) -> Result<String, ParseError> {
     iter.next().ok_or_else(|| ParseError::diag(missing))
 }
 
@@ -375,9 +480,13 @@ fn selector(sel: &str, arg: &str) -> Result<badc::diag::Selector, ParseError> {
 /// what to write and what to exit with.
 pub(crate) fn parse_args(argv: Vec<String>) -> Result<Parsed, ParseError> {
     let mut p = Parser::default();
-    let mut iter = argv.into_iter();
+    let mut iter = argv.into_iter().peekable();
     p.positional.push(iter.next().unwrap_or_default());
     while let Some(arg) = iter.next() {
+        if linker_group(&arg) {
+            p.linker_args(&arg, &mut iter)?;
+            continue;
+        }
         if p.option(&arg, &mut iter)? {
             if let Some(text) = p.print {
                 return Ok(Parsed::Print(text));
@@ -430,7 +539,7 @@ impl Parser {
     /// families are consulted in the order the spellings were written
     /// in: no family's prefix match covers a spelling a later family
     /// takes exactly.
-    fn option(&mut self, arg: &str, iter: &mut Args) -> Result<bool, ParseError> {
+    fn option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
         Ok(self.mode_option(arg, iter)?
             || self.preprocess_option(arg, iter)?
             || self.assembler_option(arg, iter)?
@@ -637,7 +746,7 @@ impl Parser {
 
     /// Output mode, driver behavior, and the flags that shape the whole
     /// run rather than one phase.
-    fn mode_option(&mut self, arg: &str, iter: &mut Args) -> Result<bool, ParseError> {
+    fn mode_option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
         match arg {
             "--interp" => self.claim(Mode::Interp)?,
             "--track-pointers" => self.track_pointers = true,
@@ -693,6 +802,7 @@ impl Parser {
             "-c" | "--compile-only" => self.compile_only = true,
             "--freestanding" => self.freestanding = true,
             "--dump-ssa" => self.codegen.dump_ssa = true,
+            "--verify-ssa" => self.codegen.verify_ssa = true,
             // Silence informational output; errors and warnings stay.
             "-q" | "--quiet" => self.quiet = true,
             "-h" | "--help" => self.print = Some(USAGE),
@@ -755,7 +865,7 @@ impl Parser {
     }
 
     /// Preprocessor and language-dialect options.
-    fn preprocess_option(&mut self, arg: &str, iter: &mut Args) -> Result<bool, ParseError> {
+    fn preprocess_option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
         let front = &mut self.front;
         match arg {
             "-D" => {
@@ -928,9 +1038,11 @@ impl Parser {
             // reaches the front end rather than being dropped.
             "-fsigned-char" | "-fno-unsigned-char" => front.char_signed = Some(true),
             "-funsigned-char" | "-fno-signed-char" => front.char_signed = Some(false),
-            // Already unconditional: a signed result wraps to its width, and
-            // no pass derives a fact from overflow being undefined (C99 6.5p5).
-            "-fwrapv" | "-fno-strict-overflow" => {}
+            // gcc's signed-overflow pair, the last one given winning: gcc >= 8
+            // spells `-fno-strict-overflow` as `-fwrapv -fwrapv-pointer`, and
+            // badc derives nothing from pointer overflow (C99 6.5p5).
+            "-fwrapv" | "-fno-strict-overflow" => front.wrapv = true,
+            "-fno-wrapv" | "-fstrict-overflow" => front.wrapv = false,
             // gcc / clang `-fno-builtin` and `-ffreestanding`: a call
             // spelled with a library function's own name is an ordinary
             // call the compiler may not fold. `-ffreestanding` also drops
@@ -980,7 +1092,7 @@ impl Parser {
     /// spellings for handing an option to the assembler. badc's
     /// assembler is built in, so each option is checked against what it
     /// implements rather than passed on.
-    fn assembler_option(&mut self, arg: &str, iter: &mut Args) -> Result<bool, ParseError> {
+    fn assembler_option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
         let opts: Vec<String> = match arg {
             s if s.starts_with("-Wa,") => s["-Wa,".len()..].split(',').map(String::from).collect(),
             "-Xassembler" => vec![operand(
@@ -1051,9 +1163,9 @@ impl Parser {
             "-mno-strict-align" => code.strict_align = false,
             // Position-independent relocatable output: no absolute
             // relocation reaches the object, so a consumer that relocates
-            // it wholesale at load can take it. badc's final images are
-            // always position-independent, so the flag only chooses the
-            // `-c` object's relocation shapes.
+            // it wholesale at load can take it. The flags choose
+            // relocation shapes; an executable's form is `-pie` /
+            // `-no-pie`.
             "-fPIC" | "-fpic" | "-fPIE" | "-fpie" => {
                 code.fpic = true;
                 code.fno_pic = false;
@@ -1152,7 +1264,7 @@ impl Parser {
     /// gcc's spellings. An argument that is not implemented is rejected
     /// rather than ignored: a hardening flag that compiles but does
     /// nothing leaves the caller believing the output is mitigated.
-    fn hardening_option(&mut self, arg: &str, iter: &mut Args) -> Result<bool, ParseError> {
+    fn hardening_option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
         let code = &mut self.codegen;
         match arg {
             // Speculative-execution mitigations, in gcc's spellings. An
@@ -1341,9 +1453,67 @@ impl Parser {
         Ok(true)
     }
 
+    /// The linker's arguments from `-Wl,` and `-Xlinker`: each option is
+    /// one the link implements, or is refused by name; any other
+    /// argument is an input, in its place among the others.
+    fn linker_args<I: Iterator<Item = String>>(
+        &mut self,
+        first: &str,
+        rest: &mut Peekable<I>,
+    ) -> Result<(), ParseError> {
+        let mut args = LinkerArgs {
+            pieces: VecDeque::new(),
+            rest,
+            dangling: false,
+        };
+        args.queue(first);
+        while let Some(arg) = args.next() {
+            if arg.is_empty() {
+                return Err(ParseError::diag(
+                    "badc: error: `-Wl,` passes the linker an empty argument",
+                ));
+            }
+            if !arg.starts_with('-') {
+                self.positional.push(arg);
+            } else if !self.linker_only_option(&arg) && !self.link_option(&arg, &mut args)? {
+                return Err(ParseError::diag(format!(
+                    "badc: error: unsupported linker option `{arg}`"
+                )));
+            }
+        }
+        if args.dangling {
+            return Err(ParseError::diag(
+                "badc: error: -Xlinker requires an argument",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Linker options that exist only in the linker's argument list,
+    /// where the compiler's spelling of the same letters means another
+    /// thing.
+    fn linker_only_option(&mut self, arg: &str) -> bool {
+        match arg {
+            // `-O<n>` sizes the hash tables of a shared object GNU ld
+            // writes; it changes no symbol binding.
+            s if s.len() > 2
+                && s.starts_with("-O")
+                && s[2..].bytes().all(|b| b.is_ascii_digit()) => {}
+            // The link records a `-l` shared library only when it
+            // satisfies a reference, which is what `--as-needed` asks for.
+            "--as-needed" => {}
+            "-(" | "-)" => self
+                .link
+                .markers
+                .push((self.positional.len(), LinkMarker::Group(arg == "-("))),
+            _ => return false,
+        }
+        true
+    }
+
     /// Options that shape a link, including the GNU ld surface a build
     /// system passes through the compiler driver.
-    fn link_option(&mut self, arg: &str, iter: &mut Args) -> Result<bool, ParseError> {
+    fn link_option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
         let link = &mut self.link;
         match arg {
             "-Map" => {
@@ -1360,10 +1530,16 @@ impl Parser {
             // GNU ld's `-M` belongs to the linker persona, which parses
             // separately.
             "--print-map" => link.print_map = true,
-            "-l" => link
-                .lib_names
-                .push(operand(iter, "badc: error: -l requires a library name")?),
-            s if s.starts_with("-l") && s.len() > 2 => link.lib_names.push(s[2..].to_string()),
+            "-pie" => link.pie = Some(true),
+            "-no-pie" => link.pie = Some(false),
+            "-l" => {
+                let name = operand(iter, "badc: error: -l requires a library name")?;
+                link.markers
+                    .push((self.positional.len(), LinkMarker::Lib(name)));
+            }
+            s if s.starts_with("-l") && s.len() > 2 => link
+                .markers
+                .push((self.positional.len(), LinkMarker::Lib(s[2..].to_string()))),
             "-L" => link
                 .library_paths
                 .push(operand(iter, "badc: error: -L requires a directory")?),
@@ -1511,15 +1687,14 @@ impl Parser {
                     }
                 }
             }
-            "--whole-archive" => self.whole_archive_open = Some(self.positional.len()),
-            "--no-whole-archive" => {
-                if let Some(start) = self.whole_archive_open.take() {
-                    link.whole_archive.push((start, self.positional.len()));
-                }
-            }
-            // Group markers: the script-link archive loop already
-            // rescans every archive to a fixed point.
-            "--start-group" | "--end-group" => {}
+            "--whole-archive" | "--no-whole-archive" => link.markers.push((
+                self.positional.len(),
+                LinkMarker::WholeArchive(arg == "--whole-archive"),
+            )),
+            "--start-group" | "--end-group" => link.markers.push((
+                self.positional.len(),
+                LinkMarker::Group(arg == "--start-group"),
+            )),
             _ => return Ok(false),
         }
         Ok(true)
@@ -1632,6 +1807,8 @@ impl Parser {
         self.resolve_stack_guard(target)?;
         self.apply_mcpu(target)?;
         self.check_code_model(mode, target)?;
+        self.check_exec_form(mode, target)?;
+        self.link.check_groups()?;
         // VM-only flags.
         if (self.track_pointers || self.trace) && mode != Mode::Interp {
             return Err(ParseError::plain(format!(
@@ -1678,9 +1855,6 @@ impl Parser {
             Some(_) => badc::ElfClass::Elf32,
             None => badc::ElfClass::Elf64,
         };
-        if let Some(start) = self.whole_archive_open.take() {
-            self.link.whole_archive.push((start, self.positional.len()));
-        }
         let deps = self.dep.kind.map(|kind| DepOptions {
             kind,
             system: self.dep.system,
@@ -1930,12 +2104,34 @@ impl Parser {
         Ok(())
     }
 
+    /// `-pie` / `-no-pie` pick the form of an executable the link
+    /// writes, which `--freestanding` fixes and only ELF leaves open.
+    fn check_exec_form(&self, mode: Mode, target: Target) -> Result<(), ParseError> {
+        if mode != Mode::NativeExecutable || self.compile_only {
+            return Ok(());
+        }
+        if self.freestanding && self.link.pie == Some(true) {
+            return Err(ParseError::diag(
+                "badc: error: `-pie` contradicts `--freestanding`, whose image is \
+                 placed at its link address",
+            ));
+        }
+        let format = target.binary_format();
+        if self.link.pie == Some(false) && format != badc::BinaryFormat::Elf {
+            return Err(ParseError::diag(format!(
+                "badc: error: `-no-pie` places an ELF executable at its link address; \
+                 a {} executable is always position-independent",
+                format.name()
+            )));
+        }
+        Ok(())
+    }
+
     /// The kernel model rewrites external addresses into sign-extended
     /// 32-bit absolutes, defined by the x86-64 psABI for images linked
-    /// in the top 2GB. It shapes relocatable output only: badc's own
-    /// images are position-independent and cannot carry an absolute text
-    /// reference, and `-fPIC` contradicts it the same way (gcc rejects
-    /// the combination). `tiny` is an aarch64 model.
+    /// in the top 2GB. It shapes relocatable output only, since badc
+    /// links no image there, and `-fPIC` contradicts it (gcc rejects the
+    /// combination). `tiny` is an aarch64 model.
     fn check_code_model(&self, mode: Mode, target: Target) -> Result<(), ParseError> {
         if self.code_model_tiny && target != Target::LinuxAarch64 {
             return Err(ParseError::diag(
@@ -1997,6 +2193,7 @@ impl FrontEnd {
             .with_strict_flex_arrays(self.strict_flex_arrays)
             .with_short_wchar(self.short_wchar)
             .with_char_signed(self.char_signed)
+            .with_wrapv(self.wrapv)
             .with_auto_var_init(self.auto_var_init)
             .with_nostdinc(self.nostdinc)
             .with_no_builtin(self.no_builtin)
@@ -2050,6 +2247,9 @@ impl Codegen {
         }
         if self.dump_ssa {
             opts = opts.with_dump_ssa();
+        }
+        if self.verify_ssa {
+            opts = opts.with_verify_ssa();
         }
         opts.output_kind = badc::OutputKind::Relocatable;
         opts
@@ -2178,7 +2378,13 @@ mod tests {
             cli.link.library_paths,
             vec!["dir".to_string(), "dir2".to_string()]
         );
-        assert_eq!(cli.link.lib_names, vec!["m".to_string(), "c".to_string()]);
+        assert_eq!(
+            cli.link.markers,
+            [
+                (1, LinkMarker::Lib("m".to_string())),
+                (1, LinkMarker::Lib("c".to_string()))
+            ]
+        );
         assert_eq!(
             reject(&["-L"]),
             ("badc: error: -L requires a directory".to_string(), 1)
@@ -2477,11 +2683,11 @@ mod tests {
     #[test]
     fn a_selector_names_one_row_by_name_alias_or_code() {
         use badc::diag::Level;
-        // `long-double-abi` carries the gcc alias `psabi` and the code
-        // B3006; all three spellings reach the same row.
-        for sel in ["long-double-abi", "psabi", "B3006"] {
+        // `attributes` carries the gcc alias `ignored-attributes` and the
+        // code B2008; all three spellings reach the same row.
+        for sel in ["attributes", "ignored-attributes", "B2008"] {
             assert_eq!(
-                level(&[&format!("-Wno-{sel}"), "a.c"], "long-double-abi"),
+                level(&[&format!("-Wno-{sel}"), "a.c"], "attributes"),
                 Level::Ignore,
                 "-Wno-{sel}"
             );
@@ -2716,8 +2922,21 @@ mod tests {
         assert!(cli.front.no_builtin);
         assert_eq!(cli.codegen.min_function_alignment, 16);
         assert!(parse(&["-fno-pic", "a.c"]).codegen.fno_pic);
-        // The wrapping the two flags ask for is what every build does.
-        parse(&["-fwrapv", "-fno-strict-overflow", "a.c"]);
+        // The overflow pair: the last spelling given wins.
+        assert!(!parse(&["a.c"]).front.wrapv);
+        for (args, wrapv) in [
+            (&["-fwrapv", "a.c"][..], true),
+            (&["-fno-strict-overflow", "a.c"][..], true),
+            (&["-fwrapv", "-fno-wrapv", "a.c"][..], false),
+            (
+                &["-fno-strict-overflow", "-fstrict-overflow", "a.c"][..],
+                false,
+            ),
+            (&["-fstrict-overflow", "-fwrapv", "a.c"][..], true),
+            (&["-fno-wrapv", "-fno-strict-overflow", "a.c"][..], true),
+        ] {
+            assert_eq!(parse(args).front.wrapv, wrapv, "{args:?}");
+        }
         assert_eq!(
             reject(&["-fstrict-flex-arrays=9", "a.c"]).0,
             "badc: error: `-fstrict-flex-arrays=` takes a level 0..=3, got `9`"
@@ -2859,6 +3078,97 @@ mod tests {
         assert_eq!(parse(&["--shared", "a.c"]).mode, Mode::SharedLibrary);
         assert_eq!(parse(&["-shared", "a.c"]).mode, Mode::SharedLibrary);
         assert_eq!(parse(&["a.c"]).mode, Mode::NativeExecutable);
+    }
+
+    /// `-Wl,` and `-Xlinker` hand their arguments to the link options
+    /// one by one, an operand possibly from the next group; an argument
+    /// that is no option is an input in its place; the linker's `-O1`
+    /// is not the compiler's; an option the link does not implement is
+    /// refused by name.
+    #[test]
+    fn linker_arguments_reach_the_link_options() {
+        let cli = parse(&[X64, "-Wl,-z,max-page-size=65536,-Map=out.map", "a.c"]);
+        assert_eq!(cli.link.max_page_size, Some(65536));
+        assert_eq!(cli.link.map_path, Some(PathBuf::from("out.map")));
+        let cli = parse(&[
+            X64,
+            "-Xlinker",
+            "-z",
+            "-Xlinker",
+            "max-page-size=4096",
+            "a.c",
+        ]);
+        assert_eq!(cli.link.max_page_size, Some(4096));
+        let cli = parse(&[X64, "-Wl,-z", "-Wl,max-page-size=8192", "a.c"]);
+        assert_eq!(cli.link.max_page_size, Some(8192));
+        let cli = parse(&[X64, "-Wl,-O1,--as-needed,-no-pie", "a.c"]);
+        assert!(
+            !cli.front.optimize,
+            "the linker's -O1 is not the compiler's"
+        );
+        assert_eq!(cli.exec_form(), badc::ExecForm::Placed);
+        let cli = parse(&[X64, "-Wl,--whole-archive,libx.a,--no-whole-archive", "a.c"]);
+        assert_eq!(cli.positional[1..], ["libx.a", "a.c"]);
+        assert_eq!(
+            cli.link.markers,
+            [
+                (1, LinkMarker::WholeArchive(true)),
+                (2, LinkMarker::WholeArchive(false))
+            ]
+        );
+        for (args, want) in [
+            (
+                &[X64, "-Wl,--version-script=v.map", "a.c"][..],
+                "badc: error: unsupported linker option `--version-script=v.map`",
+            ),
+            (
+                &[X64, "-Wl,-rpath,/opt/lib", "a.c"][..],
+                "badc: error: unsupported linker option `-rpath`",
+            ),
+            (
+                &[X64, "a.c", "-Wl,-z"][..],
+                "badc: error: -z requires a keyword",
+            ),
+            (
+                &[X64, "a.c", "-Xlinker"][..],
+                "badc: error: -Xlinker requires an argument",
+            ),
+            (
+                &[X64, "-Wl,", "a.c"][..],
+                "badc: error: `-Wl,` passes the linker an empty argument",
+            ),
+        ] {
+            assert_eq!(reject(args).0, want, "{args:?}");
+        }
+    }
+
+    /// The last of `-pie` / `-no-pie` picks an ELF executable's form,
+    /// `--freestanding` places the image whatever else is given, and a
+    /// form the output cannot take is refused rather than ignored.
+    #[test]
+    fn pie_and_no_pie_pick_the_executable_form() {
+        use badc::ExecForm;
+        let form = |args: &[&str]| parse(args).exec_form();
+        assert_eq!(form(&[X64, "a.c"]), ExecForm::Pie);
+        assert_eq!(form(&[X64, "-no-pie", "a.c"]), ExecForm::Placed);
+        assert_eq!(form(&[A64, "-pie", "-no-pie", "a.c"]), ExecForm::Placed);
+        assert_eq!(form(&[X64, "-no-pie", "-pie", "a.c"]), ExecForm::Pie);
+        assert_eq!(
+            form(&[X64, "--freestanding", "-no-pie", "a.c"]),
+            ExecForm::Freestanding
+        );
+        assert_eq!(form(&[X64, "-no-pie", "-c", "a.c"]), ExecForm::Placed);
+        let (msg, _) = reject(&[X64, "--freestanding", "-pie", "a.c"]);
+        assert!(msg.contains("`-pie` contradicts `--freestanding`"), "{msg}");
+        for target in ["--target=macos-aarch64", "--target=windows-x64"] {
+            let (msg, _) = reject(&[target, "-no-pie", "a.c"]);
+            assert!(
+                msg.contains("always position-independent"),
+                "{target}: {msg}"
+            );
+            parse(&[target, "-no-pie", "-c", "a.c"]);
+            parse(&[target, "-no-pie", "--shared", "a.c"]);
+        }
     }
 
     #[test]
@@ -3042,14 +3352,43 @@ mod tests {
         );
     }
 
+    /// Each marker stands before the positional input it precedes
+    /// (`positional[0]` is argv[0]), so a `-l` inside a span stays inside.
     #[test]
-    fn whole_archive_spans_the_positionals_it_encloses() {
-        // `positional[0]` is argv[0], so the span covers `b.a` alone.
-        let cli = parse(&["a.o", "--whole-archive", "b.a", "--no-whole-archive", "c.a"]);
-        assert_eq!(cli.link.whole_archive, vec![(2, 3)]);
-        // An unclosed span runs to the end of the command line.
-        let cli = parse(&["a.o", "--whole-archive", "b.a", "c.a"]);
-        assert_eq!(cli.link.whole_archive, vec![(2, 4)]);
+    fn link_markers_keep_their_place_among_the_positionals() {
+        let cli = parse(&[
+            "a.o",
+            "--whole-archive",
+            "b.a",
+            "-lx",
+            "--no-whole-archive",
+            "-Wl,--start-group,-ly,c.a,-)",
+            "-lz",
+        ]);
+        assert_eq!(cli.positional[1..], ["a.o", "b.a", "c.a"]);
+        assert_eq!(
+            cli.link.markers,
+            [
+                (2, LinkMarker::WholeArchive(true)),
+                (3, LinkMarker::Lib("x".to_string())),
+                (3, LinkMarker::WholeArchive(false)),
+                (3, LinkMarker::Group(true)),
+                (3, LinkMarker::Lib("y".to_string())),
+                (4, LinkMarker::Group(false)),
+                (4, LinkMarker::Lib("z".to_string())),
+            ]
+        );
+        for (args, msg) in [
+            (
+                &["--start-group", "--start-group", "a.a"][..],
+                "may not be nested",
+            ),
+            (&["a.a", "--end-group"], "--end-group without --start-group"),
+            (&["-Wl,-(", "a.a"], "--start-group without --end-group"),
+        ] {
+            let (text, code) = reject(args);
+            assert!(text.contains(msg) && code == 1, "{args:?}: {text}");
+        }
     }
 
     #[test]

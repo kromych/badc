@@ -28,7 +28,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v18  Phi { incoming=[b8:v7, b6:v15, b4:v9], kind=I64 } -> x0
     v19  Extend { value=v18, kind=I32 }                   -> x1
     v20  BinopI { op=add, lhs=v18, rhs_imm=100 }          -> x0
-    v21  Extend { value=v20, kind=I32 }                   -> x1
+    v21  Extend { value=v20, kind=I32, nsw }              -> x1
     v22  Extend { value=v20, kind=I32 }                   -> x1
     terminator Return(v20)   (exit_acc=v20)
   block 6  start_pc=0

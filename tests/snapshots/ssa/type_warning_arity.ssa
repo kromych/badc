@@ -11,7 +11,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   Binop { op=add, lhs=v1, rhs=v3 }                 -> x0
-    v8   Extend { value=v7, kind=I32 }                    -> x1
+    v8   Extend { value=v7, kind=I32, nsw }               -> x1
     v9   Extend { value=v7, kind=I32 }                    -> x1
     terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=1 ---
@@ -37,11 +37,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v15  Imm(0)                                           -> x0
     v16  Imm(0)                                           -> x0
     terminator Return(v16)   (exit_acc=v16)
-type_warning_arity.c:4: warning: too few arguments to `add` (expected 2, got 1) [B3004] [-Wtoo-few-arguments]
+type_warning_arity.c:6: warning: too few arguments to `add` (expected 2, got 1) [B3004] [-Wtoo-few-arguments]
     x = add(1);
-type_warning_arity.c:5: warning: too many arguments to `add` (expected 2, got at least 3) [B3005] [-Wtoo-many-arguments]
+type_warning_arity.c:7: warning: too many arguments to `add` (expected 2, got at least 3) [B3005] [-Wtoo-many-arguments]
     x = add(1, 2, 3, 4);
-type_warning_arity.c:5: warning: too many arguments to `add` (expected 2, got at least 4) [B3005] [-Wtoo-many-arguments]
+type_warning_arity.c:7: warning: too many arguments to `add` (expected 2, got at least 4) [B3005] [-Wtoo-many-arguments]
     x = add(1, 2, 3, 4);
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

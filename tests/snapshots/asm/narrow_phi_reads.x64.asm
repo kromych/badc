@@ -43,6 +43,8 @@ Disassembly of section .text:
                	retq
 
 <loop_masked>:
+               	testl	%edi, %edi
+               	jle	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
@@ -52,8 +54,6 @@ Disassembly of section .text:
                	movq	%rdi, %r13
                	xorl	%ebx, %ebx
                	movq	%rbx, %r12
-               	cmpl	%r13d, %ebx
-               	jge	<addr>
                	movq	%rbx, %rdi
                	callq	<addr>
                	addq	%r12, %rax
@@ -68,6 +68,8 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	leave
+               	retq
+               	movl	$0x2a, %eax
                	retq
 
 <count_u8>:

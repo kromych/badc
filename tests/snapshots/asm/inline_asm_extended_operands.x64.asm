@@ -28,16 +28,11 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x8, %rsp
                	pushq	%rbx
                	movabsq	$0x123456789abcdef, %rax # imm = 0x123456789ABCDEF
-               	movabsq	$-0x123456789abcdf0, %rdx # imm = 0xFEDCBA9876543210
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	movabsq	$-0x123456789abcdf0, %rbx # imm = 0xFEDCBA9876543210
                	shldq	$0xc, %rbx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	movabsq	$0x3456789abcdeffed, %r11 # imm = 0x3456789ABCDEFFED
                	cmpq	%r11, %rax
                	je	<addr>
@@ -45,12 +40,9 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movq	%rdx, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
+               	movabsq	$-0x123456789abcdf0, %rax # imm = 0xFEDCBA9876543210
                	movabsq	$0x123456789abcdef, %rbx # imm = 0x123456789ABCDEF
                	shrdq	$0x14, %rbx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	movabsq	$-0x432100123456789b, %r11 # imm = 0xBCDEFFEDCBA98765
                	cmpq	%r11, %rax
                	je	<addr>
@@ -58,11 +50,8 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x11223344, -0x8(%rbp) # imm = 0x11223344
                	movl	$0x11223344, %eax       # imm = 0x11223344
                	bswapl	%eax
-               	movl	%eax, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
                	cmpl	$0x44332211, %eax       # imm = 0x44332211
                	je	<addr>
                	movl	$0x3, %eax
@@ -70,11 +59,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movabsq	$0x102030405060708, %rax # imm = 0x102030405060708
-               	movq	%rax, -0x8(%rbp)
-               	movabsq	$0x102030405060708, %rax # imm = 0x102030405060708
                	bswapq	%rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	movabsq	$0x807060504030201, %r11 # imm = 0x807060504030201
                	cmpq	%r11, %rax
                	je	<addr>
@@ -86,8 +71,6 @@ Disassembly of section .text:
                	rdtscp
                	shlq	$0x20, %rdx
                	orq	%rdx, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rax
                	movq	%rax, (%rsi)
                	xorl	%eax, %eax
                	popq	%rbx

@@ -204,6 +204,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v78  Imm(0)                                           -> x0
     v79  Imm(0)                                           -> x0
     v80  Imm(0)                                           -> x0
+    v81  LifetimeEnd(0)                                   -> -
     terminator Return(v80)   (exit_acc=v80)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main

@@ -15,12 +15,12 @@ fn ent_pc=1 n_params=1 variadic=false locals=32
     v10  Binop { op=add, lhs=v8, rhs=v5 }                 -> x1
     v11  Imm(0)                                           -> x2
     v12  Binop { op=add, lhs=v1, rhs=v5 }                 -> x2
-    v13  Extend { value=v12, kind=I32 }                   -> x6
+    v13  Extend { value=v12, kind=I32, nsw }              -> x6
     v14  Extend { value=v12, kind=I8 }                    -> x6
     v15  Store { addr=v10, disp=0, value=v12, kind=I8, volatile } -> -
     v16  Extend { value=v5, kind=I32 }                    -> x1
     v17  BinopI { op=add, lhs=v5, rhs_imm=1 }             -> x0
-    v18  Imm(0)                                           -> x1
+    v18  Extend { value=v17, kind=I32, nsw }              -> x1
     terminator Jmp(b2)   (exit_acc=v17)
   block 2  start_pc=0
     v5   Phi { incoming=[b0:v3, b1:v17], kind=I64 }       -> x0
@@ -34,13 +34,14 @@ fn ent_pc=1 n_params=1 variadic=false locals=32
   block 4  start_pc=0
     v21  Imm(0)                                           -> x0
     v22  BinopI { op=sub, lhs=v1, rhs_imm=1 }             -> x7
-    v23  Extend { value=v22, kind=I32 }                   -> x0
+    v23  Extend { value=v22, kind=I32, nsw }              -> x0
     v24  Call { target_pc=1, args=[v22], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     terminator Jmp(b5)   (exit_acc=v24)
   block 5  start_pc=0
     v25  LocalAddr(-32)                                   -> x0
     v26  Imm(0)                                           -> x0
     v27  LoadLocal { off=-32, kind=I8, volatile }         -> x0
+    v28  LifetimeEnd(-32)                                 -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=main

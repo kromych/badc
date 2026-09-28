@@ -28,23 +28,20 @@ Disassembly of section .text:
 <main>:
                	movl	$0x2, %ecx
                	leaq	<rip>, %rdx
-               	movslq	%ecx, %rax
-               	cmpb	$0x0, (%rdx,%rax)
-               	jne	<addr>
                	movq	%rcx, %rax
                	imulq	%rcx, %rax
+               	cmpb	$0x0, (%rdx,%rcx)
+               	jne	<addr>
                	cmpl	$0x186a0, %eax          # imm = 0x186A0
                	jge	<addr>
-               	movslq	%eax, %rsi
-               	movb	$0x1, (%rdx,%rsi)
+               	movb	$0x1, (%rdx,%rax)
                	addq	%rcx, %rax
                	cmpl	$0x186a0, %eax          # imm = 0x186A0
                	jl	<addr>
                	incq	%rcx
-               	movslq	%ecx, %rax
-               	movq	%rax, %rsi
-               	imulq	%rax, %rsi
-               	cmpq	$0x186a0, %rsi          # imm = 0x186A0
+               	movq	%rcx, %rax
+               	imulq	%rcx, %rax
+               	cmpq	$0x186a0, %rax          # imm = 0x186A0
                	jl	<addr>
                	xorl	%eax, %eax
                	movl	$0x2, %ecx

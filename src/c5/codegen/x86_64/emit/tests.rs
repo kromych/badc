@@ -16,6 +16,8 @@ mod asm_scratch_tests {
                 seg: AsmSeg::None,
                 static_arg: false,
                 value: false,
+                volatile_object: false,
+                early_clobber: false,
             }],
             clobber_regs,
             clobber_fp_regs: 0,
@@ -69,6 +71,8 @@ mod asm_scratch_tests {
             seg: AsmSeg::None,
             static_arg: false,
             value: false,
+            volatile_object: false,
+            early_clobber: false,
         }];
         let op = asm_save_masks_and_stage(&asm, &[Some(3)], fixed, (0, 0)).unwrap();
         assert_eq!(op.0, 0);
@@ -87,13 +91,160 @@ mod asm_scratch_tests {
                 crate::c5::codegen::Target::LinuxX64,
                 crate::c5::codegen::FixedRegs::NONE,
             );
-            asm_scratch_bytes(&func, &alloc, crate::c5::codegen::FixedRegs::NONE)
+            asm_scratch_bytes(
+                &func,
+                &alloc,
+                crate::c5::codegen::FixedRegs::NONE,
+                crate::c5::codegen::Target::LinuxX64,
+            )
         };
         assert_eq!(bytes("", 0), 0);
         assert_eq!(bytes("/* note */ ;", 0), 0);
         assert_eq!(bytes("nop", 0), 0);
         assert_eq!(bytes("nop", 1 << 5), 16);
         assert_eq!(bytes("", 1 << 5), 0);
+    }
+
+    /// A statement of `r` inputs and value outputs binds its operands to
+    /// their values' registers and writes only its clobbers and the scratch
+    /// its loads may take: r10 and r11, then the caller-saved registers as
+    /// more inputs or outputs need them, none the statement clobbers. Its
+    /// inputs avoid both; a `=` output the clobbers alone, a `+` output both
+    /// and its input the scratch alone. A fixed, early-clobber or memory
+    /// operand, a second read-write output, or a clobbered frame register
+    /// keeps the staged lowering, whose operand registers the site writes.
+    #[test]
+    fn register_operands_bind_to_their_values() {
+        let target = crate::c5::codegen::Target::LinuxX64;
+        let fixed = crate::c5::codegen::FixedRegs::NONE;
+        let operand = |constraint: AsmConstraint, is_output: bool| AsmOperand {
+            constraint,
+            is_output,
+            is_rw: false,
+            width: 8,
+            seg: AsmSeg::None,
+            static_arg: false,
+            value: is_output,
+            volatile_object: false,
+            early_clobber: false,
+        };
+        let statement = |operands: alloc::vec::Vec<AsmOperand>, clobber_regs: u32| {
+            let n = operands.len();
+            let asm = AsmBlock {
+                template: b"nop".to_vec(),
+                operands,
+                clobber_regs,
+                clobber_fp_regs: 0,
+                clobber_memory: false,
+                volatile: true,
+            };
+            let parts: alloc::vec::Vec<u8> = (0..n as u8)
+                .filter(|&i| asm.operands[i as usize].is_output)
+                .skip(1)
+                .collect();
+            let mut insts: alloc::vec::Vec<Inst> = (0..n as i64).map(Inst::Imm).collect();
+            insts.push(Inst::InlineAsm {
+                asm: alloc::boxed::Box::new(asm),
+                args: (0..n as u32).collect(),
+            });
+            insts.extend(parts.into_iter().map(|op| Inst::AsmOut {
+                op,
+                kind: crate::c5::ir::LoadKind::I64,
+            }));
+            FunctionSsa {
+                insts,
+                ..Default::default()
+            }
+        };
+        let site = |func: &FunctionSsa| {
+            func.insts
+                .iter()
+                .position(|i| matches!(i, Inst::InlineAsm { .. }))
+                .unwrap()
+        };
+        let masks = |func: &FunctionSsa| {
+            let Inst::InlineAsm { asm, args } = &func.insts[site(func)] else {
+                unreachable!()
+            };
+            (
+                asm_binds_directly(func, asm, args, fixed, target),
+                asm_site_write_masks(func, asm, args, fixed, target),
+            )
+        };
+        let reg = |out: bool| operand(AsmConstraint::Reg, out);
+        let two_in = alloc::vec![reg(true), reg(false), reg(false)];
+        assert_eq!(
+            masks(&statement(two_in.clone(), 0)),
+            (true, ((1 << 10) | (1 << 11), 0))
+        );
+        let three_in = alloc::vec![reg(true), reg(false), reg(false), reg(false)];
+        assert_eq!(
+            masks(&statement(three_in.clone(), 0)),
+            (true, ((1 << 10) | (1 << 11) | (1 << 9), 0))
+        );
+        // r10 and r11 clobbered: the three inputs take r9, r8 and rdx.
+        let r10_r11 = (1 << 10) | (1 << 11);
+        let scratch = (1 << 9) | (1 << 8) | (1 << 2);
+        assert_eq!(
+            masks(&statement(three_in.clone(), r10_r11)),
+            (true, (r10_r11 | scratch, 0))
+        );
+        let avoid = |func: &FunctionSsa| {
+            let site = site(func);
+            let Inst::InlineAsm { asm, args } = &func.insts[site] else {
+                unreachable!()
+            };
+            asm_site_bound_values(func, asm, args, site as u32, fixed, target)
+        };
+        let all = r10_r11 | scratch;
+        assert_eq!(
+            avoid(&statement(three_in.clone(), r10_r11)),
+            [(1, all, 0), (2, all, 0), (3, all, 0), (4, r10_r11, 0)]
+        );
+        let mut rw = alloc::vec![reg(true), reg(false)];
+        rw[0].is_rw = true;
+        assert_eq!(
+            avoid(&statement(rw.clone(), 1)),
+            [(0, r10_r11, 0), (1, 1 | r10_r11, 0), (2, 1 | r10_r11, 0)]
+        );
+        // Two `=` outputs: a scratch each; the `AsmOut` avoids the clobbers.
+        let two_out = alloc::vec![reg(true), reg(true), reg(false)];
+        assert_eq!(
+            masks(&statement(two_out.clone(), 1)),
+            (true, (1 | r10_r11, 0))
+        );
+        assert_eq!(
+            avoid(&statement(two_out, 1)),
+            [(2, 1 | r10_r11, 0), (3, 1, 0), (4, 1, 0)]
+        );
+        let mut two_rw = alloc::vec![reg(true), reg(true)];
+        two_rw[0].is_rw = true;
+        two_rw[1].is_rw = true;
+        assert!(!masks(&statement(two_rw, 0)).0);
+        // Two `x` inputs bind; a third would need the FMA scratch, which a
+        // Win64 prologue saves only around a fused multiply-add.
+        let x = || AsmOperand {
+            width: 16,
+            value: true,
+            ..operand(AsmConstraint::Fp, false)
+        };
+        assert!(masks(&statement(alloc::vec![x(), x()], 0)).0);
+        assert!(!masks(&statement(alloc::vec![x(), x(), x()], 0)).0);
+        // rsp / rbp clobbered, a fixed register, an early-clobber output
+        // and a memory operand stage.
+        assert!(!masks(&statement(two_in.clone(), 1 << 5)).0);
+        assert!(!masks(&statement(two_in.clone(), 1 << 4)).0);
+        let mut fixed_in = two_in.clone();
+        fixed_in[1].constraint = AsmConstraint::Fixed(0);
+        assert!(!masks(&statement(fixed_in, 0)).0);
+        let mut early = two_in.clone();
+        early[0].early_clobber = true;
+        assert!(!masks(&statement(early, 0)).0);
+        let mut mem = two_in.clone();
+        mem[2].constraint = AsmConstraint::Mem;
+        let (bound, (gpr, _)) = masks(&statement(mem, 0));
+        assert!(!bound);
+        assert_ne!(gpr & 1, 0, "the staged lowering's first operand is rax");
     }
 }
 
@@ -618,6 +769,101 @@ mod two_address_tests {
         );
     }
 
+    /// The function of `src` holding a copy, the copy's id and the allocation.
+    fn copy_of(src: &str) -> (FunctionSsa, u32, Allocation) {
+        let target = Target::LinuxX64;
+        let program = crate::Compiler::with_target(
+            alloc::format!("{src} int main(void){{ return 0; }}"),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let is_copy = |i: &Inst| matches!(i, Inst::Mcpy { .. });
+        let func = funcs
+            .into_iter()
+            .find(|f| f.insts.iter().any(is_copy))
+            .expect("a function with a copy");
+        let v = func.insts.iter().position(is_copy).expect("the copy") as u32;
+        let mut alloc = super::super::ssa::reg_alloc::allocate(
+            &func,
+            target,
+            crate::c5::codegen::FixedRegs::NONE,
+        );
+        alloc.spill_count = alloc.spill_count.max(2);
+        (func, v, alloc)
+    }
+
+    /// A copy moves 16 bytes through the xmm the zero fill uses and takes
+    /// a general register only for the units below that: the writer's
+    /// scratch while the bases sit in value registers, the first bank
+    /// register the record leaves free when both reloads take the scratch,
+    /// and a push / pop only when every candidate holds a live value.
+    /// Encodings are clang's.
+    #[test]
+    fn copy_temporaries_are_free_at_the_site() {
+        let target = Target::LinuxX64;
+        let (func, v, mut alloc) = copy_of(
+            "typedef struct { long v, tag; } Value; void copy(Value *d, const Value *s) { *d = *s; }",
+        );
+        let Inst::Mcpy { dst, src, .. } = func.insts[v as usize] else {
+            panic!("{:?}", func.insts[v as usize])
+        };
+        let reg = |r: Reg| Place::IntReg(r.0);
+        let emit = |alloc: &Allocation, xmm: Option<u8>| {
+            let frame = compute_frame(&func, alloc, target.abi(), target);
+            let mut code = Vec::new();
+            emit_mcpy(
+                &mut code,
+                v,
+                Place::None,
+                dst,
+                src,
+                16,
+                8,
+                xmm,
+                false,
+                alloc,
+                frame,
+                target.abi(),
+            )
+            .expect("emit_mcpy");
+            code
+        };
+        alloc.implicit_live = alloc::vec![0; func.insts.len()];
+        alloc.places[dst as usize] = reg(Reg::RDI);
+        alloc.places[src as usize] = reg(Reg::RSI);
+        // movups xmm14, [rsi]; movups [rdi], xmm14
+        assert_eq!(
+            emit(&alloc, Some(14)),
+            [0x44, 0x0F, 0x10, 0x36, 0x44, 0x0F, 0x11, 0x37]
+        );
+        // mov r10, [rsi]; mov [rdi], r10; mov r10, [rsi + 8]; mov [rdi + 8], r10
+        let through_r10 = [
+            0x4C, 0x8B, 0x16, 0x4C, 0x89, 0x17, 0x4C, 0x8B, 0x56, 0x08, 0x4C, 0x89, 0x57, 0x08,
+        ];
+        assert_eq!(emit(&alloc, None), through_r10);
+        alloc.places[dst as usize] = Place::Spill(0);
+        alloc.places[src as usize] = Place::Spill(1);
+        // mov rax, [r11]; mov [r10], rax; mov rax, [r11 + 8]; mov [r10 + 8], rax
+        let through_rax = [
+            0x49, 0x8B, 0x03, 0x49, 0x89, 0x02, 0x49, 0x8B, 0x43, 0x08, 0x49, 0x89, 0x42, 0x08,
+        ];
+        assert!(emit(&alloc, None).ends_with(&through_rax));
+        alloc.implicit_live[v as usize] = 0xFFFF;
+        let code = emit(&alloc, None);
+        let mut saved = alloc::vec![0x50];
+        saved.extend(through_rax);
+        saved.push(0x58);
+        assert!(code.ends_with(&saved), "{code:02x?}");
+        // movups xmm14, [r11]; movups [r10], xmm14: no general register, no save.
+        assert!(
+            emit(&alloc, Some(14)).ends_with(&[0x45, 0x0F, 0x10, 0x33, 0x45, 0x0F, 0x11, 0x32])
+        );
+    }
+
     /// A division saves rax / rdx exactly for the values the allocation
     /// records live in them across it, never over its own result; without
     /// a record, any value placed there counts. Encodings are clang's.
@@ -648,7 +894,7 @@ mod two_address_tests {
             emit_binop(&mut code, op, v, reg(dst), lhs, rhs, alloc, frame).expect("emit_binop");
             code
         };
-        let (rax, rdx) = (1u16 << Reg::RAX.0, 1u16 << Reg::RDX.0);
+        let (rax, rdx) = (1u32 << Reg::RAX.0, 1u32 << Reg::RDX.0);
         // mov rax, rdi; cqo; idiv rsi
         let divide = [0x48, 0x89, 0xF8, 0x48, 0x99, 0x48, 0xF7, 0xFE];
         let with = |pre: &[u8], post: &[u8], tail: &[u8]| {
@@ -705,6 +951,115 @@ mod two_address_tests {
             0x48, 0x89, 0xF8, 0x31, 0xD2, 0x48, 0xF7, 0xF6, 0x48, 0x89, 0xC1,
         ];
         assert_eq!(emit(&func, v, &alloc, BinOp::Divu, Reg::RCX), divu);
+    }
+
+    /// `hi:lo` reaches rdx:rax as one parallel move, a divisor there moves
+    /// aside, and rax / rdx live across the divide are saved. Encodings are
+    /// llvm-mc's, but for the exchange's `87 /r` form.
+    #[test]
+    fn udiv128_moves_its_dividend_into_rdx_rax() {
+        let target = Target::LinuxX64;
+        let reg = |r: Reg| Place::IntReg(r.0);
+        let src = "unsigned long long f(unsigned long long hi, unsigned long long lo,\n\
+                   unsigned long long d) {\n\
+                   return (unsigned long long)((((unsigned __int128)hi << 64) | lo) / d);\n\
+                   }";
+        let program = crate::Compiler::with_target(
+            alloc::format!("{src} int main(void){{ return 0; }}"),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let (func, v) = funcs
+            .into_iter()
+            .find_map(|f| {
+                let at = f
+                    .insts
+                    .iter()
+                    .position(|i| matches!(i, Inst::Udiv128 { .. }))?;
+                Some((f, at as u32))
+            })
+            .expect("a 128-by-64 division");
+        let Inst::Udiv128 { hi, lo, divisor } = func.insts[v as usize] else {
+            unreachable!()
+        };
+        let mut alloc = super::super::ssa::reg_alloc::allocate(
+            &func,
+            target,
+            crate::c5::codegen::FixedRegs::NONE,
+        );
+        for p in alloc.places.iter_mut() {
+            if *p == reg(Reg::RAX) || *p == reg(Reg::RDX) {
+                *p = Place::None;
+            }
+        }
+        alloc.implicit_live = alloc::vec![0; func.insts.len()];
+        let emit = |alloc: &Allocation, h: Reg, l: Reg, d: Reg| {
+            let mut alloc = alloc.clone();
+            alloc.places[hi as usize] = reg(h);
+            alloc.places[lo as usize] = reg(l);
+            alloc.places[divisor as usize] = reg(d);
+            let frame = compute_frame(&func, &alloc, target.abi(), target);
+            let mut code = Vec::new();
+            emit_udiv128(&mut code, v, reg(Reg::R8), hi, lo, divisor, &alloc, frame)
+                .expect("emit_udiv128");
+            code
+        };
+        let div_rcx: &[u8] = &[0x48, 0xF7, 0xF1];
+        let div_r11: &[u8] = &[0x49, 0xF7, 0xF3];
+        let mov_r8_rax: &[u8] = &[0x49, 0x89, 0xC0];
+        let mov_rdx_rdi: &[u8] = &[0x48, 0x89, 0xFA];
+        let mov_rax_rsi: &[u8] = &[0x48, 0x89, 0xF0];
+        let mov_rax_rdx: &[u8] = &[0x48, 0x89, 0xD0];
+        let mov_r11_rax: &[u8] = &[0x49, 0x89, 0xC3];
+        let xchg_rax_rdx: &[u8] = &[0x48, 0x87, 0xD0];
+        let (push_rax_rdx, pop_rdx_rax): (&[u8], &[u8]) = (&[0x50, 0x52], &[0x5A, 0x58]);
+        let cases = [
+            (
+                Reg::RDI,
+                Reg::RSI,
+                Reg::RCX,
+                [mov_rdx_rdi, mov_rax_rsi, div_rcx].concat(),
+            ),
+            (
+                Reg::RAX,
+                Reg::RDX,
+                Reg::RCX,
+                [xchg_rax_rdx, div_rcx].concat(),
+            ),
+            (
+                Reg::RDI,
+                Reg::RDX,
+                Reg::RCX,
+                [mov_rax_rdx, mov_rdx_rdi, div_rcx].concat(),
+            ),
+            (
+                Reg::RDI,
+                Reg::RSI,
+                Reg::RAX,
+                [mov_r11_rax, mov_rdx_rdi, mov_rax_rsi, div_r11].concat(),
+            ),
+        ];
+        for (h, l, d, body) in cases {
+            assert_eq!(
+                emit(&alloc, h, l, d),
+                [&body[..], mov_r8_rax].concat(),
+                "{h:?} {l:?} {d:?}"
+            );
+        }
+        alloc.implicit_live[v as usize] = (1 << Reg::RAX.0) | (1 << Reg::RDX.0);
+        let saved = [
+            push_rax_rdx,
+            mov_rdx_rdi,
+            mov_rax_rsi,
+            div_rcx,
+            mov_r8_rax,
+            pop_rdx_rax,
+        ];
+        assert_eq!(emit(&alloc, Reg::RDI, Reg::RSI, Reg::RCX), saved.concat());
     }
 }
 

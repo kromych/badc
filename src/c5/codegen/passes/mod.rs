@@ -2,6 +2,7 @@
 //! `FunctionSsa` in place and is target-neutral; the per-target lowering
 //! drivers run a selection of them before instruction selection.
 
+pub(crate) mod agg_parts;
 pub(crate) mod byteload;
 pub(crate) mod const_global_fold;
 pub(crate) mod constfold;

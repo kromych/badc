@@ -109,8 +109,14 @@ impl<'a> Walker<'a> {
             return Ok(b.imm(0));
         }
         let slot = b.alloc_synthetic_local();
-        let load_kind = load_kind_for(ty, self.target);
-        let store_kind = store_kind_for(ty, self.target);
+        // The slot holds an arm's computed value: binary64 for a `long double`.
+        let value_ty = if is_long_double_scalar(ty) {
+            Ty::Double as i64
+        } else {
+            ty
+        };
+        let load_kind = load_kind_for(value_ty, self.target);
+        let store_kind = store_kind_for(value_ty, self.target);
         // C99 6.5.15: exactly one arm is evaluated, and a synthetic
         // local slot stands in for the phi. An FP-typed result carries
         // the store and load kinds so the value stays in the FP register

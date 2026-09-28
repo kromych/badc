@@ -153,6 +153,10 @@ FORWARD_EXACT = {
     # unit built here carries a call to patch. badc rejects the set on
     # aarch64 as gcc does.
     "-pg", "-mfentry", "-mrecord-mcount", "-mnop-mcount",
+    # Signed overflow. The top-level Makefile builds every unit
+    # -fno-strict-overflow, which gcc >= 8 spells -fwrapv -fwrapv-pointer;
+    # without it badc may assume at -O that a signed + - * does not overflow.
+    "-fno-strict-overflow", "-fstrict-overflow", "-fwrapv", "-fno-wrapv",
     # wchar_t width. The kernel builds the whole tree with -fshort-wchar and
     # stages L"..." into efi_char16_t (u16) arrays, so a compiler that never
     # sees it lays out the wrong element width.
@@ -262,6 +266,11 @@ UNSUPPORTED_PREFIX = (
     # (CONFIG_ZERO_CALL_USED_REGS). badc emits no such epilogue.
     # TODO: implement the register-clearing epilogue and forward the flag.
     "-fzero-call-used-regs=",
+    # Rewrites the prefix of the path `__FILE__` and `__builtin_FILE()`
+    # expand to; kbuild's `./=` (6.1 through 6.12) strips a leading `./`.
+    # badc expands the path it was given, so a unit's file-name strings can
+    # differ by that prefix.
+    "-fmacro-prefix-map=",
 )
 
 # Flags measured to leave badc's object unchanged, with the measurement.
@@ -271,12 +280,10 @@ UNSUPPORTED_PREFIX = (
 IGNORE_EXACT = {
     # Driver bookkeeping. The shim passes its own -c.
     "-c",
-    # badc performs no type-based alias analysis, deletes no null check on
-    # the strength of a preceding dereference, and derives no range from
-    # signed overflow being undefined, so the kernel's three relaxations are
-    # already what it does.
+    # badc performs no type-based alias analysis and deletes no null check
+    # on the strength of a preceding dereference, so the kernel's two
+    # relaxations are already what it does.
     "-fno-strict-aliasing", "-fno-delete-null-pointer-checks",
-    "-fno-strict-overflow",
     # What badc already emits: a tentative definition placed in .data rather
     # than left common, no stack probe, no .eh_frame, one .text and one
     # .data per object, and a frame pointer in every function.
@@ -310,6 +317,10 @@ IGNORE_EXACT = {
     # by its call count, so declining that heuristic asks for what it
     # already does; measured to leave the object unchanged.
     "-fno-inline-functions-called-once",
+    # Turns off gcc's hoisting of expressions computed on every path out of
+    # branches (6.18's crypto/aes_generic.c asks for it). badc's passes
+    # perform no such hoisting, so the unit gets what the flag asks for.
+    "-fno-code-hoisting",
     # Instruction-scheduling hints. badc schedules to its own model and
     # exposes no knob either names, so both ask for what a unit gets.
     "-fsched-pressure", "-fno-schedule-insns", "-fno-schedule-insns2",
@@ -649,7 +660,9 @@ def _self_test() -> int:
                  "-fpatchable-function-entry=4,2", "-pg", "-mfentry",
                  "-mrecord-mcount"):
         assert rewrite([flag]) == Rewritten([flag], [], []), flag
-    for flag in ("-fno-builtin", "-ffreestanding", "-fno-builtin-wcslen"):
+    for flag in ("-fno-builtin", "-ffreestanding", "-fno-builtin-wcslen",
+                 "-fno-strict-overflow", "-fstrict-overflow", "-fwrapv",
+                 "-fno-wrapv"):
         assert rewrite([flag]).argv == [flag], flag
     # The stack protector and its guard placement reach badc verbatim; the
     # canary the configuration states is the one the object carries.

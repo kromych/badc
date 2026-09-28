@@ -343,7 +343,7 @@ fn classify(func: &FunctionSsa, b: BlockId) -> Class {
     }
     // Accumulator tail: `Return([Extend](op(acc, call)))`.
     let (combine, narrow) = match func.insts.get(r as usize) {
-        Some(Inst::Extend { value, kind }) => (*value, Some(*kind)),
+        Some(Inst::Extend { value, kind, .. }) => (*value, Some(*kind)),
         _ => (r, None),
     };
     let (acc_op, other, other_imm) = match func.insts.get(combine as usize) {
@@ -671,7 +671,11 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
                     back_extend[t][pi] = if back_edge_needs_extend(kind)
                         && !already_canonical(func, arg_old, kind)
                     {
-                        emit_new!(Inst::Extend { value: arg, kind })
+                        emit_new!(Inst::Extend {
+                            value: arg,
+                            kind,
+                            nsw: false
+                        })
                     } else {
                         arg
                     };
@@ -693,7 +697,11 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
                         }
                     };
                     acc_back[t] = match narrow {
-                        Some(kind) => emit_new!(Inst::Extend { value: sum, kind }),
+                        Some(kind) => emit_new!(Inst::Extend {
+                            value: sum,
+                            kind,
+                            nsw: false
+                        }),
                         None => sum,
                     };
                 }
@@ -713,7 +721,11 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
                     rhs: x,
                 });
                 let ret = match narrow {
-                    Some(kind) => emit_new!(Inst::Extend { value: sum, kind }),
+                    Some(kind) => emit_new!(Inst::Extend {
+                        value: sum,
+                        kind,
+                        nsw: false
+                    }),
                     None => sum,
                 };
                 terminator = Terminator::Return(ret);

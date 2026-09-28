@@ -26,6 +26,8 @@ Disassembly of section .text:
                	int3
 
 <qs>:
+               	cmpl	%edx, %esi
+               	jge	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
@@ -33,10 +35,7 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %r12
-               	movslq	%edx, %r13
-               	movslq	%esi, %rsi
-               	cmpl	%r13d, %esi
-               	jge	<addr>
+               	movq	%rdx, %r13
                	leaq	(%rsi,%r13), %rax
                	movslq	%eax, %rax
                	movq	%rax, %rcx
@@ -73,13 +72,14 @@ Disassembly of section .text:
                	jle	<addr>
                	movq	%r12, %rdi
                	callq	<addr>
-               	movslq	%ebx, %rsi
+               	movq	%rbx, %rsi
                	cmpl	%r13d, %esi
                	jl	<addr>
                	popq	%rbx
                	popq	%r12
                	popq	%r13
                	leave
+               	retq
                	retq
 
 <main>:

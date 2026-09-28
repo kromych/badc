@@ -46,22 +46,21 @@ Disassembly of section .text:
                	cmpl	$0x7, %ecx
                	je	<addr>
                	leaq	<rip>, %rdi
-               	leaq	<rip>, %rdx
-               	xorl	%ecx, %ecx
-               	movl	$0x1, (%rdx)
-               	movl	$0x2, 0x4(%rdx)
-               	movl	$0x4, 0x8(%rdx)
-               	movq	%rdx, %rax
-               	leaq	0xc(%rdx), %rsi
-               	cmpq	%rsi, %rax
+               	leaq	<rip>, %rcx
+               	xorl	%esi, %esi
+               	movl	$0x1, (%rcx)
+               	movl	$0x2, 0x4(%rcx)
+               	movl	$0x4, 0x8(%rcx)
+               	movq	%rcx, %rax
+               	leaq	0xc(%rcx), %rdx
+               	cmpq	%rdx, %rax
                	jae	<addr>
-               	movslq	(%rax), %rsi
-               	addq	%rsi, %rcx
+               	movslq	(%rax), %rdx
+               	addq	%rdx, %rsi
                	addq	$0x4, %rax
-               	leaq	0xc(%rdx), %rsi
-               	cmpq	%rsi, %rax
+               	leaq	0xc(%rcx), %rdx
+               	cmpq	%rdx, %rax
                	jb	<addr>
-               	movslq	%ecx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x5, %eax

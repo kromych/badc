@@ -134,6 +134,8 @@ Disassembly of section .text:
                	retq
 
 <carried>:
+               	testq	%rdi, %rdi
+               	jle	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
@@ -143,8 +145,6 @@ Disassembly of section .text:
                	movq	%rdi, %r13
                	xorl	%ebx, %ebx
                	movq	%rbx, %r12
-               	cmpq	%r13, %rbx
-               	jge	<addr>
                	movq	%rbx, %rax
                	imulq	%rbx, %rax
                	addq	%rax, %r12
@@ -165,6 +165,8 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	leave
+               	retq
+               	xorl	%eax, %eax
                	retq
 
 <jumped>:

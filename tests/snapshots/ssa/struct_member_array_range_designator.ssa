@@ -21,7 +21,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 2  start_pc=0
     v11  Imm(0)                                           -> x1
     v12  Imm(1)                                           -> x1
-    v13  Imm(0)                                           -> x1
+    v13  Imm(1)                                           -> x1
     v14  Imm(1)                                           -> x1
     v15  Imm(1)                                           -> x1
     v16  ImmData(8)                                       -> x1
@@ -34,7 +34,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 3  start_pc=0
     v22  Imm(1)                                           -> x1
     v23  Imm(2)                                           -> x1
-    v24  Imm(0)                                           -> x1
+    v24  Imm(2)                                           -> x1
     v25  Imm(2)                                           -> x1
     v26  Imm(1)                                           -> x1
     v27  ImmData(8)                                       -> x1
@@ -47,7 +47,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 4  start_pc=0
     v33  Imm(2)                                           -> x1
     v34  Imm(3)                                           -> x1
-    v35  Imm(0)                                           -> x1
+    v35  Imm(3)                                           -> x1
     v36  Imm(3)                                           -> x1
     v37  Imm(1)                                           -> x1
     v38  ImmData(8)                                       -> x1
@@ -60,7 +60,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 5  start_pc=0
     v44  Imm(3)                                           -> x1
     v45  Imm(4)                                           -> x1
-    v46  Imm(0)                                           -> x1
+    v46  Imm(4)                                           -> x1
     v47  Imm(4)                                           -> x1
     v48  Imm(1)                                           -> x1
     v49  ImmData(8)                                       -> x1
@@ -73,7 +73,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 6  start_pc=0
     v55  Imm(4)                                           -> x1
     v56  Imm(5)                                           -> x1
-    v57  Imm(0)                                           -> x1
+    v57  Imm(5)                                           -> x1
     v58  Imm(5)                                           -> x1
     v59  Imm(0)                                           -> x1
     v60  ImmData(8)                                       -> x1

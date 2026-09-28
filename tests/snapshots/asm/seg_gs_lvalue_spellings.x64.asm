@@ -109,7 +109,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x8, %rsp
                	pushq	%rbx
                	leaq	<rip>, %rax
                	movl	$0x28, %gs:(%rax)
@@ -138,8 +138,7 @@ Disassembly of section .text:
                	movl	$0x1001, %edi           # imm = 0x1001
                	leaq	<rip>, %rsi
                	syscall
-               	movq	%rax, -0x8(%rbp)
-               	cmpq	$0x0, -0x8(%rbp)
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
@@ -170,8 +169,7 @@ Disassembly of section .text:
                	movl	$0x1001, %edi           # imm = 0x1001
                	xorl	%esi, %esi
                	syscall
-               	movq	%rax, -0x8(%rbp)
-               	cmpq	$0x0, -0x8(%rbp)
+               	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx

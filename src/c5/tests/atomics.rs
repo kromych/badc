@@ -9,6 +9,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use super::perf_codegen::x64_insns;
 use crate::c5::ir::MemOrder;
 use crate::{
     CompileOptions, Compiler, NativeOptions, NativeSymSection, OutputKind, Target,
@@ -20,17 +21,20 @@ use crate::{
 /// 7.17.7.1p2, 7.17.7.2p2).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Op {
-    /// An atomic load: `ldar` on aarch64 above relaxed, a plain load
-    /// otherwise; a plain load on x86-64 for every order.
+    /// An atomic load: on aarch64 `ldapr` for acquire, `ldar` for
+    /// seq_cst, a plain load for relaxed; a plain load on x86-64 for
+    /// every order.
     Load(u8, MemOrder),
     /// An atomic store: `stlr` on aarch64 above relaxed, a plain store
     /// otherwise; `xchg` against memory on x86-64 for seq_cst, a plain
     /// store otherwise.
     Store(u8, MemOrder),
-    /// An atomic read-modify-write: on x86-64 a `LOCK`-prefixed `XADD`
-    /// / `CMPXCHG` or an `XCHG` with a memory operand, on aarch64 an
-    /// `LDAXR` / `STLXR` pair of that width.
-    Rmw(u8),
+    /// An atomic read-modify-write or compare-exchange carrying an order:
+    /// on x86-64 a `LOCK`-prefixed `XADD` / `CMPXCHG` / `AND` / `OR` /
+    /// `XOR` or an `XCHG` with a memory operand, on aarch64 one LSE
+    /// instruction of that width with the order's acquire and release
+    /// bits.
+    Rmw(u8, MemOrder),
     /// A thread fence: `dmb ish` on aarch64 (`dmb ishld` for acquire);
     /// `mfence` on x86-64 for seq_cst and nothing for the rest.
     ThreadFence(MemOrder),
@@ -160,105 +164,179 @@ const FORMS: &[Form] = &[
     Form {
         name: "f_exchange",
         decl: "int f_exchange(atomic_int *p){ return atomic_exchange(p, 7); }",
-        op: Op::Rmw(4),
+        op: Op::Rmw(4, SeqCst),
     },
     Form {
         name: "f_exchange_explicit",
         decl: "int f_exchange_explicit(atomic_int *p){ \
                return atomic_exchange_explicit(p, 7, memory_order_acq_rel); }",
-        op: Op::Rmw(4),
+        op: Op::Rmw(4, AcqRel),
     },
     Form {
         name: "f_fetch_add",
         decl: "int f_fetch_add(atomic_int *p){ return atomic_fetch_add(p, 1); }",
-        op: Op::Rmw(4),
+        op: Op::Rmw(4, SeqCst),
     },
     Form {
         name: "f_fetch_add_explicit",
         decl: "int f_fetch_add_explicit(atomic_int *p){ \
                return atomic_fetch_add_explicit(p, 1, memory_order_relaxed); }",
-        op: Op::Rmw(4),
+        op: Op::Rmw(4, Relaxed),
     },
     Form {
         name: "f_fetch_sub",
         decl: "int f_fetch_sub(atomic_int *p){ return atomic_fetch_sub(p, 1); }",
-        op: Op::Rmw(4),
+        op: Op::Rmw(4, SeqCst),
     },
     Form {
         name: "f_fetch_sub_explicit",
         decl: "int f_fetch_sub_explicit(atomic_int *p){ \
-               return atomic_fetch_sub_explicit(p, 1, memory_order_seq_cst); }",
-        op: Op::Rmw(4),
+               return atomic_fetch_sub_explicit(p, 1, memory_order_release); }",
+        op: Op::Rmw(4, Release),
     },
     Form {
         name: "f_fetch_and",
         decl: "int f_fetch_and(atomic_int *p){ return atomic_fetch_and(p, 5); }",
-        op: Op::Rmw(4),
+        op: Op::Rmw(4, SeqCst),
     },
     Form {
         name: "f_fetch_and_explicit",
         decl: "int f_fetch_and_explicit(atomic_int *p){ \
-               return atomic_fetch_and_explicit(p, 5, memory_order_seq_cst); }",
-        op: Op::Rmw(4),
+               return atomic_fetch_and_explicit(p, 5, memory_order_acquire); }",
+        op: Op::Rmw(4, Acquire),
     },
     Form {
         name: "f_fetch_or",
         decl: "int f_fetch_or(atomic_int *p){ return atomic_fetch_or(p, 5); }",
-        op: Op::Rmw(4),
+        op: Op::Rmw(4, SeqCst),
     },
     Form {
         name: "f_fetch_or_explicit",
         decl: "int f_fetch_or_explicit(atomic_int *p){ \
-               return atomic_fetch_or_explicit(p, 5, memory_order_seq_cst); }",
-        op: Op::Rmw(4),
+               return atomic_fetch_or_explicit(p, 5, memory_order_acq_rel); }",
+        op: Op::Rmw(4, AcqRel),
     },
     Form {
         name: "f_fetch_xor",
         decl: "int f_fetch_xor(atomic_int *p){ return atomic_fetch_xor(p, 5); }",
-        op: Op::Rmw(4),
+        op: Op::Rmw(4, SeqCst),
     },
     Form {
         name: "f_fetch_xor_explicit",
         decl: "int f_fetch_xor_explicit(atomic_int *p){ \
-               return atomic_fetch_xor_explicit(p, 5, memory_order_seq_cst); }",
-        op: Op::Rmw(4),
+               return atomic_fetch_xor_explicit(p, 5, memory_order_consume); }",
+        op: Op::Rmw(4, Acquire),
     },
     Form {
         name: "f_cas_strong",
         decl: "int f_cas_strong(atomic_int *p, int *e){ \
                return atomic_compare_exchange_strong(p, e, 9); }",
-        op: Op::Rmw(4),
+        op: Op::Rmw(4, SeqCst),
     },
     Form {
         name: "f_cas_strong_explicit",
         decl: "int f_cas_strong_explicit(atomic_int *p, int *e){ \
                return atomic_compare_exchange_strong_explicit( \
                    p, e, 9, memory_order_acq_rel, memory_order_acquire); }",
-        op: Op::Rmw(4),
+        op: Op::Rmw(4, AcqRel),
     },
     Form {
         name: "f_cas_weak",
         decl: "int f_cas_weak(atomic_int *p, int *e){ \
                return atomic_compare_exchange_weak(p, e, 9); }",
-        op: Op::Rmw(4),
+        op: Op::Rmw(4, SeqCst),
     },
     Form {
         name: "f_cas_weak_explicit",
         decl: "int f_cas_weak_explicit(atomic_int *p, int *e){ \
                return atomic_compare_exchange_weak_explicit( \
                    p, e, 9, memory_order_release, memory_order_relaxed); }",
-        op: Op::Rmw(4),
+        op: Op::Rmw(4, Release),
     },
     Form {
         name: "f_flag_test_and_set",
         decl: "int f_flag_test_and_set(atomic_flag *f){ return atomic_flag_test_and_set(f); }",
-        op: Op::Rmw(1),
+        op: Op::Rmw(1, SeqCst),
     },
     Form {
         name: "f_flag_test_and_set_explicit",
         decl: "int f_flag_test_and_set_explicit(atomic_flag *f){ \
                return atomic_flag_test_and_set_explicit(f, memory_order_acquire); }",
-        op: Op::Rmw(1),
+        op: Op::Rmw(1, Acquire),
+    },
+    Form {
+        name: "f_builtin_fetch_add_release",
+        decl: "int f_builtin_fetch_add_release(int *p){ \
+               return __atomic_fetch_add(p, 1, __ATOMIC_RELEASE); }",
+        op: Op::Rmw(4, Release),
+    },
+    Form {
+        name: "f_builtin_add_fetch_llong",
+        decl: "long long f_builtin_add_fetch_llong(long long *p){ \
+               return __atomic_add_fetch(p, 2, __ATOMIC_ACQUIRE); }",
+        op: Op::Rmw(8, Acquire),
+    },
+    Form {
+        name: "f_builtin_exchange_short",
+        decl: "short f_builtin_exchange_short(short *p){ \
+               return __atomic_exchange_n(p, 3, __ATOMIC_RELAXED); }",
+        op: Op::Rmw(2, Relaxed),
+    },
+    Form {
+        name: "f_builtin_fetch_or_unused",
+        decl: "void f_builtin_fetch_or_unused(int *p){ \
+               __atomic_fetch_or(p, 4, __ATOMIC_SEQ_CST); }",
+        op: Op::Rmw(4, SeqCst),
+    },
+    Form {
+        name: "f_builtin_cas_ptr",
+        decl: "int f_builtin_cas_ptr(int **p, int **e, int *d){ \
+               return __atomic_compare_exchange_n( \
+                   p, e, d, 0, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED); }",
+        op: Op::Rmw(8, Acquire),
+    },
+    Form {
+        name: "f_builtin_cas_char",
+        decl: "int f_builtin_cas_char(char *p, char e, char d){ \
+               return __atomic_compare_exchange_n( \
+                   p, &e, d, 1, __ATOMIC_RELAXED, __ATOMIC_RELAXED); }",
+        op: Op::Rmw(1, Relaxed),
+    },
+    // A failure order that acquires where the success order does not
+    // makes the one instruction acquire as well as release.
+    Form {
+        name: "f_builtin_cas_release_acquire",
+        decl: "int f_builtin_cas_release_acquire(int *p, int *e){ \
+               return __atomic_compare_exchange_n( \
+                   p, e, 9, 0, __ATOMIC_RELEASE, __ATOMIC_ACQUIRE); }",
+        op: Op::Rmw(4, AcqRel),
+    },
+    Form {
+        name: "f_builtin_test_and_set",
+        decl: "int f_builtin_test_and_set(unsigned char *p){ \
+               return __atomic_test_and_set(p, __ATOMIC_RELEASE); }",
+        op: Op::Rmw(1, Release),
+    },
+    Form {
+        name: "f_sync_fetch_and_add",
+        decl: "int f_sync_fetch_and_add(int *p){ return __sync_fetch_and_add(p, 1); }",
+        op: Op::Rmw(4, SeqCst),
+    },
+    Form {
+        name: "f_sync_lock_test_and_set",
+        decl: "int f_sync_lock_test_and_set(int *p){ return __sync_lock_test_and_set(p, 1); }",
+        op: Op::Rmw(4, Acquire),
+    },
+    Form {
+        name: "f_sync_val_cas",
+        decl: "int f_sync_val_cas(int *p){ return __sync_val_compare_and_swap(p, 1, 2); }",
+        op: Op::Rmw(4, SeqCst),
+    },
+    Form {
+        name: "f_sync_bool_cas",
+        decl: "int f_sync_bool_cas(long long *p){ \
+               return __sync_bool_compare_and_swap(p, 1, 2); }",
+        op: Op::Rmw(8, SeqCst),
     },
     Form {
         name: "f_flag_clear",
@@ -427,31 +505,32 @@ fn lookup<'a>(code: &'a [(String, Vec<u8>)], name: &'a str) -> (&'a str, &'a [u8
         .unwrap_or_else(|| panic!("{name}: no text symbol in the emitted unit"))
 }
 
-/// Does `code` carry a `LOCK`-prefixed `XADD` (`0F C1`) or `CMPXCHG`
-/// (`0F B1`)? The emitter puts at most one REX byte between the `F0`
-/// prefix and the escape byte.
+/// Does `code` carry a `LOCK`-prefixed read-modify-write against memory:
+/// `XADD` (`0F C0` / `C1`), `CMPXCHG` (`0F B0` / `B1`), or `AND` / `OR`
+/// / `XOR` (`20` / `21`, `08` / `09`, `30` / `31`)?
 fn has_lock_rmw(code: &[u8]) -> bool {
-    (0..code.len()).any(|i| {
-        if code[i] != 0xF0 {
-            return false;
-        }
-        let j = i + 1 + usize::from(code.get(i + 1).is_some_and(|b| (0x40..=0x4F).contains(b)));
-        matches!(
-            (code.get(j), code.get(j + 1)),
-            (Some(0x0F), Some(0xC1)) | (Some(0x0F), Some(0xB1))
-        )
+    x64_insns(code).iter().any(|i| {
+        let locked = code[i.at..]
+            .iter()
+            .take_while(|b| matches!(b, 0x66 | 0xF0 | 0xF2 | 0xF3))
+            .any(|&b| b == 0xF0);
+        locked
+            && !i.reg_form()
+            && matches!(
+                i.op,
+                0x0FB0 | 0x0FB1 | 0x0FC0 | 0x0FC1 | 0x20 | 0x21 | 0x08 | 0x09 | 0x30 | 0x31
+            )
     })
 }
 
 /// Does `code` carry an `XCHG r/m, r` (`86` byte-wide, `87` otherwise)
 /// against memory? `XCHG` with a memory operand is atomic with no `LOCK`
-/// prefix (Intel SDM Vol.2). The emitter always writes a REX byte before
-/// the opcode and addresses the operand through a base register with no
-/// displacement, so the modrm's mod field is 0.
+/// prefix (Intel SDM Vol.2).
 fn has_xchg_mem(code: &[u8], width: u8) -> bool {
     let opcode = if width == 1 { 0x86 } else { 0x87 };
-    code.windows(3)
-        .any(|w| (0x40..=0x4F).contains(&w[0]) && w[1] == opcode && (w[2] >> 6) != 0b11)
+    x64_insns(code)
+        .iter()
+        .any(|i| i.op == opcode && !i.reg_form())
 }
 
 /// The widths of the `XCHG` against memory in `code`: 1 for the
@@ -466,13 +545,16 @@ fn xchg_widths(code: &[u8]) -> Vec<u8> {
 
 /// x86-64 `MFENCE` (`0F AE F0`).
 fn has_mfence(code: &[u8]) -> bool {
-    code.windows(3).any(|w| w == [0x0F, 0xAE, 0xF0])
+    x64_insns(code)
+        .iter()
+        .any(|i| i.op == 0x0FAE && i.modrm == Some(0xF0))
 }
 
 /// x86-64 `MFENCE` / `LFENCE` / `SFENCE` (`0F AE F0` / `E8` / `F8`).
 fn has_x64_fence(code: &[u8]) -> bool {
-    code.windows(3)
-        .any(|w| w[0] == 0x0F && w[1] == 0xAE && matches!(w[2], 0xF0 | 0xE8 | 0xF8))
+    x64_insns(code)
+        .iter()
+        .any(|i| i.op == 0x0FAE && matches!(i.modrm, Some(0xF0 | 0xE8 | 0xF8)))
 }
 
 /// The 32-bit words of an aarch64 function.
@@ -485,38 +567,18 @@ fn a64_words(code: &[u8]) -> Vec<u32> {
         .collect()
 }
 
-/// The `size` field (bits 31:30) an exclusive or ordered access of
-/// `width` bytes carries: 1 -> `B`, 2 -> `H`, 4 -> word, 8 -> doubleword.
-fn excl_size(width: u8) -> u32 {
-    match width {
-        1 => 0,
-        2 => 1,
-        4 => 2,
-        _ => 3,
-    }
-}
-
-/// `LDAXR{B,H}` / `STLXR{B,H}` of `width` bytes (ARM ARM C6.2) -- the
-/// acquire / release exclusive pair, not the plain `LDXR` / `STXR`. The
-/// masks clear the register fields and keep the size field.
-fn has_ldaxr_stlxr(words: &[u32], width: u8) -> (bool, bool) {
-    let size = excl_size(width) << 30;
-    let ldaxr = words
-        .iter()
-        .any(|w| w & 0xFFFF_FC00 == (0x085F_FC00 | size));
-    let stlxr = words
-        .iter()
-        .any(|w| w & 0xFFE0_FC00 == (0x0800_FC00 | size));
-    (ldaxr, stlxr)
-}
-
 /// Every aarch64 instruction in a function that orders memory, by kind.
 #[derive(Default, PartialEq, Eq, Debug)]
 struct A64Ordering {
     /// Widths of the `LDAR{B,H}` instructions, in order.
     ldar: Vec<u8>,
+    /// Widths of the RCpc `LDAPR{B,H}` instructions, in order.
+    ldapr: Vec<u8>,
     /// Widths of the `STLR{B,H}` instructions, in order.
     stlr: Vec<u8>,
+    /// Each LSE read-modify-write or compare-exchange: its width and its
+    /// acquire and release bits.
+    lse: Vec<(u8, bool, bool)>,
     /// An exclusive access of any width, ordered or plain.
     exclusive: bool,
     /// The `CRm` option of each `DMB` / `DSB` / `ISB`: 0b1011 is `ISH`,
@@ -533,6 +595,15 @@ fn a64_ordering(words: &[u32]) -> A64Ordering {
         let width = 1u8 << (w >> 30);
         if w & 0x3FFF_FC00 == 0x08DF_FC00 {
             o.ldar.push(width);
+        } else if w & 0x3FFF_FC00 == 0x38BF_C000 {
+            o.ldapr.push(width);
+        } else if w & 0x3F20_0C00 == 0x3820_0000 {
+            // LD<op> / SWP: A is bit 23, R bit 22. `LDAPR` shares the
+            // class and is told apart above.
+            o.lse.push((width, w >> 23 & 1 != 0, w >> 22 & 1 != 0));
+        } else if w & 0x3FA0_7C00 == 0x08A0_7C00 {
+            // CAS: L, the acquire, is bit 22 and o0, the release, bit 15.
+            o.lse.push((width, w >> 22 & 1 != 0, w >> 15 & 1 != 0));
         } else if w & 0x3FFF_FC00 == 0x089F_FC00 {
             o.stlr.push(width);
         } else if w & 0x3FFF_7C00 == 0x085F_7C00 || w & 0x3FE0_7C00 == 0x0800_7C00 {
@@ -561,7 +632,7 @@ fn stdatomic_forms_lower_as_documented_x86_64() {
         let xchg = xchg_widths(bytes);
         let fence = has_x64_fence(bytes);
         match form.op {
-            Op::Rmw(width) => assert!(
+            Op::Rmw(width, _) => assert!(
                 lock || has_xchg_mem(bytes, width),
                 "{name}: no LOCK XADD / LOCK CMPXCHG and no {width}-byte XCHG against memory \
                  in {bytes:02x?}"
@@ -583,13 +654,15 @@ fn stdatomic_forms_lower_as_documented_x86_64() {
     }
 }
 
-/// The aarch64 lowering of every form: `Op::Rmw` is an `LDAXR` /
-/// `STLXR` retry loop at the object's width; an `Op::Load` above relaxed
-/// is one `LDAR` of the width and an `Op::Store` above relaxed one
-/// `STLR`, with no other ordering instruction; the seq_cst, release and
-/// acq_rel `Op::ThreadFence` are `DMB ISH` and the acquire one `DMB
-/// ISHLD`; a relaxed access or fence, a signal fence and
-/// `kill_dependency` carry no ordering instruction whatever.
+/// The aarch64 lowering of every form (ARM's C/C++11 mappings):
+/// `Op::Rmw` is one LSE instruction of the object's width whose acquire
+/// and release bits are the order's, seq_cst setting both, with no
+/// exclusive access; an acquire `Op::Load` is one `LDAPR` of the width, a
+/// seq_cst one one `LDAR`, and an `Op::Store` above relaxed one `STLR`,
+/// with no other ordering instruction; the seq_cst, release and acq_rel
+/// `Op::ThreadFence` are `DMB ISH` and the acquire one `DMB ISHLD`; a
+/// relaxed access or fence, a signal fence and `kill_dependency` carry no
+/// ordering instruction whatever.
 #[test]
 fn stdatomic_forms_lower_as_documented_aarch64() {
     let code = function_bytes(Target::LinuxAarch64);
@@ -598,15 +671,14 @@ fn stdatomic_forms_lower_as_documented_aarch64() {
         let words = a64_words(bytes);
         let ord = a64_ordering(&words);
         let expect = match form.op {
-            Op::Rmw(width) => {
-                let (ldaxr, stlxr) = has_ldaxr_stlxr(&words, width);
-                assert!(
-                    ldaxr && stlxr,
-                    "{name}: no {width}-byte LDAXR / STLXR pair (ldaxr={ldaxr}, stlxr={stlxr}) \
-                     in {words:08x?}"
-                );
-                continue;
-            }
+            Op::Rmw(width, order) => A64Ordering {
+                lse: alloc::vec![(width, order.acquires(), order.releases())],
+                ..Default::default()
+            },
+            Op::Load(width, Acquire) => A64Ordering {
+                ldapr: alloc::vec![width],
+                ..Default::default()
+            },
             Op::Load(width, order) if order != Relaxed => A64Ordering {
                 ldar: alloc::vec![width],
                 ..Default::default()
@@ -821,7 +893,7 @@ fn optimizer_keeps_atomic_accesses_and_their_ordering() {
     );
 
     // The emit skips a pure value nothing uses; an atomic load is not
-    // one, so the `ldar` is in the code.
+    // one, so the `ldapr` is in the code.
     let code = function_bytes_of(
         "#include <stdatomic.h>\n\
          void f_unused(atomic_int *p){ atomic_load_explicit(p, memory_order_acquire); }\n",
@@ -830,7 +902,7 @@ fn optimizer_keeps_atomic_accesses_and_their_ordering() {
     );
     let (_, bytes) = lookup(&code, "f_unused");
     assert_eq!(
-        a64_ordering(&a64_words(bytes)).ldar,
+        a64_ordering(&a64_words(bytes)).ldapr,
         [4],
         "an unused acquire load is performed: {:08x?}",
         a64_words(bytes)

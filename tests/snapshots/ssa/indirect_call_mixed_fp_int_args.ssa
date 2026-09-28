@@ -15,7 +15,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v9   Extend { value=v4, kind=I32 }                    -> x1
     v10  Imm(0)                                           -> x1
     v11  BinopI { op=add, lhs=v4, rhs_imm=2 }             -> x1
-    v12  Extend { value=v11, kind=I32 }                   -> x2
+    v12  Extend { value=v11, kind=I32, nsw }              -> x2
     v13  Imm(4598175219545276416)                         -> x2
     v14  Imm(1069547520)                                  -> x6 [f32]
     v15  Imm(7)                                           -> x7
@@ -27,21 +27,21 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v21  Binop { op=fmul, lhs=v7, rhs=v20 }               -> d1
     v22  FpCast { kind=FpToInt, value=v21 }               -> x7
     v23  Binop { op=add, lhs=v4, rhs=v22 }                -> x7
-    v24  Extend { value=v23, kind=I32 }                   -> x8
+    v24  Extend { value=v23, kind=I32, nsw }              -> x8
     v25  Binop { op=add, lhs=v23, rhs=v11 }               -> x7
-    v26  Extend { value=v25, kind=I32 }                   -> x8
+    v26  Extend { value=v25, kind=I32, nsw }              -> x8
     v27  Imm(4636737291354636288)                         -> x8
     v28  Binop { op=fmul, lhs=v13, rhs=v27 }              -> d1
     v29  FpCast { kind=FpToInt, value=v28 }               -> x8
     v30  Binop { op=add, lhs=v25, rhs=v29 }               -> x7
-    v31  Extend { value=v30, kind=I32 }                   -> x8
+    v31  Extend { value=v30, kind=I32, nsw }              -> x8
     v32  Imm(1073741824)                                  -> x8 [f32]
     v33  Binop { op=fmul, lhs=v14, rhs=v32 }              -> d1 [f32]
     v34  FpCast { kind=FpToInt, value=v33 }               -> x6
     v35  Binop { op=add, lhs=v30, rhs=v34 }               -> x7
-    v36  Extend { value=v35, kind=I32 }                   -> x8
+    v36  Extend { value=v35, kind=I32, nsw }              -> x8
     v37  BinopI { op=add, lhs=v35, rhs_imm=7 }            -> x7
-    v38  Extend { value=v37, kind=I32 }                   -> x8
+    v38  Extend { value=v37, kind=I32, nsw }              -> x8
     v39  Extend { value=v37, kind=I32 }                   -> x8
     v40  Extend { value=v37, kind=I32 }                   -> x8
     v41  Imm(0)                                           -> x8
@@ -56,7 +56,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v46  Extend { value=v4, kind=I32 }                    -> x8
     v47  Imm(0)                                           -> x8
     v48  BinopI { op=add, lhs=v4, rhs_imm=2 }             -> x8
-    v49  Extend { value=v11, kind=I32 }                   -> x8
+    v49  Extend { value=v11, kind=I32, nsw }              -> x8
     v50  Imm(4598175219545276416)                         -> x8
     v51  Imm(1069547520)                                  -> x8 [f32]
     v52  Imm(7)                                           -> x8
@@ -67,21 +67,21 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v57  Binop { op=fmul, lhs=v7, rhs=v56 }               -> d0
     v58  FpCast { kind=FpToInt, value=v57 }               -> x8
     v59  Binop { op=add, lhs=v4, rhs=v58 }                -> x0
-    v60  Extend { value=v59, kind=I32 }                   -> x8
+    v60  Extend { value=v59, kind=I32, nsw }              -> x8
     v61  Binop { op=add, lhs=v59, rhs=v11 }               -> x0
-    v62  Extend { value=v61, kind=I32 }                   -> x1
+    v62  Extend { value=v61, kind=I32, nsw }              -> x1
     v63  Imm(4636737291354636288)                         -> x1
     v64  Binop { op=fmul, lhs=v13, rhs=v63 }              -> d0
     v65  FpCast { kind=FpToInt, value=v64 }               -> x1
     v66  Binop { op=add, lhs=v61, rhs=v65 }               -> x0
-    v67  Extend { value=v66, kind=I32 }                   -> x1
+    v67  Extend { value=v66, kind=I32, nsw }              -> x1
     v68  Imm(1073741824)                                  -> x1 [f32]
     v69  Binop { op=fmul, lhs=v14, rhs=v32 }              -> d0 [f32]
     v70  FpCast { kind=FpToInt, value=v33 }               -> x1
     v71  Binop { op=add, lhs=v66, rhs=v34 }               -> x0
-    v72  Extend { value=v71, kind=I32 }                   -> x1
+    v72  Extend { value=v71, kind=I32, nsw }              -> x1
     v73  BinopI { op=add, lhs=v71, rhs_imm=7 }            -> x0
-    v74  Extend { value=v73, kind=I32 }                   -> x1
+    v74  Extend { value=v73, kind=I32, nsw }              -> x1
     v75  Extend { value=v73, kind=I32 }                   -> x1
     v76  Extend { value=v73, kind=I32 }                   -> x1
     v77  Binop { op=ne, lhs=v37, rhs=v73 }                -> x0

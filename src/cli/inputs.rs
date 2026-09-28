@@ -2,7 +2,7 @@ use std::io::{IsTerminal, Read};
 
 use badc::Target;
 
-use super::args::Cli;
+use super::args::{Cli, LinkMarker};
 use super::options::Mode;
 use super::paths::sysroot_library_paths;
 use super::script_link::LinkInputCli;
@@ -182,13 +182,14 @@ pub(crate) fn parse_ld_script_inputs(bytes: &[u8]) -> Vec<String> {
 /// in another container is rejected by name, since the fallthrough
 /// would read it as a linker script and resolve to no inputs at all;
 /// anything else is treated as a linker script whose GROUP / INPUT /
-/// AS_NEEDED file list is resolved recursively.
-pub(crate) fn ingest_linker_input(
+/// AS_NEEDED file list is resolved recursively, as one group. Each
+/// input takes its place in the link's order.
+fn ingest_linker_input(
+    inputs: &mut Inputs,
     path: &str,
     search_paths: &[String],
     target: Target,
-    shared_libs: &mut Vec<badc::SharedLibrary>,
-    archives: &mut Vec<String>,
+    whole: bool,
     depth: usize,
 ) -> Result<(), String> {
     if depth > 16 {
@@ -235,16 +236,21 @@ pub(crate) fn ingest_linker_input(
         }
         Ok(named(lib))
     };
-    if bytes.starts_with(b"!<arch>\n") || bytes.starts_with(b"!<thin>\n") {
-        archives.push(path.to_string());
+    let lib = if bytes.starts_with(b"!<arch>\n") || bytes.starts_with(b"!<thin>\n") {
+        inputs.archives.push(path.to_string());
+        inputs.ordered.push(LinkInput::Archive {
+            path: path.to_string(),
+            whole,
+        });
+        return Ok(());
     } else if bytes.starts_with(b"\x7fELF") {
         let lib = badc::parse_shared_library(bytes)
             .map_err(|e| format!("reading `{path}` as a shared library: {e}"))?;
-        shared_libs.push(compatible(lib, badc::BinaryFormat::Elf)?);
+        compatible(lib, badc::BinaryFormat::Elf)?
     } else if badc::is_mach_o_dylib(bytes) {
         let lib = badc::parse_mach_o_dylib(bytes)
             .map_err(|e| format!("reading `{path}` as a dylib: {e}"))?;
-        shared_libs.push(compatible(lib, badc::BinaryFormat::MachO)?);
+        compatible(lib, badc::BinaryFormat::MachO)?
     } else if badc::is_tbd(bytes) {
         let text =
             core::str::from_utf8(bytes).map_err(|_| format!("`{path}` is not UTF-8 text"))?;
@@ -254,7 +260,7 @@ pub(crate) fn ingest_linker_input(
             target_platform(target),
         )
         .map_err(|e| format!("reading `{path}` as a text stub: {e}"))?;
-        shared_libs.push(compatible(lib, badc::BinaryFormat::MachO)?);
+        compatible(lib, badc::BinaryFormat::MachO)?
     } else if let Some(f) = badc::detect_binary_format(bytes) {
         return Err(format!(
             "`{path}` is a {} binary badc cannot link against; the shared-library inputs \
@@ -263,22 +269,22 @@ pub(crate) fn ingest_linker_input(
             f.name()
         ));
     } else {
+        inputs.ordered.push(LinkInput::Group(true));
         for entry in parse_ld_script_inputs(bytes) {
             let resolved = match entry.strip_prefix("-l") {
                 Some(n) => find_library(n, search_paths, target)
                     .ok_or_else(|| format!("linker script `{path}`: cannot find `-l{n}`"))?,
                 None => entry,
             };
-            ingest_linker_input(
-                &resolved,
-                search_paths,
-                target,
-                shared_libs,
-                archives,
-                depth + 1,
-            )?;
+            ingest_linker_input(inputs, &resolved, search_paths, target, whole, depth + 1)?;
         }
-    }
+        inputs.ordered.push(LinkInput::Group(false));
+        return Ok(());
+    };
+    inputs.shared_libs.push(lib);
+    inputs
+        .ordered
+        .push(LinkInput::Shared(inputs.shared_libs.len() - 1));
     Ok(())
 }
 
@@ -330,14 +336,41 @@ mod ld_script_tests {
     }
 }
 
+/// A link input in command-line order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum LinkInput {
+    /// `sources[i]`, which the link compiles.
+    Source(usize),
+    Object(String),
+    /// A static archive, every member included under `--whole-archive`.
+    Archive {
+        path: String,
+        whole: bool,
+    },
+    /// `shared_libs[i]`.
+    Shared(usize),
+    /// A group opens (true) or closes: its archives rescan together.
+    Group(bool),
+}
+
+/// A link input as the command line names it, before `-l` is resolved.
+enum Named {
+    Input(LinkInput),
+    Lib { name: String, whole: bool },
+}
+
 /// The positional inputs classified by extension, the libraries `-l`
 /// resolved, and the C library a hosted link imports from.
 pub(crate) struct Inputs {
     pub(crate) sources: Vec<String>,
     pub(crate) objects: Vec<String>,
+    /// Every static archive the link reads, `-l` ones included.
     pub(crate) archives: Vec<String>,
     /// Objects and archives in command-line order for the script link.
     pub(crate) link_inputs: Vec<LinkInputCli>,
+    /// Every link input in command-line order once `-l` is resolved.
+    pub(crate) ordered: Vec<LinkInput>,
+    named: Vec<Named>,
     /// Index into `Cli::positional` where the program's own argv starts;
     /// only `--jit` / `--interp` have one.
     pub(crate) prog_args_start: usize,
@@ -358,32 +391,55 @@ impl Inputs {
         let mut archives: Vec<String> = Vec::new();
         // Objects and archives in command-line order for the script link.
         let mut link_inputs: Vec<LinkInputCli> = Vec::new();
+        let mut named: Vec<Named> = Vec::new();
         let mut prog_args_start: usize = cli.positional.len();
         // Program argv is consumed only by --jit / --interp; every other
         // mode links or preprocesses its inputs and has no argv tail.
         let takes_prog_args = matches!(cli.mode, Mode::Jit | Mode::Interp);
-        for (i, a) in cli.positional.iter().enumerate().skip(1) {
-            if a == "-" {
-                sources.push(a.clone());
-                continue;
+        let mut markers = cli.link.markers.iter().peekable();
+        let mut whole = false;
+        let mut take_markers = |upto: usize, named: &mut Vec<Named>, whole: &mut bool| {
+            while let Some((_, m)) = markers.next_if(|(at, _)| *at <= upto) {
+                match m {
+                    LinkMarker::Lib(name) => named.push(Named::Lib {
+                        name: name.clone(),
+                        whole: *whole,
+                    }),
+                    LinkMarker::Group(open) => named.push(Named::Input(LinkInput::Group(*open))),
+                    LinkMarker::WholeArchive(on) => *whole = *on,
+                }
             }
+        };
+        for (i, a) in cli.positional.iter().enumerate().skip(1) {
+            take_markers(i, &mut named, &mut whole);
             let ext = std::path::Path::new(a)
                 .extension()
                 .and_then(|s| s.to_str())
                 .unwrap_or("");
             match ext {
-                "c" | "" | "s" | "S" | "sx" => sources.push(a.clone()),
+                _ if a == "-" => {
+                    named.push(Named::Input(LinkInput::Source(sources.len())));
+                    sources.push(a.clone());
+                }
+                "c" | "" | "s" | "S" | "sx" => {
+                    named.push(Named::Input(LinkInput::Source(sources.len())));
+                    sources.push(a.clone());
+                }
                 "o" => {
                     objects.push(a.clone());
                     link_inputs.push(LinkInputCli::Object(a.clone()));
+                    named.push(Named::Input(LinkInput::Object(a.clone())));
                 }
                 "a" => {
-                    let whole = cli.link.whole_archive.iter().any(|&(s, e)| s <= i && i < e);
                     archives.push(a.clone());
                     link_inputs.push(LinkInputCli::Archive {
                         path: a.clone(),
                         whole,
                     });
+                    named.push(Named::Input(LinkInput::Archive {
+                        path: a.clone(),
+                        whole,
+                    }));
                 }
                 _ => {
                     // In --jit / --interp the first unrecognised entry marks
@@ -406,11 +462,14 @@ impl Inputs {
                 }
             }
         }
+        take_markers(usize::MAX, &mut named, &mut whole);
         Self {
             sources,
             objects,
             archives,
             link_inputs,
+            ordered: Vec::new(),
+            named,
             prog_args_start,
             shared_libs: Vec::new(),
             target_libc: None,
@@ -425,29 +484,32 @@ impl Inputs {
     /// archive (`lib<name>.a`), matching `ld`'s default search order:
     /// the shared library becomes a load-time dependency whose exports
     /// resolve otherwise-undefined references, the `.a` a positional
-    /// archive whose members are pulled on demand.
+    /// archive whose members are pulled on demand. Each takes the `-l`'s
+    /// place in [`Self::ordered`].
     pub(crate) fn resolve_libraries(&mut self, cli: &Cli) {
         let mut search_paths: Vec<String> = cli.link.library_paths.clone();
         if let Some(root) = &cli.sysroot {
             search_paths.extend(sysroot_library_paths(cli.target, root));
         }
-        for name in &cli.link.lib_names {
-            match find_library(name, &search_paths, cli.target) {
+        for entry in core::mem::take(&mut self.named) {
+            let (name, whole) = match entry {
+                Named::Input(input) => {
+                    self.ordered.push(input);
+                    continue;
+                }
+                Named::Lib { name, whole } => (name, whole),
+            };
+            match find_library(&name, &search_paths, cli.target) {
                 Some(p) => {
-                    if let Err(e) = ingest_linker_input(
-                        &p,
-                        &search_paths,
-                        cli.target,
-                        &mut self.shared_libs,
-                        &mut self.archives,
-                        0,
-                    ) {
+                    if let Err(e) =
+                        ingest_linker_input(self, &p, &search_paths, cli.target, whole, 0)
+                    {
                         eprintln!("badc: error: {e}");
                         std::process::exit(1);
                     }
                 }
                 None => {
-                    let [shared, archive] = library_spellings(name, cli.target);
+                    let [shared, archive] = library_spellings(&name, cli.target);
                     eprintln!(
                         "badc: cannot find `{shared}` or `{archive}` on any search path \
                          ({} probed; -L<dir> names a directory, --sysroot=<dir> the \
@@ -480,6 +542,8 @@ impl Inputs {
             && self.archives.is_empty()
             && !std::io::stdin().is_terminal()
         {
+            self.ordered
+                .insert(0, LinkInput::Source(self.sources.len()));
             self.sources.push("-".to_string());
         }
         if self.sources.is_empty() && self.objects.is_empty() && self.archives.is_empty() {

@@ -174,6 +174,84 @@ fn msib(base: Reg, index: Reg, scale: u8, width: u8) -> super::table::Opnd {
     }
 }
 
+/// A `disp32(,%index,scale)` reference of the given width: no base
+/// register, the displacement a link-time address.
+fn mindex(index: Reg, scale: u8, width: u8) -> super::table::Opnd {
+    super::table::Opnd::IndexMem {
+        index: index.0,
+        scale,
+        disp: 0,
+        width,
+    }
+}
+
+/// Load of `kind` from `disp32(,%index,scale)` into `dst`, extended as the
+/// SIB loads below extend; returns the offset of the displacement field.
+pub(crate) fn emit_load_index_abs(
+    code: &mut Vec<u8>,
+    kind: crate::c5::ir::LoadKind,
+    dst: Reg,
+    index: Reg,
+    scale: u8,
+) -> usize {
+    use crate::c5::ir::LoadKind;
+    let (mnem, width_override, dst_width, width) = match kind {
+        LoadKind::I64 => (Mnem::Mov, Some(8), 8, 8),
+        LoadKind::I32 => (Mnem::Movsxd, None, 8, 4),
+        LoadKind::U32 => (Mnem::Mov, Some(4), 4, 4),
+        LoadKind::I16 => (Mnem::Movsx, None, 8, 2),
+        LoadKind::U16 => (Mnem::Movzx, None, 8, 2),
+        LoadKind::I8 => (Mnem::Movsx, None, 8, 1),
+        LoadKind::U8 => (Mnem::Movzx, None, 8, 1),
+        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => {
+            unreachable!("indexed load of a floating kind")
+        }
+    };
+    super::table::encode_into_disp32(
+        code,
+        mnem,
+        width_override,
+        &[rw(dst, dst_width), mindex(index, scale, width)],
+    )
+}
+
+/// Store of the low `width` bytes of `src` to `disp32(,%index,scale)`;
+/// returns the offset of the displacement field.
+pub(crate) fn emit_store_index_abs(
+    code: &mut Vec<u8>,
+    width: u8,
+    index: Reg,
+    scale: u8,
+    src: Reg,
+) -> usize {
+    super::table::encode_into_disp32(
+        code,
+        Mnem::Mov,
+        Some(width),
+        &[mindex(index, scale, width), rw(src, width)],
+    )
+}
+
+/// `op disp32(,%index,scale), imm`: [`emit_mi_sib`] with no base register;
+/// returns the offset of the displacement field.
+pub(crate) fn emit_mi_index_abs(
+    code: &mut Vec<u8>,
+    mnem: Mnem,
+    width: u8,
+    (index, scale): (Reg, u8),
+    imm: i32,
+) -> usize {
+    super::table::encode_into_disp32(
+        code,
+        mnem,
+        Some(width),
+        &[
+            mindex(index, scale, width),
+            super::table::Opnd::Imm(imm as i64),
+        ],
+    )
+}
+
 fn emit_byte(code: &mut Vec<u8>, b: u8) {
     code.push(b);
 }
@@ -659,6 +737,30 @@ pub(crate) fn emit_lock_cmpxchg_mem_r(
     atomic_prefix(code, width, reg, base);
     emit_byte(code, 0x0F);
     emit_byte(code, if width == 1 { 0xB0 } else { 0xB1 });
+    emit_modrm_mem(code, reg, base, disp);
+}
+
+/// `LOCK AND` / `OR` / `XOR [base + disp], reg` -- combine the memory
+/// operand with `reg` atomically, keeping no prior contents (Intel SDM
+/// Vol.2, the r/m, r forms with the `F0` LOCK prefix). Encoding: `F0 [66]
+/// [REX] 20/21, 08/09 or 30/31 /r`, the byte opcode first.
+pub(crate) fn emit_lock_alu_mem_r(
+    code: &mut Vec<u8>,
+    mnem: Mnem,
+    base: Reg,
+    disp: i32,
+    reg: Reg,
+    width: u8,
+) {
+    let opcode = match mnem {
+        Mnem::And => 0x20,
+        Mnem::Or => 0x08,
+        Mnem::Xor => 0x30,
+        _ => unreachable!("ICE: LOCK takes no {mnem:?} form here"),
+    };
+    emit_byte(code, 0xF0);
+    atomic_prefix(code, width, reg, base);
+    emit_byte(code, if width == 1 { opcode } else { opcode + 1 });
     emit_modrm_mem(code, reg, base, disp);
 }
 
@@ -1211,7 +1313,7 @@ impl Cc {
     /// elided: the branch must fire on the inverted predicate.
     /// Mirror of
     /// [`super::aarch64::Cond::flip`].
-    fn flip(self) -> Cc {
+    pub(crate) fn flip(self) -> Cc {
         match self {
             Cc::O => Cc::No,
             Cc::No => Cc::O,
@@ -1742,6 +1844,7 @@ struct X64Lower<'p> {
     fixups: Vec<Fixup>,
     fn_unwind: Vec<super::FnUnwind>,
     asm_text_abs_refs: Vec<super::AsmTextAbsRef>,
+    abs_addr_refs: Vec<super::AbsAddrRef>,
     /// Per-callee calling convention, for the callees that declare one
     /// (`__attribute__((ms_abi))` / `((sysv_abi))`). A direct call site
     /// reads it to marshal into that convention's argument window.
@@ -1762,6 +1865,7 @@ impl<'p> X64Lower<'p> {
             fixups: Vec::new(),
             fn_unwind: Vec::new(),
             asm_text_abs_refs: Vec::new(),
+            abs_addr_refs: Vec::new(),
             conv_targets: alloc::collections::BTreeMap::new(),
             ret_tags: alloc::collections::BTreeMap::new(),
             fn_name_by_pc: program
@@ -1784,7 +1888,12 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
     const FILE_ASM_ALIGN_POW2: bool = false;
     const FILE_ASM_COMMENTS: crate::c5::asm::AsmComments = crate::c5::asm::AsmComments::X86;
 
-    fn late_opt_passes(&mut self, _funcs: &mut Vec<crate::c5::ir::FunctionSsa>) {}
+    fn late_opt_passes(
+        &mut self,
+        _funcs: &mut Vec<crate::c5::ir::FunctionSsa>,
+        _pipeline: super::ssa::emit_common::Pipeline,
+    ) {
+    }
 
     fn note_callees(&mut self, funcs: &[crate::c5::ir::FunctionSsa]) {
         self.conv_targets = funcs
@@ -1881,10 +1990,12 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
             fe.asm_section_text_refs,
             &mut self.asm_text_abs_refs,
             fe.asm_text_labels,
+            &mut self.abs_addr_refs,
             native.no_fp_regs,
             native.strict_align,
             fe.rodata,
             native.output_kind == super::OutputKind::Relocatable && !native.pic,
+            native.abs32_addrs(target),
             native.hardening,
             native.stack_protect.resolved_for(target),
             entry,
@@ -1963,6 +2074,7 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
     fn install(&mut self, build: &mut Build) {
         build.fn_unwind = core::mem::take(&mut self.fn_unwind);
         build.asm_text_abs_refs = core::mem::take(&mut self.asm_text_abs_refs);
+        build.abs_addr_refs = core::mem::take(&mut self.abs_addr_refs);
     }
 }
 
@@ -2110,12 +2222,14 @@ fn apply_plt_call_fixups(
 /// are not described. A leaf emits none of the above, and any other
 /// shape is described as a frameless leaf -- safe (the unwinder returns
 /// off the top-of-stack RA) rather than codes that do not match the
-/// prologue.
+/// prologue. The test of a return taken ahead of the frame places `push rbp`
+/// at `frame_start` (0 when none), where the decode starts.
 pub(crate) fn decode_x86_64_prologue_unwind(
     text: &[u8],
     begin: u32,
     end: u32,
     prologue_end: u32,
+    frame_start: u32,
 ) -> super::FnUnwind {
     let mut uw = super::FnUnwind {
         begin,
@@ -2131,17 +2245,20 @@ pub(crate) fn decode_x86_64_prologue_unwind(
     let window = &text[b..pe];
     // Entry instructions that leave the stack alone: `endbr64`, the
     // one-byte NOP, the five-byte NOP of `-mnop-mcount`, `call rel32`.
-    let mut fp = 0usize;
-    loop {
-        let rest = &window[fp.min(window.len())..];
-        if rest.starts_with(&[0xF3, 0x0F, 0x1E, 0xFA]) {
-            fp += 4;
-        } else if rest.starts_with(&[0x90]) {
-            fp += 1;
-        } else if rest.starts_with(&[0x0F, 0x1F, 0x44, 0x00, 0x00]) || rest.starts_with(&[0xE8]) {
-            fp += 5;
-        } else {
-            break;
+    let mut fp = frame_start.saturating_sub(begin) as usize;
+    if fp == 0 {
+        loop {
+            let rest = &window[fp.min(window.len())..];
+            if rest.starts_with(&[0xF3, 0x0F, 0x1E, 0xFA]) {
+                fp += 4;
+            } else if rest.starts_with(&[0x90]) {
+                fp += 1;
+            } else if rest.starts_with(&[0x0F, 0x1F, 0x44, 0x00, 0x00]) || rest.starts_with(&[0xE8])
+            {
+                fp += 5;
+            } else {
+                break;
+            }
         }
     }
     if !window[fp.min(window.len())..].starts_with(&[0x55, 0x48, 0x89, 0xE5]) {
@@ -2551,7 +2668,7 @@ mod tests {
     /// window.
     fn decoded(prologue: &[u8]) -> super::super::FnUnwind {
         let n = prologue.len() as u32;
-        decode_x86_64_prologue_unwind(prologue, 0, n, n)
+        decode_x86_64_prologue_unwind(prologue, 0, n, n, 0)
     }
 
     #[test]
@@ -2803,6 +2920,42 @@ mod tests {
         assert_eq!(
             assemble(|c| emit_lock_cmpxchg_mem_r(c, Reg::RCX, 0, Reg::RDX, 8)),
             vec![0xF0, 0x48, 0x0F, 0xB1, 0x11]
+        );
+    }
+
+    // clang: `lock andl %esi, (%rdi)` = F0 21 37, `lock orq %rsi, (%rdi)` =
+    // F0 48 09 37, `lock xorq %r9, 0x10(%rax)` = F0 4C 31 48 10, `lock andb
+    // %sil, (%r10)` = F0 41 20 32; `lock orw %cx, (%rax)` = 66 F0 09 08 and
+    // `lock xorb %al, (%rdi)` = F0 30 07, which the prefix order and the
+    // byte form's REX byte here respell without changing the instruction.
+    #[test]
+    fn lock_alu_mem_r_forms() {
+        let lock = |mnem, base, disp, reg, width| {
+            assemble(|c| emit_lock_alu_mem_r(c, mnem, base, disp, reg, width))
+        };
+        assert_eq!(
+            lock(Mnem::And, Reg::RDI, 0, Reg::RSI, 4),
+            [0xF0, 0x21, 0x37]
+        );
+        assert_eq!(
+            lock(Mnem::Or, Reg::RDI, 0, Reg::RSI, 8),
+            [0xF0, 0x48, 0x09, 0x37]
+        );
+        assert_eq!(
+            lock(Mnem::Xor, Reg::RAX, 0x10, Reg(9), 8),
+            [0xF0, 0x4C, 0x31, 0x48, 0x10]
+        );
+        assert_eq!(
+            lock(Mnem::And, Reg(10), 0, Reg::RSI, 1),
+            [0xF0, 0x41, 0x20, 0x32]
+        );
+        assert_eq!(
+            lock(Mnem::Or, Reg::RAX, 0, Reg::RCX, 2),
+            [0xF0, 0x66, 0x09, 0x08]
+        );
+        assert_eq!(
+            lock(Mnem::Xor, Reg::RDI, 0, Reg::RAX, 1),
+            [0xF0, 0x40, 0x30, 0x07]
         );
     }
 

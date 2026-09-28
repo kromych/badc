@@ -48,7 +48,7 @@ Disassembly of section .text:
                	str	w1, [x0]
                	mov	x2, #0x7                // =7
                	str	w2, [x0]
-               	sxtw	x20, w2
+               	mov	x20, x2
                	cmp	w20, #0x7
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	str	w2, [x0]
                	mov	x2, #0xd                // =13
                	str	w2, [x0]
-               	sxtw	x20, w2
+               	mov	x20, x2
                	cmp	w20, #0xd
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

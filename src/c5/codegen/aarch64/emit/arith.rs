@@ -505,7 +505,7 @@ pub(super) fn mod_takes_third_scratch(
 
 /// The register-form encoding of an integer binop; `None` for a
 /// comparison or a modulo.
-fn int_binop_word(op: BinOp, rd: Reg, rn: Reg, rm: Reg) -> Option<u32> {
+pub(super) fn int_binop_word(op: BinOp, rd: Reg, rn: Reg, rm: Reg) -> Option<u32> {
     Some(match op {
         BinOp::Add => enc_add_reg(rd, rn, rm),
         BinOp::Sub => enc_sub_reg(rd, rn, rm),
@@ -568,7 +568,7 @@ pub(super) fn compare_cond(op: BinOp) -> Option<Cond> {
 }
 
 /// Unsigned 12-bit immediate field of `cmp Xn, #imm`, when `imm` fits.
-fn cmp_imm12(imm: i64) -> Option<u32> {
+pub(super) fn cmp_imm12(imm: i64) -> Option<u32> {
     u32::try_from(imm).ok().filter(|v| *v < (1u32 << 12))
 }
 
@@ -578,7 +578,13 @@ fn cmp_imm12(imm: i64) -> Option<u32> {
 /// to the other form), `x ^ -1` as `mvn`, `x & 0xffffffff` as a 32-bit move, and a bitmask
 /// immediate. Whether a form exists depends on `(op, imm, high_dead)` alone,
 /// which `binop_imm_materializes` reads off this function.
-fn binop_imm_peephole(op: BinOp, imm: i64, high_dead: bool, rd: Reg, rn: Reg) -> Option<u32> {
+pub(super) fn binop_imm_peephole(
+    op: BinOp,
+    imm: i64,
+    high_dead: bool,
+    rd: Reg,
+    rn: Reg,
+) -> Option<u32> {
     let imm_u64 = imm as u64;
     let pow2_shift = if imm > 0 && imm_u64.is_power_of_two() {
         let s = imm_u64.trailing_zeros();

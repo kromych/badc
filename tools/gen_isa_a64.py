@@ -42,6 +42,13 @@ DB_FIXES = {
         ("crc32x Wd, Wn, Xm", None),
     ("crc32cx Xd, Xn, Xm", "10011010|110|Rm|0|10111|Rn|Rd"):
         ("crc32cx Wd, Wn, Xm", None),
+    # The scalar mvn alias (orn Rd, ZR, Rm, {sop #n}) is shipped with its
+    # source spelled `Wn`/`Xn` and an encoding naming `Rn` for both the Rm
+    # field and the zero register, so the row parses as a repeated field.
+    ("mvn Wd, Wn, {sop #n}", "X0101010|sop|1|Rn|n:6|Rn|Rd"):
+        ("mvn Wd, Wm, {sop #n}", "00101010|sop:2|1|Rm|n:6|11111|Rd"),
+    ("mvn Xd, Xn, {sop #n}", "X0101010|sop|1|Rn|n:6|Rn|Rd"):
+        ("mvn Xd, Xm, {sop #n}", "10101010|sop:2|1|Rm|n:6|11111|Rd"),
     # The ldset 64-bit forms are shipped with a 32-bit `Wd` destination; the
     # assembler rejects that width mix (the field is width-independent, so the
     # bytes are already correct -- only the spelling is wrong).
@@ -135,6 +142,24 @@ DB_FIXES = {
         ("irg Xd|SP, Xn|SP, Xm", None),
 }
 
+# The unsigned saturating 32-bit SVE element-count forms write one register,
+# `uqincb Wdn{, pattern{, mul #imm}}`, whose result zero-extends; the database
+# spells them with the signed forms' `Xdn, Wdn` pair, which the assembler
+# rejects.
+for _stem in ('uqinc', 'uqdec'):
+    for _t, _sz in (('b', '00'), ('h', '01'), ('w', '10'), ('d', '11')):
+        _op = '111101' if _stem == 'uqinc' else '111111'
+        DB_FIXES[(f'{_stem}{_t} Xdn, Wdn, {{#pattern}}, {{mul #imm}}',
+                  f'00000100|{_sz}|10|imm:4|{_op}|pattern:5|Rdn')] = (
+            f'{_stem}{_t} Wdn, {{#pattern}}, {{mul #imm}}', None)
+
+# The SVE rows whose operands are general-purpose registers and immediates:
+# the vector-length arithmetic (rdvl, addvl, addpl) and the element-count
+# family, whose predicate-constraint pattern and multiplier read no SVE
+# register. The rest of the SVE group names Z and P registers.
+SVE_SCALAR_ROW = re.compile(
+    r'(rdvl|addvl|addpl|(cnt|inc|dec|sqinc|sqdec|uqinc|uqdec)[bhwd]) [XW]').match
+
 # The store-form atomic aliases (ST<op> = LD<op> with the result discarded)
 # are defined by the architecture only for the plain and release orderings;
 # the acquire spellings ST<op>A / ST<op>AL do not exist (an acquire on a
@@ -201,7 +226,7 @@ for _mnem, _base in LSUI_CAS.items():
 # Bare op-string tokens whose bit width is not written inline (widths verified
 # by the 32-bit row-sum constraint in the design spike).
 BARE = {'Rm': 5, 'Rn': 5, 'Rd': 5, 'Ra': 5, 'Rt': 5, 'Rt2': 5, 'Rs': 5,
-        'Rs2': 5, 'Rd2': 5, 'cond': 4, 'nzcv': 4, 'CRm': 4, 'CRn': 4,
+        'Rs2': 5, 'Rd2': 5, 'Rdn': 5, 'cond': 4, 'nzcv': 4, 'CRm': 4, 'CRn': 4,
         'sop': 2, 'option': 3}
 
 # Aliases that store the inverted written condition (al/nv invalid there).
@@ -254,7 +279,7 @@ def parse_op(op):
 # read from each row's encoding string, not fixed: the same field lands at
 # different bits across instructions (e.g. Rs at bit 0 in stlr, bit 16 in cas).
 REG_FIELD = {'d': 'Rd', 'n': 'Rn', 'm': 'Rm', 'a': 'Ra', 's': 'Rs',
-             't': 'Rt', 't2': 'Rt2', 'd2': 'Rd2', 's2': 'Rs2'}
+             't': 'Rt', 't2': 'Rt2', 'd2': 'Rd2', 's2': 'Rs2', 'dn': 'Rdn'}
 
 
 def classify(heads, toks, op, im, scaled_wb=False):
@@ -283,15 +308,23 @@ def classify(heads, toks, op, im, scaled_wb=False):
     while i < len(toks):
         t = toks[i]
         t0 = t.split('|')[0]
-        if (m := re.fullmatch(r'([XW])(d2|s2|t2|[dnmast])(\|W?SP)?', t)):
+        if (m := re.fullmatch(r'([XW])(d2|s2|t2|dn|[dnmast])(\|W?SP)?', t)):
             # A register operand feeds a named 5-bit field; its bit position is
             # read from the encoding, so any operand order is expressible.
             w, fname = m.group(1), REG_FIELD[m.group(2)]
             fv = fl.get(fname)
             if fv is None or fv[0] != 5:
                 return ('residual', f'register field {fname} not a 5-bit field')
-            consumed.add(fname)
             ops.append(w)
+            if fname in consumed:
+                # A second spelling of a register already written (the signed
+                # saturating `Xdn, Wdn` pair) names the same register.
+                first = next(k for k, f in enumerate(fields)
+                             if f.endswith(f'shift: {fv[1]} }}') and f.startswith('Reg'))
+                fields.append(f'SameReg {{ op: {i}, first: {first} }}')
+                i += 1
+                continue
+            consumed.add(fname)
             fields.append(f'Reg {{ op: {i}, shift: {fv[1]} }}')
             if m.group(3):
                 sp |= 1 << i
@@ -455,6 +488,20 @@ def classify(heads, toks, op, im, scaled_wb=False):
             fields.append(f'{kind} {{ op: {i}, shift: {pos}, width: {w} }}')
             i += 1
             continue
+        if im.startswith('SvePatternImm') and t in ('{#pattern}', '{mul #imm}'):
+            # The SVE element count: an optional predicate-constraint pattern
+            # (absent = ALL) and an optional multiplier (absent = 1) behind it.
+            name, width, kind, slot = (('pattern', 5, 'SvePattern', 'OptPattern')
+                                       if t == '{#pattern}' else
+                                       ('imm', 4, 'SveMul', 'OptMul'))
+            fv = fl.get(name)
+            if fv is None or fv[0] != width:
+                return ('residual', f'SVE {name} field not {width} bits')
+            consumed.add(name)
+            ops.append(slot)
+            fields.append(f'{kind} {{ op: {i}, shift: {fv[1]} }}')
+            i += 1
+            continue
         if t.startswith('{'):
             # The register-operand shift and extend groups are optional written
             # operands: `sop`/`n` for the shifted-register forms, `option`/`n`
@@ -511,10 +558,13 @@ def expand_wb(inst, op):
 def load_rows(db):
     rows = []
     for g in json.load(open(db))['instructions']:
-        if 'GP' not in g['category']:
+        gp = 'GP' in g['category']
+        if not gp and g['category'] != 'SVE':
             continue
         for it in g['data']:
             inst, op = it['inst'], it['op']
+            if not gp and not SVE_SCALAR_ROW(inst):
+                continue
             if inst in EXCLUDED_ROWS or UNDEFINED_ROW(inst):
                 continue
             fi, fo = DB_FIXES.get((inst, op), (None, None))
@@ -566,7 +616,8 @@ def main():
         '//',
         '// The A64 GP catalogue interpreted by `super::table::encode`: every',
         '// database row whose written-operand signature maps onto the field',
-        '// model. Some database rows are corrected and some dropped before',
+        '// model, and the SVE rows that read and write general-purpose registers',
+        '// only. Some database rows are corrected and some dropped before',
         '// parsing (see tools/gen_isa_a64.py DB_FIXES / EXCLUDED_ROWS).',
         '',
         'use super::table::{A64Op, A64Op::*, Field, Field::*, Form};',

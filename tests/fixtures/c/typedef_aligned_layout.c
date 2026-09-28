@@ -40,7 +40,9 @@ typedef struct Plain __attribute__((aligned(32))) TdNamed32;
 // object, not the elements.
 typedef char TdArr16[4] __attribute__((aligned(16)));
 
-// A typedef may lower the alignment below the natural one.
+// A typedef may lower the alignment below the natural one. The MS layout,
+// which the PE targets take, still places a member of that type at the
+// natural alignment (clang for the windows-msvc triples).
 typedef double TdLower2 __attribute__((aligned(2)));
 typedef int TdIntLower1 __attribute__((aligned(1)));
 
@@ -177,8 +179,13 @@ int main(void) {
     if (__builtin_offsetof(struct HasTdStruct, m) != 16) return 26;
     if (sizeof(struct HasTdArr) != 32) return 27;
     if (__builtin_offsetof(struct HasTdArr, a) != 16) return 28;
+#if defined(_WIN32)
+    if (sizeof(struct HasLower) != 16) return 29;
+    if (__builtin_offsetof(struct HasLower, d) != 8) return 60;
+#else
     if (sizeof(struct HasLower) != 10) return 29;
     if (__builtin_offsetof(struct HasLower, d) != 2) return 60;
+#endif
     if (sizeof(struct HasTdNamed) != 64) return 61;
     if (__alignof__(struct HasTdNamed) != 32) return 62;
     if (__builtin_offsetof(struct HasTdNamed, m) != 32) return 63;

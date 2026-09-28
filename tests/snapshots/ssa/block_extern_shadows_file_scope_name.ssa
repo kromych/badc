@@ -33,12 +33,12 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v11  BinopI { op=add, lhs=v7, rhs_imm=4 }             -> x2
     v12  Load { addr=v7, disp=4, kind=I32 }               -> x2
     v13  Binop { op=add, lhs=v9, rhs=v12 }                -> x1
-    v14  Extend { value=v13, kind=I32 }                   -> x2
+    v14  Extend { value=v13, kind=I32, nsw }              -> x2
     v15  Imm(8)                                           -> x2
     v16  BinopI { op=add, lhs=v7, rhs_imm=8 }             -> x2
     v17  Load { addr=v7, disp=8, kind=I32 }               -> x0
     v18  Binop { op=add, lhs=v13, rhs=v17 }               -> x0
-    v19  Extend { value=v18, kind=I32 }                   -> x1
+    v19  Extend { value=v18, kind=I32, nsw }              -> x1
     v20  BinopI { op=ne, lhs=v18, rhs_imm=6 }             -> x0
     terminator Bz { cond=v20, target=b2, fall=b1 }   (exit_acc=v20)
   block 1  start_pc=0

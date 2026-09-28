@@ -12,7 +12,7 @@ pub(crate) fn compile_objects(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     let Inputs {
         sources, archives, ..
     } = inputs;
-    if !archives.is_empty() || !cli.link.lib_names.is_empty() {
+    if !archives.is_empty() || cli.link.lib_names().next().is_some() {
         eprintln!(
             "badc: -c is incompatible with archive inputs / -l flags \
              (object emit doesn't involve linking)"
@@ -109,7 +109,7 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
         archives,
         ..
     } = inputs;
-    if !archives.is_empty() || !cli.link.lib_names.is_empty() {
+    if !archives.is_empty() || cli.link.lib_names().next().is_some() {
         eprintln!(
             "badc: --ar can't be combined with archive inputs / -l flags \
              (the archive is an output, not a link target)"
@@ -208,7 +208,7 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
 /// its relocations after mapping; see [`badc::NativeOptions::pic_link`].
 ///
 /// The default is that it is: this toolchain's own linker is the usual
-/// consumer and every image it writes is `ET_DYN`, so a `const` object
+/// consumer and its default executable is `ET_DYN`, so a `const` object
 /// carrying a relocation cannot ride the read-only prefix and would
 /// otherwise cost its whole `.rodata` that placement. gcc reaches the
 /// same layout wherever it is configured default-PIE.

@@ -36,7 +36,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v22  TlsAddr(8)                                       -> x7
     v23  Load { addr=v16, disp=0, kind=I32 }              -> x2
     v24  Binop { op=add, lhs=v21, rhs=v23 }               -> x2
-    v25  Extend { value=v24, kind=I32 }                   -> x6
+    v25  Extend { value=v24, kind=I32, nsw }              -> x6
     v26  Store { addr=v12, disp=0, value=v24, kind=I32 }  -> -
     v27  Extend { value=v24, kind=I32 }                   -> x1
     v28  BinopI { op=ne, lhs=v27, rhs_imm=4 }             -> x1

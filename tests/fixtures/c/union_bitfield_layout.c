@@ -19,8 +19,15 @@ int main(void) {
     if (sizeof(union u4) != 4) return 14;
 
     // Alignment: a char before the union must pad to the union's
-    // 4-byte alignment (1 + 3 pad + 4 == 8); align-1 would give 5.
+    // 4-byte alignment (1 + 3 pad + 4 == 8); align-1 would give 5. The
+    // MS layout, which the PE targets take, does not let a bit-field
+    // raise a union's alignment, and there 5 is the size (MSVC, and
+    // clang for the windows-msvc triples).
+#if defined(_WIN32)
+    if (sizeof(struct probe) != 5) return 21;
+#else
     if (sizeof(struct probe) != 8) return 21;
+#endif
 
     // A store through the bitfield stays inside the union; an array
     // must not overlap (stride == sizeof).

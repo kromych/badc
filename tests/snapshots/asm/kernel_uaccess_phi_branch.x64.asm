@@ -5,19 +5,14 @@ Disassembly of section .text:
 
 <put_user_word>:
                	endbr64
+               	leaq	0x8(%rdi), %rax
+               	movabsq	$0x7ffffffff000, %r10   # imm = 0x7FFFFFFFF000
+               	cmpq	%r10, %rax
+               	ja	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
                	pushq	%rbx
-               	leaq	0x8(%rdi), %rax
-               	movabsq	$0x7ffffffff000, %r11   # imm = 0x7FFFFFFFF000
-               	cmpq	%r11, %rax
-               	jbe	<addr>
-               	movq	$-0xe, %rax
-               	popq	%rbx
-               	leave
-               	jmp	<addr>
-		R_X86_64_PLT32	__x86_return_thunk-0x4
                	stac
                	movq	%rdi, %rax
                	movq	%rsi, %rbx
@@ -28,22 +23,20 @@ Disassembly of section .text:
                	leave
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
+               	movq	$-0xe, %rax
+               	jmp	<addr>
+		R_X86_64_PLT32	__x86_return_thunk-0x4
 
 <put_user_pair>:
                	endbr64
+               	leaq	0x10(%rdi), %rax
+               	movabsq	$0x7ffffffff000, %r10   # imm = 0x7FFFFFFFF000
+               	cmpq	%r10, %rax
+               	ja	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
                	pushq	%rbx
-               	leaq	0x10(%rdi), %rax
-               	movabsq	$0x7ffffffff000, %r11   # imm = 0x7FFFFFFFF000
-               	cmpq	%r11, %rax
-               	jbe	<addr>
-               	movq	$-0xe, %rax
-               	popq	%rbx
-               	leave
-               	jmp	<addr>
-		R_X86_64_PLT32	__x86_return_thunk-0x4
                	stac
                	movq	%rsi, %rax
                	movq	%rdi, %rbx
@@ -62,5 +55,8 @@ Disassembly of section .text:
                	movq	$-0xe, %rax
                	popq	%rbx
                	leave
+               	jmp	<addr>
+		R_X86_64_PLT32	__x86_return_thunk-0x4
+               	movq	$-0xe, %rax
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4

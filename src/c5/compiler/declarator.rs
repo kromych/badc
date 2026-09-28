@@ -31,7 +31,51 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{add_ptr_level, apply_qual_bits, is_decl_modifier, strip_unsigned};
+use super::types::{add_ptr_level, apply_qual_bits, is_decl_modifier};
+
+/// One derivation an abstract declarator spells (C99 6.7.6).
+pub(super) enum Derivation {
+    Pointer,
+    /// An array of the bound, `-1` when it is unspecified.
+    Array(i64),
+    /// A variable-length array whose bound this expression computes.
+    RuntimeArray(super::super::ast::ExprId),
+    /// A function with its parameters, when captured.
+    Function(Option<super::function::ParsedParams>),
+}
+
+/// An abstract declarator in a type name (C99 6.7.6): its derivations from
+/// the position of the omitted identifier outward, so each applies to the
+/// type the ones after it derive from the base type.
+#[derive(Default)]
+pub(super) struct AbstractDecl {
+    pub(super) derivations: alloc::vec::Vec<Derivation>,
+}
+
+impl AbstractDecl {
+    pub(super) fn pointer_levels(&self) -> i64 {
+        let pointers = self.derivations.iter();
+        pointers
+            .filter(|d| matches!(d, Derivation::Pointer))
+            .count() as i64
+    }
+
+    /// The bounds of the array a pointer to an array (`T (*)[M1]...[Mn]`)
+    /// points to, or `None` for any other type.
+    pub(super) fn pointee_dims(&self) -> Option<alloc::vec::Vec<i64>> {
+        let [Derivation::Pointer, rest @ ..] = self.derivations.as_slice() else {
+            return None;
+        };
+        let bound = |d: &Derivation| match d {
+            Derivation::Array(n) => Some(*n),
+            _ => None,
+        };
+        rest.iter()
+            .map(bound)
+            .collect::<Option<_>>()
+            .filter(|b: &alloc::vec::Vec<i64>| !b.is_empty())
+    }
+}
 
 impl Compiler {
     /// Record the array shape `idx` holds before this declarator
@@ -50,13 +94,15 @@ impl Compiler {
     /// the lexer restored when the tokens are an ordinary declarator.
     pub(super) fn try_parse_block_fn_prototype(
         &mut self,
-        lbt: i64,
+        base: super::redeclaration::Spelled,
         is_static: bool,
     ) -> Result<bool, C5Error> {
+        let lbt = base.ty;
         // Snapshot before the speculative `*` walk so a plain pointer
         // declaration with multiple declarators (`int *p, *q;`) keeps
         // its leading `*` for the caller's declarator loop.
         let proto_snap = self.lex.snapshot();
+        let base_fn = self.carriers_fn_type();
         let mut ret_ptr_levels: i64 = 0;
         while self.lex.tk == Token::MulOp {
             ret_ptr_levels += 1;
@@ -74,6 +120,14 @@ impl Compiler {
             let params = self.parse_function_params();
             self.pending.parsing_fn_ptr_proto = saved_proto;
             let params = params?;
+            let ret = lbt + ret_ptr_levels * Ty::Ptr as i64;
+            let declared = super::redeclaration::Params::of(&params, false);
+            let spelled = super::redeclaration::Spelled {
+                ty: ret,
+                enum_tag: base.enum_tag,
+            };
+            let declared = super::redeclaration::DeclaredType::Function(spelled, declared);
+            self.declare_linked(id_idx, declared, self.lex.line)?;
             // Bind only an as-yet-undeclared name; one already bound to a
             // libc binding, a function, or a variable is the same entity.
             let c = self.symbols[id_idx].class;
@@ -89,9 +143,11 @@ impl Compiler {
                 let sym = &mut self.symbols[id_idx];
                 sym.class = Token::Fun as i64;
                 sym.scoped_fn_decl = true;
-                sym.type_ = lbt + ret_ptr_levels * Ty::Ptr as i64;
-                sym.params = params.types;
-                sym.is_variadic = params.is_variadic;
+                sym.type_ = ret;
+                sym.incomplete_enum_tag = base.enum_tag;
+                sym.set_fn_params(params.fn_params());
+                // A function-pointer base is the result's function type.
+                sym.ret_fn = base_fn.map(|(f, d)| (alloc::boxed::Box::new(f), d + ret_ptr_levels));
                 sym.is_extern_decl = true;
                 sym.linkage = if is_static {
                     crate::c5::symbol::Linkage::Internal
@@ -137,100 +193,82 @@ impl Compiler {
     /// Parse an abstract parenthesized declarator tail that follows a
     /// base type in a type-name (C99 6.7.6): the `(*)(args)` of
     /// `int (*)(int)`, the `(*)[N]` of `int (*)[N]`, and their nested
-    /// forms. The leading `(` must be the current token. c5's flat type
-    /// tag records only a base type plus a pointer level, so the entire
-    /// declarator collapses to the pointer levels named by the inner
-    /// `*`s; the arg-list `(args)` and array `[N]` suffixes are absorbed
-    /// without affecting the result type. Returns that pointer level
-    /// (0 when the parentheses enclose no `*`). Used by both the cast
-    /// operand parser and the `sizeof` type-name parser.
-    pub(super) fn parse_abstract_ptr_declarator_levels(&mut self) -> Result<i64, C5Error> {
-        self.parse_abstract_ptr_declarator(false)
-            .map(|(levels, _, _)| levels)
-    }
-
-    /// As [`Self::parse_abstract_ptr_declarator_levels`], but with
-    /// `capture_proto` the plain fn-pointer shape's `(args)` list is
-    /// parsed and returned so a cast expression can record the pointee
-    /// prototype (parameter types, variadic split) for a following
-    /// call. Nested declarator shapes keep the skip behaviour.
+    /// forms, the leading `(` current. With `capture_proto` each function
+    /// level's parameter list is parsed, else skipped.
     pub(super) fn parse_abstract_ptr_declarator(
         &mut self,
         capture_proto: bool,
-    ) -> Result<
-        (
-            i64,
-            Option<super::function::ParsedParams>,
-            alloc::vec::Vec<i64>,
-        ),
-        C5Error,
-    > {
+    ) -> Result<AbstractDecl, C5Error> {
         debug_assert!(self.lex.tk == '(');
-        let mut depth: i64 = 1;
         self.next()?;
-        let mut nested_ptrs: i64 = 0;
-        // The plain fn-pointer shape holds only `*`s (and qualifiers)
-        // inside one paren level; anything else is a nested declarator
-        // whose trailing `(args)` is not the pointee prototype.
-        let mut plain = true;
-        while depth > 0 && self.lex.tk != 0 {
-            if self.lex.tk == '(' {
-                depth += 1;
-                plain = false;
-            } else if self.lex.tk == ')' {
-                depth -= 1;
-                if depth == 0 {
-                    self.next()?;
-                    break;
-                }
-            } else if self.lex.tk == Token::MulOp && depth == 1 {
-                nested_ptrs += 1;
-            } else if self.lex.tk != Token::TypeQual {
-                plain = false;
-            }
+        self.parse_abstract_group(capture_proto)
+    }
+
+    /// `abstract-declarator )` and the suffixes after it, the `(` consumed.
+    /// The derivations of a nested group come first, then the suffixes of
+    /// the omitted identifier (`[3]` in `(*[3])`), the group's pointers and
+    /// the group's own suffixes (C99 6.7.5p4).
+    fn parse_abstract_group(&mut self, capture_proto: bool) -> Result<AbstractDecl, C5Error> {
+        let mut ptrs = 0usize;
+        while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
+            ptrs += usize::from(self.lex.tk == Token::MulOp);
             self.next()?;
         }
-        // After the inner `)`: a `(args)` arg-list for the
-        // function-pointer / function-returning-fn shape, or one or more
-        // `[N]` / `[]` suffixes for the pointer-to-array shape
-        // (`T (*)[N][M]`). Both are no-ops at c5's type-tag granularity.
-        let mut proto = None;
-        if self.lex.tk == '(' {
+        let mut d = if self.lex.tk == '(' && !self.paren_opens_param_type_list() {
             self.next()?;
-            if capture_proto && plain && nested_ptrs > 0 {
-                // C99 6.2.1p4: the parameter names of a function declarator
-                // that is not part of a function definition have no scope.
-                // Record the pointee prototype's types without binding the
-                // names -- binding one that matches an enclosing local would
-                // overwrite the single-slot shadow the enclosing scope
-                // restores from at block / function exit.
-                let saved = self.pending.parsing_fn_ptr_proto;
-                self.pending.parsing_fn_ptr_proto = true;
-                let pp = self.parse_function_params()?;
-                self.pending.parsing_fn_ptr_proto = saved;
-                proto = Some(pp);
-            } else {
-                self.skip_balanced_parens_after_open()?;
-            }
+            self.parse_abstract_group(capture_proto)?
+        } else {
+            AbstractDecl::default()
+        };
+        self.parse_abstract_suffixes(capture_proto, &mut d)?;
+        if self.lex.tk != ')' {
+            return Err(self.compile_err(Code::SYNTAX, "close paren expected in type name"));
         }
-        // The pointee dimensions of `T (*)[M1]...[Mn]`: the caller folds
-        // them into an aggregate-backed tag so the pointee keeps its size.
-        // An unspecified bound (`T (*)[]`, C99 6.7.5.2p4 incomplete array
-        // type) records the -1 sentinel.
-        let mut dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
-        while self.lex.tk == Token::Brak {
-            self.next()?;
-            if self.lex.tk == ']' {
-                dims.push(-1);
+        self.next()?;
+        d.derivations
+            .extend(core::iter::repeat_with(|| Derivation::Pointer).take(ptrs));
+        self.parse_abstract_suffixes(capture_proto, &mut d)?;
+        Ok(d)
+    }
+
+    /// The function and array suffixes of an abstract declarator. With
+    /// `capture_proto` a parameter list is parsed, else skipped. An
+    /// unspecified bound records `-1` (C99 6.7.5.2p4).
+    fn parse_abstract_suffixes(
+        &mut self,
+        capture_proto: bool,
+        d: &mut AbstractDecl,
+    ) -> Result<(), C5Error> {
+        loop {
+            let step = if self.lex.tk == '(' {
                 self.next()?;
-            } else {
-                // A type-name dimension: the const-object fold stays
-                // masked (see `with_const_object_fold_masked`).
-                dims.push(self.with_const_object_fold_masked(|c| c.parse_constant_int())?);
+                if !capture_proto {
+                    self.skip_balanced_parens_after_open()?;
+                    Derivation::Function(None)
+                } else {
+                    // C99 6.2.1p4: the parameter names of a function
+                    // declarator that is not part of a function definition
+                    // have no scope, so their types are recorded without
+                    // binding the names.
+                    let saved = self.pending.parsing_fn_ptr_proto;
+                    self.pending.parsing_fn_ptr_proto = true;
+                    let pp = self.parse_function_params();
+                    self.pending.parsing_fn_ptr_proto = saved;
+                    Derivation::Function(Some(pp?))
+                }
+            } else if self.lex.tk == Token::Brak {
+                self.next()?;
+                let step = match self.parse_type_name_bound()? {
+                    super::expr::TypeNameBound::Fixed(n) => Derivation::Array(n),
+                    super::expr::TypeNameBound::Runtime(dim) => Derivation::RuntimeArray(dim),
+                };
                 self.accept(']')?;
-            }
+                step
+            } else {
+                return Ok(());
+            };
+            d.derivations.push(step);
         }
-        Ok((nested_ptrs, proto, dims))
     }
 
     /// Parse a single declarator: zero-or-more `*` (pointer levels)
@@ -246,14 +284,75 @@ impl Compiler {
     /// still detect "the user wrote brackets" by remembering whether
     /// the decay happened, but for c5 today the equivalence is
     /// sufficient.
+    /// The element type of a variable-length array declared over `ty`: the
+    /// array its constant inner dimensions and an array typedef base form,
+    /// if any (C99 6.7.5.2p3).
+    fn vla_element_type(&mut self, ty: i64) -> Result<i64, C5Error> {
+        let mut inner: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+        while self.lex.tk == Token::Brak {
+            self.next()?;
+            let Some(m) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
+            else {
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    "a non-constant inner array dimension is not supported",
+                ));
+            };
+            if m <= 0 {
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!("array dimension must be positive (got {m})"),
+                ));
+            }
+            if self.lex.tk != ']' {
+                return Err(
+                    self.compile_err(Code::SYNTAX, "close bracket expected in array declarator")
+                );
+            }
+            self.next()?;
+            inner.push(m);
+        }
+        if self.pending.typedef_base_array_size > 0 && !self.pending.base_array_taken {
+            self.pending.base_array_taken = true;
+            inner.extend(self.typedef_base_dims());
+        }
+        Ok(if inner.is_empty() {
+            ty
+        } else {
+            self.array_agg_type(ty, &inner)
+        })
+    }
+
     pub(super) fn parse_declarator(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
+        let (idx, ty, array_size, _) = self.parse_declarator_levels(base)?;
+        Ok((idx, ty, array_size))
+    }
+
+    /// `parse_declarator`, and the pointer derivations the declarator
+    /// applied to `base`, a function adjusted to a pointer included.
+    fn parse_declarator_levels(&mut self, base: i64) -> Result<(usize, i64, i64, i64), C5Error> {
         self.with_nesting("declarator", |c| c.parse_declarator_inner(base))
     }
 
-    fn parse_declarator_inner(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
+    fn parse_declarator_inner(&mut self, base: i64) -> Result<(usize, i64, i64, i64), C5Error> {
         // Taken once so it scopes to this parameter's own declarator, not
         // any nested one (a function-pointer parameter's prototype).
         let param_ctx = core::mem::take(&mut self.pending.param_decl_context);
+        // An entity's declarator starts its function types from the base.
+        let entity_start = !core::mem::take(&mut self.pending.declarator_in_group);
+        let outer_levels = if entity_start {
+            0
+        } else {
+            self.pending.declarator_path_levels
+        };
+        if entity_start {
+            self.pending.fn_ret_chain.clear();
+            self.pending.fn_chain_levels = 0;
+            self.pending.fn_chain_array_levels = 0;
+            self.pending.fn_own_sig = false;
+            self.pending.fn_decl_base = self.carriers_fn_type();
+            self.pending.base_array_taken = false;
+        }
         let mut ty = base;
         // A calling-convention decoration may precede the declarator
         // (`RET __stdcall name(args)`) or sit just inside the parentheses
@@ -304,11 +403,6 @@ impl Compiler {
         }
         self.pending.declarator_outer_const = outer_const;
         self.pending.declarator_outer_restrict = outer_restrict;
-        // Record the leading `*` count so a use of an array typedef can
-        // tell `A x` (fold the dimension onto `x`) from `A *p` (pointer to
-        // the array) even when the typedef's element type is itself a
-        // pointer.
-        self.pending.declarator_leading_ptr_count = leading_ptr_count;
         // C99 6.7.7p3 + 6.7.6.1: `A *p` for an array typedef `A` declares
         // a pointer to the array. Rebuild the flat tag into the
         // aggregate-backed pointer-to-array form so the array layer rides
@@ -316,9 +410,13 @@ impl Compiler {
         // unspecified bound (`typedef T X[]`, carried as `-1`) is an
         // incomplete array type (6.7.5.2p4), and `T (*)[]` is a pointer to
         // it: `*p` still decays to `T *` under 6.3.2.1p3, which does not
-        // require a complete type.
-        if leading_ptr_count > 0 && self.pending.typedef_base_array_size != 0 {
-            ty = self.ptr_to_array_typedef_ty(base, ty, leading_ptr_count);
+        // require a complete type. Only the first derivation applies to the
+        // array: in `A *(*f)(void)` the group's `*` points to that pointer.
+        if leading_ptr_count > 0 {
+            if self.pending.typedef_base_array_size != 0 && !self.pending.base_array_taken {
+                ty = self.ptr_to_array_typedef_ty(base, ty, leading_ptr_count);
+            }
+            self.pending.base_array_taken = true;
         }
         // Fn-pointer lineage propagation: if the caller pre-seeded
         // `pending_fn_ptr_indirection` from a typedef-of-fn-ptr
@@ -361,6 +459,11 @@ impl Compiler {
         if absorb_fn_type_ptr {
             ty -= Ty::Ptr as i64;
         }
+        let own_levels = leading_ptr_count - i64::from(absorb_fn_type_ptr);
+        // The pointers of this frame and the enclosing ones apply to the base
+        // before a signature this frame's group or suffixes hold.
+        let path_levels = outer_levels + own_levels;
+        self.pending.fn_base_levels = path_levels;
         if leading_ptr_count > 0
             && let Some(fpi) = self.pending.fn_ptr_indirection
         {
@@ -385,7 +488,7 @@ impl Compiler {
             ty += Ty::Ptr as i64;
             self.pending.fn_ptr_indirection = Some(1);
             // An abstract parameter binds no name.
-            return Ok((usize::MAX, ty, 0));
+            return Ok((usize::MAX, ty, 0, own_levels + 1));
         }
 
         // Function-pointer declarator: `RET (*Name)(args)`, possibly
@@ -401,60 +504,51 @@ impl Compiler {
         {
             self.next()?; // consume the outer `(`
             let outer_ty_before_inner = ty;
+            // The group's suffixes derive from this frame's type before its
+            // content does (C99 6.7.5p4): an array typedef no derivation
+            // took yet is the operand of the first.
+            let base_array_open = !self.pending.base_array_taken;
             // Discard any stale marker, then read what this recursion's
             // subtree produced: true when an inner group already fixed
             // the identifier's fn-pointer lineage, so this frame's
             // pointer levels describe the return type instead.
             core::mem::take(&mut self.pending.fn_ptr_group_resolved);
-            let (idx, mut inner_ty, inner_array_size) = self.parse_declarator(ty)?;
+            self.pending.declarator_in_group = true;
+            self.pending.declarator_path_levels = path_levels;
+            let (idx, mut inner_ty, inner_array_size, inner_ptr_levels) =
+                self.parse_declarator_levels(ty)?;
             let inner_resolved = core::mem::take(&mut self.pending.fn_ptr_group_resolved);
             // Pending count right after the inner declarator: a fn-pointer
             // typedef base seeded it and the inner leading `*`s added to
             // it. Captured here because the signature parses below drain
             // the pending carriers per parameter.
             let prior_pending_fpi = self.pending.fn_ptr_indirection.unwrap_or(0);
-            // Function-pointer lineage trace: the inner
-            // declarator's leading `*`s plus the fn-pointer's own
-            // pointer level give the indirection count from the
-            // variable's loaded value down to the fn-pointer
-            // rvalue, plus 1. For `T (*name)(args)` the inner
-            // declarator added one Ptr (the `*`), so depth = 1 -
-            // matching Symbol::fn_ptr_indirection's "value IS fn
-            // ptr" convention. For `T (**name)(args)` the inner
-            // added two Ptrs, depth = 2 (one more deref needed).
-            //
-            // The function-pointer determination happens after the
-            // trailing decorations are scanned -- only then is it known
-            // whether the parenthesised declarator was followed by
-            // `(args)` (fn-ptr) or by `[N]` (pointer-to-array, not a
-            // fn-ptr). Set the indirection unconditionally here and clear
-            // it back to None if the shape resolves to an array.
-            // Band arithmetic: a qualifier bit the inner declarator
-            // added (`T (*volatile name)(args)`) would otherwise land in
-            // the difference and make the quotient garbage.
-            let ty_delta = strip_unsigned(inner_ty) - strip_unsigned(outer_ty_before_inner);
-            let inner_ptr_levels = ty_delta / (Ty::Ptr as i64);
-            // The inner declarator may have stopped on `(` if it
-            // was a function-returning-fp shape like
-            // `void (*foo(args1))(args2)`. In that case `foo` is
-            // the outer function whose params we MUST capture
-            // (the body will reference them); `args2` after the
-            // outer paren close is the function-pointer pointee's
-            // signature, which c5 doesn't track.
-            //
-            // When this branch fires we stash the parsed params
-            // on `self.pending.fn_params` so `run_compile` can
-            // bind `foo` as `Token::Fun` and parse the body even
-            // though the next token will be `{` (not `(` -- the
-            // params are already consumed).
-            let mut saw_fn_signature = false;
+            // The pointer levels the group spells, nested groups' included,
+            // are the derefs from the variable's value to the function
+            // pointer, plus 1 (`T (*name)(args)`: 1, `T (**name)(args)`: 2).
+            // The nested declarator counts them: a pointer to an array
+            // re-encodes the tag, so its difference from the base does not.
+            // Whether the group is a function pointer is known only after
+            // its suffixes: `(args)` makes one, `[N]` a pointer to an array.
+            let mut group_levels = inner_ptr_levels;
+            // The inner declarator stops on `(` when the group holds the
+            // entity's own parameter list: `foo` in `void (*foo(args1))(args2)`
+            // or `int (*foo(args1))[3]` is a function, and the group's
+            // suffixes derive the type its result points to. The params go
+            // to `self.pending.fn_params` so `run_compile` binds `foo` as
+            // `Token::Fun` and parses the body that follows.
+            let mut own_sig = false;
             if self.lex.tk == '(' {
                 self.next()?;
                 // parse_function_params consumes the matching `)`,
                 // so on return we're already past the inner args1.
                 let params = self.parse_function_params()?;
                 self.pending.fn_params = Some(params);
-                saw_fn_signature = true;
+                self.pending.fn_own_sig = true;
+                self.pending.fn_chain_levels = 0;
+                self.pending.fn_chain_array_levels = 0;
+                self.pending.fn_base_levels = path_levels + inner_ptr_levels;
+                own_sig = true;
             }
             if self.lex.tk != ')' {
                 return Err(
@@ -479,12 +573,12 @@ impl Compiler {
             // bare identifier for `run_compile` to treat as a function
             // definition.
             if !param_ctx
-                && !saw_fn_signature
+                && !own_sig
                 && inner_ptr_levels == 0
                 && idx != usize::MAX
                 && self.lex.tk == '('
             {
-                return Ok((idx, inner_ty, inner_array_size));
+                return Ok((idx, inner_ty, inner_array_size, own_levels + group_levels));
             }
             // Trailing decorations on the parenthesised group.
             // Multiple are legal: `(*pp)[N](args)` etc. Each
@@ -494,18 +588,22 @@ impl Compiler {
             // `T (*p)[N]` shape (`p[i]` strides by
             // `N * sizeof(T)`, not `sizeof(T*)`).
             let mut pointee_dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
+            let mut after_sig = false;
             loop {
                 if self.lex.tk == '(' {
+                    if !pointee_dims.is_empty() {
+                        return Err(
+                            self.compile_err(Code::INVALID_DECLARATION, "array of functions")
+                        );
+                    }
                     self.next()?;
                     // Capture the pointee signature's prototype on the
                     // first function-signature paren so a fn-pointer
                     // declarator records its callee's variadic-ness and
-                    // named-parameter count. Subsequent signatures
-                    // (function-returning-fp shapes) keep skipping, as
-                    // does an enclosing frame when an inner group
-                    // already captured the innermost signature -- the
-                    // prototype a call through the variable uses.
-                    if !saw_fn_signature && !inner_resolved {
+                    // named-parameter count. A later signature -- past
+                    // the entity's own, in this frame or an inner one --
+                    // is the function type a result points to.
+                    if !self.pending.fn_own_sig {
                         // Capture the pointee signature's parameter types (not
                         // just the count) so an indirect call through the
                         // pointer narrows each argument to its declared
@@ -521,13 +619,36 @@ impl Compiler {
                         for &pidx in &pp.indices {
                             Self::restore_shadowed_symbol(&mut self.symbols[pidx]);
                         }
-                        self.pending.typedef_fn_proto = Some((pp.types.len(), pp.is_variadic));
-                        self.pending.fn_ptr_param_types = Some(pp.types);
+                        self.pending.fn_ptr_params = Some(pp.fn_params());
+                        self.pending.fn_own_sig = true;
+                        self.pending.fn_chain_levels = inner_ptr_levels;
+                        self.pending.fn_chain_array_levels = 0;
                     } else {
-                        self.skip_balanced_parens_after_open()?;
+                        // A later signature is the function type the
+                        // previous one's result points to.
+                        let saved_proto = self.pending.parsing_fn_ptr_proto;
+                        self.pending.parsing_fn_ptr_proto = true;
+                        let pp = self.parse_function_params()?;
+                        self.pending.parsing_fn_ptr_proto = saved_proto;
+                        for &pidx in &pp.indices {
+                            Self::restore_shadowed_symbol(&mut self.symbols[pidx]);
+                        }
+                        let depth = inner_ptr_levels - self.pending.fn_chain_levels
+                            + core::mem::take(&mut self.pending.fn_chain_array_levels);
+                        self.pending.fn_chain_levels = inner_ptr_levels;
+                        self.pending.fn_ret_chain.push((pp.fn_params(), depth));
                     }
-                    saw_fn_signature = true;
+                    self.pending.fn_base_levels = path_levels;
+                    after_sig = true;
                 } else if self.lex.tk == Token::Brak {
+                    // C99 6.7.5.3p1: a result is no array; the entity's
+                    // own list with `*`s before it returns a pointer.
+                    if after_sig || (own_sig && inner_ptr_levels == 0) {
+                        return Err(self.compile_err(
+                            Code::INVALID_DECLARATION,
+                            "function returning an array",
+                        ));
+                    }
                     self.next()?;
                     if self.lex.tk == ']' {
                         self.next()?;
@@ -556,6 +677,7 @@ impl Compiler {
                     // per-bracket level bump.
                     if inner_ptr_levels == 0 {
                         inner_ty += Ty::Ptr as i64;
+                        group_levels += 1;
                     }
                 } else {
                     break;
@@ -568,7 +690,7 @@ impl Compiler {
             // tagged as fn-ptr lineage (otherwise the unary `*`
             // handler treats `*p` on `T (*p)[N]` as the fn-ptr
             // decay no-op and the row deref never fires).
-            if saw_fn_signature && inner_ptr_levels > 0 {
+            if after_sig && inner_ptr_levels > 0 {
                 if inner_resolved {
                     // An inner group already fixed the identifier's
                     // lineage; the levels above it belong to the return
@@ -589,20 +711,27 @@ impl Compiler {
                     self.pending.fn_ptr_indirection = Some(inner_ptr_levels);
                 }
                 self.pending.fn_ptr_group_resolved = true;
-            } else if saw_fn_signature && inner_ptr_levels == 0 && param_ctx {
+            } else if (own_sig || after_sig) && inner_ptr_levels == 0 && param_ctx {
                 // `RET (name)(args)` parameter: the function type decays
                 // to a pointer to function, the same encoding as
                 // `RET (*name)(args)` (one indirection level).
                 inner_ty += Ty::Ptr as i64;
+                group_levels += 1;
                 self.pending.fn_ptr_indirection = Some(1);
                 self.pending.fn_ptr_group_resolved = true;
             }
             if !pointee_dims.is_empty() {
-                if !saw_fn_signature && inner_ptr_levels > 0 {
+                if !after_sig && inner_ptr_levels > 0 {
                     // Pointer-to-array shape `T (*p)[M1]...[Mn]`: fold
                     // the pointee dimensions into the aggregate-backed
                     // tag, one pointer level per inner `*`. Also covers
-                    // the abstract form `T (*)[N]` (no symbol).
+                    // the abstract form `T (*)[N]` (no symbol) and a
+                    // function's result (`T (*f(void))[N]`). An array
+                    // typedef base adds its bounds inside these.
+                    if base_array_open && self.pending.typedef_base_array_size > 0 {
+                        pointee_dims.extend(self.typedef_base_dims());
+                    }
+                    self.pending.fn_chain_array_levels += pointee_dims.len() as i64;
                     inner_ty = (self.array_agg_type(outer_ty_before_inner, &pointee_dims)
                         + inner_ptr_levels * (Ty::Ptr as i64))
                         | (inner_ty
@@ -618,7 +747,7 @@ impl Compiler {
                     self.symbols[idx].array_dims = dims;
                 }
             }
-            return Ok((idx, inner_ty, inner_array_size));
+            return Ok((idx, inner_ty, inner_array_size, own_levels + group_levels));
         }
 
         // Abstract declarator: type-only, no identifier. Most
@@ -628,7 +757,7 @@ impl Compiler {
         // recognise "no symbol to bind"; only `parse_function_params`
         // is in a context that should accept this.
         if self.lex.tk == ')' || self.lex.tk == ',' {
-            return Ok((usize::MAX, ty, 0));
+            return Ok((usize::MAX, ty, 0, own_levels));
         }
 
         if self.lex.tk != Token::Id {
@@ -663,10 +792,10 @@ impl Compiler {
             for &pidx in &pp.indices {
                 Self::restore_shadowed_symbol(&mut self.symbols[pidx]);
             }
-            self.pending.typedef_fn_proto = Some((pp.types.len(), pp.is_variadic));
-            self.pending.fn_ptr_param_types = Some(pp.types);
+            self.pending.fn_ptr_params = Some(pp.fn_params());
             self.pending.fn_ptr_indirection = Some(1);
-            return Ok((idx, ty + Ty::Ptr as i64, 0));
+            self.pending.fn_own_sig = true;
+            return Ok((idx, ty + Ty::Ptr as i64, 0, own_levels + 1));
         }
 
         let mut array_size: i64 = 0;
@@ -742,15 +871,10 @@ impl Compiler {
                         ));
                     }
                     self.next()?;
-                    if self.lex.tk == Token::Brak {
-                        return Err(self.compile_err(
-                            Code::UNSUPPORTED,
-                            "multidimensional variable-length arrays are not supported",
-                        ));
-                    }
+                    let ty = self.vla_element_type(ty)?;
                     array_size = super::VLA_ARRAY_SIZE;
                     if idx != usize::MAX {
-                        return Ok((idx, ty, array_size));
+                        return Ok((idx, ty, array_size, own_levels));
                     }
                 } else {
                     return Err(self.compile_err(
@@ -790,7 +914,7 @@ impl Compiler {
                     if self.pending.vla_allowed || param_ctx {
                         return Err(self.compile_err(
                             Code::UNSUPPORTED,
-                            "multidimensional variable-length arrays are not supported",
+                            "a non-constant inner array dimension is not supported",
                         ));
                     }
                     return Err(self.compile_err(
@@ -828,7 +952,8 @@ impl Compiler {
             // declaration's base type is parsed. The caller
             // observes `array_size != 0` and skips its own
             // typedef-dim fold to avoid double application.
-            if array_size != 0 {
+            if array_size != 0 && !self.pending.base_array_taken {
+                self.pending.base_array_taken = true;
                 let typedef_dim = self.pending.typedef_base_array_size;
                 if typedef_dim > 0 {
                     if self.pending.typedef_base_array_dims.len() >= 2 {
@@ -921,6 +1046,6 @@ impl Compiler {
             self.skip_attribute_specifiers()?;
         }
 
-        Ok((idx, ty, array_size))
+        Ok((idx, ty, array_size, own_levels))
     }
 }

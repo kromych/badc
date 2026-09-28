@@ -11,6 +11,13 @@ Five targets, cross-compiled from any host to any of them:
 | `windows-arm64` | PE32+         |
 
 Executables are position-independent (ELF `ET_DYN` / PIE, matching Mach-O).
+On Linux, `-no-pie` places the executable at its link address (`ET_EXEC`), as
+gcc's `-no-pie` does: the startup runtime and the dynamic tables stay, data
+pointers are final at link time with no `R_*_RELATIVE` entries, and the
+absolute fields of a `-fno-pic` object resolve (on x86-64 such an object
+addresses its tables with `R_X86_64_32S`, which a PIE refuses as GNU ld does).
+The last of `-pie` / `-no-pie` wins. A Mach-O or PE executable is always
+position-independent, so `-no-pie` is refused for those targets.
 `--freestanding` drops the embedded startup runtime; the program supplies the
 entry (`__c5_entry`, `#pragma entrypoint` or `--entry`). On Linux such an
 image is placed at its link address (`ET_EXEC`), since nothing in it applies
@@ -88,6 +95,15 @@ symbol-export control (`--export-all`, `--export-data`). Invoked as `ld`,
 `ld.badc`, or with `--ld`, badc presents a GNU ld persona with its own flag
 table, which is what lets it stand in for `LD=` in an existing build --
 including [the Linux kernel's](linux-kernel.md).
+
+Inputs enter the link in command-line order, after the startup runtime (where
+gcc puts `crt1.o`), so constructors of one priority run in that order and the
+first of two weak definitions wins. An ELF link takes archives as GNU ld does:
+an archive answers the references made ahead of it, rescanning itself until it
+adds nothing, `--start-group` / `--end-group` (`-(` / `-)`) rescan a span
+together, and a `-l` shared library answers the names it exports from its
+place on. A Mach-O or PE link searches every archive until nothing changes, as
+ld64 and link.exe do.
 
 ## What is supported
 

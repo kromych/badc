@@ -36,9 +36,7 @@ fn narrow_absolute(machine: u16, rtype: u32) -> bool {
 /// One PLT stub, on both targets.
 pub(super) const PLT_ENTRY_SIZE: u64 = 16;
 
-/// The relaxable GOT forms, which `elf_reloc_types` does not name.
-pub(super) const R_X86_64_GOTPCRELX: u32 = 41;
-
+/// i386's relaxable GOT form, which `elf_reloc_types` does not name.
 const R_386_GOT32X: u32 = 43;
 
 /// Name -> position, for a list whose order is its index space.
@@ -70,7 +68,7 @@ fn reloc_uses_got(machine: u16, rtype: u32) -> bool {
         EM_386 => matches!(rtype, rt::R_386_GOT32 | R_386_GOT32X),
         _ => matches!(
             rtype,
-            rt::R_X86_64_GOTPCREL | R_X86_64_GOTPCRELX | rt::R_X86_64_REX_GOTPCRELX
+            rt::R_X86_64_GOTPCREL | rt::R_X86_64_GOTPCRELX | rt::R_X86_64_REX_GOTPCRELX
         ),
     }
 }

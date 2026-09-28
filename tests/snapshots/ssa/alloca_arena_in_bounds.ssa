@@ -21,11 +21,11 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v17  Binop { op=add, lhs=v2, rhs=v10 }                -> x2
     v18  LoadIndexed { base=v2, index=v10, scale=1, kind=U8 } -> x2
     v19  Binop { op=add, lhs=v11, rhs=v18 }               -> x1
-    v20  Imm(0)                                           -> x2
+    v20  Extend { value=v19, kind=I32, nsw }              -> x2
     v21  Extend { value=v19, kind=I32 }                   -> x2
     v22  Extend { value=v10, kind=I32 }                   -> x2
     v23  BinopI { op=add, lhs=v10, rhs_imm=1 }            -> x0
-    v24  Imm(0)                                           -> x2
+    v24  Extend { value=v23, kind=I32, nsw }              -> x2
     terminator Jmp(b2)   (exit_acc=v23)
   block 2  start_pc=0
     v10  Phi { incoming=[b0:v7, b1:v23], kind=I64 }       -> x0

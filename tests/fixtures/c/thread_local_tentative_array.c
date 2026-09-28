@@ -25,10 +25,10 @@ static int *thread_main(int *arg) {
 static long second_thread_result(void) {
 #ifdef _WIN32
     HANDLE handle;
-    int code;
+    DWORD code;
 
     code = 0;
-    handle = CreateThread(0, 0, (int *)thread_main, 0, 0, 0);
+    handle = CreateThread(0, 0, (LPTHREAD_START_ROUTINE)thread_main, 0, 0, 0);
     if (!handle) return -1;
     WaitForSingleObject(handle, INFINITE);
     GetExitCodeThread(handle, &code);

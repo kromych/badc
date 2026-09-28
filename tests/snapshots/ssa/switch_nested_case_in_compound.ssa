@@ -15,13 +15,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
     v11  Imm(1)                                           -> x0
-    v12  Imm(0)                                           -> x0
+    v12  Imm(1)                                           -> x0
     v13  Imm(1)                                           -> x0
     v14  Imm(3)                                           -> x0
-    v15  Imm(0)                                           -> x0
+    v15  Imm(3)                                           -> x0
     v16  Imm(3)                                           -> x0
     v17  Imm(7)                                           -> x0
-    v18  Imm(0)                                           -> x0
+    v18  Imm(7)                                           -> x0
     v19  Imm(7)                                           -> x0
     v20  Imm(0)                                           -> x0
     v21  Imm(7)                                           -> x0
@@ -38,7 +38,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v32  Imm(0)                                           -> x0
     v33  Imm(0)                                           -> x0
     v34  Imm(100)                                         -> x0
-    v35  Imm(0)                                           -> x0
+    v35  Imm(100)                                         -> x0
     v36  Imm(100)                                         -> x0
     v37  Imm(1)                                           -> x0
     v38  Imm(100)                                         -> x0
@@ -48,13 +48,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v42  Imm(0)                                           -> x0
     v43  Imm(4196)                                        -> x0
     v44  Imm(4197)                                        -> x0
-    v45  Imm(0)                                           -> x0
+    v45  Imm(4197)                                        -> x0
     v46  Imm(4197)                                        -> x0
     v47  Imm(4199)                                        -> x0
-    v48  Imm(0)                                           -> x0
+    v48  Imm(4199)                                        -> x0
     v49  Imm(4199)                                        -> x0
     v50  Imm(4203)                                        -> x0
-    v51  Imm(0)                                           -> x0
+    v51  Imm(4203)                                        -> x0
     v52  Imm(4203)                                        -> x0
     v53  Imm(0)                                           -> x0
     v54  Imm(4203)                                        -> x0

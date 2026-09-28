@@ -77,62 +77,49 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v71  Imm(5)                                           -> x0
     v72  Imm(0)                                           -> x0
     v73  Imm(15)                                          -> x0
-    v74  Imm(3)                                           -> x0
+    v74  Imm(0)                                           -> x0
     v75  Imm(0)                                           -> x0
-    v76  Imm(15)                                          -> x0
+    v76  Imm(343597383680)                                -> x0
     v77  Imm(0)                                           -> x0
-    v78  Imm(0)                                           -> x0
+    v78  Imm(343597383680)                                -> x0
     v79  Imm(0)                                           -> x0
     v80  Imm(0)                                           -> x0
     v81  Imm(0)                                           -> x0
     v82  Imm(0)                                           -> x0
     v83  Imm(0)                                           -> x0
     v84  Imm(0)                                           -> x0
-    v85  Imm(0)                                           -> x0
+    v85  Imm(15)                                          -> x0
     v86  Imm(0)                                           -> x0
     v87  Imm(0)                                           -> x0
-    v88  Imm(0)                                           -> x0
+    v88  Imm(343597383680)                                -> x0
     v89  Imm(343597383680)                                -> x0
     v90  Imm(0)                                           -> x0
-    v91  Imm(343597383680)                                -> x0
+    v91  Imm(0)                                           -> x0
     v92  Imm(0)                                           -> x0
     v93  Imm(0)                                           -> x0
     v94  Imm(0)                                           -> x0
     v95  Imm(0)                                           -> x0
     v96  Imm(0)                                           -> x0
     v97  Imm(0)                                           -> x0
-    v98  Imm(15)                                          -> x0
+    v98  Imm(0)                                           -> x0
     v99  Imm(0)                                           -> x0
-    v100 Imm(0)                                           -> x0
-    v101 Imm(343597383680)                                -> x0
-    v102 Imm(343597383680)                                -> x0
+    v100 Imm(1)                                           -> x0
+    v101 Imm(0)                                           -> x0
+    v102 Imm(0)                                           -> x0
     v103 Imm(0)                                           -> x0
     v104 Imm(0)                                           -> x0
     v105 Imm(0)                                           -> x0
     v106 Imm(0)                                           -> x0
     v107 Imm(0)                                           -> x0
-    v108 Imm(0)                                           -> x0
+    v108 Imm(1)                                           -> x0
     v109 Imm(0)                                           -> x0
-    v110 Imm(0)                                           -> x0
+    v110 Imm(1)                                           -> x0
     v111 Imm(0)                                           -> x0
-    v112 Imm(0)                                           -> x0
-    v113 Imm(1)                                           -> x0
-    v114 Imm(0)                                           -> x0
+    v112 Imm(1)                                           -> x0
+    v113 Imm(0)                                           -> x0
+    v114 LifetimeEnd(0)                                   -> -
     v115 Imm(0)                                           -> x0
-    v116 Imm(0)                                           -> x0
-    v117 Imm(0)                                           -> x0
-    v118 Imm(0)                                           -> x0
-    v119 Imm(0)                                           -> x0
-    v120 Imm(0)                                           -> x0
-    v121 Imm(1)                                           -> x0
-    v122 Imm(0)                                           -> x0
-    v123 Imm(1)                                           -> x0
-    v124 Imm(0)                                           -> x0
-    v125 Imm(1)                                           -> x0
-    v126 Imm(0)                                           -> x0
-    v127 LifetimeEnd(0)                                   -> -
-    v128 Imm(0)                                           -> x0
-    terminator Return(v128)   (exit_acc=v128)
+    terminator Return(v115)   (exit_acc=v115)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

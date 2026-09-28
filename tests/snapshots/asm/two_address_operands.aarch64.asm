@@ -284,7 +284,6 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1, #0x48]
-               	mov	w1, w1
                	bl	<addr>
                	mov	x17, #0xabcd            // =43981
                	movk	x17, #0x6789, lsl #16
@@ -299,7 +298,6 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1, #0x50]
-               	mov	w1, w1
                	bl	<addr>
                	cmp	x0, #0x1
                	b.ne	<addr>
@@ -307,7 +305,6 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1, #0x38]
-               	mov	w1, w1
                	bl	<addr>
                	mov	x17, #-0x8000000000000000 // =-9223372036854775808
                	cmp	x0, x17

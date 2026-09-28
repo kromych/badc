@@ -31,6 +31,28 @@ fn compile_obj(src: &str, name: &str) -> EtRel {
 }
 
 #[test]
+fn a_relocated_thread_local_slot_holds_zero_like_a_data_slot() {
+    // The addend is in the relocation for `.rela.tdata` as for `.rela.data`,
+    // and the slot either patches holds zero, as clang and gcc write it.
+    let src = "int g[4]; _Thread_local int *x = &g[2]; int *y = &g[2];";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let obj = parse_et_rel(&compile_bytes(src, target), "t.o").expect("parse");
+        for name in [".tdata", ".data"] {
+            let sec = obj.sections.iter().find(|s| s.name == name).expect(name);
+            assert!(!sec.relocs.is_empty(), "{name} [{target:?}]: no relocation");
+            for r in &sec.relocs {
+                let at = r.offset as usize;
+                assert_eq!(
+                    &sec.bytes[at..at + 8],
+                    &[0; 8],
+                    "{name} [{target:?}] at {at}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn owned_and_borrowed_emit_agree() {
     // The owning entry hands the program to the data compaction, which
     // rewrites it in place; the borrowing one copies it first. Both must
@@ -295,6 +317,102 @@ fn an_internal_linkage_data_alias_names_its_target() {
         assert_eq!(al.size, tg.size, "{alias} size");
         assert!(
             matches!((al.sec, tg.sec), (EtSymRef::Section(i), EtSymRef::Section(j)) if i == j),
+            "{alias} must sit in {target}'s section"
+        );
+    }
+}
+
+#[test]
+fn a_thread_local_aggregate_initializer_fills_the_thread_local_template() {
+    // C11 6.7.9: the image of an initialized thread-local array or struct
+    // is the `.tdata` template, with its address constants relocated there;
+    // `.data` keeps only the objects of static storage duration.
+    let a = compile_obj(
+        "int g[2] = { 7, 8 };\n\
+         _Thread_local int ta[3] = { 1, 2, 3 };\n\
+         _Thread_local struct { int x; int *p; } ts = { 5, &g[1] };\n\
+         int *use(void) { static _Thread_local int b[2] = { 9, 10 }; return b; }\n",
+        "a.o",
+    );
+    let sec = |n: &str| {
+        a.sections
+            .iter()
+            .find(|s| s.name == n)
+            .unwrap_or_else(|| panic!("`{n}` missing"))
+    };
+    let tdata = sec(".tdata");
+    let words: Vec<u32> = tdata
+        .bytes
+        .chunks(4)
+        .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect();
+    assert_eq!(&words[..3], &[1, 2, 3], "ta");
+    assert_eq!(words[4], 5, "ts.x");
+    assert_eq!(&words[8..10], &[9, 10], "the block-scope array");
+    assert_eq!(tdata.relocs.len(), 1, "ts.p");
+    assert_eq!(tdata.relocs[0].offset, 24);
+    assert_eq!(sec(".data").bytes.len(), 16, "the null guard and g alone");
+}
+
+#[test]
+fn a_tentative_definition_takes_the_storage_of_its_completed_type() {
+    // C99 6.9.2p2: an object declared while its type was incomplete is
+    // defined with the type the unit ends with. Its symbol spans that type
+    // on its boundary without overlapping the objects declared around it,
+    // in `.bss` and in the thread-local image alike, and an alias bound
+    // before the object moved names the moved storage.
+    let a = compile_obj(
+        "struct S v;\n\
+         extern struct S av __attribute__((alias(\"v\")));\n\
+         int w;\n\
+         _Thread_local struct S tv;\n\
+         extern _Thread_local struct S tav __attribute__((alias(\"tv\")));\n\
+         _Thread_local int tw;\n\
+         char c;\n\
+         struct A over;\n\
+         char d;\n\
+         int xs[];\n\
+         extern int xa __attribute__((alias(\"xs\")));\n\
+         struct S { long a, b, c; };\n\
+         struct A { _Alignas(32) long x; };\n\
+         int xs[3] = { 1, 2, 3 };\n\
+         struct S *anchor(void) { return &v; }\n",
+        "a.o",
+    );
+    let sym = |n: &str| {
+        a.symbols
+            .iter()
+            .find(|s| s.name == n)
+            .unwrap_or_else(|| panic!("`{n}` missing from the symbol table"))
+    };
+    let same_section = |x: &EtSym, y: &EtSym| matches!((x.sec, y.sec), (EtSymRef::Section(i), EtSymRef::Section(j)) if i == j);
+    for (obj, size, other) in [
+        ("v", 24, "w"),
+        ("tv", 24, "tw"),
+        ("over", 32, "c"),
+        ("over", 32, "d"),
+    ] {
+        let (o, n) = (sym(obj), sym(other));
+        assert_eq!(o.size, size, "{obj} size");
+        assert!(
+            !same_section(o, n) || o.value + o.size <= n.value || n.value + n.size <= o.value,
+            "{obj} at {:#x}+{} overlaps {other} at {:#x}+{}",
+            o.value,
+            o.size,
+            n.value,
+            n.size
+        );
+    }
+    assert_eq!(
+        sym("over").value % 32,
+        0,
+        "over is placed on its type's boundary"
+    );
+    for (alias, target) in [("av", "v"), ("tav", "tv"), ("xa", "xs")] {
+        let (al, tg) = (sym(alias), sym(target));
+        assert_eq!(al.value, tg.value, "{alias} value");
+        assert!(
+            same_section(al, tg),
             "{alias} must sit in {target}'s section"
         );
     }
@@ -1116,7 +1234,7 @@ fn emit_relocs_survive_into_final_elf() {
             false,
             false,
             emit,
-            false,
+            crate::c5::ExecForm::Pie,
         )
         .expect("write")
     };

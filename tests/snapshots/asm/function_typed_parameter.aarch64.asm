@@ -16,7 +16,6 @@ Disassembly of section .text:
 <apply>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x1, w1
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
@@ -26,7 +25,6 @@ Disassembly of section .text:
 <apply_bare>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x1, w1
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9
@@ -36,7 +34,6 @@ Disassembly of section .text:
 <passthrough>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x1, w1
                	mov	x9, x0
                	mov	x0, x1
                	blr	x9

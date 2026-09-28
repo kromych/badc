@@ -1,12 +1,6 @@
-// windows.h -- Win32 surface kept under its own name.
-//
-// dlfcn.h already aliases the loader trio (LoadLibraryA, etc.) to
-// the portable POSIX-spelled names; this header is for sources that
-// want to call the Win32 functions by their native names. Currently
-// just the page-allocation trio plus the imports dlfcn.h doesn't
-// expose, since that's what the badc fixtures reach for. Add more
-// as you need them; the kernel32 dylib is the same one dlfcn.h
-// declares, so include order doesn't matter.
+// windows.h -- the Win32 surface, with the types the Windows SDK gives it,
+// so a program that declares one of these functions itself redeclares
+// the same type. dlfcn.h binds the loader trio under the POSIX names.
 //
 // Including this header on a non-Windows target is a no-op -- the
 // whole body is gated on `_WIN32` so cross-platform fixtures can
@@ -20,6 +14,7 @@
 // `NULL` and `size_t` (C99 7.17) -- included so consumers
 // that only pull in `<windows.h>` get them too.
 #include <stddef.h>
+#include <stdarg.h>
 
 // Windows SDK version constants. Real <windows.h> pulls these in so
 // version-gated API selection (condition variables, etc.) resolves.
@@ -50,11 +45,6 @@
 #define TEXT(x) x
 // Generic-text character type. c5 reaches for the ANSI-flavoured calls, so
 // TCHAR is `char` unless the program opts into UNICODE.
-#ifdef UNICODE
-typedef unsigned short TCHAR;
-#else
-typedef char TCHAR;
-#endif
 #define LoadLibrary LoadLibraryA
 #define GetModuleHandle GetModuleHandleA
 #define GetSystemDirectory GetSystemDirectoryA
@@ -70,29 +60,242 @@ typedef char TCHAR;
 #define IN
 #define OUT
 #define OPTIONAL
-typedef void *FARPROC;
-typedef void *HMODULE;
-typedef void *HINSTANCE;
-typedef void *HRGN;
-typedef void *HKEY;
-typedef int   *LPDWORD;
-typedef int   *PDWORD;
-typedef int    LPVOID_TYPE_PLACEHOLDER;
-// LPCVOID and LPSECURITY_ATTRIBUTES are opaque pointers to sqlite;
-// the Win32 dispatch table casts them to whatever shape it needs
-// before any call.
-typedef void  *LPCVOID;
-typedef void  *LPSECURITY_ATTRIBUTES;
-typedef void  *LPOVERLAPPED;
-typedef void  *PSYSTEMTIME;
-typedef void  *LPSYSTEMTIME;
-// GET_FILEEX_INFO_LEVELS is an enum on real Windows; sqlite only
-// ever passes the literal 0 (`GetFileExInfoStandard`) and never
-// names the enum, so a typedef is enough to keep the prototype
-// parseable.
-typedef int    GET_FILEEX_INFO_LEVELS;
-#define GetFileExInfoStandard 0
-#define GetFileExMaxInfoLevel 1
+// Base types (minwindef.h, basetsd.h, winnt.h) at the LLP64 widths:
+// `long` is 4 bytes on the Windows targets and `wchar_t` 2.
+typedef unsigned long      DWORD;
+typedef int                BOOL;
+typedef unsigned char      BYTE;
+typedef unsigned short     WORD;
+typedef float              FLOAT;
+typedef FLOAT             *PFLOAT;
+typedef BOOL              *PBOOL;
+typedef BOOL              *LPBOOL;
+typedef BYTE              *PBYTE;
+typedef BYTE              *LPBYTE;
+typedef int               *PINT;
+typedef int               *LPINT;
+typedef WORD              *PWORD;
+typedef WORD              *LPWORD;
+typedef long              *LPLONG;
+typedef DWORD             *PDWORD;
+typedef DWORD             *LPDWORD;
+typedef void              *LPVOID;
+typedef const void        *LPCVOID;
+typedef int                INT;
+typedef unsigned int       UINT;
+typedef unsigned int      *PUINT;
+typedef void              *PVOID;
+typedef char               CHAR;
+typedef short              SHORT;
+typedef long               LONG;
+typedef unsigned long      ULONG;
+typedef ULONG             *PULONG;
+typedef unsigned short     USHORT;
+typedef USHORT            *PUSHORT;
+typedef unsigned char      UCHAR;
+typedef UCHAR             *PUCHAR;
+typedef LONG              *PLONG;
+typedef wchar_t            WCHAR;
+typedef WCHAR             *PWCHAR, *LPWCH, *PWCH;
+typedef const WCHAR       *LPCWCH, *PCWCH;
+typedef WCHAR             *NWPSTR, *LPWSTR, *PWSTR;
+typedef const WCHAR       *LPCWSTR, *PCWSTR;
+typedef CHAR              *PCHAR, *LPCH, *PCH;
+typedef const CHAR        *LPCCH, *PCCH;
+typedef CHAR              *NPSTR, *LPSTR, *PSTR;
+typedef const CHAR        *LPCSTR, *PCSTR;
+#ifdef UNICODE
+typedef WCHAR              TCHAR, *PTCHAR;
+typedef LPWSTR             PTSTR, LPTSTR;
+typedef LPCWSTR            PCTSTR, LPCTSTR;
+#else
+typedef char               TCHAR, *PTCHAR;
+typedef LPSTR              PTSTR, LPTSTR;
+typedef LPCSTR             PCTSTR, LPCTSTR;
+#endif
+typedef long long          LONGLONG;
+typedef unsigned long long ULONGLONG;
+typedef ULONGLONG          DWORDLONG;
+typedef long long          INT_PTR, *PINT_PTR;
+typedef unsigned long long UINT_PTR, *PUINT_PTR;
+typedef long long          LONG_PTR, *PLONG_PTR;
+typedef unsigned long long ULONG_PTR, *PULONG_PTR;
+typedef ULONG_PTR          SIZE_T, *PSIZE_T;
+typedef LONG_PTR           SSIZE_T, *PSSIZE_T;
+typedef ULONG_PTR          DWORD_PTR, *PDWORD_PTR;
+typedef long long          LONG64, *PLONG64;
+typedef unsigned long long ULONG64, *PULONG64;
+typedef unsigned long long DWORD64, *PDWORD64;
+typedef signed char        INT8, *PINT8;
+typedef signed short       INT16, *PINT16;
+typedef signed int         INT32, *PINT32;
+typedef long long          INT64, *PINT64;
+typedef unsigned char      UINT8, *PUINT8;
+typedef unsigned short     UINT16, *PUINT16;
+typedef unsigned int       UINT32, *PUINT32;
+typedef unsigned long long UINT64, *PUINT64;
+typedef signed int         LONG32, *PLONG32;
+typedef unsigned int       ULONG32, *PULONG32;
+typedef unsigned int       DWORD32, *PDWORD32;
+typedef UINT_PTR           WPARAM;
+typedef LONG_PTR           LPARAM;
+typedef LONG_PTR           LRESULT;
+typedef LONG               HRESULT;
+typedef LONG               NTSTATUS;
+typedef UCHAR              BOOLEAN;
+typedef WORD               ATOM;
+typedef ULONG              LCID;
+typedef USHORT             LANGID;
+typedef DWORD              LCTYPE;
+typedef DWORD              ACCESS_MASK;
+typedef ACCESS_MASK       *PACCESS_MASK;
+typedef ACCESS_MASK        REGSAM;
+typedef LONG               LSTATUS;
+typedef DWORD              COLORREF;
+typedef DWORD             *LPCOLORREF;
+typedef long               RPC_STATUS;
+typedef DWORD              EXECUTION_STATE;
+// basetsd.h pointer/integer conversions. HANDLE is pointer-width; a LONG
+// sign-extends through LONG_PTR before becoming a HANDLE.
+#define LongToHandle(h) ((HANDLE)(LONG_PTR)(long)(h))
+#define HandleToLong(h) ((long)(LONG_PTR)(h))
+#define ULongToHandle(h) ((HANDLE)(ULONG_PTR)(unsigned long)(h))
+
+// Handles (winnt.h, minwindef.h, windef.h). STRICT is the SDK default:
+// each handle type points to a struct of its own, so two do not mix.
+#ifndef NO_STRICT
+#ifndef STRICT
+#define STRICT 1
+#endif
+#endif
+typedef void              *HANDLE;
+#define DECLARE_HANDLE(name) struct name##__ { int unused; }; typedef struct name##__ *name
+typedef HANDLE            *PHANDLE;
+typedef HANDLE            *SPHANDLE;
+typedef HANDLE            *LPHANDLE;
+typedef HANDLE             HGLOBAL;
+typedef HANDLE             HLOCAL;
+typedef HANDLE             GLOBALHANDLE;
+typedef HANDLE             LOCALHANDLE;
+typedef INT_PTR (WINAPI *FARPROC)();
+typedef INT_PTR (WINAPI *NEARPROC)();
+typedef INT_PTR (WINAPI *PROC)();
+DECLARE_HANDLE(HKEY);
+typedef HKEY              *PHKEY;
+DECLARE_HANDLE(HMETAFILE);
+DECLARE_HANDLE(HINSTANCE);
+typedef HINSTANCE          HMODULE;
+DECLARE_HANDLE(HRGN);
+DECLARE_HANDLE(HRSRC);
+DECLARE_HANDLE(HSPRITE);
+DECLARE_HANDLE(HLSURF);
+DECLARE_HANDLE(HSTR);
+DECLARE_HANDLE(HTASK);
+DECLARE_HANDLE(HWINSTA);
+DECLARE_HANDLE(HKL);
+typedef int                HFILE;
+DECLARE_HANDLE(HWND);
+DECLARE_HANDLE(HHOOK);
+typedef void              *HGDIOBJ;
+DECLARE_HANDLE(HACCEL);
+DECLARE_HANDLE(HBITMAP);
+DECLARE_HANDLE(HBRUSH);
+DECLARE_HANDLE(HCOLORSPACE);
+DECLARE_HANDLE(HDC);
+DECLARE_HANDLE(HGLRC);
+DECLARE_HANDLE(HDESK);
+DECLARE_HANDLE(HENHMETAFILE);
+DECLARE_HANDLE(HFONT);
+DECLARE_HANDLE(HICON);
+DECLARE_HANDLE(HMENU);
+DECLARE_HANDLE(HPALETTE);
+DECLARE_HANDLE(HPEN);
+DECLARE_HANDLE(HWINEVENTHOOK);
+DECLARE_HANDLE(HMONITOR);
+DECLARE_HANDLE(HUMPD);
+typedef HICON              HCURSOR;
+DECLARE_HANDLE(HDROP);
+DECLARE_HANDLE(HRAWINPUT);
+DECLARE_HANDLE(HPSS);
+typedef HANDLE             HMUTEX;
+typedef HANDLE             HMUTANT;
+typedef HANDLE             HEVENT;
+typedef HANDLE             HSEMAPHORE;
+typedef ULONG_PTR          HCRYPTPROV;
+typedef ULONG_PTR          HCRYPTKEY;
+typedef ULONG_PTR          HCRYPTHASH;
+typedef PVOID              DLL_DIRECTORY_COOKIE, *PDLL_DIRECTORY_COOKIE;
+typedef PVOID              BCRYPT_HANDLE;
+typedef PVOID              BCRYPT_ALG_HANDLE;
+typedef PVOID              PSECURITY_DESCRIPTOR;
+typedef PVOID              PSID;
+
+// The records the prototypes take by pointer before their definition, and
+// the callback shapes.
+typedef struct _SECURITY_ATTRIBUTES SECURITY_ATTRIBUTES, *PSECURITY_ATTRIBUTES,
+    *LPSECURITY_ATTRIBUTES;
+typedef struct _OVERLAPPED OVERLAPPED, *POVERLAPPED, *LPOVERLAPPED;
+typedef struct _SYSTEMTIME SYSTEMTIME, *PSYSTEMTIME, *LPSYSTEMTIME;
+struct _EXCEPTION_POINTERS;
+typedef DWORD (WINAPI *PTHREAD_START_ROUTINE)(LPVOID lpThreadParameter);
+typedef PTHREAD_START_ROUTINE LPTHREAD_START_ROUTINE;
+typedef VOID (WINAPI *PTIMERAPCROUTINE)(LPVOID lpArgToCompletionRoutine,
+                                        DWORD dwTimerLowValue, DWORD dwTimerHighValue);
+typedef BOOL (WINAPI *PHANDLER_ROUTINE)(DWORD CtrlType);
+typedef LONG (WINAPI *PTOP_LEVEL_EXCEPTION_FILTER)(struct _EXCEPTION_POINTERS *ExceptionInfo);
+typedef PTOP_LEVEL_EXCEPTION_FILTER LPTOP_LEVEL_EXCEPTION_FILTER;
+typedef LONG (WINAPI *PVECTORED_EXCEPTION_HANDLER)(struct _EXCEPTION_POINTERS *ExceptionInfo);
+typedef enum _GET_FILEEX_INFO_LEVELS {
+    GetFileExInfoStandard,
+    GetFileExMaxInfoLevel
+} GET_FILEEX_INFO_LEVELS;
+typedef struct _REASON_CONTEXT {
+    ULONG Version;
+    DWORD Flags;
+    union {
+        struct {
+            HMODULE LocalizedReasonModule;
+            ULONG   LocalizedReasonId;
+            ULONG   ReasonStringCount;
+            LPWSTR *ReasonStrings;
+        } Detailed;
+        LPWSTR SimpleReasonString;
+    } Reason;
+} REASON_CONTEXT, *PREASON_CONTEXT;
+typedef enum {
+    PSS_CAPTURE_NONE                              = 0x00000000,
+    PSS_CAPTURE_VA_CLONE                          = 0x00000001,
+    PSS_CAPTURE_RESERVED_00000002                 = 0x00000002,
+    PSS_CAPTURE_HANDLES                           = 0x00000004,
+    PSS_CAPTURE_HANDLE_NAME_INFORMATION           = 0x00000008,
+    PSS_CAPTURE_HANDLE_BASIC_INFORMATION          = 0x00000010,
+    PSS_CAPTURE_HANDLE_TYPE_SPECIFIC_INFORMATION  = 0x00000020,
+    PSS_CAPTURE_HANDLE_TRACE                      = 0x00000040,
+    PSS_CAPTURE_THREADS                           = 0x00000080,
+    PSS_CAPTURE_THREAD_CONTEXT                    = 0x00000100,
+    PSS_CAPTURE_THREAD_CONTEXT_EXTENDED           = 0x00000200,
+    PSS_CAPTURE_RESERVED_00000400                 = 0x00000400,
+    PSS_CAPTURE_VA_SPACE                          = 0x00000800,
+    PSS_CAPTURE_VA_SPACE_SECTION_INFORMATION      = 0x00001000,
+    PSS_CAPTURE_IPT_TRACE                         = 0x00002000,
+    PSS_CAPTURE_RESERVED_00004000                 = 0x00004000,
+    PSS_CREATE_BREAKAWAY_OPTIONAL                 = 0x04000000,
+    PSS_CREATE_BREAKAWAY                          = 0x08000000,
+    PSS_CREATE_FORCE_BREAKAWAY                    = 0x10000000,
+    PSS_CREATE_USE_VM_ALLOCATIONS                 = 0x20000000,
+    PSS_CREATE_MEASURE_PERFORMANCE                = 0x40000000,
+    PSS_CREATE_RELEASE_SECTION                    = 0x80000000
+} PSS_CAPTURE_FLAGS;
+typedef enum {
+    PSS_QUERY_PROCESS_INFORMATION         = 0,
+    PSS_QUERY_VA_CLONE_INFORMATION        = 1,
+    PSS_QUERY_AUXILIARY_PAGES_INFORMATION = 2,
+    PSS_QUERY_VA_SPACE_INFORMATION        = 3,
+    PSS_QUERY_HANDLE_INFORMATION          = 4,
+    PSS_QUERY_THREAD_INFORMATION          = 5,
+    PSS_QUERY_HANDLE_TRACE_INFORMATION    = 6,
+    PSS_QUERY_PERFORMANCE_COUNTERS        = 7
+} PSS_QUERY_INFORMATION_CLASS;
 
 #pragma dylib(kernel32, "kernel32.dll")
 #pragma binding(kernel32::VirtualAlloc,            "VirtualAlloc")
@@ -267,104 +470,20 @@ typedef int    GET_FILEEX_INFO_LEVELS;
 // for safety / future fields.
 #define CRITICAL_SECTION_SIZE 64
 
-// Windows API integer typedefs. The widths are pinned by the
-// platform ABI -- DWORD is 32 bits, WORD 16, BYTE 8 -- so c5's
-// struct layouts match what kernel32 / msvcrt expect when
-// reading the same struct on the other side.
-//
-//   * HANDLE / SIZE_T / LPVOID / pointers: 8 bytes (Win64 LLP64).
-//   * DWORD / BOOL / LONG: 4 bytes (= c5's `int`).
-//   * WORD / SHORT: 2 bytes.
-//   * BYTE: 1 byte.
-//   * UINT_PTR / ULONG_PTR / DWORD_PTR / LARGE_INTEGER: 8 bytes.
-//
-// The header only declares the surface sqlite + the bundled c5
-// fixtures actually reach for; extend on demand. Wide-string
-// types (LPWSTR / LPCWSTR) point at unsigned short rather than
-// `wchar_t` because c5 doesn't have a separate wchar_t typedef
-// and msvcrt's wchar is 16-bit anyway.
-typedef void              *HANDLE;
-typedef HANDLE            *PHANDLE;
-typedef HANDLE            *LPHANDLE;
-typedef unsigned long long SIZE_T;
-typedef unsigned long long ULONG_PTR;
-typedef unsigned long long UINT_PTR;
-typedef unsigned long long DWORD_PTR;
-typedef long long          LONG_PTR;
-typedef long long          LONGLONG;
-// basetsd.h pointer/integer conversions. HANDLE is pointer-width; a LONG
-// sign-extends through LONG_PTR before becoming a HANDLE.
-#define LongToHandle(h) ((HANDLE)(LONG_PTR)(long)(h))
-#define HandleToLong(h) ((long)(LONG_PTR)(h))
-#define ULongToHandle(h) ((HANDLE)(ULONG_PTR)(unsigned long)(h))
-typedef unsigned long long ULONGLONG;
-typedef long long          INT64;
-typedef long long          LONG64;
-typedef unsigned long long UINT64;
-typedef unsigned long long ULONG64;
-typedef unsigned long long DWORD64;
-typedef unsigned long long DWORDLONG;
-typedef int                INT32;
-typedef int                LONG32;
-typedef unsigned int       UINT32;
-typedef unsigned int       ULONG32;
-typedef unsigned int       DWORD32;
-typedef int                BOOL;
-typedef int                LONG;
-typedef int                HRESULT;
-typedef unsigned int       DWORD;
-typedef unsigned int       UINT;
-typedef unsigned int       ULONG;
-typedef short              SHORT;
-typedef unsigned short     WORD;
-typedef unsigned short     USHORT;
-typedef unsigned char      BYTE;
-typedef unsigned char      UCHAR;
-typedef unsigned char     *LPBYTE;
-// REGSAM is winnt.h's ACCESS_MASK (a DWORD = unsigned long on Win32)
-// used as the security-access mask of the registry API. LSTATUS is
-// winreg.h's LONG-valued status return of the registry functions.
-typedef unsigned long      REGSAM;
-typedef LONG               LSTATUS;
-typedef void              *LPVOID;
-typedef void              *PVOID;
-typedef char              *LPSTR;
-typedef char              *LPCSTR;
-typedef unsigned short    *LPWSTR;
-typedef unsigned short    *LPCWSTR;
-typedef unsigned short     WCHAR;
-typedef unsigned short    *PWSTR;
-typedef unsigned short    *PCWSTR;
-// Generic-text pointer aliases. c5 builds ANSI, so the T-variants map to the
-// narrow forms unless the program opts into UNICODE.
-#ifdef UNICODE
-typedef LPWSTR             LPTSTR;
-typedef LPCWSTR            LPCTSTR;
-#else
-typedef LPSTR              LPTSTR;
-typedef LPCSTR             LPCTSTR;
-#endif
-typedef LPCSTR             PCSTR;
-typedef LPSTR              PSTR;
-typedef long long          INT_PTR;
-typedef long long          SSIZE_T;
-typedef long long          LRESULT;
-typedef long long          LPARAM;
-typedef unsigned long long WPARAM;
-typedef int                NTSTATUS;
-typedef int               *LPBOOL;
-typedef int               *PBOOL;
-typedef unsigned char      BOOLEAN;
-
-// Slim reader/writer lock, condition variable, and one-time init
-// (Vista+). Pointer-sized opaque values per the Windows SDK.
-typedef struct _RTL_SRWLOCK { PVOID Ptr; } SRWLOCK;
-// Static initialiser for an SRWLOCK (minwinbase.h RTL_SRWLOCK_INIT).
-#define SRWLOCK_INIT {0}
-typedef struct _RTL_CONDITION_VARIABLE { PVOID Ptr; } CONDITION_VARIABLE;
-typedef struct _RTL_RUN_ONCE { PVOID Ptr; } INIT_ONCE;
-typedef SRWLOCK            *PSRWLOCK;
-typedef CONDITION_VARIABLE *PCONDITION_VARIABLE;
+// Slim reader/writer lock, condition variable and one-time initialization
+// (Vista+): pointer-sized opaque values.
+typedef struct _RTL_SRWLOCK { PVOID Ptr; } RTL_SRWLOCK, *PRTL_SRWLOCK;
+typedef RTL_SRWLOCK SRWLOCK, *PSRWLOCK;
+#define RTL_SRWLOCK_INIT {0}
+#define SRWLOCK_INIT RTL_SRWLOCK_INIT
+typedef struct _RTL_CONDITION_VARIABLE { PVOID Ptr; } RTL_CONDITION_VARIABLE,
+    *PRTL_CONDITION_VARIABLE;
+typedef RTL_CONDITION_VARIABLE CONDITION_VARIABLE, *PCONDITION_VARIABLE;
+#define CONDITION_VARIABLE_INIT {0}
+typedef struct _RTL_RUN_ONCE { PVOID Ptr; } RTL_RUN_ONCE, *PRTL_RUN_ONCE;
+typedef RTL_RUN_ONCE INIT_ONCE;
+typedef PRTL_RUN_ONCE PINIT_ONCE, LPINIT_ONCE;
+#define INIT_ONCE_STATIC_INIT {0}
 
 // Layout matches RTL_CRITICAL_SECTION so the type embeds at the right
 // size inside other structures (x64: 40 bytes).
@@ -375,12 +494,12 @@ typedef struct _RTL_CRITICAL_SECTION {
     HANDLE    OwningThread;
     HANDLE    LockSemaphore;
     ULONG_PTR SpinCount;
-} CRITICAL_SECTION;
-typedef CRITICAL_SECTION   *LPCRITICAL_SECTION;
-typedef CRITICAL_SECTION   *PCRITICAL_SECTION;
+} RTL_CRITICAL_SECTION, *PRTL_CRITICAL_SECTION;
+typedef RTL_CRITICAL_SECTION CRITICAL_SECTION;
+typedef PRTL_CRITICAL_SECTION PCRITICAL_SECTION, LPCRITICAL_SECTION;
 
 // 128-bit volume-relative file identifier, per the Windows SDK.
-typedef struct _FILE_ID_128 { unsigned char Identifier[16]; } FILE_ID_128;
+typedef struct _FILE_ID_128 { BYTE Identifier[16]; } FILE_ID_128, *PFILE_ID_128;
 
 // The anonymous struct is first, matching the Win32 header: a nested
 // aggregate initializer (`{{lo, hi}}`) fills it, and `.LowPart` /
@@ -394,7 +513,7 @@ union _LARGE_INTEGER {
         DWORD LowPart;
         LONG  HighPart;
     } u;
-    long long QuadPart;
+    LONGLONG QuadPart;
 };
 
 union _ULARGE_INTEGER {
@@ -406,7 +525,7 @@ union _ULARGE_INTEGER {
         DWORD LowPart;
         DWORD HighPart;
     } u;
-    unsigned long long QuadPart;
+    ULONGLONG QuadPart;
 };
 
 typedef union _LARGE_INTEGER  LARGE_INTEGER;
@@ -414,60 +533,29 @@ typedef union _ULARGE_INTEGER ULARGE_INTEGER;
 typedef union _LARGE_INTEGER  *PLARGE_INTEGER;
 typedef union _ULARGE_INTEGER *PULARGE_INTEGER;
 
-typedef void              *HLOCAL;
-typedef void              *HGLOBAL;
-typedef void              *HRSRC;
-typedef void              *HKL;
-typedef void              *HMENU;
-typedef void              *HWND;
-typedef void              *HDC;
-typedef void              *HBITMAP;
-typedef void              *HBRUSH;
-typedef void              *HFONT;
-typedef void              *HICON;
-typedef void              *HCURSOR;
-typedef void              *HMUTEX;
-typedef void              *HMUTANT;
-typedef void              *HEVENT;
-typedef void              *HSEMAPHORE;
-typedef void              *HKEY;
-typedef HKEY              *PHKEY;
-typedef void              *HCRYPTPROV;
-typedef void              *HCRYPTKEY;
-typedef void              *HMONITOR;
-
-// OVERLAPPED -- the i/o completion descriptor struct passed by
-// pointer to ReadFile / LockFileEx / WriteFile when those calls
-// run in async mode. sqlite's Windows VFS only needs the layout
-// (it never inspects the kernel-internal handle field), so the
-// fields are pinned to match the Win64 ABI but the layout is
-// frozen to "five 8-byte slots" for portability.
-// The real Windows OVERLAPPED nests an anonymous union with an
-// anonymous struct -- c5 doesn't model anonymous nesting, so the
-// layout is flattened to four named u32/u64 slots that occupy the
-// same 16 bytes the union/struct group does on Win64. sqlite
-// accesses `ov.Offset` and `ov.OffsetHigh` so those names live at
-// the same byte offsets the Windows headers put them at.
+// OVERLAPPED (minwinbase.h): the offset pair overlays `Pointer`.
 struct _OVERLAPPED {
     ULONG_PTR Internal;
     ULONG_PTR InternalHigh;
-    DWORD Offset;
-    DWORD OffsetHigh;
+    union {
+        struct {
+            DWORD Offset;
+            DWORD OffsetHigh;
+        };
+        PVOID Pointer;
+    };
     HANDLE hEvent;
 };
-typedef struct _OVERLAPPED OVERLAPPED;
-typedef struct _OVERLAPPED *POVERLAPPED;
-typedef struct _OVERLAPPED *LPOVERLAPPED2;
 
-// SYSTEM_INFO -- platform info populated by GetSystemInfo. Real
-// Windows headers nest the OEM ID alongside the processor arch
-// inside an anonymous union; c5 doesn't model anonymous nesting,
-// so the layout is flattened to occupy the same bytes as the
-// Win64 ABI version. sqlite reads `dwAllocationGranularity` and
-// `dwPageSize` so those names live at the same offsets the kernel
-// header puts them at.
+// SYSTEM_INFO (sysinfoapi.h): the OEM id overlays the processor pair.
 struct _SYSTEM_INFO {
-    DWORD     dwOemId;
+    union {
+        DWORD dwOemId;
+        struct {
+            WORD wProcessorArchitecture;
+            WORD wReserved;
+        };
+    };
     DWORD     dwPageSize;
     LPVOID    lpMinimumApplicationAddress;
     LPVOID    lpMaximumApplicationAddress;
@@ -481,20 +569,36 @@ struct _SYSTEM_INFO {
 typedef struct _SYSTEM_INFO SYSTEM_INFO;
 typedef struct _SYSTEM_INFO *LPSYSTEM_INFO;
 
-// SEH function-table entry. Layout differs between Win64 x64 and
-// AArch64 / IA64; the fields below match the Win64 x64 shape
-// since that is the only one any c5 consumer references today.
-// AArch64 uses a different `UnwindData` encoding inside the same
-// DWORD slot, so the c5-side declaration stays a flat
-// three-DWORD struct that both ABIs accept by ignoring the
-// platform-specific bit packing.
-struct _RUNTIME_FUNCTION {
+// Function-table entries (winnt.h): the x64 entry names its unwind info,
+// the AArch64 entry packs the unwind codes into the second word.
+typedef struct _IMAGE_RUNTIME_FUNCTION_ENTRY {
     DWORD BeginAddress;
     DWORD EndAddress;
-    DWORD UnwindData;
-};
-typedef struct _RUNTIME_FUNCTION RUNTIME_FUNCTION;
-typedef struct _RUNTIME_FUNCTION *PRUNTIME_FUNCTION;
+    union {
+        DWORD UnwindInfoAddress;
+        DWORD UnwindData;
+    };
+} IMAGE_RUNTIME_FUNCTION_ENTRY, *PIMAGE_RUNTIME_FUNCTION_ENTRY;
+typedef struct _IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY {
+    DWORD BeginAddress;
+    union {
+        DWORD UnwindData;
+        struct {
+            DWORD Flag : 2;
+            DWORD FunctionLength : 11;
+            DWORD RegF : 3;
+            DWORD RegI : 4;
+            DWORD H : 1;
+            DWORD CR : 2;
+            DWORD FrameSize : 9;
+        };
+    };
+} IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY, *PIMAGE_ARM64_RUNTIME_FUNCTION_ENTRY;
+#ifdef __aarch64__
+typedef IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY RUNTIME_FUNCTION, *PRUNTIME_FUNCTION;
+#else
+typedef IMAGE_RUNTIME_FUNCTION_ENTRY RUNTIME_FUNCTION, *PRUNTIME_FUNCTION;
+#endif
 
 // FILETIME / SYSTEMTIME -- the two structs sqlite's Windows VFS
 // uses (file timestamps + broken-down localtime fallback). Layout
@@ -520,7 +624,7 @@ typedef struct _BY_HANDLE_FILE_INFORMATION {
     DWORD    nNumberOfLinks;
     DWORD    nFileIndexHigh;
     DWORD    nFileIndexLow;
-} BY_HANDLE_FILE_INFORMATION;
+} BY_HANDLE_FILE_INFORMATION, *PBY_HANDLE_FILE_INFORMATION, *LPBY_HANDLE_FILE_INFORMATION;
 typedef struct _FILE_BASIC_INFO {
     LARGE_INTEGER CreationTime;
     LARGE_INTEGER LastAccessTime;
@@ -557,11 +661,20 @@ typedef struct _GUID {
     WORD  Data3;
     BYTE  Data4[8];
 } GUID;
-typedef struct _SECURITY_ATTRIBUTES {
+typedef GUID UUID;
+typedef GUID *LPGUID;
+typedef struct _nlsversioninfo {
+    DWORD dwNLSVersionInfoSize;
+    DWORD dwNLSVersion;
+    DWORD dwDefinedVersion;
+    DWORD dwEffectiveId;
+    GUID  guidCustomVersion;
+} NLSVERSIONINFO, *LPNLSVERSIONINFO;
+struct _SECURITY_ATTRIBUTES {
     DWORD  nLength;
     LPVOID lpSecurityDescriptor;
-    int    bInheritHandle;
-} SECURITY_ATTRIBUTES;
+    BOOL   bInheritHandle;
+};
 
 // STARTUPINFOW / STARTUPINFOEXW / PROCESS_INFORMATION (processthreadsapi.h).
 // Field order and widths match the Win64 ABI: STARTUPINFOW is passed by
@@ -589,6 +702,26 @@ typedef struct _STARTUPINFOW {
     HANDLE hStdError;
 } STARTUPINFOW;
 typedef struct _STARTUPINFOW *LPSTARTUPINFOW;
+typedef struct _STARTUPINFOA {
+    DWORD  cb;
+    LPSTR  lpReserved;
+    LPSTR  lpDesktop;
+    LPSTR  lpTitle;
+    DWORD  dwX;
+    DWORD  dwY;
+    DWORD  dwXSize;
+    DWORD  dwYSize;
+    DWORD  dwXCountChars;
+    DWORD  dwYCountChars;
+    DWORD  dwFillAttribute;
+    DWORD  dwFlags;
+    WORD   wShowWindow;
+    WORD   cbReserved2;
+    LPBYTE lpReserved2;
+    HANDLE hStdInput;
+    HANDLE hStdOutput;
+    HANDLE hStdError;
+} STARTUPINFOA, *LPSTARTUPINFOA;
 
 // Opaque process-thread attribute list. CreateProcessW reads the bytes;
 // callers only ever pass a pointer obtained from
@@ -651,7 +784,6 @@ typedef struct _COPYFILE2_EXTENDED_PARAMETERS {
     void  *pProgressRoutine;
     void  *pvCallbackContext;
 } COPYFILE2_EXTENDED_PARAMETERS;
-typedef void *DLL_DIRECTORY_COOKIE;
 typedef struct _FILE_FS_PERSISTENT_VOLUME_INFORMATION {
     ULONG VolumeFlags;
     ULONG FlagMask;
@@ -879,17 +1011,6 @@ typedef enum _COMPUTER_NAME_FORMAT {
 // winnt.h surrogate-bit predicate over the reparse tag; not an export.
 #define IsReparseTagNameSurrogate(tag) (((tag) & 0x20000000))
 #define BCRYPT_USE_SYSTEM_PREFERRED_RNG 0x00000002
-#define EXCEPTION_CONTINUE_SEARCH      0
-#define EXCEPTION_EXECUTE_HANDLER      1
-#define EXCEPTION_NONCONTINUABLE       0x1
-#define EXCEPTION_ACCESS_VIOLATION     0xC0000005
-#define EXCEPTION_IN_PAGE_ERROR        0xC0000006
-#define EXCEPTION_NONCONTINUABLE_EXCEPTION 0xC0000025
-#define EXCEPTION_FLT_DIVIDE_BY_ZERO   0xC000008E
-#define EXCEPTION_FLT_OVERFLOW         0xC0000091
-#define EXCEPTION_INT_DIVIDE_BY_ZERO   0xC0000094
-#define EXCEPTION_INT_OVERFLOW         0xC0000095
-#define EXCEPTION_STACK_OVERFLOW       0xC00000FD
 #define IO_REPARSE_TAG_MOUNT_POINT     0xA0000003
 #define IO_REPARSE_TAG_APPEXECLINK     0x8000001B
 #define SDDL_REVISION_1                1
@@ -994,14 +1115,34 @@ typedef enum _COMPUTER_NAME_FORMAT {
 #define FILE_DEVICE_CONSOLE             0x00000050
 #define FILE_DEVICE_NFS                 0x00000051
 #define FILE_DEVICE_TCP_UDP             0x00000052
-// FILE_INFO_BY_HANDLE_CLASS values for GetFileInformationByHandleEx.
-#define FileBasicInfo        0
-#define FileStandardInfo     1
-#define FileNameInfo         2
-#define FileStreamInfo       7
-#define FileAttributeTagInfo 9
-#define FileIdBothDirectoryInfo 10
-#define FileIdInfo           18
+typedef enum _FILE_INFO_BY_HANDLE_CLASS {
+    FileBasicInfo,
+    FileStandardInfo,
+    FileNameInfo,
+    FileRenameInfo,
+    FileDispositionInfo,
+    FileAllocationInfo,
+    FileEndOfFileInfo,
+    FileStreamInfo,
+    FileCompressionInfo,
+    FileAttributeTagInfo,
+    FileIdBothDirectoryInfo,
+    FileIdBothDirectoryRestartInfo,
+    FileIoPriorityHintInfo,
+    FileRemoteProtocolInfo,
+    FileFullDirectoryInfo,
+    FileFullDirectoryRestartInfo,
+    FileStorageInfo,
+    FileAlignmentInfo,
+    FileIdInfo,
+    FileIdExtdDirectoryInfo,
+    FileIdExtdDirectoryRestartInfo,
+    FileDispositionInfoEx,
+    FileRenameInfoEx,
+    FileCaseSensitiveInfo,
+    FileNormalizedNameInfo,
+    MaximumFileInfoByHandleClass
+} FILE_INFO_BY_HANDLE_CLASS, *PFILE_INFO_BY_HANDLE_CLASS;
 // Locale identifiers for GetLocaleInfoA.
 #define LOCALE_USER_DEFAULT      0x0400
 #define LOCALE_SYSTEM_DEFAULT    0x0800
@@ -1315,38 +1456,310 @@ typedef enum _COMPUTER_NAME_FORMAT {
 #define LookupPrivilegeValue LookupPrivilegeValueW
 #define SE_RESTORE_NAME L"SeRestorePrivilege"
 
-// SEH exception codes sqlite checks against in its mmap recovery
-// hook. Spelled out because c5's preprocessor can't expand the
-// MSVC `EXCEPTION_*` enum the SDK headers normally provide.
-#define EXCEPTION_IN_PAGE_ERROR        0xC0000006
-#define EXCEPTION_ACCESS_VIOLATION     0xC0000005
-#define EXCEPTION_EXECUTE_HANDLER      1
-#define EXCEPTION_CONTINUE_SEARCH      0
-#define EXCEPTION_CONTINUE_EXECUTION   (-1)
+// Exception status codes (winnt.h) and their exception-record aliases
+// (minwinbase.h).
+#define STATUS_WAIT_0                    ((DWORD)0x00000000L)
+#define STATUS_ABANDONED_WAIT_0          ((DWORD)0x00000080L)
+#define STATUS_USER_APC                  ((DWORD)0x000000C0L)
+#define STATUS_TIMEOUT                   ((DWORD)0x00000102L)
+#define STATUS_SEGMENT_NOTIFICATION      ((DWORD)0x40000005L)
+#define STATUS_FATAL_APP_EXIT            ((DWORD)0x40000015L)
+#define STATUS_GUARD_PAGE_VIOLATION      ((DWORD)0x80000001L)
+#define STATUS_DATATYPE_MISALIGNMENT     ((DWORD)0x80000002L)
+#define STATUS_BREAKPOINT                ((DWORD)0x80000003L)
+#define STATUS_SINGLE_STEP               ((DWORD)0x80000004L)
+#define STATUS_LONGJUMP                  ((DWORD)0x80000026L)
+#define STATUS_UNWIND_CONSOLIDATE        ((DWORD)0x80000029L)
+#define STATUS_ACCESS_VIOLATION          ((DWORD)0xC0000005L)
+#define STATUS_IN_PAGE_ERROR             ((DWORD)0xC0000006L)
+#define STATUS_INVALID_HANDLE            ((DWORD)0xC0000008L)
+#define STATUS_INVALID_PARAMETER         ((DWORD)0xC000000DL)
+#define STATUS_NO_MEMORY                 ((DWORD)0xC0000017L)
+#define STATUS_ILLEGAL_INSTRUCTION       ((DWORD)0xC000001DL)
+#define STATUS_NONCONTINUABLE_EXCEPTION  ((DWORD)0xC0000025L)
+#define STATUS_INVALID_DISPOSITION       ((DWORD)0xC0000026L)
+#define STATUS_ARRAY_BOUNDS_EXCEEDED     ((DWORD)0xC000008CL)
+#define STATUS_FLOAT_DENORMAL_OPERAND    ((DWORD)0xC000008DL)
+#define STATUS_FLOAT_DIVIDE_BY_ZERO      ((DWORD)0xC000008EL)
+#define STATUS_FLOAT_INEXACT_RESULT      ((DWORD)0xC000008FL)
+#define STATUS_FLOAT_INVALID_OPERATION   ((DWORD)0xC0000090L)
+#define STATUS_FLOAT_OVERFLOW            ((DWORD)0xC0000091L)
+#define STATUS_FLOAT_STACK_CHECK         ((DWORD)0xC0000092L)
+#define STATUS_FLOAT_UNDERFLOW           ((DWORD)0xC0000093L)
+#define STATUS_INTEGER_DIVIDE_BY_ZERO    ((DWORD)0xC0000094L)
+#define STATUS_INTEGER_OVERFLOW          ((DWORD)0xC0000095L)
+#define STATUS_PRIVILEGED_INSTRUCTION    ((DWORD)0xC0000096L)
+#define STATUS_STACK_OVERFLOW            ((DWORD)0xC00000FDL)
+#define STATUS_DLL_NOT_FOUND             ((DWORD)0xC0000135L)
+#define STATUS_ORDINAL_NOT_FOUND         ((DWORD)0xC0000138L)
+#define STATUS_ENTRYPOINT_NOT_FOUND      ((DWORD)0xC0000139L)
+#define STATUS_DLL_INIT_FAILED           ((DWORD)0xC0000142L)
+#define STATUS_POSSIBLE_DEADLOCK         ((DWORD)0xC0000194L)
+#define STATUS_CONTROL_STACK_VIOLATION   ((DWORD)0xC00001B2L)
+#define STATUS_FLOAT_MULTIPLE_FAULTS     ((DWORD)0xC00002B4L)
+#define STATUS_FLOAT_MULTIPLE_TRAPS      ((DWORD)0xC00002B5L)
+#define STATUS_REG_NAT_CONSUMPTION       ((DWORD)0xC00002C9L)
+#define STATUS_HEAP_CORRUPTION           ((DWORD)0xC0000374L)
+#define STATUS_STACK_BUFFER_OVERRUN      ((DWORD)0xC0000409L)
+#define STATUS_INVALID_CRUNTIME_PARAMETER ((DWORD)0xC0000417L)
+#define STATUS_ASSERTION_FAILURE         ((DWORD)0xC0000420L)
+#define STATUS_ENCLAVE_VIOLATION         ((DWORD)0xC00004A2L)
+#define STATUS_INTERRUPTED               ((DWORD)0xC0000515L)
+#define STATUS_THREAD_NOT_RUNNING        ((DWORD)0xC0000516L)
+#define STATUS_ALREADY_REGISTERED        ((DWORD)0xC0000718L)
+#define STATUS_SXS_EARLY_DEACTIVATION    ((DWORD)0xC015000FL)
+#define STATUS_SXS_INVALID_DEACTIVATION  ((DWORD)0xC0150010L)
+#define EXCEPTION_ACCESS_VIOLATION          STATUS_ACCESS_VIOLATION
+#define EXCEPTION_DATATYPE_MISALIGNMENT     STATUS_DATATYPE_MISALIGNMENT
+#define EXCEPTION_BREAKPOINT                STATUS_BREAKPOINT
+#define EXCEPTION_SINGLE_STEP               STATUS_SINGLE_STEP
+#define EXCEPTION_ARRAY_BOUNDS_EXCEEDED     STATUS_ARRAY_BOUNDS_EXCEEDED
+#define EXCEPTION_FLT_DENORMAL_OPERAND      STATUS_FLOAT_DENORMAL_OPERAND
+#define EXCEPTION_FLT_DIVIDE_BY_ZERO        STATUS_FLOAT_DIVIDE_BY_ZERO
+#define EXCEPTION_FLT_INEXACT_RESULT        STATUS_FLOAT_INEXACT_RESULT
+#define EXCEPTION_FLT_INVALID_OPERATION     STATUS_FLOAT_INVALID_OPERATION
+#define EXCEPTION_FLT_OVERFLOW              STATUS_FLOAT_OVERFLOW
+#define EXCEPTION_FLT_STACK_CHECK           STATUS_FLOAT_STACK_CHECK
+#define EXCEPTION_FLT_UNDERFLOW             STATUS_FLOAT_UNDERFLOW
+#define EXCEPTION_INT_DIVIDE_BY_ZERO        STATUS_INTEGER_DIVIDE_BY_ZERO
+#define EXCEPTION_INT_OVERFLOW              STATUS_INTEGER_OVERFLOW
+#define EXCEPTION_PRIV_INSTRUCTION          STATUS_PRIVILEGED_INSTRUCTION
+#define EXCEPTION_IN_PAGE_ERROR             STATUS_IN_PAGE_ERROR
+#define EXCEPTION_ILLEGAL_INSTRUCTION       STATUS_ILLEGAL_INSTRUCTION
+#define EXCEPTION_NONCONTINUABLE_EXCEPTION  STATUS_NONCONTINUABLE_EXCEPTION
+#define EXCEPTION_STACK_OVERFLOW            STATUS_STACK_OVERFLOW
+#define EXCEPTION_INVALID_DISPOSITION       STATUS_INVALID_DISPOSITION
+#define EXCEPTION_GUARD_PAGE                STATUS_GUARD_PAGE_VIOLATION
+#define EXCEPTION_INVALID_HANDLE            STATUS_INVALID_HANDLE
+#define EXCEPTION_POSSIBLE_DEADLOCK         STATUS_POSSIBLE_DEADLOCK
+#define CONTROL_C_EXIT                      STATUS_CONTROL_C_EXIT
+#define EXCEPTION_NONCONTINUABLE         0x1
+#define EXCEPTION_MAXIMUM_PARAMETERS     15
+#define EXCEPTION_EXECUTE_HANDLER        1
+#define EXCEPTION_CONTINUE_SEARCH        0
+#define EXCEPTION_CONTINUE_EXECUTION     (-1)
 
-// SEH descriptor structs sqlite's mmap-recovery filter walks.
-// Layout pinned to the Win64 SDK so kernel-emitted records can
-// be read field-by-field. `ExceptionInformation` is the standard
-// 15-slot array; sqlite reads index 1 to recover the faulting
-// virtual address.
-struct _EXCEPTION_RECORD {
+typedef struct _EXCEPTION_RECORD {
     DWORD                     ExceptionCode;
     DWORD                     ExceptionFlags;
     struct _EXCEPTION_RECORD *ExceptionRecord;
-    void                     *ExceptionAddress;
+    PVOID                     ExceptionAddress;
     DWORD                     NumberParameters;
-    ULONG_PTR                 ExceptionInformation[15];
-};
-typedef struct _EXCEPTION_RECORD EXCEPTION_RECORD;
-typedef struct _EXCEPTION_RECORD *PEXCEPTION_RECORD;
+    ULONG_PTR                 ExceptionInformation[EXCEPTION_MAXIMUM_PARAMETERS];
+} EXCEPTION_RECORD;
+typedef EXCEPTION_RECORD *PEXCEPTION_RECORD;
 
-struct _EXCEPTION_POINTERS {
-    EXCEPTION_RECORD *ExceptionRecord;
-    void             *ContextRecord;
-};
-typedef struct _EXCEPTION_POINTERS EXCEPTION_POINTERS;
-typedef struct _EXCEPTION_POINTERS *PEXCEPTION_POINTERS;
-typedef struct _EXCEPTION_POINTERS *LPEXCEPTION_POINTERS;
+// CONTEXT (winnt.h): the thread state an exception handler or
+// RtlCaptureContext reads, at the SDK's 16-byte alignment.
+typedef struct __declspec(align(16)) _M128A {
+    ULONGLONG Low;
+    LONGLONG  High;
+} M128A, *PM128A;
+
+typedef struct __declspec(align(16)) _XSAVE_FORMAT {
+    WORD  ControlWord;
+    WORD  StatusWord;
+    BYTE  TagWord;
+    BYTE  Reserved1;
+    WORD  ErrorOpcode;
+    DWORD ErrorOffset;
+    WORD  ErrorSelector;
+    WORD  Reserved2;
+    DWORD DataOffset;
+    WORD  DataSelector;
+    WORD  Reserved3;
+    DWORD MxCsr;
+    DWORD MxCsr_Mask;
+    M128A FloatRegisters[8];
+    M128A XmmRegisters[16];
+    BYTE  Reserved4[96];
+} XSAVE_FORMAT, *PXSAVE_FORMAT;
+typedef XSAVE_FORMAT XMM_SAVE_AREA32, *PXMM_SAVE_AREA32;
+
+#define CONTEXT_AMD64           0x00100000L
+#define CONTEXT_ARM64           0x00400000L
+#define CONTEXT_ARM64_CONTROL             (CONTEXT_ARM64 | 0x1L)
+#define CONTEXT_ARM64_INTEGER             (CONTEXT_ARM64 | 0x2L)
+#define CONTEXT_ARM64_FLOATING_POINT      (CONTEXT_ARM64 | 0x4L)
+#define CONTEXT_ARM64_DEBUG_REGISTERS     (CONTEXT_ARM64 | 0x8L)
+#define CONTEXT_ARM64_X18                 (CONTEXT_ARM64 | 0x10L)
+#define CONTEXT_ARM64_FLOATING_POINT_LOW  (CONTEXT_ARM64 | 0x40L)
+#define CONTEXT_ARM64_FLOATING_POINT_HIGH (CONTEXT_ARM64 | 0x80L)
+#define CONTEXT_ARM64_FULL (CONTEXT_ARM64_CONTROL | CONTEXT_ARM64_INTEGER | CONTEXT_ARM64_FLOATING_POINT)
+#define CONTEXT_ARM64_ALL  (CONTEXT_ARM64_CONTROL | CONTEXT_ARM64_INTEGER | CONTEXT_ARM64_FLOATING_POINT | \
+                            CONTEXT_ARM64_DEBUG_REGISTERS | CONTEXT_ARM64_X18)
+#ifdef __aarch64__
+#define CONTEXT_CONTROL         CONTEXT_ARM64_CONTROL
+#define CONTEXT_INTEGER         CONTEXT_ARM64_INTEGER
+#define CONTEXT_FLOATING_POINT  CONTEXT_ARM64_FLOATING_POINT
+#define CONTEXT_DEBUG_REGISTERS CONTEXT_ARM64_DEBUG_REGISTERS
+#define CONTEXT_FULL            CONTEXT_ARM64_FULL
+#define CONTEXT_ALL             CONTEXT_ARM64_ALL
+#else
+#define CONTEXT_CONTROL         (CONTEXT_AMD64 | 0x00000001L)
+#define CONTEXT_INTEGER         (CONTEXT_AMD64 | 0x00000002L)
+#define CONTEXT_SEGMENTS        (CONTEXT_AMD64 | 0x00000004L)
+#define CONTEXT_FLOATING_POINT  (CONTEXT_AMD64 | 0x00000008L)
+#define CONTEXT_DEBUG_REGISTERS (CONTEXT_AMD64 | 0x00000010L)
+#define CONTEXT_FULL            (CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT)
+#define CONTEXT_ALL             (CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_SEGMENTS | \
+                                 CONTEXT_FLOATING_POINT | CONTEXT_DEBUG_REGISTERS)
+#define CONTEXT_XSTATE          (CONTEXT_AMD64 | 0x00000040L)
+#define CONTEXT_KERNEL_CET      (CONTEXT_AMD64 | 0x00000080L)
+#endif
+
+#ifndef __aarch64__
+typedef struct __declspec(align(16)) _CONTEXT {
+    DWORD64 P1Home;
+    DWORD64 P2Home;
+    DWORD64 P3Home;
+    DWORD64 P4Home;
+    DWORD64 P5Home;
+    DWORD64 P6Home;
+    DWORD   ContextFlags;
+    DWORD   MxCsr;
+    WORD    SegCs;
+    WORD    SegDs;
+    WORD    SegEs;
+    WORD    SegFs;
+    WORD    SegGs;
+    WORD    SegSs;
+    DWORD   EFlags;
+    DWORD64 Dr0;
+    DWORD64 Dr1;
+    DWORD64 Dr2;
+    DWORD64 Dr3;
+    DWORD64 Dr6;
+    DWORD64 Dr7;
+    DWORD64 Rax;
+    DWORD64 Rcx;
+    DWORD64 Rdx;
+    DWORD64 Rbx;
+    DWORD64 Rsp;
+    DWORD64 Rbp;
+    DWORD64 Rsi;
+    DWORD64 Rdi;
+    DWORD64 R8;
+    DWORD64 R9;
+    DWORD64 R10;
+    DWORD64 R11;
+    DWORD64 R12;
+    DWORD64 R13;
+    DWORD64 R14;
+    DWORD64 R15;
+    DWORD64 Rip;
+    union {
+        XMM_SAVE_AREA32 FltSave;
+        struct {
+            M128A Header[2];
+            M128A Legacy[8];
+            M128A Xmm0;
+            M128A Xmm1;
+            M128A Xmm2;
+            M128A Xmm3;
+            M128A Xmm4;
+            M128A Xmm5;
+            M128A Xmm6;
+            M128A Xmm7;
+            M128A Xmm8;
+            M128A Xmm9;
+            M128A Xmm10;
+            M128A Xmm11;
+            M128A Xmm12;
+            M128A Xmm13;
+            M128A Xmm14;
+            M128A Xmm15;
+        };
+    };
+    M128A   VectorRegister[26];
+    DWORD64 VectorControl;
+    DWORD64 DebugControl;
+    DWORD64 LastBranchToRip;
+    DWORD64 LastBranchFromRip;
+    DWORD64 LastExceptionToRip;
+    DWORD64 LastExceptionFromRip;
+} CONTEXT, *PCONTEXT;
+#endif
+
+#define ARM64_MAX_BREAKPOINTS 8
+#define ARM64_MAX_WATCHPOINTS 2
+
+typedef union _ARM64_NT_NEON128 {
+    struct {
+        ULONGLONG Low;
+        LONGLONG  High;
+    };
+    double D[2];
+    float  S[4];
+    WORD   H[8];
+    BYTE   B[16];
+} ARM64_NT_NEON128, *PARM64_NT_NEON128;
+
+#ifdef __aarch64__
+#define _ARM64_NT_CONTEXT _CONTEXT
+#endif
+typedef struct __declspec(align(16)) _ARM64_NT_CONTEXT {
+    DWORD ContextFlags;
+    DWORD Cpsr;
+    union {
+        struct {
+            DWORD64 X0;
+            DWORD64 X1;
+            DWORD64 X2;
+            DWORD64 X3;
+            DWORD64 X4;
+            DWORD64 X5;
+            DWORD64 X6;
+            DWORD64 X7;
+            DWORD64 X8;
+            DWORD64 X9;
+            DWORD64 X10;
+            DWORD64 X11;
+            DWORD64 X12;
+            DWORD64 X13;
+            DWORD64 X14;
+            DWORD64 X15;
+            DWORD64 X16;
+            DWORD64 X17;
+            DWORD64 X18;
+            DWORD64 X19;
+            DWORD64 X20;
+            DWORD64 X21;
+            DWORD64 X22;
+            DWORD64 X23;
+            DWORD64 X24;
+            DWORD64 X25;
+            DWORD64 X26;
+            DWORD64 X27;
+            DWORD64 X28;
+            DWORD64 Fp;
+            DWORD64 Lr;
+        };
+        DWORD64 X[31];
+    };
+    DWORD64          Sp;
+    DWORD64          Pc;
+    ARM64_NT_NEON128 V[32];
+    DWORD            Fpcr;
+    DWORD            Fpsr;
+    DWORD            Bcr[ARM64_MAX_BREAKPOINTS];
+    DWORD64          Bvr[ARM64_MAX_BREAKPOINTS];
+    DWORD            Wcr[ARM64_MAX_WATCHPOINTS];
+    DWORD64          Wvr[ARM64_MAX_WATCHPOINTS];
+} ARM64_NT_CONTEXT, *PARM64_NT_CONTEXT;
+#ifdef __aarch64__
+#undef _ARM64_NT_CONTEXT
+typedef ARM64_NT_NEON128 NEON128, *PNEON128;
+typedef ARM64_NT_CONTEXT CONTEXT, *PCONTEXT;
+#endif
+
+typedef struct _EXCEPTION_POINTERS {
+    PEXCEPTION_RECORD ExceptionRecord;
+    PCONTEXT          ContextRecord;
+} EXCEPTION_POINTERS, *PEXCEPTION_POINTERS, *LPEXCEPTION_POINTERS;
+
+#pragma binding(kernel32::RtlCaptureContext, "RtlCaptureContext")
+VOID RtlCaptureContext(PCONTEXT ContextRecord);
 
 struct _SYSTEMTIME {
     WORD wYear;
@@ -1358,7 +1771,6 @@ struct _SYSTEMTIME {
     WORD wSecond;
     WORD wMilliseconds;
 };
-typedef struct _SYSTEMTIME SYSTEMTIME;
 
 typedef struct _TIME_ZONE_INFORMATION {
     LONG       Bias;
@@ -1368,7 +1780,7 @@ typedef struct _TIME_ZONE_INFORMATION {
     WCHAR      DaylightName[32];
     SYSTEMTIME DaylightDate;
     LONG       DaylightBias;
-} TIME_ZONE_INFORMATION;
+} TIME_ZONE_INFORMATION, *PTIME_ZONE_INFORMATION, *LPTIME_ZONE_INFORMATION;
 
 // WIN32_FILE_ATTRIBUTE_DATA -- output buffer for
 // GetFileAttributesEx. sqlite reads the attribute / size pair to
@@ -1453,6 +1865,61 @@ struct _CONSOLE_SCREEN_BUFFER_INFO {
 typedef struct _CONSOLE_SCREEN_BUFFER_INFO CONSOLE_SCREEN_BUFFER_INFO;
 typedef struct _CONSOLE_SCREEN_BUFFER_INFO *PCONSOLE_SCREEN_BUFFER_INFO;
 
+typedef struct _KEY_EVENT_RECORD {
+    BOOL bKeyDown;
+    WORD wRepeatCount;
+    WORD wVirtualKeyCode;
+    WORD wVirtualScanCode;
+    union {
+        WCHAR UnicodeChar;
+        CHAR  AsciiChar;
+    } uChar;
+    DWORD dwControlKeyState;
+} KEY_EVENT_RECORD, *PKEY_EVENT_RECORD;
+typedef struct _MOUSE_EVENT_RECORD {
+    COORD dwMousePosition;
+    DWORD dwButtonState;
+    DWORD dwControlKeyState;
+    DWORD dwEventFlags;
+} MOUSE_EVENT_RECORD, *PMOUSE_EVENT_RECORD;
+typedef struct _WINDOW_BUFFER_SIZE_RECORD {
+    COORD dwSize;
+} WINDOW_BUFFER_SIZE_RECORD, *PWINDOW_BUFFER_SIZE_RECORD;
+typedef struct _MENU_EVENT_RECORD {
+    UINT dwCommandId;
+} MENU_EVENT_RECORD, *PMENU_EVENT_RECORD;
+typedef struct _FOCUS_EVENT_RECORD {
+    BOOL bSetFocus;
+} FOCUS_EVENT_RECORD, *PFOCUS_EVENT_RECORD;
+typedef struct _INPUT_RECORD {
+    WORD EventType;
+    union {
+        KEY_EVENT_RECORD          KeyEvent;
+        MOUSE_EVENT_RECORD        MouseEvent;
+        WINDOW_BUFFER_SIZE_RECORD WindowBufferSizeEvent;
+        MENU_EVENT_RECORD         MenuEvent;
+        FOCUS_EVENT_RECORD        FocusEvent;
+    } Event;
+} INPUT_RECORD, *PINPUT_RECORD;
+typedef struct _CHAR_INFO {
+    union {
+        WCHAR UnicodeChar;
+        CHAR  AsciiChar;
+    } Char;
+    WORD Attributes;
+} CHAR_INFO, *PCHAR_INFO;
+typedef struct _CONSOLE_READCONSOLE_CONTROL {
+    ULONG nLength;
+    ULONG nInitialChars;
+    ULONG dwCtrlWakeupMask;
+    ULONG dwControlKeyState;
+} CONSOLE_READCONSOLE_CONTROL, *PCONSOLE_READCONSOLE_CONTROL;
+#define KEY_EVENT                0x0001
+#define MOUSE_EVENT              0x0002
+#define WINDOW_BUFFER_SIZE_EVENT 0x0004
+#define MENU_EVENT               0x0008
+#define FOCUS_EVENT              0x0010
+
 #define STD_INPUT_HANDLE  ((DWORD)-10)
 #define STD_OUTPUT_HANDLE ((DWORD)-11)
 #define STD_ERROR_HANDLE  ((DWORD)-12)
@@ -1497,67 +1964,75 @@ typedef struct _CONSOLE_SCREEN_BUFFER_INFO *PCONSOLE_SCREEN_BUFFER_INFO;
 #define CTRL_LOGOFF_EVENT   5
 #define CTRL_SHUTDOWN_EVENT 6
 
-char *VirtualAlloc(char *addr, long long size, int type, int protect);
-int VirtualProtect(char *addr, long long size, int new_protect, int *old_protect);
-int VirtualFree(char *addr, long long size, int type);
-HANDLE LoadLibraryA(char *name);
+LPVOID VirtualAlloc(LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationType,
+                    DWORD flProtect);
+BOOL VirtualProtect(LPVOID lpAddress, SIZE_T dwSize, DWORD flNewProtect,
+                    PDWORD lpflOldProtect);
+BOOL VirtualFree(LPVOID lpAddress, SIZE_T dwSize, DWORD dwFreeType);
+HMODULE LoadLibraryA(LPCSTR lpLibFileName);
 // LoadLibraryExA: name, hFile (reserved, must be NULL), dwFlags.
 // dwFlags bits (LOAD_*) control search-path and binding semantics.
-HANDLE LoadLibraryExA(char *name, HANDLE reserved, int flags);
-HANDLE LoadLibraryExW(const unsigned short *name, HANDLE reserved, int flags);
-PVOID  GetProcAddress(HANDLE module, char *name);
-int    FreeLibrary(HANDLE module);
-DWORD  GetLastError(void);
-int ExitProcess(int status);
-int Sleep(int milliseconds);
+HMODULE LoadLibraryExA(LPCSTR lpLibFileName, HANDLE hFile, DWORD dwFlags);
+HMODULE LoadLibraryExW(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags);
+FARPROC GetProcAddress(HMODULE hModule, LPCSTR lpProcName);
+BOOL FreeLibrary(HMODULE hLibModule);
+DWORD GetLastError(VOID);
+__attribute__((noreturn)) VOID ExitProcess(UINT uExitCode);
+VOID Sleep(DWORD dwMilliseconds);
 // Function-table registration for SEH-style stack unwinding on
 // Win64. `EntryCount` is the number of `RUNTIME_FUNCTION`
 // entries; `BaseAddress` is the image base the offsets are
 // relative to.
-int RtlAddFunctionTable(PRUNTIME_FUNCTION FunctionTable, DWORD EntryCount,
-                        long long BaseAddress);
-int RtlDeleteFunctionTable(PRUNTIME_FUNCTION FunctionTable);
+BOOLEAN RtlAddFunctionTable(PRUNTIME_FUNCTION FunctionTable, DWORD EntryCount,
+                            DWORD64 BaseAddress);
+BOOLEAN RtlDeleteFunctionTable(PRUNTIME_FUNCTION FunctionTable);
 
 // CreateThread returns a thread HANDLE (kernel object). Args
 // mirror the Win32 prototype: lpThreadAttributes, dwStackSize,
 // lpStartAddress, lpParameter, dwCreationFlags, lpThreadId.
-HANDLE CreateThread(char *attrs, long long stack_size, int *start, char *param,
-                    int flags, int *thread_id);
-int WaitForSingleObject(HANDLE handle, int millis);
-int CloseHandle(HANDLE handle);
-int GetExitCodeThread(HANDLE handle, int *exit_code);
-int SetThreadPriority(HANDLE thread, int priority);
-int GetCurrentThreadId();
-int InitializeCriticalSection(char *cs);
+HANDLE CreateThread(LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_T dwStackSize,
+                    LPTHREAD_START_ROUTINE lpStartAddress, LPVOID lpParameter,
+                    DWORD dwCreationFlags, LPDWORD lpThreadId);
+DWORD WaitForSingleObject(HANDLE hHandle, DWORD dwMilliseconds);
+BOOL CloseHandle(HANDLE hObject);
+BOOL GetExitCodeThread(HANDLE hThread, LPDWORD lpExitCode);
+BOOL SetThreadPriority(HANDLE hThread, int nPriority);
+DWORD GetCurrentThreadId(VOID);
+VOID InitializeCriticalSection(LPCRITICAL_SECTION lpCriticalSection);
 // InitializeCriticalSectionEx(cs, spin, flags): the flag word selects debug
 // info / no-dynamic-spin; c5 passes 0.
-int InitializeCriticalSectionEx(char *cs, DWORD spin, DWORD flags);
-int EnterCriticalSection(char *cs);
-int LeaveCriticalSection(char *cs);
-int DeleteCriticalSection(char *cs);
-DWORD TlsAlloc(void);
-PVOID TlsGetValue(DWORD index);
-int   TlsSetValue(DWORD index, PVOID value);
-int   TlsFree(DWORD index);
-void InitializeSRWLock(PSRWLOCK lock);
-void AcquireSRWLockExclusive(PSRWLOCK lock);
-void ReleaseSRWLockExclusive(PSRWLOCK lock);
-void AcquireSRWLockShared(PSRWLOCK lock);
-void ReleaseSRWLockShared(PSRWLOCK lock);
-BOOLEAN TryAcquireSRWLockExclusive(PSRWLOCK lock);
-BOOLEAN TryAcquireSRWLockShared(PSRWLOCK lock);
-void InitializeConditionVariable(PCONDITION_VARIABLE cv);
-int  SleepConditionVariableSRW(PCONDITION_VARIABLE cv, PSRWLOCK lock, DWORD ms, ULONG flags);
-int  SleepConditionVariableCS(PCONDITION_VARIABLE cv, PCRITICAL_SECTION cs, DWORD ms);
-void WakeConditionVariable(PCONDITION_VARIABLE cv);
-void WakeAllConditionVariable(PCONDITION_VARIABLE cv);
-HANDLE CreateSemaphoreW(void *attrs, LONG initial, LONG maximum, PCWSTR name);
+BOOL InitializeCriticalSectionEx(LPCRITICAL_SECTION lpCriticalSection,
+                                 DWORD dwSpinCount, DWORD Flags);
+VOID EnterCriticalSection(LPCRITICAL_SECTION lpCriticalSection);
+VOID LeaveCriticalSection(LPCRITICAL_SECTION lpCriticalSection);
+VOID DeleteCriticalSection(LPCRITICAL_SECTION lpCriticalSection);
+DWORD TlsAlloc(VOID);
+LPVOID TlsGetValue(DWORD dwTlsIndex);
+BOOL TlsSetValue(DWORD dwTlsIndex, LPVOID lpTlsValue);
+BOOL TlsFree(DWORD dwTlsIndex);
+VOID InitializeSRWLock(PSRWLOCK SRWLock);
+VOID AcquireSRWLockExclusive(PSRWLOCK SRWLock);
+VOID ReleaseSRWLockExclusive(PSRWLOCK SRWLock);
+VOID AcquireSRWLockShared(PSRWLOCK SRWLock);
+VOID ReleaseSRWLockShared(PSRWLOCK SRWLock);
+BOOLEAN TryAcquireSRWLockExclusive(PSRWLOCK SRWLock);
+BOOLEAN TryAcquireSRWLockShared(PSRWLOCK SRWLock);
+VOID InitializeConditionVariable(PCONDITION_VARIABLE ConditionVariable);
+BOOL SleepConditionVariableSRW(PCONDITION_VARIABLE ConditionVariable, PSRWLOCK SRWLock,
+                               DWORD dwMilliseconds, ULONG Flags);
+BOOL SleepConditionVariableCS(PCONDITION_VARIABLE ConditionVariable,
+                              PCRITICAL_SECTION CriticalSection, DWORD dwMilliseconds);
+VOID WakeConditionVariable(PCONDITION_VARIABLE ConditionVariable);
+VOID WakeAllConditionVariable(PCONDITION_VARIABLE ConditionVariable);
+HANDLE CreateSemaphoreW(LPSECURITY_ATTRIBUTES lpSemaphoreAttributes, LONG lInitialCount,
+                        LONG lMaximumCount, LPCWSTR lpName);
 #define CreateSemaphore CreateSemaphoreW
-int ReleaseSemaphore(HANDLE sem, LONG release, LONG *previous);
-HANDLE GetCurrentThread(void);
-int GetProcessTimes(HANDLE proc, void *creation, void *exit, void *kernel, void *user);
-int CancelIoEx(HANDLE h, LPOVERLAPPED overlapped);
-int GetNumberOfConsoleInputEvents(HANDLE h, LPDWORD count);
+BOOL ReleaseSemaphore(HANDLE hSemaphore, LONG lReleaseCount, LPLONG lpPreviousCount);
+HANDLE GetCurrentThread(VOID);
+BOOL GetProcessTimes(HANDLE hProcess, LPFILETIME lpCreationTime, LPFILETIME lpExitTime,
+                     LPFILETIME lpKernelTime, LPFILETIME lpUserTime);
+BOOL CancelIoEx(HANDLE hFile, LPOVERLAPPED lpOverlapped);
+BOOL GetNumberOfConsoleInputEvents(HANDLE hConsoleInput, LPDWORD lpNumberOfEvents);
 
 // The SDK inlines SecureZeroMemory so the clear is not elided. badc does
 // no dead-store elimination at -O0 (the build default), so a plain clear
@@ -1571,102 +2046,140 @@ int GetNumberOfConsoleInputEvents(HANDLE h, LPDWORD count);
 
 typedef UINT_PTR SOCKET;
 #define FAILED(hr) (((HRESULT)(hr)) < 0)
-unsigned int SetErrorMode(unsigned int mode);
-unsigned int GetErrorMode(void);
-DWORD WaitForMultipleObjects(DWORD count, HANDLE *handles, int wait_all, DWORD millis);
-int GetThreadTimes(HANDLE thread, void *creation, void *exit, void *kernel, void *user);
-HANDLE OpenThread(DWORD access, int inherit, DWORD thread_id);
-int CompareStringOrdinal(PCWSTR s1, int n1, PCWSTR s2, int n2, int ignore_case);
-int GetOverlappedResult(HANDLE h, LPOVERLAPPED overlapped, LPDWORD transferred, int wait);
-int BCryptGenRandom(void *algorithm, unsigned char *buffer, unsigned long count, unsigned long flags);
-unsigned int GetACP(void);
-int GetLocaleInfoA(DWORD locale, DWORD info_type, char *data, int cch_data);
-DWORD GetFinalPathNameByHandleW(HANDLE file, unsigned short *path, DWORD len, DWORD flags);
-HANDLE CreateWaitableTimerExW(void *timer_attrs, const unsigned short *name, DWORD flags, DWORD access);
-int ConnectNamedPipe(HANDLE pipe, LPOVERLAPPED overlapped);
-void GetCurrentThreadStackLimits(ULONG_PTR *low_limit, ULONG_PTR *high_limit);
-int SetThreadStackGuarantee(ULONG *stack_size_in_bytes);
-int GetModuleFileNameW(HANDLE module, unsigned short *filename, DWORD size);
-DWORD GetFileType(HANDLE file);
-int GetFileInformationByHandle(HANDLE file, BY_HANDLE_FILE_INFORMATION *info);
-int GetFileInformationByHandleEx(HANDLE file, int info_class, void *info, DWORD size);
-int SetFileInformationByHandle(HANDLE file, int info_class, void *info, DWORD size);
-int GetHandleInformation(HANDLE object, LPDWORD flags);
-int SetHandleInformation(HANDLE object, DWORD mask, DWORD flags);
-int GetNamedPipeHandleStateW(HANDLE pipe, LPDWORD state, LPDWORD instances, LPDWORD max_collect, LPDWORD timeout, unsigned short *user, DWORD user_size);
-int SetNamedPipeHandleState(HANDLE pipe, LPDWORD mode, LPDWORD max_collect, LPDWORD timeout);
-int CreatePipe(PHANDLE read_handle, PHANDLE write_handle, void *attrs, DWORD size);
-int DeviceIoControl(HANDLE device, DWORD code, void *in_buf, DWORD in_size, void *out_buf, DWORD out_size, LPDWORD returned, LPOVERLAPPED overlapped);
-int CreateHardLinkW(const unsigned short *link, const unsigned short *target, void *attrs);
-int CreateSymbolicLinkW(const unsigned short *symlink, const unsigned short *target, DWORD flags);
-int MoveFileExW(const unsigned short *from, const unsigned short *to, DWORD flags);
-int MoveFileExA(const char *from, const char *to, DWORD flags);
+UINT SetErrorMode(UINT uMode);
+UINT GetErrorMode(VOID);
+DWORD WaitForMultipleObjects(DWORD nCount, const HANDLE *lpHandles, BOOL bWaitAll,
+                             DWORD dwMilliseconds);
+BOOL GetThreadTimes(HANDLE hThread, LPFILETIME lpCreationTime, LPFILETIME lpExitTime,
+                    LPFILETIME lpKernelTime, LPFILETIME lpUserTime);
+HANDLE OpenThread(DWORD dwDesiredAccess, BOOL bInheritHandle, DWORD dwThreadId);
+int CompareStringOrdinal(LPCWCH lpString1, int cchCount1, LPCWCH lpString2,
+                         int cchCount2, BOOL bIgnoreCase);
+BOOL GetOverlappedResult(HANDLE hFile, LPOVERLAPPED lpOverlapped,
+                         LPDWORD lpNumberOfBytesTransferred, BOOL bWait);
+NTSTATUS BCryptGenRandom(BCRYPT_ALG_HANDLE hAlgorithm, PUCHAR pbBuffer, ULONG cbBuffer,
+                         ULONG dwFlags);
+UINT GetACP(VOID);
+int GetLocaleInfoA(LCID Locale, LCTYPE LCType, LPSTR lpLCData, int cchData);
+DWORD GetFinalPathNameByHandleW(HANDLE hFile, LPWSTR lpszFilePath, DWORD cchFilePath,
+                                DWORD dwFlags);
+HANDLE CreateWaitableTimerExW(LPSECURITY_ATTRIBUTES lpTimerAttributes,
+                              LPCWSTR lpTimerName, DWORD dwFlags, DWORD dwDesiredAccess);
+BOOL ConnectNamedPipe(HANDLE hNamedPipe, LPOVERLAPPED lpOverlapped);
+VOID GetCurrentThreadStackLimits(PULONG_PTR LowLimit, PULONG_PTR HighLimit);
+BOOL SetThreadStackGuarantee(PULONG StackSizeInBytes);
+DWORD GetModuleFileNameW(HMODULE hModule, LPWSTR lpFilename, DWORD nSize);
+DWORD GetFileType(HANDLE hFile);
+BOOL GetFileInformationByHandle(HANDLE hFile,
+                                LPBY_HANDLE_FILE_INFORMATION lpFileInformation);
+BOOL GetFileInformationByHandleEx(HANDLE hFile,
+                                  FILE_INFO_BY_HANDLE_CLASS FileInformationClass,
+                                  LPVOID lpFileInformation, DWORD dwBufferSize);
+BOOL SetFileInformationByHandle(HANDLE hFile,
+                                FILE_INFO_BY_HANDLE_CLASS FileInformationClass,
+                                LPVOID lpFileInformation, DWORD dwBufferSize);
+BOOL GetHandleInformation(HANDLE hObject, LPDWORD lpdwFlags);
+BOOL SetHandleInformation(HANDLE hObject, DWORD dwMask, DWORD dwFlags);
+BOOL GetNamedPipeHandleStateW(HANDLE hNamedPipe, LPDWORD lpState,
+                              LPDWORD lpCurInstances, LPDWORD lpMaxCollectionCount,
+                              LPDWORD lpCollectDataTimeout, LPWSTR lpUserName,
+                              DWORD nMaxUserNameSize);
+BOOL SetNamedPipeHandleState(HANDLE hNamedPipe, LPDWORD lpMode,
+                             LPDWORD lpMaxCollectionCount, LPDWORD lpCollectDataTimeout);
+BOOL CreatePipe(PHANDLE hReadPipe, PHANDLE hWritePipe,
+                LPSECURITY_ATTRIBUTES lpPipeAttributes, DWORD nSize);
+BOOL DeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID lpInBuffer,
+                     DWORD nInBufferSize, LPVOID lpOutBuffer, DWORD nOutBufferSize,
+                     LPDWORD lpBytesReturned, LPOVERLAPPED lpOverlapped);
+BOOL CreateHardLinkW(LPCWSTR lpFileName, LPCWSTR lpExistingFileName,
+                     LPSECURITY_ATTRIBUTES lpSecurityAttributes);
+BOOLEAN CreateSymbolicLinkW(LPCWSTR lpSymlinkFileName, LPCWSTR lpTargetFileName,
+                            DWORD dwFlags);
+BOOL MoveFileExW(LPCWSTR lpExistingFileName, LPCWSTR lpNewFileName, DWORD dwFlags);
+BOOL MoveFileExA(LPCSTR lpExistingFileName, LPCSTR lpNewFileName, DWORD dwFlags);
 #define MoveFileEx MoveFileExA
-int SetEnvironmentVariableW(const unsigned short *name, const unsigned short *value);
-unsigned int GetDriveTypeW(const unsigned short *root);
-int GetDiskFreeSpaceExW(const unsigned short *dir, void *avail, void *total, void *free_total);
-DWORD GetLogicalDriveStringsW(DWORD size, unsigned short *buffer);
-int GetVolumePathNameW(const unsigned short *filename, unsigned short *volume, DWORD len);
-int GetVolumePathNamesForVolumeNameW(const unsigned short *volume, unsigned short *names, DWORD len, LPDWORD returned);
-HANDLE FindFirstVolumeW(unsigned short *volume, DWORD len);
-int FindNextVolumeW(HANDLE find, unsigned short *volume, DWORD len);
-int FindVolumeClose(HANDLE find);
-DWORD GetActiveProcessorCount(WORD group);
-HANDLE OpenProcess(DWORD access, int inherit, DWORD pid);
-void *AddDllDirectory(const unsigned short *path);
-int RemoveDllDirectory(void *cookie);
-int SetWaitableTimer(HANDLE timer, void *due, LONG period, void *routine, void *arg, int resume);
-int SetWaitableTimerEx(HANDLE timer, void *due, LONG period, void *routine, void *arg, void *wake_ctx, DWORD tolerable_delay);
-int GetStringTypeW(DWORD info_type, const unsigned short *src, int count, WORD *char_type);
-int PssCaptureSnapshot(HANDLE process, DWORD flags, DWORD ctx_flags, void *snapshot);
-int PssFreeSnapshot(HANDLE process, void *snapshot);
-int PssQuerySnapshot(void *snapshot, int info_class, void *buffer, DWORD len);
-int GetUserNameW(unsigned short *buffer, LPDWORD size);
-int ConvertStringSecurityDescriptorToSecurityDescriptorW(const unsigned short *str, DWORD revision, void **sd, ULONG *size);
-long PathCchSkipRoot(const unsigned short *path, const unsigned short **root_end);
-long PathCchCombineEx(unsigned short *out, unsigned long len, const unsigned short *base, const unsigned short *more, unsigned long flags);
-DWORD GetFileVersionInfoSizeW(const unsigned short *filename, LPDWORD handle);
-int GetFileVersionInfoW(const unsigned short *filename, DWORD handle, DWORD len, void *data);
-int VerQueryValueW(void *block, const unsigned short *sub_block, void **buffer, UINT *len);
+BOOL SetEnvironmentVariableW(LPCWSTR lpName, LPCWSTR lpValue);
+UINT GetDriveTypeW(LPCWSTR lpRootPathName);
+BOOL GetDiskFreeSpaceExW(LPCWSTR lpDirectoryName,
+                         PULARGE_INTEGER lpFreeBytesAvailableToCaller,
+                         PULARGE_INTEGER lpTotalNumberOfBytes,
+                         PULARGE_INTEGER lpTotalNumberOfFreeBytes);
+DWORD GetLogicalDriveStringsW(DWORD nBufferLength, LPWSTR lpBuffer);
+BOOL GetVolumePathNameW(LPCWSTR lpszFileName, LPWSTR lpszVolumePathName,
+                        DWORD cchBufferLength);
+BOOL GetVolumePathNamesForVolumeNameW(LPCWSTR lpszVolumeName, LPWCH lpszVolumePathNames,
+                                      DWORD cchBufferLength, PDWORD lpcchReturnLength);
+HANDLE FindFirstVolumeW(LPWSTR lpszVolumeName, DWORD cchBufferLength);
+BOOL FindNextVolumeW(HANDLE hFindVolume, LPWSTR lpszVolumeName, DWORD cchBufferLength);
+BOOL FindVolumeClose(HANDLE hFindVolume);
+DWORD GetActiveProcessorCount(WORD GroupNumber);
+HANDLE OpenProcess(DWORD dwDesiredAccess, BOOL bInheritHandle, DWORD dwProcessId);
+DLL_DIRECTORY_COOKIE AddDllDirectory(PCWSTR NewDirectory);
+BOOL RemoveDllDirectory(DLL_DIRECTORY_COOKIE Cookie);
+BOOL SetWaitableTimer(HANDLE hTimer, const LARGE_INTEGER *lpDueTime, LONG lPeriod,
+                      PTIMERAPCROUTINE pfnCompletionRoutine,
+                      LPVOID lpArgToCompletionRoutine, BOOL fResume);
+BOOL SetWaitableTimerEx(HANDLE hTimer, const LARGE_INTEGER *lpDueTime, LONG lPeriod,
+                        PTIMERAPCROUTINE pfnCompletionRoutine,
+                        LPVOID lpArgToCompletionRoutine, PREASON_CONTEXT WakeContext,
+                        ULONG TolerableDelay);
+BOOL GetStringTypeW(DWORD dwInfoType, LPCWCH lpSrcStr, int cchSrc, LPWORD lpCharType);
+DWORD PssCaptureSnapshot(HANDLE ProcessHandle, PSS_CAPTURE_FLAGS CaptureFlags,
+                         DWORD ThreadContextFlags, HPSS *SnapshotHandle);
+DWORD PssFreeSnapshot(HANDLE ProcessHandle, HPSS SnapshotHandle);
+DWORD PssQuerySnapshot(HPSS SnapshotHandle,
+                       PSS_QUERY_INFORMATION_CLASS InformationClass, void *Buffer,
+                       DWORD BufferLength);
+BOOL GetUserNameW(LPWSTR lpBuffer, LPDWORD pcbBuffer);
+BOOL ConvertStringSecurityDescriptorToSecurityDescriptorW(LPCWSTR StringSecurityDescriptor,
+                                                          DWORD StringSDRevision,
+                                                          PSECURITY_DESCRIPTOR *SecurityDescriptor,
+                                                          PULONG SecurityDescriptorSize);
+HRESULT PathCchSkipRoot(PCWSTR pszPath, PCWSTR *ppszRootEnd);
+HRESULT PathCchCombineEx(PWSTR pszPathOut, size_t cchPathOut, PCWSTR pszPathIn,
+                         PCWSTR pszMore, ULONG dwFlags);
+DWORD GetFileVersionInfoSizeW(LPCWSTR lptstrFilename, LPDWORD lpdwHandle);
+BOOL GetFileVersionInfoW(LPCWSTR lptstrFilename, DWORD dwHandle, DWORD dwLen,
+                         LPVOID lpData);
+BOOL VerQueryValueW(LPCVOID pBlock, LPCWSTR lpSubBlock, LPVOID *lplpBuffer, PUINT puLen);
 
 // advapi32 registry API (winreg.h). Each returns a LONG status
 // (ERROR_SUCCESS on success); signatures track the Win32 wide forms.
-LONG RegCloseKey(HKEY hKey);
-LONG RegConnectRegistryW(LPCWSTR lpMachineName, HKEY hKey, PHKEY phkResult);
-LONG RegCreateKeyW(HKEY hKey, LPCWSTR lpSubKey, PHKEY phkResult);
-LONG RegCreateKeyExW(HKEY hKey, LPCWSTR lpSubKey, DWORD Reserved, LPWSTR lpClass,
-                     DWORD dwOptions, REGSAM samDesired, LPSECURITY_ATTRIBUTES lpSecurityAttributes,
-                     PHKEY phkResult, LPDWORD lpdwDisposition);
-LONG RegDeleteKeyW(HKEY hKey, LPCWSTR lpSubKey);
-LONG RegDeleteKeyExW(HKEY hKey, LPCWSTR lpSubKey, REGSAM samDesired, DWORD Reserved);
-LONG RegDeleteValueW(HKEY hKey, LPCWSTR lpValueName);
-LONG RegEnumKeyExW(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWORD lpcchName,
-                   LPDWORD lpReserved, LPWSTR lpClass, LPDWORD lpcchClass, PFILETIME lpftLastWriteTime);
-LONG RegEnumValueW(HKEY hKey, DWORD dwIndex, LPWSTR lpValueName, LPDWORD lpcchValueName,
-                   LPDWORD lpReserved, LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData);
-LONG RegFlushKey(HKEY hKey);
-LONG RegLoadKeyW(HKEY hKey, LPCWSTR lpSubKey, LPCWSTR lpFile);
-LONG RegOpenKeyExW(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult);
-LONG RegQueryInfoKeyW(HKEY hKey, LPWSTR lpClass, LPDWORD lpcchClass, LPDWORD lpReserved,
-                      LPDWORD lpcSubKeys, LPDWORD lpcbMaxSubKeyLen, LPDWORD lpcbMaxClassLen,
-                      LPDWORD lpcValues, LPDWORD lpcbMaxValueNameLen, LPDWORD lpcbMaxValueLen,
-                      LPDWORD lpcbSecurityDescriptor, PFILETIME lpftLastWriteTime);
-LONG RegQueryValueExW(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, LPDWORD lpType,
+LSTATUS RegCloseKey(HKEY hKey);
+LSTATUS RegConnectRegistryW(LPCWSTR lpMachineName, HKEY hKey, PHKEY phkResult);
+LSTATUS RegCreateKeyW(HKEY hKey, LPCWSTR lpSubKey, PHKEY phkResult);
+LSTATUS RegCreateKeyExW(HKEY hKey, LPCWSTR lpSubKey, DWORD Reserved, LPWSTR lpClass,
+                        DWORD dwOptions, REGSAM samDesired,
+                        const LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+                        PHKEY phkResult, LPDWORD lpdwDisposition);
+LSTATUS RegDeleteKeyW(HKEY hKey, LPCWSTR lpSubKey);
+LSTATUS RegDeleteKeyExW(HKEY hKey, LPCWSTR lpSubKey, REGSAM samDesired, DWORD Reserved);
+LSTATUS RegDeleteValueW(HKEY hKey, LPCWSTR lpValueName);
+LSTATUS RegEnumKeyExW(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWORD lpcchName,
+                      LPDWORD lpReserved, LPWSTR lpClass, LPDWORD lpcchClass,
+                      PFILETIME lpftLastWriteTime);
+LSTATUS RegEnumValueW(HKEY hKey, DWORD dwIndex, LPWSTR lpValueName,
+                      LPDWORD lpcchValueName, LPDWORD lpReserved, LPDWORD lpType,
                       LPBYTE lpData, LPDWORD lpcbData);
-LONG RegSaveKeyW(HKEY hKey, LPCWSTR lpFile, LPSECURITY_ATTRIBUTES lpSecurityAttributes);
-LONG RegSetValueExW(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved, DWORD dwType,
-                    const BYTE *lpData, DWORD cbData);
+LSTATUS RegFlushKey(HKEY hKey);
+LSTATUS RegLoadKeyW(HKEY hKey, LPCWSTR lpSubKey, LPCWSTR lpFile);
+LSTATUS RegOpenKeyExW(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired,
+                      PHKEY phkResult);
+LSTATUS RegQueryInfoKeyW(HKEY hKey, LPWSTR lpClass, LPDWORD lpcchClass,
+                         LPDWORD lpReserved, LPDWORD lpcSubKeys,
+                         LPDWORD lpcbMaxSubKeyLen, LPDWORD lpcbMaxClassLen,
+                         LPDWORD lpcValues, LPDWORD lpcbMaxValueNameLen,
+                         LPDWORD lpcbMaxValueLen, LPDWORD lpcbSecurityDescriptor,
+                         PFILETIME lpftLastWriteTime);
+LSTATUS RegQueryValueExW(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved,
+                         LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData);
+LSTATUS RegSaveKeyW(HKEY hKey, LPCWSTR lpFile,
+                    const LPSECURITY_ATTRIBUTES lpSecurityAttributes);
+LSTATUS RegSetValueExW(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved, DWORD dwType,
+                       const BYTE *lpData, DWORD cbData);
 
-// kernel32 API surface that sqlite's Windows VFS dispatch table
-// (`aSyscall[]`) takes the address of with `(SYSCALL)Name`. The
-// table only ever calls these via the cast'd function pointer, so
-// the c5-side prototypes don't need to be exact -- the cast at
-// the call site re-types the pointer to the right signature
-// before the call. Declared here as `int Name();` to give each
-// name a Token::Sys symbol the static initializer can reference;
-// the matching `#pragma binding` puts the IAT slot in scope so the
-// codegen has a kernel32 import to point the function-pointer
-// initializer at.
+// kernel32 surface sqlite's Windows VFS dispatch table takes the address
+// of; each binding puts the import in scope for the static initializer.
 #pragma binding(kernel32::AreFileApisANSI,         "AreFileApisANSI")
 #pragma binding(kernel32::CancelIo,                "CancelIo")
 #pragma binding(kernel32::CreateEventA,            "CreateEventA")
@@ -1856,27 +2369,20 @@ LONG RegSetValueExW(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved, DWORD dwType
 #pragma binding(rpcrt4::UuidCreate,                "UuidCreate")
 #pragma binding(rpcrt4::UuidCreateSequential,      "UuidCreateSequential")
 
-// Prototypes mirror the Win32 API shapes documented on MSDN. Where
-// the real return type is `BOOL` (= int) we keep `int`; where it's
-// `HANDLE`, `HWND`, or `unsigned long long`, the user-facing type
-// is preserved. Pointer-style parameter types use the typedefs
-// declared earlier in this header (DWORD, HANDLE, LPSTR, ...);
-// struct-by-pointer parameters whose layout c5 doesn't model
-// (`STARTUPINFO`, `PROCESS_INFORMATION`, `TIME_ZONE_INFORMATION`,
-// `INPUT_RECORD`) come through as `void *` -- the kernel writes
-// the bytes back; sqlite + shell.c never look inside.
-int AreFileApisANSI(void);
-int CancelIo(HANDLE hFile);
-HANDLE CreateEventA(LPSECURITY_ATTRIBUTES lpEventAttributes, int bManualReset,
-                    int bInitialState, LPCSTR lpName);
-int    FlushViewOfFile(LPCVOID lpBaseAddress, SIZE_T dwNumberOfBytesToFlush);
-HANDLE GetModuleHandleA(LPCSTR lpModuleName);
-HANDLE GetModuleHandleW(LPCWSTR lpModuleName);
-int    GetNativeSystemInfo(LPSYSTEM_INFO lpSystemInfo);
-HANDLE GetProcessHeap(void);
-PVOID  GetProcAddressA(HANDLE hModule, LPCSTR lpProcName);
-int    CharLowerW(LPWSTR lpsz);
-int    CharUpperW(LPWSTR lpsz);
+// Prototypes carry the SDK's types: a program that declares one of these
+// functions itself, as the SDK spells it, redeclares the same type.
+BOOL AreFileApisANSI(VOID);
+BOOL CancelIo(HANDLE hFile);
+HANDLE CreateEventA(LPSECURITY_ATTRIBUTES lpEventAttributes, BOOL bManualReset,
+                    BOOL bInitialState, LPCSTR lpName);
+BOOL FlushViewOfFile(LPCVOID lpBaseAddress, SIZE_T dwNumberOfBytesToFlush);
+HMODULE GetModuleHandleA(LPCSTR lpModuleName);
+HMODULE GetModuleHandleW(LPCWSTR lpModuleName);
+VOID GetNativeSystemInfo(LPSYSTEM_INFO lpSystemInfo);
+HANDLE GetProcessHeap(VOID);
+FARPROC GetProcAddressA(HMODULE hModule, LPCSTR lpProcName);
+LPWSTR CharLowerW(LPWSTR lpsz);
+LPWSTR CharUpperW(LPWSTR lpsz);
 HANDLE CreateFileA(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
                    LPSECURITY_ATTRIBUTES lpSecurityAttributes,
                    DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
@@ -1894,147 +2400,139 @@ HANDLE CreateFileW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode,
 HANDLE CreateFileTransactedA(LPCSTR lpFileName, DWORD dwDesiredAccess,
                              DWORD dwShareMode,
                              LPSECURITY_ATTRIBUTES lpSecurityAttributes,
-                             DWORD dwCreationDisposition,
-                             DWORD dwFlagsAndAttributes,
+                             DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
                              HANDLE hTemplateFile, HANDLE hTransaction,
-                             PVOID pusMiniVersion, PVOID pExtendedParameter);
+                             PUSHORT pusMiniVersion, PVOID lpExtendedParameter);
 HANDLE CreateFileTransactedW(LPCWSTR lpFileName, DWORD dwDesiredAccess,
                              DWORD dwShareMode,
                              LPSECURITY_ATTRIBUTES lpSecurityAttributes,
-                             DWORD dwCreationDisposition,
-                             DWORD dwFlagsAndAttributes,
+                             DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes,
                              HANDLE hTemplateFile, HANDLE hTransaction,
-                             PVOID pusMiniVersion, PVOID pExtendedParameter);
-DWORD  GetProcessId(HANDLE Process);
-LPSTR  lstrcpyA(LPSTR lpString1, LPCSTR lpString2);
+                             PUSHORT pusMiniVersion, PVOID lpExtendedParameter);
+DWORD GetProcessId(HANDLE Process);
+LPSTR lstrcpyA(LPSTR lpString1, LPCSTR lpString2);
 LPWSTR lstrcpyW(LPWSTR lpString1, LPCWSTR lpString2);
-HANDLE CreateMutexW(LPSECURITY_ATTRIBUTES lpMutexAttributes, int bInitialOwner,
+HANDLE CreateMutexW(LPSECURITY_ATTRIBUTES lpMutexAttributes, BOOL bInitialOwner,
                     LPCWSTR lpName);
-int DeleteFileA(LPCSTR lpFileName);
-int DeleteFileW(LPCWSTR lpFileName);
-int FileTimeToLocalFileTime(FILETIME *lpFileTime, LPFILETIME lpLocalFileTime);
-int FileTimeToSystemTime(FILETIME *lpFileTime, SYSTEMTIME *lpSystemTime);
-int FlushFileBuffers(HANDLE hFile);
-int FormatMessageA(DWORD dwFlags, LPCVOID lpSource, DWORD dwMessageId,
-                   DWORD dwLanguageId, LPSTR lpBuffer, DWORD nSize, ...);
-int FormatMessageW(DWORD dwFlags, LPCVOID lpSource, DWORD dwMessageId,
-                   DWORD dwLanguageId, LPWSTR lpBuffer, DWORD nSize, ...);
-int GetCurrentProcessId(void);
-int GetDiskFreeSpaceA(LPCSTR lpRootPathName, LPDWORD lpSectorsPerCluster,
-                      LPDWORD lpBytesPerSector, LPDWORD lpNumberOfFreeClusters,
-                      LPDWORD lpTotalNumberOfClusters);
-int GetDiskFreeSpaceW(LPCWSTR lpRootPathName, LPDWORD lpSectorsPerCluster,
-                      LPDWORD lpBytesPerSector, LPDWORD lpNumberOfFreeClusters,
-                      LPDWORD lpTotalNumberOfClusters);
-int GetFileAttributesA(LPCSTR lpFileName);
-int GetFileAttributesExW(LPCWSTR lpFileName, GET_FILEEX_INFO_LEVELS fInfoLevelId,
-                         LPVOID lpFileInformation);
-int GetFileAttributesW(LPCWSTR lpFileName);
-int GetFileSize(HANDLE hFile, LPDWORD lpFileSizeHigh);
-int GetFullPathNameA(LPCSTR lpFileName, DWORD nBufferLength, LPSTR lpBuffer,
-                     char **lpFilePart);
-int GetFullPathNameW(LPCWSTR lpFileName, DWORD nBufferLength, LPWSTR lpBuffer,
-                     unsigned short **lpFilePart);
-int GetSystemInfo(LPSYSTEM_INFO lpSystemInfo);
-int GetSystemTime(SYSTEMTIME *lpSystemTime);
-int GetSystemTimeAsFileTime(LPFILETIME lpSystemTimeAsFileTime);
-int GetTempPathA(DWORD nBufferLength, LPSTR lpBuffer);
-int GetTempPathW(DWORD nBufferLength, LPWSTR lpBuffer);
-int GetTickCount(void);
-int GetVersionExA(LPOSVERSIONINFOA lpVersionInformation);
-int GetVersionExW(LPOSVERSIONINFOW lpVersionInformation);
+BOOL DeleteFileA(LPCSTR lpFileName);
+BOOL DeleteFileW(LPCWSTR lpFileName);
+BOOL FileTimeToLocalFileTime(const FILETIME *lpFileTime, LPFILETIME lpLocalFileTime);
+BOOL FileTimeToSystemTime(const FILETIME *lpFileTime, LPSYSTEMTIME lpSystemTime);
+BOOL FlushFileBuffers(HANDLE hFile);
+DWORD FormatMessageA(DWORD dwFlags, LPCVOID lpSource, DWORD dwMessageId,
+                     DWORD dwLanguageId, LPSTR lpBuffer, DWORD nSize, va_list *Arguments);
+DWORD FormatMessageW(DWORD dwFlags, LPCVOID lpSource, DWORD dwMessageId,
+                     DWORD dwLanguageId, LPWSTR lpBuffer, DWORD nSize,
+                     va_list *Arguments);
+DWORD GetCurrentProcessId(VOID);
+BOOL GetDiskFreeSpaceA(LPCSTR lpRootPathName, LPDWORD lpSectorsPerCluster,
+                       LPDWORD lpBytesPerSector, LPDWORD lpNumberOfFreeClusters,
+                       LPDWORD lpTotalNumberOfClusters);
+BOOL GetDiskFreeSpaceW(LPCWSTR lpRootPathName, LPDWORD lpSectorsPerCluster,
+                       LPDWORD lpBytesPerSector, LPDWORD lpNumberOfFreeClusters,
+                       LPDWORD lpTotalNumberOfClusters);
+DWORD GetFileAttributesA(LPCSTR lpFileName);
+BOOL GetFileAttributesExW(LPCWSTR lpFileName, GET_FILEEX_INFO_LEVELS fInfoLevelId,
+                          LPVOID lpFileInformation);
+DWORD GetFileAttributesW(LPCWSTR lpFileName);
+DWORD GetFileSize(HANDLE hFile, LPDWORD lpFileSizeHigh);
+DWORD GetFullPathNameA(LPCSTR lpFileName, DWORD nBufferLength, LPSTR lpBuffer,
+                       LPSTR *lpFilePart);
+DWORD GetFullPathNameW(LPCWSTR lpFileName, DWORD nBufferLength, LPWSTR lpBuffer,
+                       LPWSTR *lpFilePart);
+VOID GetSystemInfo(LPSYSTEM_INFO lpSystemInfo);
+VOID GetSystemTime(LPSYSTEMTIME lpSystemTime);
+VOID GetSystemTimeAsFileTime(LPFILETIME lpSystemTimeAsFileTime);
+DWORD GetTempPathA(DWORD nBufferLength, LPSTR lpBuffer);
+DWORD GetTempPathW(DWORD nBufferLength, LPWSTR lpBuffer);
+DWORD GetTickCount(VOID);
+BOOL GetVersionExA(LPOSVERSIONINFOA lpVersionInformation);
+BOOL GetVersionExW(LPOSVERSIONINFOW lpVersionInformation);
 #define GetVersionEx GetVersionExW
-int VerifyVersionInfoW(LPOSVERSIONINFOEXW lpVersionInformation,
-                       DWORD dwTypeMask, DWORDLONG dwlConditionMask);
-DWORDLONG VerSetConditionMask(DWORDLONG ConditionMask, DWORD TypeMask,
-                              unsigned char Condition);
+BOOL VerifyVersionInfoW(LPOSVERSIONINFOEXW lpVersionInformation, DWORD dwTypeMask,
+                        DWORDLONG dwlConditionMask);
+ULONGLONG VerSetConditionMask(ULONGLONG ConditionMask, ULONG TypeMask, UCHAR Condition);
 #define VerifyVersionInfo VerifyVersionInfoW
-int GetComputerNameExW(COMPUTER_NAME_FORMAT NameType, LPWSTR lpBuffer,
-                       DWORD *nSize);
+BOOL GetComputerNameExW(COMPUTER_NAME_FORMAT NameType, LPWSTR lpBuffer, LPDWORD nSize);
 LPVOID HeapAlloc(HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes);
-int    HeapCompact(HANDLE hHeap, DWORD dwFlags);
+SIZE_T HeapCompact(HANDLE hHeap, DWORD dwFlags);
 HANDLE HeapCreate(DWORD flOptions, SIZE_T dwInitialSize, SIZE_T dwMaximumSize);
-int    HeapDestroy(HANDLE hHeap);
-int    HeapFree(HANDLE hHeap, DWORD dwFlags, LPVOID lpMem);
+BOOL HeapDestroy(HANDLE hHeap);
+BOOL HeapFree(HANDLE hHeap, DWORD dwFlags, LPVOID lpMem);
 LPVOID HeapReAlloc(HANDLE hHeap, DWORD dwFlags, LPVOID lpMem, SIZE_T dwBytes);
 SIZE_T HeapSize(HANDLE hHeap, DWORD dwFlags, LPCVOID lpMem);
-int    HeapValidate(HANDLE hHeap, DWORD dwFlags, LPCVOID lpMem);
-HANDLE LoadLibraryW(LPCWSTR lpLibFileName);
+BOOL HeapValidate(HANDLE hHeap, DWORD dwFlags, LPCVOID lpMem);
+HMODULE LoadLibraryW(LPCWSTR lpLibFileName);
 HLOCAL LocalFree(HLOCAL hMem);
-int LockFile(HANDLE hFile, DWORD dwFileOffsetLow, DWORD dwFileOffsetHigh,
-             DWORD nNumberOfBytesToLockLow, DWORD nNumberOfBytesToLockHigh);
-int LockFileEx(HANDLE hFile, DWORD dwFlags, DWORD dwReserved,
-               DWORD nNumberOfBytesToLockLow, DWORD nNumberOfBytesToLockHigh,
-               LPOVERLAPPED lpOverlapped);
+BOOL LockFile(HANDLE hFile, DWORD dwFileOffsetLow, DWORD dwFileOffsetHigh,
+              DWORD nNumberOfBytesToLockLow, DWORD nNumberOfBytesToLockHigh);
+BOOL LockFileEx(HANDLE hFile, DWORD dwFlags, DWORD dwReserved,
+                DWORD nNumberOfBytesToLockLow, DWORD nNumberOfBytesToLockHigh,
+                LPOVERLAPPED lpOverlapped);
 LPVOID MapViewOfFile(HANDLE hFileMappingObject, DWORD dwDesiredAccess,
                      DWORD dwFileOffsetHigh, DWORD dwFileOffsetLow,
                      SIZE_T dwNumberOfBytesToMap);
-int MultiByteToWideChar(UINT CodePage, DWORD dwFlags, LPCSTR lpMultiByteStr,
-                        int cbMultiByte, LPWSTR lpWideCharStr,
-                        int cchWideChar);
-int OutputDebugStringA(LPCSTR lpOutputString);
-int OutputDebugStringW(LPCWSTR lpOutputString);
-int QueryPerformanceCounter(PLARGE_INTEGER lpPerformanceCount);
-int ReadFile(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead,
-             LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped);
-int SetEndOfFile(HANDLE hFile);
-int SetFilePointer(HANDLE hFile, LONG lDistanceToMove,
-                   LONG *lpDistanceToMoveHigh, DWORD dwMoveMethod);
-int SystemTimeToFileTime(SYSTEMTIME *lpSystemTime, LPFILETIME lpFileTime);
-int UnlockFile(HANDLE hFile, DWORD dwFileOffsetLow, DWORD dwFileOffsetHigh,
-               DWORD nNumberOfBytesToUnlockLow,
-               DWORD nNumberOfBytesToUnlockHigh);
-int UnlockFileEx(HANDLE hFile, DWORD dwReserved,
-                 DWORD nNumberOfBytesToUnlockLow,
-                 DWORD nNumberOfBytesToUnlockHigh, LPOVERLAPPED lpOverlapped);
-int UnmapViewOfFile(LPCVOID lpBaseAddress);
-int WaitForSingleObjectEx(HANDLE hHandle, DWORD dwMilliseconds, int bAlertable);
-int WideCharToMultiByte(UINT CodePage, DWORD dwFlags, LPCWSTR lpWideCharStr,
+int MultiByteToWideChar(UINT CodePage, DWORD dwFlags, LPCCH lpMultiByteStr,
+                        int cbMultiByte, LPWSTR lpWideCharStr, int cchWideChar);
+VOID OutputDebugStringA(LPCSTR lpOutputString);
+VOID OutputDebugStringW(LPCWSTR lpOutputString);
+BOOL QueryPerformanceCounter(LARGE_INTEGER *lpPerformanceCount);
+BOOL ReadFile(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead,
+              LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped);
+BOOL SetEndOfFile(HANDLE hFile);
+DWORD SetFilePointer(HANDLE hFile, LONG lDistanceToMove, PLONG lpDistanceToMoveHigh,
+                     DWORD dwMoveMethod);
+BOOL SystemTimeToFileTime(const SYSTEMTIME *lpSystemTime, LPFILETIME lpFileTime);
+BOOL UnlockFile(HANDLE hFile, DWORD dwFileOffsetLow, DWORD dwFileOffsetHigh,
+                DWORD nNumberOfBytesToUnlockLow, DWORD nNumberOfBytesToUnlockHigh);
+BOOL UnlockFileEx(HANDLE hFile, DWORD dwReserved, DWORD nNumberOfBytesToUnlockLow,
+                  DWORD nNumberOfBytesToUnlockHigh, LPOVERLAPPED lpOverlapped);
+BOOL UnmapViewOfFile(LPCVOID lpBaseAddress);
+DWORD WaitForSingleObjectEx(HANDLE hHandle, DWORD dwMilliseconds, BOOL bAlertable);
+int WideCharToMultiByte(UINT CodePage, DWORD dwFlags, LPCWCH lpWideCharStr,
                         int cchWideChar, LPSTR lpMultiByteStr, int cbMultiByte,
-                        LPCSTR lpDefaultChar, LPBOOL lpUsedDefaultChar);
-int WriteFile(HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite,
-              LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped);
+                        LPCCH lpDefaultChar, LPBOOL lpUsedDefaultChar);
+BOOL WriteFile(HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite,
+               LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped);
 HANDLE FindFirstFileA(LPCSTR lpFileName, LPWIN32_FIND_DATAA lpFindFileData);
 HANDLE FindFirstFileW(LPCWSTR lpFileName, LPWIN32_FIND_DATAW lpFindFileData);
-int FindNextFileA(HANDLE hFindFile, LPWIN32_FIND_DATAA lpFindFileData);
-int FindNextFileW(HANDLE hFindFile, LPWIN32_FIND_DATAW lpFindFileData);
-int FindClose(HANDLE hFindFile);
-int SetCurrentDirectoryA(LPCSTR lpPathName);
-int SetCurrentDirectoryW(LPCWSTR lpPathName);
-int GetCurrentDirectoryA(DWORD nBufferLength, LPSTR lpBuffer);
-int GetCurrentDirectoryW(DWORD nBufferLength, LPWSTR lpBuffer);
-int CreateDirectoryA(LPCSTR lpPathName,
-                     LPSECURITY_ATTRIBUTES lpSecurityAttributes);
-int CreateDirectoryW(LPCWSTR lpPathName,
-                     LPSECURITY_ATTRIBUTES lpSecurityAttributes);
-int RemoveDirectoryA(LPCSTR lpPathName);
-int RemoveDirectoryW(LPCWSTR lpPathName);
-int SetFileAttributesA(LPCSTR lpFileName, DWORD dwFileAttributes);
-int SetFileAttributesW(LPCWSTR lpFileName, DWORD dwFileAttributes);
-int GetEnvironmentVariableA(LPCSTR lpName, LPSTR lpBuffer, DWORD nSize);
-int GetEnvironmentVariableW(LPCWSTR lpName, LPWSTR lpBuffer, DWORD nSize);
-int SetFileTime(HANDLE hFile, FILETIME *lpCreationTime,
-                FILETIME *lpLastAccessTime, FILETIME *lpLastWriteTime);
-int GetFileTime(HANDLE hFile, LPFILETIME lpCreationTime,
-                LPFILETIME lpLastAccessTime, LPFILETIME lpLastWriteTime);
-int GetTempFileNameA(LPCSTR lpPathName, LPCSTR lpPrefixString, UINT uUnique,
-                     LPSTR lpTempFileName);
-int GetTempFileNameW(LPCWSTR lpPathName, LPCWSTR lpPrefixString, UINT uUnique,
-                     LPWSTR lpTempFileName);
-HANDLE GetCurrentProcess(void);
-int DuplicateHandle(HANDLE hSourceProcessHandle, HANDLE hSourceHandle,
-                    HANDLE hTargetProcessHandle, LPHANDLE lpTargetHandle,
-                    DWORD dwDesiredAccess, int bInheritHandle, DWORD dwOptions);
-int SetFilePointerEx(HANDLE hFile, LARGE_INTEGER liDistanceToMove,
-                     PLARGE_INTEGER lpNewFilePointer, DWORD dwMoveMethod);
-int GetFileSizeEx(HANDLE hFile, PLARGE_INTEGER lpFileSize);
-HANDLE CreateMutexA(LPSECURITY_ATTRIBUTES lpMutexAttributes, int bInitialOwner,
+BOOL FindNextFileA(HANDLE hFindFile, LPWIN32_FIND_DATAA lpFindFileData);
+BOOL FindNextFileW(HANDLE hFindFile, LPWIN32_FIND_DATAW lpFindFileData);
+BOOL FindClose(HANDLE hFindFile);
+BOOL SetCurrentDirectoryA(LPCSTR lpPathName);
+BOOL SetCurrentDirectoryW(LPCWSTR lpPathName);
+DWORD GetCurrentDirectoryA(DWORD nBufferLength, LPSTR lpBuffer);
+DWORD GetCurrentDirectoryW(DWORD nBufferLength, LPWSTR lpBuffer);
+BOOL CreateDirectoryA(LPCSTR lpPathName, LPSECURITY_ATTRIBUTES lpSecurityAttributes);
+BOOL CreateDirectoryW(LPCWSTR lpPathName, LPSECURITY_ATTRIBUTES lpSecurityAttributes);
+BOOL RemoveDirectoryA(LPCSTR lpPathName);
+BOOL RemoveDirectoryW(LPCWSTR lpPathName);
+BOOL SetFileAttributesA(LPCSTR lpFileName, DWORD dwFileAttributes);
+BOOL SetFileAttributesW(LPCWSTR lpFileName, DWORD dwFileAttributes);
+DWORD GetEnvironmentVariableA(LPCSTR lpName, LPSTR lpBuffer, DWORD nSize);
+DWORD GetEnvironmentVariableW(LPCWSTR lpName, LPWSTR lpBuffer, DWORD nSize);
+BOOL SetFileTime(HANDLE hFile, const FILETIME *lpCreationTime,
+                 const FILETIME *lpLastAccessTime, const FILETIME *lpLastWriteTime);
+BOOL GetFileTime(HANDLE hFile, LPFILETIME lpCreationTime, LPFILETIME lpLastAccessTime,
+                 LPFILETIME lpLastWriteTime);
+UINT GetTempFileNameA(LPCSTR lpPathName, LPCSTR lpPrefixString, UINT uUnique,
+                      LPSTR lpTempFileName);
+UINT GetTempFileNameW(LPCWSTR lpPathName, LPCWSTR lpPrefixString, UINT uUnique,
+                      LPWSTR lpTempFileName);
+HANDLE GetCurrentProcess(VOID);
+BOOL DuplicateHandle(HANDLE hSourceProcessHandle, HANDLE hSourceHandle,
+                     HANDLE hTargetProcessHandle, LPHANDLE lpTargetHandle,
+                     DWORD dwDesiredAccess, BOOL bInheritHandle, DWORD dwOptions);
+BOOL SetFilePointerEx(HANDLE hFile, LARGE_INTEGER liDistanceToMove,
+                      PLARGE_INTEGER lpNewFilePointer, DWORD dwMoveMethod);
+BOOL GetFileSizeEx(HANDLE hFile, PLARGE_INTEGER lpFileSize);
+HANDLE CreateMutexA(LPSECURITY_ATTRIBUTES lpMutexAttributes, BOOL bInitialOwner,
                     LPCSTR lpName);
-HANDLE CreateEventW(LPSECURITY_ATTRIBUTES lpEventAttributes, int bManualReset,
-                    int bInitialState, LPCWSTR lpName);
-int ReleaseMutex(HANDLE hMutex);
-int SetEvent(HANDLE hEvent);
-int ResetEvent(HANDLE hEvent);
+HANDLE CreateEventW(LPSECURITY_ATTRIBUTES lpEventAttributes, BOOL bManualReset,
+                    BOOL bInitialState, LPCWSTR lpName);
+BOOL ReleaseMutex(HANDLE hMutex);
+BOOL SetEvent(HANDLE hEvent);
+BOOL ResetEvent(HANDLE hEvent);
 
 // I/O completion ports and thread-pool waits (synchapi.h / ioapiset.h).
 // RegisterWaitForSingleObject queues a callback of this shape when the
@@ -2057,184 +2555,652 @@ typedef void (CALLBACK *WAITORTIMERCALLBACK)(PVOID lpParameter,
     (((DWORD)(lpOverlapped)->Internal) != STATUS_PENDING)
 
 HANDLE CreateIoCompletionPort(HANDLE FileHandle, HANDLE ExistingCompletionPort,
-                              ULONG_PTR CompletionKey,
-                              DWORD NumberOfConcurrentThreads);
-int GetQueuedCompletionStatus(HANDLE CompletionPort, LPDWORD lpNumberOfBytes,
-                              ULONG_PTR *lpCompletionKey,
-                              OVERLAPPED **lpOverlapped, DWORD dwMilliseconds);
-int PostQueuedCompletionStatus(HANDLE CompletionPort,
-                               DWORD dwNumberOfBytesTransferred,
-                               ULONG_PTR dwCompletionKey,
-                               LPOVERLAPPED lpOverlapped);
-int RegisterWaitForSingleObject(PHANDLE phNewWaitObject, HANDLE hObject,
-                                WAITORTIMERCALLBACK Callback, PVOID Context,
-                                ULONG dwMilliseconds, ULONG dwFlags);
-int UnregisterWait(HANDLE WaitHandle);
-int UnregisterWaitEx(HANDLE WaitHandle, HANDLE CompletionEvent);
+                              ULONG_PTR CompletionKey, DWORD NumberOfConcurrentThreads);
+BOOL GetQueuedCompletionStatus(HANDLE CompletionPort,
+                               LPDWORD lpNumberOfBytesTransferred,
+                               PULONG_PTR lpCompletionKey, LPOVERLAPPED *lpOverlapped,
+                               DWORD dwMilliseconds);
+BOOL PostQueuedCompletionStatus(HANDLE CompletionPort, DWORD dwNumberOfBytesTransferred,
+                                ULONG_PTR dwCompletionKey, LPOVERLAPPED lpOverlapped);
+BOOL RegisterWaitForSingleObject(PHANDLE phNewWaitObject, HANDLE hObject,
+                                 WAITORTIMERCALLBACK Callback, PVOID Context,
+                                 ULONG dwMilliseconds, ULONG dwFlags);
+BOOL UnregisterWait(HANDLE WaitHandle);
+BOOL UnregisterWaitEx(HANDLE WaitHandle, HANDLE CompletionEvent);
 
-HANDLE OpenMutexA(DWORD dwDesiredAccess, int bInheritHandle, LPCSTR lpName);
-HANDLE OpenMutexW(DWORD dwDesiredAccess, int bInheritHandle, LPCWSTR lpName);
-HANDLE OpenEventA(DWORD dwDesiredAccess, int bInheritHandle, LPCSTR lpName);
-HANDLE OpenEventW(DWORD dwDesiredAccess, int bInheritHandle, LPCWSTR lpName);
-int RaiseException(DWORD dwExceptionCode, DWORD dwExceptionFlags,
-                   DWORD nNumberOfArguments, ULONG_PTR *lpArguments);
-int IsDebuggerPresent(void);
-int DebugBreak(void);
-int SetUnhandledExceptionFilter(void *lpTopLevelExceptionFilter);
-int AddVectoredExceptionHandler(ULONG First, void *Handler);
-int RemoveVectoredExceptionHandler(void *Handle);
-int TerminateProcess(HANDLE hProcess, UINT uExitCode);
-int GetSystemDirectoryA(LPSTR lpBuffer, UINT uSize);
-int GetSystemDirectoryW(LPWSTR lpBuffer, UINT uSize);
-int GetWindowsDirectoryA(LPSTR lpBuffer, UINT uSize);
-int GetWindowsDirectoryW(LPWSTR lpBuffer, UINT uSize);
-int ExpandEnvironmentStringsA(LPCSTR lpSrc, LPSTR lpDst, DWORD nSize);
-int ExpandEnvironmentStringsW(LPCWSTR lpSrc, LPWSTR lpDst, DWORD nSize);
-int SearchPathA(LPCSTR lpPath, LPCSTR lpFileName, LPCSTR lpExtension,
-                DWORD nBufferLength, LPSTR lpBuffer, char **lpFilePart);
-int SearchPath(LPCSTR lpPath, LPCSTR lpFileName, LPCSTR lpExtension,
-               DWORD nBufferLength, LPSTR lpBuffer, char **lpFilePart);
-int GetModuleFileNameA(void *hModule, LPSTR lpFilename, DWORD nSize);
-int SearchPathW(LPCWSTR lpPath, LPCWSTR lpFileName, LPCWSTR lpExtension,
-                DWORD nBufferLength, LPWSTR lpBuffer,
-                unsigned short **lpFilePart);
-int CreateProcessA(LPCSTR lpApplicationName, LPSTR lpCommandLine,
-                   LPSECURITY_ATTRIBUTES lpProcessAttributes,
-                   LPSECURITY_ATTRIBUTES lpThreadAttributes,
-                   int bInheritHandles, DWORD dwCreationFlags,
-                   LPVOID lpEnvironment, LPCSTR lpCurrentDirectory,
-                   void *lpStartupInfo, void *lpProcessInformation);
-int CreateProcessW(LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-                   LPSECURITY_ATTRIBUTES lpProcessAttributes,
-                   LPSECURITY_ATTRIBUTES lpThreadAttributes,
-                   int bInheritHandles, DWORD dwCreationFlags,
-                   LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-                   void *lpStartupInfo, void *lpProcessInformation);
+HANDLE OpenMutexA(DWORD dwDesiredAccess, BOOL bInheritHandle, LPCSTR lpName);
+HANDLE OpenMutexW(DWORD dwDesiredAccess, BOOL bInheritHandle, LPCWSTR lpName);
+HANDLE OpenEventA(DWORD dwDesiredAccess, BOOL bInheritHandle, LPCSTR lpName);
+HANDLE OpenEventW(DWORD dwDesiredAccess, BOOL bInheritHandle, LPCWSTR lpName);
+VOID RaiseException(DWORD dwExceptionCode, DWORD dwExceptionFlags,
+                    DWORD nNumberOfArguments, const ULONG_PTR *lpArguments);
+BOOL IsDebuggerPresent(VOID);
+VOID DebugBreak(VOID);
+LPTOP_LEVEL_EXCEPTION_FILTER SetUnhandledExceptionFilter(LPTOP_LEVEL_EXCEPTION_FILTER lpTopLevelExceptionFilter);
+PVOID AddVectoredExceptionHandler(ULONG First, PVECTORED_EXCEPTION_HANDLER Handler);
+ULONG RemoveVectoredExceptionHandler(PVOID Handle);
+BOOL TerminateProcess(HANDLE hProcess, UINT uExitCode);
+UINT GetSystemDirectoryA(LPSTR lpBuffer, UINT uSize);
+UINT GetSystemDirectoryW(LPWSTR lpBuffer, UINT uSize);
+UINT GetWindowsDirectoryA(LPSTR lpBuffer, UINT uSize);
+UINT GetWindowsDirectoryW(LPWSTR lpBuffer, UINT uSize);
+DWORD ExpandEnvironmentStringsA(LPCSTR lpSrc, LPSTR lpDst, DWORD nSize);
+DWORD ExpandEnvironmentStringsW(LPCWSTR lpSrc, LPWSTR lpDst, DWORD nSize);
+DWORD SearchPathA(LPCSTR lpPath, LPCSTR lpFileName, LPCSTR lpExtension,
+                  DWORD nBufferLength, LPSTR lpBuffer, LPSTR *lpFilePart);
+DWORD SearchPath(LPCSTR lpPath, LPCSTR lpFileName, LPCSTR lpExtension,
+                 DWORD nBufferLength, LPSTR lpBuffer, LPSTR *lpFilePart);
+DWORD GetModuleFileNameA(HMODULE hModule, LPSTR lpFilename, DWORD nSize);
+DWORD SearchPathW(LPCWSTR lpPath, LPCWSTR lpFileName, LPCWSTR lpExtension,
+                  DWORD nBufferLength, LPWSTR lpBuffer, LPWSTR *lpFilePart);
+BOOL CreateProcessA(LPCSTR lpApplicationName, LPSTR lpCommandLine,
+                    LPSECURITY_ATTRIBUTES lpProcessAttributes,
+                    LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles,
+                    DWORD dwCreationFlags, LPVOID lpEnvironment,
+                    LPCSTR lpCurrentDirectory, LPSTARTUPINFOA lpStartupInfo,
+                    LPPROCESS_INFORMATION lpProcessInformation);
+BOOL CreateProcessW(LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+                    LPSECURITY_ATTRIBUTES lpProcessAttributes,
+                    LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles,
+                    DWORD dwCreationFlags, LPVOID lpEnvironment,
+                    LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
+                    LPPROCESS_INFORMATION lpProcessInformation);
 HANDLE GetStdHandle(DWORD nStdHandle);
-int SetStdHandle(DWORD nStdHandle, HANDLE hHandle);
-int GetConsoleMode(HANDLE hConsoleHandle, LPDWORD lpMode);
-int SetConsoleMode(HANDLE hConsoleHandle, DWORD dwMode);
-int GetConsoleOutputCP(void);
-int SetConsoleOutputCP(UINT wCodePageID);
-int GetConsoleCP(void);
-int SetConsoleCP(UINT wCodePageID);
-int WriteConsoleW(HANDLE hConsoleOutput, void *lpBuffer,
-                  DWORD nNumberOfCharsToWrite,
-                  LPDWORD lpNumberOfCharsWritten, LPVOID lpReserved);
-int WriteConsoleA(HANDLE hConsoleOutput, void *lpBuffer,
-                  DWORD nNumberOfCharsToWrite,
-                  LPDWORD lpNumberOfCharsWritten, LPVOID lpReserved);
-int ReadConsoleW(HANDLE hConsoleInput, LPVOID lpBuffer,
-                 DWORD nNumberOfCharsToRead,
-                 LPDWORD lpNumberOfCharsRead, LPVOID pInputControl);
-int ReadConsoleA(HANDLE hConsoleInput, LPVOID lpBuffer,
-                 DWORD nNumberOfCharsToRead,
-                 LPDWORD lpNumberOfCharsRead, LPVOID pInputControl);
-int FlushConsoleInputBuffer(HANDLE hConsoleInput);
-int GetConsoleScreenBufferInfo(HANDLE hConsoleOutput,
-                               PCONSOLE_SCREEN_BUFFER_INFO lpInfo);
-int SetConsoleScreenBufferSize(HANDLE hConsoleOutput, COORD dwSize);
-int SetConsoleCursorPosition(HANDLE hConsoleOutput, COORD dwCursorPosition);
-int SetConsoleTextAttribute(HANDLE hConsoleOutput, WORD wAttributes);
-int FillConsoleOutputCharacterA(HANDLE hConsoleOutput, char cCharacter,
-                                DWORD nLength, COORD dwWriteCoord,
-                                LPDWORD lpNumberOfCharsWritten);
-int FillConsoleOutputCharacterW(HANDLE hConsoleOutput, WCHAR cCharacter,
-                                DWORD nLength, COORD dwWriteCoord,
-                                LPDWORD lpNumberOfCharsWritten);
-int FillConsoleOutputAttribute(HANDLE hConsoleOutput, WORD wAttribute,
-                               DWORD nLength, COORD dwWriteCoord,
-                               LPDWORD lpNumberOfAttrsWritten);
-int ScrollConsoleScreenBufferA(HANDLE hConsoleOutput,
-                               SMALL_RECT *lpScrollRectangle,
-                               SMALL_RECT *lpClipRectangle,
-                               COORD dwDestinationOrigin, void *lpFill);
-int ScrollConsoleScreenBufferW(HANDLE hConsoleOutput,
-                               SMALL_RECT *lpScrollRectangle,
-                               SMALL_RECT *lpClipRectangle,
-                               COORD dwDestinationOrigin, void *lpFill);
-int SetConsoleTitleA(LPCSTR lpConsoleTitle);
-int SetConsoleTitleW(LPCWSTR lpConsoleTitle);
-int GetConsoleTitleA(LPSTR lpConsoleTitle, DWORD nSize);
-int GetConsoleTitleW(LPWSTR lpConsoleTitle, DWORD nSize);
-int PeekConsoleInputA(HANDLE hConsoleInput, void *lpBuffer, DWORD nLength,
-                      LPDWORD lpNumberOfEventsRead);
-int PeekConsoleInputW(HANDLE hConsoleInput, void *lpBuffer, DWORD nLength,
-                      LPDWORD lpNumberOfEventsRead);
-int ReadConsoleInputA(HANDLE hConsoleInput, void *lpBuffer, DWORD nLength,
-                      LPDWORD lpNumberOfEventsRead);
-int ReadConsoleInputW(HANDLE hConsoleInput, void *lpBuffer, DWORD nLength,
-                      LPDWORD lpNumberOfEventsRead);
-int WriteConsoleInputA(HANDLE hConsoleInput, void *lpBuffer, DWORD nLength,
-                       LPDWORD lpNumberOfEventsWritten);
-int WriteConsoleInputW(HANDLE hConsoleInput, void *lpBuffer, DWORD nLength,
-                       LPDWORD lpNumberOfEventsWritten);
-int SetConsoleCtrlHandler(void *HandlerRoutine, int Add);
-int GenerateConsoleCtrlEvent(DWORD dwCtrlEvent, DWORD dwProcessGroupId);
-int AllocConsole(void);
-int FreeConsole(void);
-int AttachConsole(DWORD dwProcessId);
-int GetConsoleProcessList(LPDWORD lpdwProcessList, DWORD dwProcessCount);
-HWND GetConsoleWindow(void);
-int GetSystemTimePreciseAsFileTime(LPFILETIME lpSystemTimeAsFileTime);
-int QueryPerformanceFrequency(PLARGE_INTEGER lpFrequency);
-unsigned long long GetTickCount64(void);
-int SwitchToThread(void);
-int SleepEx(DWORD dwMilliseconds, int bAlertable);
-int GetTimeZoneInformation(void *lpTimeZoneInformation);
-int SystemTimeToTzSpecificLocalTime(void *lpTimeZoneInformation,
-                                    SYSTEMTIME *lpUniversalTime,
-                                    SYSTEMTIME *lpLocalTime);
-int TzSpecificLocalTimeToSystemTime(void *lpTimeZoneInformation,
-                                    SYSTEMTIME *lpLocalTime,
-                                    SYSTEMTIME *lpUniversalTime);
-int GetLocalTime(SYSTEMTIME *lpSystemTime);
-int SetLastError(DWORD dwErrCode);
-int UuidCreate(void *Uuid);
-int UuidCreateSequential(void *Uuid);
+BOOL SetStdHandle(DWORD nStdHandle, HANDLE hHandle);
+BOOL GetConsoleMode(HANDLE hConsoleHandle, LPDWORD lpMode);
+BOOL SetConsoleMode(HANDLE hConsoleHandle, DWORD dwMode);
+UINT GetConsoleOutputCP(VOID);
+BOOL SetConsoleOutputCP(UINT wCodePageID);
+UINT GetConsoleCP(VOID);
+BOOL SetConsoleCP(UINT wCodePageID);
+BOOL WriteConsoleW(HANDLE hConsoleOutput, const VOID *lpBuffer,
+                   DWORD nNumberOfCharsToWrite, LPDWORD lpNumberOfCharsWritten,
+                   LPVOID lpReserved);
+BOOL WriteConsoleA(HANDLE hConsoleOutput, const VOID *lpBuffer,
+                   DWORD nNumberOfCharsToWrite, LPDWORD lpNumberOfCharsWritten,
+                   LPVOID lpReserved);
+BOOL ReadConsoleW(HANDLE hConsoleInput, LPVOID lpBuffer, DWORD nNumberOfCharsToRead,
+                  LPDWORD lpNumberOfCharsRead,
+                  PCONSOLE_READCONSOLE_CONTROL pInputControl);
+BOOL ReadConsoleA(HANDLE hConsoleInput, LPVOID lpBuffer, DWORD nNumberOfCharsToRead,
+                  LPDWORD lpNumberOfCharsRead,
+                  PCONSOLE_READCONSOLE_CONTROL pInputControl);
+BOOL FlushConsoleInputBuffer(HANDLE hConsoleInput);
+BOOL GetConsoleScreenBufferInfo(HANDLE hConsoleOutput,
+                                PCONSOLE_SCREEN_BUFFER_INFO lpConsoleScreenBufferInfo);
+BOOL SetConsoleScreenBufferSize(HANDLE hConsoleOutput, COORD dwSize);
+BOOL SetConsoleCursorPosition(HANDLE hConsoleOutput, COORD dwCursorPosition);
+BOOL SetConsoleTextAttribute(HANDLE hConsoleOutput, WORD wAttributes);
+BOOL FillConsoleOutputCharacterA(HANDLE hConsoleOutput, CHAR cCharacter, DWORD nLength,
+                                 COORD dwWriteCoord, LPDWORD lpNumberOfCharsWritten);
+BOOL FillConsoleOutputCharacterW(HANDLE hConsoleOutput, WCHAR cCharacter, DWORD nLength,
+                                 COORD dwWriteCoord, LPDWORD lpNumberOfCharsWritten);
+BOOL FillConsoleOutputAttribute(HANDLE hConsoleOutput, WORD wAttribute, DWORD nLength,
+                                COORD dwWriteCoord, LPDWORD lpNumberOfAttrsWritten);
+BOOL ScrollConsoleScreenBufferA(HANDLE hConsoleOutput,
+                                const SMALL_RECT *lpScrollRectangle,
+                                const SMALL_RECT *lpClipRectangle,
+                                COORD dwDestinationOrigin, const CHAR_INFO *lpFill);
+BOOL ScrollConsoleScreenBufferW(HANDLE hConsoleOutput,
+                                const SMALL_RECT *lpScrollRectangle,
+                                const SMALL_RECT *lpClipRectangle,
+                                COORD dwDestinationOrigin, const CHAR_INFO *lpFill);
+BOOL SetConsoleTitleA(LPCSTR lpConsoleTitle);
+BOOL SetConsoleTitleW(LPCWSTR lpConsoleTitle);
+DWORD GetConsoleTitleA(LPSTR lpConsoleTitle, DWORD nSize);
+DWORD GetConsoleTitleW(LPWSTR lpConsoleTitle, DWORD nSize);
+BOOL PeekConsoleInputA(HANDLE hConsoleInput, PINPUT_RECORD lpBuffer, DWORD nLength,
+                       LPDWORD lpNumberOfEventsRead);
+BOOL PeekConsoleInputW(HANDLE hConsoleInput, PINPUT_RECORD lpBuffer, DWORD nLength,
+                       LPDWORD lpNumberOfEventsRead);
+BOOL ReadConsoleInputA(HANDLE hConsoleInput, PINPUT_RECORD lpBuffer, DWORD nLength,
+                       LPDWORD lpNumberOfEventsRead);
+BOOL ReadConsoleInputW(HANDLE hConsoleInput, PINPUT_RECORD lpBuffer, DWORD nLength,
+                       LPDWORD lpNumberOfEventsRead);
+BOOL WriteConsoleInputA(HANDLE hConsoleInput, const INPUT_RECORD *lpBuffer,
+                        DWORD nLength, LPDWORD lpNumberOfEventsWritten);
+BOOL WriteConsoleInputW(HANDLE hConsoleInput, const INPUT_RECORD *lpBuffer,
+                        DWORD nLength, LPDWORD lpNumberOfEventsWritten);
+BOOL SetConsoleCtrlHandler(PHANDLER_ROUTINE HandlerRoutine, BOOL Add);
+BOOL GenerateConsoleCtrlEvent(DWORD dwCtrlEvent, DWORD dwProcessGroupId);
+BOOL AllocConsole(VOID);
+BOOL FreeConsole(VOID);
+BOOL AttachConsole(DWORD dwProcessId);
+DWORD GetConsoleProcessList(LPDWORD lpdwProcessList, DWORD dwProcessCount);
+HWND GetConsoleWindow(VOID);
+VOID GetSystemTimePreciseAsFileTime(LPFILETIME lpSystemTimeAsFileTime);
+BOOL QueryPerformanceFrequency(LARGE_INTEGER *lpFrequency);
+ULONGLONG GetTickCount64(VOID);
+BOOL SwitchToThread(VOID);
+DWORD SleepEx(DWORD dwMilliseconds, BOOL bAlertable);
+DWORD GetTimeZoneInformation(LPTIME_ZONE_INFORMATION lpTimeZoneInformation);
+BOOL SystemTimeToTzSpecificLocalTime(const TIME_ZONE_INFORMATION *lpTimeZoneInformation,
+                                     const SYSTEMTIME *lpUniversalTime,
+                                     LPSYSTEMTIME lpLocalTime);
+BOOL TzSpecificLocalTimeToSystemTime(const TIME_ZONE_INFORMATION *lpTimeZoneInformation,
+                                     const SYSTEMTIME *lpLocalTime,
+                                     LPSYSTEMTIME lpUniversalTime);
+VOID GetLocalTime(LPSYSTEMTIME lpSystemTime);
+VOID SetLastError(DWORD dwErrCode);
+RPC_STATUS UuidCreate(UUID *Uuid);
+RPC_STATUS UuidCreateSequential(UUID *Uuid);
 
 // Process / named-pipe / synchronization surface (processthreadsapi.h,
 // namedpipeapi.h, memoryapi.h, fileapi.h, winbase.h). Struct-by-pointer
 // parameters use the typedefs declared earlier; the kernel reads/writes
 // the bytes at the native field offsets.
 HANDLE CreateNamedPipeW(LPCWSTR lpName, DWORD dwOpenMode, DWORD dwPipeMode,
-                        DWORD nMaxInstances, DWORD nOutBufferSize,
-                        DWORD nInBufferSize, DWORD nDefaultTimeOut,
+                        DWORD nMaxInstances, DWORD nOutBufferSize, DWORD nInBufferSize,
+                        DWORD nDefaultTimeOut,
                         LPSECURITY_ATTRIBUTES lpSecurityAttributes);
-int WaitNamedPipeW(LPCWSTR lpNamedPipeName, DWORD nTimeOut);
-int PeekNamedPipe(HANDLE hNamedPipe, LPVOID lpBuffer, DWORD nBufferSize,
-                  LPDWORD lpBytesRead, LPDWORD lpTotalBytesAvail,
-                  LPDWORD lpBytesLeftThisMessage);
-int GetExitCodeProcess(HANDLE hProcess, LPDWORD lpExitCode);
+BOOL WaitNamedPipeW(LPCWSTR lpNamedPipeName, DWORD nTimeOut);
+BOOL PeekNamedPipe(HANDLE hNamedPipe, LPVOID lpBuffer, DWORD nBufferSize,
+                   LPDWORD lpBytesRead, LPDWORD lpTotalBytesAvail,
+                   LPDWORD lpBytesLeftThisMessage);
+BOOL GetExitCodeProcess(HANDLE hProcess, LPDWORD lpExitCode);
 DWORD ResumeThread(HANDLE hThread);
-int TerminateThread(HANDLE hThread, DWORD dwExitCode);
-DWORD GetVersion(void);
+BOOL TerminateThread(HANDLE hThread, DWORD dwExitCode);
+DWORD GetVersion(VOID);
 DWORD GetLongPathNameW(LPCWSTR lpszShortPath, LPWSTR lpszLongPath, DWORD cchBuffer);
 DWORD GetShortPathNameW(LPCWSTR lpszLongPath, LPWSTR lpszShortPath, DWORD cchBuffer);
-HANDLE OpenFileMappingW(DWORD dwDesiredAccess, int bInheritHandle, LPCWSTR lpName);
+HANDLE OpenFileMappingW(DWORD dwDesiredAccess, BOOL bInheritHandle, LPCWSTR lpName);
 SIZE_T VirtualQuery(LPCVOID lpAddress, PMEMORY_BASIC_INFORMATION lpBuffer,
                     SIZE_T dwLength);
-HRESULT CopyFile2(LPCWSTR pwszExistingFileName, LPCWSTR pwszNewFileName,
+HRESULT CopyFile2(PCWSTR pwszExistingFileName, PCWSTR pwszNewFileName,
                   COPYFILE2_EXTENDED_PARAMETERS *pExtendedParameters);
-int NeedCurrentDirectoryForExePathW(LPCWSTR ExeName);
-int LCMapStringEx(LPCWSTR lpLocaleName, DWORD dwMapFlags, LPCWSTR lpSrcStr,
-                  int cchSrc, LPWSTR lpDestStr, int cchDest, void *lpVersionInformation,
-                  void *lpReserved, LONG_PTR sortHandle);
-int InitializeProcThreadAttributeList(LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList,
-                                      DWORD dwAttributeCount, DWORD dwFlags,
-                                      SIZE_T *lpSize);
-int UpdateProcThreadAttribute(LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList,
-                              DWORD dwFlags, DWORD_PTR Attribute, PVOID lpValue,
-                              SIZE_T cbSize, PVOID lpPreviousValue,
-                              SIZE_T *lpReturnSize);
-void DeleteProcThreadAttributeList(LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList);
+BOOL NeedCurrentDirectoryForExePathW(LPCWSTR ExeName);
+int LCMapStringEx(LPCWSTR lpLocaleName, DWORD dwMapFlags, LPCWSTR lpSrcStr, int cchSrc,
+                  LPWSTR lpDestStr, int cchDest, LPNLSVERSIONINFO lpVersionInformation,
+                  LPVOID lpReserved, LPARAM sortHandle);
+BOOL InitializeProcThreadAttributeList(LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList,
+                                       DWORD dwAttributeCount, DWORD dwFlags,
+                                       PSIZE_T lpSize);
+BOOL UpdateProcThreadAttribute(LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList,
+                               DWORD dwFlags, DWORD_PTR Attribute, PVOID lpValue,
+                               SIZE_T cbSize, PVOID lpPreviousValue,
+                               PSIZE_T lpReturnSize);
+VOID DeleteProcThreadAttributeList(LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList);
 
 // Token-privilege surface (processthreadsapi.h / securitybaseapi.h).
-int OpenProcessToken(HANDLE ProcessHandle, DWORD DesiredAccess, PHANDLE TokenHandle);
-int LookupPrivilegeValueW(LPCWSTR lpSystemName, LPCWSTR lpName, PLUID lpLuid);
-int AdjustTokenPrivileges(HANDLE TokenHandle, int DisableAllPrivileges,
-                          PTOKEN_PRIVILEGES NewState, DWORD BufferLength,
-                          PTOKEN_PRIVILEGES PreviousState, LPDWORD ReturnLength);
+BOOL OpenProcessToken(HANDLE ProcessHandle, DWORD DesiredAccess, PHANDLE TokenHandle);
+BOOL LookupPrivilegeValueW(LPCWSTR lpSystemName, LPCWSTR lpName, PLUID lpLuid);
+BOOL AdjustTokenPrivileges(HANDLE TokenHandle, BOOL DisableAllPrivileges,
+                           PTOKEN_PRIVILEGES NewState, DWORD BufferLength,
+                           PTOKEN_PRIVILEGES PreviousState, PDWORD ReturnLength);
+
+// ---------------------------------------------------------------------------
+// PE image format (winnt.h). The DOS header is 2-byte packed and the rest
+// 4-byte packed, the 64-bit thunk 8, as the SDK packs them.
+// ---------------------------------------------------------------------------
+
+#define IMAGE_DOS_SIGNATURE                 0x5A4D
+#define IMAGE_OS2_SIGNATURE                 0x454E
+#define IMAGE_OS2_SIGNATURE_LE              0x454C
+#define IMAGE_VXD_SIGNATURE                 0x454C
+#define IMAGE_NT_SIGNATURE                  0x00004550
+
+#pragma pack(push, 2)
+typedef struct _IMAGE_DOS_HEADER {
+    WORD  e_magic;
+    WORD  e_cblp;
+    WORD  e_cp;
+    WORD  e_crlc;
+    WORD  e_cparhdr;
+    WORD  e_minalloc;
+    WORD  e_maxalloc;
+    WORD  e_ss;
+    WORD  e_sp;
+    WORD  e_csum;
+    WORD  e_ip;
+    WORD  e_cs;
+    WORD  e_lfarlc;
+    WORD  e_ovno;
+    WORD  e_res[4];
+    WORD  e_oemid;
+    WORD  e_oeminfo;
+    WORD  e_res2[10];
+    LONG  e_lfanew;
+} IMAGE_DOS_HEADER, *PIMAGE_DOS_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 4)
+typedef struct _IMAGE_FILE_HEADER {
+    WORD  Machine;
+    WORD  NumberOfSections;
+    DWORD TimeDateStamp;
+    DWORD PointerToSymbolTable;
+    DWORD NumberOfSymbols;
+    WORD  SizeOfOptionalHeader;
+    WORD  Characteristics;
+} IMAGE_FILE_HEADER, *PIMAGE_FILE_HEADER;
+
+#define IMAGE_SIZEOF_FILE_HEADER             20
+
+#define IMAGE_FILE_RELOCS_STRIPPED           0x0001
+#define IMAGE_FILE_EXECUTABLE_IMAGE          0x0002
+#define IMAGE_FILE_LINE_NUMS_STRIPPED        0x0004
+#define IMAGE_FILE_LOCAL_SYMS_STRIPPED       0x0008
+#define IMAGE_FILE_AGGRESIVE_WS_TRIM         0x0010
+#define IMAGE_FILE_LARGE_ADDRESS_AWARE       0x0020
+#define IMAGE_FILE_BYTES_REVERSED_LO         0x0080
+#define IMAGE_FILE_32BIT_MACHINE             0x0100
+#define IMAGE_FILE_DEBUG_STRIPPED            0x0200
+#define IMAGE_FILE_REMOVABLE_RUN_FROM_SWAP   0x0400
+#define IMAGE_FILE_NET_RUN_FROM_SWAP         0x0800
+#define IMAGE_FILE_SYSTEM                    0x1000
+#define IMAGE_FILE_DLL                       0x2000
+#define IMAGE_FILE_UP_SYSTEM_ONLY            0x4000
+#define IMAGE_FILE_BYTES_REVERSED_HI         0x8000
+
+#define IMAGE_FILE_MACHINE_UNKNOWN           0
+#define IMAGE_FILE_MACHINE_TARGET_HOST       0x0001
+#define IMAGE_FILE_MACHINE_I386              0x014c
+#define IMAGE_FILE_MACHINE_R3000             0x0162
+#define IMAGE_FILE_MACHINE_R4000             0x0166
+#define IMAGE_FILE_MACHINE_R10000            0x0168
+#define IMAGE_FILE_MACHINE_WCEMIPSV2         0x0169
+#define IMAGE_FILE_MACHINE_ALPHA             0x0184
+#define IMAGE_FILE_MACHINE_SH3               0x01a2
+#define IMAGE_FILE_MACHINE_SH3DSP            0x01a3
+#define IMAGE_FILE_MACHINE_SH3E              0x01a4
+#define IMAGE_FILE_MACHINE_SH4               0x01a6
+#define IMAGE_FILE_MACHINE_SH5               0x01a8
+#define IMAGE_FILE_MACHINE_ARM               0x01c0
+#define IMAGE_FILE_MACHINE_THUMB             0x01c2
+#define IMAGE_FILE_MACHINE_ARMNT             0x01c4
+#define IMAGE_FILE_MACHINE_AM33              0x01d3
+#define IMAGE_FILE_MACHINE_POWERPC           0x01F0
+#define IMAGE_FILE_MACHINE_POWERPCFP         0x01f1
+#define IMAGE_FILE_MACHINE_IA64              0x0200
+#define IMAGE_FILE_MACHINE_MIPS16            0x0266
+#define IMAGE_FILE_MACHINE_ALPHA64           0x0284
+#define IMAGE_FILE_MACHINE_MIPSFPU           0x0366
+#define IMAGE_FILE_MACHINE_MIPSFPU16         0x0466
+#define IMAGE_FILE_MACHINE_AXP64             IMAGE_FILE_MACHINE_ALPHA64
+#define IMAGE_FILE_MACHINE_TRICORE           0x0520
+#define IMAGE_FILE_MACHINE_CEF               0x0CEF
+#define IMAGE_FILE_MACHINE_EBC               0x0EBC
+#define IMAGE_FILE_MACHINE_AMD64             0x8664
+#define IMAGE_FILE_MACHINE_M32R              0x9041
+#define IMAGE_FILE_MACHINE_ARM64             0xAA64
+#define IMAGE_FILE_MACHINE_CEE               0xC0EE
+
+typedef struct _IMAGE_DATA_DIRECTORY {
+    DWORD VirtualAddress;
+    DWORD Size;
+} IMAGE_DATA_DIRECTORY, *PIMAGE_DATA_DIRECTORY;
+
+#define IMAGE_NUMBEROF_DIRECTORY_ENTRIES    16
+
+typedef struct _IMAGE_OPTIONAL_HEADER {
+    WORD  Magic;
+    BYTE  MajorLinkerVersion;
+    BYTE  MinorLinkerVersion;
+    DWORD SizeOfCode;
+    DWORD SizeOfInitializedData;
+    DWORD SizeOfUninitializedData;
+    DWORD AddressOfEntryPoint;
+    DWORD BaseOfCode;
+    DWORD BaseOfData;
+    DWORD ImageBase;
+    DWORD SectionAlignment;
+    DWORD FileAlignment;
+    WORD  MajorOperatingSystemVersion;
+    WORD  MinorOperatingSystemVersion;
+    WORD  MajorImageVersion;
+    WORD  MinorImageVersion;
+    WORD  MajorSubsystemVersion;
+    WORD  MinorSubsystemVersion;
+    DWORD Win32VersionValue;
+    DWORD SizeOfImage;
+    DWORD SizeOfHeaders;
+    DWORD CheckSum;
+    WORD  Subsystem;
+    WORD  DllCharacteristics;
+    DWORD SizeOfStackReserve;
+    DWORD SizeOfStackCommit;
+    DWORD SizeOfHeapReserve;
+    DWORD SizeOfHeapCommit;
+    DWORD LoaderFlags;
+    DWORD NumberOfRvaAndSizes;
+    IMAGE_DATA_DIRECTORY DataDirectory[IMAGE_NUMBEROF_DIRECTORY_ENTRIES];
+} IMAGE_OPTIONAL_HEADER32, *PIMAGE_OPTIONAL_HEADER32;
+
+typedef struct _IMAGE_OPTIONAL_HEADER64 {
+    WORD      Magic;
+    BYTE      MajorLinkerVersion;
+    BYTE      MinorLinkerVersion;
+    DWORD     SizeOfCode;
+    DWORD     SizeOfInitializedData;
+    DWORD     SizeOfUninitializedData;
+    DWORD     AddressOfEntryPoint;
+    DWORD     BaseOfCode;
+    ULONGLONG ImageBase;
+    DWORD     SectionAlignment;
+    DWORD     FileAlignment;
+    WORD      MajorOperatingSystemVersion;
+    WORD      MinorOperatingSystemVersion;
+    WORD      MajorImageVersion;
+    WORD      MinorImageVersion;
+    WORD      MajorSubsystemVersion;
+    WORD      MinorSubsystemVersion;
+    DWORD     Win32VersionValue;
+    DWORD     SizeOfImage;
+    DWORD     SizeOfHeaders;
+    DWORD     CheckSum;
+    WORD      Subsystem;
+    WORD      DllCharacteristics;
+    ULONGLONG SizeOfStackReserve;
+    ULONGLONG SizeOfStackCommit;
+    ULONGLONG SizeOfHeapReserve;
+    ULONGLONG SizeOfHeapCommit;
+    DWORD     LoaderFlags;
+    DWORD     NumberOfRvaAndSizes;
+    IMAGE_DATA_DIRECTORY DataDirectory[IMAGE_NUMBEROF_DIRECTORY_ENTRIES];
+} IMAGE_OPTIONAL_HEADER64, *PIMAGE_OPTIONAL_HEADER64;
+
+#define IMAGE_NT_OPTIONAL_HDR32_MAGIC      0x10b
+#define IMAGE_NT_OPTIONAL_HDR64_MAGIC      0x20b
+#define IMAGE_ROM_OPTIONAL_HDR_MAGIC       0x107
+
+typedef IMAGE_OPTIONAL_HEADER64  IMAGE_OPTIONAL_HEADER;
+typedef PIMAGE_OPTIONAL_HEADER64 PIMAGE_OPTIONAL_HEADER;
+#define IMAGE_NT_OPTIONAL_HDR_MAGIC        IMAGE_NT_OPTIONAL_HDR64_MAGIC
+
+typedef struct _IMAGE_NT_HEADERS64 {
+    DWORD Signature;
+    IMAGE_FILE_HEADER FileHeader;
+    IMAGE_OPTIONAL_HEADER64 OptionalHeader;
+} IMAGE_NT_HEADERS64, *PIMAGE_NT_HEADERS64;
+
+typedef struct _IMAGE_NT_HEADERS {
+    DWORD Signature;
+    IMAGE_FILE_HEADER FileHeader;
+    IMAGE_OPTIONAL_HEADER32 OptionalHeader;
+} IMAGE_NT_HEADERS32, *PIMAGE_NT_HEADERS32;
+
+typedef IMAGE_NT_HEADERS64  IMAGE_NT_HEADERS;
+typedef PIMAGE_NT_HEADERS64 PIMAGE_NT_HEADERS;
+
+#define IMAGE_FIRST_SECTION(ntheader) ((PIMAGE_SECTION_HEADER)        \
+    ((ULONG_PTR)(ntheader) +                                          \
+     FIELD_OFFSET(IMAGE_NT_HEADERS, OptionalHeader) +                 \
+     ((ntheader))->FileHeader.SizeOfOptionalHeader))
+
+#define IMAGE_SUBSYSTEM_UNKNOWN              0
+#define IMAGE_SUBSYSTEM_NATIVE               1
+#define IMAGE_SUBSYSTEM_WINDOWS_GUI          2
+#define IMAGE_SUBSYSTEM_WINDOWS_CUI          3
+#define IMAGE_SUBSYSTEM_OS2_CUI              5
+#define IMAGE_SUBSYSTEM_POSIX_CUI            7
+#define IMAGE_SUBSYSTEM_NATIVE_WINDOWS       8
+#define IMAGE_SUBSYSTEM_WINDOWS_CE_GUI       9
+#define IMAGE_SUBSYSTEM_EFI_APPLICATION      10
+#define IMAGE_SUBSYSTEM_EFI_BOOT_SERVICE_DRIVER 11
+#define IMAGE_SUBSYSTEM_EFI_RUNTIME_DRIVER   12
+#define IMAGE_SUBSYSTEM_EFI_ROM              13
+#define IMAGE_SUBSYSTEM_XBOX                 14
+#define IMAGE_SUBSYSTEM_WINDOWS_BOOT_APPLICATION 16
+#define IMAGE_SUBSYSTEM_XBOX_CODE_CATALOG    17
+
+#define IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA    0x0020
+#define IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE       0x0040
+#define IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY    0x0080
+#define IMAGE_DLLCHARACTERISTICS_NX_COMPAT          0x0100
+#define IMAGE_DLLCHARACTERISTICS_NO_ISOLATION       0x0200
+#define IMAGE_DLLCHARACTERISTICS_NO_SEH             0x0400
+#define IMAGE_DLLCHARACTERISTICS_NO_BIND            0x0800
+#define IMAGE_DLLCHARACTERISTICS_APPCONTAINER       0x1000
+#define IMAGE_DLLCHARACTERISTICS_WDM_DRIVER         0x2000
+#define IMAGE_DLLCHARACTERISTICS_GUARD_CF           0x4000
+#define IMAGE_DLLCHARACTERISTICS_TERMINAL_SERVER_AWARE 0x8000
+
+#define IMAGE_DIRECTORY_ENTRY_EXPORT          0
+#define IMAGE_DIRECTORY_ENTRY_IMPORT          1
+#define IMAGE_DIRECTORY_ENTRY_RESOURCE        2
+#define IMAGE_DIRECTORY_ENTRY_EXCEPTION       3
+#define IMAGE_DIRECTORY_ENTRY_SECURITY        4
+#define IMAGE_DIRECTORY_ENTRY_BASERELOC       5
+#define IMAGE_DIRECTORY_ENTRY_DEBUG           6
+#define IMAGE_DIRECTORY_ENTRY_ARCHITECTURE    7
+#define IMAGE_DIRECTORY_ENTRY_GLOBALPTR       8
+#define IMAGE_DIRECTORY_ENTRY_TLS             9
+#define IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG    10
+#define IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT   11
+#define IMAGE_DIRECTORY_ENTRY_IAT            12
+#define IMAGE_DIRECTORY_ENTRY_DELAY_IMPORT   13
+#define IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR 14
+
+#define IMAGE_SIZEOF_SHORT_NAME              8
+
+typedef struct _IMAGE_SECTION_HEADER {
+    BYTE  Name[IMAGE_SIZEOF_SHORT_NAME];
+    union {
+        DWORD PhysicalAddress;
+        DWORD VirtualSize;
+    } Misc;
+    DWORD VirtualAddress;
+    DWORD SizeOfRawData;
+    DWORD PointerToRawData;
+    DWORD PointerToRelocations;
+    DWORD PointerToLinenumbers;
+    WORD  NumberOfRelocations;
+    WORD  NumberOfLinenumbers;
+    DWORD Characteristics;
+} IMAGE_SECTION_HEADER, *PIMAGE_SECTION_HEADER;
+
+#define IMAGE_SIZEOF_SECTION_HEADER          40
+
+#define IMAGE_SCN_TYPE_NO_PAD                0x00000008
+#define IMAGE_SCN_CNT_CODE                   0x00000020
+#define IMAGE_SCN_CNT_INITIALIZED_DATA       0x00000040
+#define IMAGE_SCN_CNT_UNINITIALIZED_DATA     0x00000080
+#define IMAGE_SCN_LNK_OTHER                  0x00000100
+#define IMAGE_SCN_LNK_INFO                   0x00000200
+#define IMAGE_SCN_LNK_REMOVE                 0x00000800
+#define IMAGE_SCN_LNK_COMDAT                 0x00001000
+#define IMAGE_SCN_NO_DEFER_SPEC_EXC          0x00004000
+#define IMAGE_SCN_GPREL                      0x00008000
+#define IMAGE_SCN_MEM_FARDATA                0x00008000
+#define IMAGE_SCN_MEM_PURGEABLE              0x00020000
+#define IMAGE_SCN_MEM_16BIT                  0x00020000
+#define IMAGE_SCN_MEM_LOCKED                 0x00040000
+#define IMAGE_SCN_MEM_PRELOAD                0x00080000
+#define IMAGE_SCN_ALIGN_1BYTES               0x00100000
+#define IMAGE_SCN_ALIGN_2BYTES               0x00200000
+#define IMAGE_SCN_ALIGN_4BYTES               0x00300000
+#define IMAGE_SCN_ALIGN_8BYTES               0x00400000
+#define IMAGE_SCN_ALIGN_16BYTES              0x00500000
+#define IMAGE_SCN_ALIGN_32BYTES              0x00600000
+#define IMAGE_SCN_ALIGN_64BYTES              0x00700000
+#define IMAGE_SCN_ALIGN_128BYTES             0x00800000
+#define IMAGE_SCN_ALIGN_256BYTES             0x00900000
+#define IMAGE_SCN_ALIGN_512BYTES             0x00A00000
+#define IMAGE_SCN_ALIGN_1024BYTES            0x00B00000
+#define IMAGE_SCN_ALIGN_2048BYTES            0x00C00000
+#define IMAGE_SCN_ALIGN_4096BYTES            0x00D00000
+#define IMAGE_SCN_ALIGN_8192BYTES            0x00E00000
+#define IMAGE_SCN_ALIGN_MASK                 0x00F00000
+#define IMAGE_SCN_LNK_NRELOC_OVFL            0x01000000
+#define IMAGE_SCN_MEM_DISCARDABLE            0x02000000
+#define IMAGE_SCN_MEM_NOT_CACHED             0x04000000
+#define IMAGE_SCN_MEM_NOT_PAGED              0x08000000
+#define IMAGE_SCN_MEM_SHARED                 0x10000000
+#define IMAGE_SCN_MEM_EXECUTE                0x20000000
+#define IMAGE_SCN_MEM_READ                   0x40000000
+#define IMAGE_SCN_MEM_WRITE                  0x80000000
+#define IMAGE_SCN_SCALE_INDEX                0x00000001
+
+typedef struct _IMAGE_BASE_RELOCATION {
+    DWORD VirtualAddress;
+    DWORD SizeOfBlock;
+} IMAGE_BASE_RELOCATION, *PIMAGE_BASE_RELOCATION;
+
+#define IMAGE_SIZEOF_BASE_RELOCATION         8
+
+#define IMAGE_REL_BASED_ABSOLUTE             0
+#define IMAGE_REL_BASED_HIGH                 1
+#define IMAGE_REL_BASED_LOW                  2
+#define IMAGE_REL_BASED_HIGHLOW              3
+#define IMAGE_REL_BASED_HIGHADJ              4
+#define IMAGE_REL_BASED_MACHINE_SPECIFIC_5   5
+#define IMAGE_REL_BASED_RESERVED             6
+#define IMAGE_REL_BASED_MACHINE_SPECIFIC_7   7
+#define IMAGE_REL_BASED_MACHINE_SPECIFIC_8   8
+#define IMAGE_REL_BASED_MACHINE_SPECIFIC_9   9
+#define IMAGE_REL_BASED_DIR64                10
+#define IMAGE_REL_BASED_IA64_IMM64           9
+#define IMAGE_REL_BASED_MIPS_JMPADDR         5
+#define IMAGE_REL_BASED_MIPS_JMPADDR16       9
+#define IMAGE_REL_BASED_ARM_MOV32            5
+#define IMAGE_REL_BASED_THUMB_MOV32          7
+
+typedef struct _IMAGE_EXPORT_DIRECTORY {
+    DWORD Characteristics;
+    DWORD TimeDateStamp;
+    WORD  MajorVersion;
+    WORD  MinorVersion;
+    DWORD Name;
+    DWORD Base;
+    DWORD NumberOfFunctions;
+    DWORD NumberOfNames;
+    DWORD AddressOfFunctions;
+    DWORD AddressOfNames;
+    DWORD AddressOfNameOrdinals;
+} IMAGE_EXPORT_DIRECTORY, *PIMAGE_EXPORT_DIRECTORY;
+
+typedef struct _IMAGE_IMPORT_BY_NAME {
+    WORD Hint;
+    CHAR Name[1];
+} IMAGE_IMPORT_BY_NAME, *PIMAGE_IMPORT_BY_NAME;
+
+#pragma pack(push, 8)
+typedef struct _IMAGE_THUNK_DATA64 {
+    union {
+        ULONGLONG ForwarderString;
+        ULONGLONG Function;
+        ULONGLONG Ordinal;
+        ULONGLONG AddressOfData;
+    } u1;
+} IMAGE_THUNK_DATA64, *PIMAGE_THUNK_DATA64;
+#pragma pack(pop)
+
+typedef struct _IMAGE_THUNK_DATA32 {
+    union {
+        DWORD ForwarderString;
+        DWORD Function;
+        DWORD Ordinal;
+        DWORD AddressOfData;
+    } u1;
+} IMAGE_THUNK_DATA32, *PIMAGE_THUNK_DATA32;
+
+#define IMAGE_ORDINAL_FLAG64 0x8000000000000000
+#define IMAGE_ORDINAL_FLAG32 0x80000000
+#define IMAGE_ORDINAL64(Ordinal) ((Ordinal) & 0xffff)
+#define IMAGE_ORDINAL32(Ordinal) ((Ordinal) & 0xffff)
+#define IMAGE_SNAP_BY_ORDINAL64(Ordinal) (((Ordinal) & IMAGE_ORDINAL_FLAG64) != 0)
+#define IMAGE_SNAP_BY_ORDINAL32(Ordinal) (((Ordinal) & IMAGE_ORDINAL_FLAG32) != 0)
+
+typedef VOID (WINAPI *PIMAGE_TLS_CALLBACK)(PVOID DllHandle, DWORD Reason, PVOID Reserved);
+
+typedef struct _IMAGE_TLS_DIRECTORY64 {
+    ULONGLONG StartAddressOfRawData;
+    ULONGLONG EndAddressOfRawData;
+    ULONGLONG AddressOfIndex;
+    ULONGLONG AddressOfCallBacks;
+    DWORD     SizeOfZeroFill;
+    union {
+        DWORD Characteristics;
+        struct {
+            DWORD Reserved0 : 20;
+            DWORD Alignment : 4;
+            DWORD Reserved1 : 8;
+        };
+    };
+} IMAGE_TLS_DIRECTORY64, *PIMAGE_TLS_DIRECTORY64;
+
+typedef struct _IMAGE_TLS_DIRECTORY32 {
+    DWORD StartAddressOfRawData;
+    DWORD EndAddressOfRawData;
+    DWORD AddressOfIndex;
+    DWORD AddressOfCallBacks;
+    DWORD SizeOfZeroFill;
+    union {
+        DWORD Characteristics;
+        struct {
+            DWORD Reserved0 : 20;
+            DWORD Alignment : 4;
+            DWORD Reserved1 : 8;
+        };
+    };
+} IMAGE_TLS_DIRECTORY32, *PIMAGE_TLS_DIRECTORY32;
+
+#define IMAGE_ORDINAL_FLAG IMAGE_ORDINAL_FLAG64
+#define IMAGE_ORDINAL(Ordinal) IMAGE_ORDINAL64(Ordinal)
+typedef IMAGE_THUNK_DATA64  IMAGE_THUNK_DATA;
+typedef PIMAGE_THUNK_DATA64 PIMAGE_THUNK_DATA;
+#define IMAGE_SNAP_BY_ORDINAL(Ordinal) IMAGE_SNAP_BY_ORDINAL64(Ordinal)
+typedef IMAGE_TLS_DIRECTORY64  IMAGE_TLS_DIRECTORY;
+typedef PIMAGE_TLS_DIRECTORY64 PIMAGE_TLS_DIRECTORY;
+
+typedef struct _IMAGE_IMPORT_DESCRIPTOR {
+    union {
+        DWORD Characteristics;
+        DWORD OriginalFirstThunk;
+    };
+    DWORD TimeDateStamp;
+    DWORD ForwarderChain;
+    DWORD Name;
+    DWORD FirstThunk;
+} IMAGE_IMPORT_DESCRIPTOR, *PIMAGE_IMPORT_DESCRIPTOR;
+
+typedef struct _IMAGE_RESOURCE_DIRECTORY {
+    DWORD Characteristics;
+    DWORD TimeDateStamp;
+    WORD  MajorVersion;
+    WORD  MinorVersion;
+    WORD  NumberOfNamedEntries;
+    WORD  NumberOfIdEntries;
+} IMAGE_RESOURCE_DIRECTORY, *PIMAGE_RESOURCE_DIRECTORY;
+
+#define IMAGE_RESOURCE_NAME_IS_STRING        0x80000000
+#define IMAGE_RESOURCE_DATA_IS_DIRECTORY     0x80000000
+
+typedef struct _IMAGE_RESOURCE_DIRECTORY_ENTRY {
+    union {
+        struct {
+            DWORD NameOffset : 31;
+            DWORD NameIsString : 1;
+        };
+        DWORD Name;
+        WORD  Id;
+    };
+    union {
+        DWORD OffsetToData;
+        struct {
+            DWORD OffsetToDirectory : 31;
+            DWORD DataIsDirectory : 1;
+        };
+    };
+} IMAGE_RESOURCE_DIRECTORY_ENTRY, *PIMAGE_RESOURCE_DIRECTORY_ENTRY;
+
+typedef struct _IMAGE_RESOURCE_DIRECTORY_STRING {
+    WORD Length;
+    CHAR NameString[1];
+} IMAGE_RESOURCE_DIRECTORY_STRING, *PIMAGE_RESOURCE_DIRECTORY_STRING;
+
+typedef struct _IMAGE_RESOURCE_DIR_STRING_U {
+    WORD  Length;
+    WCHAR NameString[1];
+} IMAGE_RESOURCE_DIR_STRING_U, *PIMAGE_RESOURCE_DIR_STRING_U;
+
+typedef struct _IMAGE_RESOURCE_DATA_ENTRY {
+    DWORD OffsetToData;
+    DWORD Size;
+    DWORD CodePage;
+    DWORD Reserved;
+} IMAGE_RESOURCE_DATA_ENTRY, *PIMAGE_RESOURCE_DATA_ENTRY;
+#pragma pack(pop)
 
 // ---------------------------------------------------------------------------
 // Win32 GUI / GDI / WGL surface (user32.dll, gdi32.dll, opengl32.dll,
@@ -2244,18 +3210,6 @@ int AdjustTokenPrivileges(HANDLE TokenHandle, int DisableAllPrivileges,
 // live in the consumer's link header; only the declarations are here.
 // ---------------------------------------------------------------------------
 
-typedef void *HGLRC;   // OpenGL rendering context (wingdi.h)
-typedef void *HGDIOBJ; // generic GDI object
-typedef void *HDROP;   // dropped-file handle (shellapi.h)
-typedef void *HRAWINPUT;
-typedef void *PROC;    // wglGetProcAddress return; cast to the target PFN
-typedef float FLOAT;
-typedef DWORD COLORREF;
-typedef WORD  ATOM;
-typedef char  CHAR;
-typedef const char *LPCCH;
-typedef WORD *LPWORD;
-typedef UINT *PUINT;
 
 // Empty error code returned by XInputGetKeystroke / message peeks.
 #ifndef ERROR_DEVICE_NOT_CONNECTED
@@ -2281,6 +3235,7 @@ struct tagRECT { LONG left; LONG top; LONG right; LONG bottom; };
 typedef struct tagRECT RECT;
 typedef struct tagRECT *LPRECT;
 typedef struct tagRECT *PRECT;
+typedef const RECT *LPCRECT;
 
 struct tagMSG {
     HWND   hwnd;
@@ -2296,7 +3251,7 @@ typedef struct tagMSG *PMSG;
 
 // WndProc and enumeration callback shapes.
 typedef LRESULT (*WNDPROC)(HWND, UINT, WPARAM, LPARAM);
-typedef int (*MONITORENUMPROC)(HMONITOR, HDC, LPRECT, LPARAM);
+typedef BOOL (CALLBACK *MONITORENUMPROC)(HMONITOR, HDC, LPRECT, LPARAM);
 
 struct tagWNDCLASSA {
     UINT    style;
@@ -2379,6 +3334,7 @@ struct tagWINDOWPLACEMENT {
     RECT  rcNormalPosition;
 };
 typedef struct tagWINDOWPLACEMENT WINDOWPLACEMENT;
+typedef struct tagWINDOWPLACEMENT *PWINDOWPLACEMENT;
 typedef struct tagWINDOWPLACEMENT *LPWINDOWPLACEMENT;
 
 struct tagMONITORINFO {
@@ -2418,8 +3374,7 @@ struct _DISPLAY_DEVICEA {
 typedef struct _DISPLAY_DEVICEA DISPLAY_DEVICEA;
 typedef struct _DISPLAY_DEVICEA *PDISPLAY_DEVICEA;
 
-// Raw input (winuser.h). Anonymous union/struct members are flattened to
-// named fields occupying the same byte offsets the SDK lays out.
+// Raw input (winuser.h).
 struct tagRAWINPUTHEADER {
     DWORD  dwType;
     DWORD  dwSize;
@@ -2474,6 +3429,7 @@ struct tagRAWINPUTDEVICE {
 };
 typedef struct tagRAWINPUTDEVICE RAWINPUTDEVICE;
 typedef struct tagRAWINPUTDEVICE *PRAWINPUTDEVICE;
+typedef const RAWINPUTDEVICE *PCRAWINPUTDEVICE;
 
 // Raw-input device enumeration surface (GetRawInputDeviceList /
 // GetRawInputDeviceInfo). Used to identify XInput HID devices.
@@ -2522,12 +3478,10 @@ typedef struct tagRID_DEVICE_INFO {
 #define RIDI_DEVICENAME  0x20000007
 #define RIDI_DEVICEINFO  0x2000000b
 
-UINT GetRawInputDeviceList(PRAWINPUTDEVICELIST pRawInputDeviceList,
-                           PUINT puiNumDevices, UINT cbSize);
-UINT GetRawInputDeviceInfoA(HANDLE hDevice, UINT uiCommand, LPVOID pData,
-                            PUINT pcbSize);
-UINT GetRawInputDeviceInfoW(HANDLE hDevice, UINT uiCommand, LPVOID pData,
-                            PUINT pcbSize);
+UINT GetRawInputDeviceList(PRAWINPUTDEVICELIST pRawInputDeviceList, PUINT puiNumDevices,
+                           UINT cbSize);
+UINT GetRawInputDeviceInfoA(HANDLE hDevice, UINT uiCommand, LPVOID pData, PUINT pcbSize);
+UINT GetRawInputDeviceInfoW(HANDLE hDevice, UINT uiCommand, LPVOID pData, PUINT pcbSize);
 
 struct _ICONINFO {
     BOOL    fIcon;
@@ -3037,9 +3991,9 @@ typedef struct {
 #pragma binding(kernel32::GlobalSize,   "GlobalSize")
 HGLOBAL GlobalAlloc(UINT uFlags, SIZE_T dwBytes);
 HGLOBAL GlobalFree(HGLOBAL hMem);
-LPVOID  GlobalLock(HGLOBAL hMem);
-BOOL    GlobalUnlock(HGLOBAL hMem);
-SIZE_T  GlobalSize(HGLOBAL hMem);
+LPVOID GlobalLock(HGLOBAL hMem);
+BOOL GlobalUnlock(HGLOBAL hMem);
+SIZE_T GlobalSize(HGLOBAL hMem);
 
 // user32.dll window, message, input, monitor, and clipboard entry points.
 #define CreateWindowA(cls, name, style, x, y, w, h, parent, menu, inst, param) \
@@ -3051,16 +4005,15 @@ SIZE_T  GlobalSize(HGLOBAL hMem);
 HWND CreateWindowExA(DWORD dwExStyle, LPCSTR lpClassName, LPCSTR lpWindowName,
                      DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
                      HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
-ATOM    RegisterClassA(const WNDCLASSA *lpWndClass);
+ATOM RegisterClassA(const WNDCLASSA *lpWndClass);
 LRESULT DefWindowProcA(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 
 #define CreateWindowW(cls, name, style, x, y, w, h, parent, menu, inst, param) \
     CreateWindowExW(0, cls, name, style, x, y, w, h, parent, menu, inst, param)
-HWND CreateWindowExW(DWORD dwExStyle, const WCHAR *lpClassName,
-                     const WCHAR *lpWindowName, DWORD dwStyle, int X, int Y,
-                     int nWidth, int nHeight, HWND hWndParent, HMENU hMenu,
-                     HINSTANCE hInstance, LPVOID lpParam);
-ATOM    RegisterClassW(const WNDCLASSW *lpWndClass);
+HWND CreateWindowExW(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName,
+                     DWORD dwStyle, int X, int Y, int nWidth, int nHeight,
+                     HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
+ATOM RegisterClassW(const WNDCLASSW *lpWndClass);
 LRESULT DefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 #ifndef SendMessage
 #define SendMessage SendMessageW
@@ -3074,18 +4027,17 @@ LRESULT DefWindowProcW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
 #ifndef LoadIcon
 #define LoadIcon LoadIconA
 #endif
-HANDLE  GetPropW(HWND hWnd, const WCHAR *lpString);
-BOOL    SetPropW(HWND hWnd, const WCHAR *lpString, HANDLE hData);
-HANDLE  RemovePropW(HWND hWnd, const WCHAR *lpString);
+HANDLE GetPropW(HWND hWnd, LPCWSTR lpString);
+BOOL SetPropW(HWND hWnd, LPCWSTR lpString, HANDLE hData);
+HANDLE RemovePropW(HWND hWnd, LPCWSTR lpString);
 
 // Registry read used for the Windows dark-mode query.
 #define HKEY_CURRENT_USER ((HKEY)(ULONG_PTR)0x80000001)
 #define RRF_RT_REG_DWORD 0x00000010
-LONG RegGetValueW(HKEY hkey, const WCHAR *lpSubKey, const WCHAR *lpValue,
-                  DWORD dwFlags, LPDWORD pdwType, void *pvData, LPDWORD pcbData);
+LSTATUS RegGetValueW(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWORD dwFlags,
+                     LPDWORD pdwType, PVOID pvData, LPDWORD pcbData);
 
 // Display / paint / timer surface RGFW's win32 backend reads.
-typedef BYTE *PBYTE;
 typedef void (CALLBACK *TIMERPROC)(HWND, UINT, UINT_PTR, DWORD);
 typedef enum MONITOR_DPI_TYPE {
     MDT_EFFECTIVE_DPI = 0,
@@ -3171,116 +4123,125 @@ typedef struct tagFLASHWINFO {
     DWORD dwTimeout;
 } FLASHWINFO, *PFLASHWINFO;
 
-BOOL     GetKeyboardState(PBYTE lpKeyState);
-HKL      GetKeyboardLayout(DWORD idThread);
-UINT     MapVirtualKeyW(UINT uCode, UINT uMapType);
-int      ToUnicodeEx(UINT wVirtKey, UINT wScanCode, const BYTE *lpKeyState,
-                     LPWSTR pwszBuff, int cchBuff, UINT wFlags, HKL dwhkl);
-LONG     ChangeDisplaySettingsExW(const WCHAR *lpszDeviceName, DEVMODEW *lpDevMode,
-                                  HWND hwnd, DWORD dwflags, LPVOID lParam);
-BOOL     EnumDisplayDevicesW(const WCHAR *lpDevice, DWORD iDevNum,
-                             PDISPLAY_DEVICEW lpDisplayDevice, DWORD dwFlags);
-BOOL     EnumDisplaySettingsW(const WCHAR *lpszDeviceName, DWORD iModeNum,
-                              DEVMODEW *lpDevMode);
-BOOL     FlashWindowEx(PFLASHWINFO pfwi);
-BOOL     GetMonitorInfoW(HMONITOR hMonitor, MONITORINFO *lpmi);
-BOOL     IsZoomed(HWND hWnd);
-HICON    LoadIconA(HINSTANCE hInstance, LPCSTR lpIconName);
-HANDLE   LoadImageA(HINSTANCE hInst, LPCSTR name, UINT type, int cx, int cy,
-                    UINT fuLoad);
+BOOL GetKeyboardState(PBYTE lpKeyState);
+HKL GetKeyboardLayout(DWORD idThread);
+UINT MapVirtualKeyW(UINT uCode, UINT uMapType);
+int ToUnicodeEx(UINT wVirtKey, UINT wScanCode, const BYTE *lpKeyState, LPWSTR pwszBuff,
+                int cchBuff, UINT wFlags, HKL dwhkl);
+LONG ChangeDisplaySettingsExW(LPCWSTR lpszDeviceName, DEVMODEW *lpDevMode, HWND hwnd,
+                              DWORD dwflags, LPVOID lParam);
+BOOL EnumDisplayDevicesW(LPCWSTR lpDevice, DWORD iDevNum,
+                         PDISPLAY_DEVICEW lpDisplayDevice, DWORD dwFlags);
+BOOL EnumDisplaySettingsW(LPCWSTR lpszDeviceName, DWORD iModeNum, DEVMODEW *lpDevMode);
+BOOL FlashWindowEx(PFLASHWINFO pfwi);
+BOOL GetMonitorInfoW(HMONITOR hMonitor, LPMONITORINFO lpmi);
+BOOL IsZoomed(HWND hWnd);
+HICON LoadIconA(HINSTANCE hInstance, LPCSTR lpIconName);
+HANDLE LoadImageA(HINSTANCE hInst, LPCSTR name, UINT type, int cx, int cy, UINT fuLoad);
 LONG_PTR GetWindowLongPtrW(HWND hWnd, int nIndex);
 LONG_PTR SetWindowLongPtrW(HWND hWnd, int nIndex, LONG_PTR dwNewLong);
-BOOL     SetWindowTextW(HWND hWnd, const WCHAR *lpString);
-LRESULT  SendMessageW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
-HWND     SetFocus(HWND hWnd);
-BOOL     SetForegroundWindow(HWND hWnd);
+BOOL SetWindowTextW(HWND hWnd, LPCWSTR lpString);
+LRESULT SendMessageW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+HWND SetFocus(HWND hWnd);
+BOOL SetForegroundWindow(HWND hWnd);
 UINT_PTR SetTimer(HWND hWnd, UINT_PTR nIDEvent, UINT uElapse, TIMERPROC lpTimerFunc);
-BOOL     KillTimer(HWND hWnd, UINT_PTR uIDEvent);
-HDC      BeginPaint(HWND hWnd, LPPAINTSTRUCT lpPaint);
-BOOL     EndPaint(HWND hWnd, const PAINTSTRUCT *lpPaint);
-BOOL     BringWindowToTop(HWND hWnd);
-BOOL     AdjustWindowRectEx(LPRECT lpRect, DWORD dwStyle, BOOL bMenu, DWORD dwExStyle);
-BOOL     MoveWindow(HWND hWnd, int X, int Y, int nWidth, int nHeight, BOOL bRepaint);
-BOOL     BitBlt(HDC hdc, int x, int y, int cx, int cy, HDC hdcSrc, int x1, int y1,
-                DWORD rop);
-HDC      CreateDCW(const WCHAR *pwszDriver, const WCHAR *pwszDevice,
-                   const WCHAR *pszPort, const DEVMODEW *pdm);
-BOOL     GetDeviceGammaRamp(HDC hdc, LPVOID lpRamp);
-BOOL     SetDeviceGammaRamp(HDC hdc, LPVOID lpRamp);
-BOOL    ShowWindow(HWND hWnd, int nCmdShow);
-HDC     GetDC(HWND hWnd);
-int     ReleaseDC(HWND hWnd, HDC hDC);
-BOOL    GetWindowRect(HWND hWnd, LPRECT lpRect);
-BOOL    GetClientRect(HWND hWnd, LPRECT lpRect);
-BOOL    DestroyWindow(HWND hWnd);
-BOOL    PeekMessageA(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax, UINT wRemoveMsg);
-BOOL    TranslateMessage(const MSG *lpMsg);
+BOOL KillTimer(HWND hWnd, UINT_PTR uIDEvent);
+HDC BeginPaint(HWND hWnd, LPPAINTSTRUCT lpPaint);
+BOOL EndPaint(HWND hWnd, const PAINTSTRUCT *lpPaint);
+BOOL BringWindowToTop(HWND hWnd);
+BOOL AdjustWindowRectEx(LPRECT lpRect, DWORD dwStyle, BOOL bMenu, DWORD dwExStyle);
+BOOL MoveWindow(HWND hWnd, int X, int Y, int nWidth, int nHeight, BOOL bRepaint);
+BOOL BitBlt(HDC hdc, int x, int y, int cx, int cy, HDC hdcSrc, int x1, int y1, DWORD rop);
+HDC CreateDCW(LPCWSTR pwszDriver, LPCWSTR pwszDevice, LPCWSTR pszPort,
+              const DEVMODEW *pdm);
+BOOL GetDeviceGammaRamp(HDC hdc, LPVOID lpRamp);
+BOOL SetDeviceGammaRamp(HDC hdc, LPVOID lpRamp);
+BOOL ShowWindow(HWND hWnd, int nCmdShow);
+HDC GetDC(HWND hWnd);
+int ReleaseDC(HWND hWnd, HDC hDC);
+BOOL GetWindowRect(HWND hWnd, LPRECT lpRect);
+BOOL GetClientRect(HWND hWnd, LPRECT lpRect);
+BOOL DestroyWindow(HWND hWnd);
+BOOL PeekMessageA(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax,
+                  UINT wRemoveMsg);
+BOOL TranslateMessage(const MSG *lpMsg);
 LRESULT DispatchMessageA(const MSG *lpMsg);
-BOOL    PostMessageW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
-DWORD   MsgWaitForMultipleObjects(DWORD nCount, void *pHandles, BOOL fWaitAll, DWORD dwMilliseconds, DWORD dwWakeMask);
+BOOL PostMessageW(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+DWORD MsgWaitForMultipleObjects(DWORD nCount, const HANDLE *pHandles, BOOL fWaitAll,
+                                DWORD dwMilliseconds, DWORD dwWakeMask);
 HCURSOR LoadCursorA(HINSTANCE hInstance, LPCSTR lpCursorName);
-SHORT   GetKeyState(int nVirtKey);
-int     GetKeyNameTextA(LONG lParam, LPSTR lpString, int cchSize);
-UINT    MapVirtualKeyA(UINT uCode, UINT uMapType);
-int     ToAscii(UINT uVirtKey, UINT uScanCode, const BYTE *lpKeyState, LPWORD lpChar, UINT uFlags);
-UINT    GetRawInputData(HRAWINPUT hRawInput, UINT uiCommand, LPVOID pData, PUINT pcbSize, UINT cbSizeHeader);
-BOOL    RegisterRawInputDevices(const RAWINPUTDEVICE *pRawInputDevices, UINT uiNumDevices, UINT cbSize);
-BOOL    ClipCursor(const RECT *lpRect);
-BOOL    GetCursorPos(LPPOINT lpPoint);
-BOOL    SetCursorPos(int X, int Y);
-BOOL    ClientToScreen(HWND hWnd, LPPOINT lpPoint);
-BOOL    ScreenToClient(HWND hWnd, LPPOINT lpPoint);
-BOOL    IsWindow(HWND hWnd);
-BOOL    IsWindowVisible(HWND hWnd);
-BOOL    GetWindowPlacement(HWND hWnd, WINDOWPLACEMENT *lpwndpl);
+SHORT GetKeyState(int nVirtKey);
+int GetKeyNameTextA(LONG lParam, LPSTR lpString, int cchSize);
+UINT MapVirtualKeyA(UINT uCode, UINT uMapType);
+int ToAscii(UINT uVirtKey, UINT uScanCode, const BYTE *lpKeyState, LPWORD lpChar,
+            UINT uFlags);
+UINT GetRawInputData(HRAWINPUT hRawInput, UINT uiCommand, LPVOID pData, PUINT pcbSize,
+                     UINT cbSizeHeader);
+BOOL RegisterRawInputDevices(PCRAWINPUTDEVICE pRawInputDevices, UINT uiNumDevices,
+                             UINT cbSize);
+BOOL ClipCursor(const RECT *lpRect);
+BOOL GetCursorPos(LPPOINT lpPoint);
+BOOL SetCursorPos(int X, int Y);
+BOOL ClientToScreen(HWND hWnd, LPPOINT lpPoint);
+BOOL ScreenToClient(HWND hWnd, LPPOINT lpPoint);
+BOOL IsWindow(HWND hWnd);
+BOOL IsWindowVisible(HWND hWnd);
+BOOL GetWindowPlacement(HWND hWnd, WINDOWPLACEMENT *lpwndpl);
 ULONG_PTR SetClassLongPtrA(HWND hWnd, int nIndex, LONG_PTR dwNewLong);
 HCURSOR SetCursor(HCURSOR hCursor);
-BOOL    DestroyCursor(HCURSOR hCursor);
-BOOL    DestroyIcon(HICON hIcon);
-BOOL    SetWindowPos(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags);
-BOOL    SetWindowTextA(HWND hWnd, LPCSTR lpString);
-LONG    GetWindowLongW(HWND hWnd, int nIndex);
-LONG    SetWindowLongW(HWND hWnd, int nIndex, LONG dwNewLong);
-LONG    GetWindowLongA(HWND hWnd, int nIndex);
-LONG    SetWindowLongA(HWND hWnd, int nIndex, LONG dwNewLong);
-BOOL    GetLayeredWindowAttributes(HWND hWnd, COLORREF *pcrKey, BYTE *pbAlpha, DWORD *pdwFlags);
-BOOL    SetLayeredWindowAttributes(HWND hWnd, COLORREF crKey, BYTE bAlpha, DWORD dwFlags);
-int     GetSystemMetrics(int nIndex);
+BOOL DestroyCursor(HCURSOR hCursor);
+BOOL DestroyIcon(HICON hIcon);
+BOOL SetWindowPos(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy,
+                  UINT uFlags);
+BOOL SetWindowTextA(HWND hWnd, LPCSTR lpString);
+LONG GetWindowLongW(HWND hWnd, int nIndex);
+LONG SetWindowLongW(HWND hWnd, int nIndex, LONG dwNewLong);
+LONG GetWindowLongA(HWND hWnd, int nIndex);
+LONG SetWindowLongA(HWND hWnd, int nIndex, LONG dwNewLong);
+BOOL GetLayeredWindowAttributes(HWND hwnd, COLORREF *pcrKey, BYTE *pbAlpha,
+                                DWORD *pdwFlags);
+BOOL SetLayeredWindowAttributes(HWND hwnd, COLORREF crKey, BYTE bAlpha, DWORD dwFlags);
+int GetSystemMetrics(int nIndex);
 HMONITOR MonitorFromPoint(POINT pt, DWORD dwFlags);
 HMONITOR MonitorFromWindow(HWND hwnd, DWORD dwFlags);
-BOOL    EnumDisplayMonitors(HDC hdc, LPRECT lprcClip, MONITORENUMPROC lpfnEnum, LPARAM dwData);
-BOOL    EnumDisplayDevicesA(LPCSTR lpDevice, DWORD iDevNum, PDISPLAY_DEVICEA lpDisplayDevice, DWORD dwFlags);
-BOOL    GetMonitorInfoA(HMONITOR hMonitor, LPMONITORINFO lpmi);
-BOOL    SetProcessDPIAware(void);
-HWND    GetForegroundWindow(void);
-BOOL    OpenClipboard(HWND hWndNewOwner);
-BOOL    CloseClipboard(void);
-HANDLE  GetClipboardData(UINT uFormat);
-BOOL    EmptyClipboard(void);
-HANDLE  SetClipboardData(UINT uFormat, HANDLE hMem);
-DWORD   CharLowerBuffA(LPSTR lpsz, DWORD cchLength);
+BOOL EnumDisplayMonitors(HDC hdc, LPCRECT lprcClip, MONITORENUMPROC lpfnEnum,
+                         LPARAM dwData);
+BOOL EnumDisplayDevicesA(LPCSTR lpDevice, DWORD iDevNum,
+                         PDISPLAY_DEVICEA lpDisplayDevice, DWORD dwFlags);
+BOOL GetMonitorInfoA(HMONITOR hMonitor, LPMONITORINFO lpmi);
+BOOL SetProcessDPIAware(VOID);
+HWND GetForegroundWindow(VOID);
+BOOL OpenClipboard(HWND hWndNewOwner);
+BOOL CloseClipboard(VOID);
+HANDLE GetClipboardData(UINT uFormat);
+BOOL EmptyClipboard(VOID);
+HANDLE SetClipboardData(UINT uFormat, HANDLE hMem);
+DWORD CharLowerBuffA(LPSTR lpsz, DWORD cchLength);
 
 // gdi32.dll pixel format, DIB, and bitblt entry points.
-int     ChoosePixelFormat(HDC hdc, const PIXELFORMATDESCRIPTOR *ppfd);
-BOOL    SetPixelFormat(HDC hdc, int format, const PIXELFORMATDESCRIPTOR *ppfd);
-int     DescribePixelFormat(HDC hdc, int iPixelFormat, UINT nBytes, LPPIXELFORMATDESCRIPTOR ppfd);
-BOOL    SwapBuffers(HDC hdc);
-int     GetDeviceCaps(HDC hdc, int index);
-HBITMAP CreateBitmap(int nWidth, int nHeight, UINT nPlanes, UINT nBitCount, const void *lpBits);
-HBITMAP CreateDIBSection(HDC hdc, const BITMAPINFO *pbmi, UINT usage, void **ppvBits, HANDLE hSection, DWORD offset);
-HDC     CreateCompatibleDC(HDC hdc);
-BOOL    DeleteDC(HDC hdc);
-BOOL    DeleteObject(HGDIOBJ ho);
+int ChoosePixelFormat(HDC hdc, const PIXELFORMATDESCRIPTOR *ppfd);
+BOOL SetPixelFormat(HDC hdc, int format, const PIXELFORMATDESCRIPTOR *ppfd);
+int DescribePixelFormat(HDC hdc, int iPixelFormat, UINT nBytes,
+                        LPPIXELFORMATDESCRIPTOR ppfd);
+BOOL SwapBuffers(HDC hdc);
+int GetDeviceCaps(HDC hdc, int index);
+HBITMAP CreateBitmap(int nWidth, int nHeight, UINT nPlanes, UINT nBitCount,
+                     const VOID *lpBits);
+HBITMAP CreateDIBSection(HDC hdc, const BITMAPINFO *pbmi, UINT usage, VOID **ppvBits,
+                         HANDLE hSection, DWORD offset);
+HDC CreateCompatibleDC(HDC hdc);
+BOOL DeleteDC(HDC hdc);
+BOOL DeleteObject(HGDIOBJ ho);
 HGDIOBJ SelectObject(HDC hdc, HGDIOBJ h);
-HICON   CreateIconIndirect(PICONINFO piconinfo);
+HICON CreateIconIndirect(PICONINFO piconinfo);
 
 // opengl32.dll WGL context entry points.
-HGLRC   wglCreateContext(HDC hdc);
-BOOL    wglDeleteContext(HGLRC hglrc);
-BOOL    wglMakeCurrent(HDC hdc, HGLRC hglrc);
-PROC    wglGetProcAddress(LPCSTR lpszProc);
-HDC     wglGetCurrentDC(void);
-HGLRC   wglGetCurrentContext(void);
-BOOL    wglShareLists(HGLRC hglrc1, HGLRC hglrc2);
+HGLRC wglCreateContext(HDC hdc);
+BOOL wglDeleteContext(HGLRC hglrc);
+BOOL wglMakeCurrent(HDC hdc, HGLRC hglrc);
+PROC wglGetProcAddress(LPCSTR lpszProc);
+HDC wglGetCurrentDC(VOID);
+HGLRC wglGetCurrentContext(VOID);
+BOOL wglShareLists(HGLRC hglrc1, HGLRC hglrc2);
 
 #endif

@@ -30,25 +30,27 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v24  Imm(123000)                                      -> x0
     v25  LoadLocal { off=-1, kind=I32 }                   -> x0
     v26  BinopI { op=mul, lhs=v25, rhs_imm=100 }          -> x0
-    v27  Extend { value=v26, kind=I32 }                   -> x1
+    v27  Extend { value=v26, kind=I32, nsw }              -> x1
     v28  BinopI { op=add, lhs=v26, rhs_imm=123000 }       -> x0
-    v29  Extend { value=v28, kind=I32 }                   -> x1
+    v29  Extend { value=v28, kind=I32, nsw }              -> x1
     v30  Imm(40)                                          -> x1
     v31  Imm(40)                                          -> x1
     v32  BinopI { op=add, lhs=v28, rhs_imm=40 }           -> x0
-    v33  Extend { value=v32, kind=I32 }                   -> x1
+    v33  Extend { value=v32, kind=I32, nsw }              -> x1
     v34  BinopI { op=add, lhs=v32, rhs_imm=5 }            -> x0
-    v35  Extend { value=v34, kind=I32 }                   -> x1
+    v35  Extend { value=v34, kind=I32, nsw }              -> x1
     v36  Extend { value=v34, kind=I32 }                   -> x1
     v37  Extend { value=v34, kind=I32 }                   -> x1
     v38  BinopI { op=ne, lhs=v34, rhs_imm=123745 }        -> x0
     terminator Bz { cond=v38, target=b2, fall=b1 }   (exit_acc=v38)
   block 1  start_pc=0
     v39  Imm(1)                                           -> x0
+    v40  LifetimeEnd(-1)                                  -> -
     terminator Return(v39)   (exit_acc=v39)
   block 2  start_pc=0
-    v40  Imm(0)                                           -> x0
-    terminator Return(v40)   (exit_acc=v40)
+    v41  Imm(0)                                           -> x0
+    v42  LifetimeEnd(-1)                                  -> -
+    terminator Return(v41)   (exit_acc=v41)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

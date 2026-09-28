@@ -23,7 +23,8 @@
 
 use super::Compiler;
 use super::types::{
-    is_bool_ty, is_float_ty, is_floating_scalar, is_pointer_ty, is_struct_ty, is_unsigned_ty,
+    is_bool_ty, is_float_ty, is_floating_scalar, is_integer_scalar_ty, is_long_double_scalar,
+    is_pointer_ty, is_struct_ty, is_unsigned_ty,
 };
 
 impl Compiler {
@@ -78,10 +79,16 @@ impl Compiler {
             self.ast_fpcast();
             self.ast_apply_assign_conv(dest_ty);
             self.ty = dest_ty;
-        } else if dest_is_fp && src_is_fp && is_float_ty(dest_ty) != is_float_ty(self.ty) {
+        } else if dest_is_fp
+            && src_is_fp
+            && (is_float_ty(dest_ty) != is_float_ty(self.ty)
+                || is_long_double_scalar(dest_ty) != is_long_double_scalar(self.ty))
+        {
             // `double` -> `float` (narrow) or `float` -> `double`
             // (widen). The walker's `Expr::Cast` arm emits the matching
-            // `Inst::FpCast(F64ToF32 / F32ToF64)` per C99 6.3.1.5.
+            // `Inst::FpCast(F64ToF32 / F32ToF64)` per C99 6.3.1.5. A
+            // `long double` to or from `double` changes no value, only
+            // the type, which decides how an argument crosses a call.
             self.ast_apply_assign_conv(dest_ty);
             self.ty = dest_ty;
         }
@@ -142,21 +149,44 @@ impl Compiler {
             return;
         }
         let common = self.arith_common_ty(lhs_ty, rhs_ty);
-        self.renormalize_to_width(common);
+        self.renormalize_overflow(common);
+    }
+
+    /// Whether `op` in type `ty` is a `+ - *` of a signed type of `int`
+    /// rank or above, whose overflow is undefined without `-fwrapv`.
+    pub(super) fn overflow_undefined(&self, op: crate::c5::ir::BinOp, ty: i64) -> bool {
+        use crate::c5::ir::BinOp as B;
+        !self.wrapv
+            && matches!(op, B::Add | B::Sub | B::Mul)
+            && is_integer_scalar_ty(ty)
+            && !is_unsigned_ty(ty)
+            && !is_bool_ty(ty)
+            && self.size_of_type(ty) >= 4
+    }
+
+    /// [`Self::renormalize_to_width`] after an operation whose signed
+    /// overflow C99 6.5p5 leaves undefined, marked so unless `-fwrapv`
+    /// defines it to wrap.
+    pub(super) fn renormalize_overflow(&mut self, ty: i64) {
+        self.renormalize(ty, !self.wrapv);
     }
 
     /// Renormalize the 64-bit accumulator to the storage width of an
     /// integer type `ty` after an operation that can overflow that width.
     ///
     /// Unsigned: mask with `(1 << N) - 1` (C99 6.2.5p9 wrap-modulo-2^N).
-    /// Signed: `Shl K; Shr K` with `K = 64 - width_bits`, truncating to
-    /// the width and sign-extending back (matches clang/gcc for the
-    /// overflow that 6.5p5 leaves undefined). Width 8 fills the
+    /// Signed: an [`UnOp::Renormalize`](super::super::ast::UnOp) node,
+    /// truncating to the width and sign-extending back (matches clang/gcc
+    /// for the overflow that 6.5p5 leaves undefined). Width 8 fills the
     /// accumulator and needs nothing. Integer promotion already widens
     /// char/short to int, so a narrow type reaching the signed path is
-    /// `int` (or LLP64 `long`), size 4. The shift pair folds to a single
-    /// `sxtw`/`movslq` at emit time.
+    /// `int` (or LLP64 `long`), size 4. The node lowers to a single
+    /// `sxtw`/`movslq`.
     pub(super) fn renormalize_to_width(&mut self, ty: i64) {
+        self.renormalize(ty, false);
+    }
+
+    fn renormalize(&mut self, ty: i64, nsw: bool) {
         let size = self.size_of_type(ty);
         if !matches!(size, 1 | 2 | 4) {
             return;
@@ -169,9 +199,10 @@ impl Compiler {
             };
             self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
         } else {
-            let shift_bits = 64 - size as i64 * 8;
-            self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, shift_bits);
-            self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, shift_bits);
+            self.mark_emit_other();
+            let result_ty = core::mem::replace(&mut self.ty, ty);
+            self.ast_apply_unary(super::super::ast::UnOp::Renormalize { nsw });
+            self.ty = result_ty;
         }
     }
 

@@ -28,10 +28,10 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v22  Extend { value=v20, kind=I32 }                   -> x0
     v23  Extend { value=v8, kind=I32 }                    -> x0
     v24  BinopI { op=mul, lhs=v8, rhs_imm=100 }           -> x0
-    v25  Extend { value=v24, kind=I32 }                   -> x2
+    v25  Extend { value=v24, kind=I32, nsw }              -> x2
     v26  Extend { value=v20, kind=I32 }                   -> x2
     v27  Binop { op=add, lhs=v24, rhs=v20 }               -> x0
-    v28  Extend { value=v27, kind=I32 }                   -> x1
+    v28  Extend { value=v27, kind=I32, nsw }              -> x1
     v29  Extend { value=v27, kind=I32 }                   -> x1
     terminator Return(v27)   (exit_acc=v27)
 ; --- SSA dump (ok=true) ent_pc=1 ---
@@ -63,6 +63,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v21  Imm(0)                                           -> x0
     v22  Imm(0)                                           -> x0
     v23  Imm(0)                                           -> x0
+    v24  LifetimeEnd(0)                                   -> -
     terminator Return(v23)   (exit_acc=v23)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit

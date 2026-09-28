@@ -22,18 +22,19 @@ fn ent_pc=0 n_params=1 variadic=false locals=3
     v14  Imm(0)                                           -> x1
     terminator Jmp(b2)   (exit_acc=v13)
   block 2  start_pc=0
-    v15  Phi { incoming=[b1:v13, b3:v18, b4:v20], kind=I64 } -> x0
+    v15  Phi { incoming=[b1:v13, b3:v19, b4:v21], kind=I64 } -> x0
     v16  Extend { value=v15, kind=I32 }                   -> x1
     v17  Extend { value=v15, kind=I32 }                   -> x1
+    v18  LifetimeEnd(-3)                                  -> -
     terminator Return(v15)   (exit_acc=v15)
   block 3  start_pc=0
-    v18  Imm(20)                                          -> x0
-    v19  Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v18)
+    v19  Imm(20)                                          -> x0
+    v20  Imm(0)                                           -> x1
+    terminator Jmp(b2)   (exit_acc=v19)
   block 4  start_pc=0
-    v20  Imm(30)                                          -> x0
-    v21  Imm(0)                                           -> x1
-    terminator Jmp(b2)   (exit_acc=v20)
+    v21  Imm(30)                                          -> x0
+    v22  Imm(0)                                           -> x1
+    terminator Jmp(b2)   (exit_acc=v21)
 ; --- SSA dump (ok=true) ent_pc=1 ---
 ; name=run_static
 fn ent_pc=1 n_params=1 variadic=false locals=0

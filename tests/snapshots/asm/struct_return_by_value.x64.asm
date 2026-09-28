@@ -26,14 +26,11 @@ Disassembly of section .text:
                	int3
 
 <echo_small>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movq	%rax, %rcx
-               	movq	(%rcx), %rax
-               	leave
+               	movq	%rdi, %rax
+               	shrq	$0x20, %rax
+               	movl	%edi, %ecx
+               	shlq	$0x20, %rax
+               	orq	%rcx, %rax
                	retq
 
 <main>:
@@ -41,7 +38,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movl	$0x7, %eax
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	-0x8(%rbp), %rdi
                	movl	%eax, (%rdi)
                	movl	$0x8, 0x4(%rdi)
                	cmpl	$0x7, %eax

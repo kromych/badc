@@ -1216,7 +1216,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v614 Imm(0)                                           -> x0
     v615 Extend { value=v5, kind=I32 }                    -> x0
     v616 BinopI { op=add, lhs=v5, rhs_imm=1 }             -> x2
-    v617 Imm(0)                                           -> x0
+    v617 Extend { value=v616, kind=I32, nsw }             -> x0
     terminator Jmp(b290)   (exit_acc=v616)
   block 290  start_pc=0
     v5   Phi { incoming=[b0:v3, b289:v616], kind=I64 }    -> x2

@@ -34,16 +34,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x18, %rsp
                	pushq	%rbx
-               	movl	$0xcb, %ebx
-               	leaq	-<rip>, %rax       # <addr>
-               	testq	%rax, %rax
-               	je	<addr>
                	movl	$0x3, %edi
-               	callq	*%rax
-               	addq	%rax, %rbx
-               	xorl	%eax, %eax
-               	testq	%rax, %rax
-               	jne	<addr>
+               	callq	<addr>
+               	leaq	0xcb(%rax), %rbx
                	leaq	-<rip>, %rax       # <addr>
                	movq	%rax, -0x8(%rbp)
                	movl	$0x4, %edi

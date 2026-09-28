@@ -26,16 +26,13 @@ Disassembly of section .text:
                	int3
 
 <free_tree>:
+               	testq	%rdi, %rdi
+               	je	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
                	pushq	%rbx
                	movq	%rdi, %rbx
-               	testq	%rbx, %rbx
-               	jne	<addr>
-               	popq	%rbx
-               	leave
-               	retq
                	movq	0x8(%rbx), %rdi
                	callq	<addr>
                	movq	0x10(%rbx), %rdi
@@ -45,6 +42,7 @@ Disassembly of section .text:
                	callq	<addr>
                	popq	%rbx
                	leave
+               	retq
                	retq
 
 <insert>:

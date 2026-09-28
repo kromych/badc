@@ -52,49 +52,43 @@ Disassembly of section .text:
 <f2>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
                	leaq	<rip>, %rax
                	movq	0x8(%rbp), %rcx
                	movq	%rcx, (%rax)
                	leaq	<rip>, %rax
                	leaq	<rip>, %rcx         # <addr>
                	movq	%rcx, (%rax)
-               	leaq	<rip>, %rbx
                	callq	<addr>
-               	movl	%eax, (%rbx)
+               	leaq	<rip>, %rcx
+               	movl	%eax, (%rcx)
                	leaq	<rip>, %rax
                	leaq	<rip>, %rcx         # <addr>
                	movq	%rcx, (%rax)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	incq	%rax
-               	popq	%rbx
-               	leave
+               	popq	%rbp
                	retq
 
 <f1>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
                	leaq	<rip>, %rax
                	movq	0x8(%rbp), %rcx
                	movq	%rcx, (%rax)
                	leaq	<rip>, %rax
                	leaq	<rip>, %rcx         # <addr>
                	movq	%rcx, (%rax)
-               	leaq	<rip>, %rbx
                	callq	<addr>
-               	movl	%eax, (%rbx)
+               	leaq	<rip>, %rcx
+               	movl	%eax, (%rcx)
                	leaq	<rip>, %rax
                	leaq	<rip>, %rcx         # <addr>
                	movq	%rcx, (%rax)
                	leaq	<rip>, %rax
                	movslq	(%rax), %rax
                	incq	%rax
-               	popq	%rbx
-               	leave
+               	popq	%rbp
                	retq
 
 <main>:

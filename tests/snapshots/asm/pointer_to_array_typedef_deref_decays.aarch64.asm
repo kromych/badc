@@ -18,15 +18,15 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x50
                	mov	x0, #-0x1               // =-1
-               	stur	x0, [x29, #-0x50]
-               	sub	x0, x29, #0x40
-               	stur	x0, [x29, #-0x48]
-               	ldur	x1, [x29, #-0x50]
+               	stur	x0, [x29, #-0x10]
+               	sub	x0, x29, #0x50
+               	stur	x0, [x29, #-0x8]
+               	ldur	x1, [x29, #-0x10]
                	str	x1, [x0]
-               	ldur	x1, [x29, #-0x50]
+               	ldur	x1, [x29, #-0x10]
                	str	x1, [x0, #0x38]
-               	ldur	x1, [x29, #-0x48]
-               	ldur	x2, [x29, #-0x50]
+               	ldur	x1, [x29, #-0x8]
+               	ldur	x2, [x29, #-0x10]
                	mov	x17, #0x4568            // =17768
                	movk	x17, #0x123, lsl #16
                	add	x2, x2, x17

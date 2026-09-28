@@ -50,79 +50,78 @@ Disassembly of section .text:
                	ret
 
 <across>:
-               	stp	d8, d9, [sp, #-0x90]!
+               	stp	d8, d9, [sp, #-0x80]!
                	stp	d10, d11, [sp, #0x10]
                	stp	d12, d13, [sp, #0x20]
                	stp	d14, d15, [sp, #0x30]
-               	stp	x29, x30, [sp, #0x80]
-               	add	x29, sp, #0x80
+               	stp	x29, x30, [sp, #0x70]
+               	add	x29, sp, #0x70
                	fmov	d8, d0
                	fmov	d9, d1
-               	fmov	d10, #2.00000000
+               	fmov	d3, #2.00000000
                	fmov	d0, #3.00000000
-               	fmul	d11, d8, d0
+               	fmul	d10, d8, d0
                	fmov	d1, #5.00000000
-               	fmul	d12, d8, d1
+               	fmul	d11, d8, d1
                	fmov	d2, #7.00000000
-               	fmul	d13, d8, d2
-               	fmul	d14, d9, d10
-               	fmul	d15, d9, d0
-               	fmul	d16, d9, d1
-               	str	d16, [sp, #0x78]
+               	fmul	d12, d8, d2
+               	fmul	d13, d9, d3
+               	fmul	d14, d9, d0
+               	fmul	d15, d9, d1
                	fmul	d16, d9, d2
-               	str	d16, [sp, #0x70]
-               	fadd	d16, d8, d9
                	str	d16, [sp, #0x68]
-               	fsub	d16, d8, d9
+               	fadd	d16, d8, d9
                	str	d16, [sp, #0x60]
-               	fmul	d16, d8, d9
+               	fsub	d16, d8, d9
                	str	d16, [sp, #0x58]
+               	fmul	d16, d8, d9
+               	str	d16, [sp, #0x50]
                	fmov	d0, #11.00000000
                	fadd	d16, d8, d0
-               	str	d16, [sp, #0x50]
+               	str	d16, [sp, #0x48]
                	fmov	d0, d8
                	fmov	d1, d9
                	bl	<addr>
-               	str	d0, [sp, #0x48]
+               	str	d0, [sp, #0x40]
                	fmov	d0, d9
                	fmov	d1, d8
                	bl	<addr>
-               	ldr	d16, [sp, #0x48]
+               	ldr	d16, [sp, #0x40]
                	fadd	d0, d16, d0
-               	fmadd	d0, d8, d10, d0
                	fmov	d1, #2.00000000
-               	fmadd	d0, d11, d1, d0
+               	fmadd	d0, d8, d1, d0
+               	fmov	d1, #2.00000000
+               	fmadd	d0, d10, d1, d0
                	fmov	d1, #3.00000000
-               	fmadd	d0, d12, d1, d0
+               	fmadd	d0, d11, d1, d0
                	fmov	d1, #4.00000000
-               	fmadd	d0, d13, d1, d0
+               	fmadd	d0, d12, d1, d0
                	fmov	d1, #5.00000000
-               	fmadd	d0, d14, d1, d0
+               	fmadd	d0, d13, d1, d0
                	fmov	d1, #6.00000000
-               	fmadd	d0, d15, d1, d0
+               	fmadd	d0, d14, d1, d0
                	fmov	d1, #7.00000000
-               	ldr	d16, [sp, #0x78]
-               	fmadd	d0, d16, d1, d0
+               	fmadd	d0, d15, d1, d0
                	fmov	d1, #8.00000000
-               	ldr	d16, [sp, #0x70]
-               	fmadd	d0, d16, d1, d0
-               	fmov	d1, #9.00000000
                	ldr	d16, [sp, #0x68]
                	fmadd	d0, d16, d1, d0
-               	fmov	d1, #10.00000000
+               	fmov	d1, #9.00000000
                	ldr	d16, [sp, #0x60]
                	fmadd	d0, d16, d1, d0
-               	fmov	d1, #11.00000000
+               	fmov	d1, #10.00000000
                	ldr	d16, [sp, #0x58]
                	fmadd	d0, d16, d1, d0
-               	fmov	d1, #12.00000000
+               	fmov	d1, #11.00000000
                	ldr	d16, [sp, #0x50]
                	fmadd	d0, d16, d1, d0
-               	ldp	x29, x30, [sp, #0x80]
+               	fmov	d1, #12.00000000
+               	ldr	d16, [sp, #0x48]
+               	fmadd	d0, d16, d1, d0
+               	ldp	x29, x30, [sp, #0x70]
                	ldp	d14, d15, [sp, #0x30]
                	ldp	d12, d13, [sp, #0x20]
                	ldp	d10, d11, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x90
+               	ldp	d8, d9, [sp], #0x80
                	ret
 
 <across_ref>:
@@ -224,109 +223,119 @@ Disassembly of section .text:
                	ret
 
 <main>:
-               	str	d8, [sp, #-0x40]!
-               	stp	x20, x21, [sp, #0x10]
-               	str	x22, [sp, #0x20]
-               	stp	x29, x30, [sp, #0x30]
-               	add	x29, sp, #0x30
-               	mov	x20, #0x0               // =0
-               	mov	x21, #0x3               // =3
-               	mov	x22, #0x5               // =5
-               	scvtf	d0, x21
-               	scvtf	d1, x22
+               	str	d8, [sp, #-0x20]!
+               	stp	x29, x30, [sp, #0x10]
+               	add	x29, sp, #0x10
+               	mov	x0, #0x3                // =3
+               	mov	x1, #0x5                // =5
+               	scvtf	d0, x0
+               	scvtf	d1, x1
                	bl	<addr>
                	mov	x0, #0x5cc              // =1484
                	scvtf	d1, x0
                	fcmp	d0, d1
                	b.eq	<addr>
-               	lsl	x0, x20, #1
+               	mov	x0, #0x0                // =0
+               	lsl	x0, x0, #1
                	add	x0, x0, #0x1
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x22, [sp, #0x20]
-               	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp], #0x40
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	d8, [sp], #0x20
                	ret
-               	scvtf	d0, x21
-               	scvtf	d1, x22
+               	mov	x0, #0x3                // =3
+               	scvtf	d0, x0
+               	mov	x0, #0x5                // =5
+               	scvtf	d1, x0
                	bl	<addr>
                	fmov	d8, d0
-               	mov	x0, x21
-               	mov	x1, x22
+               	mov	x0, #0x3                // =3
+               	mov	x1, #0x5                // =5
                	bl	<addr>
                	scvtf	d0, x0
                	fcmp	d8, d0
                	b.eq	<addr>
-               	lsl	x0, x20, #1
+               	mov	x0, #0x0                // =0
+               	lsl	x0, x0, #1
                	add	x0, x0, #0x2
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x22, [sp, #0x20]
-               	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp], #0x40
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	d8, [sp], #0x20
                	ret
-               	mov	x20, #0x1               // =1
-               	mov	x21, #-0x4              // =-4
-               	mov	x22, #0x9               // =9
-               	scvtf	d0, x21
-               	scvtf	d1, x22
+               	mov	x0, #-0x4               // =-4
+               	mov	x1, #0x9                // =9
+               	scvtf	d0, x0
+               	scvtf	d1, x1
                	bl	<addr>
                	mov	x0, #-0x6fb             // =-1787
                	scvtf	d1, x0
                	fcmp	d0, d1
-               	b.ne	<addr>
-               	scvtf	d0, x21
-               	scvtf	d1, x22
+               	b.eq	<addr>
+               	mov	x0, #0x1                // =1
+               	b	<addr>
+               	mov	x0, #-0x4               // =-4
+               	scvtf	d0, x0
+               	mov	x0, #0x9                // =9
+               	scvtf	d1, x0
                	bl	<addr>
                	fmov	d8, d0
-               	mov	x0, x21
-               	mov	x1, x22
+               	mov	x0, #-0x4               // =-4
+               	mov	x1, #0x9                // =9
                	bl	<addr>
                	scvtf	d0, x0
                	fcmp	d8, d0
-               	b.ne	<addr>
-               	mov	x20, #0x2               // =2
-               	mov	x21, #0x3e8             // =1000
-               	mov	x22, #-0x4d             // =-77
-               	scvtf	d0, x21
-               	scvtf	d1, x22
+               	b.eq	<addr>
+               	mov	x0, #0x1                // =1
+               	b	<addr>
+               	mov	x0, #0x3e8              // =1000
+               	mov	x1, #-0x4d              // =-77
+               	scvtf	d0, x0
+               	scvtf	d1, x1
                	bl	<addr>
                	mov	x0, #-0x62fb            // =-25339
                	movk	x0, #0xfac2, lsl #16
                	scvtf	d1, x0
                	fcmp	d0, d1
-               	b.ne	<addr>
-               	scvtf	d0, x21
-               	scvtf	d1, x22
+               	b.eq	<addr>
+               	mov	x0, #0x2                // =2
+               	b	<addr>
+               	mov	x0, #0x3e8              // =1000
+               	scvtf	d0, x0
+               	mov	x0, #-0x4d              // =-77
+               	scvtf	d1, x0
                	bl	<addr>
                	fmov	d8, d0
-               	mov	x0, x21
-               	mov	x1, x22
+               	mov	x0, #0x3e8              // =1000
+               	mov	x1, #-0x4d              // =-77
                	bl	<addr>
                	scvtf	d0, x0
                	fcmp	d8, d0
-               	b.ne	<addr>
-               	mov	x20, #0x3               // =3
-               	mov	x21, #0x0               // =0
-               	mov	x22, #0x1               // =1
-               	scvtf	d0, x21
-               	scvtf	d1, x22
+               	b.eq	<addr>
+               	mov	x0, #0x2                // =2
+               	b	<addr>
+               	mov	x0, #0x0                // =0
+               	mov	x1, #0x1                // =1
+               	scvtf	d0, x0
+               	scvtf	d1, x1
                	bl	<addr>
                	mov	x0, #0x81               // =129
                	scvtf	d1, x0
                	fcmp	d0, d1
-               	b.ne	<addr>
-               	scvtf	d0, x21
-               	scvtf	d1, x22
+               	b.eq	<addr>
+               	mov	x0, #0x3                // =3
+               	b	<addr>
+               	mov	x0, #0x0                // =0
+               	scvtf	d0, x0
+               	mov	x0, #0x1                // =1
+               	scvtf	d1, x0
                	bl	<addr>
                	fmov	d8, d0
-               	mov	x0, x21
-               	mov	x1, x22
+               	mov	x0, #0x0                // =0
+               	mov	x1, #0x1                // =1
                	bl	<addr>
                	scvtf	d0, x0
                	fcmp	d8, d0
-               	b.ne	<addr>
+               	b.eq	<addr>
+               	mov	x0, #0x3                // =3
+               	b	<addr>
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x30]
-               	ldr	x22, [sp, #0x20]
-               	ldp	x20, x21, [sp, #0x10]
-               	ldr	d8, [sp], #0x40
+               	ldp	x29, x30, [sp, #0x10]
+               	ldr	d8, [sp], #0x20
                	ret

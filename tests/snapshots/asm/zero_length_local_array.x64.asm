@@ -53,19 +53,19 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leave
                	retq
-               	leaq	-0x18(%rbp), %rcx
+               	leaq	-0x10(%rbp), %rcx
                	movl	$0x5, %eax
                	movl	%eax, (%rcx)
                	movl	$0x6, %edx
                	movl	%edx, 0x4(%rcx)
                	movl	$0x7, 0x8(%rcx)
-               	leaq	-0x8(%rbp), %rsi
+               	leaq	-0x18(%rbp), %rsi
                	cmpq	%rcx, %rsi
                	je	<addr>
                	movslq	(%rcx), %rax
                	movslq	0x4(%rcx), %rcx
                	addq	%rcx, %rax
-               	leaq	-0x18(%rbp), %rcx
+               	leaq	-0x10(%rbp), %rcx
                	movslq	0x8(%rcx), %rcx
                	addq	%rcx, %rax
                	cmpl	$0x12, %eax

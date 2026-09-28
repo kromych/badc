@@ -63,10 +63,50 @@ pub(super) fn emit_fp_minus_off(code: &mut Vec<u8>, dst: Reg, delta: u32) {
     emit_reg_disp(code, dst, Reg(29), -i64::from(delta));
 }
 
+/// The rest of `disp` that `fits` accepts once one ADD / SUB of the nearer
+/// 4 KiB multiple forms the base, where building all of `disp` takes two.
+fn split_disp(disp: i64, fits: impl Fn(i64) -> bool) -> Option<i64> {
+    let whole = disp.unsigned_abs();
+    if whole < 4096 || whole.is_multiple_of(4096) || whole >= 1 << 24 {
+        return None;
+    }
+    let lo = disp & 0xfff;
+    [lo, lo - 4096]
+        .into_iter()
+        .filter(|&rest| fits(rest) && (disp - rest).unsigned_abs() < 1 << 24)
+        .min_by_key(|&rest| (disp - rest).unsigned_abs())
+}
+
+/// Instructions [`emit_reg_disp`] takes for `disp`, the wide form as three.
+fn reg_disp_len(disp: i64) -> u32 {
+    match disp.unsigned_abs() {
+        whole if whole >= 1 << 24 => 3,
+        whole if whole < 4096 || whole.is_multiple_of(4096) => 1,
+        _ => 2,
+    }
+}
+
+/// Instructions building a base for accesses at `disp` whose offsets `fits` accepts.
+fn base_len(disp: i64, fits: impl Fn(i64) -> bool) -> u32 {
+    if fits(disp) {
+        0
+    } else if split_disp(disp, &fits).is_some() {
+        1
+    } else {
+        reg_disp_len(disp)
+    }
+}
+
 /// Base and offset of an `op` access at `[base + disp]`; `t` differs from `base`.
 fn mem_base(code: &mut Vec<u8>, op: MemOp, base: Reg, disp: i64, t: Reg) -> (Reg, MemOff) {
     if let Some(off) = op.offset(disp) {
         return (base, off);
+    }
+    if let Some(rest) = split_disp(disp, |d| op.offset(d).is_some())
+        && let Some(off) = op.offset(rest)
+    {
+        emit_reg_disp(code, t, base, disp - rest);
+        return (t, off);
     }
     emit_reg_disp(code, t, base, disp);
     (t, op.scaled(0))
@@ -392,7 +432,9 @@ pub(super) fn int_unit_ops(width: u32) -> (MemOp, MemOp) {
 }
 
 /// One load / store pair of `width` bytes (8, 4, 2 or 1) moving
-/// `[sbase + soff]` to `[dbase + doff]` through `temp`.
+/// `[sbase + soff]` to `[dbase + doff]` through `temp`; an offset the
+/// width does not divide takes the unscaled form, which the caller has
+/// checked reaches it.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_copy_unit(
     code: &mut Vec<u8>,
@@ -404,42 +446,144 @@ pub(super) fn emit_copy_unit(
     doff: u32,
 ) {
     let (ld, st) = int_unit_ops(width);
-    emit(code, enc_mem(ld, temp.0, sbase, ld.scaled(soff)));
-    emit(code, enc_mem(st, temp.0, dbase, st.scaled(doff)));
+    let at = |op: MemOp, off: u32| op.offset(off.into()).unwrap_or_else(|| op.scaled(off));
+    emit(code, enc_mem(ld, temp.0, sbase, at(ld, soff)));
+    emit(code, enc_mem(st, temp.0, dbase, at(st, doff)));
 }
 
-/// Bytes one window of [`emit_block_copy`] spans: 8-aligned and below 4096.
+/// Bytes one window of [`emit_block_copy`] spans through single units:
+/// 8-aligned and below 4096, the reach of the `add` that advances a base.
 pub(super) const COPY_WINDOW: u32 = 4088;
 
-/// Copy `size` bytes from `[sbase]` to `[dbase]` through `temp`; both
-/// bases advance past every window but the last.
+/// The bytes a load or store pair of `unit`-byte registers moves; the pair
+/// forms take words and doublewords only.
+pub(super) fn pair_bytes(unit: u32) -> Option<u32> {
+    (unit >= 4).then_some(2 * unit)
+}
+
+/// The widest access of a copy at `unit` through `temps` registers: a pair
+/// when two are given and the pair forms take the unit, else the unit.
+pub(super) fn copy_widest(unit: u32, temps: usize) -> u32 {
+    match pair_bytes(unit) {
+        Some(bytes) if temps >= 2 => bytes,
+        _ => unit,
+    }
+}
+
+/// Copy `size` bytes from `[sbase]` to `[dbase]` through `temps`: a pair
+/// per [`copy_widest`] access when two are given, else one unit per access,
+/// the tail through halving widths. Past one window the bases advance,
+/// which the result reports.
 pub(super) fn emit_block_copy(
     code: &mut Vec<u8>,
     unit: u32,
-    temp: Reg,
+    temps: &[Reg],
     sbase: Reg,
     dbase: Reg,
     size: u32,
-) {
+) -> bool {
+    let widest = copy_widest(unit, temps.len());
+    // A pair's scaled offset reaches 63 units, so 32 pairs stay inside it.
+    let window = if widest > unit {
+        32 * widest
+    } else {
+        COPY_WINDOW
+    };
     let mut pos = 0u32;
+    let mut advanced = false;
     while pos < size {
-        let run = (size - pos).min(COPY_WINDOW);
-        let whole = run - run % unit;
-        for off in (0..whole).step_by(unit as usize) {
-            emit_copy_unit(code, unit, temp, sbase, off, dbase, off);
-        }
-        for off in whole..run {
-            emit_copy_unit(code, 1, temp, sbase, off, dbase, off);
+        let run = (size - pos).min(window);
+        let mut off = 0u32;
+        while off < run {
+            let mut w = widest;
+            while w > run - off {
+                w /= 2;
+            }
+            if w > unit {
+                let (t1, t2) = (temps[0], temps[1]);
+                emit(code, enc_ldp_unit_off(unit, t1, t2, sbase, off as i32));
+                emit(code, enc_stp_unit_off(unit, t1, t2, dbase, off as i32));
+            } else {
+                emit_copy_unit(code, w, temps[0], sbase, off, dbase, off);
+            }
+            off += w;
         }
         pos += run;
         if pos < size {
             emit(code, enc_add_imm(sbase, sbase, run));
             emit(code, enc_add_imm(dbase, dbase, run));
+            advanced = true;
         }
+    }
+    advanced
+}
+
+/// Registers a lowering borrows at one site: the free ones of its
+/// candidate list (`site_registers`) first, then ones holding a live
+/// value, each saved below sp and restored by [`Self::restore`].
+pub(super) struct SiteRegs {
+    free: Vec<u8>,
+    held: Vec<u8>,
+    next_free: usize,
+    saved: Vec<Reg>,
+}
+
+impl SiteRegs {
+    pub(super) fn new(
+        alloc: &Allocation,
+        v: super::super::ir::ValueId,
+        candidates: &[u8],
+        taken: &[u8],
+        fixed: super::FixedRegs,
+    ) -> Self {
+        let (free, held) =
+            super::ssa::emit_common::site_registers(alloc, v, candidates, taken, fixed);
+        Self {
+            free,
+            held,
+            next_free: 0,
+            saved: Vec::new(),
+        }
+    }
+
+    /// The next free register, if any.
+    pub(super) fn free(&mut self) -> Option<Reg> {
+        let r = self.free.get(self.next_free).copied()?;
+        self.next_free += 1;
+        Some(Reg(r))
+    }
+
+    /// The next free register, else one saved on the stack; none once the
+    /// candidates are exhausted.
+    pub(super) fn take(&mut self, code: &mut Vec<u8>) -> Option<Reg> {
+        if let Some(r) = self.free() {
+            return Some(r);
+        }
+        let r = Reg(self.held.get(self.saved.len()).copied()?);
+        emit(code, enc_str_pre(r, Reg(31), -16));
+        self.saved.push(r);
+        Some(r)
+    }
+
+    /// Restore the saved registers, the last saved first.
+    pub(super) fn restore(&self, code: &mut Vec<u8>) {
+        for &r in self.saved.iter().rev() {
+            emit(code, enc_ldr_post(r, Reg(31), 16));
+        }
+    }
+
+    /// Whether `r` is a saved register, which the restore overwrites.
+    pub(super) fn borrowed(&self, r: Reg) -> bool {
+        self.saved.contains(&r)
+    }
+
+    /// The bytes the saves moved sp down by.
+    pub(super) fn saved_bytes(&self) -> u32 {
+        16 * self.saved.len() as u32
     }
 }
 
-fn enc_load_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
+pub(super) fn enc_load_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
     let (ld, _) = int_unit_ops(width);
     enc_mem(ld, rt.0, base, ld.scaled(off))
 }
@@ -664,8 +808,8 @@ fn over_aligned_region_off(off: i64, func: &FunctionSsa, frame: Frame) -> Option
     }
     func.over_aligned
         .iter()
-        .find(|&&(s, _)| s == off)
-        .map(|&(_, region_off)| region_off)
+        .find(|m| m.slot == off)
+        .map(|m| m.off)
 }
 
 pub(super) fn fp_store_op(width: u32) -> MemOp {
@@ -682,14 +826,20 @@ pub(crate) fn object_base(
     code: &mut Vec<u8>,
     base: Reg,
     disp: i64,
-    mut accesses: impl Iterator<Item = (MemOp, u32)>,
+    accesses: impl Iterator<Item = (MemOp, u32)> + Clone,
     t: Reg,
 ) -> (Reg, i64) {
-    if accesses.all(|(op, off)| op.offset(disp + i64::from(off)).is_some()) {
+    let fits = |d: i64| {
+        accesses
+            .clone()
+            .all(|(op, off)| op.offset(d + i64::from(off)).is_some())
+    };
+    if fits(disp) {
         return (base, disp);
     }
-    emit_reg_disp(code, t, base, disp);
-    (t, 0)
+    let rest = split_disp(disp, fits).unwrap_or(0);
+    emit_reg_disp(code, t, base, disp - rest);
+    (t, rest)
 }
 
 /// [`emit_agg_store_fp`] into the object at `base + disp`.
@@ -724,21 +874,77 @@ pub(super) fn emit_agg_store_fp_at(
     emit_agg_store_fp(code, src, base, off, width, align, strict_align, tmp);
 }
 
-/// Base and displacement of local slot `off`; sp only for an object past a
-/// realignment (C11 6.7.5).
-pub(super) fn local_slot_base(off: i64, func: &FunctionSsa, frame: Frame) -> (Reg, i64) {
-    match over_aligned_region_off(off, func, frame) {
-        None => (Reg(29), local_slot_off(off, func, frame)),
-        Some(region_off) if frame.align_region_off != 0 => {
-            (Reg(29), frame.align_region_off + region_off)
+/// A frame byte's displacements from fp in the static layout and from sp
+/// where sp keeps its prologue value (not `Frame::dynamic_sp`). An object in
+/// the realigned region (C11 6.7.5) has no fp form.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct FrameLoc {
+    fp: Option<i64>,
+    sp: Option<i64>,
+}
+
+impl FrameLoc {
+    /// The byte at `fp + disp` in the static layout.
+    pub(super) fn at_fp(frame: Frame, disp: i64) -> Self {
+        let sp = (!frame.dynamic_sp).then(|| disp + i64::from(frame.frame_bytes));
+        Self { fp: Some(disp), sp }
+    }
+
+    /// The same byte while sp stands `bytes` below the prologue's value.
+    pub(super) fn sp_lowered(self, bytes: u32) -> Self {
+        Self {
+            sp: self.sp.map(|d| d + i64::from(bytes)),
+            ..self
         }
-        Some(region_off) => (Reg(31), region_off.max(0)),
+    }
+
+    /// The form whose base costs the fewest instructions ([`base_len`]), fp on a tie.
+    fn pick(self, fits: impl Fn(i64) -> bool) -> (Reg, i64) {
+        [(Reg(29), self.fp), (Reg(31), self.sp)]
+            .into_iter()
+            .filter_map(|(base, disp)| Some((base, disp?)))
+            .min_by_key(|&(_, disp)| base_len(disp, &fits))
+            .expect("a frame location has an address")
     }
 }
 
-/// The address of a local slot, an over-aligned object redirected to its
-/// region (C11 6.7.5). Callers addressing only synthetic / parameter
-/// slots use `emit_local_addr_fp`.
+/// `op` between `rt` and the frame byte `loc`; `t` as for [`emit_mem`].
+pub(super) fn emit_frame_mem(code: &mut Vec<u8>, op: MemOp, rt: u8, loc: FrameLoc, t: Reg) {
+    let (base, disp) = loc.pick(|d| op.offset(d).is_some());
+    emit_mem(code, op, rt, base, disp, t);
+}
+
+/// [`object_base`] of the object at `loc`.
+pub(super) fn frame_object_base(
+    code: &mut Vec<u8>,
+    loc: FrameLoc,
+    accesses: impl Iterator<Item = (MemOp, u32)> + Clone,
+    t: Reg,
+) -> (Reg, i64) {
+    let (base, disp) = loc.pick(|d| {
+        accesses
+            .clone()
+            .all(|(op, off)| op.offset(d + i64::from(off)).is_some())
+    });
+    object_base(code, base, disp, accesses, t)
+}
+
+/// Local slot `off`, an over-aligned object redirected to its region (C11
+/// 6.7.5).
+pub(super) fn local_slot(off: i64, func: &FunctionSsa, frame: Frame) -> FrameLoc {
+    match over_aligned_region_off(off, func, frame) {
+        None => FrameLoc::at_fp(frame, local_slot_off(off, func, frame)),
+        Some(region_off) if frame.align_region_off != 0 => {
+            FrameLoc::at_fp(frame, frame.align_region_off + region_off)
+        }
+        Some(region_off) => FrameLoc {
+            fp: None,
+            sp: Some(region_off.max(0)),
+        },
+    }
+}
+
+/// The address of local slot `off` into `dst`.
 pub(super) fn emit_local_addr(
     code: &mut Vec<u8>,
     dst: Place,
@@ -746,21 +952,11 @@ pub(super) fn emit_local_addr(
     func: &FunctionSsa,
     frame: Frame,
 ) -> Emit {
-    let (base, disp) = local_slot_base(off, func, frame);
-    emit_addr_into(code, dst, base, disp, frame)
+    emit_frame_addr(code, dst, local_slot(off, func, frame), frame)
 }
 
-pub(super) fn emit_local_addr_fp(
-    code: &mut Vec<u8>,
-    dst: Place,
-    off: i64,
-    func: &FunctionSsa,
-    frame: Frame,
-) -> Emit {
-    emit_addr_into(code, dst, Reg(29), local_slot_off(off, func, frame), frame)
-}
-
-fn emit_addr_into(code: &mut Vec<u8>, dst: Place, base: Reg, disp: i64, frame: Frame) -> Emit {
+/// The address of `loc` into `dst`.
+pub(super) fn emit_frame_addr(code: &mut Vec<u8>, dst: Place, loc: FrameLoc, frame: Frame) -> Emit {
     let rd = match dst {
         Place::IntReg(r) => Reg(r),
         Place::Spill(_) => Reg(16),
@@ -768,6 +964,7 @@ fn emit_addr_into(code: &mut Vec<u8>, dst: Place, base: Reg, disp: i64, frame: F
             return fail("LocalAddr: dst not int reg / spill");
         }
     };
+    let (base, disp) = loc.pick(|_| false);
     emit_reg_disp(code, rd, base, disp);
     store_spilled_int(code, frame, dst, rd);
     Ok(())
@@ -1023,8 +1220,9 @@ pub(super) fn emit_load(
     Ok(())
 }
 
-/// A base the binary128 sequences, which move sp, may address.
-fn binary128_base(code: &mut Vec<u8>, base: Reg, disp: i64, t: Reg) -> (Reg, i64) {
+/// A base for the binary128 object at `loc` that its sequences, which move sp, may address.
+fn binary128_base(code: &mut Vec<u8>, loc: FrameLoc, t: Reg) -> (Reg, i64) {
+    let (base, disp) = loc.pick(|d| LDR_X.offset(d).is_some() && LDR_X.offset(d + 8).is_some());
     if base.0 != 31 {
         return (base, disp);
     }
@@ -1045,7 +1243,7 @@ pub(super) fn emit_load_local(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
-    let (base, disp) = local_slot_base(off, func, frame);
+    let loc = local_slot(off, func, frame);
     let t = scratch.primary;
     if let LoadKind::F32 | LoadKind::F64 | LoadKind::V128 = kind {
         let (op, what) = match kind {
@@ -1056,7 +1254,7 @@ pub(super) fn emit_load_local(
         let Some(dd) = fp_or_spill_dst(dst, frame) else {
             return fail(what);
         };
-        emit_mem(code, op, dd, base, disp, t);
+        emit_frame_mem(code, op, dd, loc, t);
         if let LoadKind::V128 = kind {
             propagate_v128(code, frame, dst, dd, scratch.primary);
             return Ok(());
@@ -1073,7 +1271,7 @@ pub(super) fn emit_load_local(
         let Some(dd) = fp_or_spill_dst(dst, frame) else {
             return fail("LoadLocal F128: dst not fp reg / spill");
         };
-        let (base, disp) = binary128_base(code, base, disp, t);
+        let (base, disp) = binary128_base(code, loc, t);
         super::binary128::emit_narrow_load(code, dd, base, disp, None);
         store_spilled_fp(code, frame, dst, dd);
         return Ok(());
@@ -1086,7 +1284,7 @@ pub(super) fn emit_load_local(
     let Some(op) = int_load_op(kind) else {
         return fail("LoadLocal: no aarch64 access for the kind");
     };
-    emit_mem(code, op, rd.0, base, disp, t);
+    emit_frame_mem(code, op, rd.0, loc, t);
     store_spilled_int(code, frame, dst, rd);
     Ok(())
 }
@@ -1107,24 +1305,15 @@ pub(super) fn emit_store_local(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
-    let (base, disp) = local_slot_base(off, func, frame);
+    let loc = local_slot(off, func, frame);
     let t = scratch.secondary;
     let value_place = place_of(alloc, value);
     if let Some((op, rs)) = int_store_source(v, kind, value, dst, alloc) {
-        emit_mem(code, op, rs.0, base, disp, t);
+        emit_frame_mem(code, op, rs.0, loc, t);
         return propagate_int(code, frame, dst, rs);
     }
     if matches!(kind, StoreKind::F32) {
-        return emit_store_local_f32(
-            code,
-            dst,
-            (base, disp),
-            value,
-            value_place,
-            alloc,
-            frame,
-            scratch,
-        );
+        return emit_store_local_f32(code, dst, loc, value, value_place, alloc, frame, scratch);
     }
     if matches!(kind, StoreKind::V128) {
         let Some(qn) = materialize_v128(
@@ -1136,7 +1325,7 @@ pub(super) fn emit_store_local(
         ) else {
             return fail("StoreLocal V128: value not fp reg / spill / int reg");
         };
-        emit_mem(code, STR_Q, qn, base, disp, t);
+        emit_frame_mem(code, STR_Q, qn, loc, t);
         propagate_v128(code, frame, dst, qn, scratch.primary);
         return Ok(());
     }
@@ -1149,9 +1338,9 @@ pub(super) fn emit_store_local(
             });
         };
         if let StoreKind::F64 = kind {
-            emit_mem(code, STR_D, dn, base, disp, t);
+            emit_frame_mem(code, STR_D, dn, loc, t);
         } else {
-            let (base, disp) = binary128_base(code, base, disp, t);
+            let (base, disp) = binary128_base(code, loc, t);
             super::binary128::emit_widen_store(code, dn, base, disp, None);
         }
         propagate_fp(code, frame, dst, dn);
@@ -1173,7 +1362,7 @@ pub(super) fn emit_store_local(
     };
     // The accumulator keeps the full source value: an assignment yields
     // the stored value before any re-narrowing on read-back (C99 6.5.16p3).
-    emit_mem(code, op, rv.0, base, disp, t);
+    emit_frame_mem(code, op, rv.0, loc, t);
     propagate_int(code, frame, dst, rv)
 }
 
@@ -1186,7 +1375,7 @@ pub(super) fn emit_store_local(
 fn emit_store_local_f32(
     code: &mut Vec<u8>,
     dst: Place,
-    (base, disp): (Reg, i64),
+    loc: FrameLoc,
     value: u32,
     value_place: Place,
     alloc: &Allocation,
@@ -1198,7 +1387,7 @@ fn emit_store_local_f32(
         let Some(sn) = materialize_fp_f32(code, value_place, frame.fp_scratch[0], frame) else {
             return fail("StoreLocal F32: value not fp reg / spill");
         };
-        emit_mem(code, STR_S, sn, base, disp, t);
+        emit_frame_mem(code, STR_S, sn, loc, t);
         if let Some(rd) = fp_reg(dst) {
             if rd != sn {
                 emit(code, super::encode::enc_fmov_s_s(rd, sn));
@@ -1222,7 +1411,7 @@ fn emit_store_local_f32(
         }
     };
     emit(code, super::encode::enc_fcvt_s_d(frame.fp_scratch[1], dn));
-    emit_mem(code, STR_S, frame.fp_scratch[1], base, disp, t);
+    emit_frame_mem(code, STR_S, frame.fp_scratch[1], loc, t);
     if let Some(rd) = fp_reg(dst) {
         if rd != dn {
             emit(code, enc_fmov_d_to_x(scratch.primary, dn));
@@ -1236,7 +1425,7 @@ fn emit_store_local_f32(
 
 /// Propagate a stored integer value, the c5 accumulator, to `dst` when the
 /// allocator parked it elsewhere; `Err` for an FP destination.
-fn propagate_int(code: &mut Vec<u8>, frame: Frame, dst: Place, rv: Reg) -> Emit {
+pub(super) fn propagate_int(code: &mut Vec<u8>, frame: Frame, dst: Place, rv: Reg) -> Emit {
     match dst {
         Place::IntReg(r) if r != rv.0 => emit_mov_reg(code, Reg(r), rv),
         Place::IntReg(_) | Place::None => {}

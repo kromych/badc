@@ -115,7 +115,7 @@ impl<'a> Walker<'a> {
         } else {
             self.vector_broadcast_operand(b, rhs, src_elem_ty)?
         };
-        let slot = b.alloc_synthetic_struct(size);
+        let slot = b.alloc_synthetic_struct(size, self.vector_temp_align(ty));
         let dst = b.local_addr(slot);
         for i in 0..lanes {
             let off = i * elem_size;
@@ -160,7 +160,7 @@ impl<'a> Walker<'a> {
         let lk = load_kind_for(elem_ty, self.target);
         let sk = store_kind_for(elem_ty, self.target);
         let src = self.walk_copy_operand(b, child)?;
-        let slot = b.alloc_synthetic_struct(size);
+        let slot = b.alloc_synthetic_struct(size, self.vector_temp_align(ty));
         let dst = b.local_addr(slot);
         for i in 0..lanes {
             let off = i * elem_size;
@@ -180,6 +180,13 @@ impl<'a> Walker<'a> {
             b.store(da, r, sk);
         }
         Ok(dst)
+    }
+
+    /// The alignment a vector temporary of `ty` is placed at: its type's,
+    /// up to the 16 bytes of the widest access badc makes to one, which
+    /// `-mstrict-align` bounds by the type's alignment.
+    fn vector_temp_align(&self, ty: i64) -> i64 {
+        i64::from(self.struct_align(ty).min(16))
     }
 
     /// Lower an x86 SIMD builtin to its instruction. A 128-bit operand is
@@ -209,7 +216,7 @@ impl<'a> Walker<'a> {
             return Ok(b.imm(0));
         }
         let result_bytes = if form.returns_vector() { 16 } else { 8 };
-        let slot = b.alloc_synthetic_struct(result_bytes);
+        let slot = b.alloc_synthetic_struct(result_bytes, result_bytes);
         let dst = b.local_addr(slot);
         ops.insert(0, dst);
         b.x86_simd(op, imm, ops);
@@ -237,7 +244,7 @@ impl<'a> Walker<'a> {
         let lhs_addr = self.walk_copy_operand(b, lhs)?;
         let rhs_addr = self.walk_copy_operand(b, rhs)?;
         let size = self.struct_size(ty);
-        let slot = b.alloc_synthetic_struct(size);
+        let slot = b.alloc_synthetic_struct(size, self.vector_temp_align(ty));
         let dst = b.local_addr(slot);
         // Widest-chunk cover: (width, load kind, store kind).
         const CHUNKS: [(i64, LoadKind, StoreKind); 4] = [

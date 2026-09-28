@@ -32,12 +32,8 @@ Disassembly of section .text:
                	shrq	$0x3e, %rdx
                	shlq	$0x2, %rdx
                	addq	%rdx, %rcx
-               	pushq	%rax
-               	movzbq	(%rcx), %rax
-               	movb	%al, (%rdi)
-               	movzbq	0x1(%rcx), %rax
-               	movb	%al, 0x1(%rdi)
-               	popq	%rax
+               	movzwq	(%rcx), %r10
+               	movw	%r10w, (%rdi)
                	movslq	0x8(%rax), %rdx
                	movzbq	0x2(%rcx), %rsi
                	addq	%rsi, %rdx

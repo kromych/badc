@@ -136,12 +136,8 @@ Disassembly of section .text:
                	retq
                	leaq	-0x10(%rbp), %r9
                	leaq	<rip>, %rbx
-               	pushq	%rax
-               	movq	(%rbx), %rax
-               	movq	%rax, (%r9)
-               	movq	0x8(%rbx), %rax
-               	movq	%rax, 0x8(%r9)
-               	popq	%rax
+               	movups	(%rbx), %xmm14
+               	movups	%xmm14, (%r9)
                	movq	%rcx, %xmm15
                	movq	%rax, %xmm0
                	addsd	%xmm15, %xmm0

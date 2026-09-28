@@ -26,6 +26,8 @@ Disassembly of section .text:
                	int3
 
 <solve>:
+               	cmpl	$0x8, %esi
+               	je	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
                	pushq	%r14
@@ -34,15 +36,6 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	%rdi, %r13
                	movslq	%esi, %r12
-               	cmpl	$0x8, %r12d
-               	jne	<addr>
-               	movl	$0x1, %eax
-               	popq	%rbx
-               	popq	%r12
-               	popq	%r13
-               	popq	%r14
-               	popq	%rbp
-               	retq
                	xorl	%ebx, %ebx
                	movq	%rbx, %r14
                	xorl	%eax, %eax
@@ -78,6 +71,8 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%rbp
+               	retq
+               	movl	$0x1, %eax
                	retq
 
 <main>:

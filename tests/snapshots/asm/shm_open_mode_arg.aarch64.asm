@@ -14,19 +14,14 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	stp	x20, x21, [sp, #-0xf0]!
-               	str	x22, [sp, #0x10]
-               	stp	x29, x30, [sp, #0xe0]
-               	add	x29, sp, #0xe0
-               	mov	x20, #0x0               // =0
-               	sub	x21, x29, #0xc0
-               	adrp	x22, <page>
-               	add	x22, x22, <lo12>
+               	stp	x20, x21, [sp, #-0xe0]!
+               	stp	x29, x30, [sp, #0xd0]
+               	add	x29, sp, #0xd0
                	bl	<addr>
-               	sxtw	x0, w0
                	mov	x2, x0
-               	mov	x0, x21
-               	mov	x1, x22
+               	sub	x0, x29, #0xc0
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	bl	<addr>
                	sub	x0, x29, #0xc0
                	bl	<addr>
@@ -38,24 +33,22 @@ Disassembly of section .text:
                	cmp	w21, #0x0
                	b.ge	<addr>
                	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp, #0xe0]
-               	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0xf0
+               	ldp	x29, x30, [sp, #0xd0]
+               	ldp	x20, x21, [sp], #0xe0
                	ret
-               	sxtw	x0, w21
                	sub	x1, x29, #0x80
+               	mov	x0, x21
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x20, #0x2               // =2
-               	sxtw	x0, w21
+               	mov	x0, x21
                	bl	<addr>
                	sub	x0, x29, #0xc0
                	bl	<addr>
                	mov	x0, x20
-               	ldp	x29, x30, [sp, #0xe0]
-               	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0xf0
+               	ldp	x29, x30, [sp, #0xd0]
+               	ldp	x20, x21, [sp], #0xe0
                	ret
                	sub	x0, x29, #0x80
                	ldrsw	x0, [x0, #0x10]
@@ -63,4 +56,6 @@ Disassembly of section .text:
                	cmp	w0, #0x180
                	b.eq	<addr>
                	mov	x20, #0x3               // =3
+               	b	<addr>
+               	mov	x20, #0x0               // =0
                	b	<addr>

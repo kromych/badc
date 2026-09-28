@@ -40,7 +40,7 @@ Disassembly of section .text:
                	movl	$0x6, %edi
                	movl	$0x7, %esi
                	callq	<addr>
-               	movslq	%eax, %rsi
+               	movq	%rax, %rsi
                	testl	%esi, %esi
                	je	<addr>
                	leaq	<rip>, %rdi
@@ -51,7 +51,7 @@ Disassembly of section .text:
                	retq
                	movq	$-0x1, %rdi
                	callq	<addr>
-               	movslq	%eax, %rsi
+               	movq	%rax, %rsi
                	testl	%esi, %esi
                	je	<addr>
                	leaq	<rip>, %rdi
@@ -62,7 +62,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x5, %edi
                	callq	<addr>
-               	movslq	%eax, %rsi
+               	movq	%rax, %rsi
                	testl	%esi, %esi
                	je	<addr>
                	leaq	<rip>, %rdi

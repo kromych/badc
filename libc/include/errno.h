@@ -275,4 +275,4 @@
 #pragma binding(msvcrt::errno_location, "_errno")
 #endif
 
-int *errno_location();
+int *errno_location(void);

@@ -28,51 +28,51 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   LocalAddr(-5)                                    -> x0
+    v1   LocalAddr(-3)                                    -> x0
     v2   Imm(3)                                           -> x0
     v3   Imm(0)                                           -> x0
-    v4   LocalAddr(-5)                                    -> x7
+    v4   LocalAddr(-3)                                    -> x7
     v5   BinopI { op=add, lhs=v4, rhs_imm=8 }             -> x0
     v6   Imm(4)                                           -> x0
     v7   Store { addr=v4, disp=8, value=v6, kind=I64 }    -> -
-    v8   LocalAddr(-5)                                    -> x0
+    v8   LocalAddr(-3)                                    -> x0
     v9   BinopI { op=add, lhs=v8, rhs_imm=16 }            -> x0
     v10  Imm(5)                                           -> x0
     v11  Imm(0)                                           -> x0
-    v12  LocalAddr(-5)                                    -> x0
+    v12  LocalAddr(-3)                                    -> x0
     v13  Call { target_pc=0, args=[v4], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v14  LocalAddr(-5)                                    -> x1
+    v14  LocalAddr(-3)                                    -> x1
     v15  Imm(0)                                           -> x1
     v16  Imm(6)                                           -> x1
     v17  BinopI { op=add, lhs=v13, rhs_imm=6 }            -> x0
-    v18  LocalAddr(-5)                                    -> x1
+    v18  LocalAddr(-3)                                    -> x1
     v19  BinopI { op=add, lhs=v18, rhs_imm=16 }           -> x1
     v20  Imm(0)                                           -> x1
     v21  BinopI { op=add, lhs=v17, rhs_imm=5 }            -> x3
     v22  Imm(0)                                           -> x0
-    v23  LocalAddr(-2)                                    -> x0
+    v23  LocalAddr(-5)                                    -> x0
     v24  Imm(7)                                           -> x0
     v25  Imm(0)                                           -> x0
-    v26  LocalAddr(-2)                                    -> x7
+    v26  LocalAddr(-5)                                    -> x7
     v27  BinopI { op=add, lhs=v26, rhs_imm=8 }            -> x0
     v28  Imm(2)                                           -> x0
     v29  Store { addr=v26, disp=8, value=v28, kind=I64 }  -> -
     v30  Imm(0)                                           -> x0
-    v31  LocalAddr(-2)                                    -> x0
+    v31  LocalAddr(-5)                                    -> x0
     v32  Call { target_pc=1, args=[v26], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v33  LocalAddr(-2)                                    -> x1
+    v33  LocalAddr(-5)                                    -> x1
     v34  BinopI { op=add, lhs=v33, rhs_imm=8 }            -> x1
     v35  Imm(0)                                           -> x1
     v36  BinopI { op=add, lhs=v32, rhs_imm=2 }            -> x0
-    v37  LocalAddr(-2)                                    -> x1
+    v37  LocalAddr(-5)                                    -> x1
     v38  BinopI { op=add, lhs=v37, rhs_imm=8 }            -> x1
     v39  Imm(0)                                           -> x1
     v40  BinopI { op=add, lhs=v36, rhs_imm=2 }            -> x0
-    v41  LocalAddr(-2)                                    -> x1
+    v41  LocalAddr(-5)                                    -> x1
     v42  BinopI { op=add, lhs=v41, rhs_imm=8 }            -> x1
     v43  Imm(0)                                           -> x1
     v44  BinopI { op=add, lhs=v40, rhs_imm=2 }            -> x0
-    v45  LocalAddr(-2)                                    -> x1
+    v45  LocalAddr(-5)                                    -> x1
     v46  Imm(0)                                           -> x1
     v47  BinopI { op=add, lhs=v44, rhs_imm=7 }            -> x0
     v48  Imm(0)                                           -> x1
@@ -95,6 +95,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=5
     v61  Phi { incoming=[b2:v57, b4:v59], kind=I64 }      -> x0
     v62  Imm(0)                                           -> x1
     v63  Extend { value=v61, kind=I32 }                   -> x1
+    v64  LifetimeEnd(-5)                                  -> -
+    v65  LifetimeEnd(-3)                                  -> -
     terminator Return(v61)   (exit_acc=v61)
   block 4  start_pc=0
     v59  Imm(1)                                           -> x0

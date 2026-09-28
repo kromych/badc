@@ -14,50 +14,8 @@ Disassembly of section .text:
                	brk	#0x1
 
 <tier_idx>:
-               	mov	x0, #0x0                // =0
-               	mov	x1, x0
-               	add	x1, x1, #0x1
-               	mov	x0, #0x1                // =1
-               	cmp	w0, #0x0
-               	b.le	<addr>
-               	lsl	x3, x1, #1
-               	mov	x0, #0x1                // =1
-               	mov	x1, #0x0                // =0
-               	mov	x2, x0
-               	add	x1, x1, #0xa
-               	mov	x2, #0x2                // =2
-               	cmp	w2, #0x1
-               	b.le	<addr>
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
-               	cmp	x1, x3
-               	b.gt	<addr>
-               	sub	x0, x0, #0x1
-               	ret
-               	mov	x0, #0x2                // =2
-               	mov	x1, #0x0                // =0
-               	mov	x2, x0
-               	add	x1, x1, #0x64
-               	mov	x2, #0x3                // =3
-               	cmp	w2, #0x2
-               	b.le	<addr>
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
-               	cmp	x1, x3
-               	b.le	<addr>
                	mov	x0, #0x3                // =3
-               	mov	x1, #0x0                // =0
-               	mov	x2, x0
-               	add	x1, x1, #0x3e8
-               	mov	x2, #0x4                // =4
-               	cmp	w2, #0x3
-               	b.le	<addr>
-               	mov	x17, #0x3               // =3
-               	mul	x1, x1, x17
-               	cmp	x1, x3
-               	b.le	<addr>
-               	mov	x0, #0x4                // =4
-               	b	<addr>
+               	ret
 
 <tier_span>:
                	mov	x1, #0x0                // =0

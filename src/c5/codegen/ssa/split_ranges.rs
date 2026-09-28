@@ -40,7 +40,7 @@ use alloc::vec::Vec;
 
 use super::super::ir::{FunctionSsa, Inst, NO_VALUE, Terminator, ValueId};
 use super::reg_alloc::{Allocation, Place};
-use super::tape::{Insertion, Undo};
+use super::tape::{At, Insertion, Undo};
 use super::{FixedRegs, Target};
 
 /// A run of uses of one value over a contiguous stretch of the
@@ -199,7 +199,7 @@ fn apply(func: &mut FunctionSsa, runs: &[Run]) -> Undo {
         .map(|&k| {
             let r = &runs[k as usize];
             Insertion {
-                at: r.first,
+                at: At::Before(r.first),
                 inst: Inst::Copy {
                     value: r.src,
                     is_fp: r.is_fp,
@@ -357,6 +357,7 @@ mod tests {
             value,
             kind: StoreKind::I64,
             volatile: false,
+            nsw: false,
         }
     }
 
@@ -365,6 +366,8 @@ mod tests {
             binding_idx: 0,
             args,
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
             fp_return: false,
             arg_aggs: Vec::new(),
             ret_agg: None,

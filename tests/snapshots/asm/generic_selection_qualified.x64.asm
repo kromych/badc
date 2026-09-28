@@ -42,8 +42,8 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	xorl	%eax, %eax
-               	movl	%eax, -0x20(%rbp)
-               	leaq	-0x20(%rbp), %rcx
+               	movl	%eax, -0x8(%rbp)
+               	leaq	-0x8(%rbp), %rcx
                	movq	%rcx, %rdx
                	subq	%rcx, %rdx
                	movq	%rdx, %rsi

@@ -10,24 +10,24 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   BinopI { op=mul, lhs=v1, rhs_imm=100 }           -> x0
-    v7   Extend { value=v6, kind=I32 }                    -> x1
+    v7   Extend { value=v6, kind=I32, nsw }               -> x1
     v8   Imm(0)                                           -> x1
     v9   Binop { op=add, lhs=v6, rhs=v3 }                 -> x0
-    v10  Extend { value=v9, kind=I32 }                    -> x1
+    v10  Extend { value=v9, kind=I32, nsw }               -> x1
     v11  Imm(0)                                           -> x1
     v12  Extend { value=v1, kind=I32 }                    -> x1
     v13  Binop { op=add, lhs=v1, rhs=v1 }                 -> x1
-    v14  Extend { value=v13, kind=I32 }                   -> x2
+    v14  Extend { value=v13, kind=I32, nsw }              -> x2
     v15  Extend { value=v13, kind=I32 }                   -> x2
     v16  Extend { value=v13, kind=I32 }                   -> x2
     v17  Imm(0)                                           -> x2
     v18  Imm(0)                                           -> x2
     v19  Imm(0)                                           -> x2
     v20  Binop { op=add, lhs=v9, rhs=v13 }                -> x0
-    v21  Extend { value=v20, kind=I32 }                   -> x1
+    v21  Extend { value=v20, kind=I32, nsw }              -> x1
     v22  Imm(0)                                           -> x1
     v23  Binop { op=add, lhs=v20, rhs=v3 }                -> x0
-    v24  Extend { value=v23, kind=I32 }                   -> x1
+    v24  Extend { value=v23, kind=I32, nsw }              -> x1
     v25  Extend { value=v23, kind=I32 }                   -> x1
     terminator Return(v23)   (exit_acc=v23)
 ; --- SSA dump (ok=true) ent_pc=2 ---

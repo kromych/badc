@@ -28,9 +28,28 @@ int address_escapes_silences(void) {
     return *p;
 }
 
+int block_local_dies(void) {
+    {
+        int e = 1; // dead: overwritten before any read.
+        e = 2;     // dead: the block ends without reading `e`.
+    }
+    return 1;
+}
+
+int shadowed_outer_is_read(int k) {
+    int f = 1;     // live: read after the block that shadows it.
+    {
+        int f = k; // live: read on the next line.
+        k = f + 1;
+    }
+    return f + k;
+}
+
 int main(void) {
     return dead_initializer()
          + self_referencing_rhs()
          + store_consumed_after_branch_is_silenced(1)
-         + address_escapes_silences();
+         + address_escapes_silences()
+         + block_local_dies()
+         + shadowed_outer_is_read(1);
 }

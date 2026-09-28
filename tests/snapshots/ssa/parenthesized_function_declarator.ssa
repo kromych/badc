@@ -8,7 +8,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   BinopI { op=add, lhs=v1, rhs_imm=1 }             -> x0
-    v5   Extend { value=v4, kind=I32 }                    -> x1
+    v5   Extend { value=v4, kind=I32, nsw }               -> x1
     v6   Extend { value=v4, kind=I32 }                    -> x1
     terminator Return(v4)   (exit_acc=v4)
 ; --- SSA dump (ok=true) ent_pc=1 ---
@@ -22,7 +22,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v3   ImmData(16)                                      -> x0
     v4   Imm(0)                                           -> x1
     v5   BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x1
-    v6   Extend { value=v5, kind=I32 }                    -> x2
+    v6   Extend { value=v5, kind=I32, nsw }               -> x2
     v7   Store { addr=v3, disp=0, value=v5, kind=I32 }    -> -
     terminator Return(v3)   (exit_acc=v3)
 ; --- SSA dump (ok=true) ent_pc=2 ---

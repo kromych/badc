@@ -9,7 +9,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
     v5   Imm(10)                                          -> x0
-    v6   Imm(0)                                           -> x0
+    v6   Imm(10)                                          -> x0
     v7   Imm(10)                                          -> x0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
@@ -31,7 +31,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v25  Imm(1)                                           -> x2
     v26  Imm(10)                                          -> x2
     v27  Imm(110)                                         -> x2
-    v28  Imm(0)                                           -> x2
+    v28  Imm(110)                                         -> x2
     v29  Imm(110)                                         -> x2
     v30  Imm(7)                                           -> x2
     v31  Imm(7)                                           -> x2
@@ -46,7 +46,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v40  Imm(1)                                           -> x2
     v41  Imm(110)                                         -> x2
     v42  Imm(1110)                                        -> x2
-    v43  Imm(0)                                           -> x2
+    v43  Imm(1110)                                        -> x2
     v44  Imm(1110)                                        -> x2
     v45  Imm(0)                                           -> x2
     v46  Imm(0)                                           -> x2
@@ -62,11 +62,11 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v56  Imm(1)                                           -> x2
     v57  Imm(1110)                                        -> x2
     v58  Imm(1111)                                        -> x2
-    v59  Imm(0)                                           -> x2
+    v59  Imm(1111)                                        -> x2
     v60  Imm(1111)                                        -> x2
     v61  Imm(0)                                           -> x2
     v62  Imm(1)                                           -> x2
-    v63  Imm(0)                                           -> x2
+    v63  Imm(1)                                           -> x2
     v64  Imm(0)                                           -> x2
     v65  Imm(0)                                           -> x2
     v66  ImmData(16)                                      -> x2
@@ -79,11 +79,11 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v73  Imm(1)                                           -> x2
     v74  Imm(1111)                                        -> x2
     v75  Imm(1112)                                        -> x2
-    v76  Imm(0)                                           -> x2
+    v76  Imm(1112)                                        -> x2
     v77  Imm(1112)                                        -> x2
     v78  Imm(1)                                           -> x2
     v79  Imm(2)                                           -> x2
-    v80  Imm(0)                                           -> x2
+    v80  Imm(2)                                           -> x2
     v81  Imm(0)                                           -> x2
     v82  Imm(0)                                           -> x2
     v83  ImmData(16)                                      -> x2
@@ -96,11 +96,11 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v90  Imm(1)                                           -> x2
     v91  Imm(1112)                                        -> x2
     v92  Imm(1113)                                        -> x2
-    v93  Imm(0)                                           -> x2
+    v93  Imm(1113)                                        -> x2
     v94  Imm(1113)                                        -> x2
     v95  Imm(2)                                           -> x2
     v96  Imm(3)                                           -> x2
-    v97  Imm(0)                                           -> x2
+    v97  Imm(3)                                           -> x2
     v98  Imm(0)                                           -> x2
     v99  Imm(0)                                           -> x2
     v100 ImmData(16)                                      -> x2

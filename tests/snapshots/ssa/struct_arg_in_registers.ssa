@@ -165,21 +165,27 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v159 Imm(300)                                         -> x0
     v160 Imm(300)                                         -> x0
     v161 Imm(300)                                         -> x0
-    v162 Imm(300)                                         -> x0
-    v163 Imm(0)                                           -> x0
+    v162 LifetimeEnd(0)                                   -> -
+    v163 Imm(300)                                         -> x0
     v164 Imm(0)                                           -> x0
-    v165 Imm(3)                                           -> x0
-    v166 Imm(0)                                           -> x0
+    v165 Imm(0)                                           -> x0
+    v166 Imm(3)                                           -> x0
     v167 Imm(0)                                           -> x0
     v168 Imm(0)                                           -> x0
     v169 Imm(0)                                           -> x0
-    v170 Imm(5)                                           -> x0
-    v171 Imm(0)                                           -> x0
+    v170 Imm(0)                                           -> x0
+    v171 Imm(5)                                           -> x0
     v172 Imm(0)                                           -> x0
     v173 Imm(0)                                           -> x0
     v174 Imm(0)                                           -> x0
     v175 Imm(0)                                           -> x0
-    terminator Return(v175)   (exit_acc=v175)
+    v176 Imm(0)                                           -> x0
+    v177 LifetimeEnd(0)                                   -> -
+    v178 LifetimeEnd(0)                                   -> -
+    v179 LifetimeEnd(0)                                   -> -
+    v180 LifetimeEnd(0)                                   -> -
+    v181 LifetimeEnd(0)                                   -> -
+    terminator Return(v176)   (exit_acc=v176)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

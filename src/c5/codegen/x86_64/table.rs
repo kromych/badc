@@ -796,7 +796,7 @@ pub(crate) fn encode_in(
     }
     let (best, matched) = encode_best(mnem, width_override, ops, mode, addr);
     match best {
-        Some(b) => Ok(b.as_slice().to_vec()),
+        Some((b, _)) => Ok(b.as_slice().to_vec()),
         None if matched => Err(format!(
             "inline asm: `{mnem:?}` operand form not encodable ({})",
             describe_operands(ops)
@@ -819,12 +819,32 @@ pub(crate) fn encode_into(
 ) {
     let mode = Mode::Bits64;
     match encode_best(mnem, width_override, ops, mode, mode.addrsize()).0 {
-        Some(b) => code.extend_from_slice(b.as_slice()),
+        Some((b, _)) => code.extend_from_slice(b.as_slice()),
         None => panic!("native emit: no encoding for `{mnem:?}` with these operands"),
     }
 }
 
-/// The shortest encoding of `mnem` for `ops`, plus whether any form matched (to
+/// [`encode_into`] for a form whose memory operand ends in a 32-bit
+/// displacement; returns the offset of that field in `code`. Only the
+/// immediate, if any, follows it.
+pub(crate) fn encode_into_disp32(
+    code: &mut Vec<u8>,
+    mnem: Mnem,
+    width_override: Option<u8>,
+    ops: &[Opnd],
+) -> usize {
+    let mode = Mode::Bits64;
+    match encode_best(mnem, width_override, ops, mode, mode.addrsize()).0 {
+        Some((b, imm)) => {
+            code.extend_from_slice(b.as_slice());
+            code.len() - imm as usize - 4
+        }
+        None => panic!("native emit: no encoding for `{mnem:?}` with these operands"),
+    }
+}
+
+/// The shortest encoding of `mnem` for `ops` with its immediate's byte count,
+/// plus whether any form matched (to
 /// distinguish "no such form" from "form matched but not encodable"). The
 /// catalogue is sorted by mnemonic and `Mnem`'s Ord matches that order, so this
 /// binary-searches on the integer discriminant to the mnemonic's run of forms.
@@ -839,7 +859,7 @@ fn encode_best(
     ops: &[Opnd],
     mode: Mode,
     addr: u8,
-) -> (Option<InsnBuf>, bool) {
+) -> (Option<(InsnBuf, u8)>, bool) {
     let forms = super::isa_x86_table::FORMS;
     let start = forms.partition_point(|f| f.mnem < mnem);
     let mut best: Option<(InsnBuf, u8)> = None;
@@ -859,7 +879,7 @@ fn encode_best(
             best = Some((buf, imm));
         }
     }
-    (best.map(|(b, _)| b), matched)
+    (best, matched)
 }
 
 /// Forms the external instruction database omits, encoded by the same

@@ -99,7 +99,7 @@ Disassembly of section .text:
                	movl	$0xa, -0x8(%rbp)
                	movslq	-0x8(%rbp), %rdi
                	callq	<addr>
-               	movslq	%eax, %rbx
+               	movq	%rax, %rbx
                	leaq	<rip>, %rdi
                	movq	%rbx, %rsi
                	movb	$0x0, %al

@@ -30,19 +30,22 @@ fn clamp_pack(n: usize) -> usize {
     }
 }
 
-/// One parsed `#pragma pack(...)` directive. The lexer scans the
-/// directive inline and folds it into [`Lexer::pack_stack`] via
-/// [`Lexer::apply_pack_directive`].
-#[derive(Debug, Clone, Copy)]
+/// One parsed `#pragma pack(...)` directive, in the forms gcc, clang and
+/// MSVC share. The lexer scans the directive inline and folds it into
+/// the pack state via [`Lexer::apply_pack_directive`].
+#[derive(Debug, Clone)]
 enum PackDirective {
-    /// `#pragma pack(N)` -- replace top of stack with N.
+    /// `#pragma pack(N)` -- the value in effect becomes N.
     Set(usize),
-    /// `#pragma pack()` -- replace top with DEFAULT_PACK.
+    /// `#pragma pack()` -- the value in effect becomes the default.
     Reset,
-    /// `#pragma pack(push, N)` -- push N onto the stack.
-    Push(usize),
-    /// `#pragma pack(pop)` -- pop one frame (no-op if at bottom).
-    Pop,
+    /// `#pragma pack(push[, id][, N])` -- save the value in effect under
+    /// the label, then set N when one is given.
+    Push(Option<alloc::string::String>, Option<usize>),
+    /// `#pragma pack(pop[, id][, N])` -- restore the value the nearest
+    /// push (with that label, when one is named) saved, then set N when
+    /// one is given.
+    Pop(Option<alloc::string::String>, Option<usize>),
 }
 
 /// One parsed `#pragma GCC visibility` directive, folded into
@@ -279,11 +282,11 @@ fn parse_line_marker(body: &[u8]) -> Option<LineMarker> {
 /// other shape (including malformed-pack and non-pack pragmas)
 /// so the caller can fall back to "skip the line silently".
 ///
-/// Accepts the four MSVC-compatible shapes:
-///   * `pragma pack(N)`            -> [`PackDirective::Set`]
-///   * `pragma pack()`             -> [`PackDirective::Reset`]
-///   * `pragma pack(push, N)`      -> [`PackDirective::Push`]
-///   * `pragma pack(pop)`          -> [`PackDirective::Pop`]
+/// Accepts the shapes gcc, clang and MSVC share:
+///   * `pragma pack(N)`                 -> [`PackDirective::Set`]
+///   * `pragma pack()`                  -> [`PackDirective::Reset`]
+///   * `pragma pack(push[, id][, N])`   -> [`PackDirective::Push`]
+///   * `pragma pack(pop[, id][, N])`    -> [`PackDirective::Pop`]
 ///
 /// The arg whitespace is liberal -- any combination of spaces /
 /// tabs is accepted between tokens to match how cpp / msvc
@@ -298,15 +301,38 @@ fn parse_pragma_pack_line(body: &[u8]) -> Option<PackDirective> {
     if inner.is_empty() {
         return Some(PackDirective::Reset);
     }
-    if inner == "pop" {
-        return Some(PackDirective::Pop);
+    let mut args = inner.split(',').map(str::trim);
+    let head = args.next()?;
+    if head != "push" && head != "pop" {
+        return inner.parse::<usize>().ok().map(PackDirective::Set);
     }
-    if let Some(rest) = inner.strip_prefix("push") {
-        let rest = rest.trim_start();
-        let rest = rest.strip_prefix(',')?.trim_start();
-        return rest.parse::<usize>().ok().map(PackDirective::Push);
+    let mut id = None;
+    let mut n = None;
+    for arg in args {
+        if let Ok(value) = arg.parse::<usize>() {
+            if n.is_some() {
+                return None;
+            }
+            n = Some(value);
+        } else if id.is_none() && n.is_none() && is_pack_label(arg) {
+            id = Some(alloc::string::String::from(arg));
+        } else {
+            return None;
+        }
     }
-    inner.parse::<usize>().ok().map(PackDirective::Set)
+    Some(if head == "push" {
+        PackDirective::Push(id, n)
+    } else {
+        PackDirective::Pop(id, n)
+    })
+}
+
+fn is_pack_label(arg: &str) -> bool {
+    let mut chars = arg.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 /// Parse a single `#`-prefix-stripped line as `pragma GCC visibility
@@ -346,67 +372,76 @@ pub(crate) struct LexerSnapshot {
     int_suffix_unsigned: bool,
     int_is_decimal: bool,
     float_suffix_f32: bool,
+    float_suffix_long: bool,
     num_is_char: bool,
     char_prefix: StrPrefix,
     str_is_wide: bool,
     str_elem_bytes: usize,
+    str_prefix: StrPrefix,
 }
 
-/// Resolved (file, line) -> byte span answers; `None` when no run
-/// holds the line.
-type LineSpanMemo = alloc::collections::BTreeMap<(u32, u32), Option<(u32, u32)>>;
-
 /// A run of consecutive lines between two preprocessor line markers:
-/// the lines in `Lexer::src[start..end]` are numbered `first_line`,
-/// `first_line + 1`, ... in `LineIndex::files[file_id]`.
+/// the `lines` lines in `Lexer::src[start..end]` are numbered
+/// `first_line`, `first_line + 1`, ... in `LineIndex::files[file_id]`.
 struct LineRun {
     file_id: u32,
     first_line: u32,
+    lines: u32,
     start: u32,
     end: u32,
+    /// The lines' offsets, tabulated when the run first answers.
+    starts: core::cell::OnceCell<Vec<u32>>,
+}
+
+impl LineRun {
+    fn new(file_id: u32, first_line: u32, lines: u32, start: usize, end: usize) -> Self {
+        Self {
+            file_id,
+            first_line,
+            lines,
+            start: start as u32,
+            end: end as u32,
+            starts: core::cell::OnceCell::new(),
+        }
+    }
 }
 
 /// Marker-aware view of the preprocessed buffer, mapping (file, line) to
-/// the line's byte span in `Lexer::src`. One entry per line marker, not
-/// per line: the buffers run to hundreds of thousands of lines and a
-/// compile asks single-digit questions of them. The first run holding a
-/// (file, line) pair answers it, matching the sequential-scan semantics
-/// this replaces. Built once, on the first diagnostic that echoes a
-/// source line; the source buffer never changes after construction.
+/// the line's byte span in `Lexer::src`. One entry per line marker; a
+/// run's line offsets are tabulated when it first answers, so the index
+/// grows with the runs diagnostics point into rather than with the
+/// buffer, and no question walks a run twice. The first run holding a
+/// (file, line) pair answers it. Built once, on the first diagnostic
+/// that echoes a source line; the source buffer never changes after
+/// construction.
 struct LineIndex {
     files: Vec<String>,
     runs: Vec<LineRun>,
-    /// Spans already resolved, so a diagnostic repeated on a discarded
-    /// trial-parse path walks no run twice.
-    memo: core::cell::RefCell<LineSpanMemo>,
 }
 
 impl LineIndex {
     /// Byte span of `line` in `files[file_id]`, or `None` when no run
     /// holds it.
     fn span_of(&self, src: &[u8], file_id: u32, line: u32) -> Option<(u32, u32)> {
-        let nl = |from: usize, to: usize| src[from..to].iter().position(|&b| b == b'\n');
-        for run in &self.runs {
-            if run.file_id != file_id || line < run.first_line {
-                continue;
-            }
-            let end = run.end as usize;
-            let mut pos = run.start as usize;
-            let mut skip = line - run.first_line;
-            while skip > 0 && pos < end {
-                match nl(pos, end) {
-                    Some(k) => pos += k + 1,
-                    None => pos = end,
-                }
-                skip -= 1;
-            }
-            if skip > 0 || pos >= end {
-                continue;
-            }
-            let stop = pos + nl(pos, end).unwrap_or(end - pos);
-            return Some((pos as u32, stop as u32));
-        }
-        None
+        let run = self.runs.iter().find(|r| {
+            r.file_id == file_id && line.checked_sub(r.first_line).is_some_and(|k| k < r.lines)
+        })?;
+        let text = &src[run.start as usize..run.end as usize];
+        let starts = run.starts.get_or_init(|| {
+            let after_newline = text
+                .iter()
+                .enumerate()
+                .filter(|&(k, &b)| b == b'\n' && k + 1 < text.len());
+            core::iter::once(run.start)
+                .chain(after_newline.map(|(k, _)| run.start + k as u32 + 1))
+                .collect()
+        });
+        let pos = starts[(line - run.first_line) as usize];
+        let stop = text[(pos - run.start) as usize..]
+            .iter()
+            .position(|&b| b == b'\n')
+            .map_or(run.end, |k| pos + k as u32);
+        Some((pos, stop))
     }
 }
 
@@ -448,9 +483,12 @@ pub(crate) struct Lexer {
     /// `true` when the most recent `Token::FloatNum` carried an `f`/`F`
     /// suffix (C99 6.4.4.2p4: the constant has type `float`). `ival`
     /// then holds the value already rounded to single precision,
-    /// re-widened to f64 bits. An `l`/`L` suffix keeps the flag false:
-    /// c5 represents long double as f64.
+    /// re-widened to f64 bits.
     pub float_suffix_f32: bool,
+
+    /// `true` when it carried an `l`/`L` suffix: the constant has type
+    /// `long double`, its value in `ival` at binary64.
+    pub float_suffix_long: bool,
 
     /// `true` when the most recent `'"'` string-literal token came from
     /// a wide (`L"..."`, `u"..."`, `U"..."`) literal. The element width is
@@ -462,6 +500,11 @@ pub(crate) struct Lexer {
     /// `wchar_bytes` for `L"..."`, 2 for `u"..."` (char16_t), 4 for
     /// `U"..."` (char32_t). Only meaningful when `str_is_wide` is set.
     pub str_elem_bytes: usize,
+
+    /// Encoding prefix of the most recent wide string literal, which fixes
+    /// its element type (C11 6.4.5p6). Only meaningful when `str_is_wide`
+    /// is set.
+    pub str_prefix: StrPrefix,
 
     /// Encoding prefix of the most recent `Token::Num` character
     /// constant. C11 6.4.4.4p2-p4 types each prefix separately -- `L'x'`
@@ -518,10 +561,13 @@ pub(crate) struct Lexer {
     /// stripping like other pragmas, since pack is position-
     /// dependent within the source and can't be batched up the way
     /// `#pragma binding(...)` is).
-    pack_stack: Vec<usize>,
+    pack: usize,
+    /// The values `#pragma pack(push)` saved, each under its label,
+    /// innermost last.
+    pack_saved: Vec<(Option<alloc::string::String>, usize)>,
     /// Stack of `#pragma GCC visibility push(...)` frames; the top holds
     /// whether the visibility currently in effect is non-preemptible.
-    /// Scanned inline like `pack_stack`, and read by the declaration
+    /// Scanned inline like `pack`, and read by the declaration
     /// paths as the default for a declaration that carries no explicit
     /// `visibility` attribute.
     visibility_stack: Vec<bool>,
@@ -632,8 +678,10 @@ impl Lexer {
             int_suffix_unsigned: false,
             int_is_decimal: true,
             float_suffix_f32: false,
+            float_suffix_long: false,
             str_is_wide: false,
             str_elem_bytes: 4,
+            str_prefix: StrPrefix::None,
             char_prefix: StrPrefix::None,
             num_is_char: false,
             wchar_bytes: 4,
@@ -643,7 +691,8 @@ impl Lexer {
             // caps struct alignment at 8, and that's the implicit
             // upper bound here too. Real `#pragma pack(N)` updates
             // happen via `apply_pack_directive`.
-            pack_stack: vec![DEFAULT_PACK],
+            pack: DEFAULT_PACK,
+            pack_saved: Vec::new(),
             visibility_stack: vec![false],
         }
     }
@@ -662,7 +711,13 @@ impl Lexer {
     /// default 8 matches c5's pre-existing struct-layout behaviour
     /// (no packing); any explicit `#pragma pack(N)` lowers it.
     pub fn current_pack(&self) -> usize {
-        *self.pack_stack.last().unwrap_or(&DEFAULT_PACK)
+        self.pack
+    }
+
+    /// The pack value a `#pragma pack` directive put in effect, `None`
+    /// when none is.
+    pub fn pragma_pack(&self) -> Option<usize> {
+        Some(self.current_pack()).filter(|&p| p != DEFAULT_PACK)
     }
 
     /// Apply one parsed `#pragma pack(...)` directive to the stack.
@@ -749,10 +804,11 @@ impl Lexer {
         }
         let mut exp = if exp_neg { -exp } else { exp };
         // C99 6.4.4.2p4: `f`/`F` types the constant `float`, `l`/`L`
-        // long double (represented as f64 in c5). Record the float
-        // suffix; the value is rounded to single precision below.
+        // `long double`. A float value is rounded to single precision
+        // below.
         if self.pos < self.src.len() && matches!(self.src[self.pos], b'f' | b'F' | b'l' | b'L') {
             self.float_suffix_f32 = matches!(self.src[self.pos], b'f' | b'F');
+            self.float_suffix_long = !self.float_suffix_f32;
             self.pos += 1;
         }
         // Scale by 2^exp through exact doubling / halving so the
@@ -896,6 +952,22 @@ impl Lexer {
         }
     }
 
+    /// C99 6.4.4.4p9: an octal or hexadecimal escape's value fits an
+    /// `unsigned char`, or the unsigned type of a wide element of
+    /// `elem_bytes` bytes.
+    fn check_escape_range(&self, esc: u8, val: i64, elem_bytes: usize) -> Result<(), C5Error> {
+        if (val as u64) >> (elem_bytes * 8).min(63) == 0 {
+            return Ok(());
+        }
+        let kind = if esc == b'x' { "hex" } else { "octal" };
+        Err(C5Error::at(
+            Code::INVALID_TOKEN,
+            &self.file,
+            self.line,
+            format!("{kind} escape sequence out of range"),
+        ))
+    }
+
     /// Fold one byte of a character constant into its value
     /// (C99 6.4.4.4p10).
     fn push_char_byte(&mut self, val: i64, count: &mut i64, acc: &mut i64) {
@@ -903,13 +975,12 @@ impl Lexer {
         *acc = (*acc << 8) | (val & 0xFF);
         // A single-character constant has the value of its char
         // interpreted as int. Sign-extend on signed-char targets so
-        // `'\x80'` is -128, matching a `char` lvalue read; a hex /
-        // octal escape that overran a byte keeps its wider value.
+        // `'\x80'` is -128, matching a `char` lvalue read.
         let v = if *count == 1 {
-            if self.char_signed && (0..=0xFF).contains(&val) {
+            if self.char_signed {
                 val as i8 as i64
             } else {
-                val
+                val & 0xFF
             }
         } else {
             *acc
@@ -986,7 +1057,7 @@ impl Lexer {
                                     b'A'..=b'F' => 10 + (h - b'A') as i64,
                                     _ => break,
                                 };
-                                acc = (acc << 4) | d;
+                                acc = acc.saturating_mul(16).saturating_add(d);
                                 self.pos += 1;
                                 count += 1;
                             }
@@ -998,6 +1069,7 @@ impl Lexer {
                                     "\\x in wide literal needs at least one hex digit",
                                 ));
                             }
+                            self.check_escape_range(esc, acc, elem_bytes)?;
                             val = acc;
                         }
                         b'u' | b'U' => val = self.read_ucn(esc)? as i64,
@@ -1013,6 +1085,7 @@ impl Lexer {
                                 self.pos += 1;
                                 count += 1;
                             }
+                            self.check_escape_range(esc, acc, elem_bytes)?;
                             val = acc;
                         }
                         _ => val = esc as i64,
@@ -1096,6 +1169,7 @@ impl Lexer {
             self.tk = Tok('"' as i64);
             self.str_is_wide = true;
             self.str_elem_bytes = elem_bytes;
+            self.str_prefix = prefix;
             return Ok(());
         }
     }
@@ -1155,10 +1229,8 @@ impl Lexer {
                         }
                         continue;
                     }
-                    // \xHH -- hex escape, 1+ hex digits, the C spec is
-                    // greedy ("as many hex digits as make sense") but
-                    // only the low byte matters for c5's char/string
-                    // streams.
+                    // \xHH -- hex escape, as many hex digits as follow
+                    // (C99 6.4.4.4p7).
                     b'x' => {
                         let mut acc: i64 = 0;
                         let mut count = 0;
@@ -1166,7 +1238,7 @@ impl Lexer {
                             let Some(d) = (self.src[self.pos] as char).to_digit(16) else {
                                 break;
                             };
-                            acc = (acc << 4) | d as i64;
+                            acc = acc.saturating_mul(16).saturating_add(d as i64);
                             self.pos += 1;
                             count += 1;
                         }
@@ -1178,6 +1250,7 @@ impl Lexer {
                                 "\\x escape needs at least one hex digit",
                             ));
                         }
+                        self.check_escape_range(esc, acc, 1)?;
                         val = acc;
                     }
                     // \NNN -- octal escape, 1..3 digits. Includes plain
@@ -1194,6 +1267,7 @@ impl Lexer {
                             self.pos += 1;
                             count += 1;
                         }
+                        self.check_escape_range(esc, acc, 1)?;
                         val = acc;
                     }
                     // Unknown escape -- C says undefined, GCC warns. Pass
@@ -1225,30 +1299,30 @@ impl Lexer {
 
     fn apply_pack_directive(&mut self, dir: PackDirective) {
         match dir {
-            PackDirective::Set(n) => {
-                let n = clamp_pack(n);
-                if let Some(top) = self.pack_stack.last_mut() {
-                    *top = n;
-                } else {
-                    self.pack_stack.push(n);
+            PackDirective::Set(n) => self.pack = clamp_pack(n),
+            PackDirective::Reset => self.pack = DEFAULT_PACK,
+            PackDirective::Push(id, n) => {
+                self.pack_saved.push((id, self.pack));
+                if let Some(n) = n {
+                    self.pack = clamp_pack(n);
                 }
             }
-            PackDirective::Reset => {
-                if let Some(top) = self.pack_stack.last_mut() {
-                    *top = DEFAULT_PACK;
-                } else {
-                    self.pack_stack.push(DEFAULT_PACK);
+            PackDirective::Pop(id, n) => {
+                // A pop without a matching push restores nothing; gcc
+                // and MSVC warn and continue.
+                let at = match &id {
+                    Some(id) => self
+                        .pack_saved
+                        .iter()
+                        .rposition(|(label, _)| label.as_deref() == Some(id.as_str())),
+                    None => self.pack_saved.len().checked_sub(1),
+                };
+                if let Some(at) = at {
+                    self.pack = self.pack_saved[at].1;
+                    self.pack_saved.truncate(at);
                 }
-            }
-            PackDirective::Push(n) => {
-                self.pack_stack.push(clamp_pack(n));
-            }
-            PackDirective::Pop => {
-                // Always keep one frame so `current_pack()` always
-                // has an answer. Popping past the bottom is a
-                // user error in real cpp; we silently ignore here.
-                if self.pack_stack.len() > 1 {
-                    self.pack_stack.pop();
+                if let Some(n) = n {
+                    self.pack = clamp_pack(n);
                 }
             }
         }
@@ -1341,10 +1415,12 @@ impl Lexer {
             int_suffix_unsigned: self.int_suffix_unsigned,
             int_is_decimal: self.int_is_decimal,
             float_suffix_f32: self.float_suffix_f32,
+            float_suffix_long: self.float_suffix_long,
             num_is_char: self.num_is_char,
             char_prefix: self.char_prefix,
             str_is_wide: self.str_is_wide,
             str_elem_bytes: self.str_elem_bytes,
+            str_prefix: self.str_prefix,
         }
     }
 
@@ -1363,10 +1439,12 @@ impl Lexer {
         self.int_suffix_unsigned = s.int_suffix_unsigned;
         self.int_is_decimal = s.int_is_decimal;
         self.float_suffix_f32 = s.float_suffix_f32;
+        self.float_suffix_long = s.float_suffix_long;
         self.num_is_char = s.num_is_char;
         self.char_prefix = s.char_prefix;
         self.str_is_wide = s.str_is_wide;
         self.str_elem_bytes = s.str_elem_bytes;
+        self.str_prefix = s.str_prefix;
     }
 
     /// True if the next non-whitespace byte is the start of a
@@ -1583,9 +1661,6 @@ impl Lexer {
         Ok(())
     }
 
-    /// Advance to the next token. Identifiers are interned into `symbols`
-    /// (with `index` kept in sync); string literals are appended to `data`
-    /// and `ival` is set to their start address.
     /// The byte span of source line `target` in the current file
     /// (`self.file`), recovered by walking the `#line` markers the
     /// preprocessor embedded in the buffer so the original (file, line)
@@ -1603,6 +1678,7 @@ impl Lexer {
             let mut file_id: u32 = 0;
             let mut first_line: u32 = 1;
             let mut start = 0usize;
+            let mut lines: u32 = 0;
             let mut i = 0usize;
             while i < n {
                 let j = match src[i..].iter().position(|&b| b == b'\n') {
@@ -1613,13 +1689,9 @@ impl Lexer {
                     && let Some(marker) = parse_line_marker(&src[i + 1..j])
                 {
                     if i > start {
-                        runs.push(LineRun {
-                            file_id,
-                            first_line,
-                            start: start as u32,
-                            end: i as u32,
-                        });
+                        runs.push(LineRun::new(file_id, first_line, lines, start, i));
                     }
+                    lines = 0;
                     first_line = marker.line as u32;
                     if let Some(f) = marker.file {
                         file_id = match files.iter().position(|x| *x == f) {
@@ -1631,34 +1703,18 @@ impl Lexer {
                         };
                     }
                     start = j + 1;
+                } else {
+                    lines += 1;
                 }
                 i = j + 1;
             }
             if start < n {
-                runs.push(LineRun {
-                    file_id,
-                    first_line,
-                    start: start as u32,
-                    end: n as u32,
-                });
+                runs.push(LineRun::new(file_id, first_line, lines, start, n));
             }
-            LineIndex {
-                files,
-                runs,
-                memo: core::cell::RefCell::new(LineSpanMemo::new()),
-            }
+            LineIndex { files, runs }
         });
         let file_id = index.files.iter().position(|f| *f == self.file)? as u32;
-        let key = (file_id, target as u32);
-        let cached = index.memo.borrow().get(&key).copied();
-        match cached {
-            Some(hit) => hit,
-            None => {
-                let span = index.span_of(&self.src, key.0, key.1);
-                index.memo.borrow_mut().insert(key, span);
-                span
-            }
-        }
+        index.span_of(&self.src, file_id, u32::try_from(target).ok()?)
     }
 
     /// The text of source line `target`, trailing whitespace trimmed.
@@ -1685,6 +1741,17 @@ impl Lexer {
         self.line_index.get().map_or(0, |i| i.runs.len())
     }
 
+    /// Runs of the line index whose line offsets are tabulated.
+    #[cfg(test)]
+    pub(crate) fn line_tables(&self) -> usize {
+        self.line_index.get().map_or(0, |i| {
+            i.runs.iter().filter(|r| r.starts.get().is_some()).count()
+        })
+    }
+
+    /// Advance to the next token. Identifiers are interned into `symbols`
+    /// (with `index` kept in sync); string literals are appended to `data`
+    /// and `ival` is set to their start address.
     pub fn next(
         &mut self,
         symbols: &mut Vec<Symbol>,
@@ -1699,6 +1766,7 @@ impl Lexer {
         self.int_suffix_unsigned = false;
         self.int_is_decimal = true;
         self.float_suffix_f32 = false;
+        self.float_suffix_long = false;
         self.num_is_char = false;
         self.char_prefix = StrPrefix::None;
         loop {
@@ -1725,7 +1793,7 @@ impl Lexer {
                 //     verbatim (they're source-position-dependent,
                 //     unlike the binding / dylib / export pragmas the
                 //     preprocessor batches). Parse the args and fold
-                //     into `pack_stack` / `visibility_stack`.
+                //     into the pack state / `visibility_stack`.
                 //   * Any other `#` line -- (shebangs,
                 //     unrecognised pragmas, stray `#`s the
                 //     preprocessor didn't consume). Skip to EOL.
@@ -2024,8 +2092,9 @@ impl Lexer {
                     {
                         // Floating-point suffix per C99 6.4.4.2p4:
                         // `f`/`F` types the constant `float`, `l`/`L`
-                        // long double (represented as f64 in c5).
+                        // `long double`.
                         self.float_suffix_f32 = matches!(self.src[self.pos], b'f' | b'F');
+                        self.float_suffix_long = !self.float_suffix_f32;
                         self.pos += 1;
                     }
                     let lit =
@@ -2293,9 +2362,9 @@ impl Lexer {
                             {
                                 // Floating-point suffix per C99
                                 // 6.4.4.2p4: `f`/`F` types the constant
-                                // `float`, `l`/`L` long double
-                                // (represented as f64 in c5).
+                                // `float`, `l`/`L` `long double`.
                                 self.float_suffix_f32 = matches!(self.src[self.pos], b'f' | b'F');
+                                self.float_suffix_long = !self.float_suffix_f32;
                                 self.pos += 1;
                             }
                             let lit = core::str::from_utf8(&self.src[int_start..body_end])
@@ -2849,6 +2918,35 @@ mod tests {
         assert_eq!(lex_string_literal(r#""\101""#), vec![0o101]); // 'A'
         // Octal stops at the first non-octal digit.
         assert_eq!(lex_string_literal(r#""\18""#), vec![0o1, b'8']);
+    }
+
+    #[test]
+    fn escape_value_fits_the_element() {
+        // C99 6.4.4.4p9: an octal or hex escape is in the range of
+        // `unsigned char`, or of the unsigned wide element type.
+        assert_eq!(lex_string_literal(r#""\xff\377""#), vec![0xFF, 0xFF]);
+        assert_eq!(lex_string_literal(r#""\x000000000041""#), vec![0x41]);
+        assert_eq!(
+            lex_string_literal_w(r#"u"\xffff""#, 4),
+            vec![0xFF, 0xFF, 0, 0]
+        );
+        for (src, kind) in [
+            (r#""\x100""#, "hex"),
+            (r#""\x80a""#, "hex"),
+            (r#""\777""#, "octal"),
+            (r#"'\x100'"#, "hex"),
+            (r#"u8"\x100""#, "hex"),
+            (r#"u"\x10000""#, "hex"),
+            (r#"U"\x100000000""#, "hex"),
+            (r#"L'\x100000000'"#, "hex"),
+            (r#""\x10000000000000000000000""#, "hex"),
+        ] {
+            let err = lex_all(src).expect_err(src).to_string();
+            assert!(
+                err.contains(&format!("{kind} escape sequence out of range")),
+                "{src}: {err}"
+            );
+        }
     }
 
     #[test]

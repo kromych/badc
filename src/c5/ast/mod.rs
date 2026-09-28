@@ -83,6 +83,11 @@ pub(crate) enum UnOp {
     AddrOf,
     /// `*expr` -- dereference a pointer. C99 6.5.3.2.
     Deref,
+    /// A signed integer result computed in the 64-bit register, reduced
+    /// to the width of the node's type by sign-extending its low bits.
+    /// `nsw` marks an operation whose overflow is undefined in this unit
+    /// (C99 6.5p5): `+ - *` and unary `-` without `-fwrapv`.
+    Renormalize { nsw: bool },
 }
 
 /// Memory transfer the compiler expands inline, from a GCC
@@ -375,20 +380,32 @@ pub(crate) enum Expr {
         ty: i64,
     },
     /// `lhs op= rhs`. C99 6.5.16.2p3: `lhs` is evaluated exactly
-    /// once; the walker spills the address and reloads.
+    /// once; the walker spills the address and reloads. `nsw`: its
+    /// overflow is undefined (C99 6.5p5).
     CompoundAssign {
         op: BinOp,
         lhs: ExprId,
         rhs: ExprId,
         ty: i64,
+        nsw: bool,
     },
     /// Prefix `++` / `--`. `by` is the post-pointer-scaling step
     /// value (+1 / -1 for scalars, `+sizeof(*ptr)` / `-sizeof(*ptr)`
-    /// for pointers) the parser resolved at this site.
-    PreInc { lvalue: ExprId, by: i64, ty: i64 },
-    /// Postfix `++` / `--`. Same `by` semantics; the walker
+    /// for pointers) the parser resolved at this site; `nsw` as above.
+    PreInc {
+        lvalue: ExprId,
+        by: i64,
+        ty: i64,
+        nsw: bool,
+    },
+    /// Postfix `++` / `--`. Same `by` and `nsw` semantics; the walker
     /// captures the pre-update value as the expression's result.
-    PostInc { lvalue: ExprId, by: i64, ty: i64 },
+    PostInc {
+        lvalue: ExprId,
+        by: i64,
+        ty: i64,
+        nsw: bool,
+    },
     /// `sizeof <operand>`. Resolved to a constant at parse time.
     Sizeof(SizeofResolved),
     /// `lhs, rhs`. C99 6.5.17 -- evaluate `lhs` for side effects,
@@ -614,6 +631,9 @@ pub(crate) enum Stmt {
     /// slot into an `Inst::LifetimeEnd`, which bounds how long the
     /// storage must stay the object's.
     ScopeEnd(Vec<i64>),
+    /// A `goto` or computed `goto` (`jump`) running `cleanups` first, after
+    /// a computed `goto`'s target is read.
+    CleanupJump { cleanups: Vec<StmtId>, jump: StmtId },
 }
 
 /// Value source of one runtime-initializer element: an expression to
@@ -774,6 +794,9 @@ pub(crate) struct FinishedFunction {
     pub is_noinline: bool,
     /// `__attribute__((naked))`: propagated onto `FunctionSsa::is_naked`.
     pub is_naked: bool,
+    /// `_Noreturn` (C11 6.7.4) on any declaration of the function:
+    /// propagated onto `FunctionSsa::is_noreturn`.
+    pub is_noreturn: bool,
     /// `__attribute__((ms_abi))` / `((sysv_abi))`: propagated onto
     /// `FunctionSsa::conv`. `CallConv::Target` when the definition
     /// follows the target's own convention.
@@ -786,6 +809,10 @@ pub(crate) struct FinishedFunction {
     /// callee copies the bytes into its own local slot before
     /// the body runs. Empty when there were no parameters.
     pub param_tys: alloc::vec::Vec<i64>,
+    /// The type each argument arrives as, which the entry converts to the
+    /// parameter's (C99 6.9.1p10): an old-style definition's promoted
+    /// types or its prior prototype's; `param_tys` otherwise.
+    pub param_arrival_tys: alloc::vec::Vec<i64>,
     /// Per-parameter local-slot offsets the parser allocated
     /// for the callee's local copy of each struct-by-value
     /// param. Slot `0` (= no offset) means the param is a
@@ -858,6 +885,8 @@ pub(crate) struct AsmBlockAst {
     /// `asm goto` label list, in source order; a template `%lK`
     /// reference names `labels[K]`. Empty for plain extended asm.
     pub labels: Vec<LabelId>,
+    /// Per label, the cleanup calls the jump to it runs.
+    pub cleanups: Vec<Vec<StmtId>>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -877,29 +906,18 @@ pub(crate) struct Ast {
     /// in well-formed C. `None` until the parser finishes the
     /// function definition.
     pub body: Option<StmtId>,
+    /// The labels whose address is taken, a computed `goto`'s targets.
+    pub label_addrs: Vec<LabelId>,
     /// Forward-fixup table for `goto`. `goto_targets[id as usize]`
     /// is `Some(StmtId)` once the matching labelled statement is
     /// seen; `None` while the label is still pending.
     pub goto_targets: Vec<Option<StmtId>>,
-    /// Indirect-call callees whose pointed-to function is variadic, keyed
-    /// by the callee's `ExprId` with the count of fixed (pre-ellipsis)
-    /// parameters. Populated when the callee's prototype is not
-    /// recoverable from its symbol alone -- a struct-field, array-element,
-    /// or dereferenced function pointer. The walker reads it to split a
-    /// variadic call's arguments at the fixed count so the host variadic
-    /// ABI places the tail correctly (C99 6.5.2.2; macOS/AAPCS64 Darwin
-    /// passes the tail on the stack). Sparse: empty unless a variadic
-    /// indirect call appears in the function.
-    pub variadic_indirect_callees: Vec<(ExprId, u32)>,
-    /// Indirect-call callees whose pointed-to function declares a
-    /// calling convention other than the target's
-    /// (`__attribute__((ms_abi))` / `((sysv_abi))`), keyed by the
-    /// callee's `ExprId`. Recorded at parse time, where the callee's
-    /// declared type is in scope; the walker reads it to pick the
-    /// argument placement, shadow space and callee-clobber shape the
-    /// call site marshals to. Sparse: empty unless such a call appears
-    /// in the function.
-    pub conv_indirect_callees: Vec<(ExprId, crate::c5::codegen::CallConv)>,
+    /// The function type of a call's callee expression, keyed by its
+    /// `ExprId`, for every call other than one naming a function: what
+    /// the parse converted the arguments to, and the fixed count and
+    /// convention the walker places them by. Absent where the callee's
+    /// type carries no function type.
+    pub callee_types: alloc::collections::BTreeMap<ExprId, crate::c5::symbol::FnType>,
     /// `Expr::Ident` nodes that reference a block-scope `extern` which
     /// shadows an enclosing bound name (a local, parameter, or enum
     /// constant). The shadowed binding is restored at block exit, so the
@@ -1286,9 +1304,11 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             is_always_inline: _,
             is_noinline: _,
             is_naked: _,
+            is_noreturn: _,
             conv: _,
             n_locals: _,
             param_tys: _,
+            param_arrival_tys: _,
             param_local_slots: _,
             returns_struct: _,
             return_struct_size: _,

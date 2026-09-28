@@ -227,7 +227,7 @@ pub(crate) fn emit(
         source_path
     });
 
-    let subs = collect_subprograms(program, build, code_vmaddr, &mut strs);
+    let subs = collect_subprograms(program, build, target, code_vmaddr, &mut strs);
 
     let mut plt_subs = collect_plt_subprograms(build, target, code_vmaddr, &mut strs);
 
@@ -294,8 +294,9 @@ pub(crate) fn emit(
 /// Where a subprogram's FDE installs its frame rules. The x86_64 lowering
 /// records the boundaries of `push rbp` and `mov rbp, rsp`, so each
 /// instruction gets the rule that holds after it; a full leaf keeps the
-/// CIE's entry rule throughout; without a record the body rule installs
-/// at the post-prologue offset.
+/// CIE's entry rule throughout, as does an aarch64 function whose prologue
+/// is hints alone; otherwise the body rule installs at the post-prologue
+/// offset.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FrameRules {
     PostPrologue,
@@ -307,8 +308,11 @@ enum FrameRules {
 }
 
 impl FrameRules {
-    fn of(build: &Build, low_pc: usize) -> Self {
+    fn of(build: &Build, arch: CfiArch, ent_pc: usize, low_pc: usize) -> Self {
         match build.fn_unwind.iter().find(|u| u.begin as usize == low_pc) {
+            None if arch == CfiArch::Aarch64 && a64_prologue_is_hints(build, ent_pc, low_pc) => {
+                FrameRules::Leaf
+            }
             None => FrameRules::PostPrologue,
             Some(u) if u.leaf => FrameRules::Leaf,
             Some(u) => FrameRules::X86Frame {
@@ -375,6 +379,22 @@ fn prologue_size_for(ent_pc: usize, low_pc: usize, build: &Build) -> u32 {
     } else {
         (body_start - low_pc) as u32
     }
+}
+
+/// Whether the aarch64 function at `low_pc` enters its body having stored
+/// nothing: its recorded prologue is `bti`, `nop` and `paciasp` alone, so sp
+/// and the return address in x30 keep their entry values throughout.
+fn a64_prologue_is_hints(build: &Build, ent_pc: usize, low_pc: usize) -> bool {
+    let Some(&body) = build.func_prologue_native.get(&ent_pc) else {
+        return false;
+    };
+    build.text.get(low_pc..body).is_some_and(|prologue| {
+        prologue
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|w| u32::from_le_bytes(*w) & 0xFFFF_F01F == 0xD503_201F)
+    })
 }
 
 /// Where the function at `low_pc` signs its return address, read off the
@@ -474,6 +494,7 @@ fn collect_plt_subprograms(
 fn collect_subprograms(
     program: &Program,
     build: &Build,
+    target: Target,
     code_vmaddr: u64,
     strs: &mut StrTable,
 ) -> Vec<Subprog> {
@@ -639,7 +660,7 @@ fn collect_subprograms(
             low_pc: code_vmaddr + lo as u64,
             high_pc: code_vmaddr + hi as u64,
             prologue_size: prologue_size_for(ent_pc, lo, build),
-            frame_rules: FrameRules::of(build, lo),
+            frame_rules: FrameRules::of(build, CfiArch::of(target), ent_pc, lo),
             ra_signed_at: paciasp_offset(build, lo, early.map(|e| e.frame)),
             early_return: early.map(|e| e.exit),
             variables,
@@ -2049,7 +2070,15 @@ fn build_debug_frame(
         let mut fde_body: Vec<u8> = Vec::new();
         // Where the rules below end, and whether they sign the return address.
         let (ruled, signed) = match sub.frame_rules {
-            FrameRules::Leaf => (0, false),
+            // An aarch64 leaf under `pac-ret+leaf` signs at its `paciasp`.
+            FrameRules::Leaf => match sub.ra_signed_at {
+                Some(at) => {
+                    write_advance_loc(&mut fde_body, arch, at + 4);
+                    fde_body.push(DW_CFA_NEGATE_RA_STATE);
+                    (at + 4, true)
+                }
+                None => (0, false),
+            },
             FrameRules::X86Frame {
                 push_rbp_end,
                 set_fpreg_end,
@@ -2773,7 +2802,13 @@ mod tests {
         let build =
             crate::c5::codegen::lower_for(&program, Target::LinuxAarch64, options).expect("lower");
         let word = |at: usize| u32::from_le_bytes(build.text[at..at + 4].try_into().unwrap());
-        let subs = collect_subprograms(&program, &build, 0, &mut StrTable::new());
+        let subs = collect_subprograms(
+            &program,
+            &build,
+            Target::LinuxAarch64,
+            0,
+            &mut StrTable::new(),
+        );
         let fib = subs
             .iter()
             .find(|s| s.early_return.is_some())

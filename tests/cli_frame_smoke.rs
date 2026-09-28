@@ -625,6 +625,86 @@ fn x86_64_debug_frame_follows_each_prologue_instruction() {
     }
 }
 
+/// The CFA program of the FDE starting at function `name`, located through
+/// the address a disassembly of the same image gives it.
+fn fde_of(dis: &str, frames: &str, name: &str) -> String {
+    let tail = format!(" <{name}>:");
+    let addr = dis
+        .lines()
+        .find_map(|l| l.strip_suffix(tail.as_str()))
+        .and_then(|a| u64::from_str_radix(a.trim(), 16).ok())
+        .unwrap_or_else(|| panic!("no `{name}` in the disassembly"));
+    let head = format!("pc={addr:08x}...");
+    let at = frames
+        .find(&head)
+        .unwrap_or_else(|| panic!("no FDE at {addr:#x}:\n{frames}"));
+    let rest = &frames[at..];
+    let end = rest.find(" FDE ").unwrap_or(rest.len());
+    rest[..end].to_string()
+}
+
+/// An aarch64 function built without a frame record keeps the CIE's entry
+/// rule (CFA = sp, the return address in x30) throughout its FDE, in a
+/// single-unit image and through a link, beside a framed function that
+/// takes the frame-record rules past its prologue. Signing the leaf's
+/// return address flags the signed state after `paciasp`.
+#[test]
+fn aarch64_frameless_leaf_keeps_the_entry_rule() {
+    let dir = tempdir("cfi-a64");
+    let leaf = "__attribute__((noinline)) int leaf(int x) { return x * 3 + 1; }\n";
+    let caller = "int leaf(int x);\n\
+                  __attribute__((noinline)) int framed(int x) { return leaf(x) + leaf(x + 1); }\n\
+                  int main(void) { return framed(2) == 18 ? 0 : 1; }\n";
+    std::fs::write(dir.join("leaf.c"), leaf).expect("write leaf.c");
+    std::fs::write(dir.join("caller.c"), caller).expect("write caller.c");
+    std::fs::write(dir.join("both.c"), format!("{leaf}{caller}")).expect("write both.c");
+    let image = |name: &str, flags: &[&str], inputs: &[&str]| {
+        let exe = dir.join(name);
+        run(
+            badc()
+                .args(["--target=linux-aarch64", "-O", "-g"])
+                .args(flags)
+                .arg("-o")
+                .arg(&exe)
+                .args(inputs.iter().map(|i| dir.join(i))),
+            name,
+        );
+        exe
+    };
+    for unit in ["leaf", "caller"] {
+        image(&format!("{unit}.o"), &["-c"], &[&format!("{unit}.c")]);
+    }
+    let images = [
+        (image("single", &[], &["both.c"]), false),
+        (image("linked", &[], &["leaf.o", "caller.o"]), false),
+        (
+            image("signed", &["-mbranch-protection=pac-ret+leaf"], &["both.c"]),
+            true,
+        ),
+    ];
+    for (exe, signed) in images {
+        let (Some(dis), Some(frames)) = (disassemble_named(&exe, "<leaf>:"), debug_frame(&exe))
+        else {
+            eprintln!("no aarch64 disassembler or DWARF dumper on PATH -- skipping");
+            return;
+        };
+        let what = exe.display();
+        let leaf = fde_of(&dis, &frames, "leaf");
+        assert!(!leaf.contains("DW_CFA_def_cfa"), "{what}: leaf\n{leaf}");
+        assert!(!leaf.contains("DW_CFA_offset"), "{what}: leaf\n{leaf}");
+        assert_eq!(
+            leaf.contains("DW_CFA_AARCH64_negate_ra_state"),
+            signed,
+            "{what}: leaf\n{leaf}"
+        );
+        let framed = fde_of(&dis, &frames, "framed");
+        assert!(
+            framed.contains("DW_CFA_def_cfa: W29 +16") && framed.contains("DW_CFA_offset: W30 -8"),
+            "{what}: framed\n{framed}"
+        );
+    }
+}
+
 /// Kernel-shaped inline asm: paravirt call sites binding the stack pointer
 /// (`ASM_CALL_CONSTRAINT`), a feature test through a link-time memory
 /// operand beside an immediate, register outputs into locals, and the

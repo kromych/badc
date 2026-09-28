@@ -2304,6 +2304,13 @@ fn enum_unsigned_compatible() {
 }
 
 #[test]
+fn enum_wide_compatible_long() {
+    // An enum whose values need 64 bits is `long` / `unsigned long` where
+    // `long` has 64 bits, as gcc and clang type it.
+    assert_eq!(run_fixture("enum_wide_compatible_long.c"), 0);
+}
+
+#[test]
 fn types_compatible_fn_ptr_cast() {
     // typeof of a function-pointer cast carries the cast's prototype
     // into __builtin_types_compatible_p.

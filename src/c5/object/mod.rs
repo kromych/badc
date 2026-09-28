@@ -265,8 +265,8 @@ fn fold_asm_sections(
     build: &mut Build,
     target: Target,
 ) -> Result<alloc::collections::BTreeMap<String, AsmLabelPlacement>, C5Error> {
-    use crate::c5::asm::AsmSectionTarget;
     use crate::c5::asm::align_fill_pattern;
+    use crate::c5::asm::{AsmRelocKind, AsmSectionTarget};
     if build.output_kind == OutputKind::Relocatable {
         return Ok(alloc::collections::BTreeMap::new());
     }
@@ -456,6 +456,18 @@ fn fold_asm_sections(
         let s = &build.asm_sections[r.section_index];
         let text_base = match (r.absolute, bases[r.section_index]) {
             (false, Some(AsmLabelPlacement::Text(b))) => b,
+            // An x86_64 rel32 over a label the data image holds: a data
+            // fixup, anchored three bytes ahead of the field it patches.
+            (false, Some(AsmLabelPlacement::Data(b)))
+                if r.kind == AsmRelocKind::Data && r.instr_offset >= 3 =>
+            {
+                build.data_fixups.push(DataFixup {
+                    instr_offset: r.instr_offset - 3,
+                    data_offset: (b as i64 + i64::from(r.section_offset) + r.addend + 4) as u64,
+                    part: AddrPart::Whole,
+                });
+                continue;
+            }
             _ => {
                 return Err(err(
                     Code::OBJECT_FORMAT,

@@ -1668,8 +1668,6 @@ fn prepare_template(
     let raw_text = stripped.as_deref().unwrap_or(raw_text);
     let expanded = crate::c5::asm::expand_template_uniq(raw_text);
     let text = expanded.as_deref().unwrap_or(raw_text);
-    let multidef = crate::c5::asm::rewrite_multidef_local_labels(text);
-    let text = multidef.as_deref().unwrap_or(text);
     let sized = match crate::c5::asm::expand_size_suffix_refs(text, &|idx| {
         asm.operands
             .get(idx as usize)
@@ -1698,6 +1696,8 @@ fn prepare_template(
         Err(m) => return fail(m),
     };
     let text = gas.as_deref().unwrap_or(text);
+    let multidef = crate::c5::asm::rewrite_multidef_local_labels(text);
+    let text = multidef.as_deref().unwrap_or(text);
     let mut extracted = match crate::c5::asm::extract_asm_sections(text, false) {
         Ok(e) => e,
         Err(m) => return fail(m),
@@ -2520,11 +2520,8 @@ impl AsmScratch {
 struct AsmLayout {
     /// Local-label definitions: `(label, code offset)`.
     label_defs: alloc::vec::Vec<(u32, usize)>,
-    /// Branch and `lea` displacement fields over local labels:
-    /// `(field, label, forward, width, instruction index)`. A relaxable
-    /// branch's field is one byte wide until `long_sites` holds its
-    /// instruction.
-    label_fixups: alloc::vec::Vec<(usize, u32, bool, u8, usize)>,
+    /// Branch and RIP-relative displacement fields over local labels.
+    label_fixups: alloc::vec::Vec<LabelFixup>,
     /// `$LABEL` address immediates: `(imm32 field, label, forward)`.
     abs_label_fixups: alloc::vec::Vec<(usize, u32, bool)>,
     /// Fields over template-label expressions a forward reference left
@@ -2539,6 +2536,19 @@ struct AsmLayout {
     prefix_run: Option<usize>,
 }
 
+/// A displacement field over a local label, measured from `end`, the end
+/// of its instruction. A relaxable branch's field is one byte wide until
+/// `long_sites` holds instruction `ii`.
+#[derive(Clone, Copy)]
+struct LabelFixup {
+    at: usize,
+    width: u8,
+    end: usize,
+    num: u32,
+    forward: bool,
+    ii: usize,
+}
+
 /// The operands of one instruction resolved for encoding, with the fields
 /// the layout or the writers settle afterwards.
 struct ResolvedOperands {
@@ -2548,6 +2558,8 @@ struct ResolvedOperands {
     /// A RIP-relative reference to a link-time symbol and the operand's
     /// template displacement, recorded at the disp32 field once encoded.
     riprel_reloc: Option<(AsmRipSym, i64)>,
+    /// The local label of a `LABEL(%rip)` memory operand.
+    label_rip: Option<(u32, bool)>,
     /// A `$expr` immediate / memory displacement the stream has not reached:
     /// a placeholder fixes the wide field and the expression settles later.
     imm_expr: Option<alloc::string::String>,
@@ -2555,11 +2567,11 @@ struct ResolvedOperands {
 }
 
 /// Label references the main stream does not define, deferred to the
-/// pushed sections: `(field, label, forward)` per branch displacement and
-/// per `$LABEL` address immediate.
+/// pushed sections: `(field, label, addend)` per PC-relative displacement
+/// and `(field, label)` per `$LABEL` address immediate.
 struct DeferredRefs {
-    branches: alloc::vec::Vec<(usize, u32, bool)>,
-    addresses: alloc::vec::Vec<(usize, u32, bool)>,
+    displacements: alloc::vec::Vec<(usize, u32, i64)>,
+    addresses: alloc::vec::Vec<(usize, u32)>,
 }
 
 /// Read-only context of one layout pass.
@@ -2651,7 +2663,7 @@ impl AsmPass<'_> {
             return ok;
         }
         let resolved = self.resolve_operands(insn, out.cx.code.len(), layout)?;
-        self.encode_insn(insn, resolved, pending_at, out, layout)
+        self.encode_insn(ii, insn, resolved, pending_at, out, layout)
     }
 
     /// A label definition or a layout / data directive, which encode no
@@ -2859,8 +2871,8 @@ impl AsmPass<'_> {
         Some(Ok(()))
     }
 
-    /// The direct-branch forms: a jmp / jcc to a local label, a label `lea`,
-    /// a jmp / jcc to an `asm goto` label, a `call` / `jmp` to a symbol.
+    /// The direct-branch forms: a jmp / jcc to a local label or to an
+    /// `asm goto` label, a `call` / `jmp` to a symbol.
     /// `None` when `insn` is none of these.
     fn emit_branch(
         &self,
@@ -2917,22 +2929,14 @@ impl AsmPass<'_> {
                 emit_rel32_branch(code, cc);
                 4
             };
-            layout
-                .label_fixups
-                .push((code.len() - width as usize, num, forward, width, ii));
-            layout.after_insn = true;
-            return Some(Ok(()));
-        }
-        // `lea LABEL(%rip), %reg`: the RIP-relative form with a zero rel32
-        // the label fixup pass patches like a jump displacement.
-        if let Some(&AsmOpnd::LabelAddr { num, forward }) = insn.operands.first() {
-            let width = match self.emit_label_lea(insn, code) {
-                Ok(w) => w,
-                Err(e) => return Some(Err(e)),
-            };
-            layout
-                .label_fixups
-                .push((code.len() - 4, num, forward, width, ii));
+            layout.label_fixups.push(LabelFixup {
+                at: code.len() - width as usize,
+                width,
+                end: code.len(),
+                num,
+                forward,
+                ii,
+            });
             layout.after_insn = true;
             return Some(Ok(()));
         }
@@ -3021,47 +3025,6 @@ impl AsmPass<'_> {
         None
     }
 
-    /// `lea LABEL(%rip), %reg`: returns the width of the displacement field.
-    fn emit_label_lea(&self, insn: &super::asm::AsmInsn, code: &mut Vec<u8>) -> Emit<u8> {
-        use super::super::ir::{AsmConstraint, AsmRegSize};
-        use super::asm::AsmOpnd;
-        if !matches!(insn.mnemonic, super::asm::Mnemonic::Table("lea")) {
-            return fail("inline asm: a label address requires `lea`");
-        }
-        let [_, dst] = insn.operands.as_slice() else {
-            return fail("inline asm: `lea` needs a destination register");
-        };
-        let operands = &self.stmt.asm.operands;
-        let (reg, width) = match *dst {
-            AsmOpnd::Reg { reg, size } if reg < 16 => (reg, size.bytes()),
-            AsmOpnd::Ref { idx, size } => match self.tpl.op_reg[idx as usize] {
-                Some(r)
-                    if !matches!(
-                        operands[idx as usize].constraint,
-                        AsmConstraint::Fp | AsmConstraint::Mem
-                    ) =>
-                {
-                    (
-                        r,
-                        size.unwrap_or(AsmRegSize::from_width(operands[idx as usize].width))
-                            .bytes(),
-                    )
-                }
-                _ => return fail("inline asm: `lea` destination must be a register"),
-            },
-            _ => return fail("inline asm: `lea` destination must be a register"),
-        };
-        let tops = [
-            super::table::Opnd::Reg { num: reg, width },
-            super::table::Opnd::RipRel { disp: 0, width },
-        ];
-        match super::table::encode(super::table::Mnem::Lea, None, &tops) {
-            Ok(bytes) => code.extend_from_slice(&bytes),
-            Err(m) => return fail(m),
-        }
-        Ok(4)
-    }
-
     /// Resolve the operands to concrete registers, immediates and memory
     /// references.
     fn resolve_operands(
@@ -3074,6 +3037,7 @@ impl AsmPass<'_> {
             concrete: alloc::vec::Vec::new(),
             operand_seg: None,
             riprel_reloc: None,
+            label_rip: None,
             imm_expr: None,
             disp_expr: None,
         };
@@ -3230,9 +3194,18 @@ impl AsmPass<'_> {
             // A label address immediate: a placeholder wide enough to force
             // the imm32 field; the relocation replaces it.
             AsmOpnd::ImmLabel { .. } => Concrete::Imm(ABS_LABEL_PLACEHOLDER),
+            // `LABEL(%rip)`: a zero disp32 the layout patches against the
+            // label once the instruction is encoded.
+            AsmOpnd::LabelAddr { num, forward } => {
+                r.label_rip = Some((num, forward));
+                Concrete::RipRel {
+                    disp: 0,
+                    size: self.mem_size_or_quad(insn),
+                }
+            }
             // Handled by `emit_branch`; a label reaching operand resolution
             // rode an unsupported form.
-            AsmOpnd::Label { .. } | AsmOpnd::LabelAddr { .. } | AsmOpnd::GotoLabel(_) => {
+            AsmOpnd::Label { .. } | AsmOpnd::GotoLabel(_) => {
                 return fail("inline asm: misplaced label reference");
             }
         })
@@ -3501,6 +3474,7 @@ impl AsmPass<'_> {
     /// and a RIP-relative symbol relocation.
     fn encode_insn(
         &self,
+        ii: usize,
         insn: &super::asm::AsmInsn,
         mut resolved: ResolvedOperands,
         pending_at: Option<usize>,
@@ -3577,6 +3551,19 @@ impl AsmPass<'_> {
                 return fail("inline asm: an expression immediate requires a wider form");
             };
             layout.expr_fixups.push((insn_at, at, 4, text));
+        }
+        if let Some((num, forward)) = resolved.label_rip.take() {
+            let Some((field, _)) = riprel_field(&body, concrete, addr, insn) else {
+                return fail("inline asm: RIP-relative displacement field not found");
+            };
+            layout.label_fixups.push(LabelFixup {
+                at: code.len() - (body.len() - field),
+                width: 4,
+                end: code.len(),
+                num,
+                forward,
+                ii,
+            });
         }
         // Both relocation channels place the reloc at `instr_offset + 3`, so
         // the anchor is three bytes before the disp32 field. gcc's addend is
@@ -3667,12 +3654,12 @@ impl AsmPass<'_> {
         long_sites: &mut alloc::collections::BTreeSet<usize>,
     ) -> bool {
         let known = long_sites.len();
-        for &(at, num, forward, width, ii) in &layout.label_fixups {
-            if width == 1
-                && let Some(target) = self.resolve_label(layout, at, num, forward)
-                && !(-128..=127).contains(&(target as i64 - (at as i64 + 1)))
+        for f in &layout.label_fixups {
+            if f.width == 1
+                && let Some(target) = self.resolve_label(layout, f.at, f.num, f.forward)
+                && !(-128..=127).contains(&(target as i64 - f.end as i64))
             {
-                long_sites.insert(ii);
+                long_sites.insert(f.ii);
             }
         }
         long_sites.len() != known
@@ -3690,18 +3677,21 @@ impl AsmPass<'_> {
         asm_text_abs_refs: &mut Vec<super::AsmTextAbsRef>,
     ) -> Emit<DeferredRefs> {
         let mut deferred = DeferredRefs {
-            branches: alloc::vec::Vec::new(),
+            displacements: alloc::vec::Vec::new(),
             addresses: alloc::vec::Vec::new(),
         };
-        for &(at, num, forward, width, _) in &layout.label_fixups {
-            match self.resolve_label(layout, at, num, forward) {
+        for f in &layout.label_fixups {
+            let (at, w) = (f.at, f.width as usize);
+            match self.resolve_label(layout, at, f.num, f.forward) {
                 Some(target) => {
-                    let w = width as usize;
-                    let rel = target as i64 - (at + w) as i64;
+                    let rel = target as i64 - f.end as i64;
                     code[at..at + w].copy_from_slice(&rel.to_le_bytes()[..w]);
                 }
                 // Only a target this stream defines takes the short form.
-                None if width == 4 => deferred.branches.push((at, num, forward)),
+                None if w == 4 => {
+                    let addend = at as i64 - f.end as i64;
+                    deferred.displacements.push((at, f.num, addend));
+                }
                 None => return fail("inline asm: undefined local label"),
             }
         }
@@ -3711,7 +3701,7 @@ impl AsmPass<'_> {
                     field_offset: at,
                     target_offset: target,
                 }),
-                None => deferred.addresses.push((at, num, forward)),
+                None => deferred.addresses.push((at, num)),
             }
         }
         Ok(deferred)
@@ -3754,9 +3744,9 @@ impl AsmPass<'_> {
 
     /// Materialize the `.pushsection` blocks, every label offset now known,
     /// then bind each deferred main-stream reference to its section
-    /// definition. The sections follow the main stream textually, so only a
-    /// forward reference reaches one, and it becomes a relocation against the
-    /// target section's symbol.
+    /// definition as a relocation against the target section's symbol. A
+    /// number defined more than once was renamed apart, so a label names one
+    /// definition, which the reference takes whichever way it points.
     fn materialize_sections(
         &self,
         out: &mut Out,
@@ -3768,7 +3758,7 @@ impl AsmPass<'_> {
         let undefined = "inline asm: undefined local label";
         let no_abs = "inline asm: `$LABEL` address immediate names no local label";
         if self.tpl.blocks.is_empty() {
-            if !deferred.branches.is_empty() {
+            if !deferred.displacements.is_empty() {
                 return fail(undefined);
             }
             if !deferred.addresses.is_empty() {
@@ -3831,34 +3821,26 @@ impl AsmPass<'_> {
                 Some(alloc::format!("{num}"))
             }
         };
-        for (at, num, forward) in deferred.branches {
-            let Some(name) = label_name(num) else {
-                return fail(undefined);
-            };
-            let hit = forward
-                .then(|| defined.iter().find(|d| d.name == name))
-                .flatten();
-            let Some(d) = hit else {
+        let definition = |num: u32| {
+            let name = label_name(num)?;
+            defined.iter().find(|d| d.name == name)
+        };
+        for (at, num, addend) in deferred.displacements {
+            let Some(d) = definition(num) else {
                 return fail(undefined);
             };
             out.asm_section_text_refs.push(super::AsmSectionTextRef {
                 instr_offset: at,
                 section_index: d.section_index,
                 section_offset: d.offset,
-                addend: -4,
+                addend,
                 absolute: false,
                 kind: crate::c5::asm::AsmRelocKind::Data,
             });
         }
         // The absolute form of the same binding: no end skew.
-        for (at, num, forward) in deferred.addresses {
-            let Some(name) = label_name(num) else {
-                return fail(undefined);
-            };
-            let hit = forward
-                .then(|| defined.iter().find(|d| d.name == name))
-                .flatten();
-            let Some(d) = hit else {
+        for (at, num) in deferred.addresses {
+            let Some(d) = definition(num) else {
                 return fail(no_abs);
             };
             out.asm_section_text_refs.push(super::AsmSectionTextRef {

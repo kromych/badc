@@ -1642,6 +1642,39 @@ fn bitfields_take_the_ms_layout_on_pe_targets() {
     layout_rows_hold("", SHAPES, &[Target::WindowsX64, Target::WindowsAarch64]);
 }
 
+/// An aggregate with no storage has MSVC's size on the PE targets: 4, or
+/// its alignment where an explicit one of at least 4 applies, never its
+/// natural alignment; a member of such a type takes that storage. The
+/// SysV targets keep GCC's 0 and give the member none. The rows are clang
+/// 18's layouts for both windows-msvc triples and for x86_64-linux-gnu
+/// and aarch64-linux-gnu, which agree on every SysV row.
+#[test]
+fn aggregates_without_storage_take_msvc_sizes_on_pe_targets() {
+    use crate::Target;
+    const MS: &[&str] = &[
+        "|struct {}|4/1|",
+        "|union {}|4/1|",
+        "|struct { int :0; }|4/1|",
+        "|struct { char a[0]; }|4/1|",
+        "|struct { long long a[0]; }|4/8|",
+        "|struct __attribute__((aligned(2))) {}|4/2|",
+        "|struct __attribute__((aligned(16))) {}|16/16|",
+        "|struct {} __attribute__((aligned(16)))|16/16|",
+        "|struct { char c; struct {} e; char d; }|6/1|c@0 d@40",
+        "|struct { struct { long long a[0]; } x; char c; }|8/8|c@32",
+    ];
+    layout_rows_hold("", MS, &[Target::WindowsX64, Target::WindowsAarch64]);
+    const SYSV: &[&str] = &[
+        "|struct {}|0/1|",
+        "|union {}|0/1|",
+        "|struct { char a[0]; }|0/1|",
+        "|struct { long long a[0]; }|0/8|",
+        "|struct __attribute__((aligned(16))) {}|0/16|",
+        "|struct { char c; struct {} e; char d; }|2/1|c@0 d@8",
+    ];
+    layout_rows_hold("", SYSV, &[Target::LinuxX64, Target::LinuxAarch64]);
+}
+
 /// The MS layout lowers only a member's natural alignment for `#pragma
 /// pack` and `packed`: an alignment the member or its type asks for, by
 /// `__declspec(align)` or `aligned`, stands, and it raises the aggregate. A

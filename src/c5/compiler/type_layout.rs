@@ -1039,6 +1039,11 @@ fn homogeneous_elements(
     if sd.anon_bitfields.iter().any(|b| b.width > 0) {
         return None;
     }
+    // An empty record adds no element whatever size it has (MSVC's is 4),
+    // as clang skips one.
+    if sd.fields.is_empty() && sd.anon_members.is_empty() {
+        return Some((None, 0));
+    }
     let (mut base, mut count) = (None, 0u32);
     let mut add = |kind: Option<(ScalarKind, u32)>, n: u32| {
         if kind.is_some() && base.is_some() && kind != base {

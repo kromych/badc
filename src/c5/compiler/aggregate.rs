@@ -709,9 +709,10 @@ impl Compiler {
             // idiom (`struct {} __empty; T arr[];`) relies on. Its
             // alignment still applies: an empty type carrying
             // `aligned(N)` places the member, and raises the
-            // containing type, at N.
+            // containing type, at N. MSVC gives the type storage.
             let is_empty_aggregate = is_struct_value_ty(field_ty)
-                && self.structs[struct_id_of(field_ty)].fields.is_empty();
+                && self.structs[struct_id_of(field_ty)].fields.is_empty()
+                && !self.target.ms_layout();
             let field_storage = if is_empty_aggregate {
                 0
             } else if field_array_size > 0 {
@@ -1260,6 +1261,13 @@ impl Compiler {
         }
         if transparent {
             self.mark_transparent_union(struct_id);
+        }
+        // MSVC gives a C aggregate with no storage size 4, or its
+        // alignment where an explicit one of at least 4 applies, as
+        // clang's `*-windows-msvc` layout does; the alignment stays.
+        let s = &mut self.structs[struct_id];
+        if self.target.ms_layout() && s.is_complete && s.size == 0 {
+            s.size = if s.explicit_align >= 4 { s.align } else { 4 };
         }
         Ok(())
     }

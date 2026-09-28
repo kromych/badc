@@ -64,8 +64,10 @@ const DT_FLAGS: u64 = 30;
 const DT_VERSYM: u64 = 0x6fff_fff0;
 const DT_VERNEED: u64 = 0x6fff_fffe;
 const DT_VERNEEDNUM: u64 = 0x6fff_ffff;
+const DT_FLAGS_1: u64 = 0x6fff_fffb;
 
 const DF_BIND_NOW: u64 = 0x8;
+const DF_1_PIE: u64 = 0x0800_0000;
 
 const VER_NDX_GLOBAL: u16 = 1;
 const VER_NDX_FIRST: u16 = 2;
@@ -944,6 +946,9 @@ fn build_dynamic(lib_strtab_offsets: &[u32], info: DynamicInfo) -> Vec<u8> {
         (DT_BIND_NOW, 0),
         (DT_FLAGS, DF_BIND_NOW),
     ];
+    if info.pie {
+        entries.push((DT_FLAGS_1, DF_1_PIE));
+    }
     // Constructor / destructor arrays the loader runs around the program.
     // Emitted only when present so a program with no constructors keeps the
     // same dynamic section it had before.
@@ -979,6 +984,8 @@ struct DynamicInfo {
     versions: Option<VersionInfo>,
     init_array: Option<(u64, u64)>,
     fini_array: Option<(u64, u64)>,
+    /// A position-independent executable: `DF_1_PIE`.
+    pie: bool,
 }
 
 /// A defined dynamic-symbol export for the ELF writer.
@@ -1858,6 +1865,11 @@ impl<'a> ElfImageWriter<'a> {
     fn layout_data_segments(&mut self) {
         let build = self.build;
         let placed = self.placed();
+        let dynamic_size = if self.loader_tables {
+            self.dynamic_section(false).len() as u64
+        } else {
+            0
+        };
         let seg = &mut self.seg;
         seg.data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
         if placed {
@@ -1885,16 +1897,7 @@ impl<'a> ElfImageWriter<'a> {
             seg.segment2_off = seg.rodata_end;
         }
         seg.dynamic_off = seg.segment2_off;
-        let version_dyn_tags: u64 = if self.dynamic.has_versions { 3 } else { 0 };
-        let init_fini_dyn_tags: u64 = 2
-            * (build.init_fini_arrays.init.is_some() as u64
-                + build.init_fini_arrays.fini.is_some() as u64);
-        seg.dynamic_size = if self.loader_tables {
-            (build.imports.dylibs.len() as u64 + 11 + version_dyn_tags + init_fini_dyn_tags)
-                * ELF64_DYN_SIZE
-        } else {
-            0
-        };
+        seg.dynamic_size = dynamic_size;
         seg.got_off = seg.dynamic_off + seg.dynamic_size;
         seg.got_size = (self.n_imports as u64) * 8;
         let got_end = seg.got_off + seg.got_size;
@@ -2718,6 +2721,46 @@ impl<'a> ElfImageWriter<'a> {
         Ok(())
     }
 
+    /// `.dynamic`. Layout sizes the section by the same call with
+    /// `addressed` false, before the tables have addresses, so the tags it
+    /// counts are the ones written.
+    fn dynamic_section(&self, addressed: bool) -> Vec<u8> {
+        let (build, seg) = (self.build, &self.seg);
+        let va = |off| if addressed { self.va(off) } else { 0 };
+        let data_va = |off| {
+            if addressed {
+                self.data_off_to_vaddr(off)
+            } else {
+                0
+            }
+        };
+        build_dynamic(
+            &self.dynamic.lib_strtab_offsets,
+            DynamicInfo {
+                hash_vmaddr: va(seg.hash_off),
+                strtab_vmaddr: va(seg.dynstr_off),
+                symtab_vmaddr: va(seg.dynsym_off),
+                rela_vmaddr: va(seg.rela_off),
+                rela_size: seg.rela_size,
+                strtab_size: self.dynamic.dynstr.len() as u64,
+                versions: self.dynamic.has_versions.then(|| VersionInfo {
+                    versym_vmaddr: va(seg.gnu_version_off),
+                    verneed_vmaddr: va(seg.gnu_version_r_off),
+                    verneed_num: self.dynamic.verneed_groups.len() as u64,
+                }),
+                init_array: build
+                    .init_fini_arrays
+                    .init
+                    .map(|(off, len)| (data_va(off), len)),
+                fini_array: build
+                    .init_fini_arrays
+                    .fini
+                    .map(|(off, len)| (data_va(off), len)),
+                pie: self.emit_dyn && build.output_kind != super::OutputKind::SharedLibrary,
+            },
+        )
+    }
+
     /// The rw segment: `.dynamic`, the zero-filled `.got` the loader fills
     /// through `.rela.dyn`, then the data image with every pointer
     /// initializer resolved to its link-time address (the matching
@@ -2731,34 +2774,7 @@ impl<'a> ElfImageWriter<'a> {
         let dynamic = if !self.loader_tables {
             Vec::new()
         } else {
-            build_dynamic(
-                &self.dynamic.lib_strtab_offsets,
-                DynamicInfo {
-                    hash_vmaddr: self.va(seg.hash_off),
-                    strtab_vmaddr: self.va(seg.dynstr_off),
-                    symtab_vmaddr: self.va(seg.dynsym_off),
-                    rela_vmaddr: self.va(seg.rela_off),
-                    rela_size: seg.rela_size,
-                    strtab_size: self.dynamic.dynstr.len() as u64,
-                    versions: if self.dynamic.has_versions {
-                        Some(VersionInfo {
-                            versym_vmaddr: self.va(seg.gnu_version_off),
-                            verneed_vmaddr: self.va(seg.gnu_version_r_off),
-                            verneed_num: self.dynamic.verneed_groups.len() as u64,
-                        })
-                    } else {
-                        None
-                    },
-                    init_array: build
-                        .init_fini_arrays
-                        .init
-                        .map(|(off, len)| (self.data_off_to_vaddr(off), len)),
-                    fini_array: build
-                        .init_fini_arrays
-                        .fini
-                        .map(|(off, len)| (self.data_off_to_vaddr(off), len)),
-                },
-            )
+            self.dynamic_section(true)
         };
         debug_assert_eq!(dynamic.len() as u64, seg.dynamic_size);
         let ro_len = seg.ro_len;
@@ -3793,6 +3809,48 @@ mod tests {
             e += ELF64_DYN_SIZE as usize;
         }
         out
+    }
+
+    /// `DF_1_PIE` marks a position-independent executable, as GNU ld and
+    /// lld mark a `-pie` link; a placed image and a shared object carry
+    /// no `DT_FLAGS_1`.
+    #[test]
+    fn only_a_position_independent_executable_carries_df_1_pie() {
+        use crate::Compiler;
+        let src = "int answer() { return 42; }\n#pragma export(answer)\nint main() { return 0; }";
+        for (machine, target) in [
+            (Machine::Aarch64, super::super::Target::LinuxAarch64),
+            (Machine::X86_64, super::super::Target::LinuxX64),
+        ] {
+            let program =
+                Compiler::with_target(super::super::super::tests::with_prelude(src), target)
+                    .compile()
+                    .expect("compile");
+            for (form, shared, want) in [
+                (ExecForm::Pie, false, Some(DF_1_PIE)),
+                (ExecForm::Placed, false, None),
+                (ExecForm::Pie, true, None),
+            ] {
+                let opts = if shared {
+                    super::super::NativeOptions::new().with_shared_library()
+                } else {
+                    super::super::NativeOptions::default()
+                };
+                let mut build = super::super::lower_for(&program, target, opts).expect("lower");
+                build.exec_form = form;
+                let bytes = write(&tiny_program(), &build, machine).unwrap();
+                let tags = dynamic_entries(&bytes);
+                assert!(
+                    tags.contains(&(DT_NULL, 0)),
+                    "{machine:?} {form:?}: no .dynamic"
+                );
+                let flags_1 = tags
+                    .iter()
+                    .find(|&&(t, _)| t == DT_FLAGS_1)
+                    .map(|&(_, v)| v);
+                assert_eq!(flags_1, want, "{machine:?} {form:?} shared={shared}");
+            }
+        }
     }
 
     #[test]

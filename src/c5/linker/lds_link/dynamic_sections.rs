@@ -530,6 +530,7 @@ impl<'a> LdsLinker<'a> {
             },
             symbolic: self.opts.symbolic,
             textrel: self.has_readonly_dynamic_reloc(),
+            pie: self.opts.emit == LdsEmit::Dyn && !self.opts.shared,
             preinit_array: self.out_extent(".preinit_array"),
             init_array: self.out_extent(".init_array"),
             fini_array: self.out_extent(".fini_array"),

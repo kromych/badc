@@ -2581,6 +2581,24 @@ fn dynstr_at(image: &[u8], off: u64) -> String {
     strz(&s, off as usize)
 }
 
+/// A `-pie` link carries `DT_FLAGS_1` with `DF_1_PIE`, as GNU ld's and
+/// lld's do; a `-shared` link does not.
+#[test]
+fn only_a_pie_link_carries_df_1_pie() {
+    let script = parse_linker_script(&default_script(true)).expect("parses");
+    for (shared, want) in [(false, Some(dynamic::DF_1_PIE)), (true, None)] {
+        let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
+        let mut opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])]);
+        opts.shared = shared;
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let flags_1 = dyn_tags(&res.image)
+            .into_iter()
+            .find(|&(t, _)| t == dynamic::DT_FLAGS_1)
+            .map(|(_, v)| v);
+        assert_eq!(flags_1, want, "shared={shared}");
+    }
+}
+
 /// A shared library input takes a `DT_NEEDED` naming its soname,
 /// and `--dynamic-linker` an `.interp` a loader can find through
 /// `PT_INTERP`, with `PT_PHDR` for the load bias.

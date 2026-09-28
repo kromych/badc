@@ -547,6 +547,13 @@ impl Compiler {
         Ok(())
     }
 
+    /// C99 6.3.2.1p2: an lvalue of incomplete type has no value to read.
+    pub(super) fn reject_incomplete_value(&self, ty: i64) -> Result<(), C5Error> {
+        self.require_complete_value(ty, Code::INVALID_OPERANDS, |t| {
+            alloc::format!("incomplete type `{t}` where a complete type is required")
+        })
+    }
+
     /// The category of an operand of type `ty`: a multi-dimensional array
     /// decays to a pointer and `__int128` is an integer type.
     pub(super) fn operand(&self, ty: i64) -> Operand {

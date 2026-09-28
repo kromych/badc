@@ -1274,6 +1274,7 @@ impl Compiler {
             return Ok(());
         }
         while self.lex.tk == ',' {
+            self.reject_incomplete_value(self.ty)?;
             let lhs_ast = self.ast_acc;
             self.next()?;
             self.drop_operand_array_decay();
@@ -1301,7 +1302,8 @@ impl Compiler {
 
     pub(super) fn expr(&mut self, lev: i64) -> Result<(), C5Error> {
         self.expr_or_void(lev)?;
-        self.reject_void_value(self.ty)
+        self.reject_void_value(self.ty)?;
+        self.reject_incomplete_value(self.ty)
     }
 
     /// An expression that may be `void`: its value is discarded, unevaluated or passed on.
@@ -2063,6 +2065,11 @@ impl Compiler {
         }
         let type_name = self.parse_type_name()?;
         let arg_ty = type_name.ty;
+        // C99 7.15.1.1p2: the type is an object type a pointer to which is
+        // spelled by adding `*`.
+        self.require_complete_value(arg_ty, Code::INVALID_ARGUMENTS, |t| {
+            format!("second operand of `{fn_name}` has incomplete type `{t}`")
+        })?;
         let is_pointer = type_name.ptr_levels > 0;
         let size = self.size_of_type(self.va_arg_slot_ty(arg_ty)) as i64;
         // C99 6.5.2.2p6: a floating argument past the promotions is `double`
@@ -2364,7 +2371,14 @@ impl Compiler {
         }
         self.ast_vstack.truncate(saved_ast_vstack_depth);
         self.emit_direct_call_ast(id_idx, &callee, ast_arg_ids, result_temp_off);
-        Ok(())
+        // C99 6.5.2.2p1: the called function returns void or a complete
+        // object type.
+        self.require_complete_value(self.ty, Code::INVALID_OPERANDS, |t| {
+            format!(
+                "calling `{}` with incomplete return type `{t}`",
+                callee.name
+            )
+        })
     }
 
     /// One argument of a direct call, evaluated into its staging slot.
@@ -2847,6 +2861,10 @@ impl Compiler {
             ));
         }
         if self.lex.tk == '{' {
+            // C99 6.5.2.5p1: an object type, or an array of unknown size of one.
+            self.require_complete_value(type_name.ty, Code::INVALID_INITIALIZER, |t| {
+                format!("compound literal has incomplete type `{t}`")
+            })?;
             // C99 6.5.2.5 compound literal: `(type){ init }`. An array
             // typedef's dimensions complete the type from the inside:
             // `(row[2]){...}` with `typedef int row[3]` is `int[2][3]`
@@ -2874,6 +2892,7 @@ impl Compiler {
         self.expr_or_void(Token::Inc as i64)?;
         if !is_void_ty(t) {
             self.reject_void_value(self.ty)?;
+            self.reject_incomplete_value(self.ty)?;
             self.check_cast(t, self.ty)?;
         }
         let cast_child_ast = self.ast_acc;
@@ -3564,6 +3583,10 @@ impl Compiler {
         } else {
             Ty::Int as i64
         };
+        // C99 6.5.2.2p1, as for a direct call.
+        self.require_complete_value(indirect_ret_ty, Code::INVALID_OPERANDS, |t| {
+            format!("calling a function with incomplete return type `{t}`")
+        })?;
         let fp_temp = self.reserve_slots(1);
         self.mark_emit_other();
         // Arguments are evaluated left to right into staging slots and

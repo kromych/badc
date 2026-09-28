@@ -1156,6 +1156,17 @@ impl Compiler {
         }
         self.parse_kr_parameter_declarations(&mut params)?;
         self.check_complete_parameters(&params, def.line)?;
+        // C99 6.9.1p3: a definition returns void or a complete object type.
+        let ret = self.symbols[id_idx].type_;
+        if self.incomplete_aggregate_tag(ret).is_some() {
+            let ty = super::types::format_type(ret, &self.structs);
+            let name = &self.symbols[id_idx].name;
+            return Err(self.compile_err_at(
+                Code::INVALID_DECLARATION,
+                def.line,
+                format!("incomplete result type `{ty}` in the definition of `{name}`"),
+            ));
+        }
         // C99 6.9.1p7: an identifier list is no prototype; calls pass what arrives.
         let arrival = if params.form == super::function::ParamForm::IdentifierList {
             self.old_style_arrival_tys(id_idx, &params.types)

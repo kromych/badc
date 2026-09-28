@@ -764,6 +764,21 @@ impl Compiler {
         ))
     }
 
+    /// Reject `ty` where C99 requires a complete object type; `msg` phrases
+    /// the report around the type's spelling.
+    pub(super) fn require_complete_value(
+        &self,
+        ty: i64,
+        code: Code,
+        msg: impl FnOnce(&str) -> alloc::string::String,
+    ) -> Result<(), C5Error> {
+        if self.incomplete_aggregate_tag(ty).is_none() {
+            return Ok(());
+        }
+        let spelled = super::types::format_type(ty, &self.structs);
+        Err(self.compile_err(code, msg(&spelled)))
+    }
+
     /// Size in bytes of a value of the given `ty`.
     ///   * pointers (any base type)  -> 8
     ///   * scalar `char`             -> 1

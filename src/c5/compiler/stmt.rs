@@ -302,7 +302,8 @@ impl Compiler {
     /// the chain through this helper.
     pub(super) fn parse_full_expr(&mut self) -> Result<(), C5Error> {
         self.parse_full_expr_or_void()?;
-        self.reject_void_value(self.ty)
+        self.reject_void_value(self.ty)?;
+        self.reject_incomplete_value(self.ty)
     }
 
     pub(super) fn parse_full_expr_or_void(&mut self) -> Result<(), C5Error> {
@@ -1677,7 +1678,10 @@ impl Compiler {
             let saved_decay_bytes = core::mem::take(&mut self.pending.last_array_decay_bytes);
             let saved_decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
             let saved_decay_vla = self.pending.last_array_decay_vla.take();
-            self.expr(Token::Assign as i64)?;
+            // A memory operand designates its object, which gcc lets have
+            // incomplete type.
+            self.expr_or_void(Token::Assign as i64)?;
+            self.reject_void_value(self.ty)?;
             let vla = core::mem::replace(&mut self.pending.last_array_decay_vla, saved_decay_vla);
             // The dims channel also marks rows the byte channel cannot
             // (an unspecified bound `*(T (*)[])p` has no byte size).
@@ -2542,7 +2546,8 @@ impl Compiler {
         }
         self.next()?; // consume '('
         self.ast_psh();
-        self.expr(Token::Assign as i64)?;
+        self.expr_or_void(Token::Assign as i64)?;
+        self.reject_void_value(self.ty)?;
         if by_address {
             self.ty += Ty::Ptr as i64;
             self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
@@ -3472,6 +3477,7 @@ impl Compiler {
             self.next()?;
         } else {
             self.parse_full_expr_or_void()?;
+            self.reject_incomplete_value(self.ty)?;
             // C99 6.8.3 expression statement: bind the parsed
             // expression's id to a `Stmt::Expr` so the walker
             // descends through it. No-op when the expression

@@ -2883,6 +2883,65 @@ fn incomplete_enum_is_rejected_where_an_incomplete_struct_is() {
 }
 
 #[test]
+fn incomplete_type_is_rejected_where_its_object_is_needed() {
+    // C99 6.9.1p3 and 6.5.2.2p1: a definition's and a call's result, 6.3.2.1p2:
+    // a value read from an lvalue, 6.5.2.5p1: a compound literal, 7.15.1.1p2:
+    // `va_arg`'s type -- each a complete object type, for a struct declared
+    // without its body and an enum used before its list (GNU) alike.
+    for tag in ["struct E", "enum E"] {
+        for (src, msg) in [
+            (
+                "@; @ *g(void); @ f(void) { return *g(); }",
+                "incomplete result type `@` in the definition of `f`",
+            ),
+            (
+                "@; @ g(void); void f(void) { g(); }",
+                "calling `g` with incomplete return type `@`",
+            ),
+            (
+                "@; @ (*fp)(void); void f(void) { (*fp)(); }",
+                "calling a function with incomplete return type `@`",
+            ),
+            (
+                "@; extern @ a, b; void f(void) { a = b; }",
+                "incomplete type `@` where a complete type is required",
+            ),
+            (
+                "@; void f(@ *p) { *p; }",
+                "incomplete type `@` where a complete type is required",
+            ),
+            (
+                "@; int f(@ *p) { return (*p, 0); }",
+                "incomplete type `@` where a complete type is required",
+            ),
+            (
+                "int printf(const char *, ...); @; void f(@ *p) { printf(\"\", *p); }",
+                "incomplete type `@` where a complete type is required",
+            ),
+            (
+                "@; void f(void) { (@){0}; }",
+                "compound literal has incomplete type `@`",
+            ),
+            (
+                "#include <stdarg.h>\n@; void f(int n, ...) { va_list ap; va_start(ap, n); va_arg(ap, @); va_end(ap); }",
+                "has incomplete type `@`",
+            ),
+        ] {
+            let src = alloc::format!("{}\nint main(void) {{ return 0; }}", src.replace('@', tag));
+            expect_compile_error(&src, &msg.replace('@', tag));
+        }
+        // The lvalue itself stands where no value is read: its address, the
+        // type of it, and an asm memory operand, which gcc accepts.
+        expect_compiles(
+            &"@; @ *p;\n\
+              int main(void) { typeof(*p) *q = &*p; __asm__ volatile(\"\" : : \"m\"(*p)); return q != p; }"
+                .replace('@', tag),
+            "designating an object of incomplete type",
+        );
+    }
+}
+
+#[test]
 fn sizeof_of_an_incomplete_type_is_diagnosed() {
     // C99 6.5.3.4p1 / C11 6.5.3.4p1: neither operator applies to an
     // incomplete type, whether the operand is a type name, an identifier,

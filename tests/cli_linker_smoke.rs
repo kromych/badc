@@ -7564,6 +7564,136 @@ fn a_system_compiled_object_reaches_thread_locals_in_every_model() {
     }
 }
 
+/// gcc `-fno-plt` code reaches every external function through its GOT
+/// slot (GOTPCRELX, x86-64 psABI B.2). The link reads an import's slot,
+/// which the loader fills through `R_X86_64_GLOB_DAT`; relaxes a call, a
+/// jump and a load of a function it defines to their direct forms; and
+/// gives a comparison with such a function's address a slot of its own.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn fno_plt_objects_reach_functions_through_the_got() {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping fno_plt_objects_reach_functions_through_the_got: no system C compiler");
+        return;
+    };
+    let dir = tempdir("fno-plt");
+    let lib = write_source(
+        &dir,
+        "lib.c",
+        "int twice(int x) { return 2 * x; }\n\
+         int (*get_twice(void))(int) { return twice; }\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <stdio.h>\n\
+         extern int twice(int);\n\
+         extern int (*get_twice(void))(int);\n\
+         extern void maybe(void) __attribute__((weak));\n\
+         int tail(int x) { return twice(x); }\n\
+         int main(void) {\n\
+           puts(\"through the GOT\");\n\
+           if (maybe) maybe();\n\
+           return tail(20) + twice(1) == 42 && get_twice() == twice ? 0 : 1;\n\
+         }\n",
+    );
+    let mut objs = Vec::new();
+    for src in [&lib, &main] {
+        let obj = src.with_extension("o");
+        run(
+            Command::new(&cc)
+                .args(["-O2", "-fno-plt", "-U_FORTIFY_SOURCE", "-c"])
+                .arg(src)
+                .arg("-o")
+                .arg(&obj),
+            "compile with -fno-plt",
+        );
+        objs.push(obj);
+    }
+    for form in [&[][..], &["-no-pie"][..]] {
+        let exe = dir.join("prog");
+        run(
+            Command::new(badc())
+                .arg("-q")
+                .args(form)
+                .args(&objs)
+                .arg("-o")
+                .arg(&exe),
+            "link the -fno-plt objects",
+        );
+        let ran = Command::new(&exe).output().expect("run");
+        assert_eq!(
+            (ran.status.code(), String::from_utf8_lossy(&ran.stdout)),
+            (Some(0), "through the GOT\n".into()),
+            "{form:?}"
+        );
+        let image = std::fs::read(&exe).expect("read the image");
+        let slot = glob_dat_slot(&image, "puts").expect("a GLOB_DAT against puts");
+        assert!(
+            rip_indirect_call_targets(&image).contains(&slot),
+            "{form:?}: no `call *disp32(%rip)` reads puts' slot at {slot:#x}"
+        );
+    }
+}
+
+/// `r_offset` of the image's `R_X86_64_GLOB_DAT` against `name`.
+fn glob_dat_slot(image: &[u8], name: &str) -> Option<u64> {
+    let rd32 = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(image[o..o + 8].try_into().unwrap());
+    let headers = elf_section_spans(image);
+    let (_, _, _, rela_off, rela_size, dynsym) = *headers.iter().find(|h| h.1 == 4)?;
+    let (_, _, _, sym_off, _, dynstr) = headers[dynsym as usize];
+    let str_off = headers[dynstr as usize].3;
+    (rela_off..rela_off + rela_size).step_by(24).find_map(|r| {
+        let info = rd64(r + 8);
+        let st_name = rd32(sym_off + (info >> 32) as usize * 24) as usize;
+        let at = str_off + st_name;
+        let end = at + image[at..].iter().position(|&b| b == 0)?;
+        (info & 0xffff_ffff == 6 && &image[at..end] == name.as_bytes()).then(|| rd64(r))
+    })
+}
+
+/// Where each `call *disp32(%rip)` in `.text` reads its target.
+fn rip_indirect_call_targets(image: &[u8]) -> Vec<u64> {
+    let headers = elf_section_spans(image);
+    let Some(&(_, _, addr, off, size, _)) = headers.iter().find(|h| h.0 == ".text") else {
+        return Vec::new();
+    };
+    let text = &image[off..off + size];
+    (0..text.len().saturating_sub(5))
+        .filter(|&i| text[i] == 0xff && text[i + 1] == 0x15)
+        .map(|i| {
+            let disp = i32::from_le_bytes(text[i + 2..i + 6].try_into().unwrap());
+            (addr + i as u64 + 6).wrapping_add_signed(disp as i64)
+        })
+        .collect()
+}
+
+/// Section headers of an ELF64 image as
+/// `(name, sh_type, sh_addr, sh_offset, sh_size, sh_link)`.
+fn elf_section_spans(bytes: &[u8]) -> Vec<(String, u32, u64, usize, usize, u32)> {
+    let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let (e_shoff, e_shentsize) = (rd64(0x28) as usize, rd16(0x3a));
+    let str_off = rd64(e_shoff + rd16(0x3e) * e_shentsize + 0x18) as usize;
+    (0..rd16(0x3c))
+        .map(|i| {
+            let sh = e_shoff + i * e_shentsize;
+            let n = str_off + rd32(sh) as usize;
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap() + n;
+            (
+                String::from_utf8_lossy(&bytes[n..end]).into_owned(),
+                rd32(sh + 4),
+                rd64(sh + 0x10),
+                rd64(sh + 0x18) as usize,
+                rd64(sh + 0x20) as usize,
+                rd32(sh + 0x28),
+            )
+        })
+        .collect()
+}
+
 // A `long double` crosses the system compiler boundary both ways as the
 // platform passes it. System V AMD64 3.2.3 gives it and an aggregate of one,
 // or of overlapping ones, the X87 + X87UP classes, in memory as an argument,

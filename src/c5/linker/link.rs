@@ -25,6 +25,7 @@ use hashbrown::HashMap;
 
 use crate::c5::error::C5Error;
 
+use super::got_relax::{self, is_x86_64_got_pcrel};
 use super::object::{
     ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol,
     RelocOrigin, RelocSite, SectionFamily, SharedLibrary, reloc_desc,
@@ -45,10 +46,10 @@ use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ADR_PREL_LO21, R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_JUMP26,
     R_AARCH64_LD_PREL_LO19, R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64,
     R_AARCH64_TLS_DTPREL64, R_X86_64_32, R_X86_64_64, R_X86_64_DTPOFF32, R_X86_64_DTPOFF64,
-    R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX,
-    TprelField, aarch64_abs_field, aarch64_is_tls, aarch64_ldst_lo12_scale, aarch64_movw_field,
-    aarch64_pcrel_data_field, aarch64_pcrel_imm_field, aarch64_tprel_field, x86_64_abs_field,
-    x86_64_is_tls, x86_64_pcrel_data_field, x86_64_tpoff_field,
+    R_X86_64_GOTPCREL, R_X86_64_GOTPCRELX, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32,
+    R_X86_64_REX_GOTPCRELX, TprelField, aarch64_abs_field, aarch64_is_tls, aarch64_ldst_lo12_scale,
+    aarch64_movw_field, aarch64_pcrel_data_field, aarch64_pcrel_imm_field, aarch64_tprel_field,
+    x86_64_abs_field, x86_64_is_tls, x86_64_pcrel_data_field, x86_64_tpoff_field,
 };
 
 /// The tag this module's diagnostics carry.
@@ -63,6 +64,7 @@ pub(crate) const fn is_got_reloc(rtype: u32) -> bool {
     matches!(
         rtype,
         R_X86_64_GOTPCREL
+            | R_X86_64_GOTPCRELX
             | R_X86_64_REX_GOTPCRELX
             | R_AARCH64_ADR_GOT_PAGE
             | R_AARCH64_LD64_GOT_LO12_NC
@@ -810,6 +812,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
     link.allocate_copies()?;
     link.define_link_symbols();
     link.collect_import_facts();
+    link.allocate_got_slots();
     link.resolve_text_relocs()?;
     link.resolve_tls_fixups()?;
     link.resolve_data_relocs()?;
@@ -982,6 +985,12 @@ struct Link<'a> {
     /// `(name, host symbol)` of each shared-library data object the
     /// link gave a copy in `.bss`.
     copies: Vec<(String, String)>,
+    /// `.data` slot of each x86-64 GOT reference `allocate_got_slots`
+    /// gave one, keyed by `(unit, relocation offset)`.
+    got_slot_sites: BTreeMap<(usize, u64), u64>,
+    /// `(unit, symbol index, slot)` of each such slot, resolved as a
+    /// pointer initializer.
+    got_slot_relocs: Vec<(usize, usize, u64)>,
     /// Import indices the note channel names as data references, and
     /// those some site branches to; a branch makes the import code.
     object_imports: BTreeSet<usize>,
@@ -1071,6 +1080,8 @@ impl<'a> Link<'a> {
             extern_data_names: hashbrown::HashSet::new(),
             routed_import_names: hashbrown::HashSet::new(),
             copies: Vec::new(),
+            got_slot_sites: BTreeMap::new(),
+            got_slot_relocs: Vec::new(),
             object_imports: BTreeSet::new(),
             branch_imports: BTreeSet::new(),
             pending_imports: Vec::new(),
@@ -1924,6 +1935,114 @@ impl<'a> Link<'a> {
             .collect();
     }
 
+    /// An x86-64 GOT reference is relaxed to a direct one where the link
+    /// defines the symbol and the instruction has a direct form. A symbol
+    /// the link defines, or holds as an absolute value, whose instruction
+    /// has none gets an 8-byte `.data` slot holding its address, as does
+    /// an unresolved weak symbol no zero rewrite reaches; the slot is
+    /// resolved like a pointer initializer, so a PIE takes an
+    /// `R_X86_64_RELATIVE` for it. Imports read the writer's GOT.
+    fn allocate_got_slots(&mut self) {
+        if self.machine != NativeMachine::X86_64 {
+            return;
+        }
+        let objs = self.objs;
+        // A global names one slot for the link, a local one in its unit.
+        let mut slot_of: BTreeMap<(usize, usize, &'a str), u64> = BTreeMap::new();
+        let first = align_usize(self.data.len(), 8) as u64;
+        for (i, obj) in objs.iter().enumerate() {
+            let resolver = self.resolver_calls(obj);
+            for reloc in &obj.text_relocs {
+                if !is_x86_64_got_pcrel(reloc.rtype) || resolver.calls.contains(&reloc.offset) {
+                    continue;
+                }
+                let Some(sym) = obj.symbols.get(reloc.sym_idx) else {
+                    continue;
+                };
+                let field = self.text_bases[i] + reloc.offset as usize;
+                if !self.needs_got_slot(sym, reloc.rtype, field) {
+                    continue;
+                }
+                let key = if sym.binding == 0 {
+                    (i, reloc.sym_idx, "")
+                } else {
+                    (usize::MAX, usize::MAX, sym.name.as_str())
+                };
+                let slot = *slot_of.entry(key).or_insert_with(|| {
+                    align_up(&mut self.data, 8);
+                    let slot = self.data.len() as u64;
+                    self.data.resize(self.data.len() + 8, 0);
+                    self.got_slot_relocs.push((i, reloc.sym_idx, slot));
+                    slot
+                });
+                self.got_slot_sites.insert((i, reloc.offset), slot);
+            }
+        }
+        if self.got_slot_relocs.is_empty() {
+            return;
+        }
+        self.section_map.data.push(SectionContribution {
+            input: None,
+            name: ".got".to_string(),
+            offset: first,
+            size: self.data.len() as u64 - first,
+        });
+        if self.bss_size > 0 {
+            align_up(
+                &mut self.data,
+                crate::c5::layout::bss_image_align(self.data_align),
+            );
+        }
+    }
+
+    /// Whether the GOT reference at `field` to `sym` reads a slot this
+    /// link provides; see [`Self::allocate_got_slots`].
+    fn needs_got_slot(&self, sym: &NativeSymbol, rtype: u32, field: usize) -> bool {
+        let name = sym.name.as_str();
+        let section = if sym.binding == 2 {
+            NativeSymSection::Undef
+        } else {
+            sym.section
+        };
+        let defined = match section {
+            NativeSymSection::Text
+            | NativeSymSection::RoData
+            | NativeSymSection::RelRo
+            | NativeSymSection::Data
+            | NativeSymSection::Bss
+            | NativeSymSection::Common => true,
+            NativeSymSection::Undef => self.defined.get(name).is_some_and(|d| {
+                !matches!(d.section, NativeSymSection::Got | NativeSymSection::Tls)
+            }),
+            _ => false,
+        };
+        let absolute = section == NativeSymSection::Abs
+            || (section == NativeSymSection::Undef
+                && !self.defined.contains_key(name)
+                && self.absolute_defined.contains_key(name));
+        let how = got_relax::got_use(&self.text, field, rtype);
+        if defined {
+            return how == got_relax::GotUse::Operand;
+        }
+        if absolute {
+            return true;
+        }
+        let unresolved_weak = sym.binding == 2
+            && section == NativeSymSection::Undef
+            && !self.defined.contains_key(name)
+            && !self.data_binding_locals.contains(name)
+            && !self.shlib_data_exports.contains(name)
+            && !self.is_routed_import(name)
+            && !self.shlib_exports.contains(name);
+        // `resolve_weak_undef_to_zero` turns a REX `mov` into `mov $0`.
+        let zero_rewrite = how == got_relax::GotUse::Load
+            && field
+                .checked_sub(3)
+                .and_then(|i| self.text.get(i))
+                .is_some_and(|b| (0x40..=0x4f).contains(b));
+        unresolved_weak && !zero_rewrite
+    }
+
     /// Whether any unit routes `name` to a dylib. A binding map keys an
     /// entry by the host symbol, which on Mach-O carries the platform's
     /// leading underscore that the object readers strip; test both
@@ -2004,10 +2123,32 @@ impl<'a> Link<'a> {
                 } else {
                     sym.section
                 };
+                if let Some(&slot) = self.got_slot_sites.get(&(i, reloc.offset)) {
+                    let site = origin.at(
+                        self.machine,
+                        reloc.rtype,
+                        origin.symbol_name(sym),
+                        reloc.offset,
+                    );
+                    let to_slot = NativeReloc {
+                        rtype: R_X86_64_PC32,
+                        ..*reloc
+                    };
+                    let target = slot as i64 + reloc.addend;
+                    park_data_ref(
+                        &mut self.pending_imports,
+                        patch_offset,
+                        &to_slot,
+                        target,
+                        &site,
+                    )?;
+                    continue;
+                }
                 let resolved_here = !matches!(sym_section, NativeSymSection::Undef)
                     || self.defined.contains_key(sym.name.as_str());
                 let relaxed = self.relax_got_reference(reloc, patch_offset, resolved_here);
                 let reloc = relaxed.as_ref().unwrap_or(reloc);
+                let patch_offset = self.text_bases[i] + reloc.offset as usize;
                 let site = origin.at(
                     self.machine,
                     reloc.rtype,
@@ -2023,10 +2164,10 @@ impl<'a> Link<'a> {
     /// A GOT reference whose symbol this link defines needs no
     /// indirection, so it relaxes to a direct reference: the aarch64
     /// `adrp :got:` + `ldr` pair becomes ADR_PREL / ADD_ABS with the
-    /// `ldr` rewritten back to the `add` it came from, the x86_64
-    /// `mov reg, [rip+disp32]` GOT load becomes the `lea` it came from
-    /// (opcode 0x8b -> 0x8d, two bytes before the disp32) resolved as a
-    /// direct PC32. A reference the link cannot resolve keeps the GOT:
+    /// `ldr` rewritten back to the `add` it came from, and an x86_64
+    /// load, call or jump through the slot takes its direct form
+    /// ([`got_relax`]) resolved as a PC32; any other x86_64 instruction
+    /// was given a slot. A reference the link cannot resolve keeps the GOT:
     /// the slot is where the loader writes the symbol's address, and
     /// the relaxed form would instead materialize an address inside
     /// this image -- for an import, its call stub.
@@ -2059,12 +2200,12 @@ impl<'a> Link<'a> {
                 ..*reloc
             });
         }
-        if reloc.rtype == R_X86_64_GOTPCREL || reloc.rtype == R_X86_64_REX_GOTPCRELX {
-            if patch_offset >= 2 && self.text[patch_offset - 2] == 0x8b {
-                self.text[patch_offset - 2] = 0x8d;
-            }
+        if self.machine == NativeMachine::X86_64 && is_x86_64_got_pcrel(reloc.rtype) {
+            let how = got_relax::got_use(&self.text, patch_offset, reloc.rtype);
+            let field = got_relax::relax(&mut self.text, patch_offset, how)?;
             return Some(NativeReloc {
                 rtype: R_X86_64_PC32,
+                offset: reloc.offset + field as u64 - patch_offset as u64,
                 ..*reloc
             });
         }
@@ -2474,6 +2615,15 @@ impl<'a> Link<'a> {
             for (reloc, slot_offset, in_tls) in sited {
                 self.resolve_data_reloc(i, obj, reloc, slot_offset, in_tls)?;
             }
+        }
+        for (unit, sym_idx, slot) in core::mem::take(&mut self.got_slot_relocs) {
+            let reloc = NativeReloc {
+                offset: slot,
+                sym_idx,
+                rtype: R_X86_64_64,
+                addend: 0,
+            };
+            self.resolve_data_reloc(unit, &objs[unit], &reloc, slot, false)?;
         }
         // Init/fini array slots: each 8-byte slot holds a `.text`
         // function pointer, so it needs the same absolute relocation as
@@ -5884,6 +6034,112 @@ mod tests {
         );
         let err = link_native_objects(&objs).expect_err("0x2020 overflows the 12 bits");
         assert!(format!("{err}").contains("relocation truncated"), "{err}");
+    }
+
+    /// GOT references to a symbol the link defines: a load, a call and a
+    /// jump take the direct forms GNU ld gives them; any other instruction,
+    /// and every reference to an absolute symbol, reads an 8-byte `.data`
+    /// slot the link fills; an import's slot read stays with the writer.
+    #[test]
+    fn foreign_x86_64_got_references_relax_or_read_a_slot() {
+        use crate::c5::object::elf_reloc_types::R_X86_64_GOTPCRELX;
+        let sym = |name: &str, section, value, binding| NativeSymbol {
+            name: name.to_string(),
+            section,
+            value,
+            size: 0,
+            binding,
+            kind: 2,
+            visibility: 0,
+        };
+        let reloc = |offset, sym_idx, rtype, addend| NativeReloc {
+            offset,
+            sym_idx,
+            rtype,
+            addend,
+        };
+        let code: &[&[u8]] = &[
+            &[0xff, 0x15, 0, 0, 0, 0],          // 0: call *f@GOTPCREL(%rip)
+            &[0xff, 0x25, 0, 0, 0, 0],          // 6: jmp *f@GOTPCREL(%rip)
+            &[0x48, 0x8b, 0x05, 0, 0, 0, 0],    // 12: mov f@GOTPCREL(%rip), %rax
+            &[0x48, 0x3b, 0x05, 0, 0, 0, 0],    // 19: cmp f@GOTPCREL(%rip), %rax
+            &[0x48, 0x83, 0x3d, 0, 0, 0, 0, 0], // 26: cmpq $0, k@GOTPCREL(%rip)
+            &[0x48, 0x8b, 0x05, 0, 0, 0, 0],    // 34: mov k@GOTPCREL(%rip), %rax
+            &[0xff, 0x15, 0, 0, 0, 0],          // 41: call *imp@GOTPCREL(%rip)
+        ];
+        let mut a = blank_object(NativeMachine::X86_64);
+        a.text = code.concat();
+        a.symbols = alloc::vec![
+            sym("", NativeSymSection::Undef, 0, 0),
+            sym("f", NativeSymSection::Undef, 0, 1),
+            sym("k", NativeSymSection::Undef, 0, 1),
+            sym("imp", NativeSymSection::Undef, 0, 1),
+        ];
+        a.text_relocs = alloc::vec![
+            reloc(2, 1, R_X86_64_GOTPCRELX, -4),
+            reloc(8, 1, R_X86_64_GOTPCRELX, -4),
+            reloc(15, 1, R_X86_64_REX_GOTPCRELX, -4),
+            reloc(22, 1, R_X86_64_REX_GOTPCRELX, -4),
+            reloc(29, 2, R_X86_64_GOTPCREL, -5),
+            reloc(37, 2, R_X86_64_REX_GOTPCRELX, -4),
+            reloc(43, 3, R_X86_64_GOTPCRELX, -4),
+        ];
+        let mut b = blank_object(NativeMachine::X86_64);
+        b.text = alloc::vec![0xc3];
+        b.symbols = alloc::vec![
+            sym("", NativeSymSection::Undef, 0, 0),
+            sym("f", NativeSymSection::Text, 0, 1),
+            sym("k", NativeSymSection::Abs, 0x1234, 1),
+        ];
+        let merged = link_native_objects_with_options(&[a, b], true).expect("link");
+        let f = 48i32;
+        let t = &merged.text;
+        let rel = |at: usize| i32::from_le_bytes(t[at..at + 4].try_into().unwrap());
+        assert_eq!(
+            (&t[0..2], rel(2)),
+            (&[0x67, 0xe8][..], f - 6),
+            "addr32 call"
+        );
+        assert_eq!((t[6], rel(7), t[11]), (0xe9, f - 11, 0x90), "jmp; nop");
+        assert_eq!((t[13], rel(15)), (0x8d, f - 19), "lea");
+        assert_eq!(&t[19..22], [0x48, 0x3b, 0x05], "the cmp keeps its form");
+        assert_eq!(t[35], 0x8b, "an absolute symbol keeps the load");
+
+        let parked = |at: u64| {
+            let p = (merged.pending_imports.iter())
+                .find(|p| p.text_offset == at)
+                .unwrap_or_else(|| panic!("no parked site at {at}"));
+            (p.target_section, p.addend, p.rtype, p.slot_load)
+        };
+        let (f_slot, k_slot) = (0i64, 8i64);
+        assert_eq!(
+            parked(22),
+            (NativeSymSection::Data, f_slot - 4, R_X86_64_PC32, false)
+        );
+        assert_eq!(
+            parked(29),
+            (NativeSymSection::Data, k_slot - 5, R_X86_64_PC32, false)
+        );
+        assert_eq!(
+            parked(37),
+            (NativeSymSection::Data, k_slot - 4, R_X86_64_PC32, false),
+            "one slot per symbol"
+        );
+        assert_eq!(
+            parked(43),
+            (NativeSymSection::Undef, -4, R_X86_64_GOTPCRELX, true),
+            "the import's own slot"
+        );
+        let slot =
+            |at: i64| u64::from_le_bytes(merged.data[at as usize..][..8].try_into().unwrap());
+        assert_eq!(slot(k_slot), 0x1234, "a constant needs no relocation");
+        let filled: Vec<_> = (merged.data_abs_relocs.iter())
+            .map(|r| (r.slot_offset, r.target))
+            .collect();
+        assert!(
+            matches!(filled[..], [(0, MergedTarget::Text(48))]),
+            "{filled:?}"
+        );
     }
 
     /// A: accessor code, `tl` at 4 of a 16-byte `.tdata` and a 0x2000-byte

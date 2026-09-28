@@ -2340,6 +2340,11 @@ impl<'a> MachOWriter<'a> {
                 "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a Mach-O image has none",
             ));
         }
+        if !build.got_pcrel_fixups.is_empty() {
+            return Err(C5Error::internal(String::from(
+                "Mach-O: an x86-64 GOT slot field reached the arm64 writer",
+            )));
+        }
         apply_data_fixups(
             out,
             code_file_offset,

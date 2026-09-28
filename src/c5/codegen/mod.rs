@@ -1904,6 +1904,10 @@ pub(crate) struct Build {
     /// ELF writer resolves them against the `.got` it lays out and the
     /// other container writers reject them.
     pub got_base_fixups: Vec<GotBaseFixup>,
+    /// Object-linked PC-relative fields that read an import's slot.
+    /// Populated only by the multi-object synthesizer; see
+    /// [`GotPcRelFixup`].
+    pub got_pcrel_fixups: Vec<GotPcRelFixup>,
     /// Read-only data the emit produced (switch dispatch tables) with
     /// its code-reference and slot fixups. See [`RodataBuild`].
     pub rodata: RodataBuild,
@@ -2421,6 +2425,18 @@ pub(crate) struct GotBaseFixup {
     pub got_offset: i64,
     /// Fields of the reference this record covers.
     pub part: AddrPart,
+}
+
+/// A 32-bit PC-relative field of an object-linked x86-64 instruction
+/// that reads an import's slot (a GOTPCREL-family relocation): the field
+/// takes `slot + addend - field`, whatever the instruction.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GotPcRelFixup {
+    /// Byte offset of the field within `Build::text`.
+    pub site_text_offset: u64,
+    /// Index into the image's imports.
+    pub import_index: usize,
+    pub addend: i64,
 }
 
 /// Relocation for `Inst::ImmData`: the codegen emits an

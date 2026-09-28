@@ -3374,6 +3374,19 @@ impl<'a> ElfImageWriter<'a> {
                 )?;
             }
         }
+        for fx in &build.got_pcrel_fixups {
+            let site = stub_len + fx.site_text_offset;
+            let slot_vmaddr = got_vmaddr + (fx.import_index as u64) * 8;
+            let value = slot_vmaddr as i64 + fx.addend - code.vmaddr_at(site) as i64;
+            let at = code.file_at(site);
+            let (Ok(disp), Some(field)) = (i32::try_from(value), self.out.get_mut(at..at + 4))
+            else {
+                return Err(Self::internal(format!(
+                    "ELF: GOT slot field at file+{at:#x} cannot take {value}"
+                )));
+            };
+            field.copy_from_slice(&disp.to_le_bytes());
+        }
         for fx in &build.data_fixups {
             let target = self.data_off_to_vaddr(fx.data_offset);
             patch_addr_load(

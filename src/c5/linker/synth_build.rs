@@ -148,6 +148,7 @@ fn synth_program_and_build(
     let SynthFixups {
         got: got_fixups,
         got_base: got_base_fixups,
+        got_pcrel: got_pcrel_fixups,
         data: data_fixups,
         func: func_fixups,
         text_pcrel: text_pcrel_relocs,
@@ -231,6 +232,7 @@ fn synth_program_and_build(
         entry_offset,
         got_fixups,
         got_base_fixups,
+        got_pcrel_fixups,
         data_fixups,
         // Object-linked jump tables ride in the merged data stream
         // (input `.rodata` folds into it); the direct-lowering rodata
@@ -888,6 +890,7 @@ fn dylib_name_from_path(path: &str) -> String {
 struct SynthFixups {
     got: Vec<GotFixup>,
     got_base: Vec<crate::c5::codegen::GotBaseFixup>,
+    got_pcrel: Vec<crate::c5::codegen::GotPcRelFixup>,
     data: Vec<DataFixup>,
     func: Vec<FuncFixup>,
     text_pcrel: Vec<crate::c5::codegen::TextPcRelReloc>,
@@ -901,6 +904,7 @@ fn synth_fixups(
 ) -> Result<SynthFixups, C5Error> {
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     let mut got_base_fixups: Vec<crate::c5::codegen::GotBaseFixup> = Vec::new();
+    let mut got_pcrel: Vec<crate::c5::codegen::GotPcRelFixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut func_fixups: Vec<FuncFixup> = Vec::new();
     let mut text_pcrel: Vec<crate::c5::codegen::TextPcRelReloc> = Vec::new();
@@ -957,6 +961,21 @@ fn synth_fixups(
             });
             continue;
         }
+        // An x86-64 slot read the object's code already addresses through
+        // the GOT: its instruction is final, so the field takes the
+        // import's slot whatever the instruction is.
+        if reloc.slot_load
+            && reloc.target_section == NativeSymSection::Undef
+            && merged.machine == NativeMachine::X86_64
+            && super::got_relax::is_x86_64_got_pcrel(reloc.rtype)
+        {
+            got_pcrel.push(crate::c5::codegen::GotPcRelFixup {
+                site_text_offset: reloc.text_offset,
+                import_index: reloc.import_index,
+                addend: reloc.addend,
+            });
+            continue;
+        }
         match merged.machine {
             NativeMachine::Aarch64 => {
                 project_aarch64_pending(
@@ -986,6 +1005,7 @@ fn synth_fixups(
     Ok(SynthFixups {
         got: got_fixups,
         got_base: got_base_fixups,
+        got_pcrel,
         data: data_fixups,
         func: func_fixups,
         text_pcrel,

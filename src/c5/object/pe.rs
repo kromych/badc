@@ -930,6 +930,18 @@ impl<'a> PeWriter<'a> {
                 patch_iat_lookup(machine, &mut text, instr_off, text_rva, target_rva, f.part)?;
             }
         }
+        for f in &build.got_pcrel_fixups {
+            let site = f.site_text_offset as usize + prologue as usize;
+            let slot_rva = l.idata.iat_rva_for_import[f.import_index] as i64;
+            let value = slot_rva + f.addend - (text_rva as i64 + site as i64);
+            let (Ok(disp), Some(field)) = (i32::try_from(value), text.get_mut(site..site + 4))
+            else {
+                return Err(Self::internal(format!(
+                    "PE: IAT slot field at .text+{site:#x} cannot take {value}"
+                )));
+            };
+            field.copy_from_slice(&disp.to_le_bytes());
+        }
         if !build.got_base_fixups.is_empty() {
             return Err(C5Error::hard(
                 Code::OBJECT_FORMAT,

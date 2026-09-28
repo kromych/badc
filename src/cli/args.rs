@@ -426,6 +426,8 @@ struct Parser {
     fixed_reg_names: Vec<String>,
     /// The `-pg` modifiers seen, x86-64 options gcc's aarch64 rejects.
     mcount_modifiers: Vec<String>,
+    /// The last `-mbranch-protection=`, an AArch64 option.
+    branch_protection_flag: Option<String>,
     ssp_guard_kind: Option<&'static str>,
     ssp_guard_reg: Option<String>,
     ssp_guard_offset: Option<i32>,
@@ -1347,6 +1349,7 @@ impl Parser {
             // rejected: an accepted-but-ignored spelling would build an
             // object that claims a protection it does not carry.
             s if s.starts_with("-mbranch-protection=") => {
+                self.branch_protection_flag = Some(s.to_string());
                 let mut prev = "";
                 for feature in s["-mbranch-protection=".len()..].split('+') {
                     match feature {
@@ -1924,6 +1927,17 @@ impl Parser {
         if self.codegen.profiling.enabled && (!is_elf_target || target.is_aarch64()) {
             return Err(ParseError::diag(format!(
                 "badc: error: `-pg` is not implemented for {}",
+                target.id_str()
+            )));
+        }
+        // A build asking for return-address signing or landing pads must
+        // not get an image without them, so an x86-64 target refuses the
+        // request, as clang does.
+        if let Some(flag) = &self.branch_protection_flag
+            && !target.is_aarch64()
+        {
+            return Err(ParseError::diag(format!(
+                "badc: error: `{flag}` is an AArch64 option; {} has no branch protection",
                 target.id_str()
             )));
         }
@@ -3056,6 +3070,23 @@ mod tests {
             let flag = format!("-mbranch-protection={bad}");
             let (msg, _) = reject(&[flag.as_str(), "a.c"]);
             assert!(msg.contains("unsupported feature"), "{bad}: {msg}");
+        }
+    }
+
+    /// An x86-64 target refuses every `-mbranch-protection=`, `none` too, as
+    /// clang does; gcc's x86-64 does not know the option.
+    #[test]
+    fn branch_protection_is_an_aarch64_option() {
+        for flag in ["-mbranch-protection=pac-ret", "-mbranch-protection=none"] {
+            for target in [X64, "--target=windows-x64"] {
+                let (msg, _) = reject(&[flag, target, "-c", "a.c"]);
+                assert!(
+                    msg.contains(&format!("`{flag}` is an AArch64 option")),
+                    "{msg}"
+                );
+            }
+            parse(&["--target=windows-arm64", flag, "-c", "a.c"]);
+            parse(&["--target=macos-aarch64", flag, "-c", "a.c"]);
         }
     }
 

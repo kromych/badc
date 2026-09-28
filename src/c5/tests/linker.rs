@@ -15634,6 +15634,49 @@ fn mapping_symbols(bytes: &[u8]) -> alloc::vec::Vec<(String, u64, String)> {
     out
 }
 
+/// The system linkers read a missing `.note.GNU-stack` as a request for an
+/// executable stack. A compiled unit's object carries an empty, unflagged
+/// one, as gcc's does, and keeps an `"x"` its file-scope asm asks for; an
+/// assembled unit carries only the note its source names, as GNU as does.
+#[test]
+fn a_compiled_object_states_a_non_executable_stack() {
+    use crate::c5::Target;
+    const SHT_PROGBITS: u32 = 1;
+    const SHF_EXECINSTR: u64 = 4;
+    let note = |bytes: &[u8]| {
+        elf_sections(bytes)
+            .into_iter()
+            .find(|s| s.0 == ".note.GNU-stack")
+            .map(|(_, ty, flags, body)| (ty, flags, body.len()))
+    };
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let c = reloc_tu("int f(void) { return 1; }", target, false);
+        assert_eq!(note(&c), Some((SHT_PROGBITS, 0, 0)), "{target:?}: a C unit");
+        let asked = reloc_tu(
+            "__asm__(\".section .note.GNU-stack,\\\"x\\\",@progbits\\n.text\");\n\
+             int f(void) { return 1; }",
+            target,
+            false,
+        );
+        assert_eq!(
+            note(&asked),
+            Some((SHT_PROGBITS, SHF_EXECINSTR, 0)),
+            "{target:?}: a C unit asking for an executable stack"
+        );
+        let bare = asm_reloc_tu(".text\n.globl f\nf:\n", target);
+        assert_eq!(note(&bare), None, "{target:?}: an assembled unit");
+        let named = asm_reloc_tu(
+            ".text\n.globl f\nf:\n.section .note.GNU-stack,\"\",@progbits\n",
+            target,
+        );
+        assert_eq!(
+            note(&named),
+            Some((SHT_PROGBITS, 0, 0)),
+            "{target:?}: an assembled unit naming the note"
+        );
+    }
+}
+
 /// `-c` object bytes for an assembled unit.
 fn asm_reloc_tu(src: &str, target: crate::c5::Target) -> alloc::vec::Vec<u8> {
     use crate::c5::compiler::CompileOptions;

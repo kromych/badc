@@ -8076,6 +8076,53 @@ fn dwarf5_line_file_names(image: &[u8]) -> Vec<String> {
     names
 }
 
+/// GNU ld reads an input object without a `.note.GNU-stack` as a request for
+/// an executable stack. A badc object carries a non-executable one, so the
+/// system linker gives the program a readable, writable stack and no warning.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_system_linker_gives_a_badc_object_a_non_executable_stack() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping the_system_linker_gives_a_badc_object_a_non_executable_stack: \
+             no system C compiler"
+        );
+        return;
+    };
+    let dir = tempdir("gnu-stack");
+    let src = write_source(&dir, "main.c", "int main(void) { return 7; }\n");
+    let obj = dir.join("main.o");
+    run(
+        Command::new(badc()).arg("-c").arg(&src).arg("-o").arg(&obj),
+        "compile main.c",
+    );
+    let exe = dir.join("prog");
+    let out = run(
+        Command::new(&cc).arg(&obj).arg("-o").arg(&exe),
+        "link with the system compiler",
+    );
+    let warnings = String::from_utf8_lossy(&out.stderr);
+    assert!(!warnings.contains("executable stack"), "{warnings}");
+    let image = std::fs::read(&exe).expect("read the image");
+    const PF_W: u32 = 2;
+    const PF_R: u32 = 4;
+    assert_eq!(gnu_stack_flags(&image), Some(PF_R | PF_W));
+    let ran = Command::new(&exe).output().expect("run");
+    assert_eq!(ran.status.code(), Some(7));
+}
+
+/// `p_flags` of an ELF64 image's `PT_GNU_STACK`.
+fn gnu_stack_flags(image: &[u8]) -> Option<u32> {
+    const PT_GNU_STACK: u32 = 0x6474_e551;
+    let rd16 = |o: usize| u16::from_le_bytes([image[o], image[o + 1]]) as usize;
+    let rd32 = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+    let phoff = u64::from_le_bytes(image[0x20..0x28].try_into().unwrap()) as usize;
+    (0..rd16(0x38))
+        .map(|i| phoff + i * rd16(0x36))
+        .find(|&ph| rd32(ph) == PT_GNU_STACK)
+        .map(|ph| rd32(ph + 4))
+}
+
 /// `r_offset` of the image's `R_X86_64_GLOB_DAT` against `name`.
 fn glob_dat_slot(image: &[u8], name: &str) -> Option<u64> {
     let rd32 = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());

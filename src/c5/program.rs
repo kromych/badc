@@ -592,6 +592,8 @@ pub struct VariableInfo {
     pub params: Vec<i64>,
     /// True when the prototype ends in `, ...`.
     pub is_variadic: bool,
+    /// Mirrors `Symbol::prototyped`.
+    pub prototyped: bool,
     /// Dimension list of a multidimensional local array, outermost
     /// first (mirrors `Symbol::array_dims`). Empty for a scalar or a
     /// one-dimensional array, whose extent `array_size` already gives.

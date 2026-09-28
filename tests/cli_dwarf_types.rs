@@ -1178,6 +1178,60 @@ fn function_pointer_locals_have_a_subroutine_type() {
     assert_eq!(bounds, [2, 3]);
 }
 
+/// A function type without a prototype (C99 6.7.5.3p14) gives a
+/// subroutine type without DW_AT_prototyped whose one child is
+/// `DW_TAG_unspecified_parameters`, distinct from the `(void)` prototype
+/// with the same return type, for every kind of declaration.
+#[test]
+fn unprototyped_function_pointers_are_not_marked_prototyped() {
+    let u = compile_unit(
+        "fnptr-unproto",
+        "int (*gp)();\n\
+         struct ops { int (*m)(); int (*mv)(void); };\n\
+         int run(void (*cb)(), struct ops *o) {\n\
+           int (*lp)() = gp;\n\
+           int (*lv)(void) = o->mv;\n\
+           cb();\n\
+           return lp() + lv() + o->m();\n\
+         }\n",
+    );
+    let run = u.named(DW_TAG_SUBPROGRAM, "run");
+    let child = |name: &str| {
+        u.children(run)
+            .into_iter()
+            .find(|d| d.name() == Some(name))
+            .unwrap_or_else(|| panic!("`run` has no child `{name}`"))
+    };
+    let pointee = |d: &Die| {
+        let sub = u.type_of(u.type_of(d));
+        assert_eq!(sub.tag, DW_TAG_SUBROUTINE_TYPE);
+        sub
+    };
+    let ops = u.named(DW_TAG_STRUCTURE_TYPE, "ops");
+    let gp = u.named(DW_TAG_VARIABLE, "gp");
+    for (what, d) in [
+        ("global", gp),
+        ("member", u.member(ops, "m")),
+        ("parameter", child("cb")),
+        ("local", child("lp")),
+    ] {
+        let sub = pointee(d);
+        assert!(sub.at(DW_AT_PROTOTYPED).is_none(), "{what}: {}", u.render());
+        let kinds: Vec<u64> = u.children(sub).iter().map(|c| c.tag).collect();
+        assert_eq!(kinds, [DW_TAG_UNSPECIFIED_PARAMETERS], "{what}");
+    }
+    assert!(pointee(child("cb")).at(DW_AT_TYPE).is_none(), "void return");
+    for d in [u.member(ops, "mv"), child("lv")] {
+        assert_eq!(pointee(d).at(DW_AT_PROTOTYPED).unwrap().as_uint(), 1);
+        assert!(u.children(pointee(d)).is_empty());
+    }
+    assert_ne!(
+        u.type_of(child("lp")).offset,
+        u.type_of(child("lv")).offset,
+        "`int (*)()` and `int (*)(void)` are different types"
+    );
+}
+
 /// A `_Thread_local` object (C11 6.2.4p4) gets a compile-unit-scope
 /// `DW_TAG_variable` like any other object with static storage
 /// duration. On the ELF x86_64 surface its location pushes the

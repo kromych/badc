@@ -1728,6 +1728,7 @@ impl Compiler {
                     fn_ptr_indirection: sym.fn_ptr_indirection,
                     params: sym.params.clone(),
                     is_variadic: sym.is_variadic,
+                    prototyped: sym.prototyped,
                     array_dims: if is_parameter {
                         Vec::new()
                     } else {

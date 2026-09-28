@@ -474,12 +474,16 @@ fn get_cpuid_leaf_checks() {
 
 /// The interpreter runs an inline asm template in the assembler syntax of
 /// the target the program was compiled for: AArch64 integer instructions on
-/// the general registers, x86-64's on its register model. Each fixture
+/// the general registers and `fmov` on the scalar FP ones, x86-64's on its
+/// register model. Each fixture
 /// computes under both targets the value its native build returns.
 #[test]
 fn the_interpreter_runs_inline_asm_in_the_targets_syntax() {
     for (name, want) in [
         ("inline_asm_a64_integer_ops.c", 0),
+        ("inline_asm_a64_fmov.c", 42),
+        ("inline_asm_a64_fmov_forms.c", 42),
+        ("inline_asm_a64_fmov_top_half.c", 42),
         ("asm_register_outputs.c", 0),
         ("file_scope_asm_decls.c", 0),
         ("inline_asm_a64_bitfield.c", 42),
@@ -518,6 +522,11 @@ fn the_interpreter_refuses_an_unmodelled_aarch64_template() {
             "an instruction word other than a hint or a barrier",
         ),
         ("b 1f\n1:\tmov %0, %1", "`b`"),
+        ("fmov v0.4s, #1.0\n\tmov %0, %1", "this `fmov` form"),
+        (
+            "fmov d0, %1\n\tfmov %w0, d0",
+            "`fmov` between registers of different widths",
+        ),
     ] {
         let src = format!(
             "int main(void) {{ unsigned long x = 1, y; \

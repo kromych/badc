@@ -3064,6 +3064,10 @@ fn run_intrinsic(
             let size = if desc.by_ref { 8 } else { i64::from(desc.size) };
             let stride = ((size + 7) & !7).max(8);
             let ap_addr = frame.regs[args[0] as usize] as usize;
+            if desc.kind == crate::c5::op::VaArgDesc::NONE {
+                frame.regs[v as usize] = ap_addr as i64;
+                return Ok(());
+            }
             let cursor = load_from_memory(mem, ap_addr, LoadKind::I64)?;
             store_to_memory(mem, ap_addr, cursor + stride, StoreKind::I64)?;
             frame.regs[v as usize] = if desc.by_ref {

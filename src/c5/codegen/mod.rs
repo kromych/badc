@@ -827,6 +827,19 @@ pub(super) fn plan_call_args_aggs(
         // the argument registers and the callee spills them to its
         // save area.
         if let Some(Some(agg)) = aggs.get(i) {
+            // An aggregate classed in no register, an empty record, takes no
+            // stack slot either, variadic or not.
+            if matches!(&agg.class, AggClass::Regs(c) if c.is_empty()) {
+                placements.push(ArgPlacement::StructRegs {
+                    regs: [ClassReg {
+                        reg: 0,
+                        is_fp: false,
+                    }; 4],
+                    n: 0,
+                    align: agg.align,
+                });
+                continue;
+            }
             let aligned = (agg.size + 7) & !7;
             if i >= fixed_args && abi.variadic_on_stack {
                 let off = agg_stack_off(stack_used, agg.arg_align);

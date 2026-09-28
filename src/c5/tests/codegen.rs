@@ -3924,6 +3924,81 @@ fn win64_variadic_and_unprototyped_calls_keep_fp_arguments_in_fp_registers() {
     assert!(f32_cell, "vd reads its named float's cell at 32 bits");
 }
 
+/// An aggregate with no member of storage takes no argument register on
+/// System V x86-64 and AAPCS64 -- Windows arm64's included, where MSVC's
+/// layout gives it 4 bytes -- and returns in none, so the argument after it
+/// takes the first register and a result needs no hidden pointer; Microsoft
+/// x64 gives it 4 bytes and a slot. A variadic call passes it as an
+/// aggregate of no bytes, not a loaded integer.
+#[test]
+fn an_empty_record_takes_no_register_outside_microsoft_x64() {
+    use crate::Target;
+    use crate::c5::codegen::ArgPlacement;
+    use crate::c5::ir::Inst;
+    let src = "struct E {};\n\
+        int takei(struct E e, int y) { (void)e; return y; }\n\
+        struct E mk(int y) { struct E e; (void)y; return e; }\n\
+        int v(int n, ...) { return n; }\n\
+        int callv(struct E e) { return v(1, e, 3); }\n";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+        Target::WindowsX64,
+    ] {
+        let ms = target == Target::WindowsX64;
+        let program = crate::Compiler::with_options(
+            src.into(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("{target:?}: compile: {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let func = |name: &str| funcs.iter().find(|f| f.name == name).expect(name);
+        let abi = target.abi();
+        let placed = |name: &str| {
+            crate::c5::codegen::ssa::emit_common::param_placements_common(func(name), abi)
+        };
+        let y = abi.int_arg_regs[usize::from(ms)];
+        assert_eq!(
+            placed("takei")[1],
+            ArgPlacement::IntReg(y),
+            "{target:?}: takei's y"
+        );
+        assert_eq!(
+            placed("mk")[0],
+            ArgPlacement::IntReg(abi.int_arg_regs[0]),
+            "{target:?}: mk's y"
+        );
+        let mk = func("mk");
+        let ret_size = mk.ret_agg.map(|i| mk.agg_descs[i as usize].size);
+        assert_eq!(
+            ret_size,
+            Some(if ms { 4 } else { 0 }),
+            "{target:?}: mk's result"
+        );
+        let callv = func("callv");
+        let arg_aggs = callv
+            .insts
+            .iter()
+            .find_map(|i| match i {
+                Inst::Call { arg_aggs, .. } => Some(arg_aggs.clone()),
+                _ => None,
+            })
+            .expect("call");
+        let e_size = arg_aggs
+            .get(1)
+            .copied()
+            .flatten()
+            .map(|i| callv.agg_descs[i as usize].size);
+        assert_eq!(e_size, (!ms).then_some(0), "{target:?}: the variadic e");
+    }
+}
+
 /// Windows arm64 passes every argument to a variadic callee in the integer
 /// bank, a named `float` as its own 32 bits and a variadic one widened to
 /// `double`: the call carries no FP mask, the named value stays single

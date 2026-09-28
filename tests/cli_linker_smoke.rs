@@ -5909,6 +5909,119 @@ fn align16_arguments_cross_the_system_compiler_boundary() {
     }
 }
 
+// An aggregate with no member of storage crosses a call in nothing on System V
+// x86-64 and AAPCS64 -- no register, no stack slot, no result register --
+// between badc and the system C compiler, each calling the other's functions
+// through pointers. The variadic call runs where the system compiler's
+// `va_arg` of one was checked: x86-64 gcc, and clang.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn empty_records_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping empty_records_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let dir = tempdir("empty-record-interop");
+    let common = "#include <stdarg.h>\n\
+        struct E {};\n\
+        struct Z { char a[0]; };\n\
+        struct N { struct E x; struct E y[3]; };\n\
+        static struct E mk(int y, int *out) { struct E e; *out = y; return e; }\n\
+        static int first(struct E e, int y) { (void)e; return y; }\n\
+        static int mid(int a, struct E e, int b, double d, struct Z z, int c)\n\
+        { (void)e; (void)z; return a * 1000 + b * 100 + (int)d * 10 + c; }\n\
+        static double fp(double x, struct E e, float y, struct N n, double w)\n\
+        { (void)e; (void)n; return x + y + w; }\n\
+        static int var(int n, ...)\n\
+        { va_list ap; va_start(ap, n); int a = va_arg(ap, int);\n\
+          struct E e = va_arg(ap, struct E); int b = va_arg(ap, int);\n\
+          double d = va_arg(ap, double); va_end(ap); (void)e;\n\
+          return n + a * 10 + b * 100 + (int)d * 1000; }\n\
+        struct fns { struct E (*mk)(int, int *); int (*first)(struct E, int);\n\
+          int (*mid)(int, struct E, int, double, struct Z, int);\n\
+          double (*fp)(double, struct E, float, struct N, double); int (*var)(int, ...); };\n\
+        static int drive(const struct fns *f, int base) {\n\
+          struct E e; struct Z z; struct N n; int got = 0;\n\
+          struct E r = f->mk(7, &got); (void)r;\n\
+          if (got != 7) return base + 1;\n\
+          if (f->first(e, 42) != 42) return base + 2;\n\
+          if (f->mid(1, e, 2, 3.0, z, 4) != 1234) return base + 3;\n\
+          if (f->fp(1.5, e, 2.25f, n, 4.0) != 7.75) return base + 4;\n\
+        #if VAR_CHECK\n\
+          if (f->var(1, 2, e, 3, 4.0) != 4321) return base + 5;\n\
+        #endif\n\
+          return 0; }\n";
+    let var_check = format!(
+        "-DVAR_CHECK={}",
+        u8::from(cfg!(any(target_arch = "x86_64", target_os = "macos")))
+    );
+    let module = write_source(
+        &dir,
+        "module.c",
+        &format!(
+            "{common}struct fns sys_fns = {{ mk, first, mid, fp, var }};\n\
+             int sys_drive(const struct fns *f) {{ return drive(f, 10); }}\n"
+        ),
+    );
+    let host = write_source(
+        &dir,
+        "host.c",
+        &format!(
+            "#include <dlfcn.h>\n{common}\
+             int main(int argc, char **argv) {{\n\
+               void *h = dlopen(argv[1], RTLD_NOW);\n\
+               if (!h) return 1;\n\
+               const struct fns *sys = dlsym(h, \"sys_fns\");\n\
+               int (*sys_drive)(const struct fns *) =\n\
+                 (int (*)(const struct fns *))dlsym(h, \"sys_drive\");\n\
+               if (!sys || !sys_drive) return 2;\n\
+               int r = drive(sys, 20);\n\
+               if (r) return r;\n\
+               struct fns mine = {{ mk, first, mid, fp, var }};\n\
+               (void)argc;\n\
+               return sys_drive(&mine); }}\n"
+        ),
+    );
+    let so = dir.join(if cfg!(target_os = "macos") {
+        "module.dylib"
+    } else {
+        "module.so"
+    });
+    run(
+        Command::new(&cc)
+            .args(["-O2", "-shared", "-fPIC", &var_check, "-o"])
+            .arg(&so)
+            .arg(&module)
+            .current_dir(&dir),
+        "build the system-compiled module",
+    );
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("host{opt}"));
+        run(
+            Command::new(badc())
+                .args([opt, &var_check, "-o"])
+                .arg(&exe)
+                .arg(&host)
+                .current_dir(&dir),
+            "link the badc host",
+        );
+        let out = Command::new(&exe)
+            .arg(&so)
+            .output()
+            .expect("run the badc host");
+        // 11-15: the module's calls into badc; 21-25: badc's calls into the module.
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "host{opt}: an empty record crossed the boundary in a register or a slot \
+             (stderr {:?})",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
 // Each argument class keeps its own registers across badc and the system C
 // compiler, both calling the other's functions through pointers: a `double`
 // after nine and after thirty-four `long long`s, a `long long` after nine

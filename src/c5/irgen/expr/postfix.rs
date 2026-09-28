@@ -8,6 +8,7 @@ use super::super::types::{
     low_word_param,
 };
 use super::super::*;
+use crate::c5::codegen::abi_classify::RegClass;
 /// A struct or union member access (C99 6.5.2.3), shared by the read and
 /// the bitfield write.
 pub(super) struct MemberRef {
@@ -295,7 +296,7 @@ impl<'a> Walker<'a> {
     /// parameters, or by their own types, which the parser narrowed to them;
     /// an all-integer out-pointer callee takes those by address (`named_by_value` false).
     /// A later argument classifies by its own type, and an aggregate of at most
-    /// one eightbyte outside the SIMD bank rides as a loaded integer.
+    /// one eightbyte the general-purpose bank carries rides as a loaded integer.
     fn call_arg_aggs(
         &mut self,
         b: &mut SsaBuilder,
@@ -327,7 +328,11 @@ impl<'a> Walker<'a> {
             if variadic
                 && is_struct_value_ty(ty_tag)
                 && self.struct_size(ty_tag) <= 8
-                && !self.agg_arg_is_simd_classed(args.conv, ty_tag)
+                && !self.agg_arg_in_regs(args.conv, ty_tag, |c| {
+                    c.is_empty()
+                        || c.iter()
+                            .any(|r| matches!(r, RegClass::Sse | RegClass::Vector))
+                })
             {
                 let vol = is_volatile_ty(ty_tag) || self.expr_is_volatile(args.exprs[i]);
                 args.vals[i] = self.small_aggregate_bits(b, args.vals[i], ty_tag, vol);
@@ -413,9 +418,15 @@ impl<'a> Walker<'a> {
         true
     }
 
-    /// Whether a by-value aggregate argument of `ty` takes a SIMD
-    /// register on `conv`'s ABI rather than the general-purpose bank.
-    fn agg_arg_is_simd_classed(&self, conv: crate::c5::codegen::CallConv, ty: i64) -> bool {
+    /// Whether a by-value aggregate argument of `ty` is passed in registers
+    /// on `conv`'s ABI whose classes satisfy `test`: an empty list is an
+    /// aggregate passed in nothing, an SSE or vector class the SIMD bank.
+    fn agg_arg_in_regs(
+        &self,
+        conv: crate::c5::codegen::CallConv,
+        ty: i64,
+        test: impl FnOnce(&[RegClass]) -> bool,
+    ) -> bool {
         let Some(desc) =
             crate::c5::compiler::host_abi_agg_desc_conv(self.structs, self.target, conv, ty)
         else {
@@ -424,12 +435,7 @@ impl<'a> Walker<'a> {
         let abi = self.target.abi_for(conv);
         matches!(
             crate::c5::codegen::abi_classify::classify_aggregate(&desc, abi, false),
-            crate::c5::codegen::abi_classify::AggClass::Regs(ref c)
-                if c.iter().any(|r| matches!(
-                    r,
-                    crate::c5::codegen::abi_classify::RegClass::Sse
-                        | crate::c5::codegen::abi_classify::RegClass::Vector
-                ))
+            crate::c5::codegen::abi_classify::AggClass::Regs(ref c) if test(c)
         )
     }
 

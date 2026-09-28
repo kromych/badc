@@ -2863,6 +2863,13 @@ fn a_zero_size_object_takes_a_frame_cell() {
 }
 
 #[test]
+fn empty_record_args() {
+    // An aggregate with no member of storage crosses a call in nothing on
+    // System V x86-64 and AAPCS64, named, variadic or returned.
+    assert_eq!(run_fixture("empty_record_args.c"), 0);
+}
+
+#[test]
 fn typeof_redeclaration_after_multidim_array() {
     // `extern typeof(x) x;` after a typeof of an array of arrays names x's
     // own type, and so does a new object declared through typeof.

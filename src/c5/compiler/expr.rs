@@ -2107,7 +2107,13 @@ impl Compiler {
         } else {
             self.sysv_va_arg_eightbytes(arg_ty)
         };
-        let (kind, align) = if is_pointer || by_ref {
+        let conv = self.current_func_conv;
+        let in_nothing = !is_pointer
+            && super::host_abi_agg_desc_conv(&self.structs, self.target, conv, arg_ty)
+                .is_some_and(|d| d.size == 0);
+        let (kind, align) = if in_nothing {
+            (VaArgDesc::NONE, 8)
+        } else if is_pointer || by_ref {
             (VaArgDesc::INT, 8)
         } else if homogeneous.is_some() {
             (

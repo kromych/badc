@@ -1173,6 +1173,36 @@ pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) 
     host_abi_agg_desc_conv(structs, target, crate::c5::codegen::CallConv::Target, ty)
 }
 
+/// Whether aggregate `id` holds no member with storage, as clang's
+/// `isEmptyRecord` decides it: each member is an unnamed bit-field, a
+/// zero-length array, or an empty aggregate or an array of them.
+fn is_empty_record(structs: &[StructDef], id: usize) -> bool {
+    let sd = &structs[id];
+    !sd.is_vector
+        && sd.fields.iter().all(|f| {
+            f.zero_len
+                || (f.bit_width == 0
+                    && f.array_size >= 0
+                    && is_struct_value_ty(f.ty)
+                    && is_empty_record(structs, struct_id_of(f.ty)))
+        })
+}
+
+/// The bytes a call moves for aggregate `id`: its size, except that on
+/// Apple and Windows AArch64 an empty record crosses in nothing whatever
+/// size its layout gives it (4 under MSVC's), as clang lowers C there.
+/// GNU/Linux follows gcc, which moves the size -- 0 for an empty record
+/// unless an unnamed bit-field gives it bytes.
+fn abi_size(structs: &[StructDef], target: Target, id: usize) -> u32 {
+    if matches!(target, Target::MacOSAarch64 | Target::WindowsAarch64)
+        && is_empty_record(structs, id)
+    {
+        0
+    } else {
+        structs[id].size as u32
+    }
+}
+
 /// [`host_abi_agg_desc`] for a function or call site on `conv`
 /// (`__attribute__((ms_abi))` / `((sysv_abi))`). `target` still fixes
 /// the member layout -- scalar widths are a property of the target, not
@@ -1205,10 +1235,7 @@ pub(crate) fn host_abi_agg_desc_conv(
     if id >= structs.len() {
         return None;
     }
-    let size = structs[id].size as u32;
-    if size == 0 {
-        return None;
-    }
+    let size = abi_size(structs, target, id);
     let align = (structs[id].align.max(1)) as u32;
     let member_align = (structs[id].member_align.max(1)) as u32;
     let mut fields = Vec::new();
@@ -1335,10 +1362,7 @@ pub(crate) fn struct_return_abi_conv(
     if id >= structs.len() {
         return StructReturnAbi::OutPtr;
     }
-    let size = structs[id].size as u32;
-    if size == 0 {
-        return StructReturnAbi::OutPtr;
-    }
+    let size = abi_size(structs, target, id);
     let align = (structs[id].align.max(1)) as u32;
     let member_align = (structs[id].member_align.max(1)) as u32;
     let mut fields = Vec::new();

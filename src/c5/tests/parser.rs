@@ -1672,6 +1672,30 @@ fn asm_goto_rejects_unknown_label_name() {
     );
 }
 
+/// An asm statement's operand names and `asm goto` labels are one
+/// namespace, as gcc and clang have it: a repeat is an error.
+#[test]
+fn asm_repeated_operand_name_or_label_is_diagnosed() {
+    for body in [
+        "__asm__ goto(\"jz %l[out]\" : : \"r\"(x) : : out, out); return 1; out: return 0;",
+        "__asm__ goto(\"jz %l[out]\" : : [out] \"r\"(x) : : out); return 1; out: return 0;",
+        "int y; __asm__(\"mov %[a], %[a]\" : [a] \"=r\"(y) : [a] \"r\"(x)); return y;",
+    ] {
+        expect_compile_error(
+            &alloc::format!("int f(int x) {{ {body} }}\nint main(void) {{ return f(0); }}"),
+            "duplicate operand name",
+        );
+    }
+    Compiler::new(
+        "int f(int x) { __asm__ goto(\"\" : : [v] \"r\"(x) : : out, in); \
+             return 1; in: return 2; out: return 0; } \
+         int main(void) { return f(0); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("distinct operand and label names compile");
+}
+
 #[test]
 fn asm_goto_rejects_label_number_out_of_range() {
     // One input operand: the only valid reference is `%l1`.

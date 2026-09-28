@@ -1474,6 +1474,15 @@ impl Compiler {
         self.consume(b';', "`;` expected after `asm(...)`")
     }
 
+    /// An asm statement's operand names and `asm goto` labels share one
+    /// namespace, as in gcc and clang, so a repeat is an error.
+    fn duplicate_asm_operand_name(&self, name: &str) -> C5Error {
+        self.compile_err(
+            Code::ASM_SYNTAX,
+            format!("inline asm: duplicate operand name `{name}`"),
+        )
+    }
+
     /// Parse the operand lists of a GCC extended-asm statement into an
     /// [`ast::AsmBlockAst`] and emit an [`ast::Expr::InlineAsm`] (or an
     /// [`ast::Stmt::AsmGoto`] for `asm goto`). The grammar is
@@ -1536,6 +1545,11 @@ impl Compiler {
                 }
                 let idx = self.lex.curr_id_idx;
                 let name = self.symbols[idx].name.clone();
+                if label_names.contains(&name) || operand_names.iter().flatten().any(|n| *n == name)
+                {
+                    self.truncate_data(data_base);
+                    return Err(self.duplicate_asm_operand_name(&name));
+                }
                 self.next()?;
                 // `label_names` stays the name as written: the template
                 // references it as `%l[name]`. Only the binding resolves
@@ -1560,7 +1574,12 @@ impl Compiler {
                         "inline asm: operand name expected after `[`",
                     ));
                 }
-                op_name = Some(self.symbols[self.lex.curr_id_idx].name.clone());
+                let name = self.symbols[self.lex.curr_id_idx].name.clone();
+                if operand_names.iter().flatten().any(|n| *n == name) {
+                    self.truncate_data(data_base);
+                    return Err(self.duplicate_asm_operand_name(&name));
+                }
+                op_name = Some(name);
                 self.next()?; // name
                 self.consume(b']', "`]` expected after asm operand name")?;
             }

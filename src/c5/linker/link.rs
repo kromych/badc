@@ -25,7 +25,7 @@ use hashbrown::HashMap;
 
 use crate::c5::error::C5Error;
 
-use super::got_relax::{self, is_x86_64_got_pcrel};
+use super::got_relax::{self, is_x86_64_got_pcrel, is_x86_64_got_slot_ref};
 use super::object::{
     ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol,
     RelocOrigin, RelocSite, SectionFamily, SharedLibrary, reloc_desc,
@@ -46,10 +46,11 @@ use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ADR_PREL_LO21, R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_JUMP26,
     R_AARCH64_LD_PREL_LO19, R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64,
     R_AARCH64_TLS_DTPREL64, R_X86_64_32, R_X86_64_64, R_X86_64_DTPOFF32, R_X86_64_DTPOFF64,
-    R_X86_64_GOTPCREL, R_X86_64_GOTPCRELX, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32,
-    R_X86_64_REX_GOTPCRELX, TprelField, aarch64_abs_field, aarch64_is_tls, aarch64_ldst_lo12_scale,
-    aarch64_movw_field, aarch64_pcrel_data_field, aarch64_pcrel_imm_field, aarch64_tprel_field,
-    x86_64_abs_field, x86_64_is_tls, x86_64_pcrel_data_field, x86_64_tpoff_field,
+    R_X86_64_GOT64, R_X86_64_GOTOFF64, R_X86_64_GOTPC32, R_X86_64_GOTPC64, R_X86_64_GOTPCREL,
+    R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_PLTOFF64, R_X86_64_REX_GOTPCRELX,
+    TprelField, aarch64_abs_field, aarch64_is_tls, aarch64_ldst_lo12_scale, aarch64_movw_field,
+    aarch64_pcrel_data_field, aarch64_pcrel_imm_field, aarch64_tprel_field, x86_64_abs_field,
+    x86_64_is_tls, x86_64_pcrel_data_field, x86_64_tpoff_field,
 };
 
 /// The tag this module's diagnostics carry.
@@ -60,23 +61,22 @@ pub(crate) use crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL;
 /// A relocation whose site reads a GOT slot: the value it wants is the
 /// symbol's address, taken from storage the loader fills, not a
 /// PC-relative distance to the symbol itself.
-pub(crate) const fn is_got_reloc(rtype: u32) -> bool {
-    matches!(
-        rtype,
-        R_X86_64_GOTPCREL
-            | R_X86_64_GOTPCRELX
-            | R_X86_64_REX_GOTPCRELX
-            | R_AARCH64_ADR_GOT_PAGE
-            | R_AARCH64_LD64_GOT_LO12_NC
-    )
+pub(crate) const fn is_got_reloc(machine: NativeMachine, rtype: u32) -> bool {
+    match machine {
+        NativeMachine::X86_64 => is_x86_64_got_slot_ref(rtype),
+        NativeMachine::Aarch64 => {
+            matches!(rtype, R_AARCH64_ADR_GOT_PAGE | R_AARCH64_LD64_GOT_LO12_NC)
+        }
+    }
 }
 
-/// A relocation whose site transfers control: the field holds a branch
-/// displacement, so the reference names an entry point and binds to a
-/// call stub. No slot read can satisfy one.
+/// A relocation whose site transfers control: the field locates an
+/// entry point -- a branch displacement, or the large code model's
+/// offset from the GOT base -- so the reference binds to a call stub.
+/// No slot read can satisfy one.
 pub(crate) const fn is_branch_reloc(machine: NativeMachine, rtype: u32) -> bool {
     match machine {
-        NativeMachine::X86_64 => rtype == R_X86_64_PLT32,
+        NativeMachine::X86_64 => matches!(rtype, R_X86_64_PLT32 | R_X86_64_PLTOFF64),
         NativeMachine::Aarch64 => matches!(rtype, R_AARCH64_CALL26 | R_AARCH64_JUMP26),
     }
 }
@@ -1958,7 +1958,7 @@ impl<'a> Link<'a> {
         for (i, obj) in objs.iter().enumerate() {
             let resolver = self.resolver_calls(obj);
             for reloc in &obj.text_relocs {
-                if !is_x86_64_got_pcrel(reloc.rtype) || resolver.calls.contains(&reloc.offset) {
+                if !is_x86_64_got_slot_ref(reloc.rtype) || resolver.calls.contains(&reloc.offset) {
                     continue;
                 }
                 let Some(sym) = obj.symbols.get(reloc.sym_idx) else {
@@ -2135,8 +2135,13 @@ impl<'a> Link<'a> {
                         origin.symbol_name(sym),
                         reloc.offset,
                     );
+                    // `G + A` is the slot's distance from the GOT base.
                     let to_slot = NativeReloc {
-                        rtype: R_X86_64_PC32,
+                        rtype: if reloc.rtype == R_X86_64_GOT64 {
+                            R_X86_64_GOTOFF64
+                        } else {
+                            R_X86_64_PC32
+                        },
                         ..*reloc
                     };
                     let target = slot as i64 + reloc.addend;
@@ -2226,6 +2231,20 @@ impl<'a> Link<'a> {
         patch_offset: usize,
         site: &RelocSite<'_>,
     ) -> Result<(), C5Error> {
+        // `GOT + A - P` names the GOT base whatever the symbol, as GNU ld
+        // resolves it; the assemblers emit it against the base's name.
+        if self.machine == NativeMachine::X86_64
+            && matches!(reloc.rtype, R_X86_64_GOTPC32 | R_X86_64_GOTPC64)
+        {
+            return park_section_ref(
+                &mut self.pending_imports,
+                patch_offset,
+                reloc,
+                reloc.addend,
+                NativeSymSection::Got,
+                site,
+            );
+        }
         if let Some(at) = self.unit_symbol_offset(unit, sym_section, sym.value) {
             let target = merged_target(sym_section, at as i64, reloc.addend, self.data.len())?;
             return self.place_target(patch_offset, reloc, target, site);
@@ -2384,12 +2403,26 @@ impl<'a> Link<'a> {
         // address-of puts an imported function there, so a branch
         // keeps its stub whatever the note says of the name.
         let slot_load = is_data_binding
-            || is_got_reloc(reloc.rtype)
+            || is_got_reloc(self.machine, reloc.rtype)
             || (!is_branch_reloc(self.machine, reloc.rtype)
                 && self.extern_data_names.contains(name));
         let routed = self.is_routed_import(name);
         let shlib_exported = self.shlib_exports.contains(name);
         if sym.binding == 2 && !is_data_binding && !routed && !shlib_exported {
+            // A distance from the GOT base takes address 0 for the
+            // symbol, as GNU ld resolves it; the site's guard skips it.
+            if is_x86_64_got_distance(self.machine, reloc.rtype) {
+                self.pending_imports.push(PendingImportReloc {
+                    text_offset: patch_offset as u64,
+                    import_index: usize::MAX,
+                    rtype: reloc.rtype,
+                    addend: reloc.addend,
+                    target_section: NativeSymSection::Abs,
+                    slot_load: false,
+                    sym_name: Some(name.into()),
+                });
+                return Ok(());
+            }
             return resolve_weak_undef_to_zero(
                 self.machine,
                 &mut self.text,
@@ -3904,7 +3937,9 @@ fn plt_stub(machine: NativeMachine) -> Vec<u8> {
 /// for `&import`, so it needs a stub like a branch does.
 fn plt_eligible(machine: NativeMachine, rtype: u32) -> bool {
     match machine {
-        NativeMachine::X86_64 => matches!(rtype, R_X86_64_PLT32 | R_X86_64_PC32),
+        NativeMachine::X86_64 => {
+            matches!(rtype, R_X86_64_PLT32 | R_X86_64_PC32 | R_X86_64_PLTOFF64)
+        }
         NativeMachine::Aarch64 => matches!(
             rtype,
             R_AARCH64_CALL26
@@ -4021,7 +4056,18 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
             ),
         ));
     }
-    emit_plt(merged, |merged, reloc, tramp, _parked| {
+    emit_plt(merged, |merged, reloc, tramp, parked_back| {
+        // The stub's distance from the GOT base is the writer's to fix.
+        if reloc.rtype == R_X86_64_PLTOFF64 {
+            parked_back.push(PendingImportReloc {
+                import_index: usize::MAX,
+                addend: tramp as i64 + reloc.addend,
+                target_section: NativeSymSection::Text,
+                sym_name: Some(import_name(merged, reloc.import_index).into()),
+                ..reloc.clone()
+            });
+            return Ok(());
+        }
         let name = import_name(merged, reloc.import_index).to_string();
         patch_x86_64_pc32(
             &mut merged.text,
@@ -4450,6 +4496,16 @@ fn needs_image_base(machine: NativeMachine, rtype: u32) -> bool {
     }
 }
 
+/// An x86-64 relocation whose value is a distance to or from the GOT
+/// base. The writer places the GOT, so the merge parks every one.
+fn is_x86_64_got_distance(machine: NativeMachine, rtype: u32) -> bool {
+    machine == NativeMachine::X86_64
+        && matches!(
+            rtype,
+            R_X86_64_GOTPC32 | R_X86_64_GOTPC64 | R_X86_64_GOTOFF64 | R_X86_64_PLTOFF64
+        )
+}
+
 /// Relocation forms the parked-reference path can materialize once
 /// the final-image writer commits each section's runtime address.
 /// Screening them here, where the referencing symbol is still in
@@ -4457,6 +4513,7 @@ fn needs_image_base(machine: NativeMachine, rtype: u32) -> bool {
 /// then only fire when a badc invariant broke.
 fn parked_reloc_supported(machine: NativeMachine, rtype: u32) -> bool {
     needs_image_base(machine, rtype)
+        || is_x86_64_got_distance(machine, rtype)
         || pcrel_data_field(machine, rtype).is_some()
         || match machine {
             NativeMachine::Aarch64 => aarch64_pcrel_imm_field(rtype).is_some(),
@@ -4536,7 +4593,9 @@ fn resolve_merged_target(
 ) -> Result<(), C5Error> {
     match target {
         MergedTarget::Text(off) => {
-            if needs_image_base(site.machine, reloc.rtype) {
+            if needs_image_base(site.machine, reloc.rtype)
+                || is_x86_64_got_distance(site.machine, reloc.rtype)
+            {
                 park_section_ref(
                     pending,
                     patch_offset,

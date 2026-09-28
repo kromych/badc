@@ -1808,6 +1808,16 @@ pub(crate) enum EmitStream {
     Data,
 }
 
+/// What a resolved relocation's target names: an offset in a stream,
+/// an offset from the GOT base, or a link-time constant address, which
+/// the ELF writer emits against no symbol.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EmitTarget {
+    Stream(EmitStream),
+    GotBase,
+    Absolute,
+}
+
 /// One resolved relocation carried into a final ELF image under
 /// `--emit-relocs`: the KASLR-style consumers read the surviving
 /// `.rela.*` sections to locate every fixed-up slot.
@@ -1818,8 +1828,9 @@ pub(crate) struct EmittedFinalReloc {
     pub site_offset: u64,
     /// ELF relocation type as applied.
     pub rtype: u32,
-    pub target: EmitStream,
-    /// Resolved target offset within the target stream (`S + A`).
+    pub target: EmitTarget,
+    /// Resolved `S + A`: an offset into the target stream or from the
+    /// GOT base, or the address itself.
     pub addend: i64,
 }
 
@@ -1916,6 +1927,9 @@ pub(crate) struct Build {
     /// ELF writer resolves them against the `.got` it lays out and the
     /// other container writers reject them.
     pub got_base_fixups: Vec<GotBaseFixup>,
+    /// GOT-relative fields, populated and resolved like
+    /// `got_base_fixups`; see [`GotRelField`].
+    pub got_rel_fields: Vec<GotRelField>,
     /// Object-linked PC-relative fields that read an import's slot.
     /// Populated only by the multi-object synthesizer; see
     /// [`GotPcRelFixup`].
@@ -2449,6 +2463,40 @@ pub(crate) struct GotPcRelFixup {
     /// Index into the image's imports.
     pub import_index: usize,
     pub addend: i64,
+}
+
+/// A field of an object-linked x86-64 instruction holding the distance
+/// between two image addresses, one of them the GOT base: the forms the
+/// medium and large PIC code models address through
+/// `_GLOBAL_OFFSET_TABLE_` (psABI 4.4.1). The field takes
+/// `to + addend - from`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GotRelField {
+    /// Byte offset of the field within `Build::text`.
+    pub site_text_offset: u64,
+    pub to: ImageAddr,
+    pub from: ImageAddr,
+    pub addend: i64,
+    /// Field width in bytes: 4 or 8.
+    pub width: u8,
+}
+
+/// An address the image writer places, named by what it holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ImageAddr {
+    /// The relocated field itself.
+    Site,
+    /// The GOT base `_GLOBAL_OFFSET_TABLE_` names.
+    GotBase,
+    /// A `Build::text` byte offset.
+    Text(u64),
+    /// A byte offset in the data-byte space, zero-fill tail included.
+    Data(u64),
+    /// The GOT slot of an import, by index into the image's imports.
+    ImportSlot(usize),
+    /// A link-time constant address: `S + A` of an unresolved weak
+    /// reference, whose `S` is 0.
+    Absolute(u64),
 }
 
 /// Relocation for `Inst::ImmData`: the codegen emits an

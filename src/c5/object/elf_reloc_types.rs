@@ -38,10 +38,16 @@ pub(crate) const R_X86_64_DTPOFF32: u32 = 21;
 pub(crate) const R_X86_64_GOTTPOFF: u32 = 22;
 pub(crate) const R_X86_64_TPOFF32: u32 = 23;
 pub(crate) const R_X86_64_PC64: u32 = 24;
+/// `S + A - GOT`: an address as a distance from the GOT base.
+pub(crate) const R_X86_64_GOTOFF64: u32 = 25;
 /// `GOT + A - P` against `_GLOBAL_OFFSET_TABLE_`: the GOT base computed
 /// from the program counter, 4 bytes wide and 8 for the `64` form.
 pub(crate) const R_X86_64_GOTPC32: u32 = 26;
+/// `G + A`: the symbol's GOT slot as a distance from the GOT base.
+pub(crate) const R_X86_64_GOT64: u32 = 27;
 pub(crate) const R_X86_64_GOTPC64: u32 = 29;
+/// `L + A - GOT`: the symbol's call entry as a distance from the GOT base.
+pub(crate) const R_X86_64_PLTOFF64: u32 = 31;
 pub(crate) const R_X86_64_GOTPC32_TLSDESC: u32 = 34;
 pub(crate) const R_X86_64_TLSDESC_CALL: u32 = 35;
 pub(crate) const R_X86_64_GOTPCRELX: u32 = 41;
@@ -346,7 +352,8 @@ pub(crate) fn x86_64_field_width(rtype: u32) -> Option<u32> {
         | R_X86_64_TPOFF32 => Some(4),
         R_X86_64_16 | R_X86_64_PC16 => Some(2),
         R_X86_64_8 | R_X86_64_PC8 => Some(1),
-        R_X86_64_DTPOFF64 | R_X86_64_GOTPC64 => Some(8),
+        R_X86_64_DTPOFF64 | R_X86_64_GOTOFF64 | R_X86_64_GOT64 | R_X86_64_GOTPC64
+        | R_X86_64_PLTOFF64 => Some(8),
         _ => None,
     }
 }

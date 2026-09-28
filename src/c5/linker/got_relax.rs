@@ -3,7 +3,7 @@
 //! instruction reads a slot the link allocates for it.
 
 use crate::c5::object::elf_reloc_types::{
-    R_X86_64_GOTPCREL, R_X86_64_GOTPCRELX, R_X86_64_REX_GOTPCRELX,
+    R_X86_64_GOT64, R_X86_64_GOTPCREL, R_X86_64_GOTPCRELX, R_X86_64_REX_GOTPCRELX,
 };
 
 /// A relocation whose disp32 addresses the symbol's GOT slot.
@@ -12,6 +12,12 @@ pub(crate) const fn is_x86_64_got_pcrel(rtype: u32) -> bool {
         rtype,
         R_X86_64_GOTPCREL | R_X86_64_GOTPCRELX | R_X86_64_REX_GOTPCRELX
     )
+}
+
+/// A relocation whose field locates the symbol's GOT slot: a disp32 from
+/// the site, or the large model's offset from the GOT base.
+pub(crate) const fn is_x86_64_got_slot_ref(rtype: u32) -> bool {
+    is_x86_64_got_pcrel(rtype) || rtype == R_X86_64_GOT64
 }
 
 /// What the instruction around a GOT reference's disp32 does with the
@@ -29,8 +35,12 @@ pub(crate) enum GotUse {
 }
 
 /// Classify the instruction whose disp32 sits at `field`. Only
-/// GOTPCRELX marks a branch as relaxable, and plain GOTPCREL a load only.
+/// GOTPCRELX marks a branch as relaxable, and plain GOTPCREL a load only;
+/// a GOT64 immediate has no direct form.
 pub(crate) fn got_use(text: &[u8], field: usize, rtype: u32) -> GotUse {
+    if !is_x86_64_got_pcrel(rtype) {
+        return GotUse::Operand;
+    }
     let (Some(&op), Some(&modrm)) = (
         field.checked_sub(2).and_then(|i| text.get(i)),
         field.checked_sub(1).and_then(|i| text.get(i)),

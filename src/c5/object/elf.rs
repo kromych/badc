@@ -2127,6 +2127,13 @@ impl<'a> ElfImageWriter<'a> {
             if tail.has_bss {
                 v.push((Sec::Bss, seg.bss_vmaddr));
             }
+            let names_got = build
+                .emitted_relocs
+                .iter()
+                .any(|r| r.target == crate::c5::codegen::EmitTarget::GotBase);
+            if self.loader_tables && names_got {
+                v.push((Sec::Got, segment_vaddr(seg, seg.got_off)));
+            }
             v
         } else {
             Vec::new()
@@ -2173,7 +2180,10 @@ impl<'a> ElfImageWriter<'a> {
     /// against the section symbol of its target stream, with the addend
     /// rebased into that section.
     fn build_rela(&self, list: &[&crate::c5::codegen::EmittedFinalReloc]) -> Vec<u8> {
-        use crate::c5::codegen::EmitStream;
+        use crate::c5::codegen::{EmitStream, EmitTarget};
+        use crate::c5::object::elf_reloc_types::{R_X86_64_GOTPC32, R_X86_64_GOTPC64};
+        let got_sym = self.tail.sec_syms.iter().position(|&(s, _)| s == Sec::Got);
+        let got_vaddr = self.va(self.seg.got_off) as i64;
         let mut b = Vec::with_capacity(list.len() * ELF64_RELA_SIZE as usize);
         for r in list {
             let site_vaddr = match r.site {
@@ -2191,11 +2201,25 @@ impl<'a> ElfImageWriter<'a> {
                 }
             };
             let (sym, addend) = match r.target {
-                EmitStream::Text => (self.sec_sym_idx(Sec::Text), self.stub_len as i64 + r.addend),
-                EmitStream::Data => {
+                EmitTarget::Stream(EmitStream::Text) => {
+                    (self.sec_sym_idx(Sec::Text), self.stub_len as i64 + r.addend)
+                }
+                EmitTarget::Stream(EmitStream::Data) => {
                     let (sec, off) = self.map_data_off(r.addend as u64);
                     (self.sec_sym_idx(sec), off as i64)
                 }
+                EmitTarget::GotBase => match got_sym {
+                    Some(i) => (1 + i as u64, r.addend),
+                    // With no section at the base, the GOTPC forms add it
+                    // themselves and any other form takes its address.
+                    None if matches!(r.rtype, R_X86_64_GOTPC32 | R_X86_64_GOTPC64)
+                        && self.machine == Machine::X86_64 =>
+                    {
+                        (0, r.addend)
+                    }
+                    None => (0, got_vaddr + r.addend),
+                },
+                EmitTarget::Absolute => (0, r.addend),
             };
             b.extend_from_slice(&site_vaddr.to_le_bytes());
             b.extend_from_slice(&((sym << 32) | r.rtype as u64).to_le_bytes());
@@ -3451,6 +3475,31 @@ impl<'a> ElfImageWriter<'a> {
                 fx.part,
                 "func fixup",
             )?;
+        }
+        for f in &build.got_rel_fields {
+            use crate::c5::codegen::ImageAddr;
+            let site = stub_len + f.site_text_offset;
+            let addr = |a: ImageAddr| match a {
+                ImageAddr::Site => code.vmaddr_at(site),
+                ImageAddr::GotBase => got_vmaddr,
+                ImageAddr::Text(off) => text_vmaddr + off,
+                ImageAddr::Data(off) => self.data_off_to_vaddr(off),
+                ImageAddr::ImportSlot(i) => got_vmaddr + (i as u64) * 8,
+                ImageAddr::Absolute(v) => v,
+            };
+            let value = (addr(f.to) as i64)
+                .wrapping_add(f.addend)
+                .wrapping_sub(addr(f.from) as i64);
+            let at = code.file_at(site);
+            let bytes = value.to_le_bytes();
+            let width = f.width as usize;
+            let fits = width == 8 || i32::try_from(value).is_ok();
+            let Some(field) = self.out.get_mut(at..at + width).filter(|_| fits) else {
+                return Err(Self::internal(format!(
+                    "ELF: GOT-relative field at file+{at:#x} cannot take {value:#x}"
+                )));
+            };
+            field.copy_from_slice(&bytes[..width]);
         }
         for r in &build.text_pcrel_relocs {
             let site_vmaddr = text_vmaddr + r.site_text_offset;

@@ -2821,6 +2821,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // The GOT base is a cross-unit link fact; the single-TU emit
         // has no table to name.
         got_base_fixups: alloc::vec::Vec::new(),
+        got_rel_fields: alloc::vec::Vec::new(),
         got_pcrel_fixups: alloc::vec::Vec::new(),
         asm_sections: asm_section_list,
         asm_sym_decls,

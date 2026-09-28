@@ -7636,6 +7636,152 @@ fn fno_plt_objects_reach_functions_through_the_got() {
     }
 }
 
+/// gcc's medium and large PIC code models take the GOT base from the
+/// program counter (R_X86_64_GOTPC32 / GOTPC64) and reach symbols from it
+/// (psABI 4.4.1): GOTOFF64 for storage the image holds -- the medium
+/// model's `.lbss` array among it -- GOT64 for a slot, PLTOFF64 for a
+/// call entry. Each resolves against the GOT the writer places, in a
+/// PIE, a fixed executable and a shared library, and a weak function
+/// nothing defines is address 0 behind its guard.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn medium_and_large_pic_objects_address_from_the_got_base() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping medium_and_large_pic_objects_address_from_the_got_base: no system C compiler"
+        );
+        return;
+    };
+    let dir = tempdir("pic-code-models");
+    let lib = write_source(
+        &dir,
+        "lib.c",
+        "#include <stdio.h>\n\
+         #include <string.h>\n\
+         extern char **environ;\n\
+         static char big[100000];\n\
+         char gbig[70000] = {5};\n\
+         static const char msg[] = \"from the GOT base\";\n\
+         int counter = 40;\n\
+         static int bump(int x) { return x + 1; }\n\
+         int twice(int x) { return 2 * x; }\n\
+         int (*get_twice(void))(int) { return twice; }\n\
+         int run(void) {\n\
+           int (*p)(const char *) = puts;\n\
+           size_t (*len)(const char *) = strlen;\n\
+           big[99999] = 7;\n\
+           gbig[69999] = 3;\n\
+           p(msg);\n\
+           printf(\"%d\\n\", counter);\n\
+           return bump(counter) + twice(big[99999]) + gbig[0] + gbig[69999]\n\
+             + (environ != 0) + (int)len(msg);\n\
+         }\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "int run(void);\n\
+         int (*get_twice(void))(int);\n\
+         int twice(int);\n\
+         extern void maybe(void) __attribute__((weak));\n\
+         int main(void) {\n\
+           if (maybe) maybe();\n\
+           return run() == 41 + 14 + 5 + 3 + 1 + 17 && get_twice() == twice ? 0 : 1;\n\
+         }\n",
+    );
+    let expect = (Some(0), "from the GOT base\n40\n".to_string());
+    let ran = |exe: &Path| {
+        let out = Command::new(exe)
+            .env("LD_LIBRARY_PATH", &dir)
+            .output()
+            .expect("run");
+        (
+            out.status.code(),
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+        )
+    };
+    for model in ["-mcmodel=medium", "-mcmodel=large"] {
+        for opt in ["-O0", "-O2"] {
+            let mut objs = Vec::new();
+            for (src, pic) in [(&lib, "-fPIC"), (&main, "-fPIE")] {
+                let obj = src.with_extension("o");
+                run(
+                    Command::new(&cc)
+                        .args([opt, pic, model, "-U_FORTIFY_SOURCE", "-c"])
+                        .arg(src)
+                        .arg("-o")
+                        .arg(&obj),
+                    "compile",
+                );
+                objs.push(obj);
+            }
+            for form in [&[][..], &["-no-pie"], &["-Wl,--emit-relocs"]] {
+                let exe = dir.join("prog");
+                run(
+                    Command::new(badc())
+                        .arg("-q")
+                        .args(form)
+                        .args(&objs)
+                        .arg("-o")
+                        .arg(&exe),
+                    "link",
+                );
+                assert_eq!(ran(&exe), expect, "{model} {opt} {form:?}");
+                if !form.contains(&"-Wl,--emit-relocs") {
+                    continue;
+                }
+                // Each record re-emitted against the GOT base names it and
+                // reproduces its field: `GOT + A - P`.
+                let image = std::fs::read(&exe).expect("read the image");
+                let got = elf_section_spans(&image)
+                    .into_iter()
+                    .find(|h| h.0 == ".got")
+                    .map(|h| h.2);
+                let pc = [(26, 4), (29, 8)];
+                let records: Vec<_> = pc
+                    .iter()
+                    .flat_map(|&(rtype, width)| {
+                        emitted_text_relocs(&image, rtype)
+                            .into_iter()
+                            .map(move |r| (r, width))
+                    })
+                    .collect();
+                assert!(!records.is_empty(), "{model} {opt}: no GOTPC record");
+                for ((at, sym, addend), width) in records {
+                    assert_eq!(Some(sym), got, "{model} {opt}: GOTPC at {at:#x}");
+                    let want = sym.wrapping_add_signed(addend).wrapping_sub(at);
+                    assert_eq!(
+                        text_field(&image, at, width),
+                        Some(want & (u64::MAX >> (64 - 8 * width))),
+                        "{model} {opt}: GOTPC at {at:#x}"
+                    );
+                }
+            }
+            let so = dir.join("libpic.so");
+            run(
+                Command::new(badc())
+                    .args(["-q", "-shared", "--export-all", "--export-data"])
+                    .arg(&objs[0])
+                    .arg("-o")
+                    .arg(&so),
+                "link the shared library",
+            );
+            let exe = dir.join("prog-so");
+            run(
+                Command::new(badc())
+                    .arg("-q")
+                    .arg(&objs[1])
+                    .arg("-L")
+                    .arg(&dir)
+                    .args(["-lpic", "-o"])
+                    .arg(&exe),
+                "link against the shared library",
+            );
+            assert_eq!(ran(&exe), expect, "{model} {opt} shared");
+        }
+    }
+}
+
 /// gcc's DWARF 5 names each unit's files in `.debug_line_str`
 /// (`DW_FORM_line_strp`), and at -O2 describes ranges and locations in
 /// `.debug_rnglists` and `.debug_loclists`. The link carries every
@@ -7832,6 +7978,39 @@ fn glob_dat_slot(image: &[u8], name: &str) -> Option<u64> {
         let end = at + image[at..].iter().position(|&b| b == 0)?;
         (info & 0xffff_ffff == 6 && &image[at..end] == name.as_bytes()).then(|| rd64(r))
     })
+}
+
+/// Each `.rela.text` record of `rtype` in an `--emit-relocs` image as
+/// `(r_offset, S, A)`, `S` the value of the symbol it names.
+fn emitted_text_relocs(image: &[u8], rtype: u32) -> Vec<(u64, u64, i64)> {
+    let rd64 = |o: usize| u64::from_le_bytes(image[o..o + 8].try_into().unwrap());
+    let headers = elf_section_spans(image);
+    let Some(&(_, _, _, off, size, symtab)) = headers.iter().find(|h| h.0 == ".rela.text") else {
+        return Vec::new();
+    };
+    let sym_off = headers[symtab as usize].3;
+    (off..off + size)
+        .step_by(24)
+        .filter(|&r| rd64(r + 8) & 0xffff_ffff == rtype as u64)
+        .map(|r| {
+            let sym = (rd64(r + 8) >> 32) as usize;
+            (rd64(r), rd64(sym_off + sym * 24 + 8), rd64(r + 16) as i64)
+        })
+        .collect()
+}
+
+/// The `width`-byte little-endian field at virtual address `at` in `.text`.
+fn text_field(image: &[u8], at: u64, width: usize) -> Option<u64> {
+    let (_, _, addr, off, size, _) = elf_section_spans(image)
+        .into_iter()
+        .find(|h| h.0 == ".text")?;
+    let i = off + usize::try_from(at.checked_sub(addr)?).ok()?;
+    let bytes = image
+        .get(i..i + width)
+        .filter(|_| i + width <= off + size)?;
+    let mut word = [0u8; 8];
+    word[..width].copy_from_slice(bytes);
+    Some(u64::from_le_bytes(word))
 }
 
 /// Where each `call *disp32(%rip)` in `.text` reads its target.

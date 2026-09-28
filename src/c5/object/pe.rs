@@ -955,7 +955,7 @@ impl<'a> PeWriter<'a> {
             };
             field.copy_from_slice(&disp.to_le_bytes());
         }
-        if !build.got_base_fixups.is_empty() {
+        if !build.got_base_fixups.is_empty() || !build.got_rel_fields.is_empty() {
             return Err(C5Error::hard(
                 Code::OBJECT_FORMAT,
                 "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a PE image has no GOT",

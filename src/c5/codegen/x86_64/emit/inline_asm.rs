@@ -903,12 +903,12 @@ impl SectionInsn<'_> {
                     disp,
                     size: self.mem_size(),
                 },
-                AsmOpnd::RipRelRef { idx, .. } => {
-                    self.resolve_const_ref_mem(idx, true, &mut ops)?
+                AsmOpnd::RipRelRef { idx, symbolic } => {
+                    self.resolve_const_ref_mem(idx, true, symbolic, &mut ops)?
                 }
                 AsmOpnd::AbsMem { disp, sym } => self.resolve_abs_mem(disp, sym, &mut ops)?,
-                AsmOpnd::AbsMemRef { idx, .. } => {
-                    self.resolve_const_ref_mem(idx, false, &mut ops)?
+                AsmOpnd::AbsMemRef { idx, symbolic } => {
+                    self.resolve_const_ref_mem(idx, false, symbolic, &mut ops)?
                 }
                 AsmOpnd::IndexMem {
                     index,
@@ -1103,14 +1103,28 @@ impl SectionInsn<'_> {
 
     /// `%cN(%%rip)` / `%PN(%%rip)` (`riprel`) or a bare `%cN` / `%PN`
     /// reference: a constant becomes the displacement literal; a link-time
-    /// address takes a RIP-relative relocation.
+    /// address takes a RIP-relative relocation. A bare `%PN` naming a memory
+    /// operand is that memory reference, as gcc and clang print it.
     fn resolve_const_ref_mem(
         &self,
         idx: u8,
         riprel: bool,
+        symbolic: bool,
         ops: &mut SectionOperands,
     ) -> Result<super::asm::Concrete, alloc::string::String> {
         use super::asm::Concrete;
+        let op = self.refs.operands.get(idx as usize);
+        if !riprel
+            && matches!(
+                op.map(|o| o.constraint),
+                Some(super::super::ir::AsmConstraint::Mem)
+            )
+        {
+            if !symbolic {
+                return Err(self.err(&mem_const_modifier(idx)));
+            }
+            return self.resolve_ref(idx, None, ops);
+        }
         let size = self.mem_size();
         if let Some(v) = (self.refs.imm_of)(idx) {
             let (what, wide) = if riprel {
@@ -3083,7 +3097,9 @@ impl AsmPass<'_> {
             // override), a link-time address RIP-relative, as for `%a`.
             // TODO: gcc spells a `%c` symbol operand as an absolute
             // reference, which a non-PIC code model needs.
-            AsmOpnd::AbsMemRef { idx, .. } => self.resolve_const_ref_mem(idx, insn, false, r)?,
+            AsmOpnd::AbsMemRef { idx, symbolic } => {
+                self.resolve_const_ref_mem(idx, insn, false, symbolic, r)?
+            }
             AsmOpnd::Reg { reg, size } => Concrete::Reg { reg, size },
             AsmOpnd::Ref { idx, size } => self.resolve_ref(idx, size, insn, r)?,
             AsmOpnd::Mem {
@@ -3114,7 +3130,9 @@ impl AsmPass<'_> {
             // `%cN(%%rip)` / `%PN(%%rip)`: a compile-time constant becomes
             // the disp32 literal; a link-time address takes a RIP-relative
             // relocation, as for `%a`.
-            AsmOpnd::RipRelRef { idx, .. } => self.resolve_const_ref_mem(idx, insn, true, r)?,
+            AsmOpnd::RipRelRef { idx, symbolic } => {
+                self.resolve_const_ref_mem(idx, insn, true, symbolic, r)?
+            }
             // `disp(,%index,scale)`: a no-base scaled-index reference. A
             // symbol displacement needs an absolute relocation the
             // function-body stream does not carry.
@@ -3220,17 +3238,27 @@ impl AsmPass<'_> {
 
     /// `%cN` / `%PN` as a memory reference: a compile-time constant is the
     /// displacement literal (RIP-relative under `riprel`, absolute
-    /// otherwise), a link-time address a RIP-relative relocation.
+    /// otherwise), a link-time address a RIP-relative relocation. A bare
+    /// `%PN` naming a memory operand is that memory reference, as gcc and
+    /// clang print it.
     fn resolve_const_ref_mem(
         &self,
         idx: u8,
         insn: &super::asm::AsmInsn,
         riprel: bool,
+        symbolic: bool,
         r: &mut ResolvedOperands,
     ) -> Emit<super::asm::Concrete> {
         use super::asm::Concrete;
-        let size = self.mem_size_or_quad(insn);
         let stmt = self.stmt;
+        let constraint = stmt.asm.operands[idx as usize].constraint;
+        if !riprel && matches!(constraint, super::super::ir::AsmConstraint::Mem) {
+            if !symbolic {
+                return fail(alloc::format!("inline asm: {}", mem_const_modifier(idx)));
+            }
+            return self.resolve_ref(idx, None, insn, r);
+        }
+        let size = self.mem_size_or_quad(insn);
         Ok(match stmt.const_of(idx) {
             Some(v) => match (i32::try_from(v), riprel) {
                 (Ok(disp), true) => Concrete::RipRel { disp, size },
@@ -4144,6 +4172,11 @@ fn emit_asm_store_width(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg, widt
         4 => super::encode::emit_mov_mem_r32(code, base, disp, src),
         _ => super::encode::emit_mov_mem_r(code, base, disp, src),
     }
+}
+
+/// gcc and clang refuse `%c` on a memory operand; `%P` prints its reference.
+fn mem_const_modifier(idx: u8) -> alloc::string::String {
+    alloc::format!("`%c{idx}` names a memory operand, which only `%P{idx}` or `%{idx}` prints")
 }
 
 #[cfg(test)]

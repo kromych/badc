@@ -3517,8 +3517,6 @@ impl Compiler {
             self.rebase_relocated_globals();
             // Record each defined object's byte size for the object
             // writers' symbol tables; the writers have no type layout.
-            // An alias is sized like any other object: it took its
-            // target's element count when it resolved.
             for i in 0..self.symbols.len() {
                 let s = &self.symbols[i];
                 if s.class != Token::Glo as i64 || !s.defined_here {
@@ -3538,6 +3536,12 @@ impl Compiler {
                 } else {
                     elem + s.fam_init_bytes
                 };
+            }
+            // An object alias keeps its declared type; its symbol takes
+            // the aliased object's size, as GNU as gives a `.set` alias,
+            // which Linux's modpost reads a `MODULE_DEVICE_TABLE` by.
+            for &(alias, target) in &self.object_aliases {
+                self.symbols[alias].data_byte_size = self.symbols[target].data_byte_size;
             }
             // Function-pointer initializers (`int (*const fp)
             // (...) = some_fn;`) recorded a `code_relocs` row

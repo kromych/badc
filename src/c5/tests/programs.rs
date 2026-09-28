@@ -2349,6 +2349,13 @@ fn speculative_init_parse_data_rewind() {
     assert_eq!(run_fixture("speculative_init_parse_data_rewind.c"), 0);
 }
 
+/// An object alias keeps its declared type; only its symbol binds to the
+/// target's storage.
+#[test]
+fn attribute_alias_keeps_declared_type() {
+    assert_eq!(run_fixture("attribute_alias_keeps_declared_type.c"), 0);
+}
+
 #[test]
 fn attribute_weak_alias() {
     // `weak` / `alias` / `used`: a non-weak alias resolves to its

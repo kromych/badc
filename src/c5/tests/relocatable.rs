@@ -296,6 +296,7 @@ fn an_internal_linkage_data_alias_names_its_target() {
          static typeof(tbl) tbl_alias __attribute__((used, alias(\"tbl\")));\n\
          static int glob_alias[3] __attribute__((used, alias(\"glob\")));\n\
          extern const struct id tbl_ext[] __attribute__((alias(\"tbl\")));\n\
+         extern int glob_first __attribute__((alias(\"glob\")));\n\
          const struct id *anchor(void) { return tbl; }\n",
         "a.o",
     );
@@ -309,6 +310,8 @@ fn an_internal_linkage_data_alias_names_its_target() {
         ("tbl_alias", "tbl", STB_LOCAL),
         ("glob_alias", "glob", STB_LOCAL),
         ("tbl_ext", "tbl", STB_GLOBAL),
+        // Declared `int`, the symbol still spans `glob`, as gcc sizes it.
+        ("glob_first", "glob", STB_GLOBAL),
     ] {
         let (al, tg) = (sym(alias), sym(target));
         assert_eq!(al.binding, binding, "{alias} binding");

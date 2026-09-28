@@ -2084,7 +2084,6 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Glo as i64;
             self.symbols[id_idx].type_ = ty;
             self.symbols[id_idx].val = self.symbols[tgt].val;
-            Self::adopt_alias_storage(&mut self.symbols, id_idx, tgt);
             self.object_aliases.push((id_idx, tgt));
             self.symbols[id_idx].defined_here = true;
             self.symbols[id_idx].is_extern_decl = false;
@@ -2855,7 +2854,6 @@ impl Compiler {
             self.symbols[id_idx].defined_here = true;
             self.symbols[id_idx].is_extern_decl = false;
             if is_object {
-                Self::adopt_alias_storage(&mut self.symbols, id_idx, tgt);
                 self.object_aliases.push((id_idx, tgt));
             } else {
                 let name = self.symbols[id_idx].link_name().into();
@@ -2870,21 +2868,6 @@ impl Compiler {
             }
         }
         Ok(())
-    }
-
-    /// An object alias names its target's storage, so it takes the
-    /// target's extent along with its offset -- the declarator may leave
-    /// the count out (`extern T a[] __attribute__((alias("t")))`). The
-    /// symbol table's size then describes the aliased object, which is
-    /// what a consumer walking it needs: Linux's modpost reads a
-    /// `MODULE_DEVICE_TABLE` alias' device table by `st_size`.
-    fn adopt_alias_storage(symbols: &mut [crate::c5::symbol::Symbol], alias: usize, target: usize) {
-        let (array_size, zero_len) = (
-            symbols[target].array_size,
-            symbols[target].is_zero_len_array,
-        );
-        symbols[alias].array_size = array_size;
-        symbols[alias].is_zero_len_array = zero_len;
     }
 
     /// Symbol index the alias target `name` resolves to: a defined symbol

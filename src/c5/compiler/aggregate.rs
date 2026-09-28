@@ -61,6 +61,8 @@ struct MemberBase {
     incomplete_enum_tag: Option<u32>,
     anon_aggregate_inner_id: Option<usize>,
     group_align: usize,
+    /// `_Alignas` among the specifiers, which no bit-field may carry.
+    group_alignas: bool,
     /// `packed` among the specifiers, which packs every declarator.
     group_packed: bool,
     base_spelling: crate::c5::symbol::DeclSpelling,
@@ -228,6 +230,7 @@ impl Compiler {
             field_base,
             incomplete_enum_tag,
             group_align,
+            group_alignas,
             group_packed,
             base_spelling,
             type_align_override,
@@ -255,6 +258,12 @@ impl Compiler {
             // appearing in declarator position.
             if self.lex.tk == ':' {
                 self.pending.attr_packed = false;
+                if group_alignas {
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        "alignment specified for an unnamed bit-field",
+                    ));
+                }
                 let width = self.parse_bitfield_width(field_base, false)?;
                 self.pending.attr_transparent_union = false;
                 let mut unit_ty = field_base;
@@ -307,6 +316,14 @@ impl Compiler {
                     return Err(self.compile_err(
                         Code::INVALID_DECLARATION,
                         "aggregate fields cannot also be bitfields",
+                    ));
+                }
+                // C11 6.7.5p2.
+                if group_alignas || self.pending.attr_alignas > 0 {
+                    let name = self.symbols[id_idx].name.clone();
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        format!("alignment specified for bit-field `{name}`"),
                     ));
                 }
                 self.parse_bitfield_width(field_ty, true)?
@@ -849,6 +866,7 @@ impl Compiler {
         // alignment of every member of the group; a per-declarator one adds
         // to it at placement.
         let mut group_align: usize = 0;
+        let mut group_alignas = false;
         let mut group_packed = false;
         // C99 6.7.2p2 admits the qualifiers in any order, so a leading
         // `volatile int x;` folds like the trailing spelling.
@@ -856,6 +874,7 @@ impl Compiler {
         while is_decl_modifier(self.lex.tk) {
             if self.lex.tk == Token::Attribute {
                 group_packed |= self.skip_attribute_specifiers()?;
+                group_alignas |= self.pending.attr_alignas > 0;
                 let m_align = self.take_member_align()?;
                 if m_align > 0 {
                     group_align = group_align.max(m_align as usize);
@@ -952,6 +971,7 @@ impl Compiler {
         let (saw_int_mod, trailing_quals) =
             self.consume_trailing_decl_modifiers(&mut mods, None)?;
         group_packed |= core::mem::take(&mut self.pending.attr_packed);
+        group_alignas |= self.pending.attr_alignas > 0;
         group_align = group_align.max(self.take_member_align()?.max(0) as usize);
         if saw_int_mod {
             if field_base_tok == Token::Int {
@@ -976,6 +996,7 @@ impl Compiler {
             incomplete_enum_tag,
             anon_aggregate_inner_id,
             group_align,
+            group_alignas,
             group_packed,
             base_spelling,
             type_align_override,

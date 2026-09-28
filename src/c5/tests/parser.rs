@@ -27,6 +27,39 @@ fn empty_source_has_no_main() {
     expect_compile_error("", "main() not defined");
 }
 
+/// C11 6.7.5p2: no alignment specifier in the declaration of a bit-field,
+/// whether it leads the member group or names one declarator of it; gcc's
+/// `aligned` attribute on a bit-field stays accepted.
+#[test]
+fn alignas_on_a_bit_field_is_diagnosed() {
+    for (src, needle) in [
+        (
+            "struct S { _Alignas(8) int b : 4; };",
+            "alignment specified for bit-field `b`",
+        ),
+        (
+            "struct S { int _Alignas(8) b : 4; };",
+            "alignment specified for bit-field `b`",
+        ),
+        (
+            "struct S { _Alignas(8) int a, b : 4; };",
+            "alignment specified for bit-field `b`",
+        ),
+        (
+            "struct S { _Alignas(8) int : 4; int c; };",
+            "alignment specified for an unnamed bit-field",
+        ),
+    ] {
+        expect_compile_error(
+            &alloc::format!("{src}\nint main(void) {{ return 0; }}"),
+            needle,
+        );
+    }
+    let ok = "struct S { _Alignas(8) int a; int b : 4 __attribute__((aligned(8))); };\n\
+              int main(void) { return sizeof(struct S) != 16; }";
+    assert!(Compiler::new(ok.to_string()).compile().is_ok());
+}
+
 #[test]
 fn overaligned_automatic_beside_a_vla_is_diagnosed() {
     // The realigned region (alignment above 16) and a variable-length array

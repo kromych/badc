@@ -33,7 +33,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	callq	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movzwq	0x8(%rcx), %rdx
                	xorq	$0x4d2, %rdx            # imm = 0x4D2
                	testl	%edx, %edx

@@ -54,7 +54,7 @@ Disassembly of section .text:
                	mov	x2, #0x2211             // =8721
                	movk	x2, #0x4433, lsl #16
                	str	w2, [x1]
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	ldrb	w3, [x1, x0]
                	ldrb	w4, [x2, x0]
@@ -68,7 +68,7 @@ Disassembly of section .text:
                	movk	x1, #0x1122, lsl #16
                	str	w1, [x0, #0x4]
                	add	x1, x0, #0x4
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
                	ldrb	w3, [x1, x0]
@@ -83,7 +83,7 @@ Disassembly of section .text:
                	movk	x1, #0xddcc, lsl #16
                	stur	w1, [x0, #0x9]
                	add	x1, x0, #0x9
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
                	ldrb	w3, [x1, x0]
@@ -100,7 +100,7 @@ Disassembly of section .text:
                	movk	x1, #0x807, lsl #48
                	stur	x1, [x0, #0x1]
                	add	x1, x0, #0x1
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
                	ldrb	w3, [x1, x0]
@@ -114,7 +114,7 @@ Disassembly of section .text:
                	mov	x1, #0xfeed             // =65261
                	sturh	w1, [x0, #0xb]
                	add	x1, x0, #0xb
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
                	ldrb	w3, [x1, x0]
@@ -132,7 +132,7 @@ Disassembly of section .text:
                	strb	w0, [x1, #0x1]
                	mov	x0, #0x99               // =153
                	strb	w0, [x1, #0x2]
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
                	ldrb	w3, [x1, x0]

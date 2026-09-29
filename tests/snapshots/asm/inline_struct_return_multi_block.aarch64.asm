@@ -27,10 +27,10 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x20               // =32
                	stur	w0, [x29, #-0x8]
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	ldur	w0, [x29, #-0x8]
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	lsr	x0, x0, #5
                	cmp	w0, #0x9

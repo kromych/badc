@@ -29,10 +29,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x5, %esi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	movslq	(%rax), %rdi
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movq	%rsi, %rcx
                	movq	%rsi, %r8
                	callq	<addr>
@@ -43,7 +43,7 @@ Disassembly of section .text:
 <func_10>:
                	movl	$0x5, %esi
                	movq	%rdx, %rdi
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx), %rax
                	movzwq	(%rax), %rax
                	movsbq	%al, %rax
@@ -51,7 +51,7 @@ Disassembly of section .text:
                	jl	<addr>
                	cmpl	$0x1, %eax
                	jle	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	orq	%rsi, %rax
                	movq	%rax, %rdx
@@ -68,8 +68,8 @@ Disassembly of section .text:
                	jne	<addr>
                	cmpl	$-0x1, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rsi
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rsi      # <addr>
+               	leaq	<rip>, %rcx      # <addr>
                	movslq	(%rsi), %rax
                	cmpl	$0x5, %eax
                	jg	<addr>
@@ -83,7 +83,7 @@ Disassembly of section .text:
                	movslq	(%rsi), %rax
                	cmpl	$0x5, %eax
                	jle	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movzwq	(%rax), %rax
                	retq
                	cqto
@@ -93,24 +93,24 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <func_17>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movl	$0x5, %esi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	movslq	(%rax), %rdi
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movq	%rsi, %rcx
                	movq	%rsi, %r8
                	callq	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	cmpl	$0x0, (%rax)
                	jne	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	cmpl	$0x6, %eax
                	jne	<addr>

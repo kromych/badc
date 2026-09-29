@@ -80,6 +80,7 @@ const STT_OBJECT: u8 = 1;
 const STT_SECTION: u8 = 3;
 const SHF_INFO_LINK: u64 = 0x40;
 const SHN_UNDEF: u16 = 0;
+const SHN_ABS: u16 = 0xfff1;
 
 /// `PT_LOAD` segment alignment.
 fn seg_align(machine: Machine) -> u64 {
@@ -641,9 +642,9 @@ fn build_dynstr(
 }
 
 /// Build the static `.symtab` + `.strtab`: the SHT_SYMTAB sentinel at index
-/// 0, one local `STT_FUNC` per import trampoline, then one local `STT_FUNC`
-/// per defined function (named, with its address and length) so the output
-/// is profilable without DWARF.
+/// 0, one local `STT_FUNC` per import trampoline, then, where no link lists
+/// the image's symbols, one local `STT_FUNC` per defined function (named,
+/// with its address and length) so the output is profilable without DWARF.
 fn build_plt_symtab(
     build: &super::Build,
     text_vmaddr: u64,
@@ -707,7 +708,8 @@ fn build_plt_symtab(
     // (perf maps a sample by `[st_value, st_value + st_size)`, so a zero
     // size leaves the function unattributable).
     let boundaries = text_boundaries(build);
-    for (i, name) in build.func_names.iter().enumerate() {
+    let unlinked = build.image_symbols.is_empty();
+    for (i, name) in build.func_names.iter().enumerate().filter(|_| unlinked) {
         let start = build.pc_to_native[build.func_ent_pcs[i]] as u64;
         let st_name = strtab.len() as u32;
         strtab.extend_from_slice(name.as_bytes());
@@ -1355,6 +1357,8 @@ struct Tail<'a> {
     rela_data: Vec<u8>,
     symtab: Vec<u8>,
     strtab: Vec<u8>,
+    /// Index of the first non-local `.symtab` entry, its `sh_info`.
+    symtab_locals: u32,
     rela_text_off: u64,
     rela_data_off: u64,
     comment: Vec<u8>,
@@ -2243,6 +2247,7 @@ impl<'a> ElfImageWriter<'a> {
         };
         let text_vmaddr = self.text_vmaddr();
         let text_shndx = self.dynamic.text_shndx;
+        let image_rows = self.image_symbol_rows();
         let tail = &mut self.tail;
         let (mut symtab, mut strtab) = if !build.plt_trampoline_offsets.is_empty() {
             build_plt_symtab(build, text_vmaddr, trampoline_size, text_shndx)
@@ -2297,10 +2302,67 @@ impl<'a> ElfImageWriter<'a> {
                 },
             );
         }
+        let mut locals = symtab.len() as u64 / ELF64_SYM_SIZE;
+        if !symtab.is_empty() {
+            for (name, mut sym) in image_rows {
+                sym.st_name = strtab.len() as u32;
+                strtab.extend_from_slice(name.as_bytes());
+                strtab.push(0);
+                locals += u64::from(sym.st_info >> 4 == STB_LOCAL);
+                write_struct(&mut symtab, &sym);
+            }
+        }
+        tail.symtab_locals = locals as u32;
         tail.rela_text = rela_text;
         tail.rela_data = rela_data;
         tail.symtab = symtab;
         tail.strtab = strtab;
+    }
+
+    /// The linked image's symbols as `.symtab` entries awaiting their names,
+    /// locals first: an address in the image, or a thread-local's offset in
+    /// the TLS segment. A function the input gave no size spans to the next
+    /// body, as the unlinked table sizes it.
+    fn image_symbol_rows(&self) -> Vec<(&'a str, Elf64Sym)> {
+        use crate::c5::codegen::SymbolPlace;
+        let build = self.build;
+        let boundaries = text_boundaries(build);
+        let plan = &self.tail.plan;
+        let data_place = |off: u64| {
+            let addr = self.data_off_to_vaddr(off);
+            (addr, self.data_addr_shndx(addr, off))
+        };
+        build
+            .image_symbols
+            .iter()
+            .map(|s| {
+                let (st_value, st_shndx) = match s.place {
+                    SymbolPlace::Text(o) => (self.text_vmaddr() + o, self.dynamic.text_shndx),
+                    SymbolPlace::Data(o) => data_place(o),
+                    SymbolPlace::Bss(o) => data_place(build.data.len() as u64 + o),
+                    SymbolPlace::Tls(o) if (o as usize) < build.tls_init_size => {
+                        (o, plan.index_of(Sec::Tdata))
+                    }
+                    SymbolPlace::Tls(o) => (o, plan.index_of(Sec::Tbss)),
+                    SymbolPlace::Abs(v) => (v, SHN_ABS),
+                };
+                let st_size = match s.place {
+                    SymbolPlace::Text(o) if s.size == 0 && s.info & 0xf == STT_FUNC => {
+                        text_body_len(&boundaries, o)
+                    }
+                    _ => s.size,
+                };
+                let sym = Elf64Sym {
+                    st_name: 0,
+                    st_info: s.info,
+                    st_other: s.other,
+                    st_shndx,
+                    st_value,
+                    st_size,
+                };
+                (s.name.as_str(), sym)
+            })
+            .collect()
     }
 
     /// File offsets of everything past the DWARF, and `.shstrtab`.
@@ -3319,12 +3381,11 @@ impl<'a> ElfImageWriter<'a> {
             },
         ));
         if let Some(name_idx) = tail.symtab_name_idx {
-            let n_sym = (tail.symtab.len() as u64) / ELF64_SYM_SIZE;
             headers.push((
                 Sec::Symtab,
                 Elf64Shdr {
                     sh_link: tail.plan.index_of(Sec::Strtab) as u32,
-                    sh_info: n_sym as u32,
+                    sh_info: tail.symtab_locals,
                     sh_entsize: ELF64_SYM_SIZE,
                     ..unloaded(
                         tail.shstrtab_offsets[name_idx],

@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <my_init>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	%rax, (%rdi)
                	leaq	(%rdx,%rcx), %rax
                	movl	%eax, 0x8(%rdi)
@@ -46,9 +46,9 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi      # <addr>
                	movl	$0x2a, %edx
                	movl	$0x8, %ecx
                	callq	*%rax

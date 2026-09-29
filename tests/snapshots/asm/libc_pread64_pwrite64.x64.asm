@@ -105,7 +105,7 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	0xa8(%rax), %rdi
                	movq	0x88(%rax), %r12
                	leaq	-0x38(%rbp), %rsi

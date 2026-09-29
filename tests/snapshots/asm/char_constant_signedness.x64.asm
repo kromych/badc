@@ -70,7 +70,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rdi
                	movslq	-0x8(%rbp), %rax
                	movb	%al, (%rdi)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	callq	*%rax
                	cmpl	$0x1, %eax
@@ -82,7 +82,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rdi
                	movslq	-0x8(%rbp), %rax
                	movb	%al, (%rdi)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	callq	*%rax
                	cmpl	$0x2, %eax

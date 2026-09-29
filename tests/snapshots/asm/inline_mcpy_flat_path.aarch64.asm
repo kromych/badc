@@ -16,7 +16,7 @@ Disassembly of section .text:
 <use_decode>:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	ldr	x3, [x1]
                	lsr	x3, x3, #62

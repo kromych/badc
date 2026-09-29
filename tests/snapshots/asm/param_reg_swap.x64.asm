@@ -69,7 +69,7 @@ Disassembly of section .text:
                	leaq	-0x38(%rbp), %rdi
                	leaq	-0x30(%rbp), %rsi
                	leaq	-0x20(%rbp), %rdx
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx       # <addr>
                	callq	<addr>
                	movzbq	-0x38(%rbp), %rax
                	leave

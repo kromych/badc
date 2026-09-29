@@ -26,17 +26,17 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movsd	(%rax), %xmm0
                	movsd	(%rax), %xmm1
                	divsd	%xmm1, %xmm0
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movsd	(%rax), %xmm1
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movss	(%rax), %xmm2
                	movss	(%rax), %xmm3
                	divss	%xmm3, %xmm2
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movss	(%rax), %xmm3
                	ucomisd	%xmm0, %xmm1
                	jbe	<addr>

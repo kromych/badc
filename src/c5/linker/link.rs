@@ -286,6 +286,9 @@ pub struct MergedNative {
     /// to `Build::func_names` so the static symbol table and DWARF name
     /// the program's own static functions.
     pub local_funcs: Vec<(String, u64)>,
+    /// The image's static symbol table, locals first: every symbol a unit
+    /// defines, with the attributes its `.symtab` gave it.
+    pub(crate) symbols: Vec<crate::c5::codegen::ImageSymbol>,
     /// Per-thread TLS image for the merged executable. The first
     /// [`Self::tls_init_size`] bytes are the initialised `.tdata`
     /// template; the remainder is `.tbss` zero-fill. The per-format
@@ -1112,6 +1115,129 @@ impl<'a> Link<'a> {
             NativeSymSection::RelRo => self.relro_map[unit].at(value),
             NativeSymSection::Data => self.rw_map[unit].at(value),
             NativeSymSection::Bss => self.bss_map[unit].at(value),
+            _ => return None,
+        })
+    }
+
+    /// The static symbol table's rows, locals first: each unit's `STT_FILE`
+    /// entry ahead of its local definitions, then the global and weak
+    /// definitions the link kept. A hidden or internal one turns local, as
+    /// the ELF gABI has the link editor do.
+    fn image_symbols(&self) -> Vec<crate::c5::codegen::ImageSymbol> {
+        use super::object::{STT_FILE, STT_SECTION};
+        use crate::c5::codegen::{ImageSymbol, SymbolPlace};
+        let row = |name: &str, place, size, binding: u8, kind: u8, visibility: u8| ImageSymbol {
+            name: name.to_string(),
+            place,
+            size,
+            info: (binding << 4) | kind,
+            other: visibility,
+        };
+        let mut locals = Vec::new();
+        let mut globals = Vec::new();
+        let mut kept_outside = hashbrown::HashSet::new();
+        for (i, obj) in self.objs.iter().enumerate() {
+            let mut file = None;
+            for sym in obj
+                .symbols
+                .iter()
+                .filter(|s| s.binding == 0 && !s.name.is_empty())
+            {
+                if sym.kind == STT_FILE {
+                    file = Some(row(&sym.name, SymbolPlace::Abs(0), 0, 0, STT_FILE, 0));
+                } else if sym.kind != STT_SECTION
+                    && let Some(place) = self.unit_place(i, sym.section, sym.value)
+                {
+                    locals.extend(file.take());
+                    let r = row(&sym.name, place, sym.size, 0, sym.kind, sym.visibility);
+                    locals.push(r);
+                }
+            }
+            // A thread-local or absolute definition resolves outside
+            // `defined`; the one its table kept is the unit's own.
+            for sym in obj
+                .symbols
+                .iter()
+                .filter(|s| s.binding != 0 && !s.name.is_empty())
+            {
+                let kept = match sym.section {
+                    NativeSymSection::Tls => {
+                        self.tls_symbol_offsets.get(sym.name.as_str())
+                            == Some(&(self.tls_bases[i] as u64 + sym.value))
+                    }
+                    NativeSymSection::Abs => {
+                        sym.kind != STT_FILE
+                            && self.absolute_defined.get(sym.name.as_str())
+                                == Some(&(sym.value as i64))
+                    }
+                    _ => false,
+                };
+                if kept
+                    && kept_outside.insert(sym.name.as_str())
+                    && let Some(place) = self.unit_place(i, sym.section, sym.value)
+                {
+                    let r = row(
+                        &sym.name,
+                        place,
+                        sym.size,
+                        sym.binding,
+                        sym.kind,
+                        sym.visibility,
+                    );
+                    globals.push(r);
+                }
+            }
+        }
+        for (name, sym) in &self.defined {
+            let place = match sym.section {
+                NativeSymSection::Text => SymbolPlace::Text(sym.value),
+                NativeSymSection::Data => SymbolPlace::Data(sym.value),
+                NativeSymSection::Bss => SymbolPlace::Bss(sym.value),
+                _ => continue,
+            };
+            let binding = if sym.weak { 2 } else { 1 };
+            globals.push(row(
+                name,
+                place,
+                sym.size,
+                binding,
+                sym.kind,
+                sym.visibility,
+            ));
+        }
+        globals.sort_by(|a, b| a.name.cmp(&b.name));
+        let (hidden, globals): (Vec<_>, Vec<_>) = globals.into_iter().partition(|g| {
+            matches!(
+                g.other & 3,
+                super::object::STV_INTERNAL | super::object::STV_HIDDEN
+            )
+        });
+        locals.extend(hidden.into_iter().map(|g| ImageSymbol {
+            info: g.info & 0xf,
+            ..g
+        }));
+        locals.extend(globals);
+        locals
+    }
+
+    /// Where unit `unit`'s definition at `value` in `section` lies in the
+    /// image, `None` outside it (a DWARF section, a common symbol).
+    fn unit_place(
+        &self,
+        unit: usize,
+        section: NativeSymSection,
+        value: u64,
+    ) -> Option<crate::c5::codegen::SymbolPlace> {
+        use crate::c5::codegen::SymbolPlace;
+        let at = || self.unit_symbol_offset(unit, section, value);
+        Some(match section {
+            NativeSymSection::Text => SymbolPlace::Text(at()?),
+            NativeSymSection::RoData | NativeSymSection::RelRo | NativeSymSection::Data => {
+                SymbolPlace::Data(at()?)
+            }
+            NativeSymSection::Bss => SymbolPlace::Bss(at()?),
+            NativeSymSection::Tls => SymbolPlace::Tls(self.tls_bases[unit] as u64 + value),
+            NativeSymSection::Abs => SymbolPlace::Abs(value),
             _ => return None,
         })
     }
@@ -3625,6 +3751,7 @@ impl<'a> Link<'a> {
         // symbol's type.
         let branch_imports = &self.branch_imports;
         self.object_imports.retain(|i| !branch_imports.contains(i));
+        let symbols = self.image_symbols();
         let defined: BTreeMap<String, MergedSymbol> = self
             .defined
             .into_iter()
@@ -3692,6 +3819,7 @@ impl<'a> Link<'a> {
             prologue_ends: self.prologue_ends,
             early_returns: self.early_returns,
             local_funcs: self.local_funcs,
+            symbols,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
             tls_align: self.tls_align,

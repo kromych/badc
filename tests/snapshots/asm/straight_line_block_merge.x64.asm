@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <note>:
                	movq	%rdi, %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movslq	(%rcx), %rdx
                	addq	%rax, %rdx
                	movl	%edx, (%rcx)
@@ -243,7 +243,7 @@ Disassembly of section .text:
 <ladder>:
                	movslq	%edi, %rdi
                	xorl	%eax, %eax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx,%rdi,8), %rcx
                	jmpq	*%rcx
                	movl	$0x1, %eax
@@ -523,7 +523,7 @@ Disassembly of section .text:
                	jl	<addr>
                	testl	%ebx, %ebx
                	jne	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	cmpl	%ecx, %eax
                	je	<addr>
@@ -646,7 +646,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	testl	%ebx, %ebx
                	jne	<addr>
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi       # <addr>
                	movl	$0x7, %esi
                	movl	$0x3, %edx
                	movq	%rsi, %rcx
@@ -657,7 +657,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	testl	%ebx, %ebx
                	jne	<addr>
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi       # <addr>
                	movl	$0x7, %esi
                	xorl	%edx, %edx
                	movl	$0x64, %ecx
@@ -668,7 +668,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	testl	%ebx, %ebx
                	jne	<addr>
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi       # <addr>
                	xorl	%esi, %esi
                	movl	$0x64, %ecx
                	movq	%rsi, %rdx

@@ -29,7 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x50, %rsp
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movl	$0x0, (%rcx)
                	leaq	-0x40(%rbp), %rax
                	xorps	%xmm14, %xmm14
@@ -50,7 +50,7 @@ Disassembly of section .text:
                	movups	%xmm14, (%rcx)
                	movl	$0x5, 0x30(%rax)
                	movq	$0x6, 0x38(%rax)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	cmpl	$0x1, %eax
                	je	<addr>
@@ -88,7 +88,7 @@ Disassembly of section .text:
                	movups	%xmm14, 0x20(%rax)
                	movups	%xmm14, 0x30(%rax)
                	movups	%xmm14, 0x40(%rax)
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movslq	(%rcx), %rdx
                	incq	%rdx
                	movl	%edx, (%rcx)
@@ -103,7 +103,7 @@ Disassembly of section .text:
                	movups	%xmm14, (%rdx)
                	movl	$0x5, 0x40(%rax)
                	movq	$0x6, 0x48(%rax)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	cmpl	$0x2, %eax
                	je	<addr>
@@ -146,7 +146,7 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	movups	%xmm14, 0x10(%rax)
                	movups	%xmm14, 0x20(%rax)
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movslq	(%rcx), %rdx
                	incq	%rdx
                	movl	%edx, (%rcx)
@@ -164,7 +164,7 @@ Disassembly of section .text:
                	movl	$0x11, 0x10(%rax)
                	leaq	-0x30(%rbp), %rax
                	movq	$0x2, 0x18(%rax)
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movslq	(%rcx), %rcx
                	cmpl	$0x4, %ecx
                	je	<addr>
@@ -203,7 +203,7 @@ Disassembly of section .text:
                	retq
 
 <check_member_range>:
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	xorl	%eax, %eax
                	movl	%eax, (%rcx)
                	movq	%rax, %rdx
@@ -220,7 +220,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	xorl	%eax, %eax
                	movl	%eax, (%rdx)
                	leaq	-0x20(%rbp), %rcx

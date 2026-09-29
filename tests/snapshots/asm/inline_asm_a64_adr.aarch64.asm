@@ -17,6 +17,6 @@ Disassembly of section .text:
                	adr	x0, <addr>
                	ldr	x0, [x0]
                	b	<addr>
-               	udf	#0x2a
-               	udf	#0x0
+  40047c: 2a 00 00 00  	.word	0x0000002a
+  400480: 00 00 00 00  	.word	0x00000000
                	ret

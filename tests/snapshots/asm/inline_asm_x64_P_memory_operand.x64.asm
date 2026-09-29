@@ -83,7 +83,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movq	<rip>, %rax
+               	movq	<rip>, %rax      # <addr>
                	cmpq	$0x14, %rax
                	je	<addr>
                	movl	$0x4, %eax

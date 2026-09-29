@@ -29,9 +29,9 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x120, %rsp            # imm = 0x120
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax       # <addr>
                	addq	$0x8, %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx       # <addr>
                	cmpb	$0x0, (%rax)
                	je	<addr>
                	movsbq	(%rax), %rdx
@@ -49,9 +49,9 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax       # <addr>
                	addq	$0x4, %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx       # <addr>
                	cmpb	$0x0, (%rax)
                	je	<addr>
                	movsbq	(%rax), %rdx
@@ -70,7 +70,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x108(%rbp), %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx       # <addr>
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movups	0x10(%rcx), %xmm14
@@ -106,7 +106,7 @@ Disassembly of section .text:
                	movq	0x100(%rcx), %r10
                	movq	%r10, 0x100(%rax)
                	addq	$0x8, %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx       # <addr>
                	cmpb	$0x0, (%rax)
                	je	<addr>
                	movsbq	(%rax), %rdx
@@ -125,13 +125,13 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x120(%rbp), %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx       # <addr>
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
                	movl	0x10(%rcx), %r10d
                	movl	%r10d, 0x10(%rax)
                	addq	$0x4, %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx       # <addr>
                	cmpb	$0x0, (%rax)
                	je	<addr>
                	movsbq	(%rax), %rdx

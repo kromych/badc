@@ -2889,6 +2889,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         label_relocs: st.label_relocs,
         exports: alloc::vec::Vec::new(),
         dynamic_exports: alloc::vec::Vec::new(),
+        image_symbols: alloc::vec::Vec::new(),
         output_kind: super::OutputKind::Executable,
         pic_link: native.pic || native.pic_link,
         exec_form: Default::default(),

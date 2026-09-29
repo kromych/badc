@@ -14,7 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <take_never>:
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ret
 
@@ -22,7 +22,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x0, #0x0                // =0
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	ldrb	w1, [x1]
                	cbz	w1, <addr>
@@ -34,9 +34,9 @@ Disassembly of section .text:
                	eor	x3, x3, x17
                	cbz	w3, <addr>
                	orr	x1, x1, #0x4
-               	adrp	x3, <page>
+               	adrp	x3, <addr>
                	add	x3, x3, <lo12>
-               	adrp	x4, <page>
+               	adrp	x4, <addr>
                	add	x4, x4, <lo12>
                	ldrb	w5, [x3, x0]
                	cbz	x5, <addr>
@@ -49,13 +49,13 @@ Disassembly of section .text:
                	ldrb	w5, [x3, x0]
                	cbnz	x5, <addr>
                	cbz	x1, <addr>
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x0, #0x0                // =0

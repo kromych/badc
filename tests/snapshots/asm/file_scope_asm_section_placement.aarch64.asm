@@ -64,4 +64,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	udf	#0x0
-               	<unknown>
+
+<asm_x_word>:
+  4005a8: 66 66 55 55  	.word	0x55556666

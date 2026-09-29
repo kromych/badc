@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <mark>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	$0x1, (%rax)
                	retq
 
@@ -40,15 +40,15 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	movl	$0x2a, %r11d
-               	movq	%r11, <rip>
+               	movq	%r11, <rip>      # <addr>
                	callq	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x1, %rax
                	je	<addr>

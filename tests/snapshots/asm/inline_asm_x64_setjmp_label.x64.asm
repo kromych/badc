@@ -49,7 +49,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	leaq	<rip>, %rcx        # <addr>
                	xorq	%rax, %rax
                	movq	%rbx, (%rdx)
@@ -60,10 +60,12 @@ Disassembly of section .text:
                	movq	%r14, 0x28(%rdx)
                	movq	%r15, 0x30(%rdx)
                	movq	%rcx, 0x38(%rdx)
+
+<LJMPRET1>:
                	movl	%eax, -0x8(%rbp)
                	cmpl	$0x0, -0x8(%rbp)
                	jne	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	cmpl	$0x0, (%rax)
                	je	<addr>
                	movl	$0x1, %eax
@@ -73,7 +75,7 @@ Disassembly of section .text:
                	movl	$0x1, (%rax)
                	movl	$0x4, %edi
                	callq	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rbx
                	movq	0x8(%rax), %rbp
                	movq	0x10(%rax), %r12
@@ -88,7 +90,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	cmpl	$0x1, %eax
                	je	<addr>

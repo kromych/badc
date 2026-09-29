@@ -234,7 +234,7 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	str	x0, [x2, #0xff8]
-               	adrp	x3, <page>
+               	adrp	x3, <addr>
                	add	x3, x3, <lo12>
                	str	w0, [x3, #0xff0]
                	stp	xzr, xzr, [x1]
@@ -279,7 +279,7 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x1, [x1, #0xff8]
                	add	x0, x0, x1
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	ldrsw	x1, [x1, #0xff0]
                	add	x0, x0, x1

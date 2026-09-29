@@ -29,7 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
                	movabsq	$0xfffffffff, %r11      # imm = 0xFFFFFFFFF
@@ -41,7 +41,7 @@ Disassembly of section .text:
                	je	<addr>
                	leave
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx), %rax
                	movq	0x8(%rcx), %rdx
                	movabsq	$0xfffffffff, %r11      # imm = 0xFFFFFFFFF

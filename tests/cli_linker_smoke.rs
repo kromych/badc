@@ -4832,6 +4832,16 @@ fn elf_sections(bytes: &[u8]) -> Vec<(String, u32, u64)> {
 /// `SHT_SYMTAB` entries of an ELF64 image as
 /// `(name, st_value, st_size, st_shndx)`.
 fn elf_symbols(bytes: &[u8]) -> Vec<(String, u64, u64, u16)> {
+    (elf_symtab(bytes).0.into_iter())
+        .map(|(name, _, value, size, shndx)| (name, value, size, shndx))
+        .collect()
+}
+
+/// One `SHT_SYMTAB` entry: `(name, st_info, st_value, st_size, st_shndx)`.
+type SymtabRow = (String, u8, u64, u64, u16);
+
+/// `SHT_SYMTAB` entries of an ELF64 image and the table's `sh_info`.
+fn elf_symtab(bytes: &[u8]) -> (Vec<SymtabRow>, u32) {
     let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]);
     let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
     let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
@@ -4845,19 +4855,21 @@ fn elf_symbols(bytes: &[u8]) -> Vec<(String, u64, u64, u16)> {
     let str_off = rd64(sh(rd32(sh(symtab) + 40) as usize) + 24) as usize;
     let off = rd64(sh(symtab) + 24) as usize;
     let count = rd64(sh(symtab) + 32) as usize / 24;
-    (0..count)
+    let rows = (0..count)
         .map(|i| {
             let e = off + i * 24;
             let n = str_off + rd32(e) as usize;
             let end = bytes[n..].iter().position(|&b| b == 0).unwrap() + n;
             (
                 String::from_utf8_lossy(&bytes[n..end]).into_owned(),
+                bytes[e + 4],
                 rd64(e + 8),
                 rd64(e + 16),
                 rd16(e + 6),
             )
         })
-        .collect()
+        .collect();
+    (rows, rd32(sh(symtab) + 44))
 }
 
 /// Program headers of an ELF64 image as `(p_type, p_flags)`.
@@ -8037,6 +8049,98 @@ fn medium_and_large_pic_objects_address_from_the_got_base() {
     }
 }
 
+/// A linked image's `.symtab` lists every symbol its units define with the
+/// binding, type and size the input gave it, each unit's locals under its
+/// `STT_FILE` entry ahead of the globals `sh_info` points at, whether the
+/// link compiles the unit or reads its object.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_linked_image_lists_every_definition_in_its_symbol_table() {
+    let dir = tempdir("image-symtab");
+    let src = write_source(
+        &dir,
+        "defs.c",
+        "int gdata = 5;\nstatic int sdata = 6;\nint gbss;\nstatic int sbss;\n\
+         const int grodata = 7;\n__thread int gtls = 8;\nstatic __thread int stls;\n\
+         int f(void) { return gdata + sdata + gbss + sbss + grodata + gtls + stls; }\n\
+         static int sfun(void) { return 1; }\n\
+         __attribute__((weak)) int wfun(void) { return 2; }\n\
+         int main(void) { return f() + sfun() + wfun() == 29 ? 0 : 1; }\n",
+    );
+    let obj = dir.join("defs.o");
+    run(
+        Command::new(badc())
+            .args(["-q", "-c"])
+            .arg(&src)
+            .arg("-o")
+            .arg(&obj),
+        "compile the unit",
+    );
+    for (input, exe) in [(&src, "from-source"), (&obj, "from-object")] {
+        let exe = dir.join(exe);
+        run(
+            Command::new(badc())
+                .arg("-q")
+                .arg(input)
+                .arg("-o")
+                .arg(&exe),
+            "link",
+        );
+        assert_eq!(Command::new(&exe).status().expect("run").code(), Some(0));
+        let image = std::fs::read(&exe).expect("read the image");
+        let sections = elf_section_spans(&image);
+        let (rows, first_global) = elf_symtab(&image);
+        let locals = rows.iter().take_while(|r| r.1 >> 4 == 0).count();
+        assert_eq!(first_global as usize, locals, "{exe:?}: sh_info");
+        assert!(
+            rows[locals..].iter().all(|r| r.1 >> 4 != 0),
+            "{exe:?}: a local follows a global"
+        );
+        let defs = rows.iter().position(|r| r.0 == "defs.c" && r.1 == 4);
+        let defs = defs.unwrap_or_else(|| panic!("{exe:?}: no STT_FILE defs.c: {rows:?}"));
+        // (name, binding, type, section, the `int` it holds)
+        for (name, binding, kind, section, value) in [
+            ("sfun", 0, 2, ".text", None),
+            ("sdata", 0, 1, ".data", Some(6)),
+            ("sbss", 0, 1, ".bss", None),
+            ("stls", 0, 6, ".tbss", None),
+            ("f", 1, 2, ".text", None),
+            ("main", 1, 2, ".text", None),
+            ("wfun", 2, 2, ".text", None),
+            ("gdata", 1, 1, ".data", Some(5)),
+            ("grodata", 1, 1, ".rodata", Some(7)),
+            ("gbss", 1, 1, ".bss", None),
+            ("gtls", 1, 6, ".tdata", Some(8)),
+        ] {
+            let at = rows.iter().position(|r| r.0 == name);
+            let at = at.unwrap_or_else(|| panic!("{exe:?}: no `{name}`: {rows:?}"));
+            let (_, info, addr, size, shndx) = &rows[at];
+            assert_eq!(
+                (info >> 4, info & 0xf),
+                (binding, kind),
+                "{exe:?}: `{name}`"
+            );
+            assert!(
+                binding != 0 || at > defs,
+                "{exe:?}: `{name}` ahead of its file"
+            );
+            let sec = &sections[*shndx as usize];
+            assert_eq!(sec.0, section, "{exe:?}: `{name}`'s section");
+            assert!(
+                *size > 0 && (kind == 2 || *size == 4),
+                "{exe:?}: `{name}` size {size}"
+            );
+            if let Some(want) = value {
+                // A thread-local's value is its offset in the TLS segment.
+                let base = if kind == 6 { 0 } else { sec.2 };
+                let at = sec.3 + (addr - base) as usize;
+                let held = i32::from_le_bytes(image[at..at + 4].try_into().unwrap());
+                assert_eq!(held, want, "{exe:?}: `{name}`'s bytes");
+            }
+        }
+    }
+}
+
 /// gcc's DWARF 5 names each unit's files in `.debug_line_str`
 /// (`DW_FORM_line_strp`), and at -O2 describes ranges and locations in
 /// `.debug_rnglists` and `.debug_loclists`. The link carries every
@@ -8132,6 +8236,16 @@ fn dwarf5_sections_survive_the_link() {
     assert!(text.contains("two.c\" starts at address"), "{text}");
     assert!(text.contains("$1 = 41"), "{text}");
     assert!(text.contains("Symbol s is"), "{text}");
+    // two.c only declares `counter`; gdb resolves the declaration through
+    // the ELF symbol, in a session where no lookup has reached one.c's.
+    let out = Command::new("gdb")
+        .args(["-nx", "-batch", "-ex", "print 'two.c'::counter"])
+        .arg(&exe)
+        .output()
+        .expect("run gdb");
+    let text = String::from_utf8_lossy(&out.stdout);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(text.contains("$1 = 41"), "{text}{err}");
 }
 
 /// The file names the DWARF 5 line tables in `.debug_line` give through

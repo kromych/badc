@@ -59,7 +59,7 @@ Disassembly of section .text:
 
 <take_slot>:
                	movslq	%edi, %rdi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	%rdi, %rcx
                	shlq	$0x2, %rcx
                	addq	%rcx, %rax
@@ -70,7 +70,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	addq	$0xc, %rax
                	cmpq	%rax, %rax
                	je	<addr>

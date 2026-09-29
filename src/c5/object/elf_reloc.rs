@@ -1626,11 +1626,14 @@ impl<'a> RelocWriter<'a> {
     /// against, and one `STT_SECTION` per named entry.
     fn emit_section_symbols(&mut self) {
         let (program, build) = (self.program, self.build);
-        let file_basename = program
-            .source_path
-            .rsplit('/')
-            .next()
-            .unwrap_or("<unknown>");
+        // A built-in source's label (`<runtime/runtime.c>`) names a path
+        // inside its brackets.
+        let path = &program.source_path;
+        let path = match path.strip_prefix('<').and_then(|p| p.strip_suffix('>')) {
+            Some(inner) if inner.contains('/') => inner,
+            _ => path,
+        };
+        let file_basename = path.rsplit('/').next().unwrap_or("<unknown>");
         self.names.file_names = if program.asm_unit {
             program.asm_file_names.iter().map(|s| s.as_str()).collect()
         } else {

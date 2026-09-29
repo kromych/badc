@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <fill>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	$0x0, (%rax)
                	movq	$0x1, 0x8(%rax)
                	movq	$-0x1, 0x10(%rax)
@@ -55,14 +55,14 @@ Disassembly of section .text:
                	movabsq	$0x64d815deeaf29df3, %rcx # imm = 0x64D815DEEAF29DF3
                	movq	%rcx, 0x88(%rax)
                	movabsq	$-0x991eff24d282dfa, %rax # imm = 0xF66E100DB2D7D206
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movq	%rax, 0x90(%rcx)
                	movabsq	$0x1069e6a57e06665d, %rax # imm = 0x1069E6A57E06665D
                	movq	%rax, 0x98(%rcx)
                	xorl	%eax, %eax
-               	leaq	<rip>, %rsi
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %rsi      # <addr>
+               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %r8       # <addr>
                	movq	%rax, %rdx
                	shlq	$0x3, %rdx
                	leaq	(%rsi,%rdx), %r9
@@ -83,13 +83,13 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x1b0, %rsp            # imm = 0x1B0
                	callq	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x3, -0x1a8(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	imulq	$0x55555556, %rsi, %rax # imm = 0x55555556
                	sarq	$0x20, %rax
@@ -114,13 +114,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x5, -0x1a0(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	imulq	$0x66666667, %rsi, %rax # imm = 0x66666667
                	sarq	$0x21, %rax
@@ -145,13 +145,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x6, -0x198(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	imulq	$0x2aaaaaab, %rsi, %rax # imm = 0x2AAAAAAB
                	sarq	$0x20, %rax
@@ -176,13 +176,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x7, -0x190(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	movl	$0x92492493, %eax       # imm = 0x92492493
                	imulq	%rsi, %rax
@@ -208,13 +208,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0xa, -0x188(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	imulq	$0x66666667, %rsi, %rax # imm = 0x66666667
                	sarq	$0x22, %rax
@@ -239,13 +239,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x64, -0x180(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	imulq	$0x51eb851f, %rsi, %rax # imm = 0x51EB851F
                	sarq	$0x25, %rax
@@ -270,13 +270,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x3e8, -0x178(%rbp)    # imm = 0x3E8
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	imulq	$0x10624dd3, %rsi, %rax # imm = 0x10624DD3
                	sarq	$0x26, %rax
@@ -301,13 +301,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0xffff, -0x170(%rbp)   # imm = 0xFFFF
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	movl	$0x80008001, %eax       # imm = 0x80008001
                	imulq	%rsi, %rax
@@ -333,13 +333,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x10001, -0x168(%rbp)  # imm = 0x10001
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	imulq	$0x7fff8001, %rsi, %rax # imm = 0x7FFF8001
                	sarq	$0x2f, %rax
@@ -364,13 +364,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x7fffffff, -0x160(%rbp) # imm = 0x7FFFFFFF
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	imulq	$0x40000001, %rsi, %rax # imm = 0x40000001
                	sarq	$0x3d, %rax
@@ -395,14 +395,14 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
                	movl	$0xfffffffd, -0x158(%rbp) # imm = 0xFFFFFFFD
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	imulq	$0x55555556, %rsi, %rax # imm = 0x55555556
                	sarq	$0x20, %rax
@@ -432,14 +432,14 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
                	movl	$0xfffffff9, -0x150(%rbp) # imm = 0xFFFFFFF9
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	movl	$0x92492493, %eax       # imm = 0x92492493
                	imulq	%rsi, %rax
@@ -470,14 +470,14 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
                	movl	$0xffffff9c, -0x148(%rbp) # imm = 0xFFFFFF9C
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	imulq	$0x51eb851f, %rsi, %rax # imm = 0x51EB851F
                	sarq	$0x25, %rax
@@ -507,14 +507,14 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
                	movl	$0x80000000, -0x140(%rbp) # imm = 0x80000000
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	movq	%rsi, %r8
                	shrq	$0x21, %r8
@@ -546,13 +546,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x1, -0x138(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	movslq	-0x138(%rbp), %rdi
                	movq	%rsi, %rax
@@ -569,13 +569,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x8, -0x130(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	movq	%rsi, %rdi
                	shrq	$0x3d, %rdi
@@ -602,14 +602,14 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
                	movl	$0xfffffff8, -0x128(%rbp) # imm = 0xFFFFFFF8
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	movq	%rsi, %r8
                	shrq	$0x3d, %r8
@@ -641,13 +641,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x40000000, -0x120(%rbp) # imm = 0x40000000
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax,%rcx,4), %rsi
                	movq	%rsi, %rdi
                	shrq	$0x22, %rdi
@@ -674,13 +674,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x3, -0x118(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	(%rax,%rcx,4), %esi
                	movl	$0xaaaaaaab, %eax       # imm = 0xAAAAAAAB
                	imulq	%rsi, %rax
@@ -704,13 +704,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x7, -0x110(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	(%rax,%rcx,4), %esi
                	imulq	$0x24924925, %rsi, %rax # imm = 0x24924925
                	shrq	$0x20, %rax
@@ -738,13 +738,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0xa, -0x108(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	(%rax,%rcx,4), %esi
                	movq	%rsi, %rax
                	shrq	%rax
@@ -769,13 +769,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0xe, -0x100(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	(%rax,%rcx,4), %esi
                	movq	%rsi, %rax
                	shrq	%rax
@@ -801,13 +801,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x64, -0xf8(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	(%rax,%rcx,4), %esi
                	movq	%rsi, %rax
                	shrq	$0x2, %rax
@@ -832,13 +832,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x3e8, -0xf0(%rbp)     # imm = 0x3E8
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	(%rax,%rcx,4), %esi
                	movq	%rsi, %rax
                	shrq	$0x3, %rax
@@ -863,13 +863,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x7fffffff, -0xe8(%rbp) # imm = 0x7FFFFFFF
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	(%rax,%rcx,4), %esi
                	leaq	(%rsi,%rsi,2), %rax
                	shrq	$0x20, %rax
@@ -897,13 +897,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x80000001, -0xe0(%rbp) # imm = 0x80000001
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	(%rax,%rcx,4), %esi
                	movl	$0x80000001, %r11d      # imm = 0x80000001
                	movq	%rsi, %rdi
@@ -929,13 +929,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0xfffffffb, -0xd8(%rbp) # imm = 0xFFFFFFFB
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	(%rax,%rcx,4), %esi
                	movl	$0xfffffffb, %r11d      # imm = 0xFFFFFFFB
                	movq	%rsi, %rdi
@@ -961,13 +961,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x1, -0xd0(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	(%rax,%rcx,4), %esi
                	movl	-0xd0(%rbp), %edi
                	movq	%rsi, %rax
@@ -984,13 +984,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movl	$0x10, -0xc8(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	(%rax,%rcx,4), %esi
                	movq	%rsi, %rdi
                	shrq	$0x4, %rdi
@@ -1011,13 +1011,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movq	$0x3, -0xc0(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movabsq	$0x5555555555555556, %rdi # imm = 0x5555555555555556
                	movq	%rsi, %rax
@@ -1043,13 +1043,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movq	$0x7, -0xb8(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movabsq	$0x4924924924924925, %rdi # imm = 0x4924924924924925
                	movq	%rsi, %rax
@@ -1077,13 +1077,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movq	$0xa, -0xb0(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movabsq	$0x6666666666666667, %rdi # imm = 0x6666666666666667
                	movq	%rsi, %rax
@@ -1111,13 +1111,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movq	$0x3e8, -0xa8(%rbp)     # imm = 0x3E8
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movabsq	$0x20c49ba5e353f7cf, %rdi # imm = 0x20C49BA5E353F7CF
                	movq	%rsi, %rax
@@ -1145,13 +1145,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movq	$0x3b9aca07, -0xa0(%rbp) # imm = 0x3B9ACA07
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movabsq	$-0x768fa0ceed5d701b, %rdi # imm = 0x89705F3112A28FE5
                	movq	%rsi, %rax
@@ -1179,14 +1179,14 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movabsq	$0x7fffffffffffffff, %rax # imm = 0x7FFFFFFFFFFFFFFF
                	movq	%rax, -0x98(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movabsq	$0x4000000000000001, %rdi # imm = 0x4000000000000001
                	movq	%rsi, %rax
@@ -1215,14 +1215,14 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
                	movq	$-0x3, -0x90(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movabsq	$0x5555555555555556, %r8 # imm = 0x5555555555555556
                	movq	%rsi, %rax
@@ -1253,14 +1253,14 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
                	movq	$-0x7, -0x88(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movabsq	$0x4924924924924925, %r8 # imm = 0x4924924924924925
                	movq	%rsi, %rax
@@ -1293,14 +1293,14 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%r8d, %r8d
                	movq	%r8, %rsi
                	movq	$-0x3b9aca07, -0x80(%rbp) # imm = 0xC46535F9
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rsi,8), %rcx
                	movabsq	$-0x768fa0ceed5d701b, %rdi # imm = 0x89705F3112A28FE5
                	movq	%rcx, %rax
@@ -1338,7 +1338,7 @@ Disassembly of section .text:
                	incq	%rsi
                	cmpl	$0x14, %esi
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
@@ -1346,7 +1346,7 @@ Disassembly of section .text:
                	movq	%rdi, %rcx
                	movabsq	$-0x8000000000000000, %rax # imm = 0x8000000000000000
                	movq	%rax, -0x78(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movq	%rsi, %rax
                	sarq	$0x3f, %rax
@@ -1380,13 +1380,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movq	$0x1, -0x70(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movq	-0x70(%rbp), %rdi
                	movq	%rsi, %rax
@@ -1403,13 +1403,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movq	$0x400, -0x68(%rbp)     # imm = 0x400
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movq	%rsi, %rax
                	sarq	$0x3f, %rax
@@ -1438,14 +1438,14 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%edi, %edi
                	movq	%rdi, %rcx
                	movq	$-0x400, -0x60(%rbp)    # imm = 0xFC00
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movq	%rsi, %rax
                	sarq	$0x3f, %rax
@@ -1479,13 +1479,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movq	$0x3, -0x58(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movabsq	$-0x5555555555555555, %rdi # imm = 0xAAAAAAAAAAAAAAAB
                	movq	%rsi, %rax
@@ -1510,13 +1510,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movq	$0x7, -0x50(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movabsq	$0x2492492492492493, %rdi # imm = 0x2492492492492493
                	movq	%rsi, %rax
@@ -1545,13 +1545,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movq	$0xa, -0x48(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movq	%rsi, %rax
                	shrq	%rax
@@ -1577,13 +1577,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movq	$0xe, -0x40(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movq	%rsi, %rax
                	shrq	%rax
@@ -1609,13 +1609,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movq	$0x3b9aca07, -0x38(%rbp) # imm = 0x3B9ACA07
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movabsq	$-0x768fa0ceed5d701b, %rdi # imm = 0x89705F3112A28FE5
                	movq	%rsi, %rax
@@ -1640,14 +1640,14 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movabsq	$-0x7fffffffffffffff, %rax # imm = 0x8000000000000001
                	movq	%rax, -0x30(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movabsq	$-0x7fffffffffffffff, %r11 # imm = 0x8000000000000001
                	movq	%rsi, %rdi
@@ -1673,13 +1673,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movq	$-0x5, -0x28(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	cmpq	$-0x5, %rsi
                	setae	%dil
@@ -1702,13 +1702,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movq	$0x1, -0x20(%rbp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movq	-0x20(%rbp), %rdi
                	movq	%rsi, %rax
@@ -1725,13 +1725,13 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	$0x14, %ecx
                	jl	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	xorl	%ecx, %ecx
                	movq	$0x400, -0x18(%rbp)     # imm = 0x400
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rsi
                	movq	%rsi, %rdi
                	shrq	$0xa, %rdi
@@ -1778,462 +1778,462 @@ Disassembly of section .text:
                	movl	$0x5a, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	addq	$0x64, %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
-               	movslq	(%rax), %rax
-               	leave
-               	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	addq	$0x64, %rax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movslq	(%rax), %rax
+               	addq	$0x64, %rax
+               	leave
+               	retq
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	leave
                	retq

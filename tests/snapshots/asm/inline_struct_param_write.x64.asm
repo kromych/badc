@@ -40,7 +40,7 @@ Disassembly of section .text:
                	retq
 
 <use_alias>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rcx
                	movq	$0x7, 0x10(%rax)
                	leaq	0xa410(%rcx), %rax
@@ -82,7 +82,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	$0x3, (%rax)
                	movq	$0x4, 0x8(%rax)
                	leaq	-0x48(%rbp), %rdi
@@ -95,7 +95,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rcx
                	cmpq	$0x3, %rcx
                	jne	<addr>
@@ -105,7 +105,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	leaq	-0x28(%rbp), %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
@@ -119,7 +119,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	0x10(%rax), %rcx
                	cmpq	$0x7, %rcx
                	jne	<addr>

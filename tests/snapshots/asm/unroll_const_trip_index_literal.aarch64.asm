@@ -121,7 +121,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	mov	x5, #0x30               // =48
-               	adrp	x6, <page>
+               	adrp	x6, <addr>
                	add	x6, x6, <lo12>
                	adrp	x7, <page>
                	add	x7, x7, <lo12>
@@ -161,7 +161,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	adrp	x3, <page>
+               	adrp	x3, <addr>
                	add	x3, x3, <lo12>
                	adrp	x4, <page>
                	add	x4, x4, <lo12>

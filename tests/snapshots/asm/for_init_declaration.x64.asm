@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	xorl	%ecx, %ecx
                	movl	$0x1, (%rdx)
                	movl	$0x2, 0x4(%rdx)
@@ -46,7 +46,7 @@ Disassembly of section .text:
                	cmpl	$0x7, %ecx
                	je	<addr>
                	leaq	<rip>, %rdi
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	xorl	%esi, %esi
                	movl	$0x1, (%rcx)
                	movl	$0x2, 0x4(%rcx)

@@ -62,10 +62,8 @@ Disassembly of section .text:
                	mov	x0, #0x2a               // =42
                	ldp	x29, x30, [sp], #0x10
                	ret
-
-<rept_run>:
-               	<unknown>
-               	<unknown>
+  4005a0: 04 04 04 07  	.word	0x07040404
+  4005a4: 07 07 07 07  	.word	0x07070707
 
 <rept_run_len>:
-               	udf	#0x8
+  4005a8: 08 00 00 00  	.word	0x00000008

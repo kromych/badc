@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <cold>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rcx
                	addq	%rdi, %rcx
                	movq	%rcx, (%rax)
@@ -250,7 +250,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%r12, %rdi
                	xorq	0x68(%rsp), %rdi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	callq	*%rax
                	testb	$0x1, %bl
@@ -389,7 +389,7 @@ Disassembly of section .text:
                	movl	$0x28, %esi
                	callq	<addr>
                	xorq	%rbx, %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	cmpq	$0x0, (%rcx)
                	je	<addr>
                	movl	$0x1, %eax

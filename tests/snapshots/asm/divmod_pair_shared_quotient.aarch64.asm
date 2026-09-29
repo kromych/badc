@@ -50,7 +50,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x4, #0x0                // =0
-               	adrp	x8, <page>
+               	adrp	x8, <addr>
                	add	x8, x8, <lo12>
                	mov	x1, x4
                	lsl	x0, x1, #4

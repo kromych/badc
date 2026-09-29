@@ -78,7 +78,7 @@ Disassembly of section .text:
                	str	w1, [x0]
                	mov	x0, #0x1                // =1
                	stur	w0, [x29, #-0x8]
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	ldursw	x2, [x29, #-0x8]
                	lsl	x2, x2, #2

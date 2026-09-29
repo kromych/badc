@@ -88,7 +88,7 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <store_all>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	$0x0, (%rax)
                	movabsq	$-0x8000000000000000, %rcx # imm = 0x8000000000000000
                	movq	%rcx, %xmm14
@@ -99,7 +99,7 @@ Disassembly of section .text:
                	movabsq	$0x3fd3333333333333, %rcx # imm = 0x3FD3333333333333
                	movq	%rcx, %xmm14
                	movsd	%xmm14, 0x18(%rax)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	$0x0, (%rax)
                	movl	$0xc0200000, 0x4(%rax)  # imm = 0xC0200000
                	movl	$0x49742400, 0x8(%rax)  # imm = 0x49742400
@@ -154,10 +154,10 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movsd	(%rax), %xmm14
                	movsd	%xmm14, 0x8(%rsp)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movss	(%rax), %xmm14
                	movsd	%xmm14, (%rsp)
                	xorl	%eax, %eax
@@ -413,7 +413,7 @@ Disassembly of section .text:
                	movl	$0x1a, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rdi
                	callq	<addr>
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
@@ -421,7 +421,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	testl	%eax, %eax
                	sete	%dil
@@ -435,7 +435,7 @@ Disassembly of section .text:
                	movl	$0x11, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rdi
                	callq	<addr>
                	movl	$0xbe800000, %eax       # imm = 0xBE800000
@@ -443,7 +443,7 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	testl	%eax, %eax
                	sete	%dil
@@ -500,7 +500,7 @@ Disassembly of section .text:
                	leave
                	retq
                	callq	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movsd	(%rax), %xmm0
                	movsd	%xmm0, -0x10(%rbp)
                	cmpq	$0x0, -0x10(%rbp)
@@ -529,7 +529,7 @@ Disassembly of section .text:
                	movl	$0x16, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movss	(%rax), %xmm0
                	movss	%xmm0, -0x8(%rbp)
                	cmpl	$0x0, -0x8(%rbp)

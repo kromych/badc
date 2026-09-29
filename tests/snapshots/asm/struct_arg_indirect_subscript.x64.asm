@@ -64,7 +64,7 @@ Disassembly of section .text:
                	leaq	-0x88(%rbp), %rax
                	leaq	0x8(%rax), %rcx
                	addq	$0x30, %rcx
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movq	(%rcx), %rsi
                	imulq	$0x3e8, %rsi, %rsi      # imm = 0x3E8
                	movq	0x8(%rcx), %rcx

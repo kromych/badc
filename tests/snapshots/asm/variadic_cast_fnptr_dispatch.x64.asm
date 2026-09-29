@@ -31,7 +31,7 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	leaq	-0x20(%rbp), %rdi
                	movb	$0x0, (%rdi)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	movl	$0x20, %esi
                	leaq	<rip>, %rdx

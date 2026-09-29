@@ -26,10 +26,10 @@ Disassembly of section .text:
                	int3
 
 <helper_one>:
-               	leaq	<rip>, %rax
-               	leaq	<rip>, %rcx
-               	leaq	<rip>, %rdx
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rax       # <addr>
+               	leaq	<rip>, %rcx       # <addr>
+               	leaq	<rip>, %rdx       # <addr>
+               	leaq	<rip>, %rdi       # <addr>
                	movq	%rax, %rsi
                	cmpb	$0x0, (%rsi)
                	je	<addr>
@@ -47,7 +47,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x15, %eax
                	retq
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi       # <addr>
                	movq	%rcx, %rsi
                	cmpb	$0x0, (%rsi)
                	je	<addr>
@@ -65,7 +65,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x16, %eax
                	retq
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi       # <addr>
                	movq	%rdx, %rsi
                	cmpb	$0x0, (%rsi)
                	je	<addr>
@@ -125,8 +125,8 @@ Disassembly of section .text:
                	je	<addr>
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rax       # <addr>
+               	leaq	<rip>, %rcx       # <addr>
                	cmpb	$0x0, (%rax)
                	je	<addr>
                	movsbq	(%rax), %rdx
@@ -146,8 +146,8 @@ Disassembly of section .text:
                	je	<addr>
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rax       # <addr>
+               	leaq	<rip>, %rcx       # <addr>
                	cmpb	$0x0, (%rax)
                	je	<addr>
                	movsbq	(%rax), %rdx

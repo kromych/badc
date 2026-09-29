@@ -436,7 +436,7 @@ Disassembly of section .text:
                	xorq	$0x24, %rax
                	testl	%eax, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	leaq	0x10(%rax), %rcx
                	movzbq	(%rcx), %rcx
                	xorq	$0x9, %rcx

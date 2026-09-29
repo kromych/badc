@@ -28,14 +28,14 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax       # <addr>
                	movl	(%rax), %eax
                	cmpl	$0x11112222, %eax       # imm = 0x11112222
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	(%rax), %ecx
                	cmpl	$0x33334444, %ecx       # imm = 0x33334444
                	je	<addr>
@@ -63,5 +63,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+
+<asm_x_word>:
                	pushw	%bp
                	pushq	%rbp

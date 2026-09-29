@@ -89,11 +89,11 @@ Disassembly of section .text:
                	retq
 
 <vec_add>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movups	(%rax), %xmm0
                	movups	0x10(%rax), %xmm1
                	vpaddd	%xmm1, %xmm0, %xmm0
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movups	%xmm0, (%rax)
                	retq
 
@@ -101,7 +101,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	xorl	%edi, %edi
                	movups	(%rax), %xmm14
                	movups	%xmm14, 0x10(%rsp)
@@ -111,7 +111,7 @@ Disassembly of section .text:
                	movups	(%rsp), %xmm14
                	movups	0x10(%rsp), %xmm0
                	paddd	%xmm14, %xmm0
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movups	%xmm0, 0x10(%rcx)
                	leave
                	retq
@@ -125,7 +125,7 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	0x10(%rax), %r13
                	movq	0x18(%rax), %r14
                	movq	0x20(%rax), %r12
@@ -195,7 +195,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x64, %eax
-               	leaq	<rip>, %r10
+               	leaq	<rip>, %r10      # <addr>
                	movl	$0x5, %r11d
                	addq	0x8(%r10), %rax
                	addq	%r11, %rax
@@ -227,7 +227,7 @@ Disassembly of section .text:
                	leave
                	retq
                	callq	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
@@ -240,7 +240,7 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x1, %rax
                	jne	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	addq	$0x10, %rax
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rdx

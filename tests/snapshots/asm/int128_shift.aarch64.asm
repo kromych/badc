@@ -49,12 +49,12 @@ Disassembly of section .text:
                	and	x8, x8, x2
                	and	x3, x3, x7
                	orr	x14, x8, x3
-               	adrp	x8, <page>
+               	adrp	x8, <addr>
                	add	x8, x8, <lo12>
                	lsl	x3, x0, #3
                	add	x8, x8, x3
                	ldr	x15, [x8]
-               	adrp	x8, <page>
+               	adrp	x8, <addr>
                	add	x8, x8, <lo12>
                	add	x8, x8, x3
                	ldr	x20, [x8]
@@ -73,11 +73,11 @@ Disassembly of section .text:
                	and	x7, x8, x7
                	orr	x7, x11, x7
                	and	x8, x8, x2
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	add	x2, x2, x3
                	ldr	x11, [x2]
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	add	x2, x2, x3
                	ldr	x3, [x2]
@@ -102,12 +102,12 @@ Disassembly of section .text:
                	orr	x8, x1, x8
                	and	x1, x7, x3
                	orr	x2, x1, x2
-               	adrp	x3, <page>
+               	adrp	x3, <addr>
                	add	x3, x3, <lo12>
                	lsl	x1, x0, #3
                	add	x3, x3, x1
                	ldr	x3, [x3]
-               	adrp	x7, <page>
+               	adrp	x7, <addr>
                	add	x7, x7, <lo12>
                	add	x1, x7, x1
                	ldr	x7, [x1]

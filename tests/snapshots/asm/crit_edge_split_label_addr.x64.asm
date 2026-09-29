@@ -27,11 +27,11 @@ Disassembly of section .text:
 
 <probe>:
                	movl	$0xa, %eax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	cmpl	$0x0, (%rcx)
                	je	<addr>
                	leaq	-<rip>, %rax        # <addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movq	%rax, (%rcx)
                	movq	$-0x1, %rax
                	retq
@@ -89,7 +89,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	$0x1, (%rax)
                	movl	$0x5, %edi
                	movl	$0x3, %esi
@@ -97,7 +97,7 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpl	$-0x1, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	cmpq	$0x0, (%rax)
                	jne	<addr>
                	movl	$0x5, %eax

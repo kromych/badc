@@ -69,7 +69,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	crc32b	<rip>, %eax
+               	crc32b	<rip>, %eax       # <addr>
                	movl	$0xa5, %esi
                	movl	$0xffffffff, %edx       # imm = 0xFFFFFFFF
                	movl	$0x82f63b78, %edi       # imm = 0x82F63B78
@@ -176,7 +176,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	crc32q	<rip>, %rax
+               	crc32q	<rip>, %rax       # <addr>
                	movabsq	$0x123456789abcdef, %rsi # imm = 0x123456789ABCDEF
                	movl	$0xffffffff, %edx       # imm = 0xFFFFFFFF
                	movl	$0x82f63b78, %edi       # imm = 0x82F63B78

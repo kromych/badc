@@ -15,7 +15,7 @@ Disassembly of section .text:
 
 <read_directive_const>:
                	b	<addr>
-               	udf	#0x2a
+  400474: 2a 00 00 00  	.word	0x0000002a
                	adr	x16, <addr>
                	ldr	w0, [x16]
                	ret
@@ -32,7 +32,7 @@ Disassembly of section .text:
 
 <main>:
                	b	<addr>
-               	udf	#0x2a
+  4004a0: 2a 00 00 00  	.word	0x0000002a
                	adr	x16, <addr>
                	ldr	w0, [x16]
                	cmp	w0, #0x2a

@@ -168,7 +168,7 @@ Disassembly of section .text:
                	movl	$0x80000000, -0x18(%rbp) # imm = 0x80000000
                	movl	$0xffffffff, -0x10(%rbp) # imm = 0xFFFFFFFF
                	movl	$0x80000000, -0x8(%rbp) # imm = 0x80000000
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi       # <addr>
                	movl	$0x3, %esi
                	callq	<addr>
                	cmpq	$0x10e1, %rax           # imm = 0x10E1
@@ -176,7 +176,7 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	leave
                	retq
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi       # <addr>
                	movq	$-0x1, %rsi
                	callq	<addr>
                	testq	%rax, %rax
@@ -286,7 +286,7 @@ Disassembly of section .text:
                	movl	$0x18, %eax
                	leave
                	retq
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi       # <addr>
                	movl	-0x10(%rbp), %esi
                	movl	$0x2, %edx
                	callq	<addr>

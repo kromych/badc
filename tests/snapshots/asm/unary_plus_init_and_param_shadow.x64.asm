@@ -30,7 +30,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movsd	(%rax), %xmm0
                	movabsq	$-0x401999999999999a, %rcx # imm = 0xBFE6666666666666
                	movq	%rcx, %xmm15
@@ -83,7 +83,7 @@ Disassembly of section .text:
                	ja	<addr>
                	movl	$0x4, %eax
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	cmpl	$0x5, %ecx
                	jne	<addr>

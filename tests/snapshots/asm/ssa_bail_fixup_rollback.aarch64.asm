@@ -55,7 +55,7 @@ Disassembly of section .text:
                	strb	w2, [x1, #0x7]
                	sub	x21, x29, #0x40
                	sub	x1, x29, #0x50
-               	adrp	x3, <page>
+               	adrp	x3, <addr>
                	add	x3, x3, <lo12>
                	mov	x0, x21
                	mov	x2, x23
@@ -81,7 +81,7 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x70
                	sub	x0, x29, #0x68
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	ldr	x16, [x1]
                	str	x16, [x0]

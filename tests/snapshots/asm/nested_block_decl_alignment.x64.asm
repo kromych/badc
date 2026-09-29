@@ -64,7 +64,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
                	pushq	%rbx
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	xorl	%eax, %eax
                	movl	$0x3, (%rcx)
                	testb	$0x3f, %cl
@@ -74,7 +74,7 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	sete	%dl
                	movzbq	%dl, %rdx
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movb	$0x5, (%rcx)
                	testb	$0x7f, %cl
                	jne	<addr>

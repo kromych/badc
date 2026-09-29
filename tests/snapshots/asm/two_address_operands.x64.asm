@@ -141,7 +141,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rdi
                	movq	0x8(%rax), %rsi
                	callq	<addr>
@@ -150,7 +150,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	0x10(%rax), %rdi
                	movq	0x18(%rax), %rsi
                	callq	<addr>
@@ -160,7 +160,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	0x20(%rax), %rdi
                	movq	0x28(%rax), %rsi
                	callq	<addr>
@@ -170,7 +170,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	0x28(%rax), %rdi
                	leaq	-<rip>, %rsi      # <addr>
                	callq	<addr>
@@ -179,7 +179,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	0x20(%rax), %rdi
                	leaq	-<rip>, %rsi      # <addr>
                	callq	<addr>
@@ -189,7 +189,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movsd	(%rax), %xmm0
                	movsd	0x8(%rax), %xmm1
                	callq	<addr>
@@ -198,7 +198,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movsd	0x10(%rax), %xmm0
                	movsd	0x18(%rax), %xmm1
                	callq	<addr>
@@ -210,7 +210,7 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movsd	0x18(%rax), %xmm0
                	movsd	0x20(%rax), %xmm1
                	callq	<addr>
@@ -219,7 +219,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movsd	0x28(%rax), %xmm0
                	movsd	0x30(%rax), %xmm1
                	callq	<addr>
@@ -231,7 +231,7 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movsd	0x18(%rax), %xmm0
                	cvtsd2ss	%xmm0, %xmm0
                	movsd	0x20(%rax), %xmm1
@@ -246,13 +246,13 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movabsq	$-0xf0f0f0f0f0f0f10, %rdi # imm = 0xF0F0F0F0F0F0F0F0
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	0x40(%rax), %rsi
                	callq	<addr>
                	cmpq	$0x20, %rax
                	jne	<addr>
                	movl	$0xff, %edi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	0x8(%rax), %rsi
                	callq	<addr>
                	cmpq	$0x4, %rax
@@ -261,7 +261,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorl	%edi, %edi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	0x40(%rax), %rsi
                	callq	<addr>
                	testq	%rax, %rax
@@ -269,7 +269,7 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rdi
                	movq	0x8(%rax), %rsi
                	movq	0x10(%rax), %rdx
@@ -280,7 +280,7 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	0x20(%rax), %rdi
                	movq	(%rax), %rsi
                	callq	<addr>
@@ -289,7 +289,7 @@ Disassembly of section .text:
                	movl	$0xb, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	0x28(%rax), %rdi
                	movq	0x30(%rax), %rsi
                	movq	(%rax), %rdx
@@ -301,7 +301,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movabsq	$0x123456789abcdef, %rdi # imm = 0x123456789ABCDEF
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	0x48(%rax), %rsi
                	callq	<addr>
                	movabsq	$-0x10fedcba98765433, %r11 # imm = 0xEF0123456789ABCD
@@ -311,13 +311,13 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x1, %edi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	0x50(%rax), %rsi
                	callq	<addr>
                	cmpq	$0x1, %rax
                	jne	<addr>
                	movl	$0x1, %edi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	0x38(%rax), %rsi
                	callq	<addr>
                	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000

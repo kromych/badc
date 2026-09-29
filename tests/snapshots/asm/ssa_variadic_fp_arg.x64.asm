@@ -28,20 +28,20 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rdi       # <addr>
+               	leaq	<rip>, %rax      # <addr>
                	movsd	(%rax), %xmm0
                	movb	$0x1, %al
                	callq	<addr>
                	movabsq	$0x407f900000000000, %rax # imm = 0x407F900000000000
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi       # <addr>
                	movq	%rax, %xmm0
                	movb	$0x1, %al
                	callq	<addr>
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rdi       # <addr>
+               	leaq	<rip>, %rax       # <addr>
                	movsd	(%rax), %xmm0
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movsd	(%rax), %xmm1
                	movb	$0x2, %al
                	callq	<addr>
@@ -55,7 +55,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movsd	(%rcx), %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

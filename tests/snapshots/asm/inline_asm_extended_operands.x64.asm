@@ -67,7 +67,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi      # <addr>
                	rdtscp
                	shlq	$0x20, %rdx
                	orq	%rdx, %rax

@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movsd	(%rcx), %xmm0
                	movabsq	$-0x1e330c7a143760, %rax # imm = 0xFFE1CCF385EBC8A0
                	movq	%rax, %xmm15
@@ -39,7 +39,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movsd	0x8(%rdx), %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm0, %xmm15
@@ -51,7 +51,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movsd	(%rdx), %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm0, %xmm15

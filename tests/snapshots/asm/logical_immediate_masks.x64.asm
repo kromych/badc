@@ -259,7 +259,7 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	xorl	%r12d, %r12d
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%r12,8), %rbx
                	movq	%rbx, %rdi
                	callq	<addr>
@@ -447,10 +447,10 @@ Disassembly of section .text:
                	incq	%r12
                	cmpl	$0x8, %r12d
                	jl	<addr>
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	movl	$0x8, %esi
                	callq	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi      # <addr>
                	movabsq	$-0xff00ff00ff0100, %rcx # imm = 0xFF00FF00FF00FF00
                	movq	%rcx, -0x20(%rbp)
                	movq	$0x10, -0x18(%rbp)

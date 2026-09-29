@@ -70,7 +70,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x38
                	sub	x1, x29, #0x30
                	sub	x2, x29, #0x20
-               	adrp	x3, <page>
+               	adrp	x3, <addr>
                	add	x3, x3, <lo12>
                	bl	<addr>
                	ldurb	w0, [x29, #-0x38]

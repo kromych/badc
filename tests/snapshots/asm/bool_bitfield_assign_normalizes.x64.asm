@@ -137,7 +137,7 @@ Disassembly of section .text:
                	movl	$0x11, %eax
                	leave
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movzbq	(%rcx), %rsi
                	andq	$0x1, %rsi
                	cmpl	$0x1, %esi
@@ -172,14 +172,14 @@ Disassembly of section .text:
                	movl	$0x15, %eax
                	leave
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movzbq	(%rcx), %rcx
                	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x16, %eax
                	leave
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movzbq	(%rcx), %rsi
                	cmpl	$0x1, %esi
                	jne	<addr>
@@ -191,26 +191,26 @@ Disassembly of section .text:
                	movl	$0x17, %eax
                	leave
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movzbq	(%rcx), %rcx
                	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x19, %eax
                	leave
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	cmpb	$0x0, (%rcx)
                	je	<addr>
                	movl	$0x1a, %eax
                	leave
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	cmpb	$0x0, (%rcx)
                	je	<addr>
                	movl	$0x1b, %eax
                	leave
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movzbq	(%rcx), %rsi
                	cmpl	$0x1, %esi
                	je	<addr>
@@ -228,7 +228,7 @@ Disassembly of section .text:
                	movl	$0x1e, %eax
                	leave
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movzbq	(%rcx), %rsi
                	andq	$0x1, %rsi
                	cmpl	$0x1, %esi

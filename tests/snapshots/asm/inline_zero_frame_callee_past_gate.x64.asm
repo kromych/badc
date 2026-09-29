@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <consume>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rcx
                	movq	(%rdi), %rdx
                	movq	0x2c8(%rdi), %rsi
@@ -49,7 +49,7 @@ Disassembly of section .text:
                	cmpl	$0x5a, %eax
                	jl	<addr>
                	leaq	-0xb40(%rbp), %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx), %rdx
                	movq	(%rax), %rsi
                	movq	0x2c8(%rax), %rax
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	cmpl	$0x5a, %eax
                	jl	<addr>
                	leaq	-0x870(%rbp), %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx), %rdx
                	movq	(%rax), %rsi
                	movq	0x2c8(%rax), %rax
@@ -85,7 +85,7 @@ Disassembly of section .text:
                	cmpl	$0x5a, %eax
                	jl	<addr>
                	leaq	-0x5a0(%rbp), %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx), %rdx
                	movq	(%rax), %rsi
                	movq	0x2c8(%rax), %rax
@@ -103,7 +103,7 @@ Disassembly of section .text:
                	cmpl	$0x5a, %eax
                	jl	<addr>
                	leaq	-0x2d0(%rbp), %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx), %rdx
                	movq	(%rax), %rsi
                	movq	0x2c8(%rax), %rax
@@ -116,9 +116,9 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	callq	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x178, %rax            # imm = 0x178
                	je	<addr>

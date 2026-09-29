@@ -144,31 +144,31 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x40, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	testb	$0x1f, %al
                	je	<addr>
                	movl	$0x41, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x42, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x43, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	testb	$0xf, %cl
                	je	<addr>
                	movl	$0x44, %eax
@@ -180,7 +180,7 @@ Disassembly of section .text:
                	movl	$0x45, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	$0x3, (%rax)
                	testb	$0xf, %al
                	je	<addr>

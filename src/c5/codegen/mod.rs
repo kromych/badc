@@ -1785,6 +1785,32 @@ pub(crate) struct DynamicExport {
     pub weak: bool,
 }
 
+/// One row of a linked image's static symbol table: a symbol a unit
+/// defines, with the type, binding, size and visibility its `.symtab`
+/// gave it.
+#[derive(Debug, Clone)]
+pub(crate) struct ImageSymbol {
+    pub name: String,
+    pub place: SymbolPlace,
+    pub size: u64,
+    /// `st_info`: the binding in the high nibble, the type in the low.
+    pub info: u8,
+    /// `st_other`: the visibility.
+    pub other: u8,
+}
+
+/// Where an [`ImageSymbol`] lies: a byte offset in [`Build::text`], in
+/// [`Build::data`], in the zero-fill past it, or in the thread-local block
+/// (`.tdata` then `.tbss`), or a link-time constant (`SHN_ABS`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SymbolPlace {
+    Text(u64),
+    Data(u64),
+    Bss(u64),
+    Tls(u64),
+    Abs(u64),
+}
+
 /// The offset space a [`DynamicExport`] addresses. The writer maps
 /// the offset to a runtime address and to the output section that
 /// holds it.
@@ -2138,6 +2164,9 @@ pub(crate) struct Build {
     /// Mach-O output; empty for shared libraries (which use
     /// `exports`) and on other targets, whose writers ignore it.
     pub dynamic_exports: Vec<DynamicExport>,
+    /// A linked image's static symbol table past its import trampolines,
+    /// locals first. Empty where no link produced the build.
+    pub image_symbols: Vec<ImageSymbol>,
     /// Whether this build should produce an executable or a
     /// shared library (dylib / .so / DLL). Set from
     /// [`NativeOptions::output_kind`]. The writer dispatches

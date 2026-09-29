@@ -53,7 +53,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	movb	$0x9, (%rdi)
                	movb	$0x2, 0x1(%rdi)
                	movb	$0x3, 0x3(%rdi)
@@ -74,21 +74,21 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	callq	<addr>
                	cmpl	$0x1237, %eax           # imm = 0x1237
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	callq	<addr>
                	cmpq	$0x1234567d, %rax       # imm = 0x1234567D
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	callq	<addr>
                	movabsq	$0x12345678a1, %r11     # imm = 0x12345678A1
                	cmpq	%r11, %rax

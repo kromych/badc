@@ -230,11 +230,11 @@ Disassembly of section .text:
                	leaq	(%rcx,%rdx), %rbx
                	movq	$-0x1, (%rax)
                	movq	$-0x1, (%rdi)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	callq	*%rax
                	leaq	-0x30(%rbp), %rdi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	callq	*%rax
                	cmpq	$0xd, %rbx
@@ -262,7 +262,7 @@ Disassembly of section .text:
                	incq	%rax
                	leaq	0x8(%rax), %rbx
                	movq	$-0x1, (%rdi)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	callq	*%rax
                	leaq	0x2(%rbx), %rax

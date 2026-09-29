@@ -20,7 +20,7 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	stur	w0, [x29, #-0x8]
                	ldur	w0, [x29, #-0x8]
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	ldr	x0, [x1, x0, lsl #3]
                	cmp	x0, #0x3

@@ -8052,8 +8052,8 @@ fn medium_and_large_pic_objects_address_from_the_got_base() {
 /// A linked image's `.symtab` lists every symbol its units define with the
 /// binding, type and size the input gave it, each unit's locals under its
 /// `STT_FILE` entry ahead of the globals `sh_info` points at, whether the
-/// link compiles the unit or reads its object.
-#[cfg(target_os = "linux")]
+/// link compiles the unit or reads its object. Both Linux targets link on
+/// every host; the image runs on a matching one.
 #[test]
 fn a_linked_image_lists_every_definition_in_its_symbol_table() {
     let dir = tempdir("image-symtab");
@@ -8067,75 +8067,83 @@ fn a_linked_image_lists_every_definition_in_its_symbol_table() {
          __attribute__((weak)) int wfun(void) { return 2; }\n\
          int main(void) { return f() + sfun() + wfun() == 29 ? 0 : 1; }\n",
     );
-    let obj = dir.join("defs.o");
-    run(
-        Command::new(badc())
-            .args(["-q", "-c"])
-            .arg(&src)
-            .arg("-o")
-            .arg(&obj),
-        "compile the unit",
-    );
-    for (input, exe) in [(&src, "from-source"), (&obj, "from-object")] {
-        let exe = dir.join(exe);
+    for target in ["linux-x64", "linux-aarch64"] {
+        let flag = format!("--target={target}");
+        let obj = dir.join(format!("defs-{target}.o"));
         run(
             Command::new(badc())
-                .arg("-q")
-                .arg(input)
+                .args(["-q", "-c", &flag])
+                .arg(&src)
                 .arg("-o")
-                .arg(&exe),
-            "link",
+                .arg(&obj),
+            "compile the unit",
         );
-        assert_eq!(Command::new(&exe).status().expect("run").code(), Some(0));
-        let image = std::fs::read(&exe).expect("read the image");
-        let sections = elf_section_spans(&image);
-        let (rows, first_global) = elf_symtab(&image);
-        let locals = rows.iter().take_while(|r| r.1 >> 4 == 0).count();
-        assert_eq!(first_global as usize, locals, "{exe:?}: sh_info");
-        assert!(
-            rows[locals..].iter().all(|r| r.1 >> 4 != 0),
-            "{exe:?}: a local follows a global"
-        );
-        let defs = rows.iter().position(|r| r.0 == "defs.c" && r.1 == 4);
-        let defs = defs.unwrap_or_else(|| panic!("{exe:?}: no STT_FILE defs.c: {rows:?}"));
-        // (name, binding, type, section, the `int` it holds)
-        for (name, binding, kind, section, value) in [
-            ("sfun", 0, 2, ".text", None),
-            ("sdata", 0, 1, ".data", Some(6)),
-            ("sbss", 0, 1, ".bss", None),
-            ("stls", 0, 6, ".tbss", None),
-            ("f", 1, 2, ".text", None),
-            ("main", 1, 2, ".text", None),
-            ("wfun", 2, 2, ".text", None),
-            ("gdata", 1, 1, ".data", Some(5)),
-            ("grodata", 1, 1, ".rodata", Some(7)),
-            ("gbss", 1, 1, ".bss", None),
-            ("gtls", 1, 6, ".tdata", Some(8)),
+        for (input, form) in [
+            (src.as_path(), "from-source"),
+            (obj.as_path(), "from-object"),
         ] {
-            let at = rows.iter().position(|r| r.0 == name);
-            let at = at.unwrap_or_else(|| panic!("{exe:?}: no `{name}`: {rows:?}"));
-            let (_, info, addr, size, shndx) = &rows[at];
-            assert_eq!(
-                (info >> 4, info & 0xf),
-                (binding, kind),
-                "{exe:?}: `{name}`"
+            let exe = dir.join(format!("{form}-{target}"));
+            run(
+                Command::new(badc())
+                    .args(["-q", &flag])
+                    .arg(input)
+                    .arg("-o")
+                    .arg(&exe),
+                "link",
             );
+            if target == host_linux_target() {
+                assert_eq!(Command::new(&exe).status().expect("run").code(), Some(0));
+            }
+            let image = std::fs::read(&exe).expect("read the image");
+            let sections = elf_section_spans(&image);
+            let (rows, first_global) = elf_symtab(&image);
+            let locals = rows.iter().take_while(|r| r.1 >> 4 == 0).count();
+            assert_eq!(first_global as usize, locals, "{exe:?}: sh_info");
             assert!(
-                binding != 0 || at > defs,
-                "{exe:?}: `{name}` ahead of its file"
+                rows[locals..].iter().all(|r| r.1 >> 4 != 0),
+                "{exe:?}: a local follows a global"
             );
-            let sec = &sections[*shndx as usize];
-            assert_eq!(sec.0, section, "{exe:?}: `{name}`'s section");
-            assert!(
-                *size > 0 && (kind == 2 || *size == 4),
-                "{exe:?}: `{name}` size {size}"
-            );
-            if let Some(want) = value {
-                // A thread-local's value is its offset in the TLS segment.
-                let base = if kind == 6 { 0 } else { sec.2 };
-                let at = sec.3 + (addr - base) as usize;
-                let held = i32::from_le_bytes(image[at..at + 4].try_into().unwrap());
-                assert_eq!(held, want, "{exe:?}: `{name}`'s bytes");
+            let defs = rows.iter().position(|r| r.0 == "defs.c" && r.1 == 4);
+            let defs = defs.unwrap_or_else(|| panic!("{exe:?}: no STT_FILE defs.c: {rows:?}"));
+            // (name, binding, type, section, the `int` it holds)
+            for (name, binding, kind, section, value) in [
+                ("sfun", 0, 2, ".text", None),
+                ("sdata", 0, 1, ".data", Some(6)),
+                ("sbss", 0, 1, ".bss", None),
+                ("stls", 0, 6, ".tbss", None),
+                ("f", 1, 2, ".text", None),
+                ("main", 1, 2, ".text", None),
+                ("wfun", 2, 2, ".text", None),
+                ("gdata", 1, 1, ".data", Some(5)),
+                ("grodata", 1, 1, ".rodata", Some(7)),
+                ("gbss", 1, 1, ".bss", None),
+                ("gtls", 1, 6, ".tdata", Some(8)),
+            ] {
+                let at = rows.iter().position(|r| r.0 == name);
+                let at = at.unwrap_or_else(|| panic!("{exe:?}: no `{name}`: {rows:?}"));
+                let (_, info, addr, size, shndx) = &rows[at];
+                assert_eq!(
+                    (info >> 4, info & 0xf),
+                    (binding, kind),
+                    "{exe:?}: `{name}`"
+                );
+                assert!(
+                    binding != 0 || at > defs,
+                    "{exe:?}: `{name}` ahead of its file"
+                );
+                let sec = &sections[*shndx as usize];
+                assert_eq!(sec.0, section, "{exe:?}: `{name}`'s section");
+                assert!(
+                    *size > 0 && (kind == 2 || *size == 4),
+                    "{exe:?}: `{name}` size {size}"
+                );
+                if let Some(want) = value {
+                    // A thread-local's value is its offset in the TLS segment.
+                    let base = if kind == 6 { 0 } else { sec.2 };
+                    let at = sec.3 + (addr - base) as usize;
+                    let held = i32::from_le_bytes(image[at..at + 4].try_into().unwrap());
+                    assert_eq!(held, want, "{exe:?}: `{name}`'s bytes");
+                }
             }
         }
     }
@@ -8146,8 +8154,8 @@ fn a_linked_image_lists_every_definition_in_its_symbol_table() {
 /// its unit, or beside another unit's initialized one, linked from sources
 /// and from objects, as gcc places it. Only the initialized `one` reaches
 /// `.tdata`, the file leaves the megabyte out, and every access, a
-/// cross-unit one included, finds its object.
-#[cfg(target_os = "linux")]
+/// cross-unit one included, finds its object. Both Linux targets link on
+/// every host; the image runs on a matching one.
 #[test]
 fn all_zero_thread_locals_take_the_zero_fill() {
     let dir = tempdir("tls-zero-fill");
@@ -8182,65 +8190,73 @@ fn all_zero_thread_locals_take_the_zero_fill() {
         "extern _Thread_local char big[];\n_Thread_local int one = 1;\n\
          int get(void) { return one + big[(1 << 20) - 1]; }\n",
     );
-    let mut objs = Vec::new();
-    for src in [&a, &b] {
-        let obj = src.with_extension("o");
-        run(
-            Command::new(badc())
-                .args(["-q", "-c"])
-                .arg(src)
-                .arg("-o")
-                .arg(&obj),
-            "compile a unit",
-        );
-        objs.push(obj);
-    }
-    let links: [(&str, Vec<&Path>); 4] = [
-        ("zero", vec![&zero]),
-        ("order", vec![&order]),
-        ("units", vec![&a, &b]),
-        ("objects", objs.iter().map(|o| o.as_path()).collect()),
-    ];
-    for (name, inputs) in links {
-        let exe = dir.join(name);
-        run(
-            Command::new(badc())
-                .arg("-q")
-                .args(&inputs)
-                .arg("-o")
-                .arg(&exe),
-            "link",
-        );
-        assert_eq!(
-            Command::new(&exe).status().expect("run").code(),
-            Some(0),
-            "{name}"
-        );
-        let image = std::fs::read(&exe).expect("read the image");
-        assert!(
-            image.len() < 1 << 19,
-            "{name}: a {}-byte image",
-            image.len()
-        );
-        let sections = elf_section_spans(&image);
-        let size_of = |want: &str| sections.iter().find(|h| h.0 == want).map_or(0, |h| h.4);
-        assert!(
-            size_of(".tdata") < 64,
-            "{name}: .tdata {}",
-            size_of(".tdata")
-        );
-        assert!(
-            size_of(".tbss") >= 1 << 20,
-            "{name}: .tbss {}",
-            size_of(".tbss")
-        );
-        let (rows, _) = elf_symtab(&image);
-        for (sym, section) in [("big", ".tbss"), ("one", ".tdata")] {
-            let Some(row) = rows.iter().find(|r| r.0 == sym) else {
-                assert_eq!((name, sym), ("zero", "one"), "{name}: no `{sym}`");
-                continue;
-            };
-            assert_eq!(sections[row.4 as usize].0, section, "{name}: `{sym}`");
+    for target in ["linux-x64", "linux-aarch64"] {
+        let flag = format!("--target={target}");
+        let mut objs = Vec::new();
+        for src in [&a, &b] {
+            let obj = src.with_extension(format!("{target}.o"));
+            run(
+                Command::new(badc())
+                    .args(["-q", "-c", &flag])
+                    .arg(src)
+                    .arg("-o")
+                    .arg(&obj),
+                "compile a unit",
+            );
+            objs.push(obj);
+        }
+        let links: [(&str, Vec<&Path>); 4] = [
+            ("zero", vec![&zero]),
+            ("order", vec![&order]),
+            ("units", vec![&a, &b]),
+            ("objects", objs.iter().map(|o| o.as_path()).collect()),
+        ];
+        for (name, inputs) in links {
+            let exe = dir.join(format!("{name}-{target}"));
+            run(
+                Command::new(badc())
+                    .args(["-q", &flag])
+                    .args(&inputs)
+                    .arg("-o")
+                    .arg(&exe),
+                "link",
+            );
+            if target == host_linux_target() {
+                assert_eq!(
+                    Command::new(&exe).status().expect("run").code(),
+                    Some(0),
+                    "{target} {name}"
+                );
+            }
+            let image = std::fs::read(&exe).expect("read the image");
+            assert!(
+                image.len() < 1 << 19,
+                "{target} {name}: a {}-byte image",
+                image.len()
+            );
+            let sections = elf_section_spans(&image);
+            let size_of = |want: &str| sections.iter().find(|h| h.0 == want).map_or(0, |h| h.4);
+            assert!(
+                size_of(".tdata") < 64,
+                "{target} {name}: .tdata {}",
+                size_of(".tdata")
+            );
+            assert!(
+                size_of(".tbss") >= 1 << 20,
+                "{target} {name}: .tbss {}",
+                size_of(".tbss")
+            );
+            let (rows, _) = elf_symtab(&image);
+            for (sym, section) in [("big", ".tbss"), ("one", ".tdata")] {
+                let Some(row) = rows.iter().find(|r| r.0 == sym) else {
+                    assert_eq!((name, sym), ("zero", "one"), "{target} {name}: no `{sym}`");
+                    continue;
+                };
+                assert_eq!(
+                    sections[row.4 as usize].0, section,
+                    "{target} {name}: `{sym}`"
+                );
+            }
         }
     }
 }
@@ -8354,6 +8370,7 @@ fn dwarf5_sections_survive_the_link() {
 
 /// The file names the DWARF 5 line tables in `.debug_line` give through
 /// `.debug_line_str`, in order. Version 4 tables name theirs inline.
+#[cfg(target_os = "linux")]
 fn dwarf5_line_file_names(image: &[u8]) -> Vec<String> {
     let headers = elf_section_spans(image);
     let section = |name: &str| {
@@ -8472,6 +8489,7 @@ fn the_system_linker_gives_a_badc_object_a_non_executable_stack() {
 }
 
 /// `p_flags` of an ELF64 image's `PT_GNU_STACK`.
+#[cfg(target_os = "linux")]
 fn gnu_stack_flags(image: &[u8]) -> Option<u32> {
     const PT_GNU_STACK: u32 = 0x6474_e551;
     let rd16 = |o: usize| u16::from_le_bytes([image[o], image[o + 1]]) as usize;
@@ -8484,6 +8502,7 @@ fn gnu_stack_flags(image: &[u8]) -> Option<u32> {
 }
 
 /// `r_offset` of the image's `R_X86_64_GLOB_DAT` against `name`.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn glob_dat_slot(image: &[u8], name: &str) -> Option<u64> {
     let rd32 = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
     let rd64 = |o: usize| u64::from_le_bytes(image[o..o + 8].try_into().unwrap());
@@ -8502,6 +8521,7 @@ fn glob_dat_slot(image: &[u8], name: &str) -> Option<u64> {
 
 /// Each `.rela.text` record of `rtype` in an `--emit-relocs` image as
 /// `(r_offset, S, A)`, `S` the value of the symbol it names.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn emitted_text_relocs(image: &[u8], rtype: u32) -> Vec<(u64, u64, i64)> {
     let rd64 = |o: usize| u64::from_le_bytes(image[o..o + 8].try_into().unwrap());
     let headers = elf_section_spans(image);
@@ -8520,6 +8540,7 @@ fn emitted_text_relocs(image: &[u8], rtype: u32) -> Vec<(u64, u64, i64)> {
 }
 
 /// The `width`-byte little-endian field at virtual address `at` in `.text`.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn text_field(image: &[u8], at: u64, width: usize) -> Option<u64> {
     let (_, _, addr, off, size, _) = elf_section_spans(image)
         .into_iter()
@@ -8534,6 +8555,7 @@ fn text_field(image: &[u8], at: u64, width: usize) -> Option<u64> {
 }
 
 /// Where each `call *disp32(%rip)` in `.text` reads its target.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn rip_indirect_call_targets(image: &[u8]) -> Vec<u64> {
     let headers = elf_section_spans(image);
     let Some(&(_, _, addr, off, size, _)) = headers.iter().find(|h| h.0 == ".text") else {

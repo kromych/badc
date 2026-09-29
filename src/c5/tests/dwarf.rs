@@ -75,6 +75,14 @@ fn lldb_batch(path: &Path, commands: &[&str]) -> Option<String> {
         Ok(o) => o,
         Err(_) => return None,
     };
+    // Shown with a failing test's output: a launch that fails reports only here.
+    if !out.status.success() || !out.stderr.is_empty() {
+        eprintln!(
+            "lldb {}: {}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
     Some(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 

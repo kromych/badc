@@ -6022,6 +6022,124 @@ fn empty_records_cross_the_system_compiler_boundary() {
     }
 }
 
+// On System V x86-64 the bytes of an unnamed bit-field classify INTEGER, as
+// gcc's classification counts them: an eightbyte one holds alone, beside a
+// `float` or inside an anonymous member, and a union's first one under a
+// zero-width one, take a general register on both sides of a call between
+// badc and a gcc system compiler, named or variadic.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn unnamed_bit_fields_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping unnamed_bit_fields_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    // clang gives an unnamed bit-field no class, the divergence
+    // `unnamed_bit_field_eightbytes_cross_the_system_compiler_boundary` states.
+    let clang = Command::new(&cc)
+        .args(["-dM", "-E", "-x", "c", "/dev/null"])
+        .output()
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("#define __clang__ "));
+    if clang {
+        eprintln!(
+            "skipping unnamed_bit_fields_cross_the_system_compiler_boundary: the system compiler \
+             is clang"
+        );
+        return;
+    }
+    let dir = tempdir("anon-bitfield-interop");
+    let common = "#include <stdarg.h>\n\
+        struct P { int :8; };\n\
+        struct Q { double d; int :32; };\n\
+        struct R { float f; int :16; float g; };\n\
+        struct A { double d; struct { int :32; float f; }; };\n\
+        union U { int :0; double d; };\n\
+        static int takep(struct P p, int y) { (void)p; return y; }\n\
+        static int takeq(struct Q q, int y) { return (int)q.d * 10 + y; }\n\
+        static int taker(struct R r, int y) { return (int)(r.f + r.g) * 10 + y; }\n\
+        static int takea(struct A a, int y) { return (int)(a.d + a.f) * 10 + y; }\n\
+        static int takeu(union U u, double y) { return (int)(u.d * 10 + y * 2); }\n\
+        static int var(int n, ...)\n\
+        { va_list ap; va_start(ap, n); struct P p = va_arg(ap, struct P);\n\
+          int a = va_arg(ap, int); struct R r = va_arg(ap, struct R);\n\
+          int b = va_arg(ap, int); va_end(ap); (void)p;\n\
+          return n + a * 10 + (int)(r.f + r.g) * 100 + b * 1000; }\n\
+        struct fns { int (*takep)(struct P, int); int (*takeq)(struct Q, int);\n\
+          int (*taker)(struct R, int); int (*takea)(struct A, int);\n\
+          int (*takeu)(union U, double); int (*var)(int, ...); };\n\
+        static int drive(const struct fns *f, int base) {\n\
+          struct P p; struct Q q = { 4.0 }; struct R r = { 1.5f, 1.5f };\n\
+          struct A a = { 1.0, 2.0f }; union U u = { 4.0 };\n\
+          if (f->takep(p, 7) != 7) return base + 1;\n\
+          if (f->takeq(q, 2) != 42) return base + 2;\n\
+          if (f->taker(r, 3) != 33) return base + 3;\n\
+          if (f->var(1, p, 2, r, 4) != 4321) return base + 4;\n\
+          if (f->takea(a, 4) != 34) return base + 5;\n\
+          if (f->takeu(u, 1.0) != 42) return base + 6;\n\
+          return 0; }\n";
+    let module = write_source(
+        &dir,
+        "module.c",
+        &format!(
+            "{common}struct fns sys_fns = {{ takep, takeq, taker, takea, takeu, var }};\n\
+             int sys_drive(const struct fns *f) {{ return drive(f, 10); }}\n"
+        ),
+    );
+    let host = write_source(
+        &dir,
+        "host.c",
+        &format!(
+            "#include <dlfcn.h>\n{common}\
+             int main(int argc, char **argv) {{\n\
+               void *h = dlopen(argv[1], RTLD_NOW);\n\
+               if (!h) return 1;\n\
+               const struct fns *sys = dlsym(h, \"sys_fns\");\n\
+               int (*sys_drive)(const struct fns *) =\n\
+                 (int (*)(const struct fns *))dlsym(h, \"sys_drive\");\n\
+               if (!sys || !sys_drive) return 2;\n\
+               int r = drive(sys, 20);\n\
+               if (r) return r;\n\
+               struct fns mine = {{ takep, takeq, taker, takea, takeu, var }};\n\
+               (void)argc;\n\
+               return sys_drive(&mine); }}\n"
+        ),
+    );
+    let so = dir.join("module.so");
+    run(
+        Command::new(&cc)
+            .args(["-O2", "-shared", "-fPIC", "-o"])
+            .arg(&so)
+            .arg(&module)
+            .current_dir(&dir),
+        "build the system-compiled module",
+    );
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("host{opt}"));
+        run(
+            Command::new(badc())
+                .args([opt, "-o"])
+                .arg(&exe)
+                .arg(&host)
+                .current_dir(&dir),
+            "link the badc host",
+        );
+        let out = Command::new(&exe)
+            .arg(&so)
+            .output()
+            .expect("run the badc host");
+        // 11-16: the module's calls into badc; 21-26: badc's calls into the module.
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "host{opt}: an unnamed bit-field's eightbyte crossed the boundary in another \
+             register (stderr {:?})",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
 // Each argument class keeps its own registers across badc and the system C
 // compiler, both calling the other's functions through pointers: a `double`
 // after nine and after thirty-four `long long`s, a `long long` after nine
@@ -8455,34 +8573,34 @@ fn homogeneous_aggregates_cross_the_system_compiler_boundary() {
     );
 }
 
-// An eightbyte that only unnamed bit-fields cover has no class and takes no
-// register, as clang classes it (System V AMD64 3.2.3): `struct { int :32;
-// int :32; double d; }` passes `d` in xmm0 and the next integer in rdi, and
-// `struct { float a; int :8; float b; }` two SSE eightbytes. gcc gives such an
-// eightbyte the INTEGER class, a recorded divergence: against gcc on x86_64
-// the integers after the aggregate arrive one register over, which the
-// expected sums state, a gcc callee reading them one register late and a badc
-// callee one early. Every other pairing agrees.
+// An eightbyte an unnamed bit-field covers is INTEGER, as gcc classes it
+// (System V AMD64 3.2.3): `struct { int :32; int :32; double d; }` passes the
+// first eightbyte in rdi, `d` in xmm0 and the next integer in rsi, and
+// `struct { float a; int :8; float b; }` an INTEGER and an SSE eightbyte.
+// clang gives an unnamed bit-field no class, a recorded divergence: against
+// clang on x86_64 System V the integers after the aggregate arrive one
+// register over, which the expected sums state, a clang callee reading them
+// one register early and a badc callee one late. Every other pairing agrees.
 const UNNAMED_BIT_FIELD_COMMON: &str = "typedef long long ll;\n\
     struct s1 { int :32; int :32; double d; };\n\
     struct s2 { float a; int :8; float b; };\n\
-    #if defined(__x86_64__) && defined(__GNUC__) && !defined(__clang__)\n\
-    #define GCC_X64 1\n\
+    #if defined(__x86_64__) && defined(__clang__) && !defined(_WIN32)\n\
+    #define CLANG_X64 1\n\
     #else\n\
-    #define GCC_X64 0\n\
+    #define CLANG_X64 0\n\
     #endif\n\
-    static int gcc_x64(void) { return GCC_X64; }\n\
+    static int clang_x64(void) { return CLANG_X64; }\n\
     static ll take1(struct s1 s, ll n1, ll n2, ll n3, ll n4, ll n5, ll n6)\n\
     { (void)n1; (void)n6; return (s.d == 1.5) * 100000 + n2 * 1000 + n3 * 100 + n4 * 10 + n5; }\n\
     static ll take2(struct s2 s, ll n1, ll n2, ll n3, ll n4, ll n5, ll n6)\n\
     { (void)n1; (void)n6;\n\
       return (s.a == 1.5f && s.b == 2.5f) * 100000 + n2 * 1000 + n3 * 100 + n4 * 10 + n5; }\n\
-    struct fns { int (*gcc_x64)(void); ll (*take1)(struct s1, ll, ll, ll, ll, ll, ll);\n\
+    struct fns { int (*clang_x64)(void); ll (*take1)(struct s1, ll, ll, ll, ll, ll, ll);\n\
       ll (*take2)(struct s2, ll, ll, ll, ll, ll, ll); };\n\
     static int drive(const struct fns *f, int base)\n\
     { struct s1 x = { .d = 1.5 }; struct s2 y = { .a = 1.5f, .b = 2.5f };\n\
-      ll want = f->gcc_x64() ? 3456 : GCC_X64 ? 1234 : 2345;\n\
-      ll floats = f->gcc_x64() || GCC_X64 ? 0 : 100000;\n\
+      ll want = f->clang_x64() ? 1234 : CLANG_X64 ? 3456 : 2345;\n\
+      ll floats = f->clang_x64() || CLANG_X64 ? 0 : 100000;\n\
       if (f->take1(x, 1, 2, 3, 4, 5, 6) != 100000 + want) return base + 1;\n\
       if (f->take2(y, 1, 2, 3, 4, 5, 6) != floats + want) return base + 2;\n\
       return 0; }\n";
@@ -8501,7 +8619,7 @@ fn unnamed_bit_field_eightbytes_cross_the_system_compiler_boundary() {
         &cc,
         "unnamed-bitfield-interop",
         UNNAMED_BIT_FIELD_COMMON,
-        "gcc_x64, take1, take2",
+        "clang_x64, take1, take2",
     );
 }
 
@@ -8519,7 +8637,7 @@ fn unnamed_bit_field_eightbytes_cross_the_windows_compiler_boundary() {
         &cc,
         "win-unnamed-bitfield-interop",
         UNNAMED_BIT_FIELD_COMMON,
-        "gcc_x64, take1, take2",
+        "clang_x64, take1, take2",
     );
 }
 

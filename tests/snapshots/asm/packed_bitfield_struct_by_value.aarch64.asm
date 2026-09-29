@@ -24,39 +24,22 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x0, [x1]
-               	and	x0, x0, #0xf80000001fffffff
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0]
+               	and	x1, x1, #0xf80000001fffffff
                	mov	x17, #0x40000000        // =1073741824
                	movk	x17, #0x5555, lsl #32
                	movk	x17, #0x555, lsl #48
-               	orr	x0, x0, x17
-               	str	x0, [x1]
+               	orr	x1, x1, x17
+               	str	x1, [x0]
                	sub	x0, x29, #0x8
-               	ldrb	w2, [x1, #0x3]
-               	ldr	w1, [x1, #0x4]
-               	strb	w2, [x0, #0x3]
-               	str	w1, [x0, #0x4]
-               	ldrb	w1, [x0]
-               	ldrb	w2, [x0, #0x1]
-               	ldrb	w3, [x0, #0x2]
-               	ldrb	w4, [x0, #0x3]
-               	ldrb	w5, [x0, #0x4]
-               	ldrb	w6, [x0, #0x5]
-               	ldrb	w7, [x0, #0x6]
-               	ldrb	w8, [x0, #0x7]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
-               	strb	w1, [x0]
-               	strb	w2, [x0, #0x1]
-               	strb	w3, [x0, #0x2]
-               	strb	w4, [x0, #0x3]
-               	strb	w5, [x0, #0x4]
-               	strb	w6, [x0, #0x5]
-               	strb	w7, [x0, #0x6]
-               	strb	w8, [x0, #0x7]
+               	str	x1, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x1, [x1]
+               	ldr	x16, [x0]
+               	str	x16, [x1]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]
@@ -85,8 +68,8 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	str	x1, [x0]
                	bl	<addr>
-               	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
+               	stur	x0, [x29, #-0x18]
+               	sub	x0, x29, #0x18
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x16, [x0]

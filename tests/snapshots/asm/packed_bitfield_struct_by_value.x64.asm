@@ -35,23 +35,15 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	leaq	<rip>, %rcx
-               	movq	(%rcx), %rax
+               	leaq	<rip>, %rax
+               	movq	(%rax), %rcx
                	movabsq	$-0x7ffffffe0000001, %r11 # imm = 0xF80000001FFFFFFF
-               	andq	%r11, %rax
+               	andq	%r11, %rcx
                	movabsq	$0x555555540000000, %r11 # imm = 0x555555540000000
-               	orq	%r11, %rax
-               	movq	%rax, (%rcx)
+               	orq	%r11, %rcx
+               	movq	%rcx, (%rax)
                	leaq	-0x8(%rbp), %rax
-               	movzbq	0x3(%rcx), %rdx
-               	movl	0x4(%rcx), %ecx
-               	movb	%dl, 0x3(%rax)
-               	movl	%ecx, 0x4(%rax)
-               	leaq	-0x18(%rbp), %rcx
-               	movq	(%rax), %r10
-               	movq	%r10, (%rcx)
-               	movq	(%rcx), %r10
-               	movq	%r10, (%rax)
+               	movq	%rcx, (%rax)
                	leaq	<rip>, %rcx
                	movq	(%rcx), %rcx
                	movq	(%rax), %r10

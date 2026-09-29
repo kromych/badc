@@ -6165,8 +6165,11 @@ fn homogeneous_aggregate_elements_follow_the_members() {
 
 /// System V AMD64 3.2.3: an eightbyte no field overlaps takes no register,
 /// and a union's 16-byte vector beside a double or another vector takes one
-/// whole xmm register. The argument after each aggregate lands in the
-/// register past the ones the aggregate takes, and the result takes as many.
+/// whole xmm register. An unnamed bit-field's bytes are INTEGER, as gcc
+/// classifies them, inside an anonymous member too; a zero-width one covers
+/// none in a structure and a union's first byte. The argument after each
+/// aggregate lands in the register past the ones the aggregate takes, and
+/// the result takes as many.
 #[test]
 fn sysv_eightbyte_classes_place_the_following_argument() {
     use crate::Target;
@@ -6209,6 +6212,46 @@ fn sysv_eightbyte_classes_place_the_following_argument() {
         ("union { float f[4]; v4f v; }", "double", true, 2, 2),
         ("union { double a; double b; }", "double", true, 1, 1),
         ("struct { double d; long l; }", "long", false, 1, 2),
+        ("struct { int :8; }", "long", false, 1, 1),
+        ("struct { double d; int :32; }", "long", false, 1, 2),
+        (
+            "struct { float f; int :16; float g; }",
+            "double",
+            true,
+            1,
+            2,
+        ),
+        (
+            "struct __attribute__((packed)) { double d; int :32; }",
+            "long",
+            false,
+            1,
+            2,
+        ),
+        ("struct { double d; int :0; }", "long", false, 0, 1),
+        ("union { int :8; double d; }", "double", true, 0, 1),
+        ("union { int :0; double d; }", "double", true, 0, 1),
+        (
+            "struct { double d; struct { int :32; float f; }; }",
+            "double",
+            true,
+            1,
+            2,
+        ),
+        (
+            "struct { float f; union { int :0; float g; }; }",
+            "double",
+            true,
+            0,
+            1,
+        ),
+        (
+            "struct { double d; union { struct { int :0; }; double e; }; }",
+            "double",
+            true,
+            2,
+            2,
+        ),
     ];
     let mut src =
         alloc::string::String::from("typedef float v4f __attribute__((vector_size(16)));\n");

@@ -1030,6 +1030,36 @@ pub(crate) fn flatten_struct_fields(
             }
         }
     }
+    push_unnamed_bit_fields(structs, struct_id, base_off, out);
+}
+
+/// The unnamed bit-fields of aggregate `id` at `base` and of the anonymous
+/// members inside it, INTEGER leaves as gcc's System V classification counts
+/// them: in a structure the bytes a non-zero width spans, in a union its
+/// leading bytes, where a zero width still covers the first.
+fn push_unnamed_bit_fields(structs: &[StructDef], id: usize, base: u32, out: &mut Vec<FlatField>) {
+    let sd = &structs[id];
+    for b in &sd.anon_bitfields {
+        let (first, end) = if sd.is_union {
+            (0, b.width.div_ceil(8).max(1).min(sd.size as u32))
+        } else if b.width > 0 {
+            (b.bit_start / 8, (b.bit_start + b.width).div_ceil(8))
+        } else {
+            continue;
+        };
+        if end > first {
+            out.push(FlatField {
+                offset: base + first,
+                size: end - first,
+                kind: ScalarKind::Int,
+                bit_field: true,
+                single_fp_vector: false,
+            });
+        }
+    }
+    for m in &sd.anon_members {
+        push_unnamed_bit_fields(structs, m.inner, base + m.offset as u32, out);
+    }
 }
 
 /// The leaf kind of a non-aggregate member of type `ty`.

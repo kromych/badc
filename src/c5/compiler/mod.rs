@@ -235,7 +235,8 @@ impl StructDef {
 /// requested bit count -- 0 for the C99 6.7.2.1p11 form that only ends
 /// the current storage unit. `align` is the unit's MS-layout alignment,
 /// `explicit_align` the one its attributes ask for and `type_align` the
-/// one a typedef gives its type, each 0 when none.
+/// one a typedef gives its type, each 0 when none. `bit_start` is the
+/// aggregate bit its placement begins at.
 #[derive(Debug, Clone, Copy)]
 pub struct AnonBitfield {
     pub before: u32,
@@ -244,6 +245,7 @@ pub struct AnonBitfield {
     pub align: u8,
     pub explicit_align: u32,
     pub type_align: u32,
+    pub bit_start: u32,
 }
 
 impl AnonBitfield {

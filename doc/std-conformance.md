@@ -256,26 +256,34 @@ unversioned. A version at the floor can name a compatibility
 implementation whose semantics differ from the header badc ships for that
 name. TODO: hold the bound version and the declared interface in step.
 
-### An eightbyte of unnamed bit-fields takes no register, severity 5
+### An unnamed bit-field classifies INTEGER, severity 5
 
 The System V AMD64 psABI (3.2.3) does not say whether an unnamed bit-field
-is a field when an eightbyte is classified. badc follows clang: an unnamed
-bit-field has no class, so an eightbyte only unnamed bit-fields cover
-takes no register, and one sharing an eightbyte with named fields leaves
-their class alone. gcc gives such a bit-field the INTEGER class, so the two
-shapes below cross a call to or from gcc-compiled x86-64 code in different
-registers:
+is a field when an eightbyte is classified. badc follows gcc: in a
+structure the bytes a non-zero width spans are INTEGER, in a union the
+leading bytes its width spans are, a zero width covering the first, and
+an anonymous member's unnamed bit-fields count at its offset. clang gives an
+unnamed bit-field no class, so these shapes cross a call to or from
+clang-compiled x86-64 code in different registers:
 
-- `struct { int :32; int :32; double d; }`: badc and clang pass `d` in
-  xmm0 and the next integer argument in rdi; gcc passes the first
-  eightbyte in rdi, `d` in xmm0 and the next integer in rsi.
-- `struct { float a; int :8; float b; }`: badc and clang pass `a` in xmm0
-  and `b` in xmm1; gcc passes the eightbyte holding `a` in rdi and `b` in
-  xmm0, and the next integer in rsi rather than rdi.
+- `struct { int :32; int :32; double d; }`: badc and gcc pass the first
+  eightbyte in rdi, `d` in xmm0 and the next integer argument in rsi;
+  clang passes `d` in xmm0 and the next integer in rdi.
+- `struct { float a; int :8; float b; }`: badc and gcc pass the eightbyte
+  holding `a` in rdi, `b` in xmm0 and the next integer in rsi; clang
+  passes `a` in xmm0, `b` in xmm1 and the next integer in rdi.
+- `union { int :0; double d; }`: badc and gcc pass it in rdi, clang in
+  xmm0.
 
-The divergence is System V AMD64's alone: AAPCS64 passes both shapes in
-general-purpose registers under either compiler, and the Microsoft x64
-convention passes them by reference.
+gcc also types a union's bit-field as the narrowest integer mode holding
+its width and passes the aggregate in memory when the union's offset is
+not a multiple of that mode's size, as in `struct { char c[5]; union {
+int :24; char x; } u; float f[2]; }`, which badc and clang pass in rdi
+and xmm0. TODO: send such an aggregate to memory.
+
+Both divergences are System V AMD64's alone: AAPCS64 passes the
+structures in general-purpose registers under either compiler, and the
+Microsoft x64 convention places every shape here by size.
 
 ### A floating-point vector of one element goes to memory, severity 5
 

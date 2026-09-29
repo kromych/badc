@@ -1633,7 +1633,7 @@ impl<'a> RelocWriter<'a> {
             Some(inner) if inner.contains('/') => inner,
             _ => path,
         };
-        let file_basename = path.rsplit('/').next().unwrap_or("<unknown>");
+        let file_basename = crate::c5::host::path_base_name(path);
         self.names.file_names = if program.asm_unit {
             program.asm_file_names.iter().map(|s| s.as_str()).collect()
         } else {

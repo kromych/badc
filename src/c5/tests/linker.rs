@@ -40,6 +40,35 @@ fn transitively_dead_static_chain_is_dropped_from_object() {
     assert!(!has_caller, "lexically-dead caller must drop");
 }
 
+/// A unit's `STT_FILE` symbol is its source's base name whichever
+/// separator the path spells, as a Windows host gives it `\`.
+#[test]
+fn a_units_file_symbol_is_the_base_name_under_either_separator() {
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for path in [
+        "dir/sub/defs.c",
+        "C:\\dir\\sub\\defs.c",
+        "C:\\dir/sub\\defs.c",
+    ] {
+        let src = "static int s; int main(void) { return s; }\n";
+        let mut program = Compiler::new(src.to_string()).compile().expect("compile");
+        program.source_path = path.into();
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        let obj = crate::c5::linker::object::parse_native_elf(&bytes).expect("parse");
+        let files: Vec<&str> = obj
+            .symbols
+            .iter()
+            .filter(|s| s.kind == crate::c5::linker::object::STT_FILE)
+            .map(|s| s.name.as_str())
+            .collect();
+        assert_eq!(files, ["defs.c"], "{path}");
+    }
+}
+
 #[test]
 fn address_taken_static_survives_dce() {
     // A static function whose address is stored in a global

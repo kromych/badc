@@ -20,7 +20,7 @@ use super::{
 /// Name bfd gives a synthesized file symbol: the input's base name,
 /// which for an archive member is the member name.
 fn file_sym_name(source: &str) -> String {
-    let base = source.rsplit(['/', '\\']).next().unwrap_or(source);
+    let base = crate::c5::host::path_base_name(source);
     base.split_once('(')
         .map(|(_, m)| m.trim_end_matches(')'))
         .unwrap_or(base)

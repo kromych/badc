@@ -881,7 +881,7 @@ fn dylib_name_from_path(path: &str) -> String {
     // The c5 handle is the load path's stem -- "libc.so.6" maps
     // to "libc", "/usr/lib/libSystem.B.dylib" to "libSystem",
     // "msvcrt.dll" to "msvcrt". Used only for diagnostics today.
-    let basename = path.rsplit('/').next().unwrap_or(path);
+    let basename = crate::c5::host::path_base_name(path);
     let stem = basename.split('.').next().unwrap_or(basename);
     let stripped = stem.strip_prefix("lib").unwrap_or(stem);
     stripped.to_string()

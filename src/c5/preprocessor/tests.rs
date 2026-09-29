@@ -2156,12 +2156,8 @@ fn isystem_paths_follow_the_i_paths_and_precede_the_bundled_headers() {
         out.contains("uint64_t"),
         "the bundled <stdint.h> follows: {out}"
     );
-    let only = sdir.join("only.h");
-    assert!(
-        pp.system_headers.contains(only.to_str().unwrap()),
-        "{:?}",
-        pp.system_headers
-    );
+    let only = format!("{}/only.h", sdir.to_str().unwrap());
+    assert!(pp.system_headers.contains(&only), "{:?}", pp.system_headers);
 }
 
 #[test]

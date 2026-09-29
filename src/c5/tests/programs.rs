@@ -7221,10 +7221,11 @@ fn function_close_cost_is_independent_of_declaration_count() {
          exits examine, so the unwind is reading the table rather than \
          the scope's own bindings",
     );
-    // The full-table scan this replaced does grow with the declarations,
-    // so the equality above is not something any implementation gives.
+    // The full-table scan this replaced reads every added declaration at
+    // each of the 300 function exits at least, so the equality above is
+    // not something any implementation gives.
     assert!(
-        large_scan >= small_scan * 8,
+        large_scan.saturating_sub(small_scan) >= (16000 - 500) * 300,
         "a full-table scan per scope exit no longer grows with the \
          declaration count ({small_scan} -> {large_scan}); the check \
          above no longer proves anything",

@@ -107,7 +107,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	movq	%fs:0x0, %rax
-               	addq	$-0xc0, %rax
+               	addq	$-0x80, %rax
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x2, %eax
@@ -134,16 +134,16 @@ Disassembly of section .text:
                	movq	%rax, (%rdx)
                	movq	$0x7, 0x8(%rdx)
                	movq	%fs:0x0, %rdx
-               	addq	$-0x100, %rdx
+               	addq	$-0xa0, %rdx
                	movb	$0x1, (%rdx)
                	movq	%fs:0x0, %rsi
-               	addq	$-0xf8, %rsi
+               	addq	$-0x90, %rsi
                	movb	$0x2, (%rsi)
                	movq	%fs:0x0, %rsi
-               	addq	$-0xf0, %rsi
+               	addq	$-0x70, %rsi
                	movb	$0x3, (%rsi)
                	movq	%fs:0x0, %r8
-               	addq	$-0xd0, %r8
+               	addq	$-0x60, %r8
                	movb	$0x4, (%r8)
                	movsd	(%rcx), %xmm0
                	movq	%rdi, %xmm15
@@ -158,7 +158,7 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	retq
                	movq	%fs:0x0, %rcx
-               	addq	$-0xc0, %rcx
+               	addq	$-0x80, %rcx
                	movq	(%rcx), %rdi
                	movq	0x8(%rcx), %rcx
                	addq	%rcx, %rdi
@@ -173,7 +173,7 @@ Disassembly of section .text:
                	retq
                	movsbq	(%rdx), %rax
                	movq	%fs:0x0, %rcx
-               	addq	$-0xf8, %rcx
+               	addq	$-0x90, %rcx
                	movsbq	(%rcx), %rcx
                	addq	%rcx, %rax
                	movsbq	(%rsi), %rcx

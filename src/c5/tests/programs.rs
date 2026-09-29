@@ -3676,6 +3676,13 @@ fn block_scope_thread_local() {
 }
 
 #[test]
+fn a_block_scope_static_thread_local_hides_the_file_scope_one() {
+    // C99 6.2.1p4: the block's `static _Thread_local x` is its own object,
+    // named by every reference in the block after the scope has closed once.
+    assert_eq!(run_fixture("thread_local_block_static_shadow.c"), 0);
+}
+
+#[test]
 fn builtin_offsetof() {
     // GCC / C11 `__builtin_offsetof(type, member)` folds to the member's byte
     // offset -- struct tag / typedef, `.field` chains, `[index]` subscripts

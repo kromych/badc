@@ -944,12 +944,9 @@ impl Compiler {
     /// and `used` / `section` attributes past the scope-exit restore of
     /// the scoped binding (toolchains emit the same `name.N` locals).
     /// Function close stamps `owner_ent_pc`; static DCE then treats the
-    /// object as a per-instance part of its function. Thread-locals are
-    /// skipped: their `val` is a TLS offset outside the `.data` model.
+    /// object as a per-instance part of its function. A thread-local's
+    /// record carries a TLS offset, which the `.data` passes pass over.
     pub(super) fn push_block_static_record(&mut self, loc_idx: usize, ty: i64) {
-        if self.symbols[loc_idx].is_thread_local {
-            return;
-        }
         let final_array = self.symbols[loc_idx].array_size;
         let fam_tail = self.symbols[loc_idx].fam_init_bytes;
         let zero_len = self.symbols[loc_idx].is_zero_len_array;
@@ -983,6 +980,7 @@ impl Compiler {
             reserved_data_bytes: reserved,
             fam_init_bytes: fam_tail,
             data_align: src.data_align,
+            is_thread_local: src.is_thread_local,
             linkage: crate::c5::symbol::Linkage::Internal,
             defined_here: true,
             has_initializer: true,

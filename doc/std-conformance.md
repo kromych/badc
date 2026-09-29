@@ -275,15 +275,24 @@ clang-compiled x86-64 code in different registers:
 - `union { int :0; double d; }`: badc and gcc pass it in rdi, clang in
   xmm0.
 
-gcc also types a union's bit-field as the narrowest integer mode holding
-its width and passes the aggregate in memory when the union's offset is
-not a multiple of that mode's size, as in `struct { char c[5]; union {
-int :24; char x; } u; float f[2]; }`, which badc and clang pass in rdi
-and xmm0. TODO: send such an aggregate to memory.
+A union's bit-field, named or not, is typed as gcc types it, the narrowest
+integer mode holding its width, and an aggregate whose union sits off that
+mode's alignment is MEMORY class: badc and gcc pass `struct { char c[5];
+union { int :24; char x; } u; float f[2]; }` in memory, clang in rdi and
+xmm0.
 
-Both divergences are System V AMD64's alone: AAPCS64 passes the
+These divergences are System V AMD64's alone: AAPCS64 passes the
 structures in general-purpose registers under either compiler, and the
 Microsoft x64 convention places every shape here by size.
+
+### A misaligned member past an array's first element keeps its class, severity 5
+
+The System V AMD64 psABI (3.2.3) sends an aggregate with an unaligned
+field to memory without saying how an array's elements count. badc
+follows gcc, which examines an array's first element alone: `struct {
+struct __attribute__((packed)) { int x; char c; } a[2]; }` passes in rdi
+and rsi under badc and gcc, where clang, finding `a[1].x` at offset 5,
+passes it in memory.
 
 ### A floating-point vector of one element goes to memory, severity 5
 

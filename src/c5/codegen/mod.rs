@@ -4942,7 +4942,7 @@ mod abi_plan_tests {
             offset,
             size: 8,
             kind: ScalarKind::Int,
-            bit_field: false,
+            align: 8,
             single_fp_vector: false,
         };
         let desc = crate::c5::ir::AggDesc {

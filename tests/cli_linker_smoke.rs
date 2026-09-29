@@ -56,6 +56,16 @@ fn host_cc() -> Option<std::ffi::OsString> {
         .then_some(cc)
 }
 
+/// Whether `cc` is clang, whose System V classification of bit-fields
+/// differs from gcc's, the Linux system compiler's.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn cc_is_clang(cc: &std::ffi::OsStr) -> bool {
+    Command::new(cc)
+        .args(["-dM", "-E", "-x", "c", "/dev/null"])
+        .output()
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("#define __clang__ "))
+}
+
 // Gated on Linux: produces a Linux ELF that the test driver
 // exec's directly, and the executable-link path through
 // `link_native_objects` + `write_executable_elf64` is Linux-
@@ -6036,20 +6046,13 @@ fn unnamed_bit_fields_cross_the_system_compiler_boundary() {
         );
         return;
     };
-    // clang gives an unnamed bit-field no class, the divergence
-    // `unnamed_bit_field_eightbytes_cross_the_system_compiler_boundary` states.
-    let clang = Command::new(&cc)
-        .args(["-dM", "-E", "-x", "c", "/dev/null"])
-        .output()
-        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("#define __clang__ "));
-    if clang {
+    if cc_is_clang(&cc) {
         eprintln!(
             "skipping unnamed_bit_fields_cross_the_system_compiler_boundary: the system compiler \
              is clang"
         );
         return;
     }
-    let dir = tempdir("anon-bitfield-interop");
     let common = "#include <stdarg.h>\n\
         struct P { int :8; };\n\
         struct Q { double d; int :32; };\n\
@@ -6079,65 +6082,86 @@ fn unnamed_bit_fields_cross_the_system_compiler_boundary() {
           if (f->takea(a, 4) != 34) return base + 5;\n\
           if (f->takeu(u, 1.0) != 42) return base + 6;\n\
           return 0; }\n";
-    let module = write_source(
-        &dir,
-        "module.c",
-        &format!(
-            "{common}struct fns sys_fns = {{ takep, takeq, taker, takea, takeu, var }};\n\
-             int sys_drive(const struct fns *f) {{ return drive(f, 10); }}\n"
-        ),
+    drive_across_the_system_compiler(
+        &cc,
+        "anon-bitfield-interop",
+        common,
+        "takep, takeq, taker, takea, takeu, var",
     );
-    let host = write_source(
-        &dir,
-        "host.c",
-        &format!(
-            "#include <dlfcn.h>\n{common}\
-             int main(int argc, char **argv) {{\n\
-               void *h = dlopen(argv[1], RTLD_NOW);\n\
-               if (!h) return 1;\n\
-               const struct fns *sys = dlsym(h, \"sys_fns\");\n\
-               int (*sys_drive)(const struct fns *) =\n\
-                 (int (*)(const struct fns *))dlsym(h, \"sys_drive\");\n\
-               if (!sys || !sys_drive) return 2;\n\
-               int r = drive(sys, 20);\n\
-               if (r) return r;\n\
-               struct fns mine = {{ takep, takeq, taker, takea, takeu, var }};\n\
-               (void)argc;\n\
-               return sys_drive(&mine); }}\n"
-        ),
-    );
-    let so = dir.join("module.so");
-    run(
-        Command::new(&cc)
-            .args(["-O2", "-shared", "-fPIC", "-o"])
-            .arg(&so)
-            .arg(&module)
-            .current_dir(&dir),
-        "build the system-compiled module",
-    );
-    for opt in ["-O0", "-O"] {
-        let exe = dir.join(format!("host{opt}"));
-        run(
-            Command::new(badc())
-                .args([opt, "-o"])
-                .arg(&exe)
-                .arg(&host)
-                .current_dir(&dir),
-            "link the badc host",
+}
+
+// gcc types a union's bit-field as the narrowest integer mode holding its
+// width, and an aggregate whose union misaligns that mode goes to memory;
+// past an array's first element it binds no alignment. Each shape crosses a
+// call between badc and a gcc system compiler both ways, as an argument, a
+// variadic one and a result.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn union_bit_field_modes_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping union_bit_field_modes_cross_the_system_compiler_boundary: no system C compiler"
         );
-        let out = Command::new(&exe)
-            .arg(&so)
-            .output()
-            .expect("run the badc host");
-        // 11-16: the module's calls into badc; 21-26: badc's calls into the module.
-        assert_eq!(
-            out.status.code(),
-            Some(0),
-            "host{opt}: an unnamed bit-field's eightbyte crossed the boundary in another \
-             register (stderr {:?})",
-            String::from_utf8_lossy(&out.stderr)
+        return;
+    };
+    if cc_is_clang(&cc) {
+        eprintln!(
+            "skipping union_bit_field_modes_cross_the_system_compiler_boundary: the system \
+             compiler is clang"
         );
+        return;
     }
+    let common = "#include <stdarg.h>\n\
+        struct Z { char c[5]; union { int :24; char x; } u; float f[2]; };\n\
+        struct N { char c[5]; union __attribute__((packed)) { int x:24; char y; } u; float f[2]; };\n\
+        struct __attribute__((packed)) M { char c; union { int x:24; char y; }; char d[3]; float f; };\n\
+        struct R { union { int :24; char x; } u[2]; char c[2]; float f[2]; };\n\
+        struct __attribute__((packed)) K { int x; char c; };\n\
+        struct A { struct K a[2]; };\n\
+        static int takez(struct Z s, int y) { return s.c[4] + s.u.x + (int)(s.f[0] + s.f[1]) * 100 + y * 1000; }\n\
+        static int taken(struct N s, int y) { return s.c[4] + s.u.x + (int)(s.f[0] + s.f[1]) * 100 + y * 1000; }\n\
+        static int takem(struct M s, int y) { return s.c + s.x + s.d[2] + (int)(s.f * 100) + y * 1000; }\n\
+        static int taker(struct R s, int y)\n\
+        { return s.u[0].x + s.u[1].x + s.c[1] + (int)(s.f[0] + s.f[1]) * 100 + y * 1000; }\n\
+        static int takea(struct A s, int y) { return s.a[0].x + s.a[1].x + s.a[1].c + y * 1000; }\n\
+        static struct Z makez(int v) { struct Z r = { { 0, 0, 0, 0, (char)v }, { .x = 2 }, { 1.5f, 2.5f } }; return r; }\n\
+        static struct N maken(int v) { struct N r = { { 0, 0, 0, 0, (char)v }, { .x = 2 }, { 1.5f, 2.5f } }; return r; }\n\
+        static struct M makem(int v)\n\
+        { struct M r; r.c = (char)v; r.x = 2; r.d[0] = r.d[1] = 0; r.d[2] = 3; r.f = 1.25f; return r; }\n\
+        static struct R maker(int v)\n\
+        { struct R r = { { { .x = (char)v }, { .x = 2 } }, { 0, 3 }, { 1.5f, 2.5f } }; return r; }\n\
+        static struct A makea(int v) { struct A r = { { { v, 0 }, { 20, 3 } } }; return r; }\n\
+        static int var(int n, ...)\n\
+        { va_list ap; va_start(ap, n); struct Z z = va_arg(ap, struct Z);\n\
+          int p = va_arg(ap, int); struct A b = va_arg(ap, struct A);\n\
+          int q = va_arg(ap, int); struct N m = va_arg(ap, struct N); va_end(ap);\n\
+          return n + z.c[4] * 10 + z.u.x * 100 + p * 1000 + b.a[0].x * 10000 + q * 100000\n\
+            + m.c[4] * 1000000; }\n\
+        struct fns { int (*takez)(struct Z, int); int (*taken)(struct N, int);\n\
+          int (*takem)(struct M, int); int (*taker)(struct R, int); int (*takea)(struct A, int);\n\
+          struct Z (*makez)(int); struct N (*maken)(int); struct M (*makem)(int);\n\
+          struct R (*maker)(int); struct A (*makea)(int); int (*var)(int, ...); };\n\
+        static int drive(const struct fns *f, int base) {\n\
+          struct Z z = f->makez(3); struct N n = f->maken(4); struct M m = f->makem(5);\n\
+          struct R r = f->maker(6); struct A a = f->makea(7);\n\
+          if (z.c[4] != 3 || z.u.x != 2 || z.f[1] != 2.5f) return base + 1;\n\
+          if (n.c[4] != 4 || n.u.x != 2 || n.f[1] != 2.5f) return base + 2;\n\
+          if (m.c != 5 || m.x != 2 || m.d[2] != 3 || m.f != 1.25f) return base + 3;\n\
+          if (r.u[0].x != 6 || r.u[1].x != 2 || r.c[1] != 3 || r.f[1] != 2.5f) return base + 4;\n\
+          if (a.a[0].x != 7 || a.a[1].x != 20 || a.a[1].c != 3) return base + 5;\n\
+          if (f->takez(z, 1) != 1405) return base + 6;\n\
+          if (f->taken(n, 1) != 1406) return base + 7;\n\
+          if (f->takem(m, 1) != 1135) return base + 8;\n\
+          if (f->taker(r, 1) != 1411) return base + 9;\n\
+          if (f->takea(a, 1) != 1030) return base + 10;\n\
+          if (f->var(1, z, 2, a, 3, n) != 4372231) return base + 11;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(
+        &cc,
+        "union-bitfield-mode-interop",
+        common,
+        "takez, taken, takem, taker, takea, makez, maken, makem, maker, makea, var",
+    );
 }
 
 // Each argument class keeps its own registers across badc and the system C

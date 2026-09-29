@@ -976,7 +976,24 @@ pub(crate) fn flatten_struct_fields(
     base_off: u32,
     out: &mut Vec<FlatField>,
 ) {
+    flatten_leaves(structs, target, struct_id, base_off, true, out);
+}
+
+/// [`flatten_struct_fields`] for aggregate `struct_id` at `base_off`, where
+/// `checked` says whether the leaves' alignment binds: past an array's
+/// first element it does not, as gcc classifies the first alone. An
+/// anonymous member is an aggregate field of its own, as gcc classifies it,
+/// so its union rules hold.
+fn flatten_leaves(
+    structs: &[StructDef],
+    target: Target,
+    struct_id: usize,
+    base_off: u32,
+    checked: bool,
+    out: &mut Vec<FlatField>,
+) {
     let sd = &structs[struct_id];
+    let bound = |align: u32| if checked { align } else { 1 };
     let single_fp_vector = sd.is_vector
         && matches!(sd.fields.as_slice(),
             [f] if f.array_size == 1 && scalar_kind(f.ty, target).is_fp_scalar());
@@ -990,12 +1007,22 @@ pub(crate) fn flatten_struct_fields(
             offset: base_off,
             size: sd.size as u32,
             kind: ScalarKind::Vector,
-            bit_field: false,
+            align: bound((sd.size as u32).clamp(1, 16)),
             single_fp_vector,
         });
         return;
     }
-    for f in &sd.fields {
+    let mut members = sd.anon_members.iter().peekable();
+    let mut next = 0;
+    while next < sd.fields.len() || members.peek().is_some() {
+        if let Some(m) = members.next_if(|m| m.first as usize <= next) {
+            let off = base_off + m.offset as u32;
+            flatten_leaves(structs, target, m.inner, off, checked, out);
+            next = next.max((m.first + m.count) as usize);
+            continue;
+        }
+        let f = &sd.fields[next];
+        next += 1;
         let elem_ty = f.ty;
         let is_struct_value = is_struct_value_ty(elem_ty);
         // A bit-field occupies the bytes its bits span from its unit;
@@ -1010,6 +1037,11 @@ pub(crate) fn flatten_struct_fields(
         } else {
             (f.offset as u32, flat_scalar_size(elem_ty, target))
         };
+        let align = match (f.bit_width, sd.is_union) {
+            (0, _) => elem_size.clamp(1, 16),
+            (w, true) => int_mode_bytes(w),
+            _ => 1,
+        };
         let count = if f.array_size > 0 {
             f.array_size as u32
         } else {
@@ -1017,33 +1049,40 @@ pub(crate) fn flatten_struct_fields(
         };
         for i in 0..count {
             let off = base_off + elem_off + i * elem_size;
+            let checked = checked && i == 0;
             if is_struct_value {
-                flatten_struct_fields(structs, target, struct_id_of(elem_ty), off, out);
+                flatten_leaves(structs, target, struct_id_of(elem_ty), off, checked, out);
             } else {
                 out.push(FlatField {
                     offset: off,
                     size: elem_size,
                     kind: scalar_kind(elem_ty, target),
-                    bit_field: f.bit_width > 0,
+                    align: if checked { align } else { 1 },
                     single_fp_vector,
                 });
             }
         }
     }
-    push_unnamed_bit_fields(structs, struct_id, base_off, out);
+    push_unnamed_bit_fields(sd, base_off, bound, out);
 }
 
-/// The unnamed bit-fields of aggregate `id` at `base` and of the anonymous
-/// members inside it, INTEGER leaves as gcc's System V classification counts
-/// them: in a structure the bytes a non-zero width spans, in a union its
-/// leading bytes, where a zero width still covers the first.
-fn push_unnamed_bit_fields(structs: &[StructDef], id: usize, base: u32, out: &mut Vec<FlatField>) {
-    let sd = &structs[id];
+/// The unnamed bit-fields of `sd` at `base`, INTEGER leaves as gcc's System
+/// V classification counts them: in a structure the bytes a non-zero width
+/// spans, in a union its leading bytes, where a zero width still covers
+/// the first and the narrowest integer mode holding the width binds the
+/// union's offset.
+fn push_unnamed_bit_fields(
+    sd: &StructDef,
+    base: u32,
+    bound: impl Fn(u32) -> u32,
+    out: &mut Vec<FlatField>,
+) {
     for b in &sd.anon_bitfields {
-        let (first, end) = if sd.is_union {
-            (0, b.width.div_ceil(8).max(1).min(sd.size as u32))
+        let (first, end, align) = if sd.is_union {
+            let end = b.width.div_ceil(8).max(1).min(sd.size as u32);
+            (0, end, int_mode_bytes(b.width))
         } else if b.width > 0 {
-            (b.bit_start / 8, (b.bit_start + b.width).div_ceil(8))
+            (b.bit_start / 8, (b.bit_start + b.width).div_ceil(8), 1)
         } else {
             continue;
         };
@@ -1052,14 +1091,17 @@ fn push_unnamed_bit_fields(structs: &[StructDef], id: usize, base: u32, out: &mu
                 offset: base + first,
                 size: end - first,
                 kind: ScalarKind::Int,
-                bit_field: true,
+                align: bound(align),
                 single_fp_vector: false,
             });
         }
     }
-    for m in &sd.anon_members {
-        push_unnamed_bit_fields(structs, m.inner, base + m.offset as u32, out);
-    }
+}
+
+/// The bytes of the narrowest integer mode holding `width` bits, the type
+/// gcc gives a union's bit-field: one for a zero width.
+fn int_mode_bytes(width: u32) -> u32 {
+    width.max(1).div_ceil(8).next_power_of_two()
 }
 
 /// The leaf kind of a non-aggregate member of type `ty`.
@@ -1188,7 +1230,7 @@ pub(crate) fn long_double_agg_desc(
             offset: 0,
             size: 16,
             kind,
-            bit_field: false,
+            align: 16,
             single_fp_vector: false,
         }],
         homogeneous: HomogeneousAggregate::new(kind, 16, 1),

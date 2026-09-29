@@ -228,7 +228,7 @@ impl AggTy {
                 offset: l.offset,
                 size: l.sc.size(),
                 kind: l.sc.abi_kind(),
-                bit_field: false,
+                align: l.sc.size().clamp(1, 16),
                 single_fp_vector: false,
             })
             .collect()

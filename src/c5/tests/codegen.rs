@@ -6232,6 +6232,13 @@ fn sysv_eightbyte_classes_place_the_following_argument() {
         ("union { int :8; double d; }", "double", true, 0, 1),
         ("union { int :0; double d; }", "double", true, 0, 1),
         (
+            "struct { struct __attribute__((packed)) { int x; char c; } a[2]; }",
+            "long",
+            false,
+            2,
+            2,
+        ),
+        (
             "struct { double d; struct { int :32; float f; }; }",
             "double",
             true,
@@ -6302,7 +6309,9 @@ fn sysv_eightbyte_classes_place_the_following_argument() {
 /// System V AMD64 3.2.3: a packed aggregate with a member off its natural
 /// alignment is MEMORY class, on the stack ahead of the argument after it,
 /// which takes the first integer register; a bit-field is exempt, and so is
-/// a packed aggregate whose members all lie aligned.
+/// a packed aggregate whose members all lie aligned. As gcc classifies them,
+/// a union's bit-field binds the union's offset to its integer mode, a zero
+/// width to one byte, and past an array's first element nothing is bound.
 #[test]
 fn sysv_misaligned_members_send_the_aggregate_to_memory() {
     use crate::Target;
@@ -6322,6 +6331,30 @@ fn sysv_misaligned_members_send_the_aggregate_to_memory() {
         ),
         (
             "struct __attribute__((packed)) { char c; int x : 16; }",
+            false,
+        ),
+        (
+            "struct { char c[5]; union { int :24; char x; } u; float f[2]; }",
+            true,
+        ),
+        (
+            "struct { char c[5]; union __attribute__((packed)) { int x : 24; char y; } u; float f[2]; }",
+            true,
+        ),
+        (
+            "struct __attribute__((packed)) { char c; union { int x : 24; char y; }; char d[3]; float f; }",
+            true,
+        ),
+        (
+            "struct { char c[4]; union { int :24; char x; } u; float f[2]; }",
+            false,
+        ),
+        (
+            "struct { char c[7]; union { int :0; char x; } u; float f[2]; }",
+            false,
+        ),
+        (
+            "struct { union { int :24; char x; } u[2]; char c[2]; float f[2]; }",
             false,
         ),
     ];

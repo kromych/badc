@@ -224,6 +224,11 @@ const ABBREV_VOLATILE_TYPE_VOID: u64 = 43;
 const ABBREV_RESTRICT_TYPE: u64 = 44;
 const ABBREV_RESTRICT_TYPE_VOID: u64 = 45;
 const ABBREV_ENUMERATION_TYPE_ANON: u64 = 46;
+const ABBREV_SUBROUTINE_TYPE_UNPROTOTYPED: u64 = 47;
+const ABBREV_SUBROUTINE_TYPE_VOID_UNPROTOTYPED: u64 = 48;
+const ABBREV_SUBROUTINE_TYPE_NO_PARAMS: u64 = 49;
+const ABBREV_SUBROUTINE_TYPE_VOID_NO_PARAMS: u64 = 50;
+const ABBREV_ENUMERATION_TYPE_DECL: u64 = 51;
 
 /// Compilation-unit header for `.debug_info` (DWARF 4, 32-bit form).
 #[repr(C, packed)]
@@ -540,9 +545,18 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
             (DW_AT_DECLARATION, DW_FORM_FLAG_PRESENT),
         ],
     },
+    AbbrevDecl {
+        code: ABBREV_ENUMERATION_TYPE_DECL,
+        tag: DW_TAG_ENUMERATION_TYPE,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRP),
+            (DW_AT_DECLARATION, DW_FORM_FLAG_PRESENT),
+        ],
+    },
     // subroutine_type -- the pointee of a function pointer (DWARF 4 5.7).
-    // TODO: DW_AT_prototyped is set for a pointee without a prototype too;
-    // the writer reads no `prototyped` flag, and `VariableInfo` has none.
+    // A function type without a prototype omits DW_AT_prototyped and has
+    // one unspecified_parameters child, as gcc and clang emit it.
     AbbrevDecl {
         code: ABBREV_SUBROUTINE_TYPE,
         tag: DW_TAG_SUBROUTINE_TYPE,
@@ -553,6 +567,31 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         code: ABBREV_SUBROUTINE_TYPE_VOID,
         tag: DW_TAG_SUBROUTINE_TYPE,
         has_children: true,
+        attrs: &[(DW_AT_PROTOTYPED, DW_FORM_FLAG)],
+    },
+    AbbrevDecl {
+        code: ABBREV_SUBROUTINE_TYPE_UNPROTOTYPED,
+        tag: DW_TAG_SUBROUTINE_TYPE,
+        has_children: true,
+        attrs: &[(DW_AT_TYPE, DW_FORM_REF4)],
+    },
+    AbbrevDecl {
+        code: ABBREV_SUBROUTINE_TYPE_VOID_UNPROTOTYPED,
+        tag: DW_TAG_SUBROUTINE_TYPE,
+        has_children: true,
+        attrs: &[],
+    },
+    // A `(void)` prototype has no child.
+    AbbrevDecl {
+        code: ABBREV_SUBROUTINE_TYPE_NO_PARAMS,
+        tag: DW_TAG_SUBROUTINE_TYPE,
+        has_children: false,
+        attrs: &[(DW_AT_PROTOTYPED, DW_FORM_FLAG), (DW_AT_TYPE, DW_FORM_REF4)],
+    },
+    AbbrevDecl {
+        code: ABBREV_SUBROUTINE_TYPE_VOID_NO_PARAMS,
+        tag: DW_TAG_SUBROUTINE_TYPE,
+        has_children: false,
         attrs: &[(DW_AT_PROTOTYPED, DW_FORM_FLAG)],
     },
     // formal_parameter of a subroutine_type: a type with no name and no
@@ -1353,6 +1392,7 @@ enum TypeNode {
         ret: Option<TypeId>,
         params: Vec<TypeId>,
         variadic: bool,
+        prototyped: bool,
     },
     /// `DW_TAG_typedef` (DWARF 4 5.3): the name a declaration spelled the
     /// type with.
@@ -1645,6 +1685,7 @@ impl<'a> TypeCatalog<'a> {
                 f.fn_ptr_indirection,
                 &f.params,
                 f.is_variadic,
+                f.prototyped,
                 f.decl_spelling,
             )
         } else {
@@ -1666,6 +1707,7 @@ impl<'a> TypeCatalog<'a> {
                 sym.fn_ptr_indirection,
                 &sym.params,
                 sym.is_variadic,
+                sym.prototyped,
                 sym.binding.decl_spelling,
             )
         } else {
@@ -1697,6 +1739,7 @@ impl<'a> TypeCatalog<'a> {
                 v.fn_ptr_indirection,
                 &v.params,
                 v.is_variadic,
+                v.prototyped,
                 v.decl_spelling,
             )
         } else {
@@ -1720,6 +1763,7 @@ impl<'a> TypeCatalog<'a> {
         indirection: i64,
         param_tags: &[i64],
         variadic: bool,
+        prototyped: bool,
         spelling: DeclSpelling,
     ) -> TypeId {
         let depth = indirection.clamp(0, 32) as u8;
@@ -1731,16 +1775,18 @@ impl<'a> TypeCatalog<'a> {
             Some(k) if k.is_void_value() => None,
             Some(k) => Some(self.of_key(k)),
         };
+        // A type without a prototype has no parameter types (C99 6.7.5.3p14).
         let params: Vec<TypeId> = param_tags
             .iter()
             .copied()
-            .filter(|&p| !crate::c5::compiler::types::is_void_ty(p))
+            .filter(|&p| prototyped && !crate::c5::compiler::types::is_void_ty(p))
             .map(|p| self.of_tag(p))
             .collect();
         let fn_ty = self.intern(TypeNode::Subroutine {
             ret,
             params,
             variadic,
+            prototyped,
         });
         // A function-pointer typedef names the pointer type as a whole
         // (`typedef int (*fn_t)(int)`), so the alias sits over the finished
@@ -1870,11 +1916,10 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode, strs: &mut StrPool
         }
         TypeNode::Declaration(id) => {
             let structs = catalog.structs;
-            let is_union = structs.get(*id).is_some_and(|s| s.is_union);
-            let abbrev = if is_union {
-                ABBREV_UNION_TYPE_DECL
-            } else {
-                ABBREV_STRUCTURE_TYPE_DECL
+            let abbrev = match structs.get(*id) {
+                Some(s) if s.is_enum => ABBREV_ENUMERATION_TYPE_DECL,
+                Some(s) if s.is_union => ABBREV_UNION_TYPE_DECL,
+                _ => ABBREV_STRUCTURE_TYPE_DECL,
             };
             write_uleb128(&mut die.bytes, abbrev);
             die.push_str(strs, structs.get(*id).map_or("", |s| &s.name));
@@ -1942,26 +1987,34 @@ fn build_type_die(catalog: &mut TypeCatalog, node: &TypeNode, strs: &mut StrPool
             ret,
             params,
             variadic,
+            prototyped,
         } => {
-            match ret {
-                Some(r) => {
-                    write_uleb128(&mut die.bytes, ABBREV_SUBROUTINE_TYPE);
-                    die.bytes.push(1);
-                    die.push_ref(*r);
+            let childless = *prototyped && params.is_empty() && !*variadic;
+            let abbrev = match (ret.is_some(), *prototyped, childless) {
+                (true, true, false) => ABBREV_SUBROUTINE_TYPE,
+                (false, true, false) => ABBREV_SUBROUTINE_TYPE_VOID,
+                (true, true, true) => ABBREV_SUBROUTINE_TYPE_NO_PARAMS,
+                (false, true, true) => ABBREV_SUBROUTINE_TYPE_VOID_NO_PARAMS,
+                (true, false, _) => ABBREV_SUBROUTINE_TYPE_UNPROTOTYPED,
+                (false, false, _) => ABBREV_SUBROUTINE_TYPE_VOID_UNPROTOTYPED,
+            };
+            write_uleb128(&mut die.bytes, abbrev);
+            if *prototyped {
+                die.bytes.push(1);
+            }
+            if let Some(r) = ret {
+                die.push_ref(*r);
+            }
+            if !childless {
+                for p in params {
+                    write_uleb128(&mut die.bytes, ABBREV_FORMAL_PARAMETER_TYPE);
+                    die.push_ref(*p);
                 }
-                None => {
-                    write_uleb128(&mut die.bytes, ABBREV_SUBROUTINE_TYPE_VOID);
-                    die.bytes.push(1);
+                if *variadic || !*prototyped {
+                    write_uleb128(&mut die.bytes, ABBREV_UNSPECIFIED_PARAMETERS);
                 }
+                die.bytes.push(0);
             }
-            for p in params {
-                write_uleb128(&mut die.bytes, ABBREV_FORMAL_PARAMETER_TYPE);
-                die.push_ref(*p);
-            }
-            if *variadic {
-                write_uleb128(&mut die.bytes, ABBREV_UNSPECIFIED_PARAMETERS);
-            }
-            die.bytes.push(0);
         }
         TypeNode::Typedef { name, inner } => {
             let abbrev = match inner {
@@ -2126,13 +2179,14 @@ mod abbrev_golden {
              380f00001d0d004913380f00000b0d00030e49136b0f0d0f00000c180000000d0101\
              491300000e21002f0f00000f0401030e0b0b00002e04010b0b0000102800030e1c0d\
              00001113010b0f00001217010b0f0000131300030e3c190000141700030e3c190000\
-             151501270c49130000161501270c0000170500491300001821000000190f000b0b00\
-             001a3b0000001b3400030e49133f1902183a0f3b0f00001c3400030e491302183a0f\
-             3b0f0000203400030e49133f193a0f3b0f0000213400030e49133a0f3b0f0000222e\
-             00030e110112073f19270c360b0000232e01030e110112073f19270c360b40180000\
-             242e00030e11011207270c360b0000252e01030e11011207270c360b401800002616\
-             00030e49130000271600030e00002826004913000029260000002a3500491300002b\
-             350000002c3700491300002d3700000000"
+             330400030e3c190000151501270c49130000161501270c00002f1501491300003015\
+             010000311500270c49130000321500270c0000170500491300001821000000190f00\
+             0b0b00001a3b0000001b3400030e49133f1902183a0f3b0f00001c3400030e491302\
+             183a0f3b0f0000203400030e49133f193a0f3b0f0000213400030e49133a0f3b0f00\
+             00222e00030e110112073f19270c360b0000232e01030e110112073f19270c360b40\
+             180000242e00030e11011207270c360b0000252e01030e11011207270c360b401800\
+             00261600030e49130000271600030e00002826004913000029260000002a35004913\
+             00002b350000002c3700491300002d3700000000"
         );
     }
 }

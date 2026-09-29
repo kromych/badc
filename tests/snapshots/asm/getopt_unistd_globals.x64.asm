@@ -45,7 +45,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi      # <addr>
                	leaq	<rip>, %rdx
                	xorl	%eax, %eax
                	callq	<addr>

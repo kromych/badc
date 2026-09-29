@@ -35,7 +35,8 @@ use super::types::{add_ptr_level, apply_qual_bits, is_decl_modifier};
 
 /// One derivation an abstract declarator spells (C99 6.7.6).
 pub(super) enum Derivation {
-    Pointer,
+    /// A pointer, with the qualifier bits that follow its `*`.
+    Pointer(i64),
     /// An array of the bound, `-1` when it is unspecified.
     Array(i64),
     /// A variable-length array whose bound this expression computes.
@@ -56,14 +57,14 @@ impl AbstractDecl {
     pub(super) fn pointer_levels(&self) -> i64 {
         let pointers = self.derivations.iter();
         pointers
-            .filter(|d| matches!(d, Derivation::Pointer))
+            .filter(|d| matches!(d, Derivation::Pointer(_)))
             .count() as i64
     }
 
     /// The bounds of the array a pointer to an array (`T (*)[M1]...[Mn]`)
     /// points to, or `None` for any other type.
     pub(super) fn pointee_dims(&self) -> Option<alloc::vec::Vec<i64>> {
-        let [Derivation::Pointer, rest @ ..] = self.derivations.as_slice() else {
+        let [Derivation::Pointer(_), rest @ ..] = self.derivations.as_slice() else {
             return None;
         };
         let bound = |d: &Derivation| match d {
@@ -209,9 +210,14 @@ impl Compiler {
     /// the omitted identifier (`[3]` in `(*[3])`), the group's pointers and
     /// the group's own suffixes (C99 6.7.5p4).
     fn parse_abstract_group(&mut self, capture_proto: bool) -> Result<AbstractDecl, C5Error> {
-        let mut ptrs = 0usize;
+        // Each `*` and the qualifiers of that pointer (C99 6.7.5.1p1).
+        let mut ptrs: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
         while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
-            ptrs += usize::from(self.lex.tk == Token::MulOp);
+            if self.lex.tk == Token::MulOp {
+                ptrs.push(0);
+            } else if let Some(quals) = ptrs.last_mut() {
+                *quals |= self.lex_qualifier_bits();
+            }
             self.next()?;
         }
         let mut d = if self.lex.tk == '(' && !self.paren_opens_param_type_list() {
@@ -225,8 +231,9 @@ impl Compiler {
             return Err(self.compile_err(Code::SYNTAX, "close paren expected in type name"));
         }
         self.next()?;
+        // The rightmost `*` is the derivation nearest the omitted identifier.
         d.derivations
-            .extend(core::iter::repeat_with(|| Derivation::Pointer).take(ptrs));
+            .extend(ptrs.into_iter().rev().map(Derivation::Pointer));
         self.parse_abstract_suffixes(capture_proto, &mut d)?;
         Ok(d)
     }

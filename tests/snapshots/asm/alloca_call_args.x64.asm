@@ -86,7 +86,7 @@ Disassembly of section .text:
                	movl	$0x8, %r12d
                	movl	$0x9, %r13d
                	movl	$0xa, %r14d
-               	leaq	<rip>, %r15
+               	leaq	<rip>, %r15      # <addr>
                	movq	(%r15), %r15
                	subq	$0x20, %rsp
                	movq	%rax, (%rsp)

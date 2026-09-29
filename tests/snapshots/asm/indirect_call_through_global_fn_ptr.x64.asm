@@ -34,17 +34,17 @@ Disassembly of section .text:
 <driver>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	$0x7, (%rax)
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movl	$0x23, %edx
                	movl	%edx, (%rcx)
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	movslq	(%rax), %rsi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	callq	*%rax
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	popq	%rbp
                	retq
@@ -52,17 +52,17 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	$0x7, (%rax)
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movl	$0x23, %edx
                	movl	%edx, (%rcx)
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	movslq	(%rax), %rsi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	callq	*%rax
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	popq	%rbp
                	retq

@@ -14,49 +14,49 @@ Disassembly of section .text:
                	brk	#0x1
 
 <page_buf_end>:
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x2, lsl #12   // =0x2000
                	ret
 
 <main>:
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	and	x1, x0, #0xfff
                	cbz	w1, <addr>
                	mov	x0, #0x1                // =1
                	ret
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	and	x2, x1, #0x3f
                	cbz	w2, <addr>
                	mov	x0, #0x2                // =2
                	ret
-               	adrp	x4, <page>
+               	adrp	x4, <addr>
                	add	x4, x4, <lo12>
                	and	x2, x4, #0x3f
                	cbz	w2, <addr>
                	mov	x0, #0x3                // =3
                	ret
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	and	x3, x2, #0xf
                	cbz	w3, <addr>
                	mov	x0, #0x4                // =4
                	ret
-               	adrp	x3, <page>
+               	adrp	x3, <addr>
                	add	x3, x3, <lo12>
                	and	x5, x3, #0xfff
                	cbz	w5, <addr>
                	mov	x0, #0x5                // =5
                	ret
-               	adrp	x5, <page>
+               	adrp	x5, <addr>
                	add	x5, x5, <lo12>
                	and	x5, x5, #0x1f
                	cbz	w5, <addr>
                	mov	x0, #0x6                // =6
                	ret
-               	adrp	x5, <page>
+               	adrp	x5, <addr>
                	add	x5, x5, <lo12>
                	and	x6, x5, #0x7f
                	cbz	w6, <addr>
@@ -72,7 +72,7 @@ Disassembly of section .text:
                	str	w7, [x1]
                	mov	x7, #0x3                // =3
                	strb	w7, [x3, #0xfff]
-               	adrp	x7, <page>
+               	adrp	x7, <addr>
                	add	x7, x7, <lo12>
                	mov	x8, #0x4                // =4
                	strb	w8, [x7, #0x9]
@@ -103,7 +103,7 @@ Disassembly of section .text:
                	mov	x0, #0xb                // =11
                	ret
                	ldrb	w1, [x7, #0x9]
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	ldrsw	x2, [x2]
                	add	x1, x1, x2

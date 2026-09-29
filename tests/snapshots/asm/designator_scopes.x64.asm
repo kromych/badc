@@ -35,7 +35,7 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rax)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	movslq	0x8(%rax), %rdx
                	addq	%rdx, %rcx
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movslq	(%rcx), %rdx
                	movslq	0x8(%rcx), %rsi
                	addq	%rsi, %rdx
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	movups	0x10(%rcx), %xmm14
                	movups	%xmm14, 0x10(%rax)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	0x28(%rax), %rcx
                	movslq	0x2c(%rax), %rdx
                	addq	%rdx, %rcx
@@ -104,7 +104,7 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	leave
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movslq	0x28(%rcx), %rdx
                	movslq	0x2c(%rcx), %rsi
                	addq	%rsi, %rdx
@@ -124,7 +124,7 @@ Disassembly of section .text:
                	movl	$0xa, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	0x4(%rax), %rcx
                	movslq	0xc(%rax), %rdx
                	addq	%rdx, %rcx
@@ -147,7 +147,7 @@ Disassembly of section .text:
                	retq
 
 <member_array_forms>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	movslq	0x4(%rax), %rdx
                	addq	%rdx, %rcx
@@ -159,7 +159,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xf, %eax
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movslq	(%rcx), %rdx
                	movslq	0x4(%rcx), %rsi
                	addq	%rsi, %rdx

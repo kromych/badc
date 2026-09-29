@@ -438,6 +438,9 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("data_reloc_one_past_end.c", 10),
     ("constant_set_again_after_call.c", 0),
     ("asm_register_outputs.c", 0),
+    // An inline-asm section holding PC-relative fields against a text label
+    // and a string operand, which only the object-then-link path relocates.
+    ("inline_asm_section_symbol_minus_label.c", 42),
     ("static_init_cast_funcptr.c", 0),
     ("static_init_paren_relocation.c", 0),
     ("sys_addr_in_static_init.c", 42),
@@ -459,6 +462,8 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("file_scope_asm_weak_set.c", 0),
     ("inline_asm_section_label.c", 42),
     ("attribute_weak_alias.c", 0),
+    ("attribute_alias_keeps_declared_type.c", 0),
+    ("c99_float_math_and_vsscanf.c", 0),
     ("weak_definition_not_inlined.c", 42),
     ("weak_alias_call_not_inlined.c", 42),
     ("weak_extern_data_address.c", 0),

@@ -427,6 +427,39 @@ fn prefetch() {
     assert_eq!(enc("prfm", &[Opnd::Imm(9), mem(30, -8)]), 0xF89F_83C9); // plil1strm
 }
 
+/// The top-half moves of FMOV (general): `fmov Vd.D[1], Xn` and `fmov Xd,
+/// Vn.D[1]`. Words from llvm-mc 18.
+#[test]
+fn fmov_top_half_of_a_vector() {
+    let d1 = |num| Opnd::VecElem {
+        num,
+        size: 3,
+        index: 1,
+    };
+    let xzr = Opnd::Reg {
+        num: 31,
+        is64: true,
+        sp: false,
+    };
+    assert_eq!(enc("fmov", &[d1(0), x(1)]), 0x9EAF_0020);
+    assert_eq!(enc("fmov", &[d1(31), xzr]), 0x9EAF_03FF);
+    assert_eq!(enc("fmov", &[d1(7), x(30)]), 0x9EAF_03C7);
+    assert_eq!(enc("fmov", &[x(2), d1(3)]), 0x9EAE_0062);
+    assert_eq!(enc("fmov", &[x(30), d1(31)]), 0x9EAE_03FE);
+    assert_eq!(enc("fmov", &[xzr, d1(5)]), 0x9EAE_00BF);
+    // Only lane 1 of a D-element view, only a 64-bit register.
+    let lane = |size, index| Opnd::VecElem {
+        num: 0,
+        size,
+        index,
+    };
+    assert!(encode("fmov", &[lane(3, 0), x(1)]).is_err());
+    assert!(encode("fmov", &[lane(2, 1), x(1)]).is_err());
+    assert!(encode("fmov", &[lane(3, 1), w(1)]).is_err());
+    assert!(encode("fmov", &[w(1), lane(3, 1)]).is_err());
+    assert!(encode("fmov", &[lane(3, 1), sp(true)]).is_err());
+}
+
 #[test]
 fn fmov_gp_fp() {
     let d = |num: u8| Opnd::VReg { num, is_d: true };
@@ -441,6 +474,9 @@ fn fmov_gp_fp() {
     // A width mismatch (X<->S or W<->D) has no encoding.
     assert!(encode("fmov", &[x(0), s(0)]).is_err());
     assert!(encode("fmov", &[d(0), w(0)]).is_err());
+    // The zero register, never the stack pointer.
+    assert!(encode("fmov", &[d(0), sp(true)]).is_err());
+    assert!(encode("fmov", &[sp(true), d(0)]).is_err());
 }
 
 #[test]

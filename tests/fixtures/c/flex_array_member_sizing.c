@@ -4,6 +4,14 @@
 // so the empty-aggregate floor-to-1 must not apply -- otherwise the
 // aggregate gains a spurious byte that mis-pads any enclosing struct.
 // The aggregate's alignment still follows its members' declared types.
+// The MS layout of the PE targets gives such an aggregate 4 bytes (MSVC,
+// clang's windows-msvc triples).
+
+#if defined(_WIN32)
+#define NO_STORAGE 4
+#else
+#define NO_STORAGE 0
+#endif
 
 struct OnlyFlexU {
     union {
@@ -25,16 +33,16 @@ struct OnlyFlexArr {
 };
 
 int main(void) {
-    // A union of only flexible-array members has size 0, alignment from
-    // its widest member (unsigned short -> 2).
-    if (sizeof(struct OnlyFlexU) != 0) return 1;
+    // A union of only flexible-array members is an aggregate without
+    // storage, aligned as its widest member (unsigned short -> 2).
+    if (sizeof(struct OnlyFlexU) != NO_STORAGE) return 1;
 
     // Embedding it after an int must not add a tail byte: the int is
-    // 4 bytes and the union contributes nothing, so the struct is 4.
-    if (sizeof(struct WithLeading) != 4) return 2;
+    // 4 bytes and the union adds its own size only.
+    if (sizeof(struct WithLeading) != 4 + NO_STORAGE) return 2;
 
-    // A struct whose only member is a zero-length array is size 0.
-    if (sizeof(struct OnlyFlexArr) != 0) return 3;
+    // So is a struct whose only member is a zero-length array.
+    if (sizeof(struct OnlyFlexArr) != NO_STORAGE) return 3;
 
     // The flexible member still addresses the bytes that follow the
     // header when backing storage is provided.

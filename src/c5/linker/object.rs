@@ -467,6 +467,33 @@ impl<'a> RelocOrigin<'a> {
         }
     }
 
+    /// The name a diagnostic gives `sym`: its own, or for a section
+    /// symbol, which has none, its input section's, as GNU ld reports it.
+    pub(crate) fn symbol_name<'s>(&self, sym: &'s NativeSymbol) -> &'s str
+    where
+        'a: 's,
+    {
+        if !sym.name.is_empty() || sym.kind != STT_SECTION {
+            return &sym.name;
+        }
+        let families: &[SectionFamily] = match sym.section {
+            NativeSymSection::Text => &[SectionFamily::Text],
+            NativeSymSection::RoData => &[SectionFamily::RoData],
+            NativeSymSection::RelRo => &[SectionFamily::RelRo],
+            NativeSymSection::Data => &[SectionFamily::Data],
+            NativeSymSection::Bss => &[SectionFamily::Bss],
+            NativeSymSection::Tls => &[SectionFamily::Tdata, SectionFamily::Tbss],
+            _ => &[],
+        };
+        // A section symbol's value is its section's offset in the family
+        // blob; an empty section may share that offset with the next one.
+        self.sections
+            .iter()
+            .filter(|s| families.contains(&s.family) && s.offset == sym.value)
+            .max_by_key(|s| s.size)
+            .map_or(&sym.name, |s| s.name.as_str())
+    }
+
     pub(crate) fn at(
         &self,
         machine: NativeMachine,
@@ -669,6 +696,9 @@ pub enum NativeSymSection {
     /// native linker fails fast on Tls references until that
     /// lowering lands.
     Tls,
+    /// `STT_SECTION` symbol pointing at the unit's `.debug_info`
+    /// section, which `.debug_aranges` and the name indexes address.
+    DebugInfo,
     /// `STT_SECTION` symbol pointing at the unit's `.debug_abbrev`
     /// section. Used by `.rela.debug_info` entries for the CU
     /// header's `debug_abbrev_offset`; the linker rebases the
@@ -685,15 +715,22 @@ pub enum NativeSymSection {
     /// linker rebases the offset by the unit's merged
     /// `.debug_str` base.
     DebugStr,
+    /// `STT_SECTION` symbol pointing at the unit's
+    /// [`NativeObject::debug_other`] entry of this index.
+    DebugOther(u16),
 }
 
 /// `st_info & 0xf` symbol types the linker distinguishes.
 pub const STT_NOTYPE: u8 = 0;
 pub const STT_OBJECT: u8 = 1;
 pub const STT_FUNC: u8 = 2;
+pub const STT_SECTION: u8 = 3;
+pub const STT_FILE: u8 = 4;
 /// `st_other & 0x3` -- the only visibility that reaches the dynamic
 /// symbol table.
 pub const STV_DEFAULT: u8 = 0;
+pub const STV_INTERNAL: u8 = 1;
+pub const STV_HIDDEN: u8 = 2;
 
 /// One entry from the unit's `.symtab`. Section symbols (the
 /// `STT_SECTION` LOCAL entries the writer emits) are dropped
@@ -958,6 +995,20 @@ pub struct NativeObject {
     /// reloc kind (4-byte vs 8-byte slot).
     pub debug_info_relocs: Vec<NativeReloc>,
     pub debug_line_relocs: Vec<NativeReloc>,
+    /// Every other `.debug_*` section -- DWARF 5's `.debug_line_str`,
+    /// `.debug_rnglists`, `.debug_loclists`, `.debug_str_offsets`,
+    /// `.debug_addr` and the rest -- with its relocations.
+    pub debug_other: Vec<DebugInput>,
+}
+
+/// One `.debug_*` section outside the four `NativeObject` names.
+#[derive(Debug, Clone, Default)]
+pub struct DebugInput {
+    pub name: String,
+    pub bytes: Vec<u8>,
+    /// `SHF_STRINGS`: NUL-terminated strings, merged by content.
+    pub strings: bool,
+    pub relocs: Vec<NativeReloc>,
 }
 
 /// True when `bytes` starts with the ELF magic. Cheap
@@ -1034,7 +1085,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         Some(i) => BadcNote::parse(section_slice(bytes, &shdrs[i])?)?,
         None => BadcNote::default(),
     };
-    let debug = debug_sections(bytes, &shdrs, &roles)?;
+    let debug = debug_sections(bytes, &shdrs, shstrtab_bytes, &roles)?;
 
     Ok(NativeObject {
         source: String::new(),
@@ -1079,6 +1130,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         debug_str: debug.str,
         debug_info_relocs: debug.info_relocs,
         debug_line_relocs: debug.line_relocs,
+        debug_other: debug.other,
     })
 }
 
@@ -1208,6 +1260,8 @@ struct SectionRoles {
     debug_str: Option<usize>,
     rela_debug_info: Option<usize>,
     rela_debug_line: Option<usize>,
+    /// Every other `.debug_*` section, in section order.
+    debug_other: Vec<usize>,
     /// `.init_array*` / `.fini_array*`: (shndx, is_dtor, priority).
     init_array_sections: Vec<(usize, bool, Option<u32>)>,
     /// Dropped content, for the link map's "Discarded input sections"
@@ -1233,6 +1287,7 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
         debug_str: None,
         rela_debug_info: None,
         rela_debug_line: None,
+        debug_other: Vec::new(),
         init_array_sections: Vec::new(),
         discarded: Vec::new(),
     };
@@ -1263,6 +1318,14 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
         };
         if let Some(slot) = channel {
             *slot = Some(i);
+            continue;
+        }
+        // `.debug_frame` is the image writer's own, built from the CFI.
+        if name.starts_with(".debug_")
+            && name != ".debug_frame"
+            && !matches!(sh.sh_type, SHT_RELA | SHT_NOBITS)
+        {
+            roles.debug_other.push(i);
             continue;
         }
         if let Some((is_dtor, priority)) = parse_init_array_section_name(name) {
@@ -1614,9 +1677,11 @@ fn decode_symbols(
             (&blobs.bss_bases, NativeSymSection::Bss),
             (&blobs.tls_bases, NativeSymSection::Tls),
         ],
+        roles.debug_info,
         roles.debug_abbrev,
         roles.debug_line,
         roles.debug_str,
+        &roles.debug_other,
     );
     for i in 0..n_syms {
         let sym: Elf64Sym = read_struct(symtab_bytes, i * ELF64_SYM_SIZE)?;
@@ -1995,7 +2060,7 @@ impl BadcNote {
     }
 }
 
-/// The DWARF 4 sections, copied verbatim; the linker concatenates
+/// The DWARF sections, copied verbatim; the linker concatenates
 /// per-unit blobs and rebases addresses through the matching
 /// `.rela.debug_*` relocations. Empty when the producer emitted none.
 #[derive(Default)]
@@ -2006,11 +2071,13 @@ struct DebugSections {
     str: Vec<u8>,
     info_relocs: Vec<NativeReloc>,
     line_relocs: Vec<NativeReloc>,
+    other: Vec<DebugInput>,
 }
 
 fn debug_sections(
     bytes: &[u8],
     shdrs: &[Elf64Shdr],
+    shstrtab_bytes: &[u8],
     roles: &SectionRoles,
 ) -> Result<DebugSections, C5Error> {
     let copy = |idx: Option<usize>| -> Result<Vec<u8>, C5Error> {
@@ -2025,6 +2092,19 @@ fn debug_sections(
             None => Ok(Vec::new()),
         }
     };
+    const SHF_STRINGS: u64 = 0x20;
+    let mut other = Vec::with_capacity(roles.debug_other.len());
+    for &i in &roles.debug_other {
+        let rela = shdrs
+            .iter()
+            .position(|sh| sh.sh_type == SHT_RELA && sh.sh_info as usize == i);
+        other.push(DebugInput {
+            name: strtab_str(shstrtab_bytes, shdrs[i].sh_name as usize)?.to_string(),
+            bytes: copy(Some(i))?,
+            strings: shdrs[i].sh_flags & SHF_STRINGS != 0,
+            relocs: relocs(rela)?,
+        });
+    }
     Ok(DebugSections {
         info: copy(roles.debug_info)?,
         abbrev: copy(roles.debug_abbrev)?,
@@ -2032,6 +2112,7 @@ fn debug_sections(
         str: copy(roles.debug_str)?,
         info_relocs: relocs(roles.rela_debug_info)?,
         line_relocs: relocs(roles.rela_debug_line)?,
+        other,
     })
 }
 /// Parse a `.rela.<target>` section body into a list of
@@ -2142,9 +2223,11 @@ impl ShndxMap {
     fn build(
         n_sections: usize,
         families: &[(&[(usize, u64)], NativeSymSection)],
+        debug_info_idx: Option<usize>,
         debug_abbrev_idx: Option<usize>,
         debug_line_idx: Option<usize>,
         debug_str_idx: Option<usize>,
+        debug_other: &[usize],
     ) -> Self {
         let mut entries = alloc::vec![None; n_sections];
         for (bases, kind) in families {
@@ -2155,12 +2238,18 @@ impl ShndxMap {
             }
         }
         for (idx, kind) in [
+            (debug_info_idx, NativeSymSection::DebugInfo),
             (debug_abbrev_idx, NativeSymSection::DebugAbbrev),
             (debug_line_idx, NativeSymSection::DebugLine),
             (debug_str_idx, NativeSymSection::DebugStr),
         ] {
             if let Some(i) = idx.filter(|&i| i < entries.len()) {
                 entries[i] = Some((kind, 0));
+            }
+        }
+        for (k, &i) in debug_other.iter().enumerate() {
+            if i < entries.len() {
+                entries[i] = Some((NativeSymSection::DebugOther(k as u16), 0));
             }
         }
         Self { entries }

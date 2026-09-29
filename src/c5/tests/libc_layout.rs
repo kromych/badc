@@ -1042,3 +1042,18 @@ fn windows_h_context_follows_the_sdk() {
         ],
     );
 }
+
+/// `MONITOR_DPI_TYPE` and its enumerators belong to `<shellscalingapi.h>`,
+/// as in the SDK, so a unit that defines them after `<windows.h>` -- the
+/// SDK header's own shape -- compiles.
+#[test]
+fn windows_h_leaves_the_dpi_enums_to_shellscalingapi_h() {
+    let src = "#include <windows.h>\n\
+               typedef enum MONITOR_DPI_TYPE { MDT_EFFECTIVE_DPI = 0 } MONITOR_DPI_TYPE;\n\
+               int dpi(MONITOR_DPI_TYPE t) { return t == MDT_EFFECTIVE_DPI; }\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        if let Err(err) = compile(src, target) {
+            panic!("{}: {err}", target.id_str());
+        }
+    }
+}

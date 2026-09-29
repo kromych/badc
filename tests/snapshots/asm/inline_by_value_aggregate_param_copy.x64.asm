@@ -48,7 +48,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movb	$0x7, (%rax)
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movq	%rax, (%rcx)
                	movzbq	(%rax), %rcx
                	movb	$0x63, (%rax)
@@ -91,7 +91,7 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movb	$0x4, (%rax)
                	movb	$0x4d, (%rax)
                	movzbq	(%rax), %rax

@@ -31,14 +31,14 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0x2, -0x8(%rbp)
                	movl	-0x8(%rbp), %eax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx       # <addr>
                	movq	(%rcx,%rax,8), %rax
                	cmpq	$0x3, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	movabsq	$0x7777777777777777, %r11 # imm = 0x7777777777777777
                	cmpq	%r11, %rax

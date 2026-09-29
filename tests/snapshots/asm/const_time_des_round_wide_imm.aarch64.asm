@@ -424,97 +424,97 @@ Disassembly of section .text:
                	add	x29, sp, #0x10
                	mov	x0, #0xa5a5             // =42405
                	movk	x0, #0xa5a5, lsl #16
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	mov	x20, x0
                	mov	x0, #0x1ac0             // =6848
                	movk	x0, #0xd2f5, lsl #16
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	eor	x20, x20, x0
                	mov	x0, #0xcf1f             // =53023
                	movk	x0, #0x3849, lsl #16
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	eor	x20, x20, x0
                	mov	x0, #0xd1f2             // =53746
                	movk	x0, #0xbabb, lsl #16
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	eor	x20, x20, x0
                	mov	x0, #0x8a9              // =2217
                	movk	x0, #0xe41, lsl #16
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	eor	x20, x20, x0
                	mov	x0, #0xb9f4             // =47604
                	movk	x0, #0xb7b0, lsl #16
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	eor	x20, x20, x0
                	mov	x0, #0x9cc3             // =40131
                	movk	x0, #0x2353, lsl #16
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	eor	x20, x20, x0
                	mov	x0, #0x9b46             // =39750
                	movk	x0, #0xa72e, lsl #16
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	eor	x20, x20, x0
                	mov	x0, #0xb9ed             // =47597
                	movk	x0, #0x7580, lsl #16
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	eor	x20, x20, x0
                	mov	x0, #0xd268             // =53864
                	movk	x0, #0xa631, lsl #16
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	eor	x20, x20, x0
                	mov	x0, #0x12a7             // =4775
                	movk	x0, #0x12f4, lsl #16
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	eor	x20, x20, x0
                	mov	x0, #0x6fda             // =28634
                	movk	x0, #0x4491, lsl #16
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	eor	x20, x20, x0
                	mov	x0, #0x7d71             // =32113
                	movk	x0, #0x96ac, lsl #16
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	eor	x20, x20, x0
                	mov	x0, #0x581c             // =22556
                	movk	x0, #0xdd35, lsl #16
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	eor	x20, x20, x0
                	mov	x0, #0x94cb             // =38091
                	movk	x0, #0x53fb, lsl #16
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	eor	x20, x20, x0
                	mov	x0, #0x63ae             // =25518
                	movk	x0, #0x4551, lsl #16
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	eor	x0, x20, x0

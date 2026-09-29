@@ -55,9 +55,11 @@ pub const DT_GNU_HASH: u64 = 0x6fff_fef5;
 pub const DT_VERSYM: u64 = 0x6fff_fff0;
 pub const DT_VERDEF: u64 = 0x6fff_fffc;
 pub const DT_VERDEFNUM: u64 = 0x6fff_fffd;
+pub const DT_FLAGS_1: u64 = 0x6fff_fffb;
 
 pub const DF_SYMBOLIC: u64 = 0x02;
 pub const DF_TEXTREL: u64 = 0x04;
+pub const DF_1_PIE: u64 = 0x0800_0000;
 
 /// `VER_FLG_BASE`: the node naming the object itself.
 const VER_FLG_BASE: u16 = 1;
@@ -468,6 +470,8 @@ pub struct DynAddrs {
     pub rpath: Option<(u32, bool)>,
     pub symbolic: bool,
     pub textrel: bool,
+    /// A position-independent executable: `DF_1_PIE`.
+    pub pie: bool,
     /// `(address, size)` of `.preinit_array`, `.init_array` and
     /// `.fini_array`, so a loader runs what they hold.
     pub preinit_array: Option<(u64, u64)>,
@@ -543,6 +547,9 @@ pub fn build_dynamic(a: &DynAddrs, class: ElfClass) -> Vec<u8> {
     }
     if flags != 0 {
         tags.push((DT_FLAGS, flags));
+    }
+    if a.pie {
+        tags.push((DT_FLAGS_1, DF_1_PIE));
     }
     if let Some(v) = a.versym {
         tags.push((DT_VERSYM, v));

@@ -1186,7 +1186,7 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%r12d, %r12d
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%r12,8), %rbx
                	leaq	-0x1(%rbx), %rax
                	leaq	-0xa0(%rbp), %rdi
@@ -2484,7 +2484,7 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%r12d, %r12d
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rcx
                	movabsq	$0x5851f42d4c957f2d, %r11 # imm = 0x5851F42D4C957F2D
                	imulq	%r11, %rcx
@@ -2979,7 +2979,7 @@ Disassembly of section .text:
                	cmpl	$0xc8, %r12d
                	jl	<addr>
                	xorl	%ebx, %ebx
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rcx
                	movabsq	$0x5851f42d4c957f2d, %r11 # imm = 0x5851F42D4C957F2D
                	imulq	%r11, %rcx
@@ -3120,7 +3120,7 @@ Disassembly of section .text:
                	leaq	-0xf0(%rbp), %rax
                	movq	(%rax), %r8
                	movq	0x8(%rax), %rdx
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx), %rax
                	movabsq	$0x5851f42d4c957f2d, %r11 # imm = 0x5851F42D4C957F2D
                	imulq	%r11, %rax
@@ -3214,7 +3214,7 @@ Disassembly of section .text:
                	leaq	-0xe0(%rbp), %rcx
                	movq	(%rcx), %rax
                	leaq	-0x1(%rax), %rsi
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movq	(%rdx), %rax
                	movabsq	$0x5851f42d4c957f2d, %r11 # imm = 0x5851F42D4C957F2D
                	imulq	%r11, %rax

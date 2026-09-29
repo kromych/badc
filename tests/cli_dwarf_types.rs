@@ -290,6 +290,8 @@ struct Die {
     cu_base: u32,
     tag: u64,
     depth: usize,
+    /// The abbreviation's `DW_CHILDREN_yes`.
+    has_children: bool,
     attrs: Vec<(u64, Val)>,
 }
 
@@ -476,6 +478,7 @@ fn parse_object(path: &Path) -> Unit {
                 cu_base: cu_base as u32,
                 tag: ab.tag,
                 depth,
+                has_children: ab.has_children,
                 attrs,
             });
             if ab.has_children {
@@ -685,12 +688,14 @@ fn forward_declared_aggregate_is_a_declaration() {
         "declaration",
         "struct opaque;\n\
          union uopaque;\n\
-         struct wrap { struct opaque *p; union uopaque *q; int x; };\n\
+         enum eopaque;\n\
+         struct wrap { struct opaque *p; union uopaque *q; enum eopaque *e; int x; };\n\
          int use(void) { struct wrap w; return w.x; }\n",
     );
     for (tag, name) in [
         (DW_TAG_STRUCTURE_TYPE, "opaque"),
         (DW_TAG_UNION_TYPE, "uopaque"),
+        (DW_TAG_ENUMERATION_TYPE, "eopaque"),
     ] {
         let d = u.named(tag, name);
         assert!(
@@ -706,7 +711,7 @@ fn forward_declared_aggregate_is_a_declaration() {
     // A complete empty aggregate keeps a size and no declaration flag.
     let wrap = u.named(DW_TAG_STRUCTURE_TYPE, "wrap");
     assert!(wrap.at(DW_AT_DECLARATION).is_none());
-    assert_eq!(wrap.at(DW_AT_BYTE_SIZE).unwrap().as_uint(), 24);
+    assert_eq!(wrap.at(DW_AT_BYTE_SIZE).unwrap().as_uint(), 32);
 }
 
 /// A function-pointer member points at a subroutine type carrying the
@@ -1176,6 +1181,61 @@ fn function_pointer_locals_have_a_subroutine_type() {
         .map(|d| d.at(DW_AT_UPPER_BOUND).unwrap().as_uint())
         .collect();
     assert_eq!(bounds, [2, 3]);
+}
+
+/// A function type without a prototype (C99 6.7.5.3p14) gives a
+/// subroutine type without DW_AT_prototyped whose one child is
+/// `DW_TAG_unspecified_parameters`, distinct from the `(void)` prototype
+/// with the same return type, for every kind of declaration.
+#[test]
+fn unprototyped_function_pointers_are_not_marked_prototyped() {
+    let u = compile_unit(
+        "fnptr-unproto",
+        "int (*gp)();\n\
+         struct ops { int (*m)(); int (*mv)(void); };\n\
+         int run(void (*cb)(), struct ops *o) {\n\
+           int (*lp)() = gp;\n\
+           int (*lv)(void) = o->mv;\n\
+           cb();\n\
+           return lp() + lv() + o->m();\n\
+         }\n",
+    );
+    let run = u.named(DW_TAG_SUBPROGRAM, "run");
+    let child = |name: &str| {
+        u.children(run)
+            .into_iter()
+            .find(|d| d.name() == Some(name))
+            .unwrap_or_else(|| panic!("`run` has no child `{name}`"))
+    };
+    let pointee = |d: &Die| {
+        let sub = u.type_of(u.type_of(d));
+        assert_eq!(sub.tag, DW_TAG_SUBROUTINE_TYPE);
+        sub
+    };
+    let ops = u.named(DW_TAG_STRUCTURE_TYPE, "ops");
+    let gp = u.named(DW_TAG_VARIABLE, "gp");
+    for (what, d) in [
+        ("global", gp),
+        ("member", u.member(ops, "m")),
+        ("parameter", child("cb")),
+        ("local", child("lp")),
+    ] {
+        let sub = pointee(d);
+        assert!(sub.at(DW_AT_PROTOTYPED).is_none(), "{what}: {}", u.render());
+        let kinds: Vec<u64> = u.children(sub).iter().map(|c| c.tag).collect();
+        assert_eq!(kinds, [DW_TAG_UNSPECIFIED_PARAMETERS], "{what}");
+    }
+    assert!(pointee(child("cb")).at(DW_AT_TYPE).is_none(), "void return");
+    // A `(void)` prototype has no children, as gcc and clang state it.
+    for d in [u.member(ops, "mv"), child("lv")] {
+        assert_eq!(pointee(d).at(DW_AT_PROTOTYPED).unwrap().as_uint(), 1);
+        assert!(!pointee(d).has_children);
+    }
+    assert_ne!(
+        u.type_of(child("lp")).offset,
+        u.type_of(child("lv")).offset,
+        "`int (*)()` and `int (*)(void)` are different types"
+    );
 }
 
 /// A `_Thread_local` object (C11 6.2.4p4) gets a compile-unit-scope

@@ -125,6 +125,62 @@ fn dash_m_writes_the_rule_to_stdout_and_compiles_nothing() {
     }
 }
 
+/// The unused-binding warnings take the split `-MM` does: a header the
+/// unit's directory or `-I` supplied is the project's and its bindings are
+/// reported at their own file, as gcc and clang report them; the bundled
+/// headers and an `-isystem` directory's are system headers and are not.
+/// An unused `inline` function is reported nowhere, as under gcc.
+#[test]
+fn unused_binding_warnings_cover_the_projects_headers_only() {
+    let dir = TempDir::new("badc-dep-test-unused");
+    std::fs::create_dir_all(dir.join("inc")).expect("create inc dir");
+    std::fs::create_dir_all(dir.join("sys")).expect("create sys dir");
+    write(
+        &dir,
+        "sys/lib.h",
+        "static int sf(int sp) { int sv; return 2; }\n",
+    );
+    write(
+        &dir,
+        "inc/proj.h",
+        "static inline int hi(int unused_p) { return 1; }\n\
+         static int hs(void) { return 2; }\n\
+         int hdef(int hp) { int hv; return 3; }\n",
+    );
+    write(
+        &dir,
+        "main.c",
+        "#include \"proj.h\"\n#include <stdio.h>\n#include <lib.h>\n\
+         static inline int mi(void) { return 4; }\n\
+         int main(int argc, char **argv) { return 0; }\n",
+    );
+    let args = [
+        "-Wall", "-Wextra", "-Iinc", "-isystem", "sys", "-c", "main.c", "-o", "main.o",
+    ];
+    let err = run_stderr(&dir, &args);
+    for want in [
+        "inc/proj.h:1: warning: unused parameter `unused_p`",
+        "inc/proj.h:2: warning: unused function `hs`",
+        "inc/proj.h:3: warning: unused parameter `hp`",
+        "inc/proj.h:3: warning: unused variable `hv`",
+        "main.c:5: warning: unused parameter `argc`",
+    ] {
+        assert!(err.contains(want), "{want}: {err}");
+    }
+    assert!(!err.contains("`mi`"), "{err}");
+    for line in err.lines().filter(|l| l.contains(": warning: ")) {
+        assert!(
+            line.starts_with("main.c:") || line.starts_with("inc/proj.h:"),
+            "{line}"
+        );
+    }
+    let deps = run(&dir, &["-Iinc", "-isystem", "sys", "-MM", "main.c"]);
+    assert_eq!(
+        prereqs(&deps),
+        vec!["inc/proj.h".to_string(), "main.c".to_string()]
+    );
+}
+
 #[test]
 fn dash_m_lists_system_headers_that_dash_mm_drops() {
     let dir = fixture("m-vs-mm");

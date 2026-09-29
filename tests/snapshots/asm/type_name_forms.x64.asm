@@ -118,7 +118,7 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movslq	0x14(%rcx), %rax
                	cmpl	$0x6, %eax
                	je	<addr>

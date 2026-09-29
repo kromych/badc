@@ -827,6 +827,19 @@ pub(super) fn plan_call_args_aggs(
         // the argument registers and the callee spills them to its
         // save area.
         if let Some(Some(agg)) = aggs.get(i) {
+            // An aggregate classed in no register, an empty record, takes no
+            // stack slot either, variadic or not.
+            if matches!(&agg.class, AggClass::Regs(c) if c.is_empty()) {
+                placements.push(ArgPlacement::StructRegs {
+                    regs: [ClassReg {
+                        reg: 0,
+                        is_fp: false,
+                    }; 4],
+                    n: 0,
+                    align: agg.align,
+                });
+                continue;
+            }
             let aligned = (agg.size + 7) & !7;
             if i >= fixed_args && abi.variadic_on_stack {
                 let off = agg_stack_off(stack_used, agg.arg_align);
@@ -1336,6 +1349,18 @@ pub(crate) struct MergedDwarf {
     /// offset follows the linker's data convention, with the zero-fill
     /// tail continuing past the image length.
     pub debug_info_data_relocs: Vec<DwarfDataReloc>,
+    /// Every other `.debug_*` section the link merged.
+    pub other: Vec<MergedDwarfSection>,
+}
+
+/// A merged `.debug_*` section outside the four [`MergedDwarf`] names,
+/// with its placeholders.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct MergedDwarfSection {
+    pub name: String,
+    pub bytes: Vec<u8>,
+    pub text_relocs: Vec<DwarfTextReloc>,
+    pub data_relocs: Vec<DwarfDataReloc>,
 }
 
 /// One text-targeting DWARF reloc surfaced through
@@ -1760,6 +1785,32 @@ pub(crate) struct DynamicExport {
     pub weak: bool,
 }
 
+/// One row of a linked image's static symbol table: a symbol a unit
+/// defines, with the type, binding, size and visibility its `.symtab`
+/// gave it.
+#[derive(Debug, Clone)]
+pub(crate) struct ImageSymbol {
+    pub name: String,
+    pub place: SymbolPlace,
+    pub size: u64,
+    /// `st_info`: the binding in the high nibble, the type in the low.
+    pub info: u8,
+    /// `st_other`: the visibility.
+    pub other: u8,
+}
+
+/// Where an [`ImageSymbol`] lies: a byte offset in [`Build::text`], in
+/// [`Build::data`], in the zero-fill past it, or in the thread-local block
+/// (`.tdata` then `.tbss`), or a link-time constant (`SHN_ABS`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SymbolPlace {
+    Text(u64),
+    Data(u64),
+    Bss(u64),
+    Tls(u64),
+    Abs(u64),
+}
+
 /// The offset space a [`DynamicExport`] addresses. The writer maps
 /// the offset to a runtime address and to the output section that
 /// holds it.
@@ -1796,6 +1847,16 @@ pub(crate) enum EmitStream {
     Data,
 }
 
+/// What a resolved relocation's target names: an offset in a stream,
+/// an offset from the GOT base, or a link-time constant address, which
+/// the ELF writer emits against no symbol.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EmitTarget {
+    Stream(EmitStream),
+    GotBase,
+    Absolute,
+}
+
 /// One resolved relocation carried into a final ELF image under
 /// `--emit-relocs`: the KASLR-style consumers read the surviving
 /// `.rela.*` sections to locate every fixed-up slot.
@@ -1806,8 +1867,9 @@ pub(crate) struct EmittedFinalReloc {
     pub site_offset: u64,
     /// ELF relocation type as applied.
     pub rtype: u32,
-    pub target: EmitStream,
-    /// Resolved target offset within the target stream (`S + A`).
+    pub target: EmitTarget,
+    /// Resolved `S + A`: an offset into the target stream or from the
+    /// GOT base, or the address itself.
     pub addend: i64,
 }
 
@@ -1904,6 +1966,13 @@ pub(crate) struct Build {
     /// ELF writer resolves them against the `.got` it lays out and the
     /// other container writers reject them.
     pub got_base_fixups: Vec<GotBaseFixup>,
+    /// GOT-relative fields, populated and resolved like
+    /// `got_base_fixups`; see [`GotRelField`].
+    pub got_rel_fields: Vec<GotRelField>,
+    /// Object-linked PC-relative fields that read an import's slot.
+    /// Populated only by the multi-object synthesizer; see
+    /// [`GotPcRelFixup`].
+    pub got_pcrel_fixups: Vec<GotPcRelFixup>,
     /// Read-only data the emit produced (switch dispatch tables) with
     /// its code-reference and slot fixups. See [`RodataBuild`].
     pub rodata: RodataBuild,
@@ -2095,6 +2164,9 @@ pub(crate) struct Build {
     /// Mach-O output; empty for shared libraries (which use
     /// `exports`) and on other targets, whose writers ignore it.
     pub dynamic_exports: Vec<DynamicExport>,
+    /// A linked image's static symbol table past its import trampolines,
+    /// locals first. Empty where no link produced the build.
+    pub image_symbols: Vec<ImageSymbol>,
     /// Whether this build should produce an executable or a
     /// shared library (dylib / .so / DLL). Set from
     /// [`NativeOptions::output_kind`]. The writer dispatches
@@ -2421,6 +2493,52 @@ pub(crate) struct GotBaseFixup {
     pub got_offset: i64,
     /// Fields of the reference this record covers.
     pub part: AddrPart,
+}
+
+/// A 32-bit PC-relative field of an object-linked x86-64 instruction
+/// that reads an import's slot (a GOTPCREL-family relocation): the field
+/// takes `slot + addend - field`, whatever the instruction.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GotPcRelFixup {
+    /// Byte offset of the field within `Build::text`.
+    pub site_text_offset: u64,
+    /// Index into the image's imports.
+    pub import_index: usize,
+    pub addend: i64,
+}
+
+/// A field of an object-linked x86-64 instruction holding the distance
+/// between two image addresses, one of them the GOT base: the forms the
+/// medium and large PIC code models address through
+/// `_GLOBAL_OFFSET_TABLE_` (psABI 4.4.1). The field takes
+/// `to + addend - from`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GotRelField {
+    /// Byte offset of the field within `Build::text`.
+    pub site_text_offset: u64,
+    pub to: ImageAddr,
+    pub from: ImageAddr,
+    pub addend: i64,
+    /// Field width in bytes: 4 or 8.
+    pub width: u8,
+}
+
+/// An address the image writer places, named by what it holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ImageAddr {
+    /// The relocated field itself.
+    Site,
+    /// The GOT base `_GLOBAL_OFFSET_TABLE_` names.
+    GotBase,
+    /// A `Build::text` byte offset.
+    Text(u64),
+    /// A byte offset in the data-byte space, zero-fill tail included.
+    Data(u64),
+    /// The GOT slot of an import, by index into the image's imports.
+    ImportSlot(usize),
+    /// A link-time constant address: `S + A` of an unresolved weak
+    /// reference, whose `S` is 0.
+    Absolute(u64),
 }
 
 /// Relocation for `Inst::ImmData`: the codegen emits an
@@ -2969,6 +3087,9 @@ pub struct Hardening {
     /// A function that spills the link register signs it against sp on
     /// entry (`paciasp`) and authenticates it before `ret` (`autiasp`).
     pub pac_ret: bool,
+    /// `-mbranch-protection=pac-ret+leaf`: a function that keeps its
+    /// return address in the link register signs it as well.
+    pub pac_ret_leaf: bool,
     /// `-fcf-protection=branch`: x86_64 indirect-branch tracking. An
     /// `endbr64` opens every function and every indirect-branch target,
     /// which is the only instruction CET permits an indirect transfer to
@@ -2985,6 +3106,7 @@ impl Hardening {
         sls_indirect_jmp: false,
         bti: false,
         pac_ret: false,
+        pac_ret_leaf: false,
         cf_protection_branch: false,
     };
 }
@@ -4849,7 +4971,7 @@ mod abi_plan_tests {
             offset,
             size: 8,
             kind: ScalarKind::Int,
-            bit_field: false,
+            align: 8,
             single_fp_vector: false,
         };
         let desc = crate::c5::ir::AggDesc {

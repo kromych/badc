@@ -105,9 +105,10 @@ impl Compiler {
     }
 
     /// Look up a tag in scope, searching from the innermost block
-    /// outward (C99 6.2.1: tags have block scope). An inner `struct T`
-    /// shadows an outer one declared at a wider scope.
-    pub(super) fn find_struct_id(&self, name: &str) -> Option<usize> {
+    /// outward (C99 6.2.1: tags have block scope). Struct, union and
+    /// enum tags share one name space (6.2.3), so an inner tag of any
+    /// kind shadows an outer one declared at a wider scope.
+    pub(super) fn find_tag(&self, name: &str) -> Option<usize> {
         for scope in self.tag_scopes.iter().rev() {
             if let Some((_, id)) = scope.iter().rev().find(|(n, _)| n == name) {
                 return Some(*id);
@@ -116,11 +117,15 @@ impl Compiler {
         None
     }
 
-    /// Look up a tag only in the current (innermost) scope. The body
-    /// of a struct definition uses this to decide whether the tag is
-    /// a redefinition (same scope) or a fresh declaration shadowing
-    /// an outer one.
-    pub(super) fn find_struct_id_in_current_scope(&self, name: &str) -> Option<usize> {
+    /// The visible struct or union tag `name`; an enum tag hides it.
+    pub(super) fn find_struct_id(&self, name: &str) -> Option<usize> {
+        self.find_tag(name).filter(|&id| !self.structs[id].is_enum)
+    }
+
+    /// Look up a tag only in the current (innermost) scope. A definition
+    /// uses this to decide whether the tag is a redefinition (same scope)
+    /// or a fresh declaration shadowing an outer one.
+    pub(super) fn find_tag_in_current_scope(&self, name: &str) -> Option<usize> {
         self.tag_scopes.last().and_then(|scope| {
             scope
                 .iter()
@@ -130,40 +135,58 @@ impl Compiler {
         })
     }
 
-    /// Find an existing struct tag by name or register a fresh
-    /// forward declaration (size 0, no fields) and return that.
-    /// Used by every type-position that mentions `struct Foo`
-    /// before the struct's body has been seen -- common idioms
-    /// like `typedef struct Foo Foo;` and `struct Foo *p;` rely
-    /// on this.
-    pub(super) fn find_or_forward_declare_struct(&mut self, name: &str, is_union: bool) -> usize {
-        if let Some(id) = self.find_struct_id(name) {
-            return id;
+    /// C99 6.7.2.3p2: every declaration of a tag uses the keyword that
+    /// declared it.
+    pub(super) fn check_tag_kind(&self, id: usize, keyword: &str) -> Result<(), C5Error> {
+        let s = &self.structs[id];
+        if s.keyword() == keyword {
+            return Ok(());
         }
-        self.structs.push(StructDef {
-            name: name.to_string(),
-            size: 0,
-            align: 1,
-            explicit_align: 0,
-            natural_align: 0,
-            member_align: 0,
-            fields: Vec::new(),
-            anon_bitfields: Vec::new(),
-            anon_members: Vec::new(),
-            is_union,
-            is_complete: false,
-            is_vector: false,
-            is_array: false,
-            is_anonymous: false,
-            is_transparent_union: false,
-            cast_named: false,
-            vla_size_slot: None,
-        });
+        Err(self.compile_err(
+            Code::INVALID_DECLARATION,
+            alloc::format!(
+                "`{keyword} {}` does not match the earlier `{} {}`",
+                s.name,
+                s.keyword(),
+                s.name
+            ),
+        ))
+    }
+
+    /// A fresh incomplete tag declared in the current scope.
+    pub(super) fn declare_tag(&mut self, name: &str, is_union: bool, is_enum: bool) -> usize {
+        self.structs
+            .push(StructDef::incomplete_tag(name, is_union, is_enum));
         let id = self.structs.len() - 1;
         if let Some(scope) = self.tag_scopes.last_mut() {
             scope.push((name.to_string(), id));
         }
         id
+    }
+
+    /// The visible struct or union tag `name`, or a fresh forward
+    /// declaration of it. Used by every type-position that mentions
+    /// `struct Foo` before the struct's body has been seen -- common
+    /// idioms like `typedef struct Foo Foo;` and `struct Foo *p;` rely
+    /// on this. `standalone` is the `struct Foo;` declaration, which
+    /// declares the tag in the current scope whatever an outer scope
+    /// holds (C99 6.7.2.3p7).
+    pub(super) fn find_or_forward_declare_struct(
+        &mut self,
+        name: &str,
+        is_union: bool,
+        standalone: bool,
+    ) -> Result<usize, C5Error> {
+        let found = if standalone {
+            self.find_tag_in_current_scope(name)
+        } else {
+            self.find_tag(name)
+        };
+        if let Some(id) = found {
+            self.check_tag_kind(id, if is_union { "union" } else { "struct" })?;
+            return Ok(id);
+        }
+        Ok(self.declare_tag(name, is_union, false))
     }
 
     /// Rewrite `ty` into the type named by a `__attribute__((mode(M)))`
@@ -267,6 +290,8 @@ impl Compiler {
             is_transparent_union: false,
             cast_named: false,
             vla_size_slot: None,
+            is_enum: false,
+            enum_underlying: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -368,6 +393,8 @@ impl Compiler {
             is_transparent_union: false,
             cast_named: false,
             vla_size_slot: None,
+            is_enum: false,
+            enum_underlying: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -479,6 +506,8 @@ impl Compiler {
             is_transparent_union: false,
             cast_named: false,
             vla_size_slot: None,
+            is_enum: false,
+            enum_underlying: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -563,6 +592,8 @@ impl Compiler {
             is_transparent_union: false,
             cast_named: false,
             vla_size_slot: None,
+            is_enum: false,
+            enum_underlying: None,
         });
         struct_ty_for(self.structs.len() - 1)
     }
@@ -731,6 +762,21 @@ impl Compiler {
             Code::INVALID_OPERANDS,
             alloc::format!("`{op}` operand has type `{ty}`, a pointer to an incomplete type"),
         ))
+    }
+
+    /// Reject `ty` where C99 requires a complete object type; `msg` phrases
+    /// the report around the type's spelling.
+    pub(super) fn require_complete_value(
+        &self,
+        ty: i64,
+        code: Code,
+        msg: impl FnOnce(&str) -> alloc::string::String,
+    ) -> Result<(), C5Error> {
+        if self.incomplete_aggregate_tag(ty).is_none() {
+            return Ok(());
+        }
+        let spelled = super::types::format_type(ty, &self.structs);
+        Err(self.compile_err(code, msg(&spelled)))
     }
 
     /// Size in bytes of a value of the given `ty`.
@@ -930,7 +976,24 @@ pub(crate) fn flatten_struct_fields(
     base_off: u32,
     out: &mut Vec<FlatField>,
 ) {
+    flatten_leaves(structs, target, struct_id, base_off, true, out);
+}
+
+/// [`flatten_struct_fields`] for aggregate `struct_id` at `base_off`, where
+/// `checked` says whether the leaves' alignment binds: past an array's
+/// first element it does not, as gcc classifies the first alone. An
+/// anonymous member is an aggregate field of its own, as gcc classifies it,
+/// so its union rules hold.
+fn flatten_leaves(
+    structs: &[StructDef],
+    target: Target,
+    struct_id: usize,
+    base_off: u32,
+    checked: bool,
+    out: &mut Vec<FlatField>,
+) {
     let sd = &structs[struct_id];
+    let bound = |align: u32| if checked { align } else { 1 };
     let single_fp_vector = sd.is_vector
         && matches!(sd.fields.as_slice(),
             [f] if f.array_size == 1 && scalar_kind(f.ty, target).is_fp_scalar());
@@ -944,12 +1007,22 @@ pub(crate) fn flatten_struct_fields(
             offset: base_off,
             size: sd.size as u32,
             kind: ScalarKind::Vector,
-            bit_field: false,
+            align: bound((sd.size as u32).clamp(1, 16)),
             single_fp_vector,
         });
         return;
     }
-    for f in &sd.fields {
+    let mut members = sd.anon_members.iter().peekable();
+    let mut next = 0;
+    while next < sd.fields.len() || members.peek().is_some() {
+        if let Some(m) = members.next_if(|m| m.first as usize <= next) {
+            let off = base_off + m.offset as u32;
+            flatten_leaves(structs, target, m.inner, off, checked, out);
+            next = next.max((m.first + m.count) as usize);
+            continue;
+        }
+        let f = &sd.fields[next];
+        next += 1;
         let elem_ty = f.ty;
         let is_struct_value = is_struct_value_ty(elem_ty);
         // A bit-field occupies the bytes its bits span from its unit;
@@ -964,6 +1037,11 @@ pub(crate) fn flatten_struct_fields(
         } else {
             (f.offset as u32, flat_scalar_size(elem_ty, target))
         };
+        let align = match (f.bit_width, sd.is_union) {
+            (0, _) => elem_size.clamp(1, 16),
+            (w, true) => int_mode_bytes(w),
+            _ => 1,
+        };
         let count = if f.array_size > 0 {
             f.array_size as u32
         } else {
@@ -971,19 +1049,59 @@ pub(crate) fn flatten_struct_fields(
         };
         for i in 0..count {
             let off = base_off + elem_off + i * elem_size;
+            let checked = checked && i == 0;
             if is_struct_value {
-                flatten_struct_fields(structs, target, struct_id_of(elem_ty), off, out);
+                flatten_leaves(structs, target, struct_id_of(elem_ty), off, checked, out);
             } else {
                 out.push(FlatField {
                     offset: off,
                     size: elem_size,
                     kind: scalar_kind(elem_ty, target),
-                    bit_field: f.bit_width > 0,
+                    align: if checked { align } else { 1 },
                     single_fp_vector,
                 });
             }
         }
     }
+    push_unnamed_bit_fields(sd, base_off, bound, out);
+}
+
+/// The unnamed bit-fields of `sd` at `base`, INTEGER leaves as gcc's System
+/// V classification counts them: in a structure the bytes a non-zero width
+/// spans, in a union its leading bytes, where a zero width still covers
+/// the first and the narrowest integer mode holding the width binds the
+/// union's offset.
+fn push_unnamed_bit_fields(
+    sd: &StructDef,
+    base: u32,
+    bound: impl Fn(u32) -> u32,
+    out: &mut Vec<FlatField>,
+) {
+    for b in &sd.anon_bitfields {
+        let (first, end, align) = if sd.is_union {
+            let end = b.width.div_ceil(8).max(1).min(sd.size as u32);
+            (0, end, int_mode_bytes(b.width))
+        } else if b.width > 0 {
+            (b.bit_start / 8, (b.bit_start + b.width).div_ceil(8), 1)
+        } else {
+            continue;
+        };
+        if end > first {
+            out.push(FlatField {
+                offset: base + first,
+                size: end - first,
+                kind: ScalarKind::Int,
+                align: bound(align),
+                single_fp_vector: false,
+            });
+        }
+    }
+}
+
+/// The bytes of the narrowest integer mode holding `width` bits, the type
+/// gcc gives a union's bit-field: one for a zero width.
+fn int_mode_bytes(width: u32) -> u32 {
+    width.max(1).div_ceil(8).next_power_of_two()
 }
 
 /// The leaf kind of a non-aggregate member of type `ty`.
@@ -1038,6 +1156,11 @@ fn homogeneous_elements(
     }
     if sd.anon_bitfields.iter().any(|b| b.width > 0) {
         return None;
+    }
+    // An empty record adds no element whatever size it has (MSVC's is 4),
+    // as clang skips one.
+    if sd.fields.is_empty() && sd.anon_members.is_empty() {
+        return Some((None, 0));
     }
     let (mut base, mut count) = (None, 0u32);
     let mut add = |kind: Option<(ScalarKind, u32)>, n: u32| {
@@ -1107,7 +1230,7 @@ pub(crate) fn long_double_agg_desc(
             offset: 0,
             size: 16,
             kind,
-            bit_field: false,
+            align: 16,
             single_fp_vector: false,
         }],
         homogeneous: HomogeneousAggregate::new(kind, 16, 1),
@@ -1120,6 +1243,36 @@ pub(crate) fn long_double_agg_desc(
 /// reaches the call as its copy's address.
 pub(crate) fn host_abi_agg_desc(structs: &[StructDef], target: Target, ty: i64) -> Option<AggDesc> {
     host_abi_agg_desc_conv(structs, target, crate::c5::codegen::CallConv::Target, ty)
+}
+
+/// Whether aggregate `id` holds no member with storage, as clang's
+/// `isEmptyRecord` decides it: each member is an unnamed bit-field, a
+/// zero-length array, or an empty aggregate or an array of them.
+fn is_empty_record(structs: &[StructDef], id: usize) -> bool {
+    let sd = &structs[id];
+    !sd.is_vector
+        && sd.fields.iter().all(|f| {
+            f.zero_len
+                || (f.bit_width == 0
+                    && f.array_size >= 0
+                    && is_struct_value_ty(f.ty)
+                    && is_empty_record(structs, struct_id_of(f.ty)))
+        })
+}
+
+/// The bytes a call moves for aggregate `id`: its size, except that on
+/// Apple and Windows AArch64 an empty record crosses in nothing whatever
+/// size its layout gives it (4 under MSVC's), as clang lowers C there.
+/// GNU/Linux follows gcc, which moves the size -- 0 for an empty record
+/// unless an unnamed bit-field gives it bytes.
+fn abi_size(structs: &[StructDef], target: Target, id: usize) -> u32 {
+    if matches!(target, Target::MacOSAarch64 | Target::WindowsAarch64)
+        && is_empty_record(structs, id)
+    {
+        0
+    } else {
+        structs[id].size as u32
+    }
 }
 
 /// [`host_abi_agg_desc`] for a function or call site on `conv`
@@ -1154,10 +1307,7 @@ pub(crate) fn host_abi_agg_desc_conv(
     if id >= structs.len() {
         return None;
     }
-    let size = structs[id].size as u32;
-    if size == 0 {
-        return None;
-    }
+    let size = abi_size(structs, target, id);
     let align = (structs[id].align.max(1)) as u32;
     let member_align = (structs[id].member_align.max(1)) as u32;
     let mut fields = Vec::new();
@@ -1284,10 +1434,7 @@ pub(crate) fn struct_return_abi_conv(
     if id >= structs.len() {
         return StructReturnAbi::OutPtr;
     }
-    let size = structs[id].size as u32;
-    if size == 0 {
-        return StructReturnAbi::OutPtr;
-    }
+    let size = abi_size(structs, target, id);
     let align = (structs[id].align.max(1)) as u32;
     let member_align = (structs[id].member_align.max(1)) as u32;
     let mut fields = Vec::new();

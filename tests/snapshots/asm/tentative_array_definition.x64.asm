@@ -26,24 +26,24 @@ Disassembly of section .text:
                	int3
 
 <take_never>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax       # <addr>
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorl	%eax, %eax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx       # <addr>
                	cmpb	$0x0, (%rcx)
                	je	<addr>
                	movl	$0x1, %ecx
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movsbq	(%rdx), %rsi
                	cmpl	$0x68, %esi
                	je	<addr>
                	orq	$0x4, %rcx
-               	leaq	<rip>, %rsi
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rsi       # <addr>
+               	leaq	<rip>, %rdi       # <addr>
                	cmpb	$0x0, (%rsi,%rax)
                	je	<addr>
                	movsbq	(%rdx,%rax), %r8
@@ -56,14 +56,14 @@ Disassembly of section .text:
                	jne	<addr>
                	testq	%rcx, %rcx
                	je	<addr>
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi       # <addr>
                	movq	%rcx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi       # <addr>
                	movb	$0x0, %al
                	callq	<addr>
                	xorl	%eax, %eax

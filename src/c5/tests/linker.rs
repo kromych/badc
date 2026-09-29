@@ -40,6 +40,35 @@ fn transitively_dead_static_chain_is_dropped_from_object() {
     assert!(!has_caller, "lexically-dead caller must drop");
 }
 
+/// A unit's `STT_FILE` symbol is its source's base name whichever
+/// separator the path spells, as a Windows host gives it `\`.
+#[test]
+fn a_units_file_symbol_is_the_base_name_under_either_separator() {
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for path in [
+        "dir/sub/defs.c",
+        "C:\\dir\\sub\\defs.c",
+        "C:\\dir/sub\\defs.c",
+    ] {
+        let src = "static int s; int main(void) { return s; }\n";
+        let mut program = Compiler::new(src.to_string()).compile().expect("compile");
+        program.source_path = path.into();
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        let obj = crate::c5::linker::object::parse_native_elf(&bytes).expect("parse");
+        let files: Vec<&str> = obj
+            .symbols
+            .iter()
+            .filter(|s| s.kind == crate::c5::linker::object::STT_FILE)
+            .map(|s| s.name.as_str())
+            .collect();
+        assert_eq!(files, ["defs.c"], "{path}");
+    }
+}
+
 #[test]
 fn address_taken_static_survives_dce() {
     // A static function whose address is stored in a global
@@ -5919,6 +5948,7 @@ fn minimal_native_object(
         debug_str: alloc::vec::Vec::new(),
         debug_info_relocs: alloc::vec::Vec::new(),
         debug_line_relocs: alloc::vec::Vec::new(),
+        debug_other: alloc::vec::Vec::new(),
     }
 }
 
@@ -6247,6 +6277,7 @@ fn aarch64_data_ref_object_ex(
         debug_str: alloc::vec::Vec::new(),
         debug_info_relocs: alloc::vec::Vec::new(),
         debug_line_relocs: alloc::vec::Vec::new(),
+        debug_other: alloc::vec::Vec::new(),
     }
 }
 
@@ -6488,6 +6519,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         debug_str: alloc::vec::Vec::new(),
         debug_info_relocs: alloc::vec::Vec::new(),
         debug_line_relocs: alloc::vec::Vec::new(),
+        debug_other: alloc::vec::Vec::new(),
     }
 }
 
@@ -10037,6 +10069,67 @@ int main(void) { int x = 0; return f(&x, 1); }
     // label and the `out` goto target).
     assert_eq!(sec(".gtab").3.len(), 8);
     assert_eq!(sec(".rela.gtab").3.len(), 2 * 24);
+}
+
+#[test]
+fn inline_asm_symbol_minus_label_is_pc_relative() {
+    // `.long %c0 - 2b` four bytes past `2:` in the section being assembled
+    // (Linux 5.15's bug table): PC-relative against the operand's symbol,
+    // the field's distance from the label its addend, as GNU as emits it.
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src = r#"
+void f(void) {
+    __asm__ volatile("1:\tnop\n"
+        ".pushsection __bug_table,\"aw\"\n"
+        "2:\t.long 1b - 2b\n"
+        "\t.long %c0 - 2b\n"
+        "\t.short %c1\n"
+        "\t.short %c2\n"
+        "\t.org 2b+%c3\n"
+        ".popsection"
+        : : "i"("bug file"), "i"(11), "i"(1), "i"(12));
+}
+int main(void) { f(); return 0; }
+"#;
+    for (target, prel32) in [(Target::LinuxX64, 2u32), (Target::LinuxAarch64, 261)] {
+        let program = Compiler::with_target(String::from(src), target)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let sections = elf_sections(&bytes);
+        let symbols = elf_symbols(&bytes);
+        let sec = |n: &str| &sections.iter().find(|s| s.0 == n).expect(n).3;
+        let relas: alloc::vec::Vec<(u64, u32, usize, i64)> = sec(".rela__bug_table")
+            .as_chunks::<24>()
+            .0
+            .iter()
+            .map(|r| {
+                let info = u64::from_le_bytes(r[8..16].try_into().unwrap());
+                (
+                    u64::from_le_bytes(r[..8].try_into().unwrap()),
+                    info as u32,
+                    (info >> 32) as usize,
+                    i64::from_le_bytes(r[16..].try_into().unwrap()),
+                )
+            })
+            .collect();
+        assert_eq!(relas.len(), 2, "{target:?}: {relas:?}");
+        let (off, ty, sym, addend) = relas[1];
+        assert_eq!((off, ty), (4, prel32), "{target:?}");
+        // The field holds `sym - 2b`: the symbol plus the addend, less the
+        // field's own four bytes past the label.
+        let (_, _, shndx, value, _) = &symbols[sym];
+        let at = (*value as i64 + addend - 4) as usize;
+        assert!(
+            sections[*shndx as usize].3[at..].starts_with(b"bug file\0"),
+            "{target:?}: addend {addend}"
+        );
+        assert_eq!(sec("__bug_table")[8..12], [11, 0, 1, 0], "{target:?}");
+    }
 }
 
 #[test]
@@ -15568,6 +15661,49 @@ fn mapping_symbols(bytes: &[u8]) -> alloc::vec::Vec<(String, u64, String)> {
         .collect();
     out.sort();
     out
+}
+
+/// The system linkers read a missing `.note.GNU-stack` as a request for an
+/// executable stack. A compiled unit's object carries an empty, unflagged
+/// one, as gcc's does, and keeps an `"x"` its file-scope asm asks for; an
+/// assembled unit carries only the note its source names, as GNU as does.
+#[test]
+fn a_compiled_object_states_a_non_executable_stack() {
+    use crate::c5::Target;
+    const SHT_PROGBITS: u32 = 1;
+    const SHF_EXECINSTR: u64 = 4;
+    let note = |bytes: &[u8]| {
+        elf_sections(bytes)
+            .into_iter()
+            .find(|s| s.0 == ".note.GNU-stack")
+            .map(|(_, ty, flags, body)| (ty, flags, body.len()))
+    };
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let c = reloc_tu("int f(void) { return 1; }", target, false);
+        assert_eq!(note(&c), Some((SHT_PROGBITS, 0, 0)), "{target:?}: a C unit");
+        let asked = reloc_tu(
+            "__asm__(\".section .note.GNU-stack,\\\"x\\\",@progbits\\n.text\");\n\
+             int f(void) { return 1; }",
+            target,
+            false,
+        );
+        assert_eq!(
+            note(&asked),
+            Some((SHT_PROGBITS, SHF_EXECINSTR, 0)),
+            "{target:?}: a C unit asking for an executable stack"
+        );
+        let bare = asm_reloc_tu(".text\n.globl f\nf:\n", target);
+        assert_eq!(note(&bare), None, "{target:?}: an assembled unit");
+        let named = asm_reloc_tu(
+            ".text\n.globl f\nf:\n.section .note.GNU-stack,\"\",@progbits\n",
+            target,
+        );
+        assert_eq!(
+            note(&named),
+            Some((SHT_PROGBITS, 0, 0)),
+            "{target:?}: an assembled unit naming the note"
+        );
+    }
 }
 
 /// `-c` object bytes for an assembled unit.

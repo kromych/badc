@@ -58,10 +58,16 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	udf	#0x0
-               	mov	w1, #0x1234             // =4660
-               	str	w1, [x0]
-               	ret
+
+<asm_store_magic>:
+  400590: 81 46 82 52  	.word	0x52824681
+  400594: 01 00 00 b9  	.word	0xb9000001
+  400598: c0 03 5f d6  	.word	0xd65f03c0
                	nop
-               	udf	#0x5678
+
+<asm_magic_word>:
+  4005a0: 78 56 00 00  	.word	0x00005678
                	nop
-               	udf	#0x10
+
+<asm_label_delta>:
+  4005a8: 10 00 00 00  	.word	0x00000010

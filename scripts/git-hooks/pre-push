@@ -186,11 +186,32 @@ def check_ascii(root: Path) -> int:
     return 0
 
 
-# Code behind `cfg(target_os = ...)` is not compiled for the host, so
-# clippy cannot see it: a lint in a Linux-only path passes every check on a
-# macOS host and fails in CI. Linting once per target family closes that.
-# `clippy` type-checks without linking, so no cross linker is needed.
-CROSS_LINT_TARGETS = ("x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu")
+# Code behind `cfg(target_os = ...)` or `cfg(target_arch = ...)` is not
+# compiled for the host, so clippy cannot see it: a lint in a Linux-only path
+# passes every check on a macOS host and fails in CI, and a helper only that
+# path calls is dead code on the other hosts. Linting each CI host's target
+# closes that; the untargeted runs cover the host's own. `clippy` type-checks
+# without linking, so no cross linker is needed.
+CROSS_LINT_TARGETS = (
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-gnu",
+    "aarch64-pc-windows-msvc",
+)
+
+
+def host_target() -> str:
+    try:
+        out = subprocess.run(
+            ["rustc", "-vV"], capture_output=True, text=True, check=True
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+    for line in out.stdout.splitlines():
+        if line.startswith("host: "):
+            return line.split(":", 1)[1].strip()
+    return ""
 
 
 def installed_targets() -> set[str]:
@@ -208,7 +229,10 @@ def installed_targets() -> set[str]:
 
 def cross_lint(root: Path) -> int:
     have = installed_targets()
+    host = host_target()
     for target in CROSS_LINT_TARGETS:
+        if target == host:
+            continue
         if target not in have:
             print(
                 f"[pre-push] skipping clippy for {target}: target not installed "

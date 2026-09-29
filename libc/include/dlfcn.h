@@ -86,9 +86,9 @@
 #pragma binding(kernel32::dlerror, "GetLastError")
 #endif
 
-char *dlopen(char *path, int flags);
-char *dlsym(char *handle, char *name);
-int dlclose(char *handle);
+void *dlopen(const char *path, int flags);
+void *dlsym(void *__restrict handle, const char *__restrict name);
+int dlclose(void *handle);
 char *dlerror(void);
 
 #ifndef __BADC_WINDOWS__

@@ -28,9 +28,9 @@ Disassembly of section .text:
 <reader>:
                	xorl	%edx, %edx
                	movl	$0x3, %eax
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8       # <addr>
                	movq	(%r8), %rcx
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	movq	%rdx, %rsi
                	movq	(%rdi), %r9
                	addq	%rcx, %r9
@@ -54,7 +54,7 @@ Disassembly of section .text:
                	retq
 
 <work>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rcx
                	addq	%rdi, %rcx
                	movq	%rcx, (%rax)
@@ -69,7 +69,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x3, %rax
                	je	<addr>

@@ -256,26 +256,43 @@ unversioned. A version at the floor can name a compatibility
 implementation whose semantics differ from the header badc ships for that
 name. TODO: hold the bound version and the declared interface in step.
 
-### An eightbyte of unnamed bit-fields takes no register, severity 5
+### An unnamed bit-field classifies INTEGER, severity 5
 
 The System V AMD64 psABI (3.2.3) does not say whether an unnamed bit-field
-is a field when an eightbyte is classified. badc follows clang: an unnamed
-bit-field has no class, so an eightbyte only unnamed bit-fields cover
-takes no register, and one sharing an eightbyte with named fields leaves
-their class alone. gcc gives such a bit-field the INTEGER class, so the two
-shapes below cross a call to or from gcc-compiled x86-64 code in different
-registers:
+is a field when an eightbyte is classified. badc follows gcc: in a
+structure the bytes a non-zero width spans are INTEGER, in a union the
+leading bytes its width spans are, a zero width covering the first, and
+an anonymous member's unnamed bit-fields count at its offset. clang gives an
+unnamed bit-field no class, so these shapes cross a call to or from
+clang-compiled x86-64 code in different registers:
 
-- `struct { int :32; int :32; double d; }`: badc and clang pass `d` in
-  xmm0 and the next integer argument in rdi; gcc passes the first
-  eightbyte in rdi, `d` in xmm0 and the next integer in rsi.
-- `struct { float a; int :8; float b; }`: badc and clang pass `a` in xmm0
-  and `b` in xmm1; gcc passes the eightbyte holding `a` in rdi and `b` in
-  xmm0, and the next integer in rsi rather than rdi.
+- `struct { int :32; int :32; double d; }`: badc and gcc pass the first
+  eightbyte in rdi, `d` in xmm0 and the next integer argument in rsi;
+  clang passes `d` in xmm0 and the next integer in rdi.
+- `struct { float a; int :8; float b; }`: badc and gcc pass the eightbyte
+  holding `a` in rdi, `b` in xmm0 and the next integer in rsi; clang
+  passes `a` in xmm0, `b` in xmm1 and the next integer in rdi.
+- `union { int :0; double d; }`: badc and gcc pass it in rdi, clang in
+  xmm0.
 
-The divergence is System V AMD64's alone: AAPCS64 passes both shapes in
-general-purpose registers under either compiler, and the Microsoft x64
-convention passes them by reference.
+A union's bit-field, named or not, is typed as gcc types it, the narrowest
+integer mode holding its width, and an aggregate whose union sits off that
+mode's alignment is MEMORY class: badc and gcc pass `struct { char c[5];
+union { int :24; char x; } u; float f[2]; }` in memory, clang in rdi and
+xmm0.
+
+These divergences are System V AMD64's alone: AAPCS64 passes the
+structures in general-purpose registers under either compiler, and the
+Microsoft x64 convention places every shape here by size.
+
+### A misaligned member past an array's first element keeps its class, severity 5
+
+The System V AMD64 psABI (3.2.3) sends an aggregate with an unaligned
+field to memory without saying how an array's elements count. badc
+follows gcc, which examines an array's first element alone: `struct {
+struct __attribute__((packed)) { int x; char c; } a[2]; }` passes in rdi
+and rsi under badc and gcc, where clang, finding `a[1].x` at offset 5,
+passes it in memory.
 
 ### A floating-point vector of one element goes to memory, severity 5
 
@@ -341,7 +358,9 @@ Microsoft x64 convention places both by size.
   ordering point: none is forwarded, merged, hoisted or dropped.
 - `_Thread_local`, and the GNU `__thread` spelling, at file and block scope
   (a block-scope `static _Thread_local` gets one per-thread instance) on
-  every target. On ELF, variables land in `.tdata` / `.tbss`, their
+  every target. On ELF, variables land in `.tdata` / `.tbss`, an object
+  whose image is all zeros in the zero fill whatever its initializer,
+  declaration order or unit, as gcc places it; their
   symbols are typed `STT_TLS`, and TLS-relative relocations let a badc object
   link against external TLS through the system linker; on PE the image
   carries an `IMAGE_TLS_DIRECTORY64`; on Mach-O each variable gets a
@@ -604,8 +623,10 @@ Microsoft x64 convention places both by size.
 - The gcc `-M` dependency-output family: `-M`, `-MM`, `-MD`, `-MMD`,
   `-MF`, `-MT`, `-MQ`, `-MP`, and the `-Wp,-MD,<file>` / `-Wp,-MMD,<file>`
   spellings. `-MM` / `-MMD` omit system headers, which here means the
-  compiler's own header set and the system fallback directories; a header
-  from `-I`, `-iquote` or the including file's directory is a user header.
+  compiler's own header set, the `-isystem` directories and the system
+  fallback directories; a header from `-I`, `-iquote` or the including
+  file's directory is a user header. The unused-binding warnings draw the
+  same line.
   A header served from the in-binary set has no filesystem path and is
   omitted from the prerequisite list.
 - The `__has_include`, `__has_include_next`, `__has_builtin` and

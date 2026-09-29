@@ -256,13 +256,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ldursw	x1, [x29, #-0x10]
                	ldr	w0, [x0, x1, lsl #2]
                	cmp	w0, #0x62
                	b.ne	<addr>
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ldursw	x1, [x29, #-0x10]
                	lsl	x1, x1, #1
@@ -273,13 +273,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ldursw	x1, [x29, #-0x8]
                	ldrh	w0, [x0, x1, lsl #1]
                	eor	x0, x0, #0x8000
                	cbnz	w0, <addr>
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ldursw	x1, [x29, #-0x8]
                	ldrb	w0, [x0, x1]

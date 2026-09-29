@@ -85,12 +85,7 @@ Disassembly of section .text:
                	addb	%al, (%rsp,%rax)
 
 <rept_run>:
-               	addb	$0x4, %al
-               	addb	$0x7, %al
-               	<unknown>
-               	<unknown>
-               	<unknown>
-               	<unknown>
+  400540: 04 04 04 07 07 07 07 07         ........
 
 <rept_run_len>:
                	orb	%al, (%rax)

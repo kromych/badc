@@ -65,7 +65,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	leaq	-0x10(%rbp), %rcx
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
@@ -130,7 +130,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	leaq	-0x40(%rbp), %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
@@ -143,7 +143,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movsd	(%rax), %xmm0
                	movabsq	$0x4059000000000000, %rcx # imm = 0x4059000000000000
                	movq	%rcx, %xmm15

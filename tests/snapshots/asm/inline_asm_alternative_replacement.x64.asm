@@ -53,4 +53,4 @@ Disassembly of section .text:
                	popq	%rdx
                	popq	%rcx
                	retq
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi      # <addr>

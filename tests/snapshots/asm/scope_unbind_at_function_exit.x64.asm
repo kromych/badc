@@ -38,7 +38,7 @@ Disassembly of section .text:
                	retq
 
 <by_static>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	retq
 
@@ -63,49 +63,49 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movslq	(%rcx), %rax
                	cmpl	$0xb, %eax
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movslq	(%rdx), %rax
                	cmpl	$0x16, %eax
                	je	<addr>
                	movl	$0x8, %eax
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	cmpl	$0x21, %eax
                	je	<addr>
                	movl	$0x9, %eax
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	cmpl	$0x2c, %eax
                	je	<addr>
                	movl	$0xa, %eax
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	cmpl	$0x37, %eax
                	je	<addr>
                	movl	$0xb, %eax
                	retq
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi      # <addr>
                	movslq	(%rsi), %rax
                	cmpl	$0x58, %eax
                	je	<addr>
                	movl	$0xc, %eax
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rdi
                	cmpl	$0x63, %edi
                	je	<addr>

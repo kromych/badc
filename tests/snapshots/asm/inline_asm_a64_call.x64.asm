@@ -26,12 +26,12 @@ Disassembly of section .text:
                	int3
 
 <bump>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	$0x2a, (%rax)
                	retq
 
 <main>:
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movl	$0x2a, %eax
                	movl	%eax, (%rcx)
                	retq

@@ -1147,7 +1147,7 @@ Disassembly of section .text:
                	ret
                	mov	x25, #0x0               // =0
                	mov	x21, x25
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ldr	x20, [x0, x21, lsl #3]
                	sub	x24, x20, #0x1

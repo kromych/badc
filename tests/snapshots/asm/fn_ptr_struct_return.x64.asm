@@ -26,14 +26,14 @@ Disassembly of section .text:
                	int3
 
 <finder_impl>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax       # <addr>
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	xorl	%edi, %edi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	callq	*%rax
                	testq	%rax, %rax
@@ -41,7 +41,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	xorl	%edi, %edi
                	callq	*%rax
@@ -50,7 +50,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	xorl	%edi, %edi
                	callq	*%rax
@@ -59,7 +59,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	xorl	%edi, %edi
                	callq	*%rax

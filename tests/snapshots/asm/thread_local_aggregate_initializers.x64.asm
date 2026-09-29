@@ -138,7 +138,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	callq	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	cmpq	%rcx, %rax
                	jne	<addr>
                	callq	<addr>

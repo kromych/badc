@@ -27,10 +27,10 @@ Disassembly of section .text:
 
 <interp>:
                	xorl	%eax, %eax
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movl	$0x1, %ecx
                	movzbq	(%rdi), %r8
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi      # <addr>
                	movq	(%rdx,%r8,8), %rdx
                	jmpq	*%rdx
                	leaq	0x1(%rcx), %rdx
@@ -58,21 +58,21 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi       # <addr>
                	callq	<addr>
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi       # <addr>
                	callq	<addr>
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi       # <addr>
                	callq	<addr>
                	cmpl	$0x7, %eax
                	je	<addr>

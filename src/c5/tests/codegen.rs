@@ -2799,24 +2799,27 @@ fn builtin_overflow_on_128bit_operand_lowers_inline() {
     }
 }
 
-/// The x86 `x` (xmm) inline-asm operand path moves a full 128-bit value
-/// (movups), so it requires a 16-byte `__m128i`. A scalar float / double `x`
-/// operand must be rejected at parse rather than over-reading / over-writing
-/// its 4/8-byte storage. TODO: scalar `x` via movss / movsd.
+/// An x86 `x` (xmm) inline-asm operand is a 16-byte vector or a `float` /
+/// `double` in the low lane; one of another type, such as `int`, is rejected
+/// at parse rather than moved at a width its storage does not have.
 #[test]
-fn scalar_x_inline_asm_operand_is_rejected() {
+fn x_inline_asm_operand_is_a_vector_or_a_floating_scalar() {
     use crate::{Compiler, Target};
-    let err = Compiler::with_target(
+    let compile = |src: &str| Compiler::with_target(src.to_string(), Target::LinuxX64).compile();
+    compile(
         "double f(double a){ double r; __asm__(\"movsd %1, %0\" : \"=x\"(r) : \"x\"(a)); \
-             return r; } int main(void){ return (int) f(1.0); }"
-            .to_string(),
-        Target::LinuxX64,
+             return r; } int main(void){ return (int) f(1.0); }",
     )
-    .compile()
-    .expect_err("a scalar `x` operand must be rejected, not over-moved");
+    .expect("a double `x` operand");
+    let err = compile(
+        "int f(int a){ int r; __asm__(\"movd %1, %0\" : \"=x\"(r) : \"x\"(a)); \
+             return r; } int main(void){ return f(1); }",
+    )
+    .expect_err("an int `x` operand");
     assert!(
-        err.to_string().contains("16-byte (__m128i) `x` operands"),
-        "expected the scalar-`x` rejection, got: {err}",
+        err.to_string()
+            .contains("an `x` operand is a 16-byte vector, a `float` or a `double`"),
+        "{err}"
     );
 }
 
@@ -3922,6 +3925,118 @@ fn win64_variadic_and_unprototyped_calls_keep_fp_arguments_in_fp_registers() {
         )
     });
     assert!(f32_cell, "vd reads its named float's cell at 32 bits");
+}
+
+/// An aggregate with no member of storage takes no argument register on
+/// System V x86-64 and AAPCS64 -- Windows arm64's included, where MSVC's
+/// layout gives it 4 bytes -- and returns in none, so the argument after it
+/// takes the first register and a result needs no hidden pointer; Microsoft
+/// x64 gives it 4 bytes and a slot. A variadic call passes it as an
+/// aggregate of no bytes, not a loaded integer.
+#[test]
+fn an_empty_record_takes_no_register_outside_microsoft_x64() {
+    use crate::Target;
+    use crate::c5::codegen::ArgPlacement;
+    use crate::c5::ir::Inst;
+    let src = "struct E {};\n\
+        int takei(struct E e, int y) { (void)e; return y; }\n\
+        struct E mk(int y) { struct E e; (void)y; return e; }\n\
+        int v(int n, ...) { return n; }\n\
+        int callv(struct E e) { return v(1, e, 3); }\n";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+        Target::WindowsX64,
+    ] {
+        let ms = target == Target::WindowsX64;
+        let program = crate::Compiler::with_options(
+            src.into(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("{target:?}: compile: {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let func = |name: &str| funcs.iter().find(|f| f.name == name).expect(name);
+        let abi = target.abi();
+        let placed = |name: &str| {
+            crate::c5::codegen::ssa::emit_common::param_placements_common(func(name), abi)
+        };
+        let y = abi.int_arg_regs[usize::from(ms)];
+        assert_eq!(
+            placed("takei")[1],
+            ArgPlacement::IntReg(y),
+            "{target:?}: takei's y"
+        );
+        assert_eq!(
+            placed("mk")[0],
+            ArgPlacement::IntReg(abi.int_arg_regs[0]),
+            "{target:?}: mk's y"
+        );
+        let mk = func("mk");
+        let ret_size = mk.ret_agg.map(|i| mk.agg_descs[i as usize].size);
+        assert_eq!(
+            ret_size,
+            Some(if ms { 4 } else { 0 }),
+            "{target:?}: mk's result"
+        );
+        let callv = func("callv");
+        let arg_aggs = callv
+            .insts
+            .iter()
+            .find_map(|i| match i {
+                Inst::Call { arg_aggs, .. } => Some(arg_aggs.clone()),
+                _ => None,
+            })
+            .expect("call");
+        let e_size = arg_aggs
+            .get(1)
+            .copied()
+            .flatten()
+            .map(|i| callv.agg_descs[i as usize].size);
+        assert_eq!(e_size, (!ms).then_some(0), "{target:?}: the variadic e");
+    }
+}
+
+/// A member declared without brackets is not a zero-length array, whatever
+/// the declarator before it was: a record after a `[0]` member keeps its
+/// storage and crosses a call by reference on the AArch64 targets, so the
+/// argument after it takes the second register.
+#[test]
+fn a_record_after_a_zero_length_array_member_keeps_its_storage() {
+    use crate::Target;
+    use crate::c5::codegen::ArgPlacement;
+    let src = "struct Z { int n; char tail[0]; };\n\
+        struct T { int a; long b; const char *s, *e; void *m; long x; };\n\
+        int take(struct T t, int y) { return y + t.a; }\n";
+    for target in [
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+    ] {
+        let program = crate::Compiler::with_options(
+            src.into(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("{target:?}: compile: {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let take = funcs.iter().find(|f| f.name == "take").expect("take");
+        let abi = target.abi();
+        let placed = crate::c5::codegen::ssa::emit_common::param_placements_common(take, abi);
+        assert_eq!(
+            placed[1],
+            ArgPlacement::IntReg(abi.int_arg_regs[1]),
+            "{target:?}: take's y"
+        );
+    }
 }
 
 /// Windows arm64 passes every argument to a variadic callee in the integer
@@ -6087,8 +6202,11 @@ fn homogeneous_aggregate_elements_follow_the_members() {
 
 /// System V AMD64 3.2.3: an eightbyte no field overlaps takes no register,
 /// and a union's 16-byte vector beside a double or another vector takes one
-/// whole xmm register. The argument after each aggregate lands in the
-/// register past the ones the aggregate takes, and the result takes as many.
+/// whole xmm register. An unnamed bit-field's bytes are INTEGER, as gcc
+/// classifies them, inside an anonymous member too; a zero-width one covers
+/// none in a structure and a union's first byte. The argument after each
+/// aggregate lands in the register past the ones the aggregate takes, and
+/// the result takes as many.
 #[test]
 fn sysv_eightbyte_classes_place_the_following_argument() {
     use crate::Target;
@@ -6131,6 +6249,53 @@ fn sysv_eightbyte_classes_place_the_following_argument() {
         ("union { float f[4]; v4f v; }", "double", true, 2, 2),
         ("union { double a; double b; }", "double", true, 1, 1),
         ("struct { double d; long l; }", "long", false, 1, 2),
+        ("struct { int :8; }", "long", false, 1, 1),
+        ("struct { double d; int :32; }", "long", false, 1, 2),
+        (
+            "struct { float f; int :16; float g; }",
+            "double",
+            true,
+            1,
+            2,
+        ),
+        (
+            "struct __attribute__((packed)) { double d; int :32; }",
+            "long",
+            false,
+            1,
+            2,
+        ),
+        ("struct { double d; int :0; }", "long", false, 0, 1),
+        ("union { int :8; double d; }", "double", true, 0, 1),
+        ("union { int :0; double d; }", "double", true, 0, 1),
+        (
+            "struct { struct __attribute__((packed)) { int x; char c; } a[2]; }",
+            "long",
+            false,
+            2,
+            2,
+        ),
+        (
+            "struct { double d; struct { int :32; float f; }; }",
+            "double",
+            true,
+            1,
+            2,
+        ),
+        (
+            "struct { float f; union { int :0; float g; }; }",
+            "double",
+            true,
+            0,
+            1,
+        ),
+        (
+            "struct { double d; union { struct { int :0; }; double e; }; }",
+            "double",
+            true,
+            2,
+            2,
+        ),
     ];
     let mut src =
         alloc::string::String::from("typedef float v4f __attribute__((vector_size(16)));\n");
@@ -6181,7 +6346,9 @@ fn sysv_eightbyte_classes_place_the_following_argument() {
 /// System V AMD64 3.2.3: a packed aggregate with a member off its natural
 /// alignment is MEMORY class, on the stack ahead of the argument after it,
 /// which takes the first integer register; a bit-field is exempt, and so is
-/// a packed aggregate whose members all lie aligned.
+/// a packed aggregate whose members all lie aligned. As gcc classifies them,
+/// a union's bit-field binds the union's offset to its integer mode, a zero
+/// width to one byte, and past an array's first element nothing is bound.
 #[test]
 fn sysv_misaligned_members_send_the_aggregate_to_memory() {
     use crate::Target;
@@ -6201,6 +6368,30 @@ fn sysv_misaligned_members_send_the_aggregate_to_memory() {
         ),
         (
             "struct __attribute__((packed)) { char c; int x : 16; }",
+            false,
+        ),
+        (
+            "struct { char c[5]; union { int :24; char x; } u; float f[2]; }",
+            true,
+        ),
+        (
+            "struct { char c[5]; union __attribute__((packed)) { int x : 24; char y; } u; float f[2]; }",
+            true,
+        ),
+        (
+            "struct __attribute__((packed)) { char c; union { int x : 24; char y; }; char d[3]; float f; }",
+            true,
+        ),
+        (
+            "struct { char c[4]; union { int :24; char x; } u; float f[2]; }",
+            false,
+        ),
+        (
+            "struct { char c[7]; union { int :0; char x; } u; float f[2]; }",
+            false,
+        ),
+        (
+            "struct { union { int :24; char x; } u[2]; char c[2]; float f[2]; }",
             false,
         ),
     ];
@@ -11780,6 +11971,43 @@ fn a64_pac_ret_leaves_a_frameless_leaf_unsigned() {
         "no pair around a frameless leaf"
     );
     assert!(w.contains(&A64_RET), "the leaf still returns");
+}
+
+#[test]
+fn a64_pac_ret_leaf_signs_a_frameless_leaf() {
+    // `-mbranch-protection=pac-ret+leaf`: a full leaf signs the return
+    // address it keeps in x30 as well, with the pair around its body and
+    // `autiasp` directly ahead of the `ret`; under `bti` the signature
+    // stands in for the landing pad.
+    let leaf_too = crate::Hardening {
+        pac_ret: true,
+        pac_ret_leaf: true,
+        ..crate::Hardening::NONE
+    };
+    for hardening in [
+        leaf_too,
+        crate::Hardening {
+            bti: true,
+            ..leaf_too
+        },
+    ] {
+        let w = a64_pac_words(PAC_LEAF_SRC, hardening);
+        assert_eq!(w.first().copied(), Some(PACIASP), "signs at entry");
+        let rets: alloc::vec::Vec<usize> = w
+            .iter()
+            .enumerate()
+            .filter(|&(_, &x)| x == A64_RET)
+            .map(|(i, _)| i)
+            .collect();
+        assert!(!rets.is_empty(), "the leaf returns");
+        for i in rets {
+            assert_eq!(w[i - 1], AUTIASP, "`autiasp` directly precedes the `ret`");
+        }
+        assert_eq!(w.iter().filter(|&&x| x == PACIASP).count(), 1);
+    }
+    // A framed function signs once, as under plain `pac-ret`.
+    let framed = a64_pac_words(PAC_FRAMED_SRC, leaf_too);
+    assert_eq!(framed, a64_pac_words(PAC_FRAMED_SRC, PAC_RET_ONLY));
 }
 
 #[test]

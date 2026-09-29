@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <ret_ptr_as_int>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	retq
 

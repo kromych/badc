@@ -118,7 +118,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     terminator Return(v38)   (exit_acc=v38)
   block 20  start_pc=0
     v39  Imm(1084227584)                                  -> x0 [f32]
-    v40  CallExt { binding_idx=70, args=[v39], fp_arg_mask=0x1, fp_return=true } -> d0 [f32]
+    v40  CallExt { binding_idx=82, args=[v39], fp_arg_mask=0x1, fp_return=true } -> d0 [f32]
     v41  FpCast { kind=F32ToF64, value=v40 }              -> d0
     v42  Imm(4627448617123184640)                         -> x0
     v43  Binop { op=fsub, lhs=v41, rhs=v42 }              -> d0
@@ -141,7 +141,7 @@ fn ent_pc=14 n_params=0 variadic=false locals=0
     terminator Return(v46)   (exit_acc=v46)
   block 24  start_pc=0
     v47  Imm(0)                                           -> x0 [f32]
-    v48  CallExt { binding_idx=71, args=[v47], fp_arg_mask=0x1, fp_return=true } -> d0 [f32]
+    v48  CallExt { binding_idx=83, args=[v47], fp_arg_mask=0x1, fp_return=true } -> d0 [f32]
     v49  FpCast { kind=F32ToF64, value=v48 }              -> d0
     v50  Imm(0)                                           -> x0
     v51  Binop { op=fsub, lhs=v49, rhs=v50 }              -> d0

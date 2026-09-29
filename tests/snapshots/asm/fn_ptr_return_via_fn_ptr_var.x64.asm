@@ -152,7 +152,7 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%edi, %edi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	callq	*%rax
                	movl	$0x3, %edi
@@ -164,7 +164,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x1, %edi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	callq	*%rax
                	movl	$0x3, %edi

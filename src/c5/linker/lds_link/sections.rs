@@ -69,7 +69,7 @@ fn file_glob(pattern: &str, source: &str) -> bool {
         return true;
     }
     if !pattern.contains('/') {
-        let base = source.rsplit('/').next().unwrap_or(source);
+        let base = crate::c5::host::path_base_name(source);
         // Archive members are labeled `lib.a(member.o)`.
         let base = base
             .split_once('(')

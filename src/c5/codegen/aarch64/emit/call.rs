@@ -157,6 +157,9 @@ pub(super) fn emit_va_arg_cursor(
     let Some(ap_r) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
         return fail("VaArg: ap not int reg / spill");
     };
+    if desc.kind == crate::c5::op::VaArgDesc::NONE {
+        return va_arg_result(code, dst, ap_r, frame);
+    }
     let (rd, adv) = va_arg_cursor_regs(ap_r, dst, scratch);
     let adv = adv.unwrap_or_else(|| scratch.third(frame));
     emit(code, enc_ldr_imm(rd, ap_r, 0));
@@ -170,13 +173,19 @@ pub(super) fn emit_va_arg_cursor(
     if desc.by_ref {
         emit(code, enc_ldr_imm(rd, rd, 0));
     }
+    va_arg_result(code, dst, rd, frame)
+}
+
+/// Deliver the address `va_arg` computed in `src` to its result `dst`.
+fn va_arg_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) -> Emit {
     match dst {
-        Place::IntReg(r) if rd.0 != r => emit_mov_reg(code, Reg(r), rd),
+        Place::IntReg(r) if r != src.0 => emit_mov_reg(code, Reg(r), src),
+        Place::IntReg(_) | Place::None => {}
         Place::Spill(slot) => {
             let sp_off = spill_off(frame, slot);
-            emit_spill_str_x_auto(code, frame, rd, sp_off);
+            emit_spill_str_x_auto(code, frame, src, sp_off);
         }
-        _ => {}
+        Place::FpReg(_) => return fail("VaArg: dst is an FP register (the result is a pointer)"),
     }
     Ok(())
 }
@@ -286,6 +295,9 @@ pub(super) fn emit_va_arg_aapcs64(
             return fail("VaArg: &ap not in int reg / spill");
         }
     };
+    if desc.kind == crate::c5::op::VaArgDesc::NONE {
+        return va_arg_result(code, dst, ap_r, frame);
+    }
     let ap = if ap_r.0 != scratch.secondary.0 {
         emit_mov_reg(code, scratch.secondary, ap_r);
         scratch.secondary
@@ -419,19 +431,7 @@ pub(super) fn emit_va_arg_aapcs64(
     // The borrowed register is restored before a spilled result's
     // sp-relative store.
     emit(code, enc_ldr_post(borrow, Reg(31), 16));
-    match dst {
-        Place::IntReg(r) if r != scratch.primary.0 => emit_mov_reg(code, Reg(r), scratch.primary),
-        Place::IntReg(_) => {}
-        Place::Spill(slot) => {
-            let sp_off = spill_off(frame, slot);
-            emit_spill_str_x_auto(code, frame, scratch.primary, sp_off);
-        }
-        Place::None => {}
-        Place::FpReg(_) => {
-            return fail("VaArg: dst is an FP register (the result is a pointer)");
-        }
-    }
-    Ok(())
+    va_arg_result(code, dst, scratch.primary, frame)
 }
 
 /// The operands every call form carries: the argument values, which of
@@ -1174,7 +1174,7 @@ impl CallArgs<'_> {
         let strict = self.abi.strict_align;
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             match placement.register_part() {
-                super::ArgPlacement::StructRegs { regs, n, align } if !regs[0].is_fp => {
+                super::ArgPlacement::StructRegs { regs, n, align } if n > 0 && !regs[0].is_fp => {
                     let base = regs[0].reg;
                     // The eightbyte at `off`, or what of it the aggregate holds.
                     let size = self

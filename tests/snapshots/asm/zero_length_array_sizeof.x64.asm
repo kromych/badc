@@ -30,7 +30,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	xorl	%eax, %eax
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi      # <addr>
                	movq	%rax, %rcx
                	cmpl	$0x4, %eax
                	sete	%dl
@@ -53,7 +53,7 @@ Disassembly of section .text:
                	movq	%rdx, %rcx
                	jmp	<addr>
                	movq	%rdx, %rcx
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	cmpl	$0x0, (%rdx)
                	je	<addr>
                	movl	$0x8, %eax

@@ -152,6 +152,17 @@ pub(crate) enum Mnemonic {
         prefix: u8,
         opcode: u8,
     },
+    /// A scalar conversion between an integer and an xmm register,
+    /// `<prefix> [REX.W] 0F <opcode> /r`. `to_gpr` (`cvt[t]s{d,s}2si`)
+    /// writes the general register in ModRM.reg from an xmm register or
+    /// memory in r/m; otherwise (`cvtsi2s{d,s}`) the xmm register is
+    /// ModRM.reg and the general register or memory the r/m. REX.W follows
+    /// the general register's width, or the suffix for a memory integer.
+    SseCvt {
+        prefix: u8,
+        opcode: u8,
+        to_gpr: bool,
+    },
     /// A packed shift `<op> $imm8, %xmm` encoded as `66 [REX] 0F <opcode>
     /// /digit ib`: the op rides ModRM.reg as an opcode extension, the
     /// (source = destination) xmm sits in r/m. `var_opcode`, where the shift
@@ -1413,6 +1424,10 @@ fn sse2_op(name: &str) -> Option<Mnemonic> {
         ("unpcklps", 0, 0x14), ("unpckhps", 0, 0x15),
         // Packed int <-> single-float conversions (cvtdq2ps / cvtps2dq / cvttps2dq).
         ("cvtdq2ps", 0, 0x5B), ("cvtps2dq", 0x66, 0x5B), ("cvttps2dq", 0xF3, 0x5B),
+        // Between the float widths, and packed int <-> double.
+        ("cvtsd2ss", 0xF2, 0x5A), ("cvtss2sd", 0xF3, 0x5A),
+        ("cvtpd2ps", 0x66, 0x5A), ("cvtps2pd", 0, 0x5A),
+        ("cvtdq2pd", 0xF3, 0xE6), ("cvtpd2dq", 0xF2, 0xE6), ("cvttpd2dq", 0x66, 0xE6),
         ("addpd", 0x66, 0x58), ("subpd", 0x66, 0x5C), ("mulpd", 0x66, 0x59), ("divpd", 0x66, 0x5E),
         ("andpd", 0x66, 0x54), ("orpd", 0x66, 0x56), ("xorpd", 0x66, 0x57),
         ("unpcklpd", 0x66, 0x14), ("unpckhpd", 0x66, 0x15),
@@ -1526,6 +1541,20 @@ fn sse_imm(name: &str) -> Option<Mnemonic> {
     ];
     if let Some(&(_, prefix, opcode)) = MASKS.iter().find(|(n, _, _)| *n == name) {
         return Some(Mnemonic::SseSignMask { prefix, opcode });
+    }
+    // The scalar integer conversions, `(name, prefix, opcode, to_gpr)`.
+    #[rustfmt::skip]
+    const CVTS: &[(&str, u8, u8, bool)] = &[
+        ("cvttsd2si", 0xF2, 0x2C, true), ("cvttss2si", 0xF3, 0x2C, true),
+        ("cvtsd2si", 0xF2, 0x2D, true), ("cvtss2si", 0xF3, 0x2D, true),
+        ("cvtsi2sd", 0xF2, 0x2A, false), ("cvtsi2ss", 0xF3, 0x2A, false),
+    ];
+    if let Some(&(_, prefix, opcode, to_gpr)) = CVTS.iter().find(|r| r.0 == name) {
+        return Some(Mnemonic::SseCvt {
+            prefix,
+            opcode,
+            to_gpr,
+        });
     }
     // `(name, immediate opcode, /digit, variable-count opcode)`.
     #[rustfmt::skip]
@@ -4365,6 +4394,83 @@ fn encode_bespoke(
             }
             code.extend_from_slice(&[0x0F, opcode]);
             code.push(modrm_reg(d & 7, s & 7));
+            Ok(())
+        }
+        Mnemonic::SseCvt {
+            prefix,
+            opcode,
+            to_gpr,
+        } => {
+            let [src, dst] = two(ops)?;
+            let xmm = |c: &Concrete| match c {
+                Concrete::Reg { reg, .. } if (XMM_BASE..XMM_BASE + 16).contains(reg) => {
+                    Some(*reg - XMM_BASE)
+                }
+                _ => None,
+            };
+            let gpr = |c: &Concrete| match *c {
+                Concrete::Reg { reg, size } if reg < 16 => Some((reg, size)),
+                _ => None,
+            };
+            // The xmm-side operand and ModRM.reg, and the general-register
+            // width that sets REX.W.
+            let (rm, reg, width) = if to_gpr {
+                let Some((d, size)) = gpr(&dst) else {
+                    return Err(String::from(
+                        "inline asm: this conversion's destination must be a general register",
+                    ));
+                };
+                if xmm(&src).is_none() && MemRm::of(&src).is_none() {
+                    return Err(String::from(
+                        "inline asm: this conversion's source must be an XMM register or memory",
+                    ));
+                }
+                (src, d, Some(size))
+            } else {
+                let Some(d) = xmm(&dst) else {
+                    return Err(String::from(
+                        "inline asm: this conversion's destination must be an XMM register",
+                    ));
+                };
+                (src, d, gpr(&src).map(|(_, size)| size))
+            };
+            let w = match (width, suffix) {
+                (Some(r), Some(s)) if r != s => {
+                    return Err(String::from(
+                        "inline asm: the suffix does not match the general register's width",
+                    ));
+                }
+                (Some(size), _) | (None, Some(size)) => match size {
+                    AsmRegSize::Long => false,
+                    AsmRegSize::Quad => true,
+                    _ => {
+                        return Err(String::from(
+                            "inline asm: this conversion takes a 32- or 64-bit integer",
+                        ));
+                    }
+                },
+                // GNU as takes a memory integer without a suffix as 32 bits.
+                (None, None) => false,
+            };
+            code.push(prefix);
+            if let Some(s) = xmm(&rm).or_else(|| gpr(&rm).map(|(r, _)| r)) {
+                if w || reg >= 8 || s >= 8 {
+                    code.push(rex(w, reg >= 8, false, s >= 8));
+                }
+                code.extend_from_slice(&[0x0F, opcode]);
+                code.push(modrm_reg(reg & 7, s & 7));
+            } else {
+                let Some(mr) = MemRm::of(&rm) else {
+                    return Err(String::from(
+                        "inline asm: this conversion's source must be a register or memory",
+                    ));
+                };
+                if w || reg >= 8 || mr.rex_x() || mr.rex_b() {
+                    code.push(rex(w, reg >= 8, mr.rex_x(), mr.rex_b()));
+                }
+                code.extend_from_slice(&[0x0F, opcode]);
+                mr.emit(code, mode, addr, reg & 7)?;
+            }
             Ok(())
         }
         Mnemonic::Sse2Rr {
@@ -8250,6 +8356,54 @@ mod tests {
                 "{}",
                 core::str::from_utf8(tmpl).unwrap()
             );
+        }
+    }
+
+    /// The conversions between the integer and floating forms, register and
+    /// memory sources, 32- and 64-bit integers, and the float-width and
+    /// packed ones. A memory integer without a suffix is 32 bits, as GNU as
+    /// takes it. Bytes from llvm-mc 18, equal to GNU as 2.42's.
+    #[test]
+    fn scalar_and_packed_conversion_rows() {
+        #[rustfmt::skip]
+        let cases: &[(&[u8], &[u8])] = &[
+            (b"cvttsd2si %xmm1, %eax", &[0xF2, 0x0F, 0x2C, 0xC1]),
+            (b"cvttsd2si %xmm9, %r10", &[0xF2, 0x4D, 0x0F, 0x2C, 0xD1]),
+            (b"cvttsd2siq %xmm2, %rax", &[0xF2, 0x48, 0x0F, 0x2C, 0xC2]),
+            (b"cvttsd2si (%rdi), %ecx", &[0xF2, 0x0F, 0x2C, 0x0F]),
+            (b"cvttsd2si 8(%rdi), %r11", &[0xF2, 0x4C, 0x0F, 0x2C, 0x5F, 0x08]),
+            (b"cvttss2si %xmm3, %edx", &[0xF3, 0x0F, 0x2C, 0xD3]),
+            (b"cvttss2si (%rsi), %r12", &[0xF3, 0x4C, 0x0F, 0x2C, 0x26]),
+            (b"cvtsd2si %xmm15, %esi", &[0xF2, 0x41, 0x0F, 0x2D, 0xF7]),
+            (b"cvtsd2si (%rdi,%rcx,8), %rdi", &[0xF2, 0x48, 0x0F, 0x2D, 0x3C, 0xCF]),
+            (b"cvtss2si %xmm4, %r13d", &[0xF3, 0x44, 0x0F, 0x2D, 0xEC]),
+            (b"cvtss2si 4(%rsi), %rbx", &[0xF3, 0x48, 0x0F, 0x2D, 0x5E, 0x04]),
+            (b"cvtsi2sd %eax, %xmm0", &[0xF2, 0x0F, 0x2A, 0xC0]),
+            (b"cvtsi2sd %r9, %xmm10", &[0xF2, 0x4D, 0x0F, 0x2A, 0xD1]),
+            (b"cvtsi2sdl (%rdx), %xmm1", &[0xF2, 0x0F, 0x2A, 0x0A]),
+            (b"cvtsi2sdq (%rcx), %xmm11", &[0xF2, 0x4C, 0x0F, 0x2A, 0x19]),
+            (b"cvtsi2ss %ecx, %xmm2", &[0xF3, 0x0F, 0x2A, 0xD1]),
+            (b"cvtsi2ssq %rdx, %xmm3", &[0xF3, 0x48, 0x0F, 0x2A, 0xDA]),
+            (b"cvtsi2ssl 4(%rdx), %xmm12", &[0xF3, 0x44, 0x0F, 0x2A, 0x62, 0x04]),
+            (b"cvtsi2sd (%rax), %xmm0", &[0xF2, 0x0F, 0x2A, 0x00]),
+            (b"cvtsd2ss %xmm1, %xmm2", &[0xF2, 0x0F, 0x5A, 0xD1]),
+            (b"cvtss2sd (%rsi), %xmm13", &[0xF3, 0x44, 0x0F, 0x5A, 0x2E]),
+            (b"cvtpd2ps %xmm3, %xmm4", &[0x66, 0x0F, 0x5A, 0xE3]),
+            (b"cvtps2pd %xmm5, %xmm14", &[0x44, 0x0F, 0x5A, 0xF5]),
+            (b"cvtdq2pd (%rdi), %xmm6", &[0xF3, 0x0F, 0xE6, 0x37]),
+            (b"cvtpd2dq %xmm7, %xmm8", &[0xF2, 0x44, 0x0F, 0xE6, 0xC7]),
+            (b"cvttpd2dq %xmm9, %xmm10", &[0x66, 0x45, 0x0F, 0xE6, 0xD1]),
+        ];
+        for &(src, want) in cases {
+            assert_eq!(asm_bytes(src), want, "{}", String::from_utf8_lossy(src));
+        }
+        for bad in [
+            &b"cvttsd2sil %xmm0, %rax"[..],
+            b"cvtsi2sd %ax, %xmm0",
+            b"cvttsd2si %xmm0, %xmm1",
+        ] {
+            let got = mode_asm_bytes(super::super::table::Mode::Bits64, bad);
+            assert!(got.is_err(), "{}", String::from_utf8_lossy(bad));
         }
     }
 

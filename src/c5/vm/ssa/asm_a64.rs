@@ -1,11 +1,13 @@
 //! AArch64 inline asm under the interpreter: the integer instructions on the
-//! general registers, over the operand registers the native lowering assigns.
-//! Memory, branches, condition flags, SIMD / FP and system registers are
-//! refused rather than mis-modelled.
+//! general registers, over the operand registers the native lowering assigns,
+//! and `fmov` on the scalar SIMD / FP registers. Memory, branches, condition
+//! flags, the vector instructions and system registers are refused rather
+//! than mis-modelled.
 
 use alloc::format;
 
 use crate::c5::codegen::aarch64::asm::{AsmOpndA64, assign_operand_regs, parse_template};
+use crate::c5::codegen::aarch64::encode::vfp_expand_imm;
 use crate::c5::error::C5Error;
 use crate::c5::ir::{AsmBlock, AsmConstraint, ValueId};
 
@@ -58,12 +60,14 @@ fn check_words(bytes: &mut alloc::vec::Vec<u8>) -> Result<(), C5Error> {
     Ok(())
 }
 
-/// The general-register file: `x[31]` is the zero register.
-struct Gprs {
+/// The register files: `x[31]` is the zero register, `v` the 128-bit SIMD /
+/// FP registers.
+struct Regs {
     x: [u64; 32],
+    v: [u128; 32],
 }
 
-impl Gprs {
+impl Regs {
     fn read(&self, r: usize, is64: bool) -> u64 {
         if is64 {
             self.x[r]
@@ -120,7 +124,7 @@ impl Model<'_, '_> {
     /// The flexible second operand at `ops[i..]`: an immediate with an
     /// optional `lsl`, or a register with an optional shift or extend,
     /// read at the operation's width.
-    fn operand2(&self, g: &Gprs, ops: &[AsmOpndA64], i: usize, is64: bool) -> Result<u64, C5Error> {
+    fn operand2(&self, g: &Regs, ops: &[AsmOpndA64], i: usize, is64: bool) -> Result<u64, C5Error> {
         let bits = if is64 { 64 } else { 32 };
         let (v, reg) = match ops.get(i) {
             Some(AsmOpndA64::Imm(_) | AsmOpndA64::RefConst(_)) => (self.imm(ops.get(i))?, false),
@@ -248,7 +252,10 @@ pub(super) fn run(
             _ => {}
         }
     }
-    let mut g = Gprs { x: [0; 32] };
+    let mut g = Regs {
+        x: [0; 32],
+        v: [0; 32],
+    };
     for (i, op) in asm.operands.iter().enumerate() {
         let Some(r) = op_reg[i] else { continue };
         let r = r as usize;
@@ -314,10 +321,81 @@ pub(super) fn run(
     Ok(())
 }
 
+/// `fmov` from an immediate, within the FP file and between the files, on
+/// the scalar D and S views and a vector's top half. A write to a D or S
+/// view clears the rest of its vector register, as the architecture does.
+fn fmov(model: &Model<'_, '_>, g: &mut Regs, ops: &[AsmOpndA64]) -> Result<(), C5Error> {
+    use AsmOpndA64::{FpImm, VReg, VecElem};
+    let low = |v: u128, is_d: bool| if is_d { v as u64 } else { u64::from(v as u32) };
+    let widths = || refused("`fmov` between registers of different widths");
+    match ops {
+        [VReg { num: d, is_d }, FpImm(imm)] => {
+            g.v[*d as usize] = u128::from(vfp_expand_imm(*imm, !*is_d));
+        }
+        [
+            VReg { num: d, is_d },
+            VReg {
+                num: n,
+                is_d: from_d,
+            },
+        ] if is_d == from_d => {
+            g.v[*d as usize] = u128::from(low(g.v[*n as usize], *is_d));
+        }
+        [VReg { num: d, is_d }, src] => {
+            let (n, is64) = model.gpr(Some(src))?;
+            if is64 != *is_d {
+                return Err(widths());
+            }
+            g.v[*d as usize] = u128::from(g.read(n, is64));
+        }
+        [
+            VecElem {
+                num: d,
+                size: 3,
+                index: 1,
+            },
+            src,
+        ] => {
+            let (n, is64) = model.gpr(Some(src))?;
+            if !is64 {
+                return Err(widths());
+            }
+            let v = &mut g.v[*d as usize];
+            *v = (*v & u128::from(u64::MAX)) | (u128::from(g.x[n]) << 64);
+        }
+        [dst, VReg { num: n, is_d }] => {
+            let (d, is64) = model.gpr(Some(dst))?;
+            if is64 != *is_d {
+                return Err(widths());
+            }
+            g.write(d, is64, low(g.v[*n as usize], *is_d));
+        }
+        [
+            dst,
+            VecElem {
+                num: n,
+                size: 3,
+                index: 1,
+            },
+        ] => {
+            let (d, is64) = model.gpr(Some(dst))?;
+            if !is64 {
+                return Err(widths());
+            }
+            g.write(d, true, (g.v[*n as usize] >> 64) as u64);
+        }
+        _ => return Err(refused("this `fmov` form")),
+    }
+    Ok(())
+}
+
 /// Execute one instruction on the register file.
-fn step(model: &Model<'_, '_>, g: &mut Gprs, m: &str, ops: &[AsmOpndA64]) -> Result<(), C5Error> {
+fn step(model: &Model<'_, '_>, g: &mut Regs, m: &str, ops: &[AsmOpndA64]) -> Result<(), C5Error> {
     if NO_OPS.contains(&m) {
         return Ok(());
+    }
+    if m == "fmov" {
+        return fmov(model, g, ops);
     }
     if FLAG_OPS.contains(&m) {
         return Err(refused(&format!("`{m}`, which uses the condition flags,")));

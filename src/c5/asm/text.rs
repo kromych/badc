@@ -411,9 +411,11 @@ fn scan_local_label_tokens(text: &str) -> alloc::vec::Vec<LocalLabelTok<'_>> {
 /// (`f` a greater position, `b` a not-greater one). The rest of the pipeline
 /// resolves a label as a single-definition symbol, so this turns the
 /// multiple-definition case -- a template reusing `1:` across nested
-/// replacement blocks -- into the handled named-label case. A number defined
-/// once keeps its numeric form (the common case), so the result is `None` when
-/// no number is defined more than once.
+/// replacement blocks or in a repeated body -- into the handled named-label
+/// case. The text is the macro expansion's, where each copy of a repeated body
+/// defines its own labels. A number defined once keeps its numeric form (the
+/// common case), so the result is `None` when no number is defined more than
+/// once.
 pub(crate) fn rewrite_multidef_local_labels(text: &str) -> Option<alloc::string::String> {
     let toks = scan_local_label_tokens(text);
     let mut def_counts: alloc::collections::BTreeMap<&str, usize> =

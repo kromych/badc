@@ -895,6 +895,10 @@ pub(super) fn emit_va_arg_sysv(
     } else {
         ap
     };
+    if desc.kind == VaArgDesc::NONE {
+        int_result_to_dst(code, dst, ap, frame);
+        return Ok(());
+    }
     // A by-value integer-class aggregate spans `ceil(size/8)` consecutive gp
     // slots and rides the save area only when all of them fit; an FP
     // argument is a single double or a vector, each one 16-byte save slot.

@@ -30,10 +30,10 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
                	pushq	%rbx
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %rcx
-               	leaq	<rip>, %rdx
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rdx      # <addr>
+               	leaq	<rip>, %rsi      # <addr>
                	movabsq	$-0x2152411021524111, %rax # imm = 0xDEADBEEFDEADBEEF
                	movq	%rax, (%rdi)
                	movq	%rax, (%rcx)
@@ -43,19 +43,19 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	xorl	%ecx, %ecx
                	cpuid
-               	leaq	<rip>, %r10
+               	leaq	<rip>, %r10      # <addr>
                	movq	%rax, (%r10)
-               	leaq	<rip>, %r10
+               	leaq	<rip>, %r10      # <addr>
                	movq	%rbx, (%r10)
-               	leaq	<rip>, %r10
+               	leaq	<rip>, %r10      # <addr>
                	movq	%rcx, (%r10)
-               	leaq	<rip>, %r10
+               	leaq	<rip>, %r10      # <addr>
                	movq	%rdx, (%r10)
                	movq	(%rdi), %rax
                	shrq	$0x20, %rax
                	testl	%eax, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	shrq	$0x20, %rax
                	testl	%eax, %eax
@@ -64,7 +64,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	testq	%rsi, %rsi
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx), %rcx
                	shrq	$0x20, %rcx
                	testl	%ecx, %ecx
@@ -72,7 +72,7 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	shrq	$0x20, %rax
                	testl	%eax, %eax
@@ -93,11 +93,11 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	xorl	%ecx, %ecx
                	cpuid
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	movq	(%rdi), %rdi
                	cmpl	%edi, %eax
                	jne	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	cmpl	%eax, %ebx
                	sete	%sil
@@ -105,14 +105,14 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	testq	%rsi, %rsi
                	je	<addr>
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi      # <addr>
                	movq	(%rsi), %rsi
                	cmpl	%esi, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	cmpl	%eax, %edx
                	sete	%al

@@ -13,8 +13,14 @@ const CODESIGN: &str = "/usr/bin/codesign";
 /// binary emit, native-binary emit -- so the chatter is uniform.
 /// Routes the info line through `eprint_diagnostic` so the
 /// severity word picks up the green TTY color.
-pub(crate) fn write_output(out: &std::path::Path, bytes: &[u8], target: Target, quiet: bool) {
-    if let Err(e) = std::fs::write(out, bytes) {
+pub(crate) fn write_output(
+    out: &std::path::Path,
+    bytes: &[u8],
+    target: Target,
+    quiet: bool,
+    executable: bool,
+) {
+    if let Err(e) = badc::write_output_file(out, bytes, executable) {
         eprint_diagnostic(format!(
             "badc: error: failed to write {}: {e}",
             out.display()
@@ -77,21 +83,6 @@ pub(crate) fn post_write_native(out: &std::path::Path, target: Target) {
             );
         }
     }
-}
-
-#[cfg(unix)]
-pub(crate) fn set_executable(path: &std::path::Path) {
-    use std::os::unix::fs::PermissionsExt;
-    if let Ok(meta) = std::fs::metadata(path) {
-        let mut perms = meta.permissions();
-        perms.set_mode(perms.mode() | 0o111);
-        let _ = std::fs::set_permissions(path, perms);
-    }
-}
-
-#[cfg(not(unix))]
-pub(crate) fn set_executable(_path: &std::path::Path) {
-    // Windows treats `.exe` extension as the executable signal; nothing to do.
 }
 
 #[cfg(target_os = "macos")]

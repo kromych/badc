@@ -1,7 +1,6 @@
 use super::args::Cli;
 use super::diag::{eprint_diagnostic, eprint_error};
 use super::options::Mode;
-use super::output::set_executable;
 
 /// One link input in command-line position: placement follows the
 /// order files are loaded, so archives keep their place in the line.
@@ -201,10 +200,9 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
         .output_path
         .clone()
         .unwrap_or_else(|| std::path::PathBuf::from("a.out"));
-    if let Err(e) = std::fs::write(&out, &res.image) {
+    if let Err(e) = badc::write_output_file(&out, &res.image, true) {
         fail(format!("error: failed to write {}: {e}", out.display()));
     }
-    set_executable(&out);
     if !cli.quiet {
         eprint_diagnostic(format!("info: wrote file {}", out.display()));
     }

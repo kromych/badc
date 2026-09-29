@@ -90,6 +90,19 @@ pub struct LdsObject {
 }
 
 impl LdsObject {
+    /// The name a diagnostic gives symbol `i`: its own, or for a section
+    /// symbol, which has none, its section's, as GNU ld reports it.
+    pub(super) fn symbol_name(&self, i: usize) -> String {
+        let sym = &self.symbols[i];
+        if !sym.name.is_empty() || sym.kind() != super::STT_SECTION {
+            return sym.name.clone();
+        }
+        match self.shndx_map.get(&sym.shndx) {
+            Some(&k) => self.sections[k].name.clone(),
+            None => format!("section symbol {}", sym.shndx),
+        }
+    }
+
     pub(super) fn section_data(&self, s: &RawSection) -> &[u8] {
         if s.shtype == SHT_NOBITS {
             return &[];

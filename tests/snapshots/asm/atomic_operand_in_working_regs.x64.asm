@@ -35,7 +35,7 @@ Disassembly of section .text:
                	movq	%rdx, %rbx
                	movq	%rcx, %r12
                	movl	$0x64, %eax
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movl	$0x5, %ecx
                	pushq	%rax
                	lock
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	leaq	(%rdi,%rsi), %r13
                	movq	%r13, %r10
                	lock
@@ -78,7 +78,7 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	leaq	0x9(%rdi), %rcx
                	addq	%rsi, %rcx

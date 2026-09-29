@@ -1058,6 +1058,30 @@ fn aarch64_movw_sabs_overflow_fails_the_link() {
     assert!(e.contains("overflow against `tgt'"), "{e}");
 }
 
+/// A diagnostic names a section symbol, which has no name of its own,
+/// by its section, as GNU ld does.
+#[test]
+fn a_section_symbol_is_named_by_its_section_in_a_diagnostic() {
+    // Symtab: null(0), .text(1), .data(2).
+    let o = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0; 4])
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+        .reloc(0, 0, 2, rt::R_X86_64_32, 0);
+    let objs = alloc::vec![parse_lds_object("a.o", o.build(EM_X86_64)).expect("a.o parses")];
+    let script = parse_linker_script(
+        "SECTIONS { . = 0x1000; .text : { *(.text) } . = 0x100000000; .data : { *(.data) } }",
+    )
+    .expect("script parses");
+    let opts = LdsOptions {
+        emit: LdsEmit::Exec,
+        max_page_size: 0x1000,
+        ..Default::default()
+    };
+    let e = link_with_script(&script, objs, &opts).expect_err("the field cannot hold the address");
+    let e = format!("{e}");
+    assert!(e.contains("R_X86_64_32 against `.data'"), "{e}");
+}
+
 // ---- Cortex-A53 erratum 843419 (`--fix-cortex-a53-843419`) ----
 // The expectations mirror GNU ld's workaround: the ADRP becomes an
 // ADR where the addressed page is within a megabyte, otherwise the
@@ -2579,6 +2603,24 @@ fn dyn_tags(image: &[u8]) -> Vec<(u64, u64)> {
 fn dynstr_at(image: &[u8], off: u64) -> String {
     let (_, s) = image_section(image, ".dynstr");
     strz(&s, off as usize)
+}
+
+/// A `-pie` link carries `DT_FLAGS_1` with `DF_1_PIE`, as GNU ld's and
+/// lld's do; a `-shared` link does not.
+#[test]
+fn only_a_pie_link_carries_df_1_pie() {
+    let script = parse_linker_script(&default_script(true)).expect("parses");
+    for (shared, want) in [(false, Some(dynamic::DF_1_PIE)), (true, None)] {
+        let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
+        let mut opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])]);
+        opts.shared = shared;
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let flags_1 = dyn_tags(&res.image)
+            .into_iter()
+            .find(|&(t, _)| t == dynamic::DT_FLAGS_1)
+            .map(|(_, v)| v);
+        assert_eq!(flags_1, want, "shared={shared}");
+    }
 }
 
 /// A shared library input takes a `DT_NEEDED` naming its soname,

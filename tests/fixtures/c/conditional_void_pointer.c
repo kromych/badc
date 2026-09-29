@@ -10,7 +10,15 @@
  * operand is a constant expression by asking which arm's type won.
  *
  * A struct with no named member has size 0 (gcc / clang C extension),
- * which the `sizeof(struct { int:-!!(e); })` assertion idiom needs. */
+ * which the `sizeof(struct { int:-!!(e); })` assertion idiom needs. The
+ * MS layout of the PE targets (MSVC, clang's windows-msvc triples) gives
+ * it 4 bytes, which the idiom then adds. */
+
+#if defined(_WIN32)
+#define NO_STORAGE 4
+#else
+#define NO_STORAGE 0
+#endif
 
 #define is_constexpr(x) \
     (sizeof(int) == sizeof(*(8 ? ((void *)((long)(x) * 0l)) : (int *)8)))
@@ -58,12 +66,12 @@ int main(void) {
     if (sizeof(*(g ? (struct obj *)&g : 0)) != sizeof(struct obj))
         return 7;
 
-    /* A struct with no named member is zero-sized. */
-    if (sizeof(struct {}) != 0)
+    /* A struct with no named member: gcc gives it 0 bytes, MSVC 4. */
+    if (sizeof(struct {}) != NO_STORAGE)
         return 8;
-    if (sizeof(struct { int : 0; }) != 0)
+    if (sizeof(struct { int : 0; }) != NO_STORAGE)
         return 9;
-    if (BUILD_BUG_ON_ZERO(0) != 0)
+    if (BUILD_BUG_ON_ZERO(0) != NO_STORAGE)
         return 10;
 
     /* The constant-expression detector: 1 for constants, 0 otherwise. */
@@ -77,11 +85,11 @@ int main(void) {
         return 14;
 
     /* Constant and runtime argument forms agree on the value. */
-    if (MASK(39, 21) != 0xffffe00000ULL)
+    if (MASK(39, 21) != 0xffffe00000ULL + NO_STORAGE)
         return 15;
-    if (mask_dyn(39, 21) != 0xffffe00000ULL)
+    if (mask_dyn(39, 21) != 0xffffe00000ULL + NO_STORAGE)
         return 16;
-    if (mask_dyn(7, 0) != 0xffULL)
+    if (mask_dyn(7, 0) != 0xffULL + NO_STORAGE)
         return 17;
 
     return 0;

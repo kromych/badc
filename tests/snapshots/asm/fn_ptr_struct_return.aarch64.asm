@@ -14,7 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <finder_impl>:
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	ret
 

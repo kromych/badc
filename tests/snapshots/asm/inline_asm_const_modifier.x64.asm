@@ -38,7 +38,7 @@ Disassembly of section .text:
                	retq
 
 <address_modifier>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	retq
 
@@ -56,7 +56,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rax
                	cmpl	$0x21, %eax
                	je	<addr>

@@ -29,7 +29,7 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	testl	%edi, %edi
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rcx
                	addq	%rdi, %rcx
                	movq	%rcx, (%rax)
@@ -44,7 +44,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movl	$0x64, %edi
                	callq	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x13ba, %rax           # imm = 0x13BA
                	jne	<addr>

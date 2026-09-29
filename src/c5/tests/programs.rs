@@ -474,12 +474,16 @@ fn get_cpuid_leaf_checks() {
 
 /// The interpreter runs an inline asm template in the assembler syntax of
 /// the target the program was compiled for: AArch64 integer instructions on
-/// the general registers, x86-64's on its register model. Each fixture
+/// the general registers and `fmov` on the scalar FP ones, x86-64's on its
+/// register model. Each fixture
 /// computes under both targets the value its native build returns.
 #[test]
 fn the_interpreter_runs_inline_asm_in_the_targets_syntax() {
     for (name, want) in [
         ("inline_asm_a64_integer_ops.c", 0),
+        ("inline_asm_a64_fmov.c", 42),
+        ("inline_asm_a64_fmov_forms.c", 42),
+        ("inline_asm_a64_fmov_top_half.c", 42),
         ("asm_register_outputs.c", 0),
         ("file_scope_asm_decls.c", 0),
         ("inline_asm_a64_bitfield.c", 42),
@@ -518,6 +522,11 @@ fn the_interpreter_refuses_an_unmodelled_aarch64_template() {
             "an instruction word other than a hint or a barrier",
         ),
         ("b 1f\n1:\tmov %0, %1", "`b`"),
+        ("fmov v0.4s, #1.0\n\tmov %0, %1", "this `fmov` form"),
+        (
+            "fmov d0, %1\n\tfmov %w0, d0",
+            "`fmov` between registers of different widths",
+        ),
     ] {
         let src = format!(
             "int main(void) {{ unsigned long x = 1, y; \
@@ -1478,8 +1487,15 @@ fn cpu_relax_hint() {
 fn empty_struct_member() {
     // A complete empty `struct {}` member contributes zero storage (GCC),
     // so the common flexible-array-in-union idiom lays a flexible array
-    // over a union's first member. Forward-declared members stay rejected.
-    assert_eq!(run_fixture("empty_struct_member.c"), 0);
+    // over a union's first member; the PE targets take MSVC's 4 bytes.
+    // Forward-declared members stay rejected.
+    for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+        assert_eq!(
+            run_fixture_for("empty_struct_member.c", target),
+            0,
+            "{target:?}"
+        );
+    }
 }
 
 #[test]
@@ -1690,8 +1706,15 @@ fn variadic_struct_return() {
 #[test]
 fn flex_array_member_sizing() {
     // C99 6.7.2.1p18: a flexible/zero-length array member contributes no
-    // storage; an aggregate built only from such members has size 0.
-    assert_eq!(run_fixture("flex_array_member_sizing.c"), 0);
+    // storage; an aggregate built only from such members has size 0, or
+    // MSVC's 4 on the PE targets.
+    for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+        assert_eq!(
+            run_fixture_for("flex_array_member_sizing.c", target),
+            0,
+            "{target:?}"
+        );
+    }
 }
 
 #[test]
@@ -2304,6 +2327,13 @@ fn enum_unsigned_compatible() {
 }
 
 #[test]
+fn enum_wide_compatible_long() {
+    // An enum whose values need 64 bits is `long` / `unsigned long` where
+    // `long` has 64 bits, as gcc and clang type it.
+    assert_eq!(run_fixture("enum_wide_compatible_long.c"), 0);
+}
+
+#[test]
 fn types_compatible_fn_ptr_cast() {
     // typeof of a function-pointer cast carries the cast's prototype
     // into __builtin_types_compatible_p.
@@ -2331,6 +2361,13 @@ fn speculative_init_parse_data_rewind() {
     // conditional emits data and rewinds it; the padding and boundary
     // records must rewind with it.
     assert_eq!(run_fixture("speculative_init_parse_data_rewind.c"), 0);
+}
+
+/// An object alias keeps its declared type; only its symbol binds to the
+/// target's storage.
+#[test]
+fn attribute_alias_keeps_declared_type() {
+    assert_eq!(run_fixture("attribute_alias_keeps_declared_type.c"), 0);
 }
 
 #[test]
@@ -2813,6 +2850,37 @@ fn enum_used_before_definition() {
     // C99 6.7.2.2p4: values read through declarations made before an enum's
     // definition take the enum's type, as those made after it do.
     assert_eq!(run_fixture("enum_used_before_definition.c"), 0);
+}
+
+#[test]
+fn tag_scopes() {
+    // C99 6.2.1p4, 6.2.3: a block's tag of any kind hides an outer one and
+    // goes out of scope with the block.
+    assert_eq!(run_fixture("tag_scopes.c"), 0);
+}
+
+#[test]
+fn a_zero_size_object_takes_a_frame_cell() {
+    // GNU C's empty aggregate is an object: a local, a by-value argument's
+    // copy and a returned temporary each take a cell of their own, so the
+    // interpreter reads their addresses and no neighbour shares one.
+    let src = "struct E {};\n\
+        static int f(struct E e, int y) { (void)e; return y; }\n\
+        static struct E mk(void) { struct E e; return e; }\n\
+        int main(void) {\n\
+          int before = 1; struct E a, b; int after = 2;\n\
+          struct E c = mk(); (void)c;\n\
+          if ((void *)&a == (void *)&b || (void *)&a == (void *)&before) return 1;\n\
+          return f(a, 42) == 42 && before + after == 3 ? 0 : 2;\n\
+        }\n";
+    assert_eq!(run_str(src), 0);
+}
+
+#[test]
+fn empty_record_args() {
+    // An aggregate with no member of storage crosses a call in nothing on
+    // System V x86-64 and AAPCS64, named, variadic or returned.
+    assert_eq!(run_fixture("empty_record_args.c"), 0);
 }
 
 #[test]
@@ -3619,6 +3687,31 @@ fn block_scope_thread_local() {
     // object has thread storage duration -- placed in the TLS block, one per
     // thread, persisting across calls (single-threaded: accumulates).
     assert_eq!(run_fixture("block_scope_thread_local.c"), 0);
+}
+
+#[test]
+fn a_block_scope_static_thread_local_hides_the_file_scope_one() {
+    // C99 6.2.1p4: the block's `static _Thread_local x` is its own object,
+    // named by every reference in the block after the scope has closed once.
+    assert_eq!(run_fixture("thread_local_block_static_shadow.c"), 0);
+}
+
+#[test]
+fn a_const_thread_local_folds_from_the_thread_local_template() {
+    // A `const _Thread_local` object's value, element or member read in a
+    // static initializer comes from the thread-local template, not `.data`.
+    assert_eq!(run_fixture("thread_local_const_fold.c"), 0);
+}
+
+#[test]
+fn all_zero_thread_locals_follow_the_initialized_ones() {
+    // The template lays the initialized thread-locals out first and the
+    // all-zero ones after them; values, relocations and alignment follow.
+    use crate::Target;
+    for target in [Target::LinuxX64, Target::MacOSAarch64, Target::WindowsX64] {
+        let got = run_fixture_for("thread_local_zero_images.c", target);
+        assert_eq!(got, 0, "{target:?}");
+    }
 }
 
 #[test]
@@ -6383,7 +6476,13 @@ fn conditional_void_pointer() {
     // C99 6.5.15p6 for two pointer arms: a null pointer constant arm
     // takes the other arm's type, otherwise a `void *` arm wins. The
     // constant-expression detection idiom rests on that distinction.
-    assert_eq!(run_fixture("conditional_void_pointer.c"), 0);
+    for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+        assert_eq!(
+            run_fixture_for("conditional_void_pointer.c", target),
+            0,
+            "{target:?}"
+        );
+    }
 }
 
 #[test]
@@ -7122,10 +7221,11 @@ fn function_close_cost_is_independent_of_declaration_count() {
          exits examine, so the unwind is reading the table rather than \
          the scope's own bindings",
     );
-    // The full-table scan this replaced does grow with the declarations,
-    // so the equality above is not something any implementation gives.
+    // The full-table scan this replaced reads every added declaration at
+    // each of the 300 function exits at least, so the equality above is
+    // not something any implementation gives.
     assert!(
-        large_scan >= small_scan * 8,
+        large_scan.saturating_sub(small_scan) >= (16000 - 500) * 300,
         "a full-table scan per scope exit no longer grows with the \
          declaration count ({small_scan} -> {large_scan}); the check \
          above no longer proves anything",
@@ -7785,23 +7885,22 @@ fn integer_constant_added_to_an_address_constant() {
     // expression added to it in either order. A leading integer term --
     // including a cast or a `sizeof` of an anonymous bitfield struct,
     // the shape a compile-time type assertion expands to -- must still
-    // leave a relocation in the slot.
-    assert_eq!(
-        run_str(
-            "struct opts { int a; int b; };\n\
-             static struct opts opts;\n\
-             struct row { void *value; };\n\
-             static struct row r[] = {\n\
-                 { .value = &opts.b + 0 },\n\
-                 { .value = 0 + &opts.b },\n\
-                 { .value = (int)(sizeof(struct { int : (-!!0); })) + &opts.b },\n\
-             };\n\
-             int main(void) {\n\
-                 if (r[0].value != &opts.b) return 1;\n\
-                 if (r[1].value != r[0].value) return 2;\n\
-                 if (r[2].value != r[0].value) return 3;\n\
-                 return 42; }"
-        ),
-        42
-    );
+    // leave a relocation in the slot. That struct has gcc's size 0 and
+    // MSVC's 4, the PE targets' layout.
+    let src = "struct opts { int a; int b; int pad[4]; };\n\
+               static struct opts opts;\n\
+               struct row { void *value; };\n\
+               static struct row r[] = {\n\
+                   { .value = &opts.b + 0 },\n\
+                   { .value = 0 + &opts.b },\n\
+                   { .value = (int)(sizeof(struct { int : (-!!0); })) + &opts.b },\n\
+               };\n\
+               int main(void) {\n\
+                   if (r[0].value != &opts.b) return 1;\n\
+                   if (r[1].value != r[0].value) return 2;\n\
+                   if (r[2].value != &opts.b + sizeof(struct { int : 0; })) return 3;\n\
+                   return 42; }";
+    for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+        assert_eq!(super::run_str_for(src, target), 42, "{target:?}");
+    }
 }

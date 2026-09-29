@@ -1003,7 +1003,7 @@ impl Compiler {
         self.symbols[id_idx].class = Token::Fun as i64;
         if self.symbols[id_idx].binding.decl_line == 0 {
             self.symbols[id_idx].binding.decl_line = self.lex.line;
-            self.symbols[id_idx].binding.decl_in_main_source = self.in_main_source();
+            self.symbols[id_idx].binding.decl_in_user_source = self.in_user_source();
         }
         // Census one file-scope declaration of this name for
         // the inline linkage models (C99 6.7.4p6-p7 and
@@ -1145,7 +1145,7 @@ impl Compiler {
         // report about the function points at its body.
         self.symbols[id_idx].binding.decl_line = def.line;
         self.symbols[id_idx].binding.decl_file = self.intern_source_file() as u32;
-        self.symbols[id_idx].binding.decl_in_main_source = self.in_main_source();
+        self.symbols[id_idx].binding.decl_in_user_source = self.in_user_source();
         // C99 6.9.1p5: a definition names every parameter it declares.
         if params.indices.len() != params.types.len() {
             return Err(self.compile_err_at(
@@ -1156,6 +1156,17 @@ impl Compiler {
         }
         self.parse_kr_parameter_declarations(&mut params)?;
         self.check_complete_parameters(&params, def.line)?;
+        // C99 6.9.1p3: a definition returns void or a complete object type.
+        let ret = self.symbols[id_idx].type_;
+        if self.incomplete_aggregate_tag(ret).is_some() {
+            let ty = super::types::format_type(ret, &self.structs);
+            let name = &self.symbols[id_idx].name;
+            return Err(self.compile_err_at(
+                Code::INVALID_DECLARATION,
+                def.line,
+                format!("incomplete result type `{ty}` in the definition of `{name}`"),
+            ));
+        }
         // C99 6.9.1p7: an identifier list is no prototype; calls pass what arrives.
         let arrival = if params.form == super::function::ParamForm::IdentifierList {
             self.old_style_arrival_tys(id_idx, &params.types)
@@ -1200,10 +1211,8 @@ impl Compiler {
         params: &super::function::ParsedParams,
         line: usize,
     ) -> Result<(), C5Error> {
-        for (pos, (&idx, &ty)) in params.indices.iter().zip(&params.types).enumerate() {
-            let incomplete_enum =
-                params.enum_tags.iter().any(|&(p, _)| p == pos) && !is_pointer_ty(ty);
-            if self.incomplete_aggregate_tag(ty).is_some() || incomplete_enum {
+        for (&idx, &ty) in params.indices.iter().zip(&params.types) {
+            if self.incomplete_aggregate_tag(ty).is_some() {
                 let name = &self.symbols[idx].name;
                 return Err(self.compile_err_at(
                     Code::INVALID_DECLARATION,
@@ -1728,6 +1737,7 @@ impl Compiler {
                     fn_ptr_indirection: sym.fn_ptr_indirection,
                     params: sym.params.clone(),
                     is_variadic: sym.is_variadic,
+                    prototyped: sym.prototyped,
                     array_dims: if is_parameter {
                         Vec::new()
                     } else {
@@ -1843,7 +1853,7 @@ impl Compiler {
             let i = bi as usize;
             let sym = &self.symbols[i];
             if sym.class != Token::Loc as i64
-                || !sym.binding.decl_in_main_source
+                || !sym.binding.decl_in_user_source
                 || sym.binding.address_escaped
                 || sym.binding.was_read
                 || sym.binding.maybe_unused
@@ -1979,8 +1989,7 @@ impl Compiler {
             // further on in the unit -- a tag defined later, or an enum
             // used before its definition -- so its storage is sized, and
             // an aggregate left incomplete rejected, once the unit is parsed.
-            let tag = self.incomplete_aggregate_tag(ty);
-            if tag.is_some() || (decl.base_enum_tag.is_some() && !is_pointer_ty(ty)) {
+            if let Some(tag) = self.incomplete_aggregate_tag(ty) {
                 self.pending_incomplete_objects
                     .push((id_idx, tag, signature_line));
             }
@@ -2033,7 +2042,7 @@ impl Compiler {
         if self.symbols[id_idx].binding.decl_line == 0 {
             self.symbols[id_idx].binding.decl_line = self.lex.line;
             self.symbols[id_idx].binding.decl_file = self.intern_source_file() as u32;
-            self.symbols[id_idx].binding.decl_in_main_source = self.in_main_source();
+            self.symbols[id_idx].binding.decl_in_user_source = self.in_user_source();
         }
         if !was_tentative_glo {
             self.symbols[id_idx].is_thread_local = thread_local;
@@ -2083,7 +2092,6 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Glo as i64;
             self.symbols[id_idx].type_ = ty;
             self.symbols[id_idx].val = self.symbols[tgt].val;
-            Self::adopt_alias_storage(&mut self.symbols, id_idx, tgt);
             self.object_aliases.push((id_idx, tgt));
             self.symbols[id_idx].defined_here = true;
             self.symbols[id_idx].is_extern_decl = false;
@@ -2751,9 +2759,8 @@ impl Compiler {
     /// declarator's own line.
     fn complete_tentative_definitions(&mut self) -> Result<(), C5Error> {
         for (id_idx, sid, line) in core::mem::take(&mut self.pending_incomplete_objects) {
-            if let Some(sid) = sid
-                && !self.structs[sid].is_complete
-            {
+            let tag = &self.structs[sid];
+            if !tag.is_complete && tag.enum_underlying.is_none() {
                 let name = self.symbols[id_idx].name.clone();
                 return Err(self.compile_err_at(
                     Code::INVALID_DECLARATION,
@@ -2854,7 +2861,6 @@ impl Compiler {
             self.symbols[id_idx].defined_here = true;
             self.symbols[id_idx].is_extern_decl = false;
             if is_object {
-                Self::adopt_alias_storage(&mut self.symbols, id_idx, tgt);
                 self.object_aliases.push((id_idx, tgt));
             } else {
                 let name = self.symbols[id_idx].link_name().into();
@@ -2869,21 +2875,6 @@ impl Compiler {
             }
         }
         Ok(())
-    }
-
-    /// An object alias names its target's storage, so it takes the
-    /// target's extent along with its offset -- the declarator may leave
-    /// the count out (`extern T a[] __attribute__((alias("t")))`). The
-    /// symbol table's size then describes the aliased object, which is
-    /// what a consumer walking it needs: Linux's modpost reads a
-    /// `MODULE_DEVICE_TABLE` alias' device table by `st_size`.
-    fn adopt_alias_storage(symbols: &mut [crate::c5::symbol::Symbol], alias: usize, target: usize) {
-        let (array_size, zero_len) = (
-            symbols[target].array_size,
-            symbols[target].is_zero_len_array,
-        );
-        symbols[alias].array_size = array_size;
-        symbols[alias].is_zero_len_array = zero_len;
     }
 
     /// Symbol index the alias target `name` resolves to: a defined symbol
@@ -2984,16 +2975,20 @@ impl Compiler {
         // not unused (matching gcc / clang, which never warn on it).
         let init_names: alloc::collections::BTreeSet<&str> =
             self.init_funcs.iter().map(|f| f.name.as_str()).collect();
-        let mut unused: Vec<(usize, String)> = Vec::new();
+        let mut unused: Vec<(u32, usize, String)> = Vec::new();
         for sym in self.symbols.iter() {
             if sym.class != Token::Fun as i64
                 || !sym.defined_here
                 || sym.linkage != Linkage::Internal
                 // An inline definition is internal but externally
-                // declared; another unit may still call the name.
+                // declared; another unit may still call the name. gcc
+                // reports no `inline` function, which headers define
+                // for their includers to call or not.
                 || sym.is_inline_definition
+                || sym.saw_plain_inline_decl
+                || sym.saw_extern_inline_decl
                 || sym.binding.was_referenced
-                || !sym.binding.decl_in_main_source
+                || !sym.binding.decl_in_user_source
                 || sym.name.is_empty()
                 || sym.name.starts_with('_')
                 || sym.name == "main"
@@ -3002,14 +2997,14 @@ impl Compiler {
             {
                 continue;
             }
-            unused.push((sym.binding.decl_line, sym.name.clone()));
+            let b = &sym.binding;
+            unused.push((b.decl_file, b.decl_line, sym.name.clone()));
         }
-        for (line, name) in unused {
-            self.warn_at(
-                Code::UNUSED_FUNCTION,
-                line,
-                alloc::format!("unused function `{name}`"),
-            );
+        // The unit is parsed, so each report names its declaration's file.
+        for (file, line, name) in unused {
+            let file = self.source_files[file as usize].clone();
+            let msg = alloc::format!("unused function `{name}`");
+            self.warn_at_file(Code::UNUSED_FUNCTION, &file, line, msg);
         }
     }
 

@@ -23,14 +23,7 @@ impl<'a> LdsLinker<'a> {
         errors: &mut Vec<String>,
         oi: usize,
     ) {
-        let name = || {
-            let sym = &self.objects[oi].symbols[r.sym as usize];
-            if sym.name.is_empty() {
-                format!("section symbol {}", sym.shndx)
-            } else {
-                sym.name.clone()
-            }
-        };
+        let name = || self.objects[oi].symbol_name(r.sym as usize);
         let rd32 = |buf: &[u8], site: usize| -> u32 {
             u32::from_le_bytes([buf[site], buf[site + 1], buf[site + 2], buf[site + 3]])
         };

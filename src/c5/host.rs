@@ -33,6 +33,12 @@ pub enum Overwrite {
     Force,
 }
 
+/// The last component of `path`, split at `/` or `\`: the object writer
+/// and the linker name files after paths either host spells.
+pub(crate) fn path_base_name(path: &str) -> &str {
+    path.rsplit(['/', '\\']).next().unwrap_or(path)
+}
+
 pub trait Host {
     /// Open `name` for reading. Returns a fresh non-negative fd or `-1`.
     fn open(&mut self, name: &str) -> i64;

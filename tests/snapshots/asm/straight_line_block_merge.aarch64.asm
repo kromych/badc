@@ -572,7 +572,7 @@ Disassembly of section .text:
                	mov	x20, #0xe               // =14
                	b	<addr>
                	cbnz	w20, <addr>
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	mov	x1, #0x7                // =7
                	mov	x2, #0x3                // =3
@@ -583,7 +583,7 @@ Disassembly of section .text:
                	mov	x20, #0xf               // =15
                	b	<addr>
                	cbnz	w20, <addr>
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	mov	x1, #0x7                // =7
                	mov	x2, #0x0                // =0
@@ -594,7 +594,7 @@ Disassembly of section .text:
                	mov	x20, #0x10              // =16
                	b	<addr>
                	cbnz	w20, <addr>
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
                	mov	x3, #0x64               // =100

@@ -123,7 +123,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	(%rax), %ecx
                	xorq	$0x1, %rcx
                	testl	%ecx, %ecx
@@ -157,7 +157,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	0x20(%rax), %ecx
                	xorq	$0x2, %rcx
                	testl	%ecx, %ecx
@@ -191,7 +191,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rcx
                	cmpq	$0x1, %rcx
                	jne	<addr>

@@ -40,7 +40,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	clflush	%ds:<rip>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	(%rax), %eax
                	movl	$0xa5a5a5a5, %r11d      # imm = 0xA5A5A5A5
                	cmpl	%r11d, %eax
@@ -50,7 +50,7 @@ Disassembly of section .text:
                	nop
                	nop
                	nop
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	$0x12345678, (%rax)     # imm = 0x12345678
                	movl	%ds:<rip>, %eax
                	cmpl	$0x12345678, %eax       # imm = 0x12345678

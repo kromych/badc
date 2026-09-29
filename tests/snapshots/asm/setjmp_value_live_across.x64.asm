@@ -28,7 +28,7 @@ Disassembly of section .text:
 <h>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	movl	$0x1, %esi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -41,7 +41,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	imulq	$0x7, %rdi, %rax
                	leaq	(%rax,%rsi), %rbx
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax

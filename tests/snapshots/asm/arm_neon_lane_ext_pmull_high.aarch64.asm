@@ -89,11 +89,11 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x70
-               	adrp	x16, <page>
+               	adrp	x16, <addr>
                	add	x16, x16, <lo12>
                	ldr	q0, [x16]
                	stur	q0, [x29, #-0x70]
-               	adrp	x16, <page>
+               	adrp	x16, <addr>
                	add	x16, x16, <lo12>
                	ldr	q0, [x16]
                	stur	q0, [x29, #-0x60]

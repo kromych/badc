@@ -11,8 +11,18 @@
 //
 // A guard object follows each initialized one, so a store past the fixed
 // part is visible.
+//
+// The MS layout of the PE targets (MSVC, clang's windows-msvc triples)
+// gives the empty member 4 bytes, so `slaves` follows it instead of
+// overlaying `slave0`.
 
 #include <stdio.h>
+
+#if defined(_WIN32)
+#define DESC_SIZE 8
+#else
+#define DESC_SIZE 5
+#endif
 
 struct desc {
     unsigned char len;
@@ -62,13 +72,15 @@ static struct plain p = { .n = 3, .v = { 7, 8, 9 } };
 static unsigned int guard3 = 0x55555555u;
 
 int main(void) {
-    if (sizeof(struct desc) != 5) return 1;
-    if (d_scalar.len != 5) return 2;
+    if (sizeof(struct desc) != DESC_SIZE) return 1;
+    if (d_scalar.len != DESC_SIZE) return 2;
     if (d_scalar.type != 0x24) return 3;
     if (d_scalar.sub != 0x06) return 4;
     if (d_scalar.master != 1) return 5;
     if (d_scalar.slave0 != 2) return 6;
+#if !defined(_WIN32)
     if (d_scalar.slaves[0] != 2) return 7;
+#endif
     if (guard1 != 0xA5A5A5A5u) return 8;
 
     if (sizeof(struct wide) != 16) return 20;

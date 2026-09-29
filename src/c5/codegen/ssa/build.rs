@@ -1633,13 +1633,13 @@ impl SsaBuilder {
         -self.func.locals
     }
 
-    /// Reserve `ceil(size/8)` contiguous 8-byte slots and return the
-    /// base (most-negative) slot, whose address is the lowest of the
-    /// group. A whole-struct `Mcpy` from that address covers the
+    /// Reserve `ceil(size/8)` contiguous 8-byte slots, at least one, and
+    /// return the base (most-negative) slot, whose address is the lowest of
+    /// the group. A whole-struct `Mcpy` from that address covers the
     /// reserved bytes. Used for an aggregate temporary; an `align` above
     /// the slot's 8 bytes places it in the over-aligned region.
     pub(crate) fn alloc_synthetic_struct(&mut self, size: i64, align: i64) -> i64 {
-        let nslots = (size + 7) / 8;
+        let nslots = ((size + 7) / 8).max(1);
         let mut base = 0;
         for k in 0..nslots {
             let s = self.alloc_synthetic_local();
@@ -1649,11 +1649,9 @@ impl SsaBuilder {
         }
         // Record the multi-cell range so slot coalescing reserves the
         // interior cells, which carry no instruction reference.
-        if nslots >= 1 {
-            self.func.multi_cell_slots.push((base, nslots));
-            if align > 8 {
-                self.add_region_member(base, align, nslots * 8);
-            }
+        self.func.multi_cell_slots.push((base, nslots));
+        if align > 8 {
+            self.add_region_member(base, align, nslots * 8);
         }
         base
     }

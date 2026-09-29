@@ -53,7 +53,7 @@ Disassembly of section .text:
                	xorl	%r13d, %r13d
                	xorl	%r14d, %r14d
                	xorl	%r15d, %r15d
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movss	(%rdx), %xmm1
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm1
@@ -87,7 +87,7 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movl	$0x3f800000, %esi       # imm = 0x3F800000
                	movl	$0x40000000, %r10d      # imm = 0x40000000
                	movq	%r10, 0x58(%rsp)
@@ -130,7 +130,7 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movl	$0x3f800000, %esi       # imm = 0x3F800000
                	movl	$0x40000000, %r10d      # imm = 0x40000000
                	movq	%r10, 0x58(%rsp)
@@ -173,32 +173,32 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movslq	(%rdx), %rdx
                	cmpl	$0x7, %edx
                	jne	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movss	0x4(%rdx), %xmm1
                	movl	$0x3f800000, %edx       # imm = 0x3F800000
                	movq	%rdx, %xmm15
                	ucomiss	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movss	0x8(%rdx), %xmm1
                	movl	$0x40000000, %edx       # imm = 0x40000000
                	movq	%rdx, %xmm15
                	ucomiss	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movss	0xc(%rdx), %xmm1
                	movl	$0x40400000, %edx       # imm = 0x40400000
                	movq	%rdx, %xmm15
                	ucomiss	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movss	0x10(%rdx), %xmm1
                	xorl	%edx, %edx
                	movq	%rdx, %xmm15
@@ -213,7 +213,7 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	xorl	%esi, %esi
                	movss	(%rdx), %xmm1
                	movq	%rsi, %xmm15

@@ -28,7 +28,7 @@ Disassembly of section .text:
 <__c5_lazy_stream>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	cmpq	$0x0, 0x10(%rax)
                	je	<addr>
                	movq	0x10(%rax), %rax
@@ -40,10 +40,10 @@ Disassembly of section .text:
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movq	(%rax), %rax
                	movq	%rax, 0x10(%rcx)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	0x10(%rax), %rax
                	popq	%rbp
                	retq
@@ -59,7 +59,7 @@ Disassembly of section .text:
                	movq	%rax, %rbx
                	cmpl	$0x80000001, %ebx       # imm = 0x80000001
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	$0x28, (%rax)
                	movl	$0x2, %edi
                	callq	<addr>
@@ -71,7 +71,7 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpl	$0x80000001, %ebx       # imm = 0x80000001
                	je	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	$0x29, (%rax)
                	movl	$0x2, %edi
                	callq	<addr>
@@ -81,7 +81,7 @@ Disassembly of section .text:
                	movl	$0x29, %ecx
                	movb	$0x0, %al
                	callq	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	cmpl	$0x0, (%rax)
                	jne	<addr>
                	leaq	<rip>, %rdi

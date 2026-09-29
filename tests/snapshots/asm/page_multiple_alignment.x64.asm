@@ -26,27 +26,27 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax     # <addr>
                	testl	$0x3fff, %eax           # imm = 0x3FFF
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	testl	$0x3fff, %ecx           # imm = 0x3FFF
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx     # <addr>
                	testl	$0x3fff, %edx           # imm = 0x3FFF
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi      # <addr>
                	testl	$0x3fff, %esi           # imm = 0x3FFF
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx     # <addr>
                	testl	$0x3fff, %edx           # imm = 0x3FFF
                	je	<addr>
                	movl	$0x5, %eax
@@ -56,7 +56,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx     # <addr>
                	leaq	0x8000(%rdx), %r8
                	testl	$0x3fff, %r8d           # imm = 0x3FFF
                	je	<addr>
@@ -85,17 +85,17 @@ Disassembly of section .text:
                	movl	$0xb, (%rcx)
                	movl	$0x16, (%rsi)
                	movl	$0x21, (%rdi)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax     # <addr>
                	addq	$0x14000, %rax          # imm = 0x14000
                	movl	$0x2c, (%rax)
                	movslq	(%rcx), %rcx
                	cmpl	$0xb, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movslq	(%rcx), %rcx
                	cmpl	$0x16, %ecx
                	jne	<addr>
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx     # <addr>
                	addq	$0x4000, %rcx           # imm = 0x4000
                	movslq	(%rcx), %rcx
                	cmpl	$0x21, %ecx

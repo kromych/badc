@@ -100,7 +100,7 @@ Disassembly of section .text:
                	ret
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x50
+               	add	x1, x1, #0x90
                	and	x0, x1, #0xf
                	cbz	w0, <addr>
                	mov	x0, #0x2                // =2
@@ -133,21 +133,21 @@ Disassembly of section .text:
                	str	x8, [x2, #0x8]
                	mrs	x9, TPIDR_EL0
                	add	x9, x9, #0x0, lsl #12   // =0x0
-               	add	x9, x9, #0x10
+               	add	x9, x9, #0x70
                	mov	x10, #0x1               // =1
                	strb	w10, [x9]
                	mrs	x10, TPIDR_EL0
                	add	x10, x10, #0x0, lsl #12 // =0x0
-               	add	x10, x10, #0x18
+               	add	x10, x10, #0x80
                	mov	x11, #0x2               // =2
                	strb	w11, [x10]
                	mrs	x11, TPIDR_EL0
                	add	x11, x11, #0x0, lsl #12 // =0x0
-               	add	x11, x11, #0x20
+               	add	x11, x11, #0xa0
                	strb	w5, [x11]
                	mrs	x5, TPIDR_EL0
                	add	x5, x5, #0x0, lsl #12   // =0x0
-               	add	x5, x5, #0x40
+               	add	x5, x5, #0xb0
                	strb	w6, [x5]
                	ldr	d1, [x3]
                	fcmp	d1, d0

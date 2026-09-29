@@ -29,7 +29,7 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rcx
                	addq	$-0x10, %rcx
                	movq	(%rcx), %rax
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	cmpq	%rdx, %rax
                	je	<addr>
                	movl	$0xbad1, %eax           # imm = 0xBAD1
@@ -37,7 +37,7 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rax
                	addq	$-0x8, %rax
                	movq	(%rax), %rdx
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi      # <addr>
                	addq	$0x8, %rsi
                	cmpq	%rsi, %rdx
                	jne	<addr>
@@ -61,7 +61,7 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rax
                	addq	$-0x10, %rax
                	movq	(%rax), %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x1, %eax
@@ -72,7 +72,7 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rax
                	addq	$-0x8, %rax
                	movq	(%rax), %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	addq	$0x8, %rcx
                	cmpq	%rcx, %rax
                	je	<addr>
@@ -115,7 +115,7 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rax
                	addq	$-0x10, %rax
                	movq	(%rax), %rcx
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	cmpq	%rdx, %rcx
                	jne	<addr>
                	movq	(%rax), %rax
@@ -130,7 +130,7 @@ Disassembly of section .text:
                	movq	%fs:0x0, %rax
                	addq	$-0x8, %rax
                	movq	(%rax), %rcx
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	addq	$0x8, %rdx
                	cmpq	%rdx, %rcx
                	jne	<addr>

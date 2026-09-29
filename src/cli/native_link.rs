@@ -11,7 +11,7 @@ use super::inputs::{
     unreadable_object_reason,
 };
 use super::options::Mode;
-use super::output::{post_write_native, set_executable, write_output};
+use super::output::{post_write_native, write_output};
 use super::paths::default_output_path;
 use super::stats::LinkStats;
 
@@ -949,8 +949,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
             &default_path
         }
     };
-    write_output(out, &bytes, cli.target, cli.quiet);
-    set_executable(out);
+    write_output(out, &bytes, cli.target, cli.quiet, true);
     post_write_native(out, cli.target);
     if cli.link.map_path.is_some() || cli.link.print_map {
         let out_name = out.file_name().and_then(|n| n.to_str()).unwrap_or("a.out");

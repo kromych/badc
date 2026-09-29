@@ -324,6 +324,9 @@ impl VaArgDesc {
     /// A System V aggregate in registers whose eightbytes are not all
     /// INTEGER: each comes from the save area of its class (3.5.7).
     pub(crate) const EIGHTBYTES: u8 = 5;
+    /// Passed in nothing, an empty record: the read leaves the list as it
+    /// is and yields the list's own address, of which it reads no byte.
+    pub(crate) const NONE: u8 = 6;
 
     pub(crate) const EB_INTEGER: u8 = 1;
     pub(crate) const EB_SSE: u8 = 2;

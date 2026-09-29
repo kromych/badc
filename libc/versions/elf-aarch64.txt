@@ -6,7 +6,7 @@
 # at or below the floor, else the oldest version it has, unless
 # libc/versions/minimums.txt raises it -- which it does only where
 # the older definition implements a different interface, and says so.
-# Reference library: ldd (GNU libc) 2.43.
+# Reference library: ldd (Ubuntu GLIBC 2.39-0ubuntu8.7) 2.39.
 #
 # `[soname]` opens a library; each line under it names a symbol the
 # bundled headers bind to it and the version the image requires. `-`
@@ -788,6 +788,7 @@ copysignl     GLIBC_2.17
 cos           GLIBC_2.17
 cosf          GLIBC_2.17
 cosh          GLIBC_2.17
+coshf         GLIBC_2.17
 coshl         GLIBC_2.17
 cosl          GLIBC_2.17
 erf           GLIBC_2.17
@@ -798,6 +799,7 @@ erff          GLIBC_2.17
 erfl          GLIBC_2.17
 exp           GLIBC_2.17
 exp2          GLIBC_2.17
+exp2f         GLIBC_2.17
 exp2l         GLIBC_2.17
 expf          GLIBC_2.17
 expl          GLIBC_2.17
@@ -827,6 +829,7 @@ fmod          GLIBC_2.17
 fmodf         GLIBC_2.17
 fmodl         GLIBC_2.17
 frexp         GLIBC_2.17
+frexpf        GLIBC_2.17
 frexpl        GLIBC_2.17
 hypot         GLIBC_2.17
 hypotf        GLIBC_2.17
@@ -835,10 +838,13 @@ ilogb         GLIBC_2.17
 ilogbf        GLIBC_2.17
 ilogbl        GLIBC_2.17
 ldexp         GLIBC_2.17
+ldexpf        GLIBC_2.17
 ldexpl        GLIBC_2.17
 llrint        GLIBC_2.17
+llrintf       GLIBC_2.17
 llrintl       GLIBC_2.17
 llround       GLIBC_2.17
+llroundf      GLIBC_2.17
 llroundl      GLIBC_2.17
 log           GLIBC_2.17
 log10         GLIBC_2.17
@@ -848,14 +854,18 @@ log1p         GLIBC_2.17
 log1pf        GLIBC_2.17
 log1pl        GLIBC_2.17
 log2          GLIBC_2.17
+log2f         GLIBC_2.17
 log2l         GLIBC_2.17
 logf          GLIBC_2.17
 logl          GLIBC_2.17
 lrint         GLIBC_2.17
+lrintf        GLIBC_2.17
 lrintl        GLIBC_2.17
 lround        GLIBC_2.17
+lroundf       GLIBC_2.17
 lroundl       GLIBC_2.17
 modf          GLIBC_2.17
+modff         GLIBC_2.17
 modfl         GLIBC_2.17
 nearbyint     GLIBC_2.17
 nearbyintf    GLIBC_2.17
@@ -880,6 +890,7 @@ scalbnl       GLIBC_2.17
 sin           GLIBC_2.17
 sinf          GLIBC_2.17
 sinh          GLIBC_2.17
+sinhf         GLIBC_2.17
 sinhl         GLIBC_2.17
 sinl          GLIBC_2.17
 sqrt          GLIBC_2.17
@@ -888,6 +899,7 @@ sqrtl         GLIBC_2.17
 tan           GLIBC_2.17
 tanf          GLIBC_2.17
 tanh          GLIBC_2.17
+tanhf         GLIBC_2.17
 tanhl         GLIBC_2.17
 tanl          GLIBC_2.17
 tgamma        GLIBC_2.17

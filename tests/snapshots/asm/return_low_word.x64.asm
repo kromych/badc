@@ -199,12 +199,12 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi       # <addr>
                	movl	$0x4, %esi
                	callq	<addr>
                	cmpq	$0xb, %rax
                	jne	<addr>
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi       # <addr>
                	movl	$0x5, %esi
                	callq	<addr>
                	cmpq	$0x16, %rax

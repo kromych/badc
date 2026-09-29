@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movl	$0x3, %eax
                	movl	%eax, (%rcx)
                	testb	$0x3f, %cl
@@ -38,7 +38,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movb	$0x9, (%rcx)
                	testl	$0xfff, %ecx            # imm = 0xFFF
                	je	<addr>
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	testb	$0x3f, %al
                	je	<addr>
                	movl	$0x5, %eax
@@ -58,7 +58,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x6, %eax
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	testb	$0x7f, %al
                	je	<addr>
                	movl	$0x7, %eax

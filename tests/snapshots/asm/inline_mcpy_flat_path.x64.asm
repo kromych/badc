@@ -26,8 +26,8 @@ Disassembly of section .text:
                	int3
 
 <use_decode>:
-               	leaq	<rip>, %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rax      # <addr>
+               	leaq	<rip>, %rcx       # <addr>
                	movq	(%rax), %rdx
                	shrq	$0x3e, %rdx
                	shlq	$0x2, %rdx
@@ -42,7 +42,7 @@ Disassembly of section .text:
                	retq
 
 <use_widen>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rdx
                	movq	0x20(%rax), %rax
@@ -62,7 +62,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movw	$0x0, -0x8(%rbp)
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx      # <addr>
                	movabsq	$-0x8000000000000000, %rdx # imm = 0x8000000000000000
                	movq	%rdx, (%rcx)
                	movl	$0x0, 0x8(%rcx)
@@ -81,7 +81,7 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movslq	0x8(%rax), %rax
                	cmpl	$0x3, %eax
                	je	<addr>
@@ -94,7 +94,7 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x6, %rax
                	je	<addr>

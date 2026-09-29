@@ -99,7 +99,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	%rsi, %rbx
                	xorl	%edx, %edx
-               	leaq	<rip>, %r8
+               	leaq	<rip>, %r8       # <addr>
                	movq	%rdx, %rsi
                	xorl	%ecx, %ecx
                	movq	%rdx, %rax
@@ -393,7 +393,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	movl	$0x3e8, %esi            # imm = 0x3E8
                	callq	<addr>
                	cmpq	$0xa8, %rax

@@ -1,8 +1,8 @@
 /* AArch64 inline asm: FP immediate (fmov #imm). fmov loads a VFP-encodable
  * float constant into a scalar register or every lane of a vector. Reading the
  * constant back as its IEEE-754 bit pattern checks the encoding end to end.
- * Native-only on AArch64 (the interpreter's inline-asm evaluator is x86-only);
- * on x86_64 the bit patterns are the plain-C constants. */
+ * The interpreter refuses the vector form. On x86_64 the bit patterns are the
+ * plain-C constants. */
 
 static long long dbl_two_bits(void) {
     long long r;

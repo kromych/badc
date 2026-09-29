@@ -343,6 +343,7 @@ impl Compiler {
     /// aggregate parameter. A type alignment above the 8-byte slot places
     /// it in the over-aligned frame region as a named declarator's object.
     pub(super) fn reserve_object_slots(&mut self, ty: i64, slots: i64) -> Result<i64, C5Error> {
+        let slots = slots.max(1);
         let slot = self.reserve_slots(slots);
         let align = self.align_of_type(ty) as i64;
         if align > 8 {
@@ -547,8 +548,7 @@ impl Compiler {
             // complete type by the end of its declarator; an enum used
             // before its definition is incomplete (6.7.2.3p2). A block-scope
             // `extern` has linkage and declares no object, so it is exempt.
-            let incomplete_enum = base_enum_tag.is_some() && !is_pointer_ty(ty);
-            if !is_extern && (self.incomplete_aggregate_tag(ty).is_some() || incomplete_enum) {
+            if !is_extern && self.incomplete_aggregate_tag(ty).is_some() {
                 let name = self.symbols[loc_idx].name.clone();
                 return Err(self.compile_err(
                     Code::INVALID_DECLARATION,
@@ -631,13 +631,13 @@ impl Compiler {
     }
 
     pub(super) fn set_decl_site(&mut self, idx: usize) {
-        let (line, file, in_main) = (
+        let (line, file, in_user) = (
             self.lex.line,
             self.intern_source_file() as u32,
-            self.in_main_source(),
+            self.in_user_source(),
         );
         let b = &mut self.symbols[idx].binding;
-        (b.decl_line, b.decl_file, b.decl_in_main_source) = (line, file, in_main);
+        (b.decl_line, b.decl_file, b.decl_in_user_source) = (line, file, in_user);
     }
 
     /// Bind one block-scope declarator to storage: a block-scope `extern`
@@ -944,12 +944,9 @@ impl Compiler {
     /// and `used` / `section` attributes past the scope-exit restore of
     /// the scoped binding (toolchains emit the same `name.N` locals).
     /// Function close stamps `owner_ent_pc`; static DCE then treats the
-    /// object as a per-instance part of its function. Thread-locals are
-    /// skipped: their `val` is a TLS offset outside the `.data` model.
+    /// object as a per-instance part of its function. A thread-local's
+    /// record carries a TLS offset, which the `.data` passes pass over.
     pub(super) fn push_block_static_record(&mut self, loc_idx: usize, ty: i64) {
-        if self.symbols[loc_idx].is_thread_local {
-            return;
-        }
         let final_array = self.symbols[loc_idx].array_size;
         let fam_tail = self.symbols[loc_idx].fam_init_bytes;
         let zero_len = self.symbols[loc_idx].is_zero_len_array;
@@ -983,6 +980,7 @@ impl Compiler {
             reserved_data_bytes: reserved,
             fam_init_bytes: fam_tail,
             data_align: src.data_align,
+            is_thread_local: src.is_thread_local,
             linkage: crate::c5::symbol::Linkage::Internal,
             defined_here: true,
             has_initializer: true,
@@ -1003,7 +1001,7 @@ impl Compiler {
                 decl_spelling: src.binding.decl_spelling,
                 decl_line: src.binding.decl_line,
                 decl_file: src.binding.decl_file,
-                decl_in_main_source: src.binding.decl_in_main_source,
+                decl_in_user_source: src.binding.decl_in_user_source,
                 ..Default::default()
             },
             ..Default::default()

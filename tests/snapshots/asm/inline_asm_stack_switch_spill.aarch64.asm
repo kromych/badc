@@ -63,7 +63,7 @@ Disassembly of section .text:
                	mul	x0, x2, x17
                	add	x16, x0, #0x3
                	stur	x16, [x29, #-0x38]
-               	adrp	x16, <page>
+               	adrp	x16, <addr>
                	add	x16, x16, <lo12>
                	stur	x16, [x29, #-0x60]
                	adrp	x16, <page>
@@ -127,7 +127,7 @@ Disassembly of section .text:
                	lsl	x2, x16, #4
                	add	x1, x1, x2
                	add	x1, x1, x0
-               	adrp	x16, <page>
+               	adrp	x16, <addr>
                	add	x16, x16, <lo12>
                	stur	x16, [x29, #-0x50]
                	ldur	x0, [x29, #-0x50]

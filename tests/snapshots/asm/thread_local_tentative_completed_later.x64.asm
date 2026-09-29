@@ -27,14 +27,14 @@ Disassembly of section .text:
 
 <tv_early>:
                	movq	%fs:0x0, %rax
-               	addq	$-0x28, %rax
+               	addq	$-0x30, %rax
                	retq
 
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movq	%fs:0x0, %rax
-               	addq	$-0x28, %rax
+               	addq	$-0x30, %rax
                	cmpq	$0x0, (%rax)
                	jne	<addr>
                	cmpq	$0x0, 0x8(%rax)
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	movq	$0x2, 0x8(%rax)
                	movq	$0x3, 0x10(%rax)
                	movq	%fs:0x0, %rcx
-               	addq	$-0x48, %rcx
+               	addq	$-0x50, %rcx
                	movl	$0x0, (%rcx)
                	movq	0x8(%rax), %rcx
                	cmpq	$0x2, %rcx
@@ -62,7 +62,7 @@ Disassembly of section .text:
                	jne	<addr>
                	callq	<addr>
                	movq	%fs:0x0, %rcx
-               	addq	$-0x28, %rcx
+               	addq	$-0x30, %rcx
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x2, %eax
@@ -72,9 +72,9 @@ Disassembly of section .text:
                	addq	$-0x10, %rax
                	movq	$0x4, 0x8(%rax)
                	movq	%fs:0x0, %rdx
-               	addq	$-0x40, %rdx
+               	addq	$-0x48, %rdx
                	movq	%fs:0x0, %rsi
-               	addq	$-0x30, %rsi
+               	addq	$-0x38, %rsi
                	movb	$0x5, (%rsi)
                	movb	$0x5, (%rdx)
                	testb	$0xf, %al

@@ -16,29 +16,29 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	d0, [x1]
                	bl	<addr>
-               	adrp	x16, <page>
+               	adrp	x16, <addr>
                	ldr	d0, [x16, #0x18]
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	bl	<addr>
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	ldr	d0, [x1]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	d1, [x1]
                	bl	<addr>
-               	adrp	x16, <page>
+               	adrp	x16, <addr>
                	ldr	d0, [x16, #0x18]
-               	adrp	x16, <page>
+               	adrp	x16, <addr>
                	ldr	d1, [x16, #0x18]
                	fcmp	d1, d0
                	b.eq	<addr>

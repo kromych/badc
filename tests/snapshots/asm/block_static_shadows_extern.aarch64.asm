@@ -32,7 +32,7 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	mov	x1, #0x2                // =2
                	adrp	x2, <page>
@@ -45,7 +45,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	mov	x1, #0x3                // =3
                	adrp	x2, <page>
@@ -58,7 +58,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	mov	x1, #0x2                // =2
                	adrp	x2, <page>
@@ -71,7 +71,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	mov	x1, #0x1                // =1
                	adrp	x2, <page>
@@ -84,7 +84,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	mov	x1, #0x1                // =1
                	adrp	x2, <page>
@@ -106,7 +106,7 @@ Disassembly of section .text:
                	ldr	x2, [x2]
                	blr	x2
                	mov	x20, x0
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x1
                	mov	x1, #0x2                // =2
@@ -124,7 +124,7 @@ Disassembly of section .text:
                	ldr	x2, [x2]
                	blr	x2
                	add	x20, x20, x0
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	mov	x1, #0x1                // =1
                	adrp	x2, <page>

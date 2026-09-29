@@ -27,6 +27,39 @@ fn empty_source_has_no_main() {
     expect_compile_error("", "main() not defined");
 }
 
+/// C11 6.7.5p2: no alignment specifier in the declaration of a bit-field,
+/// whether it leads the member group or names one declarator of it; gcc's
+/// `aligned` attribute on a bit-field stays accepted.
+#[test]
+fn alignas_on_a_bit_field_is_diagnosed() {
+    for (src, needle) in [
+        (
+            "struct S { _Alignas(8) int b : 4; };",
+            "alignment specified for bit-field `b`",
+        ),
+        (
+            "struct S { int _Alignas(8) b : 4; };",
+            "alignment specified for bit-field `b`",
+        ),
+        (
+            "struct S { _Alignas(8) int a, b : 4; };",
+            "alignment specified for bit-field `b`",
+        ),
+        (
+            "struct S { _Alignas(8) int : 4; int c; };",
+            "alignment specified for an unnamed bit-field",
+        ),
+    ] {
+        expect_compile_error(
+            &alloc::format!("{src}\nint main(void) {{ return 0; }}"),
+            needle,
+        );
+    }
+    let ok = "struct S { _Alignas(8) int a; int b : 4 __attribute__((aligned(8))); };\n\
+              int main(void) { return sizeof(struct S) != 16; }";
+    assert!(Compiler::new(ok.to_string()).compile().is_ok());
+}
+
 #[test]
 fn overaligned_automatic_beside_a_vla_is_diagnosed() {
     // The realigned region (alignment above 16) and a variable-length array
@@ -1639,6 +1672,30 @@ fn asm_goto_rejects_unknown_label_name() {
     );
 }
 
+/// An asm statement's operand names and `asm goto` labels are one
+/// namespace, as gcc and clang have it: a repeat is an error.
+#[test]
+fn asm_repeated_operand_name_or_label_is_diagnosed() {
+    for body in [
+        "__asm__ goto(\"jz %l[out]\" : : \"r\"(x) : : out, out); return 1; out: return 0;",
+        "__asm__ goto(\"jz %l[out]\" : : [out] \"r\"(x) : : out); return 1; out: return 0;",
+        "int y; __asm__(\"mov %[a], %[a]\" : [a] \"=r\"(y) : [a] \"r\"(x)); return y;",
+    ] {
+        expect_compile_error(
+            &alloc::format!("int f(int x) {{ {body} }}\nint main(void) {{ return f(0); }}"),
+            "duplicate operand name",
+        );
+    }
+    Compiler::new(
+        "int f(int x) { __asm__ goto(\"\" : : [v] \"r\"(x) : : out, in); \
+             return 1; in: return 2; out: return 0; } \
+         int main(void) { return f(0); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("distinct operand and label names compile");
+}
+
 #[test]
 fn asm_goto_rejects_label_number_out_of_range() {
     // One input operand: the only valid reference is `%l1`.
@@ -2712,6 +2769,176 @@ fn parameter_of_incomplete_type_in_a_definition_is_diagnosed() {
     )
     .compile()
     .expect("a prototype and pointer parameters may name incomplete types");
+}
+
+#[test]
+fn tags_share_one_scoped_name_space() {
+    // C99 6.7.2.3p2: a tag's declarations all use the keyword that declared
+    // it, whether they name the tag or define it (6.2.3: one name space).
+    for (src, msg) in [
+        (
+            "struct T { int a; }; union T *p;",
+            "`union T` does not match the earlier `struct T`",
+        ),
+        (
+            "struct T { int a; }; enum T { A };",
+            "`enum T` does not match the earlier `struct T`",
+        ),
+        (
+            "enum T { A }; struct T *p;",
+            "`struct T` does not match the earlier `enum T`",
+        ),
+        (
+            "struct T; union T { int a; };",
+            "`union T` does not match the earlier `struct T`",
+        ),
+        ("enum E { A }; enum E { B };", "enum `E` already defined"),
+        ("enum *p;", "enum name or `{` expected"),
+    ] {
+        expect_compile_error(
+            &alloc::format!("{src}\nint main(void) {{ return 0; }}"),
+            msg,
+        );
+    }
+    // 6.2.1p4: a block's enum definition declares a type of its own, so the
+    // file-scope declaration it shares a name with stays incomplete.
+    expect_compile_error(
+        "enum E;\n\
+         int f(void) { enum E { BIG = 0x100000000 }; return (int)sizeof(enum E); }\n\
+         int main(void) { return (int)sizeof(enum E); }",
+        "`sizeof` applied to an incomplete type",
+    );
+    // 6.7.2.3p7: `struct S;` declares S in its block whatever is outside.
+    expect_compile_error(
+        "struct S { int a; };\n\
+         int main(void) { struct S; return (int)sizeof(struct S); }",
+        "`sizeof` applied to an incomplete type",
+    );
+    // A block's tag hides an outer one of any kind, and the outer one is
+    // back when the block ends.
+    expect_compiles(
+        "struct T { int a; };\n\
+         enum U { U0 };\n\
+         int f(void) { enum T { A = 4 }; struct U; struct U *p = 0; return A + (p != 0); }\n\
+         struct T s;\n\
+         enum U u = U0;\n\
+         int main(void) { return f() - 4 + s.a + (int)u; }",
+        "tags of another kind in a block",
+    );
+}
+
+#[test]
+fn incomplete_enum_is_rejected_where_an_incomplete_struct_is() {
+    // C99 6.7.2.2p4: an enum is incomplete until its list closes. A use of
+    // the tag before then (a GNU extension) names a type that takes the
+    // incomplete-type checks of a struct declared without its body.
+    for (src, msg) in [
+        (
+            "enum E; struct S { enum E m; };",
+            "field `m` has incomplete type",
+        ),
+        (
+            "enum E; struct S { enum E m[2]; };",
+            "field `m` has incomplete type",
+        ),
+        (
+            "enum E; int n = sizeof(enum E);",
+            "`sizeof` applied to an incomplete type",
+        ),
+        (
+            "enum E; int n = _Alignof(enum E);",
+            "`_Alignof` applied to an incomplete type",
+        ),
+        (
+            "enum E; int f(enum E *p) { return (int)sizeof *p; }",
+            "`sizeof` applied to an incomplete type",
+        ),
+        (
+            "enum E; enum E *f(enum E *p) { return p + 1; }",
+            "a pointer to an incomplete type",
+        ),
+        ("enum E; enum E a[3];", "object `a` has incomplete type"),
+        ("enum E; static enum E x;", "object `x` has incomplete type"),
+        ("enum E; enum E x;", "object `x` has incomplete type"),
+    ] {
+        expect_compile_error(
+            &alloc::format!("{src}\nint main(void) {{ return 0; }}"),
+            msg,
+        );
+    }
+    // A declaration that needs no complete type stands, and the definition
+    // completes the objects declared before it.
+    expect_compiles(
+        "enum E;\n\
+         extern enum E x;\n\
+         enum E *px = &x;\n\
+         enum E tentative;\n\
+         typedef enum E T;\n\
+         enum E f(enum E);\n\
+         enum E { A = 3 };\n\
+         enum E x = A;\n\
+         int main(void) { T t = A; return (int)(t + tentative + *px) - 6; }",
+        "declarations of an incomplete enum",
+    );
+}
+
+#[test]
+fn incomplete_type_is_rejected_where_its_object_is_needed() {
+    // C99 6.9.1p3 and 6.5.2.2p1: a definition's and a call's result, 6.3.2.1p2:
+    // a value read from an lvalue, 6.5.2.5p1: a compound literal, 7.15.1.1p2:
+    // `va_arg`'s type -- each a complete object type, for a struct declared
+    // without its body and an enum used before its list (GNU) alike.
+    for tag in ["struct E", "enum E"] {
+        for (src, msg) in [
+            (
+                "@; @ *g(void); @ f(void) { return *g(); }",
+                "incomplete result type `@` in the definition of `f`",
+            ),
+            (
+                "@; @ g(void); void f(void) { g(); }",
+                "calling `g` with incomplete return type `@`",
+            ),
+            (
+                "@; @ (*fp)(void); void f(void) { (*fp)(); }",
+                "calling a function with incomplete return type `@`",
+            ),
+            (
+                "@; extern @ a, b; void f(void) { a = b; }",
+                "incomplete type `@` where a complete type is required",
+            ),
+            (
+                "@; void f(@ *p) { *p; }",
+                "incomplete type `@` where a complete type is required",
+            ),
+            (
+                "@; int f(@ *p) { return (*p, 0); }",
+                "incomplete type `@` where a complete type is required",
+            ),
+            (
+                "int printf(const char *, ...); @; void f(@ *p) { printf(\"\", *p); }",
+                "incomplete type `@` where a complete type is required",
+            ),
+            (
+                "@; void f(void) { (@){0}; }",
+                "compound literal has incomplete type `@`",
+            ),
+            (
+                "#include <stdarg.h>\n@; void f(int n, ...) { va_list ap; va_start(ap, n); va_arg(ap, @); va_end(ap); }",
+                "has incomplete type `@`",
+            ),
+        ] {
+            let src = alloc::format!("{}\nint main(void) {{ return 0; }}", src.replace('@', tag));
+            expect_compile_error(&src, &msg.replace('@', tag));
+        }
+        // The lvalue itself stands where no value is read: its address, the
+        // type of it, and an asm memory operand, which gcc accepts.
+        expect_compiles(
+            &"@; @ *p;\n\
+              int main(void) { typeof(*p) *q = &*p; __asm__ volatile(\"\" : : \"m\"(*p)); return q != p; }"
+                .replace('@', tag),
+            "designating an object of incomplete type",
+        );
+    }
 }
 
 #[test]
@@ -4208,6 +4435,16 @@ fn block_declarators_are_separated_by_commas() {
                    return foo(1) + bar(2) + y + *b == 2 + 4 + 2 + 3 ? 0 : 1;\n\
                }";
     assert_eq!(super::run_str(src), 0);
+}
+
+#[test]
+fn a_qualifier_inside_an_abstract_declarator_group_is_kept() {
+    // C99 6.7.5.1p1: the `const` after a `*` qualifies that pointer inside
+    // the parentheses of an abstract declarator too; the type prints it.
+    expect_compile_error(
+        "int main(void) { return (int)((int (*const *)[3])0 * 2); }",
+        "`int (* const *)[3]`",
+    );
 }
 
 #[test]

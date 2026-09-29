@@ -225,14 +225,7 @@ impl<'a> LdsLinker<'a> {
         oi: usize,
     ) {
         let machine = self.machine;
-        let name = || {
-            let sym = &self.objects[oi].symbols[r.sym as usize];
-            if sym.name.is_empty() {
-                format!("section symbol {}", sym.shndx)
-            } else {
-                sym.name.clone()
-            }
-        };
+        let name = || self.objects[oi].symbol_name(r.sym as usize);
         if site > buf.len() {
             errors.push(format!(
                 "{}: relocation offset 0x{:x} outside section",
@@ -378,14 +371,7 @@ impl<'a> LdsLinker<'a> {
         errors: &mut Vec<String>,
         oi: usize,
     ) {
-        let name = || {
-            let sym = &self.objects[oi].symbols[r.sym as usize];
-            if sym.name.is_empty() {
-                format!("section symbol {}", sym.shndx)
-            } else {
-                sym.name.clone()
-            }
-        };
+        let name = || self.objects[oi].symbol_name(r.sym as usize);
         let v = match r.rtype {
             rt::R_386_32 | rt::R_386_16 | rt::R_386_8 => sa,
             // GOTPC's symbol is `_GLOBAL_OFFSET_TABLE_`, so `sa` is

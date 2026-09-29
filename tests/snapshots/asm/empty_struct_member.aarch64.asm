@@ -21,8 +21,8 @@ Disassembly of section .text:
                	mov	x1, #0x1111             // =4369
                	str	x1, [x0, #0x8]
                	add	x1, x0, #0x8
-               	cmp	x1, x1
-               	b.eq	<addr>
+               	sub	x1, x1, x1
+               	cbz	x1, <addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10

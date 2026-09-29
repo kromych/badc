@@ -4,9 +4,21 @@
 // `__DECLARE_FLEX_ARRAY` macro expands to; btrfs uses it for the on-disk
 // stripe extent header, whose item size is computed as
 // `sizeof(header) + n * sizeof(entry)`. Values come from gcc 16 on
-// linux/x86_64 and linux/aarch64.
+// linux/x86_64 and linux/aarch64. The MS layout of the PE targets (MSVC,
+// clang's windows-msvc triples) gives an aggregate without storage 4
+// bytes, so a flexible array after one starts on its own alignment.
 
 #include <stddef.h>
+
+#if defined(_WIN32)
+#define EMPTY 4
+#define STRIDES_AT 8
+#define TAIL_AT 8
+#else
+#define EMPTY 0
+#define STRIDES_AT 0
+#define TAIL_AT 4
+#endif
 
 #define DECLARE_FLEX_ARRAY(TYPE, NAME) \
     struct {                           \
@@ -92,35 +104,36 @@ int main(void) {
     if (offsetof(struct ec_params, sensor_offset) != 1) return 20;
     if (offsetof(struct ec_params, ec_rate) != 1) return 21;
 
-    if (sizeof(struct stripe_extent) != 0) return 1;
+    if (sizeof(struct stripe_extent) != STRIDES_AT) return 1;
     if (_Alignof(struct stripe_extent) != 1) return 2;
-    if (sizeof(struct stripe_extent_unpacked) != 0) return 3;
+    if (sizeof(struct stripe_extent_unpacked) != STRIDES_AT) return 3;
     if (_Alignof(struct stripe_extent_unpacked) != 8) return 4;
 
-    if (sizeof(struct empty) != 0) return 5;
-    if (sizeof(struct empty_packed) != 0) return 6;
-    if (sizeof(struct empty_and_flex) != 0) return 7;
-    if (sizeof(struct empty_and_flex_packed) != 0) return 8;
+    if (sizeof(struct empty) != EMPTY) return 5;
+    if (sizeof(struct empty_packed) != EMPTY) return 6;
+    if (sizeof(struct empty_and_flex) != EMPTY) return 7;
+    if (sizeof(struct empty_and_flex_packed) != EMPTY) return 8;
 
-    if (sizeof(struct with_header) != 4) return 9;
-    if (offsetof(struct with_header, tail) != 4) return 10;
+    if (sizeof(struct with_header) != TAIL_AT) return 9;
+    if (offsetof(struct with_header, tail) != TAIL_AT) return 10;
     if (sizeof(union flex_union) != 4) return 11;
     if (sizeof(union flex_union_packed) != 4) return 12;
 
-    // The on-disk item size an allocator computes for n strides is
-    // exactly n entries: the header contributes nothing.
-    if (sizeof(struct stripe_extent) + 3 * sizeof(struct raid_stride) != 48) return 13;
+    // The on-disk item size an allocator computes for n strides is n
+    // entries after the header, which gcc gives no bytes.
+    if (sizeof(struct stripe_extent) + 3 * sizeof(struct raid_stride) != STRIDES_AT + 48)
+        return 13;
 
-    // The flexible array starts at offset 0 and is addressable through
-    // a buffer sized that way.
+    // The flexible array starts where the header ends and is addressable
+    // through a buffer sized that way.
     {
-        static unsigned char buf[2 * sizeof(struct raid_stride)];
+        static unsigned char buf[STRIDES_AT + 2 * sizeof(struct raid_stride)];
         struct stripe_extent *se = (struct stripe_extent *) buf;
         se->strides[0].devid = 1;
         se->strides[0].offset = 2;
         se->strides[1].devid = 3;
         se->strides[1].offset = 4;
-        if ((unsigned char *) &se->strides[0] != buf) return 14;
+        if ((unsigned char *) &se->strides[0] != buf + STRIDES_AT) return 14;
         if (se->strides[1].devid != 3 || se->strides[1].offset != 4) return 15;
     }
     return 0;

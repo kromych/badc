@@ -32,12 +32,12 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rsi
-               	leaq	<rip>, %rdx
-               	leaq	<rip>, %rdi
-               	leaq	<rip>, %r8
-               	leaq	<rip>, %rcx
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rsi      # <addr>
+               	leaq	<rip>, %rdx      # <addr>
+               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %r8       # <addr>
+               	leaq	<rip>, %rcx      # <addr>
+               	leaq	<rip>, %rax      # <addr>
                	leaq	0x8(%rsi), %r9
                	subq	%rsi, %r9
                	cmpq	$0x8, %r9

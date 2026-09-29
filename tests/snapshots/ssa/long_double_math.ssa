@@ -17,7 +17,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v11  Binop { op=fmul, lhs=v8, rhs=v10 }               -> d0
     v12  LocalAddr(-202)                                  -> x9
     v13  Store { addr=v12, disp=0, value=v11, kind=F80 }  -> -
-    v14  CallExt { binding_idx=108, args=[v12], fp_arg_mask=0x0 } -> x0
+    v14  CallExt { binding_idx=120, args=[v12], fp_arg_mask=0x0 } -> x0
     v15  LocalAddr(-203)                                  -> x0
     v16  LoadLocal { off=-203, kind=F80 }                 -> d0
     v17  Imm(4616189618054758400)                         -> x0
@@ -32,7 +32,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v22  LoadLocal { off=-200, kind=F80, volatile }       -> d0
     v23  LocalAddr(-204)                                  -> x9
     v24  Store { addr=v23, disp=0, value=v22, kind=F80 }  -> -
-    v25  CallExt { binding_idx=109, args=[v23], fp_arg_mask=0x0 } -> x0
+    v25  CallExt { binding_idx=121, args=[v23], fp_arg_mask=0x0 } -> x0
     v26  LocalAddr(-205)                                  -> x0
     v27  LoadLocal { off=-205, kind=F80 }                 -> d0
     v28  Imm(4612811918334230528)                         -> x0
@@ -48,7 +48,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v34  Imm(4)                                           -> x7
     v35  LocalAddr(-206)                                  -> x9
     v36  Store { addr=v35, disp=0, value=v33, kind=F80 }  -> -
-    v37  CallExt { binding_idx=121, args=[v35, v34], fp_arg_mask=0x0 } -> x0
+    v37  CallExt { binding_idx=133, args=[v35, v34], fp_arg_mask=0x0 } -> x0
     v38  LocalAddr(-207)                                  -> x0
     v39  LoadLocal { off=-207, kind=F80 }                 -> d0
     v40  Imm(4620693217682128896)                         -> x0
@@ -67,7 +67,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v49  LocalAddr(-1)                                    -> x7
     v50  LocalAddr(-208)                                  -> x9
     v51  Store { addr=v50, disp=0, value=v48, kind=F80 }  -> -
-    v52  CallExt { binding_idx=122, args=[v50, v49], fp_arg_mask=0x0 } -> x0
+    v52  CallExt { binding_idx=134, args=[v50, v49], fp_arg_mask=0x0 } -> x0
     v53  LocalAddr(-209)                                  -> x0
     v54  LoadLocal { off=-209, kind=F80 }                 -> d0
     v55  Imm(4604930618986332160)                         -> x0
@@ -91,7 +91,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v67  LocalAddr(-201)                                  -> x7
     v68  LocalAddr(-210)                                  -> x9
     v69  Store { addr=v68, disp=0, value=v66, kind=F80 }  -> -
-    v70  CallExt { binding_idx=123, args=[v68, v67], fp_arg_mask=0x0 } -> x0
+    v70  CallExt { binding_idx=135, args=[v68, v67], fp_arg_mask=0x0 } -> x0
     v71  LocalAddr(-211)                                  -> x0
     v72  LoadLocal { off=-211, kind=F80 }                 -> d0
     v73  Imm(4602678819172646912)                         -> x0
@@ -121,7 +121,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v91  Store { addr=v90, disp=0, value=v87, kind=F80 }  -> -
     v92  LocalAddr(-213)                                  -> x0
     v93  Store { addr=v92, disp=0, value=v89, kind=F80 }  -> -
-    v94  CallExt { binding_idx=113, args=[v90, v92], fp_arg_mask=0x0 } -> x0
+    v94  CallExt { binding_idx=125, args=[v90, v92], fp_arg_mask=0x0 } -> x0
     v95  LocalAddr(-214)                                  -> x0
     v96  LoadLocal { off=-214, kind=F80 }                 -> d0
     v97  Imm(4652218415073722368)                         -> x0
@@ -136,7 +136,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v102 LoadLocal { off=-200, kind=F80, volatile }       -> d0
     v103 LocalAddr(-215)                                  -> x9
     v104 Store { addr=v103, disp=0, value=v102, kind=F80 } -> -
-    v105 CallExt { binding_idx=110, args=[v103], fp_arg_mask=0x0 } -> x0
+    v105 CallExt { binding_idx=122, args=[v103], fp_arg_mask=0x0 } -> x0
     v106 LocalAddr(-216)                                  -> x0
     v107 LoadLocal { off=-216, kind=F80 }                 -> d0
     v108 Imm(4613937818241073152)                         -> x0
@@ -149,7 +149,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v113 LoadLocal { off=-200, kind=F80, volatile }       -> d0
     v114 LocalAddr(-217)                                  -> x9
     v115 Store { addr=v114, disp=0, value=v113, kind=F80 } -> -
-    v116 CallExt { binding_idx=111, args=[v114], fp_arg_mask=0x0 } -> x0
+    v116 CallExt { binding_idx=123, args=[v114], fp_arg_mask=0x0 } -> x0
     v117 LocalAddr(-218)                                  -> x0
     v118 LoadLocal { off=-218, kind=F80 }                 -> d0
     v119 Imm(4611686018427387904)                         -> x0
@@ -165,7 +165,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v127 LoadLocal { off=-200, kind=F80, volatile }       -> d0
     v128 LocalAddr(-219)                                  -> x9
     v129 Store { addr=v128, disp=0, value=v127, kind=F80 } -> -
-    v130 CallExt { binding_idx=112, args=[v128], fp_arg_mask=0x0 } -> x0
+    v130 CallExt { binding_idx=124, args=[v128], fp_arg_mask=0x0 } -> x0
     v131 LocalAddr(-220)                                  -> x0
     v132 LoadLocal { off=-220, kind=F80 }                 -> d0
     v133 Imm(4611686018427387904)                         -> x0
@@ -184,7 +184,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v142 LoadLocal { off=-200, kind=F80, volatile }       -> d0
     v143 LocalAddr(-221)                                  -> x9
     v144 Store { addr=v143, disp=0, value=v142, kind=F80 } -> -
-    v145 CallExt { binding_idx=87, args=[v143], fp_arg_mask=0x0 } -> x0
+    v145 CallExt { binding_idx=99, args=[v143], fp_arg_mask=0x0 } -> x0
     v146 LocalAddr(-222)                                  -> x0
     v147 LoadLocal { off=-222, kind=F80 }                 -> d0
     v148 Imm(4613937818241073152)                         -> x0
@@ -197,7 +197,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v153 LoadLocal { off=-200, kind=F80, volatile }       -> d0
     v154 LocalAddr(-223)                                  -> x9
     v155 Store { addr=v154, disp=0, value=v153, kind=F80 } -> -
-    v156 CallExt { binding_idx=125, args=[v154], fp_arg_mask=0x0 } -> x0
+    v156 CallExt { binding_idx=137, args=[v154], fp_arg_mask=0x0 } -> x0
     v157 BinopI { op=ne, lhs=v156, rhs_imm=-3 }           -> x0
     v158 BinopI { op=ne, lhs=v157, rhs_imm=0 }            -> x1
     v159 Imm(0)                                           -> x1
@@ -209,7 +209,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v163 LoadLocal { off=-199, kind=F80, volatile }       -> d0
     v164 LocalAddr(-224)                                  -> x9
     v165 Store { addr=v164, disp=0, value=v163, kind=F80 } -> -
-    v166 CallExt { binding_idx=126, args=[v164], fp_arg_mask=0x0 } -> x0
+    v166 CallExt { binding_idx=138, args=[v164], fp_arg_mask=0x0 } -> x0
     v167 BinopI { op=ne, lhs=v166, rhs_imm=1 }            -> x0
     v168 Imm(0)                                           -> x1
     v169 Imm(0)                                           -> x1
@@ -224,7 +224,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v174 LoadLocal { off=-200, kind=F80, volatile }       -> d0
     v175 LocalAddr(-225)                                  -> x9
     v176 Store { addr=v175, disp=0, value=v174, kind=F80 } -> -
-    v177 CallExt { binding_idx=104, args=[v175], fp_arg_mask=0x0 } -> x0
+    v177 CallExt { binding_idx=116, args=[v175], fp_arg_mask=0x0 } -> x0
     v178 LocalAddr(-226)                                  -> x0
     v179 LoadLocal { off=-226, kind=F80 }                 -> d0
     v180 Imm(4611686018427387904)                         -> x0
@@ -237,7 +237,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v185 LoadLocal { off=-200, kind=F80, volatile }       -> d0
     v186 LocalAddr(-227)                                  -> x9
     v187 Store { addr=v186, disp=0, value=v185, kind=F80 } -> -
-    v188 CallExt { binding_idx=127, args=[v186], fp_arg_mask=0x0 } -> x0
+    v188 CallExt { binding_idx=139, args=[v186], fp_arg_mask=0x0 } -> x0
     v189 BinopI { op=ne, lhs=v188, rhs_imm=-2 }           -> x0
     v190 BinopI { op=ne, lhs=v189, rhs_imm=0 }            -> x1
     v191 Imm(0)                                           -> x1
@@ -249,7 +249,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v195 LoadLocal { off=-198, kind=F80, volatile }       -> d0
     v196 LocalAddr(-228)                                  -> x9
     v197 Store { addr=v196, disp=0, value=v195, kind=F80 } -> -
-    v198 CallExt { binding_idx=128, args=[v196], fp_arg_mask=0x0 } -> x0
+    v198 CallExt { binding_idx=140, args=[v196], fp_arg_mask=0x0 } -> x0
     v199 BinopI { op=ne, lhs=v198, rhs_imm=2 }            -> x0
     v200 Imm(0)                                           -> x1
     v201 Imm(0)                                           -> x1
@@ -264,7 +264,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v206 LoadLocal { off=-199, kind=F80, volatile }       -> d0
     v207 LocalAddr(-229)                                  -> x9
     v208 Store { addr=v207, disp=0, value=v206, kind=F80 } -> -
-    v209 CallExt { binding_idx=103, args=[v207], fp_arg_mask=0x0 } -> x0
+    v209 CallExt { binding_idx=115, args=[v207], fp_arg_mask=0x0 } -> x0
     v210 LocalAddr(-230)                                  -> x0
     v211 LoadLocal { off=-230, kind=F80 }                 -> d0
     v212 Imm(0)                                           -> x0
@@ -286,7 +286,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v224 Store { addr=v223, disp=0, value=v220, kind=F80 } -> -
     v225 LocalAddr(-232)                                  -> x0
     v226 Store { addr=v225, disp=0, value=v222, kind=F80 } -> -
-    v227 CallExt { binding_idx=114, args=[v223, v225], fp_arg_mask=0x0 } -> x0
+    v227 CallExt { binding_idx=126, args=[v223, v225], fp_arg_mask=0x0 } -> x0
     v228 LocalAddr(-233)                                  -> x0
     v229 LoadLocal { off=-233, kind=F80 }                 -> d0
     v230 Imm(4607182418800017408)                         -> x0
@@ -304,7 +304,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v240 Store { addr=v239, disp=0, value=v236, kind=F80 } -> -
     v241 LocalAddr(-235)                                  -> x0
     v242 Store { addr=v241, disp=0, value=v238, kind=F80 } -> -
-    v243 CallExt { binding_idx=120, args=[v239, v241], fp_arg_mask=0x0 } -> x0
+    v243 CallExt { binding_idx=132, args=[v239, v241], fp_arg_mask=0x0 } -> x0
     v244 LocalAddr(-236)                                  -> x0
     v245 LoadLocal { off=-236, kind=F80 }                 -> d0
     v246 Imm(4607182418800017408)                         -> x0
@@ -327,7 +327,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v259 Store { addr=v258, disp=0, value=v255, kind=F80 } -> -
     v260 LocalAddr(-238)                                  -> x0
     v261 Store { addr=v260, disp=0, value=v257, kind=F80 } -> -
-    v262 CallExt { binding_idx=116, args=[v258, v260], fp_arg_mask=0x0 } -> x0
+    v262 CallExt { binding_idx=128, args=[v258, v260], fp_arg_mask=0x0 } -> x0
     v263 LocalAddr(-239)                                  -> x0
     v264 LoadLocal { off=-239, kind=F80 }                 -> d0
     v265 Imm(4617315517961601024)                         -> x0
@@ -345,7 +345,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v273 Store { addr=v272, disp=0, value=v270, kind=F80 } -> -
     v274 LocalAddr(-241)                                  -> x0
     v275 Store { addr=v274, disp=0, value=v271, kind=F80 } -> -
-    v276 CallExt { binding_idx=117, args=[v272, v274], fp_arg_mask=0x0 } -> x0
+    v276 CallExt { binding_idx=129, args=[v272, v274], fp_arg_mask=0x0 } -> x0
     v277 LocalAddr(-242)                                  -> x0
     v278 LoadLocal { off=-242, kind=F80 }                 -> d0
     v279 Imm(4602678819172646912)                         -> x0
@@ -359,7 +359,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v285 Store { addr=v284, disp=0, value=v282, kind=F80 } -> -
     v286 LocalAddr(-244)                                  -> x0
     v287 Store { addr=v286, disp=0, value=v283, kind=F80 } -> -
-    v288 CallExt { binding_idx=118, args=[v284, v286], fp_arg_mask=0x0 } -> x0
+    v288 CallExt { binding_idx=130, args=[v284, v286], fp_arg_mask=0x0 } -> x0
     v289 LocalAddr(-245)                                  -> x0
     v290 LoadLocal { off=-245, kind=F80 }                 -> d0
     v291 Imm(4611686018427387904)                         -> x0
@@ -380,7 +380,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v302 Binop { op=fmul, lhs=v299, rhs=v301 }            -> d0
     v303 LocalAddr(-246)                                  -> x9
     v304 Store { addr=v303, disp=0, value=v302, kind=F80 } -> -
-    v305 CallExt { binding_idx=124, args=[v303], fp_arg_mask=0x0 } -> x0
+    v305 CallExt { binding_idx=136, args=[v303], fp_arg_mask=0x0 } -> x0
     v306 BinopI { op=ne, lhs=v305, rhs_imm=3 }            -> x0
     terminator Bz { cond=v306, target=b38, fall=b37 }   (exit_acc=v306)
   block 37  start_pc=0
@@ -395,7 +395,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v313 Binop { op=fmul, lhs=v310, rhs=v312 }            -> d0
     v314 LocalAddr(-247)                                  -> x9
     v315 Store { addr=v314, disp=0, value=v313, kind=F80 } -> -
-    v316 CallExt { binding_idx=105, args=[v314], fp_arg_mask=0x0 } -> x0
+    v316 CallExt { binding_idx=117, args=[v314], fp_arg_mask=0x0 } -> x0
     v317 LocalAddr(-248)                                  -> x0
     v318 LoadLocal { off=-248, kind=F80 }                 -> d0
     v319 Imm(4611686018427387904)                         -> x0
@@ -410,7 +410,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v324 Imm(0)                                           -> x0
     v325 LocalAddr(-249)                                  -> x9
     v326 Store { addr=v325, disp=0, value=v324, kind=F80 } -> -
-    v327 CallExt { binding_idx=86, args=[v325], fp_arg_mask=0x0 } -> x0
+    v327 CallExt { binding_idx=98, args=[v325], fp_arg_mask=0x0 } -> x0
     v328 LocalAddr(-250)                                  -> x0
     v329 LoadLocal { off=-250, kind=F80 }                 -> d0
     v330 Imm(4607182418800017408)                         -> x0
@@ -423,7 +423,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v335 Imm(4607182418800017408)                         -> x1
     v336 LocalAddr(-251)                                  -> x9
     v337 Store { addr=v336, disp=0, value=v330, kind=F80 } -> -
-    v338 CallExt { binding_idx=82, args=[v336], fp_arg_mask=0x0 } -> x0
+    v338 CallExt { binding_idx=94, args=[v336], fp_arg_mask=0x0 } -> x0
     v339 LocalAddr(-252)                                  -> x0
     v340 LoadLocal { off=-252, kind=F80 }                 -> d0
     v341 Imm(0)                                           -> x0
@@ -442,7 +442,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v352 Binop { op=fmul, lhs=v349, rhs=v351 }            -> d0
     v353 LocalAddr(-253)                                  -> x9
     v354 Store { addr=v353, disp=0, value=v352, kind=F80 } -> -
-    v355 CallExt { binding_idx=84, args=[v353], fp_arg_mask=0x0 } -> x0
+    v355 CallExt { binding_idx=96, args=[v353], fp_arg_mask=0x0 } -> x0
     v356 LocalAddr(-254)                                  -> x0
     v357 LoadLocal { off=-254, kind=F80 }                 -> d0
     v358 Imm(4613937818241073152)                         -> x0
@@ -458,7 +458,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v366 Imm(4613937818241073152)                         -> x1
     v367 LocalAddr(-255)                                  -> x9
     v368 Store { addr=v367, disp=0, value=v358, kind=F80 } -> -
-    v369 CallExt { binding_idx=85, args=[v367], fp_arg_mask=0x0 } -> x0
+    v369 CallExt { binding_idx=97, args=[v367], fp_arg_mask=0x0 } -> x0
     v370 LocalAddr(-256)                                  -> x0
     v371 LoadLocal { off=-256, kind=F80 }                 -> d0
     v372 Imm(4620693217682128896)                         -> x0
@@ -477,7 +477,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v381 Imm(4636737291354636288)                         -> x0
     v382 LocalAddr(-257)                                  -> x9
     v383 Store { addr=v382, disp=0, value=v381, kind=F80 } -> -
-    v384 CallExt { binding_idx=83, args=[v382], fp_arg_mask=0x0 } -> x0
+    v384 CallExt { binding_idx=95, args=[v382], fp_arg_mask=0x0 } -> x0
     v385 LocalAddr(-258)                                  -> x0
     v386 LoadLocal { off=-258, kind=F80 }                 -> d0
     v387 Imm(4611686018427387904)                         -> x0
@@ -492,7 +492,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v392 Imm(0)                                           -> x0
     v393 LocalAddr(-259)                                  -> x9
     v394 Store { addr=v393, disp=0, value=v392, kind=F80 } -> -
-    v395 CallExt { binding_idx=88, args=[v393], fp_arg_mask=0x0 } -> x0
+    v395 CallExt { binding_idx=100, args=[v393], fp_arg_mask=0x0 } -> x0
     v396 LocalAddr(-260)                                  -> x0
     v397 LoadLocal { off=-260, kind=F80 }                 -> d0
     v398 Imm(0)                                           -> x0
@@ -504,7 +504,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v402 Imm(0)                                           -> x1
     v403 LocalAddr(-261)                                  -> x9
     v404 Store { addr=v403, disp=0, value=v398, kind=F80 } -> -
-    v405 CallExt { binding_idx=89, args=[v403], fp_arg_mask=0x0 } -> x0
+    v405 CallExt { binding_idx=101, args=[v403], fp_arg_mask=0x0 } -> x0
     v406 LocalAddr(-262)                                  -> x0
     v407 LoadLocal { off=-262, kind=F80 }                 -> d0
     v408 Imm(4607182418800017408)                         -> x0
@@ -523,7 +523,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v419 Store { addr=v418, disp=0, value=v415, kind=F80 } -> -
     v420 LocalAddr(-264)                                  -> x1
     v421 Store { addr=v420, disp=0, value=v408, kind=F80 } -> -
-    v422 CallExt { binding_idx=115, args=[v418, v420], fp_arg_mask=0x0 } -> x0
+    v422 CallExt { binding_idx=127, args=[v418, v420], fp_arg_mask=0x0 } -> x0
     v423 LocalAddr(-265)                                  -> x0
     v424 LoadLocal { off=-265, kind=F80 }                 -> d0
     v425 Imm(0)                                           -> x0
@@ -544,7 +544,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v436 Store { addr=v435, disp=0, value=v433, kind=F80 } -> -
     v437 LocalAddr(-267)                                  -> x0
     v438 Store { addr=v437, disp=0, value=v434, kind=F80 } -> -
-    v439 CallExt { binding_idx=119, args=[v435, v437], fp_arg_mask=0x0 } -> x0
+    v439 CallExt { binding_idx=131, args=[v435, v437], fp_arg_mask=0x0 } -> x0
     v440 LocalAddr(-268)                                  -> x0
     v441 LoadLocal { off=-268, kind=F80 }                 -> d0
     v442 Imm(4611686018427387904)                         -> x0
@@ -562,7 +562,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v450 Store { addr=v449, disp=0, value=v447, kind=F80 } -> -
     v451 LocalAddr(-270)                                  -> x0
     v452 Store { addr=v451, disp=0, value=v448, kind=F80 } -> -
-    v453 CallExt { binding_idx=131, args=[v449, v451], fp_arg_mask=0x0 } -> x0
+    v453 CallExt { binding_idx=143, args=[v449, v451], fp_arg_mask=0x0 } -> x0
     v454 LocalAddr(-271)                                  -> x0
     v455 LoadLocal { off=-271, kind=F80 }                 -> d0
     v456 Imm(4611686018427387904)                         -> x0
@@ -577,7 +577,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v463 Store { addr=v462, disp=0, value=v460, kind=F80 } -> -
     v464 LocalAddr(-273)                                  -> x0
     v465 Store { addr=v464, disp=0, value=v461, kind=F80 } -> -
-    v466 CallExt { binding_idx=132, args=[v462, v464], fp_arg_mask=0x0 } -> x0
+    v466 CallExt { binding_idx=144, args=[v462, v464], fp_arg_mask=0x0 } -> x0
     v467 LocalAddr(-274)                                  -> x0
     v468 LoadLocal { off=-274, kind=F80 }                 -> d0
     v469 Imm(4609434218613702656)                         -> x0
@@ -596,7 +596,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v478 Imm(3)                                           -> x7
     v479 LocalAddr(-275)                                  -> x9
     v480 Store { addr=v479, disp=0, value=v477, kind=F80 } -> -
-    v481 CallExt { binding_idx=129, args=[v479, v478], fp_arg_mask=0x0 } -> x0
+    v481 CallExt { binding_idx=141, args=[v479, v478], fp_arg_mask=0x0 } -> x0
     v482 LocalAddr(-276)                                  -> x0
     v483 LoadLocal { off=-276, kind=F80 }                 -> d0
     v484 Imm(4616189618054758400)                         -> x0
@@ -608,7 +608,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v488 Imm(2)                                           -> x7
     v489 LocalAddr(-277)                                  -> x9
     v490 Store { addr=v489, disp=0, value=v487, kind=F80 } -> -
-    v491 CallExt { binding_idx=130, args=[v489, v488], fp_arg_mask=0x0 } -> x0
+    v491 CallExt { binding_idx=142, args=[v489, v488], fp_arg_mask=0x0 } -> x0
     v492 LocalAddr(-278)                                  -> x0
     v493 LoadLocal { off=-278, kind=F80 }                 -> d0
     v494 Imm(4611686018427387904)                         -> x0
@@ -632,7 +632,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v508 Store { addr=v507, disp=0, value=v503, kind=F80 } -> -
     v509 LocalAddr(-281)                                  -> x1
     v510 Store { addr=v509, disp=0, value=v504, kind=F80 } -> -
-    v511 CallExt { binding_idx=133, args=[v505, v507, v509], fp_arg_mask=0x0 } -> x0
+    v511 CallExt { binding_idx=145, args=[v505, v507, v509], fp_arg_mask=0x0 } -> x0
     v512 LocalAddr(-282)                                  -> x0
     v513 LoadLocal { off=-282, kind=F80 }                 -> d0
     v514 Imm(4616752568008179712)                         -> x0
@@ -657,7 +657,7 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v527 Imm(0)                                           -> x0
     v528 Imm(0)                                           -> x0
     v529 Imm(0)                                           -> x0
-    v530 ImmExtCode(binding=109)                          -> x0
+    v530 ImmExtCode(binding=121)                          -> x0
     v531 Imm(0)                                           -> x1
     v532 LoadLocal { off=-200, kind=F80, volatile }       -> d0
     v533 Imm(0)                                           -> x1

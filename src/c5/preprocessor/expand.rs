@@ -20,6 +20,7 @@ use alloc::vec::Vec;
 
 use super::text::{MAX_LITERAL_PREFIX, literal_prefix_len, pp_number_len, skip_literal};
 use super::{FnMacro, Preprocessor};
+use crate::c5::codegen::Target;
 use crate::c5::ident::{self, key};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -741,9 +742,9 @@ impl<'a> Exp<'a> {
     /// followed by that shape is left alone for the caller to pass through.
     /// The verdict is the one the conditional path reports.
     fn has_operator(&mut self, tok: Tok, rest: &mut Vec<Tok>, out: &mut Vec<Tok>) -> bool {
-        let known: fn(&str) -> bool = match self.text(tok) {
+        let known: fn(&str, Target) -> bool = match self.text(tok) {
             "__has_builtin" => super::builtins::has_builtin,
-            "__has_attribute" => super::cond::is_known_attribute,
+            "__has_attribute" => |name, _| super::cond::is_known_attribute(name),
             _ => return false,
         };
         let n = rest.len();
@@ -754,7 +755,7 @@ impl<'a> Exp<'a> {
         if self.text(open) != "(" || arg.kind != TokKind::Ident || self.text(close) != ")" {
             return false;
         }
-        let verdict = known(self.text(arg));
+        let verdict = known(self.text(arg), self.pp.target);
         rest.truncate(n - 3);
         let t = self.synth(
             (if verdict { "1" } else { "0" }).to_string(),

@@ -6,6 +6,9 @@
 
 #include <windows.h>
 
+/* The SDK's guard, which GLFW's win32 header declares these under too. */
+#ifndef DPI_ENUMS_DECLARED
+#define DPI_ENUMS_DECLARED
 typedef enum MONITOR_DPI_TYPE {
     MDT_EFFECTIVE_DPI = 0,
     MDT_ANGULAR_DPI   = 1,
@@ -18,5 +21,6 @@ typedef enum PROCESS_DPI_AWARENESS {
     PROCESS_SYSTEM_DPI_AWARE      = 1,
     PROCESS_PER_MONITOR_DPI_AWARE = 2
 } PROCESS_DPI_AWARENESS;
+#endif
 
 #endif /* RGFW_DEMO_SHELLSCALINGAPI_H */

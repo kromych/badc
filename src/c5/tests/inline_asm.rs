@@ -646,6 +646,51 @@ fn x86_unencodable_c_memory_operand_is_diagnosed() {
     }
 }
 
+// Emits a native image, so it needs `native-emit`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_p_names_a_memory_operand_reference_and_c_is_refused() {
+    use crate::{NativeOptions, Target};
+    // `%P` on an `m` operand prints its reference, as gcc and clang do, in
+    // the function body and in a pushed section, where Linux's ALTERNATIVE
+    // replacements put `prefetchw %P1`; `%c` there is refused by both.
+    // A relocatable object keeps the pushed section's bytes.
+    let emit = |body: &str| {
+        let src = alloc::format!(
+            "void f(const char *x, unsigned *s, unsigned v) {{ {body} }} \
+             int main(void) {{ return 0; }}"
+        );
+        let opts = NativeOptions {
+            output_kind: crate::OutputKind::Relocatable,
+            ..NativeOptions::default()
+        };
+        crate::c5::object::emit_native_single_tu_for_test(
+            &super::compile_str(&src),
+            Target::LinuxX64,
+            opts,
+        )
+    };
+    for insns in [
+        "prefetchw %P0\\n\\tclflush %P0\\n\\txchgl %1, %P2",
+        ".pushsection .altinstr_replacement, \\\"ax\\\"\\n\\tprefetchw %P0\\n\\t\\
+         clflush %P0\\n\\txchgl %1, %P2\\n.popsection",
+    ] {
+        let body = alloc::format!(
+            "__asm__ volatile(\"{insns}\" : \"+m\"(*(volatile char *)x), \"+r\"(v), \"+m\"(*s));"
+        );
+        let bytes = emit(&body).unwrap_or_else(|e| panic!("`{insns}`: {e}"));
+        // prefetchw (%reg): 0F 0D /1, mod 00.
+        let prefetchw = bytes
+            .windows(3)
+            .any(|w| w[..2] == [0x0F, 0x0D] && w[2] & 0xF8 == 0x08);
+        assert!(prefetchw, "`{insns}`: no prefetchw through a register");
+    }
+    let err = emit("__asm__ volatile(\"prefetchw %c0\" : : \"m\"(*x));")
+        .expect_err("`%c` on a memory operand");
+    let msg = alloc::format!("{err}");
+    assert!(msg.contains("names a memory operand"), "{msg}");
+}
+
 #[test]
 fn x86_range_immediate_constraints_are_immediates() {
     // The x86 range-restricted immediate letters classify as immediates,

@@ -100,10 +100,10 @@ Disassembly of section .text:
                	movq	$0x2222, %rdi           # imm = 0x2222
                	callq	*%rbx
                	movq	%r15, %rsp
-               	movq	%rax, <rip>
-               	movq	%rsi, <rip>
-               	movq	%rdi, <rip>
-               	leaq	<rip>, %rax
+               	movq	%rax, <rip>      # <addr>
+               	movq	%rsi, <rip>      # <addr>
+               	movq	%rdi, <rip>      # <addr>
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x4d2, %rax            # imm = 0x4D2
                	je	<addr>
@@ -113,7 +113,7 @@ Disassembly of section .text:
                	popq	%r15
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x1111, %rax           # imm = 0x1111
                	je	<addr>
@@ -123,7 +123,7 @@ Disassembly of section .text:
                	popq	%r15
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	cmpq	$0x2222, %rax           # imm = 0x2222
                	je	<addr>

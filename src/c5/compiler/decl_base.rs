@@ -262,7 +262,8 @@ impl Compiler {
             // A trailing attribute on a tag use without a body
             // (`struct name __attribute__((...))`); consume it.
             self.skip_attribute_specifiers()?;
-            self.find_or_forward_declare_struct(&name, is_union)
+            let standalone = self.lex.tk == ';';
+            self.find_or_forward_declare_struct(&name, is_union, standalone)?
         };
         Ok(struct_ty_for(id))
     }

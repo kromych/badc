@@ -1578,11 +1578,11 @@ fn build_symtab<'g>(
                 }
         });
         if !has_file && keeps_locals {
-            let base = o
-                .source
-                .rsplit(['/', '('])
+            let base = crate::c5::host::path_base_name(&o.source);
+            let base = base
+                .rsplit('(')
                 .next()
-                .unwrap_or(&o.source)
+                .unwrap_or(base)
                 .trim_end_matches(')');
             syms.push(OutSym {
                 name: base.to_string(),

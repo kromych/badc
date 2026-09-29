@@ -107,6 +107,7 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(libc::scanf,     "_scanf")
 #pragma binding(libc::fscanf,    "_fscanf")
 #pragma binding(libc::sscanf,    "_sscanf")
+#pragma binding(libc::vsscanf,   "_vsscanf")
 #pragma binding(libc::fopen,     "_fopen")
 #pragma binding(libc::freopen,   "_freopen")
 #pragma binding(libc::fclose,    "_fclose")
@@ -316,6 +317,7 @@ typedef struct __c5_fpos_t fpos_t;
 // The legacy msvcrt.dll exports no _ftelli64 (unlike _fseeki64); UCRT does.
 #pragma dylib(ucrtbase, "ucrtbase.dll")
 #pragma binding(ucrtbase::_ftelli64, "_ftelli64")
+#pragma binding(ucrtbase::__stdio_common_vsscanf, "__stdio_common_vsscanf")
 #pragma binding(msvcrt::fgetpos,   "fgetpos")
 #pragma binding(msvcrt::fsetpos,   "fsetpos")
 #pragma binding(msvcrt::rewind,    "rewind")
@@ -482,9 +484,20 @@ int fscanf(FILE *stream, const char *fmt, ...);
 int sscanf(const char *src, const char *fmt, ...);
 #ifdef __linux__
 // GNU asprintf: allocate a buffer for the formatted result and store its
-// address through `strp`; its `va_list` form, and sscanf's.
+// address through `strp`, and its `va_list` form.
 int asprintf(char **strp, char *fmt, ...);
 int vasprintf(char **strp, const char *fmt, __builtin_va_list ap);
+#endif
+// C99 7.19.6.14. msvcrt.dll has no vsscanf; the Universal CRT's header
+// defines it over ucrtbase's scanner, which reads no FILE.
+#ifdef _WIN32
+int __stdio_common_vsscanf(unsigned long long options, const char *src, size_t len,
+                           const char *fmt, void *locale, __builtin_va_list ap);
+static inline int vsscanf(const char *src, const char *fmt, __builtin_va_list ap)
+{
+    return __stdio_common_vsscanf(0, src, (size_t)-1, fmt, 0, ap);
+}
+#else
 int vsscanf(const char *src, const char *fmt, __builtin_va_list ap);
 #endif
 FILE *fopen(const char *path, const char *mode);
@@ -682,23 +695,27 @@ unsigned short *wcscat(unsigned short *dst, const unsigned short *src);
 unsigned short *wcsncat(unsigned short *dst, const unsigned short *src, unsigned long long n);
 unsigned short *wcsdup(const unsigned short *s);
 int   _wcsicmp(const unsigned short *a, const unsigned short *b);
-int   localtime_s();
-int   gmtime_s();
-int   ctime_s();
-int   asctime_s();
-int   strerror_s();
-char *_strdup();
-int   _strnicmp();
-int   _stricmp();
-int   _get_errno();
-int   _set_errno();
-int  *_errno();
-int   __argc();
-char **__argv();
-unsigned short **__wargv();
-int   __getmainargs();
-int   _getch();
-int   _kbhit();
+// The Windows SDK's prototypes: `errno_t` is `int`, and `time_t` the
+// 64-bit `long long` the CRT's `_*64_s` entries take.
+struct tm;
+int   localtime_s(struct tm *tm, const long long *t);
+int   gmtime_s(struct tm *tm, const long long *t);
+int   ctime_s(char *buf, size_t size, const long long *t);
+int   asctime_s(char *buf, size_t size, const struct tm *tm);
+int   strerror_s(char *buf, size_t size, int errnum);
+char *_strdup(const char *s);
+int   _strnicmp(const char *a, const char *b, size_t n);
+int   _stricmp(const char *a, const char *b);
+int   _get_errno(int *value);
+int   _set_errno(int value);
+int  *_errno(void);
+// msvcrt's data exports, which a reference reads through the import slot.
+extern int      __argc;
+extern char   **__argv;
+extern wchar_t **__wargv;
+int   __getmainargs(int *argc, char ***argv, char ***envp, int do_wildcard, void *startup_info);
+int   _getch(void);
+int   _kbhit(void);
 long long _msize(void *p);
 int   _open(char *path, int flags, int mode);
 int   _wopen(const unsigned short *path, int flags, int mode);
@@ -717,7 +734,7 @@ int   _chmod(char *path, int mode);
 int   _unlink(char *path);
 char *_getcwd(char *buf, int n);
 int   _chdir(char *path);
-int   _getpid();
+int   _getpid(void);
 int   _dup(int fd);
 int   _dup2(int fd, int newfd);
 FILE *_fdopen(int fd, const char *mode);
@@ -728,7 +745,7 @@ FILE *fdopen(int fd, const char *mode);
 unsigned long      _byteswap_ulong(unsigned long v);
 unsigned long long _byteswap_uint64(unsigned long long v);
 unsigned short     _byteswap_ushort(unsigned short v);
-FILE *__iob_func();
+FILE *__iob_func(void);
 
 // MSVC's `_findfirst`/`_findnext` companion structs. Layout
 // pinned to the Win64 SDK so the kernel-emitted records match
@@ -786,7 +803,7 @@ struct _wfinddata64_t {
 #define O_TEXT        _O_TEXT
 #define O_BINARY      _O_BINARY
 #endif
-char *dlsym(char *handle, char *name);
+void *dlsym(void *__restrict handle, const char *__restrict name);
 
 // Lazy resolver for `stdin` / `stdout` / `stderr`. Index
 // 0 = stdin, 1 = stdout, 2 = stderr.

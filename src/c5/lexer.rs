@@ -1661,11 +1661,11 @@ impl Lexer {
         Ok(())
     }
 
-    /// The byte span of source line `target` in the current file
-    /// (`self.file`), recovered by walking the `#line` markers the
-    /// preprocessor embedded in the buffer so the original (file, line)
-    /// numbering is honoured. `None` when no such line is found.
-    fn line_span(&self, target: usize) -> Option<(u32, u32)> {
+    /// The byte span of source line `target` in `file`, recovered by
+    /// walking the `#line` markers the preprocessor embedded in the buffer
+    /// so the original (file, line) numbering is honoured. `None` when no
+    /// such line is found.
+    fn line_span(&self, file: &str, target: usize) -> Option<(u32, u32)> {
         // Split the buffer into marker-delimited runs on first use. A
         // diagnostic may be constructed speculatively on a trial-parse
         // path that its caller discards, so this lookup must not
@@ -1713,7 +1713,7 @@ impl Lexer {
             }
             LineIndex { files, runs }
         });
-        let file_id = index.files.iter().position(|f| *f == self.file)? as u32;
+        let file_id = index.files.iter().position(|f| f == file)? as u32;
         index.span_of(&self.src, file_id, u32::try_from(target).ok()?)
     }
 
@@ -1721,8 +1721,8 @@ impl Lexer {
     /// Used to echo the line a diagnostic points at, even when the
     /// parser has read ahead of it (an unused-parameter warning fires
     /// at the closing brace but names the parameter's declaration line).
-    pub(crate) fn line_text_by_number(&self, target: usize) -> Option<&str> {
-        let (start, end) = self.line_span(target)?;
+    pub(crate) fn line_text_by_number(&self, file: &str, target: usize) -> Option<&str> {
+        let (start, end) = self.line_span(file, target)?;
         core::str::from_utf8(&self.src[start as usize..end as usize])
             .ok()
             .map(|s| s.trim_end())
@@ -1731,8 +1731,8 @@ impl Lexer {
     /// The byte offset of source line `target` in the preprocessed
     /// translation unit, which is the position the diagnostic pragmas
     /// resolve on.
-    pub(crate) fn line_offset(&self, target: usize) -> Option<u32> {
-        self.line_span(target).map(|(start, _)| start)
+    pub(crate) fn line_offset(&self, file: &str, target: usize) -> Option<u32> {
+        self.line_span(file, target).map(|(start, _)| start)
     }
 
     /// Entries the line index holds, 0 when no diagnostic built it.

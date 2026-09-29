@@ -138,7 +138,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v8   Imm(1)                                           -> x0
     terminator Return(v8)   (exit_acc=v8)
   block 2  start_pc=0
-    v9   TlsAddr(64)                                      -> x0
+    v9   TlsAddr(128)                                     -> x0
     v10  Imm(16)                                          -> x2
     v11  Imm(15)                                          -> x2
     v12  BinopI { op=and, lhs=v9, rhs_imm=15 }            -> x2
@@ -177,7 +177,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v33  TlsAddr(104)                                     -> x7
     v34  Imm(4609434218613702656)                         -> x7
     v35  Store { addr=v1, disp=0, value=v34, kind=F64 }   -> -
-    v36  TlsAddr(64)                                      -> x8
+    v36  TlsAddr(128)                                     -> x8
     v37  Imm(3)                                           -> x8
     v38  Store { addr=v9, disp=0, value=v37, kind=I64 }   -> -
     v39  BinopI { op=add, lhs=v9, rhs_imm=8 }             -> x9
@@ -192,15 +192,15 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v48  BinopI { op=add, lhs=v25, rhs_imm=8 }            -> x6
     v49  Imm(7)                                           -> x6
     v50  Store { addr=v25, disp=8, value=v49, kind=I64 }  -> -
-    v51  TlsAddr(0)                                       -> x2
+    v51  TlsAddr(96)                                      -> x2
     v52  Imm(1)                                           -> x6
     v53  Store { addr=v51, disp=0, value=v52, kind=I8 }   -> -
-    v54  TlsAddr(8)                                       -> x6
+    v54  TlsAddr(112)                                     -> x6
     v55  Imm(2)                                           -> x3
     v56  Store { addr=v54, disp=0, value=v55, kind=I8 }   -> -
-    v57  TlsAddr(16)                                      -> x6
+    v57  TlsAddr(144)                                     -> x6
     v58  Store { addr=v57, disp=0, value=v37, kind=I8 }   -> -
-    v59  TlsAddr(48)                                      -> x8
+    v59  TlsAddr(160)                                     -> x8
     v60  Store { addr=v59, disp=0, value=v40, kind=I8 }   -> -
     v61  Load { addr=v1, disp=0, kind=F64 }               -> d0
     v62  Binop { op=fne, lhs=v61, rhs=v34 }               -> x1
@@ -218,7 +218,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v70  Imm(5)                                           -> x0
     terminator Return(v70)   (exit_acc=v70)
   block 11  start_pc=0
-    v71  TlsAddr(64)                                      -> x1
+    v71  TlsAddr(128)                                     -> x1
     v72  Load { addr=v71, disp=0, kind=I64 }              -> x7
     v73  BinopI { op=add, lhs=v71, rhs_imm=8 }            -> x9
     v74  Load { addr=v71, disp=8, kind=I64 }              -> x1
@@ -235,17 +235,17 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v83  Imm(6)                                           -> x1
     terminator Return(v46)   (exit_acc=v46)
   block 13  start_pc=0
-    v84  TlsAddr(0)                                       -> x0
+    v84  TlsAddr(96)                                      -> x0
     v85  Load { addr=v51, disp=0, kind=I8 }               -> x0
-    v86  TlsAddr(8)                                       -> x1
+    v86  TlsAddr(112)                                     -> x1
     v87  Load { addr=v86, disp=0, kind=I8 }               -> x1
     v88  Binop { op=add, lhs=v85, rhs=v87 }               -> x0
     v89  Extend { value=v88, kind=I32, nsw }              -> x1
-    v90  TlsAddr(16)                                      -> x1
+    v90  TlsAddr(144)                                     -> x1
     v91  Load { addr=v57, disp=0, kind=I8 }               -> x1
     v92  Binop { op=add, lhs=v88, rhs=v91 }               -> x0
     v93  Extend { value=v92, kind=I32, nsw }              -> x1
-    v94  TlsAddr(48)                                      -> x1
+    v94  TlsAddr(160)                                     -> x1
     v95  Load { addr=v59, disp=0, kind=I8 }               -> x1
     v96  Binop { op=add, lhs=v92, rhs=v95 }               -> x0
     v97  Extend { value=v96, kind=I32, nsw }              -> x1

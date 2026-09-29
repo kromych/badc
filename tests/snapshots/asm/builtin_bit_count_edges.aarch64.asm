@@ -645,7 +645,7 @@ Disassembly of section .text:
                	add	x21, x21, #0x1
                	cbz	w0, <addr>
                	mov	x20, #0x0               // =0
-               	adrp	x22, <page>
+               	adrp	x22, <addr>
                	add	x22, x22, <lo12>
                	cbnz	w0, <addr>
                	cmp	w20, #0xa

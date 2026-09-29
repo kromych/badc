@@ -45,6 +45,8 @@ pub(crate) mod eh_frame;
 pub(crate) mod erratum;
 #[cfg(feature = "std")]
 pub(crate) mod gnu_property;
+
+mod got_relax;
 #[cfg(feature = "std")]
 mod image;
 pub(crate) mod ld_driver;

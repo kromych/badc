@@ -240,7 +240,7 @@ Disassembly of section .text:
 <jump_back>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	movl	$0x1, %esi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -253,7 +253,7 @@ Disassembly of section .text:
                	pushq	%rbx
                	movq	%rdi, %rbx
                	movq	%rsi, %r12
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
                	movslq	%eax, %rax
@@ -421,7 +421,7 @@ Disassembly of section .text:
                	subq	$0x2a0, %rsp            # imm = 0x2A0
                	pushq	%r12
                	pushq	%rbx
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rbx
                	leaq	-0x290(%rbp), %rdi
                	xorps	%xmm14, %xmm14

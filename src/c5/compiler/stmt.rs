@@ -221,6 +221,7 @@ impl Compiler {
                         fn_ptr_indirection: sym.fn_ptr_indirection,
                         params: sym.params.clone(),
                         is_variadic: sym.is_variadic,
+                        prototyped: sym.prototyped,
                         array_dims: sym.array_dims.clone(),
                         decl_spelling: sym.binding.decl_spelling,
                     });
@@ -301,7 +302,8 @@ impl Compiler {
     /// the chain through this helper.
     pub(super) fn parse_full_expr(&mut self) -> Result<(), C5Error> {
         self.parse_full_expr_or_void()?;
-        self.reject_void_value(self.ty)
+        self.reject_void_value(self.ty)?;
+        self.reject_incomplete_value(self.ty)
     }
 
     pub(super) fn parse_full_expr_or_void(&mut self) -> Result<(), C5Error> {
@@ -1053,7 +1055,7 @@ impl Compiler {
             let sym = &self.symbols[b.idx];
             if sym.class != Token::Loc as i64
                 || sym.val >= 0
-                || !sym.binding.decl_in_main_source
+                || !sym.binding.decl_in_user_source
                 || sym.binding.address_escaped
                 || sym.binding.was_read
                 || sym.binding.maybe_unused
@@ -1474,6 +1476,15 @@ impl Compiler {
         self.consume(b';', "`;` expected after `asm(...)`")
     }
 
+    /// An asm statement's operand names and `asm goto` labels share one
+    /// namespace, as in gcc and clang, so a repeat is an error.
+    fn duplicate_asm_operand_name(&self, name: &str) -> C5Error {
+        self.compile_err(
+            Code::ASM_SYNTAX,
+            format!("inline asm: duplicate operand name `{name}`"),
+        )
+    }
+
     /// Parse the operand lists of a GCC extended-asm statement into an
     /// [`ast::AsmBlockAst`] and emit an [`ast::Expr::InlineAsm`] (or an
     /// [`ast::Stmt::AsmGoto`] for `asm goto`). The grammar is
@@ -1536,6 +1547,11 @@ impl Compiler {
                 }
                 let idx = self.lex.curr_id_idx;
                 let name = self.symbols[idx].name.clone();
+                if label_names.contains(&name) || operand_names.iter().flatten().any(|n| *n == name)
+                {
+                    self.truncate_data(data_base);
+                    return Err(self.duplicate_asm_operand_name(&name));
+                }
                 self.next()?;
                 // `label_names` stays the name as written: the template
                 // references it as `%l[name]`. Only the binding resolves
@@ -1560,7 +1576,12 @@ impl Compiler {
                         "inline asm: operand name expected after `[`",
                     ));
                 }
-                op_name = Some(self.symbols[self.lex.curr_id_idx].name.clone());
+                let name = self.symbols[self.lex.curr_id_idx].name.clone();
+                if operand_names.iter().flatten().any(|n| *n == name) {
+                    self.truncate_data(data_base);
+                    return Err(self.duplicate_asm_operand_name(&name));
+                }
+                op_name = Some(name);
                 self.next()?; // name
                 self.consume(b']', "`]` expected after asm operand name")?;
             }
@@ -1657,7 +1678,10 @@ impl Compiler {
             let saved_decay_bytes = core::mem::take(&mut self.pending.last_array_decay_bytes);
             let saved_decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
             let saved_decay_vla = self.pending.last_array_decay_vla.take();
-            self.expr(Token::Assign as i64)?;
+            // A memory operand designates its object, which gcc lets have
+            // incomplete type.
+            self.expr_or_void(Token::Assign as i64)?;
+            self.reject_void_value(self.ty)?;
             let vla = core::mem::replace(&mut self.pending.last_array_decay_vla, saved_decay_vla);
             // The dims channel also marks rows the byte channel cannot
             // (an unspecified bound `*(T (*)[])p` has no byte size).
@@ -1710,19 +1734,29 @@ impl Compiler {
                     ),
                 ));
             }
-            // The x86 `x` operand path moves a full 128-bit value (movups), so
-            // it requires a 16-byte operand (a __m128i / vector). A scalar
-            // float / double `x` operand is not yet supported and is rejected
-            // rather than over-reading / over-writing its storage. AArch64 `w`
-            // has its own (scalar-double) width check in the emitter.
-            if matches!(constraint, AsmConstraint::Fp)
+            // An x86 `x` operand is a 16-byte vector, moved whole, or a
+            // `float` / `double` in the low lane, as the SysV ABI passes one;
+            // a matching input takes the class of the output it names.
+            // AArch64 `w` has its own (scalar-double) width check in the
+            // emitter.
+            let class = match constraint {
+                AsmConstraint::Match(n) => operands
+                    .get(n as usize)
+                    .map_or(constraint, |o: &AsmOperand| o.constraint),
+                c => c,
+            };
+            let scalar_fp = matches!(class, AsmConstraint::Fp)
+                && !self.target.is_aarch64()
+                && super::types::is_floating_scalar(self.ty);
+            if matches!(class, AsmConstraint::Fp)
                 && !self.target.is_aarch64()
                 && self.size_of_type(self.ty) != 16
+                && !scalar_fp
             {
                 self.truncate_data(data_base);
                 return Err(self.compile_err(
                     Code::UNSUPPORTED,
-                    "inline asm: only 16-byte (__m128i) `x` operands are supported",
+                    "inline asm: an `x` operand is a 16-byte vector, a `float` or a `double`",
                 ));
             }
             // A `register T v asm("reg")` variable used as a plain
@@ -1872,7 +1906,8 @@ impl Compiler {
                 width,
                 seg: operand_seg,
                 static_arg: false,
-                value: false,
+                // A scalar `x` input is its value; a vector one its address.
+                value: scalar_fp && !stores_back,
                 volatile_object,
                 early_clobber,
             });
@@ -2522,7 +2557,8 @@ impl Compiler {
         }
         self.next()?; // consume '('
         self.ast_psh();
-        self.expr(Token::Assign as i64)?;
+        self.expr_or_void(Token::Assign as i64)?;
+        self.reject_void_value(self.ty)?;
         if by_address {
             self.ty += Ty::Ptr as i64;
             self.ast_apply_unary(super::super::ast::UnOp::AddrOf);
@@ -3452,6 +3488,7 @@ impl Compiler {
             self.next()?;
         } else {
             self.parse_full_expr_or_void()?;
+            self.reject_incomplete_value(self.ty)?;
             // C99 6.8.3 expression statement: bind the parsed
             // expression's id to a `Stmt::Expr` so the walker
             // descends through it. No-op when the expression

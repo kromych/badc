@@ -192,7 +192,7 @@ struct PeLayout<'a> {
     edata_present: bool,
     dwarf_present: bool,
     text_rva: u32,
-    dwarf_blobs: Vec<(&'static str, Vec<u8>)>,
+    dwarf_blobs: Vec<(alloc::borrow::Cow<'static, str>, Vec<u8>)>,
     plan: SectionPlan,
     headers_size: u32,
     text_file_off: u32,
@@ -420,13 +420,21 @@ impl<'a> PeWriter<'a> {
         l.text_rva = SECTION_ALIGNMENT;
         let text_vmaddr = IMAGE_BASE + (l.text_rva + self.text_prologue_len) as u64;
         let raw = image::image_dwarf(program, build, self.target, text_vmaddr, None, None)?;
-        l.dwarf_blobs = alloc::vec![
+        l.dwarf_blobs = [
             (".debug_info", raw.debug_info),
             (".debug_abbrev", raw.debug_abbrev),
             (".debug_line", raw.debug_line),
             (".debug_str", raw.debug_str),
             (".debug_frame", raw.debug_frame),
-        ];
+        ]
+        .into_iter()
+        .map(|(name, bytes)| (name.into(), bytes))
+        .chain(
+            raw.other
+                .into_iter()
+                .map(|(name, bytes)| (name.into(), bytes)),
+        )
+        .collect();
         let dwarf_section_count = if l.dwarf_present {
             l.dwarf_blobs.iter().filter(|(_, b)| !b.is_empty()).count()
         } else {
@@ -542,13 +550,18 @@ impl<'a> PeWriter<'a> {
         };
         l.named_out = named_out;
         if let Some(md) = &build.merged_dwarf {
-            let mut info = core::mem::take(&mut self.layout.dwarf_blobs[0].1);
-            for r in &md.debug_info_data_relocs {
-                super::apply_merged_dwarf_data_reloc(&mut info, r, &|off| {
-                    IMAGE_BASE + self.data_off_to_rva(off as u32) as u64
-                })?;
+            // `.debug_info`, then the other sections after the fixed five.
+            let lists = core::iter::once((0, &md.debug_info_data_relocs))
+                .chain((md.other.iter().enumerate()).map(|(k, s)| (5 + k, &s.data_relocs)));
+            for (at, relocs) in lists {
+                let mut bytes = core::mem::take(&mut self.layout.dwarf_blobs[at].1);
+                for r in relocs {
+                    super::apply_merged_dwarf_data_reloc(&mut bytes, r, &|off| {
+                        IMAGE_BASE + self.data_off_to_rva(off as u32) as u64
+                    })?;
+                }
+                self.layout.dwarf_blobs[at].1 = bytes;
             }
-            self.layout.dwarf_blobs[0].1 = info;
         }
         Ok(())
     }
@@ -930,7 +943,19 @@ impl<'a> PeWriter<'a> {
                 patch_iat_lookup(machine, &mut text, instr_off, text_rva, target_rva, f.part)?;
             }
         }
-        if !build.got_base_fixups.is_empty() {
+        for f in &build.got_pcrel_fixups {
+            let site = f.site_text_offset as usize + prologue as usize;
+            let slot_rva = l.idata.iat_rva_for_import[f.import_index] as i64;
+            let value = slot_rva + f.addend - (text_rva as i64 + site as i64);
+            let (Ok(disp), Some(field)) = (i32::try_from(value), text.get_mut(site..site + 4))
+            else {
+                return Err(Self::internal(format!(
+                    "PE: IAT slot field at .text+{site:#x} cannot take {value}"
+                )));
+            };
+            field.copy_from_slice(&disp.to_le_bytes());
+        }
+        if !build.got_base_fixups.is_empty() || !build.got_rel_fields.is_empty() {
             return Err(C5Error::hard(
                 Code::OBJECT_FORMAT,
                 "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a PE image has no GOT",

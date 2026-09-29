@@ -73,7 +73,7 @@ Disassembly of section .text:
                	movb	%cl, 0x7(%rdx)
                	leaq	-0x40(%rbp), %rdi
                	leaq	-0x50(%rbp), %rsi
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx       # <addr>
                	movq	%r13, %rdx
                	callq	<addr>
                	xorl	%eax, %eax
@@ -99,7 +99,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x70, %rsp
                	leaq	-0x68(%rbp), %rax
-               	leaq	<rip>, %rcx
+               	leaq	<rip>, %rcx       # <addr>
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
                	xorl	%eax, %eax

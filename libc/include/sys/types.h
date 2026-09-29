@@ -53,11 +53,12 @@ typedef unsigned int gid_t;
 // Windows `struct stat` carries `st_mode` at that width. Source that
 // declares its own `mode_t` on Windows -- as CPython's `_stat.c` does,
 // because MSVC's headers leave it to the program -- then redefines the
-// name to the same type, which C11 6.7p3 permits.
-#if defined(__BADC_WINDOWS__)
+// name to the same type, which C11 6.7p3 permits. glibc's is `unsigned
+// int`, Darwin's `__uint16_t`.
+#if defined(__BADC_WINDOWS__) || defined(__APPLE__)
 typedef unsigned short mode_t;
 #else
-typedef int mode_t;
+typedef unsigned int mode_t;
 #endif
 // `dev_t` is the device number. Its width is platform-defined and
 // matters in struct layout (it sits in stat and in libc runtime state):
@@ -106,8 +107,14 @@ typedef long long blkcnt64_t;
 typedef long blkcnt_t;
 typedef long blkcnt64_t;
 #endif
+// Unsigned 32-bit in glibc and Darwin; Winsock's socklen_t is `int`.
+#ifdef __BADC_WINDOWS__
 typedef int id_t;
 typedef int useconds_t;
+#else
+typedef unsigned int id_t;
+typedef unsigned int useconds_t;
+#endif
 typedef int suseconds_t;
 typedef int clockid_t;
 typedef int timer_id_t;
@@ -118,7 +125,11 @@ typedef long long fsfilcnt_t;
 typedef long fsblkcnt_t;
 typedef long fsfilcnt_t;
 #endif
+#ifdef __BADC_WINDOWS__
 typedef int socklen_t;
+#else
+typedef unsigned int socklen_t;
+#endif
 typedef int key_t;
 
 /* The Linux <sys/types.h> makes `fd_set` and the `FD_*` macros visible

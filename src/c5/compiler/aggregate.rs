@@ -6,7 +6,6 @@
 //! layout state, so the bit-packing rules stay in one place.
 
 use alloc::format;
-use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use super::super::diag::Code;
@@ -16,7 +15,7 @@ use super::decl_base;
 use super::types::{
     is_decl_modifier, is_pointer_ty, is_struct_value_ty, round_up, struct_id_of, struct_ty_for,
 };
-use super::{AnonBitfield, AnonMember, Compiler, StructDef, StructField};
+use super::{AnonBitfield, AnonMember, Compiler, StructField};
 
 /// The running layout of one aggregate body: the next offset, the alignment
 /// maxima its members contribute, and the bit cursor of the current bitfield
@@ -61,6 +60,8 @@ struct MemberBase {
     incomplete_enum_tag: Option<u32>,
     anon_aggregate_inner_id: Option<usize>,
     group_align: usize,
+    /// `_Alignas` among the specifiers, which no bit-field may carry.
+    group_alignas: bool,
     /// `packed` among the specifiers, which packs every declarator.
     group_packed: bool,
     base_spelling: crate::c5::symbol::DeclSpelling,
@@ -228,6 +229,7 @@ impl Compiler {
             field_base,
             incomplete_enum_tag,
             group_align,
+            group_alignas,
             group_packed,
             base_spelling,
             type_align_override,
@@ -255,6 +257,12 @@ impl Compiler {
             // appearing in declarator position.
             if self.lex.tk == ':' {
                 self.pending.attr_packed = false;
+                if group_alignas {
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        "alignment specified for an unnamed bit-field",
+                    ));
+                }
                 let width = self.parse_bitfield_width(field_base, false)?;
                 self.pending.attr_transparent_union = false;
                 let mut unit_ty = field_base;
@@ -290,7 +298,9 @@ impl Compiler {
             let declared = self.parse_declarator(field_base);
             self.pending.in_member_declarator = saved_member_ctx;
             let (id_idx, mut field_ty, mut field_array_size) = declared?;
-            let mut field_zero_len = self.pending.declarator_zero_len_array;
+            // The pending flag describes the last bracketed declarator, so
+            // it holds for this member only with the `-1` count.
+            let mut field_zero_len = field_array_size < 0 && self.pending.declarator_zero_len_array;
             // A member may carry a trailing attribute
             // (`int x __attribute__((aligned(16)));`,
             // `int x __attribute__((deprecated));`). Member-level
@@ -307,6 +317,14 @@ impl Compiler {
                     return Err(self.compile_err(
                         Code::INVALID_DECLARATION,
                         "aggregate fields cannot also be bitfields",
+                    ));
+                }
+                // C11 6.7.5p2.
+                if group_alignas || self.pending.attr_alignas > 0 {
+                    let name = self.symbols[id_idx].name.clone();
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        format!("alignment specified for bit-field `{name}`"),
                     ));
                 }
                 self.parse_bitfield_width(field_ty, true)?
@@ -385,13 +403,13 @@ impl Compiler {
             // forward-declared tag is incomplete; size cannot stand in
             // for that, since a complete empty `struct {}` and a struct
             // whose only member is a flexible array both have size 0.
+            let field_name = self.symbols[id_idx].name.clone();
             if is_aggregate_value && !self.structs[struct_id_of(field_ty)].is_complete {
                 return Err(self.compile_err(
                     Code::INVALID_DECLARATION,
-                    "aggregate-value field of incomplete type",
+                    format!("field `{field_name}` has incomplete type"),
                 ));
             }
-            let field_name = self.symbols[id_idx].name.clone();
 
             if bit_width > 0 && field_array_size != 0 {
                 return Err(self.compile_err(
@@ -492,16 +510,16 @@ impl Compiler {
         // Recorded so the post-body `packed` re-lay reproduces
         // the same placement: the member has no name, so
         // `fields` cannot carry it.
-        let record = AnonBitfield {
+        let mut record = AnonBitfield {
             before: self.structs[struct_id].fields.len() as u32,
             width,
             unit: unit.min(u8::MAX as usize) as u8,
             align: ms_align.clamp(1, u8::MAX as usize) as u8,
             explicit_align: explicit as u32,
             type_align: type_align_override as u32,
+            bit_start: 0,
         };
         let type_align = record.declared_align();
-        self.structs[struct_id].anon_bitfields.push(record);
         if width == 0 {
             // C99 6.7.2.1p11: a width-zero bitfield aligns
             // the next field to the start of the next
@@ -518,15 +536,18 @@ impl Compiler {
             // A union member occupies its own storage from
             // offset 0; the bits round up to whole bytes.
             layout.offset = layout.offset.max((width as usize).div_ceil(8));
-        } else if packed {
-            align_bit_cursor(layout, explicit);
-            layout.bf_bit_cursor += width as usize;
-            layout.offset = layout.offset.max(layout.bf_bit_cursor.div_ceil(8));
         } else {
             align_bit_cursor(layout, explicit);
-            let gcc = self.target.gcc_bitfields();
-            place_bitfield(layout, unit, type_align, width, gcc);
+            if packed {
+                layout.bf_bit_cursor += width as usize;
+                layout.offset = layout.offset.max(layout.bf_bit_cursor.div_ceil(8));
+            } else {
+                let gcc = self.target.gcc_bitfields();
+                place_bitfield(layout, unit, type_align, width, gcc);
+            }
+            record.bit_start = (layout.bf_bit_cursor - width as usize) as u32;
         }
+        self.structs[struct_id].anon_bitfields.push(record);
         // Whether an unnamed bit-field's declared type raises
         // the aggregate's alignment is target-defined. Where
         // it does, a non-zero width is still clamped by
@@ -692,9 +713,10 @@ impl Compiler {
             // idiom (`struct {} __empty; T arr[];`) relies on. Its
             // alignment still applies: an empty type carrying
             // `aligned(N)` places the member, and raises the
-            // containing type, at N.
+            // containing type, at N. MSVC gives the type storage.
             let is_empty_aggregate = is_struct_value_ty(field_ty)
-                && self.structs[struct_id_of(field_ty)].fields.is_empty();
+                && self.structs[struct_id_of(field_ty)].fields.is_empty()
+                && !self.target.ms_layout();
             let field_storage = if is_empty_aggregate {
                 0
             } else if field_array_size > 0 {
@@ -782,47 +804,19 @@ impl Compiler {
         // mid-definition. C99 6.2.1: only a tag in the SAME scope
         // makes this a redefinition; a tag of the same name in an
         // outer scope is shadowed by a fresh declaration here.
-        let struct_id = match self.find_struct_id_in_current_scope(name) {
-            Some(id) if self.structs[id].fields.is_empty() => {
-                self.structs[id].is_union = is_union;
-                id
-            }
-            Some(_) => {
-                return Err(self.compile_err(
-                    Code::INVALID_DECLARATION,
-                    format!(
-                        "{} `{}` already defined",
-                        if is_union { "union" } else { "struct" },
-                        name
-                    ),
-                ));
-            }
-            None => {
-                self.structs.push(StructDef {
-                    name: name.to_string(),
-                    size: 0,
-                    align: 1,
-                    explicit_align: 0,
-                    natural_align: 0,
-                    member_align: 0,
-                    fields: Vec::new(),
-                    anon_bitfields: Vec::new(),
-                    anon_members: Vec::new(),
-                    is_union,
-                    is_complete: false,
-                    is_vector: false,
-                    is_array: false,
-                    is_anonymous: false,
-                    is_transparent_union: false,
-                    cast_named: false,
-                    vla_size_slot: None,
-                });
-                let id = self.structs.len() - 1;
-                if let Some(scope) = self.tag_scopes.last_mut() {
-                    scope.push((name.to_string(), id));
+        let keyword = if is_union { "union" } else { "struct" };
+        let struct_id = match self.find_tag_in_current_scope(name) {
+            Some(id) => {
+                self.check_tag_kind(id, keyword)?;
+                if !self.structs[id].fields.is_empty() {
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        format!("{keyword} `{name}` already defined"),
+                    ));
                 }
                 id
             }
+            None => self.declare_tag(name, is_union, false),
         };
         Ok(struct_id)
     }
@@ -849,6 +843,7 @@ impl Compiler {
         // alignment of every member of the group; a per-declarator one adds
         // to it at placement.
         let mut group_align: usize = 0;
+        let mut group_alignas = false;
         let mut group_packed = false;
         // C99 6.7.2p2 admits the qualifiers in any order, so a leading
         // `volatile int x;` folds like the trailing spelling.
@@ -856,6 +851,7 @@ impl Compiler {
         while is_decl_modifier(self.lex.tk) {
             if self.lex.tk == Token::Attribute {
                 group_packed |= self.skip_attribute_specifiers()?;
+                group_alignas |= self.pending.attr_alignas > 0;
                 let m_align = self.take_member_align()?;
                 if m_align > 0 {
                     group_align = group_align.max(m_align as usize);
@@ -952,6 +948,7 @@ impl Compiler {
         let (saw_int_mod, trailing_quals) =
             self.consume_trailing_decl_modifiers(&mut mods, None)?;
         group_packed |= core::mem::take(&mut self.pending.attr_packed);
+        group_alignas |= self.pending.attr_alignas > 0;
         group_align = group_align.max(self.take_member_align()?.max(0) as usize);
         if saw_int_mod {
             if field_base_tok == Token::Int {
@@ -976,6 +973,7 @@ impl Compiler {
             incomplete_enum_tag,
             anon_aggregate_inner_id,
             group_align,
+            group_alignas,
             group_packed,
             base_spelling,
             type_align_override,
@@ -1022,7 +1020,7 @@ impl Compiler {
             self.apply_post_body_attributes(id)?;
             id
         } else {
-            self.find_or_forward_declare_struct(&inner_name, nested_is_union)
+            self.find_or_forward_declare_struct(&inner_name, nested_is_union, false)?
         };
         Ok((struct_ty_for(inner_id), inner_id))
     }
@@ -1240,6 +1238,13 @@ impl Compiler {
         if transparent {
             self.mark_transparent_union(struct_id);
         }
+        // MSVC gives a C aggregate with no storage size 4, or its
+        // alignment where an explicit one of at least 4 applies, as
+        // clang's `*-windows-msvc` layout does; the alignment stays.
+        let s = &mut self.structs[struct_id];
+        if self.target.ms_layout() && s.is_complete && s.size == 0 {
+            s.size = if s.explicit_align >= 4 { s.align } else { 4 };
+        }
         Ok(())
     }
 
@@ -1319,7 +1324,7 @@ impl Compiler {
             // so the packed layout reserves the same bits the natural
             // one did (C99 6.7.2.1p11).
             while anon_pos < anon.len() && anon[anon_pos].before as usize <= i {
-                bit_cursor = self.repack_anon_bitfield(bit_cursor, &anon[anon_pos], packing);
+                bit_cursor = self.repack_anon_bitfield(struct_id, bit_cursor, anon_pos, packing);
                 anon_pos += 1;
             }
             // A member promoted from an anonymous struct/union moves as a
@@ -1398,7 +1403,7 @@ impl Compiler {
         }
         // Unnamed bit-fields trailing the last named member.
         while anon_pos < anon.len() {
-            bit_cursor = self.repack_anon_bitfield(bit_cursor, &anon[anon_pos], packing);
+            bit_cursor = self.repack_anon_bitfield(struct_id, bit_cursor, anon_pos, packing);
             anon_pos += 1;
         }
         let size = bit_cursor.div_ceil(8);
@@ -1551,7 +1556,10 @@ impl Compiler {
                 if a.width == 0 {
                     cur.close(a.unit as usize, align, round);
                 } else {
-                    cur.bitfield(a.unit as usize, align, round, a.width as usize);
+                    let (offset, bit) =
+                        cur.bitfield(a.unit as usize, align, round, a.width as usize);
+                    self.structs[struct_id].anon_bitfields[anon_pos - 1].bit_start =
+                        (offset * 8) as u32 + bit;
                 }
             }
             if mem_pos < members.len() && members[mem_pos].first as usize <= i {
@@ -1632,15 +1640,24 @@ impl Compiler {
     /// storage-unit padding) from the boundary `packed_request` leaves it,
     /// a zero width rounds up to the next boundary of the declared type or
     /// of its request, whichever is wider.
-    fn repack_anon_bitfield(&self, bit_cursor: usize, a: &AnonBitfield, packing: Packing) -> usize {
+    fn repack_anon_bitfield(
+        &mut self,
+        struct_id: usize,
+        bit_cursor: usize,
+        idx: usize,
+        packing: Packing,
+    ) -> usize {
+        let a = self.structs[struct_id].anon_bitfields[idx];
         if a.width == 0 {
             let align = a.declared_align().max(a.explicit_align as usize).max(1);
             return round_up(bit_cursor, align * 8);
         }
-        match self.packed_request(a.explicit_align as usize, packing) {
-            0 => bit_cursor + a.width as usize,
-            align => round_up(bit_cursor, align * 8) + a.width as usize,
-        }
+        let start = match self.packed_request(a.explicit_align as usize, packing) {
+            0 => bit_cursor,
+            align => round_up(bit_cursor, align * 8),
+        };
+        self.structs[struct_id].anon_bitfields[idx].bit_start = start as u32;
+        start + a.width as usize
     }
 
     /// The boundary a packed re-lay keeps for a non-zero-width bit-field

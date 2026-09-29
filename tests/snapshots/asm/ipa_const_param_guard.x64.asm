@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <patch_map>:
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rdx
                	shlq	%rdx
@@ -589,14 +589,14 @@ Disassembly of section .text:
                	subq	$0x8, %rsp
                	pushq	%rbx
                	xorl	%ecx, %ecx
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movq	%rcx, %rax
                	movq	%rax, (%rdx,%rax,8)
                	incq	%rax
                	cmpl	$0xb4, %eax
                	jl	<addr>
                	xorl	%eax, %eax
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	movq	(%rdx,%rax,8), %rsi
                	incq	%rax
                	imulq	%rax, %rsi

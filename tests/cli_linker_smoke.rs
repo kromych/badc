@@ -56,6 +56,16 @@ fn host_cc() -> Option<std::ffi::OsString> {
         .then_some(cc)
 }
 
+/// Whether `cc` is clang, whose System V classification of bit-fields
+/// differs from gcc's, the Linux system compiler's.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn cc_is_clang(cc: &std::ffi::OsStr) -> bool {
+    Command::new(cc)
+        .args(["-dM", "-E", "-x", "c", "/dev/null"])
+        .output()
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("#define __clang__ "))
+}
+
 // Gated on Linux: produces a Linux ELF that the test driver
 // exec's directly, and the executable-link path through
 // `link_native_objects` + `write_executable_elf64` is Linux-
@@ -311,6 +321,50 @@ fn on_demand_runtime_sources_compile_only_when_a_symbol_needs_them() {
         matched.contains(" rtlib="),
         "the stalled link did not compile the on-demand sources: {matched}"
     );
+}
+
+// A link replaces its output rather than rewriting it, so a program that is
+// still running does not block its own relink (ETXTBSY on Linux) and keeps
+// running the image it started with.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn a_link_replaces_a_running_executable() {
+    use std::process::Stdio;
+    let dir = tempdir("busy-output");
+    let src = |code: i32| {
+        format!(
+            "#include <stdio.h>\nint main(void) {{ while (getchar() != EOF) ; return {code}; }}\n"
+        )
+    };
+    let link = |what: &str| {
+        run(
+            Command::new(badc())
+                .args(["-q", "p.c", "-o", "p"])
+                .current_dir(&dir),
+            what,
+        );
+    };
+    write_source(&dir, "p.c", &src(3));
+    link("link p");
+    let mut old = Command::new(dir.join("p"))
+        .stdin(Stdio::piped())
+        .spawn()
+        .expect("start p");
+    write_source(&dir, "p.c", &src(4));
+    link("link over the running p");
+    drop(old.stdin.take());
+    assert_eq!(old.wait().expect("wait for p").code(), Some(3));
+    let new = Command::new(dir.join("p"))
+        .stdin(Stdio::null())
+        .status()
+        .expect("run the new p");
+    assert_eq!(new.code(), Some(4));
+    let mut names: Vec<_> = std::fs::read_dir(&dir)
+        .expect("list")
+        .map(|e| e.expect("entry").file_name())
+        .collect();
+    names.sort();
+    assert_eq!(names, ["p", "p.c"]);
 }
 
 // Inputs enter the link in command-line order, as gcc hands them to the
@@ -4778,6 +4832,16 @@ fn elf_sections(bytes: &[u8]) -> Vec<(String, u32, u64)> {
 /// `SHT_SYMTAB` entries of an ELF64 image as
 /// `(name, st_value, st_size, st_shndx)`.
 fn elf_symbols(bytes: &[u8]) -> Vec<(String, u64, u64, u16)> {
+    (elf_symtab(bytes).0.into_iter())
+        .map(|(name, _, value, size, shndx)| (name, value, size, shndx))
+        .collect()
+}
+
+/// One `SHT_SYMTAB` entry: `(name, st_info, st_value, st_size, st_shndx)`.
+type SymtabRow = (String, u8, u64, u64, u16);
+
+/// `SHT_SYMTAB` entries of an ELF64 image and the table's `sh_info`.
+fn elf_symtab(bytes: &[u8]) -> (Vec<SymtabRow>, u32) {
     let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]);
     let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
     let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
@@ -4791,19 +4855,21 @@ fn elf_symbols(bytes: &[u8]) -> Vec<(String, u64, u64, u16)> {
     let str_off = rd64(sh(rd32(sh(symtab) + 40) as usize) + 24) as usize;
     let off = rd64(sh(symtab) + 24) as usize;
     let count = rd64(sh(symtab) + 32) as usize / 24;
-    (0..count)
+    let rows = (0..count)
         .map(|i| {
             let e = off + i * 24;
             let n = str_off + rd32(e) as usize;
             let end = bytes[n..].iter().position(|&b| b == 0).unwrap() + n;
             (
                 String::from_utf8_lossy(&bytes[n..end]).into_owned(),
+                bytes[e + 4],
                 rd64(e + 8),
                 rd64(e + 16),
                 rd16(e + 6),
             )
         })
-        .collect()
+        .collect();
+    (rows, rd32(sh(symtab) + 44))
 }
 
 /// Program headers of an ELF64 image as `(p_type, p_flags)`.
@@ -5863,6 +5929,251 @@ fn align16_arguments_cross_the_system_compiler_boundary() {
             String::from_utf8_lossy(&out.stderr)
         );
     }
+}
+
+// An aggregate with no member of storage crosses a call in nothing on System V
+// x86-64 and AAPCS64 -- no register, no stack slot, no result register --
+// between badc and the system C compiler, each calling the other's functions
+// through pointers. The variadic call runs where the system compiler's
+// `va_arg` of one was checked: x86-64 gcc, and clang.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn empty_records_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping empty_records_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    let dir = tempdir("empty-record-interop");
+    let common = "#include <stdarg.h>\n\
+        struct E {};\n\
+        struct Z { char a[0]; };\n\
+        struct N { struct E x; struct E y[3]; };\n\
+        static struct E mk(int y, int *out) { struct E e; *out = y; return e; }\n\
+        static int first(struct E e, int y) { (void)e; return y; }\n\
+        static int mid(int a, struct E e, int b, double d, struct Z z, int c)\n\
+        { (void)e; (void)z; return a * 1000 + b * 100 + (int)d * 10 + c; }\n\
+        static double fp(double x, struct E e, float y, struct N n, double w)\n\
+        { (void)e; (void)n; return x + y + w; }\n\
+        static int var(int n, ...)\n\
+        { va_list ap; va_start(ap, n); int a = va_arg(ap, int);\n\
+          struct E e = va_arg(ap, struct E); int b = va_arg(ap, int);\n\
+          double d = va_arg(ap, double); va_end(ap); (void)e;\n\
+          return n + a * 10 + b * 100 + (int)d * 1000; }\n\
+        struct fns { struct E (*mk)(int, int *); int (*first)(struct E, int);\n\
+          int (*mid)(int, struct E, int, double, struct Z, int);\n\
+          double (*fp)(double, struct E, float, struct N, double); int (*var)(int, ...); };\n\
+        static int drive(const struct fns *f, int base) {\n\
+          struct E e; struct Z z; struct N n; int got = 0;\n\
+          struct E r = f->mk(7, &got); (void)r;\n\
+          if (got != 7) return base + 1;\n\
+          if (f->first(e, 42) != 42) return base + 2;\n\
+          if (f->mid(1, e, 2, 3.0, z, 4) != 1234) return base + 3;\n\
+          if (f->fp(1.5, e, 2.25f, n, 4.0) != 7.75) return base + 4;\n\
+        #if VAR_CHECK\n\
+          if (f->var(1, 2, e, 3, 4.0) != 4321) return base + 5;\n\
+        #endif\n\
+          return 0; }\n";
+    let var_check = format!(
+        "-DVAR_CHECK={}",
+        u8::from(cfg!(any(target_arch = "x86_64", target_os = "macos")))
+    );
+    let module = write_source(
+        &dir,
+        "module.c",
+        &format!(
+            "{common}struct fns sys_fns = {{ mk, first, mid, fp, var }};\n\
+             int sys_drive(const struct fns *f) {{ return drive(f, 10); }}\n"
+        ),
+    );
+    let host = write_source(
+        &dir,
+        "host.c",
+        &format!(
+            "#include <dlfcn.h>\n{common}\
+             int main(int argc, char **argv) {{\n\
+               void *h = dlopen(argv[1], RTLD_NOW);\n\
+               if (!h) return 1;\n\
+               const struct fns *sys = dlsym(h, \"sys_fns\");\n\
+               int (*sys_drive)(const struct fns *) =\n\
+                 (int (*)(const struct fns *))dlsym(h, \"sys_drive\");\n\
+               if (!sys || !sys_drive) return 2;\n\
+               int r = drive(sys, 20);\n\
+               if (r) return r;\n\
+               struct fns mine = {{ mk, first, mid, fp, var }};\n\
+               (void)argc;\n\
+               return sys_drive(&mine); }}\n"
+        ),
+    );
+    let so = dir.join(if cfg!(target_os = "macos") {
+        "module.dylib"
+    } else {
+        "module.so"
+    });
+    run(
+        Command::new(&cc)
+            .args(["-O2", "-shared", "-fPIC", &var_check, "-o"])
+            .arg(&so)
+            .arg(&module)
+            .current_dir(&dir),
+        "build the system-compiled module",
+    );
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("host{opt}"));
+        run(
+            Command::new(badc())
+                .args([opt, &var_check, "-o"])
+                .arg(&exe)
+                .arg(&host)
+                .current_dir(&dir),
+            "link the badc host",
+        );
+        let out = Command::new(&exe)
+            .arg(&so)
+            .output()
+            .expect("run the badc host");
+        // 11-15: the module's calls into badc; 21-25: badc's calls into the module.
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "host{opt}: an empty record crossed the boundary in a register or a slot \
+             (stderr {:?})",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
+
+// On System V x86-64 the bytes of an unnamed bit-field classify INTEGER, as
+// gcc's classification counts them: an eightbyte one holds alone, beside a
+// `float` or inside an anonymous member, and a union's first one under a
+// zero-width one, take a general register on both sides of a call between
+// badc and a gcc system compiler, named or variadic.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn unnamed_bit_fields_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping unnamed_bit_fields_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    if cc_is_clang(&cc) {
+        eprintln!(
+            "skipping unnamed_bit_fields_cross_the_system_compiler_boundary: the system compiler \
+             is clang"
+        );
+        return;
+    }
+    let common = "#include <stdarg.h>\n\
+        struct P { int :8; };\n\
+        struct Q { double d; int :32; };\n\
+        struct R { float f; int :16; float g; };\n\
+        struct A { double d; struct { int :32; float f; }; };\n\
+        union U { int :0; double d; };\n\
+        static int takep(struct P p, int y) { (void)p; return y; }\n\
+        static int takeq(struct Q q, int y) { return (int)q.d * 10 + y; }\n\
+        static int taker(struct R r, int y) { return (int)(r.f + r.g) * 10 + y; }\n\
+        static int takea(struct A a, int y) { return (int)(a.d + a.f) * 10 + y; }\n\
+        static int takeu(union U u, double y) { return (int)(u.d * 10 + y * 2); }\n\
+        static int var(int n, ...)\n\
+        { va_list ap; va_start(ap, n); struct P p = va_arg(ap, struct P);\n\
+          int a = va_arg(ap, int); struct R r = va_arg(ap, struct R);\n\
+          int b = va_arg(ap, int); va_end(ap); (void)p;\n\
+          return n + a * 10 + (int)(r.f + r.g) * 100 + b * 1000; }\n\
+        struct fns { int (*takep)(struct P, int); int (*takeq)(struct Q, int);\n\
+          int (*taker)(struct R, int); int (*takea)(struct A, int);\n\
+          int (*takeu)(union U, double); int (*var)(int, ...); };\n\
+        static int drive(const struct fns *f, int base) {\n\
+          struct P p; struct Q q = { 4.0 }; struct R r = { 1.5f, 1.5f };\n\
+          struct A a = { 1.0, 2.0f }; union U u = { 4.0 };\n\
+          if (f->takep(p, 7) != 7) return base + 1;\n\
+          if (f->takeq(q, 2) != 42) return base + 2;\n\
+          if (f->taker(r, 3) != 33) return base + 3;\n\
+          if (f->var(1, p, 2, r, 4) != 4321) return base + 4;\n\
+          if (f->takea(a, 4) != 34) return base + 5;\n\
+          if (f->takeu(u, 1.0) != 42) return base + 6;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(
+        &cc,
+        "anon-bitfield-interop",
+        common,
+        "takep, takeq, taker, takea, takeu, var",
+    );
+}
+
+// gcc types a union's bit-field as the narrowest integer mode holding its
+// width, and an aggregate whose union misaligns that mode goes to memory;
+// past an array's first element it binds no alignment. Each shape crosses a
+// call between badc and a gcc system compiler both ways, as an argument, a
+// variadic one and a result.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn union_bit_field_modes_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping union_bit_field_modes_cross_the_system_compiler_boundary: no system C compiler"
+        );
+        return;
+    };
+    if cc_is_clang(&cc) {
+        eprintln!(
+            "skipping union_bit_field_modes_cross_the_system_compiler_boundary: the system \
+             compiler is clang"
+        );
+        return;
+    }
+    let common = "#include <stdarg.h>\n\
+        struct Z { char c[5]; union { int :24; char x; } u; float f[2]; };\n\
+        struct N { char c[5]; union __attribute__((packed)) { int x:24; char y; } u; float f[2]; };\n\
+        struct __attribute__((packed)) M { char c; union { int x:24; char y; }; char d[3]; float f; };\n\
+        struct R { union { int :24; char x; } u[2]; char c[2]; float f[2]; };\n\
+        struct __attribute__((packed)) K { int x; char c; };\n\
+        struct A { struct K a[2]; };\n\
+        static int takez(struct Z s, int y) { return s.c[4] + s.u.x + (int)(s.f[0] + s.f[1]) * 100 + y * 1000; }\n\
+        static int taken(struct N s, int y) { return s.c[4] + s.u.x + (int)(s.f[0] + s.f[1]) * 100 + y * 1000; }\n\
+        static int takem(struct M s, int y) { return s.c + s.x + s.d[2] + (int)(s.f * 100) + y * 1000; }\n\
+        static int taker(struct R s, int y)\n\
+        { return s.u[0].x + s.u[1].x + s.c[1] + (int)(s.f[0] + s.f[1]) * 100 + y * 1000; }\n\
+        static int takea(struct A s, int y) { return s.a[0].x + s.a[1].x + s.a[1].c + y * 1000; }\n\
+        static struct Z makez(int v) { struct Z r = { { 0, 0, 0, 0, (char)v }, { .x = 2 }, { 1.5f, 2.5f } }; return r; }\n\
+        static struct N maken(int v) { struct N r = { { 0, 0, 0, 0, (char)v }, { .x = 2 }, { 1.5f, 2.5f } }; return r; }\n\
+        static struct M makem(int v)\n\
+        { struct M r; r.c = (char)v; r.x = 2; r.d[0] = r.d[1] = 0; r.d[2] = 3; r.f = 1.25f; return r; }\n\
+        static struct R maker(int v)\n\
+        { struct R r = { { { .x = (char)v }, { .x = 2 } }, { 0, 3 }, { 1.5f, 2.5f } }; return r; }\n\
+        static struct A makea(int v) { struct A r = { { { v, 0 }, { 20, 3 } } }; return r; }\n\
+        static int var(int n, ...)\n\
+        { va_list ap; va_start(ap, n); struct Z z = va_arg(ap, struct Z);\n\
+          int p = va_arg(ap, int); struct A b = va_arg(ap, struct A);\n\
+          int q = va_arg(ap, int); struct N m = va_arg(ap, struct N); va_end(ap);\n\
+          return n + z.c[4] * 10 + z.u.x * 100 + p * 1000 + b.a[0].x * 10000 + q * 100000\n\
+            + m.c[4] * 1000000; }\n\
+        struct fns { int (*takez)(struct Z, int); int (*taken)(struct N, int);\n\
+          int (*takem)(struct M, int); int (*taker)(struct R, int); int (*takea)(struct A, int);\n\
+          struct Z (*makez)(int); struct N (*maken)(int); struct M (*makem)(int);\n\
+          struct R (*maker)(int); struct A (*makea)(int); int (*var)(int, ...); };\n\
+        static int drive(const struct fns *f, int base) {\n\
+          struct Z z = f->makez(3); struct N n = f->maken(4); struct M m = f->makem(5);\n\
+          struct R r = f->maker(6); struct A a = f->makea(7);\n\
+          if (z.c[4] != 3 || z.u.x != 2 || z.f[1] != 2.5f) return base + 1;\n\
+          if (n.c[4] != 4 || n.u.x != 2 || n.f[1] != 2.5f) return base + 2;\n\
+          if (m.c != 5 || m.x != 2 || m.d[2] != 3 || m.f != 1.25f) return base + 3;\n\
+          if (r.u[0].x != 6 || r.u[1].x != 2 || r.c[1] != 3 || r.f[1] != 2.5f) return base + 4;\n\
+          if (a.a[0].x != 7 || a.a[1].x != 20 || a.a[1].c != 3) return base + 5;\n\
+          if (f->takez(z, 1) != 1405) return base + 6;\n\
+          if (f->taken(n, 1) != 1406) return base + 7;\n\
+          if (f->takem(m, 1) != 1135) return base + 8;\n\
+          if (f->taker(r, 1) != 1411) return base + 9;\n\
+          if (f->takea(a, 1) != 1030) return base + 10;\n\
+          if (f->var(1, z, 2, a, 3, n) != 4372231) return base + 11;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(
+        &cc,
+        "union-bitfield-mode-interop",
+        common,
+        "takez, taken, takem, taker, takea, makez, maken, makem, maker, makea, var",
+    );
 }
 
 // Each argument class keeps its own registers across badc and the system C
@@ -7520,6 +7831,771 @@ fn a_system_compiled_object_reaches_thread_locals_in_every_model() {
     }
 }
 
+/// gcc `-fno-plt` code reaches every external function through its GOT
+/// slot (GOTPCRELX, x86-64 psABI B.2). The link reads an import's slot,
+/// which the loader fills through `R_X86_64_GLOB_DAT`; relaxes a call, a
+/// jump and a load of a function it defines to their direct forms; and
+/// gives a comparison with such a function's address a slot of its own.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn fno_plt_objects_reach_functions_through_the_got() {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping fno_plt_objects_reach_functions_through_the_got: no system C compiler");
+        return;
+    };
+    let dir = tempdir("fno-plt");
+    let lib = write_source(
+        &dir,
+        "lib.c",
+        "int twice(int x) { return 2 * x; }\n\
+         int (*get_twice(void))(int) { return twice; }\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <stdio.h>\n\
+         extern int twice(int);\n\
+         extern int (*get_twice(void))(int);\n\
+         extern void maybe(void) __attribute__((weak));\n\
+         int tail(int x) { return twice(x); }\n\
+         int main(void) {\n\
+           puts(\"through the GOT\");\n\
+           if (maybe) maybe();\n\
+           return tail(20) + twice(1) == 42 && get_twice() == twice ? 0 : 1;\n\
+         }\n",
+    );
+    let mut objs = Vec::new();
+    for src in [&lib, &main] {
+        let obj = src.with_extension("o");
+        run(
+            Command::new(&cc)
+                .args(["-O2", "-fPIE", "-fno-plt", "-U_FORTIFY_SOURCE", "-c"])
+                .arg(src)
+                .arg("-o")
+                .arg(&obj),
+            "compile with -fno-plt",
+        );
+        objs.push(obj);
+    }
+    for form in [&[][..], &["-no-pie"][..]] {
+        let exe = dir.join("prog");
+        run(
+            Command::new(badc())
+                .arg("-q")
+                .args(form)
+                .args(&objs)
+                .arg("-o")
+                .arg(&exe),
+            "link the -fno-plt objects",
+        );
+        let ran = Command::new(&exe).output().expect("run");
+        assert_eq!(
+            (ran.status.code(), String::from_utf8_lossy(&ran.stdout)),
+            (Some(0), "through the GOT\n".into()),
+            "{form:?}"
+        );
+        let image = std::fs::read(&exe).expect("read the image");
+        let slot = glob_dat_slot(&image, "puts").expect("a GLOB_DAT against puts");
+        assert!(
+            rip_indirect_call_targets(&image).contains(&slot),
+            "{form:?}: no `call *disp32(%rip)` reads puts' slot at {slot:#x}"
+        );
+    }
+}
+
+/// gcc's medium and large PIC code models take the GOT base from the
+/// program counter (R_X86_64_GOTPC32 / GOTPC64) and reach symbols from it
+/// (psABI 4.4.1): GOTOFF64 for storage the image holds -- the medium
+/// model's `.lbss` array among it -- GOT64 for a slot, PLTOFF64 for a
+/// call entry. Each resolves against the GOT the writer places, in a
+/// PIE, a fixed executable and a shared library, and a weak function
+/// nothing defines is address 0 behind its guard.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+fn medium_and_large_pic_objects_address_from_the_got_base() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping medium_and_large_pic_objects_address_from_the_got_base: no system C compiler"
+        );
+        return;
+    };
+    let dir = tempdir("pic-code-models");
+    let lib = write_source(
+        &dir,
+        "lib.c",
+        "#include <stdio.h>\n\
+         #include <string.h>\n\
+         extern char **environ;\n\
+         static char big[100000];\n\
+         char gbig[70000] = {5};\n\
+         static const char msg[] = \"from the GOT base\";\n\
+         int counter = 40;\n\
+         static int bump(int x) { return x + 1; }\n\
+         int twice(int x) { return 2 * x; }\n\
+         int (*get_twice(void))(int) { return twice; }\n\
+         int run(void) {\n\
+           int (*p)(const char *) = puts;\n\
+           size_t (*len)(const char *) = strlen;\n\
+           big[99999] = 7;\n\
+           gbig[69999] = 3;\n\
+           p(msg);\n\
+           printf(\"%d\\n\", counter);\n\
+           return bump(counter) + twice(big[99999]) + gbig[0] + gbig[69999]\n\
+             + (environ != 0) + (int)len(msg);\n\
+         }\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "int run(void);\n\
+         int (*get_twice(void))(int);\n\
+         int twice(int);\n\
+         extern void maybe(void) __attribute__((weak));\n\
+         int main(void) {\n\
+           if (maybe) maybe();\n\
+           return run() == 41 + 14 + 5 + 3 + 1 + 17 && get_twice() == twice ? 0 : 1;\n\
+         }\n",
+    );
+    let expect = (Some(0), "from the GOT base\n40\n".to_string());
+    let ran = |exe: &Path| {
+        let out = Command::new(exe)
+            .env("LD_LIBRARY_PATH", &dir)
+            .output()
+            .expect("run");
+        (
+            out.status.code(),
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+        )
+    };
+    for model in ["-mcmodel=medium", "-mcmodel=large"] {
+        for opt in ["-O0", "-O2"] {
+            let mut objs = Vec::new();
+            for (src, pic) in [(&lib, "-fPIC"), (&main, "-fPIE")] {
+                let obj = src.with_extension("o");
+                run(
+                    Command::new(&cc)
+                        .args([opt, pic, model, "-U_FORTIFY_SOURCE", "-c"])
+                        .arg(src)
+                        .arg("-o")
+                        .arg(&obj),
+                    "compile",
+                );
+                objs.push(obj);
+            }
+            for form in [&[][..], &["-no-pie"], &["-Wl,--emit-relocs"]] {
+                let exe = dir.join("prog");
+                run(
+                    Command::new(badc())
+                        .arg("-q")
+                        .args(form)
+                        .args(&objs)
+                        .arg("-o")
+                        .arg(&exe),
+                    "link",
+                );
+                assert_eq!(ran(&exe), expect, "{model} {opt} {form:?}");
+                if !form.contains(&"-Wl,--emit-relocs") {
+                    continue;
+                }
+                // Each record re-emitted against the GOT base names it and
+                // reproduces its field: `GOT + A - P`.
+                let image = std::fs::read(&exe).expect("read the image");
+                let got = elf_section_spans(&image)
+                    .into_iter()
+                    .find(|h| h.0 == ".got")
+                    .map(|h| h.2);
+                let pc = [(26, 4), (29, 8)];
+                let records: Vec<_> = pc
+                    .iter()
+                    .flat_map(|&(rtype, width)| {
+                        emitted_text_relocs(&image, rtype)
+                            .into_iter()
+                            .map(move |r| (r, width))
+                    })
+                    .collect();
+                assert!(!records.is_empty(), "{model} {opt}: no GOTPC record");
+                for ((at, sym, addend), width) in records {
+                    assert_eq!(Some(sym), got, "{model} {opt}: GOTPC at {at:#x}");
+                    let want = sym.wrapping_add_signed(addend).wrapping_sub(at);
+                    assert_eq!(
+                        text_field(&image, at, width),
+                        Some(want & (u64::MAX >> (64 - 8 * width))),
+                        "{model} {opt}: GOTPC at {at:#x}"
+                    );
+                }
+            }
+            let so = dir.join("libpic.so");
+            run(
+                Command::new(badc())
+                    .args(["-q", "-shared", "--export-all", "--export-data"])
+                    .arg(&objs[0])
+                    .arg("-o")
+                    .arg(&so),
+                "link the shared library",
+            );
+            let exe = dir.join("prog-so");
+            run(
+                Command::new(badc())
+                    .arg("-q")
+                    .arg(&objs[1])
+                    .arg("-L")
+                    .arg(&dir)
+                    .args(["-lpic", "-o"])
+                    .arg(&exe),
+                "link against the shared library",
+            );
+            assert_eq!(ran(&exe), expect, "{model} {opt} shared");
+        }
+    }
+}
+
+/// A linked image's `.symtab` lists every symbol its units define with the
+/// binding, type and size the input gave it, each unit's locals under its
+/// `STT_FILE` entry ahead of the globals `sh_info` points at, whether the
+/// link compiles the unit or reads its object. Both Linux targets link on
+/// every host; the image runs on a matching one.
+#[test]
+fn a_linked_image_lists_every_definition_in_its_symbol_table() {
+    let dir = tempdir("image-symtab");
+    let src = write_source(
+        &dir,
+        "defs.c",
+        "int gdata = 5;\nstatic int sdata = 6;\nint gbss;\nstatic int sbss;\n\
+         const int grodata = 7;\n__thread int gtls = 8;\nstatic __thread int stls;\n\
+         int f(void) { return gdata + sdata + gbss + sbss + grodata + gtls + stls; }\n\
+         static int sfun(void) { return 1; }\n\
+         __attribute__((weak)) int wfun(void) { return 2; }\n\
+         int main(void) { return f() + sfun() + wfun() == 29 ? 0 : 1; }\n",
+    );
+    for target in ["linux-x64", "linux-aarch64"] {
+        let flag = format!("--target={target}");
+        let obj = dir.join(format!("defs-{target}.o"));
+        run(
+            Command::new(badc())
+                .args(["-q", "-c", &flag])
+                .arg(&src)
+                .arg("-o")
+                .arg(&obj),
+            "compile the unit",
+        );
+        for (input, form) in [
+            (src.as_path(), "from-source"),
+            (obj.as_path(), "from-object"),
+        ] {
+            let exe = dir.join(format!("{form}-{target}"));
+            run(
+                Command::new(badc())
+                    .args(["-q", &flag])
+                    .arg(input)
+                    .arg("-o")
+                    .arg(&exe),
+                "link",
+            );
+            if target == host_linux_target() {
+                assert_eq!(Command::new(&exe).status().expect("run").code(), Some(0));
+            }
+            let image = std::fs::read(&exe).expect("read the image");
+            let sections = elf_section_spans(&image);
+            let (rows, first_global) = elf_symtab(&image);
+            let locals = rows.iter().take_while(|r| r.1 >> 4 == 0).count();
+            assert_eq!(first_global as usize, locals, "{exe:?}: sh_info");
+            assert!(
+                rows[locals..].iter().all(|r| r.1 >> 4 != 0),
+                "{exe:?}: a local follows a global"
+            );
+            let defs = rows.iter().position(|r| r.0 == "defs.c" && r.1 == 4);
+            let defs = defs.unwrap_or_else(|| panic!("{exe:?}: no STT_FILE defs.c: {rows:?}"));
+            // (name, binding, type, section, the `int` it holds)
+            for (name, binding, kind, section, value) in [
+                ("sfun", 0, 2, ".text", None),
+                ("sdata", 0, 1, ".data", Some(6)),
+                ("sbss", 0, 1, ".bss", None),
+                ("stls", 0, 6, ".tbss", None),
+                ("f", 1, 2, ".text", None),
+                ("main", 1, 2, ".text", None),
+                ("wfun", 2, 2, ".text", None),
+                ("gdata", 1, 1, ".data", Some(5)),
+                ("grodata", 1, 1, ".rodata", Some(7)),
+                ("gbss", 1, 1, ".bss", None),
+                ("gtls", 1, 6, ".tdata", Some(8)),
+            ] {
+                let at = rows.iter().position(|r| r.0 == name);
+                let at = at.unwrap_or_else(|| panic!("{exe:?}: no `{name}`: {rows:?}"));
+                let (_, info, addr, size, shndx) = &rows[at];
+                assert_eq!(
+                    (info >> 4, info & 0xf),
+                    (binding, kind),
+                    "{exe:?}: `{name}`"
+                );
+                assert!(
+                    binding != 0 || at > defs,
+                    "{exe:?}: `{name}` ahead of its file"
+                );
+                let sec = &sections[*shndx as usize];
+                assert_eq!(sec.0, section, "{exe:?}: `{name}`'s section");
+                assert!(
+                    *size > 0 && (kind == 2 || *size == 4),
+                    "{exe:?}: `{name}` size {size}"
+                );
+                if let Some(want) = value {
+                    // A thread-local's value is its offset in the TLS segment.
+                    let base = if kind == 6 { 0 } else { sec.2 };
+                    let at = sec.3 + (addr - base) as usize;
+                    let held = i32::from_le_bytes(image[at..at + 4].try_into().unwrap());
+                    assert_eq!(held, want, "{exe:?}: `{name}`'s bytes");
+                }
+            }
+        }
+    }
+}
+
+/// A thread-local whose image is all zeros takes the `.tbss` zero fill
+/// wherever it is declared: zero-initialized, ahead of an initialized one in
+/// its unit, or beside another unit's initialized one, linked from sources
+/// and from objects, as gcc places it. Only the initialized `one` reaches
+/// `.tdata`, the file leaves the megabyte out, and every access, a
+/// cross-unit one included, finds its object. Both Linux targets link on
+/// every host; the image runs on a matching one.
+#[test]
+fn all_zero_thread_locals_take_the_zero_fill() {
+    let dir = tempdir("tls-zero-fill");
+    let touch = "big[0] = 7; big[(1 << 20) - 1] = 5;";
+    let zero = write_source(
+        &dir,
+        "zero.c",
+        &format!(
+            "_Thread_local char big[1 << 20] = {{0}};\n\
+             int main(void) {{ {touch} return big[0] + big[(1 << 20) - 1] == 12 ? 0 : 1; }}\n"
+        ),
+    );
+    let order = write_source(
+        &dir,
+        "order.c",
+        &format!(
+            "_Thread_local char big[1 << 20];\n_Thread_local int one = 1;\n\
+             int main(void) {{ {touch} return one == 1 && big[0] == 7 ? 0 : 1; }}\n"
+        ),
+    );
+    let a = write_source(
+        &dir,
+        "a.c",
+        &format!(
+            "_Thread_local char big[1 << 20];\nint get(void);\n\
+             int main(void) {{ {touch} return get() == 6 && big[0] == 7 ? 0 : 1; }}\n"
+        ),
+    );
+    let b = write_source(
+        &dir,
+        "b.c",
+        "extern _Thread_local char big[];\n_Thread_local int one = 1;\n\
+         int get(void) { return one + big[(1 << 20) - 1]; }\n",
+    );
+    for target in ["linux-x64", "linux-aarch64"] {
+        let flag = format!("--target={target}");
+        let mut objs = Vec::new();
+        for src in [&a, &b] {
+            let obj = src.with_extension(format!("{target}.o"));
+            run(
+                Command::new(badc())
+                    .args(["-q", "-c", &flag])
+                    .arg(src)
+                    .arg("-o")
+                    .arg(&obj),
+                "compile a unit",
+            );
+            objs.push(obj);
+        }
+        let links: [(&str, Vec<&Path>); 4] = [
+            ("zero", vec![&zero]),
+            ("order", vec![&order]),
+            ("units", vec![&a, &b]),
+            ("objects", objs.iter().map(|o| o.as_path()).collect()),
+        ];
+        for (name, inputs) in links {
+            let exe = dir.join(format!("{name}-{target}"));
+            run(
+                Command::new(badc())
+                    .args(["-q", &flag])
+                    .args(&inputs)
+                    .arg("-o")
+                    .arg(&exe),
+                "link",
+            );
+            if target == host_linux_target() {
+                assert_eq!(
+                    Command::new(&exe).status().expect("run").code(),
+                    Some(0),
+                    "{target} {name}"
+                );
+            }
+            let image = std::fs::read(&exe).expect("read the image");
+            assert!(
+                image.len() < 1 << 19,
+                "{target} {name}: a {}-byte image",
+                image.len()
+            );
+            let sections = elf_section_spans(&image);
+            let size_of = |want: &str| sections.iter().find(|h| h.0 == want).map_or(0, |h| h.4);
+            assert!(
+                size_of(".tdata") < 64,
+                "{target} {name}: .tdata {}",
+                size_of(".tdata")
+            );
+            assert!(
+                size_of(".tbss") >= 1 << 20,
+                "{target} {name}: .tbss {}",
+                size_of(".tbss")
+            );
+            let (rows, _) = elf_symtab(&image);
+            for (sym, section) in [("big", ".tbss"), ("one", ".tdata")] {
+                let Some(row) = rows.iter().find(|r| r.0 == sym) else {
+                    assert_eq!((name, sym), ("zero", "one"), "{target} {name}: no `{sym}`");
+                    continue;
+                };
+                assert_eq!(
+                    sections[row.4 as usize].0, section,
+                    "{target} {name}: `{sym}`"
+                );
+            }
+        }
+    }
+}
+
+/// gcc's DWARF 5 names each unit's files in `.debug_line_str`
+/// (`DW_FORM_line_strp`), and at -O2 describes ranges and locations in
+/// `.debug_rnglists` and `.debug_loclists`. The link carries every
+/// `.debug_*` section, folds the string ones by content and rebases each
+/// reference, so every unit's line table names its own sources beside a
+/// badc unit's DWARF 4, and gdb reads the image.
+#[cfg(target_os = "linux")]
+#[test]
+fn dwarf5_sections_survive_the_link() {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping dwarf5_sections_survive_the_link: no system C compiler");
+        return;
+    };
+    let dir = tempdir("dwarf5-sections");
+    let one = write_source(
+        &dir,
+        "one.c",
+        "int counter = 41;\n\
+         static int sum(const int *p, int n)\n\
+         { int s = 0; for (int i = 0; i < n; i++) s += p[i] * i; return s; }\n\
+         int one(int x) { int a[8]; for (int i = 0; i < 8; i++) a[i] = x + i;\n\
+           return sum(a, x & 7); }\n",
+    );
+    let two = write_source(
+        &dir,
+        "two.c",
+        "int one(int);\nint three(void);\nextern int counter;\n\
+         int main(void) {\n\
+           counter = one(counter) + three();\n\
+           return counter > 0 ? 0 : 1;\n\
+         }\n",
+    );
+    let three = write_source(&dir, "three.c", "int three(void) { return 3; }\n");
+    let mut objs = Vec::new();
+    for (src, opt) in [(&one, "-O2"), (&two, "-O0")] {
+        let obj = src.with_extension("o");
+        let built = Command::new(&cc)
+            .args(["-g", "-gdwarf-5", opt, "-c"])
+            .arg(src)
+            .arg("-o")
+            .arg(&obj)
+            .output()
+            .expect("run the system compiler");
+        if !built.status.success() {
+            eprintln!("skipping dwarf5_sections_survive_the_link: no -gdwarf-5");
+            return;
+        }
+        objs.push(obj);
+    }
+    let badc_obj = dir.join("three.o");
+    run(
+        Command::new(badc())
+            .args(["-q", "-g", "-c"])
+            .arg(&three)
+            .arg("-o")
+            .arg(&badc_obj),
+        "compile the badc unit",
+    );
+    objs.push(badc_obj);
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .args(["-q", "-g"])
+            .args(&objs)
+            .arg("-o")
+            .arg(&exe),
+        "link",
+    );
+    assert_eq!(Command::new(&exe).status().expect("run").code(), Some(0));
+    let image = std::fs::read(&exe).expect("read the image");
+    let names: Vec<String> = elf_section_spans(&image).into_iter().map(|h| h.0).collect();
+    for want in [".debug_line_str", ".debug_rnglists", ".debug_loclists"] {
+        assert!(names.iter().any(|n| n == want), "no {want} in {names:?}");
+    }
+    let files = dwarf5_line_file_names(&image);
+    for want in ["one.c", "two.c"] {
+        assert!(
+            (files.iter()).any(|f| Path::new(f).file_name().is_some_and(|n| n == want)),
+            "no line table names {want}: {files:?}"
+        );
+    }
+    let Ok(out) = Command::new("gdb")
+        .args(["-nx", "-batch", "-ex", "info line two.c:5"])
+        .args(["-ex", "print 'one.c'::counter", "-ex", "info scope sum"])
+        .arg(&exe)
+        .output()
+    else {
+        return;
+    };
+    let text = String::from_utf8_lossy(&out.stdout);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(!err.contains("Dwarf Error"), "{err}");
+    assert!(text.contains("two.c\" starts at address"), "{text}");
+    assert!(text.contains("$1 = 41"), "{text}");
+    assert!(text.contains("Symbol s is"), "{text}");
+    // two.c only declares `counter`; gdb resolves the declaration through
+    // the ELF symbol, in a session where no lookup has reached one.c's.
+    let out = Command::new("gdb")
+        .args(["-nx", "-batch", "-ex", "print 'two.c'::counter"])
+        .arg(&exe)
+        .output()
+        .expect("run gdb");
+    let text = String::from_utf8_lossy(&out.stdout);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(text.contains("$1 = 41"), "{text}{err}");
+}
+
+/// The file names the DWARF 5 line tables in `.debug_line` give through
+/// `.debug_line_str`, in order. Version 4 tables name theirs inline.
+#[cfg(target_os = "linux")]
+fn dwarf5_line_file_names(image: &[u8]) -> Vec<String> {
+    let headers = elf_section_spans(image);
+    let section = |name: &str| {
+        let h = headers.iter().find(|h| h.0 == name)?;
+        Some(&image[h.3..h.3 + h.4])
+    };
+    let (Some(line), Some(strs)) = (section(".debug_line"), section(".debug_line_str")) else {
+        return Vec::new();
+    };
+    let cstr = |b: &[u8], at: usize| {
+        let s = &b[at..];
+        String::from_utf8_lossy(&s[..s.iter().position(|&c| c == 0).unwrap()]).into_owned()
+    };
+    let uleb = |b: &[u8], at: &mut usize| {
+        let (mut v, mut shift) = (0u64, 0);
+        loop {
+            let byte = b[*at];
+            *at += 1;
+            v |= u64::from(byte & 0x7f) << shift;
+            shift += 7;
+            if byte & 0x80 == 0 {
+                return v;
+            }
+        }
+    };
+    let mut names = Vec::new();
+    let mut unit = 0;
+    while unit + 4 <= line.len() {
+        let len = u32::from_le_bytes(line[unit..unit + 4].try_into().unwrap()) as usize;
+        let b = &line[unit + 4..unit + 4 + len];
+        unit += 4 + len;
+        if u16::from_le_bytes([b[0], b[1]]) != 5 {
+            continue;
+        }
+        let mut at = 14 + b[13] as usize - 1;
+        // Directories, then files: an entry format, a count, the entries.
+        for table in 0..2 {
+            let formats: Vec<(u64, u64)> = (0..b[at])
+                .map({
+                    at += 1;
+                    |_| (uleb(b, &mut at), uleb(b, &mut at))
+                })
+                .collect();
+            for _ in 0..uleb(b, &mut at) {
+                for &(content, form) in &formats {
+                    let path = match form {
+                        0x1f | 0x0e => {
+                            let off = u32::from_le_bytes(b[at..at + 4].try_into().unwrap());
+                            at += 4;
+                            (form == 0x1f).then(|| cstr(strs, off as usize))
+                        }
+                        0x08 => {
+                            let s = cstr(b, at);
+                            at += s.len() + 1;
+                            Some(s)
+                        }
+                        0x0f => {
+                            uleb(b, &mut at);
+                            None
+                        }
+                        0x0b | 0x05 | 0x06 | 0x07 | 0x1e => {
+                            at += match form {
+                                0x0b => 1,
+                                0x05 => 2,
+                                0x06 => 4,
+                                0x07 => 8,
+                                _ => 16,
+                            };
+                            None
+                        }
+                        other => panic!("line table entry form {other:#x}"),
+                    };
+                    if table == 1 && content == 1 {
+                        names.extend(path);
+                    }
+                }
+            }
+        }
+    }
+    names
+}
+
+/// GNU ld reads an input object without a `.note.GNU-stack` as a request for
+/// an executable stack. A badc object carries a non-executable one, so the
+/// system linker gives the program a readable, writable stack and no warning.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_system_linker_gives_a_badc_object_a_non_executable_stack() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping the_system_linker_gives_a_badc_object_a_non_executable_stack: \
+             no system C compiler"
+        );
+        return;
+    };
+    let dir = tempdir("gnu-stack");
+    let src = write_source(&dir, "main.c", "int main(void) { return 7; }\n");
+    let obj = dir.join("main.o");
+    run(
+        Command::new(badc()).arg("-c").arg(&src).arg("-o").arg(&obj),
+        "compile main.c",
+    );
+    let exe = dir.join("prog");
+    let out = run(
+        Command::new(&cc).arg(&obj).arg("-o").arg(&exe),
+        "link with the system compiler",
+    );
+    let warnings = String::from_utf8_lossy(&out.stderr);
+    assert!(!warnings.contains("executable stack"), "{warnings}");
+    let image = std::fs::read(&exe).expect("read the image");
+    const PF_W: u32 = 2;
+    const PF_R: u32 = 4;
+    assert_eq!(gnu_stack_flags(&image), Some(PF_R | PF_W));
+    let ran = Command::new(&exe).output().expect("run");
+    assert_eq!(ran.status.code(), Some(7));
+}
+
+/// `p_flags` of an ELF64 image's `PT_GNU_STACK`.
+#[cfg(target_os = "linux")]
+fn gnu_stack_flags(image: &[u8]) -> Option<u32> {
+    const PT_GNU_STACK: u32 = 0x6474_e551;
+    let rd16 = |o: usize| u16::from_le_bytes([image[o], image[o + 1]]) as usize;
+    let rd32 = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+    let phoff = u64::from_le_bytes(image[0x20..0x28].try_into().unwrap()) as usize;
+    (0..rd16(0x38))
+        .map(|i| phoff + i * rd16(0x36))
+        .find(|&ph| rd32(ph) == PT_GNU_STACK)
+        .map(|ph| rd32(ph + 4))
+}
+
+/// `r_offset` of the image's `R_X86_64_GLOB_DAT` against `name`.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn glob_dat_slot(image: &[u8], name: &str) -> Option<u64> {
+    let rd32 = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(image[o..o + 8].try_into().unwrap());
+    let headers = elf_section_spans(image);
+    let (_, _, _, rela_off, rela_size, dynsym) = *headers.iter().find(|h| h.1 == 4)?;
+    let (_, _, _, sym_off, _, dynstr) = headers[dynsym as usize];
+    let str_off = headers[dynstr as usize].3;
+    (rela_off..rela_off + rela_size).step_by(24).find_map(|r| {
+        let info = rd64(r + 8);
+        let st_name = rd32(sym_off + (info >> 32) as usize * 24) as usize;
+        let at = str_off + st_name;
+        let end = at + image[at..].iter().position(|&b| b == 0)?;
+        (info & 0xffff_ffff == 6 && &image[at..end] == name.as_bytes()).then(|| rd64(r))
+    })
+}
+
+/// Each `.rela.text` record of `rtype` in an `--emit-relocs` image as
+/// `(r_offset, S, A)`, `S` the value of the symbol it names.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn emitted_text_relocs(image: &[u8], rtype: u32) -> Vec<(u64, u64, i64)> {
+    let rd64 = |o: usize| u64::from_le_bytes(image[o..o + 8].try_into().unwrap());
+    let headers = elf_section_spans(image);
+    let Some(&(_, _, _, off, size, symtab)) = headers.iter().find(|h| h.0 == ".rela.text") else {
+        return Vec::new();
+    };
+    let sym_off = headers[symtab as usize].3;
+    (off..off + size)
+        .step_by(24)
+        .filter(|&r| rd64(r + 8) & 0xffff_ffff == rtype as u64)
+        .map(|r| {
+            let sym = (rd64(r + 8) >> 32) as usize;
+            (rd64(r), rd64(sym_off + sym * 24 + 8), rd64(r + 16) as i64)
+        })
+        .collect()
+}
+
+/// The `width`-byte little-endian field at virtual address `at` in `.text`.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn text_field(image: &[u8], at: u64, width: usize) -> Option<u64> {
+    let (_, _, addr, off, size, _) = elf_section_spans(image)
+        .into_iter()
+        .find(|h| h.0 == ".text")?;
+    let i = off + usize::try_from(at.checked_sub(addr)?).ok()?;
+    let bytes = image
+        .get(i..i + width)
+        .filter(|_| i + width <= off + size)?;
+    let mut word = [0u8; 8];
+    word[..width].copy_from_slice(bytes);
+    Some(u64::from_le_bytes(word))
+}
+
+/// Where each `call *disp32(%rip)` in `.text` reads its target.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn rip_indirect_call_targets(image: &[u8]) -> Vec<u64> {
+    let headers = elf_section_spans(image);
+    let Some(&(_, _, addr, off, size, _)) = headers.iter().find(|h| h.0 == ".text") else {
+        return Vec::new();
+    };
+    let text = &image[off..off + size];
+    (0..text.len().saturating_sub(5))
+        .filter(|&i| text[i] == 0xff && text[i + 1] == 0x15)
+        .map(|i| {
+            let disp = i32::from_le_bytes(text[i + 2..i + 6].try_into().unwrap());
+            (addr + i as u64 + 6).wrapping_add_signed(disp as i64)
+        })
+        .collect()
+}
+
+/// Section headers of an ELF64 image as
+/// `(name, sh_type, sh_addr, sh_offset, sh_size, sh_link)`.
+fn elf_section_spans(bytes: &[u8]) -> Vec<(String, u32, u64, usize, usize, u32)> {
+    let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+    let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let (e_shoff, e_shentsize) = (rd64(0x28) as usize, rd16(0x3a));
+    let str_off = rd64(e_shoff + rd16(0x3e) * e_shentsize + 0x18) as usize;
+    (0..rd16(0x3c))
+        .map(|i| {
+            let sh = e_shoff + i * e_shentsize;
+            let n = str_off + rd32(sh) as usize;
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap() + n;
+            (
+                String::from_utf8_lossy(&bytes[n..end]).into_owned(),
+                rd32(sh + 4),
+                rd64(sh + 0x10),
+                rd64(sh + 0x18) as usize,
+                rd64(sh + 0x20) as usize,
+                rd32(sh + 0x28),
+            )
+        })
+        .collect()
+}
+
 // A `long double` crosses the system compiler boundary both ways as the
 // platform passes it. System V AMD64 3.2.3 gives it and an aggregate of one,
 // or of overlapping ones, the X87 + X87UP classes, in memory as an argument,
@@ -7761,34 +8837,34 @@ fn homogeneous_aggregates_cross_the_system_compiler_boundary() {
     );
 }
 
-// An eightbyte that only unnamed bit-fields cover has no class and takes no
-// register, as clang classes it (System V AMD64 3.2.3): `struct { int :32;
-// int :32; double d; }` passes `d` in xmm0 and the next integer in rdi, and
-// `struct { float a; int :8; float b; }` two SSE eightbytes. gcc gives such an
-// eightbyte the INTEGER class, a recorded divergence: against gcc on x86_64
-// the integers after the aggregate arrive one register over, which the
-// expected sums state, a gcc callee reading them one register late and a badc
-// callee one early. Every other pairing agrees.
+// An eightbyte an unnamed bit-field covers is INTEGER, as gcc classes it
+// (System V AMD64 3.2.3): `struct { int :32; int :32; double d; }` passes the
+// first eightbyte in rdi, `d` in xmm0 and the next integer in rsi, and
+// `struct { float a; int :8; float b; }` an INTEGER and an SSE eightbyte.
+// clang gives an unnamed bit-field no class, a recorded divergence: against
+// clang on x86_64 System V the integers after the aggregate arrive one
+// register over, which the expected sums state, a clang callee reading them
+// one register early and a badc callee one late. Every other pairing agrees.
 const UNNAMED_BIT_FIELD_COMMON: &str = "typedef long long ll;\n\
     struct s1 { int :32; int :32; double d; };\n\
     struct s2 { float a; int :8; float b; };\n\
-    #if defined(__x86_64__) && defined(__GNUC__) && !defined(__clang__)\n\
-    #define GCC_X64 1\n\
+    #if defined(__x86_64__) && defined(__clang__) && !defined(_WIN32)\n\
+    #define CLANG_X64 1\n\
     #else\n\
-    #define GCC_X64 0\n\
+    #define CLANG_X64 0\n\
     #endif\n\
-    static int gcc_x64(void) { return GCC_X64; }\n\
+    static int clang_x64(void) { return CLANG_X64; }\n\
     static ll take1(struct s1 s, ll n1, ll n2, ll n3, ll n4, ll n5, ll n6)\n\
     { (void)n1; (void)n6; return (s.d == 1.5) * 100000 + n2 * 1000 + n3 * 100 + n4 * 10 + n5; }\n\
     static ll take2(struct s2 s, ll n1, ll n2, ll n3, ll n4, ll n5, ll n6)\n\
     { (void)n1; (void)n6;\n\
       return (s.a == 1.5f && s.b == 2.5f) * 100000 + n2 * 1000 + n3 * 100 + n4 * 10 + n5; }\n\
-    struct fns { int (*gcc_x64)(void); ll (*take1)(struct s1, ll, ll, ll, ll, ll, ll);\n\
+    struct fns { int (*clang_x64)(void); ll (*take1)(struct s1, ll, ll, ll, ll, ll, ll);\n\
       ll (*take2)(struct s2, ll, ll, ll, ll, ll, ll); };\n\
     static int drive(const struct fns *f, int base)\n\
     { struct s1 x = { .d = 1.5 }; struct s2 y = { .a = 1.5f, .b = 2.5f };\n\
-      ll want = f->gcc_x64() ? 3456 : GCC_X64 ? 1234 : 2345;\n\
-      ll floats = f->gcc_x64() || GCC_X64 ? 0 : 100000;\n\
+      ll want = f->clang_x64() ? 1234 : CLANG_X64 ? 3456 : 2345;\n\
+      ll floats = f->clang_x64() || CLANG_X64 ? 0 : 100000;\n\
       if (f->take1(x, 1, 2, 3, 4, 5, 6) != 100000 + want) return base + 1;\n\
       if (f->take2(y, 1, 2, 3, 4, 5, 6) != floats + want) return base + 2;\n\
       return 0; }\n";
@@ -7807,7 +8883,7 @@ fn unnamed_bit_field_eightbytes_cross_the_system_compiler_boundary() {
         &cc,
         "unnamed-bitfield-interop",
         UNNAMED_BIT_FIELD_COMMON,
-        "gcc_x64, take1, take2",
+        "clang_x64, take1, take2",
     );
 }
 
@@ -7825,7 +8901,7 @@ fn unnamed_bit_field_eightbytes_cross_the_windows_compiler_boundary() {
         &cc,
         "win-unnamed-bitfield-interop",
         UNNAMED_BIT_FIELD_COMMON,
-        "gcc_x64, take1, take2",
+        "clang_x64, take1, take2",
     );
 }
 

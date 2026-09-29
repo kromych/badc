@@ -185,6 +185,48 @@ pub struct StructDef {
     /// For a variable-length array's type (C99 6.7.5.2): the frame slot of
     /// its byte count, which `sizeof` and pointer arithmetic read; `size` is 0.
     pub vla_size_slot: Option<i64>,
+    /// An enumeration tag (C99 6.7.2.2). Its entry is the type only while
+    /// incomplete; once the list closes, the type is `enum_underlying`.
+    pub is_enum: bool,
+    pub enum_underlying: Option<i64>,
+}
+
+impl StructDef {
+    /// A tag declared without its body: an incomplete type (C99 6.7.2.3).
+    pub(crate) fn incomplete_tag(name: &str, is_union: bool, is_enum: bool) -> Self {
+        StructDef {
+            name: name.to_string(),
+            size: 0,
+            align: 1,
+            explicit_align: 0,
+            natural_align: 0,
+            member_align: 0,
+            fields: Vec::new(),
+            anon_bitfields: Vec::new(),
+            anon_members: Vec::new(),
+            is_union,
+            is_complete: false,
+            is_vector: false,
+            is_array: false,
+            is_anonymous: false,
+            is_transparent_union: false,
+            cast_named: false,
+            vla_size_slot: None,
+            is_enum,
+            enum_underlying: None,
+        }
+    }
+
+    /// The keyword that declared the tag.
+    pub(super) fn keyword(&self) -> &'static str {
+        if self.is_enum {
+            "enum"
+        } else if self.is_union {
+            "union"
+        } else {
+            "struct"
+        }
+    }
 }
 
 /// One unnamed bit-field of an aggregate (`int :N;`). `before` is the
@@ -193,7 +235,8 @@ pub struct StructDef {
 /// requested bit count -- 0 for the C99 6.7.2.1p11 form that only ends
 /// the current storage unit. `align` is the unit's MS-layout alignment,
 /// `explicit_align` the one its attributes ask for and `type_align` the
-/// one a typedef gives its type, each 0 when none.
+/// one a typedef gives its type, each 0 when none. `bit_start` is the
+/// aggregate bit its placement begins at.
 #[derive(Debug, Clone, Copy)]
 pub struct AnonBitfield {
     pub before: u32,
@@ -202,6 +245,7 @@ pub struct AnonBitfield {
     pub align: u8,
     pub explicit_align: u32,
     pub type_align: u32,
+    pub bit_start: u32,
 }
 
 impl AnonBitfield {
@@ -489,6 +533,9 @@ pub struct CompileOptions {
     /// probed after the including file's directory and before the
     /// `-I` paths (gcc scope).
     pub quote_include_paths: Vec<String>,
+    /// `-isystem path` -- system header directories probed after the `-I`
+    /// paths and before the bundled headers (gcc scope).
+    pub isystem_paths: Vec<String>,
     /// System header directories probed only after the bundled headers
     /// (the driver fills them from the declared sysroot). A third-party
     /// header the embedded set lacks (`zlib.h`) resolves here without
@@ -776,6 +823,11 @@ impl CompileOptions {
     /// Replace the `-iquote` (quoted-include-only) search-path list.
     pub fn with_quote_include_paths(mut self, paths: Vec<String>) -> Self {
         self.quote_include_paths = paths;
+        self
+    }
+    /// Replace the `-isystem` directory list.
+    pub fn with_isystem_paths(mut self, paths: Vec<String>) -> Self {
+        self.isystem_paths = paths;
         self
     }
     /// Replace the system header directories (probed after the bundled
@@ -2108,22 +2160,22 @@ pub struct Compiler {
     /// was seen.
     switch_defaults: Vec<bool>,
 
-    /// Defined struct types, indexed by struct id.
+    /// Tag types and synthesized aggregates, indexed by struct id.
     pub(super) structs: Vec<StructDef>,
-    /// Per-scope struct/union tag bindings (C99 6.2.1: tags have
-    /// block scope). Each entry is a Vec of `(tag_name, struct_id)`
-    /// declared in that scope. The first entry is the file scope; an
-    /// inner block pushes an empty scope on entry and pops it on
-    /// exit, so a `struct T` in a nested block shadows an outer one
-    /// without colliding. `self.structs` keeps the StructDef storage
-    /// reachable by id even after a scope pops.
+    /// Per-scope tag bindings. Struct, union and enum tags share one
+    /// name space (C99 6.2.3) and have block scope (6.2.1). Each entry
+    /// is a Vec of `(tag_name, struct_id)` declared in that scope. The
+    /// first entry is the file scope; an inner block pushes an empty
+    /// scope on entry and pops it on exit, so a tag in a nested block
+    /// shadows an outer one without colliding. `self.structs` keeps the
+    /// StructDef storage reachable by id even after a scope pops.
     pub(super) tag_scopes: Vec<Vec<(String, usize)>>,
     /// Captured enum definitions. Populated by `parse_enum_body`
     /// when the parser sees `enum Tag { ... }`; the (tag, constants)
     /// pairs feed the DWARF emitter's enum DIEs.
     pub(super) enums: Vec<EnumDef>,
-    /// Enum tags a use took the `int` placeholder for before their
-    /// definition; the definition rewrites the types holding it.
+    /// Incomplete enum tags a declaration used; the definition rewrites
+    /// the types built on the tag's entry.
     pub(super) enum_placeholder_tags: Vec<u32>,
 
     /// Where every controllable diagnostic the front end reports goes.
@@ -2167,6 +2219,9 @@ pub struct Compiler {
     /// [`CompileOptions::track_includes`] was set. Empty otherwise.
     /// Renders the `-H` trace and the `-M` family's prerequisites.
     include_records: Vec<IncludeRecord>,
+    /// The preprocessor's `system_headers`: files whose declarations the
+    /// unused-binding diagnostics skip.
+    system_headers: alloc::collections::BTreeSet<String>,
 
     /// `#pragma entrypoint(<name>)` value drained from the
     /// preprocessor. Default `None` means "use `main`".
@@ -2277,11 +2332,11 @@ pub struct Compiler {
     /// once the unit is complete.
     pending_asm_globl: Vec<String>,
     /// File-scope object definitions whose type was incomplete at the
-    /// declarator: an aggregate tag, or an enum used before its definition.
-    /// C99 6.9.2p2 completes a tentative definition with the type the unit
-    /// ends with, so each entry -- the symbol, the aggregate's tag, and the
-    /// declarator's line -- is sized once the unit is complete.
-    pending_incomplete_objects: Vec<(usize, Option<usize>, usize)>,
+    /// declarator: an aggregate or enum tag not yet defined. C99 6.9.2p2
+    /// completes a tentative definition with the type the unit ends with,
+    /// so each entry -- the symbol, the tag, and the declarator's line --
+    /// is sized once the unit is complete.
+    pending_incomplete_objects: Vec<(usize, usize, usize)>,
     /// Return type of the function whose body is currently being
     /// parsed (0 outside any function). Used by the `return s`
     /// path to emit a struct-copy through the hidden out-pointer
@@ -2719,6 +2774,9 @@ impl Compiler {
         for path in &opts.quote_include_paths {
             pp.add_quote_path(path);
         }
+        for path in &opts.isystem_paths {
+            pp.add_isystem_path(path);
+        }
         for path in &opts.system_include_paths {
             pp.add_system_fallback_path(path);
         }
@@ -2764,7 +2822,9 @@ impl Compiler {
     /// negative base offset, bumping the high-water mark. Callers
     /// own any `multi_cell_temps` push and any `loc_offs` recycle.
     pub(super) fn reserve_slots(&mut self, n_slots: i64) -> i64 {
-        self.loc_offs += n_slots;
+        // A zero-size object (GNU C's empty aggregate) takes a cell too, so
+        // its address is its own and inside the frame.
+        self.loc_offs += n_slots.max(1);
         if self.loc_offs > self.max_loc_offs {
             self.max_loc_offs = self.loc_offs;
         }
@@ -2881,6 +2941,7 @@ impl Compiler {
         let pp_diagnostics = pp.sink.take();
         let pp_control = pp.sink.into_control();
         let pp_include_records = pp.include_records;
+        let pp_system_headers = pp.system_headers;
         let pp_entrypoint = pp.entrypoint;
         let pp_subsystem = pp.subsystem;
         let pp_intrinsics = pp.intrinsics;
@@ -3007,6 +3068,7 @@ impl Compiler {
             asm_idents: Vec::new(),
             asm_validate_sink: Default::default(),
             include_records: pp_include_records,
+            system_headers: pp_system_headers,
             pp_entrypoint,
             pp_subsystem,
             pp_intrinsics,
@@ -3517,8 +3579,6 @@ impl Compiler {
             self.rebase_relocated_globals();
             // Record each defined object's byte size for the object
             // writers' symbol tables; the writers have no type layout.
-            // An alias is sized like any other object: it took its
-            // target's element count when it resolved.
             for i in 0..self.symbols.len() {
                 let s = &self.symbols[i];
                 if s.class != Token::Glo as i64 || !s.defined_here {
@@ -3538,6 +3598,12 @@ impl Compiler {
                 } else {
                     elem + s.fam_init_bytes
                 };
+            }
+            // An object alias keeps its declared type; its symbol takes
+            // the aliased object's size, as GNU as gives a `.set` alias,
+            // which Linux's modpost reads a `MODULE_DEVICE_TABLE` by.
+            for &(alias, target) in &self.object_aliases {
+                self.symbols[alias].data_byte_size = self.symbols[target].data_byte_size;
             }
             // Function-pointer initializers (`int (*const fp)
             // (...) = some_fn;`) recorded a `code_relocs` row
@@ -3588,6 +3654,7 @@ impl Compiler {
             .resolve_entry_and_dllmain_pcs()
             .map_err(|e| self.failed(e))?;
         let exports = self.resolve_exports().map_err(|e| self.failed(e))?;
+        self.lay_out_thread_locals();
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!(

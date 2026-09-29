@@ -1041,6 +1041,24 @@ impl Ast {
         }
     }
 
+    /// Rewrite the thread-local template offset every `Expr::Ident` naming
+    /// a thread-local object records.
+    pub(crate) fn remap_tls_offsets(&mut self, f: &mut impl FnMut(&mut i64)) {
+        use crate::c5::token::Token;
+        for expr in &mut self.exprs {
+            if let Expr::Ident {
+                class,
+                val,
+                is_thread_local: true,
+                ..
+            } = expr
+                && *class == Token::Glo as i64
+            {
+                f(val);
+            }
+        }
+    }
+
     /// Add `data_base` to every data-segment offset stored on AST nodes.
     /// Used by the linker after each unit's data segment is placed in the
     /// merged image: parser-time `data_off` / `val` snapshots are

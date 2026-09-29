@@ -659,15 +659,11 @@ pub(crate) struct BindingInfo {
     /// DWARF file_names index. Zero means the primary source.
     pub decl_file: u32,
 
-    /// True if the declaration was parsed while the lexer was
-    /// reading the primary source (matched against
-    /// `Compiler::source_label`); false when the declaration came
-    /// from a header pulled in by `#include`. Used to suppress
-    /// unused-symbol diagnostics on header-internal static
-    /// helpers -- those are only dead with respect to the current
-    /// translation unit, and the header is the wrong place to
-    /// flag them.
-    pub decl_in_main_source: bool,
+    /// True if the declaration was parsed in the primary source or a
+    /// header its directory, `-iquote` or `-I` supplied; false in a
+    /// bundled or system header, whose bindings the unused-symbol
+    /// diagnostics do not report, as gcc and clang skip system headers.
+    pub decl_in_user_source: bool,
 
     /// True when the declaration carried a `maybe_unused` /
     /// `unused` attribute (C23 6.7.12.4 `[[maybe_unused]]` or GNU

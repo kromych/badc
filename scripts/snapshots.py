@@ -17,7 +17,9 @@ class).
 A fixture may pin extra badc flags for its snapshots with a leading
 `// snapshot-flags: ...` comment (e.g. `-c -mcmodel=kernel` for a form
 only a relocatable object shows). The flags apply to the SSA and every
-asm emission; a target that rejects them drops that snapshot. With `-c`
+asm emission; a target that rejects them drops that snapshot. A
+`// snapshot-flags(<target>): ...` line adds flags for that target's
+emission only; the SSA dump is linux-x64's. With `-c`
 the object is disassembled with relocations shown (`-r`), which is where
 the addressing form of an unresolved reference is visible.
 
@@ -176,12 +178,17 @@ def normalise_asm(text: str) -> str:
     return text
 
 
-SNAPSHOT_FLAGS_RE = re.compile(r"^//\s*snapshot-flags:\s*(.+?)\s*$", re.MULTILINE)
+SNAPSHOT_FLAGS_RE = re.compile(
+    r"^//\s*snapshot-flags(?:\(([\w-]+)\))?:\s*(.+?)\s*$", re.MULTILINE
+)
 
 
-def fixture_flags(src: Path) -> list[str]:
-    m = SNAPSHOT_FLAGS_RE.search(src.read_text(errors="replace"))
-    return m.group(1).split() if m else []
+def fixture_flags(src: Path, target: str) -> list[str]:
+    flags: list[str] = []
+    for m in SNAPSHOT_FLAGS_RE.finditer(src.read_text(errors="replace")):
+        if m.group(1) in (None, target):
+            flags += m.group(2).split()
+    return flags
 
 
 def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path, root: Path) -> bool:
@@ -203,7 +210,7 @@ def emit_ssa(badc: Path, src: Path, dst: Path, tmp_bin: Path, root: Path) -> boo
             "-O",
             "--target=linux-x64",
             "--dump-ssa",
-            *fixture_flags(src),
+            *fixture_flags(src, "linux-x64"),
             "-o",
             str(tmp_bin),
             str(rel),
@@ -294,7 +301,7 @@ def fixture_text_ranges(map_path: Path, source: str) -> list[tuple[int, int]] | 
 def emit_asm(badc: Path, src: Path, dst: Path, tmp_bin: Path, target: str, root: Path) -> bool:
     # Relative source path + cwd=root: keep `__FILE__` checkout-independent
     # (see emit_ssa).
-    flags = fixture_flags(src)
+    flags = fixture_flags(src, target)
     # `-Map` records where each input's .text lies; `-c` produces no link
     # and takes no map (an object carries no runtime).
     map_path = tmp_bin.with_suffix(".map")

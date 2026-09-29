@@ -424,7 +424,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x3e8
                	b.lo	<addr>
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	mov	x1, #0xc                // =12
                	mov	x3, #0x1008             // =4104
@@ -441,9 +441,9 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, w3
                	b.lo	<addr>
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	mov	x16, x2
                	mov	x17, x1

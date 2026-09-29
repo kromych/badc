@@ -95,12 +95,15 @@ pub(crate) struct FrontEnd {
     pub(crate) wrapv: bool,
     pub(crate) auto_var_init: badc::AutoVarInit,
     pub(crate) nostdinc: bool,
+    /// gcc `-P`: `-E` output without its line markers.
+    pub(crate) no_line_markers: bool,
     pub(crate) no_builtin: bool,
     pub(crate) no_builtin_fns: Vec<String>,
     pub(crate) defines: Vec<(String, String)>,
     pub(crate) undefines: Vec<String>,
     pub(crate) include_paths: Vec<String>,
     pub(crate) quote_include_paths: Vec<String>,
+    pub(crate) isystem_paths: Vec<String>,
     pub(crate) force_includes: Vec<String>,
     /// `-H` / `--show-includes`: print the resolved path of every
     /// `#include`, with leading dots marking nesting depth.
@@ -426,6 +429,8 @@ struct Parser {
     fixed_reg_names: Vec<String>,
     /// The `-pg` modifiers seen, x86-64 options gcc's aarch64 rejects.
     mcount_modifiers: Vec<String>,
+    /// The last `-mbranch-protection=`, an AArch64 option.
+    branch_protection_flag: Option<String>,
     ssp_guard_kind: Option<&'static str>,
     ssp_guard_reg: Option<String>,
     ssp_guard_offset: Option<i32>,
@@ -902,6 +907,15 @@ impl Parser {
             s if s.starts_with("-iquote") && s.len() > 7 => {
                 front.quote_include_paths.push(s[7..].to_string());
             }
+            // gcc / clang -isystem DIR: a directory of system headers,
+            // probed after the -I paths and before the bundled headers.
+            "-isystem" => front.isystem_paths.push(operand(
+                iter,
+                "badc: error: -isystem requires a path argument",
+            )?),
+            s if s.starts_with("-isystem") && s.len() > 8 => {
+                front.isystem_paths.push(s[8..].to_string());
+            }
             // gcc / clang -include FILE: splice the named header in front
             // of the source. Repeatable; later flags expand top-to-bottom.
             "-include" => front.force_includes.push(operand(
@@ -1061,6 +1075,10 @@ impl Parser {
             // carries is an error rather than a bind to badc's bundled
             // libc.
             "-nostdinc" => front.nostdinc = true,
+            // gcc / clang `-P`: `-E` prints no line markers, for inputs
+            // that are not C (linker scripts, generated headers). Without
+            // `-E` it has no effect, as under gcc.
+            "-P" => front.no_line_markers = true,
             // gcc / clang `-std=<dialect>`: badc compiles C99 with the
             // GNU extensions always available, so the dialect selects
             // only whether `__STRICT_ANSI__` is defined.
@@ -1342,19 +1360,23 @@ impl Parser {
                 };
             }
             // A `+`-joined AArch64 feature list. `standard` is gcc's
-            // alias for `bti+pac-ret`. The `leaf` and `b-key` modifiers
-            // of `pac-ret`, and `gcs`, are rejected: an accepted-but-
-            // ignored spelling would build an object that claims a
-            // protection it does not carry.
+            // alias for `bti+pac-ret`; `leaf` modifies the `pac-ret` before
+            // it, as in gcc's grammar. The `b-key` modifier and `gcs` are
+            // rejected: an accepted-but-ignored spelling would build an
+            // object that claims a protection it does not carry.
             s if s.starts_with("-mbranch-protection=") => {
+                self.branch_protection_flag = Some(s.to_string());
+                let mut prev = "";
                 for feature in s["-mbranch-protection=".len()..].split('+') {
                     match feature {
                         "none" => {
                             code.hardening.bti = false;
                             code.hardening.pac_ret = false;
+                            code.hardening.pac_ret_leaf = false;
                         }
                         "bti" => code.hardening.bti = true,
                         "pac-ret" => code.hardening.pac_ret = true,
+                        "leaf" if prev == "pac-ret" => code.hardening.pac_ret_leaf = true,
                         "standard" => {
                             code.hardening.bti = true;
                             code.hardening.pac_ret = true;
@@ -1363,10 +1385,11 @@ impl Parser {
                             return Err(ParseError::diag(format!(
                                 "badc: error: unsupported feature `{other}` in \
                                  `-mbranch-protection=` (supported: none, bti, \
-                                 pac-ret, standard)"
+                                 pac-ret, pac-ret+leaf, standard)"
                             )));
                         }
                     }
+                    prev = feature;
                 }
             }
             // gcc `-fstack-protector*`: which functions carry a stack
@@ -1923,6 +1946,17 @@ impl Parser {
                 target.id_str()
             )));
         }
+        // A build asking for return-address signing or landing pads must
+        // not get an image without them, so an x86-64 target refuses the
+        // request, as clang does.
+        if let Some(flag) = &self.branch_protection_flag
+            && !target.is_aarch64()
+        {
+            return Err(ParseError::diag(format!(
+                "badc: error: `{flag}` is an AArch64 option; {} has no branch protection",
+                target.id_str()
+            )));
+        }
         if let Some(flag) = self.mcount_modifiers.first()
             && target.is_aarch64()
         {
@@ -2204,6 +2238,7 @@ impl FrontEnd {
             .with_undefines(self.undefines.clone())
             .with_include_paths(self.include_paths.clone())
             .with_quote_include_paths(self.quote_include_paths.clone())
+            .with_isystem_paths(self.isystem_paths.clone())
             .with_system_include_paths(self.system_include_paths.clone())
             .with_own_header_roots(self.own_header_roots.clone())
             .with_force_includes(self.force_includes.clone())
@@ -2342,7 +2377,22 @@ mod tests {
 
     #[test]
     fn include_paths_keep_the_two_scopes_apart() {
-        let cli = parse(&["-Iinc", "-I", "inc2", "-iquoteq", "-iquote", "q2", "a.c"]);
+        let cli = parse(&[
+            "-Iinc",
+            "-I",
+            "inc2",
+            "-iquoteq",
+            "-iquote",
+            "q2",
+            "-isystems",
+            "-isystem",
+            "s2",
+            "a.c",
+        ]);
+        assert_eq!(
+            cli.front.isystem_paths,
+            vec!["s".to_string(), "s2".to_string()]
+        );
         assert_eq!(
             cli.front.include_paths,
             vec!["inc".to_string(), "inc2".to_string()]
@@ -2359,6 +2409,13 @@ mod tests {
             reject(&["-iquote"]),
             (
                 "badc: error: -iquote requires a path argument".to_string(),
+                1
+            )
+        );
+        assert_eq!(
+            reject(&["-isystem"]),
+            (
+                "badc: error: -isystem requires a path argument".to_string(),
                 1
             )
         );
@@ -3032,8 +3089,44 @@ mod tests {
         assert_eq!(
             reject(&["-mbranch-protection=gcs", "a.c"]).0,
             "badc: error: unsupported feature `gcs` in `-mbranch-protection=` \
-             (supported: none, bti, pac-ret, standard)"
+             (supported: none, bti, pac-ret, pac-ret+leaf, standard)"
         );
+    }
+
+    /// `leaf` modifies the `pac-ret` before it, as in gcc's grammar and in
+    /// Linux 5.10-6.1's `-mbranch-protection=pac-ret+leaf+bti`; alone or
+    /// after another feature it is refused, as `b-key` is.
+    #[test]
+    fn branch_protection_leaf_modifies_pac_ret() {
+        let h = |flag: &str| parse(&[A64, flag, "-c", "a.c"]).codegen.hardening;
+        let k = h("-mbranch-protection=pac-ret+leaf+bti");
+        assert!(k.pac_ret && k.pac_ret_leaf && k.bti);
+        let p = h("-mbranch-protection=pac-ret");
+        assert!(p.pac_ret && !p.pac_ret_leaf);
+        let n = h("-mbranch-protection=pac-ret+leaf+none");
+        assert!(!n.pac_ret && !n.pac_ret_leaf);
+        for bad in ["leaf", "bti+leaf", "standard+leaf", "pac-ret+b-key"] {
+            let flag = format!("-mbranch-protection={bad}");
+            let (msg, _) = reject(&[flag.as_str(), "a.c"]);
+            assert!(msg.contains("unsupported feature"), "{bad}: {msg}");
+        }
+    }
+
+    /// An x86-64 target refuses every `-mbranch-protection=`, `none` too, as
+    /// clang does; gcc's x86-64 does not know the option.
+    #[test]
+    fn branch_protection_is_an_aarch64_option() {
+        for flag in ["-mbranch-protection=pac-ret", "-mbranch-protection=none"] {
+            for target in [X64, "--target=windows-x64"] {
+                let (msg, _) = reject(&[flag, target, "-c", "a.c"]);
+                assert!(
+                    msg.contains(&format!("`{flag}` is an AArch64 option")),
+                    "{msg}"
+                );
+            }
+            parse(&["--target=windows-arm64", flag, "-c", "a.c"]);
+            parse(&["--target=macos-aarch64", flag, "-c", "a.c"]);
+        }
     }
 
     #[test]

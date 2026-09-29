@@ -57,6 +57,7 @@ const DW_AT_UPPER_BOUND: u32 = 0x2f;
 const DW_AT_CALLING_CONVENTION: u32 = 0x36;
 const DW_CC_NORMAL: u8 = 0x01;
 const DW_AT_CONST_VALUE: u32 = 0x1c;
+const DW_AT_DECLARATION: u32 = 0x3c;
 
 const DW_ATE_ADDRESS: u8 = 0x01;
 const DW_ATE_BOOLEAN: u8 = 0x02;
@@ -203,6 +204,9 @@ pub(crate) struct DwarfSections {
     pub debug_line: Vec<u8>,
     pub debug_str: Vec<u8>,
     pub debug_frame: Vec<u8>,
+    /// A linked image's other `.debug_*` sections, by name. The ELF and
+    /// PE writers emit them; no Mach-O input carries one.
+    pub other: Vec<(String, Vec<u8>)>,
 }
 
 /// Produce DWARF for `program` / `build`.
@@ -223,7 +227,7 @@ pub(crate) fn emit(
         source_path
     });
 
-    let subs = collect_subprograms(program, build, code_vmaddr, &mut strs);
+    let subs = collect_subprograms(program, build, target, code_vmaddr, &mut strs);
 
     let mut plt_subs = collect_plt_subprograms(build, target, code_vmaddr, &mut strs);
 
@@ -283,14 +287,16 @@ pub(crate) fn emit(
         debug_line,
         debug_str,
         debug_frame,
+        other: Vec::new(),
     }
 }
 
 /// Where a subprogram's FDE installs its frame rules. The x86_64 lowering
 /// records the boundaries of `push rbp` and `mov rbp, rsp`, so each
 /// instruction gets the rule that holds after it; a full leaf keeps the
-/// CIE's entry rule throughout; without a record the body rule installs
-/// at the post-prologue offset.
+/// CIE's entry rule throughout, as does an aarch64 function whose prologue
+/// is hints alone; otherwise the body rule installs at the post-prologue
+/// offset.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FrameRules {
     PostPrologue,
@@ -302,8 +308,11 @@ enum FrameRules {
 }
 
 impl FrameRules {
-    fn of(build: &Build, low_pc: usize) -> Self {
+    fn of(build: &Build, arch: CfiArch, ent_pc: usize, low_pc: usize) -> Self {
         match build.fn_unwind.iter().find(|u| u.begin as usize == low_pc) {
+            None if arch == CfiArch::Aarch64 && a64_prologue_is_hints(build, ent_pc, low_pc) => {
+                FrameRules::Leaf
+            }
             None => FrameRules::PostPrologue,
             Some(u) if u.leaf => FrameRules::Leaf,
             Some(u) => FrameRules::X86Frame {
@@ -370,6 +379,22 @@ fn prologue_size_for(ent_pc: usize, low_pc: usize, build: &Build) -> u32 {
     } else {
         (body_start - low_pc) as u32
     }
+}
+
+/// Whether the aarch64 function at `low_pc` enters its body having stored
+/// nothing: its recorded prologue is `bti`, `nop` and `paciasp` alone, so sp
+/// and the return address in x30 keep their entry values throughout.
+fn a64_prologue_is_hints(build: &Build, ent_pc: usize, low_pc: usize) -> bool {
+    let Some(&body) = build.func_prologue_native.get(&ent_pc) else {
+        return false;
+    };
+    build.text.get(low_pc..body).is_some_and(|prologue| {
+        prologue
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|w| u32::from_le_bytes(*w) & 0xFFFF_F01F == 0xD503_201F)
+    })
 }
 
 /// Where the function at `low_pc` signs its return address, read off the
@@ -469,6 +494,7 @@ fn collect_plt_subprograms(
 fn collect_subprograms(
     program: &Program,
     build: &Build,
+    target: Target,
     code_vmaddr: u64,
     strs: &mut StrTable,
 ) -> Vec<Subprog> {
@@ -634,7 +660,7 @@ fn collect_subprograms(
             low_pc: code_vmaddr + lo as u64,
             high_pc: code_vmaddr + hi as u64,
             prologue_size: prologue_size_for(ent_pc, lo, build),
-            frame_rules: FrameRules::of(build, lo),
+            frame_rules: FrameRules::of(build, CfiArch::of(target), ent_pc, lo),
             ra_signed_at: paciasp_offset(build, lo, early.map(|e| e.frame)),
             early_return: early.map(|e| e.exit),
             variables,
@@ -676,6 +702,9 @@ impl CatalogEntry {
         match self {
             CatalogEntry::Base(_) | CatalogEntry::VoidStar => 7,
             CatalogEntry::Pointer { .. } | CatalogEntry::StructPointer { .. } => 6,
+            CatalogEntry::Struct { id } if structs.get(*id as usize).is_some_and(|s| s.is_enum) => {
+                1 + 4
+            }
             CatalogEntry::Struct { id } => {
                 let mut size: u32 = 1 + 4 + 4;
                 if let Some(s) = structs.get(*id as usize) {
@@ -1031,6 +1060,7 @@ const ABBREV_ENUMERATION_TYPE: u64 = 17;
 const ABBREV_ENUMERATOR: u64 = 18;
 const ABBREV_SUBPROGRAM_INTERNAL: u64 = 19;
 const ABBREV_ENUMERATION_TYPE_ANON: u64 = 20;
+const ABBREV_ENUMERATION_TYPE_DECL: u64 = 21;
 
 /// One `.debug_abbrev` declaration: the abbreviation code, its DWARF tag,
 /// whether the DIE has children, and the ordered (attribute, form) pairs.
@@ -1224,6 +1254,17 @@ const ABBREV_DECLS: &[AbbrevDecl] = &[
         tag: DW_TAG_ENUMERATION_TYPE,
         has_children: true,
         attrs: &[(DW_AT_BYTE_SIZE, DW_FORM_DATA1)],
+    },
+    // An enum the unit declares but never defines: DW_AT_declaration and
+    // no size, as for a forward-declared aggregate (DWARF 4 5.7).
+    AbbrevDecl {
+        code: ABBREV_ENUMERATION_TYPE_DECL,
+        tag: DW_TAG_ENUMERATION_TYPE,
+        has_children: false,
+        attrs: &[
+            (DW_AT_NAME, DW_FORM_STRP),
+            (DW_AT_DECLARATION, DW_FORM_FLAG_PRESENT),
+        ],
     },
     // enumerator -- one (name, value) pair. DW_AT_const_value is signed
     // since C99 enum constants can be negative.
@@ -1709,6 +1750,11 @@ fn emit_type_die(
                 .get(id)
                 .copied()
                 .expect("collect() interned every struct name");
+            if s.is_enum {
+                write_uleb128(body, ABBREV_ENUMERATION_TYPE_DECL);
+                body.extend_from_slice(&name_off.to_le_bytes());
+                return;
+            }
             write_uleb128(body, abbrev);
             body.extend_from_slice(&name_off.to_le_bytes());
             body.extend_from_slice(&(s.size as u32).to_le_bytes());
@@ -2024,7 +2070,15 @@ fn build_debug_frame(
         let mut fde_body: Vec<u8> = Vec::new();
         // Where the rules below end, and whether they sign the return address.
         let (ruled, signed) = match sub.frame_rules {
-            FrameRules::Leaf => (0, false),
+            // An aarch64 leaf under `pac-ret+leaf` signs at its `paciasp`.
+            FrameRules::Leaf => match sub.ra_signed_at {
+                Some(at) => {
+                    write_advance_loc(&mut fde_body, arch, at + 4);
+                    fde_body.push(DW_CFA_NEGATE_RA_STATE);
+                    (at + 4, true)
+                }
+                None => (0, false),
+            },
             FrameRules::X86Frame {
                 push_rbp_end,
                 set_fpreg_end,
@@ -2374,7 +2428,7 @@ mod tests {
              130000071301030e0b060000081701030e0b060000090d00030e4913380600000a0d\
              00030e49136b0f0d0f00000b2e01030e110112073f19491300000c0500030e491300\
              000d180000000e0500030e4913021800000f0101491300001021002f0f0000110401\
-             03080b0b00001404010b0b000012280003081c0d000000"
+             03080b0b00001404010b0b0000150400030e3c19000012280003081c0d000000"
         );
     }
 
@@ -2748,7 +2802,13 @@ mod tests {
         let build =
             crate::c5::codegen::lower_for(&program, Target::LinuxAarch64, options).expect("lower");
         let word = |at: usize| u32::from_le_bytes(build.text[at..at + 4].try_into().unwrap());
-        let subs = collect_subprograms(&program, &build, 0, &mut StrTable::new());
+        let subs = collect_subprograms(
+            &program,
+            &build,
+            Target::LinuxAarch64,
+            0,
+            &mut StrTable::new(),
+        );
         let fib = subs
             .iter()
             .find(|s| s.early_return.is_some())
@@ -2966,6 +3026,33 @@ mod tests {
 #[cfg(test)]
 mod info_golden {
     use super::*;
+
+    /// A tag declared as an enum and never defined is an enumeration
+    /// declaration, and its DIE is the size the layout pass reserves.
+    #[test]
+    fn an_undefined_enum_tag_is_an_enumeration_declaration() {
+        let mut strs = StrTable::new();
+        let mut tag = StructDef::incomplete_tag("never", false, true);
+        tag.cast_named = true;
+        let structs = alloc::vec![tag];
+        let catalog = TypeCatalog::collect(&[], &[], &mut strs, Target::LinuxX64, &structs);
+        let entry = CatalogEntry::Struct { id: 0 };
+        let mut body = Vec::new();
+        let none = BTreeMap::new();
+        emit_type_die(
+            &entry,
+            &mut body,
+            &catalog,
+            &structs,
+            &none,
+            &BTreeMap::new(),
+            Target::LinuxX64,
+        );
+        let mut want = alloc::vec![ABBREV_ENUMERATION_TYPE_DECL as u8];
+        want.extend_from_slice(&catalog.struct_names[&0].to_le_bytes());
+        assert_eq!(body, want);
+        assert_eq!(entry.die_size(&structs) as usize, body.len());
+    }
 
     /// Byte-stability lock for the amalg `.debug_info` CU.
     #[test]

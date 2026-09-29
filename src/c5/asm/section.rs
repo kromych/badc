@@ -55,9 +55,9 @@ pub(crate) enum AsmSectionValue {
     LocExpr(alloc::string::String),
     /// A relocation whose base is an `i`-class operand naming a link-time
     /// address (`%cN`) or an `asm goto` label (`%lN`), optionally with a
-    /// constant addend and `- .` PC-relative. `%c0 + %c1 - .` (a static-key
-    /// jump entry) folds `%c1` into the addend; `.long %c0 - .` (the bug
-    /// table's file pointer) has no addend.
+    /// constant addend and minus a location. `%c0 + %c1 - .` (a static-key
+    /// jump entry) folds `%c1` into the addend; `.long %c0 - .` and `.long
+    /// %c0 - 2b` (the bug table's file pointer, 7.x and 5.15) have none.
     OperandReloc {
         idx: u8,
         /// `%l` (an `asm goto` label) rather than `%c` (an operand address).
@@ -65,7 +65,9 @@ pub(crate) enum AsmSectionValue {
         /// Constant addend expression (operand constants + literals), empty
         /// when absent.
         addend: alloc::string::String,
-        pcrel: bool,
+        /// The location subtracted, `.` or a label of the section being
+        /// assembled, which makes the field PC-relative as GNU as makes it.
+        minus: Option<alloc::string::String>,
     },
 }
 

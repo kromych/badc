@@ -14,31 +14,31 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	adrp	x0, <page>
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	and	x1, x0, #0xffff
                	cbz	x1, <addr>
                	mov	x0, #0x1                // =1
                	ret
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	and	x2, x1, #0xffff
                	cbz	x2, <addr>
                	mov	x0, #0x2                // =2
                	ret
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	and	x2, x2, #0xffff
                	cbz	x2, <addr>
                	mov	x0, #0x3                // =3
                	ret
-               	adrp	x2, <page>
+               	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	and	x3, x2, #0xffff
                	cbz	x3, <addr>
                	mov	x0, #0x4                // =4
                	ret
-               	adrp	x3, <page>
+               	adrp	x3, <addr>
                	add	x3, x3, <lo12>
                	and	x4, x3, #0xffff
                	cbz	x4, <addr>

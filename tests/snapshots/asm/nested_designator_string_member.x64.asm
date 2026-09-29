@@ -29,7 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	addq	$0x4, %rax
                	leaq	<rip>, %rcx
                	cmpb	$0x0, (%rax)
@@ -49,7 +49,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	cmpb	$0x0, 0x7(%rax)
                	jne	<addr>
                	cmpb	$0x0, 0xb(%rax)

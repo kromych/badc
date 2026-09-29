@@ -14,7 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	mov	x0, #0x3                // =3
                	str	w0, [x1]
@@ -27,7 +27,7 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	adrp	x1, <page>
+               	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	mov	x2, #0x9                // =9
                	strb	w2, [x1]

@@ -732,6 +732,43 @@ fn section_reloc_addend_parses() {
 }
 
 #[test]
+fn operand_reloc_subtracts_a_location() {
+    // `%c0 - .` and `%c0 + %c1 - .` are PC-relative against the operand's
+    // address; `%c0 - 2b` (Linux 5.15's bug table) subtracts a label of the
+    // section being assembled; a bare `%c0` stays the operand's constant.
+    let reloc = |idx, goto, addend: &str, minus: &str| AsmSectionValue::OperandReloc {
+        idx,
+        goto,
+        addend: alloc::string::String::from(addend),
+        minus: Some(alloc::string::String::from(minus)),
+    };
+    assert_eq!(
+        parse_section_value("%c0 - .").unwrap(),
+        reloc(0, false, "", ".")
+    );
+    assert_eq!(
+        parse_section_value("%c0 + %c1 - .").unwrap(),
+        reloc(0, false, "%c1", ".")
+    );
+    assert_eq!(
+        parse_section_value("%c0 - 2b").unwrap(),
+        reloc(0, false, "", "2b")
+    );
+    assert_eq!(
+        parse_section_value("%c1 + 4 - 2b").unwrap(),
+        reloc(1, false, "4", "2b")
+    );
+    assert_eq!(
+        parse_section_value("(%l0) - .").unwrap(),
+        reloc(0, true, "", ".")
+    );
+    assert_eq!(
+        parse_section_value("%c0").unwrap(),
+        AsmSectionValue::OperandConst(0)
+    );
+}
+
+#[test]
 fn shift_right_is_logical_like_gnu_as() {
     // GNU as shifts the 64-bit value, so `>>` never replicates the sign
     // bit. Verified against `as` (`.quad` of each expression): the kernel's

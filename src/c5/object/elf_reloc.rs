@@ -1533,15 +1533,26 @@ impl<'a> RelocWriter<'a> {
         Ok(())
     }
 
-    /// `.note.gnu.property` (the AArch64 feature word the branch
-    /// protections claim; the consumer AND-merges it across inputs) and the
-    /// switch dispatch tables, which take a read-only entry of their own:
+    /// A compiled unit's `.note.GNU-stack`, `.note.gnu.property` (the AArch64
+    /// feature word the branch protections claim; the consumer AND-merges it
+    /// across inputs) and the switch dispatch tables, which take a read-only
+    /// entry of their own:
     /// the name keeps the `.rodata` prefix consumers that discover compiler
     /// jump tables key on, and stays apart from the carved `.rodata` so its
     /// pc-relative entry relocations do not pull that section's const
     /// objects into the relro stream on re-ingestion.
     fn place_writer_payloads(&mut self) -> Result<(), C5Error> {
         let build = self.build;
+        // The system linkers read a missing `.note.GNU-stack` as a request
+        // for an executable stack. Compiled C needs none, as gcc's objects
+        // state; an assembler unit carries only the note its source names.
+        if !self.program.asm_unit {
+            self.layout
+                .carve
+                .table
+                .get_or_insert(".note.GNU-stack", SHT_PROGBITS, 0, 1)
+                .map_err(Self::internal)?;
+        }
         let gnu_property_align: u64 = match self.class {
             ElfClass::Elf32 => 4,
             ElfClass::Elf64 => 8,
@@ -1615,11 +1626,14 @@ impl<'a> RelocWriter<'a> {
     /// against, and one `STT_SECTION` per named entry.
     fn emit_section_symbols(&mut self) {
         let (program, build) = (self.program, self.build);
-        let file_basename = program
-            .source_path
-            .rsplit('/')
-            .next()
-            .unwrap_or("<unknown>");
+        // A built-in source's label (`<runtime/runtime.c>`) names a path
+        // inside its brackets.
+        let path = &program.source_path;
+        let path = match path.strip_prefix('<').and_then(|p| p.strip_suffix('>')) {
+            Some(inner) if inner.contains('/') => inner,
+            _ => path,
+        };
+        let file_basename = crate::c5::host::path_base_name(path);
         self.names.file_names = if program.asm_unit {
             program.asm_file_names.iter().map(|s| s.as_str()).collect()
         } else {

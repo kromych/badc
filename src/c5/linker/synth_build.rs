@@ -37,14 +37,15 @@ use alloc::vec::Vec;
 
 use crate::c5::codegen::{
     AddrPart, Build, CopyRelocReq, DataFixup, DynamicExport, DynamicExportSection, EmitStream,
-    EmittedFinalReloc, ExecForm, FuncFixup, GotFixup, OutputKind, ResolvedDylib, ResolvedImport,
-    ResolvedImports, Target,
+    EmitTarget, EmittedFinalReloc, ExecForm, FuncFixup, GotFixup, OutputKind, ResolvedDylib,
+    ResolvedImport, ResolvedImports, Target,
 };
 use crate::c5::error::C5Error;
 use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE, R_AARCH64_ADR_PREL_PG_HI21,
-    R_AARCH64_CALL26, R_AARCH64_JUMP26, R_AARCH64_LD64_GOT_LO12_NC, R_X86_64_GOTPCREL,
-    R_X86_64_PC32, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, aarch64_ldst_lo12_scale,
+    R_AARCH64_CALL26, R_AARCH64_JUMP26, R_AARCH64_LD64_GOT_LO12_NC, R_X86_64_GOT64,
+    R_X86_64_GOTOFF64, R_X86_64_GOTPC32, R_X86_64_GOTPC64, R_X86_64_GOTPCREL, R_X86_64_PC32,
+    R_X86_64_PLT32, R_X86_64_PLTOFF64, R_X86_64_REX_GOTPCRELX, aarch64_ldst_lo12_scale,
     aarch64_movw_field,
 };
 use crate::c5::object::write_native_image;
@@ -148,6 +149,8 @@ fn synth_program_and_build(
     let SynthFixups {
         got: got_fixups,
         got_base: got_base_fixups,
+        got_rel: got_rel_fields,
+        got_pcrel: got_pcrel_fixups,
         data: data_fixups,
         func: func_fixups,
         text_pcrel: text_pcrel_relocs,
@@ -214,6 +217,7 @@ fn synth_program_and_build(
         text_data_ranges: Vec::new(),
         copy_relocs,
         dynamic_exports,
+        image_symbols: merged.symbols.clone(),
         text: merged.text.clone(),
         text_align: merged.text_align,
         data: merged.data.clone(),
@@ -231,6 +235,8 @@ fn synth_program_and_build(
         entry_offset,
         got_fixups,
         got_base_fixups,
+        got_rel_fields,
+        got_pcrel_fixups,
         data_fixups,
         // Object-linked jump tables ride in the merged data stream
         // (input `.rodata` folds into it); the direct-lowering rodata
@@ -602,10 +608,10 @@ fn synth_emitted_relocs(merged: &MergedNative) -> Vec<EmittedFinalReloc> {
             crate::c5::object::elf_reloc_types::R_AARCH64_PREL32,
         ),
     };
-    let target_of = |t: MergedTarget| -> (EmitStream, i64) {
+    let target_of = |t: MergedTarget| -> (EmitTarget, i64) {
         match t {
-            MergedTarget::Text(o) => (EmitStream::Text, o),
-            MergedTarget::Data(o) => (EmitStream::Data, o),
+            MergedTarget::Text(o) => (EmitTarget::Stream(EmitStream::Text), o),
+            MergedTarget::Data(o) => (EmitTarget::Stream(EmitStream::Data), o),
         }
     };
     let mut v = Vec::new();
@@ -614,7 +620,7 @@ fn synth_emitted_relocs(merged: &MergedNative) -> Vec<EmittedFinalReloc> {
             site: EmitStream::Text,
             site_offset: r.text_offset,
             rtype: r.rtype,
-            target: EmitStream::Text,
+            target: EmitTarget::Stream(EmitStream::Text),
             addend: r.target_text_offset,
         });
     }
@@ -623,8 +629,10 @@ fn synth_emitted_relocs(merged: &MergedNative) -> Vec<EmittedFinalReloc> {
             continue;
         }
         let target = match p.target_section {
-            NativeSymSection::Text => EmitStream::Text,
-            _ => EmitStream::Data,
+            NativeSymSection::Text => EmitTarget::Stream(EmitStream::Text),
+            NativeSymSection::Got => EmitTarget::GotBase,
+            NativeSymSection::Abs => EmitTarget::Absolute,
+            _ => EmitTarget::Stream(EmitStream::Data),
         };
         v.push(EmittedFinalReloc {
             site: EmitStream::Text,
@@ -685,12 +693,18 @@ fn synth_merged_dwarf(merged: &MergedNative) -> Option<crate::c5::codegen::Merge
         && merged.debug_abbrev.is_empty()
         && merged.debug_line.is_empty()
         && merged.debug_str.is_empty()
+        && merged.debug_other.is_empty()
     {
         return None;
     }
     let text_reloc = |r: &DebugTextReloc| crate::c5::codegen::DwarfTextReloc {
         byte_offset: r.byte_offset,
         merged_text_offset: r.merged_text_offset,
+        width: r.width,
+    };
+    let data_reloc = |r: &super::link::DebugDataReloc| crate::c5::codegen::DwarfDataReloc {
+        byte_offset: r.byte_offset,
+        merged_data_offset: r.merged_data_offset,
         width: r.width,
     };
     Some(crate::c5::codegen::MergedDwarf {
@@ -711,10 +725,14 @@ fn synth_merged_dwarf(merged: &MergedNative) -> Option<crate::c5::codegen::Merge
         debug_info_data_relocs: merged
             .debug_info_data_relocs
             .iter()
-            .map(|r| crate::c5::codegen::DwarfDataReloc {
-                byte_offset: r.byte_offset,
-                merged_data_offset: r.merged_data_offset,
-                width: r.width,
+            .map(data_reloc)
+            .collect(),
+        other: (merged.debug_other.iter())
+            .map(|s| crate::c5::codegen::MergedDwarfSection {
+                name: s.name.clone(),
+                bytes: s.bytes.clone(),
+                text_relocs: s.text_relocs.iter().map(text_reloc).collect(),
+                data_relocs: s.data_relocs.iter().map(data_reloc).collect(),
             })
             .collect(),
     })
@@ -863,7 +881,7 @@ fn dylib_name_from_path(path: &str) -> String {
     // The c5 handle is the load path's stem -- "libc.so.6" maps
     // to "libc", "/usr/lib/libSystem.B.dylib" to "libSystem",
     // "msvcrt.dll" to "msvcrt". Used only for diagnostics today.
-    let basename = path.rsplit('/').next().unwrap_or(path);
+    let basename = crate::c5::host::path_base_name(path);
     let stem = basename.split('.').next().unwrap_or(basename);
     let stripped = stem.strip_prefix("lib").unwrap_or(stem);
     stripped.to_string()
@@ -888,6 +906,8 @@ fn dylib_name_from_path(path: &str) -> String {
 struct SynthFixups {
     got: Vec<GotFixup>,
     got_base: Vec<crate::c5::codegen::GotBaseFixup>,
+    got_rel: Vec<crate::c5::codegen::GotRelField>,
+    got_pcrel: Vec<crate::c5::codegen::GotPcRelFixup>,
     data: Vec<DataFixup>,
     func: Vec<FuncFixup>,
     text_pcrel: Vec<crate::c5::codegen::TextPcRelReloc>,
@@ -901,6 +921,8 @@ fn synth_fixups(
 ) -> Result<SynthFixups, C5Error> {
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     let mut got_base_fixups: Vec<crate::c5::codegen::GotBaseFixup> = Vec::new();
+    let mut got_rel: Vec<crate::c5::codegen::GotRelField> = Vec::new();
+    let mut got_pcrel: Vec<crate::c5::codegen::GotPcRelFixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut func_fixups: Vec<FuncFixup> = Vec::new();
     let mut text_pcrel: Vec<crate::c5::codegen::TextPcRelReloc> = Vec::new();
@@ -957,6 +979,27 @@ fn synth_fixups(
             });
             continue;
         }
+        if merged.machine == NativeMachine::X86_64
+            && let Some(field) = x86_64_got_rel_field(merged, reloc, text_abs)?
+        {
+            got_rel.push(field);
+            continue;
+        }
+        // An x86-64 slot read the object's code already addresses through
+        // the GOT: its instruction is final, so the field takes the
+        // import's slot whatever the instruction is.
+        if reloc.slot_load
+            && reloc.target_section == NativeSymSection::Undef
+            && merged.machine == NativeMachine::X86_64
+            && super::got_relax::is_x86_64_got_pcrel(reloc.rtype)
+        {
+            got_pcrel.push(crate::c5::codegen::GotPcRelFixup {
+                site_text_offset: reloc.text_offset,
+                import_index: reloc.import_index,
+                addend: reloc.addend,
+            });
+            continue;
+        }
         match merged.machine {
             NativeMachine::Aarch64 => {
                 project_aarch64_pending(
@@ -986,6 +1029,8 @@ fn synth_fixups(
     Ok(SynthFixups {
         got: got_fixups,
         got_base: got_base_fixups,
+        got_rel,
+        got_pcrel,
         data: data_fixups,
         func: func_fixups,
         text_pcrel,
@@ -1148,6 +1193,71 @@ fn declined_reloc(
         TextAbsolute::RejectedInPie { shared } if absolute => site.absolute_in_pie(shared),
         _ => site.unsupported(),
     }
+}
+
+/// The field of an x86-64 relocation measured from or to the GOT base,
+/// or `None` for any other form. The merge resolved the symbol: a
+/// section target's offset rides in `addend`, a GOT64 against a symbol
+/// the link defines became a GOTOFF64 against its slot, a PLTOFF64
+/// against an import names the import's call stub, and an unresolved
+/// weak symbol is the constant 0 (`Abs`).
+fn x86_64_got_rel_field(
+    merged: &MergedNative,
+    reloc: &super::link::PendingImportReloc,
+    text_abs: TextAbsolute,
+) -> Result<Option<crate::c5::codegen::GotRelField>, C5Error> {
+    use crate::c5::codegen::{GotRelField, ImageAddr};
+    let (to, from, addend, width) = match (reloc.rtype, reloc.target_section) {
+        (R_X86_64_GOTPC32, NativeSymSection::Got) => {
+            (ImageAddr::GotBase, ImageAddr::Site, reloc.addend, 4)
+        }
+        (R_X86_64_GOTPC64, NativeSymSection::Got) => {
+            (ImageAddr::GotBase, ImageAddr::Site, reloc.addend, 8)
+        }
+        (R_X86_64_GOTOFF64 | R_X86_64_PLTOFF64, NativeSymSection::Text) => (
+            ImageAddr::Text(reloc.addend as u64),
+            ImageAddr::GotBase,
+            0,
+            8,
+        ),
+        (
+            R_X86_64_GOTOFF64,
+            NativeSymSection::RoData
+            | NativeSymSection::RelRo
+            | NativeSymSection::Data
+            | NativeSymSection::Bss,
+        ) => (
+            ImageAddr::Data(reloc.addend as u64),
+            ImageAddr::GotBase,
+            0,
+            8,
+        ),
+        (R_X86_64_GOTOFF64 | R_X86_64_PLTOFF64, NativeSymSection::Abs) => (
+            ImageAddr::Absolute(reloc.addend as u64),
+            ImageAddr::GotBase,
+            0,
+            8,
+        ),
+        (R_X86_64_GOT64, NativeSymSection::Undef) if reloc.slot_load => (
+            ImageAddr::ImportSlot(reloc.import_index),
+            ImageAddr::GotBase,
+            reloc.addend,
+            8,
+        ),
+        (
+            R_X86_64_GOTPC32 | R_X86_64_GOTPC64 | R_X86_64_GOTOFF64 | R_X86_64_GOT64
+            | R_X86_64_PLTOFF64,
+            _,
+        ) => return Err(declined_reloc(merged, reloc, reloc.rtype, text_abs)),
+        _ => return Ok(None),
+    };
+    Ok(Some(GotRelField {
+        site_text_offset: reloc.text_offset,
+        to,
+        from,
+        addend,
+        width,
+    }))
 }
 
 fn project_x86_64_pending(
@@ -1451,6 +1561,7 @@ mod tests {
             debug_line_bases: alloc::vec![],
             debug_info_relocs: alloc::vec![],
             debug_line_relocs: alloc::vec![],
+            debug_other: alloc::vec![],
             unit_for_debug_info_reloc: alloc::vec![],
             unit_for_debug_line_reloc: alloc::vec![],
             debug_info_text_relocs: alloc::vec![],
@@ -1459,6 +1570,7 @@ mod tests {
             prologue_ends: hashbrown::HashMap::new(),
             early_returns: hashbrown::HashMap::new(),
             local_funcs: alloc::vec::Vec::new(),
+            symbols: alloc::vec::Vec::new(),
             tls_data: alloc::vec![],
             tls_init_size: 0,
             tls_align: 8,

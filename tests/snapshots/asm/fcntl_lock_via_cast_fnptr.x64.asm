@@ -78,7 +78,7 @@ Disassembly of section .text:
                	movq	%rax, %r13
                	leaq	-0x60(%rbp), %rdx
                	movw	$0x1, (%rdx)
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	movl	$0x6, %esi
                	movq	%rax, %rcx

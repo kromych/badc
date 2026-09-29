@@ -1228,15 +1228,18 @@ fn strip_label_parens(s: &str) -> &str {
     s
 }
 
-/// If `s` ends with `- .` (subtract the field's own position), return the
-/// base expression before it; otherwise `None`.
-fn strip_trailing_pcrel(s: &str) -> Option<&str> {
-    let base = s
-        .trim_end()
-        .strip_suffix('.')?
-        .trim_end()
-        .strip_suffix('-')?;
-    Some(base.trim_end())
+/// If `s` ends with `- loc`, `loc` being `.` or a label or symbol name,
+/// return the expression before it and `loc`; otherwise `None`.
+fn strip_trailing_location(s: &str) -> Option<(&str, &str)> {
+    let s = s.trim_end();
+    let at = s.rfind('-')?;
+    let loc = s[at + 1..].trim();
+    let name = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
+    let is_loc = loc == "."
+        || (!loc.is_empty()
+            && loc.bytes().all(name)
+            && eval_const_expr_ops(loc, &|_| Some(0)).is_none());
+    is_loc.then(|| (s[..at].trim_end(), loc))
 }
 
 /// Parse an operand / goto-label relocation value: a `%cN` operand address
@@ -1272,25 +1275,26 @@ fn parse_operand_reloc(a: &str) -> Option<Result<AsmSectionValue, alloc::string:
     } else {
         after
     };
-    let (tail, pcrel) = match strip_trailing_pcrel(after.trim()) {
-        Some(base) => (base, true),
-        None => (after.trim(), false),
+    let (tail, minus) = match strip_trailing_location(after.trim()) {
+        Some((base, loc)) => (base, Some(alloc::string::String::from(loc))),
+        None => (after.trim(), None),
     };
-    // A `%l` goto label always relocates; a `%c` operand only when it is
-    // PC-relative or carries an addend (a bare `%cN` is a plain constant).
+    // A `%l` goto label always relocates; a `%c` operand only when a
+    // location is subtracted or it carries an addend (a bare `%cN` is a
+    // plain constant).
     let addend = match tail.strip_prefix('+') {
         Some(rest) => rest.trim(),
         None if tail.is_empty() => "",
         None => return None,
     };
-    if !goto && !pcrel && addend.is_empty() {
+    if !goto && minus.is_none() && addend.is_empty() {
         return None;
     }
     Some(Ok(AsmSectionValue::OperandReloc {
         idx,
         goto,
         addend: alloc::string::String::from(addend),
-        pcrel,
+        minus,
     }))
 }
 

@@ -737,7 +737,8 @@ pub(super) fn is_full_leaf(frame: Frame, alloc: &Allocation) -> bool {
 /// `-mbranch-protection=pac-ret`: `paciasp` before the first sp move and
 /// `autiasp` after the last sp restore, the window in which sp -- the
 /// modifier -- holds its entry value. A full leaf stores no return
-/// address and a `TailExt` forwarder runs no epilogue, so neither signs.
+/// address, so it signs only under `pac-ret+leaf`; a `TailExt` forwarder
+/// runs no epilogue and never signs.
 pub(super) fn signs_return_address(
     func: &FunctionSsa,
     frame: Frame,
@@ -746,7 +747,7 @@ pub(super) fn signs_return_address(
 ) -> bool {
     abi.hardening.pac_ret
         && !func.is_naked
-        && !is_full_leaf(frame, alloc)
+        && (abi.hardening.pac_ret_leaf || !is_full_leaf(frame, alloc))
         && !func
             .blocks
             .iter()

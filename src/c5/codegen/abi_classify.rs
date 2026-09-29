@@ -51,8 +51,12 @@ pub(crate) struct FlatField {
     pub offset: u32,
     pub size: u32,
     pub kind: ScalarKind,
-    /// The bytes a bit-field's bits span, which no alignment binds.
-    pub bit_field: bool,
+    /// The boundary gcc's System V classification requires of `offset`:
+    /// the scalar's size, or for a union's bit-field the narrowest integer
+    /// mode holding its width. 1 for a structure's bit-field, whose bytes
+    /// no alignment binds, and past an array's first element, which the
+    /// classification does not examine.
+    pub align: u32,
     /// A floating-point vector of one element: `float` or `double` with a
     /// `vector_size` of its own width.
     pub single_fp_vector: bool,
@@ -258,7 +262,7 @@ fn classify_win64(size: u32, is_return: bool) -> AggClass {
 }
 
 /// System V AMD64 (3.2.3): aggregates larger than 16 bytes, or with a field
-/// off its natural alignment (a bit-field excepted), are MEMORY class, and
+/// off the alignment its `align` names, are MEMORY class, and
 /// so is one holding a floating-point vector of one element, which the
 /// psABI gives no class and gcc passes in memory. Otherwise each of the one
 /// or two eightbytes starts NO_CLASS and merges the classes of the fields
@@ -278,7 +282,7 @@ fn classify_sysv(size: u32, fields: &[FlatField], is_return: bool) -> AggClass {
     if size > 16
         || fields
             .iter()
-            .any(|f| f.single_fp_vector || (!f.bit_field && f.offset % f.size.clamp(1, 16) != 0))
+            .any(|f| f.single_fp_vector || f.offset % f.align.max(1) != 0)
     {
         return memory;
     }
@@ -482,7 +486,7 @@ mod tests {
             offset,
             size,
             kind,
-            bit_field: false,
+            align: size.clamp(1, 16),
             single_fp_vector: false,
         }
     }
@@ -647,7 +651,7 @@ mod tests {
         let bits = [
             ff(0, 1, ScalarKind::Int),
             FlatField {
-                bit_field: true,
+                align: 1,
                 ..ff(1, 2, ScalarKind::Int)
             },
         ];

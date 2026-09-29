@@ -27,11 +27,11 @@ Disassembly of section .text:
 
 <main>:
                	movl	$0x1, %ecx
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	(%rax), %edi
                	xorl	%eax, %eax
                	movl	$0xaaaaaaab, %r8d       # imm = 0xAAAAAAAB
-               	leaq	<rip>, %rdx
+               	leaq	<rip>, %rdx      # <addr>
                	cmpl	%edi, %eax
                	jae	<addr>
                	movq	%rax, %rsi
@@ -64,7 +64,7 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	%edi, %eax
                	jb	<addr>
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movl	(%rax), %ecx
                	movl	0x4(%rax), %edx
                	xorq	%rdx, %rcx

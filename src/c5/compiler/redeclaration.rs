@@ -13,7 +13,7 @@ use super::Compiler;
 use super::function::{ParamForm, ParsedParams};
 use super::types::{
     VOLATILE_BIT, VOLATILE_INNER_BIT, VOLATILE_MASK, format_signature, format_type,
-    is_const_object_ty, is_void_ty, rebase_placeholder_int, strip_object_const, strip_unsigned,
+    is_const_object_ty, is_void_ty, rebase_enum_placeholder, strip_object_const, strip_unsigned,
 };
 
 /// A type as a declaration spelled it: the tag, and the enum tag it named
@@ -238,14 +238,12 @@ impl Compiler {
     }
 
     /// What a spelling denotes now: a use of an enum tag before its
-    /// definition took `int` and keeps the tag; once the definition fixes
-    /// the type, the spelling reads it and drops the tag.
+    /// definition took the tag's incomplete entry and keeps the tag; once
+    /// the definition fixes the type, the spelling reads it and drops the tag.
     pub(super) fn resolve_spelling(&self, s: Spelled) -> Spelled {
-        let underlying = s
-            .enum_tag
-            .and_then(|tag| self.enum_tag_underlying(&self.symbols[tag as usize].name));
-        match underlying {
-            Some(underlying) => Spelled::plain(rebase_placeholder_int(s.ty, underlying)),
+        let tag = s.enum_tag.map(|tag| tag as usize);
+        match tag.and_then(|id| Some((id, self.structs[id].enum_underlying?))) {
+            Some((id, underlying)) => Spelled::plain(rebase_enum_placeholder(s.ty, id, underlying)),
             None => s,
         }
     }

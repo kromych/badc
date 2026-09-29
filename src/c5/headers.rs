@@ -729,6 +729,83 @@ mod tests {
         assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 
+    /// The C99 library functions a target lacked a declaration for are
+    /// declared on every target with the standard type (C99 7.12, 7.19.6.14).
+    #[test]
+    fn c99_functions_are_declared_on_every_target() {
+        use crate::{CompileOptions, Compiler, Target};
+        const DECLS: &[(&str, &str)] = &[
+            ("sinhf", "float (*)(float)"),
+            ("coshf", "float (*)(float)"),
+            ("tanhf", "float (*)(float)"),
+            ("log2f", "float (*)(float)"),
+            ("exp2f", "float (*)(float)"),
+            ("frexpf", "float (*)(float, int *)"),
+            ("ldexpf", "float (*)(float, int)"),
+            ("modff", "float (*)(float, float *)"),
+            ("lrintf", "long (*)(float)"),
+            ("llrintf", "long long (*)(float)"),
+            ("lroundf", "long (*)(float)"),
+            ("llroundf", "long long (*)(float)"),
+            ("vsscanf", "int (*)(const char *, const char *, va_list)"),
+        ];
+        let mut src = alloc::string::String::from(
+            "#include <math.h>\n#include <stdarg.h>\n#include <stdio.h>\n",
+        );
+        for (name, ty) in DECLS {
+            src.push_str(&alloc::format!(
+                "_Static_assert(_Generic(&{name}, {ty}: 1, default: 0), \"{name}\");\n"
+            ));
+        }
+        for target in Target::ALL {
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            if let Err(e) = Compiler::with_options(src.clone(), target, opts).compile() {
+                panic!("{}: {e}", target.id_str());
+            }
+        }
+    }
+
+    /// The POSIX declarations take POSIX's types on the Linux and macOS
+    /// targets, as glibc's and Darwin's headers give them.
+    #[test]
+    fn posix_declarations_take_posix_types() {
+        use crate::{CompileOptions, Compiler, Target};
+        const DECLS: &[(&str, &str)] = &[
+            ("&dlopen", "void *(*)(const char *, int)"),
+            ("&dlsym", "void *(*)(void *, const char *)"),
+            ("&dlclose", "int (*)(void *)"),
+            ("&truncate", "int (*)(const char *, off_t)"),
+            ("&ftruncate", "int (*)(int, off_t)"),
+            ("&umask", "mode_t (*)(mode_t)"),
+            ("&chmod", "int (*)(const char *, mode_t)"),
+            ("&fchmod", "int (*)(int, mode_t)"),
+            ("&mkdir", "int (*)(const char *, mode_t)"),
+            ("&usleep", "int (*)(useconds_t)"),
+            ("(id_t)0", "unsigned int"),
+            ("(useconds_t)0", "unsigned int"),
+            ("(socklen_t)0", "unsigned int"),
+        ];
+        for (target, mode) in [
+            (Target::LinuxX64, "unsigned int"),
+            (Target::LinuxAarch64, "unsigned int"),
+            (Target::MacOSAarch64, "unsigned short"),
+        ] {
+            let mut src = alloc::string::String::from(
+                "#include <dlfcn.h>\n#include <sys/types.h>\n#include <unistd.h>\n",
+            );
+            let mode_row = [("(mode_t)0", mode)];
+            for (expr, ty) in DECLS.iter().chain(&mode_row) {
+                src.push_str(&alloc::format!(
+                    "_Static_assert(_Generic({expr}, {ty}: 1, default: 0), \"{expr}\");\n"
+                ));
+            }
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            if let Err(e) = Compiler::with_options(src, target, opts).compile() {
+                panic!("{}: {e}", target.id_str());
+            }
+        }
+    }
+
     /// The C99 and POSIX functions of no parameters are declared with a
     /// prototype, so a call passing an argument is diagnosed (C99
     /// 6.5.2.2p2), and the POSIX id functions return uid_t, gid_t and pid_t,
@@ -794,6 +871,66 @@ mod tests {
             for name in &names {
                 let text = alloc::format!(
                     "too many arguments to `{name}` (expected 0, got at least 1) [B3005]"
+                );
+                assert!(
+                    warnings.iter().any(|w| w.contains(&text)),
+                    "{}: {name}: {warnings:?}",
+                    target.id_str()
+                );
+            }
+        }
+    }
+
+    /// The Windows CRT block declares its entry points with the SDK's
+    /// prototypes -- a call with one argument too many is diagnosed against
+    /// the declared count -- and msvcrt's `__argc`, `__argv` and `__wargv`
+    /// as the objects they are, which a reference reads through the import.
+    #[test]
+    fn windows_crt_declarations_are_prototypes() {
+        use crate::{CompileOptions, Compiler, Target};
+        const FNS: &[(&str, usize)] = &[
+            ("localtime_s", 2),
+            ("gmtime_s", 2),
+            ("ctime_s", 3),
+            ("asctime_s", 3),
+            ("strerror_s", 3),
+            ("_strdup", 1),
+            ("_strnicmp", 3),
+            ("_stricmp", 2),
+            ("_get_errno", 1),
+            ("_set_errno", 1),
+            ("_errno", 0),
+            ("__getmainargs", 5),
+            ("_getch", 0),
+            ("_kbhit", 0),
+            ("_getpid", 0),
+            ("__iob_func", 0),
+            ("WSACleanup", 0),
+        ];
+        for target in [Target::WindowsX64, Target::WindowsAarch64] {
+            let mut src = alloc::string::String::from(
+                "#include <stdio.h>\n#include <string.h>\n#include <conio.h>\n\
+                 #include <sys/socket.h>\n\
+                 _Static_assert(_Generic(&__argc, int *: 1, default: 0)\n\
+                   && _Generic(&__argv, char ***: 1, default: 0)\n\
+                   && _Generic(&__wargv, wchar_t ***: 1, default: 0), \"data exports\");\n\
+                 void calls(void) {\n",
+            );
+            for (name, n) in FNS {
+                let args = alloc::vec!["0"; n + 1].join(", ");
+                src.push_str(&alloc::format!("    (void){name}({args});\n"));
+            }
+            src.push_str("}\n");
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            let program = Compiler::with_options(src.clone(), target, opts)
+                .compile()
+                .unwrap_or_else(|e| panic!("{}: {e}\n{src}", target.id_str()));
+            let warnings: alloc::vec::Vec<_> =
+                program.warnings.iter().map(|w| w.to_string()).collect();
+            for (name, n) in FNS {
+                let text = alloc::format!(
+                    "too many arguments to `{name}` (expected {n}, got at least {})",
+                    n + 1
                 );
                 assert!(
                     warnings.iter().any(|w| w.contains(&text)),

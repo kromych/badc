@@ -1505,7 +1505,23 @@ pub(crate) struct AsmBlock {
     pub volatile: bool,
 }
 
+/// The register class operand `i` of `operands` takes: a matching input
+/// takes the class of the output it names.
+pub(crate) fn asm_operand_class(operands: &[AsmOperand], i: usize) -> AsmConstraint {
+    match operands[i].constraint {
+        AsmConstraint::Match(n) => operands
+            .get(n as usize)
+            .map_or(AsmConstraint::Match(n), |o| o.constraint),
+        c => c,
+    }
+}
+
 impl AsmBlock {
+    /// [`asm_operand_class`] of operand `i`.
+    pub(crate) fn operand_class(&self, i: usize) -> AsmConstraint {
+        asm_operand_class(&self.operands, i)
+    }
+
     /// True when the template names the stack pointer (`rsp` / `esp` /
     /// `sp` / `wsp` as a token). Such asm can capture or switch the stack
     /// -- the setjmp / longjmp / stack-switch idioms -- so an activation

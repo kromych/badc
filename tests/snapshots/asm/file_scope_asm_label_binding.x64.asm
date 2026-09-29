@@ -69,9 +69,13 @@ Disassembly of section .text:
                	movl	$0x1234, (%rdi)         # imm = 0x1234
                	retq
                	nop
+
+<asm_magic_word>:
                	js	<addr>
                	addb	%al, (%rax)
                	nop
                	nopl	(%rax)
+
+<asm_label_delta>:
                	orb	%al, (%rax)
                	addb	%al, (%rax)

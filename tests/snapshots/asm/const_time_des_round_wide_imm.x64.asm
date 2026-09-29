@@ -480,67 +480,67 @@ Disassembly of section .text:
                	subq	$0x8, %rsp
                	pushq	%rbx
                	movl	$0xa5a5a5a5, %edi       # imm = 0xA5A5A5A5
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi       # <addr>
                	callq	<addr>
                	movq	%rax, %rbx
                	movl	$0xd2f51ac0, %edi       # imm = 0xD2F51AC0
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi       # <addr>
                	callq	<addr>
                	xorq	%rax, %rbx
                	movl	$0x3849cf1f, %edi       # imm = 0x3849CF1F
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi       # <addr>
                	callq	<addr>
                	xorq	%rax, %rbx
                	movl	$0xbabbd1f2, %edi       # imm = 0xBABBD1F2
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi       # <addr>
                	callq	<addr>
                	xorq	%rax, %rbx
                	movl	$0xe4108a9, %edi        # imm = 0xE4108A9
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi       # <addr>
                	callq	<addr>
                	xorq	%rax, %rbx
                	movl	$0xb7b0b9f4, %edi       # imm = 0xB7B0B9F4
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi       # <addr>
                	callq	<addr>
                	xorq	%rax, %rbx
                	movl	$0x23539cc3, %edi       # imm = 0x23539CC3
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi       # <addr>
                	callq	<addr>
                	xorq	%rax, %rbx
                	movl	$0xa72e9b46, %edi       # imm = 0xA72E9B46
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi       # <addr>
                	callq	<addr>
                	xorq	%rax, %rbx
                	movl	$0x7580b9ed, %edi       # imm = 0x7580B9ED
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi       # <addr>
                	callq	<addr>
                	xorq	%rax, %rbx
                	movl	$0xa631d268, %edi       # imm = 0xA631D268
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi       # <addr>
                	callq	<addr>
                	xorq	%rax, %rbx
                	movl	$0x12f412a7, %edi       # imm = 0x12F412A7
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi       # <addr>
                	callq	<addr>
                	xorq	%rax, %rbx
                	movl	$0x44916fda, %edi       # imm = 0x44916FDA
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi       # <addr>
                	callq	<addr>
                	xorq	%rax, %rbx
                	movl	$0x96ac7d71, %edi       # imm = 0x96AC7D71
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi       # <addr>
                	callq	<addr>
                	xorq	%rax, %rbx
                	movl	$0xdd35581c, %edi       # imm = 0xDD35581C
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi       # <addr>
                	callq	<addr>
                	xorq	%rax, %rbx
                	movl	$0x53fb94cb, %edi       # imm = 0x53FB94CB
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi       # <addr>
                	callq	<addr>
                	xorq	%rax, %rbx
                	movl	$0x455163ae, %edi       # imm = 0x455163AE
-               	leaq	<rip>, %rsi
+               	leaq	<rip>, %rsi       # <addr>
                	callq	<addr>
                	xorq	%rbx, %rax
                	movl	%eax, %eax

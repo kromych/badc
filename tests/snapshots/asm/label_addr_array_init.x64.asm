@@ -48,7 +48,7 @@ Disassembly of section .text:
 
 <run_static>:
                	movslq	%edi, %rdi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rdi,8), %rax
                	jmpq	*%rax
                	movl	$0x1, %eax
@@ -60,7 +60,7 @@ Disassembly of section .text:
 
 <run_static_const>:
                	movslq	%edi, %rdi
-               	leaq	<rip>, %rax
+               	leaq	<rip>, %rax       # <addr>
                	movq	(%rax,%rdi,8), %rax
                	jmpq	*%rax
                	movl	$0x64, %eax

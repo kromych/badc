@@ -1487,8 +1487,15 @@ fn cpu_relax_hint() {
 fn empty_struct_member() {
     // A complete empty `struct {}` member contributes zero storage (GCC),
     // so the common flexible-array-in-union idiom lays a flexible array
-    // over a union's first member. Forward-declared members stay rejected.
-    assert_eq!(run_fixture("empty_struct_member.c"), 0);
+    // over a union's first member; the PE targets take MSVC's 4 bytes.
+    // Forward-declared members stay rejected.
+    for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+        assert_eq!(
+            run_fixture_for("empty_struct_member.c", target),
+            0,
+            "{target:?}"
+        );
+    }
 }
 
 #[test]
@@ -1699,8 +1706,15 @@ fn variadic_struct_return() {
 #[test]
 fn flex_array_member_sizing() {
     // C99 6.7.2.1p18: a flexible/zero-length array member contributes no
-    // storage; an aggregate built only from such members has size 0.
-    assert_eq!(run_fixture("flex_array_member_sizing.c"), 0);
+    // storage; an aggregate built only from such members has size 0, or
+    // MSVC's 4 on the PE targets.
+    for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+        assert_eq!(
+            run_fixture_for("flex_array_member_sizing.c", target),
+            0,
+            "{target:?}"
+        );
+    }
 }
 
 #[test]
@@ -6458,7 +6472,13 @@ fn conditional_void_pointer() {
     // C99 6.5.15p6 for two pointer arms: a null pointer constant arm
     // takes the other arm's type, otherwise a `void *` arm wins. The
     // constant-expression detection idiom rests on that distinction.
-    assert_eq!(run_fixture("conditional_void_pointer.c"), 0);
+    for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+        assert_eq!(
+            run_fixture_for("conditional_void_pointer.c", target),
+            0,
+            "{target:?}"
+        );
+    }
 }
 
 #[test]
@@ -7860,23 +7880,22 @@ fn integer_constant_added_to_an_address_constant() {
     // expression added to it in either order. A leading integer term --
     // including a cast or a `sizeof` of an anonymous bitfield struct,
     // the shape a compile-time type assertion expands to -- must still
-    // leave a relocation in the slot.
-    assert_eq!(
-        run_str(
-            "struct opts { int a; int b; };\n\
-             static struct opts opts;\n\
-             struct row { void *value; };\n\
-             static struct row r[] = {\n\
-                 { .value = &opts.b + 0 },\n\
-                 { .value = 0 + &opts.b },\n\
-                 { .value = (int)(sizeof(struct { int : (-!!0); })) + &opts.b },\n\
-             };\n\
-             int main(void) {\n\
-                 if (r[0].value != &opts.b) return 1;\n\
-                 if (r[1].value != r[0].value) return 2;\n\
-                 if (r[2].value != r[0].value) return 3;\n\
-                 return 42; }"
-        ),
-        42
-    );
+    // leave a relocation in the slot. That struct has gcc's size 0 and
+    // MSVC's 4, the PE targets' layout.
+    let src = "struct opts { int a; int b; int pad[4]; };\n\
+               static struct opts opts;\n\
+               struct row { void *value; };\n\
+               static struct row r[] = {\n\
+                   { .value = &opts.b + 0 },\n\
+                   { .value = 0 + &opts.b },\n\
+                   { .value = (int)(sizeof(struct { int : (-!!0); })) + &opts.b },\n\
+               };\n\
+               int main(void) {\n\
+                   if (r[0].value != &opts.b) return 1;\n\
+                   if (r[1].value != r[0].value) return 2;\n\
+                   if (r[2].value != &opts.b + sizeof(struct { int : 0; })) return 3;\n\
+                   return 42; }";
+    for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+        assert_eq!(super::run_str_for(src, target), 42, "{target:?}");
+    }
 }

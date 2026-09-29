@@ -4,11 +4,18 @@
 
 #include <stdint.h>
 
+/* The Mach-O and PE loaders place a thread's block on 16 bytes. */
+#if defined(__APPLE__) || defined(_WIN32)
+#define WIDE_ALIGN 16
+#else
+#define WIDE_ALIGN 32
+#endif
+
 static int g = 3;
 _Thread_local char zero_first[100];
 _Thread_local int zero_init[4] = {0};
 _Thread_local int *ptr = &g;
-_Alignas(32) _Thread_local char wide[32];
+_Alignas(WIDE_ALIGN) _Thread_local char wide[32];
 _Thread_local long seven = 7;
 _Thread_local struct {
     int a;
@@ -27,7 +34,7 @@ int main(void) {
     if (*ptr != 3) return 1;
     if (seven != 7) return 2;
     if (pair.a != 0 || pair.b != 5) return 3;
-    if ((uintptr_t)wide % 32) return 4;
+    if ((uintptr_t)wide % WIDE_ALIGN) return 4;
     for (int i = 0; i < 100; i++)
         if (zero_first[i]) return 5;
     for (int i = 0; i < 4; i++)

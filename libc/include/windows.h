@@ -4039,12 +4039,6 @@ LSTATUS RegGetValueW(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue, DWORD dwFlags
 
 // Display / paint / timer surface RGFW's win32 backend reads.
 typedef void (CALLBACK *TIMERPROC)(HWND, UINT, UINT_PTR, DWORD);
-typedef enum MONITOR_DPI_TYPE {
-    MDT_EFFECTIVE_DPI = 0,
-    MDT_ANGULAR_DPI = 1,
-    MDT_RAW_DPI = 2,
-    MDT_DEFAULT = 0
-} MONITOR_DPI_TYPE;
 
 typedef struct tagPOINTL { LONG x; LONG y; } POINTL;
 

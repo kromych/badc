@@ -4002,6 +4002,43 @@ fn an_empty_record_takes_no_register_outside_microsoft_x64() {
     }
 }
 
+/// A member declared without brackets is not a zero-length array, whatever
+/// the declarator before it was: a record after a `[0]` member keeps its
+/// storage and crosses a call by reference on the AArch64 targets, so the
+/// argument after it takes the second register.
+#[test]
+fn a_record_after_a_zero_length_array_member_keeps_its_storage() {
+    use crate::Target;
+    use crate::c5::codegen::ArgPlacement;
+    let src = "struct Z { int n; char tail[0]; };\n\
+        struct T { int a; long b; const char *s, *e; void *m; long x; };\n\
+        int take(struct T t, int y) { return y + t.a; }\n";
+    for target in [
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+    ] {
+        let program = crate::Compiler::with_options(
+            src.into(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("{target:?}: compile: {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let take = funcs.iter().find(|f| f.name == "take").expect("take");
+        let abi = target.abi();
+        let placed = crate::c5::codegen::ssa::emit_common::param_placements_common(take, abi);
+        assert_eq!(
+            placed[1],
+            ArgPlacement::IntReg(abi.int_arg_regs[1]),
+            "{target:?}: take's y"
+        );
+    }
+}
+
 /// Windows arm64 passes every argument to a variadic callee in the integer
 /// bank, a named `float` as its own 32 bits and a variadic one widened to
 /// `double`: the call carries no FP mask, the named value stays single

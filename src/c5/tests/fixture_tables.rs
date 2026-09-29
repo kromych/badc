@@ -1012,6 +1012,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_tentative_array.c", 0),
     ("thread_local_tentative_completed_later.c", 0),
     ("thread_local_block_static_shadow.c", 0),
+    ("thread_local_const_fold.c", 0),
     ("thread_local_aggregate_initializers.c", 0),
     // Struct-value locals + `.` field access on macOS arm64.
     ("struct_value_basics.c", 0),
@@ -2068,6 +2069,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_tentative_array.c", 0),
     ("thread_local_tentative_completed_later.c", 0),
     ("thread_local_block_static_shadow.c", 0),
+    ("thread_local_const_fold.c", 0),
     ("thread_local_aggregate_initializers.c", 0),
     // Variadic FP packer: `printf("%f\n", 1.5)` -- on Linux
     // AAPCS64, FP variadic args ride d0..d7 the same as fixed
@@ -2976,6 +2978,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_tentative_array.c", 0),
     ("thread_local_tentative_completed_later.c", 0),
     ("thread_local_block_static_shadow.c", 0),
+    ("thread_local_const_fold.c", 0),
     ("thread_local_aggregate_initializers.c", 0),
     // Variadic FP packer: `printf("%f\n", 1.5)`. SysV pulls FP
     // variadic args through xmm0..xmm7 with AL = XMM count; the
@@ -3680,6 +3683,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_tentative_array.c", 0),
     ("thread_local_tentative_completed_later.c", 0),
     ("thread_local_block_static_shadow.c", 0),
+    ("thread_local_const_fold.c", 0),
     ("thread_local_aggregate_initializers.c", 0),
     // Windows x86_64 alignment of `_setjmp`: the header's macro
     // wrapper must align the env pointer up to 16 bytes so the
@@ -4371,6 +4375,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_tentative_array.c", 0),
     ("thread_local_tentative_completed_later.c", 0),
     ("thread_local_block_static_shadow.c", 0),
+    ("thread_local_const_fold.c", 0),
     ("thread_local_aggregate_initializers.c", 0),
     // Windows AArch64 routes setjmp / longjmp through the
     // `Intrinsic::SetjmpAArch64` / `Intrinsic::LongjmpAArch64`
@@ -5422,6 +5427,9 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("packed_member_declaration.c", 0),
     ("bitfield_attribute_after_width.c", 0),
     ("bitfield_typedef_alignment.c", 0),
+    // Every thread-local read folds at compile time; nothing reaches a
+    // thread-local block at run time.
+    ("thread_local_const_fold.c", 0),
 ];
 
 /// Fixtures the JIT declines rather than runs, so the exit-code tables

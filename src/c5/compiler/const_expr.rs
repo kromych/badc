@@ -2374,12 +2374,29 @@ impl Compiler {
     /// sign-extended from `size` bytes when `ty` is signed, zero-extended
     /// when it is unsigned.
     fn read_data_int(&self, at: usize, size: usize, ty: i64) -> i128 {
-        let size = size.min(8);
-        let mut v: u64 = 0;
-        for k in 0..size {
-            v |= (self.data[at + k] as u64) << (k * 8);
+        read_image_int(&self.data, at, size, ty)
+    }
+
+    /// The static-storage image an object's offset indexes: the thread-local
+    /// template for a `_Thread_local` object, `.data` otherwise.
+    fn object_image(&self, thread_local: bool) -> &[u8] {
+        if thread_local {
+            &self.tls_data
+        } else {
+            &self.data
         }
-        narrow_const_int(size, is_unsigned_ty(ty), false, v as i128)
+    }
+
+    /// Whether a relocation patches any byte of the thread-local template's
+    /// `tls_data[at..at + size]`.
+    fn tls_range_relocated(&self, at: usize, size: usize) -> bool {
+        let hit = |o: u64| o >= at as u64 && o < (at + size) as u64;
+        self.tls_data_relocs.iter().any(|r| hit(r.data_offset))
+            || self.tls_code_relocs.iter().any(|r| hit(r.data_offset))
+            || self
+                .tls_extern_data_relocs
+                .iter()
+                .any(|r| hit(r.data_offset))
     }
 
     /// An integer constant of type `ty` whose `i128` is the value the type
@@ -2438,7 +2455,7 @@ impl Compiler {
             (true, 0) => alloc::vec::Vec::new(),
             (true, n) => alloc::vec![n],
         };
-        let (mut off, mut ty) = (s.val, s.type_);
+        let (mut off, mut ty, tls) = (s.val, s.type_, s.is_thread_local);
         let mut dims = dims_of(&s.array_dims, s.array_size);
         let cp = self.init_checkpoint();
         self.next()?;
@@ -2501,13 +2518,13 @@ impl Compiler {
             || !scalar
             || !(1..=8).contains(&size)
             || off < 0
-            || off as usize + size > self.data.len()
+            || off as usize + size > self.object_image(tls).len()
         {
             None
         } else if let Some((bit, width, unit)) = bits {
-            self.read_const_bits(off as usize, unit, bit, width, ty)
+            self.read_const_bits(tls, off as usize, unit, bit, width, ty)
         } else {
-            self.read_const_slot(off as usize, size, ty)
+            self.read_const_slot(tls, off as usize, size, ty)
         };
         let Some(v) = read else {
             self.restore_init_checkpoint(cp);
@@ -2517,12 +2534,16 @@ impl Compiler {
         Ok(Some(v))
     }
 
-    /// The value in the `const` object slot `data[at..at + size]` of type
-    /// `ty`. A slot a relocation patches holds the address the relocation
-    /// resolves to, which only a pointer-wide read of the whole slot yields;
-    /// `None` for any other read of patched bytes.
-    fn read_const_slot(&self, at: usize, size: usize, ty: i64) -> Option<ConstVal> {
-        if self.data_range_relocated(at, size) {
+    /// The value in the `const` object slot `[at..at + size]` of type `ty`,
+    /// in the thread-local template when `tls`, else in `.data`. A `.data`
+    /// slot a relocation patches holds the address the relocation resolves
+    /// to, which only a pointer-wide read of the whole slot yields; `None`
+    /// for any other read of patched bytes.
+    fn read_const_slot(&self, tls: bool, at: usize, size: usize, ty: i64) -> Option<ConstVal> {
+        if tls && self.tls_range_relocated(at, size) {
+            return None;
+        }
+        if !tls && self.data_range_relocated(at, size) {
             let mut a = self.relocated_address_at(at, size, ty)?;
             if is_pointer_ty(ty) {
                 let p = pointee_ty(ty);
@@ -2531,7 +2552,7 @@ impl Compiler {
             }
             return Some(ConstVal::Addr(a));
         }
-        let bits = self.read_data_int(at, size, ty);
+        let bits = read_image_int(self.object_image(tls), at, size, ty);
         Some(match (is_floating_ty(ty), size) {
             (true, 4) => ConstVal::Float(f32::from_bits(bits as u32) as f64),
             (true, _) => ConstVal::Float(f64::from_bits(bits as u64)),
@@ -2541,24 +2562,28 @@ impl Compiler {
     }
 
     /// The bit-field of `width` bits at bit `bit` of the `const` storage
-    /// unit `data[at..at + size]`, converted to its type `ty` (C99 6.7.2.1p10):
-    /// sign-extended for a signed type, 0 or 1 for `_Bool`.
+    /// unit `[at..at + size]`, in the image [`Self::read_const_slot`] reads,
+    /// converted to its type `ty` (C99 6.7.2.1p10): sign-extended for a
+    /// signed type, 0 or 1 for `_Bool`.
     fn read_const_bits(
         &self,
+        tls: bool,
         at: usize,
         size: usize,
         bit: u32,
         width: u32,
         ty: i64,
     ) -> Option<ConstVal> {
+        let image = self.object_image(tls);
         if !(1..=8).contains(&size)
-            || at + size > self.data.len()
+            || at + size > image.len()
             || bit + width > (size * 8) as u32
-            || self.data_range_relocated(at, size)
+            || (tls && self.tls_range_relocated(at, size))
+            || (!tls && self.data_range_relocated(at, size))
         {
             return None;
         }
-        let unit = self.read_data_int(at, size, ty | UNSIGNED_BIT) as u64;
+        let unit = read_image_int(image, at, size, ty | UNSIGNED_BIT) as u64;
         let field = (unit >> bit) & (u64::MAX >> (64 - width));
         let v = if is_unsigned_ty(ty) || strip_unsigned(ty) == Ty::Bool as i64 {
             field as i128
@@ -2892,11 +2917,11 @@ impl Compiler {
             let idx = self.lex.curr_id_idx;
             let sym = &self.symbols[idx];
             if sym.is_const_qualified && sym.class == Token::Glo as i64 && !sym.is_extern_decl {
-                let ty = sym.type_;
+                let (ty, tls) = (sym.type_, sym.is_thread_local);
                 let off = sym.val as usize;
                 let size = self.size_of_type(ty);
-                if (1..=8).contains(&size) && off + size <= self.data.len() {
-                    let v = self.read_const_slot(off, size, ty);
+                if (1..=8).contains(&size) && off + size <= self.object_image(tls).len() {
+                    let v = self.read_const_slot(tls, off, size, ty);
                     if let Some(v) = v {
                         self.symbols[idx].binding.was_referenced = true;
                         self.next()?;
@@ -3045,4 +3070,15 @@ fn compare_literal_bytes(
         }
     }
     Some(0)
+}
+
+/// The integer of type `ty` in the `size` little-endian bytes of `image` at
+/// `at`, eight at most.
+fn read_image_int(image: &[u8], at: usize, size: usize, ty: i64) -> i128 {
+    let size = size.min(8);
+    let mut v: u64 = 0;
+    for k in 0..size {
+        v |= (image[at + k] as u64) << (k * 8);
+    }
+    narrow_const_int(size, is_unsigned_ty(ty), false, v as i128)
 }

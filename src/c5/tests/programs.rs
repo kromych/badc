@@ -3683,6 +3683,13 @@ fn a_block_scope_static_thread_local_hides_the_file_scope_one() {
 }
 
 #[test]
+fn a_const_thread_local_folds_from_the_thread_local_template() {
+    // A `const _Thread_local` object's value, element or member read in a
+    // static initializer comes from the thread-local template, not `.data`.
+    assert_eq!(run_fixture("thread_local_const_fold.c"), 0);
+}
+
+#[test]
 fn builtin_offsetof() {
     // GCC / C11 `__builtin_offsetof(type, member)` folds to the member's byte
     // offset -- struct tag / typedef, `.field` chains, `[index]` subscripts

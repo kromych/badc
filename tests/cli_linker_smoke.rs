@@ -7869,7 +7869,7 @@ fn fno_plt_objects_reach_functions_through_the_got() {
         let obj = src.with_extension("o");
         run(
             Command::new(&cc)
-                .args(["-O2", "-fno-plt", "-U_FORTIFY_SOURCE", "-c"])
+                .args(["-O2", "-fPIE", "-fno-plt", "-U_FORTIFY_SOURCE", "-c"])
                 .arg(src)
                 .arg("-o")
                 .arg(&obj),

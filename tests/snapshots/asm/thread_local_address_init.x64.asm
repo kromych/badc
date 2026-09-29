@@ -141,14 +141,14 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movq	%fs:0x0, %rsi
-               	addq	$-0x10, %rsi
+               	addq	$-0x8, %rsi
                	cmpq	$0x0, (%rsi)
                	je	<addr>
                	movl	$0xa, %eax
                	popq	%rbp
                	retq
                	movq	%fs:0x0, %rsi
-               	addq	$-0x8, %rsi
+               	addq	$-0x10, %rsi
                	movq	(%rsi), %rsi
                	cmpq	$0x2a, %rsi
                	je	<addr>

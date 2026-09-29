@@ -3690,6 +3690,13 @@ fn a_const_thread_local_folds_from_the_thread_local_template() {
 }
 
 #[test]
+fn all_zero_thread_locals_follow_the_initialized_ones() {
+    // The template lays the initialized thread-locals out first and the
+    // all-zero ones after them; values, relocations and alignment follow.
+    assert_eq!(run_fixture("thread_local_zero_images.c"), 0);
+}
+
+#[test]
 fn builtin_offsetof() {
     // GCC / C11 `__builtin_offsetof(type, member)` folds to the member's byte
     // offset -- struct tag / typedef, `.field` chains, `[index]` subscripts

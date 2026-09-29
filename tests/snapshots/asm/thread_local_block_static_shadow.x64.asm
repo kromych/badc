@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <bump_x>:
                	movq	%fs:0x0, %rcx
-               	addq	$-0x10, %rcx
+               	addq	$-0x18, %rcx
                	movslq	(%rcx), %rax
                	leaq	0x1(%rax), %rdx
                	movl	%edx, (%rcx)
@@ -35,7 +35,7 @@ Disassembly of section .text:
 
 <bump_y>:
                	movq	%fs:0x0, %rax
-               	addq	$-0x8, %rax
+               	addq	$-0x10, %rax
                	movslq	(%rax), %rcx
                	addq	$0x2, %rcx
                	movl	%ecx, (%rax)
@@ -72,7 +72,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movq	%fs:0x0, %rax
-               	addq	$-0x18, %rax
+               	addq	$-0x8, %rax
                	cmpl	$0x0, (%rax)
                	je	<addr>
                	movl	$0x5, %eax

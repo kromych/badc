@@ -16,7 +16,7 @@ Disassembly of section .text:
 <bump_x>:
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x20
+               	add	x1, x1, #0x18
                	ldrsw	x0, [x1]
                	add	x2, x0, #0x1
                	str	w2, [x1]
@@ -25,7 +25,7 @@ Disassembly of section .text:
 <bump_y>:
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0x28
+               	add	x0, x0, #0x20
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x2
                	str	w1, [x0]
@@ -64,7 +64,7 @@ Disassembly of section .text:
                	ret
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0x18
+               	add	x0, x0, #0x28
                	ldrsw	x0, [x0]
                	cbz	w0, <addr>
                	mov	x0, #0x5                // =5

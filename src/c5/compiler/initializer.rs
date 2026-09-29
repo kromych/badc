@@ -452,6 +452,97 @@ impl Compiler {
         Ok(())
     }
 
+    /// Order the thread-local template as gcc does: the objects whose bytes
+    /// or relocations initialize them first, as `.tdata`, then the all-zero
+    /// ones, which join the `.tbss` zero fill whatever their declaration
+    /// order or initializer. An object's extent runs to the next object's
+    /// start and moves to the placement alignment it was reserved on;
+    /// `.tdata` ends on the block alignment, where the relocatable writer
+    /// and the reader both start `.tbss`. A template with a byte or
+    /// relocation ahead of its first object keeps its layout.
+    pub(super) fn lay_out_thread_locals(&mut self) {
+        let len = self.tls_data.len();
+        // Each object's start and the alignment it was reserved on.
+        let mut objects: alloc::collections::BTreeMap<usize, usize> = Default::default();
+        for s in &self.symbols {
+            if s.class == Token::Glo as i64 && s.is_thread_local && s.defined_here {
+                let want = (s.data_align.max(0) as usize).max(self.align_of_type(s.type_));
+                let align = self.data_placement_align(s.type_, want);
+                let at = objects.entry(s.val as usize).or_insert(1);
+                *at = (*at).max(align);
+            }
+        }
+        objects.retain(|&v, _| v <= len);
+        let starts: Vec<(usize, usize)> = objects.into_iter().collect();
+        let Some(&(first, _)) = starts.first() else {
+            return;
+        };
+        let mut patched = alloc::vec![false; len];
+        let slots = (self.tls_data_relocs.iter().map(|r| r.data_offset))
+            .chain(self.tls_code_relocs.iter().map(|r| r.data_offset))
+            .chain(self.tls_extern_data_relocs.iter().map(|r| r.data_offset));
+        for at in slots {
+            for b in patched.iter_mut().skip(at as usize).take(8) {
+                *b = true;
+            }
+        }
+        let data = &self.tls_data;
+        let significant = |i: usize| data[i] != 0 || patched[i];
+        if (0..first).any(significant) {
+            return;
+        }
+        let align = crate::c5::layout::tls_image_align(self.tls_align);
+        // (old start, old end, new start), initialized objects first.
+        let mut moves: Vec<(usize, usize, usize)> = Vec::with_capacity(starts.len());
+        let mut image: Vec<u8> = Vec::with_capacity(len);
+        let mut init_end = 0usize;
+        for initialized in [true, false] {
+            if !initialized {
+                init_end = init_end.next_multiple_of(align);
+                image.resize(image.len().max(init_end), 0);
+            }
+            for (k, &(old, object_align)) in starts.iter().enumerate() {
+                let end = starts.get(k + 1).map_or(len, |s| s.0);
+                let last = (old..end).rev().find(|&i| significant(i));
+                if last.is_some() != initialized {
+                    continue;
+                }
+                let new = image.len().next_multiple_of(object_align.max(1));
+                image.resize(new, 0);
+                image.extend_from_slice(&data[old..end]);
+                if let Some(last) = last {
+                    init_end = new + last - old + 1;
+                }
+                moves.push((old, end, new));
+            }
+        }
+        let remap = |off: u64| {
+            let off = off as usize;
+            let owner = moves.iter().find(|m| off >= m.0 && off < m.1.max(m.0 + 1));
+            owner.map_or(off, |m| m.2 + off - m.0) as u64
+        };
+        for s in &mut self.symbols {
+            if s.class == Token::Glo as i64 && s.is_thread_local && s.defined_here {
+                s.val = remap(s.val as u64) as i64;
+            }
+        }
+        for r in &mut self.tls_data_relocs {
+            r.data_offset = remap(r.data_offset);
+        }
+        for r in &mut self.tls_code_relocs {
+            r.data_offset = remap(r.data_offset);
+        }
+        for r in &mut self.tls_extern_data_relocs {
+            r.data_offset = remap(r.data_offset);
+        }
+        for f in &mut self.finished_functions {
+            f.ast
+                .remap_tls_offsets(&mut |v| *v = remap(*v as u64) as i64);
+        }
+        self.tls_init_size = init_end.min(image.len());
+        self.tls_data = image;
+    }
+
     /// Push the relocation entry that an initializer element needs
     /// at byte offset `here` within `self.data`.
     ///   * `None`        -- plain integer constant, no entry.

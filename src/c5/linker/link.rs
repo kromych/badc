@@ -922,9 +922,8 @@ struct Link<'a> {
     /// returns instructions.
     shlib_data_exports: hashbrown::HashSet<&'a str>,
 
-    /// Each unit's base in the merged TLS block (0 for units with no
-    /// TLS storage, which contribute nothing).
-    tls_bases: Vec<usize>,
+    /// Where each unit's thread-local block lies in the merged one.
+    tls_places: Vec<TlsPlace>,
     tls_data: Vec<u8>,
     tls_init_size: usize,
     tls_align: usize,
@@ -1052,7 +1051,7 @@ impl<'a> Link<'a> {
                 .iter()
                 .flat_map(|l| l.data_exports.iter().map(String::as_str))
                 .collect(),
-            tls_bases: Vec::new(),
+            tls_places: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
             tls_align: crate::c5::layout::TLS_ALIGN_MIN,
@@ -1163,7 +1162,7 @@ impl<'a> Link<'a> {
                 let kept = match sym.section {
                     NativeSymSection::Tls => {
                         self.tls_symbol_offsets.get(sym.name.as_str())
-                            == Some(&(self.tls_bases[i] as u64 + sym.value))
+                            == Some(&self.unit_tls_offset(i, sym.value))
                     }
                     NativeSymSection::Abs => {
                         sym.kind != STT_FILE
@@ -1236,7 +1235,7 @@ impl<'a> Link<'a> {
                 SymbolPlace::Data(at()?)
             }
             NativeSymSection::Bss => SymbolPlace::Bss(at()?),
-            NativeSymSection::Tls => SymbolPlace::Tls(self.tls_bases[unit] as u64 + value),
+            NativeSymSection::Tls => SymbolPlace::Tls(self.unit_tls_offset(unit, value)),
             NativeSymSection::Abs => SymbolPlace::Abs(value),
             _ => return None,
         })
@@ -1277,37 +1276,38 @@ impl<'a> Link<'a> {
                  definitions into a single translation unit.",
             ));
         }
-        self.tls_bases = alloc::vec![0; objs.len()];
-        let mut any_tls_init = false;
+        // Every unit's `.tdata` ahead of every unit's `.tbss`, as the ELF
+        // linkers lay the block out, so the zero fill stays out of the
+        // file image. A unit's zero fill keeps its offset modulo the unit's
+        // alignment, and a single unit's block its layout.
+        let place = |cursor: usize, residue: usize, align: usize| {
+            cursor + (residue % align + align - cursor % align) % align
+        };
+        self.tls_places = alloc::vec![TlsPlace::default(); objs.len()];
         for (i, obj) in objs.iter().enumerate() {
-            if obj.tls_data.is_empty() && obj.tls_bss_size == 0 {
+            self.tls_align = self.tls_align.max(obj.tls_align);
+            if obj.tls_data.is_empty() {
                 continue;
             }
-            let base = align_usize(self.tls_data.len(), obj.tls_align.max(1));
+            let base = place(self.tls_data.len(), 0, obj.tls_align.max(1));
             self.tls_data.resize(base, 0);
-            self.tls_bases[i] = base;
-            self.tls_align = self.tls_align.max(obj.tls_align);
-            if !obj.tls_data.is_empty() {
-                any_tls_init = true;
-            }
             self.tls_data.extend_from_slice(&obj.tls_data);
-            self.tls_data
-                .resize(self.tls_data.len() + obj.tls_bss_size, 0);
+            self.tls_places[i] = TlsPlace {
+                tdata: base,
+                init_len: obj.tls_data.len(),
+                tbss: base + obj.tls_data.len(),
+            };
         }
-        // The init boundary. Concatenating several units' [init ++
-        // zero-fill] blocks has no single `.tdata` / `.tbss` split
-        // point, so when more than one unit contributes the whole
-        // merged block is emitted as initialised data (the zero-fill
-        // regions are already zero bytes) when any unit carries an init
-        // template. A single TLS unit keeps the `.tdata` / `.tbss`
-        // split the writer expects, so its zero-fill stays out of the
-        // file image.
-        let multi_tls = tls_objs.len() > 1;
-        self.tls_init_size = if uses_tlv || (elf_tpoff_resolved && multi_tls) {
-            if any_tls_init { self.tls_data.len() } else { 0 }
-        } else {
-            tls_objs.first().map(|o| o.tls_data.len()).unwrap_or(0)
-        };
+        self.tls_init_size = self.tls_data.len();
+        for (i, obj) in objs.iter().enumerate() {
+            if obj.tls_bss_size == 0 {
+                continue;
+            }
+            let p = &mut self.tls_places[i];
+            p.init_len = obj.tls_data.len();
+            p.tbss = place(self.tls_data.len(), p.init_len, obj.tls_align.max(1));
+            self.tls_data.resize(p.tbss + obj.tls_bss_size, 0);
+        }
         // A global definition resolves by name. Every object states its
         // own in its symbol table, where a strong definition outranks a
         // weak one; badc's own objects list them in the note as well.
@@ -1319,7 +1319,7 @@ impl<'a> Link<'a> {
                         && s.binding == if strong { 1 } else { 2 }
                 });
                 for sym in defs {
-                    let at = self.tls_bases[i] as u64 + sym.value;
+                    let at = self.unit_tls_offset(i, sym.value);
                     match self.tls_symbol_offsets.entry(sym.name.as_str()) {
                         hashbrown::hash_map::Entry::Vacant(v) => {
                             v.insert(at);
@@ -1338,12 +1338,20 @@ impl<'a> Link<'a> {
         }
         for (i, obj) in objs.iter().enumerate() {
             for (name, off, _size) in &obj.tls_symbols {
-                self.tls_symbol_offsets
-                    .entry(name.as_str())
-                    .or_insert(self.tls_bases[i] as u64 + off);
+                let at = self.unit_tls_offset(i, *off);
+                self.tls_symbol_offsets.entry(name.as_str()).or_insert(at);
             }
         }
         Ok(())
+    }
+
+    /// The merged thread-local offset of unit `unit`'s offset `off`.
+    fn unit_tls_offset(&self, unit: usize, off: u64) -> u64 {
+        let p = self.tls_places[unit];
+        match off.checked_sub(p.init_len as u64) {
+            None => p.tdata as u64 + off,
+            Some(past) => p.tbss as u64 + past,
+        }
     }
 
     /// Offset from the thread pointer of `offset` into the merged TLS
@@ -1420,7 +1428,7 @@ impl<'a> Link<'a> {
         // A weak definition yields to a strong one elsewhere, so only a
         // local or strong definition in this unit resolves here.
         let offset = if sym.section == NativeSymSection::Tls && sym.binding != 2 {
-            self.tls_bases[unit] as u64 + sym.value
+            self.unit_tls_offset(unit, sym.value)
         } else if let Some(&at) = self.tls_symbol_offsets.get(sym.name.as_str()) {
             at
         } else if self.defined.contains_key(sym.name.as_str()) {
@@ -1626,6 +1634,7 @@ impl<'a> Link<'a> {
                 self.section_map.discarded.push((i, name.clone(), *size));
             }
             for s in &obj.sections {
+                let tls_at = self.unit_tls_offset(i, s.offset);
                 let (list, offset) = match s.family {
                     SectionFamily::Text => (
                         &mut self.section_map.text,
@@ -1641,10 +1650,9 @@ impl<'a> Link<'a> {
                         (&mut self.section_map.data, self.rw_map[i].at(s.offset))
                     }
                     SectionFamily::Bss => (&mut self.section_map.bss, self.bss_map[i].at(s.offset)),
-                    SectionFamily::Tdata | SectionFamily::Tbss => (
-                        &mut self.section_map.tls,
-                        self.tls_bases[i] as u64 + s.offset,
-                    ),
+                    SectionFamily::Tdata | SectionFamily::Tbss => {
+                        (&mut self.section_map.tls, tls_at)
+                    }
                     SectionFamily::Discard => continue,
                 };
                 list.push(SectionContribution {
@@ -2645,7 +2653,7 @@ impl<'a> Link<'a> {
             let win_teb = !obj.tls_index_fixups.is_empty();
             for (text_off, target) in &obj.elf_tpoff_fixups {
                 let merged_offset = match target {
-                    ElfTpoffTarget::Local(off) => self.tls_bases[i] as u64 + off,
+                    ElfTpoffTarget::Local(off) => self.unit_tls_offset(i, *off),
                     ElfTpoffTarget::Extern(name) => {
                         match self.tls_symbol_offsets.get(name.as_str()) {
                             Some(o) => *o,
@@ -2775,7 +2783,7 @@ impl<'a> Link<'a> {
                 .chain(
                     obj.tls_relocs
                         .iter()
-                        .map(|r| (r, self.tls_bases[i] as u64 + r.offset, true)),
+                        .map(|r| (r, self.unit_tls_offset(i, r.offset), true)),
                 )
                 .collect();
             for (reloc, slot_offset, in_tls) in sited {
@@ -3367,7 +3375,7 @@ impl<'a> Link<'a> {
                             &format!("unresolved `extern _Thread_local` reference to `{name}`",),
                         )
                     })?,
-                    None => self.tls_bases[i] as u64 + off,
+                    None => self.unit_tls_offset(i, off),
                 };
                 descriptors.push(resolved);
             }
@@ -3602,9 +3610,7 @@ impl<'a> Link<'a> {
                     ),
                 ));
             }
-            let value = (self.tls_bases[unit_idx] as u64)
-                .wrapping_add(sym.value)
-                .wrapping_add(reloc.addend as u64);
+            let value = self.unit_tls_offset(unit_idx, sym.value.wrapping_add(reloc.addend as u64));
             if width == 4 && value > u32::MAX as u64 {
                 let site = origin.at(machine, reloc.rtype, origin.symbol_name(sym), reloc.offset);
                 return Err(site.truncated(value as i64));
@@ -3833,6 +3839,16 @@ impl<'a> Link<'a> {
             section_map: self.section_map,
         })
     }
+}
+
+/// Where a unit's thread-local block lies in the merged one: its first
+/// `init_len` offsets, the unit's `.tdata`, from `tdata`, the rest from
+/// `tbss`.
+#[derive(Debug, Clone, Copy, Default)]
+struct TlsPlace {
+    tdata: usize,
+    init_len: usize,
+    tbss: usize,
 }
 
 /// Mach-O TLV descriptors resolved to per-thread offsets, and the
@@ -6290,7 +6306,7 @@ mod tests {
     fn a_debug_location_takes_the_thread_block_offset_in_either_width() {
         use crate::c5::object::elf_reloc_types::R_X86_64_DTPOFF32;
         let mut b = blank_object(NativeMachine::X86_64);
-        b.tls_bss_size = 0x10;
+        b.tls_data = alloc::vec![0; 0x10];
         b.tls_align = 8;
         let mut a = blank_object(NativeMachine::X86_64);
         a.tls_data = alloc::vec![0; 16];
@@ -6334,6 +6350,48 @@ mod tests {
         let merged = link_native_objects(&[b, a]).expect("link");
         let at = |i: usize| u64::from_le_bytes(merged.debug_info[i..i + 8].try_into().unwrap());
         assert_eq!([at(0), at(8)], [0x14, 0x16]);
+    }
+
+    /// Every unit's `.tdata` precedes every unit's `.tbss` in the merged
+    /// block, so the zero fill stays out of the file image, and a unit's
+    /// thread-local symbols follow the half their offset falls in.
+    #[test]
+    fn every_units_tdata_precedes_every_units_tbss() {
+        use crate::c5::codegen::SymbolPlace;
+        let unit = |init: usize, zero: usize, syms: &[(&str, u64)]| {
+            let mut o = blank_object(NativeMachine::X86_64);
+            o.tls_data = alloc::vec![1; init];
+            o.tls_bss_size = zero;
+            o.tls_align = 8;
+            o.symbols = (syms.iter())
+                .map(|&(name, value)| NativeSymbol {
+                    name: name.to_string(),
+                    section: NativeSymSection::Tls,
+                    value,
+                    size: 4,
+                    binding: 1,
+                    kind: 6,
+                    visibility: 0,
+                })
+                .collect();
+            o
+        };
+        let a = unit(8, 0x100, &[("a_zero", 8)]);
+        let b = unit(16, 0x20, &[("b_init", 0), ("b_zero", 16)]);
+        let merged = link_native_objects(&[a, b]).expect("link");
+        assert_eq!(merged.tls_init_size, 24);
+        assert_eq!(merged.tls_data.len(), 24 + 0x100 + 0x20);
+        assert!(merged.tls_data[..24].iter().all(|&byte| byte == 1));
+        let at = |name: &str| {
+            merged
+                .symbols
+                .iter()
+                .find(|s| s.name == name)
+                .map(|s| s.place)
+        };
+        assert_eq!(at("b_init"), Some(SymbolPlace::Tls(8)));
+        assert_eq!(at("a_zero"), Some(SymbolPlace::Tls(24)));
+        assert_eq!(at("b_zero"), Some(SymbolPlace::Tls(24 + 0x100)));
     }
 
     /// A thread-local reference from an object with no note fixups, as

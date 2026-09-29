@@ -8141,6 +8141,110 @@ fn a_linked_image_lists_every_definition_in_its_symbol_table() {
     }
 }
 
+/// A thread-local whose image is all zeros takes the `.tbss` zero fill
+/// wherever it is declared: zero-initialized, ahead of an initialized one in
+/// its unit, or beside another unit's initialized one, linked from sources
+/// and from objects, as gcc places it. Only the initialized `one` reaches
+/// `.tdata`, the file leaves the megabyte out, and every access, a
+/// cross-unit one included, finds its object.
+#[cfg(target_os = "linux")]
+#[test]
+fn all_zero_thread_locals_take_the_zero_fill() {
+    let dir = tempdir("tls-zero-fill");
+    let touch = "big[0] = 7; big[(1 << 20) - 1] = 5;";
+    let zero = write_source(
+        &dir,
+        "zero.c",
+        &format!(
+            "_Thread_local char big[1 << 20] = {{0}};\n\
+             int main(void) {{ {touch} return big[0] + big[(1 << 20) - 1] == 12 ? 0 : 1; }}\n"
+        ),
+    );
+    let order = write_source(
+        &dir,
+        "order.c",
+        &format!(
+            "_Thread_local char big[1 << 20];\n_Thread_local int one = 1;\n\
+             int main(void) {{ {touch} return one == 1 && big[0] == 7 ? 0 : 1; }}\n"
+        ),
+    );
+    let a = write_source(
+        &dir,
+        "a.c",
+        &format!(
+            "_Thread_local char big[1 << 20];\nint get(void);\n\
+             int main(void) {{ {touch} return get() == 6 && big[0] == 7 ? 0 : 1; }}\n"
+        ),
+    );
+    let b = write_source(
+        &dir,
+        "b.c",
+        "extern _Thread_local char big[];\n_Thread_local int one = 1;\n\
+         int get(void) { return one + big[(1 << 20) - 1]; }\n",
+    );
+    let mut objs = Vec::new();
+    for src in [&a, &b] {
+        let obj = src.with_extension("o");
+        run(
+            Command::new(badc())
+                .args(["-q", "-c"])
+                .arg(src)
+                .arg("-o")
+                .arg(&obj),
+            "compile a unit",
+        );
+        objs.push(obj);
+    }
+    let links: [(&str, Vec<&Path>); 4] = [
+        ("zero", vec![&zero]),
+        ("order", vec![&order]),
+        ("units", vec![&a, &b]),
+        ("objects", objs.iter().map(|o| o.as_path()).collect()),
+    ];
+    for (name, inputs) in links {
+        let exe = dir.join(name);
+        run(
+            Command::new(badc())
+                .arg("-q")
+                .args(&inputs)
+                .arg("-o")
+                .arg(&exe),
+            "link",
+        );
+        assert_eq!(
+            Command::new(&exe).status().expect("run").code(),
+            Some(0),
+            "{name}"
+        );
+        let image = std::fs::read(&exe).expect("read the image");
+        assert!(
+            image.len() < 1 << 19,
+            "{name}: a {}-byte image",
+            image.len()
+        );
+        let sections = elf_section_spans(&image);
+        let size_of = |want: &str| sections.iter().find(|h| h.0 == want).map_or(0, |h| h.4);
+        assert!(
+            size_of(".tdata") < 64,
+            "{name}: .tdata {}",
+            size_of(".tdata")
+        );
+        assert!(
+            size_of(".tbss") >= 1 << 20,
+            "{name}: .tbss {}",
+            size_of(".tbss")
+        );
+        let (rows, _) = elf_symtab(&image);
+        for (sym, section) in [("big", ".tbss"), ("one", ".tdata")] {
+            let Some(row) = rows.iter().find(|r| r.0 == sym) else {
+                assert_eq!((name, sym), ("zero", "one"), "{name}: no `{sym}`");
+                continue;
+            };
+            assert_eq!(sections[row.4 as usize].0, section, "{name}: `{sym}`");
+        }
+    }
+}
+
 /// gcc's DWARF 5 names each unit's files in `.debug_line_str`
 /// (`DW_FORM_line_strp`), and at -O2 describes ranges and locations in
 /// `.debug_rnglists` and `.debug_loclists`. The link carries every

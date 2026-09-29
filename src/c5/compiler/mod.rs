@@ -3654,6 +3654,7 @@ impl Compiler {
             .resolve_entry_and_dllmain_pcs()
             .map_err(|e| self.failed(e))?;
         let exports = self.resolve_exports().map_err(|e| self.failed(e))?;
+        self.lay_out_thread_locals();
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!(

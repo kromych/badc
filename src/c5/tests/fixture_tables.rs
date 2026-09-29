@@ -1012,6 +1012,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_tentative_array.c", 0),
     ("thread_local_tentative_completed_later.c", 0),
     ("thread_local_block_static_shadow.c", 0),
+    ("thread_local_zero_images.c", 0),
     ("thread_local_const_fold.c", 0),
     ("thread_local_aggregate_initializers.c", 0),
     // Struct-value locals + `.` field access on macOS arm64.
@@ -2069,6 +2070,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_tentative_array.c", 0),
     ("thread_local_tentative_completed_later.c", 0),
     ("thread_local_block_static_shadow.c", 0),
+    ("thread_local_zero_images.c", 0),
     ("thread_local_const_fold.c", 0),
     ("thread_local_aggregate_initializers.c", 0),
     // Variadic FP packer: `printf("%f\n", 1.5)` -- on Linux
@@ -2978,6 +2980,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_tentative_array.c", 0),
     ("thread_local_tentative_completed_later.c", 0),
     ("thread_local_block_static_shadow.c", 0),
+    ("thread_local_zero_images.c", 0),
     ("thread_local_const_fold.c", 0),
     ("thread_local_aggregate_initializers.c", 0),
     // Variadic FP packer: `printf("%f\n", 1.5)`. SysV pulls FP
@@ -3683,6 +3686,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_tentative_array.c", 0),
     ("thread_local_tentative_completed_later.c", 0),
     ("thread_local_block_static_shadow.c", 0),
+    ("thread_local_zero_images.c", 0),
     ("thread_local_const_fold.c", 0),
     ("thread_local_aggregate_initializers.c", 0),
     // Windows x86_64 alignment of `_setjmp`: the header's macro
@@ -4375,6 +4379,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_tentative_array.c", 0),
     ("thread_local_tentative_completed_later.c", 0),
     ("thread_local_block_static_shadow.c", 0),
+    ("thread_local_zero_images.c", 0),
     ("thread_local_const_fold.c", 0),
     ("thread_local_aggregate_initializers.c", 0),
     // Windows AArch64 routes setjmp / longjmp through the
@@ -5455,6 +5460,7 @@ pub(super) const JIT_UNSUPPORTED_FIXTURES: &[(&str, &str)] = &[
         "thread-local storage",
     ),
     ("thread_local_block_static_shadow.c", "thread-local storage"),
+    ("thread_local_zero_images.c", "thread-local storage"),
     (
         "thread_local_aggregate_initializers.c",
         "thread-local storage",

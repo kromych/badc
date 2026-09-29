@@ -145,7 +145,7 @@ Disassembly of section .text:
                	ret
                	mrs	x3, TPIDR_EL0
                	add	x3, x3, #0x0, lsl #12   // =0x0
-               	add	x3, x3, #0x58
+               	add	x3, x3, #0x60
                	ldr	x3, [x3]
                	cbz	x3, <addr>
                	mov	x0, #0xa                // =10
@@ -153,7 +153,7 @@ Disassembly of section .text:
                	ret
                	mrs	x3, TPIDR_EL0
                	add	x3, x3, #0x0, lsl #12   // =0x0
-               	add	x3, x3, #0x60
+               	add	x3, x3, #0x58
                	ldr	x3, [x3]
                	cmp	x3, #0x2a
                	b.eq	<addr>

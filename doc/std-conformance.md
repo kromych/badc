@@ -358,7 +358,9 @@ Microsoft x64 convention places both by size.
   ordering point: none is forwarded, merged, hoisted or dropped.
 - `_Thread_local`, and the GNU `__thread` spelling, at file and block scope
   (a block-scope `static _Thread_local` gets one per-thread instance) on
-  every target. On ELF, variables land in `.tdata` / `.tbss`, their
+  every target. On ELF, variables land in `.tdata` / `.tbss`, an object
+  whose image is all zeros in the zero fill whatever its initializer,
+  declaration order or unit, as gcc places it; their
   symbols are typed `STT_TLS`, and TLS-relative relocations let a badc object
   link against external TLS through the system linker; on PE the image
   carries an `IMAGE_TLS_DIRECTORY64`; on Mach-O each variable gets a

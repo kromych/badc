@@ -278,19 +278,6 @@ impl Compiler {
         }
     }
 
-    /// Parse a single declarator: zero-or-more `*` (pointer levels)
-    /// + identifier + optional `[N]` array suffix. Returns the symbol
-    /// index, the (possibly decayed) base type, and the array
-    /// dimension. `array_size = 0` means the declarator is not an
-    /// array; otherwise `type_` holds the element type and
-    /// `array_size` is N.
-    ///
-    /// `int xs[]` -- empty-bracket form -- is treated as `int *xs`
-    /// (added pointer level, `array_size = 0`) per C's parameter-
-    /// position decay rule. Callers in object-decl position can
-    /// still detect "the user wrote brackets" by remembering whether
-    /// the decay happened, but for c5 today the equivalence is
-    /// sufficient.
     /// The element type of a variable-length array declared over `ty`: the
     /// array its constant inner dimensions and an array typedef base form,
     /// if any (C99 6.7.5.2p3).
@@ -310,9 +297,21 @@ impl Compiler {
         })
     }
 
-    pub(super) fn parse_declarator(&mut self, base: i64) -> Result<(usize, i64, i64), C5Error> {
-        let (idx, ty, array_size, _) = self.parse_declarator_levels(base)?;
-        Ok((idx, ty, array_size))
+    /// Parse a declarator over `base`. Returns the symbol it declares
+    /// (`usize::MAX` for an abstract one), its type (the element type for
+    /// an array), its outermost array count (0 for no array, -1 for `[]`
+    /// and for a GNU zero-length `[0]`) and whether that count is a
+    /// zero-length array's. A nested declarator (a parameter's) leaves the
+    /// enclosing one's zero-length state as it found it.
+    pub(super) fn parse_declarator(
+        &mut self,
+        base: i64,
+    ) -> Result<(usize, i64, i64, bool), C5Error> {
+        let outer = core::mem::take(&mut self.pending.declarator_zero_len_array);
+        let r = self.parse_declarator_levels(base);
+        let zero_len = core::mem::replace(&mut self.pending.declarator_zero_len_array, outer);
+        let (idx, ty, array_size, _) = r?;
+        Ok((idx, ty, array_size, zero_len))
     }
 
     /// `parse_declarator`, and the pointer derivations the declarator
@@ -822,7 +821,6 @@ impl Compiler {
                 return Err(self.compile_err(Code::INVALID_DECLARATION, "array of functions"));
             }
             self.require_complete_elements(ty, &[-1])?;
-            self.pending.declarator_zero_len_array = false;
             self.next()?;
             // C99 6.7.5.3p7 + 6.7.5.2p1: `[`'s contents may be
             // prefixed by `static` and / or any type qualifier
@@ -867,8 +865,8 @@ impl Compiler {
                 // member it behaves like a C99 6.7.2.1 flexible array member
                 // (`T x[]`), so it rides the same `array_size = -1` sentinel.
                 // As a declared object the two differ -- `[0]` is a complete
-                // type of size zero -- which `declarator_zero_len_array`
-                // carries to the object allocators.
+                // type of size zero -- which `parse_declarator` reports
+                // alongside the count.
                 array_size = if n == 0 { -1 } else { n };
                 self.pending.declarator_zero_len_array = n == 0;
             } else {

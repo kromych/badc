@@ -297,10 +297,7 @@ impl Compiler {
             self.pending.member_decl_save = None;
             let declared = self.parse_declarator(field_base);
             self.pending.in_member_declarator = saved_member_ctx;
-            let (id_idx, mut field_ty, mut field_array_size) = declared?;
-            // The pending flag describes the last bracketed declarator, so
-            // it holds for this member only with the `-1` count.
-            let mut field_zero_len = field_array_size < 0 && self.pending.declarator_zero_len_array;
+            let (id_idx, mut field_ty, mut field_array_size, mut field_zero_len) = declared?;
             // A member may carry a trailing attribute
             // (`int x __attribute__((aligned(16)));`,
             // `int x __attribute__((deprecated));`). Member-level

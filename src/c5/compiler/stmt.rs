@@ -539,7 +539,7 @@ impl Compiler {
         let lbt = self.parse_decl_base_type()?;
         let base_enum_tag = self.pending.base_enum_tag.take();
         while self.lex.tk != ';' {
-            let (id_idx, mut ty, mut td_array) = self.parse_declarator(lbt)?;
+            let (id_idx, mut ty, mut td_array, _) = self.parse_declarator(lbt)?;
             if id_idx == usize::MAX {
                 return Err(self.compile_err(Code::INVALID_DECLARATION, "typedef requires a name"));
             }

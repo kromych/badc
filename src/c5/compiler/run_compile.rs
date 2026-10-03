@@ -487,7 +487,7 @@ impl Compiler {
         // list -- for diagnostics that would otherwise point at the
         // function body's opening brace parsed further below.
         let signature_line = self.lex.line;
-        let (id_idx, mut ty, mut array_size) = self.parse_declarator(bt)?;
+        let (id_idx, mut ty, mut array_size, mut zero_len_array) = self.parse_declarator(bt)?;
         // `register T name asm("reg")` at file scope is a GNU global
         // register variable; any other `asm(...)` suffix is the
         // assembler name and the object declaration continues
@@ -551,7 +551,6 @@ impl Compiler {
         // A fixed dimension (`> 0`) sizes the object; a deferred array
         // typedef (`typedef T X[]`, carried as `-1`) makes the object
         // a deferred array whose size the initializer fixes.
-        let mut zero_len_array = self.pending.declarator_zero_len_array;
         if typedef_dim != 0 && array_size == 0 && !self.pending.base_array_taken {
             array_size = typedef_dim;
             zero_len_array = self.pending.typedef_base_zero_len;
@@ -1262,7 +1261,7 @@ impl Compiler {
             } | qual_bits;
             let base_enum_tag = self.pending.base_enum_tag.take();
             while self.lex.tk != ';' && self.lex.tk != 0 {
-                let (decl_idx, mut decl_ty, decl_arr) = self.parse_declarator(base)?;
+                let (decl_idx, mut decl_ty, decl_arr, _) = self.parse_declarator(base)?;
                 if decl_idx != usize::MAX {
                     // An array parameter is adjusted to a pointer to its
                     // element type (6.7.5.3p7), a row for more than one
@@ -2375,7 +2374,7 @@ impl Compiler {
         // at the end of the unit is completed to one
         // element. A GNU `T x[0]` is complete already and
         // holds no elements, so it keeps the zero count.
-        let zero_len = self.pending.declarator_zero_len_array;
+        let zero_len = self.symbols[id_idx].is_zero_len_array;
         let count = if zero_len { 0 } else { 1 };
         self.symbols[id_idx].array_size = count;
         self.symbols[id_idx].is_zero_len_array = zero_len;

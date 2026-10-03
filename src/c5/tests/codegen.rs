@@ -4212,6 +4212,42 @@ fn a_record_after_a_zero_length_array_member_keeps_its_storage() {
     }
 }
 
+/// A declarator's zero-length bound is its own (C99 6.9.2p2): a file-scope
+/// array of unknown size with no initializer gets one element after a
+/// `[0]` declaration, both through an array typedef (`T t;`) and when a
+/// parameter of its element type is declared `[0]` (`int (*fa[])(int
+/// b[0])`). The `[0]` object itself stays empty.
+#[test]
+fn a_zero_length_bound_does_not_carry_to_another_declarator() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let src = "typedef int T[];\n\
+               int z[0];\n\
+               T t;\n\
+               int (*fa[])(int b[0]);\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            src.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        };
+        let obj = crate::emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"));
+        let syms = elf64_symbol_records(&obj);
+        let size = |name: &str| syms.iter().find(|s| s.0 == name).map(|s| s.4);
+        assert_eq!(
+            (size("z"), size("t"), size("fa")),
+            (Some(0), Some(4), Some(8)),
+            "{target:?}: {syms:?}"
+        );
+    }
+}
+
 /// Windows arm64 passes every argument to a variadic callee in the integer
 /// bank, a named `float` as its own 32 bits and a variadic one widened to
 /// `double`: the call carries no FP mask, the named value stays single

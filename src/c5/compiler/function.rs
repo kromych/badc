@@ -343,7 +343,7 @@ impl Compiler {
             // callback-registering prototypes); we record the
             // type but don't bind any symbol.
             self.pending.param_decl_context = true;
-            let (param_idx, mut full_ty, array_size) = self.parse_declarator(ty)?;
+            let (param_idx, mut full_ty, array_size, _) = self.parse_declarator(ty)?;
             // A parameter may carry a trailing attribute
             // (`PyObject *op __attribute__((unused))`).
             self.skip_attribute_specifiers()?;

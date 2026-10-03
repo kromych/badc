@@ -713,6 +713,7 @@ fn install_data_model(
     macros.insert("__PTRDIFF_TYPE__".to_string(), ptrdiff_ty.to_string());
     macros.insert("__INTPTR_TYPE__".to_string(), ptrdiff_ty.to_string());
     macros.insert("__UINTPTR_TYPE__".to_string(), size_ty.to_string());
+    install_stdint_model(macros, target, ilp32);
     let ptr_bytes = if ilp32 { "4" } else { "8" };
     for name in [
         "__SIZEOF_POINTER__",
@@ -754,6 +755,83 @@ fn install_data_model(
         };
         macros.insert(model.to_string(), "1".to_string());
     }
+}
+
+/// The `<stdint.h>` types each platform's own headers give, under gcc's and
+/// clang's predefined names. glibc makes `int64_t`, `intmax_t` and the
+/// fastest 16- and 32-bit types `long` on LP64; Apple's headers make them
+/// `long long`, `long`, `short` and `int`; Windows `long long`, `long long`
+/// and `int`; glibc on ILP32 `long long`, `long long` and `int`. The constant
+/// suffixes, the limits and the `<inttypes.h>` length modifiers follow.
+fn install_stdint_model(macros: &mut HashMap<String, String>, target: Target, ilp32: bool) {
+    let lp64 = !ilp32 && !target.is_windows();
+    let apple = target == Target::MacOSAarch64;
+    let int64 = if lp64 && !apple { "long" } else { "long long" };
+    let intmax = if lp64 { "long" } else { "long long" };
+    let intptr = match (ilp32, target.is_windows()) {
+        (true, _) => "int",
+        (false, true) => "long long",
+        (false, false) => "long",
+    };
+    let (fast16, fast32) = match (lp64, apple) {
+        (true, false) => ("long", "long"),
+        (true, true) => ("short", "int"),
+        (false, _) => ("int", "int"),
+    };
+    let suffix = |ty: &str| match ty {
+        "long" => "L",
+        "long long" => "LL",
+        _ => "",
+    };
+    let length = |ty: &str| match ty {
+        "short" => "h",
+        "long" => "l",
+        "long long" => "ll",
+        _ => "",
+    };
+    let limits = |ty: &str| match ty {
+        "short" => ("32767".to_string(), "65535".to_string()),
+        "int" => ("2147483647".to_string(), "4294967295U".to_string()),
+        _ => {
+            let s = suffix(ty);
+            (
+                format!("9223372036854775807{s}"),
+                format!("18446744073709551615U{s}"),
+            )
+        }
+    };
+    // `__INTPTR_TYPE__` is the data model's, installed with `__SIZE_TYPE__`.
+    for (name, ty) in [
+        ("INT64", int64),
+        ("INTMAX", intmax),
+        ("INTPTR", intptr),
+        ("INT_FAST16", fast16),
+        ("INT_FAST32", fast32),
+    ] {
+        let (s, l) = (suffix(ty), length(ty));
+        if name != "INTPTR" {
+            macros.insert(format!("__{name}_TYPE__"), ty.to_string());
+            macros.insert(format!("__U{name}_TYPE__"), format!("unsigned {ty}"));
+        }
+        if matches!(name, "INT64" | "INTMAX") {
+            macros.insert(format!("__{name}_C_SUFFIX__"), s.to_string());
+            macros.insert(format!("__U{name}_C_SUFFIX__"), format!("U{s}"));
+        }
+        if matches!(name, "INTPTR" | "INT_FAST16" | "INT_FAST32") {
+            let (max, umax) = limits(ty);
+            macros.insert(format!("__{name}_MAX__"), max);
+            macros.insert(format!("__U{name}_MAX__"), umax);
+        }
+        for conv in ["d", "i"] {
+            macros.insert(format!("__{name}_FMT{conv}__"), format!("\"{l}{conv}\""));
+        }
+        for conv in ["o", "u", "x", "X"] {
+            macros.insert(format!("__U{name}_FMT{conv}__"), format!("\"{l}{conv}\""));
+        }
+    }
+    let (max, umax) = limits(intptr);
+    macros.insert("__PTRDIFF_MAX__".to_string(), max);
+    macros.insert("__SIZE_MAX__".to_string(), umax);
 }
 
 /// The targets one predefine row covers.

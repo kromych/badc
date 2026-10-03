@@ -5624,9 +5624,9 @@ fn inttypes_header_supplies_types_and_format_macros() {
     // C99 7.8: `<inttypes.h>` layers on top of `<stdint.h>` and adds
     // the PRI / SCN conversion-specifier macros. The fixture
     // includes only `<inttypes.h>` and asserts the fixed-width
-    // typedefs still resolve transitively, plus the macro
-    // expansions match the LP64 / LLP64 contract c5 ships
-    // (int64_t aliases `long long`, so PRId64 is "lld" uniformly).
+    // typedefs still resolve transitively, and that each 64-bit,
+    // greatest-width and pointer-width macro agrees with the type the
+    // target gives its typedef.
     assert_eq!(run_fixture("inttypes_header.c"), 0);
 }
 

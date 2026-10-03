@@ -1057,3 +1057,74 @@ fn windows_h_leaves_the_dpi_enums_to_shellscalingapi_h() {
         }
     }
 }
+
+/// `<stdint.h>` gives each target its platform's types: glibc's `long` for
+/// `int64_t`, `intptr_t`, `intmax_t` and the fastest 16- and 32-bit types on
+/// LP64 Linux; Apple's `long long`, `long`, `long`, `short` and `int`; and
+/// Windows' `long long` for the first three and `int` for the last two. The
+/// least- and fastest-width 64-bit types, the constant macros and the limits
+/// take the same types, and the `<inttypes.h>` conversions the same length
+/// modifier: `PRId64` is "ld" under glibc and "lld" elsewhere.
+#[test]
+fn stdint_types_are_the_platforms() {
+    const LINUX: [&str; 5] = ["long", "long", "long", "long", "long"];
+    const APPLE: [&str; 5] = ["long long", "long", "long", "short", "int"];
+    const WINDOWS: [&str; 5] = ["long long", "long long", "long long", "int", "int"];
+    for (target, [i64_ty, ptr_ty, max_ty, f16_ty, f32_ty]) in [
+        (Target::LinuxX64, LINUX),
+        (Target::LinuxAarch64, LINUX),
+        (Target::MacOSAarch64, APPLE),
+        (Target::WindowsX64, WINDOWS),
+        (Target::WindowsAarch64, WINDOWS),
+    ] {
+        // A conversion string's size: length modifier, conversion, terminator.
+        let len = |ty: &str| match ty {
+            "int" => 2,
+            "long long" => 4,
+            _ => 3,
+        };
+        let (n64, nptr, nmax, n16, n32) = (
+            len(i64_ty),
+            len(ptr_ty),
+            len(max_ty),
+            len(f16_ty),
+            len(f32_ty),
+        );
+        let src = format!(
+            "#include <inttypes.h>\n\
+             #include <stddef.h>\n\
+             #define IS(e, T) _Generic((e), T: 1, default: 0)\n\
+             #define BOTH(t, T) (IS((t)0, T) && IS((u##t)0, unsigned T))\n\
+             _Static_assert(BOTH(int64_t, {i64_ty}) && BOTH(int_least64_t, {i64_ty}), \"int64_t\");\n\
+             _Static_assert(BOTH(int_fast64_t, {i64_ty}), \"int_fast64_t\");\n\
+             _Static_assert(BOTH(intptr_t, {ptr_ty}) && BOTH(intmax_t, {max_ty}), \"intptr_t\");\n\
+             _Static_assert(BOTH(int_fast16_t, {f16_ty}) && BOTH(int_fast32_t, {f32_ty}), \"fast\");\n\
+             _Static_assert(IS(INT64_C(1), {i64_ty}) && IS(UINT64_C(1), unsigned {i64_ty}), \"INT64_C\");\n\
+             _Static_assert(IS(INTMAX_C(1), {max_ty}) && IS(UINTMAX_C(1), unsigned {max_ty}), \"INTMAX_C\");\n\
+             _Static_assert(IS(INT64_MIN, {i64_ty}) && IS(UINT64_MAX, unsigned {i64_ty}), \"INT64 limits\");\n\
+             _Static_assert(IS(INTPTR_MAX, {ptr_ty}) && IS(UINTPTR_MAX, unsigned {ptr_ty}), \"INTPTR limits\");\n\
+             _Static_assert(IS(INTMAX_MIN, {max_ty}) && IS(UINTMAX_MAX, unsigned {max_ty}), \"INTMAX limits\");\n\
+             _Static_assert(IS(SIZE_MAX, size_t) && IS(PTRDIFF_MIN, ptrdiff_t), \"size limits\");\n\
+             _Static_assert(IS(UINT32_MAX, unsigned), \"UINT32_MAX\");\n\
+             _Static_assert(INT64_MAX == 0x7fffffffffffffff && UINT64_MAX + 1 == 0, \"values\");\n\
+             _Static_assert(INT64_MIN < 0 && INTMAX_MIN < 0 && PTRDIFF_MIN < 0, \"minima\");\n\
+             _Static_assert(INT_FAST16_MAX == (int_fast16_t)(UINT_FAST16_MAX >> 1), \"fast16 max\");\n\
+             _Static_assert(INT_FAST32_MAX == (int_fast32_t)(UINT_FAST32_MAX >> 1), \"fast32 max\");\n\
+             _Static_assert(INT_FAST16_MIN == -INT_FAST16_MAX - 1, \"fast16 min\");\n\
+             _Static_assert((uint_fast16_t)-1 == UINT_FAST16_MAX, \"fast16 umax\");\n\
+             _Static_assert((uint_fast32_t)-1 == UINT_FAST32_MAX, \"fast32 umax\");\n\
+             static const char d64[] = PRId64, x64[] = PRIx64, s64[] = SCNu64;\n\
+             static const char dmax[] = PRIdMAX, smax[] = SCNxMAX, uptr[] = PRIuPTR;\n\
+             static const char df16[] = PRIdFAST16, sf16[] = SCNuFAST16;\n\
+             static const char xf32[] = PRIxFAST32, sf32[] = SCNdFAST32;\n\
+             _Static_assert(sizeof d64 == {n64} && sizeof x64 == {n64} && sizeof s64 == {n64}, \"64\");\n\
+             _Static_assert(sizeof dmax == {nmax} && sizeof smax == {nmax}, \"MAX\");\n\
+             _Static_assert(sizeof uptr == {nptr}, \"PTR\");\n\
+             _Static_assert(sizeof df16 == {n16} && sizeof sf16 == {n16}, \"FAST16\");\n\
+             _Static_assert(sizeof xf32 == {n32} && sizeof sf32 == {n32}, \"FAST32\");\n"
+        );
+        if let Err(err) = compile(&src, target) {
+            panic!("{}: {err}", target.id_str());
+        }
+    }
+}

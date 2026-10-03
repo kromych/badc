@@ -1069,10 +1069,9 @@ impl Parser {
             }
             // gcc hands a `-Wp,` payload's comma-separated pieces to the
             // preprocessor. There `-MD` / `-MMD` take the output path as
-            // an operand, which is how kbuild requests dependency files.
-            // Reaching the preprocessor directly means no `-o`-derived
-            // rule name applies, so the rule keeps the source-derived
-            // default -- gcc behaves the same.
+            // an operand. Reaching the preprocessor directly means no
+            // `-o`-derived rule name applies, so the rule keeps the
+            // source-derived default -- gcc behaves the same.
             s if s.starts_with("-Wp,") => {
                 let mut parts = s["-Wp,".len()..].split(',');
                 while let Some(part) = parts.next() {
@@ -1311,10 +1310,10 @@ impl Parser {
                 code.fno_pic = true;
             }
             // gcc / clang `-fno-jump-tables`: a switch never dispatches
-            // through a table, only through the compare tree. Kernels
-            // built with retpoline or indirect-branch tracking pass it
-            // because a table dispatch is an indirect branch those
-            // configurations must not take.
+            // through a table, only through the compare tree. A build
+            // under retpolines or indirect-branch tracking passes it,
+            // because a table dispatch is an indirect branch such a build
+            // must not take.
             "-fjump-tables" => code.jump_tables = true,
             "-fno-jump-tables" => code.jump_tables = false,
             // gcc / clang `-fno-optimize-sibling-calls`: every call returns
@@ -1323,8 +1322,7 @@ impl Parser {
             "-foptimize-sibling-calls" => code.sibling_calls = true,
             "-fno-optimize-sibling-calls" => code.sibling_calls = false,
             // gcc `-fmin-function-alignment=N`: every function entry
-            // lands on a multiple of N, which is how a kernel states
-            // CONFIG_FUNCTION_ALIGNMENT. Unlike `-falign-functions` gcc
+            // lands on a multiple of N. Unlike `-falign-functions` gcc
             // never skips a large gap under it, and badc never does
             // either.
             s if s.starts_with("-fmin-function-alignment=") => {
@@ -1712,8 +1710,8 @@ impl Parser {
                 link.subsystem = Some(parsed);
             }
             // GNU ld surface for script-driven links. `-T FILE` /
-            // `--script=FILE` select the script; the rest mirror the
-            // options the Linux kernel build passes to `ld`.
+            // `--script=FILE` select the script; the rest mirror GNU ld's
+            // options of the same names.
             "-T" | "--script" => {
                 link.script_path = Some(PathBuf::from(operand(
                     iter,
@@ -2095,8 +2093,8 @@ impl Parser {
     /// not have.
     fn resolve_stack_guard(&mut self, target: Target) -> Result<(), ParseError> {
         // gcc's x86 default for `-mstack-protector-guard=` is `tls`, so a
-        // register, an offset or a symbol named alone selects it; the
-        // kernel names only the register and the symbol on SMP builds.
+        // register, an offset or a symbol named alone selects it, as when
+        // a build names only the register and the symbol.
         let kind = self.ssp_guard_kind.or_else(|| {
             let named = self.ssp_guard_reg.is_some()
                 || self.ssp_guard_offset.is_some()
@@ -3201,9 +3199,9 @@ mod tests {
         );
     }
 
-    /// `leaf` modifies the `pac-ret` before it, as in gcc's grammar and in
-    /// Linux 5.10-6.1's `-mbranch-protection=pac-ret+leaf+bti`; alone or
-    /// after another feature it is refused, as `b-key` is.
+    /// `leaf` modifies the `pac-ret` before it, as in gcc's grammar
+    /// (`-mbranch-protection=pac-ret+leaf+bti`); alone or after another
+    /// feature it is refused, as `b-key` is.
     #[test]
     fn branch_protection_leaf_modifies_pac_ret() {
         let h = |flag: &str| parse(&[A64, flag, "-c", "a.c"]).codegen.hardening;

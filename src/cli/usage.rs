@@ -248,8 +248,7 @@ Compile knobs:
                            usual. The file is -MF, else the -o
                            object with its suffix replaced by `.d`,
                            else the source's base name + `.d`.
-  -MMD                     As -MD with -MM's header filter. This is
-                           the form kbuild uses.
+  -MMD                     As -MD with -MM's header filter.
   -MF file                 Write the dependency rule to `file`.
   -MT target               Name the rule's target, used verbatim.
                            Repeatable; replaces the default name.
@@ -291,8 +290,7 @@ Compile knobs:
                            source under either is refused unless -E.
   -Wp,-MD,file             The preprocessor spellings of -MD / -MMD,
   -Wp,-MMD,file            which take the output path as an operand.
-                           kbuild passes dependency generation this
-                           way. As in gcc, the rule keeps the
+                           As in gcc, the rule keeps the
                            source-derived name; -o does not name it.
   -q, --quiet              Suppress `info:` chatter on stderr (the
                            per-source `info: compiling <path>`

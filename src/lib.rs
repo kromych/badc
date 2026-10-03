@@ -78,10 +78,9 @@ pub const GNU_COMPAT_VERSION: &str = gnu_compat_version!();
 /// gcc-compatibility statement, and the commit the compiler was
 /// built from where its source named one, in the family style of
 /// `gcc (GCC) 14.2.0` / `clang version 19.0.0`. This is the first
-/// line of `--version`, so consumers that keep `head -n1` of
-/// `$(CC) --version` (the Linux kernel's `CONFIG_CC_VERSION_TEXT`,
-/// which reaches the boot banner and `/proc/version`) record which
-/// compiler build produced the image, not merely which release.
+/// line of `--version`, so a build that keeps `head -n1` of
+/// `$(CC) --version` as its compiler's name in what it produces
+/// records which compiler build produced it, not merely which release.
 ///
 /// This is deliberately not [`OUTPUT_MARKER`]. The commit belongs
 /// in what identifies the compiler to a person or a build system;

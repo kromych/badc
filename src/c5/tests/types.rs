@@ -3678,6 +3678,46 @@ fn plain_char_is_a_third_character_type() {
     }
 }
 
+/// GNU C types `__builtin_alloca`, `__builtin_frame_address`,
+/// `__builtin_return_address` and the return-address conversions, the
+/// memory-transfer builtins, `__builtin_assume_aligned` and `&&label` as
+/// `void *`: generic selection picks the `void *` association, a
+/// diagnostic spells `void*`, and arithmetic on the value steps one byte
+/// as on any `void *`.
+#[test]
+fn gnu_void_pointer_builtins_are_void_pointers() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "#define K(e) _Generic((e), void *: 1, char *: 2, signed char *: 3, \
+               unsigned char *: 4, default: 0)\n\
+               int main(void) {\n\
+               \tchar buf[8];\n\
+               \tint n = 0;\n\
+               lab:\n\
+               \tn += K(__builtin_alloca(4)) + K(__builtin_alloca(4) + 1)\n\
+               \t\t+ K(__builtin_frame_address(0)) + K(__builtin_frame_address(1))\n\
+               \t\t+ K(__builtin_return_address(0))\n\
+               \t\t+ K(__builtin_extract_return_addr(__builtin_return_address(0)))\n\
+               \t\t+ K(__builtin_frob_return_addr(__builtin_return_address(0)))\n\
+               \t\t+ K(__builtin_memcpy(buf, \"ab\", 2)) + K(__builtin_memmove(buf, \"ab\", 2))\n\
+               \t\t+ K(__builtin_memset(buf, 0, 2)) + K(__builtin_assume_aligned(buf, 1))\n\
+               \t\t+ K(&&lab);\n\
+               \treturn n * 10 + (int)((char *)(__builtin_memcpy(buf, \"ab\", 2) + 3) - buf);\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 12 * 10 + 3, "{src}");
+    let src = "struct S { int x; };\n\
+               void take(struct S s);\n\
+               void f(void) { take(__builtin_alloca(4)); }\n\
+               int main(void) { return 0; }\n";
+    let msg = Compiler::new(src.to_string())
+        .compile()
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(msg.contains("(param=struct S, arg=void*)"), "{msg}");
+}
+
 /// The three character types are incompatible (C99 6.2.7p1), so a
 /// redeclaration that swaps one for another conflicts, on the target whose
 /// plain `char` shares the other's representation too, and a diagnostic

@@ -563,7 +563,7 @@ impl Compiler {
         }
         self.next()?;
         // Both forms yield the destination address (C99 7.21.2.1p2).
-        let ty = Ty::Char as i64 + UNSIGNED_BIT + Ty::Ptr as i64;
+        let ty = super::types::void_ptr_ty();
         let size = match self.expr_const_int(args[2]) {
             Some(n) if mem_transfer_fits(op, n, ptr_align) => n,
             _ => return self.emit_mem_transfer_libcall(op, &args, ty),
@@ -1773,7 +1773,7 @@ impl Compiler {
         // each level above 0 is one load through the level below; the
         // return-address form then reads the return slot of the record
         // reached, as the level-0 intrinsic does.
-        let void_ptr_ty = (Ty::Char as i64) + (Ty::Ptr as i64);
+        let void_ptr_ty = super::types::void_ptr_ty();
         for _ in 0..frame_walk_levels {
             if let Some(child) = self.ast_acc {
                 self.ast_emit_cast(child, void_ptr_ty + Ty::Ptr as i64);
@@ -2213,8 +2213,8 @@ impl Compiler {
         let is_fp_unary = intr_kind.is_some_and(|i| i.is_fp_unary());
         let is_int_bit_unary = intr_kind.is_some_and(|i| i.is_int_bit_unary());
         let is_bswap = intr_kind.is_some_and(|i| i.is_bswap());
-        // `alloca` returns `void *`; the setjmp / longjmp / `va_*` forms are
-        // `int` so a statement-context call typechecks.
+        // The setjmp / longjmp / `va_*` forms are `int` so a
+        // statement-context call typechecks.
         if is(Intrinsic::Trap) {
             // `__builtin_trap` and `__builtin_unreachable` are `void`, so
             // `return __builtin_unreachable();` is the 6.8.6.4p1 void form.
@@ -2253,7 +2253,9 @@ impl Compiler {
                 _ => Ty::Int as i64,
             }) | super::types::UNSIGNED_BIT
         } else {
-            (Ty::Char as i64) + (Ty::Ptr as i64)
+            // `alloca`, `__builtin_frame_address` and
+            // `__builtin_return_address` are `void *` in GNU C.
+            super::types::void_ptr_ty()
         }
     }
 
@@ -3070,7 +3072,7 @@ impl Compiler {
             .ast
             .push_expr(super::super::ast::Expr::LabelAddr(label), pos);
         self.ast_acc = Some(id);
-        self.ty = Ty::Char as i64 + Ty::Ptr as i64;
+        self.ty = super::types::void_ptr_ty();
         Ok(())
     }
 

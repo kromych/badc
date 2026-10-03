@@ -1220,10 +1220,8 @@ pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
         // `sizeof <vla>` is a runtime `size_t`; c5 types it as `int`.
         Expr::VlaSizeof { .. } => Some(crate::c5::token::Ty::Int as i64),
         Expr::CompoundLiteral { ty, .. } => Some(*ty),
-        // `&&label` is a `void *` (char-pointer encoding).
-        Expr::LabelAddr(_) => {
-            Some(crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64)
-        }
+        // GNU C types `&&label` as `void *`.
+        Expr::LabelAddr(_) => Some(crate::c5::compiler::types::void_ptr_ty()),
         // An asm statement carries no value type.
         Expr::InlineAsm(_) => None,
     }

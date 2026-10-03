@@ -484,20 +484,23 @@ impl Compiler {
 
     /// The bounds of an unnamed parameter's array declarator (`int [][3]`),
     /// outermost first. The outermost is adjusted away (C99 6.7.5.3p7), so
-    /// its contents -- `static`, qualifiers, `*`, any expression -- are
-    /// skipped and it reads as unspecified; an inner one is a constant.
+    /// its contents -- `static`, qualifiers, `*` or a size of integer type
+    /// -- are discarded and it reads as unspecified; an inner one is a
+    /// constant.
     fn parse_unnamed_param_bounds(&mut self) -> Result<Vec<i64>, C5Error> {
         let mut dims = Vec::new();
         while self.lex.tk == Token::Brak {
             self.next()?;
             if dims.is_empty() {
-                self.skip_array_dimension_expr()?;
+                self.skip_param_array_size()?;
                 dims.push(-1);
             } else if self.lex.tk == ']' {
                 return Err(self.unknown_size_element_err());
             } else {
                 let Some(n) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
                 else {
+                    let ty = self.peek_expr_type()?;
+                    self.require_integer_size(ty)?;
                     return Err(self.compile_err(
                         Code::UNSUPPORTED,
                         "a non-constant inner array dimension is not supported",

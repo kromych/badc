@@ -5762,6 +5762,7 @@ impl Compiler {
         }
         let saved_ty = self.ty;
         self.expr(Token::Assign as i64)?;
+        self.require_integer_size(self.ty)?;
         self.ty = saved_ty;
         match self.ast_acc.take() {
             Some(dim) => Ok(TypeNameBound::Runtime(dim)),

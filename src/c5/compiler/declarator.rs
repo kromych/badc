@@ -878,13 +878,14 @@ impl Compiler {
                 // variable-length array. Everywhere else it is a
                 // constraint violation.
                 if param_ctx {
-                    self.skip_array_dimension_expr()?;
-                    // `skip_array_dimension_expr` stops at the `]`; consume
+                    self.skip_param_array_size()?;
+                    // `skip_param_array_size` stops at the `]`; consume
                     // it so the declarator resumes past the dimension.
                     self.next()?;
                     array_size = -1;
                 } else if self.pending.vla_allowed {
                     self.expr(Token::Assign as i64)?;
+                    self.require_integer_size(self.ty)?;
                     // C99 6.7.5.2p5: the size is the dimension's value; an
                     // `__int128` one converts to the `size_t` it is taken in.
                     if self.is_int128_ty(self.ty) {
@@ -1050,6 +1051,8 @@ impl Compiler {
                 // stride model is compile-time only, so reject it
                 // cleanly rather than miscompile the row stride.
                 if self.pending.vla_allowed || param_ctx {
+                    let ty = self.peek_expr_type()?;
+                    self.require_integer_size(ty)?;
                     return Err(self.compile_err(
                         Code::UNSUPPORTED,
                         "a non-constant inner array dimension is not supported",

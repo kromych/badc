@@ -3563,6 +3563,72 @@ fn an_integer_constant_expression_rejects_a_floating_result() {
     assert_eq!(Vm::new(program).run().unwrap(), 18, "{src}");
 }
 
+/// C99 6.7.5.2p1: the size of an array declarator has integer type, a
+/// variable-length array's, a type name's and a parameter's as well as a
+/// constant one's. A floating, pointer or structure size is an error in
+/// the front end; a character, enumeration, `_Bool` or `__int128` size and
+/// a converted floating value size their arrays, and `[*]` has no size.
+#[test]
+fn an_array_size_has_integer_type() {
+    use super::Vm;
+    use crate::Compiler;
+    let compile = |src: &str| {
+        Compiler::new(format!(
+            "struct P {{ int x; }};\n{src}\nint main(void) {{ return 0; }}\n"
+        ))
+        .compile()
+    };
+    for (src, ty) in [
+        (
+            "int f(double d) { int a[d]; return (int)sizeof a; }",
+            "double",
+        ),
+        (
+            "int f(long double d) { int a[d]; return (int)sizeof a; }",
+            "long double",
+        ),
+        ("int f(int *p) { int a[p]; return (int)sizeof a; }", "int*"),
+        (
+            "int f(struct P s) { int a[s]; return (int)sizeof a; }",
+            "struct P",
+        ),
+        (
+            "int f(double d) { int a[2][d]; return (int)sizeof a; }",
+            "double",
+        ),
+        ("int f(float d) { return (int)sizeof(int[d]); }", "float"),
+        ("int f(int *p) { return (int)sizeof(int[p]); }", "int*"),
+        ("void g(double d, int a[d]);", "double"),
+        ("void g(int *p, int a[p]);", "int*"),
+        ("void g(double d, int [d]);", "double"),
+        ("void g(double d, int a[static d]);", "double"),
+        ("void g(double d, int a[2][d]);", "double"),
+        ("void g(double d, int a[d]) { (void)a; }", "double"),
+        ("int a[(int *)0 + 1];", "int*"),
+    ] {
+        let msg = compile(src)
+            .err()
+            .unwrap_or_else(|| panic!("`{src}` compiled"))
+            .to_string();
+        let want = format!("array size has type `{ty}`, not an integer type");
+        assert!(
+            msg.contains(&want) && msg.contains("[invalid-declaration]"),
+            "`{src}`: {msg}"
+        );
+    }
+    let src = "enum K { K1 = 3 };\n\
+               void g(int n, int a[n]);\n\
+               void h(int a[*]);\n\
+               int f(int n, char c, enum K k, _Bool b, __int128 w, double d) {\n\
+               \tint a[n], e[c], g[k], h[b + 1], i[w], j[(int)d];\n\
+               \treturn (int)((sizeof a + sizeof e + sizeof g + sizeof h + sizeof i + sizeof j\n\
+               \t\t+ sizeof(int[n])) / sizeof(int));\n\
+               }\n\
+               int main(void) { return f(1, 2, K1, 1, 4, 5.5); }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 18, "{src}");
+}
+
 /// C99 6.2.5p15: plain `char` is a type distinct from `signed char` and
 /// `unsigned char`, with the representation of one of them. Generic
 /// selection (C11 6.5.1.1) and `__builtin_types_compatible_p` see three

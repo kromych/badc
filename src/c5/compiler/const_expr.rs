@@ -635,7 +635,11 @@ impl Compiler {
         match self.parse_const_expr_cond_val() {
             // Folded to a constant; the caller validates the trailing `]`.
             // A bare symbol address is a genuine error, not a VLA.
-            Ok(v) => Ok(Some(self.require_integer_const(v)?.as_int())),
+            Ok(v) => {
+                let v = self.require_integer_const(v)?;
+                self.require_integer_size(v.expr_ty())?;
+                Ok(Some(v.as_int()))
+            }
             // Non-constant operand -> a VLA dimension: rewind for the
             // caller's runtime-expression parse.
             Err(_) if self.pending.const_expr_nonconst => {
@@ -648,11 +652,30 @@ impl Compiler {
         }
     }
 
-    /// Consume an array-declarator dimension up to (not including) the
-    /// matching `]`. Used for a variable-length array parameter, whose
-    /// size is discarded when the array is adjusted to a pointer (C99
-    /// 6.7.6.3p7); also absorbs the `[*]` unspecified-size form.
-    pub(super) fn skip_array_dimension_expr(&mut self) -> Result<(), C5Error> {
+    /// C99 6.7.5.2p1: the size expression of an array declarator has
+    /// integer type.
+    pub(super) fn require_integer_size(&self, ty: i64) -> Result<(), C5Error> {
+        self.require_category(
+            ty,
+            Category::Integer,
+            Code::INVALID_DECLARATION,
+            "array size",
+        )
+    }
+
+    /// Consume the bound of a parameter's array declarator up to (not
+    /// including) its `]`: `static` and qualifiers, then `*` or a size,
+    /// which the adjustment to a pointer discards (C99 6.7.5.3p7) and
+    /// which has integer type all the same.
+    pub(super) fn skip_param_array_size(&mut self) -> Result<(), C5Error> {
+        while self.lex.tk == Token::Static || self.lex.tk == Token::TypeQual {
+            self.next()?;
+        }
+        let star = self.lex.tk == Token::MulOp && self.lex.peek_after_whitespace(b']');
+        if self.lex.tk != ']' && !star {
+            let ty = self.peek_expr_type()?;
+            self.require_integer_size(ty)?;
+        }
         let mut depth: i64 = 0;
         loop {
             if self.lex.tk == Token::Brak {

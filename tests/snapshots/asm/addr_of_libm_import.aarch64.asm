@@ -48,16 +48,20 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
                	movi	d0, #0000000000000000
-               	bl	<addr>
+               	blr	x0
                	movi	d1, #0000000000000000
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
                	fmov	d0, d1
-               	bl	<addr>
+               	blr	x0
                	fmov	d1, #1.00000000
                	fcmp	d0, d1
                	b.eq	<addr>
@@ -75,9 +79,3 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret
-
-<__c5_sys_sin>:
-               	b	<addr>
-
-<__c5_sys_cos>:
-               	b	<addr>

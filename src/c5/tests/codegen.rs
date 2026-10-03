@@ -529,7 +529,7 @@ fn relocated_const_lands_in_relro_region_in_every_target() {
             merged.data_ro_len < merged.data_relro_len,
             "{target:?}: the link must produce a non-empty relro region"
         );
-        let plt = crate::emit_plt_for(&mut merged, target).expect("plt");
+        let plt = crate::emit_plt_for(&mut merged, target, false).expect("plt");
         let image = write_native_image_from_merged(
             &merged,
             &plt,
@@ -668,7 +668,7 @@ fn relro_const_leaves_the_rodata_prefix_intact_in_every_target() {
             merged.data_ro_len > 0 && merged.data_relro_len > merged.data_ro_len,
             "{target:?}: the link must keep a read-only prefix and a relro region"
         );
-        let plt = crate::emit_plt_for(&mut merged, target).expect("plt");
+        let plt = crate::emit_plt_for(&mut merged, target, false).expect("plt");
         let image = write_native_image_from_merged(
             &merged,
             &plt,
@@ -790,7 +790,7 @@ fn statically_relocated_object_keeps_const_storage_read_only_when_linked() {
             merged.data_relro_len > 0,
             "{target:?}: the demoted section must reach the relro region"
         );
-        let plt = crate::emit_plt_for(&mut merged, target).expect("plt");
+        let plt = crate::emit_plt_for(&mut merged, target, false).expect("plt");
         let image = write_native_image_from_merged(
             &merged,
             &plt,

@@ -8748,6 +8748,86 @@ fn a_data_initializer_holds_a_library_objects_address() {
     }
 }
 
+// A data initializer holding a shared library function's address -- in
+// badc's own unit and in one the system compiler built, in a position-
+// independent image and a placed one -- equals the address the program's
+// code takes and the one the library takes (C99 6.5.9p6).
+#[cfg(target_os = "linux")]
+#[test]
+fn a_data_initializer_holds_a_library_functions_address() {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping a_data_initializer_holds_a_library_functions_address: no cc");
+        return;
+    };
+    let dir = tempdir("data-init-fn");
+    let lib = write_source(
+        &dir,
+        "fns.c",
+        "int lib_fn(void) { return 7; }\n\
+         int lib_check(int (*f)(void)) { return f == lib_fn; }\n",
+    );
+    run(
+        Command::new(&cc)
+            .args(["-O2", "-shared", "-fPIC", "-o"])
+            .arg(dir.join("libfns.so"))
+            .arg(&lib),
+        "build the shared library",
+    );
+    let user = write_source(
+        &dir,
+        "user.c",
+        "#include <stdio.h>\n\
+         int lib_fn(void);\n\
+         int lib_check(int (*f)(void));\n\
+         int (*lf)(void) = lib_fn;\n\
+         int (*const clf)(void) = lib_fn;\n\
+         int (*pf)(const char *) = puts;\n\
+         int main(void) {\n\
+           int (*volatile q)(void) = lib_fn;\n\
+           int (*volatile p)(const char *) = puts;\n\
+           return (lf == q) | (clf == q) << 1 | lib_check(lf) << 2 | (pf == p) << 3 |\n\
+                  (lf() == 7) << 4;\n\
+         }\n",
+    );
+    let exe = dir.join("prog");
+    let mut builds: Vec<(String, Vec<&str>, PathBuf)> = Vec::new();
+    for opt in ["-O0", "-O"] {
+        for link in [None, Some("-no-pie")] {
+            let flags = [opt].into_iter().chain(link).collect();
+            builds.push((format!("badc {opt} {link:?}"), flags, user.clone()));
+        }
+    }
+    for (cflag, link) in [("-fPIE", None), ("-fno-pie", Some("-no-pie"))] {
+        let obj = dir.join(format!("user{cflag}.o"));
+        run(
+            Command::new(&cc)
+                .args(["-O2", cflag, "-c"])
+                .arg(&user)
+                .arg("-o")
+                .arg(&obj),
+            "build the system-compiled object",
+        );
+        builds.push((format!("cc {cflag}"), link.into_iter().collect(), obj));
+    }
+    for (what, flags, input) in builds {
+        run(
+            Command::new(badc())
+                .arg("-q")
+                .args(&flags)
+                .arg(input)
+                .arg(format!("-L{}", dir.display()))
+                .args(["-lfns", "-o"])
+                .arg(&exe),
+            "link",
+        );
+        let out = Command::new(&exe)
+            .env("LD_LIBRARY_PATH", &dir)
+            .output()
+            .expect("run");
+        assert_eq!(out.status.code(), Some(31), "{what}: {out:?}");
+    }
+}
+
 // An object the system compiler built references its thread-locals by
 // local-exec relocations alone, with no note of badc's: a static, a global
 // a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own

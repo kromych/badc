@@ -152,18 +152,27 @@ fn synth_program_and_build(
     let imports = synth_imports(merged, target)?;
     // Slots the PLT pass left unresolved for the loader to bind.
     let data_import_binds = merged.data_import_refs.clone();
+    let placed = output_kind != OutputKind::SharedLibrary && opts.exec_form.placed();
     if !data_import_binds.is_empty()
-        && super::DataImportSlots::of(target) != super::DataImportSlots::Bind
+        && super::DataImportSlots::of(target, placed) != super::DataImportSlots::Bind
     {
         return Err(internal_err(
             MODULE,
             &alloc::format!(
-                "{} data slot(s) naming an import reached a {target:?} image unresolved; its \
-                 loader binds none",
+                "{} data slot(s) naming an import reached a {target:?} image unresolved; it \
+                 binds none",
                 data_import_binds.len()
             ),
         ));
     }
+    // A stub code takes as a value is the import's address in an ELF executable.
+    let canonical_imports = if target.binary_format() == crate::c5::codegen::BinaryFormat::Elf
+        && output_kind != OutputKind::SharedLibrary
+    {
+        merged.stub_address_imports.iter().copied().collect()
+    } else {
+        Vec::new()
+    };
     let SynthFixups {
         got: got_fixups,
         got_base: got_base_fixups,
@@ -230,6 +239,7 @@ fn synth_program_and_build(
         compact_unwind: merged.compact_unwind.clone(),
         eh_frame: merged.eh_frame.clone(),
         data_import_binds,
+        canonical_imports,
         orphaned_data: None,
         stopped_at_data_liveness: false,
         ssa_dump: alloc::string::String::new(),
@@ -1589,6 +1599,7 @@ mod tests {
             macho_tlv_fixups: alloc::vec![],
             copy_relocs: alloc::vec![],
             object_imports: alloc::collections::BTreeSet::new(),
+            stub_address_imports: alloc::collections::BTreeSet::new(),
             dylibs: alloc::vec![],
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],

@@ -69,8 +69,10 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
                	fmov	d0, #-9.00000000
-               	bl	<addr>
+               	blr	x0
                	fmov	d1, #9.00000000
                	fcmp	d0, d1
                	b.eq	<addr>
@@ -79,7 +81,9 @@ Disassembly of section .text:
                	ret
                	adrp	x16, <page>
                	ldr	d0, [x16, #0x18]
-               	bl	<addr>
+               	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
+               	blr	x0
                	fmov	d1, #9.00000000
                	fcmp	d0, d1
                	b.eq	<addr>
@@ -88,7 +92,9 @@ Disassembly of section .text:
                	ret
                	adrp	x16, <page>
                	ldr	d0, [x16, #0x20]
-               	bl	<addr>
+               	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
+               	blr	x0
                	fmov	d1, #5.00000000
                	fcmp	d0, d1
                	b.eq	<addr>
@@ -115,12 +121,3 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
                	ret
-
-<__c5_sys_sqrt>:
-               	b	<addr>
-
-<__c5_sys_fabs>:
-               	b	<addr>
-
-<__c5_sys_floor>:
-               	b	<addr>

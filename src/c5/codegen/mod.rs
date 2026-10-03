@@ -407,9 +407,9 @@ impl Target {
     }
 
     /// Whether the image's loader binds any data slot to an imported
-    /// symbol, not only a GOT's (dyld's bind stream).
+    /// symbol, not only a GOT's (dyld's bind stream, ELF dynamic relocations).
     pub fn binds_data_imports(self) -> bool {
-        self == Target::MacOSAarch64
+        self.binary_format() != BinaryFormat::Pe
     }
 
     /// Target matching the host this build of badc is running on.
@@ -1982,8 +1982,11 @@ pub(crate) struct Build {
     /// fills them.
     pub compact_unwind: Vec<CompactUnwind>,
     pub eh_frame: Vec<EhFrameBlock>,
-    /// Data slots naming an import, which the loader binds (Mach-O).
+    /// Data slots naming an import, which the loader binds (Mach-O, ELF).
     pub data_import_binds: Vec<DataImportBind>,
+    /// Imports, ascending, whose call stub code takes as a value: an ELF
+    /// executable publishes it as the import's address (a canonical PLT entry).
+    pub canonical_imports: Vec<usize>,
     /// `--emit-relocs` records; empty unless the link requested them.
     pub emitted_relocs: Vec<EmittedFinalReloc>,
     /// Data-import copy relocations resolved against the merged symbol

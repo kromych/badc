@@ -12,8 +12,8 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::program::Program;
 use super::elf_reloc_types::{
-    R_AARCH64_COPY, R_AARCH64_GLOB_DAT, R_AARCH64_RELATIVE, R_X86_64_COPY, R_X86_64_GLOB_DAT,
-    R_X86_64_RELATIVE,
+    R_AARCH64_ABS64, R_AARCH64_COPY, R_AARCH64_GLOB_DAT, R_AARCH64_JUMP_SLOT, R_AARCH64_RELATIVE,
+    R_X86_64_64, R_X86_64_COPY, R_X86_64_GLOB_DAT, R_X86_64_JUMP_SLOT, R_X86_64_RELATIVE,
 };
 use super::{Abi, AddrPart, Build, DataRegion, ExecForm, Machine, data_region_addr};
 use super::{aarch64, dwarf, eh_frame, image, x86_64};
@@ -437,6 +437,14 @@ fn r_glob_dat(machine: Machine) -> u64 {
     }
 }
 
+/// The `R_*_64` / `R_*_ABS64` and `R_*_JUMP_SLOT` relocation types.
+fn r_symbolic(machine: Machine) -> (u64, u64) {
+    match machine {
+        Machine::Aarch64 => (R_AARCH64_ABS64.into(), R_AARCH64_JUMP_SLOT.into()),
+        Machine::X86_64 => (R_X86_64_64.into(), R_X86_64_JUMP_SLOT.into()),
+    }
+}
+
 /// `R_*_RELATIVE` relocation type: the loader writes `load_bias + r_addend`
 /// into the slot.
 fn r_relative(machine: Machine) -> u64 {
@@ -809,10 +817,11 @@ fn eh_frame_hdr_len(build: &Build) -> u64 {
     }
 }
 
-/// Build .dynsym.
+/// Build .dynsym; an import's `st_value` is its canonical PLT entry's address, or 0.
 fn build_dynsym(
     import_name_offsets: &[u32],
     import_is_object: &[bool],
+    import_values: &[u64],
     exports: &[DynsymExport],
     copies: &DynsymCopyTargets<'_>,
 ) -> Vec<u8> {
@@ -855,7 +864,7 @@ fn build_dynsym(
                     },
                 st_other: 0, // STV_DEFAULT
                 st_shndx: SHN_UNDEF,
-                st_value: 0,
+                st_value: import_values.get(i).copied().unwrap_or(0),
                 st_size: 0,
             },
         );
@@ -1637,6 +1646,26 @@ impl<'a> ElfImageWriter<'a> {
         self.va(self.seg.code_off) + self.stub_len
     }
 
+    /// `.got` slots: one per import, then one per canonical import's stub.
+    fn n_got_slots(&self) -> usize {
+        self.n_imports + self.build.canonical_imports.len()
+    }
+
+    /// The `.got` slot index the site at `fx` reads: a canonical import's
+    /// stub branches through its own slot.
+    fn got_slot(&self, fx: &crate::c5::codegen::GotFixup) -> usize {
+        let build = self.build;
+        let stub = build
+            .plt_trampoline_offsets
+            .get(fx.import_index)
+            .copied()
+            .flatten();
+        match build.canonical_imports.binary_search(&fx.import_index) {
+            Ok(k) if stub == Some(fx.instr_offset) => self.n_imports + k,
+            _ => fx.import_index,
+        }
+    }
+
     /// The defined `.dynsym` entries.
     fn collect_exports(&mut self) -> Result<(), C5Error> {
         let build = self.build;
@@ -1720,6 +1749,7 @@ impl<'a> ElfImageWriter<'a> {
         let dynsym = build_dynsym(
             &name_offsets,
             &import_is_object,
+            &[],
             &exports_placeholder,
             &DynsymCopyTargets {
                 name_offsets: &copy_name_offsets,
@@ -1987,6 +2017,7 @@ impl<'a> ElfImageWriter<'a> {
             self.n_relative_sites()
         };
         let relr_size = self.relr_words.len() as u64 * 8;
+        let n_got_slots = self.n_got_slots() as u64;
         let dynamic = &self.dynamic;
         let seg = &mut self.seg;
         seg.has_tls = !build.tls_data.is_empty();
@@ -2047,9 +2078,11 @@ impl<'a> ElfImageWriter<'a> {
         } else {
             after_hash
         };
-        seg.rela_size =
-            (self.n_imports as u64 + n_relative as u64 + build.copy_relocs.len() as u64)
-                * ELF64_RELA_SIZE;
+        seg.rela_size = (n_got_slots
+            + n_relative as u64
+            + build.copy_relocs.len() as u64
+            + build.data_import_binds.len() as u64)
+            * ELF64_RELA_SIZE;
         seg.relr_off = seg.rela_off + seg.rela_size;
         seg.relr_size = relr_size;
         seg.code_off = round_up(seg.relr_off + seg.relr_size, self.text_align);
@@ -2105,6 +2138,7 @@ impl<'a> ElfImageWriter<'a> {
         } else {
             0
         };
+        let n_got_slots = self.n_got_slots() as u64;
         let seg = &mut self.seg;
         seg.data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
         if placed {
@@ -2134,7 +2168,7 @@ impl<'a> ElfImageWriter<'a> {
         seg.dynamic_off = seg.segment2_off;
         seg.dynamic_size = dynamic_size;
         seg.got_off = seg.dynamic_off + seg.dynamic_size;
-        seg.got_size = (self.n_imports as u64) * 8;
+        seg.got_size = n_got_slots * 8;
         let got_end = seg.got_off + seg.got_size;
         // The rw load's relro part: `.dynamic`, `.got` and, in a
         // position-independent image, the relro region.
@@ -3003,9 +3037,19 @@ impl<'a> ElfImageWriter<'a> {
                 }
             })
             .collect();
+        let mut import_values = alloc::vec![0; self.n_imports];
+        for &i in &build.canonical_imports {
+            let Some(stub) = build.plt_trampoline_offsets.get(i).copied().flatten() else {
+                return Err(Self::internal(format!(
+                    "ELF image: canonical import {i} has no call stub"
+                )));
+            };
+            import_values[i] = self.text_vmaddr() + stub as u64;
+        }
         let final_dynsym = build_dynsym(
             &dynamic.name_offsets,
             &dynamic.import_is_object,
+            &import_values,
             &final_exports,
             &DynsymCopyTargets {
                 name_offsets: &dynamic.copy_name_offsets,
@@ -3044,6 +3088,29 @@ impl<'a> ElfImageWriter<'a> {
                     r_offset: addr,
                     r_info: (sym_idx << 32) | r_copy,
                     r_addend: 0,
+                },
+            );
+        }
+        // A canonical stub's own slot, which the loader binds past the executable.
+        let (r_abs, r_jump_slot) = r_symbolic(machine);
+        let got_vmaddr = self.va(seg.got_off);
+        for (k, &i) in build.canonical_imports.iter().enumerate() {
+            write_struct(
+                &mut rela,
+                &Elf64Rela {
+                    r_offset: got_vmaddr + ((self.n_imports + k) as u64) * 8,
+                    r_info: ((i as u64 + 1) << 32) | r_jump_slot,
+                    r_addend: 0,
+                },
+            );
+        }
+        for b in &build.data_import_binds {
+            write_struct(
+                &mut rela,
+                &Elf64Rela {
+                    r_offset: self.data_off_to_vaddr(b.data_offset),
+                    r_info: ((b.import as u64 + 1) << 32) | r_abs,
+                    r_addend: b.addend,
                 },
             );
         }
@@ -3862,7 +3929,7 @@ impl<'a> ElfImageWriter<'a> {
         }
         for fx in &build.got_fixups {
             let instr_off = stub_len + fx.instr_offset as u64;
-            let slot_vmaddr = got_vmaddr + (fx.import_index as u64) * 8;
+            let slot_vmaddr = got_vmaddr + (self.got_slot(fx) as u64) * 8;
             if fx.is_data_load && machine == Machine::X86_64 {
                 crate::c5::codegen::require_whole_addr(fx.part, "GOT data-load fixup")?;
                 patch_got_data_load(
@@ -5456,6 +5523,127 @@ mod tests {
             Some(build.bss_size as u64),
             "rw PT_LOAD memsz tail must equal bss_size"
         );
+    }
+
+    /// The `.rela.dyn` entries, as `(r_offset, r_info, r_addend)`.
+    fn rela_dyn(bytes: &[u8]) -> Vec<(u64, u64, i64)> {
+        let off = section_file_off(bytes, ".rela.dyn").expect(".rela.dyn") as usize;
+        let size = find_section(bytes, ".rela.dyn").unwrap().3 as usize;
+        (0..size / 24)
+            .map(|i| off + 24 * i)
+            .map(|e| {
+                (
+                    read_u64(bytes, e),
+                    read_u64(bytes, e + 8),
+                    read_u64(bytes, e + 16) as i64,
+                )
+            })
+            .collect()
+    }
+
+    /// `st_value` of the first `.symtab` entry named `want`.
+    fn symtab_value(bytes: &[u8], want: &str) -> u64 {
+        let off = section_file_off(bytes, ".symtab").expect(".symtab") as usize;
+        let size = find_section(bytes, ".symtab").unwrap().3 as usize;
+        let strtab = section_file_off(bytes, ".strtab").expect(".strtab") as usize;
+        (0..size / 24)
+            .map(|i| off + 24 * i)
+            .find(|&e| {
+                let at = strtab + read_u32(bytes, e) as usize;
+                bytes[at..].split(|&b| b == 0).next() == Some(want.as_bytes())
+            })
+            .map(|e| read_u64(bytes, e + 8))
+            .expect(want)
+    }
+
+    /// A data slot naming an import takes a load-time relocation against the
+    /// import's own symbol, with its addend, and no relative fixup.
+    #[test]
+    fn a_data_slot_naming_an_import_is_relocated_against_its_symbol() {
+        for (machine, target) in [
+            (Machine::Aarch64, super::super::Target::LinuxAarch64),
+            (Machine::X86_64, super::super::Target::LinuxX64),
+        ] {
+            let mut b = tiny_build();
+            b.abi = target.abi();
+            b.data = vec![0; 24];
+            b.data_import_binds
+                .push(crate::c5::codegen::DataImportBind {
+                    data_offset: 16,
+                    import: 0,
+                    addend: 8,
+                });
+            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let slot = find_section(&bytes, ".data").expect(".data").2 + 16;
+            let rela = rela_dyn(&bytes);
+            let at_slot: Vec<_> = rela.iter().filter(|r| r.0 == slot).collect();
+            assert_eq!(
+                at_slot,
+                [&(slot, (1 << 32) | r_symbolic(machine).0, 8)],
+                "{machine:?}"
+            );
+        }
+    }
+
+    /// A canonical import publishes its stub as its `.dynsym` value; the stub
+    /// branches through a `.got` slot of its own (`JUMP_SLOT`), and the
+    /// import's `GLOB_DAT` slot stays for the address code reads.
+    #[test]
+    fn a_canonical_import_publishes_its_stub_and_branches_through_its_own_slot() {
+        let ret = |machine| match machine {
+            Machine::X86_64 => vec![0xc3; 16],
+            Machine::Aarch64 => 0xd65f_03c0u32.to_le_bytes().repeat(4),
+        };
+        for (machine, target) in [
+            (Machine::Aarch64, super::super::Target::LinuxAarch64),
+            (Machine::X86_64, super::super::Target::LinuxX64),
+        ] {
+            let mut b = tiny_build();
+            b.abi = target.abi();
+            b.text = ret(machine);
+            b.text.extend(match machine {
+                Machine::X86_64 => vec![0xff, 0x25, 0, 0, 0, 0],
+                Machine::Aarch64 => [0x9000_0010u32, 0xf940_0210, 0xd61f_0200]
+                    .iter()
+                    .flat_map(|w| w.to_le_bytes())
+                    .collect(),
+            });
+            b.plt_trampoline_offsets = vec![Some(16)];
+            b.got_fixups.push(crate::c5::codegen::GotFixup {
+                instr_offset: 16,
+                part: AddrPart::Whole,
+                import_index: 0,
+                is_data_load: false,
+            });
+            b.canonical_imports = vec![0];
+            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let stub = symtab_value(&bytes, "exit");
+            let dynsym = section_file_off(&bytes, ".dynsym").expect(".dynsym") as usize;
+            assert_eq!(read_u64(&bytes, dynsym + 24 + 8), stub, "{machine:?}");
+            let (_, _, got, got_size, _) = find_section(&bytes, ".got").expect(".got");
+            assert_eq!(got_size, 16, "{machine:?}");
+            let rela = rela_dyn(&bytes);
+            for want in [(got, r_glob_dat(machine)), (got + 8, r_symbolic(machine).1)] {
+                assert!(
+                    rela.contains(&(want.0, (1 << 32) | want.1, 0)),
+                    "{machine:?}: {rela:x?}"
+                );
+            }
+            let (_, _, text, _, _) = find_section(&bytes, ".text").expect(".text");
+            let at = section_file_off(&bytes, ".text").unwrap() as usize + (stub - text) as usize;
+            let word = |k: usize| read_u32(&bytes, at + 4 * k) as u64;
+            let slot = match machine {
+                Machine::X86_64 => {
+                    let disp = read_u32(&bytes, at + 2) as i32 as i64;
+                    (stub as i64 + 6 + disp) as u64
+                }
+                Machine::Aarch64 => {
+                    let pages = ((word(0) >> 29) & 3) | ((word(0) >> 5) & 0x7ffff) << 2;
+                    (stub & !0xfff) + (pages << 12) + ((word(1) >> 10) & 0xfff) * 8
+                }
+            };
+            assert_eq!(slot, got + 8, "{machine:?}: the stub reads its own slot");
+        }
     }
 
     #[test]

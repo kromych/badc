@@ -88,9 +88,10 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	movl	$0x42a20000, %eax       # imm = 0x42A20000
-               	movq	%rax, %xmm0
-               	callq	<addr>
+               	movq	<rip>, %rax       # <addr>
+               	movl	$0x42a20000, %ecx       # imm = 0x42A20000
+               	movq	%rcx, %xmm0
+               	callq	*%rax
                	movl	$0x41100000, %eax       # imm = 0x41100000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -99,9 +100,10 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
-               	movl	$0x40bccccd, %eax       # imm = 0x40BCCCCD
-               	movq	%rax, %xmm0
-               	callq	<addr>
+               	movq	<rip>, %rax       # <addr>
+               	movl	$0x40bccccd, %ecx       # imm = 0x40BCCCCD
+               	movq	%rcx, %xmm0
+               	callq	*%rax
                	movl	$0x40a00000, %eax       # imm = 0x40A00000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -110,9 +112,10 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	popq	%rbp
                	retq
-               	movl	$0x40066666, %eax       # imm = 0x40066666
-               	movq	%rax, %xmm0
-               	callq	<addr>
+               	movq	<rip>, %rax       # <addr>
+               	movl	$0x40066666, %ecx       # imm = 0x40066666
+               	movq	%rcx, %xmm0
+               	callq	*%rax
                	movl	$0x40400000, %eax       # imm = 0x40400000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -148,12 +151,3 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
-
-<__c5_sys_sqrtf>:
-               	jmp	<addr>
-
-<__c5_sys_floorf>:
-               	jmp	<addr>
-
-<__c5_sys_ceilf>:
-               	jmp	<addr>

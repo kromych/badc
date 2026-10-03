@@ -78,7 +78,7 @@ pub(crate) fn dump_native_link(rest: &[String], target: badc::Target) {
     // byte adrp+ldr+br on aarch64), but the link-side
     // contract is identical: append one trampoline per unique
     // import, patch each call-site to reach it.
-    let plt_result = badc::emit_plt_for(&mut merged, target);
+    let plt_result = badc::emit_plt_for(&mut merged, target, false);
     match plt_result {
         Ok(tramps) => {
             println!("  PLT tramps  = {} entry(ies)", tramps.len());

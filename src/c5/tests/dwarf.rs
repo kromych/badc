@@ -476,7 +476,7 @@ fn build_signed_mach_o_two_units(
     }
     let mut merged = crate::link_native_objects(&objs)
         .unwrap_or_else(|e| panic!("link_native_objects failed: {e}"));
-    let plt = crate::emit_plt_for(&mut merged, target)
+    let plt = crate::emit_plt_for(&mut merged, target, false)
         .unwrap_or_else(|e| panic!("emit_plt_for failed: {e}"));
     let bytes = crate::write_native_image_from_merged(
         &merged,

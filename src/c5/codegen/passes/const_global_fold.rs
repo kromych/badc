@@ -38,13 +38,15 @@ pub(crate) enum AddrConst {
     Extern { sym: u32, disp: i64 },
     /// A function, by entry pc.
     Code(usize),
+    /// An imported function, by binding index.
+    Import(i64),
 }
 
 impl AddrConst {
     fn disp(self) -> i64 {
         match self {
             AddrConst::Data { disp, .. } | AddrConst::Extern { disp, .. } => disp,
-            AddrConst::Code(_) => 0,
+            AddrConst::Code(_) | AddrConst::Import(_) => 0,
         }
     }
 
@@ -58,7 +60,7 @@ impl AddrConst {
                 sym,
                 disp: disp.wrapping_add(by),
             },
-            AddrConst::Code(pc) => AddrConst::Code(pc),
+            AddrConst::Code(_) | AddrConst::Import(_) => self,
         }
     }
 
@@ -69,6 +71,7 @@ impl AddrConst {
             AddrConst::Data { base, .. } => Inst::ImmData(base),
             AddrConst::Extern { .. } => Inst::ImmData(0),
             AddrConst::Code(pc) => Inst::ImmCode(pc),
+            AddrConst::Import(binding) => Inst::ImmExtCode(binding),
         }
     }
 }
@@ -166,14 +169,13 @@ impl<'a> ConstData<'a> {
         }
         // A code slot names a body of this unit or an import placeholder
         // the emitters resolve by name, as `ImmCode` does either way.
-        // A slot the loader binds is no constant.
+        // A slot the loader binds holds the import's own address.
         for r in &program.code_relocs {
-            let pc = r.target_ent_pc as usize;
-            let constant = program.bound_trampoline(r.target_ent_pc).is_none();
-            relocs.push((
-                r.data_offset as i64,
-                constant.then_some(AddrConst::Code(pc)),
-            ));
+            let addr = match program.bound_trampoline(r.target_ent_pc) {
+                Some(binding) => AddrConst::Import(binding),
+                None => AddrConst::Code(r.target_ent_pc as usize),
+            };
+            relocs.push((r.data_offset as i64, Some(addr)));
         }
         relocs.extend(
             program

@@ -720,7 +720,7 @@ pub fn link_executable_with_runtime(
     append_on_demand_objects(&mut objs, target, reloc)?;
 
     let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
-    let plt = crate::emit_plt_for(&mut merged, target).map_err(|e| format!("plt: {e}"))?;
+    let plt = crate::emit_plt_for(&mut merged, target, false).map_err(|e| format!("plt: {e}"))?;
     let entry_name = program.entry_name.as_deref().unwrap_or("main");
     write_native_image_from_merged(
         &merged,
@@ -826,7 +826,7 @@ pub fn link_shared_library(
     let obj = parse_native_elf(&bytes).map_err(|e| format!("parse program object: {e}"))?;
     let mut merged =
         link_native_objects_with_options(&[obj], true).map_err(|e| format!("link: {e}"))?;
-    let plt = crate::emit_plt_for(&mut merged, target).map_err(|e| format!("plt: {e}"))?;
+    let plt = crate::emit_plt_for(&mut merged, target, false).map_err(|e| format!("plt: {e}"))?;
     write_native_image_from_merged(
         &merged,
         &plt,
@@ -899,7 +899,7 @@ pub fn link_executable_with_runtime_multi(
     }
 
     let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
-    let plt = crate::emit_plt_for(&mut merged, target).map_err(|e| format!("plt: {e}"))?;
+    let plt = crate::emit_plt_for(&mut merged, target, false).map_err(|e| format!("plt: {e}"))?;
     let entry_name = entry.entry_name.as_deref().unwrap_or("main");
     write_native_image_from_merged(
         &merged,
@@ -933,7 +933,7 @@ pub fn link_freestanding(
         .map_err(|e| format!("emit program object: {e}"))?;
     let objs = vec![parse_native_elf(&prog_bytes).map_err(|e| format!("parse: {e}"))?];
     let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
-    let plt = crate::emit_plt_for(&mut merged, target).map_err(|e| format!("plt: {e}"))?;
+    let plt = crate::emit_plt_for(&mut merged, target, false).map_err(|e| format!("plt: {e}"))?;
     write_native_image_from_merged(
         &merged,
         &plt,

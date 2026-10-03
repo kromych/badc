@@ -48,12 +48,12 @@ use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE,
     R_AARCH64_ADR_PREL_LO21, R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_JUMP26,
     R_AARCH64_LD_PREL_LO19, R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64,
-    R_AARCH64_TLS_DTPREL64, R_X86_64_32, R_X86_64_64, R_X86_64_DTPOFF32, R_X86_64_DTPOFF64,
-    R_X86_64_GOT64, R_X86_64_GOTOFF64, R_X86_64_GOTPC32, R_X86_64_GOTPC64, R_X86_64_GOTPCREL,
-    R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_PLTOFF64, R_X86_64_REX_GOTPCRELX,
-    TprelField, aarch64_abs_field, aarch64_is_tls, aarch64_ldst_lo12_scale, aarch64_movw_field,
-    aarch64_pcrel_data_field, aarch64_pcrel_imm_field, aarch64_tprel_field, x86_64_abs_field,
-    x86_64_is_tls, x86_64_pcrel_data_field, x86_64_tpoff_field,
+    R_AARCH64_TLS_DTPREL64, R_X86_64_32, R_X86_64_32S, R_X86_64_64, R_X86_64_DTPOFF32,
+    R_X86_64_DTPOFF64, R_X86_64_GOT64, R_X86_64_GOTOFF64, R_X86_64_GOTPC32, R_X86_64_GOTPC64,
+    R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_PLTOFF64,
+    R_X86_64_REX_GOTPCRELX, TprelField, aarch64_abs_field, aarch64_is_tls, aarch64_ldst_lo12_scale,
+    aarch64_movw_field, aarch64_pcrel_data_field, aarch64_pcrel_imm_field, aarch64_tprel_field,
+    x86_64_abs_field, x86_64_is_tls, x86_64_pcrel_data_field, x86_64_tpoff_field,
 };
 
 /// The tag this module's diagnostics carry.
@@ -224,6 +224,9 @@ pub struct MergedNative {
     /// `STT_OBJECT`. The writers republish the type on the undefined
     /// dynamic symbol instead of tagging every import a function.
     pub object_imports: alloc::collections::BTreeSet<usize>,
+    /// Indices into [`Self::imports`] whose call stub code takes as a value,
+    /// not as a branch target; filled by the PLT pass.
+    pub stub_address_imports: alloc::collections::BTreeSet<usize>,
     /// Concatenated standard DWARF byte streams from every
     /// input unit. Each unit's blob starts at
     /// `debug_*_bases[unit_idx]` inside the merged stream; the
@@ -4055,6 +4058,7 @@ impl<'a> Link<'a> {
             macho_tlv_fixups: tlv.fixups,
             copy_relocs,
             object_imports: self.object_imports,
+            stub_address_imports: BTreeSet::new(),
             debug_info: dbg.info.bytes,
             debug_abbrev: dbg.abbrev,
             debug_line: dbg.line.bytes,
@@ -4335,14 +4339,20 @@ fn plt_stub(machine: NativeMachine) -> Vec<u8> {
     }
 }
 
-/// A relocation a site may reach an import through. On aarch64 the
-/// address-of pair (`adrp` + `add`) materializes the stub's address
-/// for `&import`, so it needs a stub like a branch does.
+/// A relocation a site may reach an import through. An address-of form (aarch64
+/// `adrp` + `add`, an x86-64 PC-relative or absolute field) takes the stub's
+/// address for `&import`, so it needs a stub like a branch does.
 fn plt_eligible(machine: NativeMachine, rtype: u32) -> bool {
     match machine {
-        NativeMachine::X86_64 => {
-            matches!(rtype, R_X86_64_PLT32 | R_X86_64_PC32 | R_X86_64_PLTOFF64)
-        }
+        NativeMachine::X86_64 => matches!(
+            rtype,
+            R_X86_64_PLT32
+                | R_X86_64_PC32
+                | R_X86_64_PLTOFF64
+                | R_X86_64_32
+                | R_X86_64_32S
+                | R_X86_64_64
+        ),
         NativeMachine::Aarch64 => matches!(
             rtype,
             R_AARCH64_CALL26
@@ -4355,7 +4365,7 @@ fn plt_eligible(machine: NativeMachine, rtype: u32) -> bool {
 
 /// What a data slot naming an import holds: the import's call stub, made
 /// even for an import only data names, or the symbol itself, which the
-/// loader binds as it binds a GOT entry (Mach-O). Only the bind equals the
+/// loader binds as it binds a GOT entry (Mach-O, ELF). Only the bind equals the
 /// address code reads from the GOT.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataImportSlots {
@@ -4364,9 +4374,13 @@ pub enum DataImportSlots {
 }
 
 impl DataImportSlots {
-    /// The resolution `target`'s loader supports.
-    pub fn of(target: crate::c5::codegen::Target) -> Self {
-        if target.binds_data_imports() {
+    /// The resolution `target`'s loader supports. An ELF executable
+    /// `placed` at its link address keeps read-only storage free of load-time
+    /// relocations, so its slots hold the stub, which it publishes as the
+    /// import's address (GNU ld's canonical PLT entry).
+    pub fn of(target: crate::c5::codegen::Target, placed: bool) -> Self {
+        let elf = target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
+        if target.binds_data_imports() && !(placed && elf) {
             DataImportSlots::Bind
         } else {
             DataImportSlots::Stub
@@ -4374,12 +4388,14 @@ impl DataImportSlots {
     }
 }
 
-/// The PLT pass for `merged`'s machine, resolving data slots as `target`'s loader takes them.
+/// The PLT pass for `merged`'s machine, resolving data slots as `target`'s
+/// loader takes them for an image `placed` at its link address or not.
 pub fn emit_plt_for(
     merged: &mut MergedNative,
     target: crate::c5::codegen::Target,
+    placed: bool,
 ) -> Result<Vec<PltTrampoline>, C5Error> {
-    let slots = DataImportSlots::of(target);
+    let slots = DataImportSlots::of(target, placed);
     match merged.machine {
         NativeMachine::X86_64 => emit_x86_64_plt(merged, slots),
         NativeMachine::Aarch64 => emit_aarch64_plt(merged, slots),
@@ -4449,6 +4465,9 @@ fn emit_plt(
             .get(&reloc.import_index)
             .copied()
             .expect("every reloc has a stub from the first loop");
+        if !is_branch_reloc(machine, reloc.rtype) {
+            merged.stub_address_imports.insert(reloc.import_index);
+        }
         patch_site(merged, reloc, tramp, &mut parked_back)?;
     }
     let data_import_refs = match slots {
@@ -4474,6 +4493,7 @@ fn emit_plt(
                 text_offset
             }
         };
+        merged.stub_address_imports.insert(import_index);
         merged.data_abs_relocs.push(DataAbsReloc {
             slot_offset: slot,
             target: MergedTarget::Text(stub_at as i64 + addend),
@@ -4504,8 +4524,11 @@ pub fn emit_x86_64_plt(
         ));
     }
     emit_plt(merged, slots, |merged, reloc, tramp, parked_back| {
-        // The stub's distance from the GOT base is the writer's to fix.
-        if reloc.rtype == R_X86_64_PLTOFF64 {
+        // The stub's GOT-relative distance and absolute address are the writer's to fix.
+        if matches!(
+            reloc.rtype,
+            R_X86_64_PLTOFF64 | R_X86_64_32 | R_X86_64_32S | R_X86_64_64
+        ) {
             parked_back.push(PendingImportReloc {
                 import_index: usize::MAX,
                 addend: tramp as i64 + reloc.addend,
@@ -5618,35 +5641,57 @@ mod tests {
 
     /// Where the loader binds data slots, a static pointer to a libc function
     /// is relocated against the import's own symbol, not a forwarding body,
-    /// and the link leaves it to the writer without a call stub.
+    /// and the link leaves it to the writer without a call stub; an ELF
+    /// executable placed at its link address holds the stub instead, which it
+    /// publishes as the import's address.
     #[test]
     fn a_static_pointer_to_a_libc_function_names_the_import() {
-        let target = Target::MacOSAarch64;
-        let mut opts = NativeOptions::new().with_debug_info(false);
-        opts.output_kind = OutputKind::Relocatable;
-        let obj = compile_native_with(
-            "#include <stdio.h>\nint (*fp)(const char *) = puts;\n\
-             int main(void) { return fp == 0; }\n",
-            target,
-            opts,
-            crate::CompileOptions::default(),
-        );
-        let slots: Vec<&str> = (obj.data_relocs.iter().chain(&obj.relro_relocs))
-            .map(|r| obj.symbols[r.sym_idx].name.as_str())
-            .collect();
-        assert_eq!(slots, ["_puts"]);
-        assert!(
-            !obj.symbols
-                .iter()
-                .any(|s| s.section == NativeSymSection::Text && s.name.contains("puts")),
-            "no forwarding body: {:?}",
-            obj.symbols
-        );
-        let mut merged = link_native_objects(&[obj]).expect("link");
-        assert_eq!(merged.data_import_refs.len(), 1);
-        let stubs = emit_plt_for(&mut merged, target).expect("plt");
-        assert_eq!(merged.data_import_refs.len(), 1, "left to bind");
-        assert!(stubs.is_empty(), "no stub for an import nothing calls");
+        for (target, symbol) in [
+            (Target::MacOSAarch64, "_puts"),
+            (Target::LinuxX64, "puts"),
+            (Target::LinuxAarch64, "puts"),
+        ] {
+            let mut opts = NativeOptions::new().with_debug_info(false);
+            opts.output_kind = OutputKind::Relocatable;
+            let obj = compile_native_with(
+                "#include <stdio.h>\nint (*fp)(const char *) = puts;\n\
+                 int main(void) { return fp == 0; }\n",
+                target,
+                opts,
+                crate::CompileOptions::default(),
+            );
+            let slots: Vec<&str> = (obj.data_relocs.iter().chain(&obj.relro_relocs))
+                .map(|r| obj.symbols[r.sym_idx].name.as_str())
+                .collect();
+            assert_eq!(slots, [symbol], "{target:?}");
+            assert!(
+                !obj.symbols
+                    .iter()
+                    .any(|s| s.section == NativeSymSection::Text && s.name.contains("puts")),
+                "{target:?}: no forwarding body: {:?}",
+                obj.symbols
+            );
+            let objs = [obj];
+            let mut merged = link_native_objects(&objs).expect("link");
+            assert_eq!(merged.data_import_refs.len(), 1, "{target:?}");
+            let stubs = emit_plt_for(&mut merged, target, false).expect("plt");
+            assert_eq!(merged.data_import_refs.len(), 1, "{target:?}: left to bind");
+            assert!(
+                stubs.is_empty(),
+                "{target:?}: no stub for an import nothing calls"
+            );
+            if target != Target::MacOSAarch64 {
+                let mut placed = link_native_objects(&objs).expect("link");
+                let stubs = emit_plt_for(&mut placed, target, true).expect("plt");
+                assert!(placed.data_import_refs.is_empty(), "{target:?}");
+                assert_eq!(stubs.len(), 1, "{target:?}");
+                assert_eq!(
+                    placed.stub_address_imports.iter().collect::<Vec<_>>(),
+                    [&stubs[0].import_index],
+                    "{target:?}"
+                );
+            }
+        }
     }
 
     /// An otherwise-undefined reference resolves against a shared
@@ -5748,7 +5793,7 @@ mod tests {
                 "{target:?}: a call site branches, got {code_reads} read(s) and \
                  {code_branches} branch(es)",
             );
-            let plt = emit_plt_for(&mut merged, target).expect("plt pass");
+            let plt = emit_plt_for(&mut merged, target, false).expect("plt pass");
             assert!(
                 plt.iter().all(|t| t.import_index != data),
                 "{target:?}: the data import must get no call stub",

@@ -906,7 +906,8 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         cli,
         stack_warning.map(|w| (badc::diag::Code::EXEC_STACK, w)),
     );
-    let plt = match badc::emit_plt_for(&mut merged, cli.target) {
+    let placed = cli.mode != Mode::SharedLibrary && cli.exec_form().placed();
+    let plt = match badc::emit_plt_for(&mut merged, cli.target, placed) {
         Ok(p) => p,
         Err(e) => {
             eprint_diagnostic(format!("badc: {e}"));

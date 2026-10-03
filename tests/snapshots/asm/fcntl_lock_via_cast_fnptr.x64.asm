@@ -114,6 +114,3 @@ Disassembly of section .text:
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>
-
-<__c5_sys_fcntl>:
-               	jmp	<addr>

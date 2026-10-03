@@ -20,12 +20,14 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	mov	x20, x0
+               	mov	x21, #0x0               // =0
                	sub	x0, x20, #0x1
                	bl	<addr>
-               	mov	x21, x0
-               	sub	x0, x20, #0x2
-               	bl	<addr>
-               	add	x0, x21, x0
+               	sub	x20, x20, #0x2
+               	add	x21, x21, x0
+               	cmp	w20, #0x2
+               	b.ge	<addr>
+               	add	x0, x21, x20
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret

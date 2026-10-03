@@ -15,12 +15,14 @@
 //!     with `C`'s result unused. Every other `Return` in the function
 //!     must name the same, which the loop exit then returns (a `void`
 //!     function's recursion names no value).
-//!   * integer accumulator: `Return([Extend](op(acc, C)))` with
+//!   * integer accumulator: `Return([narrow](op(acc, C)))` with
 //!     `op` an integer `Add` / `Mul` (associative and commutative on
 //!     two's-complement, so the reassociation the loop performs is
 //!     exact) and the non-call operand defined independently of `C`.
-//!     A narrow return type re-narrows the sum with the leading
-//!     `Extend`; that width is carried onto the loop's accumulator.
+//!     A narrow return type re-narrows the sum -- a signed `Extend`, or
+//!     the mask an unsigned one takes -- and that narrowing is carried
+//!     onto the loop's accumulator; `C` may appear narrowed to at least
+//!     the same width, as a narrow call result is at its use.
 //!
 //! The rewrite rebuilds the function (value ids are positional, so the
 //! whole body is remapped): the entry block keeps its prologue
@@ -93,9 +95,76 @@ impl AccOp {
 enum Mode {
     /// Every return names the same constant exit.
     Const,
-    /// `Return([Extend](op(acc, other)))`; `narrow` is the return-type
-    /// width the sum is re-narrowed to (`None` for a full-width return).
-    Accum { op: AccOp, narrow: Option<LoadKind> },
+    /// `Return([narrow](op(acc, other)))`; `narrow` is how a narrow
+    /// return type re-narrows the sum (`None` for a full-width return).
+    Accum { op: AccOp, narrow: Option<Narrow> },
+}
+
+/// How a narrow integer value is re-narrowed: a signed `Extend`, or the
+/// mask that zero-extends an unsigned one.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Narrow {
+    Sign(LoadKind),
+    Zero(i64),
+}
+
+impl Narrow {
+    /// Bytes the narrowing keeps.
+    fn bytes(self) -> Option<u8> {
+        match self {
+            Narrow::Sign(kind) => kind.int_bytes(),
+            Narrow::Zero(0xff) => Some(1),
+            Narrow::Zero(0xffff) => Some(2),
+            Narrow::Zero(0xffff_ffff) => Some(4),
+            Narrow::Zero(_) => None,
+        }
+    }
+
+    /// The kind a phi of its values takes: a sign-extended one names its
+    /// width, a zero-extended one is a whole register, as the phis of
+    /// unsigned locals are.
+    fn phi_kind(self) -> LoadKind {
+        match self {
+            Narrow::Sign(kind) => kind,
+            Narrow::Zero(_) => LoadKind::I64,
+        }
+    }
+
+    /// Whether every value of `r` is its own narrowing.
+    fn keeps(self, r: super::value_range::Range) -> bool {
+        match self {
+            Narrow::Sign(kind) => r.fits(kind),
+            Narrow::Zero(mask) => r.kept_by_mask(mask),
+        }
+    }
+
+    fn inst(self, value: ValueId) -> Inst {
+        match self {
+            Narrow::Sign(kind) => Inst::Extend {
+                value,
+                kind,
+                nsw: false,
+            },
+            Narrow::Zero(mask) => Inst::BinopI {
+                op: BinOp::And,
+                lhs: value,
+                rhs_imm: mask,
+            },
+        }
+    }
+}
+
+/// The value `v` narrows and how, when `v` is a narrowing.
+fn narrowing(func: &FunctionSsa, v: ValueId) -> Option<(ValueId, Narrow)> {
+    match func.insts.get(v as usize)? {
+        Inst::Extend { value, kind, .. } => Some((*value, Narrow::Sign(*kind))),
+        Inst::BinopI {
+            op: BinOp::And,
+            lhs,
+            rhs_imm: mask @ (0xff | 0xffff | 0xffff_ffff),
+        } => Some((*lhs, Narrow::Zero(*mask))),
+        _ => None,
+    }
 }
 
 /// What a constant-mode `Return` names: no value, or a literal.
@@ -281,7 +350,7 @@ enum Class {
     /// self-call.
     TailConst(TailBlock, ConstExit),
     /// `Return([Extend](op(acc, call)))`.
-    TailAccum(TailBlock, AccOp, Option<LoadKind>),
+    TailAccum(TailBlock, AccOp, Option<Narrow>),
     /// A shape the pass cannot express; bail on the whole function.
     Bail,
 }
@@ -341,19 +410,39 @@ fn classify(func: &FunctionSsa, b: BlockId) -> Class {
             exit,
         );
     }
-    // Accumulator tail: `Return([Extend](op(acc, call)))`.
-    let (combine, narrow) = match func.insts.get(r as usize) {
-        Some(Inst::Extend { value, kind, .. }) => (*value, Some(*kind)),
-        _ => (r, None),
+    // Accumulator tail: `Return([narrow](op(acc, call)))`. Narrowings at
+    // least as wide stacked under the return's (the sum's own `nsw`
+    // re-narrowing, an `int` promotion's) keep the bits it keeps, so the
+    // stack narrows as the outermost does.
+    let (combine, narrow) = match narrowing(func, r) {
+        Some((mut v, outer)) => {
+            while let Some((inner, n)) = narrowing(func, v)
+                && n.bytes().zip(outer.bytes()).is_some_and(|(i, o)| i >= o)
+            {
+                v = inner;
+            }
+            (v, Some(outer))
+        }
+        None => (r, None),
+    };
+    // The call narrowed to at least the returned width, as a narrow
+    // result is at its use, stands for the call: two's-complement add and
+    // multiply carry nothing downward, so the low bits the return keeps
+    // depend only on the operands' low bits.
+    let width = narrow.and_then(Narrow::bytes);
+    let is_call = |v: ValueId| {
+        v == call_pc
+            || matches!(narrowing(func, v), Some((inner, n))
+                if inner == call_pc && width.is_some_and(|w| n.bytes().is_some_and(|b| b >= w)))
     };
     let (acc_op, other, other_imm) = match func.insts.get(combine as usize) {
         Some(Inst::Binop { op, lhs, rhs }) => {
             let Some(acc_op) = AccOp::from_binop(*op) else {
                 return Class::Bail;
             };
-            let other = if *lhs == call_pc && *rhs != call_pc {
+            let other = if is_call(*lhs) && !is_call(*rhs) {
                 *rhs
-            } else if *rhs == call_pc && *lhs != call_pc {
+            } else if is_call(*rhs) && !is_call(*lhs) {
                 *lhs
             } else {
                 return Class::Bail;
@@ -366,7 +455,7 @@ fn classify(func: &FunctionSsa, b: BlockId) -> Class {
         }
         // `call - k` accumulates `-k` and `call << k` the factor `2^k`: the
         // arithmetic wraps, so each agrees with its form for every such `k`.
-        Some(Inst::BinopI { op, lhs, rhs_imm }) if *lhs == call_pc => match *op {
+        Some(Inst::BinopI { op, lhs, rhs_imm }) if is_call(*lhs) => match *op {
             BinOp::Sub => (AccOp::Add, NO_VALUE, Some(rhs_imm.wrapping_neg())),
             BinOp::Shl if (0..64).contains(rhs_imm) => {
                 (AccOp::Mul, NO_VALUE, Some(1i64 << rhs_imm))
@@ -503,8 +592,8 @@ fn analyze(func: &FunctionSsa) -> Option<Plan> {
                 if r == NO_VALUE {
                     return None;
                 }
-                if let Some(kind) = narrow
-                    && !super::value_range::arg_range(&func.insts, r).fits(*kind)
+                if let Some(n) = narrow
+                    && !n.keeps(super::value_range::arg_range(&func.insts, r))
                 {
                     return None;
                 }
@@ -704,11 +793,7 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
                         }
                     };
                     acc_back[t] = match narrow {
-                        Some(kind) => emit_new!(Inst::Extend {
-                            value: sum,
-                            kind,
-                            nsw: false
-                        }),
+                        Some(n) => emit_new!(n.inst(sum)),
                         None => sum,
                     };
                 }
@@ -728,11 +813,7 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
                     rhs: x,
                 });
                 let ret = match narrow {
-                    Some(kind) => emit_new!(Inst::Extend {
-                        value: sum,
-                        kind,
-                        nsw: false
-                    }),
+                    Some(n) => emit_new!(n.inst(sum)),
                     None => sum,
                 };
                 terminator = Terminator::Return(ret);
@@ -773,7 +854,7 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
             }
             acc_phi_id = emit_new!(Inst::Phi {
                 incoming,
-                kind: narrow.unwrap_or(LoadKind::I64),
+                kind: narrow.map_or(LoadKind::I64, Narrow::phi_kind),
             });
         }
         for &pc in &plan.entry_move {

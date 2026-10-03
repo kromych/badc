@@ -990,6 +990,20 @@ pub(crate) enum LoadKind {
     V128,
 }
 
+impl LoadKind {
+    /// Bytes an integer kind reads; `None` for the floating and vector
+    /// kinds.
+    pub(crate) fn int_bytes(self) -> Option<u8> {
+        match self {
+            LoadKind::I64 => Some(8),
+            LoadKind::I32 | LoadKind::U32 => Some(4),
+            LoadKind::I16 | LoadKind::U16 => Some(2),
+            LoadKind::I8 | LoadKind::U8 => Some(1),
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => None,
+        }
+    }
+}
+
 /// How much of an indexed access's `index` forms the address: all 64
 /// bits, or the low word sign- / zero-extended by the access itself.
 /// Only AArch64, whose register-offset addressing has the forms, sets

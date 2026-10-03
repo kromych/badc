@@ -94,7 +94,10 @@ The linker also takes GNU-ld-shaped work directly: linker scripts
 symbol-export control (`--export-all`, `--export-data`). Invoked as `ld`,
 `ld.badc`, or with `--ld`, badc presents a GNU ld persona with its own flag
 table, which is what lets it stand in for `LD=` in an existing build --
-including [the Linux kernel's](linux-kernel.md).
+including [the Linux kernel's](linux-kernel.md). A link option a link does not
+implement is refused by name. As in GNU ld, an input whose `.note.GNU-stack`
+is executable makes the image's stack executable, with a warning, unless
+`-z noexecstack` is given.
 
 Inputs enter the link in command-line order, after the startup runtime (where
 gcc puts `crt1.o`), so constructors of one priority run in that order and the

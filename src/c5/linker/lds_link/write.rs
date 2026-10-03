@@ -7,13 +7,13 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use hashbrown::HashMap;
 
-use super::synth::sha1;
 use super::{
     ChunkSrc, ET_DYN, ET_EXEC, Elf64Phdr, FinalSym, LdsEmit, LdsLinker, PT_LOAD, PT_PHDR, Piece,
     SHF_LINK_ORDER, SHT_NOBITS, SHT_REL, SHT_RELA, SHT_STRTAB, SHT_SYMTAB, STB_LOCAL,
     SYNTH_DYNAMIC, SYNTH_DYNSTR, SYNTH_DYNSYM, SYNTH_GNU_HASH, SYNTH_HASH, SYNTH_VERDEF,
     SYNTH_VERSYM, SecFate, align_up, machine_uses_rela,
 };
+use crate::c5::object::sha1::sha1;
 
 /// `.symtab` and `.strtab` bytes, locals first as ELF requires, with
 /// each symbol's final index and the count of locals for `sh_info`.

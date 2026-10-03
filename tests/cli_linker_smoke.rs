@@ -4142,6 +4142,411 @@ fn a_script_link_takes_the_executable_form_the_flags_pick() {
     }
 }
 
+/// `(p_type, p_flags, p_align)` of an ELF64 image's program headers.
+fn elf_segment_aligns(bytes: &[u8]) -> Vec<(u32, u32, u64)> {
+    let rd = |o: usize, n: usize| {
+        let mut v = [0u8; 8];
+        v[..n].copy_from_slice(&bytes[o..o + n]);
+        u64::from_le_bytes(v)
+    };
+    let (phoff, phent, phnum) = (rd(0x20, 8) as usize, rd(0x36, 2) as usize, rd(0x38, 2));
+    (0..phnum as usize)
+        .map(|i| phoff + i * phent)
+        .map(|ph| (rd(ph, 4) as u32, rd(ph + 4, 4) as u32, rd(ph + 48, 8)))
+        .collect()
+}
+
+// The link without -T implements the link options another linker's users
+// pass: a build-id note, DT_RELR packing, the page size, `-S`, an
+// executable stack. The image runs where the host can run it, and two links
+// of one input carry one build id.
+#[test]
+fn hosted_link_options_shape_the_image() {
+    let dir = tempdir("hosted-link-options");
+    let src = write_source(
+        &dir,
+        "m.c",
+        "static int a = 1, b = 2, c = 3;\n\
+         int *table[] = { &a, &b, &c, &a, &b };\n\
+         int main(void) { return *table[0] + *table[1] + *table[2] + *table[4] - 8; }\n",
+    );
+    let opts = [
+        "-g",
+        "-Wl,--build-id",
+        "-Wl,-z,pack-relative-relocs",
+        "-Wl,-z,max-page-size=0x10000",
+        "-Wl,-z,execstack",
+        "-Wl,-S",
+    ];
+    for target in ["linux-x64", "linux-aarch64"] {
+        let link = |name: &str| {
+            let exe = dir.join(format!("{target}-{name}"));
+            run(
+                Command::new(badc())
+                    .args(["-q", &format!("--target={target}")])
+                    .args(opts)
+                    .arg(&src)
+                    .arg("-o")
+                    .arg(&exe),
+                "link",
+            );
+            std::fs::read(&exe).expect("read the image")
+        };
+        let bytes = link("a");
+        assert_eq!(bytes, link("b"), "{target}: one input, one image");
+        let sections = elf_sections(&bytes);
+        let has = |name: &str, sh_type: u32| sections.iter().any(|s| s.0 == name && s.1 == sh_type);
+        assert!(
+            has(".note.gnu.build-id", 7) && has(".relr.dyn", 19),
+            "{sections:?}"
+        );
+        assert!(
+            !sections.iter().any(|s| s.0.starts_with(".debug")),
+            "{target}: -S"
+        );
+        let segments = elf_segment_aligns(&bytes);
+        assert!(segments.iter().any(|s| s.0 == 4), "{target}: PT_NOTE");
+        assert!(
+            segments.iter().any(|s| s.0 == 0x6474_e551 && s.1 & 1 != 0),
+            "{target}: an executable PT_GNU_STACK"
+        );
+        assert!(
+            segments.iter().filter(|s| s.0 == 1).all(|s| s.2 == 0x10000),
+            "{target}: {segments:?}"
+        );
+        if target == host_linux_target() {
+            let out = Command::new(dir.join(format!("{target}-a")))
+                .output()
+                .expect("run the image");
+            assert_eq!(
+                out.status.code(),
+                Some(0),
+                "{target}: the table reads 1 2 3 2"
+            );
+        }
+    }
+}
+
+// A link option badc does not implement is refused by name, never taken
+// and dropped: without -T the options only the script engine has, with -T
+// the ones it lacks; an ELF option on another format; a `-z` keyword no
+// badc link implements. What a link has by construction passes.
+#[test]
+fn link_options_badc_does_not_implement_are_refused_by_name() {
+    let dir = tempdir("link-option-refusals");
+    let src = write_source(&dir, "m.c", "int main(void) { return 0; }\n");
+    let obj = dir.join("m.o");
+    run(
+        Command::new(badc())
+            .args(["-q", "--target=linux-x64", "-c"])
+            .arg(&src)
+            .arg("-o")
+            .arg(&obj),
+        "compile",
+    );
+    let script = write_source(
+        &dir,
+        "t.lds",
+        "ENTRY(main) SECTIONS { . = 0x400000; .text : { *(.text*) } .data : { *(.data*) } }\n",
+    );
+    let link = |target: &str, script_link: bool, opts: &[&str]| {
+        let mut cmd = Command::new(badc());
+        cmd.args(["-q", &format!("--target={target}")]).args(opts);
+        if script_link {
+            cmd.arg("-T").arg(&script).arg(&obj);
+        } else {
+            cmd.arg(&src);
+        }
+        cmd.arg("-o")
+            .arg(dir.join("out"))
+            .output()
+            .expect("run badc")
+    };
+    let hosted: &[(&[&str], &str)] = &[
+        (&["-Wl,-z,norelro"], "`-z norelro`"),
+        (&["-Wl,-z,lazy"], "`-z lazy`"),
+        (&["-Wl,-z,muldefs"], "`-z muldefs`"),
+        (&["-Wl,-z,undefs"], "`-z undefs`"),
+        (&["-Wl,-z,separate-code"], "`-z separate-code`"),
+        (&["-Wl,-z,nodelete"], "`-z nodelete`"),
+        (&["-Wl,--orphan-handling=warn"], "`--orphan-handling`"),
+        (
+            &["-Wl,--fix-cortex-a53-843419"],
+            "`--fix-cortex-a53-843419`",
+        ),
+    ];
+    for (opts, name) in hosted {
+        let out = link("linux-x64", false, opts);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success()
+                && err.contains(&format!("{name} is not supported by a link without -T")),
+            "{opts:?}: {err}"
+        );
+    }
+    let scripted: &[(&[&str], &str)] = &[
+        (&["-Wl,-z,relro"], "`-z relro`"),
+        (&["-Wl,-z,lazy"], "`-z lazy`"),
+        (&["-Wl,-z,undefs"], "`-z undefs`"),
+        (&["--export-all"], "`--export-all / --export-data`"),
+        (&["-lm"], "`-l`"),
+        (
+            &["-Wl,--fix-cortex-a53-843419"],
+            "`--fix-cortex-a53-843419`",
+        ),
+    ];
+    for (opts, name) in scripted {
+        let out = link("linux-x64", true, opts);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains(&format!("{name} is not supported by a -T link")),
+            "{opts:?}: {err}"
+        );
+    }
+    let out = link("macos-aarch64", false, &["-Wl,--build-id"]);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("it shapes an ELF image"), "{err}");
+    for opts in [
+        &["-Wl,-z,relro,-z,now,-z,text,-z,notext,-z,noexecstack"][..],
+        &["-Wl,-Bsymbolic,--no-warn-rwx-segments,--fatal-warnings,--no-undefined"],
+        &["-Wl,-X,--discard-none,--warn-execstack,--no-warn-execstack"],
+    ] {
+        let out = link("linux-x64", false, opts);
+        assert!(
+            out.status.success(),
+            "{opts:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    for (opts, exec_stack) in [
+        (&["-Wl,-z,norelro,-z,now,-z,execstack"][..], true),
+        (&["-Wl,-z,text"], false),
+    ] {
+        let out = link("linux-x64", true, opts);
+        assert!(
+            out.status.success(),
+            "{opts:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let bytes = std::fs::read(dir.join("out")).expect("read the image");
+        let stack = elf_segment_aligns(&bytes)
+            .into_iter()
+            .find(|s| s.0 == 0x6474_e551);
+        assert_eq!(stack.map(|s| s.1 & 1 != 0), Some(exec_stack), "{opts:?}");
+    }
+}
+
+// `--no-undefined` (`-z defs`) holds a shared library to the definitions
+// its link can see, as an executable always is; `-z undefs` lifts it. A
+// -T link reports a dynamic relocation into read-only memory under `-z
+// text`, and an executable stack under `-z execstack`.
+#[test]
+fn undefined_references_and_text_relocations_follow_the_z_keywords() {
+    let dir = tempdir("z-defs-text");
+    let lib = write_source(
+        &dir,
+        "u.c",
+        "int ext(void);\nint f(void) { return ext(); }\n",
+    );
+    let shared = |opts: &[&str]| {
+        Command::new(badc())
+            .args(["-q", "--target=linux-x64", "-shared"])
+            .args(opts)
+            .arg(&lib)
+            .arg("-o")
+            .arg(dir.join("libu.so"))
+            .output()
+            .expect("run badc")
+    };
+    for opts in [&["-Wl,--no-undefined"][..], &["-Wl,-z,defs"]] {
+        let out = shared(opts);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains("undefined reference to `ext`"),
+            "{err}"
+        );
+    }
+    for opts in [&[][..], &["-Wl,-z,defs,-z,undefs"]] {
+        assert!(shared(opts).status.success(), "{opts:?}");
+    }
+    let asm = write_source(
+        &dir,
+        "t.s",
+        ".globl _start\n_start:\n\tmovabs $v, %rax\n\tret\n.data\nv:\n\t.quad 0\n",
+    );
+    let script = write_source(
+        &dir,
+        "t.lds",
+        "ENTRY(_start) SECTIONS { . = 0x400000; .text : { *(.text*) } .data : { *(.data*) } }\n",
+    );
+    let obj = dir.join("t.o");
+    run(
+        Command::new(badc())
+            .args(["-q", "--target=linux-x64", "-c"])
+            .arg(&asm)
+            .arg("-o")
+            .arg(&obj),
+        "assemble",
+    );
+    let script_link = |opts: &[&str]| {
+        Command::new(badc())
+            .args(["-q", "--target=linux-x64", "-pie"])
+            .args(opts)
+            .arg("-T")
+            .arg(&script)
+            .arg(&obj)
+            .arg("-o")
+            .arg(dir.join("t"))
+            .output()
+            .expect("run badc")
+    };
+    assert!(script_link(&[]).status.success(), "DT_TEXTREL by default");
+    let out = script_link(&["-Wl,-z,text"]);
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success() && err.contains("read-only segment has dynamic relocations"),
+        "{err}"
+    );
+}
+
+/// GNU ld's stack rule in each link: an input whose `.note.GNU-stack` is
+/// executable makes the stack executable and is named in a warning; `-z
+/// noexecstack` overrides it, `-z execstack` forces the stack (the last of
+/// the two holds), `--no-warn-execstack` withholds the warning and
+/// `--warn-execstack` extends it to `-z execstack`.
+#[test]
+fn an_executable_stack_note_follows_gnu_lds_rule_in_every_link() {
+    let dir = tempdir("execstack-rule");
+    let compile = |name: &str, body: &str| {
+        let src = write_source(&dir, name, body);
+        let obj = dir.join(name.replace(".c", ".o"));
+        run(
+            Command::new(badc())
+                .args(["-q", "--target=linux-x64", "-c"])
+                .arg(&src)
+                .arg("-o")
+                .arg(&obj),
+            "compile",
+        );
+        obj
+    };
+    let m = compile("m.c", "int f(void);\nint main(void) { return f() - 1; }\n");
+    let x = compile(
+        "x.c",
+        "__asm__(\".section .note.GNU-stack,\\\"x\\\",@progbits\\n.text\");\n\
+         int f(void) { return 1; }\n",
+    );
+    let p = compile("p.c", "int f(void) { return 1; }\n");
+    let script = write_source(
+        &dir,
+        "t.lds",
+        "ENTRY(main) SECTIONS { . = 0x400000; .text : { *(.text*) } .data : { *(.data*) } }\n",
+    );
+    let image = dir.join("out");
+    // One link of `objs` under `ld_opts` (spelled as GNU ld takes them).
+    let link = |kind: &str, objs: &[&PathBuf], ld_opts: &[&str]| {
+        let mut cmd = Command::new(badc());
+        if kind == "--ld" {
+            cmd.args(["--ld", "-m", "elf_x86_64", "-e", "main"])
+                .args(ld_opts);
+        } else {
+            cmd.arg("--target=linux-x64");
+            if !ld_opts.is_empty() {
+                cmd.arg(format!("-Wl,{}", ld_opts.join(",")));
+            }
+            if kind == "-T" {
+                cmd.arg("-T").arg(&script);
+            }
+        }
+        let _ = std::fs::remove_file(&image);
+        let out = cmd
+            .args(objs)
+            .arg("-o")
+            .arg(&image)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert!(out.status.success(), "{kind} {ld_opts:?}: {err}");
+        let flags = gnu_stack_flags(&std::fs::read(&image).expect("read the image"));
+        (flags.expect("PT_GNU_STACK") & 1 != 0, err)
+    };
+    let by_input = "x.o: requires executable stack";
+    let by_option = "enabling an executable stack because of -z execstack";
+    for kind in ["hosted", "-T", "--ld"] {
+        for (objs, ld_opts, rwx, warning) in [
+            (&[&m, &p][..], &[][..], false, None),
+            (&[&m, &x], &[], true, Some(by_input)),
+            (&[&m, &x], &["-z", "noexecstack"], false, None),
+            (&[&m, &x], &["--no-warn-execstack"], true, None),
+            (&[&m, &p], &["-z", "execstack"], true, None),
+            (
+                &[&m, &p],
+                &["-z", "execstack", "--warn-execstack"],
+                true,
+                Some(by_option),
+            ),
+            (
+                &[&m, &x],
+                &["-z", "noexecstack", "-z", "execstack"],
+                true,
+                None,
+            ),
+        ] {
+            let (stack_x, err) = link(kind, objs, ld_opts);
+            assert_eq!(stack_x, rwx, "{kind} {ld_opts:?}: {err}");
+            match warning {
+                Some(w) => assert!(err.contains(w), "{kind} {ld_opts:?}: {err}"),
+                None => assert!(
+                    !err.contains("executable stack"),
+                    "{kind} {ld_opts:?}: {err}"
+                ),
+            }
+        }
+    }
+}
+
+/// The link without -T keeps every local symbol of its inputs, which is
+/// what `--discard-none` asks for; `-X` drops the assembler temporaries
+/// (`.L*`) among them. The last of the two holds, as in GNU ld.
+#[test]
+fn a_hosted_link_drops_the_assembler_temporaries_under_dash_x() {
+    let dir = tempdir("discard-temporaries");
+    let asm = write_source(
+        &dir,
+        "t.s",
+        ".text\n.globl f\nf:\n\tret\n\
+         .section .rodata.str1.1,\"aMS\",@progbits,1\n.Lstr:\n\t.asciz \"hi\"\n\
+         .data\n.globl ptr\nptr:\n\t.quad .Lstr\n",
+    );
+    let main = write_source(
+        &dir,
+        "m.c",
+        "void f(void);\nint main(void) { f(); return 0; }\n",
+    );
+    let exe = dir.join("out");
+    for (opts, kept) in [
+        (&[][..], true),
+        (&["-Wl,--discard-none"], true),
+        (&["-Wl,-X"], false),
+        (&["-Wl,-X,--discard-none"], true),
+        (&["-Wl,--discard-none,-X"], false),
+    ] {
+        run(
+            Command::new(badc())
+                .args(["-q", "--target=linux-x64"])
+                .args(opts)
+                .arg(&main)
+                .arg(&asm)
+                .arg("-o")
+                .arg(&exe),
+            "link",
+        );
+        let symbols = elf_symbols(&std::fs::read(&exe).expect("read the image"));
+        assert_eq!(symbols.iter().any(|s| s.0 == ".Lstr"), kept, "{opts:?}");
+        assert!(symbols.iter().any(|s| s.0 == "ptr"), "{opts:?}: ptr stays");
+    }
+}
+
 /// The `--target` name of this host when it is a Linux one.
 fn host_linux_target() -> &'static str {
     match (cfg!(target_os = "linux"), cfg!(target_arch = "x86_64")) {
@@ -8489,7 +8894,6 @@ fn the_system_linker_gives_a_badc_object_a_non_executable_stack() {
 }
 
 /// `p_flags` of an ELF64 image's `PT_GNU_STACK`.
-#[cfg(target_os = "linux")]
 fn gnu_stack_flags(image: &[u8]) -> Option<u32> {
     const PT_GNU_STACK: u32 = 0x6474_e551;
     let rd16 = |o: usize| u16::from_le_bytes([image[o], image[o + 1]]) as usize;

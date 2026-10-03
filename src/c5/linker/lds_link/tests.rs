@@ -1,6 +1,4 @@
-use super::dynamic_sections::encode_relr;
 use super::inputs::{RawReloc, strz};
-use super::synth::sha1;
 use super::*;
 use crate::c5::linker::default_script::default_script;
 use crate::c5::linker::lds::parse_linker_script;
@@ -1296,6 +1294,54 @@ fn a53_data_spans_are_not_scanned() {
     assert_eq!(a53_words(&res.image, 0xff8, 0, 4), insns.to_vec());
 }
 
+/// bfd's stack rule: `-z execstack` / `noexecstack` decide; without one,
+/// an input whose `.note.GNU-stack` is executable makes the stack
+/// executable, with a warning naming it that `--no-warn-execstack`
+/// withholds and `--warn-execstack` extends to `-z execstack`.
+#[test]
+fn an_executable_stack_note_makes_the_stack_executable() {
+    let script = parse_linker_script("SECTIONS { . = 0x400000; .text : { *(.text) } }").unwrap();
+    let obj = |name: &str, note_flags: u64| {
+        let o = TestObj::new()
+            .sec(".note.GNU-stack", SHT_PROGBITS, note_flags, 1, &[])
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sym(name, STB_GLOBAL, STT_FUNC, 1, 0, 1);
+        parse_lds_object(&format!("{name}.o"), o.build(EM_X86_64)).expect("parses")
+    };
+    let by_input = "x.o: requires executable stack";
+    let by_option = "because of -z execstack";
+    for (asked, exec_stack, warn_execstack, rwx, warning) in [
+        (false, None, None, false, None),
+        (true, None, None, true, Some(by_input)),
+        (true, None, Some(false), true, None),
+        (true, Some(false), None, false, None),
+        (false, Some(true), None, true, None),
+        (false, Some(true), Some(true), true, Some(by_option)),
+    ] {
+        let mut objs = alloc::vec![obj("_start", 0)];
+        if asked {
+            objs.push(obj("x", SHF_EXECINSTR));
+        }
+        let opts = LdsOptions {
+            exec_stack,
+            warn_execstack,
+            ..Default::default()
+        };
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let what = alloc::format!("{asked} {exec_stack:?} {warn_execstack:?}");
+        let stack = image_phdrs(&res.image)
+            .into_iter()
+            .find(|p| p.p_type == PT_GNU_STACK)
+            .expect("PT_GNU_STACK");
+        assert_eq!(stack.p_flags & PF_X != 0, rwx, "{what}");
+        let texts: Vec<&str> = res.warnings.iter().map(|w| w.text.as_str()).collect();
+        match warning {
+            Some(w) => assert!(texts.iter().any(|t| t.contains(w)), "{what}: {texts:?}"),
+            None => assert!(texts.is_empty(), "{what}: {texts:?}"),
+        }
+    }
+}
+
 /// The veneer symbol names its input section by the index the input
 /// file gives it, not by the position it holds in this link. The
 /// kernel links its kallsyms images with `--strip-debug` and the
@@ -1333,50 +1379,6 @@ fn a53_veneer_name_is_independent_of_the_dropped_sections() {
     let kept = veneers(false);
     assert_eq!(kept.len(), 1, "{kept:?}");
     assert_eq!(kept, veneers(true), "veneer name moved with the strip set");
-}
-
-#[test]
-fn relr_encoding_round_trips() {
-    let addrs = [0x1000u64, 0x1008, 0x1010, 0x1400, 0x1408 + 63 * 8];
-    let words = encode_relr(&addrs, 8);
-    let mut got: Vec<u64> = Vec::new();
-    let mut base = 0u64;
-    for w in words {
-        if w & 1 == 0 {
-            got.push(w);
-            base = w + 8;
-        } else {
-            let mut r = w >> 1;
-            let mut i = 0u64;
-            while r != 0 {
-                if r & 1 != 0 {
-                    got.push(base + i * 8);
-                }
-                r >>= 1;
-                i += 1;
-            }
-            base += 63 * 8;
-        }
-    }
-    assert_eq!(got, addrs);
-}
-
-#[test]
-fn sha1_matches_known_vectors() {
-    assert_eq!(
-        sha1(b"abc"),
-        [
-            0xa9, 0x99, 0x3e, 0x36, 0x47, 0x06, 0x81, 0x6a, 0xba, 0x3e, 0x25, 0x71, 0x78, 0x50,
-            0xc2, 0x6c, 0x9c, 0xd0, 0xd8, 0x9d
-        ]
-    );
-    assert_eq!(
-        sha1(b""),
-        [
-            0xda, 0x39, 0xa3, 0xee, 0x5e, 0x6b, 0x4b, 0x0d, 0x32, 0x55, 0xbf, 0xef, 0x95, 0x60,
-            0x18, 0x90, 0xaf, 0xd8, 0x07, 0x09
-        ]
-    );
 }
 
 #[test]

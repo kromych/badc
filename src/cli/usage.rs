@@ -107,6 +107,24 @@ Multi-TU knobs:
                            `-fno-pic` code. The last one wins; `-c` and
                            `--shared` ignore both. A Mach-O or PE
                            executable is always position-independent.
+  --build-id[=sha1|none], -z <keyword>, -S, -X, ...
+                           GNU ld's image options. Every link takes
+                           --build-id, -z max-page-size=, -z
+                           [no]pack-relative-relocs, -z [no]execstack,
+                           --[no-]warn-execstack, -z now, -z [no]text,
+                           --no-apply-dynamic-relocs, -S /
+                           --strip-debug, -X, --discard-none,
+                           --emit-relocs, --no-undefined / -z defs,
+                           -Bsymbolic and --fatal-warnings; one without
+                           -T also -z relro and, for --shared, -z
+                           undefs; one with -T --orphan-handling=, -z
+                           norelro and, for AArch64,
+                           --fix-cortex-a53-843419. Without -z
+                           [no]execstack an input whose
+                           .note.GNU-stack is executable makes the
+                           stack executable, as in GNU ld. --build-id
+                           and -z apply to ELF images. Any other is
+                           refused by name.
   --subsystem=<kind>       Stamp the PE subsystem: console, windows,
                            native, efi_application,
                            efi_boot_service_driver,

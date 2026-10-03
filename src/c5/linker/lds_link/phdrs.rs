@@ -181,7 +181,7 @@ impl<'a> LdsLinker<'a> {
         segs.push((
             Elf64Phdr {
                 p_type: PT_GNU_STACK,
-                p_flags: PF_R | PF_W,
+                p_flags: PF_R | PF_W | if self.exec_stack { PF_X } else { 0 },
                 p_align: 0x10,
                 ..Default::default()
             },

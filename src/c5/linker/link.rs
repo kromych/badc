@@ -312,6 +312,9 @@ pub struct MergedNative {
     pub init_fini_arrays: crate::c5::codegen::InitFiniArrays,
     /// Per-input-section placement records for the merged streams.
     pub section_map: SectionMap,
+    /// The first input whose `.note.GNU-stack` asks for an executable
+    /// stack.
+    pub exec_stack_input: Option<String>,
     /// C-identifier-named sections grouped across units, in the order
     /// their bytes sit in the merged streams. A writer able to carry a
     /// variable section list gives each its own output section; the
@@ -3758,6 +3761,7 @@ impl<'a> Link<'a> {
         let branch_imports = &self.branch_imports;
         self.object_imports.retain(|i| !branch_imports.contains(i));
         let symbols = self.image_symbols();
+        let exec_stack_input = (self.objs.iter().find(|o| o.exec_stack)).map(|o| o.source.clone());
         let defined: BTreeMap<String, MergedSymbol> = self
             .defined
             .into_iter()
@@ -3837,6 +3841,7 @@ impl<'a> Link<'a> {
                     .then_some((self.fini_array.0, self.fini_array.1 - self.fini_array.0)),
             },
             section_map: self.section_map,
+            exec_stack_input,
         })
     }
 }
@@ -4782,6 +4787,7 @@ mod tests {
             source: String::new(),
             sections: Vec::new(),
             discarded: Vec::new(),
+            exec_stack: false,
             text_align: 16,
             rodata: Vec::new(),
             rodata_align: 8,
@@ -5899,6 +5905,7 @@ mod tests {
                 source: alloc::string::String::new(),
                 sections: alloc::vec::Vec::new(),
                 discarded: alloc::vec::Vec::new(),
+                exec_stack: false,
                 text_align: 16,
                 rodata: Vec::new(),
                 rodata_align: 8,

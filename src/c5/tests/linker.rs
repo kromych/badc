@@ -4434,10 +4434,10 @@ fn export_data_exposes_data_globals_in_dynsym() {
             OutputKind::Executable,
             Target::LinuxX64,
             None,
-            false,
-            export_data,
-            false,
-            crate::c5::ExecForm::Pie,
+            &crate::c5::ImageOptions {
+                export_data,
+                ..Default::default()
+            },
         )
         .expect("write executable")
     };
@@ -4560,10 +4560,11 @@ fn dynamic_exports_carry_section_size_binding_and_visibility() {
         OutputKind::Executable,
         Target::LinuxX64,
         None,
-        true,
-        true,
-        false,
-        crate::c5::ExecForm::Pie,
+        &crate::c5::ImageOptions {
+            export_all: true,
+            export_data: true,
+            ..Default::default()
+        },
     )
     .expect("write executable");
 
@@ -5909,6 +5910,7 @@ fn minimal_native_object(
         source: alloc::string::String::new(),
         sections: alloc::vec::Vec::new(),
         discarded: alloc::vec::Vec::new(),
+        exec_stack: false,
         text_align: 16,
         rodata: Vec::new(),
         rodata_align: 8,
@@ -6223,6 +6225,7 @@ fn aarch64_data_ref_object_ex(
         source: alloc::string::String::new(),
         sections: alloc::vec::Vec::new(),
         discarded: alloc::vec::Vec::new(),
+        exec_stack: false,
         machine: NativeMachine::Aarch64,
         text,
         text_align: 16,
@@ -6480,6 +6483,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         source: alloc::string::String::new(),
         sections: alloc::vec::Vec::new(),
         discarded: alloc::vec::Vec::new(),
+        exec_stack: false,
         machine: NativeMachine::Aarch64,
         text: alloc::vec::Vec::new(),
         text_align: 16,

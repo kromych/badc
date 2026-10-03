@@ -292,6 +292,15 @@ pub struct LdsOptions {
     /// `--emit-relocs`: carry every applied input relocation into the
     /// output as `.rela.<outsec>` entries against the output symtab.
     pub emit_relocs: bool,
+    /// `-z execstack` (`Some(true)`) / `noexecstack` (`Some(false)`);
+    /// without either, an input's executable `.note.GNU-stack` makes the
+    /// stack executable, see [`crate::c5::linker::resolve_exec_stack`].
+    pub exec_stack: Option<bool>,
+    /// `--warn-execstack` (`Some(true)`) / `--no-warn-execstack`.
+    pub warn_execstack: Option<bool>,
+    /// `-z text`: a dynamic relocation against read-only memory is an
+    /// error rather than a `DT_TEXTREL`.
+    pub text: bool,
     /// Cleared to report no warning at all, as `-w` does. A row a
     /// selector raised to an error keeps its level.
     pub emit_warnings: bool,
@@ -347,6 +356,9 @@ impl Default for LdsOptions {
             pack_relative_relocs: false,
             apply_dynamic_relocs: true,
             emit_relocs: false,
+            exec_stack: None,
+            warn_execstack: None,
+            text: false,
             emit_warnings: true,
             diag: Config::new(),
             soname: None,
@@ -675,6 +687,8 @@ pub struct LdsLinker<'a> {
     /// Merged `.note.gnu.property` body, empty when no input carries a
     /// property that survives the merge.
     gnu_property: Vec<u8>,
+    /// `PT_GNU_STACK` is executable.
+    exec_stack: bool,
     /// Per output section, bytes reserved after its last input piece
     /// for erratum veneers; multiples of the page size so the insertion
     /// preserves every following page offset and the site set with it.
@@ -845,6 +859,14 @@ impl<'a> LdsLinker<'a> {
         // else; bfd consumes it and never places it. Keeping it would
         // put a PROGBITS input in whatever `*(.note*)` rule claims it,
         // which then stops being a note section.
+        let asked_by = objects.iter().find(|o| {
+            (o.sections.iter()).any(|s| s.name == ".note.GNU-stack" && s.flags & SHF_EXECINSTR != 0)
+        });
+        let (exec_stack, stack_warning) = super::zkeyword::resolve_exec_stack(
+            opts.exec_stack,
+            asked_by.map(|o| o.source.as_str()),
+            opts.warn_execstack,
+        );
         let drop_input = |s: &RawSection| {
             s.name == ".note.GNU-stack"
                 || (s.name == SYNTH_GNU_PROPERTY && s.shtype == SHT_NOTE)
@@ -889,7 +911,10 @@ impl<'a> LdsLinker<'a> {
         let class = class_for_machine(machine);
         let mut config = opts.diag.clone();
         config.inhibit_warnings(!opts.emit_warnings);
-        let sink = Sink::new(config, Control::default());
+        let mut sink = Sink::new(config, Control::default());
+        if let Some(warning) = stack_warning {
+            sink.emit(Code::EXEC_STACK, None, warning);
+        }
         let mut linker = LdsLinker {
             script,
             objects,
@@ -942,6 +967,7 @@ impl<'a> LdsLinker<'a> {
             emitted: Vec::new(),
             sym_index: SymIndex::default(),
             gnu_property,
+            exec_stack,
             veneer_reserve: BTreeMap::new(),
             veneer_syms: Vec::new(),
             code_spans: HashMap::new(),
@@ -1017,6 +1043,13 @@ impl<'a> LdsLinker<'a> {
         self.layout_pass(true)?;
         if !self.errors.is_empty() {
             return Err(self.script_errors());
+        }
+        if self.opts.text && self.has_readonly_dynamic_reloc() {
+            return Err(link_err(
+                Code::RELOCATION,
+                MODULE,
+                "read-only segment has dynamic relocations (-z text)",
+            ));
         }
         if !self.undefined.is_empty() {
             let list: Vec<String> = self

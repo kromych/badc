@@ -39,6 +39,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         mut target_libc,
         ..
     } = inputs;
+    super::driver::refuse_link_options(cli, false);
     let mut stats = LinkStats::new();
 
     // These objects are linked into an image below. A position-
@@ -841,18 +842,27 @@ fn warn_freestanding_imports(cli: &Cli, merged: &badc::MergedNative) {
             None => by_library.push((library, vec![format!("`{name}`")])),
         }
     }
-    let mut sink = badc::diag::Sink::new(cli.front.diag.clone(), Default::default());
-    for (library, names) in by_library {
+    let warnings = by_library.into_iter().map(|(library, names)| {
         let verb = if names.len() == 1 { "binds" } else { "bind" };
-        sink.emit(
-            badc::diag::Code::FREESTANDING_IMPORT,
-            None,
-            format!(
-                "--freestanding: {} {verb} to {library}, so the image runs through the \
-                 dynamic loader",
-                names.join(", ")
-            ),
+        let message = format!(
+            "--freestanding: {} {verb} to {library}, so the image runs through the dynamic loader",
+            names.join(", ")
         );
+        (badc::diag::Code::FREESTANDING_IMPORT, message)
+    });
+    emit_link_warnings(cli, warnings);
+}
+
+/// Report link warnings at the levels the command line set; under
+/// `--fatal-warnings` or `-Werror` one fails the link.
+fn emit_link_warnings(cli: &Cli, warnings: impl IntoIterator<Item = (badc::diag::Code, String)>) {
+    let mut config = cli.front.diag.clone();
+    if cli.link.fatal_warnings {
+        config.warnings_as_errors(true);
+    }
+    let mut sink = badc::diag::Sink::new(config, Default::default());
+    for (code, message) in warnings {
+        sink.emit(code, None, message);
     }
     let tty = std::io::stderr().is_terminal();
     for d in sink.diagnostics() {
@@ -868,8 +878,8 @@ fn warn_freestanding_imports(cli: &Cli, merged: &badc::MergedNative) {
 fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
     // A shared library may reference symbols the host executable
     // supplies at `dlopen` time; let an unresolved global become a
-    // load-time import instead of a link error.
-    let allow_undefined = cli.mode == Mode::SharedLibrary;
+    // load-time import instead of a link error, unless `--no-undefined`.
+    let allow_undefined = cli.mode == Mode::SharedLibrary && cli.link.defs != Some(true);
     let mut merged = match badc::link_native_objects_with_shared_libs(
         image.objs,
         allow_undefined,
@@ -883,6 +893,15 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
     };
     stats.mark("merge");
     warn_freestanding_imports(cli, &merged);
+    let (exec_stack, stack_warning) = badc::resolve_exec_stack(
+        cli.link.exec_stack,
+        merged.exec_stack_input.as_deref(),
+        cli.link.warn_execstack,
+    );
+    emit_link_warnings(
+        cli,
+        stack_warning.map(|w| (badc::diag::Code::EXEC_STACK, w)),
+    );
     let plt = match merged.machine {
         badc::NativeMachine::X86_64 => badc::emit_x86_64_plt(&mut merged),
         badc::NativeMachine::Aarch64 => badc::emit_aarch64_plt(&mut merged),
@@ -927,10 +946,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         native_output_kind,
         cli.target,
         shared_lib_name,
-        cli.link.export_all,
-        cli.link.export_data,
-        cli.link.emit_relocs,
-        cli.exec_form(),
+        &cli.image_options(exec_stack),
     );
 
     let bytes = match write_result {

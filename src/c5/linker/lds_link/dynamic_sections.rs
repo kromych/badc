@@ -3,6 +3,7 @@
 use crate::c5::linker::dynamic::{self, DynSym, VerDef};
 use crate::c5::linker::lds::glob_match;
 use crate::c5::object::elf_reloc_types as rt;
+use crate::c5::object::relr::encode_relr;
 use alloc::string::String;
 use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
@@ -15,38 +16,6 @@ use super::{
     SYNTH_REL, SYNTH_RELA, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM, ScriptSym, SecFate,
     machine_uses_rela,
 };
-
-/// Pack sorted 8-aligned addresses into SHT_RELR words: an even
-/// entry relocates its own address and rebases the window at
-/// `addr + 8`; each following odd entry's bits `1..=63` relocate
-/// `base + (bit-1)*8` and advance the base by `63*8`.
-pub(super) fn encode_relr(addrs: &[u64], word_size: u64) -> Vec<u64> {
-    let span = (word_size * 8 - 1) * word_size;
-    let mut out: Vec<u64> = Vec::new();
-    let mut i = 0usize;
-    while i < addrs.len() {
-        out.push(addrs[i]);
-        let mut base = addrs[i] + word_size;
-        i += 1;
-        loop {
-            let mut word: u64 = 0;
-            while i < addrs.len() {
-                let d = addrs[i].wrapping_sub(base);
-                if d >= span || !d.is_multiple_of(word_size) {
-                    break;
-                }
-                word |= 1u64 << (d / word_size);
-                i += 1;
-            }
-            if word == 0 {
-                break;
-            }
-            out.push((word << 1) | 1);
-            base += span;
-        }
-    }
-    out
-}
 
 impl<'a> LdsLinker<'a> {
     /// Version definitions in index order. Index 1 names the object
@@ -548,7 +517,7 @@ impl<'a> LdsLinker<'a> {
     /// True when a dynamic relocation applies to a section the loader
     /// maps read-only. `DT_TEXTREL` is what tells it to make the
     /// segment writable first; without the tag the write faults.
-    fn has_readonly_dynamic_reloc(&self) -> bool {
+    pub(super) fn has_readonly_dynamic_reloc(&self) -> bool {
         let sites = self
             .dyn_relas
             .iter()

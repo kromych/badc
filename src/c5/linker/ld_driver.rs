@@ -28,6 +28,7 @@ use super::relocatable::{
     DiscardLocals, EM_386, EM_AARCH64, EM_X86_64, EtRel, LdScript, RelinkOptions, link_relocatable,
     link_relocatable_with_map, parse_et_rel, parse_module_script,
 };
+use super::zkeyword::{ZKeyword, parse_z_keyword};
 
 /// How positional inputs and archive state were ordered on the
 /// command line.
@@ -80,6 +81,8 @@ struct LdArgs {
     orphan_handling: Option<String>,
     /// `-z noexecstack` / `-z execstack`.
     gnu_stack: Option<bool>,
+    /// `--warn-execstack` / `--no-warn-execstack`.
+    warn_execstack: Option<bool>,
     print_version: bool,
     // Final-link options; ignored under `-r`, which has no layout.
     /// `-shared` / `-pie`: ET_DYN output. The last of those two and
@@ -296,6 +299,7 @@ impl LdArgs {
             strip_debug: false,
             orphan_handling: None,
             gnu_stack: None,
+            warn_execstack: None,
             print_version: false,
             shared: false,
             shared_object: false,
@@ -471,6 +475,8 @@ impl LdArgs {
                 "-EL" => {} // little-endian, the only byte order supported
                 "-EB" => return Err(ld_err("big-endian output is not supported")),
                 "--no-warn-rwx-segments" | "--warn-rwx-segments" => {}
+                "--warn-execstack" => a.warn_execstack = Some(true),
+                "--no-warn-execstack" => a.warn_execstack = Some(false),
                 // badc records a DT_NEEDED for every shared library named
                 // on the command line, so neither keyword changes the tags.
                 "--as-needed" | "--no-as-needed" | "--add-needed" | "--no-add-needed" => {}
@@ -509,22 +515,15 @@ impl LdArgs {
     /// keywords shape final images only and change nothing about a
     /// relocatable link. Returns the exit code of a rejected one.
     fn apply_z_keyword(&mut self, kw: &str) -> Option<i32> {
-        match kw {
-            "noexecstack" => self.gnu_stack = Some(false),
-            "execstack" => self.gnu_stack = Some(true),
-            "pack-relative-relocs" => self.pack_relative_relocs = true,
-            "nopack-relative-relocs" => self.pack_relative_relocs = false,
-            s if s.starts_with("max-page-size=") => {
-                match parse_page_size(&s["max-page-size=".len()..]) {
-                    Some(n) => self.max_page_size = Some(n),
-                    None => {
-                        return Some(ld_err("-z max-page-size requires a power of two"));
-                    }
-                }
-            }
-            _ => {}
+        match parse_z_keyword(kw) {
+            Ok(ZKeyword::ExecStack(on)) => self.gnu_stack = Some(on),
+            Ok(ZKeyword::PackRelativeRelocs(on)) => self.pack_relative_relocs = on,
+            Ok(ZKeyword::MaxPageSize(n)) => self.max_page_size = Some(n),
+            // TODO: the other keywords take no effect on a final link.
+            Ok(_) => {}
+            Err(e) => return Some(ld_err(e)),
         }
-        check_z_keyword(kw)
+        None
     }
 }
 
@@ -605,47 +604,6 @@ fn run_relocatable_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         print!("{map}");
     }
     0
-}
-
-/// `-z` keywords ld accepts. Unknown ones are errors, matching GNU
-/// ld's `-z <kw> ignored` warning turned strict.
-fn check_z_keyword(kw: &str) -> Option<i32> {
-    let known = matches!(
-        kw,
-        "noexecstack"
-            | "execstack"
-            | "relro"
-            | "norelro"
-            | "now"
-            | "lazy"
-            | "text"
-            | "notext"
-            | "defs"
-            | "undefs"
-            | "muldefs"
-            | "pack-relative-relocs"
-            | "nopack-relative-relocs"
-            | "noseparate-code"
-            | "separate-code"
-            // Dynamic-loader policy recorded in DT_FLAGS_1. The kernel
-            // passes them on links that produce no dynamic segment, so
-            // there is nothing to record and nothing to warn about.
-            | "nodefaultlib"
-            | "nodelete"
-            | "nodlopen"
-            | "nodump"
-            | "origin"
-            | "global"
-            | "initfirst"
-            | "interpose"
-            | "loadfltr"
-    ) || kw.starts_with("max-page-size=")
-        || kw.starts_with("common-page-size=");
-    if known {
-        None
-    } else {
-        Some(ld_err(format!("unsupported -z keyword `{kw}`")))
-    }
 }
 
 /// What the input resolver needs from a parsed object. Archive member
@@ -1033,16 +991,6 @@ fn is_shared_object(bytes: &[u8]) -> bool {
         && u16::from_le_bytes([bytes[16], bytes[17]]) == ET_DYN
 }
 
-/// `-z max-page-size=` / GNU ld's size syntax: decimal or `0x` hex,
-/// power of two.
-fn parse_page_size(body: &str) -> Option<u64> {
-    let n = match body.strip_prefix("0x").or_else(|| body.strip_prefix("0X")) {
-        Some(hex) => u64::from_str_radix(hex, 16).ok()?,
-        None => body.parse::<u64>().ok()?,
-    };
-    n.is_power_of_two().then_some(n)
-}
-
 /// Final (non-`-r`) link: lay the inputs out under the script and
 /// write the image. With no `-T`/`--script` the built-in default
 /// script runs, as GNU ld's does.
@@ -1096,6 +1044,9 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         pack_relative_relocs: a.pack_relative_relocs,
         apply_dynamic_relocs: a.apply_dynamic_relocs,
         emit_relocs: a.emit_relocs,
+        exec_stack: a.gnu_stack,
+        warn_execstack: a.warn_execstack,
+        text: false,
         emit_warnings: true,
         diag: crate::c5::diag::Config::new(),
         soname: a.soname.clone(),
@@ -1214,13 +1165,13 @@ mod tests {
             "interpose",
             "loadfltr",
         ] {
-            assert!(check_z_keyword(kw).is_none(), "{kw} must link");
+            assert!(parse_z_keyword(kw).is_ok(), "{kw} must link");
         }
         for kw in ["noexecstack", "relro", "now", "max-page-size=4096"] {
-            assert!(check_z_keyword(kw).is_none(), "{kw} regressed");
+            assert!(parse_z_keyword(kw).is_ok(), "{kw} regressed");
         }
         for kw in ["bogus-keyword", "nodefaultlibs", ""] {
-            assert!(check_z_keyword(kw).is_some(), "{kw} must be refused");
+            assert!(parse_z_keyword(kw).is_err(), "{kw} must be refused");
         }
     }
 

@@ -184,6 +184,10 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
         // no position in a translation unit, so no pragma applies.
         diag: cli.front.diag.clone(),
         fix_cortex_a53_843419: cli.link.fix_cortex_a53_843419,
+        symbolic: cli.link.symbolic,
+        exec_stack: cli.link.exec_stack,
+        warn_execstack: cli.link.warn_execstack,
+        text: cli.link.text == Some(true),
         ..Default::default()
     };
     let res = match badc::link_with_script(&script, inputs, &opts) {
@@ -195,6 +199,9 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
     };
     for w in &res.warnings {
         eprintln!("badc: {w}");
+    }
+    if cli.link.fatal_warnings && !res.warnings.is_empty() {
+        fail("error: warnings treated as errors (--fatal-warnings)".to_string());
     }
     let out = cli
         .output_path

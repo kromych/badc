@@ -33,7 +33,11 @@ pub(crate) mod image;
 pub(crate) mod mach_o;
 #[cfg(feature = "native-emit")]
 pub(crate) mod pe;
+#[cfg(feature = "native-emit")]
+pub(crate) mod relr;
 pub(crate) mod section_table;
+#[cfg(feature = "native-emit")]
+pub(crate) mod sha1;
 #[cfg(feature = "std")]
 pub(crate) mod so_versions;
 #[cfg(feature = "std")]
@@ -1149,6 +1153,7 @@ pub(crate) mod test_support {
 
     pub(crate) fn empty_build() -> Build {
         Build {
+            elf: Default::default(),
             diagnostics: Vec::new(),
             text_data_ranges: Vec::new(),
             emitted_relocs: Vec::new(),

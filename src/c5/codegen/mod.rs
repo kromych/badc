@@ -2186,6 +2186,8 @@ pub(crate) struct Build {
     /// placed form at its link address and adds the loader tables when
     /// it binds a shared-library symbol.
     pub exec_form: ExecForm,
+    /// The container options a link asked for.
+    pub elf: ElfImageOptions,
     /// Mirror of [`NativeOptions::code_model`]. The relocatable writer
 
     /// reads it to pick the external-address form; see [`CodeModel`].
@@ -3857,6 +3859,18 @@ impl ExecForm {
     pub fn placed(self) -> bool {
         self != ExecForm::Pie
     }
+}
+
+/// The link options an ELF image's container takes: `--build-id=sha1`,
+/// `-z max-page-size=` (`None` keeps the target's), `-z
+/// pack-relative-relocs`, `--no-apply-dynamic-relocs`, `-z execstack`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ElfImageOptions {
+    pub build_id: bool,
+    pub max_page_size: Option<u64>,
+    pub pack_relative_relocs: bool,
+    pub no_apply_dynamic_relocs: bool,
+    pub exec_stack: bool,
 }
 
 impl Default for NativeOptions {

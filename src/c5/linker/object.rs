@@ -52,6 +52,7 @@ const SHT_RELA: u32 = 4;
 const SHT_NOBITS: u32 = 8;
 const SHT_NOTE: u32 = 7;
 const SHT_X86_64_UNWIND: u32 = 0x7000_0001;
+const SHF_EXECINSTR: u64 = 0x4;
 const SHN_UNDEF: u16 = 0;
 const SHN_ABS: u16 = 0xfff1;
 const SHN_COMMON: u16 = 0xfff2;
@@ -840,6 +841,9 @@ pub struct NativeObject {
     /// `(name, sh_size)`. Symbol / string / relocation tables are
     /// metadata consumed by the parse, not dropped content.
     pub discarded: Vec<(String, u64)>,
+    /// The object's `.note.GNU-stack` is executable: it asks for an
+    /// executable stack.
+    pub exec_stack: bool,
     pub machine: NativeMachine,
     pub text: Vec<u8>,
     /// Largest sh_addralign among the text-family sections, at least 16.
@@ -1091,6 +1095,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         source: String::new(),
         sections,
         discarded: roles.discarded,
+        exec_stack: roles.exec_stack,
         machine,
         text: blobs.text.0,
         text_align: blobs.text.1,
@@ -1267,6 +1272,8 @@ struct SectionRoles {
     /// Dropped content, for the link map's "Discarded input sections"
     /// report.
     discarded: Vec<(String, u64)>,
+    /// `.note.GNU-stack` is executable.
+    exec_stack: bool,
 }
 
 fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<SectionRoles, C5Error> {
@@ -1290,6 +1297,7 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
         debug_other: Vec::new(),
         init_array_sections: Vec::new(),
         discarded: Vec::new(),
+        exec_stack: false,
     };
     // Sections an `SHT_RELA` targets. `classify_section` needs this to
     // keep a relocated read-only section out of the read-only stream.
@@ -1305,6 +1313,9 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
     let mut section_family: Vec<SectionFamily> = alloc::vec![SectionFamily::Discard; shdrs.len()];
     for (i, sh) in shdrs.iter().enumerate() {
         let name = strtab_str(shstrtab_bytes, sh.sh_name as usize)?;
+        if name == ".note.GNU-stack" && sh.sh_flags & SHF_EXECINSTR != 0 {
+            roles.exec_stack = true;
+        }
         let channel = match name {
             ".symtab" => Some(&mut roles.symtab),
             ".note.badc" => Some(&mut roles.badc_note),
@@ -2378,7 +2389,6 @@ fn classify_section(
 ) -> Result<SectionFamily, C5Error> {
     const SHF_WRITE: u64 = 0x1;
     const SHF_ALLOC: u64 = 0x2;
-    const SHF_EXECINSTR: u64 = 0x4;
     const SHF_TLS: u64 = 0x400;
     let demote = |f: SectionFamily| {
         if f == SectionFamily::RoData && has_relocs {

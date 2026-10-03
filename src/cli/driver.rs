@@ -153,6 +153,21 @@ fn resolve_search_paths(cli: &mut Cli) {
     };
 }
 
+/// Stop a link asked for an option it does not implement, naming it.
+pub(crate) fn refuse_link_options(cli: &Cli, script: bool) {
+    if let Some((opt, why)) = cli.link_refusal(script) {
+        let path = if script {
+            "a -T link"
+        } else {
+            "a link without -T"
+        };
+        eprint_diagnostic(format!(
+            "badc: error: `{opt}` is not supported by {path}: {why}"
+        ));
+        std::process::exit(1);
+    }
+}
+
 /// Run the output mode the command line selected.
 fn dispatch(cli: Cli) {
     if cli.mode == Mode::ListSymbols {
@@ -195,16 +210,9 @@ fn dispatch(cli: Cli) {
             );
             std::process::exit(1);
         }
+        refuse_link_options(&cli, true);
         run_script_link(&cli, spath, inputs.link_inputs);
         return;
-    }
-    if cli.link.fix_cortex_a53_843419 {
-        // Implemented by the script-driven engine only.
-        // TODO: scan for the erratum sequences on the scriptless path.
-        eprintln!(
-            "badc: note: --fix-cortex-a53-843419 accepted; erratum veneers are not \
-             generated without -T/--script"
-        );
     }
     inputs.resolve_libraries(&cli);
     inputs.fall_back_to_stdin();

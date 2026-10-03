@@ -1234,10 +1234,10 @@ fn emit_relocs_survive_into_final_elf() {
             OutputKind::Executable,
             Target::LinuxX64,
             None,
-            false,
-            false,
-            emit,
-            crate::c5::ExecForm::Pie,
+            &crate::c5::ImageOptions {
+                emit_relocs: emit,
+                ..Default::default()
+            },
         )
         .expect("write")
     };

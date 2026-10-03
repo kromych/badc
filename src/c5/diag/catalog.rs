@@ -210,6 +210,9 @@ catalog! {
     6003, "merged-section-access", [], Warning, Controllable,
         [DEFAULT], Live,
         "a relocation reaches past the end of the merged section it names";
+    6004, "execstack", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "the image's stack is executable because an input's `.note.GNU-stack` asks for it, or because `-z execstack` does under `--warn-execstack`";
     6010, "undefined-symbol", [], Error, Hard,
         [], Live,
         "a reference no input object, archive or shared library defines";
@@ -277,6 +280,7 @@ impl Code {
     pub const ORPHAN_SECTION: Code = Code::new(6001);
     pub const MISSING_ENTRY: Code = Code::new(6002);
     pub const MERGED_SECTION_ACCESS: Code = Code::new(6003);
+    pub const EXEC_STACK: Code = Code::new(6004);
     pub const UNDEFINED_SYMBOL: Code = Code::new(6010);
     pub const DUPLICATE_SYMBOL: Code = Code::new(6011);
     pub const RELOCATION: Code = Code::new(6012);

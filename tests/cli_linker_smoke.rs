@@ -9515,6 +9515,73 @@ fn a_cxx_exception_lands_in_a_badc_linked_image() {
     assert_eq!(String::from_utf8_lossy(&out.stdout), "cleanup\ncaught\n1\n");
 }
 
+/// A static initializer naming an imported object or function, writable or
+/// `const`, with or without an offset, holds the address dyld binds: the
+/// one code takes at run time (C99 6.5.9p6). Compiled by badc, and compiled
+/// by the system compiler and linked by badc.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_static_pointer_to_an_import_holds_the_symbol() {
+    let test = "a_static_pointer_to_an_import_holds_the_symbol";
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping {test}: no system C compiler");
+        return;
+    };
+    let sdk = Command::new("xcrun").arg("--show-sdk-path").output();
+    let Some(sdk) = sdk.ok().filter(|o| o.status.success()) else {
+        eprintln!("skipping {test}: no SDK");
+        return;
+    };
+    let sdk = String::from_utf8_lossy(&sdk.stdout).trim().to_string();
+    let dir = tempdir(test);
+    write_source(
+        &dir,
+        "imp.c",
+        "#include <stdio.h>\n\
+         extern FILE *__stderrp;\n\
+         extern const char *const sys_signame[];\n\
+         FILE **p = &__stderrp;\n\
+         int (*fp)(const char *) = puts;\n\
+         int (*const cfp)(const char *) = puts;\n\
+         const char *const *sp = &sys_signame[1];\n\
+         int main(void) {\n\
+           int (*volatile q)(const char *) = puts;\n\
+           fprintf(*p, \"through the pointer %s\\n\", *sp);\n\
+           return (p == &__stderrp) | (fp == q) << 1 | (cfp == q) << 2 |\n\
+                  (sp == &sys_signame[1]) << 3;\n\
+         }\n",
+    );
+    run(
+        Command::new(&cc)
+            .args(["-c", "imp.c", "-o", "imp_cc.o"])
+            .current_dir(&dir),
+        "compile with the system compiler",
+    );
+    for (inputs, image) in [
+        (&["imp.c"][..], "imp_badc"),
+        (&["imp_cc.o"][..], "imp_link"),
+    ] {
+        run(
+            Command::new(badc())
+                .arg("-q")
+                .args(inputs)
+                .arg(format!("-L{sdk}/usr/lib"))
+                .args(["-lSystem", "-o", image])
+                .current_dir(&dir),
+            "link the image",
+        );
+        let out = Command::new(dir.join(image))
+            .output()
+            .expect("run the image");
+        assert_eq!(out.status.code(), Some(15), "{image}: {out:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&out.stderr),
+            "through the pointer hup\n",
+            "{image}"
+        );
+    }
+}
+
 /// The loader publishes its link map through the executable's `DT_DEBUG`,
 /// so gdb lists the C library a badc executable runs with and, through
 /// that library's thread debugging, reads its thread-locals.

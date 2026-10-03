@@ -3572,6 +3572,7 @@ impl<'a> RelocWriter<'a> {
     /// addend; label-address and function-pointer initializers against
     /// `.text` (or the named section the carve moved the function to), the
     /// addend being the target's offset within the section.
+    /// A slot the loader binds names the import's own symbol.
     fn emit_data_relocs(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         self.relocs.data = Vec::with_capacity(
@@ -3594,6 +3595,10 @@ impl<'a> RelocWriter<'a> {
         for r in &build.code_relocs {
             let (sym, addend) = self.code_reloc_ref(r.target_ent_pc as usize)?;
             self.push_data_row(r.data_offset, sym, addend);
+        }
+        for b in &build.data_import_binds {
+            let sym = self.syms.import_sym_indices[b.import] as u64;
+            self.push_data_row(b.data_offset, sym, b.addend);
         }
         Ok(())
     }

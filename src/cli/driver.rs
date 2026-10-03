@@ -188,7 +188,7 @@ fn dispatch(cli: Cli) {
     }
 
     if cli.mode == Mode::DumpNativeLink {
-        dump_native_link(&cli.positional[1..]);
+        dump_native_link(&cli.positional[1..], cli.target);
         return;
     }
     let mut inputs = Inputs::classify(&cli);

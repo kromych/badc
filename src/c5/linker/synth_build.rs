@@ -150,6 +150,20 @@ fn synth_program_and_build(
         resolve_entry_offset(merged, entry_name)?
     };
     let imports = synth_imports(merged, target)?;
+    // Slots the PLT pass left unresolved for the loader to bind.
+    let data_import_binds = merged.data_import_refs.clone();
+    if !data_import_binds.is_empty()
+        && super::DataImportSlots::of(target) != super::DataImportSlots::Bind
+    {
+        return Err(internal_err(
+            MODULE,
+            &alloc::format!(
+                "{} data slot(s) naming an import reached a {target:?} image unresolved; its \
+                 loader binds none",
+                data_import_binds.len()
+            ),
+        ));
+    }
     let SynthFixups {
         got: got_fixups,
         got_base: got_base_fixups,
@@ -215,6 +229,7 @@ fn synth_program_and_build(
         named_sections: merged.named_sections.clone(),
         compact_unwind: merged.compact_unwind.clone(),
         eh_frame: merged.eh_frame.clone(),
+        data_import_binds,
         orphaned_data: None,
         stopped_at_data_liveness: false,
         ssa_dump: alloc::string::String::new(),
@@ -386,6 +401,8 @@ fn synth_program(
         data_relocs: data_relocs.to_vec(),
         extern_data_relocs: Vec::new(),
         code_relocs: code_relocs.to_vec(),
+        sys_trampolines: Vec::new(),
+        bind_trampoline_slots: false,
         tls_data_relocs: Vec::new(),
         tls_extern_data_relocs: Vec::new(),
         tls_code_relocs: Vec::new(),

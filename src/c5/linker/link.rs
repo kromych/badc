@@ -30,7 +30,9 @@ use super::object::{
     EH_FRAME, ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
     NativeSymbol, RelocOrigin, RelocSite, SectionFamily, SharedLibrary, SymRef, reloc_desc,
 };
-use crate::c5::codegen::{CompactUnwind, EhFrameBlock, EhFrameField, EhFrameTarget, PointerSlot};
+use crate::c5::codegen::{
+    CompactUnwind, DataImportBind, EhFrameBlock, EhFrameField, EhFrameTarget, PointerSlot,
+};
 use crate::c5::layout::{pad_to_align as align_up, round_up as align_usize};
 // A tail-call `b <sym>` reaches its target the same way `bl` does --
 // a 26-bit PC-relative branch immediate -- so `R_AARCH64_JUMP26` shares
@@ -156,15 +158,8 @@ pub struct MergedNative {
     /// against the `.text` section symbol.
     pub applied_text_relocs: Vec<AppliedTextReloc>,
     /// Data-initializer slots that hold the address of an imported
-    /// function: `(slot_data_offset, import_index)`. A function-pointer
-    /// table entry naming a shared-library symbol (`static freefn t =
-    /// free;`) resolves to that import's PLT stub -- a valid function
-    /// pointer. The PLT pass creates the stub (even for an import
-    /// referenced only from data) and turns each entry into a
-    /// `Text`-target [`DataAbsReloc`] against the stub, so the PIE
-    /// writer emits the load-time relative relocation like any other
-    /// function-pointer initializer.
-    pub data_import_refs: Vec<(u64, usize)>,
+    /// symbol, resolved by the PLT pass as [`DataImportSlots`] says.
+    pub data_import_refs: Vec<DataImportBind>,
     /// Architecture of the merged image. Every unit must agree;
     /// the link errors out if they don't.
     pub machine: NativeMachine,
@@ -1060,9 +1055,8 @@ struct Link<'a> {
     applied_text_relocs: Vec<AppliedTextReloc>,
     data_abs_relocs: Vec<DataAbsReloc>,
     data_pcrel_relocs: Vec<DataPcRel>,
-    /// Data slots that name an imported function; the PLT pass turns
-    /// each into a stub-targeting `DataAbsReloc`.
-    data_import_refs: Vec<(u64, usize)>,
+    /// Data slots that name an import; see [`MergedNative::data_import_refs`].
+    data_import_refs: Vec<DataImportBind>,
     /// `.rela.tdata` slots, resolved like `.rela.data` ones.
     tls_abs_relocs: Vec<DataAbsReloc>,
 }
@@ -3163,11 +3157,7 @@ impl<'a> Link<'a> {
                     {
                         return self.write_data_slot(slot_offset, in_tls, reloc.addend, "weak");
                     }
-                    // A data initializer naming an imported function (a
-                    // function-pointer table entry, e.g. `static freefn
-                    // t = free;`) routes to the import's PLT stub -- a
-                    // valid function pointer -- recorded for the PLT
-                    // pass to resolve.
+                    // A data initializer naming an import is left to the PLT pass.
                     None if self.shlib_exports.contains(sym.name.as_str())
                         || self.is_routed_import(sym.name.as_str())
                         || self.import_idx_for_name.contains_key(sym.name.as_str()) =>
@@ -3186,7 +3176,11 @@ impl<'a> Link<'a> {
                         }
                         let idx = self.record_import(sym.name.as_str());
                         self.flat_imports.insert(sym.name.clone());
-                        self.data_import_refs.push((slot_offset, idx));
+                        self.data_import_refs.push(DataImportBind {
+                            data_offset: slot_offset,
+                            import: idx,
+                            addend: reloc.addend,
+                        });
                         return Ok(());
                     }
                     None => {
@@ -4359,6 +4353,39 @@ fn plt_eligible(machine: NativeMachine, rtype: u32) -> bool {
     }
 }
 
+/// What a data slot naming an import holds: the import's call stub, made
+/// even for an import only data names, or the symbol itself, which the
+/// loader binds as it binds a GOT entry (Mach-O). Only the bind equals the
+/// address code reads from the GOT.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DataImportSlots {
+    Stub,
+    Bind,
+}
+
+impl DataImportSlots {
+    /// The resolution `target`'s loader supports.
+    pub fn of(target: crate::c5::codegen::Target) -> Self {
+        if target.binds_data_imports() {
+            DataImportSlots::Bind
+        } else {
+            DataImportSlots::Stub
+        }
+    }
+}
+
+/// The PLT pass for `merged`'s machine, resolving data slots as `target`'s loader takes them.
+pub fn emit_plt_for(
+    merged: &mut MergedNative,
+    target: crate::c5::codegen::Target,
+) -> Result<Vec<PltTrampoline>, C5Error> {
+    let slots = DataImportSlots::of(target);
+    match merged.machine {
+        NativeMachine::X86_64 => emit_x86_64_plt(merged, slots),
+        NativeMachine::Aarch64 => emit_aarch64_plt(merged, slots),
+    }
+}
+
 /// Lower every `pending_imports` entry into a per-import PLT
 /// trampoline appended to `MergedNative::text` (16-byte aligned, one
 /// stub per import index in order of first occurrence; an import no
@@ -4366,10 +4393,10 @@ fn plt_eligible(machine: NativeMachine, rtype: u32) -> bool {
 /// `patch_site` with its trampoline's text offset. Data-ref entries
 /// (`import_index == usize::MAX`) and slot-read sites are re-parked for
 /// the writer, which resolves them against its own vmaddrs. A data
-/// initializer naming an imported function resolves to that import's
-/// stub through a Text-target `DataAbsReloc`.
+/// initializer naming an import resolves as `slots` says.
 fn emit_plt(
     merged: &mut MergedNative,
+    slots: DataImportSlots,
     mut patch_site: impl FnMut(
         &mut MergedNative,
         &PendingImportReloc,
@@ -4424,8 +4451,16 @@ fn emit_plt(
             .expect("every reloc has a stub from the first loop");
         patch_site(merged, reloc, tramp, &mut parked_back)?;
     }
-    let data_import_refs = merged.data_import_refs.clone();
-    for (slot, import_index) in data_import_refs {
+    let data_import_refs = match slots {
+        DataImportSlots::Stub => core::mem::take(&mut merged.data_import_refs),
+        DataImportSlots::Bind => Vec::new(),
+    };
+    for DataImportBind {
+        data_offset: slot,
+        import: import_index,
+        addend,
+    } in data_import_refs
+    {
         let stub_at = match tramp_for_import.get(&import_index) {
             Some(&off) => off,
             None => {
@@ -4441,7 +4476,7 @@ fn emit_plt(
         };
         merged.data_abs_relocs.push(DataAbsReloc {
             slot_offset: slot,
-            target: MergedTarget::Text(stub_at as i64),
+            target: MergedTarget::Text(stub_at as i64 + addend),
             anchor: MergedTarget::Text(stub_at as i64),
         });
     }
@@ -4455,7 +4490,10 @@ fn emit_plt(
 /// formula. The site's `text_offset` points at the disp32 byte (the
 /// codegen sets it to `instr_offset + 1`), so `S` is the trampoline
 /// byte offset within the merged text.
-pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, C5Error> {
+pub fn emit_x86_64_plt(
+    merged: &mut MergedNative,
+    slots: DataImportSlots,
+) -> Result<Vec<PltTrampoline>, C5Error> {
     if merged.machine != NativeMachine::X86_64 {
         return Err(internal_err(
             MODULE,
@@ -4465,7 +4503,7 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
             ),
         ));
     }
-    emit_plt(merged, |merged, reloc, tramp, parked_back| {
+    emit_plt(merged, slots, |merged, reloc, tramp, parked_back| {
         // The stub's distance from the GOT base is the writer's to fix.
         if reloc.rtype == R_X86_64_PLTOFF64 {
             parked_back.push(PendingImportReloc {
@@ -4501,7 +4539,10 @@ pub fn emit_x86_64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, 
 /// Text-section reference to the stub offset, which `synth_fixups`
 /// projects into a `FuncFixup` the writer resolves against the real
 /// vmaddr, exactly like a function-pointer literal.
-pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>, C5Error> {
+pub fn emit_aarch64_plt(
+    merged: &mut MergedNative,
+    slots: DataImportSlots,
+) -> Result<Vec<PltTrampoline>, C5Error> {
     if merged.machine != NativeMachine::Aarch64 {
         return Err(internal_err(
             MODULE,
@@ -4511,8 +4552,10 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
             ),
         ));
     }
-    emit_plt(merged, |merged, reloc, tramp, parked_back| {
-        match reloc.rtype {
+    emit_plt(
+        merged,
+        slots,
+        |merged, reloc, tramp, parked_back| match reloc.rtype {
             R_AARCH64_CALL26 | R_AARCH64_JUMP26 => {
                 let name = import_name(merged, reloc.import_index).to_string();
                 patch_aarch64_pcrel(
@@ -4540,8 +4583,8 @@ pub fn emit_aarch64_plt(merged: &mut MergedNative) -> Result<Vec<PltTrampoline>,
                 Ok(())
             }
             _ => unreachable!("the stub loop rejected every other rtype"),
-        }
-    })
+        },
+    )
 }
 
 /// Import name behind a [`PendingImportReloc::import_index`], for
@@ -5573,6 +5616,39 @@ mod tests {
         );
     }
 
+    /// Where the loader binds data slots, a static pointer to a libc function
+    /// is relocated against the import's own symbol, not a forwarding body,
+    /// and the link leaves it to the writer without a call stub.
+    #[test]
+    fn a_static_pointer_to_a_libc_function_names_the_import() {
+        let target = Target::MacOSAarch64;
+        let mut opts = NativeOptions::new().with_debug_info(false);
+        opts.output_kind = OutputKind::Relocatable;
+        let obj = compile_native_with(
+            "#include <stdio.h>\nint (*fp)(const char *) = puts;\n\
+             int main(void) { return fp == 0; }\n",
+            target,
+            opts,
+            crate::CompileOptions::default(),
+        );
+        let slots: Vec<&str> = (obj.data_relocs.iter().chain(&obj.relro_relocs))
+            .map(|r| obj.symbols[r.sym_idx].name.as_str())
+            .collect();
+        assert_eq!(slots, ["_puts"]);
+        assert!(
+            !obj.symbols
+                .iter()
+                .any(|s| s.section == NativeSymSection::Text && s.name.contains("puts")),
+            "no forwarding body: {:?}",
+            obj.symbols
+        );
+        let mut merged = link_native_objects(&[obj]).expect("link");
+        assert_eq!(merged.data_import_refs.len(), 1);
+        let stubs = emit_plt_for(&mut merged, target).expect("plt");
+        assert_eq!(merged.data_import_refs.len(), 1, "left to bind");
+        assert!(stubs.is_empty(), "no stub for an import nothing calls");
+    }
+
     /// An otherwise-undefined reference resolves against a shared
     /// library's exports: the executable link succeeds instead of
     /// erroring, the symbol becomes a load-time import, and the
@@ -5672,11 +5748,7 @@ mod tests {
                 "{target:?}: a call site branches, got {code_reads} read(s) and \
                  {code_branches} branch(es)",
             );
-            let plt = match merged.machine {
-                NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
-                NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
-            }
-            .expect("plt pass");
+            let plt = emit_plt_for(&mut merged, target).expect("plt pass");
             assert!(
                 plt.iter().all(|t| t.import_index != data),
                 "{target:?}: the data import must get no call stub",
@@ -5762,7 +5834,7 @@ mod tests {
             "the function pointer in data should be recorded as a data import",
         );
         let before = merged.data_abs_relocs.len();
-        let _ = emit_aarch64_plt(&mut merged).expect("plt pass");
+        let _ = emit_aarch64_plt(&mut merged, DataImportSlots::Stub).expect("plt pass");
         assert!(
             merged.data_abs_relocs.len() > before,
             "the PLT pass should emit a stub-targeting DataAbsReloc for the data import",
@@ -5839,7 +5911,7 @@ mod tests {
             "expected at least two pending imports (printf + puts), got {pending_pre}",
         );
 
-        let trampolines = emit_x86_64_plt(&mut merged).expect("plt");
+        let trampolines = emit_x86_64_plt(&mut merged, DataImportSlots::Stub).expect("plt");
         assert!(
             trampolines.len() >= 2,
             "expected >= 2 trampolines for printf + puts, got {}",
@@ -5903,7 +5975,7 @@ mod tests {
         let copts = crate::CompileOptions::default().with_no_entry_point(true);
         let a = compile_native_with("int caller(void) { return 0; }\n", target, opts, copts);
         let mut merged = link_native_objects(&[a]).expect("link");
-        let err = emit_x86_64_plt(&mut merged).unwrap_err();
+        let err = emit_x86_64_plt(&mut merged, DataImportSlots::Stub).unwrap_err();
         assert!(
             err.to_string().contains("X86_64"),
             "unexpected error: {err}",
@@ -5935,7 +6007,7 @@ mod tests {
             "expected at least two pending imports (printf + puts), got {pending_pre}",
         );
 
-        let trampolines = emit_aarch64_plt(&mut merged).expect("plt");
+        let trampolines = emit_aarch64_plt(&mut merged, DataImportSlots::Stub).expect("plt");
         assert!(
             trampolines.len() >= 2,
             "expected >= 2 trampolines for printf + puts, got {}",
@@ -5993,7 +6065,7 @@ mod tests {
         let copts = crate::CompileOptions::default().with_no_entry_point(true);
         let a = compile_native_with("int caller(void) { return 0; }\n", target, opts, copts);
         let mut merged = link_native_objects(&[a]).expect("link");
-        let err = emit_aarch64_plt(&mut merged).unwrap_err();
+        let err = emit_aarch64_plt(&mut merged, DataImportSlots::Stub).unwrap_err();
         assert!(
             err.to_string().contains("Aarch64"),
             "unexpected error: {err}",

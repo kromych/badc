@@ -2850,6 +2850,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         named_sections: alloc::vec::Vec::new(),
         compact_unwind: alloc::vec::Vec::new(),
         eh_frame: alloc::vec::Vec::new(),
+        data_import_binds: alloc::vec::Vec::new(),
         // The GOT base is a cross-unit link fact; the single-TU emit
         // has no table to name.
         got_base_fixups: alloc::vec::Vec::new(),

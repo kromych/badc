@@ -2580,6 +2580,8 @@ pub struct Compiler {
     /// real function body lands so they never split a caller
     /// mid-emission.
     sys_trampoline_sym: alloc::collections::BTreeMap<usize, usize>,
+    /// [`Program::sys_trampolines`].
+    sys_trampolines: Vec<(u64, i64)>,
 
     /// Per-TU counter for anonymous compound-literal backing
     /// symbols. C99 6.5.2.5 compound literals at file scope
@@ -3136,6 +3138,7 @@ impl Compiler {
             current_function_name: String::new(),
             code_reloc_sym_idx: Vec::new(),
             sys_trampoline_sym: alloc::collections::BTreeMap::new(),
+            sys_trampolines: Vec::new(),
             glo_imm_refs: alloc::vec::Vec::new(),
             data_reloc_sym_idx: alloc::vec::Vec::new(),
             init_reloc_slots: alloc::collections::BTreeSet::new(),
@@ -3707,6 +3710,8 @@ impl Compiler {
             data_relocs: self.data_relocs,
             extern_data_relocs: self.extern_data_relocs,
             code_relocs: self.code_relocs,
+            sys_trampolines: self.sys_trampolines,
+            bind_trampoline_slots: false,
             tls_data_relocs: self.tls_data_relocs,
             tls_extern_data_relocs: self.tls_extern_data_relocs,
             tls_code_relocs: self.tls_code_relocs,

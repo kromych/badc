@@ -1259,7 +1259,7 @@ fn emit_relocs_survive_into_final_elf() {
         !merged.applied_text_relocs.is_empty(),
         "merge records the applied text relocations"
     );
-    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let image = |emit: bool| {
         write_native_image_from_merged_ex(
             &merged,

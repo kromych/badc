@@ -318,6 +318,13 @@ pub struct Program {
     /// writer handling mirrors `data_relocs` -- see [`CodeReloc`]
     /// for the per-format strategy.
     pub code_relocs: Vec<CodeReloc>,
+    /// `(ent_pc, binding index)` of each libc trampoline: the function a static
+    /// initializer stores in place of a binding's load-time address.
+    pub(crate) sys_trampolines: Vec<(u64, i64)>,
+    /// The loader binds data slots, so one naming a trampoline is bound to the
+    /// binding instead: the address code reads from the GOT, as C99 6.5.9p6
+    /// requires of two pointers to one function.
+    pub(crate) bind_trampoline_slots: bool,
     /// Address-constant initializers of `_Thread_local` objects (C99
     /// 6.7.8p4). `data_offset` is a byte offset into [`Self::tls_data`],
     /// the initialization template the runtime copies per thread; the
@@ -517,6 +524,15 @@ impl Program {
             .flat_map(|f| f.label_data_slots.iter().map(|s| (s.data_offset, f.ent_pc)))
     }
 
+    /// The binding a data slot naming the function at `ent_pc` is bound to.
+    pub(crate) fn bound_trampoline(&self, ent_pc: u64) -> Option<i64> {
+        if !self.bind_trampoline_slots {
+            return None;
+        }
+        let at = self.sys_trampolines.iter().find(|t| t.0 == ent_pc)?;
+        Some(at.1)
+    }
+
     /// Every `data` byte offset a slot value is written into after the
     /// initializer bytes are staged: link-time addresses within this
     /// unit, extern symbol addresses, function addresses, and `&&label`
@@ -690,6 +706,8 @@ impl DataOffsets for Program {
             data_relocs,
             extern_data_relocs,
             code_relocs,
+            sys_trampolines: _,       // code address space
+            bind_trampoline_slots: _, // a mode
             tls_data_relocs,
             tls_extern_data_relocs: _, // slot in `tls_data`, target by name
             tls_code_relocs: _,        // slot in `tls_data`, target in code
@@ -826,6 +844,8 @@ mod data_offset_tests {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            sys_trampolines: Vec::new(),
+            bind_trampoline_slots: false,
             tls_data_relocs: Vec::new(),
             tls_extern_data_relocs: Vec::new(),
             tls_code_relocs: Vec::new(),

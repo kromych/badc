@@ -7,7 +7,7 @@ use badc::{PredefinedKind, predefined_symbols};
 /// ET_EXEC writer for `MergedNative` lands. Args are taken
 /// verbatim from the command line minus the leading executable
 /// name; non-flag positional args are treated as `.o` paths.
-pub(crate) fn dump_native_link(rest: &[String]) {
+pub(crate) fn dump_native_link(rest: &[String], target: badc::Target) {
     let paths: Vec<&str> = rest
         .iter()
         .filter(|a| !a.starts_with("--") && *a != "--dump-native-link")
@@ -78,10 +78,7 @@ pub(crate) fn dump_native_link(rest: &[String]) {
     // byte adrp+ldr+br on aarch64), but the link-side
     // contract is identical: append one trampoline per unique
     // import, patch each call-site to reach it.
-    let plt_result = match merged.machine {
-        badc::NativeMachine::X86_64 => badc::emit_x86_64_plt(&mut merged),
-        badc::NativeMachine::Aarch64 => badc::emit_aarch64_plt(&mut merged),
-    };
+    let plt_result = badc::emit_plt_for(&mut merged, target);
     match plt_result {
         Ok(tramps) => {
             println!("  PLT tramps  = {} entry(ies)", tramps.len());

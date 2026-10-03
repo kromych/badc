@@ -69,6 +69,7 @@ const BIND_OPCODE_SET_DYLIB_SPECIAL_IMM: u8 = 0x30;
 const BIND_SPECIAL_DYLIB_FLAT_LOOKUP_IMM: u8 = 0x0E;
 const BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM: u8 = 0x40;
 const BIND_OPCODE_SET_TYPE_IMM: u8 = 0x50;
+const BIND_OPCODE_SET_ADDEND_SLEB: u8 = 0x60;
 const BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB: u8 = 0x70;
 const BIND_OPCODE_DO_BIND: u8 = 0x90;
 
@@ -359,6 +360,19 @@ fn put_uleb128(out: &mut Vec<u8>, mut v: u64) {
         let byte = (v & 0x7F) as u8;
         v >>= 7;
         if v == 0 {
+            out.push(byte);
+            return;
+        }
+        out.push(byte | 0x80);
+    }
+}
+
+/// Signed LEB128: 7-bit groups until the rest is the last group's sign.
+fn put_sleb128(out: &mut Vec<u8>, mut v: i64) {
+    loop {
+        let byte = (v & 0x7F) as u8;
+        v >>= 7;
+        if (v == 0 && byte & 0x40 == 0) || (v == -1 && byte & 0x40 != 0) {
             out.push(byte);
             return;
         }
@@ -1235,9 +1249,19 @@ fn push_bind_source(out: &mut Vec<u8>, source: BindSource) {
     }
 }
 
+/// A data slot bound to `import + addend`, at `(segment, offset)`.
+struct DataBind {
+    import: usize,
+    slot: (u8, u64),
+    addend: i64,
+}
+
+/// The bind stream: each import's `__got` slot at the head of `segment` and
+/// the data slots naming it, then the TLV descriptors' bootstrap slots.
 fn build_bind_opcodes(
     imports: &super::ResolvedImports,
     segment: u8,
+    data_binds: &[DataBind],
     tlv_ctx: Option<TlvBindContext>,
 ) -> Vec<u8> {
     let mut out = Vec::new();
@@ -1256,9 +1280,23 @@ fn build_bind_opcodes(
         out.push(BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM); // flags = 0
         out.extend_from_slice(imp.real_symbol.as_bytes());
         out.push(0); // NUL terminator
-        out.push(BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB | (segment & 0x0F));
-        put_uleb128(&mut out, (i * 8) as u64);
-        out.push(BIND_OPCODE_DO_BIND);
+        let slots = (data_binds.iter())
+            .filter(|b| b.import == i)
+            .map(|b| (b.slot, b.addend));
+        for ((seg, offset), addend) in core::iter::once(((segment, (i * 8) as u64), 0)).chain(slots)
+        {
+            out.push(BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB | (seg & 0x0F));
+            put_uleb128(&mut out, offset);
+            if addend != 0 {
+                out.push(BIND_OPCODE_SET_ADDEND_SLEB);
+                put_sleb128(&mut out, addend);
+            }
+            out.push(BIND_OPCODE_DO_BIND);
+            if addend != 0 {
+                out.push(BIND_OPCODE_SET_ADDEND_SLEB);
+                put_sleb128(&mut out, 0);
+            }
+        }
     }
     if let Some(ctx) = tlv_ctx {
         let bootstrap_source = BindSource::Dylib(ctx.bootstrap_ordinal);
@@ -2151,19 +2189,6 @@ impl<'a> MachOWriter<'a> {
         let build = self.build;
         let l = &self.layout;
         let seg_data = seg_index_data(l.data_const_present);
-        self.linkedit.bind_ops = build_bind_opcodes(
-            &build.imports,
-            seg_data,
-            if self.tls_present {
-                Some(TlvBindContext {
-                    segment_offset: l.thread_vars_offset_in_segment,
-                    tlv_count: self.n_tlv,
-                    bootstrap_ordinal: tlv_bootstrap_ordinal(&build.imports.dylibs)?,
-                })
-            } else {
-                None
-            },
-        );
         let data_slot = |off: u64| -> (u8, u64) {
             if off < l.relro_total {
                 (SEG_INDEX_DATA_CONST, off.saturating_sub(l.ro_len))
@@ -2174,6 +2199,27 @@ impl<'a> MachOWriter<'a> {
                 )
             }
         };
+        let data_binds: Vec<DataBind> = (build.data_import_binds.iter())
+            .map(|b| DataBind {
+                import: b.import,
+                slot: data_slot(b.data_offset),
+                addend: b.addend,
+            })
+            .collect();
+        self.linkedit.bind_ops = build_bind_opcodes(
+            &build.imports,
+            seg_data,
+            &data_binds,
+            if self.tls_present {
+                Some(TlvBindContext {
+                    segment_offset: l.thread_vars_offset_in_segment,
+                    tlv_count: self.n_tlv,
+                    bootstrap_ordinal: tlv_bootstrap_ordinal(&build.imports.dylibs)?,
+                })
+            } else {
+                None
+            },
+        );
         self.linkedit.rebase_ops = build_rebase_opcodes(
             &build.data_relocs,
             &build.code_relocs,
@@ -2969,6 +3015,89 @@ mod tests {
         panic!("no {seg},{name}");
     }
 
+    /// A data slot naming an import binds to the symbol plus its addend
+    /// beside the import's `__got` slot, and takes no rebase.
+    #[test]
+    fn a_data_slot_naming_an_import_binds_to_its_symbol() {
+        use crate::c5::codegen::DataImportBind;
+        let mut b = tiny_build();
+        b.data = alloc::vec![0; 32];
+        b.data_import_binds = [(16, 0), (24, -40)]
+            .map(|(data_offset, addend)| DataImportBind {
+                data_offset,
+                import: 0,
+                addend,
+            })
+            .to_vec();
+        let bytes = write(&tiny_program(), &b).unwrap();
+        let (got, _, _) = section_header(&bytes, "__DATA", "__got");
+        let (data, _, _) = section_header(&bytes, "__DATA", "__data");
+        let (binds, rebases) = dyld_info(&bytes);
+        let write = |offset, addend| (String::from("_write"), offset, addend);
+        assert_eq!(
+            binds,
+            [
+                write(0, 0),
+                write(data + 16 - got, 0),
+                write(data + 24 - got, -40)
+            ]
+        );
+        assert!(rebases.is_empty(), "{rebases:?}");
+    }
+
+    /// The `(symbol, segment offset, addend)` of each bind, all in one
+    /// segment, and the rebase opcode bytes, from `LC_DYLD_INFO_ONLY`.
+    fn dyld_info(bytes: &[u8]) -> (Vec<(String, u64, i64)>, Vec<u8>) {
+        let mut lc = 32usize;
+        for _ in 0..read_u32(bytes, 16) {
+            if read_u32(bytes, lc) == LC_DYLD_INFO_ONLY {
+                let at = |o: usize| read_u32(bytes, lc + o) as usize;
+                let rebase = bytes[at(8)..at(8) + at(12)].to_vec();
+                let stream = &bytes[at(16)..at(16) + at(20)];
+                let leb = |i: &mut usize, signed: bool| {
+                    let (mut v, mut shift) = (0i64, 0);
+                    loop {
+                        let byte = stream[*i];
+                        *i += 1;
+                        v |= i64::from(byte & 0x7f) << shift;
+                        shift += 7;
+                        if byte & 0x80 == 0 {
+                            if signed && byte & 0x40 != 0 {
+                                v |= -1 << shift;
+                            }
+                            return v;
+                        }
+                    }
+                };
+                let mut binds = Vec::new();
+                let (mut symbol, mut offset, mut addend, mut i) = (String::new(), 0, 0, 0);
+                while i < stream.len() && stream[i] != BIND_OPCODE_DONE {
+                    let op = stream[i] & 0xF0;
+                    i += 1;
+                    match op {
+                        BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM => {
+                            let end = i + stream[i..].iter().position(|&c| c == 0).unwrap();
+                            symbol = String::from_utf8_lossy(&stream[i..end]).into_owned();
+                            i = end + 1;
+                        }
+                        BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB => {
+                            offset = leb(&mut i, false) as u64;
+                        }
+                        BIND_OPCODE_SET_ADDEND_SLEB => addend = leb(&mut i, true),
+                        BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB => {
+                            leb(&mut i, false);
+                        }
+                        BIND_OPCODE_DO_BIND => binds.push((symbol.clone(), offset, addend)),
+                        _ => {}
+                    }
+                }
+                return (binds, rebase.into_iter().filter(|&op| op != 0).collect());
+            }
+            lc += read_u32(bytes, lc + 4) as usize;
+        }
+        panic!("no LC_DYLD_INFO_ONLY");
+    }
+
     #[test]
     fn writes_mh_magic_64() {
         let bytes = write(&tiny_program(), &tiny_build()).unwrap();
@@ -3118,7 +3247,7 @@ mod tests {
             imports: (0..20).map(|i| sample_import(i, false)).collect(),
             dylibs,
         };
-        let out = build_bind_opcodes(&imports, 1, None);
+        let out = build_bind_opcodes(&imports, 1, &[], None);
         assert!(
             out.windows(2)
                 .any(|w| w == [BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB, 0x10]),

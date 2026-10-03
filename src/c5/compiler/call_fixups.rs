@@ -189,6 +189,8 @@ impl Compiler {
             }
             let ent_pc = self.next_ent_pc;
             self.symbols[tr_idx].val = ent_pc as i64;
+            self.sys_trampolines
+                .push((ent_pc as u64, self.symbols[sys_idx].val));
             // C99 6.9 has no notion of synthetic helpers, but
             // a trampoline body is emitted into this TU's text,
             // so its symbol is `defined here` for the linker

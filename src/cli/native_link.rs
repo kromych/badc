@@ -906,11 +906,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         cli,
         stack_warning.map(|w| (badc::diag::Code::EXEC_STACK, w)),
     );
-    let plt = match merged.machine {
-        badc::NativeMachine::X86_64 => badc::emit_x86_64_plt(&mut merged),
-        badc::NativeMachine::Aarch64 => badc::emit_aarch64_plt(&mut merged),
-    };
-    let plt = match plt {
+    let plt = match badc::emit_plt_for(&mut merged, cli.target) {
         Ok(p) => p,
         Err(e) => {
             eprint_diagnostic(format!("badc: {e}"));

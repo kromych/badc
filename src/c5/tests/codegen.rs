@@ -483,12 +483,9 @@ fn string_literals_land_read_only_in_every_target() {
 fn relocated_const_lands_in_relro_region_in_every_target() {
     use crate::c5::compiler::CompileOptions;
     use crate::c5::linker::{
-        NativeMachine, link_native_objects, parse_native_elf, write_native_image_from_merged,
+        link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
-    use crate::c5::{
-        Compiler, NativeOptions, OutputKind, Target, emit_aarch64_plt, emit_native_with_options,
-        emit_x86_64_plt,
-    };
+    use crate::c5::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
     const PT_GNU_RELRO: u32 = 0x6474_E552;
     const MEM_READ: u32 = 0x4000_0000;
     const MEM_WRITE: u32 = 0x8000_0000;
@@ -532,11 +529,7 @@ fn relocated_const_lands_in_relro_region_in_every_target() {
             merged.data_ro_len < merged.data_relro_len,
             "{target:?}: the link must produce a non-empty relro region"
         );
-        let plt = match merged.machine {
-            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
-            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
-        }
-        .expect("plt");
+        let plt = crate::emit_plt_for(&mut merged, target).expect("plt");
         let image = write_native_image_from_merged(
             &merged,
             &plt,
@@ -613,12 +606,9 @@ fn relocated_const_lands_in_relro_region_in_every_target() {
 fn relro_const_leaves_the_rodata_prefix_intact_in_every_target() {
     use crate::c5::compiler::CompileOptions;
     use crate::c5::linker::{
-        NativeMachine, link_native_objects, parse_native_elf, write_native_image_from_merged,
+        link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
-    use crate::c5::{
-        Compiler, NativeOptions, OutputKind, Target, emit_aarch64_plt, emit_native_with_options,
-        emit_x86_64_plt,
-    };
+    use crate::c5::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
     const PT_GNU_RELRO: u32 = 0x6474_E552;
     const MEM_WRITE: u32 = 0x8000_0000;
     // One unit mixing a pure `const` with a relocation-carrying one.
@@ -678,11 +668,7 @@ fn relro_const_leaves_the_rodata_prefix_intact_in_every_target() {
             merged.data_ro_len > 0 && merged.data_relro_len > merged.data_ro_len,
             "{target:?}: the link must keep a read-only prefix and a relro region"
         );
-        let plt = match merged.machine {
-            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
-            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
-        }
-        .expect("plt");
+        let plt = crate::emit_plt_for(&mut merged, target).expect("plt");
         let image = write_native_image_from_merged(
             &merged,
             &plt,
@@ -764,12 +750,9 @@ fn relro_const_leaves_the_rodata_prefix_intact_in_every_target() {
 fn statically_relocated_object_keeps_const_storage_read_only_when_linked() {
     use crate::c5::compiler::CompileOptions;
     use crate::c5::linker::{
-        NativeMachine, link_native_objects, parse_native_elf, write_native_image_from_merged,
+        link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
-    use crate::c5::{
-        Compiler, NativeOptions, OutputKind, Target, emit_aarch64_plt, emit_native_with_options,
-        emit_x86_64_plt,
-    };
+    use crate::c5::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
     const PT_GNU_RELRO: u32 = 0x6474_E552;
     let src = "\
         const char pure_tab[16] = \"PURETABPURETAB\";\n\
@@ -807,11 +790,7 @@ fn statically_relocated_object_keeps_const_storage_read_only_when_linked() {
             merged.data_relro_len > 0,
             "{target:?}: the demoted section must reach the relro region"
         );
-        let plt = match merged.machine {
-            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
-            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
-        }
-        .expect("plt");
+        let plt = crate::emit_plt_for(&mut merged, target).expect("plt");
         let image = write_native_image_from_merged(
             &merged,
             &plt,
@@ -4599,7 +4578,7 @@ fn pe_export_name_table_is_lexically_sorted() {
     let bytes = emit_native_with_options(&program, Target::WindowsX64, opts).expect("emit");
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let mut merged = link_native_objects(&[obj]).expect("link");
-    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let dll = write_native_image_from_merged(
         &merged,
         &plt,
@@ -4830,7 +4809,7 @@ fn foreign_cst16_section_lands_sixteen_aligned_in_image() {
         .expect("foreign data symbol must survive the merge")
         .value;
     assert_eq!(sym_value % 16, 0, "merged .data offset must stay aligned");
-    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let exe = write_native_image_from_merged(
         &merged,
         &plt,

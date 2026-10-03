@@ -941,12 +941,13 @@ pub(crate) fn data_region_addr(regions: &[DataRegion], off: u64) -> u64 {
 /// values, AST data offsets, relocation slots), then lower the result.
 #[cfg(feature = "native-emit")]
 fn compact_and_lower(
-    program: Program,
+    mut program: Program,
     target: Target,
     options: NativeOptions,
 ) -> Result<(Program, i64, Build), C5Error> {
     use crate::c5::codegen::LowerMode;
     use crate::c5::codegen::ssa::shadow;
+    program.bind_trampoline_slots = target.binds_data_imports();
     let segregate = options.bss_segregate && !bss_segregation_disabled();
     let first =
         crate::c5::codegen::ssa::emit_common::time_pass("object::compact_program_data", || {
@@ -1131,6 +1132,8 @@ pub(crate) mod test_support {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            sys_trampolines: Vec::new(),
+            bind_trampoline_slots: false,
             tls_data_relocs: Vec::new(),
             tls_extern_data_relocs: Vec::new(),
             tls_code_relocs: Vec::new(),
@@ -1166,6 +1169,7 @@ pub(crate) mod test_support {
             named_sections: Vec::new(),
             compact_unwind: Vec::new(),
             eh_frame: Vec::new(),
+            data_import_binds: Vec::new(),
             got_base_fixups: Vec::new(),
             got_rel_fields: Vec::new(),
             got_pcrel_fixups: Vec::new(),

@@ -570,7 +570,11 @@ pub(crate) fn compute_live_sets(
     let mut code_edges: Vec<Vec<usize>> = alloc::vec![Vec::new(); n];
     let mut data_edges: Vec<Vec<usize>> = alloc::vec![Vec::new(); n];
     if n > 0 {
-        for r in &program.code_relocs {
+        // A slot the loader binds to a binding holds no trampoline.
+        let bound = |r: &&crate::c5::program::CodeReloc| {
+            program.bound_trampoline(r.target_ent_pc).is_some()
+        };
+        for r in program.code_relocs.iter().filter(|r| !bound(r)) {
             let off = r.data_offset as i64;
             if (0..data_len).contains(&off) {
                 code_edges[interval_of(off)].push(r.target_ent_pc as usize);

@@ -166,9 +166,14 @@ impl<'a> ConstData<'a> {
         }
         // A code slot names a body of this unit or an import placeholder
         // the emitters resolve by name, as `ImmCode` does either way.
+        // A slot the loader binds is no constant.
         for r in &program.code_relocs {
             let pc = r.target_ent_pc as usize;
-            relocs.push((r.data_offset as i64, Some(AddrConst::Code(pc))));
+            let constant = program.bound_trampoline(r.target_ent_pc).is_none();
+            relocs.push((
+                r.data_offset as i64,
+                constant.then_some(AddrConst::Code(pc)),
+            ));
         }
         relocs.extend(
             program

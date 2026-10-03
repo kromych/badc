@@ -3967,7 +3967,7 @@ fn thread_local_storage_links_into_pt_tls_executable() {
         merged.tls_data.starts_with(&7i32.to_le_bytes()),
         "initialised TLS image must survive the merge"
     );
-    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let exe = write_native_image_from_merged(
         &merged,
         &plt,
@@ -4018,8 +4018,7 @@ fn thread_local_storage_links_into_pt_tls_executable() {
 fn thread_local_blocks_merge_on_their_alignment() {
     use crate::c5::compiler::CompileOptions;
     use crate::c5::linker::{
-        emit_aarch64_plt, emit_x86_64_plt, link_native_objects, parse_native_elf,
-        write_native_image_from_merged,
+        link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     const UNIT_MAIN: &str = "typedef struct __attribute__((aligned(16))) { long a, b; } S16;\n\
@@ -4086,11 +4085,7 @@ fn thread_local_blocks_merge_on_their_alignment() {
             other_base, 32,
             "{target:?}: the second unit's block sits on its alignment"
         );
-        let plt = match target {
-            Target::LinuxX64 => emit_x86_64_plt(&mut merged),
-            _ => emit_aarch64_plt(&mut merged),
-        }
-        .expect("plt");
+        let plt = crate::emit_plt_for(&mut merged, target).expect("plt");
         let exe = write_native_image_from_merged(
             &merged,
             &plt,
@@ -4309,7 +4304,7 @@ fn pragma_export_round_trips_into_shared_library() {
         alloc::vec!["exported_fn".to_string()],
         "linker unions only the exported names"
     );
-    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let so = write_native_image_from_merged(
         &merged,
         &plt,
@@ -4360,7 +4355,7 @@ fn export_all_executable_exposes_dynamic_symbols() {
         let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
         let obj = parse_native_elf(&bytes).expect("parse ET_REL");
         let mut merged = link_native_objects(&[obj]).expect("link");
-        let plt = emit_x86_64_plt(&mut merged).expect("plt");
+        let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
         write_native_image_from_merged(
             &merged,
             &plt,
@@ -4425,7 +4420,7 @@ fn export_data_exposes_data_globals_in_dynsym() {
         let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
         let obj = parse_native_elf(&bytes).expect("parse ET_REL");
         let mut merged = link_native_objects(&[obj]).expect("link");
-        let plt = emit_x86_64_plt(&mut merged).expect("plt");
+        let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
         write_native_image_from_merged_ex(
             &merged,
             &plt,
@@ -4551,7 +4546,7 @@ fn dynamic_exports_carry_section_size_binding_and_visibility() {
     let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let mut merged = link_native_objects(&[obj]).expect("link");
-    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let image = write_native_image_from_merged_ex(
         &merged,
         &plt,
@@ -4615,7 +4610,7 @@ fn macho_executable_exports_globals_through_dyld_info_trie() {
     // global must all resolve through the trie at their symtab
     // addresses.
     use crate::c5::linker::{
-        emit_aarch64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+        emit_plt_for, link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
     use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
     let program = Compiler::with_options(
@@ -4638,7 +4633,7 @@ fn macho_executable_exports_globals_through_dyld_info_trie() {
     let bytes = emit_native_with_options(&program, Target::MacOSAarch64, opts).expect("emit");
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let mut merged = link_native_objects(&[obj]).expect("link");
-    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let plt = emit_plt_for(&mut merged, Target::MacOSAarch64).expect("plt");
     let exe = write_native_image_from_merged(
         &merged,
         &plt,
@@ -4853,7 +4848,7 @@ fn thread_local_in_elf_shared_library_is_a_link_error() {
         !merged.tls_data.is_empty(),
         "the merged unit must carry TLS data"
     );
-    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let err = write_native_image_from_merged(
         &merged,
         &plt,
@@ -4905,7 +4900,7 @@ fn shared_object_relocates_internal_data_pointers() {
     let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let mut merged = link_native_objects(&[obj]).expect("link");
-    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let so = write_native_image_from_merged(
         &merged,
         &plt,
@@ -4921,7 +4916,7 @@ fn shared_object_relocates_internal_data_pointers() {
         so_rel >= 2,
         "shared object must relocate the two internal function pointers, got {so_rel}"
     );
-    let plt2 = emit_x86_64_plt(&mut merged).expect("plt");
+    let plt2 = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let exe = write_native_image_from_merged(
         &merged,
         &plt2,
@@ -4991,7 +4986,7 @@ fn export_all_round_trips_into_shared_library() {
         "a static function must not round-trip"
     );
     let mut merged = link_native_objects(&[obj]).expect("link");
-    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let so = write_native_image_from_merged(
         &merged,
         &plt,
@@ -5037,7 +5032,7 @@ fn win64_dll_records_requested_name() {
     let bytes = emit_native_with_options(&program, Target::WindowsX64, opts).expect("emit");
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let mut merged = link_native_objects(&[obj]).expect("link");
-    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let dll = write_native_image_from_merged(
         &merged,
         &plt,
@@ -6154,7 +6149,7 @@ fn weak_undef_binds_against_a_shared_library_export() {
         merged
             .data_import_refs
             .iter()
-            .any(|&(off, idx)| off == 0 && idx == 0),
+            .any(|b| b.data_offset == 0 && b.import == 0 && b.addend == 0),
         "the pointer slot is recorded against the import, not zeroed",
     );
 }
@@ -6353,7 +6348,7 @@ fn aarch64_lo12_relocations_all_reach_the_same_target() {
     };
     use crate::c5::{OutputKind, Target};
     let mut merged = link_native_objects(&[aarch64_lo12_object()]).expect("link");
-    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let plt = emit_aarch64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let exe = write_native_image_from_merged(
         &merged,
         &plt,
@@ -6435,7 +6430,7 @@ fn unhandled_relocation_type_is_a_link_error_naming_it() {
     // the image is never written with the site left unpatched.
     let e = link_native_objects(&[obj])
         .and_then(|mut merged| {
-            let plt = emit_aarch64_plt(&mut merged)?;
+            let plt = emit_aarch64_plt(&mut merged, crate::DataImportSlots::Stub)?;
             write_native_image_from_merged(
                 &merged,
                 &plt,
@@ -6734,7 +6729,7 @@ fn aarch64_shared_adrp_link(words: &[u32], relocs: &[(u64, u32)]) -> alloc::vec:
         0x100,
     );
     let mut merged = link_native_objects(&[obj]).expect("link");
-    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let plt = emit_aarch64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let exe = write_native_image_from_merged(
         &merged,
         &plt,
@@ -6895,7 +6890,7 @@ fn aarch64_pairs_for_symbols_on_distinct_pages_stay_independent() {
         0x2000,
     );
     let mut merged = link_native_objects(&[obj]).expect("link");
-    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let plt = emit_aarch64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let exe = write_native_image_from_merged(
         &merged,
         &plt,
@@ -6950,7 +6945,7 @@ fn aarch64_got_low12_sites_sharing_one_adrp_all_load_the_slot() {
     );
     let mut merged =
         link_native_objects_with_options(&[obj], true).expect("an undefined global is an import");
-    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let plt = emit_aarch64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let exe = write_native_image_from_merged(
         &merged,
         &plt,
@@ -7006,7 +7001,7 @@ fn elf_section_offsets_respect_their_claimed_alignment() {
     let bytes = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let mut merged = link_native_objects(&[obj]).expect("link");
-    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let plt = emit_aarch64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let exe = write_native_image_from_merged(
         &merged,
         &plt,
@@ -7402,7 +7397,7 @@ fn macho_data_import_gets_no_bogus_local_text_symbol() {
     // have a trampoline get a local text symbol; a data import keeps just
     // its undefined entry.
     use crate::c5::linker::{
-        emit_aarch64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
+        emit_plt_for, link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
     use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
     let program = Compiler::with_options(
@@ -7422,7 +7417,7 @@ fn macho_data_import_gets_no_bogus_local_text_symbol() {
     let bytes = emit_native_with_options(&program, Target::MacOSAarch64, opts).expect("emit");
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let mut merged = link_native_objects(&[obj]).expect("link");
-    let plt = emit_aarch64_plt(&mut merged).expect("plt");
+    let plt = emit_plt_for(&mut merged, Target::MacOSAarch64).expect("plt");
     let exe = write_native_image_from_merged(
         &merged,
         &plt,
@@ -10351,8 +10346,7 @@ fn self_link_operand_symbol_shape(
     flags: &str,
 ) -> (alloc::vec::Vec<u8>, crate::c5::linker::MergedNative) {
     use crate::c5::linker::{
-        emit_aarch64_plt, emit_x86_64_plt, link_native_objects, parse_native_elf,
-        write_native_image_from_merged,
+        link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
     use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
     let src = alloc::format!(
@@ -10384,10 +10378,7 @@ fn self_link_operand_symbol_shape(
     let bytes = emit_native_with_options(&program, target, opts).expect("emit");
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let mut merged = link_native_objects(core::slice::from_ref(&obj)).expect("link");
-    let plt = match target {
-        crate::c5::Target::LinuxAarch64 => emit_aarch64_plt(&mut merged).expect("plt"),
-        _ => emit_x86_64_plt(&mut merged).expect("plt"),
-    };
+    let plt = crate::emit_plt_for(&mut merged, target).expect("plt");
     let image = write_native_image_from_merged(
         &merged,
         &plt,
@@ -10607,8 +10598,7 @@ fn self_link_text_absolute_shape(
     words: &str,
 ) -> Result<(alloc::vec::Vec<u8>, crate::c5::linker::MergedNative), crate::c5::error::C5Error> {
     use crate::c5::linker::{
-        emit_aarch64_plt, emit_x86_64_plt, link_native_objects, parse_native_elf,
-        write_native_image_from_merged,
+        link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
     use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
     let src = alloc::format!(
@@ -10636,12 +10626,7 @@ fn self_link_text_absolute_shape(
     let bytes = emit_native_with_options(&program, target, opts).expect("emit");
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let mut merged = link_native_objects(core::slice::from_ref(&obj)).expect("link");
-    let plt = match target {
-        crate::c5::Target::LinuxAarch64 | crate::c5::Target::WindowsAarch64 => {
-            emit_aarch64_plt(&mut merged).expect("plt")
-        }
-        _ => emit_x86_64_plt(&mut merged).expect("plt"),
-    };
+    let plt = crate::emit_plt_for(&mut merged, target).expect("plt");
     let output_kind = if target.is_windows() {
         OutputKind::SharedLibrary
     } else {
@@ -12859,10 +12844,10 @@ fn two_tu_extern_data_links_through_own_linker() {
 fn imported_function_called_and_address_taken_links_through_own_linker() {
     use crate::c5::compiler::CompileOptions;
     use crate::c5::linker::{
-        SharedLibrary, emit_aarch64_plt, emit_x86_64_plt, link_native_objects_with_shared_libs,
-        parse_native_elf, write_native_image_from_merged,
+        SharedLibrary, link_native_objects_with_shared_libs, parse_native_elf,
+        write_native_image_from_merged,
     };
-    use crate::c5::{NativeMachine, NativeOptions, OutputKind, Target, emit_native_with_options};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     // Declared by the source rather than pulled from a header, so both
     // references take the cross-TU channels a user extern uses; a
     // shared library exporting the name supplies it at load time, as
@@ -12935,11 +12920,8 @@ fn imported_function_called_and_address_taken_links_through_own_linker() {
             !merged.object_imports.contains(&idx),
             "{target:?}: an import a branch reaches is code, not an object"
         );
-        let plt = match merged.machine {
-            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
-            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
-        }
-        .expect("plt pass drains every branch against an import");
+        let plt = crate::emit_plt_for(&mut merged, target)
+            .expect("plt pass drains every branch against an import");
         write_native_image_from_merged(
             &merged,
             &plt,
@@ -13184,8 +13166,7 @@ fn inline_asm_branch_to_undefined_symbol_emits_a_call_relocation() {
 #[test]
 fn inline_asm_reads_the_got_base() {
     use crate::c5::linker::{
-        emit_aarch64_plt, emit_x86_64_plt, link_native_objects, parse_native_elf,
-        write_native_image_from_merged,
+        link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
@@ -13216,12 +13197,7 @@ fn inline_asm_reads_the_got_base() {
         let obj_bytes = emit_native_with_options(&program, target, opts).expect("emit object");
         let obj = parse_native_elf(&obj_bytes).expect("parse ET_REL");
         let mut merged = link_native_objects(&[obj]).expect("the GOT base is defined by the link");
-        let plt = if target == Target::LinuxX64 {
-            emit_x86_64_plt(&mut merged)
-        } else {
-            emit_aarch64_plt(&mut merged)
-        }
-        .expect("plt");
+        let plt = crate::emit_plt_for(&mut merged, target).expect("plt");
         let image = write_native_image_from_merged(
             &merged,
             &plt,
@@ -14914,12 +14890,9 @@ fn relro_stream_separates_relocated_const_from_read_only() {
     // every runtime page size.
     use crate::c5::compiler::CompileOptions;
     use crate::c5::linker::{
-        NativeMachine, link_native_objects, parse_native_elf, write_native_image_from_merged,
+        link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
-    use crate::c5::{
-        NativeOptions, OutputKind, Target, emit_aarch64_plt, emit_native_with_options,
-        emit_x86_64_plt,
-    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     const PT_LOAD: u32 = 1;
     const PT_DYNAMIC: u32 = 2;
     const PT_GNU_RELRO: u32 = 0x6474_E552;
@@ -14974,11 +14947,7 @@ fn relro_stream_separates_relocated_const_from_read_only() {
             sym("wglob") >= relro_len,
             "{target:?}: writable data past relro"
         );
-        let plt = match merged.machine {
-            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
-            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
-        }
-        .expect("plt");
+        let plt = crate::emit_plt_for(&mut merged, target).expect("plt");
         let image = write_native_image_from_merged(
             &merged,
             &plt,
@@ -15078,11 +15047,9 @@ fn relro_segment_covers_dynamic_and_got_without_relro_content() {
     // With no relocated const anywhere the relro stream is empty, but
     // PT_GNU_RELRO still protects `.dynamic` and `.got`, as ld does.
     use crate::c5::linker::{
-        NativeMachine, link_native_objects, parse_native_elf, write_native_image_from_merged,
+        link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
-    use crate::c5::{
-        NativeOptions, OutputKind, emit_aarch64_plt, emit_native_with_options, emit_x86_64_plt,
-    };
+    use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
     const PT_DYNAMIC: u32 = 2;
     const PT_GNU_RELRO: u32 = 0x6474_E552;
     let opts = NativeOptions {
@@ -15100,11 +15067,7 @@ fn relro_segment_covers_dynamic_and_got_without_relro_content() {
             merged.data_ro_len, merged.data_relro_len,
             "{target:?}: no relocated const, empty relro stream"
         );
-        let plt = match merged.machine {
-            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
-            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
-        }
-        .expect("plt");
+        let plt = crate::emit_plt_for(&mut merged, target).expect("plt");
         let image = write_native_image_from_merged(
             &merged,
             &plt,
@@ -15494,7 +15457,7 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
     helper_o.source = "helper.o".to_string();
     arch_o.source = "liba.a(archmem.o)".to_string();
     let mut merged = link_native_objects(&[main_o, helper_o, arch_o]).expect("link");
-    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let exe = write_native_image_from_merged(
         &merged,
         &plt,

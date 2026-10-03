@@ -406,6 +406,12 @@ impl Target {
         Target::host()
     }
 
+    /// Whether the image's loader binds any data slot to an imported
+    /// symbol, not only a GOT's (dyld's bind stream).
+    pub fn binds_data_imports(self) -> bool {
+        self == Target::MacOSAarch64
+    }
+
     /// Target matching the host this build of badc is running on.
     /// The match is resolved at compile time via `cfg!`, so each
     /// build only ever returns one value.
@@ -1891,6 +1897,14 @@ pub(crate) struct EmittedFinalReloc {
     pub addend: i64,
 }
 
+/// A data slot the loader binds to `import + addend`; `import` indexes the resolved imports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DataImportBind {
+    pub data_offset: u64,
+    pub import: usize,
+    pub addend: i64,
+}
+
 /// A slot an unwinder reads a routine's address from: an import's, which
 /// the loader binds, or one in the data-byte space.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -1968,6 +1982,8 @@ pub(crate) struct Build {
     /// fills them.
     pub compact_unwind: Vec<CompactUnwind>,
     pub eh_frame: Vec<EhFrameBlock>,
+    /// Data slots naming an import, which the loader binds (Mach-O).
+    pub data_import_binds: Vec<DataImportBind>,
     /// `--emit-relocs` records; empty unless the link requested them.
     pub emitted_relocs: Vec<EmittedFinalReloc>,
     /// Data-import copy relocations resolved against the merged symbol
@@ -4282,7 +4298,25 @@ pub(crate) fn lower_for_with_prebuilt(
     build.abi.stack_protect = options.stack_protect;
     build.data_relocs = program.data_relocs.clone();
     build.extern_data_relocs = program.extern_data_relocs.clone();
-    build.code_relocs = program.code_relocs.clone();
+    build.code_relocs = Vec::with_capacity(program.code_relocs.len());
+    for r in &program.code_relocs {
+        let Some(binding) = program.bound_trampoline(r.target_ent_pc) else {
+            build.code_relocs.push(*r);
+            continue;
+        };
+        let import = (build.imports.imports.iter())
+            .position(|i| i.binding_idx == binding)
+            .ok_or_else(|| {
+                C5Error::internal(alloc::format!(
+                    "a data slot names libc binding {binding}, which no import resolves"
+                ))
+            })?;
+        build.data_import_binds.push(DataImportBind {
+            data_offset: r.data_offset,
+            import,
+            addend: 0,
+        });
+    }
     build.tls_data_relocs = program.tls_data_relocs.clone();
     build.tls_extern_data_relocs = program.tls_extern_data_relocs.clone();
     build.tls_code_relocs = program.tls_code_relocs.clone();

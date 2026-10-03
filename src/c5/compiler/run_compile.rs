@@ -372,6 +372,7 @@ impl Compiler {
         self.pending.attr_weak = false;
         self.pending.attr_call_conv = crate::c5::codegen::CallConv::Target;
         self.pending.attr_used = false;
+        self.pending.attr_maybe_unused = false;
         self.pending.attr_visibility = None;
         self.pending.attr_section = None;
         self.pending.attr_patchable_entry = None;
@@ -3049,6 +3050,7 @@ impl Compiler {
                 || sym.name.starts_with('_')
                 || sym.name == "main"
                 || sym.is_used
+                || sym.binding.maybe_unused
                 || init_names.contains(sym.name.as_str())
             {
                 continue;
@@ -3076,6 +3078,9 @@ impl Compiler {
         }
         if self.pending.attr_used {
             self.symbols[id_idx].is_used = true;
+        }
+        if self.pending.attr_maybe_unused {
+            self.symbols[id_idx].binding.maybe_unused = true;
         }
         // `ms_abi` / `sysv_abi`: the convention of the function this
         // symbol names, or of the function a function-pointer object

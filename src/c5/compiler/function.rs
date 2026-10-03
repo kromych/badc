@@ -148,11 +148,12 @@ impl Compiler {
     }
 
     /// A parameter's own `ms_abi` / `sysv_abi` describes that
-    /// parameter's pointed-to function, not the declarator the list
-    /// belongs to, so the enclosing convention is detached across the
-    /// list the way the other declarator carriers are.
+    /// parameter's pointed-to function, and its `unused` that parameter,
+    /// not the declarator the list belongs to, so the enclosing ones are
+    /// detached across the list the way the other declarator carriers are.
     pub(super) fn parse_function_params(&mut self) -> Result<ParsedParams, C5Error> {
         let outer_conv = core::mem::take(&mut self.pending.attr_call_conv);
+        let outer_unused = core::mem::take(&mut self.pending.attr_maybe_unused);
         // The enclosing declarator's function-pointer carriers and function
         // types, which each parameter's own declarator starts afresh.
         let p = &mut self.pending;
@@ -182,6 +183,7 @@ impl Compiler {
         let p = &mut self.pending;
         p.declarator_prior_shape = outer_prior;
         p.attr_call_conv = outer_conv;
+        p.attr_maybe_unused = outer_unused;
         (
             p.fn_ptr_indirection,
             p.fn_ptr_ret_indirection,

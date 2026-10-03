@@ -795,6 +795,42 @@ fn warn_unused_variable_parameter_function() {
     );
 }
 
+/// GNU `unused` silences the unused rows of its declaration whether it
+/// leads it, sits among its specifiers or trails a declarator -- the last
+/// for that declarator alone -- and for a function on any of its
+/// declarations; a parameter's own stays with the parameter. The kernel
+/// writes `__maybe_unused` in each of these places.
+#[test]
+fn the_unused_attribute_silences_its_declarator_wherever_written() {
+    let src = "#define U __attribute__((unused))\n\
+               struct s { int x; };\n\
+               int f(struct s *in) {\n\
+                 struct s U *p = in; int U q = 1; U int r = 2; int t U = 3, u = 4;\n\
+                 int lone = 5;\n\
+                 return 0;\n\
+               }\n\
+               static int U f1(int x) { int w = x; return x; }\n\
+               static U int f2(int x) { return x; }\n\
+               U static int f3(int x) { return x; }\n\
+               static int f4(int x) U;\n\
+               static int f4(int x) { return x; }\n\
+               static int g1(int x U) { return 0; }\n\
+               static int g2(void) { return 0; }\n\
+               int main(void) { return f(0); }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all"]);
+    let mut warned: alloc::vec::Vec<&str> = p
+        .warnings
+        .iter()
+        .filter_map(|w| {
+            let backtick = w.text.find('`')?;
+            let end = w.text[backtick + 1..].find('`')?;
+            Some(&w.text[backtick + 1..backtick + 1 + end])
+        })
+        .collect();
+    warned.sort_unstable();
+    assert_eq!(warned, ["g1", "g2", "lone", "u", "w"], "{:?}", p.warnings);
+}
+
 /// A binding starts with no uses and the outer one keeps its own: `n` is
 /// unused in `second` and ends no lifetime there, the outer `k` stays unread.
 #[test]

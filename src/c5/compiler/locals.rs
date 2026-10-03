@@ -393,6 +393,7 @@ impl Compiler {
         // Reset the per-declaration carriers; a stale one from the
         // enclosing function would bleed onto a static's emission record.
         self.pending_noreturn = leading_noreturn;
+        self.pending.attr_maybe_unused = false;
         self.pending.base_is_const = false;
         let _ = self.take_base_spelling();
         self.pending.saw_register_storage = false;
@@ -453,11 +454,13 @@ impl Compiler {
         // declarator; one written after a declarator applies to it alone.
         let leading_cleanup = self.pending.attr_cleanup.take();
         let leading_uninitialized = core::mem::take(&mut self.pending.attr_uninitialized);
-        // `noreturn` among the specifiers marks every function declarator;
-        // after one, that declarator alone.
+        // `noreturn` and `unused` among the specifiers apply to every
+        // declarator; after one, to that declarator alone.
         let base_noreturn = self.pending_noreturn;
+        let base_maybe_unused = maybe_unused || self.pending.attr_maybe_unused;
         while self.lex.tk != ';' {
             self.pending_noreturn = base_noreturn;
+            self.pending.attr_maybe_unused = base_maybe_unused;
             self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
             self.pending.fn_ptr_ret_indirection = base_fn_ptr_ret_indirection;
             self.pending.base_is_function_type = base_is_function_type;
@@ -553,7 +556,7 @@ impl Compiler {
             if !is_extern || extern_shadows_binding {
                 self.save_scope_binding(loc_idx);
             }
-            if maybe_unused {
+            if self.pending.attr_maybe_unused {
                 self.symbols[loc_idx].binding.maybe_unused = true;
             }
 
@@ -641,6 +644,7 @@ impl Compiler {
         self.next()?;
         self.pending.auto_type_single_declarator = false;
         self.pending_noreturn = false;
+        self.pending.attr_maybe_unused = false;
         Ok(())
     }
 

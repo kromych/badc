@@ -99,6 +99,10 @@ BADC_FLAGS = ("--verify-ssa",)
 # an `-O2` gate here before this was measured.
 REFERENCE_GATE = "-O0"
 REFERENCE_CONFIRM = "-O2"
+# The sanitizer a runtime finding's reference runs under before the finding
+# is filed (`confirm`). Alignment stays off: csmith's programs take the
+# addresses of packed members.
+UBSAN = ("-fsanitize=undefined", "-fno-sanitize=alignment", "-fno-sanitize-recover=all")
 
 # csmith bounds. Measured over 40 seeds on an aarch64 host: the defaults give
 # 106 to 3160 lines (median 1461), these give 97 to 1465 (median 652), and the
@@ -126,6 +130,42 @@ GENERATION_BOUNDS = (
     "4",
     "--concise",
 )
+
+
+@dataclasses.dataclass(frozen=True)
+class Leg:
+    """What a run varies beyond the defaults above. A leg's name joins the
+    signature of everything it finds, so the week's issue holds each leg's
+    findings apart."""
+
+    name: str = ""
+    badc_flags: tuple[str, ...] = ()
+    badc_env: tuple[tuple[str, str], ...] = ()
+    csmith_flags: tuple[str, ...] = ()
+    # How the badc the leg runs is built, where CI's usual build is not it.
+    build: str = ""
+
+
+LEGS = {
+    "default": Leg(),
+    # A cap far above the default 64 inlines callees whole that the default
+    # leaves out of line, so the splice meets frames and returns the default
+    # leg rarely builds: an aggregate-return lifetime defect showed only
+    # there in a 27k-case local round.
+    "inline-cap-4096": Leg("inline-cap-4096", badc_flags=("--inline-cap=4096",)),
+    # Two registers per bank spill nearly every value, and the allocation
+    # check stops a compile whose placement breaks an invariant, which a
+    # checksum shows only when the clobbered value is read.
+    "pressure": Leg(
+        "pressure",
+        badc_env=(("BADC_MAX_GPR", "2"), ("BADC_MAX_FPR", "2"), ("BADC_VERIFY_ALLOC", "1")),
+        build='cargo build --release --features "codegen_test full" --bin badc',
+    ),
+    # csmith 2.4.0's GNU C extensions, which 2.3.0 does not generate.
+    "gnu": Leg("gnu", csmith_flags=("--int128", "--uint128", "--builtins", "--binary-constant")),
+}
+# The leg this run is: `--leg`.
+LEG = LEGS["default"]
 
 # The release used as the case store, and the label put on a weekly issue.
 CASE_STORE_TAG = "fuzz-cases-v1"
@@ -433,8 +473,11 @@ def normalize_message(message: str) -> str:
     return " ".join(text.split())[:200]
 
 
-def signature_of(arch: str, parts: list[str]) -> tuple[str, str]:
-    human = " ".join(parts)
+def signature_of(arch: str, parts: list[str], leg: str = "") -> tuple[str, str]:
+    """The finding's key and its words. A leg other than the default leads
+    them, so its findings file apart; the default leg's keep the form the
+    weeks before the legs filed under."""
+    human = " ".join([leg, *parts] if leg else parts)
     key = hashlib.sha256(f"{arch}|{human}".encode()).hexdigest()[:12]
     return key, human
 
@@ -475,8 +518,25 @@ def generate(csmith: Csmith, seed: int, workdir: Path, limits: Limits) -> Step:
     it rather than beside the `-o` path, and a run from the repository root
     leaves that file behind.
     """
-    argv = [str(csmith.binary), "--seed", str(seed), *GENERATION_BOUNDS, "-o", "case.c"]
+    argv = [
+        str(csmith.binary),
+        "--seed",
+        str(seed),
+        *GENERATION_BOUNDS,
+        *LEG.csmith_flags,
+        "-o",
+        "case.c",
+    ]
     return run_command(argv, workdir, limits.generate)
+
+
+def target_builtin(text: str) -> bool:
+    """Whether a generated program calls an x86 target builtin. csmith's
+    `--builtins` include `__builtin_ia32_crc32qi`, and disabling their `x86`
+    kind leaves no builtin at all in the output (csmith 2.4.0 at 0cdc710);
+    clang accepts a call it does not emit and badc rejects every call.
+    TODO: run these once badc takes the ia32 builtins."""
+    return "__builtin_ia32_" in text
 
 
 def run_case(
@@ -498,7 +558,10 @@ def run_case(
     steps.append(step)
     if not step.ok or not source.is_file():
         return CaseResult(seed, 0, time.monotonic() - started, "generator failed", steps=steps)
-    lines = len(source.read_text(errors="replace").splitlines())
+    text = source.read_text(errors="replace")
+    lines = len(text.splitlines())
+    if target_builtin(text):
+        return CaseResult(seed, lines, time.monotonic() - started, "x86 target builtin", steps=steps)
 
     expected: str | None = None
     if reference is not None:
@@ -523,11 +586,18 @@ def run_case(
             )
         expected = gate.checksum
 
-    env = dict(os.environ, RUST_BACKTRACE="1")
+    env = dict(os.environ, RUST_BACKTRACE="1", **dict(LEG.badc_env))
     outcomes = {}
     for config in CONFIGS:
         outcome = build_and_run(
-            badc, config, workdir, csmith.include, limits, limits.run, env=env, flags=BADC_FLAGS
+            badc,
+            config,
+            workdir,
+            csmith.include,
+            limits,
+            limits.run,
+            env=env,
+            flags=(*BADC_FLAGS, *LEG.badc_flags),
         )
         steps.extend(outcome.steps)
         outcomes[config] = outcome
@@ -609,7 +679,7 @@ def classify(
         detail: str,
         step: Step | None = None,
     ) -> None:
-        key, human = signature_of(arch, parts)
+        key, human = signature_of(arch, parts, LEG.name)
         findings.append(
             Finding(
                 verdict,
@@ -749,35 +819,45 @@ def confirm(
     expected: str | None,
     steps: list[Step],
 ) -> bool:
-    """Drop a runtime finding the reference cannot reproduce at `-O2`.
+    """Drop a runtime finding the reference cannot reproduce at `-O2`, or
+    whose program the undefined-behaviour sanitizer stops at `-O0`.
 
     A reference that disagrees with itself between the two levels is either
     optimising a program csmith did not keep free of undefined behaviour or
-    wrong itself; either way the case says nothing about badc.
+    wrong itself; either way the case says nothing about badc. Agreeing is
+    not enough: csmith 2.4.0's builtins pass 0 to `__builtin_clz`, and both
+    levels can compute the same answer from it. A sanitizer build that does
+    not build confirms nothing either way and drops nothing.
     """
-    if finding.verdict not in RUNTIME_VERDICTS or reference is None:
+    if finding.verdict not in (*RUNTIME_VERDICTS, "run-timeout") or reference is None:
         return True
-    again = build_and_run(
-        reference.binary,
-        REFERENCE_CONFIRM,
-        workdir,
-        csmith.include,
-        limits,
-        limits.reference_run,
-        tag=reference.name,
-    )
-    steps.extend(again.steps)
-    if again.checksum is None:
-        finding.detail += (
-            f" (dropped: {reference.name} {REFERENCE_CONFIRM} {again.skip})"
+    for level, flags, tag, timeout in (
+        (REFERENCE_CONFIRM, (), reference.name, limits.reference_run),
+        (REFERENCE_GATE, UBSAN, f"{reference.name}-ubsan", limits.reference_run * 4),
+    ):
+        again = build_and_run(
+            reference.binary,
+            level,
+            workdir,
+            csmith.include,
+            limits,
+            timeout,
+            tag=tag,
+            flags=flags,
         )
-        return False
-    if expected is not None and again.checksum != expected:
-        finding.detail += (
-            f" (dropped: {reference.name} {REFERENCE_CONFIRM} = {again.checksum},"
-            f" {REFERENCE_GATE} = {expected})"
-        )
-        return False
+        steps.extend(again.steps)
+        what = f"{reference.name} {level}" + (" under UBSan" if flags else "")
+        if flags and again.skip == "compile failed":
+            finding.detail += f" (unconfirmed: {what} did not build)"
+            continue
+        if again.checksum is None:
+            finding.detail += f" (dropped: {what} {again.skip})"
+            return False
+        if expected is not None and again.checksum != expected:
+            finding.detail += (
+                f" (dropped: {what} = {again.checksum}, {REFERENCE_GATE} = {expected})"
+            )
+            return False
     return True
 
 
@@ -820,6 +900,7 @@ BADC = @badc@
 REF = @ref@
 INCLUDE = @include@
 BADC_FLAGS = @badc_flags@
+BADC_ENV = @badc_env@
 VERDICT = @verdict@
 CONFIGS = @configs@
 SIGNATURE = @signature@
@@ -846,7 +927,7 @@ def run(argv, timeout, threads=CPUS):
         stderr=subprocess.PIPE,
         text=True,
         errors="replace",
-        env=dict(os.environ, RUST_BACKTRACE="1", ASAN_OPTIONS="detect_leaks=0"),
+        env=dict(os.environ, RUST_BACKTRACE="1", ASAN_OPTIONS="detect_leaks=0", **BADC_ENV),
         start_new_session=POSIX,
     )
     try:
@@ -1011,7 +1092,8 @@ def render_test(
         "badc": repr(str(badc)),
         "ref": repr(str(reference.binary) if reference else None),
         "include": repr(str(include)),
-        "badc_flags": repr(list(BADC_FLAGS)),
+        "badc_flags": repr([*BADC_FLAGS, *LEG.badc_flags]),
+        "badc_env": repr(dict(LEG.badc_env)),
         "verdict": repr(finding.verdict),
         "configs": repr(finding.config.split(",")),
         "signature": repr(signature_regex(finding)),
@@ -1144,6 +1226,7 @@ class Run:
     repeat_seeds: dict[str, list[int]] = dataclasses.field(default_factory=dict)
     seconds: float = 0.0
     lines: list[int] = dataclasses.field(default_factory=list)
+    leg: Leg = dataclasses.field(default_factory=Leg)
 
 
 def fuzz(
@@ -1271,17 +1354,21 @@ def repro_commands(run: Run, finding: Finding, csmith: Csmith | None) -> str:
     A compile-time verdict needs the compile alone; a verdict about what the
     program did needs the runs and the reference's answer beside them.
     """
-    bounds = " ".join(GENERATION_BOUNDS)
+    leg = run.leg
+    bounds = " ".join([*GENERATION_BOUNDS, *leg.csmith_flags])
     include = str(csmith.include) if csmith else "$CSMITH_INCLUDE"
     runtime = not finding.verdict.startswith("compile-")
-    lines = [f"csmith --seed {finding.seed} {bounds} -o case.c"]
+    lines = [f"# badc: {leg.build}"] if leg.build else []
+    lines.append(f"csmith --seed {finding.seed} {bounds} -o case.c")
     if runtime and run.reference_name:
         lines.append(
             f'{run.reference_name} {REFERENCE_GATE} -w -I "{include}"'
             " -o case-ref case.c && ./case-ref"
         )
+    env = "".join(f"{k}={v} " for k, v in leg.badc_env)
+    flags = " ".join([*BADC_FLAGS, *leg.badc_flags])
     for config in finding.config.split(","):
-        build = f'badc {config} -w -I "{include}" -o case{config} case.c'
+        build = f'{env}badc {config} {flags} -w -I "{include}" -o case{config} case.c'
         lines.append(f"{build} && ./case{config}" if runtime else build)
     return "\n".join(lines)
 
@@ -1296,9 +1383,10 @@ def finding_comment(
 ) -> str:
     url = asset_url(repo, asset_name(day, run.arch, finding.key, finding.seed))
     configs = ", ".join(f"`{c}`" for c in finding.config.split(","))
+    leg = f", leg `{run.leg.name}`" if run.leg.name else ""
     rows = [
         ("verdict", f"`{finding.verdict}`"),
-        ("configuration", f"badc {configs}"),
+        ("configuration", f"badc {configs}{leg}"),
         ("architecture", f"`{run.arch}`"),
         ("run", where),
         ("compiler", f"`{run.badc}`"),
@@ -1315,7 +1403,8 @@ def finding_comment(
     rows.append(("signature", f"`{finding.key}`"))
     table = ["| | |", "|---|---|"]
     table += [f"| {name} | {value} |" for name, value in rows]
-    out = [f"## badc {finding.config.replace(',', ', ')}: {finding.detail}"]
+    title = finding.config.replace(",", ", ") + (f" ({run.leg.name})" if run.leg.name else "")
+    out = [f"## badc {title}: {finding.detail}"]
     out += ["", *table, "", "Reproduce:", "", "```sh"]
     out += [repro_commands(run, finding, csmith), "```"]
     if finding.reduced is not None and finding.reduced_lines <= INLINE_REDUCTION_LINES:
@@ -1334,6 +1423,7 @@ def summary_markdown(run: Run, publishing: str) -> str:
     median = sorted(run.lines)[len(run.lines) // 2] if run.lines else 0
     rows = [
         ("architecture", run.arch),
+        ("leg", run.leg.name or "default"),
         ("cases", str(run.cases)),
         ("wall clock", f"{run.seconds:.0f}s"),
         ("cases per minute", f"{run.cases / max(run.seconds / 60.0, 1e-9):.0f}"),
@@ -1378,6 +1468,7 @@ def report_json(run: Run, day: dt.date, repo: str) -> str:
     return json.dumps(
         {
             "arch": run.arch,
+            "leg": run.leg.name or "default",
             "started": run.started.isoformat(),
             "week": weekly_title(day),
             "cases": run.cases,
@@ -1638,6 +1729,7 @@ def check_test_children(test_text: str, check) -> None:
 
 
 def self_test() -> int:
+    global LEG
     failures: list[str] = []
 
     def check(name: str, got: object, want: object) -> None:
@@ -1705,6 +1797,23 @@ def self_test() -> int:
         != signature_of("x86_64", ["run-timeout", "-O"])[0],
         True,
     )
+    check(
+        "the default leg keeps the signatures filed before legs",
+        signature_of("x86_64", ["checksum-mismatch", "-O"], LEGS["default"].name)[0],
+        hashlib.sha256(b"x86_64|checksum-mismatch -O").hexdigest()[:12],
+    )
+    check(
+        "a leg files apart",
+        len({signature_of("x86_64", ["checksum-mismatch", "-O"], LEGS[n].name)[0] for n in LEGS}),
+        len(LEGS),
+    )
+    check(
+        "a leg's signature names it",
+        signature_of("x86_64", ["checksum-mismatch", "-O"], "pressure")[1],
+        "pressure checksum-mismatch -O",
+    )
+    check("an x86 target builtin is seen", target_builtin("x = __builtin_ia32_crc32qi(a, b);"), True)
+    check("a generic builtin is not", target_builtin("x = __builtin_clz(a);"), False)
     check("no panic", panic_site("error: bad expression [B2020]"), None)
     traced = (
         panic
@@ -1842,6 +1951,45 @@ def self_test() -> int:
         finding.reduced_lines = 0
     check("comment links the case", asset_url("kromych/badc", asset_name(dt.date(2026, 9, 17), "x86_64", key, 4177298122)) in comment, True)
     check("comment names the seed", "4177298122" in comment, True)
+    # A leg's comment says which leg, and its reproduction builds and runs
+    # badc the way the leg did.
+    pressure = dataclasses.replace(run, leg=LEGS["pressure"])
+    runtime = dataclasses.replace(finding, verdict="checksum-mismatch", config="-O")
+    repro = repro_commands(pressure, runtime, None)
+    check("a leg's reproduction names its build", LEGS["pressure"].build in repro, True)
+    check(
+        "a leg's reproduction runs badc with its environment and flags",
+        "BADC_MAX_GPR=2 BADC_MAX_FPR=2 BADC_VERIFY_ALLOC=1 badc -O --verify-ssa -w" in repro,
+        True,
+    )
+    check(
+        "a leg's comment names the leg",
+        "leg `pressure`" in finding_comment(pressure, runtime, dt.date(2026, 9, 17), "kromych/badc", "local", None),
+        True,
+    )
+    gnu = repro_commands(dataclasses.replace(run, leg=LEGS["gnu"]), runtime, None)
+    check("a leg's reproduction generates with its options", "--int128 --uint128 --builtins" in gnu, True)
+    check("the default leg's reproduction is as before", "badc: " in repro_commands(run, runtime, None), False)
+    saved = LEG
+    try:
+        LEG = LEGS["pressure"]
+        leg_test = render_test(finding, Path("/usr/bin/badc"), None, Path("/usr/include/csmith"), Limits(30, 60, 10, 1))
+        LEG = LEGS["inline-cap-4096"]
+        cap_test = render_test(finding, Path("/usr/bin/badc"), None, Path("/usr/include/csmith"), Limits(30, 60, 10, 1))
+    finally:
+        LEG = saved
+    check("a leg's test carries its environment", "'BADC_VERIFY_ALLOC': '1'" in leg_test, True)
+    check("a leg's test carries its flags", "'--inline-cap=4096'" in cap_test, True)
+    if os.name == "posix":
+        with tempfile.TemporaryDirectory() as tmp:
+            old = Path(tmp) / "csmith"
+            old.write_text("#!/bin/sh\necho '  --builtins | --no-builtins: builtins'\n", encoding="utf-8")
+            old.chmod(0o755)
+            check(
+                "a generator without a leg's options is named",
+                generator_lacks(Csmith(old, "csmith 2.3.0", Path(tmp)), LEGS["gnu"].csmith_flags),
+                ["--int128", "--uint128", "--binary-constant"],
+            )
     check("summary lists the finding", key in summary_markdown(run, "dry run"), True)
     check(
         "dedup reads a signature out of prose",
@@ -2033,14 +2181,33 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="auto",
         help="cvise, creduce, c_reduce or none (default: the first on PATH)",
     )
+    parser.add_argument(
+        "--leg",
+        choices=sorted(LEGS),
+        default="default",
+        help="what the run varies (LEGS); its findings file apart",
+    )
     parser.add_argument("--self-test", action="store_true")
     return parser.parse_args(argv)
 
 
+def generator_lacks(csmith: Csmith, flags: tuple[str, ...]) -> list[str]:
+    """The options among `flags` the generator's help does not list: an
+    option csmith does not know fails every generation, and the run would
+    report nothing for it."""
+    with tempfile.TemporaryDirectory() as scratch:
+        text = subprocess.run(
+            [str(csmith.binary), "--help"], capture_output=True, text=True, cwd=scratch
+        ).stdout
+    return [f for f in flags if f not in text]
+
+
 def main(argv: list[str] | None = None) -> int:
+    global LEG
     args = parse_args(argv)
     if args.self_test:
         return self_test()
+    LEG = LEGS[args.leg]
 
     csmith = find_csmith(args.csmith, args.csmith_include)
     if csmith is None:
@@ -2050,6 +2217,14 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(f"{message}: skipping")
         return 0
+    lacking = generator_lacks(csmith, LEG.csmith_flags)
+    if lacking:
+        print(
+            f"error: {csmith.version} has no {' '.join(lacking)}, which leg"
+            f" {args.leg} generates with",
+            file=sys.stderr,
+        )
+        return 2
     badc = find_badc(args.badc)
     if badc is None:
         print("error: badc not found; build it or pass --badc", file=sys.stderr)
@@ -2061,14 +2236,22 @@ def main(argv: list[str] | None = None) -> int:
         arch=host_arch(),
         started=dt.datetime.now(dt.timezone.utc),
         csmith=csmith.version,
-        badc=" ".join([tool_version(badc), *BADC_FLAGS]),
+        badc=" ".join(
+            [
+                *(f"{k}={v}" for k, v in LEG.badc_env),
+                tool_version(badc),
+                *BADC_FLAGS,
+                *LEG.badc_flags,
+            ]
+        ),
         reference=(
             f"{reference.version} at {REFERENCE_GATE}"
             if reference
             else "none (badc -O0 vs -O only)"
         ),
         reference_name=reference.name if reference else "",
-        bounds=" ".join(GENERATION_BOUNDS),
+        bounds=" ".join([*GENERATION_BOUNDS, *LEG.csmith_flags]),
+        leg=LEG,
     )
     limits = Limits(
         generate=args.generate_timeout,
@@ -2083,7 +2266,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"badc: {badc} ({run.badc})")
     print(f"reference: {run.reference}")
     budget = f"{len(args.case)} named seed(s)" if args.case else f"{args.minutes} min"
-    print(f"{budget}, {jobs} cases in flight, arch {run.arch}")
+    print(f"{budget}, {jobs} cases in flight, arch {run.arch}, leg {args.leg}")
 
     root = Path(tempfile.mkdtemp(prefix="badc-csmith-"))
     try:

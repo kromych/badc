@@ -263,12 +263,14 @@ def find_badc(explicit: str | None) -> Path | None:
 
 
 def find_reference(explicit: str | None) -> Reference | None:
+    """The reference compiler, by the path PATH gives it, links unresolved:
+    a ccache masquerade link dispatches on the name it is run by."""
     names = [explicit] if explicit else ["clang", "gcc", "cc"]
     for name in names:
         found = shutil.which(name) if name else None
         if not found:
             continue
-        path = Path(found).resolve()
+        path = Path(found).absolute()
         return Reference(path, first_line_of_version(path, name))
     return None
 
@@ -1714,6 +1716,18 @@ def self_test() -> int:
         "<badc::c5::compiler::Compiler>::fill_member_value_t",
     )
     check("no backtrace, no frame", panic_frame(panic), None)
+    if os.name == "posix":
+        with tempfile.TemporaryDirectory() as tmp:
+            dispatcher = Path(tmp) / "ccache"
+            dispatcher.write_text('#!/bin/sh\necho "$(basename "$0") 1.0"\n', encoding="utf-8")
+            dispatcher.chmod(0o755)
+            (Path(tmp) / "clang").symlink_to(dispatcher)
+            found = find_reference(str(Path(tmp) / "clang"))
+            check(
+                "the reference runs by its own name, not its link's target",
+                (found.name, found.version) if found else None,
+                ("clang", "clang 1.0"),
+            )
     check("the reducer can be turned off", find_reducer("none"), None)
     check("the in-tree reducer is the fallback", find_reducer("c_reduce")[0], "c_reduce")
     check(

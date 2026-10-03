@@ -40,6 +40,7 @@ pub const DT_STRSZ: u64 = 10;
 pub const DT_SYMENT: u64 = 11;
 pub const DT_SONAME: u64 = 14;
 pub const DT_SYMBOLIC: u64 = 16;
+pub const DT_DEBUG: u64 = 21;
 pub const DT_INIT_ARRAY: u64 = 25;
 pub const DT_FINI_ARRAY: u64 = 26;
 pub const DT_INIT_ARRAYSZ: u64 = 27;
@@ -506,7 +507,8 @@ pub struct DynAddrs {
     pub textrel: bool,
     /// A position-independent executable: `DF_1_PIE`.
     pub pie: bool,
-    /// An executable rather than a shared object.
+    /// An executable rather than a shared object: `DT_DEBUG`, and none of
+    /// the `DT_FLAGS_1` bits only a shared object takes.
     pub executable: bool,
     /// `DT_FLAGS` and `DT_FLAGS_1` bits the `-z` keywords record.
     pub flags: u64,
@@ -549,6 +551,11 @@ pub fn build_dynamic(a: &DynAddrs, class: ElfClass) -> Vec<u8> {
     }
     tags.push((DT_STRSZ, a.strsz));
     tags.push((DT_SYMENT, class.sym_size()));
+    // The loader publishes its `r_debug` here, where a debugger finds the
+    // link map; bfd writes the slot into every executable.
+    if a.executable {
+        tags.push((DT_DEBUG, 0));
+    }
     for (arr, tag, sz) in [
         (a.preinit_array, DT_PREINIT_ARRAY, DT_PREINIT_ARRAYSZ),
         (a.init_array, DT_INIT_ARRAY, DT_INIT_ARRAYSZ),

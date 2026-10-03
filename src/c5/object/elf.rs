@@ -58,6 +58,7 @@ const DT_RELASZ: u64 = 8;
 const DT_RELAENT: u64 = 9;
 const DT_STRSZ: u64 = 10;
 const DT_SYMENT: u64 = 11;
+const DT_DEBUG: u64 = 21;
 const DT_INIT_ARRAY: u64 = 25;
 const DT_FINI_ARRAY: u64 = 26;
 const DT_INIT_ARRAYSZ: u64 = 27;
@@ -990,12 +991,17 @@ fn build_dynamic(lib_strtab_offsets: &[u32], info: DynamicInfo) -> Vec<u8> {
         (DT_SYMTAB, info.symtab_vmaddr),
         (DT_STRSZ, info.strtab_size),
         (DT_SYMENT, ELF64_SYM_SIZE),
+    ];
+    if info.executable {
+        entries.push((DT_DEBUG, 0));
+    }
+    entries.extend([
         (DT_RELA, info.rela_vmaddr),
         (DT_RELASZ, info.rela_size),
         (DT_RELAENT, ELF64_RELA_SIZE),
         (DT_BIND_NOW, 0),
         (DT_FLAGS, DF_BIND_NOW),
-    ];
+    ]);
     if info.pie {
         entries.push((DT_FLAGS_1, DF_1_PIE));
     }
@@ -1039,6 +1045,9 @@ struct DynamicInfo {
     versions: Option<VersionInfo>,
     init_array: Option<(u64, u64)>,
     fini_array: Option<(u64, u64)>,
+    /// An executable rather than a shared object: `DT_DEBUG`, where the
+    /// loader publishes its `r_debug` for a debugger.
+    executable: bool,
     /// A position-independent executable: `DF_1_PIE`.
     pie: bool,
     /// `.relr.dyn`'s address and size: `DT_RELR`.
@@ -3184,6 +3193,7 @@ impl<'a> ElfImageWriter<'a> {
                     .init_fini_arrays
                     .fini
                     .map(|(off, len)| (data_va(off), len)),
+                executable: build.output_kind != super::OutputKind::SharedLibrary,
                 pie: self.emit_dyn && build.output_kind != super::OutputKind::SharedLibrary,
                 relr: self.relr.then(|| (va(seg.relr_off), seg.relr_size)),
             },
@@ -5244,6 +5254,34 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// `DT_DEBUG` is the slot the loader writes its `r_debug` into, where a
+    /// debugger finds the link map: an executable carries it in a load the
+    /// loader can write, a shared object carries none, as under GNU ld.
+    #[test]
+    fn an_executable_gives_the_loader_its_debug_slot() {
+        let exe = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let entries = dynamic_entries(&exe);
+        assert!(entries.contains(&(DT_DEBUG, 0)), "{entries:x?}");
+        let at = find_phdr(&exe, PT_DYNAMIC).expect("PT_DYNAMIC");
+        let slot = read_u64(&exe, at + 16)
+            + (entries.iter().position(|e| e.0 == DT_DEBUG).unwrap() as u64) * ELF64_DYN_SIZE;
+        let phoff = read_u64(&exe, 32);
+        let phnum = u16::from_le_bytes(exe[56..58].try_into().unwrap()) as u64;
+        let writable = (0..phnum).any(|i| {
+            let p = (phoff + i * PROGRAM_HEADER_SIZE) as usize;
+            let (vaddr, memsz) = (read_u64(&exe, p + 16), read_u64(&exe, p + 40));
+            read_u32(&exe, p) == PT_LOAD
+                && read_u32(&exe, p + 4) & PF_W != 0
+                && (vaddr..vaddr + memsz).contains(&slot)
+        });
+        assert!(writable, "DT_DEBUG at {slot:#x} lies in a writable load");
+        let mut lib = tiny_build();
+        lib.output_kind = super::super::OutputKind::SharedLibrary;
+        let lib = write(&tiny_program(), &lib, Machine::Aarch64).unwrap();
+        let entries = dynamic_entries(&lib);
+        assert!(!entries.iter().any(|e| e.0 == DT_DEBUG), "{entries:x?}");
     }
 
     /// Shared-library output (`OutputKind::SharedLibrary`) flips `e_type`

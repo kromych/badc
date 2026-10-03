@@ -2760,6 +2760,27 @@ fn loader_keywords_record_their_dynamic_flags() {
     }
 }
 
+/// An executable's `.dynamic` carries `DT_DEBUG`, the slot the loader
+/// writes its `r_debug` into for a debugger; a shared object's does not,
+/// as under GNU ld.
+#[test]
+fn an_executable_takes_dt_debug_and_a_shared_object_does_not() {
+    let script = parse_linker_script(&default_script(true)).expect("parses");
+    for shared in [false, true] {
+        let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
+        let mut opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])]);
+        opts.shared = shared;
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let tags = dyn_tags(&res.image);
+        let debug = tags.iter().find(|&&(t, _)| t == dynamic::DT_DEBUG);
+        assert_eq!(
+            debug,
+            (!shared).then_some(&(dynamic::DT_DEBUG, 0)),
+            "shared={shared}"
+        );
+    }
+}
+
 /// `-z common-page-size=` is what `CONSTANT (COMMONPAGESIZE)` reads, and
 /// `-z muldefs` lets the first of two definitions stand.
 #[test]

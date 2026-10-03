@@ -9320,6 +9320,53 @@ fn all_zero_thread_locals_take_the_zero_fill() {
     }
 }
 
+/// The loader publishes its link map through the executable's `DT_DEBUG`,
+/// so gdb lists the C library a badc executable runs with and, through
+/// that library's thread debugging, reads its thread-locals.
+#[cfg(target_os = "linux")]
+#[test]
+fn gdb_finds_the_c_library_and_the_thread_locals() {
+    let dir = tempdir("gdb-link-map");
+    let src = write_source(
+        &dir,
+        "t.c",
+        "__thread int tv = 5;\nstatic __thread int stv;\n\
+         int main(void) { stv = 3; return tv + stv - 8; }\n",
+    );
+    let exe = dir.join("t");
+    run(
+        Command::new(badc())
+            .args(["-q", "-g"])
+            .arg(&src)
+            .arg("-o")
+            .arg(&exe),
+        "build the program",
+    );
+    // A container may refuse the personality call that turns address
+    // randomization off; the run does not need it.
+    let Ok(out) = Command::new("gdb")
+        .args(["-nx", "-batch", "-ex", "set disable-randomization off"])
+        .args(["-ex", "break 3", "-ex", "run"])
+        .args(["-ex", "info sharedlibrary", "-ex", "print tv"])
+        .arg(&exe)
+        .output()
+    else {
+        eprintln!("skipping gdb_finds_the_c_library_and_the_thread_locals: no gdb");
+        return;
+    };
+    let text = String::from_utf8_lossy(&out.stdout);
+    let err = String::from_utf8_lossy(&out.stderr);
+    if err.contains("ptrace:") {
+        eprintln!("skipping gdb_finds_the_c_library_and_the_thread_locals: {err}");
+        return;
+    }
+    assert!(
+        text.contains("libc.so"),
+        "no libc in the link map: {text}{err}"
+    );
+    assert!(text.contains("$1 = 5"), "{text}{err}");
+}
+
 /// gcc's DWARF 5 names each unit's files in `.debug_line_str`
 /// (`DW_FORM_line_strp`), and at -O2 describes ranges and locations in
 /// `.debug_rnglists` and `.debug_loclists`. The link carries every

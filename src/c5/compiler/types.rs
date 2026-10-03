@@ -663,6 +663,16 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
                 ptr_suffix(ty, depth)
             );
         }
+        // A GNU vector, spelled as its lane type and the attribute that
+        // declares it; its interned name encodes the lane type's tag.
+        if let Some(s) = structs.get(id).filter(|s| s.is_vector) {
+            let lane = format_type(s.fields[0].ty, structs);
+            return format!(
+                "{base_const}{lane} __attribute__((vector_size({}))){}",
+                s.size,
+                ptr_suffix(ty, depth)
+            );
+        }
         let name = structs
             .get(id)
             .map(|s| s.name.as_str())

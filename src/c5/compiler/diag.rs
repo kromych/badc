@@ -819,9 +819,15 @@ impl Compiler {
                 && !is_array_agg(declared)
                 && !is_array_agg(actual)
                 && !def_of(declared).is_some_and(|s| s.is_union);
+            let is_vector = |ty: i64| def_of(ty).is_some_and(|s| s.is_vector);
+            let reason = if is_vector(declared) || is_vector(actual) {
+                "incompatible types"
+            } else {
+                "incompatible struct types"
+            };
             return Some(TypeMismatch {
                 code: Code::INCOMPATIBLE_STRUCT_TYPES,
-                reason: "incompatible struct types",
+                reason,
                 no_conversion: object_mismatch,
             });
         }

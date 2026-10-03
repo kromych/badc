@@ -4439,3 +4439,47 @@ fn equal_arithmetic_arms_of_a_conditional_take_the_usual_conversions() {
          }\n",
     );
 }
+
+/// A diagnostic presents a GNU vector type as a vector: it spells the type
+/// as its lane type with the `vector_size` attribute that declares it,
+/// rather than as the aggregate badc models it with, and calls a mismatch
+/// with it a mismatch of types rather than of struct types, in an error, a
+/// warning and behind a pointer.
+#[test]
+fn a_vector_type_spells_as_its_lane_type_and_size() {
+    use crate::{Compiler, Target};
+    let head = "typedef char v16 __attribute__((vector_size(16)));\n\
+                typedef unsigned u16 __attribute__((vector_size(16)));\n\
+                struct S { int x; };\n\
+                void g(struct S s);\n";
+    let diags = |body: &str| -> String {
+        let src = format!("{head}{body}\nint main(void) {{ return 0; }}\n");
+        match Compiler::with_target(src, Target::LinuxX64).compile() {
+            Ok(p) => p.warnings.iter().map(|w| w.to_string()).collect(),
+            Err(e) => e.to_string(),
+        }
+    };
+    for (body, text) in [
+        (
+            "void f(void) { struct S s; v16 v; s = v; }",
+            "types differ on either side of `=` \
+             (lhs=struct S, rhs=char __attribute__((vector_size(16))))",
+        ),
+        (
+            "void f(void) { u16 u; g(u); }",
+            "incompatible types in argument 1 of `g` \
+             (param=struct S, arg=unsigned int __attribute__((vector_size(16))))",
+        ),
+        (
+            "void f(void) { v16 *pv = 0; struct S *ps = pv; (void)ps; }",
+            "incompatible types in initializer \
+             (declared=struct S*, init=char __attribute__((vector_size(16)))*)",
+        ),
+    ] {
+        let msg = diags(body);
+        assert!(
+            msg.contains(text) && !msg.contains("struct types") && !msg.contains("__vector_"),
+            "`{body}`: {msg}"
+        );
+    }
+}

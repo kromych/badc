@@ -3764,12 +3764,12 @@ impl Compiler {
         if super::types::strip_unsigned(lhs_ty) != super::types::strip_unsigned(self.ty) {
             let lhs_s = format_type(lhs_ty, &self.structs);
             let rhs_s = format_type(self.ty, &self.structs);
+            let vector =
+                is_vector_ty(&self.structs, lhs_ty) || is_vector_ty(&self.structs, self.ty);
+            let what = if vector { "types" } else { "struct types" };
             return Err(self.compile_err(
                 Code::INCOMPATIBLE_TYPES,
-                format!(
-                    "struct types differ on either side of `=` \
-                 (lhs={lhs_s}, rhs={rhs_s})"
-                ),
+                format!("{what} differ on either side of `=` (lhs={lhs_s}, rhs={rhs_s})"),
             ));
         }
         self.mark_emit_other();

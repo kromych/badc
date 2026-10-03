@@ -4815,6 +4815,50 @@ fn an_old_style_parameter_declaration_adjusts_as_a_prototype_does() {
     );
 }
 
+/// A type attribute trailing a function declarator applies to the return
+/// type, as in gcc: `float *f(void) __attribute__((vector_size(16)))`
+/// returns a pointer to a 16-byte vector, at file scope and in a
+/// block-scope prototype alike, and the attribute does not carry over to the
+/// declarations that follow it. A trailing `mode` is an error there, as in
+/// gcc: a function type has no machine mode to take.
+#[test]
+fn a_type_attribute_trailing_a_function_declarator_types_its_return() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    for src in [
+        "int f(void) __attribute__((mode(DI)));\nint after;\n",
+        "void g(void) {\n\tint f(void) __attribute__((mode(QI)));\n\tint after;\n}\n",
+    ] {
+        let err = Compiler::with_target(src.to_string(), Target::LinuxX64)
+            .compile()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        assert!(
+            err.contains("`mode` applied to an inappropriate type"),
+            "{src}: {err}"
+        );
+    }
+    let src = "typedef float *P __attribute__((vector_size(16)));\n\
+               P get_vector(void);\n\
+               float *vector_return(void) __attribute__((vector_size(16)));\n\
+               int after_file_scope;\n\
+               _Static_assert(sizeof(*get_vector()) == 16, \"typedef return\");\n\
+               _Static_assert(sizeof(*vector_return()) == 16, \"file-scope return\");\n\
+               _Static_assert(sizeof(after_file_scope) == 4, \"no leak at file scope\");\n\
+               int main(void) {\n\
+               \tfloat *local_vector_return(void) __attribute__((vector_size(16)));\n\
+               \tif (sizeof(int) != 4) return 2;\n\
+               \tif (sizeof(*local_vector_return()) != 16) return 3;\n\
+               \tif (sizeof(*vector_return()) != 16) return 4;\n\
+               \treturn 0;\n\
+               }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(Vm::new(program).run().unwrap(), 0, "{src}");
+}
+
 /// GNU C's `vector_size` makes a vector of the innermost element type,
 /// through pointer, array and function derivations, at the sizes gcc gives;
 /// the element is an integer type other than `_Bool`, or a floating type, so

@@ -482,6 +482,23 @@ impl Compiler {
         }
     }
 
+    /// The return type `ret` of a function declarator under the type
+    /// attributes its trailing list carries, as gcc applies them:
+    /// `vector_size` reaches the innermost element of the return type, and
+    /// `mode` finds no type it can apply to in a function type.
+    pub(super) fn apply_function_declarator_attributes(
+        &mut self,
+        ret: i64,
+    ) -> Result<i64, C5Error> {
+        if self.pending.attr_mode.take().is_some() {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "`mode` applied to an inappropriate type",
+            ));
+        }
+        self.apply_pending_vector_size(ret)
+    }
+
     /// Synthesize the aggregate that models a GCC `vector_size(n_bytes)` vector
     /// of `elem_ty`: a single array field of `n_bytes / sizeof(elem)` lanes,
     /// flagged `is_vector`. sizeof / initialization / by-value pass reuse the

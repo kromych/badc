@@ -121,7 +121,11 @@ impl Compiler {
             let params = self.parse_function_params();
             self.pending.parsing_fn_ptr_proto = saved_proto;
             let params = params?;
+            // A type attribute trailing the prototype applies to its return
+            // type, so none is left pending for the next declaration.
+            self.skip_attribute_specifiers()?;
             let ret = lbt + ret_ptr_levels * Ty::Ptr as i64;
+            let ret = self.apply_function_declarator_attributes(ret)?;
             let declared = super::redeclaration::Params::of(&params, false);
             let spelled = super::redeclaration::Spelled {
                 ty: ret,
@@ -156,7 +160,6 @@ impl Compiler {
                     crate::c5::symbol::Linkage::External
                 };
             }
-            self.skip_attribute_specifiers()?;
             // C11 6.7.4: `noreturn` on any declaration marks the function.
             if c != Token::Loc as i64 {
                 self.symbols[id_idx].is_noreturn |= self.pending_noreturn;

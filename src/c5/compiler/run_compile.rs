@@ -901,6 +901,14 @@ impl Compiler {
             self.parse_declarator_asm_label(id_idx)?;
             self.skip_attribute_specifiers()?;
         }
+        // A type attribute among them applies to the return type, as in gcc
+        // (`float *f(void) __attribute__((vector_size(16)))` returns a pointer
+        // to a vector); the name's type was recorded before they were read.
+        let declarator_ty = ty;
+        let ty = self.apply_function_declarator_attributes(ty)?;
+        if ty != declarator_ty {
+            self.symbols[id_idx].type_ = ty;
+        }
 
         // C99 6.7.5.3p14: an empty list outside a definition supplies no parameter
         // information, so the composite type keeps the prior list (6.2.7p4); in a

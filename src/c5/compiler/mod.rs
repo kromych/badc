@@ -1326,6 +1326,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// alongside `was_read`.
     pub last_loaded_local_prior_pending: Vec<usize>,
 
+    /// The latest scalar assignment to a local, with the local and the
+    /// `was_read` it marked: an assignment whose value is used reads its
+    /// left operand, as gcc's -Wunused-but-set-variable counts it, and a
+    /// context discarding that value restores the flag.
+    pub value_assignment: Option<(crate::c5::ast::ExprId, usize, bool)>,
+
     /// AST id of the rhs expression that the bitfield write path
     /// (`emit_bitfield_access`'s Assign branch) just parsed. The
     /// storage emit the same routine produces afterwards triggers
@@ -1705,6 +1711,7 @@ impl Default for Pending {
             last_loaded_local: None,
             last_loaded_local_prior_was_read: false,
             last_loaded_local_prior_pending: Vec::new(),
+            value_assignment: None,
             bf_assign_rhs: None,
             last_emit_was_indirect_call: false,
             last_imm_was_zero: false,

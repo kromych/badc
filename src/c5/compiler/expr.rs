@@ -1294,6 +1294,7 @@ impl Compiler {
         while self.lex.tk == ',' {
             self.reject_incomplete_value(self.ty)?;
             let lhs_ast = self.ast_acc;
+            self.discard_value(lhs_ast);
             self.next()?;
             self.drop_operand_array_decay();
             self.pending.indirect_callee_ret_fn_ptr = 0;
@@ -3726,6 +3727,8 @@ impl Compiler {
             self.ast_assign();
             if let Some(idx) = assigned_local {
                 self.record_local_store(idx, line);
+                let prior = core::mem::replace(&mut self.symbols[idx].binding.was_read, true);
+                self.pending.value_assignment = self.ast_acc.map(|id| (id, idx, prior));
             }
         } else {
             return Err(self.compile_err(Code::INVALID_OPERANDS, "bad lvalue in assignment"));

@@ -470,6 +470,26 @@ impl Compiler {
     /// stores, the prior values were overwritten without an
     /// intervening read and each line is emitted as a dead-store
     /// diagnostic before the new entry is pushed.
+    /// The value of `e` is discarded -- an expression statement, a `for`
+    /// clause, a comma's operand: the assignment it ends in reads no left
+    /// operand after all.
+    pub(super) fn discard_value(&mut self, e: Option<ExprId>) {
+        let mut e = e;
+        while let Some(id) = e {
+            if let Some((assign, idx, prior)) = self.pending.value_assignment
+                && assign == id
+            {
+                self.symbols[idx].binding.was_read = prior;
+                self.pending.value_assignment = None;
+                return;
+            }
+            e = match self.ast.expr(id) {
+                Expr::Comma { rhs, .. } => Some(*rhs),
+                _ => None,
+            };
+        }
+    }
+
     pub(super) fn record_local_store(&mut self, idx: usize, line: usize) {
         if !self.warn_dead_store
             || !self.symbols[idx].binding.decl_in_user_source

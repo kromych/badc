@@ -831,6 +831,37 @@ fn the_unused_attribute_silences_its_declarator_wherever_written() {
     assert_eq!(warned, ["g1", "g2", "lone", "u", "w"], "{:?}", p.warnings);
 }
 
+/// An assignment whose value is used reads its left operand, as gcc's
+/// -Wunused-but-set-variable counts it: a loop or `if` condition testing
+/// it (the kernel's `idr_for_each_entry`, `for_each_gt`) and a chained
+/// assignment do; an expression statement, a comma's operands in one and
+/// a `for` clause discard it. The verdicts are gcc 16's.
+#[test]
+fn an_assignment_whose_value_is_used_reads_its_left_operand() {
+    let src = "void *next(int *id);\n\
+               int cond(void) { int id, n = 0; void *entry;\n\
+                 for (id = 0; (entry = next(&id)) != 0; id += 1) n++; return n; }\n\
+               int iff(void) { void *p; int id = 0; if ((p = next(&id))) return 1; return 0; }\n\
+               int chain(int a) { int x, y; x = y = a; return x; }\n\
+               int stmt(int a) { int z; z = a; return a; }\n\
+               int comma(int a) { int u, v; u = a, v = a; return a; }\n\
+               int clause(int a) { int w; for (w = a; a > 0; w = a - 1) a--; return a; }\n\
+               int main(void) { return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all"]);
+    let mut set: alloc::vec::Vec<&str> = p
+        .warnings
+        .iter()
+        .filter(|w| w.text.contains("set but never used"))
+        .filter_map(|w| {
+            let backtick = w.text.find('`')?;
+            let end = w.text[backtick + 1..].find('`')?;
+            Some(&w.text[backtick + 1..backtick + 1 + end])
+        })
+        .collect();
+    set.sort_unstable();
+    assert_eq!(set, ["u", "v", "w", "z"], "{:?}", p.warnings);
+}
+
 /// A binding starts with no uses and the outer one keeps its own: `n` is
 /// unused in `second` and ends no lifetime there, the outer `k` stays unread.
 #[test]

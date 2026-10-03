@@ -395,6 +395,7 @@ impl Compiler {
             let init_before = self.ast_stmts_snapshot();
             self.parse_full_expr_or_void()?;
             let init_expr = self.ast_acc;
+            self.discard_value(init_expr);
             // Treat the init expression as an Expr statement.
             if let Some(e) = init_expr {
                 let pos = self.ast_src_pos();
@@ -432,6 +433,7 @@ impl Compiler {
         // Step (optional). Comma operator: `i++, k--`.
         let post_ast: Option<super::super::ast::ExprId> = if self.lex.tk != ')' {
             self.parse_full_expr_or_void()?;
+            self.discard_value(self.ast_acc);
             self.ast_acc
         } else {
             None
@@ -3580,6 +3582,7 @@ impl Compiler {
         } else {
             self.parse_full_expr_or_void()?;
             self.reject_incomplete_value(self.ty)?;
+            self.discard_value(self.ast_acc);
             // C99 6.8.3 expression statement: bind the parsed
             // expression's id to a `Stmt::Expr` so the walker
             // descends through it. No-op when the expression

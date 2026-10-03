@@ -790,6 +790,8 @@ REDUCERS = ("cvise", "creduce")
 # compute differently: no missing return or uninitialized scalar, no
 # implicit declaration, and nothing the sanitizers see. csmith's own
 # programs take the address of packed members, so alignment stays off.
+# `-fno-common`: Apple clang puts a tentative definition in common
+# storage, which the address sanitizer does not instrument.
 REFERENCE_GUARD = (
     "-Werror=return-type",
     "-Werror=uninitialized",
@@ -798,6 +800,7 @@ REFERENCE_GUARD = (
     "-Werror=int-conversion",
     "-Werror=incompatible-pointer-types",
     "-Werror=excess-initializers",
+    "-fno-common",
     "-fsanitize=undefined,address",
     "-fno-sanitize=alignment",
     "-fno-sanitize-recover=all",
@@ -1781,6 +1784,7 @@ def self_test() -> int:
     build = rendered["build"]
     assert callable(build)
     check("the reference build keeps its guard", "-w" in build("clang", ["-O0"], "ref0")[0], False)
+    check("the guard sanitizes tentative definitions", "-fno-common" in rendered["GUARD"], True)
     check("badc builds quietly", "-w" in build("/usr/bin/badc", ["-O0"], "out")[0], True)
     check(
         "badc builds check the SSA form",

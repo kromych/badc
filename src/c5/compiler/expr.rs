@@ -5394,11 +5394,16 @@ impl Compiler {
         // is lexed, so re-lexing appends its string data after the rewind.
         let mut winner = None;
         let mut default_assoc = None;
+        // The names each association mentions, and whether it is the type
+        // match (`Some(true)`) or the `default` (`Some(false)`).
+        let mut mentions: Vec<(Option<bool>, Vec<usize>)> = Vec::new();
         loop {
+            let mut role = None;
             if self.lex.tk == Token::Default {
                 self.next()?; // default
                 if default_assoc.is_none() {
                     default_assoc = Some(self.lex.snapshot());
+                    role = Some(false);
                 }
                 self.consume(b':', "`:` expected after `default`")?;
             } else {
@@ -5422,10 +5427,12 @@ impl Compiler {
                     );
                 if is_match {
                     winner = Some(self.lex.snapshot());
+                    role = Some(true);
                 }
                 self.consume(b':', "`:` expected after generic association type")?;
             }
-            self.skip_generic_assoc_expr()?;
+            let names = self.skip_generic_assoc_expr()?;
+            mentions.push((role, names));
             if self.lex.tk == ',' {
                 self.next()?;
                 continue;
@@ -5434,6 +5441,12 @@ impl Compiler {
         }
         self.consume(b')', "`)` expected to close `_Generic`")?;
         let after = self.lex.snapshot();
+        let chosen = Some(winner.is_some());
+        for (_, names) in mentions.into_iter().filter(|(role, _)| *role != chosen) {
+            for idx in names {
+                self.mark_unevaluated_use(idx);
+            }
+        }
 
         let Some(chosen) = winner.or(default_assoc) else {
             return Err(self.compile_err(
@@ -5997,16 +6010,22 @@ impl Compiler {
 
     /// Advance the lexer past one generic association's expression to
     /// the terminating top-level `,` or `)`, tracking bracket depth so
-    /// commas and parens inside the expression do not end the scan.
+    /// commas and parens inside the expression do not end the scan, and
+    /// return the declared names it mentions, member names aside.
     /// TODO: parse an unselected association's expression for syntax.
-    fn skip_generic_assoc_expr(&mut self) -> Result<(), C5Error> {
+    fn skip_generic_assoc_expr(&mut self) -> Result<Vec<usize>, C5Error> {
         let mut depth = 0i32;
         let mut conditionals = 0i32;
+        let (mut names, mut member) = (Vec::new(), false);
         loop {
             let tk = self.lex.tk;
             if depth == 0 && (tk == ',' || tk == ')') {
-                return Ok(());
+                return Ok(names);
             }
+            if tk == Token::Id && !member && self.symbols[self.lex.curr_id_idx].class != 0 {
+                names.push(self.lex.curr_id_idx);
+            }
+            member = tk == Token::Dot || tk == Token::Arrow;
             // No expression holds a type name, `default` or an unpaired `:`
             // outside brackets; one here starts the next association.
             if depth == 0 {

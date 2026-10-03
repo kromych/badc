@@ -97,6 +97,7 @@ impl Compiler {
             // its whole size; a postfix form or an undeclared name (C99 6.5.1p2)
             // takes the expression path and its diagnostics.
             let idx = self.lex.curr_id_idx;
+            self.mark_unevaluated_use(idx);
             let var_ty = self.symbols[idx].type_;
             let arr = self.symbols[idx].array_size;
             let class = self.symbols[idx].class;
@@ -852,6 +853,7 @@ impl Compiler {
             self.restore_lex(snap);
             return Ok(None);
         }
+        self.mark_unevaluated_use(idx);
         Ok(Some(align))
     }
 }

@@ -1130,6 +1130,14 @@ impl Compiler {
         r
     }
 
+    /// A reference to `idx` that no evaluation follows (C99 6.5.3.4p2, 6.6p3):
+    /// used and read, as gcc counts a reference it parses without evaluating.
+    pub(super) fn mark_unevaluated_use(&mut self, idx: usize) {
+        let binding = &mut self.symbols[idx].binding;
+        binding.was_referenced = true;
+        binding.was_read = true;
+    }
+
     /// Run `f` over an operand that is evaluated only when `taken`.
     pub(super) fn evaluated_if<T>(
         &mut self,

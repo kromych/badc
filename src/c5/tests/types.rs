@@ -910,6 +910,48 @@ fn a_binding_starts_with_no_uses() {
     );
 }
 
+/// A name referenced only where nothing is evaluated is used and read, as gcc
+/// counts it (C99 6.5.3.4p2, 6.6p3); a name mentioned nowhere stays unused.
+#[test]
+fn a_name_in_an_unevaluated_operand_is_used() {
+    let src = "struct s { long a; char ctx[]; };\n\
+               static int setup(void) { return 0; }\n\
+               struct board { int (*setup)(void); };\n\
+               const struct board brd = { .setup = 0 ? setup : (void *)0 };\n\
+               unsigned align_of_ctx(void) { struct s *t; return __alignof__(t->ctx); }\n\
+               unsigned long size_of(void) { struct s f; return sizeof(f); }\n\
+               unsigned long set_a(void) { int x; x = 1; return sizeof(x); }\n\
+               unsigned long set_b(void) { int x; x = 1; return __alignof__(x); }\n\
+               static int pick(int v) { return v; }\n\
+               int choose(int v) { int m = 3; switch (v) { case 0 ? pick(m) : 1: return 1; }\n\
+                   return 0; }\n\
+               typedef struct { int acquired; } tl_t;\n\
+               typedef struct { int held; } lk_t;\n\
+               void take(lk_t *lock) { tl_t *tl; tl = (tl_t *)(void *)lock;\n\
+                   _Generic((lock), tl_t *: ({ tl->acquired = 1; }), lk_t *: (void)0); }\n\
+               static int lonely(void) { return 1; }\n\
+               int nowhere(void) { int n; int m; m = 2; return 0; }\n\
+               int main(void) { return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all", "extra"]);
+    let mut unused: alloc::vec::Vec<&str> = p
+        .warnings
+        .iter()
+        .filter(|w| w.text.contains("unused") || w.text.contains("never used"))
+        .map(|w| w.text.as_str())
+        .collect();
+    unused.sort_unstable();
+    assert_eq!(
+        unused,
+        [
+            "unused function `lonely`",
+            "unused variable `n`",
+            "variable `m` set but never used"
+        ],
+        "{:?}",
+        p.warnings
+    );
+}
+
 /// A local named like a static function keeps its uses apart from the
 /// function's; a call through a block-scope declaration uses the function.
 #[test]

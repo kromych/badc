@@ -769,6 +769,7 @@ impl Compiler {
     /// operand -- where C99 6.6p3 does not require it to be a constant
     /// expression; the value is discarded by the enclosing operator.
     fn skip_unevaluated_operand(&mut self) -> Result<(), C5Error> {
+        self.mark_unevaluated_use(self.lex.curr_id_idx);
         self.next()?; // the non-constant primary token
         loop {
             if self.lex.tk == '(' || self.lex.tk == Token::Brak {
@@ -789,12 +790,18 @@ impl Compiler {
     /// matching close.
     fn skip_balanced_group(&mut self) -> Result<(), C5Error> {
         let mut depth: i64 = 0;
+        let mut member = false;
         loop {
             if self.lex.tk == 0 {
                 return Err(
                     self.compile_err(Code::SYNTAX, "unterminated operand in constant expression")
                 );
             }
+            if self.lex.tk == Token::Id && !member && self.symbols[self.lex.curr_id_idx].class != 0
+            {
+                self.mark_unevaluated_use(self.lex.curr_id_idx);
+            }
+            member = self.lex.tk == Token::Dot || self.lex.tk == Token::Arrow;
             depth += self.bracket_depth_delta();
             self.next()?;
             if depth == 0 {

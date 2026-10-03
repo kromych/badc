@@ -2308,7 +2308,9 @@ impl<'p, 's> LinePass<'p, 's> {
         // retarget (C99 6.10.4); absent one it is the physical line.
         let substituted = self.pp.substitute(&buffer, self.filename, self.presumed);
         let site = self.site(self.presumed);
-        let processed = self.pp.apply_pragma_operators(&substituted, site)?;
+        let processed = self
+            .pp
+            .apply_pragma_operators(&substituted, site, &self.current_file)?;
         self.out.push_str(&processed);
         // One newline for the line itself, one per joined continuation,
         // so source line numbering survives the join.

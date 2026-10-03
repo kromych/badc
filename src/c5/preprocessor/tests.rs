@@ -896,6 +896,17 @@ fn pragma_operator_pack_emits_inline_directive() {
 }
 
 #[test]
+fn a_pragma_operator_leaves_its_line_numbered() {
+    // The re-emitted directive takes a line of its own; a marker after it
+    // gives the rest of the source line its number back.
+    let out = process("int a;\n_Pragma(\"pack(1)\") struct S { char a; };\nint b;\n");
+    assert!(
+        out.contains("\n#pragma pack(1)\n# 2 \"<source>\"\n struct S { char a; };\nint b;"),
+        "{out:?}"
+    );
+}
+
+#[test]
 fn pragma_operator_ignored_inside_string_literal() {
     // The operator name inside a string literal is ordinary text.
     let out = process("const char *s = \"_Pragma(\\\"once\\\")\";\n");

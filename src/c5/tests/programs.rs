@@ -7948,3 +7948,23 @@ fn integer_constant_added_to_an_address_constant() {
         assert_eq!(super::run_str_for(src, target), 42, "{target:?}");
     }
 }
+
+#[test]
+fn a_pragma_operator_keeps_the_lines_after_it_numbered() {
+    use crate::{CompileOptions, Compiler, Target};
+    // The `#pragma pack` an operator re-emits takes a line of its own; the
+    // diagnostic two lines further down still names its source line.
+    let src = "#define PACK _Pragma(\"pack(1)\")\n\
+               PACK\n\
+               struct s { char c; int i; };\n\
+               int main(void) { return undeclared_x; }\n";
+    let err = Compiler::with_options(src.to_string(), Target::host(), CompileOptions::default())
+        .compile()
+        .expect_err("an undeclared identifier is an error");
+    let lines: alloc::vec::Vec<u32> = err
+        .diagnostics()
+        .iter()
+        .filter_map(|d| d.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [4], "{err}");
+}

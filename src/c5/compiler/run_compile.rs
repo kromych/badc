@@ -511,16 +511,10 @@ impl Compiler {
         }
         // A declarator may carry a trailing attribute before the
         // terminator (`name(args) __attribute__((...));`, an
-        // initializer, a comma, or a function body's `{`).
+        // initializer, a comma, or a function body's `{`), and after an
+        // asm label, where it types the declarator as well.
         self.skip_attribute_specifiers()?;
-        // `typedef T name __attribute__((vector_size(N)))` (and the
-        // object form) binds the attribute to the declarator, not the
-        // base type, so it lands here rather than at the base-type
-        // sites. The leading form already consumed it, leaving 0.
-        ty = self.apply_pending_vector_size(ty)?;
-        if let Some(m) = self.pending.attr_mode.take() {
-            ty = self.apply_mode_to_type(ty, m)?;
-        }
+        ty = self.apply_pending_type_attributes(ty)?;
         let declarator_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
         // Captured per declarator, before a nested parse (a later parameter
         // of function type) can overwrite it.

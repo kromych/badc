@@ -329,12 +329,8 @@ impl Compiler {
                 0
             };
             self.pending.attr_transparent_union = false;
-            // After the declarator `vector_size(N)` types the member itself,
-            // as the typedef and object declarators take it.
-            field_ty = self.apply_pending_vector_size(field_ty)?;
-            if let Some(m) = self.pending.attr_mode.take() {
-                field_ty = self.apply_mode_to_type(field_ty, m)?;
-            }
+            // An attribute after the bit-field width types the member too.
+            field_ty = self.apply_pending_type_attributes(field_ty)?;
             let field_packed = core::mem::take(&mut self.pending.attr_packed);
             let m_align = self.take_member_align()?;
             // Alignment for this declarator only (a comma-list peer

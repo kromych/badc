@@ -4641,3 +4641,41 @@ fn vector_size_applies_to_the_innermost_element_type() {
         compile(src).unwrap_or_else(|e| panic!("`{src}`: {e}"));
     }
 }
+
+/// A `vector_size` or `mode` attribute after a declarator types that
+/// declarator's entity at every declarator site, and no later declaration.
+#[test]
+fn a_trailing_type_attribute_types_its_own_declarator() {
+    use crate::{Compiler, Target};
+    let src = r#"
+int proto(int v __attribute__((vector_size(16))), int m __attribute__((mode(QI))), int y) {
+    _Static_assert(sizeof v == 16 && sizeof m == 1 && sizeof y == 4, "prototype");
+    return 0;
+}
+int knr(v, y)
+int v __attribute__((vector_size(16)));
+int y;
+{
+    _Static_assert(sizeof v == 16 && sizeof y == 4, "old-style");
+    return 0;
+}
+int main(void) {
+    int a __attribute__((vector_size(16)));
+    int b;
+    int c __attribute__((mode(QI))), d;
+    static int s __attribute__((vector_size(16)));
+    extern int e __attribute__((vector_size(16)));
+    int t;
+    _Static_assert(sizeof a == 16 && sizeof b == 4, "automatic");
+    _Static_assert(sizeof c == 1 && sizeof d == 4, "comma list");
+    _Static_assert(sizeof s == 16 && sizeof e == 16 && sizeof t == 4, "static, extern");
+    for (int i __attribute__((mode(QI))) = 0, j = 0; i < 1; i++) {
+        _Static_assert(sizeof i == 1 && sizeof j == 4, "for");
+    }
+    return 0;
+}
+"#;
+    Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+}

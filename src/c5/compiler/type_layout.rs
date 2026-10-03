@@ -473,6 +473,15 @@ impl Compiler {
         Ok((self.make_vector_type(elem, n) + levels) | (ty & DERIVATION_QUAL_MASK))
     }
 
+    /// `ty` with the pending `vector_size` and then `mode` attribute applied.
+    pub(super) fn apply_pending_type_attributes(&mut self, ty: i64) -> Result<i64, C5Error> {
+        let ty = self.apply_pending_vector_size(ty)?;
+        match self.pending.attr_mode.take() {
+            Some(m) => self.apply_mode_to_type(ty, m),
+            None => Ok(ty),
+        }
+    }
+
     /// Synthesize the aggregate that models a GCC `vector_size(n_bytes)` vector
     /// of `elem_ty`: a single array field of `n_bytes / sizeof(elem)` lanes,
     /// flagged `is_vector`. sizeof / initialization / by-value pass reuse the

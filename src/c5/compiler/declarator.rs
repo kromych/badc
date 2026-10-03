@@ -311,6 +311,9 @@ impl Compiler {
         let r = self.parse_declarator_levels(base);
         let zero_len = core::mem::replace(&mut self.pending.declarator_zero_len_array, outer);
         let (idx, ty, array_size, _) = r?;
+        // A `vector_size` or `mode` attribute the declarator carries types
+        // its own entity; left pending, it retyped the next declaration.
+        let ty = self.apply_pending_type_attributes(ty)?;
         Ok((idx, ty, array_size, zero_len))
     }
 

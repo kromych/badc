@@ -539,17 +539,9 @@ impl Compiler {
         let lbt = self.parse_decl_base_type()?;
         let base_enum_tag = self.pending.base_enum_tag.take();
         while self.lex.tk != ';' {
-            let (id_idx, mut ty, mut td_array, mut td_zero_len) = self.parse_declarator(lbt)?;
+            let (id_idx, ty, mut td_array, mut td_zero_len) = self.parse_declarator(lbt)?;
             if id_idx == usize::MAX {
                 return Err(self.compile_err(Code::INVALID_DECLARATION, "typedef requires a name"));
-            }
-            // `__attribute__((vector_size(N)))` on the typedef rebuilds its type
-            // into a GCC vector here, matching the file-scope path. Without it
-            // the attribute leaked to the first subsequent declaration and was
-            // then consumed, so a second use of the typedef resolved as a scalar.
-            ty = self.apply_pending_vector_size(ty)?;
-            if let Some(m) = self.pending.attr_mode.take() {
-                ty = self.apply_mode_to_type(ty, m)?;
             }
             let declarator_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);

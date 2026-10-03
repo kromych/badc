@@ -1865,10 +1865,7 @@ impl Compiler {
 
         // `__attribute__((vector_size(N)))` rebuilds the base type into a GCC
         // vector of N bytes before qualifiers apply.
-        bt = self.apply_pending_vector_size(bt)?;
-        if let Some(m) = self.pending.attr_mode.take() {
-            bt = self.apply_mode_to_type(bt, m)?;
-        }
+        bt = self.apply_pending_type_attributes(bt)?;
         // Written after the base type is complete, so a nested parse inside
         // it (a parameter list in an aggregate body) leaves nothing behind.
         self.pending.base_enum_tag = enum_tag;

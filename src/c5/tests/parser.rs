@@ -860,8 +860,8 @@ fn computed_goto_whose_cleanups_depend_on_its_target() {
 
 #[test]
 fn jumps_that_enter_no_protected_scope() {
-    // The fifth is the kernel's `scoped_guard()`: from a statement
-    // expression into the loop.
+    // The fifth jumps from a statement expression in a `for` clause into
+    // the loop body.
     let cases = [
         "void t(int c, int n) { { char v[n]; v[0] = 0; if (c) goto out; } out: ; }",
         "void t(void) { int k = 0; { again: ; int a CL = 0; (void)a; if (k++ < 2) goto again; } }",
@@ -4377,9 +4377,11 @@ fn a_trailing_noreturn_specifier_is_recorded() {
 /// A block-scope declaration marks a function noreturn as a file-scope one
 /// does, through `_Noreturn` among its specifiers or a leading or trailing
 /// attribute, and the mark reaches no other declarator. A constant
-/// condition's dead branch neither falls through nor ends a loop: the
-/// kernel's `BUILD_BUG()` stub and `scoped_class` guard, which gcc and
-/// clang pass, do not warn. The warnings match clang's.
+/// condition's dead branch neither falls through nor ends a loop: a call
+/// through a block-scope noreturn declaration, and a `for` whose only
+/// `break` sits in a constant-false branch reached by a `goto` from its
+/// third clause, do not warn, as gcc and clang do not. The warnings
+/// match clang's.
 #[test]
 fn fall_off_end_sees_block_scope_noreturn_and_constant_conditions() {
     let quiet = [

@@ -120,8 +120,8 @@ fn dot_s_assembles_to_an_object() {
 fn dot_capital_s_preprocesses_and_predefines_assembler() {
     let d = dir("dot-cap-s");
     write(&d, "bump.h", "#define SEVEN 7\n");
-    // `__ASSEMBLER__` gates the C-only half of a shared header, as the
-    // kernel's do; only the assembly half may reach the assembler.
+    // `__ASSEMBLER__` gates the C-only half of a shared header; only the
+    // assembly half may reach the assembler.
     write(
         &d,
         "leaf.S",
@@ -175,7 +175,7 @@ fn assembly_units_write_dependency_rules() {
         "leaf.S",
         &format!("#include \"bump.h\"\n{}", LEAF.replace("7", "SEVEN")),
     );
-    // The kbuild spelling: the rule keeps the source-derived name.
+    // The `-Wp,-MMD,file` spelling: the rule keeps the source-derived name.
     run_ok(
         &d,
         &[
@@ -338,11 +338,11 @@ fn an_unreferenced_globl_declaration_reaches_the_symbol_table() {
 }
 
 /// An immediate whose expression folds to a value already fixed where the
-/// instruction sits takes the operand's `imm8` form, as GNU as 2.46.1 does;
-/// the kernel's boot decompressor writes `subl $rva(1b), %ebp` this way. A
-/// form with no `imm8` keeps the wide field, and so does a reference to a
-/// label the instruction's own width would move -- there GNU as settles the
-/// field before the layout, and the two widths give different values.
+/// instruction sits takes the operand's `imm8` form, as GNU as 2.46.1 does
+/// (`subl $(1b - start), %ebp`). A form with no `imm8` keeps the wide
+/// field, and so does a reference to a label the instruction's own width
+/// would move -- there GNU as settles the field before the layout, and the
+/// two widths give different values.
 #[test]
 fn a_folded_expression_immediate_takes_the_narrow_form() {
     let back = "\t.text\nstart:\n\tcall 1f\n1:\tpopq %rbp\n";
@@ -383,7 +383,7 @@ fn a_folded_expression_immediate_takes_the_narrow_form() {
 /// `inc` / `dec` on a 16- or 32-bit register take the one-byte `0x40+rd` /
 /// `0x48+rd` form outside 64-bit mode, where those opcodes are the REX
 /// prefix instead. Every expectation is GNU as 2.46.1's encoding of the
-/// same source; the kernel's `efi-mixed.S` carries the 32-bit form.
+/// same source.
 #[test]
 fn one_byte_inc_and_dec_encode_outside_long_mode() {
     let t = text_of(
@@ -402,8 +402,8 @@ fn one_byte_inc_and_dec_encode_outside_long_mode() {
 fn hidden_visibility_reaches_the_symbol_table() {
     // GNU as 2.46.1 on the same source: `_bss` and `_ebss` are
     // `GLOBAL HIDDEN UND`, and a defined `.hidden` symbol keeps its
-    // definition with STV_HIDDEN. The kernel's boot decompressor marks its
-    // linker-script symbols this way.
+    // definition with STV_HIDDEN, as a unit marks the symbols a linker
+    // script defines for it.
     let d = dir("hidden");
     write(
         &d,
@@ -516,9 +516,9 @@ fn relocs(bytes: &[u8], want: &str) -> Vec<(u64, u32, i64)> {
 
 #[test]
 fn a_constant_assignment_with_external_linkage_becomes_an_absolute_symbol() {
-    // GNU as puts `sym = <constant>` in the symbol table as SHN_ABS. The
-    // kernel's generated `piggy.S` defines its payload lengths that way
-    // and C code reads them, so the symbol has to survive the fold.
+    // GNU as puts `sym = <constant>` in the symbol table as SHN_ABS. A
+    // generated unit may define a payload's length that way for C code to
+    // read, so the symbol has to survive the fold.
     let d = dir("abs-sym");
     write(
         &d,
@@ -682,9 +682,8 @@ fn a_set_to_the_location_counter_defines_a_label() {
 fn assembler_options_are_checked_rather_than_passed_on() {
     let d = dir("wa");
     write(&d, "leaf.s", LEAF);
-    // The options the kernel's assembly units carry. `-march=` is the
-    // arm64 defconfig's, and refusing it failed the first unit of the
-    // build -- an instruction-set ceiling selects nothing badc varies.
+    // GNU as options a build passes through `-Wa,`. `-march=` is an
+    // instruction-set ceiling, which selects nothing badc varies.
     run_ok(
         &d,
         &[
@@ -735,8 +734,8 @@ fn assembler_options_are_checked_rather_than_passed_on() {
 
 /// GNU as keeps a label whose name carries the local-label prefix out of
 /// `.symtab` unless `-L` / `--keep-locals` is given, whatever `.type` and
-/// `.size` name it: the kernel's `SYM_FUNC_START_LOCAL(.Lname)` spells one
-/// `@function` and sizes it, and `as` still drops it. References reduce to
+/// `.size` name it: a `.L` label typed `@function` and sized is still
+/// dropped by `as`. References reduce to
 /// the label's section plus an addend either way, so the option moves no
 /// relocation.
 #[test]
@@ -939,8 +938,8 @@ fn m32_starts_the_encoder_in_32_bit_mode() {
     );
 }
 
-/// The direct far branch of real-mode mode-switch code, in the shapes
-/// the kernel's `arch/x86/realmode` units write it. Bytes, `R_386_*`
+/// The direct far branch of real-mode mode-switch code, in its 16- and
+/// 32-bit shapes. Bytes, `R_386_*`
 /// numbering and the implicit addend are GNU as 2.46.1's for the same
 /// source.
 #[test]
@@ -1145,7 +1144,7 @@ fn text_bytes(b: &[u8]) -> Vec<u8> {
 
 /// A difference of two local numeric labels is an absolute value in every
 /// operand position, in plain `.text` as much as inside a `.pushsection`:
-/// the ALTERNATIVE idiom stores it as a length byte and reads it as an
+/// a patch site stores it as a length byte and reads it as an
 /// instruction field. GNU as 2.46.1 emits these bytes for the same unit --
 /// a backward difference takes the narrow field, a forward one keeps the
 /// wide field the encoding chose.
@@ -1376,8 +1375,7 @@ fn m32_predefines_the_ilp32_data_model() {
 /// an `unsigned short` array takes one (C99 6.7.8p15) where the default
 /// 4-byte `wchar_t` refuses it. `-fno-short-wchar` is the explicit
 /// default, as in gcc 16.1.1, and leaves the already-16-bit Windows
-/// targets alone. The kernel builds its whole tree this way and stages
-/// `L"..."` into `efi_char16_t` arrays.
+/// targets alone.
 #[test]
 fn short_wchar_narrows_wchar_t_from_the_driver() {
     const PP: &str = concat!(
@@ -1448,8 +1446,7 @@ fn short_wchar_narrows_wchar_t_from_the_driver() {
 /// driver and move `__CHAR_UNSIGNED__` with the type, so `<limits.h>`
 /// and the compiler agree. Without either, the target ABI decides:
 /// unsigned on AArch64 ELF, signed elsewhere, as gcc 16.1.1 and
-/// clang 22.1.8 do on each. The kernel builds every unit
-/// `-funsigned-char`.
+/// clang 22.1.8 do on each.
 #[test]
 fn char_signedness_flags_reach_the_front_end() {
     const PP: &str = concat!(
@@ -1620,11 +1617,11 @@ fn the_dependency_scan_follows_the_code_model() {
     }
 }
 
-/// `arch/x86/kernel/verify_cpu.S` guards its CPUID-presence probe with
-/// `#ifndef __x86_64__`, and the realmode units that include it are
-/// built `-m16`. Preprocessing that unit with `__x86_64__` defined drops
-/// the probe, leaving a `cpuid` on a CPU never established to have one.
-/// Bytes are GNU as 2.46.1's for the same source.
+/// `-m16` preprocesses as i386, so a CPUID-presence probe guarded by
+/// `#ifndef __x86_64__` stays in a unit built `-m16`. Preprocessing it
+/// with `__x86_64__` defined drops the probe, leaving a `cpuid` on a CPU
+/// never established to have one. Bytes are GNU as 2.46.1's for the same
+/// source.
 #[test]
 fn m16_selects_the_realmode_cpuid_check() {
     const SRC: &str = concat!(
@@ -2112,10 +2109,9 @@ fn a_template_stream_branch_takes_the_short_form() {
 }
 
 /// A branch relaxes across `.align` and a label-valued `.skip`, whose
-/// padding absorbs the branch's own width. The kernel's `clear_bhb_loop` is
-/// this shape; the bytes are GNU as 2.46.1's for the same source, which
-/// needs the function's base to keep the 64-byte modulus the padding is
-/// measured against.
+/// padding absorbs the branch's own width. The bytes are GNU as 2.46.1's
+/// for the same source, which needs the function's base to keep the
+/// 64-byte modulus the padding is measured against.
 #[test]
 fn a_branch_over_alignment_padding_matches_gnu_as() {
     let src = "\t.text\n\t.skip 32, 0x90\n\t.globl f\nf:\n\tpush %rbp\n\tmov %rsp, %rbp\n\
@@ -2166,10 +2162,9 @@ fn a_branch_to_a_set_alias_follows_the_chain() {
 /// A data field naming a `.set name, symbol` alias relocates against the
 /// name the source wrote: the chain supplies the value, not the symbol the
 /// relocation names, which is how GNU as 2.46.1 assembles the source below
-/// on both targets. `SYM_FUNC_ALIAS` plus `EXPORT_SYMBOL` gives the kernel
-/// one `.export_symbol` entry per name, and modpost matches each entry's
-/// label suffix against the name its relocation targets, so reducing the
-/// entry to the aliased name rejects the export.
+/// on both targets. An export table holding one entry per name, read back
+/// by matching each entry's label suffix against the name its relocation
+/// targets, rejects an entry reduced to the aliased name.
 #[test]
 fn a_data_reference_to_a_set_alias_names_the_written_symbol() {
     const X86_64: u32 = 1;
@@ -2813,10 +2808,10 @@ fn val_offset_and_ra_state_take_their_own_opcodes() {
     );
 }
 
-/// A frame operand is an absolute expression, not a literal: the kernel's
-/// signal trampolines spell every saved-register slot as offset arithmetic
-/// over a macro argument. Both frames below describe the same state, so
-/// the two must encode identically.
+/// A frame operand is an absolute expression, not a literal: a signal
+/// trampoline's CFI may spell every saved-register slot as offset
+/// arithmetic over a macro argument. Both frames below describe the same
+/// state, so the two must encode identically.
 #[test]
 fn a_frame_operand_may_be_a_constant_expression() {
     let lit = object_for(
@@ -3066,12 +3061,9 @@ fn section_headers64(b: &[u8]) -> Vec<(String, u32, u64, u32, u64)> {
 /// GNU as keeps the `.previous` slot beside the `.pushsection` stack and
 /// `.popsection` restores what the push saved, so a `.section` /
 /// `.previous` pair bracketing a pushed section returns to the section
-/// before the pair. The kernel's `xen-asm.S` switches to `.init.text`,
-/// expands `UNWIND_HINT` there and returns with `.previous` before
-/// `xen_iret:`; the `ANNOTATE` label after it bound to
-/// `.discard.unwind_hints` and objtool rejected the linked image. The
-/// `.discard.annotate_insn` header carries the `M` flag and the entry size
-/// and `.text.hot` its `o` link, as GNU as 2.46.1 writes them.
+/// before the pair, and a label after the pair belongs to that section.
+/// The `.discard.annotate_insn` header carries the `M` flag and the entry
+/// size and `.text.hot` its `o` link, as GNU as 2.46.1 writes them.
 #[test]
 fn previous_after_a_push_pop_pair_and_the_section_attributes_match_gas() {
     const PC32: u32 = 2;

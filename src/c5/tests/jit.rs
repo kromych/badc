@@ -430,10 +430,10 @@ fn select_of_two_constants_folds_its_guard() {
     // The undefined `bug` would fail the JIT load if any survived.
     let src = "
         extern void bug(void);
-        #define BUILD_BUG_ON(c) do { if (!(!(c))) bug(); } while (0)
+        #define FAIL_IF(c) do { if (!(!(c))) bug(); } while (0)
         static __attribute__((always_inline)) unsigned long
         encode(unsigned long page, unsigned long flags) {
-            BUILD_BUG_ON(flags > 3ul);
+            FAIL_IF(flags > 3ul);
             return flags | page;
         }
         static int delay_rmap;
@@ -446,14 +446,14 @@ fn select_of_two_constants_folds_its_guard() {
                             | 0x10ul | 0x20ul | 0x40ul)
         #define STACK_FLAGS (0x100ul | DATA_FLAGS | 0x100000ul)
         static unsigned long stack_flags(void) {
-            BUILD_BUG_ON(STACK_FLAGS & (0x10000ul | 0x8000ul));
+            FAIL_IF(STACK_FLAGS & (0x10000ul | 0x8000ul));
             return STACK_FLAGS;
         }
         static int tier;
         static unsigned long tier_bits(void) {
             unsigned long v = tier ? (delay_rmap ? 1ul : 2ul) : 3ul;
-            BUILD_BUG_ON(v > 3ul);
-            BUILD_BUG_ON(v == 0ul);
+            FAIL_IF(v > 3ul);
+            FAIL_IF(v == 0ul);
             return v;
         }
         int main(void) {
@@ -491,7 +491,7 @@ fn const_trip_loop_unrolls_so_its_index_folds_a_guard() {
     // rolled loop's over a runtime bound.
     let src = "
         extern void bug(void);
-        #define BUILD_BUG_ON(c) do { if (!(!(c))) bug(); } while (0)
+        #define FAIL_IF(c) do { if (!(!(c))) bug(); } while (0)
         #define NR_FIXED 3
         #define BASE_IDX 32
         struct counter {
@@ -502,11 +502,11 @@ fn const_trip_loop_unrolls_so_its_index_folds_a_guard() {
         struct bank { struct counter fixed[NR_FIXED]; };
         static const int event_ids[NR_FIXED] = { 11, 22, 33 };
         static __attribute__((always_inline)) unsigned long long sel_of(unsigned int i) {
-            BUILD_BUG_ON(i >= NR_FIXED);
+            FAIL_IF(i >= NR_FIXED);
             return (unsigned long long)event_ids[i] << 8;
         }
         static __attribute__((always_inline)) unsigned int slot_of(unsigned int i) {
-            BUILD_BUG_ON(BASE_IDX + i >= 64u);
+            FAIL_IF(BASE_IDX + i >= 64u);
             return i + BASE_IDX;
         }
         static void bank_init(struct bank *b, void *owner) {
@@ -554,24 +554,24 @@ fn const_scalar_load_folds_to_its_initializer() {
     // the JIT load if any guard survived.
     let src = "
         extern void bug(void);
-        #define BUILD_BUG_ON(c) do { if (!(!(c))) bug(); } while (0)
+        #define FAIL_IF(c) do { if (!(!(c))) bug(); } while (0)
         static const _Bool is_conditional = 1;
         static const _Bool is_unconditional = 0;
         static const int depth = 3;
         static const unsigned char kind = 200;
         static const long mask = -4;
         static int guard(void) {
-            BUILD_BUG_ON(!is_conditional);
-            BUILD_BUG_ON(is_unconditional);
-            BUILD_BUG_ON(depth != 3);
-            BUILD_BUG_ON(kind != 200);
-            BUILD_BUG_ON(mask >= 0);
+            FAIL_IF(!is_conditional);
+            FAIL_IF(is_unconditional);
+            FAIL_IF(depth != 3);
+            FAIL_IF(kind != 200);
+            FAIL_IF(mask >= 0);
             return depth;
         }
         static int block_guard(void) {
             static const _Bool outer = 1;
-            { static const int inner = 5; BUILD_BUG_ON(inner != 5); }
-            BUILD_BUG_ON(!outer);
+            { static const int inner = 5; FAIL_IF(inner != 5); }
+            FAIL_IF(!outer);
             return 5;
         }
         static const char *names[2] = {(const char *)1, (const char *)2};

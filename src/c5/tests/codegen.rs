@@ -181,10 +181,9 @@ fn output_marker_is_version_only_and_present_in_every_target() {
 }
 
 /// The first line of `--version` (`BUILD_INFO`) is the complete
-/// identification consumers record: the Linux kernel captures
-/// `$(CC) --version | head -n1` as `CONFIG_CC_VERSION_TEXT`,
-/// which reaches the boot banner and `/proc/version`. It must
-/// name the compiler, its release version, and the
+/// identification consumers record: a build keeps
+/// `$(CC) --version | head -n1` as its compiler's name in what it
+/// produces. It must name the compiler, its release version, and the
 /// gcc-compatibility claim, and, where the source named one, the
 /// commit the compiler was built from -- so an image records which
 /// compiler build produced it, not merely which release. On a
@@ -3254,8 +3253,8 @@ fn atomic128_store_insert_aarch64() {
     assert!(any_bic, "store-insert must emit a BIC (mask clear)");
 }
 
-/// 128-bit compare-and-swap through the pre-LSE `ldxp`/`stxp` exclusive pair,
-/// the kernel `__ll_sc__cmpxchg128` shape. Unlike the recognized load/store
+/// 128-bit compare-and-swap through the pre-LSE `ldxp`/`stxp` exclusive pair
+/// in inline asm. Unlike the recognized load/store
 /// idioms this is not lowered to an intrinsic: `prfm`, `ldxp`, `cmp`, `ccmp`,
 /// `b.ne`, `stxp`/`stlxp` and `cbnz` each go through the per-instruction
 /// inline-asm encoder. Before `ldxp` gained a catalogue row this failed to
@@ -3696,7 +3695,8 @@ fn two_escaped_objects_of_one_block_keep_distinct_cells() {
 /// An object no instruction reads or writes is observable only through a
 /// comparison of its address, which needs both objects alive; the pair in
 /// one scope therefore keeps distinct cells while successive scopes share
-/// them. This is the kernel's `typecheck()` shape.
+/// them. A macro that checks two types by comparing the addresses of a
+/// dummy of each has this shape.
 #[test]
 fn address_compared_dummies_share_across_scopes_only() {
     let checks = |scopes: &str| {
@@ -5529,8 +5529,7 @@ fn internal_linkage_data_objects_are_named_by_local_symbols() {
 /// (`STT_TLS`). A linker adopts a typed UNDEF onto an untyped
 /// definition, so `STT_OBJECT` on a reference to an assembly code
 /// label retypes it in the linked image and objdump renders the
-/// label's range as data; the kernel's x86 decoder posttest rejects
-/// an image linked so. The distinction rides the vendor note.
+/// label's range as data. The distinction rides the vendor note.
 #[test]
 fn undefined_references_stay_untyped() {
     use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
@@ -5767,9 +5766,9 @@ fn in_out_port_forms_inline_asm_x64() {
 #[test]
 fn fxsave_fxrstor_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
-    // edk2's BaseLib reaches x87/SSE state save/restore through
-    // `asm("fxsave %0")` / `asm("fxrstor %0")`; the x86_64 emit lowers
-    // them to `fxsave m` (0F AE /0) and `fxrstor m` (0F AE /1).
+    // x87/SSE state is saved and restored through `asm("fxsave %0")` /
+    // `asm("fxrstor %0")`; the x86_64 emit lowers them to `fxsave m`
+    // (0F AE /0) and `fxrstor m` (0F AE /1).
     let program = super::compile_str_bare(
         "typedef struct { unsigned char b[512]; } FXBUF;\n\
          void save(FXBUF *p){ __asm__ __volatile__(\"fxsave %0\":\"=m\"(*p)); }\n\
@@ -5791,7 +5790,7 @@ fn fxsave_fxrstor_inline_asm_x64() {
 #[test]
 fn movd_mmx_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
-    // edk2's BaseLib reads/writes the MMX registers through
+    // The MMX registers are read and written through
     // `asm("movd %%mm0, %0")` / `asm("movd %0, %%mm3")`; the x86_64 emit
     // lowers them to `movd r/m32, mm` (0F 7E /r) and `movd mm, r/m32`
     // (0F 6E /r) with the mm index in ModRM.reg and no 0x66 prefix.
@@ -5816,7 +5815,7 @@ fn movd_mmx_inline_asm_x64() {
 #[test]
 fn operandless_privileged_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
-    // edk2's BaseLib reaches the operandless privileged instructions through
+    // The operandless privileged instructions are reached through
     // bare `asm("sti")` / `asm("cli")` / etc. The general x86_64 asm path
     // encodes each from its mnemonic with no operands.
     let program = super::compile_str_bare(
@@ -5857,8 +5856,8 @@ fn operandless_privileged_inline_asm_x64() {
 #[test]
 fn descriptor_table_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
-    // edk2's BaseLib reads/writes the descriptor-table registers and flushes
-    // cache lines through single-memory-operand asm. The x86_64 emit forces
+    // The descriptor-table registers are read and written, and cache lines
+    // flushed, through single-memory-operand asm. The x86_64 emit forces
     // the operand address into r10 and selects the form by opcode + ModRM.reg:
     //   sgdt/sidt = 0F 01 /0,/1 ; lgdt/lidt = 0F 01 /2,/3 ;
     //   sldt/str  = 0F 00 /0,/1 ; clflush   = 0F AE /7.
@@ -5899,8 +5898,8 @@ fn descriptor_table_inline_asm_x64() {
 #[test]
 fn control_debug_segment_mov_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
-    // edk2's BaseLib reads/writes the control (cr0..cr4) and debug (dr0..dr7)
-    // registers and reads the segment registers through `mov` with a special
+    // The control (cr0..cr4) and debug (dr0..dr7) registers are read and
+    // written, and the segment registers read, through `mov` with a special
     // register named in the template. The x86_64 emit selects:
     //   read  cr/dr -> gpr : 0F 20 / 0F 21 ; write gpr -> cr/dr : 0F 22 / 0F 23
     //   read  seg   -> gpr : 8C.
@@ -5945,9 +5944,9 @@ fn control_debug_segment_mov_inline_asm_x64() {
 #[test]
 fn interlocked_and_halt_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
-    // edk2's BaseSynchronizationLib / BaseCpuLib reach the atomic primitives
-    // and the halt through `lock`-prefixed multi-line asm blocks. The general
-    // asm path encodes each line: lock = F0, xadd = 0F C1, cmpxchg = 0F B1,
+    // The atomic primitives and the halt are reached through `lock`-prefixed
+    // multi-line asm blocks. The general asm path encodes each line:
+    // lock = F0, xadd = 0F C1, cmpxchg = 0F B1,
     // inc/dec = FF /0,/1, hlt = F4. The `"+m"` destinations are memory
     // references (`(%reg)`, ModRM mod != 11); a `lock` prefix on a register
     // destination is an invalid encoding that faults at runtime (#UD).
@@ -6130,11 +6129,11 @@ fn asm_goto_emits_for_both_targets() {
     }
 }
 
-/// Kernel jump-label source: a `1: nop` patch site whose `%l[l_yes]` is
-/// published to `__jump_table` and never branched by the template.
+/// An `asm goto` patch site: a `1: nop` whose `%l[l_yes]` is published to
+/// a table section and never branched by the template.
 /// `out_op` is the output list; `extra_op` adds inputs after the `"i"`
 /// key reference.
-fn a64_jump_label_object(out_op: &str, extra_op: &str) -> crate::c5::linker::object::NativeObject {
+fn a64_patch_site_object(out_op: &str, extra_op: &str) -> crate::c5::linker::object::NativeObject {
     use crate::c5::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
     let decl = if out_op.is_empty() { "" } else { "int o = 0;" };
     let ret = if out_op.is_empty() { "0" } else { "o" };
@@ -6161,7 +6160,7 @@ int main(void) {{ return probe(); }}
     );
     let program = Compiler::with_target(src, Target::LinuxAarch64)
         .compile()
-        .expect("jump-label shape compiles");
+        .expect("patch-site shape compiles");
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
         ..Default::default()
@@ -6194,7 +6193,7 @@ fn a64_jump_table_entry(obj: &crate::c5::linker::object::NativeObject) -> (usize
 
 /// The aarch64 inline-asm operand region (captures + store-backs) is
 /// static frame storage, not an sp carve around the template: a published
-/// `%l` (jump-label site) is reached by a branch patched in at run time,
+/// `%l` (a patch site) is reached by a branch patched in at run time,
 /// which bypasses every template exit path, so sp must already be balanced
 /// there. Locks, for the mixed shape (an output the label edge must store
 /// back + published label, no template branch): sp moves only in the
@@ -6204,7 +6203,7 @@ fn a64_jump_table_entry(obj: &crate::c5::linker::object::NativeObject) -> (usize
 #[test]
 fn a64_asm_goto_published_label_static_frame_region() {
     use crate::c5::linker::object::NativeSymSection;
-    let obj = a64_jump_label_object("\"=r\"(o)", ", \"r\"(g)");
+    let obj = a64_patch_site_object("\"=r\"(o)", ", \"r\"(g)");
     let probe = obj
         .symbols
         .iter()
@@ -6255,13 +6254,13 @@ fn a64_asm_goto_published_label_static_frame_region() {
     );
 }
 
-/// The kernel jump-label macro's own shape -- every operand an immediate --
-/// takes no operand region: the function stays frameless (no sp adjustment,
-/// no frame record) and the published `%l` names the label's block itself.
+/// A patch site whose every operand is an immediate takes no operand
+/// region: the function stays frameless (no sp adjustment, no frame
+/// record) and the published `%l` names the label's block itself.
 #[test]
-fn a64_asm_goto_immediate_jump_label_frameless() {
+fn a64_asm_goto_immediate_patch_site_frameless() {
     use crate::c5::linker::object::NativeSymSection;
-    let obj = a64_jump_label_object("", "");
+    let obj = a64_patch_site_object("", "");
     let probe = obj
         .symbols
         .iter()
@@ -6941,10 +6940,9 @@ fn elf64_section_flags(obj: &[u8], name: &str) -> Option<u64> {
 
 /// C99 6.4.5p6 leaves modifying a string literal undefined, and the
 /// placement is what enforces it. Consumers also classify a pointer by
-/// where it landed rather than by its declared type: the Linux kernel's
-/// `kfree_const` frees anything outside `[__start_rodata, __end_rodata)`,
-/// so a literal left in the writable image reaches `kfree` as though it
-/// were heap and corrupts the allocator.
+/// where it landed rather than by its declared type: a release routine
+/// that skips pointers into the read-only data range would free a literal
+/// left in the writable image as though it were heap.
 ///
 /// Locks both directions: anonymous literals -- including the template a
 /// local aggregate is copied from -- land in a `.rodata` carrying no
@@ -7202,10 +7200,10 @@ fn elf64_symbol_records(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u8,
 
 /// For a RELA relocation the addend lives in `r_addend`; the target
 /// field in the section image carries no information and gas leaves it
-/// zero. The x86_64 kernel module loader enforces exactly that before
-/// applying a module's relocations. Pointer slots in static data used
-/// to leak the VM's baked values (the target's data offset for data
-/// pointers, the function's `ent_pc` for function pointers).
+/// zero, and a loader may require it zero before applying the
+/// relocation. Pointer slots in static data used to leak the VM's baked
+/// values (the target's data offset for data pointers, the function's
+/// `ent_pc` for function pointers).
 #[test]
 fn relocated_slots_are_zero_in_relocatable_objects() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
@@ -7445,16 +7443,17 @@ fn an_assembly_time_assignment_defines_an_absolute_symbol() {
     }
 }
 
-/// The Linux kernel's `__EXPORT_SYMBOL` emits one `.export_symbol`
-/// record per export through file-scope asm: a `__export_symbol_<name>`
+/// An export table built through file-scope asm holds one
+/// `.export_symbol` record per export: a `__export_symbol_<name>`
 /// label, the license as `.asciz`, the namespace as adjacent `.ascii`
 /// literals with an explicit NUL, then `.balign 8` and a `.quad <name>`.
-/// modpost pairs each relocation with the nearest label at or below its
-/// offset and requires the relocation's target to be the GLOBAL symbol
-/// named by the label suffix, so the byte layout, the label placement,
-/// and the relocation targets must all match what GNU as produces.
+/// A post-link reader pairs each relocation with the nearest label at or
+/// below its offset and requires the relocation's target to be the GLOBAL
+/// symbol named by the label suffix, so the byte layout, the label
+/// placement, and the relocation targets must all match what GNU as
+/// produces.
 #[test]
-fn kernel_export_symbol_records_take_the_gas_shape() {
+fn file_scope_export_records_take_the_gas_shape() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
     const SRC: &str = "\
         int plain_sym; \
@@ -8741,9 +8740,9 @@ fn elf_text_align_and_funcs(bytes: &[u8]) -> (u64, alloc::vec::Vec<(String, u64,
 fn min_function_alignment_places_entries_without_growing_symbol_sizes() {
     // `-fmin-function-alignment=N` starts every function at a multiple of
     // N and raises `.text`'s own alignment to match, so the placement
-    // holds once the section is placed -- what CONFIG_FUNCTION_ALIGNMENT
-    // states. The fill belongs to no function: each `st_size` stays the
-    // size the packed object gave it, as gcc's does.
+    // holds once the section is placed. The fill belongs to no function:
+    // each `st_size` stays the size the packed object gave it, as gcc's
+    // does.
     use crate::{
         CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
     };
@@ -8894,9 +8893,9 @@ fn elf_undefined_names(bytes: &[u8]) -> alloc::vec::Vec<String> {
 
 #[test]
 fn a_freestanding_unit_takes_the_isdigit_builtin_it_probes() {
-    // The shape of Linux's <linux/ctype.h>: `__builtin_isdigit` stands in
-    // for `isdigit` when `__has_builtin` reports it, in a unit with no
-    // library headers, so it folds from its operand as gcc folds it.
+    // `__builtin_isdigit` stands in for `isdigit` when `__has_builtin`
+    // reports it, in a unit with no library headers, so it folds from its
+    // operand as gcc folds it.
     use crate::{CompileOptions, Compiler, Target};
     let src = "#if __has_builtin(__builtin_isdigit)\n\
                #define isdigit(c) __builtin_isdigit(c)\n\
@@ -8991,7 +8990,7 @@ fn freestanding_builtin_mem_transfer_binds_its_own_fallback() {
     // transfer whose count is no small constant falls back to a call of
     // the library function, and the builtin supplies that binding
     // itself, so a freestanding unit compiles with the name left
-    // undefined for the link to resolve (the kernel builds this way).
+    // undefined for the link to resolve.
     use crate::{CompileOptions, Compiler, Target};
     let src = "void f(void *d, const void *s, unsigned long n)\n\
                { __builtin_memcpy(d, s, n); __builtin_memset(d, 0, n); }\n";
@@ -9441,9 +9440,8 @@ fn indexes_by_address(text: &[u8], at: usize) -> bool {
 /// `-fno-pic`, the kernel code model) takes an absolute field, so the
 /// dispatch loads its entry through the table's address, `mov
 /// table(,%idx,8), %r10`: one `R_X86_64_32S` at that load's displacement
-/// against the table section's STT_SECTION symbol and no `lea`. objtool
-/// reads a PC32 table reference as a compiler quirk and stops reporting
-/// unreachable instructions for the whole object.
+/// against the table section's STT_SECTION symbol and no `lea`, as gcc
+/// relocates a `-fno-pic` switch table.
 #[test]
 fn static_link_switch_dispatch_indexes_the_table_by_its_address() {
     use crate::c5::object::elf_reloc_types::R_X86_64_32S;
@@ -9778,9 +9776,8 @@ fn switch_slots_land_on_pads_where_their_cases_reach() {
 
 /// `-fno-jump-tables`: a dense set that would otherwise table-dispatch
 /// stays on the compare tree, so no table section reaches the object
-/// and the dispatch takes no indirect branch. Kernel configurations
-/// building under retpoline or indirect-branch tracking pass the flag
-/// for exactly that reason.
+/// and the dispatch takes no indirect branch. A build under retpolines
+/// or indirect-branch tracking passes the flag for exactly that reason.
 #[test]
 fn no_jump_tables_keeps_a_dense_switch_on_the_compare_tree() {
     use crate::Target;
@@ -11645,8 +11642,9 @@ fn typeof_literal_member_with_sizeof_aligned_attr_stores_in_place() {
 /// string literal must fold away at `-O`: the load folds to the
 /// literal's byte (C99 6.4.5p6 makes the storage immutable), the guard
 /// becomes constant, and no reference to the assert helper survives.
-/// The kernel's newline check (`fmt[sizeof(fmt) - 2] != '\n'`) is this
-/// shape. A guard that holds must keep its call.
+/// A check that a format string ends in a newline
+/// (`fmt[sizeof(fmt) - 2] != '\n'`) is this shape. A guard that holds
+/// must keep its call.
 #[test]
 fn literal_index_guarded_assert_call_folds_away() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
@@ -11695,8 +11693,8 @@ fn literal_index_guarded_assert_call_folds_away() {
 /// A shift whose count is outside `0 ..= 63` has no result C99 6.5.7p3
 /// defines, so it must not fold to one: folding makes
 /// `__builtin_constant_p` over the result true and decides the guard of
-/// a branch the source only reaches when the count is in range. The
-/// kernel's `FIELD_PREP` range check is this shape -- an arm the
+/// a branch the source only reaches when the count is in range. A
+/// bit-field packing macro's range check is this shape -- an arm the
 /// compiler cannot prove dead computes `1 << (12 - 12 - 1)`, and a
 /// folded count leaves an unconditional call to a build-time assertion
 /// that has no definition. An in-range count still folds, and the same
@@ -11754,12 +11752,12 @@ fn out_of_range_shift_count_does_not_feed_a_constant_p_guard() {
 /// A build-time assertion written on a member the function has just
 /// assigned must fold at `-O`: the store's constant answers the read
 /// back of the same location, the guard becomes constant, and the
-/// unreachable assert call goes with its block. The kernel's
-/// `BUILD_BUG_ON(!is_power_of_2(virtvdev->bar0_virtual_buf_size))` is
-/// this shape -- a `u8` member, so the read back is an unsigned narrow
-/// one, and the guard's second half sits past a branch the first half
-/// decides. A member whose value is not a power of two keeps its call,
-/// and without `-O` both calls stay, as they do under gcc.
+/// unreachable assert call goes with its block. A power-of-two
+/// assertion on such a member is this shape -- a `u8` member, so the
+/// read back is an unsigned narrow one, and the guard's second half sits
+/// past a branch the first half decides. A member whose value is not a
+/// power of two keeps its call, and without `-O` both calls stay, as they
+/// do under gcc.
 #[test]
 fn member_store_constant_guarded_assert_call_folds_away() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
@@ -11822,11 +11820,11 @@ fn member_store_constant_guarded_assert_call_folds_away() {
 }
 
 /// `__builtin_constant_p` over a marker pointer must answer 1 once the
-/// splices that carry the marker have happened. The kernel's
-/// `BUILD_BUG_ON(!__builtin_constant_p(tmo == libeth_xsktmo))` reaches
-/// its query through an `always_inline` body that holds a call of its
-/// own returning a struct by value, and through a function-pointer
-/// parameter the splice turns into a direct call. A site whose marker
+/// splices that carry the marker have happened. A build-time assertion
+/// `!__builtin_constant_p(p == &marker)` reaches its query through an
+/// `always_inline` body that holds a call of its own returning a struct
+/// by value, and through a function-pointer parameter the splice turns
+/// into a direct call. A site whose marker
 /// is a runtime argument keeps its call, and without `-O` both stay,
 /// as they do under gcc.
 #[test]
@@ -13423,7 +13421,7 @@ fn stack_guard_forms_reach_the_object() {
             .any(|(_, n, _)| n == "__stack_chk_guard"),
         "the thread-block form names no guard object"
     );
-    // The kernel's x86-64 form: a %gs-relative reference to a named
+    // The x86-64 named-guard form: a %gs-relative reference to a named
     // object, relocated PC-relative like any other RIP-relative access.
     let tls_sym = emit_ssp(
         src,
@@ -13465,8 +13463,8 @@ fn stack_guard_forms_reach_the_object() {
         4,
         "an adrp + add pair per guard read"
     );
-    // The kernel's aarch64 form: `mrs xN, <sysreg>` then a load at the
-    // per-task offset, naming no symbol.
+    // The aarch64 system-register form: `mrs xN, <sysreg>` then a load at
+    // the given offset, naming no symbol.
     let sysreg = emit_ssp(
         src,
         Target::LinuxAarch64,
@@ -13498,9 +13496,8 @@ fn stack_guard_forms_reach_the_object() {
 }
 
 /// The kernel code model reads the default guard through `%gs`, as gcc
-/// and clang do: a Linux build that names no guard register keeps its
-/// per-CPU canary at `%gs:0x28`. A named segment is kept under either
-/// model.
+/// and clang do: a unit that names no guard register reads its canary
+/// at `%gs:0x28`. A named segment is kept under either model.
 #[test]
 #[cfg(feature = "full")]
 fn the_kernel_code_model_reads_the_default_guard_through_gs() {
@@ -13661,10 +13658,10 @@ fn address_of_compound_literal_argument_stays_a_scalar_pointer() {
 /// pointer whose declared type carries it, on the Microsoft x64 calling
 /// convention while the rest of the unit stays on System V: arguments in
 /// rcx/rdx/r8/r9 by position, 32 bytes of caller-reserved shadow space,
-/// rsi/rdi callee-saved. The Linux kernel spells it `__efiapi` and UEFI
-/// firmware enters the x86_64 EFI stub through it; compiling the
-/// attribute away leaves the stub reading its system-table argument out
-/// of the wrong register.
+/// rsi/rdi callee-saved. UEFI firmware calls an x86-64 image's entry
+/// point on this convention, as the UEFI specification states; compiling
+/// the attribute away leaves the entry reading its system-table argument
+/// out of the wrong register.
 ///
 /// The attribute is x86-only, as in gcc: on the aarch64 targets and on
 /// Windows -- where it names the target's own convention -- it changes

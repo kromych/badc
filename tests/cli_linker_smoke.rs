@@ -5844,7 +5844,7 @@ fn elf_segment_ranges(bytes: &[u8]) -> Vec<(u32, u32, usize, usize)> {
 /// `.rodata` the prefix, and the demoted storage is only re-protected
 /// once the loader has applied the fixups. `-fno-pic` states the
 /// opposite -- a link that resolves the relocation statically -- and is
-/// checked here too, since the kernel corpus builds under it.
+/// checked here too.
 #[test]
 fn compile_only_object_keeps_the_read_only_prefix_when_linked() {
     const PT_GNU_RELRO: u32 = 0x6474_E552;
@@ -12984,11 +12984,10 @@ mod aarch64_link {
 
     // Cortex-A53 erratum 843419, end to end through `badc --ld`.
     //
-    // Whether a kernel link reaches this path at all is decided by its
-    // final addresses: the pinned release places no erratum sequence at
-    // a 0xff8/0xffc page offset and produces no veneer, so the kernel
-    // gate covers none of it. The sequence here is placed by the script,
-    // so the cover does not depend on a corpus.
+    // Whether a link reaches this path at all is decided by its final
+    // addresses: an erratum sequence must land at a 0xff8/0xffc page
+    // offset. The sequence here is placed by the script, so the cover does
+    // not depend on a corpus.
 
     /// An ADRP at page offset 0xff8 whose dependent load/store follows,
     /// in a section a debug section precedes. The words are `.inst`:
@@ -13045,8 +13044,8 @@ mod aarch64_link {
 
     /// The dependent load/store moves into a veneer and its site takes a
     /// branch, and the veneer keeps its name across a `--strip-debug`
-    /// link: the kernel links its first kallsyms image stripped and the
-    /// final one not, then requires the two symbol maps to agree.
+    /// link, so a stripped link and an unstripped one of the same inputs
+    /// produce the same symbol table.
     #[test]
     fn a53_veneers_survive_a_strip_debug_link_unchanged() {
         let dir = tempdir("a64-erratum-843419");

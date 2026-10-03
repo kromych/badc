@@ -120,7 +120,7 @@ fn short_wchar_narrows_wchar_t_on_every_target() {
     assert_eq!(run(elems, Target::LinuxX64, true), 7, "narrowed elements");
     // C99 6.7.8p15: the destination element must be wchar_t-wide, so the
     // flag is what lets a wide literal stage into an unsigned short array
-    // (the shape the kernel's efi_char16_t arrays take).
+    // (a UTF-16 string buffer under a 2-byte `wchar_t`).
     let u16_array = "unsigned short d[] = L\"ab\";\n\
                      int main(void){ return (int)sizeof(d); }";
     assert_eq!(
@@ -797,8 +797,7 @@ fn warn_unused_variable_parameter_function() {
 /// GNU `unused` silences the unused rows of its declaration whether it
 /// leads it, sits among its specifiers or trails a declarator -- the last
 /// for that declarator alone -- and for a function on any of its
-/// declarations; a parameter's own stays with the parameter. The kernel
-/// writes `__maybe_unused` in each of these places.
+/// declarations; a parameter's own stays with the parameter.
 #[test]
 fn the_unused_attribute_silences_its_declarator_wherever_written() {
     let src = "#define U __attribute__((unused))\n\
@@ -832,9 +831,9 @@ fn the_unused_attribute_silences_its_declarator_wherever_written() {
 
 /// An assignment whose value is used reads its left operand, as gcc's
 /// -Wunused-but-set-variable counts it: a loop or `if` condition testing
-/// it (the kernel's `idr_for_each_entry`, `for_each_gt`) and a chained
-/// assignment do; an expression statement, a comma's operands in one and
-/// a `for` clause discard it. The verdicts are gcc 16's.
+/// it (`(entry = next(&id)) != 0`) and a chained assignment do; an
+/// expression statement, a comma's operands in one and a `for` clause
+/// discard it. The verdicts are gcc 16's.
 #[test]
 fn an_assignment_whose_value_is_used_reads_its_left_operand() {
     let src = "void *next(int *id);\n\
@@ -1574,8 +1573,8 @@ fn a_named_address_space_on_the_object_does_not_change_compatibility() {
     // C99 6.3.2.1p2 gives an lvalue's value the unqualified type, so a
     // named address space qualifying the object itself takes no part in
     // assignment compatibility -- the same rule `volatile` already gets.
-    // Both spellings the x86 per-cpu accessors produce are covered: a
-    // qualified pointer object, and a dereference of a pointer to one.
+    // Both spellings of a `__seg_gs` access are covered: a qualified
+    // pointer object, and a dereference of a pointer to one.
     let src = "struct mm_struct;\n\
                extern struct mm_struct *__seg_gs cur_mm;\n\
                extern struct mm_struct *pcpu_mm;\n\
@@ -4208,7 +4207,7 @@ fn a_result_keeps_the_pointer_levels_over_a_function_pointer_base() {
 
 /// C23 6.7.2.5: `typeof` of a function designator (`*fp`) names the
 /// function's type, its parameters included, so an entity declared through
-/// the specifier has the prototype (the kernel's `static_call` trampolines).
+/// the specifier has the prototype.
 #[test]
 fn typeof_a_function_designator_keeps_its_parameters() {
     compile_str(
@@ -4290,9 +4289,8 @@ fn uses_before_an_enums_definition_take_the_enums_type() {
 }
 
 /// A typeof of an array of arrays leaves no bounds to the next declaration
-/// through typeof: Linux's `EXPORT_SYMBOL` redeclares `node_to_cpumask_map`,
-/// an array of the array typedef `cpumask_var_t`, and then
-/// `__per_cpu_offset` this way.
+/// through typeof: `extern typeof(a) a;` over an array of an array
+/// typedef, then over another array.
 #[test]
 fn a_typeof_of_an_array_of_arrays_leaves_no_bounds_behind() {
     use crate::{Compiler, Target};

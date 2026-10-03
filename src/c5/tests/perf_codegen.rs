@@ -2434,9 +2434,9 @@ fn aarch64_frames_spill_only_past_the_callee_saved_bank() {
 }
 
 /// A register output of an inline asm statement into a scalar local is
-/// the statement's own value, so the local takes no frame slot: the
-/// gsbase switch of the kernel's entry path is `swapgs; rdgsbase %rax;
-/// swapgs; ret` and nothing else, and a system-register read on AArch64
+/// the statement's own value, so the local takes no frame slot: a gsbase
+/// read between two `swapgs` is `swapgs; rdgsbase %rax; swapgs; ret` and
+/// nothing else, and a system-register read on AArch64
 /// is `mrs; ret`. An output into a volatile local is still written to it.
 #[test]
 fn asm_register_output_keeps_the_local_out_of_the_frame() {
@@ -2476,12 +2476,12 @@ return v;\n}\n";
 }
 
 /// Every register output of an inline asm statement is a value of its own.
-/// The kernel's `rdtsc()` joins its two halves in registers and `cpuid`'s
+/// An `rdtsc` wrapper joins its two halves in registers and `cpuid`'s
 /// four outputs reach their sum, neither through the stack; outputs nothing
-/// reads leave nothing past the template, so the paravirt call shape is the
-/// call alone; on AArch64 two `mrs` outputs sum in their registers, and a
-/// dead one takes x16. Every output past the first went through a frame
-/// slot before.
+/// reads leave nothing past the template, so an asm `call` whose outputs
+/// go unread is the call alone; on AArch64 two `mrs` outputs sum in their
+/// registers, and a dead one takes x16. Every output past the first went
+/// through a frame slot before.
 #[test]
 fn asm_outputs_past_the_first_are_values() {
     const X64: &str = "unsigned long rd(void) {\n\
@@ -2576,10 +2576,10 @@ fn x86_asm_register_operands_bind_to_their_values() {
     m.finish();
 }
 
-/// The four-lane syndrome of the kernel's lib/raid6/neon.uc in its
-/// statement order: the wrappers' asm operands are their values' registers,
-/// so no memory access goes through sp and the inner loop moves no vector.
-/// Staged through a frame scratch, the kernel's function took 48 bytes.
+/// A four-lane GF(2^8) syndrome over NEON intrinsics: the wrappers' asm
+/// operands are their values' registers, so no memory access goes through
+/// sp and the inner loop moves no vector. Staged through a frame scratch,
+/// the function took 48 bytes.
 #[test]
 fn neon_intrinsic_chain_takes_no_frame() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -3868,7 +3868,7 @@ fn a64_built_accesses(ws: &[u32], base: u32) -> (usize, usize) {
 /// Twelve volatile accesses to locals the layout places past a 4 KiB array,
 /// more than 4 KiB below fp -- written as a volatile object, it keeps
 /// storage of its own ahead of them; `moving` also calls alloca, and
-/// `switched` moves sp to another stack the way libmill's `go()` does.
+/// `switched` moves sp to another stack, as a coroutine launch does.
 const FAR_SLOTS: &str = "void use(void *);\n\
     long fixed(long n) {\n\
         volatile char pad[4096];\n\

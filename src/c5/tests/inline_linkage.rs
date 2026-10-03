@@ -273,9 +273,8 @@ fn c99_inline_model_is_the_default() {
 #[test]
 fn ordinary_definition_after_an_extern_inline_body_is_the_external_one() {
     // gcc's gnu_inline contract: the extern-inline body serves only
-    // inlining, and the same unit may provide the ordinary definition,
-    // which is what the kernel's fortified string helpers do -- an
-    // extern gnu_inline wrapper in the header, the real definition in
+    // inlining, and the same unit may provide the ordinary definition --
+    // an extern gnu_inline wrapper in a header, the real definition in
     // the unit. The identifier must bind an external definition.
     let src = "extern __attribute__((__gnu_inline__)) inline int f(int x) { return x + 1; }\n\
                int f(int x) { return x + 2; }\n\
@@ -545,9 +544,8 @@ const FORTIFY_WRAPPERS: &[(&str, &str, &str)] = &[
 /// An inline definition provides no external definition (C99 6.7.4p6),
 /// so it is not what `__builtin_<fn>` names, and the body badc emits
 /// for it calls the builtin in turn. Binding the builtin to that body
-/// closes the loop: every `<linux/fortify-string.h>` wrapper the
-/// inliner declined became a body that called itself, and the kernel's
-/// first fortified compare ran the boot stack off its guard page.
+/// closes the loop: every fortified string wrapper the inliner declined
+/// became a body that called itself until the stack ran out.
 #[test]
 fn builtin_alias_reaches_the_external_definition() {
     for (name, def, caller) in FORTIFY_WRAPPERS {

@@ -1167,9 +1167,8 @@ fn fixture_parity_native_optimized() {
 /// parameter compiles only once inlined: out of line the operand is not
 /// a link-time constant, so the section-data emit rejects it. -O inlines
 /// it at the constant-argument call site, folding the operand, and routes
-/// the two returns through a join-block phi. This is the kernel
-/// `arch_static_branch` shape; it is verified only at -O since the
-/// out-of-line body is (correctly) unencodable at -O0.
+/// the two returns through a join-block phi. It is verified only at -O
+/// since the out-of-line body is (correctly) unencodable at -O0.
 #[test]
 fn param_operand_asm_goto_inlines_at_opt() {
     let src = r#"

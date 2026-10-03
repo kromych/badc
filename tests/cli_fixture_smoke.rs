@@ -834,7 +834,7 @@ fn opt_level_flags_map_to_the_single_level() {
 // `-mcmodel=` values follow the target the way gcc's do: aarch64 has
 // tiny/small, x86-64 has small/kernel. `tiny` narrows the layout
 // contract the small form already satisfies, so it lowers as small and
-// the objects are identical (the arm64 vdso builds its units with it).
+// the objects are identical.
 #[test]
 fn code_model_values_follow_the_target() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -2004,10 +2004,9 @@ fn auto_var_init_and_padding_flags_are_validated_by_name() {
     }
 }
 
-/// The x86 kernel names the guard's register and symbol without naming
-/// the form, because gcc's x86 default for `-mstack-protector-guard=` is
-/// `tls`. Requiring the form stopped the defconfig build at the first
-/// unit. aarch64 has no such default and still requires it.
+/// A build may name the guard's register and symbol without naming the
+/// form, because gcc's x86 default for `-mstack-protector-guard=` is
+/// `tls`. aarch64 has no such default and still requires it.
 #[test]
 fn the_x86_guard_form_defaults_the_way_gcc_does() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -2030,7 +2029,7 @@ fn the_x86_guard_form_defaults_the_way_gcc_does() {
             .output()
             .expect("run badc")
     };
-    // The SMP kernel's own pair, with no `-mstack-protector-guard=`.
+    // A register and a symbol, with no `-mstack-protector-guard=`.
     let out = compile(&[
         "--target=linux-x64",
         "-mstack-protector-guard-reg=gs",
@@ -2083,8 +2082,8 @@ fn stack_protector_canary_holds_and_catches_a_smashed_frame() {
     let badc = env!("CARGO_BIN_EXE_badc");
     let root = TempDir::new("badc-ssp-run");
 
-    // `strong` is the mode the kernel selects, so it is the one run at
-    // both optimization levels; the rest cover their own selection at one.
+    // `strong` runs at both optimization levels; the rest cover their own
+    // selection at one.
     for (mode, opt) in [
         ("-fno-stack-protector", &[][..]),
         ("-fstack-protector", &[][..]),
@@ -3242,9 +3241,8 @@ fn prototyped_int_return_is_widened_once() {
 }
 
 /// Compile the `tests/fixtures/c` fixture `name` for linux-x64 at `-O`
-/// under the flags its `// snapshot-flags:` line pins -- the kbuild
-/// option set the kernel-shaped fixtures state, as the snapshot
-/// generator builds it -- into `dir`, returning the object.
+/// under the flags its `// snapshot-flags:` line pins, as the snapshot
+/// generator builds it, into `dir`, returning the object.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn compile_fixture_object(dir: &std::path::Path, name: &str) -> PathBuf {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -3319,7 +3317,7 @@ fn has_indirect_branch(lines: &[String]) -> bool {
 }
 
 /// A `call` / `jmp` whose target is an `"i"` operand naming a function
-/// (`call %c[__func]`, the kernel's `call_on_stack`) is a direct branch
+/// (`call %c[__func]`) is a direct branch
 /// to the symbol: a call relocation against an external name, a
 /// resolved displacement to a function of the unit. An indirect branch
 /// through a register would bypass the retpoline thunks the fixture's
@@ -3459,11 +3457,11 @@ fn return_with_uaccess_enabled(dis: &str, func: &str) -> Option<u64> {
     None
 }
 
-/// After inlining `user_access_begin`, the caller's branch on its result
-/// is a branch on a phi of constants; threading each predecessor past
-/// the merge leaves no path from `stac` to a return that skips `clac`.
-/// The check walks the disassembly's edges, as objtool's UACCESS rule
-/// does, for the plain-store and the `asm goto` (`unsafe_put_user`)
+/// After inlining a helper that opens a `stac` region and returns whether
+/// it did, the caller's branch on its result is a branch on a phi of
+/// constants; threading each predecessor past the merge leaves no path
+/// from `stac` to a return that skips `clac`. The check walks the
+/// disassembly's edges, for the plain-store and the `asm goto` store
 /// shapes.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
@@ -3484,18 +3482,16 @@ fn every_path_from_stac_reaches_clac_before_returning() {
     }
 }
 
-/// The paravirt interrupt-flag accessors inline. Each is an
-/// always_inline body whose one statement is an indirect call through
-/// `pv_ops` carrying ASM_CALL_CONSTRAINT, and a stack-pointer operand
-/// used to make badc decline the body: the kernel then called a
-/// 166-byte out-of-line copy at every site that read or wrote the
-/// interrupt flag, on the configuration the distribution ships
-/// (CONFIG_PARAVIRT_XXL), which `defconfig` does not build. No copy of
-/// one may survive, `-Winline` may not name one, and each site keeps
-/// the call folded onto the `pv_ops` member the source named.
+/// Accessors whose always_inline body is one asm indirect call through a
+/// member of a function-pointer table, with a stack-pointer operand,
+/// inline. The stack-pointer operand used to make badc decline the body,
+/// leaving a 166-byte out-of-line copy called at every site that read or
+/// wrote the interrupt flag. No copy of one may survive, `-Winline` may
+/// not name one, and each site keeps the call folded onto the table
+/// member the source named.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
-fn the_paravirt_interrupt_flag_accessors_inline() {
+fn asm_table_call_accessors_with_a_stack_pointer_operand_inline() {
     let dir = TempDir::new("badc-pvirq");
     let fixture = fixtures_dir().join("kernel_paravirt_irqflags.c");
     let obj = dir.join("kernel_paravirt_irqflags.o");
@@ -3553,13 +3549,13 @@ fn the_paravirt_interrupt_flag_accessors_inline() {
 }
 
 /// A call through a function pointer that holds a known address is a
-/// direct call, for an external target as for one of the unit: the
-/// always_inline retry loop taking the SEAMCALL entry as an argument
+/// direct call, for an external target as for one of the unit: an
+/// always_inline retry loop taking the entry function as an argument
 /// inlines past its stack-pointer asm operand, and the call through
-/// the substituted constant is a direct branch to `__seamcall_ret`
-/// with a call relocation -- a `jmp` where the caller returns the result
-/// unchanged. No `mov $__seamcall_*` remains, which under IBT is a
-/// reference to a function without `endbr64` outside a direct branch.
+/// the substituted constant is a direct branch to the entry with a call
+/// relocation -- a `jmp` where the caller returns the result unchanged.
+/// No `mov $<entry>` remains, which under IBT is a reference to a
+/// function without `endbr64` outside a direct branch.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn a_call_through_a_constant_function_address_is_direct() {
@@ -3600,7 +3596,7 @@ fn a_call_through_a_constant_function_address_is_direct() {
 }
 
 /// The offset of the first instruction of `func` no path from its entry
-/// reaches, walking the disassembly's edges as objtool does: a
+/// reaches, walking the disassembly's edges: a
 /// conditional branch continues on both arms, `jmp` on its target only,
 /// `call` past the call, and `ret`, a return-thunk `jmp` and `ud2` end
 /// the path. A `ud2` or `nop` off every path is padding, not code.
@@ -3633,7 +3629,7 @@ fn unreachable_instruction(dis: &str, func: &str) -> Option<u64> {
 }
 
 /// `__builtin_unreachable()` / `__builtin_trap()` as a statement seals
-/// its block, so the code after a `BUG()` -- a `default:` arm's
+/// its block, so the code after a trap -- a `default:` arm's
 /// `return`, the fall-off return of the inlined helper -- is not
 /// emitted: no instruction of the fixture's functions is off every path
 /// from the entry.

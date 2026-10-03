@@ -1,4 +1,6 @@
-//! End-to-end tests: load a C source from `tests/fixtures/c/`, compile, run, and
+// expression, so an array bound of the shape
+// `__builtin_constant_p(n) ? const : nonconst`, or of the `||` / `&&`
+// short-circuit forms, is a constant, not a C99 6.7.6.2 VLA.//! End-to-end tests: load a C source from `tests/fixtures/c/`, compile, run, and
 //! check the exit code. These exercise the whole pipeline.
 
 use super::compile_str;
@@ -252,9 +254,9 @@ fn wide_string_struct_member() {
 #[test]
 fn inline_asm_memory_operand() {
     // An inline-asm `"m"` / `"+m"` operand is a memory reference: the
-    // interlocked `lock cmpxchg` / `lock xadd` (edk2 BaseSynchronizationLib)
-    // read and write the memory object, not a register (a `lock` on a
-    // register destination is an invalid encoding that faults at runtime).
+    // interlocked `lock cmpxchg` / `lock xadd` read and write the memory
+    // object, not a register (a `lock` on a register destination is an
+    // invalid encoding that faults at runtime).
     assert_eq!(
         run_fixture_for("inline_asm_memory_operand.c", crate::Target::LinuxX64),
         0
@@ -281,8 +283,8 @@ fn inline_asm_x64_callee_saved_operands() {
 #[test]
 fn init_2d_struct_array() {
     // A 2D array of structs with an inferred outer dimension
-    // (`struct T xs[][M] = { { {...}, ... }, ... }`, OpenSSL's OSSL_PARAM
-    // tables) descends the rows instead of misreading a row as one struct.
+    // (`struct T xs[][M] = { { {...}, ... }, ... }`) descends the rows
+    // instead of misreading a row as one struct.
     // Covers file-scope and static-local; 1D and fixed-size regress.
     assert_eq!(run_fixture("init_2d_struct_array.c"), 0);
 }
@@ -291,16 +293,15 @@ fn init_2d_struct_array() {
 fn init_paren_conditional_arith() {
     // A parenthesized constant conditional followed by arithmetic
     // (`(cond ? a : b) * N`) in an aggregate initializer folds correctly
-    // instead of misreading the trailing operators as extra elements
-    // (OpenSSL cipher tables use this form).
+    // instead of misreading the trailing operators as extra elements.
     assert_eq!(run_fixture("init_paren_conditional_arith.c"), 0);
 }
 
 #[test]
 fn offsetof_runtime_subscript() {
     // GCC extension: `__builtin_offsetof(T, m[i])` with a non-constant `i`
-    // yields the runtime offset `offsetof(T, m) + i * stride` (edk2 firmware
-    // uses it). A constant subscript still folds.
+    // yields the runtime offset `offsetof(T, m) + i * stride`. A constant
+    // subscript still folds.
     assert_eq!(run_fixture("offsetof_runtime_subscript.c"), 0);
 }
 
@@ -316,9 +317,8 @@ fn offsetof_multi_runtime_subscript() {
 #[test]
 fn decl_specifier_order() {
     // C99 6.7.1: declaration specifiers may appear in any order. A
-    // storage-class specifier after the type (`INTN STATIC f()`, the edk2
-    // firmware form) is accepted at file and block scope; internal linkage
-    // still applies.
+    // storage-class specifier after the type (`int static f()`) is accepted
+    // at file and block scope; internal linkage still applies.
     assert_eq!(run_fixture("decl_specifier_order.c"), 0);
 }
 
@@ -327,7 +327,7 @@ fn wide_string_pointer_array() {
     // C99 6.7.8: `wchar_t *names[] = { L"a", L"b" }` is a brace list of
     // pointer initializers, not a brace-wrapped string. The wide brace-wrap
     // now requires a wchar_t-width scalar element, so a pointer array stays a
-    // brace list (the edk2 `CHAR16 *mDeviceTypeStr[]` form).
+    // brace list.
     assert_eq!(run_fixture("wide_string_pointer_array.c"), 0);
 }
 
@@ -1137,9 +1137,9 @@ fn builtin_bitcount_zero_const_fold() {
 fn const_cond_dead_arm_not_vla() {
     // C99 6.6p3: in a constant expression the operand not selected by a
     // constant condition is not evaluated and need not be a constant
-    // expression, so an array bound of the kernel `ilog2` shape --
-    // `__builtin_constant_p(n) ? const : nonconst` and the `||` / `&&`
-    // short-circuit forms -- is a constant, not a C99 6.7.6.2 VLA. Sizes
+    // expression, so an array bound of the shape
+    // `__builtin_constant_p(n) ? const : nonconst`, or of the `||` / `&&`
+    // short-circuit forms, is a constant, not a C99 6.7.6.2 VLA. Sizes
     // match gcc and clang; the fixture also links with the unselected-arm
     // callee undefined, proving the dead arm is never referenced.
     assert_eq!(run_fixture("const_cond_array_bound.c"), 0);
@@ -1570,7 +1570,7 @@ fn prototype_param_keeps_object_shape() {
 fn array_alias_param_outer_bracket() {
     // C99 6.7.7p3 + 6.7.5.3p7: `rows_t rows[]` over `typedef T rows_t[1]`
     // is pointer-to-row; one subscript strides a whole row and decays to
-    // the element pointer (the kernel's cpumask_var_t parameter shape).
+    // the element pointer.
     assert_eq!(run_fixture("array_alias_param_outer_bracket.c"), 0);
 }
 
@@ -3445,7 +3445,7 @@ fn the_pty_headers_complete_struct_termios() {
     use crate::{CompileOptions, Compiler, Target};
     // glibc's <pty.h> and the BSD <util.h> include <termios.h>, so a unit
     // that reaches the pty helpers through either header alone still sees
-    // the struct definition. QEMU's chardev/char-pty.c is such a unit.
+    // the struct definition.
     let compiles = |header: &str, target: Target| -> bool {
         let src = alloc::format!(
             "#include <{header}>\nint f(void) {{ struct termios t; t.c_iflag = 0; \
@@ -6456,9 +6456,7 @@ fn bool_bitfield_assign_normalizes() {
     // C99 6.5.16.1p2 + 6.3.1.2: a value assigned to a `_Bool` bitfield
     // converts to `_Bool` (zero / nonzero) before the store, not by
     // truncation to the field's width. Masking alone folded
-    // `flag = x & 4` to a constant 0 for a field at bit 0 or 1, which
-    // is the kernel's `data->allow_reinit = flags &
-    // PERCPU_REF_ALLOW_REINIT`.
+    // `flag = x & 4` to a constant 0 for a field at bit 0 or 1.
     assert_eq!(run_fixture("bool_bitfield_assign_normalizes.c"), 0);
 }
 
@@ -6581,9 +6579,10 @@ fn builtin_constant_p_value_kinds() {
 
 #[test]
 fn builtin_constant_p_selects_choose_expr_arm_in_initializer() {
-    // The kernel's PIN_GROUP shape: an array operand selects the address
-    // arm, whose value carries a relocation; an integer operand selects
-    // the constant arm; a floating arm keeps its value.
+    // An initializer that selects with `__builtin_choose_expr` on
+    // `__builtin_constant_p`: an array operand selects the address arm,
+    // whose value carries a relocation; an integer operand selects the
+    // constant arm; a floating arm keeps its value.
     assert_eq!(run_fixture("builtin_constant_p_choose_expr_init.c"), 0);
 }
 
@@ -7005,7 +7004,7 @@ fn struct_member_two_dimensional_scalar_array_init() {
 
 #[test]
 fn typeof_multidimensional_array_redeclaration_keeps_inner_dim() {
-    // `extern typeof(a) a;` (the EXPORT_SYMBOL shape) on a multi-dim array
+    // `extern typeof(a) a;` on a multi-dim array
     // must keep every dimension so a later `a[i][j]` strides by the inner
     // dimension, not drop to a single dimension.
     let src = "
@@ -7490,7 +7489,7 @@ fn mach_vm_statistics_carries_the_user_memory_tags() {
              && VM_FLAGS_ALIAS_MASK==0xFF000000 \
              && VM_FLAGS_SUPERPAGE_SIZE_2MB==(2<<16))?1:-1];\n";
     assert!(header_snippet_compiles(src, Target::MacOSAarch64));
-    // A Mach tag has no meaning off Darwin; mimalloc's own probe is
+    // A Mach tag has no meaning off Darwin; a program may probe for it with
     // `#if defined(VM_MAKE_TAG)`, so defining it elsewhere would select a
     // tagged mmap on a kernel that reads the fd argument as a descriptor.
     for target in [
@@ -7585,7 +7584,7 @@ fn vm_region_basic_info_keeps_the_kernel_packing() {
 #[test]
 fn commoncrypto_random_is_bound_to_libsystem() {
     use crate::Target;
-    // mimalloc's Unix layer reaches for both headers to draw entropy:
+    // A unit drawing entropy may reach for both headers:
     // <AvailabilityMacros.h> puts MAC_OS_X_VERSION_MAX_ALLOWED past
     // 10.15, which selects CCRandomGenerateBytes over arc4random_buf.
     let src = "#include <AvailabilityMacros.h>\n\

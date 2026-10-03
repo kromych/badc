@@ -13,9 +13,9 @@ const SWAP_WALK: &str = "long swap_walk(long a, long b, int n) {\n\
     for (int i = 0; i < n; i++) { if (i & 1) { long t = a; a = b; b = t; } }\n\
     return a * 3 + b;\n}\n";
 
-/// The kernel's scoped user access: run-once loops sharing `done`, whose
-/// body assigns `len`, read after them. `scoped` adds the kernel's cleanup
-/// variable and an `asm goto` with an output that leaves for an error label.
+/// Run-once loops sharing `done`, whose body assigns `len`, read after
+/// them. `scoped` adds a cleanup variable and an `asm goto` with an output
+/// that leaves for an error label.
 const RUN_ONCE: &str = "extern int get(int *p);\n\
     extern void mark(int **p);\n\
     extern int bad(void);\n\

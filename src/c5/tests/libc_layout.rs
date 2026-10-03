@@ -1,7 +1,7 @@
 //! Record layouts of the bundled headers against the declarations each target
-//! uses: the kernel uapi of the release `demos/linux/setup.py` pins, glibc on
-//! Linux and the SDK on macOS. Each check is a `_Static_assert` compiled for
-//! its target, so a clean compile is the pass.
+//! uses: the Linux uapi headers, glibc on Linux and the SDK on macOS. Each
+//! check is a `_Static_assert` compiled for its target, so a clean compile
+//! is the pass.
 
 use crate::{CompileOptions, Compiler, Target};
 

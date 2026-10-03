@@ -325,7 +325,7 @@ fn line_text_by_number_honours_line_markers() {
 
 #[test]
 fn line_index_is_sized_by_markers_and_the_runs_it_answers_from() {
-    // A preprocessed kernel unit runs to hundreds of thousands of lines:
+    // A preprocessed unit can run to hundreds of thousands of lines:
     // the index holds an entry per marker and tabulates a run's lines
     // once, when the run first answers, however many lines are asked.
     use crate::c5::lexer::Lexer;

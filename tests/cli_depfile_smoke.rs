@@ -323,7 +323,7 @@ fn dash_e_writes_the_expansion_to_the_o_operand() {
 #[test]
 fn wp_spellings_carry_the_path_and_keep_the_default_rule_name() {
     let dir = fixture("wp");
-    // kbuild's form. As in gcc the payload reaches the preprocessor
+    // `-Wp,-MMD,file`: as in gcc the payload reaches the preprocessor
     // directly, so `-o` does not name the rule.
     run(
         &dir,
@@ -334,7 +334,7 @@ fn wp_spellings_carry_the_path_and_keep_the_default_rule_name() {
         "-Wp,-MMD must still compile"
     );
     assert_eq!(read(&dir, "dep3.d"), "main.o: main.c a.h sub/deep.h b.h\n");
-    // The kernel's dot-prefixed name works the same.
+    // A dot-prefixed name works the same.
     run(
         &dir,
         &[
@@ -358,13 +358,13 @@ fn wp_spellings_carry_the_path_and_keep_the_default_rule_name() {
             "-c",
             "-Wp,-MMD,dep5.d",
             "-MT",
-            "kernel/t.o",
+            "lib/t.o",
             "-o",
             "obj/main.o",
             "main.c",
         ],
     );
-    assert!(read(&dir, "dep5.d").starts_with("kernel/t.o: "));
+    assert!(read(&dir, "dep5.d").starts_with("lib/t.o: "));
     // `-Wp,-MD,` is the system-header-including spelling.
     run(
         &dir,

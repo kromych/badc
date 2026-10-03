@@ -3,6 +3,7 @@
 //! built from 64-bit operations.
 
 use super::bitfield::bitfield_mask_halves;
+use super::types::{is_bool_scalar, is_float_ty, is_floating_scalar};
 use super::*;
 use crate::c5::ast::expr_ty;
 use crate::c5::ir::{BitCountOp, is_int_comparison_op};
@@ -76,6 +77,13 @@ impl<'a> Walker<'a> {
         } else {
             ty
         };
+        Ok(self.int128_widen(b, v, ty))
+    }
+
+    /// C99 6.3.1.3: the scalar `v` of type `ty` as a 128-bit value: widened
+    /// to 64 bits, with its sign filling the high half (zero for an
+    /// unsigned type or a pointer).
+    pub(super) fn int128_widen(&mut self, b: &mut SsaBuilder, v: ValueId, ty: i64) -> Halves {
         let low_ty = Ty::LongLong as i64 | (ty & UNSIGNED_BIT);
         let lo = self.convert_scalar_value(b, v, ty, low_ty);
         let hi = if (ty & UNSIGNED_BIT) != 0 || is_pointer_ty(ty) {
@@ -83,7 +91,23 @@ impl<'a> Walker<'a> {
         } else {
             b.binop_imm(BinOp::Shr, lo, 63)
         };
-        Ok((lo, hi))
+        (lo, hi)
+    }
+
+    /// C99 6.3.1.2 / 6.3.1.3: a 128-bit value converted to the integer
+    /// type `to_ty`. `_Bool` tests the whole value; any other type takes
+    /// it modulo 2^64, narrowed to its width.
+    pub(super) fn int128_narrow(
+        &mut self,
+        b: &mut SsaBuilder,
+        pair: Halves,
+        to_ty: i64,
+    ) -> ValueId {
+        if is_bool_scalar(to_ty) {
+            return Self::int128_to_bool(b, pair);
+        }
+        let low_ty = Ty::LongLong as i64 | UNSIGNED_BIT;
+        self.convert_scalar_value(b, pair.0, low_ty, to_ty)
     }
 
     /// 128-bit addition: 64-bit halves with the carry recovered from
@@ -503,6 +527,13 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// C99 6.3.1.2: a 128-bit value converted to `_Bool` is 0 only when
+    /// both halves are.
+    pub(super) fn int128_to_bool(b: &mut SsaBuilder, (lo, hi): Halves) -> ValueId {
+        let any = b.binop(BinOp::Or, lo, hi);
+        b.binop_imm(BinOp::Ne, any, 0)
+    }
+
     /// Reinterpret a value's bits across the integer and FP register
     /// banks through an 8-byte stack slot. The `F64` kinds are single
     /// moves with no widen or narrow, so the round trip is bit-exact on
@@ -751,7 +782,7 @@ impl<'a> Walker<'a> {
     /// Apply a value-producing 128-bit operator to an already-loaded
     /// left operand, shared by `Expr::Binary` and the compound
     /// assignment. `lhs` is carried for diagnostics only.
-    fn int128_binary_pair(
+    pub(super) fn int128_binary_pair(
         &mut self,
         b: &mut SsaBuilder,
         op: BinOp,
@@ -871,15 +902,25 @@ impl<'a> Walker<'a> {
     }
 
     /// Lower `E1 op= E2` where `E1` is a 128-bit object.
+    /// A floating `op_ty` converts the object's value, operates in that
+    /// type and converts back (C99 6.3.1.4).
     pub(super) fn walk_int128_compound_assign(
         &mut self,
         b: &mut SsaBuilder,
         op: BinOp,
         lhs: ExprId,
         rhs: ExprId,
+        ty: i64,
+        op_ty: i64,
     ) -> Result<ValueId, WalkError> {
+        let signed = (ty & UNSIGNED_BIT) == 0;
         self.int128_rmw(b, lhs, false, |this, b, a| {
-            this.int128_binary_pair(b, op, a, lhs, rhs)
+            if !is_floating_scalar(op_ty) {
+                return this.int128_binary_pair(b, op, a, lhs, rhs);
+            }
+            let lv = this.int128_to_fp(b, a, signed, is_float_ty(op_ty));
+            let res = this.walk_fp_operation(b, op, lv, rhs, op_ty)?;
+            Ok(this.fp_to_int128(b, res, signed))
         })
     }
 

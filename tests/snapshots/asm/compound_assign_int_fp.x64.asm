@@ -68,12 +68,11 @@ Disassembly of section .text:
                	retq
                	movl	$0x7, %edx
                	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rdx, %xmm1
+               	cvtsi2ss	%rdx, %xmm1
                	movl	$0x4039999a, %esi       # imm = 0x4039999A
-               	movq	%rsi, %xmm14
-               	cvtss2sd	%xmm14, %xmm2
-               	addsd	%xmm2, %xmm1
-               	cvttsd2si	%xmm1, %rsi
+               	movq	%rsi, %xmm15
+               	addss	%xmm15, %xmm1
+               	cvttss2si	%xmm1, %rsi
                	cmpl	$0x9, %esi
                	je	<addr>
                	movl	$0x5, %eax
@@ -91,11 +90,31 @@ Disassembly of section .text:
                	retq
                	movl	$0x5, %esi
                	xorps	%xmm1, %xmm1
-               	cvtsi2sd	%rsi, %xmm1
+               	movq	%rsi, %r10
+               	testq	%r10, %r10
+               	js	<addr>
+               	cvtsi2sd	%r10, %xmm1
+               	jmp	<addr>
+               	movq	%r10, %r11
+               	shrq	%r11
+               	andq	$0x1, %r10
+               	orq	%r10, %r11
+               	cvtsi2sd	%r11, %xmm1
+               	addsd	%xmm1, %xmm1
                	movabsq	$0x400c000000000000, %rsi # imm = 0x400C000000000000
                	movq	%rsi, %xmm15
                	mulsd	%xmm15, %xmm1
-               	cvttsd2si	%xmm1, %rsi
+               	movapd	%xmm1, %xmm14
+               	movabsq	$0x43e0000000000000, %r11 # imm = 0x43E0000000000000
+               	movq	%r11, %xmm15
+               	ucomisd	%xmm15, %xmm14
+               	jae	<addr>
+               	cvttsd2si	%xmm14, %rsi
+               	jmp	<addr>
+               	subsd	%xmm15, %xmm14
+               	cvttsd2si	%xmm14, %rsi
+               	movabsq	$-0x8000000000000000, %r11 # imm = 0x8000000000000000
+               	orq	%r11, %rsi
                	cmpq	$0x11, %rsi
                	je	<addr>
                	movq	%rdx, %rax

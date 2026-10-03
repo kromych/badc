@@ -491,7 +491,7 @@ Disassembly of section .text:
                	ldurh	w1, [x20, #0x5]
                	lsl	x2, x1, #32
                	orr	x2, x0, x2
-               	asr	x2, x2, #4
+               	lsr	x2, x2, #4
                	lsl	x1, x1, #32
                	orr	x0, x0, x1
                	and	x0, x0, #0xffff000000000000

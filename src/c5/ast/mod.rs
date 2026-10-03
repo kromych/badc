@@ -381,13 +381,17 @@ pub(crate) enum Expr {
         ty: i64,
     },
     /// `lhs op= rhs`. C99 6.5.16.2p3: `lhs` is evaluated exactly
-    /// once; the walker spills the address and reloads. `nsw`: its
-    /// overflow is undefined (C99 6.5p5).
+    /// once, and `op` is performed in `op_ty`, the type of `lhs op rhs`:
+    /// the usual arithmetic conversions of both operands, the promoted
+    /// `lhs` for a shift, the pointer for `+=` / `-=` on one. The result
+    /// converts to `ty`, the type of `lhs`. `nsw`: its overflow is
+    /// undefined (C99 6.5p5).
     CompoundAssign {
         op: BinOp,
         lhs: ExprId,
         rhs: ExprId,
         ty: i64,
+        op_ty: i64,
         nsw: bool,
     },
     /// Prefix `++` / `--`. `by` is the post-pointer-scaling step

@@ -2,7 +2,7 @@
 //! postfix increment and compound literals (C99 6.5.2).
 
 use super::super::access::{load_kind_for, load_kind_width, load_place, seg_copy_bytes};
-use super::super::atomic::RmwOpen;
+use super::super::atomic::{RmwOpen, RmwPlace};
 use super::super::types::{
     arg_value_ty, arg_width, extend_scalar_call_result, is_float_ty, is_floating_scalar,
     low_word_param,
@@ -952,6 +952,17 @@ impl<'a> Walker<'a> {
             old,
         } = self.rmw_open(b, lvalue, ty)?;
         let stepped = self.increment_value(b, old, by, ty);
+        // C99 6.5.3.1p2: a bit-field's new value is the one it now holds.
+        if let RmwPlace::Bitfield {
+            addr,
+            bf,
+            seg,
+            align,
+        } = place
+        {
+            let stored = self.store_into_bitfield(b, addr, bf, stepped, seg, vol, align);
+            return Ok(if post { old } else { stored });
+        }
         place.store_marked(b, stepped, store_kind, vol, nsw);
         if post {
             return Ok(old);

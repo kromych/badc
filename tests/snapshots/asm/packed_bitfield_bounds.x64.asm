@@ -550,7 +550,7 @@ Disassembly of section .text:
                	movq	%rcx, %rdx
                	shlq	$0x20, %rdx
                	orq	%rax, %rdx
-               	sarq	$0x4, %rdx
+               	shrq	$0x4, %rdx
                	shlq	$0x20, %rcx
                	orq	%rcx, %rax
                	movabsq	$-0x1000000000000, %r11 # imm = 0xFFFF000000000000

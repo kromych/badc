@@ -2867,6 +2867,14 @@ fn enum_type_identity() {
 }
 
 #[test]
+fn compound_assign_once() {
+    // C99 6.5.16.2p3: `E1 op= E2` evaluates `E1` once and computes in the
+    // type of `E1 op E2`, for a bit-field and an `__int128` object as for
+    // any other lvalue.
+    assert_eq!(run_fixture("compound_assign_once.c"), 0);
+}
+
+#[test]
 fn variably_modified_type_names() {
     // C99 6.7.5.2p4, 6.5.3.4p2: a variable-length array type name's size
     // is computed at run time, and a cast to a pointer to one strides by it.

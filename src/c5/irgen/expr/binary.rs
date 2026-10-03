@@ -2,7 +2,7 @@
 //! (C99 6.5.5 - 6.5.16).
 
 use super::super::access::{seg_copy_bytes, store_kind_for, store_kind_width, store_place};
-use super::super::atomic::RmwOpen;
+use super::super::atomic::{RmwOpen, RmwPlace};
 use super::super::types::{fold_int_binop, is_floating_scalar, is_fp_arith_op, type_size_bytes};
 use super::super::*;
 use super::postfix::MemberRef;
@@ -158,6 +158,22 @@ impl<'a> Walker<'a> {
         let lv = b.fp_widen_to_f64(lv);
         let rv = b.fp_widen_to_f64(rv);
         b.binop(op, lv, rv)
+    }
+
+    /// `lv op rhs` in the floating type `op_ty`, `lv` already converted
+    /// to it: the right operand of a compound assignment.
+    pub(in super::super) fn walk_fp_operation(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: BinOp,
+        lv: ValueId,
+        rhs: ExprId,
+        op_ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        let rv = self.walk_expr_rvalue(b, rhs)?;
+        let rhs_ty = expr_ty(self.ast.expr(rhs)).unwrap_or(op_ty);
+        let rv = self.convert_scalar_value(b, rv, rhs_ty, op_ty);
+        Ok(self.walk_fp_binop(b, op, lv, rv))
     }
 
     /// Route a binop through the per-arch `BinopI` form when a walked
@@ -455,8 +471,11 @@ impl<'a> Walker<'a> {
         Ok(self.narrow_int_to_ty(b, value, rhs_ty, ty))
     }
 
-    /// C99 6.5.16.2 compound assignment. `nsw`: the operation's overflow
-    /// is undefined (C99 6.5p5).
+    /// C99 6.5.16.2 compound assignment: `E1 op= E2` is `E1 = E1 op E2`
+    /// with `E1` evaluated once. The operation is performed in `op_ty`,
+    /// the type of `E1 op E2`, and the result converts to `ty`, the type
+    /// of `E1`. `nsw`: the operation's overflow is undefined (C99 6.5p5).
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn walk_compound_assign(
         &mut self,
         b: &mut SsaBuilder,
@@ -464,12 +483,11 @@ impl<'a> Walker<'a> {
         lhs: ExprId,
         rhs: ExprId,
         ty: i64,
+        op_ty: i64,
         nsw: bool,
     ) -> Result<ValueId, WalkError> {
-        // C99 6.5.16.2p3: `E1 op= E2` is `E1 = E1 op E2` with E1
-        // evaluated once, and its value is the post-op value.
         if self.is_int128_value_ty(ty) || self.is_wide_unit_bitfield(lhs) {
-            return self.walk_int128_compound_assign(b, op, lhs, rhs);
+            return self.walk_int128_compound_assign(b, op, lhs, rhs, ty, op_ty);
         }
         let RmwOpen {
             place,
@@ -478,41 +496,33 @@ impl<'a> Walker<'a> {
             vol,
             old,
         } = self.rmw_open(b, lhs, ty)?;
-        let new_val = if is_fp_arith_op(op) && !is_floating_scalar(ty) {
-            // C99 6.5.16.2: an integer lvalue with a floating operand
-            // computes in the floating common type and converts back to
-            // the lvalue's type before the store.
-            let lv = b.fp_cast(FpCastKind::IntToFp, old);
-            let mut rv = self.walk_expr_rvalue(b, rhs)?;
-            if b.is_f32(rv) {
-                rv = b.fp_widen_to_f64(rv);
-            }
-            let res = b.binop(op, lv, rv);
-            b.fp_cast(FpCastKind::FpToInt, res)
-        } else if is_fp_arith_op(op) {
-            // C99 6.5.16.2 computes in the operands' common type, then
-            // converts to E1's type: the same precision rules a plain
-            // binop follows, plus a narrowing to the store width.
-            let mut lv = old;
-            let mut rv = self.walk_expr_rvalue(b, rhs)?;
-            let op_is_f32 = b.is_f32(lv) && b.is_f32(rv);
-            if op_is_f32 {
-                let res = b.binop(op, lv, rv);
-                b.mark_f32(res)
-            } else {
-                lv = b.fp_widen_to_f64(lv);
-                rv = b.fp_widen_to_f64(rv);
-                let res = b.binop(op, lv, rv);
-                // C99 6.3.1.5: narrow back to the lvalue's precision.
-                if matches!(store_kind, StoreKind::F32) {
-                    b.fp_narrow_to_f32(res)
-                } else {
-                    res
-                }
-            }
+        // A bit-field's value converts to its declared type, which for a
+        // `_Bool` field is a test of the whole value (C99 6.3.1.2).
+        let store_ty = match place {
+            RmwPlace::Bitfield { bf, .. } => bf.ty,
+            _ => ty,
+        };
+        let new_val = if self.is_int128_value_ty(op_ty) {
+            let a = self.int128_widen(b, old, ty);
+            let pair = self.int128_binary_pair(b, op, a, lhs, rhs)?;
+            self.int128_narrow(b, pair, store_ty)
+        } else if is_floating_scalar(op_ty) {
+            let lv = self.convert_scalar_value(b, old, ty, op_ty);
+            let res = self.walk_fp_operation(b, op, lv, rhs, op_ty)?;
+            self.convert_scalar_value(b, res, op_ty, store_ty)
         } else {
             self.walk_int_binop(b, op, old, lhs, rhs, ty)?
         };
+        // C99 6.5.16p3: a bit-field's value is the one it now holds.
+        if let RmwPlace::Bitfield {
+            addr,
+            bf,
+            seg,
+            align,
+        } = place
+        {
+            return Ok(self.store_into_bitfield(b, addr, bf, new_val, seg, vol, align));
+        }
         place.store_marked(b, new_val, store_kind, vol, nsw);
         // C99 6.5.16.2p3: the value is the post-update value in E1's
         // type, so a sub-64-bit lvalue reloads through `load_kind`

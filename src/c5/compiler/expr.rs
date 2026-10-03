@@ -3359,6 +3359,7 @@ impl Compiler {
                 lhs: lvalue,
                 rhs: size,
                 ty,
+                op_ty: ty,
                 nsw: false,
             },
             pos,
@@ -3780,26 +3781,20 @@ impl Compiler {
         if is_vector_ty(&self.structs, lhs_ty) && is_vector_binop_token(binop) {
             return self.parse_vector_compound_assignment(lhs_ty, binop, compound_lhs_ast);
         }
-        // The 128-bit integer's lvalue is an address with no scalar load
-        // to rewrite; the walker evaluates it once (C99 6.5.16.2p3).
-        if self.is_int128_ty(lhs_ty) {
-            return self.parse_int128_compound_assignment(lhs_ty, binop, compound_lhs_ast);
-        }
-        // A parenthesized bitfield lvalue (`(s.f) OP= x`) arrives as the
-        // read node the member parser built; C99 6.5.16.2: `s.f = s.f OP x`
-        // with the field evaluated once.
-        let bf_lvalue = compound_lhs_ast.and_then(|id| match self.ast.expr(id) {
-            super::super::ast::Expr::Member {
-                obj,
-                field_off,
-                bitfield: Some(desc),
-                ty,
-                ..
-            } => Some((id, *obj, *field_off, *desc, *ty)),
-            _ => None,
+        // The 128-bit integer's lvalue is an address and a bit-field's is
+        // the read node the member parser built: neither has a scalar load
+        // to rewrite, and the walker evaluates both once (C99 6.5.16.2p3).
+        let is_bitfield = compound_lhs_ast.is_some_and(|id| {
+            matches!(
+                self.ast.expr(id),
+                super::super::ast::Expr::Member {
+                    bitfield: Some(_),
+                    ..
+                }
+            )
         });
-        if let Some(bf) = bf_lvalue {
-            return self.parse_bitfield_compound_assignment(binop, bf);
+        if self.is_int128_ty(lhs_ty) || is_bitfield {
+            return self.parse_rmw_compound_assignment(lhs_ty, binop, compound_lhs_ast);
         }
         self.parse_scalar_compound_assignment(binop, compound_lhs_ast)
     }
@@ -3852,7 +3847,10 @@ impl Compiler {
         Ok(())
     }
 
-    fn parse_int128_compound_assignment(
+    /// `E1 op= E2` over a 128-bit integer or a bit-field. Its overflow is
+    /// never marked undefined: a bit-field's is a conversion to its
+    /// width, and the 128-bit operations do not carry the mark.
+    fn parse_rmw_compound_assignment(
         &mut self,
         lhs_ty: i64,
         binop: i64,
@@ -3861,58 +3859,57 @@ impl Compiler {
         let lhs_node = compound_lhs_ast.ok_or_else(|| {
             self.compile_err(Code::INVALID_OPERANDS, "bad lvalue in compound assignment")
         })?;
-        let pos = self.ast_src_pos();
         self.next()?;
         self.expr(Token::Assign as i64)?;
+        let (bop, op_ty) = self.compound_assign_operation(binop, lhs_ty, false)?;
         let rhs_node = self.ast_acc.ok_or_else(|| {
             self.compile_err(Code::INVALID_OPERANDS, "bad rhs in compound assignment")
         })?;
-        let bop = self.compound_assign_binop(binop, lhs_ty, self.ty, false)?;
-        let node = self.ast.push_expr(
-            super::super::ast::Expr::CompoundAssign {
-                op: bop,
-                lhs: lhs_node,
-                rhs: rhs_node,
-                ty: lhs_ty,
-                nsw: false,
-            },
-            pos,
-        );
-        self.ast_acc = Some(node);
+        self.ast_emit_compound_assign(bop, lhs_node, rhs_node, lhs_ty, op_ty, false);
         self.ty = lhs_ty;
         Ok(())
     }
 
-    fn parse_bitfield_compound_assignment(
+    /// C99 6.5.16.2: the operation of `E1 op= E2`, with the right operand
+    /// parsed into the accumulator and `E1` of type `lhs_ty`. The operands
+    /// are checked and the right one is converted or scaled as `E1 op E2`
+    /// takes it. Returns the operator and the type of `E1 op E2`, which
+    /// the operation is performed in: the usual arithmetic conversions of
+    /// both operands (6.3.1.8), the promoted `E1` for a shift (6.5.7p3),
+    /// the pointer for `+=` / `-=` on one (6.5.6p8).
+    fn compound_assign_operation(
         &mut self,
         binop: i64,
-        (read, obj, field_off, desc, field_ty): (
-            super::super::ast::ExprId,
-            super::super::ast::ExprId,
-            i64,
-            super::super::ast::BitfieldDesc,
-            i64,
-        ),
-    ) -> Result<(), C5Error> {
-        let pos = self.ast_src_pos();
-        self.next()?;
-        self.expr(Token::Assign as i64)?;
-        let rhs = self.ast_acc.ok_or_else(|| {
-            self.compile_err(Code::INVALID_OPERANDS, "bad rhs in compound assignment")
-        })?;
-        let op = self.compound_assign_binop(binop, field_ty, self.ty, false)?;
-        let combined = self.ast.push_expr(
-            super::super::ast::Expr::Binary {
-                op,
-                lhs: read,
-                rhs,
-                ty: field_ty,
-            },
-            pos,
-        );
-        self.ast_emit_bitfield_assign(obj, field_off, desc, combined, field_ty);
-        self.ty = field_ty;
-        Ok(())
+        lhs_ty: i64,
+        lhs_fn_ptr: bool,
+    ) -> Result<(super::super::ir::BinOp, i64), C5Error> {
+        use super::super::ir::BinOp as B;
+        let rhs_ty = self.ty;
+        let op_is_fp = is_floating_scalar(lhs_ty) || is_floating_scalar(rhs_ty);
+        let bop = self.compound_assign_binop(binop, lhs_ty, rhs_ty, op_is_fp)?;
+        if is_pointer_ty(lhs_ty) {
+            let op = if bop == B::Add { "+=" } else { "-=" };
+            self.require_complete_pointee(lhs_ty, op)?;
+            let elem_size = self.size_of_type(pointee_ty(lhs_ty)) as i64;
+            if let Some(slot) = self.vla_pointee_slot(lhs_ty) {
+                self.emit_binop_with_vla_size(B::Mul, slot);
+            } else if !lhs_fn_ptr && elem_size > 1 {
+                self.emit_binop_with_imm(B::Mul, elem_size);
+            }
+            return Ok((bop, lhs_ty));
+        }
+        if matches!(bop, B::Shl | B::Shr | B::Shru) {
+            return Ok((bop, integer_promote(lhs_ty)));
+        }
+        if !op_is_fp {
+            return Ok((bop, self.arith_common_ty(lhs_ty, rhs_ty)));
+        }
+        // A floating lvalue takes an integer operand converted to its
+        // type; an integer lvalue is converted by the walker.
+        if is_floating_scalar(lhs_ty) {
+            self.require_both_float(lhs_ty, "compound assign")?;
+        }
+        Ok((bop, fp_result_ty(lhs_ty, rhs_ty)))
     }
 
     fn parse_scalar_compound_assignment(
@@ -3939,44 +3936,9 @@ impl Compiler {
         self.ast_psh();
         let lhs_ty = self.ty;
         self.expr(Token::Assign as i64)?;
-        let pre_scale_rhs_ast = self.ast_acc;
-        // Read before a conversion rewrites `self.ty`: an integer lvalue
-        // with a floating operand computes in the floating type (C99
-        // 6.5.16.2).
-        let rhs_ty = self.ty;
-        let rhs_is_fp = is_floating_scalar(rhs_ty);
-        if (binop == Token::AddOp as i64 || binop == Token::SubOp as i64)
-            && is_pointer_ty(lhs_ty)
-            && !is_floating_scalar(lhs_ty)
-        {
-            let op = if binop == Token::AddOp as i64 {
-                "+="
-            } else {
-                "-="
-            };
-            self.require_complete_pointee(lhs_ty, op)?;
-            let elem_ty = pointee_ty(lhs_ty);
-            let elem_size = self.size_of_type(elem_ty) as i64;
-            if let Some(slot) = self.vla_pointee_slot(lhs_ty) {
-                self.emit_binop_with_vla_size(crate::c5::ir::BinOp::Mul, slot);
-            } else if !lhs_fn_ptr && elem_size > 1 {
-                self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, elem_size);
-            }
-        }
-        // The scaled operand, so the walker re-emits the same `Mul` rather
-        // than scaling again.
-        let mut compound_rhs_ast = self.ast_acc.or(pre_scale_rhs_ast);
-        let lhs_is_fp = is_floating_scalar(lhs_ty);
-        // C99 6.5.16.2: `E1 OP= E2` computes in the type of `E1 OP E2`, so
-        // an integer operand of a floating lvalue is converted first.
-        if lhs_is_fp {
-            self.require_both_float(lhs_ty, "compound assign")?;
-            compound_rhs_ast = self.ast_acc.or(compound_rhs_ast);
-        }
-        // For an integer lvalue with a floating operand the walker converts
-        // the lvalue, computes, and converts back.
-        let op_is_fp = lhs_is_fp || rhs_is_fp;
-        let bop = self.compound_assign_binop(binop, lhs_ty, rhs_ty, op_is_fp)?;
+        let (bop, op_ty) = self.compound_assign_operation(binop, lhs_ty, lhs_fn_ptr)?;
+        // The scaled or converted operand, so the walker applies it as is.
+        let compound_rhs_ast = self.ast_acc;
         self.ast_binop(bop);
         self.ty = lhs_ty;
         self.ast_assign();
@@ -3984,17 +3946,12 @@ impl Compiler {
             self.record_local_store(idx, line);
         }
         if let (Some(lhs), Some(rhs)) = (compound_lhs_ast, compound_rhs_ast) {
-            let ca_ty = self.ty;
             // The operation is performed in the lvalue's own type, or the
             // store back is a conversion rather than an overflow.
-            let common =
-                (!op_is_fp && !is_pointer_ty(lhs_ty)).then(|| self.arith_common_ty(lhs_ty, rhs_ty));
-            let nsw = common.is_some_and(|c| {
-                self.overflow_undefined(bop, c)
-                    && self.overflow_undefined(bop, lhs_ty)
-                    && self.size_of_type(c) == self.size_of_type(lhs_ty)
-            });
-            self.ast_emit_compound_assign(bop, lhs, rhs, ca_ty, nsw);
+            let nsw = self.overflow_undefined(bop, op_ty)
+                && self.overflow_undefined(bop, lhs_ty)
+                && self.size_of_type(op_ty) == self.size_of_type(lhs_ty);
+            self.ast_emit_compound_assign(bop, lhs, rhs, lhs_ty, op_ty, nsw);
         }
         Ok(())
     }
@@ -5028,7 +4985,6 @@ impl Compiler {
         // The token after the member decides between a store, which
         // preserves the other bits of the storage unit, and an extraction.
         let is_bf_assign = self.lex.tk == Token::Assign;
-        let is_bf_compound = self.lex.tk == Token::AssignOp;
         let is_bf_incdec = self.lex.tk == Token::Inc || self.lex.tk == Token::Dec;
         let bf_desc = super::super::ast::BitfieldDesc {
             bit_offset: field.bit_offset as u8,
@@ -5043,7 +4999,6 @@ impl Compiler {
         // narrow (C99 6.3.1.1p2).
         let bf_field_ty = super::emit::bitfield_value_ty(field.bit_width, field_ty);
         self.pending.bf_assign_rhs = None;
-        self.pending.bf_compound_assign = None;
         // `emit_bitfield_access` runs the c5 stack through stores the AST
         // tracker reads as assignments; its vstack pushes are dropped and
         // the one node this access needs is built below.
@@ -5060,33 +5015,6 @@ impl Compiler {
                 if let Some(rhs) = self.pending.bf_assign_rhs.take() {
                     let res_ty = self.ty;
                     self.ast_emit_bitfield_assign(obj, bf_field_off, bf_desc, rhs, res_ty);
-                }
-            } else if is_bf_compound {
-                // C99 6.5.16.2: `E1 OP= E2` is `E1 = E1 OP E2` with `E1` evaluated
-                // once.
-                if let Some((rhs, ir_op)) = self.pending.bf_compound_assign.take() {
-                    let src = self.ast_src_pos();
-                    let read = self.ast.push_expr(
-                        super::super::ast::Expr::Member {
-                            obj,
-                            field_off: bf_field_off,
-                            bitfield: Some(bf_desc),
-                            ty: bf_field_ty,
-                            array_size: 0,
-                        },
-                        src,
-                    );
-                    let combined = self.ast.push_expr(
-                        super::super::ast::Expr::Binary {
-                            op: ir_op,
-                            lhs: read,
-                            rhs,
-                            ty: bf_field_ty,
-                        },
-                        src,
-                    );
-                    let res_ty = self.ty;
-                    self.ast_emit_bitfield_assign(obj, bf_field_off, bf_desc, combined, res_ty);
                 }
             } else if is_bf_incdec {
                 // Postfix `++` / `--` on the member: the access ran in read mode

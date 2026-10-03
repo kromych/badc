@@ -311,6 +311,11 @@ impl Compiler {
         let r = self.parse_declarator_levels(base);
         let zero_len = core::mem::replace(&mut self.pending.declarator_zero_len_array, outer);
         let (idx, ty, array_size, _) = r?;
+        // An attribute list may trail a grouped declarator too, which
+        // returns before the inner parser's trailing loop.
+        while self.at_attribute_specifier() {
+            self.skip_attribute_specifiers()?;
+        }
         // A `vector_size` or `mode` attribute the declarator carries types
         // its own entity; left pending, it retyped the next declaration.
         let ty = self.apply_pending_type_attributes(ty)?;

@@ -4679,3 +4679,27 @@ int main(void) {
         .compile()
         .unwrap_or_else(|e| panic!("{e}"));
 }
+
+/// GNU C: an attribute list may trail a grouped declarator (a pointer to a
+/// function or to an array) at block scope as at file scope, and applies to
+/// that declarator.
+#[test]
+fn an_attribute_may_trail_a_grouped_declarator_at_block_scope() {
+    use crate::{Compiler, Target};
+    let src = r#"
+int main(void) {
+    int (*ap)[4] __attribute__((aligned(16))) = 0;
+    int (*fp)(int) __attribute__((aligned(32))) = 0;
+    typedef int (*fp_t)(int) __attribute__((aligned(16)));
+    _Static_assert(__alignof__(ap) == 16 && __alignof__(fp) == 32, "objects");
+    _Static_assert(__alignof__(fp_t) == 16, "typedef");
+    for (int (*q)[2] __attribute__((aligned(64))) = 0; q;) {
+        _Static_assert(__alignof__(q) == 64, "for");
+    }
+    return ap != 0 || fp != 0;
+}
+"#;
+    Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+}

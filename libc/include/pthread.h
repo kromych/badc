@@ -21,8 +21,11 @@
 
 #pragma once
 
-// `struct sched_param` for the scheduling-parameter setters.
+// `struct sched_param` for the scheduling-parameter setters,
+// `struct timespec` for the timed waits and `clockid_t` for the clocks.
 #include <sched.h>
+#include <sys/types.h>
+#include <time.h>
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
@@ -298,8 +301,8 @@ int pthread_setschedprio(pthread_t thread, int prio);
 #ifdef __linux__
 // Thread CPU affinity (Linux). cpu_set_t comes from <sched.h>; it is passed by
 // address as an opaque buffer whose byte length is cpusetsize.
-int pthread_setaffinity_np(pthread_t thread, unsigned long cpusetsize, char *cpuset);
-int pthread_getaffinity_np(pthread_t thread, unsigned long cpusetsize, char *cpuset);
+int pthread_setaffinity_np(pthread_t thread, size_t cpusetsize, const cpu_set_t *cpuset);
+int pthread_getaffinity_np(pthread_t thread, size_t cpusetsize, cpu_set_t *cpuset);
 #endif
 #ifdef __APPLE__
 // Darwin sets only the calling thread's name (no pthread_t parameter).
@@ -327,41 +330,45 @@ void pthread_jit_write_protect_np(int enabled);
 // condition variable's absolute timed waits run against.
 int pthread_setname_np(pthread_t thread, const char *name);
 int pthread_getname_np(pthread_t thread, char *name, unsigned long len);
-int pthread_getcpuclockid(pthread_t thread, int *clock_id);
+int pthread_getcpuclockid(pthread_t thread, clockid_t *clock_id);
 int pthread_condattr_init(pthread_condattr_t *attr);
 int pthread_condattr_destroy(pthread_condattr_t *attr);
-int pthread_condattr_setclock(pthread_condattr_t *attr, int clock_id);
+int pthread_condattr_setclock(pthread_condattr_t *attr, clockid_t clock_id);
 #endif
-int pthread_mutex_init(char *mutex, char *attr);
-int pthread_mutex_lock(char *mutex);
-int pthread_mutex_trylock(char *mutex);
-int pthread_mutex_unlock(char *mutex);
-int pthread_mutex_destroy(char *mutex);
-int pthread_mutexattr_init(char *attr);
-int pthread_mutexattr_settype(char *attr, int kind);
-int pthread_mutexattr_destroy(char *attr);
-int pthread_cond_init(char *cond, char *attr);
-int pthread_cond_destroy(char *cond);
-int pthread_cond_wait(char *cond, char *mutex);
-int pthread_cond_timedwait(char *cond, char *mutex, char *abstime);
-int pthread_cond_signal(char *cond);
-int pthread_cond_broadcast(char *cond);
-int pthread_attr_init(char *attr);
-int pthread_attr_destroy(char *attr);
-int pthread_attr_setdetachstate(char *attr, int detachstate);
-int pthread_attr_setstacksize(char *attr, unsigned long stacksize);
-int pthread_attr_setscope(char *attr, int scope);
-int pthread_attr_setschedpolicy(char *attr, int policy);
-int pthread_attr_setschedparam(char *attr, const struct sched_param *param);
-int pthread_attr_getschedparam(const char *attr, struct sched_param *param);
-int pthread_attr_getguardsize(const char *attr, unsigned long *guardsize);
-int pthread_attr_getstack(const char *attr, void **stackaddr, unsigned long *stacksize);
+int pthread_mutex_init(pthread_mutex_t *restrict mutex, const pthread_mutexattr_t *restrict attr);
+int pthread_mutex_lock(pthread_mutex_t *mutex);
+int pthread_mutex_trylock(pthread_mutex_t *mutex);
+int pthread_mutex_unlock(pthread_mutex_t *mutex);
+int pthread_mutex_destroy(pthread_mutex_t *mutex);
+int pthread_mutexattr_init(pthread_mutexattr_t *attr);
+int pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type);
+int pthread_mutexattr_destroy(pthread_mutexattr_t *attr);
+int pthread_cond_init(pthread_cond_t *restrict cond, const pthread_condattr_t *restrict attr);
+int pthread_cond_destroy(pthread_cond_t *cond);
+int pthread_cond_wait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex);
+int pthread_cond_timedwait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex,
+                           const struct timespec *restrict abstime);
+int pthread_cond_signal(pthread_cond_t *cond);
+int pthread_cond_broadcast(pthread_cond_t *cond);
+int pthread_attr_init(pthread_attr_t *attr);
+int pthread_attr_destroy(pthread_attr_t *attr);
+int pthread_attr_setdetachstate(pthread_attr_t *attr, int detachstate);
+int pthread_attr_setstacksize(pthread_attr_t *attr, size_t stacksize);
+int pthread_attr_setscope(pthread_attr_t *attr, int contentionscope);
+int pthread_attr_setschedpolicy(pthread_attr_t *attr, int policy);
+int pthread_attr_setschedparam(pthread_attr_t *restrict attr,
+                               const struct sched_param *restrict param);
+int pthread_attr_getschedparam(const pthread_attr_t *restrict attr,
+                               struct sched_param *restrict param);
+int pthread_attr_getguardsize(const pthread_attr_t *restrict attr, size_t *restrict guardsize);
+int pthread_attr_getstack(const pthread_attr_t *restrict attr, void **restrict stackaddr,
+                          size_t *restrict stacksize);
 #if defined(__linux__)
 // GNU extension: the running thread's attributes, including the real
 // stack bounds (the portable route is pthread_attr_getstack on these).
-int pthread_getattr_np(unsigned long thread, char *attr);
+int pthread_getattr_np(pthread_t thread, pthread_attr_t *attr);
 #endif
-int pthread_attr_setinheritsched(char *attr, int inheritsched);
+int pthread_attr_setinheritsched(pthread_attr_t *attr, int inheritsched);
 #ifdef __linux__
 // Linux names the calling-convention pair (pthread_t, name).
 int pthread_setname_np(pthread_t thread, const char *name);

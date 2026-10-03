@@ -355,15 +355,21 @@ int ioctlsocket(int fd, int cmd, int *arg);
 
 // Common prototypes -- portable across the three platforms.
 int socket(int domain, int type, int protocol);
-int bind(int fd, char *addr, int addrlen);
+int bind(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int listen(int fd, int backlog);
-int accept(int fd, char *addr, int *addrlen);
+int accept(int fd, struct sockaddr *restrict addr, socklen_t *restrict addrlen);
 int accept4(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags);
-int connect(int fd, char *addr, int addrlen);
-int setsockopt(int fd, int level, int optname, const void *optval, int optlen);
-int getsockopt(int fd, int level, int optname, void *optval, int *optlen);
+int connect(int fd, const struct sockaddr *addr, socklen_t addrlen);
+int setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen);
+int getsockopt(int fd, int level, int optname, void *restrict optval,
+               socklen_t *restrict optlen);
+#ifdef _WIN32
 int recv(int fd, void *buf, int n, int flags);
 int send(int fd, const void *buf, int n, int flags);
+#else
+ssize_t recv(int fd, void *buf, size_t n, int flags);
+ssize_t send(int fd, const void *buf, size_t n, int flags);
+#endif
 int shutdown(int fd, int how);
 int socketpair(int domain, int type, int protocol, int *sv);
 int getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
@@ -375,7 +381,8 @@ int recvfrom(unsigned long long s, char *buf, int len, int flags, struct sockadd
 int sendto(unsigned long long s, const char *buf, int len, int flags,
            const struct sockaddr *to, int tolen);
 #else
-long recvfrom(int fd, void *buf, long n, int flags, struct sockaddr *addr, socklen_t *addrlen);
-long sendto(int fd, const void *buf, long n, int flags, const struct sockaddr *addr,
-            socklen_t addrlen);
+ssize_t recvfrom(int fd, void *restrict buf, size_t n, int flags,
+                 struct sockaddr *restrict addr, socklen_t *restrict addrlen);
+ssize_t sendto(int fd, const void *buf, size_t n, int flags, const struct sockaddr *addr,
+               socklen_t addrlen);
 #endif

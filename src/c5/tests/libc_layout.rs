@@ -1153,6 +1153,74 @@ fn mutex_types_take_the_platform_values() {
     }
 }
 
+/// POSIX gives the mutex, condition-variable and attribute functions of
+/// `<pthread.h>` pointers to their own object types, and `bind`, `connect`
+/// and `accept` a `struct sockaddr` and a `socklen_t` length. A program
+/// may repeat each POSIX prototype after the bundled headers on every
+/// POSIX target with no diagnostic (C99 6.7p4); a declaration of another
+/// type is a conflicting-types error.
+#[test]
+fn thread_and_socket_interfaces_take_the_posix_types() {
+    use crate::c5::Compiler;
+    let src = "#include <pthread.h>\n\
+               #include <sys/socket.h>\n\
+               int pthread_mutex_init(pthread_mutex_t *restrict, const pthread_mutexattr_t *restrict);\n\
+               int pthread_mutex_lock(pthread_mutex_t *);\n\
+               int pthread_mutex_trylock(pthread_mutex_t *);\n\
+               int pthread_mutex_unlock(pthread_mutex_t *);\n\
+               int pthread_mutex_destroy(pthread_mutex_t *);\n\
+               int pthread_mutexattr_init(pthread_mutexattr_t *);\n\
+               int pthread_mutexattr_settype(pthread_mutexattr_t *, int);\n\
+               int pthread_mutexattr_destroy(pthread_mutexattr_t *);\n\
+               int pthread_cond_init(pthread_cond_t *restrict, const pthread_condattr_t *restrict);\n\
+               int pthread_cond_destroy(pthread_cond_t *);\n\
+               int pthread_cond_wait(pthread_cond_t *restrict, pthread_mutex_t *restrict);\n\
+               int pthread_cond_timedwait(pthread_cond_t *restrict, pthread_mutex_t *restrict,\n\
+                                          const struct timespec *restrict);\n\
+               int pthread_cond_signal(pthread_cond_t *);\n\
+               int pthread_cond_broadcast(pthread_cond_t *);\n\
+               int pthread_attr_init(pthread_attr_t *);\n\
+               int pthread_attr_destroy(pthread_attr_t *);\n\
+               int pthread_attr_setdetachstate(pthread_attr_t *, int);\n\
+               int pthread_attr_setstacksize(pthread_attr_t *, size_t);\n\
+               int pthread_attr_setscope(pthread_attr_t *, int);\n\
+               int pthread_attr_setschedpolicy(pthread_attr_t *, int);\n\
+               int pthread_attr_setschedparam(pthread_attr_t *restrict, const struct sched_param *restrict);\n\
+               int pthread_attr_getschedparam(const pthread_attr_t *restrict, struct sched_param *restrict);\n\
+               int pthread_attr_getguardsize(const pthread_attr_t *restrict, size_t *restrict);\n\
+               int pthread_attr_getstack(const pthread_attr_t *restrict, void **restrict, size_t *restrict);\n\
+               int pthread_attr_setinheritsched(pthread_attr_t *, int);\n\
+               int bind(int, const struct sockaddr *, socklen_t);\n\
+               int connect(int, const struct sockaddr *, socklen_t);\n\
+               int accept(int, struct sockaddr *restrict, socklen_t *restrict);\n\
+               int setsockopt(int, int, int, const void *, socklen_t);\n\
+               int getsockopt(int, int, int, void *restrict, socklen_t *restrict);\n\
+               ssize_t recv(int, void *, size_t, int);\n\
+               ssize_t send(int, const void *, size_t, int);\n\
+               ssize_t recvfrom(int, void *restrict, size_t, int, struct sockaddr *restrict,\n\
+                                socklen_t *restrict);\n\
+               ssize_t sendto(int, const void *, size_t, int, const struct sockaddr *, socklen_t);\n\
+               #ifdef __linux__\n\
+               int pthread_getattr_np(pthread_t, pthread_attr_t *);\n\
+               int pthread_getcpuclockid(pthread_t, clockid_t *);\n\
+               int pthread_condattr_setclock(pthread_condattr_t *, clockid_t);\n\
+               int pthread_setaffinity_np(pthread_t, size_t, const cpu_set_t *);\n\
+               int pthread_getaffinity_np(pthread_t, size_t, cpu_set_t *);\n\
+               #endif\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{}: {e}", target.id_str()));
+        assert!(
+            program.warnings.is_empty(),
+            "{}: {:?}",
+            target.id_str(),
+            program.warnings
+        );
+    }
+}
+
 /// POSIX's memory-mapping and thread-specific interfaces traffic in
 /// `void *`: `mmap` and `mremap` return one, `pthread_getspecific` too, and
 /// the address, value and start-routine parameters take one, so their

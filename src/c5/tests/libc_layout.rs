@@ -1153,6 +1153,28 @@ fn mutex_types_take_the_platform_values() {
     }
 }
 
+/// POSIX leaves the type of `pthread_t` open, and each platform's C
+/// library fixes it: glibc's is `unsigned long`, Darwin's a pointer to
+/// `struct _opaque_pthread_t`.
+#[test]
+fn pthread_t_is_the_platforms() {
+    for (target, ty) in [
+        (Target::LinuxX64, "unsigned long"),
+        (Target::LinuxAarch64, "unsigned long"),
+        (Target::MacOSAarch64, "struct _opaque_pthread_t *"),
+    ] {
+        let src = format!(
+            "#include <pthread.h>\n\
+             _Static_assert(_Generic((pthread_t)0, {ty}: 1, default: 0), \"pthread_t\");\n\
+             _Static_assert(_Generic(pthread_self(), {ty}: 1, default: 0), \"pthread_self\");\n\
+             int main(void) {{ return 0; }}\n"
+        );
+        if let Err(err) = compile(&src, target) {
+            panic!("{}: {err}", target.id_str());
+        }
+    }
+}
+
 /// POSIX gives the mutex, condition-variable and attribute functions of
 /// `<pthread.h>` pointers to their own object types, and `bind`, `connect`
 /// and `accept` a `struct sockaddr` and a `socklen_t` length. A program

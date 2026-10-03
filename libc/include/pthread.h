@@ -223,14 +223,8 @@ typedef struct __c5_pthread_attr pthread_attr_t;
 #define PTHREAD_ONCE_INIT          0
 #endif
 
-// `pthread_t` is pointer-sized on every supported POSIX target
-// (an opaque struct pointer on macOS, `unsigned long` on
-// Linux); we need 8 bytes of storage per handle so the libc
-// can write a real ID and the c5-side join can pass it back
-// unbroken. Plain `int` was 8 bytes pre-M31 but has been 4 since
-// real i32 storage landed -- the gap is what made
-// `demos/threads.c` print all zeroes (each pthread_create wrote
-// 8 bytes into a 4-byte slot, smashing the next handle).
+// The thread handle is the platform's type, which POSIX leaves open:
+// glibc's `unsigned long`, Darwin's pointer to an opaque structure.
 //
 // `pthread_key_t` and `pthread_once_t` must match the platform
 // layout exactly, not a wider catch-all: they appear inside
@@ -239,7 +233,13 @@ typedef struct __c5_pthread_attr pthread_attr_t;
 // computes field offsets against the host's struct). macOS uses
 // `unsigned long` for the key and the 16-byte signature-carrying
 // struct for the once control; Linux uses `unsigned int` / `int`.
+#if defined(__APPLE__)
+typedef struct _opaque_pthread_t *pthread_t;
+#elif defined(__linux__)
+typedef unsigned long pthread_t;
+#else
 typedef long long pthread_t;
+#endif
 #ifdef __APPLE__
 typedef unsigned long pthread_key_t;
 typedef struct __c5_pthread_once pthread_once_t;

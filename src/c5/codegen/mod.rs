@@ -750,6 +750,9 @@ pub(crate) struct ArgAgg {
     pub align: u32,
     /// `abi_classify::arg_align`; `align` still bounds the transfer width.
     pub arg_align: u32,
+    /// A narrow vector on AArch64, passed as a 32-bit integer
+    /// ([`abi_classify::is_narrow_vector`]).
+    pub int32: bool,
 }
 
 impl ArgAgg {
@@ -760,6 +763,7 @@ impl ArgAgg {
             size: desc.size,
             align: desc.align,
             arg_align: abi_classify::arg_align(desc.align, desc.member_align, abi),
+            int32: abi.arch == Arch::Aarch64 && abi_classify::is_narrow_vector(desc),
         }
     }
 }
@@ -1008,9 +1012,20 @@ pub(super) fn plan_call_args_aggs(
                                 int_idx = int_max;
                             }
                         }
-                        let off = if abi.packed_stack_args && need_int == 0 && i < fixed_args {
-                            let off = stack_used.next_multiple_of(agg.arg_align.max(1));
-                            stack_used = off + agg.size;
+                        // Apple packs a named argument at its own size and
+                        // alignment, a narrow vector as the 32-bit integer
+                        // it crosses as.
+                        let packed = match (need_int, agg.int32) {
+                            (_, true) => Some((4, 4)),
+                            (0, false) => Some((agg.arg_align.max(1), agg.size)),
+                            _ => None,
+                        };
+                        let off = if let Some((align, bytes)) = packed
+                            && abi.packed_stack_args
+                            && i < fixed_args
+                        {
+                            let off = stack_used.next_multiple_of(align);
+                            stack_used = off + bytes;
                             off
                         } else {
                             let off = agg_stack_off(stack_used, agg.arg_align);
@@ -4713,6 +4728,7 @@ mod abi_plan_tests {
             size: 16,
             align: 8,
             arg_align: 8,
+            int32: false,
         };
         // five int scalars, a 2-eightbyte GP aggregate that can't fit the
         // one remaining int reg, then one int scalar.
@@ -4744,6 +4760,7 @@ mod abi_plan_tests {
             size: 16,
             align: 4,
             arg_align: 4,
+            int32: false,
         };
         // five FP scalars, a 4-float HFA that can't fit the remaining FP
         // regs, then one int scalar that the integer file must still hold.
@@ -4773,6 +4790,7 @@ mod abi_plan_tests {
             size: 16,
             align: 16,
             arg_align: 16,
+            int32: false,
         }
     }
 
@@ -4932,6 +4950,7 @@ mod abi_plan_tests {
             size: 8,
             align: 4,
             arg_align: 4,
+            int32: false,
         };
         let mut fp = FpMask::EMPTY;
         for i in 0..11 {
@@ -4965,6 +4984,7 @@ mod abi_plan_tests {
             size: 16,
             align: 8,
             arg_align: 8,
+            int32: false,
         });
         let plan = plan_call_args_aggs(
             9,
@@ -5016,6 +5036,7 @@ mod abi_plan_tests {
             member_align: 8,
             fields: alloc::vec![half(0), half(8)],
             homogeneous: None,
+            vector: false,
         };
         for (target, pair, slot) in [
             (Target::LinuxAarch64, [1, 2], 8),

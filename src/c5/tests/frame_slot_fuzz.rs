@@ -249,6 +249,7 @@ impl AggTy {
             member_align: self.align,
             fields: self.flat_fields(),
             homogeneous,
+            vector: false,
         }
     }
 }

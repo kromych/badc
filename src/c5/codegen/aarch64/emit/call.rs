@@ -663,7 +663,7 @@ fn setup_indirect_result(
 ) {
     if let Some(ai) = ret_agg
         && agg_descs[ai as usize].size > 16
-        && super::abi_classify::fp_member_layout(&agg_descs[ai as usize]).is_none()
+        && super::abi_classify::fp_member_layout(&agg_descs[ai as usize], true).is_none()
     {
         // A homogeneous aggregate over 16 bytes still returns in v-registers,
         // not through x8.
@@ -698,7 +698,7 @@ fn finish_call_result(
         let desc = &agg_descs[ai as usize];
         let size = desc.size;
         let slot = local_slot(ret_slot_off, func, frame);
-        if let Some(members) = super::abi_classify::fp_member_layout(desc) {
+        if let Some(members) = super::abi_classify::fp_member_layout(desc, true) {
             // AAPCS64 6.9: a homogeneous aggregate result arrives with element
             // k in v[k], a Short Vector result whole in v0.
             let accesses = members
@@ -1063,7 +1063,7 @@ impl CallArgs<'_> {
             }
             let members = self.arg_aggs.get(i).copied().flatten().and_then(|idx| {
                 let d = &self.agg_descs[idx as usize];
-                super::abi_classify::fp_member_layout(d)
+                super::abi_classify::fp_member_layout(d, false)
             });
             let Some(base) = self.arg_int(code, i, self.scratch.primary) else {
                 return fail("Call: SIMD-class arg not int reg / spill");

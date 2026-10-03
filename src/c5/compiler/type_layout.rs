@@ -1208,6 +1208,7 @@ pub(crate) fn long_double_agg_desc(
             single_fp_vector: false,
         }],
         homogeneous: HomogeneousAggregate::new(kind, 16, 1),
+        vector: false,
     })
 }
 
@@ -1316,6 +1317,7 @@ pub(crate) fn host_abi_agg_desc_conv(
         member_align,
         fields,
         homogeneous,
+        vector: structs[id].is_vector,
     })
 }
 
@@ -1423,6 +1425,7 @@ pub(crate) fn struct_return_abi_conv(
         member_align,
         fields,
         homogeneous,
+        vector: structs[id].is_vector,
     };
     if homogeneous.is_some() {
         return StructReturnAbi::Regs(desc);

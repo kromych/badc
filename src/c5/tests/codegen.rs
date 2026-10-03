@@ -6278,7 +6278,7 @@ fn homogeneous_aggregate_elements_follow_the_members() {
             let make = func(&alloc::format!("make{i}"));
             let desc = &make.agg_descs[make.ret_agg.expect("an aggregate return") as usize];
             assert_eq!(
-                fp_member_layout(desc).map_or(0, |m| m.len()),
+                fp_member_layout(desc, true).map_or(0, |m| m.len()),
                 usize::from(n),
                 "{target:?} `{ty}`: the result's SIMD registers"
             );
@@ -14313,6 +14313,95 @@ fn apple_arm64_packs_narrow_stack_arguments() {
             accesses(&take, 29, true),
             from_fp,
             "{target:?} take: {take:08x?}"
+        );
+    }
+}
+
+/// A `float` vector of 4 bytes, narrower than AAPCS64's Short Vectors
+/// (6.4.2), crosses a call as clang places it on every AArch64 target: as a
+/// 32-bit integer argument, in the next general register or an `int`'s stack
+/// slot (4 bytes on Apple arm64), and returned in s0. A struct holding it
+/// stays in the general registers.
+#[test]
+fn aarch64_narrow_float_vector_crosses_as_clang_places_it() {
+    use crate::Target;
+    use crate::c5::codegen::ArgPlacement;
+    use crate::c5::codegen::aarch64::encode::{
+        Reg, enc_ldr_s_imm, enc_ldr32_imm, enc_str_imm, enc_str_s_imm, enc_str32_imm,
+    };
+    use crate::c5::codegen::ssa::emit_common::param_placements_common;
+    const SRC: &str = "typedef float v1f __attribute__((vector_size(4)));\n\
+        struct sf { v1f v; };\n\
+        v1f ext_r(void);\n\
+        void ext_take(int k, v1f v, int j);\n\
+        void ext_s(long a0, long a1, long a2, long a3, long a4, long a5, long a6, long a7,\n\
+            v1f v, int j);\n\
+        v1f give(v1f *p) { return *p; }\n\
+        struct sf give_s(struct sf *p) { return *p; }\n\
+        void keep(v1f *out) { *out = ext_r(); }\n\
+        void pass(v1f *p) { ext_take(1, *p, 2); }\n\
+        void pass_s(v1f *p) { ext_s(0, 1, 2, 3, 4, 5, 6, 7, *p, 9); }\n\
+        int take_s(long a0, long a1, long a2, long a3, long a4, long a5, long a6, long a7,\n\
+            v1f v, int j) { return j; }\n";
+    let x = Reg;
+    // `enc` with some register as the base.
+    let any_base = |ws: &[u32], enc: &dyn Fn(Reg) -> u32| (0..31).any(|n| ws.contains(&enc(x(n))));
+    for (target, slot) in [
+        (Target::MacOSAarch64, 4),
+        (Target::LinuxAarch64, 8),
+        (Target::WindowsAarch64, 8),
+    ] {
+        let program = crate::Compiler::with_options(
+            SRC.into(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let take = funcs.iter().find(|f| f.name == "take_s").expect("take_s");
+        let placed = param_placements_common(take, target.abi());
+        assert!(
+            matches!(
+                placed[8],
+                ArgPlacement::StructStack {
+                    off: 0,
+                    size: 4,
+                    ..
+                }
+            ),
+            "{target:?} take_s v: {:?}",
+            placed[8]
+        );
+        assert_eq!(placed[9], ArgPlacement::Stack(slot), "{target:?} take_s j");
+        let obj = relocatable_object(SRC, target);
+        let ws = |name: &str| function_words(&obj, name);
+        assert!(
+            ws("give").contains(&enc_ldr_s_imm(0, x(0), 0)),
+            "{target:?} give: the vector is not returned in s0"
+        );
+        assert!(
+            any_base(&ws("give_s"), &|b| enc_ldr32_imm(x(0), b, 0)),
+            "{target:?} give_s: the struct is not returned in w0"
+        );
+        assert!(
+            any_base(&ws("keep"), &|b| enc_str_s_imm(0, b, 0)),
+            "{target:?} keep: the result is not read from s0"
+        );
+        assert!(
+            any_base(&ws("pass"), &|b| enc_ldr32_imm(x(1), b, 0)),
+            "{target:?} pass: the vector is not passed in w1"
+        );
+        // `j` stored at [sp, #slot] as a word, or as a doubleword in an 8-byte slot.
+        let pass_s = ws("pass_s");
+        assert!(
+            (0..31).any(|r| {
+                pass_s.contains(&enc_str32_imm(x(r), x(31), slot))
+                    || (slot == 8 && pass_s.contains(&enc_str_imm(x(r), x(31), slot)))
+            }),
+            "{target:?} pass_s: j is not at [sp, #{slot}]"
         );
     }
 }

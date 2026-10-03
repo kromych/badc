@@ -222,6 +222,19 @@ pub(crate) fn is_abi_vector_width(width: u32) -> bool {
     vector_reg_class(width).is_some()
 }
 
+/// A GNU vector narrower than the 8- and 16-byte Short Vectors, for which
+/// AAPCS64 6.4.2 has no rule. badc passes it as clang does on every
+/// AArch64 target, as a 32-bit integer argument.
+pub(crate) fn is_narrow_vector(desc: &AggDesc) -> bool {
+    desc.vector && desc.size < 8
+}
+
+/// A narrow vector of floating-point lanes, which clang returns in the low
+/// bytes of v0.
+fn returns_in_fp_reg(desc: &AggDesc) -> bool {
+    is_narrow_vector(desc) && desc.fields.iter().all(|f| f.kind.is_fp_scalar())
+}
+
 pub(crate) fn arg_align(align: u32, member_align: u32, abi: Abi) -> u32 {
     if abi.natural_composite_align {
         member_align
@@ -383,7 +396,7 @@ impl Eightbyte {
 /// returned in consecutive SIMD registers, one per element. Otherwise
 /// a composite of 16 bytes or less occupies one or two GPRs; a larger
 /// one is passed by reference (argument) or via the x8 indirect-result
-/// register (return).
+/// register (return). A narrow floating-point vector returns in v0.
 fn classify_aapcs64(desc: &AggDesc, is_return: bool) -> AggClass {
     if let Some(hfa) = desc.homogeneous {
         return AggClass::Regs(alloc::vec![hfa.reg_class(); hfa.count()]);
@@ -394,6 +407,9 @@ fn classify_aapcs64(desc: &AggDesc, is_return: bool) -> AggClass {
     }
     if let Some(c) = sole_vector_width(size, &desc.fields).and_then(vector_reg_class) {
         return AggClass::Regs(alloc::vec![c]);
+    }
+    if is_return && returns_in_fp_reg(desc) {
+        return AggClass::Regs(alloc::vec![RegClass::Sse]);
     }
     if size <= 16 {
         let n = size.div_ceil(8) as usize; // 1 or 2 GPRs
@@ -406,14 +422,21 @@ fn classify_aapcs64(desc: &AggDesc, is_return: bool) -> AggClass {
 }
 
 /// `(byte_offset, byte_size)` of each SIMD register slot the aggregate
-/// occupies, in register order: an HFA's elements (AAPCS64 6.8.2) or
-/// the single slot a Short Vector fills. `None` when the aggregate takes
-/// no SIMD register. The aarch64 emit drives its per-slot load / store
-/// width from this, so a 16-byte vector moves as one `q` access instead
-/// of the HFA element's `d` or `s`.
-pub(crate) fn fp_member_layout(desc: &AggDesc) -> Option<alloc::vec::Vec<(u32, u32)>> {
+/// occupies, passed or returned (`is_return`), in register order: an HFA's
+/// elements (AAPCS64 6.8.2), the single slot a Short Vector fills, or the
+/// low bytes of v0 a narrow floating-point vector returns in. `None` when
+/// the aggregate takes no SIMD register. The aarch64 emit drives its
+/// per-slot load / store width from this, so a 16-byte vector moves as one
+/// `q` access instead of the HFA element's `d` or `s`.
+pub(crate) fn fp_member_layout(
+    desc: &AggDesc,
+    is_return: bool,
+) -> Option<alloc::vec::Vec<(u32, u32)>> {
     if let Some(hfa) = desc.homogeneous {
         return Some(hfa.members());
+    }
+    if is_return && returns_in_fp_reg(desc) {
+        return Some(alloc::vec![(0, desc.size)]);
     }
     let width = sole_vector_width(desc.size, &desc.fields)?;
     vector_reg_class(width)?;
@@ -499,6 +522,7 @@ mod tests {
             member_align: 8,
             fields: fields.to_vec(),
             homogeneous: None,
+            vector: false,
         }
     }
 
@@ -791,7 +815,7 @@ mod tests {
                 AggClass::Regs(alloc::vec![RegClass::Sse])
             );
         }
-        assert_eq!(fp_member_layout(&u), Some(alloc::vec![(0, 8)]));
+        assert_eq!(fp_member_layout(&u, true), Some(alloc::vec![(0, 8)]));
         let parts = register_parts(&u, aapcs(), true).expect("one register");
         assert_eq!(
             parts
@@ -974,6 +998,47 @@ mod tests {
     }
 
     #[test]
+    fn aapcs64_narrow_float_vector_returns_in_a_simd_register() {
+        // A bare 4-byte `float` vector passes as a 32-bit integer and returns
+        // in s0, as clang places it; a struct holding it and an integer vector
+        // of its width keep the general registers both ways.
+        let lane = FlatField {
+            single_fp_vector: true,
+            ..ff(0, 4, ScalarKind::F32)
+        };
+        let bare = AggDesc {
+            vector: true,
+            ..desc(4, &[lane])
+        };
+        assert_eq!(
+            classify_aggregate(&bare, aapcs(), false),
+            AggClass::Regs(alloc::vec![RegClass::Integer])
+        );
+        assert_eq!(
+            classify_aggregate(&bare, aapcs(), true),
+            AggClass::Regs(alloc::vec![RegClass::Sse])
+        );
+        assert_eq!(fp_member_layout(&bare, true), Some(alloc::vec![(0, 4)]));
+        assert_eq!(fp_member_layout(&bare, false), None);
+        let bytes: alloc::vec::Vec<FlatField> = (0..4).map(|i| ff(i, 1, ScalarKind::Int)).collect();
+        let ints = AggDesc {
+            vector: true,
+            ..desc(4, &bytes)
+        };
+        for held in [&desc(4, &[lane]), &ints] {
+            assert_eq!(
+                classify_aggregate(held, aapcs(), true),
+                AggClass::Regs(alloc::vec![RegClass::Integer])
+            );
+            assert_eq!(fp_member_layout(held, true), None);
+        }
+        assert_eq!(
+            classify_aggregate(&bare, sysv(), true),
+            AggClass::ReturnIndirect
+        );
+    }
+
+    #[test]
     fn vector_wider_than_a_register_goes_to_memory() {
         // 32 bytes exceeds the register on both, so the lanes reach the
         // size rules: System V sends the value to memory (the psABI's ymm
@@ -1077,21 +1142,24 @@ mod tests {
             classify_aggregate(&hva, aapcs(), true),
             AggClass::Regs(alloc::vec![RegClass::Vector; 2])
         );
-        assert_eq!(fp_member_layout(&hva), Some(alloc::vec![(0, 16), (16, 16)]));
+        assert_eq!(
+            fp_member_layout(&hva, true),
+            Some(alloc::vec![(0, 16), (16, 16)])
+        );
         // The SIMD-slot layout covers a sole vector as one whole slot.
         assert_eq!(
-            fp_member_layout(&desc(16, &vec(16))),
+            fp_member_layout(&desc(16, &vec(16)), true),
             Some(alloc::vec![(0, 16)])
         );
         assert_eq!(
-            fp_member_layout(&desc(8, &vec(8))),
+            fp_member_layout(&desc(8, &vec(8)), true),
             Some(alloc::vec![(0, 8)])
         );
-        assert_eq!(fp_member_layout(&desc(4, &vec(4))), None);
+        assert_eq!(fp_member_layout(&desc(4, &vec(4)), true), None);
         // An HFA still reports its members.
         let f = [ff(0, 8, ScalarKind::F64), ff(8, 8, ScalarKind::F64)];
         assert_eq!(
-            fp_member_layout(&hfa(16, &f, ScalarKind::F64, 2)),
+            fp_member_layout(&hfa(16, &f, ScalarKind::F64, 2), true),
             Some(alloc::vec![(0, 8), (8, 8)])
         );
     }

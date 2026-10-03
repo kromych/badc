@@ -1589,7 +1589,7 @@ fn emit_struct_param_scatter(
                 // 8-byte HFA member, s for a 4-byte one. x16 is never an
                 // argument register.
                 let desc = &func.agg_descs[*agg_idx as usize];
-                let members = super::abi_classify::fp_member_layout(desc);
+                let members = super::abi_classify::fp_member_layout(desc, false);
                 let member = |k: usize| {
                     members
                         .as_ref()
@@ -2161,7 +2161,7 @@ fn emit_aggregate_return(
         emit_mov_reg(code, scratch.primary, saddr);
     }
     let base = scratch.primary;
-    if let Some(members) = super::abi_classify::fp_member_layout(desc) {
+    if let Some(members) = super::abi_classify::fp_member_layout(desc, true) {
         for (k, (off, msize)) in members.iter().enumerate() {
             emit_agg_load_fp(
                 code,

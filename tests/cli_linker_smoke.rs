@@ -58,12 +58,23 @@ fn host_cc() -> Option<std::ffi::OsString> {
 
 /// Whether `cc` is clang, whose System V classification of bit-fields
 /// differs from gcc's, the Linux system compiler's.
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn cc_is_clang(cc: &std::ffi::OsStr) -> bool {
     Command::new(cc)
         .args(["-dM", "-E", "-x", "c", "/dev/null"])
         .output()
         .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("#define __clang__ "))
+}
+
+/// The system C compiler and, where it is not clang, a `clang` that runs:
+/// the peers a convention gcc and clang place apart is checked against.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn host_cc_and_clang() -> Vec<std::ffi::OsString> {
+    let mut ccs: Vec<std::ffi::OsString> = host_cc().into_iter().collect();
+    if !ccs.iter().any(|cc| cc_is_clang(cc)) && cc_is_clang("clang".as_ref()) {
+        ccs.push("clang".into());
+    }
+    ccs
 }
 
 // Gated on Linux: produces a Linux ELF that the test driver
@@ -9452,17 +9463,21 @@ fn unnamed_bit_field_eightbytes_cross_the_windows_compiler_boundary() {
 // vector's argument and struct cross. AAPCS64 passes the structs holding the
 // `float` vector in general-purpose registers and the `double` vector in d0
 // under either compiler; the bare `float` vector, which gcc and clang place
-// apart there, crosses only against gcc on x86_64.
+// apart there, crosses against gcc on x86_64 and against clang on AArch64,
+// past the general registers and as a variadic argument too there. A clang
+// beside a gcc system compiler is driven as well.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn single_fp_vectors_cross_the_system_compiler_boundary() {
-    let Some(cc) = host_cc() else {
+    let ccs = host_cc_and_clang();
+    if ccs.is_empty() {
         eprintln!(
             "skipping single_fp_vectors_cross_the_system_compiler_boundary: no system C compiler"
         );
         return;
-    };
-    let common = "typedef long long ll;\n\
+    }
+    let common = "#include <stdarg.h>\n\
+        typedef long long ll;\n\
         typedef float v1f __attribute__((vector_size(4)));\n\
         typedef double v1d __attribute__((vector_size(8)));\n\
         struct d1 { v1d v; };\n\
@@ -9479,8 +9494,14 @@ fn single_fp_vectors_cross_the_system_compiler_boundary() {
         #else\n\
         #define CLANG_X64 0\n\
         #endif\n\
+        #if defined(__aarch64__) && defined(__clang__)\n\
+        #define CLANG_A64 1\n\
+        #else\n\
+        #define CLANG_A64 0\n\
+        #endif\n\
         static int gcc_x64(void) { return GCC_X64; }\n\
         static int clang_x64(void) { return CLANG_X64; }\n\
+        static int clang_a64(void) { return CLANG_A64; }\n\
         static ll take_d1(ll k, struct d1 s, double x, ll n)\n\
         { return k * 1000 + (ll)(s.v[0] * 100 + x * 10) + n; }\n\
         static ll take_v1d(ll k, v1d v, double x, ll n)\n\
@@ -9498,15 +9519,24 @@ fn single_fp_vectors_cross_the_system_compiler_boundary() {
         { return k * 1000 + (ll)(v[0] * 100 + x * 10) + n; }\n\
         static v1f make_v1f(float x) { v1f r = { x }; return r; }\n\
         static v1d make_v1d(double x) { v1d r = { x }; return r; }\n\
-        struct fns { int (*gcc_x64)(void); int (*clang_x64)(void);\n\
+        static ll take_sv(ll a0, ll a1, ll a2, ll a3, ll a4, ll a5, ll a6, ll a7, v1f v, int j,\n\
+          v1f w, char c)\n\
+        { return (ll)(v[0] * 100 + w[0] * 10) + j * 1000 + c + a0 + a7; }\n\
+        static ll va_v1f(int n, ...)\n\
+        { va_list ap; va_start(ap, n); v1f v = va_arg(ap, v1f); int j = va_arg(ap, int);\n\
+          va_end(ap); return (ll)(v[0] * 100) + j * 10 + n; }\n\
+        struct fns { int (*gcc_x64)(void); int (*clang_x64)(void); int (*clang_a64)(void);\n\
           ll (*take_d1)(ll, struct d1, double, ll); ll (*take_v1d)(ll, v1d, double, ll);\n\
           struct d1 (*make_d1)(double); ll (*take_f1)(ll, struct f1, double, ll);\n\
           ll (*take_ff)(ll, struct ff, double, ll); ll (*take_fd)(struct fd, ll);\n\
           struct f1 (*make_f1)(float); struct ff (*make_ff)(float, float);\n\
           struct fd (*make_fd)(float, double); ll (*take_v1f)(ll, v1f, double, ll);\n\
-          v1f (*make_v1f)(float); v1d (*make_v1d)(double); };\n\
+          v1f (*make_v1f)(float); v1d (*make_v1d)(double);\n\
+          ll (*take_sv)(ll, ll, ll, ll, ll, ll, ll, ll, v1f, int, v1f, char);\n\
+          ll (*va_v1f)(int, ...); };\n\
         static int drive(const struct fns *f, int base)\n\
         { int gcc = f->gcc_x64() || GCC_X64, clang = f->clang_x64() || CLANG_X64;\n\
+          int a64 = f->clang_a64() || CLANG_A64;\n\
           struct d1 d = { { 1.5 } }; v1d vd = { 1.5 }; v1f vf = { 1.5f };\n\
           struct f1 s = { { 1.5f } }; struct ff t = { { 1.5f }, 3.0f };\n\
           struct fd u = { { 1.5f }, 4.5 }; struct ff rt; struct fd ru;\n\
@@ -9522,18 +9552,23 @@ fn single_fp_vectors_cross_the_system_compiler_boundary() {
           if (rt.v[0] != 2.5f || rt.f != 3.5f) return base + 8;\n\
           ru = f->make_fd(2.5f, 4.5);\n\
           if (ru.v[0] != 2.5f || ru.d != 4.5) return base + 9;\n\
-          if (!gcc) return 0;\n\
+          if (!gcc && !a64) return 0;\n\
           if (f->take_v1f(9, vf, 2.5, 7) != 9182) return base + 10;\n\
           if (f->make_v1f(2.5f)[0] != 2.5f) return base + 11;\n\
           if (f->make_v1d(2.5)[0] != 2.5) return base + 12;\n\
+          if (!a64) return 0;\n\
+          if (f->take_sv(1, 0, 0, 0, 0, 0, 0, 2, vf, 3, vf, 4) != 3172) return base + 13;\n\
+          if (f->va_v1f(5, vf, 6) != 215) return base + 14;\n\
           return 0; }\n";
-    drive_across_the_system_compiler(
-        &cc,
-        "single-fp-vector-interop",
-        common,
-        "gcc_x64, clang_x64, take_d1, take_v1d, make_d1, take_f1, take_ff, take_fd, make_f1, \
-         make_ff, make_fd, take_v1f, make_v1f, make_v1d",
-    );
+    for (k, cc) in ccs.iter().enumerate() {
+        drive_across_the_system_compiler(
+            cc,
+            ["single-fp-vector-interop", "single-fp-vector-interop-clang"][k],
+            common,
+            "gcc_x64, clang_x64, clang_a64, take_d1, take_v1d, make_d1, take_f1, take_ff, \
+             take_fd, make_f1, make_ff, make_fd, take_v1f, make_v1f, make_v1d, take_sv, va_v1f",
+        );
+    }
 }
 
 // Aggregates whose eightbytes merge several fields or none cross the system

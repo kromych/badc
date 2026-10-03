@@ -314,6 +314,21 @@ AAPCS64 passes a struct holding the `float` vector in general-purpose
 registers and the `double` vector in d0 under either compiler, and the
 Microsoft x64 convention places both by size.
 
+### A vector narrower than 8 bytes crosses an AArch64 call as clang places it, severity 5
+
+AAPCS64 (6.4.2) has Short Vectors of 8 and 16 bytes and no rule for a
+narrower vector. badc follows clang on every AArch64 target: such a vector is
+passed as a 32-bit integer -- in the low word of the next general-purpose
+register, else in the stack slot an `int` takes, 4 bytes at a 4-byte boundary
+for a named argument on Apple's arm64 and 8 bytes elsewhere -- and
+`float __attribute__((vector_size(4)))` is returned in s0. gcc on Linux passes
+that vector on the stack, the arguments after it too, and returns it in w0, so
+it crosses a call to or from gcc-compiled AArch64 code misplaced as an
+argument or a result. A struct holding it crosses in general-purpose
+registers under either compiler. TODO: an integer vector narrower than 8
+bytes is returned in w0, where clang returns it in v0: one element in the low
+bytes, more than one widened to equal lanes of d0.
+
 ## Extensions implemented
 
 ### C11 / C23

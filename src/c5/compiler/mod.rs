@@ -2018,6 +2018,17 @@ pub struct Compiler {
     /// scopes to the immediately following declarator only.
     pending_noreturn: bool,
 
+    /// Nesting depth of operands that are not evaluated: the operands of
+    /// `sizeof`, `_Alignof` and `typeof`, of `__builtin_object_size` and
+    /// `__builtin_constant_p`, `_Generic`'s controlling expression, the
+    /// `?:` arm a constant condition skips and the `&&` / `||` operand a
+    /// constant short-circuits, and a speculative parse. A diagnostic about
+    /// the value the operand would compute stays quiet there, as in gcc.
+    unevaluated: u32,
+    /// The integer literals that stand for a folded `__builtin_object_size`,
+    /// which C does not count as integer constant expressions.
+    folded_builtin_lits: Vec<super::ast::ExprId>,
+
     /// Nesting depth of unevaluated constant-expression operands
     /// (short-circuited `&&` / `||` right sides and not-taken `?:`
     /// arms). C99 6.6p4 forbids a zero divisor in a constant
@@ -3026,6 +3037,8 @@ impl Compiler {
             pending_is_naked: false,
             pending_noreturn: false,
             const_unevaluated: 0,
+            unevaluated: 0,
+            folded_builtin_lits: Vec::new(),
             const_object_fold: 0,
             static_duration_init: 0,
             ast: super::ast::Ast::new(),

@@ -1005,14 +1005,171 @@ impl Compiler {
         self.report_mismatch(&m, line, text)
     }
 
-    /// [`Self::check_initializer_conversion`] for the expression just parsed.
+    /// [`Self::check_initializer_conversion`] for the expression just parsed,
+    /// into an object of type `declared`, or a bit-field of `bits` bits.
     pub(super) fn check_initializer_expr(
         &mut self,
         declared: i64,
+        bits: u32,
         line: usize,
     ) -> Result<(), C5Error> {
         let flags = (self.last_emit_is_zero(), self.last_emit_was_indirect_call());
-        self.check_initializer_conversion(declared, self.ty, flags, line)
+        self.check_initializer_conversion(declared, self.ty, flags, line)?;
+        self.check_constant_conversion_of(self.ast_acc, declared, bits, line);
+        Ok(())
+    }
+
+    /// The value and type of `e` when the AST spells an integer constant
+    /// expression: literals, `sizeof`, casts, and the arithmetic, bitwise
+    /// and shift operators over them, each computed in the type its node
+    /// carries (C99 6.6, 6.3.1.3). `None` for anything else, a division by
+    /// zero and a shift by more than the width.
+    fn ast_const_value(&self, e: ExprId) -> Option<(i128, i64)> {
+        // TODO: constants of the 128-bit integer types, whose arithmetic the
+        // AST carries as aggregate operations.
+        let norm = |v: i128, ty: i64| {
+            let integer = super::types::is_integer_scalar_ty(ty) && !is_void_ty(ty);
+            let bytes = self.size_of_type(ty);
+            integer.then(|| {
+                super::types::narrow_const_int(
+                    bytes,
+                    super::types::is_unsigned_ty(ty),
+                    is_bool_ty(ty),
+                    v,
+                )
+            })
+        };
+        match self.ast.expr(e) {
+            Expr::IntLit { .. } if self.folded_builtin_lits.contains(&e) => None,
+            Expr::IntLit { val, ty } => Some((norm(*val as i128, *ty)?, *ty)),
+            Expr::Sizeof(s) => Some((s.size_bytes as i128, s.result_ty)),
+            Expr::Cast { child, to_ty } => {
+                let (v, _) = self.ast_const_value(*child)?;
+                Some((norm(v, *to_ty)?, *to_ty))
+            }
+            Expr::Unary { op, child, ty } => {
+                let v = norm(self.ast_const_value(*child)?.0, *ty)?;
+                let r = match op {
+                    UnOp::Neg => v.checked_neg()?,
+                    UnOp::BitNot => !v,
+                    UnOp::Renormalize { .. } => v,
+                    _ => return None,
+                };
+                Some((norm(r, *ty)?, *ty))
+            }
+            Expr::Binary { op, lhs, rhs, ty } => {
+                let l = norm(self.ast_const_value(*lhs)?.0, *ty)?;
+                let (r, _) = self.ast_const_value(*rhs)?;
+                let width = (self.size_of_type(*ty) * 8) as i128;
+                let shift_ok = (0..width).contains(&r);
+                let v = match op {
+                    BinOp::Shl if shift_ok => l << r,
+                    BinOp::Shr | BinOp::Shru if shift_ok => l >> r,
+                    _ => {
+                        let r = norm(r, *ty)?;
+                        match op {
+                            BinOp::Add => l + r,
+                            BinOp::Sub => l - r,
+                            BinOp::Mul => l.checked_mul(r)?,
+                            BinOp::Div | BinOp::Divu if r != 0 => l / r,
+                            BinOp::Mod | BinOp::Modu if r != 0 => l % r,
+                            BinOp::And => l & r,
+                            BinOp::Or => l | r,
+                            BinOp::Xor => l ^ r,
+                            _ => return None,
+                        }
+                    }
+                };
+                Some((norm(v, *ty)?, *ty))
+            }
+            _ => None,
+        }
+    }
+
+    /// Run `f` over an operand that is not evaluated (C99 6.5.3.4p2,
+    /// 6.5.13p4, 6.5.14p4, 6.5.15p4).
+    pub(super) fn unevaluated<T>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> Result<T, C5Error>,
+    ) -> Result<T, C5Error> {
+        self.unevaluated += 1;
+        let r = f(self);
+        self.unevaluated -= 1;
+        r
+    }
+
+    /// Run `f` over an operand that is evaluated only when `taken`.
+    pub(super) fn evaluated_if<T>(
+        &mut self,
+        taken: bool,
+        f: impl FnOnce(&mut Self) -> Result<T, C5Error>,
+    ) -> Result<T, C5Error> {
+        if taken { f(self) } else { self.unevaluated(f) }
+    }
+
+    /// The constant-conversion check for the expression `e` about to be
+    /// converted to `to`. An explicit cast is part of the value: one to the
+    /// target type leaves a value that fits it.
+    pub(super) fn check_constant_conversion_of(
+        &mut self,
+        e: Option<ExprId>,
+        to: i64,
+        bits: u32,
+        line: usize,
+    ) {
+        if let Some((value, from)) = e.and_then(|e| self.ast_const_value(e)) {
+            self.check_constant_conversion(value, from, to, bits, line);
+        }
+    }
+
+    /// Warns when the integer constant `value` of type `from` changes value
+    /// in its implicit conversion to the integer type `to`, a bit-field of
+    /// `bits` bits when that is not zero. As in gcc, a value that fits the
+    /// width at the other signedness keeps its bits and is no change
+    /// (`unsigned u = -1;`, `char c = 255;`); `_Bool` takes any value.
+    pub(super) fn check_constant_conversion(
+        &mut self,
+        value: i128,
+        from: i64,
+        to: i64,
+        bits: u32,
+        line: usize,
+    ) {
+        if self.unevaluated > 0
+            || !super::types::is_integer_scalar_ty(to)
+            || is_void_ty(to)
+            || is_bool_ty(to)
+        {
+            return;
+        }
+        let width = if bits > 0 {
+            bits
+        } else {
+            (self.size_of_type(to) * 8) as u32
+        };
+        if width >= 128 || (-(1i128 << (width - 1))..1i128 << width).contains(&value) {
+            return;
+        }
+        let low = value & ((1i128 << width) - 1);
+        let now = if !super::types::is_unsigned_ty(to) && low >> (width - 1) != 0 {
+            low - (1i128 << width)
+        } else {
+            low
+        };
+        let from_s = super::types::format_type(from, &self.structs);
+        let to_s = super::types::format_type(unqualified_object_ty(to), &self.structs);
+        let target = if bits > 0 {
+            alloc::format!("a {bits}-bit `{to_s}` bit-field")
+        } else {
+            alloc::format!("`{to_s}`")
+        };
+        self.warn_at(
+            Code::CONSTANT_CONVERSION,
+            line,
+            alloc::format!(
+                "implicit conversion from `{from_s}` to {target} changes value from {value} to {now}"
+            ),
+        );
     }
 
     /// GNU `transparent_union`: a parameter whose type is a union

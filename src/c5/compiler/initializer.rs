@@ -1836,9 +1836,18 @@ impl Compiler {
     /// converts to as if by assignment (C99 6.7.8p11): the value and the
     /// relocation it needs.
     pub(super) fn parse_init_leaf_for(&mut self, ty: i64) -> Result<InitLeaf, C5Error> {
+        self.parse_init_leaf_for_bits(ty, 0)
+    }
+
+    /// [`Self::parse_init_leaf_for`] a bit-field of `bits` bits, or an
+    /// object of type `ty` when `bits` is zero.
+    fn parse_init_leaf_for_bits(&mut self, ty: i64, bits: u32) -> Result<InitLeaf, C5Error> {
         let line = self.lex.line;
         let leaf = self.parse_constant_init_value()?;
         self.check_initializer_conversion(ty, leaf.ty, (leaf.is_zero_int(), false), line)?;
+        if matches!(leaf.reloc, InitElemReloc::None) {
+            self.check_constant_conversion(leaf.value, leaf.ty, ty, bits, line);
+        }
         Ok(leaf)
     }
 
@@ -4369,7 +4378,8 @@ impl Compiler {
             // brace list each rewrite the entire unit. Merge
             // the bitfield's bits into the existing storage
             // unit instead.
-            let InitLeaf { value, reloc, .. } = self.parse_init_leaf_for(field.ty)?;
+            let InitLeaf { value, reloc, .. } =
+                self.parse_init_leaf_for_bits(field.ty, field.bit_width)?;
             if !matches!(
                 self.init_reloc_for(reloc, field.ty)?,
                 InitElemReloc::None | InitElemReloc::Float64Bits
@@ -4581,7 +4591,7 @@ impl Compiler {
                 "brace elision into a non-constant struct member is not supported",
             ));
         }
-        self.check_initializer_expr(field.ty, line)?;
+        self.check_initializer_expr(field.ty, field.bit_width, line)?;
         self.convert_assign_rhs(field.ty);
         let field_ast = self.ast_acc;
         self.ast_assign();
@@ -4672,7 +4682,7 @@ impl Compiler {
                 self.expr(Token::Assign as i64)?;
                 // C99 6.7.9p11: convert as in assignment (integer leaf
                 // of a floating member rounds through IEEE-754).
-                self.check_initializer_expr(ty, line)?;
+                self.check_initializer_expr(ty, 0, line)?;
                 self.convert_assign_rhs(ty);
                 let v = self.ast_acc;
                 self.ast_assign();
@@ -4881,7 +4891,7 @@ impl Compiler {
                 what,
             )?;
         } else {
-            self.check_initializer_expr(ty, init_line)?;
+            self.check_initializer_expr(ty, 0, init_line)?;
         }
         // C99 6.5.16.1p2: the RHS of an assignment is converted
         // to the unqualified LHS type. For a float / double

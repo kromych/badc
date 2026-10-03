@@ -5275,3 +5275,121 @@ fn an_assignment_to_a_read_only_object_is_an_error() {
         compile(body).unwrap_or_else(|e| panic!("`{body}`: {e}"));
     }
 }
+
+/// C99 6.3.1.3: an integer converted to an integer type that cannot
+/// represent it changes value. For an integer constant converted
+/// implicitly -- in an initializer, an assignment, an argument or a
+/// return, to an object or a bit-field -- B3010 constant-conversion warns,
+/// as gcc's -Woverflow and clang's -Wconstant-conversion do by default. A
+/// value that fits the width at the other signedness keeps its bits, as in
+/// gcc (`unsigned g = -1;`, `char c = 255;`); an explicit cast states the
+/// conversion; `_Bool` takes any value. The lines and values below are the
+/// ones gcc 16.2.1 reports on both Linux targets.
+#[test]
+fn an_implicit_conversion_that_changes_a_constant_warns() {
+    use crate::diag::{Code, Config, Level};
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "struct BF { int x : 3; unsigned y : 2; };\n\
+               void fc(char c);\n\
+               char r1(void) { return 300; }\n\
+               unsigned char r2(void) { return -1; }\n\
+               int g1 = 0x100000000LL;\n\
+               unsigned g2 = -1;\n\
+               char g3 = 255 - 128 * 2 + 255;\n\
+               short g4 = 70000;\n\
+               _Bool g5 = 2;\n\
+               struct BF g6 = { 8, 4 };\n\
+               char g7 = (char)300;\n\
+               char g8[2] = { 256, 1 };\n\
+               void f(void) {\n\
+               \tchar c = 300;\n\
+               \tunsigned char u = 255;\n\
+               \tstruct BF s = { 0, 5 };\n\
+               \tc = 1 << 8;\n\
+               \ts.x = 8;\n\
+               \ts.y = 3;\n\
+               \tfc(-129);\n\
+               \tc = (char)300 + 0;\n\
+               \t(void)c; (void)u; (void)s;\n\
+               }\n";
+    let compile = |config: Config, target: Target| {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_diag(config);
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{}: {e}", target.id_str()))
+    };
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = compile(Config::new(), target);
+        let lines: alloc::vec::Vec<u32> = program
+            .warnings
+            .iter()
+            .filter(|w| w.code == Code::CONSTANT_CONVERSION)
+            .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+            .collect();
+        assert_eq!(
+            lines,
+            [3, 5, 8, 10, 10, 12, 14, 16, 17, 18, 20],
+            "{}: {:?}",
+            target.id_str(),
+            program.warnings
+        );
+        let text: alloc::vec::Vec<&str> =
+            program.warnings.iter().map(|w| w.text.as_str()).collect();
+        for want in [
+            "implicit conversion from `long long` to `int` changes value from 4294967296 to 0",
+            "implicit conversion from `int` to a 3-bit `int` bit-field changes value from 8 to 0",
+            "implicit conversion from `int` to a 2-bit `unsigned int` bit-field changes value from 5 to 1",
+            "implicit conversion from `int` to `char` changes value from 256 to 0",
+        ] {
+            assert!(
+                text.contains(&want),
+                "{}: {want}: {text:?}",
+                target.id_str()
+            );
+        }
+    }
+    assert_eq!(
+        Code::from_selector("overflow"),
+        Some(Code::CONSTANT_CONVERSION)
+    );
+    let mut quiet = Config::new();
+    quiet.set_level(Code::CONSTANT_CONVERSION, Level::Ignore);
+    let program = compile(quiet, Target::LinuxX64);
+    assert!(program.warnings.is_empty(), "{:?}", program.warnings);
+    // An operand that is not evaluated converts nothing (C99 6.5.3.4p2,
+    // 6.5.13p4, 6.5.14p4, 6.5.15p4), and a folded `__builtin_object_size`
+    // is no integer constant expression: only lines 13, 16 and 17 warn, as
+    // in gcc.
+    let src = "unsigned int u32(unsigned int n);\n\
+               void use(char *p);\n\
+               void sink(long v);\n\
+               void f(char *addr, int order, int k) {\n\
+               \tint sz = __builtin_object_size(addr, 0);\n\
+               \tsink(sizeof((long)(order > u32(0x400000000ULL))));\n\
+               \tsink(__builtin_constant_p(0x400000000ULL) ? 1 : u32(0x400000000ULL));\n\
+               \tsink(0 && u32(0x400000000ULL));\n\
+               \tsink(1 || u32(0x400000000ULL));\n\
+               \tsink(_Generic(u32(0x400000000ULL), unsigned int: 1, default: 0));\n\
+               \t__typeof__(u32(0x400000000ULL)) g = _Alignof(u32(0x400000000ULL));\n\
+               \tsink(1 ? 0 : u32(0x400000000ULL));\n\
+               \tsink(k ? u32(0x400000000ULL) : 0);\n\
+               \tsink(0 ? u32(0x400000000ULL) : 0);\n\
+               \tsink(g + sz);\n\
+               \tsink(k && u32(0x400000000ULL));\n\
+               \tchar q = 300;\n\
+               \tsink(q);\n\
+               }\n";
+    let opts = CompileOptions::default().with_no_entry_point(true);
+    let program = Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let lines: alloc::vec::Vec<u32> = program
+        .warnings
+        .iter()
+        .filter(|w| w.code == Code::CONSTANT_CONVERSION)
+        .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [13, 16, 17], "{:?}", program.warnings);
+}

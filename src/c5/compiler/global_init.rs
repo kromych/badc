@@ -597,6 +597,9 @@ impl Compiler {
         let cv = self.parse_const_expr_cond_val()?;
         let zero = matches!(cv, ConstVal::Int { val: 0, .. });
         self.check_initializer_conversion(var_ty, cv.expr_ty(), (zero, false), line)?;
+        if let ConstVal::Int { val, ty } = cv {
+            self.check_constant_conversion(val, ty, var_ty, 0, line);
+        }
         // C99 6.6 / 6.3.2.3: an address constant in a pointer-width
         // integer slot is a link-time relocation, and takes the one a
         // pointer-typed slot would; gcc and clang accept it. Restricted

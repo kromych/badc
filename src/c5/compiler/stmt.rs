@@ -3532,6 +3532,7 @@ impl Compiler {
                         }
                         self.report_mismatch(&m, line, text)?;
                     }
+                    self.check_constant_conversion_of(self.ast_acc, ret_ty, 0, line);
                     // Reuse `convert_assign_rhs` so an `int`-typed
                     // `return` from a `double`-returning function lifts
                     // through the int-to-float cast rather than landing

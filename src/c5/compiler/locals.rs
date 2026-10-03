@@ -1436,7 +1436,7 @@ impl Compiler {
             }
             let line = self.lex.line;
             self.expr(Token::Assign as i64)?;
-            self.check_initializer_expr(ty, line)?;
+            self.check_initializer_expr(ty, 0, line)?;
             if let Some(rhs) = self.ast_acc.take() {
                 // Fill `[i, range_end]`. A range reuses the value node;
                 // the walker re-walks it per store, which is safe for the
@@ -2591,7 +2591,7 @@ impl Compiler {
             self.next()?;
             let line = self.lex.line;
             self.expr(Token::Assign as i64)?;
-            self.check_initializer_expr(t, line)?;
+            self.check_initializer_expr(t, 0, line)?;
             self.convert_assign_rhs(t);
             self.pending_local_init_ast = self.ast_acc;
             self.accept(',')?;

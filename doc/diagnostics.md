@@ -71,6 +71,7 @@ regenerates.
 | B3007 | `dead-store` | ignore | controllable | - | a value assigned to a local and replaced before any read |
 | B3008 | `switch-outside-range` | warning | controllable | default | a `case` label whose value lies outside the range of the controlling expression's type before promotion |
 | B3009 | `empty-case-range` | warning | controllable | default | a GNU case range `lo ... hi` whose low bound exceeds its high bound in the promoted type of the controlling expression; the label is dropped |
+| B3010 | `constant-conversion` | warning | controllable | default | an integer constant converted implicitly to an integer type or a bit-field whose width holds the value at neither signedness |
 | B3020 | `invalid-operands` | error | hard | - | an operator applied to operands its constraints reject, or a non-lvalue where an lvalue is required |
 | B3021 | `constant-expression` | error | hard | - | an expression that must be constant and is not, or one the compiler cannot evaluate at translation time |
 | B3022 | `invalid-initializer` | error | hard | - | an initializer C99 6.7.8 rejects: a mismatched brace form, a designator naming nothing, an index out of range |

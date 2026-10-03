@@ -552,10 +552,13 @@ impl Compiler {
         let saved_callee_ret = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         // Parse at assignment precedence so binary, conditional, and
         // assignment operators are consumed.
-        self.expr_or_void(Token::Assign as i64)?;
-        if comma_operands {
-            self.parse_comma_operators()?;
-        }
+        self.unevaluated(|c| {
+            c.expr_or_void(Token::Assign as i64)?;
+            if comma_operands {
+                c.parse_comma_operators()?;
+            }
+            Ok(())
+        })?;
         // `&f` where `f` names a function: the operand is a pointer to
         // `f`'s function type. Route the same pending carriers the
         // function-typedef and `typeof(f)` bases use, so the prototype

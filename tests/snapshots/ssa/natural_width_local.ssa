@@ -77,6 +77,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v71  Imm(0)                                           -> x0
     v72  Imm(0)                                           -> x0
     terminator Return(v72)   (exit_acc=v72)
+natural_width_local.c:8: warning: implicit conversion from `int` to `signed char` changes value from 300 to 44 [B3010] [-Wconstant-conversion]
+    signed char sc = 300;
+natural_width_local.c:9: warning: implicit conversion from `int` to `unsigned char` changes value from 300 to 44 [B3010] [-Wconstant-conversion]
+    unsigned char uc = 300;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

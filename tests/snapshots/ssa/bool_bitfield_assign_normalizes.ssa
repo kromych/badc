@@ -729,6 +729,16 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v668 Imm(0)                                           -> x0
     v669 LifetimeEnd(-1)                                  -> -
     terminator Return(v668)   (exit_acc=v668)
+bool_bitfield_assign_normalizes.c:37: warning: implicit conversion from `int` to a 3-bit `unsigned int` bit-field changes value from 9 to 1 [B3010] [-Wconstant-conversion]
+static struct Ref g_static = { 1, 6, 9, 1.5 };
+bool_bitfield_assign_normalizes.c:93: warning: implicit conversion from `unsigned int` to a 3-bit `unsigned int` bit-field changes value from 8 to 0 [B3010] [-Wconstant-conversion]
+    r.mode = 8u;          if (r.mode != 0u) return 15;
+bool_bitfield_assign_normalizes.c:94: warning: implicit conversion from `unsigned int` to a 3-bit `unsigned int` bit-field changes value from 9 to 1 [B3010] [-Wconstant-conversion]
+    r.mode = 9u;          if (r.mode != 1u) return 16;
+bool_bitfield_assign_normalizes.c:151: warning: implicit conversion from `unsigned int` to a 1-bit `unsigned int` bit-field changes value from 3 to 1 [B3010] [-Wconstant-conversion]
+        q.b = 3u;
+bool_bitfield_assign_normalizes.c:153: warning: implicit conversion from `unsigned int` to a 3-bit `unsigned int` bit-field changes value from 10 to 2 [B3010] [-Wconstant-conversion]
+        q.w = 0x0Au;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

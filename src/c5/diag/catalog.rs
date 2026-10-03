@@ -159,6 +159,9 @@ catalog! {
     3009, "empty-case-range", [], Warning, Controllable,
         [DEFAULT], Live,
         "a GNU case range `lo ... hi` whose low bound exceeds its high bound in the promoted type of the controlling expression; the label is dropped";
+    3010, "constant-conversion", ["overflow"], Warning, Controllable,
+        [DEFAULT], Live,
+        "an integer constant converted implicitly to an integer type or a bit-field whose width holds the value at neither signedness";
     3020, "invalid-operands", [], Error, Hard,
         [], Live,
         "an operator applied to operands its constraints reject, or a non-lvalue where an lvalue is required";
@@ -402,6 +405,7 @@ impl Code {
     pub const DEAD_STORE: Code = Code::new(3007);
     pub const SWITCH_OUTSIDE_RANGE: Code = Code::new(3008);
     pub const EMPTY_CASE_RANGE: Code = Code::new(3009);
+    pub const CONSTANT_CONVERSION: Code = Code::new(3010);
     pub const LINK_PRAGMA_IGNORED: Code = Code::new(7008);
     pub const FREESTANDING_IMPORT: Code = Code::new(7010);
     pub const DWARF_OUTPUT: Code = Code::new(7011);

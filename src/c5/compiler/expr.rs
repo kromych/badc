@@ -2506,6 +2506,9 @@ impl Compiler {
             }
             self.report_mismatch(&m, arg_line, text)?;
         }
+        if tu_member.is_none() && !callee.is_sys_call {
+            self.check_constant_conversion_of(self.ast_acc, want, 0, arg_line);
+        }
         if let Some(member_ty) = tu_member {
             // The member is materialized in an anonymous union object, so every
             // backend passes the union, as GCC does.
@@ -3678,7 +3681,10 @@ impl Compiler {
             });
         let lhs_is_struct_value = is_struct_value_ty(lhs_ty);
         if let Some((obj, field_off, desc)) = bf_lvalue {
+            let line = self.lex.line;
             self.expr(Token::Assign as i64)?;
+            let bits = u32::from(desc.bit_width);
+            self.check_constant_conversion_of(self.ast_acc, desc.ty, bits, line);
             if let Some(rhs) = self.ast_acc {
                 self.ty = Ty::Int as i64;
                 let res_ty = self.ty;
@@ -3722,6 +3728,7 @@ impl Compiler {
                 }
                 self.report_mismatch(&m, line, text)?;
             }
+            self.check_constant_conversion_of(self.ast_acc, lhs_ty, 0, line);
             self.convert_assign_rhs(lhs_ty);
             self.ty = lhs_ty;
             self.ast_assign();
@@ -3998,6 +4005,8 @@ impl Compiler {
             "first operand of `?:`",
         )?;
         let cond_ast = self.ast_acc;
+        // C99 6.5.15p4: only the arm the condition selects is evaluated.
+        let cond_value = cond_ast.and_then(|c| self.expr_const_int(c));
         self.next()?; // consume `?`
         self.flush_pending_stores();
         // GNU `a ?: b`: the condition's own value is the result when
@@ -4005,10 +4014,12 @@ impl Compiler {
         let elvis = self.lex.tk == ':';
         let mut then_ast = cond_ast;
         if !elvis {
-            self.expr_or_void(Token::Assign as i64)?;
-            // C99 6.5.15: the middle operand is an expression, so a comma
-            // chain is legal there; `expr(Assign)` stops at `,`.
-            self.parse_comma_operators()?;
+            self.evaluated_if(cond_value != Some(0), |c| {
+                c.expr_or_void(Token::Assign as i64)?;
+                // C99 6.5.15: the middle operand is an expression, so a comma
+                // chain is legal there; `expr(Assign)` stops at `,`.
+                c.parse_comma_operators()
+            })?;
             then_ast = self.ast_acc;
         }
         let then_ty = self.ty;
@@ -4018,7 +4029,8 @@ impl Compiler {
             return Err(self.compile_err(Code::SYNTAX, "conditional missing colon"));
         }
         self.flush_pending_stores();
-        self.expr_or_void(Token::Cond as i64)?;
+        let else_taken = cond_value.is_none_or(|v| v == 0);
+        self.evaluated_if(else_taken, |c| c.expr_or_void(Token::Cond as i64))?;
         let mut else_ast = self.ast_acc;
         let else_ty = self.ty;
         let result_ty = self.conditional_result_ty(then_ty, else_ty, then_ast, else_ast);
@@ -4175,9 +4187,16 @@ impl Compiler {
         sc: super::super::ast::ShortCircuitOp,
     ) -> Result<(), C5Error> {
         let lhs_ast = self.ast_acc;
+        // C99 6.5.13p4 / 6.5.14p4: a constant left side decides whether the
+        // right one is evaluated.
+        let skipped = match (lhs_ast.and_then(|l| self.expr_const_int(l)), sc) {
+            (Some(0), super::super::ast::ShortCircuitOp::Lan) => true,
+            (Some(v), super::super::ast::ShortCircuitOp::Lor) => v != 0,
+            _ => false,
+        };
         self.next()?;
         self.flush_pending_stores();
-        self.expr(op.rhs_lev as i64)?;
+        self.evaluated_if(!skipped, |c| c.expr(op.rhs_lev as i64))?;
         self.check_binary_operands(lhs_ty, self.ty, op.name)?;
         let rhs_ast = self.ast_acc;
         self.ty = Ty::Int as i64;
@@ -5093,6 +5112,7 @@ impl Compiler {
     ) -> Result<(), C5Error> {
         // The token after the member decides between a store, which
         // preserves the other bits of the storage unit, and an extraction.
+        let line = self.lex.line;
         let is_bf_assign = self.lex.tk == Token::Assign;
         let is_bf_incdec = self.lex.tk == Token::Inc || self.lex.tk == Token::Dec;
         if is_bf_assign || is_bf_incdec {
@@ -5132,6 +5152,7 @@ impl Compiler {
                 // The stored value was parsed inside `emit_bitfield_access` and
                 // kept in `pending.bf_assign_rhs`.
                 if let Some(rhs) = self.pending.bf_assign_rhs.take() {
+                    self.check_constant_conversion_of(Some(rhs), field.ty, field.bit_width, line);
                     let res_ty = self.ty;
                     self.ast_emit_bitfield_assign(obj, bf_field_off, bf_desc, rhs, res_ty);
                 }
@@ -5340,7 +5361,7 @@ impl Compiler {
         let saved_reloc = self.code_reloc_sym_idx.len();
         let saved_ast_acc = self.ast_acc;
         let saved_vstack = self.ast_vstack.len();
-        self.expr_or_void(Token::Assign as i64)?;
+        self.unevaluated(|c| c.expr_or_void(Token::Assign as i64))?;
         let ctrl_ty = unqualified_version_ty(self.ty);
         // A function designator converts to a pointer to the function.
         let ctrl_fn = self
@@ -5426,7 +5447,7 @@ impl Compiler {
         let saved_ast_acc = self.ast_acc;
         let saved_vstack = self.ast_vstack.len();
         let saved_ty = self.ty;
-        let result = self.expr_or_void(Token::Assign as i64);
+        let result = self.unevaluated(|c| c.expr_or_void(Token::Assign as i64));
         let ty = self.ty;
         self.ty = saved_ty;
         self.next_ent_pc = saved_text_len;

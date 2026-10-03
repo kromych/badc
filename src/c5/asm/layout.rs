@@ -8,8 +8,8 @@ use crate::c5::codegen::map_syms::MapClass;
 use crate::c5::codegen::ssa::cfi;
 
 /// Section-relative offsets of the labels one materialize call defines.
-/// A same-section label difference (`775f - 774f`, an alternatives
-/// replacement length) folds to a constant from these even when the field
+/// A same-section label difference (`775f - 774f`, a replacement
+/// sequence's length) folds to a constant from these even when the field
 /// referencing it sits in another section, and the main stream's `.skip`
 /// padding sizes itself from them. Offsets continue from the sink lengths
 /// the call starts with, so they agree with the materialized layout.
@@ -805,8 +805,8 @@ fn fold_def_of(v: AsmExprValue) -> AsmFoldDef {
 /// byte length is structural -- data width times count, string length,
 /// alignment / `.org` padding -- so a forward label difference and the
 /// `.skip` replacement padding resolve without the values. A fill count
-/// over label differences (the alternatives `.skip` padding sized by
-/// labels of another section) resolves in a second round against the
+/// over label differences (`.skip` padding sized by labels of another
+/// section) resolves in a second round against the
 /// first round's offsets.
 ///
 /// A branch the arch encoder gave a short form starts short and is
@@ -1252,9 +1252,9 @@ fn measure_round_inner(
                     at = (base + add).max(at);
                 }
                 AsmSectionItem::OrgExpr(expr, _) => {
-                    // A target referencing labels of a later subsection (the
-                    // alternatives length equalizer) resolves in round two,
-                    // like a fill count.
+                    // A target referencing labels of a later subsection (an
+                    // `.org` padding a sequence to its replacement's length)
+                    // resolves in round two, like a fill count.
                     let resolve = |t: &str| -> Option<AsmExprLeaf> {
                         let loc = |k: &str, off: i64| {
                             AsmExprLeaf::Loc(AsmExprTerm {
@@ -1454,7 +1454,7 @@ pub(crate) fn materialize_asm_sections(
     }
     // Offsets of every section label, so a difference to a label defined in a
     // later block (the replacement length `775f - 774f`, whose field sits in
-    // the earlier `.altinstructions`) folds to a constant. Seeded with the
+    // an earlier section) folds to a constant. Seeded with the
     // sink lengths so the offsets are the materialized ones.
     let measured = measure_asm_section_offsets(blocks, const_of, align_is_p2, sink)?;
     let mut defined: alloc::vec::Vec<MaterializedLabel> = alloc::vec::Vec::new();
@@ -2564,9 +2564,9 @@ pub(crate) fn materialize_asm_sections(
         }
     }
     // The same for `.globl`, whose declaration and definition need not share
-    // a section: the kernel's `vdso-wrap.S` declares in the default section
-    // and defines in `.rodata`. The per-section pass above already bound the
-    // same-section case; this reaches the rest.
+    // a section: `.globl x` in the default section, `x:` under `.rodata`.
+    // The per-section pass above already bound the same-section case; this
+    // reaches the rest.
     for name in &global_names {
         let AsmSectionSink {
             sections,

@@ -216,7 +216,7 @@ pub(crate) fn duplicate_label_name(text: &str) -> Option<&str> {
 
 /// Split a template into statements at `;` and newlines, with `;` inside a
 /// double-quoted run kept (a quoted macro argument carries whole
-/// instruction sequences: `ALTERNATIVE "a; b", ...`). A newline always
+/// instruction sequences: `M "a; b", ...`). A newline always
 /// separates, as a string literal cannot span one.
 pub(crate) fn split_asm_statements(text: &str) -> alloc::vec::Vec<&str> {
     if !text.contains('"') {

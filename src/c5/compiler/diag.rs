@@ -229,12 +229,19 @@ impl Compiler {
                 }
                 reachable
             }
-            Stmt::If { then_s, else_s, .. } => {
-                let then_ft = self.stmt_may_fall_through(*then_s);
-                match else_s {
-                    Some(e) => then_ft || self.stmt_may_fall_through(*e),
-                    // No else: the false branch reaches the continuation.
-                    None => true,
+            Stmt::If {
+                cond,
+                then_s,
+                else_s,
+            } => {
+                let then_ft = || self.stmt_may_fall_through(*then_s);
+                // No else: the false branch reaches the continuation.
+                let else_ft = || else_s.is_none_or(|e| self.stmt_may_fall_through(e));
+                // A constant condition leaves the other branch dead.
+                match self.expr_const_int(*cond) {
+                    Some(0) => else_ft(),
+                    Some(_) => then_ft(),
+                    None => then_ft() || else_ft(),
                 }
             }
             // A `while` checks its condition first, so it falls through
@@ -370,9 +377,21 @@ impl Compiler {
                 BlockItem::Stmt(s) => self.stmt_has_loop_break(*s),
                 BlockItem::Decl(_) => false,
             }),
-            Stmt::If { then_s, else_s, .. } => {
-                self.stmt_has_loop_break(*then_s)
-                    || else_s.is_some_and(|e| self.stmt_has_loop_break(e))
+            // A constant condition's dead branch is entered only through a
+            // label, which this walk does not follow; the kernel's
+            // `scoped_class` guard breaks only from there.
+            Stmt::If {
+                cond,
+                then_s,
+                else_s,
+            } => {
+                let then_b = || self.stmt_has_loop_break(*then_s);
+                let else_b = || else_s.is_some_and(|e| self.stmt_has_loop_break(e));
+                match self.expr_const_int(*cond) {
+                    Some(0) => else_b(),
+                    Some(_) => then_b(),
+                    None => then_b() || else_b(),
+                }
             }
             Stmt::Labeled { body, .. } | Stmt::Case { body, .. } | Stmt::Default { body, .. } => {
                 self.stmt_has_loop_break(*body)

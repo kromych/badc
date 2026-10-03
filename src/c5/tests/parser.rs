@@ -4320,6 +4320,47 @@ fn a_trailing_noreturn_specifier_is_recorded() {
     }
 }
 
+/// A block-scope declaration marks a function noreturn as a file-scope one
+/// does, through `_Noreturn` among its specifiers or a leading or trailing
+/// attribute, and the mark reaches no other declarator. A constant
+/// condition's dead branch neither falls through nor ends a loop: the
+/// kernel's `BUILD_BUG()` stub and `scoped_class` guard, which gcc and
+/// clang pass, do not warn. The warnings match clang's.
+#[test]
+fn fall_off_end_sees_block_scope_noreturn_and_constant_conditions() {
+    let quiet = [
+        "int f(void) { _Noreturn extern void d(void); d(); }",
+        "int f(void) { extern _Noreturn void d(void); d(); }",
+        "int f(void) { extern void d(void) __attribute__((noreturn)); d(); }",
+        "int f(void) { do { __attribute__((__noreturn__)) extern void d(void) \
+         __attribute__((__error__(\"x\"))); if (!(!(1))) d(); } while (0); }",
+        "int f(int x) { for (int g = x; ; ({ goto out; })) if (0) { out: break; } \
+         else return g; }",
+        "int f(int x) { if (1) return x; }",
+    ];
+    let warned = [
+        "int f(void) { __attribute__((noreturn)) extern void a(void); \
+         extern void b(void); b(); }",
+        "int f(void) { extern void a(void) __attribute__((noreturn)), b(void); b(); }",
+        "_Noreturn void g(void) { extern void h(void); h(); for (;;); }\n\
+         int f(void) { extern void h(void); h(); }",
+        "int f(int x) { if (0) return x; }",
+    ];
+    for (src, warns) in quiet
+        .iter()
+        .map(|s| (s, false))
+        .chain(warned.iter().map(|s| (s, true)))
+    {
+        let src = alloc::format!("{src}\nint main(void) {{ return 0; }}");
+        let prog = super::compile_str_bare_with_diags(&src, &["all"]);
+        let fell = prog.warnings.iter().any(|w| {
+            w.to_string()
+                .contains("control reaches end of non-void function `f`")
+        });
+        assert_eq!(fell, warns, "{src}: {:?}", prog.warnings);
+    }
+}
+
 #[test]
 fn a_typedef_name_after_an_int_modifier_is_not_a_type_specifier() {
     // C99 6.7.2p2: a typedef-name does not combine with `unsigned` /

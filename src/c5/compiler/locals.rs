@@ -380,7 +380,11 @@ impl Compiler {
     /// function-body scope (shared with the parameters, C99 6.2.1p4)
     /// otherwise -- receives the bindings and the saved outer state its
     /// exit restores.
-    pub(super) fn parse_local_decl(&mut self, maybe_unused: bool) -> Result<(), C5Error> {
+    pub(super) fn parse_local_decl(
+        &mut self,
+        maybe_unused: bool,
+        leading_noreturn: bool,
+    ) -> Result<(), C5Error> {
         let mut is_static = false;
         let mut is_extern = false;
         let mut is_thread_local = false;
@@ -388,6 +392,7 @@ impl Compiler {
         let mut qual_bits: i64 = 0;
         // Reset the per-declaration carriers; a stale one from the
         // enclosing function would bleed onto a static's emission record.
+        self.pending_noreturn = leading_noreturn;
         self.pending.base_is_const = false;
         let _ = self.take_base_spelling();
         self.pending.saw_register_storage = false;
@@ -448,7 +453,11 @@ impl Compiler {
         // declarator; one written after a declarator applies to it alone.
         let leading_cleanup = self.pending.attr_cleanup.take();
         let leading_uninitialized = core::mem::take(&mut self.pending.attr_uninitialized);
+        // `noreturn` among the specifiers marks every function declarator;
+        // after one, that declarator alone.
+        let base_noreturn = self.pending_noreturn;
         while self.lex.tk != ';' {
+            self.pending_noreturn = base_noreturn;
             self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
             self.pending.fn_ptr_ret_indirection = base_fn_ptr_ret_indirection;
             self.pending.base_is_function_type = base_is_function_type;
@@ -631,6 +640,7 @@ impl Compiler {
         }
         self.next()?;
         self.pending.auto_type_single_declarator = false;
+        self.pending_noreturn = false;
         Ok(())
     }
 
@@ -892,8 +902,10 @@ impl Compiler {
         }
         // The declaration names the file-scope entity unless it
         // shadows a local; attributes (`weak`, visibility) attach
-        // to that entity, as on the extern-object path.
+        // to that entity, as on the extern-object path, and so does
+        // `noreturn` (C11 6.7.4).
         if c != Token::Loc as i64 {
+            self.symbols[loc_idx].is_noreturn |= self.pending_noreturn;
             self.apply_symbol_attributes(loc_idx);
         }
         self.accept_declarator_separator()?;
@@ -917,8 +929,12 @@ impl Compiler {
             || self.lex.tk == Token::Static
             || self.lex.tk == Token::ThreadLocal
             || self.lex.tk == Token::FuncSpec
+            || self.lex.tk == Token::Noreturn
             || self.lex.tk == Token::TypeQual
         {
+            if self.lex.tk == Token::Noreturn {
+                self.pending_noreturn = true;
+            }
             if self.lex.tk == Token::Static {
                 *is_static = true;
             }

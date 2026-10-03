@@ -365,7 +365,7 @@ impl Compiler {
             // and the declared counter never reaches the
             // SSA prologue.
             let init_before = self.ast_stmts_snapshot();
-            self.parse_local_decl(false)?;
+            self.parse_local_decl(false, false)?;
             let init_after = self.ast.stmts.len();
             // C99 6.7p1: a declaration's init-declarator-list may name
             // several declarators (`for (int i = 0, l = n; ...)`).
@@ -1041,7 +1041,7 @@ impl Compiler {
             // C23 6.7.13 / 6.8: an attribute-specifier-sequence may
             // lead either a declaration or a statement at block scope.
             // Consume it, then dispatch on the following token.
-            let mut leading_maybe_unused = false;
+            let (mut leading_maybe_unused, mut leading_noreturn) = (false, false);
             if self.at_attribute_specifier() {
                 self.pending.attr_maybe_unused = false;
                 // Clear per-item so a `cleanup` attribute leading a
@@ -1049,8 +1049,10 @@ impl Compiler {
                 // declaration; the declaration path re-reads it after this.
                 self.pending.attr_cleanup = None;
                 self.pending.attr_uninitialized = false;
+                self.pending_noreturn = false;
                 self.skip_attribute_specifiers()?;
                 leading_maybe_unused = self.pending.attr_maybe_unused;
+                leading_noreturn = core::mem::take(&mut self.pending_noreturn);
                 if self.lex.tk == '}' {
                     break;
                 }
@@ -1064,7 +1066,7 @@ impl Compiler {
             } else if self.lex_is_block_decl_start() {
                 let item_before = self.ast_stmts_snapshot();
                 let vla_before = self.func_vla_decls;
-                self.parse_local_decl(leading_maybe_unused)?;
+                self.parse_local_decl(leading_maybe_unused, leading_noreturn)?;
                 if self.func_vla_decls > vla_before && first_vla_item.is_none() {
                     first_vla_item = Some(top_level_ids.len());
                 }

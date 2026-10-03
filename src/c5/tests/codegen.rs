@@ -12414,6 +12414,16 @@ const SSP_SHAPES_SRC: &str = "\
 
 /// Compile `src` to a relocatable object under `ssp`.
 fn emit_ssp(src: &str, target: crate::Target, ssp: crate::StackProtect) -> alloc::vec::Vec<u8> {
+    emit_ssp_model(src, target, ssp, crate::CodeModel::Small)
+}
+
+/// [`emit_ssp`] under `code_model`.
+fn emit_ssp_model(
+    src: &str,
+    target: crate::Target,
+    ssp: crate::StackProtect,
+    code_model: crate::CodeModel,
+) -> alloc::vec::Vec<u8> {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
     let prog = crate::Compiler::with_options(
         alloc::string::String::from(src),
@@ -12425,6 +12435,7 @@ fn emit_ssp(src: &str, target: crate::Target, ssp: crate::StackProtect) -> alloc
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
         stack_protect: ssp,
+        code_model,
         ..NativeOptions::default()
     };
     emit_native_with_options(&prog, target, opts).unwrap_or_else(|e| panic!("emit: {e}"))
@@ -12851,6 +12862,53 @@ fn stack_guard_forms_reach_the_object() {
             .any(|(_, n, _)| n == "__stack_chk_guard"),
         "the system-register form names no guard object"
     );
+}
+
+/// The kernel code model reads the default guard through `%gs`, as gcc
+/// and clang do: a Linux build that names no guard register keeps its
+/// per-CPU canary at `%gs:0x28`. A named segment is kept under either
+/// model.
+#[test]
+#[cfg(feature = "full")]
+fn the_kernel_code_model_reads_the_default_guard_through_gs() {
+    use crate::{CodeModel, GuardSeg, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect};
+    let src = "void snk(void *); void f(void) { char b[32]; snk(b); }\n";
+    let all = StackProtect {
+        mode: crate::StackProtector::All,
+        ..StackProtect::OFF
+    };
+    let fs = StackProtect {
+        guard: StackGuard::Tls {
+            seg: GuardSeg::Fs,
+            offset: SYSV_TLS_GUARD_OFFSET,
+        },
+        ..all
+    };
+    // `mov %fs:0x28, %r11` / `mov %gs:0x28, %r11`.
+    let reads = |obj: &[u8], prefix: u8| {
+        elf_text(obj)
+            .windows(9)
+            .filter(|w| *w == [prefix, 0x4C, 0x8B, 0x1C, 0x25, 0x28, 0x00, 0x00, 0x00])
+            .count()
+    };
+    for (model, ssp, prefix, other) in [
+        (CodeModel::Kernel, all, 0x65, 0x64),
+        (CodeModel::Kernel, fs, 0x64, 0x65),
+        (CodeModel::Small, all, 0x64, 0x65),
+    ] {
+        let obj = emit_ssp_model(src, crate::Target::LinuxX64, ssp, model);
+        let what = alloc::format!("{model:?}, {:?}", ssp.guard);
+        assert_eq!(
+            reads(&obj, prefix),
+            2,
+            "{what}: the prologue and the return read"
+        );
+        assert_eq!(
+            reads(&obj, other),
+            0,
+            "{what}: no read through the other segment"
+        );
+    }
 }
 
 #[test]

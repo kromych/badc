@@ -2274,7 +2274,7 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
             fe.rodata,
             native.output_kind == super::OutputKind::Relocatable && !native.pic,
             native.hardening,
-            native.stack_protect.resolved_for(target),
+            native.stack_protect.resolved_for(target, native.code_model),
             entry,
             native.fixed_regs,
             native.optimize,

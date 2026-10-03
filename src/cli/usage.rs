@@ -388,12 +388,15 @@ Compile knobs:
   -mstack-protector-guard=global|tls|sysreg
                            Where the guard value is read from. The
                            default follows the target: %fs:0x28 on
-                           Linux/x86-64, the __stack_chk_guard object
-                           elsewhere. `tls` is x86-64 only, `sysreg`
-                           aarch64 only.
+                           Linux/x86-64 (%gs:0x28 under
+                           -mcmodel=kernel), the __stack_chk_guard
+                           object elsewhere. `tls` is x86-64 only,
+                           `sysreg` aarch64 only.
   -mstack-protector-guard-reg=R
-                           Segment register (fs, gs) under =tls, or the
-                           AArch64 system register name under =sysreg.
+                           Segment register (fs, gs) under =tls, by
+                           default gs under -mcmodel=kernel and fs
+                           otherwise, or the AArch64 system register
+                           name under =sysreg.
   -mstack-protector-guard-offset=N
                            Byte offset of the guard within the thread
                            block (=tls) or above the system register's

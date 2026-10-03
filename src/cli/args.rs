@@ -2011,7 +2011,8 @@ impl Parser {
                         ));
                     }
                     let seg = match self.ssp_guard_reg.as_deref() {
-                        None | Some("fs") => badc::GuardSeg::Fs,
+                        None => badc::GuardSeg::for_code_model(self.codegen.code_model),
+                        Some("fs") => badc::GuardSeg::Fs,
                         Some("gs") => badc::GuardSeg::Gs,
                         Some(other) => {
                             return Err(ParseError::diag(format!(
@@ -3163,6 +3164,39 @@ mod tests {
             reject(&["--param", "nope=1", "a.c"]).0,
             "badc: error: unsupported `--param` name `nope` (supported: ssp-buffer-size)"
         );
+    }
+
+    /// A `tls` guard that names no segment takes the code model's, as gcc
+    /// does, wherever `-mcmodel=` stands on the line; a named one is kept.
+    #[test]
+    fn an_unnamed_guard_segment_follows_the_code_model() {
+        let guard = |flags: &[&str]| {
+            let mut args = vec![X64, "-fstack-protector-all", "-c", "a.c"];
+            args.extend_from_slice(flags);
+            parse(&args).codegen.stack_protect.guard
+        };
+        let tls = |seg| badc::StackGuard::Tls {
+            seg,
+            offset: badc::SYSV_TLS_GUARD_OFFSET,
+        };
+        let (fs, gs) = (badc::GuardSeg::Fs, badc::GuardSeg::Gs);
+        for (flags, want) in [
+            (
+                &["-mcmodel=kernel", "-mstack-protector-guard=tls"][..],
+                tls(gs),
+            ),
+            (&["-mstack-protector-guard=tls", "-mcmodel=kernel"], tls(gs)),
+            (
+                &["-mcmodel=kernel", "-mstack-protector-guard-reg=fs"],
+                tls(fs),
+            ),
+            (&["-mstack-protector-guard=tls"], tls(fs)),
+            (&["-mstack-protector-guard-reg=gs"], tls(gs)),
+            // No form named: the ABI's, which emission resolves per model.
+            (&["-mcmodel=kernel"], badc::StackGuard::Abi),
+        ] {
+            assert_eq!(guard(flags), want, "{flags:?}");
+        }
     }
 
     #[test]

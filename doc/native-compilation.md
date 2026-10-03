@@ -338,7 +338,10 @@ compares, and calls `__stack_chk_fail` on a mismatch.
 from, with `-mstack-protector-guard-reg=`, `-mstack-protector-guard-offset=` and
 `-mstack-protector-guard-symbol=` as its operands. The default follows the
 target: `%fs:0x28` on Linux/x86-64, the C library's `__stack_chk_guard` object
-elsewhere. `tls` is the x86-64 segment-relative form the kernel selects
+elsewhere. Under `-mcmodel=kernel` the segment defaults to `%gs`, as gcc and
+clang choose, for this form and for a `tls` guard that names no register; a
+Linux x86-64 build that names no guard register keeps its per-CPU canary at
+`%gs:0x28`. `tls` is the x86-64 segment-relative form the kernel selects
 (`-mstack-protector-guard=tls`, `-mstack-protector-guard-reg=gs`,
 `-mstack-protector-guard-symbol=__ref_stack_chk_guard`); `sysreg` is the
 aarch64 form that reads a per-task offset above a system register

@@ -3151,8 +3151,9 @@ pub enum StackProtector {
 /// `-mstack-protector-guard=`: where the canary value is read from.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum StackGuard {
-    /// The target's C-library ABI: `%fs:0x28` on Linux/x86-64, the
-    /// `__stack_chk_guard` object on every other target.
+    /// The target's ABI: `%fs:0x28` on Linux/x86-64 (`%gs:0x28` under
+    /// the kernel code model), the `__stack_chk_guard` object on every
+    /// other target.
     #[default]
     Abi,
     /// `global`: the `__stack_chk_guard` object, or the
@@ -3170,13 +3171,24 @@ pub enum StackGuard {
 
 /// Segment register a `tls` stack guard is read through
 /// (`-mstack-protector-guard-reg=`).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GuardSeg {
     /// `%fs`, the System V x86-64 thread pointer.
-    #[default]
     Fs,
     /// `%gs`, which the Linux kernel uses for its per-CPU base.
     Gs,
+}
+
+impl GuardSeg {
+    /// The segment a guard is read through when none is named: `%gs`
+    /// under the kernel code model, `%fs` otherwise, as gcc and clang
+    /// choose.
+    pub fn for_code_model(code_model: CodeModel) -> Self {
+        match code_model {
+            CodeModel::Kernel => GuardSeg::Gs,
+            CodeModel::Small => GuardSeg::Fs,
+        }
+    }
 }
 
 /// Guard object name for `-mstack-protector-guard-symbol=`. Held inline
@@ -3267,16 +3279,17 @@ impl StackProtect {
     };
 
     /// Replace [`StackGuard::Abi`] with the target's own form, so the
-    /// emitters see a concrete one. Linux/x86-64 keeps the canary in the
-    /// thread control block at [`SYSV_TLS_GUARD_OFFSET`]; every other
-    /// target reads the C library's `__stack_chk_guard` object.
-    pub(crate) fn resolved_for(self, target: Target) -> Self {
+    /// emitters see a concrete one. Linux/x86-64 keeps the canary at
+    /// [`SYSV_TLS_GUARD_OFFSET`] from the base of the segment
+    /// [`GuardSeg::for_code_model`] names; every other target reads the
+    /// C library's `__stack_chk_guard` object.
+    pub(crate) fn resolved_for(self, target: Target, code_model: CodeModel) -> Self {
         if self.guard != StackGuard::Abi {
             return self;
         }
         let guard = match target {
             Target::LinuxX64 => StackGuard::Tls {
-                seg: GuardSeg::Fs,
+                seg: GuardSeg::for_code_model(code_model),
                 offset: SYSV_TLS_GUARD_OFFSET,
             },
             _ => StackGuard::Global,
@@ -3425,8 +3438,9 @@ pub fn fixed_register(target: Target, name: &str) -> Result<FixedReg, String> {
 /// gcc's `--param ssp-buffer-size=` default.
 pub const DEFAULT_SSP_BUFFER_SIZE: u32 = 8;
 
-/// Byte offset of the canary within the System V x86-64 thread control
-/// block, which glibc and musl both honour.
+/// Byte offset of the canary from the guard segment's base: its slot in
+/// the System V x86-64 thread control block, which glibc and musl both
+/// honour, and in the per-CPU area Linux reaches through `%gs`.
 pub const SYSV_TLS_GUARD_OFFSET: i32 = 0x28;
 
 /// The object a `global` stack guard is read from, and the name

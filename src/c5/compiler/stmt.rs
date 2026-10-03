@@ -539,7 +539,7 @@ impl Compiler {
         let lbt = self.parse_decl_base_type()?;
         let base_enum_tag = self.pending.base_enum_tag.take();
         while self.lex.tk != ';' {
-            let (id_idx, mut ty, mut td_array, _) = self.parse_declarator(lbt)?;
+            let (id_idx, mut ty, mut td_array, mut td_zero_len) = self.parse_declarator(lbt)?;
             if id_idx == usize::MAX {
                 return Err(self.compile_err(Code::INVALID_DECLARATION, "typedef requires a name"));
             }
@@ -639,8 +639,11 @@ impl Compiler {
             )?;
             if typedef_dim != 0 && td_array == 0 && !self.pending.base_array_taken {
                 td_array = typedef_dim;
+                td_zero_len = self.pending.typedef_base_zero_len;
             }
             self.symbols[id_idx].array_size = td_array;
+            // A zero-length alias shares the `-1` count of one of unknown size.
+            self.symbols[id_idx].is_zero_len_array = td_array < 0 && td_zero_len;
             self.symbols[id_idx].is_function_type = typedef_is_fn_type;
             // A function-type typedef records the calling convention its
             // declaration named, so a declarator through the alias

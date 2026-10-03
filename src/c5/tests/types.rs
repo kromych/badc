@@ -4483,3 +4483,31 @@ fn a_vector_type_spells_as_its_lane_type_and_size() {
         );
     }
 }
+
+/// C99 6.7.7p3: a typedef names its array type, bound included, so a
+/// block-scope object of an array typedef of unknown size takes its size
+/// from its initializer and one of a GNU zero-length alias is empty, as at
+/// file scope; a zero-length alias declared at block scope is complete.
+#[test]
+fn a_block_scope_object_of_an_unsized_array_typedef_is_an_array() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "typedef int T[];\n\
+               typedef int ZF[0];\n\
+               typedef int R[][2];\n\
+               int main(void) {\n\
+               \tT t = { 1, 2, 3 };\n\
+               \tZF a;\n\
+               \ttypedef int ZB[0];\n\
+               \tZB b;\n\
+               \ttypedef int TB[];\n\
+               \tTB c = { 4, 5 };\n\
+               \tstatic T s = { 6, 7, 8, 9 };\n\
+               \tR r = { { 1, 2 }, { 3, 4 }, { 5, 6 } };\n\
+               \treturn sizeof t == 12 && t[2] == 3 && sizeof a == 0 && sizeof(ZB) == 0\n\
+               \t\t&& sizeof b == 0 && sizeof c == 8 && c[1] == 5 && sizeof s == 16 && s[3] == 9\n\
+               \t\t&& sizeof r == 24 && r[2][1] == 6;\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 1, "{src}");
+}

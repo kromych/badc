@@ -471,7 +471,7 @@ impl Compiler {
             let saved_vla = core::mem::replace(&mut self.pending.vla_allowed, true);
             // Filled by a declarator group holding its entity's own list.
             self.pending.fn_params = None;
-            let (loc_idx, ty, mut array_size, zero_len) = self.parse_declarator(lbt)?;
+            let (loc_idx, ty, mut array_size, mut zero_len) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = saved_vla;
             self.pending.attr_transparent_union = false;
             // C99 6.7.1p5 + 6.9.1: a declarator of bare function type (a
@@ -503,11 +503,13 @@ impl Compiler {
             // C99 6.7.7p3: an array typedef contributes its dimension only
             // when no derivation of the declarator applied to it; `A *p`
             // points to the array. Peek without clearing so the rest of the
-            // comma list keeps it.
+            // comma list keeps it. An alias of unknown size (`-1`) leaves
+            // the size to the initializer, and a zero-length one is empty.
             let typedef_dim = self.pending.typedef_base_array_size;
             self.check_array_elem_align(array_size, ty, typedef_dim, base_type_align)?;
-            if typedef_dim > 0 && array_size == 0 && !self.pending.base_array_taken {
+            if typedef_dim != 0 && array_size == 0 && !self.pending.base_array_taken {
                 array_size = typedef_dim;
+                zero_len = self.pending.typedef_base_zero_len;
                 self.apply_typedef_array_dims(loc_idx);
             }
             self.ty = ty;

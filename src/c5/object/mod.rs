@@ -45,6 +45,8 @@ pub(crate) mod so_versions;
 #[cfg(feature = "std")]
 pub(crate) mod strtab;
 pub(crate) mod weak_undef;
+#[cfg(feature = "native-emit")]
+pub(crate) mod xxh3;
 
 #[cfg(feature = "native-emit")]
 use crate::c5::diag::Code;

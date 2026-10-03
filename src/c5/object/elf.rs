@@ -17,6 +17,7 @@ use super::elf_reloc_types::{
 };
 use super::{Abi, AddrPart, Build, DataRegion, ExecForm, Machine, data_region_addr};
 use super::{aarch64, dwarf, eh_frame, image, x86_64};
+use crate::c5::codegen::BuildId;
 use crate::c5::layout::{round_up, write_struct};
 
 const EI_NIDENT: usize = 16;
@@ -126,9 +127,6 @@ const SHT_GNU_VERNEED: u32 = 0x6fff_fffe;
 const SHT_GNU_VERSYM: u32 = 0x6fff_ffff;
 const SHT_NOTE: u32 = 7;
 const SHT_RELR: u32 = 19;
-const NT_GNU_BUILD_ID: u32 = 3;
-/// `namesz`, `descsz`, `type`, `"GNU\0"` and the 20-byte SHA-1.
-const BUILD_ID_NOTE_SIZE: u64 = 36;
 /// The glibc version whose requirement keeps a loader that cannot apply
 /// `DT_RELR` from starting the image.
 const GLIBC_ABI_DT_RELR: &str = "GLIBC_ABI_DT_RELR";
@@ -1819,7 +1817,7 @@ impl<'a> ElfImageWriter<'a> {
         dynamic.text_shndx = SectionPlan::prefix(
             self.loader_tables,
             has_versions,
-            build.elf.build_id,
+            build.elf.build_id != BuildId::None,
             self.relr,
         )
         .index_of(Sec::Text);
@@ -2012,12 +2010,13 @@ impl<'a> ElfImageWriter<'a> {
             + if seg.has_tls { 1 } else { 0 }
             + if seg.has_rodata && !placed { 1 } else { 0 }
             + u64::from(seg.eh_hdr_len > 0);
-        seg.n_program_headers += build.elf.build_id as u64;
+        let note_len = build.elf.build_id.note_len() as u64;
+        seg.n_program_headers += u64::from(note_len > 0);
         seg.phoff = ELF_HEADER_SIZE;
         seg.phsize = seg.n_program_headers * PROGRAM_HEADER_SIZE;
         seg.note_off = seg.phoff + seg.phsize;
-        seg.interp_off = if build.elf.build_id {
-            round_up(seg.note_off + BUILD_ID_NOTE_SIZE, 8)
+        seg.interp_off = if note_len > 0 {
+            round_up(seg.note_off + note_len, 8)
         } else {
             seg.note_off
         };
@@ -2323,7 +2322,7 @@ impl<'a> ElfImageWriter<'a> {
         tail.plan = SectionPlan::new(SectionsPresent {
             dynamic: self.loader_tables,
             versions: self.dynamic.has_versions,
-            build_id: build.elf.build_id,
+            build_id: build.elf.build_id != BuildId::None,
             relr: self.relr,
             rodata,
             eh_frame_hdr: seg.eh_hdr_len > 0,
@@ -2665,7 +2664,7 @@ impl<'a> ElfImageWriter<'a> {
             ".bss",
             ".comment",
         ]);
-        if build.elf.build_id {
+        if build.elf.build_id != BuildId::None {
             names.push(".note.gnu.build-id");
         }
         if relr {
@@ -2869,15 +2868,16 @@ impl<'a> ElfImageWriter<'a> {
                 seg.tls_align,
             );
         }
-        if self.build.elf.build_id {
+        let note_len = self.build.elf.build_id.note_len() as u64;
+        if note_len > 0 {
             write_phdr(
                 &mut out,
                 PT_NOTE,
                 PF_R,
                 seg.note_off,
                 self.va(seg.note_off),
-                BUILD_ID_NOTE_SIZE,
-                BUILD_ID_NOTE_SIZE,
+                note_len,
+                note_len,
                 4,
             );
         }
@@ -2923,27 +2923,20 @@ impl<'a> ElfImageWriter<'a> {
 
     /// `.note.gnu.build-id`, its digest zero until [`Self::fill_build_id`].
     fn emit_build_id_note(&mut self) {
-        if !self.build.elf.build_id {
+        let style = self.build.elf.build_id;
+        if style == BuildId::None {
             return;
         }
-        let out = &mut self.out;
-        out.resize(self.seg.note_off as usize, 0);
-        out.extend_from_slice(&4u32.to_le_bytes());
-        out.extend_from_slice(&20u32.to_le_bytes());
-        out.extend_from_slice(&NT_GNU_BUILD_ID.to_le_bytes());
-        out.extend_from_slice(b"GNU\0");
-        out.resize(out.len() + 20, 0);
+        self.out.resize(self.seg.note_off as usize, 0);
+        self.out.extend_from_slice(&style.note());
     }
 
-    /// The SHA-1 of the whole image, its digest field still zero, as the
+    /// The digest of the whole image, its own field still zero, as the
     /// build-id note's descriptor.
     fn fill_build_id(&mut self) {
-        if !self.build.elf.build_id {
-            return;
-        }
-        let digest = super::sha1::sha1(&self.out);
-        let at = (self.seg.note_off + BUILD_ID_NOTE_SIZE - 20) as usize;
-        self.out[at..at + 20].copy_from_slice(&digest);
+        let digest = self.build.elf.build_id.digest(&self.out);
+        let at = (self.seg.note_off + 16) as usize;
+        self.out[at..at + digest.len()].copy_from_slice(&digest);
     }
 
     /// `.interp`, the final `.dynsym` (each export's `st_value` is its
@@ -3348,14 +3341,14 @@ impl<'a> ElfImageWriter<'a> {
             },
         );
         self.shdr(null.0, null.1);
-        if self.build.elf.build_id {
+        if self.build.elf.build_id != BuildId::None {
             let note = Elf64Shdr {
                 sh_name: self.name_off(".note.gnu.build-id"),
                 sh_type: SHT_NOTE,
                 sh_flags: SHF_ALLOC,
                 sh_addr: self.va(self.seg.note_off),
                 sh_offset: self.seg.note_off,
-                sh_size: BUILD_ID_NOTE_SIZE,
+                sh_size: self.build.elf.build_id.note_len() as u64,
                 sh_addralign: 4,
                 ..Default::default()
             };
@@ -4864,26 +4857,35 @@ mod tests {
     /// of the image with the descriptor zero, as GNU ld computes it.
     #[test]
     fn a_build_id_note_holds_the_image_digest() {
+        type Digest = fn(&[u8]) -> Vec<u8>;
+        let sha1: Digest = |b| super::super::sha1::sha1(b).to_vec();
+        let fast: Digest = |b| super::super::xxh3::build_id_fast(b).to_vec();
         for machine in [Machine::Aarch64, Machine::X86_64] {
-            let mut b = pie_with_pointers(machine, 2);
-            b.elf.build_id = true;
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
-            let (sh_type, flags, addr, size, _) =
-                find_section(&bytes, ".note.gnu.build-id").expect("the note");
-            assert_eq!(
-                (sh_type, flags & SHF_ALLOC, size),
-                (SHT_NOTE, SHF_ALLOC, 36)
-            );
-            let note = find_phdr(&bytes, PT_NOTE).expect("PT_NOTE");
-            assert_eq!(read_u64(&bytes, note + 16), addr, "{machine:?}");
-            let off = section_file_off(&bytes, ".note.gnu.build-id").unwrap() as usize;
-            assert_eq!(
-                &bytes[off..off + 16],
-                b"\x04\0\0\0\x14\0\0\0\x03\0\0\0GNU\0"
-            );
-            let mut zeroed = bytes.clone();
-            zeroed[off + 16..off + 36].fill(0);
-            assert_eq!(bytes[off + 16..off + 36], super::super::sha1::sha1(&zeroed));
+            for (style, len, digest) in [(BuildId::Sha1, 20, sha1), (BuildId::Fast, 8, fast)] {
+                let mut b = pie_with_pointers(machine, 2);
+                b.elf.build_id = style;
+                let bytes = write(&tiny_program(), &b, machine).unwrap();
+                let (sh_type, flags, addr, size, _) =
+                    find_section(&bytes, ".note.gnu.build-id").expect("the note");
+                assert_eq!(
+                    (sh_type, flags & SHF_ALLOC, size),
+                    (SHT_NOTE, SHF_ALLOC, 16 + len as u64)
+                );
+                let note = find_phdr(&bytes, PT_NOTE).expect("PT_NOTE");
+                assert_eq!(read_u64(&bytes, note + 16), addr, "{machine:?}");
+                let off = section_file_off(&bytes, ".note.gnu.build-id").unwrap() as usize;
+                assert_eq!(bytes[off..off + 4], 4u32.to_le_bytes());
+                assert_eq!(bytes[off + 4..off + 8], (len as u32).to_le_bytes());
+                assert_eq!(&bytes[off + 8..off + 16], b"\x03\0\0\0GNU\0");
+                let mut zeroed = bytes.clone();
+                zeroed[off + 16..off + 16 + len].fill(0);
+                assert_eq!(bytes[off + 16..off + 16 + len], digest(&zeroed));
+                let again = write(&tiny_program(), &b, machine).unwrap();
+                assert_eq!(
+                    again, bytes,
+                    "{machine:?} {style:?}: the same image, the same id"
+                );
+            }
         }
     }
 

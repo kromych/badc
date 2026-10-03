@@ -23,8 +23,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
+use crate::c5::codegen::BuildId;
 use crate::c5::error::C5Error;
-use crate::c5::object::sha1::sha1;
 use crate::c5::object::strtab::build_string_table;
 
 use super::attributes;
@@ -822,8 +822,8 @@ pub struct RelinkOptions {
     pub script: Option<LdScript>,
     pub discard_locals: DiscardLocals,
     pub strip_debug: bool,
-    /// `--build-id=sha1`: append a `.note.gnu.build-id` section.
-    pub build_id_sha1: bool,
+    /// `--build-id`: append a `.note.gnu.build-id` section.
+    pub build_id: BuildId,
     /// `-z noexecstack` (`Some(false)`) / `-z execstack`
     /// (`Some(true)`): ensure a `.note.GNU-stack` marker section with
     /// the requested execute flag, as GNU ld does.
@@ -1106,7 +1106,7 @@ fn link_relocatable_inner(
         &sig_index,
         raw_syms,
         symtab.first_global,
-        opts.build_id_sha1,
+        opts.build_id,
     )?;
     Ok((file, rows))
 }
@@ -1321,17 +1321,12 @@ fn push_side_sections(
         out.bytes = p.bytes;
         outsecs.push(out);
     }
-    if opts.build_id_sha1 {
-        // Note body: nhdr + "GNU\0" + 20-byte digest.
+    if opts.build_id != BuildId::None {
         let mut out = OutSec::new(".note.gnu.build-id", exec_fill);
         out.sh_type = SHT_NOTE;
         out.flags = SHF_ALLOC;
         out.addralign = 4;
-        out.bytes.extend_from_slice(&4u32.to_le_bytes());
-        out.bytes.extend_from_slice(&20u32.to_le_bytes());
-        out.bytes.extend_from_slice(&3u32.to_le_bytes()); // NT_GNU_BUILD_ID
-        out.bytes.extend_from_slice(b"GNU\0");
-        out.bytes.extend_from_slice(&[0u8; 20]);
+        out.bytes = opts.build_id.note();
         outsecs.push(out);
     }
     Ok(())
@@ -1946,7 +1941,7 @@ fn write_et_rel(
     group_sig_sym: &[u32],
     mut syms: Vec<RawSym>,
     first_global: u32,
-    build_id: bool,
+    build_id: BuildId,
 ) -> Result<Vec<u8>, C5Error> {
     // Final section numbering. Entries: (kind, payload index).
     enum Ent {
@@ -2153,7 +2148,7 @@ fn write_et_rel(
         } else {
             let at = (file.len() as u64).next_multiple_of(align);
             file.resize(at as usize, 0);
-            if build_id
+            if build_id != BuildId::None
                 && let Ent::Sec(i) = e
                 && outsecs[*i].name == ".note.gnu.build-id"
             {
@@ -2244,8 +2239,8 @@ fn write_et_rel(
     file[62..64].copy_from_slice(&e_shstrndx.to_le_bytes());
 
     if let Some(off) = build_id_desc_off {
-        let digest = sha1(&file);
-        file[off..off + 20].copy_from_slice(&digest);
+        let digest = build_id.digest(&file);
+        file[off..off + digest.len()].copy_from_slice(&digest);
     }
     Ok(file)
 }

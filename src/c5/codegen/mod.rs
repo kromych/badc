@@ -3880,12 +3880,77 @@ impl ExecForm {
     }
 }
 
-/// The link options an ELF image's container takes: `--build-id=sha1`,
-/// `-z max-page-size=` (`None` keeps the target's), `-z
+/// `--build-id` styles: GNU ld's SHA-1, which lld also writes for `tree`,
+/// and lld's `fast`, an XXH3-64. Each hashes the image with its
+/// descriptor zero.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum BuildId {
+    #[default]
+    None,
+    Sha1,
+    Fast,
+}
+
+impl BuildId {
+    /// The style a `--build-id=` value names; `None` when none does.
+    pub fn parse(style: &str) -> Option<BuildId> {
+        match style {
+            "none" => Some(Self::None),
+            "sha1" | "tree" => Some(Self::Sha1),
+            "fast" => Some(Self::Fast),
+            _ => None,
+        }
+    }
+
+    /// The descriptor's size in bytes.
+    pub fn digest_len(self) -> usize {
+        match self {
+            Self::None => 0,
+            Self::Sha1 => 20,
+            Self::Fast => 8,
+        }
+    }
+
+    /// The note's size: its 16-byte header and name, then the descriptor;
+    /// nothing when no id is asked for.
+    pub fn note_len(self) -> usize {
+        match self {
+            Self::None => 0,
+            _ => 16 + self.digest_len(),
+        }
+    }
+
+    /// `.note.gnu.build-id` with a zero descriptor.
+    pub fn note(self) -> Vec<u8> {
+        const NT_GNU_BUILD_ID: u32 = 3;
+        let mut note = Vec::with_capacity(self.note_len());
+        if self != Self::None {
+            note.extend_from_slice(&4u32.to_le_bytes());
+            note.extend_from_slice(&(self.digest_len() as u32).to_le_bytes());
+            note.extend_from_slice(&NT_GNU_BUILD_ID.to_le_bytes());
+            note.extend_from_slice(b"GNU\0");
+            note.resize(self.note_len(), 0);
+        }
+        note
+    }
+
+    /// The id of `image`, whose descriptor bytes are still zero.
+    #[cfg(feature = "native-emit")]
+    pub(crate) fn digest(self, image: &[u8]) -> Vec<u8> {
+        match self {
+            Self::None => Vec::new(),
+            Self::Sha1 => crate::c5::object::sha1::sha1(image).to_vec(),
+            Self::Fast => crate::c5::object::xxh3::build_id_fast(image).to_vec(),
+        }
+    }
+}
+
+/// The link options an ELF image's container takes: `--build-id`, `-z
+/// max-page-size=` (`None` keeps the target's), `-z
 /// pack-relative-relocs`, `--no-apply-dynamic-relocs`, `-z execstack`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ElfImageOptions {
-    pub build_id: bool,
+    pub build_id: BuildId,
     pub max_page_size: Option<u64>,
     pub pack_relative_relocs: bool,
     pub no_apply_dynamic_relocs: bool,

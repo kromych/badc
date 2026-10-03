@@ -13,7 +13,6 @@ use super::{
     SYNTH_DYNAMIC, SYNTH_DYNSTR, SYNTH_DYNSYM, SYNTH_GNU_HASH, SYNTH_HASH, SYNTH_VERDEF,
     SYNTH_VERSYM, SecFate, align_up, machine_uses_rela,
 };
-use crate::c5::object::sha1::sha1;
 
 /// `.symtab` and `.strtab` bytes, locals first as ELF requires, with
 /// each symbol's final index and the count of locals for `sh_info`.
@@ -630,15 +629,14 @@ impl<'a> LdsLinker<'a> {
     /// Build-id digest over the whole image with the digest field
     /// zeroed (it already is), then patched in place.
     fn patch_build_id(&self, image: &mut [u8], file_off: &HashMap<usize, u64>) {
-        if self.opts.build_id_sha1
-            && let Some((out, off)) = self.build_id_location()
+        if let Some((out, off)) = self.build_id_location()
             && !self.outs[out].removed
             && self.outs[out].shtype != SHT_NOBITS
         {
             let at = (file_off[&out] + off + 16) as usize;
-            let digest = sha1(image);
-            if at + 20 <= image.len() {
-                image[at..at + 20].copy_from_slice(&digest);
+            let digest = self.opts.build_id.digest(image);
+            if let Some(field) = image.get_mut(at..at + digest.len()) {
+                field.copy_from_slice(&digest);
             }
         }
     }

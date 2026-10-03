@@ -204,7 +204,7 @@ pub(crate) struct Link {
     /// `-T` / `--script`: switches to the per-input-section engine.
     pub(crate) script_path: Option<PathBuf>,
     pub(crate) orphan_handling: badc::OrphanHandling,
-    pub(crate) build_id_sha1: bool,
+    pub(crate) build_id: badc::BuildId,
     pub(crate) apply_dynamic_relocs: bool,
     pub(crate) strip_debug: bool,
     pub(crate) discard_locals: bool,
@@ -282,7 +282,7 @@ impl Default for Link {
             library_paths: Vec::new(),
             script_path: None,
             orphan_handling: badc::OrphanHandling::Place,
-            build_id_sha1: false,
+            build_id: badc::BuildId::None,
             apply_dynamic_relocs: true,
             strip_debug: false,
             discard_locals: false,
@@ -381,7 +381,7 @@ impl Cli {
             strip_debug: link.strip_debug,
             discard_temporaries: link.discard_locals,
             elf: badc::ElfImageOptions {
-                build_id: link.build_id_sha1,
+                build_id: link.build_id,
                 max_page_size: link.z.max_page_size(),
                 pack_relative_relocs: link.z.pack_relative_relocs(),
                 no_apply_dynamic_relocs: !link.apply_dynamic_relocs,
@@ -401,8 +401,9 @@ impl Cli {
         let link = &self.link;
         let elf = self.target.binary_format() == badc::BinaryFormat::Elf;
         let shared = self.mode == Mode::SharedLibrary;
-        let elf_only =
-            link.build_id_sha1 || !link.apply_dynamic_relocs || link.z.iter().next().is_some();
+        let elf_only = link.build_id != badc::BuildId::None
+            || !link.apply_dynamic_relocs
+            || link.z.iter().next().is_some();
         let z_refusal = link.z.refusal(|kw| {
             if script {
                 kw.in_script_link()
@@ -1708,17 +1709,15 @@ impl Parser {
                     }
                 };
             }
-            "--build-id" => link.build_id_sha1 = true,
+            "--build-id" => link.build_id = badc::BuildId::Sha1,
             s if s.starts_with("--build-id=") => {
-                link.build_id_sha1 = match &s["--build-id=".len()..] {
-                    "sha1" => true,
-                    "none" => false,
-                    other => {
-                        return Err(ParseError::diag(format!(
-                            "badc: error: --build-id=`{other}` is not supported (sha1, none)"
-                        )));
-                    }
-                };
+                let style = &s["--build-id=".len()..];
+                link.build_id = badc::BuildId::parse(style).ok_or_else(|| {
+                    ParseError::diag(format!(
+                        "badc: error: --build-id=`{style}` is not supported \
+                         (sha1, tree, fast, none)"
+                    ))
+                })?;
             }
             "-z" => {
                 let kw = operand(iter, "badc: error: -z requires a keyword")?;
@@ -3503,7 +3502,7 @@ mod tests {
         ]);
         assert_eq!(cli.link.script_path.unwrap(), PathBuf::from("link.ld"));
         assert_eq!(cli.link.orphan_handling, badc::OrphanHandling::Warn);
-        assert!(cli.link.build_id_sha1);
+        assert_eq!(cli.link.build_id, badc::BuildId::Sha1);
         assert_eq!(cli.link.z.max_page_size(), Some(0x1000));
         assert!(cli.link.z.pack_relative_relocs());
         assert!(cli.link.emit_relocs && cli.link.export_all && cli.link.export_data);

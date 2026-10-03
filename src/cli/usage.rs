@@ -107,9 +107,11 @@ Multi-TU knobs:
                            `-fno-pic` code. The last one wins; `-c` and
                            `--shared` ignore both. A Mach-O or PE
                            executable is always position-independent.
-  --build-id[=sha1|none], -z <keyword>, -S, -X, ...
+  --build-id[=sha1|tree|fast|none], -z <keyword>, -S, -X, ...
                            GNU ld's image options. Every link takes
-                           --build-id, -z max-page-size=, -z
+                           --build-id (bare, sha1 and tree: a 20-byte
+                           SHA-1; fast: lld's 8-byte XXH3), -z
+                           max-page-size=, -z
                            [no]pack-relative-relocs, -z [no]execstack,
                            --[no-]warn-execstack,
                            --[no-]warn-rwx-segments, -z now, -z [no]text,

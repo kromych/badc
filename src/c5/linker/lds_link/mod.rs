@@ -56,6 +56,7 @@ use super::gnu_property;
 use super::lds::{Assignment, DataWidth, Expr, LinkerScript, OutputSectionType};
 use super::object::{ElfClass, SharedLibrary};
 use super::zkeyword::{ZKeyword, ZKeywords};
+use crate::c5::codegen::BuildId;
 use crate::c5::diag::{Code, Config, Control, Diagnostic, Sink};
 use crate::c5::error::C5Error;
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -279,7 +280,7 @@ pub struct LdsOptions {
     pub entry_override: Option<String>,
     pub max_page_size: u64,
     pub orphan_handling: OrphanHandling,
-    pub build_id_sha1: bool,
+    pub build_id: BuildId,
     pub strip_debug: bool,
     /// `-X`: drop compiler-temporary local symbols (`.L*`).
     pub discard_locals: bool,
@@ -364,7 +365,7 @@ impl Default for LdsOptions {
             entry_override: None,
             max_page_size: 0x1000,
             orphan_handling: OrphanHandling::Place,
-            build_id_sha1: false,
+            build_id: BuildId::None,
             strip_debug: false,
             discard_locals: false,
             discard_all: false,

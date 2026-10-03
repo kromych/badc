@@ -4516,6 +4516,96 @@ fn an_executable_stack_note_follows_gnu_lds_rule_in_every_link() {
     }
 }
 
+/// The descriptor of an ELF64 image's build-id note.
+fn build_id_desc(bytes: &[u8]) -> Option<Vec<u8>> {
+    let note = elf_section_spans(bytes)
+        .into_iter()
+        .find(|s| s.0 == ".note.gnu.build-id")?;
+    let off = note.3;
+    let len = u32::from_le_bytes(bytes[off + 4..off + 8].try_into().unwrap()) as usize;
+    Some(bytes[off + 16..off + 16 + len].to_vec())
+}
+
+/// `--build-id` writes GNU ld's 20-byte SHA-1 bare and as `sha1`, the
+/// same for lld's `tree`, and lld's 8-byte XXH3 for `fast`, in the link
+/// without -T, the -T link and the `--ld` persona. The same link writes
+/// the same id, and `tree` writes `sha1`'s image.
+#[test]
+fn build_id_styles_take_their_lengths_in_every_link() {
+    let dir = tempdir("build-id-styles");
+    let src = write_source(&dir, "m.c", "int main(void) { return 0; }\n");
+    let obj = dir.join("m.o");
+    run(
+        Command::new(badc())
+            .args(["-q", "--target=linux-x64", "-c"])
+            .arg(&src)
+            .arg("-o")
+            .arg(&obj),
+        "compile",
+    );
+    let script = write_source(
+        &dir,
+        "t.lds",
+        "ENTRY(main) SECTIONS { . = 0x400000; .text : { *(.text*) } .data : { *(.data*) } }\n",
+    );
+    let link = |kind: &str, opt: &str, out: &str| -> Vec<u8> {
+        let mut cmd = Command::new(badc());
+        if kind == "--ld" {
+            cmd.args(["--ld", "-m", "elf_x86_64", "-e", "main", opt]);
+        } else {
+            cmd.args(["-q", "--target=linux-x64"])
+                .arg(format!("-Wl,{opt}"));
+            if kind == "-T" {
+                cmd.arg("-T").arg(&script);
+            }
+        }
+        let image = dir.join(out);
+        run(
+            cmd.arg(&obj).arg("-o").arg(&image),
+            &format!("{kind} {opt}"),
+        );
+        std::fs::read(&image).expect("read the image")
+    };
+    for kind in ["hosted", "-T", "--ld"] {
+        for (opt, len) in [
+            ("--build-id", 20),
+            ("--build-id=sha1", 20),
+            ("--build-id=tree", 20),
+            ("--build-id=fast", 8),
+        ] {
+            let one = link(kind, opt, "one");
+            assert_eq!(
+                one,
+                link(kind, opt, "two"),
+                "{kind} {opt}: an identical link"
+            );
+            let desc = build_id_desc(&one).unwrap_or_else(|| panic!("{kind} {opt}: no note"));
+            assert_eq!(desc.len(), len, "{kind} {opt}");
+            assert!(desc.iter().any(|&b| b != 0), "{kind} {opt}: an id");
+        }
+        let tree = link(kind, "--build-id=tree", "tree");
+        assert_eq!(
+            tree,
+            link(kind, "--build-id=sha1", "sha1"),
+            "{kind}: tree is sha1"
+        );
+        let none = link(kind, "--build-id=none", "none");
+        assert!(build_id_desc(&none).is_none(), "{kind}: no note");
+    }
+    let out = Command::new(badc())
+        .args(["-q", "--target=linux-x64", "-Wl,--build-id=md5"])
+        .arg(&obj)
+        .arg("-o")
+        .arg(dir.join("md5"))
+        .output()
+        .expect("run badc");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success() && err.contains("(sha1, tree, fast, none)"),
+        "{err}"
+    );
+}
+
 /// A link's warnings follow `-w`, which withholds them, and not `-q`, which
 /// quiets the `info:` lines only; `--fatal-warnings` makes one fail the
 /// link. The same holds for the link without -T and the -T link.

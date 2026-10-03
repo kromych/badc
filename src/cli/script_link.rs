@@ -176,7 +176,7 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
             _ => 0x200000,
         },
         orphan_handling: cli.link.orphan_handling,
-        build_id_sha1: cli.link.build_id_sha1,
+        build_id: cli.link.build_id,
         strip_debug: cli.link.strip_debug,
         discard_locals: cli.link.discard_locals,
         discard_none: cli.link.discard_none,

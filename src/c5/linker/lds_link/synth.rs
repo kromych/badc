@@ -1,5 +1,6 @@
 //! Synthetic sections: their creation and their contents.
 
+use crate::c5::codegen::BuildId;
 use crate::c5::linker::dynamic::{self};
 use crate::c5::object::eh_frame;
 use crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL as GOT_SYMBOL;
@@ -60,12 +61,12 @@ impl<'a> LdsLinker<'a> {
             let synth = self.synth_obj;
             self.objects[synth].sections[idx].addralign = 4;
         }
-        if self.opts.build_id_sha1 {
+        if self.opts.build_id != BuildId::None {
             let idx = self.push_synth_section(SYNTH_BUILD_ID, SHT_NOTE, SHF_ALLOC);
             let synth = self.synth_obj;
             let sec = &mut self.objects[synth].sections[idx];
             sec.addralign = 4;
-            sec.size = 36; // 12-byte header + "GNU\0" + 20-byte sha1
+            sec.size = self.opts.build_id.note_len() as u64;
         }
         if !self.opts.shared_libs.is_empty() {
             let idx = self.push_synth_section(SYNTH_PLT, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR);
@@ -277,13 +278,7 @@ impl<'a> LdsLinker<'a> {
                             );
                         }
                     }
-                    SYNTH_BUILD_ID => {
-                        bytes.extend_from_slice(&4u32.to_le_bytes()); // namesz
-                        bytes.extend_from_slice(&20u32.to_le_bytes()); // descsz
-                        bytes.extend_from_slice(&3u32.to_le_bytes()); // NT_GNU_BUILD_ID
-                        bytes.extend_from_slice(b"GNU\0");
-                        bytes.extend_from_slice(&[0u8; 20]);
-                    }
+                    SYNTH_BUILD_ID => bytes = self.opts.build_id.note(),
                     SYNTH_GNU_PROPERTY => bytes = self.gnu_property.clone(),
                     SYNTH_INTERP => {
                         bytes = self.opts.interp.clone().unwrap_or_default().into_bytes();

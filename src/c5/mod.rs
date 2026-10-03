@@ -45,10 +45,10 @@ pub use object::{
 };
 pub use {
     codegen::{
-        BinaryFormat, CodeModel, DEFAULT_SSP_BUFFER_SIZE, ElfImageOptions, ExecForm, FixedReg,
-        FixedRegs, GuardSeg, GuardSymbol, Hardening, IndirectBranch, NativeOptions, OutputKind,
-        PatchableEntry, Profiling, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect, StackProtector,
-        Target, fixed_register, jit_run, jit_run_with_options, stack_guard_sysreg,
+        BinaryFormat, BuildId, CodeModel, DEFAULT_SSP_BUFFER_SIZE, ElfImageOptions, ExecForm,
+        FixedReg, FixedRegs, GuardSeg, GuardSymbol, Hardening, IndirectBranch, NativeOptions,
+        OutputKind, PatchableEntry, Profiling, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect,
+        StackProtector, Target, fixed_register, jit_run, jit_run_with_options, stack_guard_sysreg,
     },
     compiler::{
         AUTO_VAR_INIT_PATTERN_BYTE, AutoVarInit, CompileOptions, Compiler, StructDef, StructField,

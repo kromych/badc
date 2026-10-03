@@ -1754,7 +1754,7 @@ fn property_notes_merge_into_one_note_under_a_gnu_property_segment() {
     // can put a non-note inside it.
     let opts = LdsOptions {
         max_page_size: 0x1000,
-        build_id_sha1: true,
+        build_id: crate::c5::codegen::BuildId::Sha1,
         ..Default::default()
     };
     let res = link_with_script(
@@ -1811,6 +1811,50 @@ fn property_notes_merge_into_one_note_under_a_gnu_property_segment() {
     assert_eq!(covered.len(), 2, "the merged note and the build id");
 }
 
+/// The build-id descriptor is the style's digest of the image with the
+/// descriptor zero: SHA-1, or lld's 8-byte `fast` id.
+#[test]
+fn the_build_id_is_the_digest_of_the_image() {
+    use crate::c5::codegen::BuildId;
+    let script = parse_linker_script(&super::super::default_script::default_script(false))
+        .expect("the built-in default script parses");
+    for (style, len) in [(BuildId::Sha1, 20), (BuildId::Fast, 8)] {
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0x90; 16],
+            )
+            .build(EM_X86_64);
+        let opts = LdsOptions {
+            build_id: style,
+            max_page_size: 0x1000,
+            ..Default::default()
+        };
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("a.o", a).expect("parses")],
+            &opts,
+        )
+        .expect("the link succeeds");
+        let secs = readelf_sections(&res.image);
+        let note = (secs.iter())
+            .find(|s| s.0 == ".note.gnu.build-id")
+            .expect("the note");
+        assert_eq!(note.3, 16 + len as u64, "{style:?}");
+        let at = section_file_off(&res.image, note.2) + 16;
+        let mut zeroed = res.image.clone();
+        zeroed[at..at + len].fill(0);
+        assert_eq!(
+            res.image[at..at + len],
+            style.digest(&zeroed)[..],
+            "{style:?}"
+        );
+    }
+}
+
 /// A script can put something between two note sections. Each run
 /// gets its own PT_NOTE, the way ld emits them, so what a consumer
 /// reads end to end over a segment is notes only.
@@ -1837,7 +1881,7 @@ SECTIONS {
         .build(EM_X86_64);
     let script = parse_linker_script(SEP_SCRIPT).expect("parses");
     let opts = LdsOptions {
-        build_id_sha1: true,
+        build_id: crate::c5::codegen::BuildId::Sha1,
         max_page_size: 0x1000,
         ..Default::default()
     };

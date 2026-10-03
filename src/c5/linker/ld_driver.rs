@@ -29,6 +29,7 @@ use super::relocatable::{
     link_relocatable_with_map, parse_et_rel, parse_module_script,
 };
 use super::zkeyword::{ZKeyword, ZKeywords, parse_z_keyword};
+use crate::c5::codegen::BuildId;
 
 /// How positional inputs and archive state were ordered on the
 /// command line.
@@ -49,12 +50,6 @@ enum InputItem {
     /// every library inside it is as needed, and its close restores the
     /// state before it.
     AsNeededSpan(bool),
-}
-
-#[derive(PartialEq, Eq, Clone, Copy)]
-enum BuildId {
-    None,
-    Sha1,
 }
 
 /// Binutils compatibility level reported by `--version`. Raise it only
@@ -455,13 +450,9 @@ impl LdArgs {
                 }
                 "--build-id" => a.build_id = BuildId::Sha1,
                 s if s.starts_with("--build-id=") => {
-                    a.build_id = match &s["--build-id=".len()..] {
-                        "sha1" | "fast" | "tree" => BuildId::Sha1,
-                        "none" => BuildId::None,
-                        other => {
-                            return Err(ld_err(format!("unsupported --build-id style `{other}`")));
-                        }
-                    };
+                    let style = &s["--build-id=".len()..];
+                    a.build_id = BuildId::parse(style)
+                        .ok_or_else(|| ld_err(format!("unsupported --build-id style `{style}`")))?;
                 }
                 "--emit-relocs" | "-q" => a.emit_relocs = true,
                 "--no-undefined" => a.z.push(ZKeyword::Defs(true)),
@@ -511,7 +502,7 @@ impl LdArgs {
                          GNU-ld-compatible driver; see ld(1) for option semantics.\n\
                          Supported: -r, -o, -m EMU, -T SCRIPT, -shared, -pie, \
                          -no-pie, --whole-archive, \
-                         --start-group, -L/-l, -z KEYWORD, --build-id[=sha1|none], \
+                         --start-group, -L/-l, -z KEYWORD, --build-id[=sha1|tree|fast|none], \
                          --emit-relocs, --fatal-warnings, -X, --strip-debug, -EL, \
                          --orphan-handling=KIND, --no-undefined, --gc-sections"
                     );
@@ -586,7 +577,7 @@ fn run_relocatable_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         script,
         discard_locals: a.discard_locals,
         strip_debug: a.strip_debug,
-        build_id_sha1: a.build_id == BuildId::Sha1,
+        build_id: a.build_id,
         gnu_stack: a.z.exec_stack(),
         allow_multiple_definition: a.z.muldefs(),
         expect_machine: machine,
@@ -1063,7 +1054,7 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
             Some("discard") => OrphanHandling::Discard,
             _ => OrphanHandling::Place,
         },
-        build_id_sha1: a.build_id == BuildId::Sha1,
+        build_id: a.build_id,
         strip_debug: a.strip_debug,
         discard_locals: a.discard_locals == DiscardLocals::Temporaries,
         discard_all: a.discard_locals == DiscardLocals::All,

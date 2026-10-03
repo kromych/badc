@@ -8,9 +8,11 @@ Inputs are positional and may mix `.c` sources, `.s` / `.S`
 assembly sources, c5 `.o` objects, and `.a` archives. A single
 `.c` input compiles and emits a binary directly; two or more
 inputs (or any `-l` / `-L` / `-c` flag) run through the cross-TU
-linker. `.S` (and `.sx`) run through the preprocessor with
-`__ASSEMBLER__` predefined before being assembled; `.s` is
-assembled verbatim, as in gcc's suffix table.
+linker. `.i` is C that is preprocessed already: its line markers
+and pragmas apply and nothing in it is expanded again. `.S` (and
+`.sx`) run through the preprocessor with `__ASSEMBLER__`
+predefined before being assembled; `.s` is assembled verbatim, as
+in gcc's suffix table.
 
 Output mode -- pick at most one (defaults to a native binary):
   --interp                 Run under the SSA interpreter.

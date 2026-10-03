@@ -584,6 +584,10 @@ pub struct CompileOptions {
     /// its output, so `-E` output compiles to the program its source
     /// does. Set by the `-E` path only.
     pub keep_pragmas: bool,
+    /// The source is preprocessed already (a `.i` unit): the
+    /// preprocessor reads its line markers and pragmas, expands nothing
+    /// and includes nothing. See [`Preprocessor::set_preprocessed`].
+    pub preprocessed: bool,
     /// The level each diagnostic reports at, as the `-W` family left
     /// it. The pragmas in the unit apply on top of this.
     pub diag: crate::c5::diag::Config,
@@ -756,9 +760,13 @@ impl CompileOptions {
     /// declaration is a hosted one, so `-fno-builtin` / `-ffreestanding`
     /// withdraw it and `-fno-builtin-<name>` withdraws it for that name;
     /// under `-nostdinc` the header the retry would splice in is off the
-    /// search. The undeclared-function error stands instead.
+    /// search, and a preprocessed unit includes nothing. The
+    /// undeclared-function error stands instead.
     pub fn declines_auto_include(&self, name: &str) -> bool {
-        self.nostdinc || self.no_builtin || self.no_builtin_fns.iter().any(|n| n == name)
+        self.nostdinc
+            || self.no_builtin
+            || self.preprocessed
+            || self.no_builtin_fns.iter().any(|n| n == name)
     }
 
     /// Define signed overflow to wrap (`-fwrapv`). See [`Self::wrapv`].
@@ -870,6 +878,11 @@ impl CompileOptions {
     /// See [`Self::keep_pragmas`].
     pub fn with_keep_pragmas(mut self, on: bool) -> Self {
         self.keep_pragmas = on;
+        self
+    }
+    /// See [`Self::preprocessed`].
+    pub fn with_preprocessed(mut self, on: bool) -> Self {
+        self.preprocessed = on;
         self
     }
     /// Install the levels the `-W` family selected. See
@@ -2735,6 +2748,7 @@ impl Compiler {
         pp.set_source_label(&opts.source_label);
         pp.set_track_includes(opts.track_includes);
         pp.set_keep_pragmas(opts.keep_pragmas);
+        pp.set_preprocessed(opts.preprocessed);
         pp.set_asm_source(opts.asm_source);
         if let Some(secs) = opts.translation_time {
             pp.set_translation_time(secs);
@@ -2815,7 +2829,7 @@ impl Compiler {
         // with a force-include, need a copy. Recording for pass reuse is
         // skipped when the retry is off for every name.
         let retry_opts = opts.clone();
-        let record = !(opts.nostdinc || opts.no_builtin);
+        let record = !(opts.nostdinc || opts.no_builtin || opts.preprocessed);
         let mut this = Self::build_recording(&source, target, opts, record);
         this.retry_state = Some((source, retry_opts));
         this

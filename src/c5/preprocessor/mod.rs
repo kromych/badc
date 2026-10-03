@@ -264,6 +264,9 @@ pub(crate) struct Preprocessor {
     /// at its position, `_Pragma` as a `#pragma` line, so the expansion
     /// compiles to the program its source does.
     keep_pragmas: bool,
+    /// `true` for a `.i` unit, which translation phases 1-4 already
+    /// produced: see [`Self::set_preprocessed`].
+    preprocessed: bool,
     /// `true` for assembler-with-cpp input (a `.S` unit). A `#` line
     /// whose name is no directive then passes through with its tail
     /// macro-expanded, as GNU cpp does for assembler input; in C such
@@ -1196,6 +1199,7 @@ impl Preprocessor {
             system_headers: BTreeSet::new(),
             track_includes: false,
             keep_pragmas: false,
+            preprocessed: false,
             asm_source: false,
             entrypoint: None,
             subsystem: None,
@@ -1344,6 +1348,16 @@ impl Preprocessor {
         self.keep_pragmas = on;
     }
 
+    /// Read the source as preprocessed already, as gcc reads a `.i`
+    /// unit: its text is not macro-expanded, nothing is included, the
+    /// `-include` list included, and of the directives only line
+    /// markers, `#line` and `#pragma` act. `#define` / `#undef`, which
+    /// gcc's `-dD` output carries, are accepted without effect; any other
+    /// directive is an error, as gcc's front end reports a stray `#`.
+    pub fn set_preprocessed(&mut self, on: bool) {
+        self.preprocessed = on;
+    }
+
     /// Mark the input as assembler-with-cpp (a `.S` unit).
     pub fn set_asm_source(&mut self, on: bool) {
         self.asm_source = on;
@@ -1490,7 +1504,7 @@ impl Preprocessor {
     /// a diagnostic on one of its lines does not claim a line of the
     /// user's source.
     fn process_preamble(&mut self, out: &mut String) -> Result<(), C5Error> {
-        if self.force_includes.is_empty() {
+        if self.force_includes.is_empty() || self.preprocessed {
             return Ok(());
         }
         let mut preamble = String::new();
@@ -2004,6 +2018,14 @@ impl<'p, 's> LinePass<'p, 's> {
             // covers this one; its extent ends where this line's
             // output does.
             let closing = self.pp.sink.control().has_open_suppress();
+            if self.pp.preprocessed {
+                self.preprocessed_line(line, line_no)?;
+                if closing {
+                    let end = self.out.len() as u32;
+                    self.pp.sink.control_mut().close_suppress(end);
+                }
+                continue;
+            }
             let hash = line.trim_start().strip_prefix('#').map(|rest| {
                 let spelling = rest.trim_start();
                 (spelling, parse_directive(spelling, self.pp.asm_source))
@@ -2067,6 +2089,48 @@ impl<'p, 's> LinePass<'p, 's> {
             file: self.filename,
             line: line_no,
             offset: self.out.len() as u32,
+        }
+    }
+
+    /// One line of preprocessed input ([`Preprocessor::set_preprocessed`]):
+    /// text as it stands, a line marker, `#line` or `#pragma` as in any
+    /// unit, `#define` / `#undef` as a blank, and any other directive an
+    /// error.
+    fn preprocessed_line(&mut self, line: &str, line_no: usize) -> Result<(), C5Error> {
+        let Some(spelling) = line.trim_start().strip_prefix('#').map(str::trim_start) else {
+            self.out.push_str(line);
+            self.blank();
+            self.idx += 1;
+            return Ok(());
+        };
+        let parsed = parse_directive(spelling, false);
+        match parsed {
+            Directive::Line { .. } | Directive::Pragma(_) => {
+                self.directive(&parsed, spelling, line_no)
+            }
+            Directive::Define(..) | Directive::DefineFn(..) | Directive::Undef(_) => {
+                self.blank();
+                self.idx += 1;
+                Ok(())
+            }
+            // C99 6.10.7: the null directive.
+            Directive::Other if spelling.is_empty() => {
+                self.blank();
+                self.idx += 1;
+                Ok(())
+            }
+            _ => {
+                let name = spelling.split_whitespace().next().unwrap_or_default();
+                Err(C5Error::at(
+                    Code::DIRECTIVE,
+                    self.filename,
+                    line_no,
+                    format!(
+                        "`#{name}` in preprocessed input, which takes no directive but \
+                         line markers, `#line` and `#pragma`"
+                    ),
+                ))
+            }
         }
     }
 

@@ -74,7 +74,7 @@ catalog! {
         "a `#pragma intrinsic` naming a function badc has no intrinsic for; the name stays an ordinary call";
     1010, "directive", [], Error, Hard,
         [], Live,
-        "a directive whose operand the preprocessor cannot process, or a conditional directive with no `#if` to match";
+        "a directive whose operand the preprocessor cannot process, a directive preprocessed input does not take, or a conditional directive with no `#if` to match";
     1011, "invalid-pragma", [], Error, Hard,
         [], Live,
         "a pragma badc implements whose operand cannot be applied";

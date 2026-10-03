@@ -8,7 +8,7 @@ use badc::Target;
 use super::compile::tu_defines;
 use super::deps::{DepKind, DepOptions};
 use super::diag::eprint_diagnostic;
-use super::options::{AssemblerOption, Mode, accept_assembler_option, parse_c_integer};
+use super::options::{AssemblerOption, Mode, SourceKind, accept_assembler_option, parse_c_integer};
 use super::usage::USAGE;
 
 /// A rejected command line. `styled` routes the text through the
@@ -2317,6 +2317,7 @@ impl FrontEnd {
             .with_translation_time(self.translation_time)
             .with_source_label(label.to_string())
             .with_diag(self.diag.clone())
+            .with_preprocessed(SourceKind::of(label).is_preprocessed())
     }
 }
 

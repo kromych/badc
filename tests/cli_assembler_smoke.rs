@@ -1575,6 +1575,32 @@ fn preprocessed_output_compiles_again() {
     run_ok(&d, &["-q", "-c", "a_pp.c", "-o", "a.o"]);
 }
 
+/// A `.i` unit is C that needs no preprocessing, as in gcc's suffix
+/// table: `-E` output compiles from one, and its text is not expanded a
+/// second time, so a `#define` in it names nothing.
+#[test]
+fn a_dot_i_unit_compiles_without_preprocessing() {
+    let d = dir("dot-i");
+    write(
+        &d,
+        "a.c",
+        "#include <stdatomic.h>\n#define ONE 1\n\
+         int main(void) { atomic_int x = ONE; return atomic_fetch_add(&x, 1) - ONE; }\n",
+    );
+    run_ok(&d, &["-q", "-E", "a.c", "-o", "a.i"]);
+    run_ok(&d, &["-q", "-c", "a.i", "-o", "a.o"]);
+    write(
+        &d,
+        "b.i",
+        "# 1 \"b.c\"\n#define TWO 2\nint main(void) { return TWO - 2; }\n",
+    );
+    let (ok, text) = run(&d, &["-q", "-c", "b.i", "-o", "b.o"]);
+    assert!(
+        !ok && text.contains("b.c:2:") && text.contains("TWO") && text.contains("[B2022]"),
+        "{text}"
+    );
+}
+
 /// Which headers a unit opens depends on the predefine set, so the
 /// preprocess-only modes take the code model too, as gcc does. Refusing
 /// them would leave `-MM` describing a unit nobody builds.

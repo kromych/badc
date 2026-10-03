@@ -934,6 +934,43 @@ fn preprocessed_output_keeps_the_pragmas_the_pass_consumes() {
 }
 
 #[test]
+fn preprocessed_input_is_not_preprocessed_again() {
+    // A `.i` unit, as gcc reads one: no text is expanded, `#define`
+    // has no effect, line markers and pragmas act, and nothing is
+    // force-included.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.set_preprocessed(true);
+    pp.force_includes.push("never_opened.h".to_string());
+    let src = "# 7 \"orig.c\"\n\
+               #define A 1\n\
+               int a = A + __LINE__;\n\
+               #pragma intrinsic(\"alloca\")\n\
+               #\n\
+               _Pragma(\"pack(1)\") int b;\n";
+    let out = pp.process(src).expect("preprocessed input passes");
+    assert!(
+        out.contains("# 7 \"orig.c\"\n\nint a = A + __LINE__;\n"),
+        "{out:?}"
+    );
+    assert!(out.contains("_Pragma(\"pack(1)\") int b;"), "{out:?}");
+    assert!(!out.contains("never_opened"), "{out:?}");
+    assert!(pp.intrinsics.contains_key("alloca"));
+
+    for directive in ["#include \"x.h\"", "#if 0", "#error no"] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.set_preprocessed(true);
+        let err = pp
+            .process(&format!("int x;\n{directive}\n"))
+            .expect_err(directive);
+        let d = &err.diagnostics()[0];
+        assert_eq!(
+            (d.code, d.loc.as_ref().map(|l| l.line)),
+            (Code::DIRECTIVE, Some(2))
+        );
+    }
+}
+
+#[test]
 fn pragma_operator_ignored_inside_string_literal() {
     // The operator name inside a string literal is ordinary text.
     let out = process("const char *s = \"_Pragma(\\\"once\\\")\";\n");

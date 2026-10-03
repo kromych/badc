@@ -21,6 +21,8 @@ pub(crate) mod dwarf;
 #[cfg(feature = "native-emit")]
 pub(crate) mod dwarf_reloc;
 #[cfg(feature = "native-emit")]
+pub(crate) mod eh_frame;
+#[cfg(feature = "native-emit")]
 pub(crate) mod elf;
 pub(crate) mod elf_class;
 #[cfg(feature = "native-emit")]

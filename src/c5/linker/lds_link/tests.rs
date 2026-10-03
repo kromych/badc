@@ -5,7 +5,8 @@ use crate::c5::linker::lds::parse_linker_script;
 use crate::c5::linker::object::NativeMachine;
 use crate::c5::linker::object::{Elf32Shdr, Elf64Shdr, read_struct};
 use crate::c5::linker::zkeyword::{ZKeywords, parse_z_keyword};
-use crate::c5::linker::{comdat, dynamic, eh_frame};
+use crate::c5::linker::{comdat, dynamic};
+use crate::c5::object::eh_frame;
 use crate::c5::object::elf_reloc_types as rt;
 use crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL as GOT_SYMBOL;
 

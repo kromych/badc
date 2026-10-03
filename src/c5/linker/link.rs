@@ -27,8 +27,8 @@ use crate::c5::error::C5Error;
 
 use super::got_relax::{self, is_x86_64_got_pcrel, is_x86_64_got_slot_ref};
 use super::object::{
-    ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol,
-    RelocOrigin, RelocSite, SectionFamily, SharedLibrary, reloc_desc,
+    EH_FRAME, ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
+    NativeSymbol, RelocOrigin, RelocSite, SectionFamily, SharedLibrary, reloc_desc,
 };
 use crate::c5::layout::{pad_to_align as align_up, round_up as align_usize};
 // A tail-call `b <sym>` reaches its target the same way `bl` does --
@@ -592,20 +592,19 @@ impl BlobMap {
 }
 
 /// Blob length below which this unit's `fam` sections stay in place.
-/// The parse sorted C-identifier-named sections last, so they form a
+/// The parse sorted the sections grouped by name last, so they form a
 /// suffix starting at the lowest such section's offset.
 fn named_prefix_len(obj: &NativeObject, fam: SectionFamily, blob_len: u64) -> u64 {
     obj.sections
         .iter()
-        .filter(|s| s.family == fam && super::object::is_c_identifier(&s.name))
+        .filter(|s| s.family == fam && super::object::grouped_by_name(&s.name))
         .map(|s| s.offset)
         .min()
         .unwrap_or(blob_len)
 }
 
-/// Every unit's C-identifier-named `fam` sections, grouped by name.
-/// Name order, then link order within a name, so the merge is a
-/// function of its inputs.
+/// Every unit's `fam` sections grouped by name. Name order, then link
+/// order within a name, so the merge is a function of its inputs.
 fn named_group_order(
     objs: &[NativeObject],
     fam: SectionFamily,
@@ -614,7 +613,7 @@ fn named_group_order(
         .iter()
         .enumerate()
         .flat_map(|(i, o)| o.sections.iter().map(move |s| (i, s)))
-        .filter(|(_, s)| s.family == fam && super::object::is_c_identifier(&s.name))
+        .filter(|(_, s)| s.family == fam && super::object::grouped_by_name(&s.name))
         .collect();
     v.sort_by(|a, b| a.1.name.cmp(&b.1.name).then(a.0.cmp(&b.0)));
     v
@@ -682,18 +681,31 @@ fn group_named_bytes(
     let any = !order.is_empty();
     let write = fam != SectionFamily::RoData;
     let mut prev: Option<&str> = None;
+    // The unwind table's previous contribution, `(start, end)` in `data`.
+    let mut last_eh: Option<(usize, usize)> = None;
     for (i, s) in order {
         // A writer that gives each name a section of its own places
         // them apart, so an offset at one group's end must not name the
         // next group's first byte.
-        if prev.is_some_and(|p| p != s.name) {
+        if let Some(p) = prev.filter(|&p| p != s.name) {
+            close_named_group(data, p, extents);
             data.push(0);
         }
         prev = Some(&s.name);
+        let unpadded = data.len();
         align_up(data, s.align.max(1) as usize);
+        let pad = data.len() - unpadded;
+        if s.name == EH_FRAME
+            && let Some((start, end)) = last_eh
+        {
+            absorb_eh_frame_padding(data, start, end, pad);
+        }
         let at = data.len() as u64;
         let src = blob(&objs[i]);
         data.extend_from_slice(&src[s.offset as usize..(s.offset + s.size) as usize]);
+        if s.name == EH_FRAME {
+            last_eh = Some((at as usize, data.len()));
+        }
         maps[i].moved.push((s.offset, s.size, at));
         note_extent(
             extents,
@@ -708,11 +720,45 @@ fn group_named_bytes(
             },
         );
     }
+    if let Some(p) = prev {
+        close_named_group(data, p, extents);
+    }
     // An offset equal to a region's end names the next region's first
     // byte, so the last group keeps a byte of slack behind it.
     if any {
         data.push(0);
     }
+}
+
+/// End the group `name`: the unwind table takes the zero-length entry that
+/// terminates it, which a crt object supplies to other links.
+fn close_named_group(data: &mut Vec<u8>, name: &str, extents: &mut [NamedExtent]) {
+    if name != EH_FRAME {
+        return;
+    }
+    data.extend_from_slice(&[0; 4]);
+    if let Some(e) = extents.iter_mut().find(|e| e.name == name) {
+        e.end = data.len() as u64;
+    }
+}
+
+/// Grow the last record of the unwind-table contribution at
+/// `data[start..end]` over the `pad` zero bytes behind it, `DW_CFA_nop`s
+/// inside a record; between records, a zero word ends the table. A
+/// contribution its records do not tile exactly keeps the padding.
+fn absorb_eh_frame_padding(data: &mut [u8], start: usize, end: usize, pad: usize) {
+    if pad == 0 {
+        return;
+    }
+    let Ok(entries) = crate::c5::object::eh_frame::entries(&data[start..end]) else {
+        return;
+    };
+    let Some(last) = entries.last().filter(|e| e.off + e.len == end - start) else {
+        return;
+    };
+    let at = start + last.off;
+    let len = u32::from_le_bytes(data[at..at + 4].try_into().unwrap());
+    data[at..at + 4].copy_from_slice(&(len + pad as u32).to_le_bytes());
 }
 
 /// The zero-fill counterpart: bss carries sizes, not bytes.
@@ -1505,11 +1551,11 @@ impl<'a> Link<'a> {
         let bss_align = bss_alignment(objs);
         let mut rodata_align: usize = crate::c5::layout::DATA_ALIGN_MIN;
         let mut relro_align: usize = crate::c5::layout::DATA_ALIGN_MIN;
-        // Sections whose name is a C identifier keep their identity: the
-        // parse sorted them to the end of their family blob, and the
-        // merge moves that suffix out to group every unit's
-        // contribution to one name together, so `__start_` / `__stop_`
-        // can bound it.
+        // Sections grouped by name keep their identity: the parse sorted
+        // them to the end of their family blob, and the merge moves that
+        // suffix out to group every unit's contribution to one name
+        // together, so `__start_` / `__stop_` can bound a C-identifier
+        // name and `.eh_frame` stays one table.
         let mut named_extents: Vec<NamedExtent> = Vec::new();
         for obj in objs {
             align_up(&mut self.text, obj.text_align.max(16));
@@ -1607,6 +1653,7 @@ impl<'a> Link<'a> {
         );
         self.start_stop_bounds = named_extents
             .iter()
+            .filter(|e| super::object::is_c_identifier(&e.name))
             .flat_map(|e| {
                 [
                     (format!("__start_{}", e.name), e.sec, e.start),
@@ -5679,6 +5726,50 @@ mod tests {
             def.value, 0,
             "common slot lands at the start of the post-unit bss extent"
         );
+    }
+
+    /// Every unit's `.eh_frame` joins one table in the relro region: the
+    /// padding ahead of a contribution lengthens the previous unit's last
+    /// record, so no zero word ends the table early, and a zero-length
+    /// entry ends the whole. No `__start_` / `__stop_` bound names it.
+    #[test]
+    fn unit_unwind_tables_form_one_terminated_table() {
+        // A 12-byte CIE: length 8, id 0, version 1, empty augmentation,
+        // code and data alignment factors.
+        let cie: alloc::vec::Vec<u8> = [8u32.to_le_bytes(), 0u32.to_le_bytes()]
+            .concat()
+            .into_iter()
+            .chain([1, 0, 1, 0x78])
+            .collect();
+        let unit = || NativeObject {
+            relro: cie.clone(),
+            relro_align: 8,
+            sections: alloc::vec![super::super::object::InputSection {
+                name: EH_FRAME.to_string(),
+                family: SectionFamily::RelRo,
+                offset: 0,
+                size: 12,
+                align: 8,
+            }],
+            ..blank_object(NativeMachine::X86_64)
+        };
+        let merged = link_native_objects(&[unit(), unit()]).expect("link");
+        let eh = (merged.named_sections.iter())
+            .find(|n| n.name == EH_FRAME)
+            .expect("one .eh_frame");
+        let at = eh.offset as usize;
+        assert!(at >= merged.data_ro_len && at < merged.data_relro_len);
+        assert_eq!(eh.size, 12 + 4 + 12 + 4);
+        let table = &merged.data[at..at + eh.size as usize];
+        assert_eq!(
+            &table[..4],
+            &12u32.to_le_bytes(),
+            "the first CIE takes the padding"
+        );
+        assert_eq!(&table[12..16], &[0; 4]);
+        assert_eq!(&table[16..28], &cie[..]);
+        assert_eq!(&table[28..], &[0; 4], "the terminator");
+        assert!(!merged.defined.keys().any(|k| k.contains(EH_FRAME)));
     }
 
     /// The merge keeps per-input-section identity: each contribution's

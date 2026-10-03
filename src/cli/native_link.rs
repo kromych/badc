@@ -26,6 +26,7 @@ use super::stats::LinkStats;
 /// per-arch PLT pass, and write_native_image_from_merged. The
 /// image carries DWARF (subprogram + variable + type DIEs ride
 /// the merged per-`.o` `.debug_info`; `.debug_frame` regenerates),
+/// every input's `.eh_frame` as one table under `PT_GNU_EH_FRAME`,
 /// variadic libc imports, `#pragma` exports, and `_Thread_local`
 /// storage in each format's native shape: ELF PT_TLS, the PE TLS
 /// directory + `_tls_index`, the Mach-O TLV descriptors. Mach-O

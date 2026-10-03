@@ -11125,13 +11125,138 @@ fn named_sections_get_their_own_elf_section_header() {
             .current_dir(&dir),
         "link named sections for ELF",
     );
-    let names = elf_section_names(&std::fs::read(&exe).expect("read image"));
+    let bytes = std::fs::read(&exe).expect("read image");
+    let names = elf_section_names(&bytes);
     for n in ["myro", "myrw"] {
         assert!(names.iter().any(|s| s == n), "`{n}` in {names:?}");
     }
-    // The family headers stay, holding what was not grouped out.
-    for n in [".rodata", ".data", ".text"] {
+    // A family header covers what was not grouped out; a family its named
+    // sections fill takes none.
+    for n in [".data", ".text"] {
         assert!(names.iter().any(|s| s == n), "`{n}` in {names:?}");
+    }
+    let empty = empty_alloc_sections(&bytes);
+    assert!(empty.is_empty(), "empty sections {empty:?}");
+}
+
+/// Allocated sections an ELF64 image heads with a zero size.
+fn empty_alloc_sections(bytes: &[u8]) -> Vec<String> {
+    (elf_sections(bytes)
+        .into_iter()
+        .zip(elf_section_spans(bytes)))
+    .filter(|(s, span)| s.2 & 2 != 0 && span.4 == 0)
+    .map(|(s, _)| s.0)
+    .collect()
+}
+
+/// A function framed the way another producer describes it, in the
+/// table its `.cfi_sections` names, for each ELF target.
+fn framed_asm(target: &str, name: &str, table: &str) -> String {
+    let (kind, body) = if target.ends_with("x64") {
+        (
+            "@function",
+            "\tpushq\t%rbp\n\t.cfi_def_cfa_offset 16\n\t.cfi_offset %rbp, -16\n\
+             \tmovq\t%rsp, %rbp\n\t.cfi_def_cfa_register %rbp\n\tmovl\t$20, %eax\n\
+             \tpopq\t%rbp\n\t.cfi_def_cfa %rsp, 8\n\tret\n",
+        )
+    } else {
+        (
+            "%function",
+            "\tstp\tx29, x30, [sp, #-16]!\n\t.cfi_def_cfa_offset 16\n\
+             \t.cfi_offset x29, -16\n\t.cfi_offset x30, -8\n\tmov\tx29, sp\n\
+             \tmov\tw0, #20\n\tldp\tx29, x30, [sp], #16\n\t.cfi_restore x30\n\
+             \t.cfi_restore x29\n\t.cfi_def_cfa_offset 0\n\tret\n",
+        )
+    };
+    format!(
+        "\t.text\n\t.globl {name}\n\t.type {name},{kind}\n{name}:\n\
+         \t.cfi_sections {table}\n\t.cfi_startproc\n{body}\t.cfi_endproc\n\
+         \t.size {name},.-{name}\n"
+    )
+}
+
+/// Another producer's unwind table reaches the image: every input's
+/// `.eh_frame` forms one terminated section that `.eh_frame_hdr` indexes
+/// under `PT_GNU_EH_FRAME`, as `ld --eh-frame-hdr` links it. The table
+/// rides the relro region: writable until the loader has relocated a
+/// position-independent image, read-only in a placed one.
+#[test]
+fn input_call_frame_tables_reach_the_image() {
+    const PT_GNU_EH_FRAME: u32 = 0x6474_e550;
+    const SHF_WRITE: u64 = 1;
+    for (target, form) in [
+        ("linux-x64", "-pie"),
+        ("linux-x64", "-no-pie"),
+        ("linux-aarch64", "-pie"),
+        ("linux-aarch64", "-no-pie"),
+    ] {
+        let dir = tempdir(&format!("call-frames-{target}{form}"));
+        write_source(&dir, "eh.s", &framed_asm(target, "eh_fn", ".eh_frame"));
+        write_source(
+            &dir,
+            "main.c",
+            "int eh_fn(void);\nint main(void) { return eh_fn() == 20 ? 0 : 1; }\n",
+        );
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args(["-c", "eh.s", "-o", "eh.o"])
+                .current_dir(&dir),
+            "assemble a framed function",
+        );
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args([form, "-g", "main.c", "eh.o", "-o", "prog"])
+                .current_dir(&dir),
+            "link the framed functions",
+        );
+        let bytes = std::fs::read(dir.join("prog")).expect("read image");
+        let what = format!("{target} {form}");
+        let spans = elf_section_spans(&bytes);
+        // The table fills the relro family here, which then takes no
+        // header of its own.
+        let empty = empty_alloc_sections(&bytes);
+        assert!(empty.is_empty(), "{what}: empty sections {empty:?}");
+        let flags = (elf_sections(&bytes).into_iter())
+            .find(|s| s.0 == ".eh_frame")
+            .map(|s| s.2);
+        assert_eq!(
+            flags.map(|f| f & SHF_WRITE != 0),
+            Some(form == "-pie"),
+            "{what}: .eh_frame flags {flags:?}"
+        );
+        let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
+        let rel = |at: u64, o: usize| at.wrapping_add(rd32(o) as i32 as u64);
+        let span = |name: &str| {
+            let s = spans.iter().find(|s| s.0 == name);
+            let s = s.unwrap_or_else(|| panic!("{what}: no {name} in {spans:?}"));
+            (s.2, s.3, s.4)
+        };
+        let syms = elf_symbols(&bytes);
+        let addr = |name: &str| syms.iter().find(|s| s.0 == name).expect(name).1;
+        let (eh_addr, eh_off, eh_size) = span(".eh_frame");
+        let (hdr_addr, hdr_off, _) = span(".eh_frame_hdr");
+        assert!(
+            (elf_segment_ranges(&bytes).iter()).any(|s| s.0 == PT_GNU_EH_FRAME && s.2 == hdr_off),
+            "{what}: PT_GNU_EH_FRAME covers .eh_frame_hdr"
+        );
+        assert_eq!(
+            rd32(eh_off + eh_size - 4),
+            0,
+            "{what}: the table is terminated"
+        );
+        assert_eq!(bytes[hdr_off..hdr_off + 4], [1, 0x1b, 0x03, 0x3b], "{what}");
+        assert_eq!(
+            rel(hdr_addr + 4, hdr_off + 4),
+            eh_addr,
+            "{what}: eh_frame_ptr"
+        );
+        assert_eq!(rd32(hdr_off + 8), 1, "{what}: eh_fn's FDE alone");
+        assert_eq!(rel(hdr_addr, hdr_off + 12), addr("eh_fn"), "{what}");
+        let fde = rel(hdr_addr, hdr_off + 16);
+        let fde_off = eh_off + (fde - eh_addr) as usize;
+        assert_eq!(rel(fde + 8, fde_off + 8), addr("eh_fn"), "{what}: pc_begin");
     }
 }
 

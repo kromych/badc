@@ -1244,9 +1244,9 @@ fn read_elf_headers(bytes: &[u8]) -> Result<(NativeMachine, Vec<Elf64Shdr>, &[u8
 
 /// What each section header contributes, decided by name and flags.
 /// The family lists hold section indices in placement order: a section
-/// whose name is a C identifier sorts to the end of its family, so the
-/// blob splits into a prefix the linker appends whole and a suffix it
-/// regroups by name across units.
+/// [`grouped_by_name`] sorts to the end of its family, so the blob splits
+/// into a prefix the linker appends whole and a suffix it regroups by name
+/// across units.
 struct SectionRoles {
     text: Vec<usize>,
     rodata: Vec<usize>,
@@ -1386,7 +1386,7 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
             )
         )
     });
-    // Stable, so anything not named as a C identifier keeps its order.
+    // Stable, so every section the merge leaves in place keeps its order.
     for list in [
         &mut roles.rodata,
         &mut roles.relro,
@@ -1395,7 +1395,7 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
     ] {
         list.sort_by_key(|&i| {
             strtab_str(shstrtab_bytes, shdrs[i].sh_name as usize)
-                .map(is_c_identifier)
+                .map(grouped_by_name)
                 .unwrap_or(false)
         });
     }
@@ -2344,6 +2344,15 @@ pub fn is_c_identifier(name: &str) -> bool {
     !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
+pub(crate) use crate::c5::object::eh_frame::EH_FRAME;
+
+/// Whether the merge gathers every unit's contribution to `name` into one
+/// output section: a C-identifier name, which `__start_` / `__stop_` bound,
+/// and the unwind table.
+pub fn grouped_by_name(name: &str) -> bool {
+    is_c_identifier(name) || name == EH_FRAME
+}
+
 /// Standard family for a section name, `None` when the name carries
 /// no convention and the header has to decide.
 fn family_by_name(name: &str) -> Option<SectionFamily> {
@@ -2368,12 +2377,14 @@ fn family_by_name(name: &str) -> Option<SectionFamily> {
 
 /// The single authority on which merged stream a section joins.
 ///
-/// The name table names the standard families; every other
-/// allocatable section (an `__attribute__((section("name")))`
-/// placement, an assembler `.pushsection` payload, `.eh_frame`)
-/// classifies from its header flags. `has_relocs` reports whether an
-/// `SHT_RELA` section targets it: a slot a relocation patches cannot
-/// sit in the stream the image maps `PF_R` from the file, so a
+/// The name table names the standard families; `.eh_frame` joins the
+/// relro stream whether or not a unit's copy is relocated, so every
+/// unit's table can form one section; every other allocatable section
+/// (an `__attribute__((section("name")))` placement, an assembler
+/// `.pushsection` payload) classifies from its header flags.
+/// `has_relocs` reports whether an `SHT_RELA` section targets it: a
+/// slot a relocation patches cannot sit in the stream the image maps
+/// `PF_R` from the file, so a
 /// relocated read-only section joins the relro stream -- writable for
 /// the loader's fixups, then re-protected read-only under
 /// `PT_GNU_RELRO`, the way a toolchain treats `.data.rel.ro`.
@@ -2416,6 +2427,9 @@ fn classify_section(
             MODULE,
             &format!("section `{name}` is SHF_TLS but not a `.tdata` / `.tbss` family name"),
         ));
+    }
+    if name == EH_FRAME && sh_type == SHT_PROGBITS {
+        return Ok(SectionFamily::RelRo);
     }
     match sh_type {
         SHT_PROGBITS if sh_flags & SHF_EXECINSTR != 0 => Ok(SectionFamily::Text),
@@ -2968,8 +2982,8 @@ mod tests {
 
     /// clang types `.eh_frame` SHT_X86_64_UNWIND, the x86-64 psABI's
     /// unwind-table type; it reads as SHT_PROGBITS there and joins the
-    /// read-only stream. The value is processor-specific, and on AArch64
-    /// it names nothing the merge models.
+    /// relro stream with every other unit's table. The value is
+    /// processor-specific, and on AArch64 it names nothing the merge models.
     #[test]
     fn an_x86_64_unwind_section_reads_as_progbits() {
         const SHF_ALLOC: u64 = 0x2;
@@ -2985,7 +2999,7 @@ mod tests {
         let obj = parse_native_elf(&build_test_elf(EM_X86_64, &plans)).expect("x86-64 object");
         let eh = obj.sections.iter().find(|s| s.name == ".eh_frame");
         assert!(
-            eh.is_some_and(|s| s.family == SectionFamily::RoData && s.size == 8),
+            eh.is_some_and(|s| s.family == SectionFamily::RelRo && s.size == 8),
             "{:?}",
             obj.sections
         );
@@ -3056,8 +3070,9 @@ mod tests {
                 SectionFamily::RelRo,
             ),
             (".bss", SHT_NOBITS, A | W, SectionFamily::Bss),
+            // The unwind table, relocated or not, is one relro section.
+            (".eh_frame", SHT_PROGBITS, A, SectionFamily::RelRo),
             // Flag-classified strangers.
-            (".eh_frame", SHT_PROGBITS, A, SectionFamily::RoData),
             (".my.rw", SHT_PROGBITS, A | W, SectionFamily::Data),
             (".my.ro", SHT_PROGBITS, A, SectionFamily::RoData),
             (".my.code", SHT_PROGBITS, A | X, SectionFamily::Text),

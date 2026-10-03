@@ -1,7 +1,7 @@
 //! Synthetic sections: their creation and their contents.
 
 use crate::c5::linker::dynamic::{self};
-use crate::c5::linker::eh_frame;
+use crate::c5::object::eh_frame;
 use crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL as GOT_SYMBOL;
 use alloc::format;
 use alloc::vec::Vec;

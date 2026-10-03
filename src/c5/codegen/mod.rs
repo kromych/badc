@@ -1888,9 +1888,10 @@ pub(crate) struct EmittedFinalReloc {
     pub addend: i64,
 }
 
-/// A C-identifier-named input section the merge grouped across units,
-/// for a writer that gives it an output section of its own. `offset`
-/// is into `Build::data`, or into the zero-fill region when `bss`.
+/// An input section the merge grouped by name across units (a C-identifier
+/// name, or `.eh_frame`), for a writer that gives it an output section of
+/// its own. `offset` is into `Build::data`, or into the zero-fill region
+/// when `bss`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NamedSection {
     pub name: String,

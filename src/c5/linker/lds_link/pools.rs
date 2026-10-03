@@ -1,6 +1,6 @@
 //! SHF_MERGE pools and `.eh_frame` CIE deduplication.
 
-use crate::c5::linker::eh_frame;
+use crate::c5::object::eh_frame;
 use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::String;

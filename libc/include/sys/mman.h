@@ -112,14 +112,14 @@ int memfd_create(const char *name, unsigned int flags);
 // 64-bit. An `int` length/offset truncates a mapping at or past 2GB.
 // `long` / `unsigned long` match off_t / size_t on LP64 (this block's
 // POSIX targets).
-char *mmap(char *addr, unsigned long len, int prot, int flags, int fd, long offset);
-int munmap(char *addr, unsigned long len);
+void *mmap(void *addr, unsigned long len, int prot, int flags, int fd, long offset);
+int munmap(void *addr, unsigned long len);
 // Report which pages of a mapping are resident; `vec` gets one byte per page.
-int mincore(char *addr, unsigned long len, unsigned char *vec);
-char *mremap(char *old, unsigned long old_size, unsigned long new_size, int flags);
-int msync(char *addr, unsigned long len, int flags);
-int mprotect(char *addr, unsigned long len, int prot);
-int madvise(char *addr, unsigned long len, int advice);
+int mincore(void *addr, unsigned long len, unsigned char *vec);
+void *mremap(void *old, unsigned long old_size, unsigned long new_size, int flags);
+int msync(void *addr, unsigned long len, int flags);
+int mprotect(void *addr, unsigned long len, int prot);
+int madvise(void *addr, unsigned long len, int advice);
 // POSIX shared memory objects; mode is mode_t (an unsigned int on the
 // targets). Darwin declares shm_open variadic and reads the mode via
 // va_arg (from the stack on arm64), so the prototype must match; glibc

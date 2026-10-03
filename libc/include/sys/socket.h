@@ -360,10 +360,10 @@ int listen(int fd, int backlog);
 int accept(int fd, char *addr, int *addrlen);
 int accept4(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags);
 int connect(int fd, char *addr, int addrlen);
-int setsockopt(int fd, int level, int optname, char *optval, int optlen);
-int getsockopt(int fd, int level, int optname, char *optval, int *optlen);
-int recv(int fd, char *buf, int n, int flags);
-int send(int fd, char *buf, int n, int flags);
+int setsockopt(int fd, int level, int optname, const void *optval, int optlen);
+int getsockopt(int fd, int level, int optname, void *optval, int *optlen);
+int recv(int fd, void *buf, int n, int flags);
+int send(int fd, const void *buf, int n, int flags);
 int shutdown(int fd, int how);
 int socketpair(int domain, int type, int protocol, int *sv);
 int getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen);
@@ -375,6 +375,7 @@ int recvfrom(unsigned long long s, char *buf, int len, int flags, struct sockadd
 int sendto(unsigned long long s, const char *buf, int len, int flags,
            const struct sockaddr *to, int tolen);
 #else
-long recvfrom(int fd, char *buf, long n, int flags, struct sockaddr *addr, socklen_t *addrlen);
-long sendto(int fd, char *buf, long n, int flags, struct sockaddr *addr, socklen_t addrlen);
+long recvfrom(int fd, void *buf, long n, int flags, struct sockaddr *addr, socklen_t *addrlen);
+long sendto(int fd, const void *buf, long n, int flags, const struct sockaddr *addr,
+            socklen_t addrlen);
 #endif

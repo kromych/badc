@@ -1128,3 +1128,41 @@ fn stdint_types_are_the_platforms() {
         }
     }
 }
+
+/// POSIX's memory-mapping and thread-specific interfaces traffic in
+/// `void *`: `mmap` and `mremap` return one, `pthread_getspecific` too, and
+/// the address, value and start-routine parameters take one, so their
+/// results convert to any object pointer without a cast.
+#[test]
+fn memory_and_thread_interfaces_use_void_pointers() {
+    for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        let mremap = if target == Target::MacOSAarch64 {
+            ""
+        } else {
+            "_Static_assert(IS(mremap(0, 0, 0, 0), void *), \"mremap\");\n"
+        };
+        let src = format!(
+            "#include <sys/mman.h>\n\
+             #include <pthread.h>\n\
+             #define IS(e, T) _Generic((e), T: 1, default: 0)\n\
+             struct page {{ char b[64]; }};\n\
+             static void *worker(void *arg) {{ return arg; }}\n\
+             int f(pthread_key_t k, struct page *pg) {{\n\
+             _Static_assert(IS(mmap(0, 0, 0, 0, -1, 0), void *), \"mmap\");\n\
+             {mremap}\
+             _Static_assert(IS(pthread_getspecific(k), void *), \"pthread_getspecific\");\n\
+             struct page *p = mmap(0, sizeof *p, PROT_READ, MAP_PRIVATE | MAP_ANON, -1, 0);\n\
+             struct page *q = pthread_getspecific(k);\n\
+             pthread_t t;\n\
+             void *ret;\n\
+             pthread_setspecific(k, pg);\n\
+             pthread_create(&t, 0, worker, pg);\n\
+             pthread_join(t, &ret);\n\
+             return munmap(p, sizeof *p) + (q == ret);\n\
+             }}\n"
+        );
+        if let Err(err) = compile(&src, target) {
+            panic!("{}: {err}", target.id_str());
+        }
+    }
+}

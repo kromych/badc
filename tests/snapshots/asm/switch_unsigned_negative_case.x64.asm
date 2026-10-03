@@ -48,24 +48,24 @@ Disassembly of section .text:
 <u16>:
                	movq	%rdi, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
-               	cmpq	$-0x1, %rax
-               	jb	<addr>
+               	cmpl	$0x7, %eax
+               	jl	<addr>
+               	cmpl	$0x7, %eax
+               	je	<addr>
                	movl	$0x3e7, %eax            # imm = 0x3E7
                	retq
-               	cmpl	$0x7, %eax
-               	jne	<addr>
                	movl	$0x7, %eax
                	retq
 
 <u8>:
                	movq	%rdi, %rax
                	andq	$0xff, %rax
-               	cmpq	$-0x1, %rax
-               	jb	<addr>
+               	cmpl	$0x3, %eax
+               	jl	<addr>
+               	cmpl	$0x3, %eax
+               	je	<addr>
                	movl	$0x3e7, %eax            # imm = 0x3E7
                	retq
-               	cmpl	$0x3, %eax
-               	jne	<addr>
                	movl	$0x3, %eax
                	retq
 

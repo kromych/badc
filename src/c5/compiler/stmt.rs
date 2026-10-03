@@ -29,7 +29,9 @@ use super::super::error::C5Error;
 use super::super::token::{Tok, Token, Ty};
 use super::Compiler;
 use super::diag::Category;
-use super::types::{is_struct_ty, is_struct_value_ty, is_void_ty, struct_ptr_depth};
+use super::types::{
+    integer_promote, is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_void_ty, struct_ptr_depth,
+};
 
 /// The outer binding a nested block saved before rebinding a name, restored
 /// at the block's exit. A block nests arbitrarily, so unlike the single
@@ -492,13 +494,14 @@ impl Compiler {
         self.consume(b'(', "open paren expected")?;
         self.parse_controlling_expr("switch", Category::Integer)?;
         let disc_ast = self.ast_acc;
+        let promoted = integer_promote(self.ty);
         self.consume(b')', "close paren expected")?;
 
         // Conservative drop of any pending dead-store entries at
         // the switch entry boundary, matching the flush a
         // control-flow op would have produced through emit_cf_op.
         self.flush_pending_stores();
-        self.switch_cases.push(Vec::new());
+        self.switch_cases.push((promoted, Vec::new()));
         self.switch_defaults.push(false);
         self.enter_switch();
         self.enter_switch_body();
@@ -3164,43 +3167,61 @@ impl Compiler {
             // expression chain (`a ? b : c`), so we go in at the top.
             // Block-scope `const` scalar objects fold to their recorded
             // initializer values here, as GCC (GNU mode, at -O) accepts.
-            let lo = self.parse_constant_int_folding_const_objects()?;
+            let lo = self.parse_constant_folding_const_objects()?;
             // GNU case range `case lo ... hi:` (C extension): the label
             // covers every value in [lo, hi]. `hi == lo` for a single label.
             let hi = if self.lex.tk == Token::Ellipsis {
                 self.next()?;
-                self.parse_constant_int_folding_const_objects()?
+                self.parse_constant_folding_const_objects()?
             } else {
                 lo
             };
             self.consume(b':', "expected colon after case")?;
             self.check_switch_label(line)?;
-            if hi < lo {
+            let Some(&(promoted, _)) = self.switch_cases.last() else {
+                return Err(self.compile_err(Code::INVALID_STATEMENT, "case outside switch"));
+            };
+            // C99 6.8.4.2p5: each label converts to the promoted type of
+            // the controlling expression, which the comparisons are made in.
+            let lo = self.const_int_of(lo.as_i128(), promoted).as_i128();
+            let hi = self.const_int_of(hi.as_i128(), promoted).as_i128();
+            let unsigned = is_unsigned_ty(promoted);
+            let spell = |v: i128| {
+                if unsigned {
+                    format!("{}", v as u128)
+                } else {
+                    format!("{v}")
+                }
+            };
+            if (unsigned && (hi as u128) < (lo as u128)) || (!unsigned && hi < lo) {
                 return Err(self.compile_err(
                     Code::INVALID_STATEMENT,
-                    format!("case range `{lo} ... {hi}` is empty (low bound exceeds high)"),
+                    format!(
+                        "case range `{} ... {}` is empty (low bound exceeds high)",
+                        spell(lo),
+                        spell(hi)
+                    ),
                 ));
             }
             // C99 6.8.4.2p3: the case constant expressions in one switch
-            // must be distinct (constraint). A single label is tracked for
-            // duplicate detection; a `lo ... hi` range is dispatched by a
-            // bounds comparison (walk.rs) with no per-value expansion, so it
-            // is not enumerated here and an overlap involving a range is not
-            // diagnosed (a permitted relaxation of the constraint check).
-            match self.switch_cases.last_mut() {
-                Some(cases) => {
-                    if lo == hi {
-                        if cases.contains(&lo) {
-                            return Err(self.compile_err(
-                                Code::INVALID_STATEMENT,
-                                format!("duplicate case value {lo} in switch"),
-                            ));
-                        }
-                        cases.push(lo);
-                    }
+            // must be distinct after the conversion (constraint). A single
+            // label is tracked for duplicate detection; a `lo ... hi` range
+            // is dispatched by a bounds comparison with no per-value
+            // expansion, so it is not enumerated here and an overlap
+            // involving a range is not diagnosed.
+            if lo == hi {
+                if self
+                    .switch_cases
+                    .last()
+                    .is_some_and(|(_, c)| c.contains(&lo))
+                {
+                    return Err(self.compile_err(
+                        Code::INVALID_STATEMENT,
+                        format!("duplicate case value {} in switch", spell(lo)),
+                    ));
                 }
-                None => {
-                    return Err(self.compile_err(Code::INVALID_STATEMENT, "case outside switch"));
+                if let Some((_, cases)) = self.switch_cases.last_mut() {
+                    cases.push(lo);
                 }
             }
             let body_before = self.ast_stmts_snapshot();

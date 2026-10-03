@@ -546,10 +546,16 @@ impl Compiler {
     /// case labels (including GNU ranges), `static_assert`, and
     /// initializer designator indices.
     pub(super) fn parse_constant_int_folding_const_objects(&mut self) -> Result<i64, C5Error> {
+        Ok(self.parse_constant_folding_const_objects()?.as_int())
+    }
+
+    /// [`Self::parse_constant_int_folding_const_objects`] keeping the
+    /// value's type, for a case label converted to the controlling type.
+    pub(super) fn parse_constant_folding_const_objects(&mut self) -> Result<ConstVal, C5Error> {
         self.const_object_fold += 1;
-        let r = self.parse_constant_int();
+        let r = self.parse_const_expr_cond_val();
         self.const_object_fold -= 1;
-        r
+        self.require_integer_const(r?)
     }
 
     /// Run `rule` with the const-object fold masked: a type dimension

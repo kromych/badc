@@ -1134,10 +1134,10 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v55  Binop { op=sub, lhs=v46, rhs=v54 }               -> [spill 1]
     v56  Binop { op=add, lhs=v1, rhs=v55 }                -> [spill 4]
     v57  LoadIndexed { base=v1, index=v55, scale=1, kind=U8 } -> [spill 1]
-    v58  BinopI { op=ult, lhs=v57, rhs_imm=1 }            -> [spill 4]
+    v58  BinopI { op=lt, lhs=v57, rhs_imm=1 }             -> [spill 4]
     terminator Bnz { cond=v58, target=b10, fall=b2 }   (exit_acc=v58)
   block 2  start_pc=0
-    v157 BinopI { op=ult, lhs=v57, rhs_imm=2 }            -> [spill 4]
+    v157 BinopI { op=lt, lhs=v57, rhs_imm=2 }             -> [spill 4]
     terminator Bnz { cond=v157, target=b9, fall=b3 }   (exit_acc=v157)
   block 3  start_pc=0
     v183 BinopI { op=eq, lhs=v57, rhs_imm=2 }             -> [spill 1]

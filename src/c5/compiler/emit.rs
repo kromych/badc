@@ -1771,8 +1771,8 @@ impl Compiler {
     /// Push a `Stmt::Case { val, body }`.
     pub(super) fn ast_emit_case(
         &mut self,
-        val: i64,
-        hi: i64,
+        val: i128,
+        hi: i128,
         body: super::super::ast::StmtId,
     ) -> super::super::ast::StmtId {
         let pos = self.ast_src_pos();

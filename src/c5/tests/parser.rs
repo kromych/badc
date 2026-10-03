@@ -1301,6 +1301,42 @@ fn duplicate_case_value_is_rejected() {
     );
 }
 
+/// C99 6.8.4.2p5 converts each case label to the promoted type of the
+/// controlling expression, and p3 requires the converted values to be
+/// distinct: `-1` and `0xffffffffu` collide for an `unsigned` controlling
+/// expression and stay apart for an `__int128` one, and a GNU range is
+/// empty or not in that type.
+#[test]
+fn case_labels_compare_in_the_promoted_controlling_type() {
+    expect_compile_error(
+        "int f(unsigned u){ switch(u){ case -1: return 1; case 0xffffffffu: return 2; } \
+         return 0; } int main(void){ return 0; }",
+        "duplicate case value 4294967295",
+    );
+    expect_compile_error(
+        "int f(unsigned __int128 x){ switch(x){ case -1: return 1; \
+         case ~(unsigned __int128)0: return 2; } return 0; } int main(void){ return 0; }",
+        "duplicate case value 340282366920938463463374607431768211455",
+    );
+    expect_compile_error(
+        "int f(int i){ switch(i){ case 5 ... 1: return 1; } return 0; } \
+         int main(void){ return 0; }",
+        "case range `5 ... 1` is empty",
+    );
+    for src in [
+        "int f(__int128 x){ switch(x){ case -1: return 1; case 0xffffffffffffffffULL: \
+         return 2; } return 0; } int main(void){ return 0; }",
+        "int f(unsigned u){ switch(u){ case 1 ... -1: return 1; } return 0; } \
+         int main(void){ return 0; }",
+        "int f(unsigned char c){ switch(c){ case 1: return 1; case 257: return 2; } \
+         return 0; } int main(void){ return 0; }",
+    ] {
+        Compiler::new(src.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("{src}: {e}"));
+    }
+}
+
 #[test]
 fn duplicate_case_value_in_inner_switch_only() {
     // Distinct values across nested switches are fine; the duplicate is

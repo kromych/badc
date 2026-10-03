@@ -2939,6 +2939,41 @@ fn an_int128_offset_count_or_dimension_takes_its_low_half() {
     }
 }
 
+/// C99 6.8.4.2p5: a `switch` on an `__int128` compares the labels with
+/// all 128 bits. The dispatcher tests the loaded high half of the value
+/// against each label's -- 0 for 3, -1 for -2, 1 for 2^64 -- before it
+/// searches the low half.
+#[test]
+fn a_switch_on_an_int128_tests_the_high_half() {
+    use crate::c5::ir::{BinOp, Inst};
+    use crate::{CompileOptions, Compiler, Target};
+    const SRC: &str = "int sw(__int128 x) { switch (x) { case 3: return 30; \
+        case -2: return -20; case (__int128)1 << 64: return 64; default: return 99; } }\n";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(SRC.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let f = funcs.iter().find(|f| f.name == "sw").expect("sw");
+        for high in [0i64, -1, 1] {
+            let tested = f.insts.iter().any(|i| {
+                matches!(i, Inst::BinopI { op: BinOp::Eq, lhs, rhs_imm }
+                    if *rhs_imm == high && matches!(f.insts[*lhs as usize], Inst::Load { .. }))
+            });
+            assert!(tested, "{target:?} high half {high}: {:?}", f.insts);
+        }
+    }
+}
+
 /// ARM ARM C6.2: the aarch64 atomic read-modify-write lowering is one LSE
 /// instruction, for a seq_cst fetch-add the acquire-release `LDADDAL`.
 /// Match it by the bits that do not depend on the registers:

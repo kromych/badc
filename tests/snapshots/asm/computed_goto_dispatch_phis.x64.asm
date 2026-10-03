@@ -633,10 +633,10 @@ Disassembly of section .text:
                	movq	%r10, 0x50(%rsp)
                	movq	0x50(%rsp), %r10
                	cmpl	$0x1, %r10d
-               	jb	<addr>
+               	jl	<addr>
                	movq	0x50(%rsp), %r10
                	cmpl	$0x2, %r10d
-               	jb	<addr>
+               	jl	<addr>
                	movq	0x50(%rsp), %r10
                	cmpl	$0x2, %r10d
                	jne	<addr>

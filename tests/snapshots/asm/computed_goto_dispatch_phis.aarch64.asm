@@ -470,9 +470,9 @@ Disassembly of section .text:
                	msub	x15, x20, x14, x15
                	ldrb	w15, [x0, x15]
                	cmp	w15, #0x1
-               	b.lo	<addr>
+               	b.lt	<addr>
                	cmp	w15, #0x2
-               	b.lo	<addr>
+               	b.lt	<addr>
                	cmp	w15, #0x2
                	b.ne	<addr>
                	sxtw	x15, w13

@@ -585,11 +585,12 @@ pub(crate) enum Stmt {
     /// `switch (disc) body` (C99 6.8.4.2). `body` is the
     /// statement that contains the case labels.
     Switch { disc: ExprId, body: StmtId },
-    /// `case val: body` (C99 6.8.1).
-    /// `case val: body`, or the GNU range `case val ... hi: body`
-    /// (`hi == val` for a single label). The walker maps every value in
-    /// `[val, hi]` to this case's block.
-    Case { val: i64, hi: i64, body: StmtId },
+    /// `case val: body` (C99 6.8.1), or the GNU range `case val ... hi:
+    /// body` (`hi == val` for a single label). The bounds hold the labels
+    /// converted to the promoted type of the controlling expression
+    /// (6.8.4.2p5); the walker maps every value in `[val, hi]` to this
+    /// case's block.
+    Case { val: i128, hi: i128, body: StmtId },
     /// `default: body` (C99 6.8.1).
     Default { body: StmtId },
     /// `break;` (C99 6.8.6.3).

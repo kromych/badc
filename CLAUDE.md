@@ -125,6 +125,15 @@ than for wedging in quick hacks to get something compiling. Don't write lore,
 refer to unresolved issues and milestones with the TODO marker, no mentioning of
 milestones and issue numbers otherwise.
 
+Code, comments, test names and test comments describe the construct and the rule
+that governs it: a C99 clause, the platform ABI, or the documented behavior of gcc,
+clang, GNU ld or gas. They do not name the projects badc builds (the Linux kernel,
+CPython, sqlite, edk2, ...) or their files, macros, configuration options and build
+steps: that reads as a patch aimed at one program. Platform references stay: the OS
+interfaces (Linux UAPI and syscall layouts, the loader, Windows DLLs) and the
+`kernel` code model. A commit body may cite a project only as measured evidence;
+`demos/` and `scripts/` are about the projects and are exempt.
+
 ## Comment style and conversational style
 
 The audience is adult professionals. Hence, comments must not read like editorials

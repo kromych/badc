@@ -4,6 +4,7 @@ use crate::c5::linker::default_script::default_script;
 use crate::c5::linker::lds::parse_linker_script;
 use crate::c5::linker::object::NativeMachine;
 use crate::c5::linker::object::{Elf32Shdr, Elf64Shdr, read_struct};
+use crate::c5::linker::zkeyword::{ZKeywords, parse_z_keyword};
 use crate::c5::linker::{comdat, dynamic, eh_frame};
 use crate::c5::object::elf_reloc_types as rt;
 use crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL as GOT_SYMBOL;
@@ -2623,6 +2624,92 @@ fn only_a_pie_link_carries_df_1_pie() {
             .map(|(_, v)| v);
         assert_eq!(flags_1, want, "shared={shared}");
     }
+}
+
+/// The `-z` keywords that record a loader policy reach `.dynamic` as GNU
+/// ld writes them: `now` as `DF_BIND_NOW` and `DF_1_NOW`, `origin` in
+/// both words, the rest in `DT_FLAGS_1`, and an executable keeps none
+/// of the bits only a shared object can carry.
+#[test]
+fn loader_keywords_record_their_dynamic_flags() {
+    let script = parse_linker_script(&default_script(true)).expect("parses");
+    let mut z = ZKeywords::default();
+    for kw in ["now", "origin", "nodelete", "nodefaultlib", "initfirst"] {
+        z.push(parse_z_keyword(kw).unwrap());
+    }
+    for (shared, flags_1) in [
+        (
+            true,
+            dynamic::DF_1_NOW
+                | dynamic::DF_1_ORIGIN
+                | dynamic::DF_1_NODELETE
+                | dynamic::DF_1_NODEFLIB
+                | dynamic::DF_1_INITFIRST,
+        ),
+        (
+            false,
+            dynamic::DF_1_NOW | dynamic::DF_1_ORIGIN | dynamic::DF_1_NODEFLIB | dynamic::DF_1_PIE,
+        ),
+    ] {
+        let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
+        let mut opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])]);
+        opts.shared = shared;
+        opts.take_z_keywords(&z).expect("the engine takes them");
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let tag = |want: u64| {
+            dyn_tags(&res.image)
+                .into_iter()
+                .find(|&(t, _)| t == want)
+                .map(|(_, v)| v)
+        };
+        let flags = dynamic::DF_BIND_NOW | dynamic::DF_ORIGIN;
+        assert_eq!(tag(dynamic::DT_FLAGS), Some(flags), "shared={shared}");
+        assert_eq!(tag(dynamic::DT_FLAGS_1), Some(flags_1), "shared={shared}");
+    }
+}
+
+/// `-z common-page-size=` is what `CONSTANT (COMMONPAGESIZE)` reads, and
+/// `-z muldefs` lets the first of two definitions stand.
+#[test]
+fn common_page_size_and_muldefs_reach_the_link() {
+    let script = parse_linker_script(
+        "SECTIONS { . = 0x400000; .text : { *(.text) } __common = CONSTANT (COMMONPAGESIZE); }",
+    )
+    .unwrap();
+    let obj = |name: &str, byte: u8| {
+        let o = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[byte])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1);
+        parse_lds_object(name, o.build(EM_X86_64)).expect("parses")
+    };
+    let link = |z: &[&str]| {
+        let mut keywords = ZKeywords::default();
+        for kw in z {
+            keywords.push(parse_z_keyword(kw).unwrap());
+        }
+        let mut opts = LdsOptions::default();
+        opts.take_z_keywords(&keywords)
+            .expect("the engine takes them");
+        link_with_script(
+            &script,
+            alloc::vec![obj("a.o", 0xc3), obj("b.o", 0x90)],
+            &opts,
+        )
+    };
+    let err = link(&[]).expect_err("two definitions of _start");
+    assert!(
+        format!("{err}").contains("multiple definition of `_start`"),
+        "{err}"
+    );
+    let res = link(&["muldefs", "common-page-size=0x400"]).expect("muldefs links");
+    let syms = image_symbols(&res.image);
+    assert_eq!(find_sym(&syms, "__common"), 0x400);
+    let start = find_sym(&syms, "_start");
+    assert_eq!(
+        res.image[section_file_off(&res.image, start)],
+        0xc3,
+        "the first definition stands"
+    );
 }
 
 /// A shared library input takes a `DT_NEEDED` naming its soname,

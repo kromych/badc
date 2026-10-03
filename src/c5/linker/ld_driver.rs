@@ -28,7 +28,7 @@ use super::relocatable::{
     DiscardLocals, EM_386, EM_AARCH64, EM_X86_64, EtRel, LdScript, RelinkOptions, link_relocatable,
     link_relocatable_with_map, parse_et_rel, parse_module_script,
 };
-use super::zkeyword::{ZKeyword, parse_z_keyword};
+use super::zkeyword::{ZKeyword, ZKeywords, parse_z_keyword};
 
 /// How positional inputs and archive state were ordered on the
 /// command line.
@@ -73,14 +73,14 @@ struct LdArgs {
     build_id: BuildId,
     fatal_warnings: bool,
     emit_relocs: bool,
-    no_undefined: bool,
     discard_locals: DiscardLocals,
     /// `--discard-none`: keep every local symbol.
     discard_none: bool,
     strip_debug: bool,
     orphan_handling: Option<String>,
-    /// `-z noexecstack` / `-z execstack`.
-    gnu_stack: Option<bool>,
+    /// The `-z` keywords, with `--no-undefined` as `-z defs` and
+    /// `--pack-dyn-relocs=` as `-z [no]pack-relative-relocs`.
+    z: ZKeywords,
     /// `--warn-execstack` / `--no-warn-execstack`.
     warn_execstack: Option<bool>,
     print_version: bool,
@@ -94,8 +94,6 @@ struct LdArgs {
     entry: Option<String>,
     map_path: Option<PathBuf>,
     print_map: bool,
-    max_page_size: Option<u64>,
-    pack_relative_relocs: bool,
     apply_dynamic_relocs: bool,
     /// `-u SYM`: symbols forced undefined before the archive scan.
     undefined: Vec<String>,
@@ -293,12 +291,11 @@ impl LdArgs {
             build_id: BuildId::None,
             fatal_warnings: false,
             emit_relocs: false,
-            no_undefined: false,
             discard_locals: DiscardLocals::None,
             discard_none: false,
             strip_debug: false,
             orphan_handling: None,
-            gnu_stack: None,
+            z: ZKeywords::default(),
             warn_execstack: None,
             print_version: false,
             shared: false,
@@ -306,8 +303,6 @@ impl LdArgs {
             entry: None,
             map_path: None,
             print_map: false,
-            max_page_size: None,
-            pack_relative_relocs: false,
             apply_dynamic_relocs: true,
             undefined: Vec::new(),
             gc_sections: false,
@@ -381,8 +376,8 @@ impl LdArgs {
                 s if s.starts_with("-Map=") => {
                     a.map_path = Some(PathBuf::from(&s["-Map=".len()..]))
                 }
-                "--pack-dyn-relocs=relr" => a.pack_relative_relocs = true,
-                "--pack-dyn-relocs=none" => a.pack_relative_relocs = false,
+                "--pack-dyn-relocs=relr" => a.z.push(ZKeyword::PackRelativeRelocs(true)),
+                "--pack-dyn-relocs=none" => a.z.push(ZKeyword::PackRelativeRelocs(false)),
                 "--apply-dynamic-relocs" => a.apply_dynamic_relocs = true,
                 "--no-apply-dynamic-relocs" => a.apply_dynamic_relocs = false,
                 // Accepted with no effect on the emitted image: badc emits
@@ -458,7 +453,7 @@ impl LdArgs {
                     };
                 }
                 "--emit-relocs" | "-q" => a.emit_relocs = true,
-                "--no-undefined" => a.no_undefined = true,
+                "--no-undefined" => a.z.push(ZKeyword::Defs(true)),
                 "-X" | "--discard-locals" => {
                     a.discard_locals = DiscardLocals::Temporaries;
                     a.discard_none = false;
@@ -511,16 +506,13 @@ impl LdArgs {
         Ok(a)
     }
 
-    /// One `-z` keyword, with GNU semantics for ET_REL output: these
-    /// keywords shape final images only and change nothing about a
-    /// relocatable link. Returns the exit code of a rejected one.
+    /// One `-z` keyword. A final link takes it as the engine answers it
+    /// ([`LdsOptions::take_z_keywords`]); a relocatable one, as GNU ld
+    /// does, only the stack note and the duplicate-definition rule.
+    /// Returns the exit code of a keyword GNU ld does not have.
     fn apply_z_keyword(&mut self, kw: &str) -> Option<i32> {
         match parse_z_keyword(kw) {
-            Ok(ZKeyword::ExecStack(on)) => self.gnu_stack = Some(on),
-            Ok(ZKeyword::PackRelativeRelocs(on)) => self.pack_relative_relocs = on,
-            Ok(ZKeyword::MaxPageSize(n)) => self.max_page_size = Some(n),
-            // TODO: the other keywords take no effect on a final link.
-            Ok(_) => {}
+            Ok(kw) => self.z.push(kw),
             Err(e) => return Some(ld_err(e)),
         }
         None
@@ -575,7 +567,8 @@ fn run_relocatable_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         discard_locals: a.discard_locals,
         strip_debug: a.strip_debug,
         build_id_sha1: a.build_id == BuildId::Sha1,
-        gnu_stack: a.gnu_stack,
+        gnu_stack: a.z.exec_stack(),
+        allow_multiple_definition: a.z.muldefs(),
         expect_machine: machine,
     };
     // ld writes a map for a relocatable link too, and kbuild's
@@ -1014,7 +1007,7 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         return ld_err("no input files");
     }
     let m = machine.unwrap_or(objs[0].machine);
-    let opts = LdsOptions {
+    let mut opts = LdsOptions {
         emit: if a.shared {
             LdsEmit::Dyn
         } else {
@@ -1025,12 +1018,12 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         gc_sections: a.gc_sections,
         undefined: a.undefined.clone(),
         // GNU ld defaults: 2 MiB on x86-64, 64 KiB on aarch64, 4 KiB
-        // on i386.
-        max_page_size: a.max_page_size.unwrap_or(match m {
+        // on i386; `-z max-page-size=` replaces it below.
+        max_page_size: match m {
             EM_AARCH64 => 0x10000,
             EM_386 => 0x1000,
             _ => 0x200000,
-        }),
+        },
         orphan_handling: match a.orphan_handling.as_deref() {
             Some("warn") => OrphanHandling::Warn,
             Some("error") => OrphanHandling::Error,
@@ -1041,12 +1034,9 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         strip_debug: a.strip_debug,
         discard_locals: a.discard_locals != DiscardLocals::None,
         discard_none: a.discard_none,
-        pack_relative_relocs: a.pack_relative_relocs,
         apply_dynamic_relocs: a.apply_dynamic_relocs,
         emit_relocs: a.emit_relocs,
-        exec_stack: a.gnu_stack,
         warn_execstack: a.warn_execstack,
-        text: false,
         emit_warnings: true,
         diag: crate::c5::diag::Config::new(),
         soname: a.soname.clone(),
@@ -1065,7 +1055,11 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         rpath: a.rpath.clone(),
         new_dtags: a.new_dtags,
         fix_cortex_a53_843419: a.fix_cortex_a53_843419,
+        ..Default::default()
     };
+    if let Err((kw, why)) = opts.take_z_keywords(&a.z) {
+        return ld_err(format!("-z {} is not supported: {why}", kw.name()));
+    }
     let res = match super::lds_link::link_with_script(&script, objs, &opts) {
         Ok(r) => r,
         Err(e) => return ld_err(format!("{e}")),

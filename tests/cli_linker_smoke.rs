@@ -4572,6 +4572,95 @@ fn a_links_warnings_follow_dash_w_and_not_dash_q() {
     }
 }
 
+/// One table answers the `-z` keywords for the `--ld` persona and for the
+/// driver's -T link, so a keyword cannot be taken by one and refused by
+/// the other; a refusal names the keyword. A relocatable link takes every
+/// keyword, as GNU ld does.
+#[test]
+fn the_ld_persona_and_the_script_link_answer_every_z_keyword_alike() {
+    let dir = tempdir("z-keywords-alike");
+    let src = write_source(&dir, "m.c", "int main(void) { return 0; }\n");
+    let obj = dir.join("m.o");
+    run(
+        Command::new(badc())
+            .args(["-q", "--target=linux-x64", "-c"])
+            .arg(&src)
+            .arg("-o")
+            .arg(&obj),
+        "compile",
+    );
+    let script = write_source(
+        &dir,
+        "t.lds",
+        "ENTRY(main) SECTIONS { . = 0x400000; .text : { *(.text*) } .data : { *(.data*) } }\n",
+    );
+    let refused = ["relro", "lazy", "undefs", "separate-code"];
+    for kw in [
+        "execstack",
+        "noexecstack",
+        "relro",
+        "norelro",
+        "now",
+        "lazy",
+        "text",
+        "notext",
+        "defs",
+        "undefs",
+        "muldefs",
+        "pack-relative-relocs",
+        "nopack-relative-relocs",
+        "separate-code",
+        "noseparate-code",
+        "max-page-size=0x1000",
+        "common-page-size=0x1000",
+        "nodefaultlib",
+        "nodelete",
+        "nodlopen",
+        "nodump",
+        "origin",
+        "global",
+        "initfirst",
+        "interpose",
+        "loadfltr",
+    ] {
+        let persona = Command::new(badc())
+            .args(["--ld", "-m", "elf_x86_64", "-T"])
+            .arg(&script)
+            .arg(&obj)
+            .args(["-z", kw, "-o"])
+            .arg(dir.join("persona"))
+            .output()
+            .expect("run badc --ld");
+        let driver = Command::new(badc())
+            .args(["-q", "--target=linux-x64", &format!("-Wl,-z,{kw}"), "-T"])
+            .arg(&script)
+            .arg(&obj)
+            .arg("-o")
+            .arg(dir.join("driver"))
+            .output()
+            .expect("run badc");
+        let named = format!("-z {}", kw.split('=').next().unwrap_or(kw));
+        for (front, out) in [("--ld", &persona), ("-T", &driver)] {
+            let err = String::from_utf8_lossy(&out.stderr);
+            let taken = !refused.contains(&kw);
+            assert_eq!(out.status.success(), taken, "{front} -z {kw}: {err}");
+            assert!(taken || err.contains(&named), "{front} -z {kw}: {err}");
+        }
+        let relocatable = Command::new(badc())
+            .args(["--ld", "-r", "-z", kw])
+            .arg(&obj)
+            .arg("-o")
+            .arg(dir.join("r.o"))
+            .output()
+            .expect("run badc --ld -r");
+        assert!(
+            relocatable.status.success(),
+            "-r -z {kw}: {}",
+            String::from_utf8_lossy(&relocatable.stderr)
+        );
+    }
+}
+
 /// The link without -T keeps every local symbol of its inputs, which is
 /// what `--discard-none` asks for; `-X` drops the assembler temporaries
 /// (`.L*`) among them. The last of the two holds, as in GNU ld.

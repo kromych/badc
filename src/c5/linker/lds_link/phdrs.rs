@@ -24,7 +24,9 @@ impl<'a> LdsLinker<'a> {
         } else {
             0x1000
         };
-        common.min(self.opts.max_page_size)
+        (self.opts.common_page_size)
+            .unwrap_or(common)
+            .min(self.opts.max_page_size)
     }
 
     /// Output sections the writer will emit, in statement order. The

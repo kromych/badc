@@ -51,10 +51,11 @@ use super::link_err;
 
 /// The tag this module's diagnostics carry.
 pub(super) const MODULE: &str = "";
-use super::dynamic::{DynTables, HashStyle, VerDef};
+use super::dynamic::{self, DynTables, HashStyle, VerDef};
 use super::gnu_property;
 use super::lds::{Assignment, DataWidth, Expr, LinkerScript, OutputSectionType};
 use super::object::{ElfClass, SharedLibrary};
+use super::zkeyword::{ZKeyword, ZKeywords};
 use crate::c5::diag::{Code, Config, Control, Diagnostic, Sink};
 use crate::c5::error::C5Error;
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -301,6 +302,14 @@ pub struct LdsOptions {
     /// `-z text`: a dynamic relocation against read-only memory is an
     /// error rather than a `DT_TEXTREL`.
     pub text: bool,
+    /// `-z common-page-size=`: `CONSTANT (COMMONPAGESIZE)`; `None` keeps
+    /// the machine's.
+    pub common_page_size: Option<u64>,
+    /// `-z muldefs`: the first of two definitions of a symbol stands.
+    pub allow_multiple_definition: bool,
+    /// `DT_FLAGS` / `DT_FLAGS_1` bits the `-z` keywords record.
+    pub dynamic_flags: u64,
+    pub dynamic_flags_1: u64,
     /// Cleared to report no warning at all, as `-w` does. A row a
     /// selector raised to an error keeps its level.
     pub emit_warnings: bool,
@@ -359,6 +368,10 @@ impl Default for LdsOptions {
             exec_stack: None,
             warn_execstack: None,
             text: false,
+            common_page_size: None,
+            allow_multiple_definition: false,
+            dynamic_flags: 0,
+            dynamic_flags_1: 0,
             emit_warnings: true,
             diag: Config::new(),
             soname: None,
@@ -375,6 +388,30 @@ impl Default for LdsOptions {
             new_dtags: false,
             fix_cortex_a53_843419: false,
         }
+    }
+}
+
+impl LdsOptions {
+    /// Take the `-z` keywords `z` as the engine answers each
+    /// ([`ZKeyword::in_script_link`]); the first one it refuses comes
+    /// back with the reason.
+    pub fn take_z_keywords(&mut self, z: &ZKeywords) -> Result<(), (ZKeyword, &'static str)> {
+        if let Some(refused) = z.refusal(ZKeyword::in_script_link) {
+            return Err(refused);
+        }
+        for kw in z.iter() {
+            match kw {
+                ZKeyword::ExecStack(on) => self.exec_stack = Some(on),
+                ZKeyword::PackRelativeRelocs(on) => self.pack_relative_relocs = on,
+                ZKeyword::MaxPageSize(n) => self.max_page_size = n,
+                ZKeyword::CommonPageSize(n) => self.common_page_size = Some(n),
+                ZKeyword::Text(on) => self.text = on,
+                ZKeyword::Muldefs => self.allow_multiple_definition = true,
+                _ => {}
+            }
+        }
+        (self.dynamic_flags, self.dynamic_flags_1) = dynamic::z_keyword_flags(z);
+        Ok(())
     }
 }
 

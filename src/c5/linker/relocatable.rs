@@ -828,6 +828,8 @@ pub struct RelinkOptions {
     /// (`Some(true)`): ensure a `.note.GNU-stack` marker section with
     /// the requested execute flag, as GNU ld does.
     pub gnu_stack: Option<bool>,
+    /// `-z muldefs`: the first of two definitions of a symbol stands.
+    pub allow_multiple_definition: bool,
     /// Machine constraint from `-m <emulation>`.
     pub expect_machine: Option<u16>,
 }
@@ -1062,7 +1064,7 @@ fn link_relocatable_inner(
         build_output_sections(objs, script, &dropped, opts, exec_fill);
     push_side_sections(&mut outsecs, objs, machine, opts, &side, exec_fill)?;
     let placed = placement_lookup(&outsecs);
-    let globals = resolve_globals(objs, &dropped, &outsecs)?;
+    let globals = resolve_globals(objs, &dropped, &outsecs, opts.allow_multiple_definition)?;
     let symtab = build_symtab(objs, opts, &outsecs, &placed, &globals)?;
     let out_relocs = rewrite_relocs(objs, &outsecs, &placed, &symtab)?;
     let out_groups = kept_output_groups(objs, &kept_groups, &group_outsec);
@@ -1373,6 +1375,7 @@ fn resolve_globals(
     objs: &[EtRel],
     dropped: &HashSet<SecId>,
     outsecs: &[OutSec],
+    allow_multiple_definition: bool,
 ) -> Result<Globals, C5Error> {
     let mut order: Vec<String> = Vec::new();
     let mut globals: HashMap<String, GState> = HashMap::new();
@@ -1460,7 +1463,7 @@ fn resolve_globals(
                     EtSymRef::Undef | EtSymRef::Common => GState::Def { obj, sym: ds, weak },
                     _ => {
                         let new_weak = sym.binding == STB_WEAK;
-                        if !weak && !new_weak {
+                        if !weak && !new_weak && !allow_multiple_definition {
                             return Err(link_err(
                                 Code::DUPLICATE_SYMBOL,
                                 MODULE,

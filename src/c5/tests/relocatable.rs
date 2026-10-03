@@ -105,6 +105,30 @@ fn merge(objs: &[EtRel], opts: &RelinkOptions) -> EtRel {
     parse_et_rel(&bytes, "merged").expect("round-trip parse")
 }
 
+/// `-z muldefs` in a relocatable link: the first of two definitions
+/// stands, where without it the link fails.
+#[test]
+fn muldefs_keeps_the_first_definition_in_a_relocatable_link() {
+    let a = compile_obj("int f(void) { return 1; }\n", "a.o");
+    let b = compile_obj("int f(void) { return 2; }\n", "b.o");
+    let pair = [a, b];
+    let err = link_relocatable(&pair, &RelinkOptions::default()).expect_err("two definitions");
+    assert!(
+        format!("{err}").contains("multiple definition of `f'"),
+        "{err}"
+    );
+    let merged = merge(
+        &pair,
+        &RelinkOptions {
+            allow_multiple_definition: true,
+            ..Default::default()
+        },
+    );
+    let defs: Vec<_> = merged.symbols.iter().filter(|s| s.name == "f").collect();
+    assert_eq!(defs.len(), 1, "one global f");
+    assert_eq!(defs[0].value, 0, "a.o's body opens the merged .text");
+}
+
 #[test]
 fn merges_sections_symbols_and_relocs() {
     let a = compile_obj(

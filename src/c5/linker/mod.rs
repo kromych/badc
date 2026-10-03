@@ -152,4 +152,4 @@ pub use synth_build::{
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use target_libc::{TargetCLibrary, library_bindings};
-pub use zkeyword::{ZKeyword, parse_z_keyword, resolve_exec_stack};
+pub use zkeyword::{ZKeyword, ZKeywords, ZSupport, parse_z_keyword, resolve_exec_stack};

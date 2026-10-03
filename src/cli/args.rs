@@ -205,26 +205,15 @@ pub(crate) struct Link {
     pub(crate) script_path: Option<PathBuf>,
     pub(crate) orphan_handling: badc::OrphanHandling,
     pub(crate) build_id_sha1: bool,
-    pub(crate) max_page_size: Option<u64>,
-    pub(crate) pack_relative_relocs: bool,
     pub(crate) apply_dynamic_relocs: bool,
     pub(crate) strip_debug: bool,
     pub(crate) discard_locals: bool,
     pub(crate) discard_none: bool,
     pub(crate) fix_cortex_a53_843419: bool,
-    /// The last of `-z execstack` / `noexecstack`, `-z relro` / `norelro`,
-    /// `now` / `lazy`, `text` / `notext` and `defs` / `undefs`
-    /// (`--no-undefined` is `defs`), and of `--warn-execstack` /
-    /// `--no-warn-execstack`.
-    pub(crate) exec_stack: Option<bool>,
+    /// The `-z` keywords, `--no-undefined` as `-z defs`.
+    pub(crate) z: badc::ZKeywords,
+    /// The last of `--warn-execstack` / `--no-warn-execstack`.
     pub(crate) warn_execstack: Option<bool>,
-    pub(crate) relro: Option<bool>,
-    pub(crate) now: Option<bool>,
-    pub(crate) text: Option<bool>,
-    pub(crate) defs: Option<bool>,
-    pub(crate) muldefs: bool,
-    /// A `-z` keyword no badc link implements, the first one given.
-    pub(crate) z_unsupported: Option<badc::ZKeyword>,
     /// `--fatal-warnings`: a link warning fails the link.
     pub(crate) fatal_warnings: bool,
     /// `-Bsymbolic`: a shared library binds its references to its own
@@ -292,21 +281,13 @@ impl Default for Link {
             script_path: None,
             orphan_handling: badc::OrphanHandling::Place,
             build_id_sha1: false,
-            max_page_size: None,
-            pack_relative_relocs: false,
             apply_dynamic_relocs: true,
             strip_debug: false,
             discard_locals: false,
             discard_none: false,
             fix_cortex_a53_843419: false,
-            exec_stack: None,
+            z: badc::ZKeywords::default(),
             warn_execstack: None,
-            relro: None,
-            now: None,
-            text: None,
-            defs: None,
-            muldefs: false,
-            z_unsupported: None,
             fatal_warnings: false,
             symbolic: false,
             emit_relocs: false,
@@ -398,8 +379,8 @@ impl Cli {
             discard_temporaries: link.discard_locals,
             elf: badc::ElfImageOptions {
                 build_id: link.build_id_sha1,
-                max_page_size: link.max_page_size,
-                pack_relative_relocs: link.pack_relative_relocs,
+                max_page_size: link.z.max_page_size(),
+                pack_relative_relocs: link.z.pack_relative_relocs(),
                 no_apply_dynamic_relocs: !link.apply_dynamic_relocs,
                 exec_stack,
             },
@@ -408,50 +389,30 @@ impl Cli {
 
     /// The first link option the link does not implement, by name, with
     /// what stands in its way: a `-T` link's engine or the image writer
-    /// of the link without one. What each takes by construction passes:
-    /// the writer's image is relro, bound at load, free of text
-    /// relocations (a link that would need one fails naming it) and keeps
+    /// of the link without one. The `-z` keywords take the answers of the
+    /// table the `--ld` persona shares ([`badc::ZKeyword::in_script_link`],
+    /// [`badc::ZKeyword::in_hosted_link`]). The image without -T keeps
     /// every local symbol of its inputs (`--discard-none`), and a shared
     /// library it writes binds its own references directly.
     pub(crate) fn link_refusal(&self, script: bool) -> Option<(String, &'static str)> {
         let link = &self.link;
         let elf = self.target.binary_format() == badc::BinaryFormat::Elf;
         let shared = self.mode == Mode::SharedLibrary;
-        let z = |kw: badc::ZKeyword| format!("-z {}", kw.name());
-        let elf_only = link.build_id_sha1
-            || link.max_page_size.is_some()
-            || link.pack_relative_relocs
-            || !link.apply_dynamic_relocs
-            || link.exec_stack.is_some()
-            || link.relro.is_some()
-            || link.now.is_some()
-            || link.text.is_some();
-        let refusal = if let Some(kw) = link.z_unsupported {
-            (z(kw), "it is not implemented")
-        } else if link.muldefs {
-            (
-                z(badc::ZKeyword::Muldefs),
-                "a symbol defined twice is an error",
-            )
-        } else if link.now == Some(false) {
-            (
-                z(badc::ZKeyword::Now(false)),
-                "every import binds when the image is loaded",
-            )
-        } else if !elf && elf_only {
+        let elf_only =
+            link.build_id_sha1 || !link.apply_dynamic_relocs || link.z.iter().next().is_some();
+        let z_refusal = link.z.refusal(|kw| {
+            if script {
+                kw.in_script_link()
+            } else {
+                kw.in_hosted_link(shared)
+            }
+        });
+        let refusal = if !elf && elf_only {
             (String::from("-z / --build-id"), "it shapes an ELF image")
+        } else if let Some((kw, why)) = z_refusal {
+            (format!("-z {}", kw.name()), why)
         } else if script {
-            if link.relro == Some(true) {
-                (
-                    z(badc::ZKeyword::Relro(true)),
-                    "a -T link writes no PT_GNU_RELRO",
-                )
-            } else if link.defs == Some(false) {
-                (
-                    z(badc::ZKeyword::Defs(false)),
-                    "a -T link refuses an unresolved reference",
-                )
-            } else if link.export_all || link.export_data {
+            if link.export_all || link.export_data {
                 (
                     String::from("--export-all / --export-data"),
                     "it is not implemented under -T",
@@ -471,26 +432,11 @@ impl Cli {
                 String::from("--orphan-handling"),
                 "without -T every input section is placed by its name",
             )
-        } else if link.relro == Some(false) {
-            (
-                z(badc::ZKeyword::Relro(false)),
-                "the image's relocated read-only data is read-only once relocated",
-            )
-        } else if link.defs == Some(false) && !shared {
-            (
-                z(badc::ZKeyword::Defs(false)),
-                "an executable's unresolved reference is an error",
-            )
         } else if link.fix_cortex_a53_843419 {
             // TODO: the erratum scan on the link without -T.
             (
                 String::from("--fix-cortex-a53-843419"),
                 "the erratum veneers are generated under -T",
-            )
-        } else if link.max_page_size.is_some_and(|n| n > 0x40_0000) {
-            (
-                String::from("-z max-page-size"),
-                "the image's first load sits at 0x400000, which a larger page does not divide",
             )
         } else {
             return None;
@@ -1773,21 +1719,10 @@ impl Parser {
             }
             "-z" => {
                 let kw = operand(iter, "badc: error: -z requires a keyword")?;
-                let kw = badc::parse_z_keyword(&kw)
-                    .map_err(|e| ParseError::diag(format!("badc: error: {e}")))?;
-                match kw {
-                    badc::ZKeyword::MaxPageSize(n) => link.max_page_size = Some(n),
-                    badc::ZKeyword::PackRelativeRelocs(on) => link.pack_relative_relocs = on,
-                    badc::ZKeyword::ExecStack(on) => link.exec_stack = Some(on),
-                    badc::ZKeyword::Relro(on) => link.relro = Some(on),
-                    badc::ZKeyword::Now(on) => link.now = Some(on),
-                    badc::ZKeyword::Text(on) => link.text = Some(on),
-                    badc::ZKeyword::Defs(on) => link.defs = Some(on),
-                    badc::ZKeyword::Muldefs => link.muldefs = true,
-                    other => {
-                        link.z_unsupported.get_or_insert(other);
-                    }
-                }
+                link.z.push(
+                    badc::parse_z_keyword(&kw)
+                        .map_err(|e| ParseError::diag(format!("badc: error: {e}")))?,
+                );
             }
             "--emit-relocs" => link.emit_relocs = true,
             "--export-all" => link.export_all = true,
@@ -1799,7 +1734,7 @@ impl Parser {
             "--warn-execstack" => link.warn_execstack = Some(true),
             "--no-warn-execstack" => link.warn_execstack = Some(false),
             "--no-apply-dynamic-relocs" => link.apply_dynamic_relocs = false,
-            "--no-undefined" => link.defs = Some(true),
+            "--no-undefined" => link.z.push(badc::ZKeyword::Defs(true)),
             "--fatal-warnings" => link.fatal_warnings = true,
             "-Bsymbolic" => link.symbolic = true,
             // Properties every badc image has: little-endian, no
@@ -3354,7 +3289,7 @@ mod tests {
     #[test]
     fn linker_arguments_reach_the_link_options() {
         let cli = parse(&[X64, "-Wl,-z,max-page-size=65536,-Map=out.map", "a.c"]);
-        assert_eq!(cli.link.max_page_size, Some(65536));
+        assert_eq!(cli.link.z.max_page_size(), Some(65536));
         assert_eq!(cli.link.map_path, Some(PathBuf::from("out.map")));
         let cli = parse(&[
             X64,
@@ -3364,9 +3299,9 @@ mod tests {
             "max-page-size=4096",
             "a.c",
         ]);
-        assert_eq!(cli.link.max_page_size, Some(4096));
+        assert_eq!(cli.link.z.max_page_size(), Some(4096));
         let cli = parse(&[X64, "-Wl,-z", "-Wl,max-page-size=8192", "a.c"]);
-        assert_eq!(cli.link.max_page_size, Some(8192));
+        assert_eq!(cli.link.z.max_page_size(), Some(8192));
         let cli = parse(&[X64, "-Wl,-O1,--as-needed,-no-pie", "a.c"]);
         assert!(
             !cli.front.optimize,
@@ -3563,8 +3498,8 @@ mod tests {
         assert_eq!(cli.link.script_path.unwrap(), PathBuf::from("link.ld"));
         assert_eq!(cli.link.orphan_handling, badc::OrphanHandling::Warn);
         assert!(cli.link.build_id_sha1);
-        assert_eq!(cli.link.max_page_size, Some(0x1000));
-        assert!(cli.link.pack_relative_relocs);
+        assert_eq!(cli.link.z.max_page_size(), Some(0x1000));
+        assert!(cli.link.z.pack_relative_relocs());
         assert!(cli.link.emit_relocs && cli.link.export_all && cli.link.export_data);
         assert!(
             !cli.link.discard_locals && cli.link.discard_none,

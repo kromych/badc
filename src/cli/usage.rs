@@ -118,8 +118,11 @@ Multi-TU knobs:
                            -Bsymbolic and --fatal-warnings; one without
                            -T also -z relro and, for --shared, -z
                            undefs; one with -T --orphan-handling=, -z
-                           norelro and, for AArch64,
-                           --fix-cortex-a53-843419. Without -z
+                           norelro, -z muldefs, -z common-page-size=,
+                           -z noseparate-code, the DT_FLAGS_1 keywords
+                           (-z nodelete, -z origin, ...) and, for
+                           AArch64, --fix-cortex-a53-843419, as the
+                           --ld persona's final link does. Without -z
                            [no]execstack an input whose
                            .note.GNU-stack is executable makes the
                            stack executable, as in GNU ld. --build-id

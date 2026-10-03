@@ -879,7 +879,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
     // A shared library may reference symbols the host executable
     // supplies at `dlopen` time; let an unresolved global become a
     // load-time import instead of a link error, unless `--no-undefined`.
-    let allow_undefined = cli.mode == Mode::SharedLibrary && cli.link.defs != Some(true);
+    let allow_undefined = cli.mode == Mode::SharedLibrary && cli.link.z.defs() != Some(true);
     let mut merged = match badc::link_native_objects_with_shared_libs(
         image.objs,
         allow_undefined,
@@ -894,7 +894,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
     stats.mark("merge");
     warn_freestanding_imports(cli, &merged);
     let (exec_stack, stack_warning) = badc::resolve_exec_stack(
-        cli.link.exec_stack,
+        cli.link.z.exec_stack(),
         merged.exec_stack_input.as_deref(),
         cli.link.warn_execstack,
     );

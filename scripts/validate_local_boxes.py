@@ -18,7 +18,9 @@ Each lane:
   2. Build release with `cargo build --release --locked`.
   3. Run `cargo test --release` (all test targets), then `cargo test`, the
      debug build CI's test jobs run on every platform: `debug_assert!`
-     invariants exist only there.
+     invariants exist only there. Each runs through `scripts/cargo_test.py`,
+     which also fails a test binary that ends before reporting every test
+     it announced.
   4. On Linux lanes, rerun the lib suite under the register-pressure caps
      (`BADC_MAX_GPR=2 BADC_MAX_FPR=2`, `--lib --features "codegen_test full"`),
      the same scope as CI's pressure matrix, which runs on Linux only.
@@ -525,13 +527,15 @@ def posix_steps(
         # Linux-gated path passes every local check and fails in CI. Debug
         # profile, matching the `fmt + clippy` job.
         steps.append("step cargo clippy --all-targets --features full -- -D warnings")
+    # cargo passes a test binary that exits 0 before its last test, which a
+    # test running C code in-process can make it do; cargo_test.py fails it.
     steps += [
         "step cargo build --release --locked --features full",
-        "step cargo test --release --features full",
+        "step python3 scripts/cargo_test.py --release --features full",
         # CI's test jobs build debug on every platform, and a
         # `debug_assert!` holds only there: a violated invariant passes the
         # release run and fails CI (c13fed07f reached CI that way).
-        "step cargo test --features full",
+        "step python3 scripts/cargo_test.py --features full",
     ]
     if box.kind == "linux":
         # CI additionally runs the suite under register-pressure caps
@@ -542,8 +546,8 @@ def posix_steps(
         # optimization-strength property does not hold under a 2-register
         # bank. CI's pressure matrix is Linux-only, so this lane is too.
         steps.append(
-            "step env BADC_MAX_GPR=2 BADC_MAX_FPR=2 "
-            'cargo test --release --lib --features "codegen_test full"'
+            "step env BADC_MAX_GPR=2 BADC_MAX_FPR=2 python3 scripts/cargo_test.py "
+            '--release --lib --features "codegen_test full"'
         )
     if demos:
         steps.append("step " + demo_command(box, jobs, "python3"))
@@ -597,8 +601,8 @@ def windows_inner(box: Box, demos: bool, jobs: int) -> str:
     remote_path = box.remote_path.replace("/", "\\")
     named = [
         ("cargo build", "cargo build --release --locked --features full"),
-        ("cargo test", "cargo test --release --features full"),
-        ("cargo test (debug)", "cargo test --features full"),
+        ("cargo test", "python scripts/cargo_test.py --release --features full"),
+        ("cargo test (debug)", "python scripts/cargo_test.py --features full"),
     ]
     if demos:
         named.append(("demo phase", demo_command(box, jobs, "python")))
@@ -714,6 +718,12 @@ def self_test() -> int:
     assert any(s.startswith(f'echo "{CORPUS_MARK} kernel ') for s in kernel), kernel
     assert KERNEL_RELEASE == linux_setup.DEFCONFIG_KERNEL[0]
 
+    # Every lane's tests run through scripts/cargo_test.py, which fails a
+    # binary that ends before reporting the tests it announced.
+    for box in boxes[0], boxes[2]:
+        for step in posix_steps(box, True, True, True, DEMO_JOBS):
+            assert "cargo test" not in step, step
+    assert "cargo test --" not in windows_inner(boxes[1], True, DEMO_JOBS)
     win = Box("win", "h", "R:/src/compilers/badc/", "windows")
     inner = windows_inner(win, True, DEMO_JOBS)
     assert inner.startswith("set GITHUB_TOKEN= & set /p GITHUB_TOKEN= & ")

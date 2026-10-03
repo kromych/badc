@@ -74,6 +74,7 @@ jobs:
           python3 demos/kernel/smoke.py --self-test
           python3 scripts/snapshots.py --self-test
           python3 scripts/validate_local_boxes.py --self-test
+          python3 scripts/cargo_test.py --self-test
           python3 tests/perf/run.py --self-test
           python3 scripts/perf_publish.py --self-test
           python3 scripts/perf_backfill.py --self-test
@@ -247,7 +248,10 @@ jobs:
         # respective triples, so the other runners compile them out
         # and only verify the VM, lexer, parser, codegen-as-bytecode,
         # and optimizer paths.
-        run: cargo test --locked --features full --verbose
+        # scripts/cargo_test.py fails a test binary that ends before
+        # reporting every test it announced, which cargo passes when the
+        # binary exits 0.
+        run: python scripts/cargo_test.py --locked --features full --verbose
       - name: compare fib vs libc_basic ELFs (ubuntu-latest only, on failure)
         # Real-Intel-only crash inside libc-heavy fixtures; QEMU and
         # macOS/aarch64 lanes pass identical bytes. The perf-table
@@ -934,7 +938,7 @@ jobs:
       - name: build codegen_test binary
         run: cargo build --release --locked --features "codegen_test full"
       - name: cargo test under pressure
-        run: cargo test --release --locked --features "codegen_test full" --lib
+        run: python scripts/cargo_test.py --release --locked --features "codegen_test full" --lib
       - name: demos under pressure
         run: |
           set -e

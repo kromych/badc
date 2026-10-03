@@ -51,12 +51,18 @@ jobs:
         with:
           key: release-${{ matrix.target }}
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
       # Re-run the test suite on each target -- a release artifact that
       # fails its own tests is worse than no artifact at all. Tests run
       # in debug for speed; release flags don't change observable
-      # behavior in this codebase.
+      # behavior in this codebase. scripts/cargo_test.py fails a test
+      # binary that ends before reporting every test it announced, which
+      # cargo passes when the binary exits 0.
       - name: cargo test
-        run: cargo test --locked --features full --verbose
+        run: python scripts/cargo_test.py --locked --features full --verbose
 
       # `--features full` is required: the `badc` binary declares
       # `required-features = ["std", "full"]`, so without it the bin

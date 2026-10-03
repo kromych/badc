@@ -19,7 +19,7 @@ impl<'a> Walker<'a> {
         bf: BitfieldDesc,
     ) -> Result<AsmSeg, WalkError> {
         let seg = self.access_seg(id, ty)?;
-        if seg != AsmSeg::None && bf.unit_size == 16 {
+        if seg != AsmSeg::None && bf.is_wide_unit() {
             return Err(WalkError::UnsupportedExpr {
                 id,
                 kind: "16-byte bitfield unit in a named address space",
@@ -41,7 +41,7 @@ impl<'a> Walker<'a> {
         vol: bool,
         align: u8,
     ) -> ValueId {
-        if bf.unit_size == 16 {
+        if bf.is_wide_unit() {
             let v = self.bitfield_extract_128(b, addr, bf, vol);
             return self.bitfield_value_form(b, bf, v);
         }
@@ -67,7 +67,7 @@ impl<'a> Walker<'a> {
     ) -> ValueId {
         let w = bf.bit_width as i64;
         let (mask_lo, mask_hi) = bitfield_mask_halves(bf.bit_width, 0);
-        if bf.unit_size == 16 {
+        if bf.is_wide_unit() {
             let src = if bf.is_wide_value() {
                 self.int128_load_vol(b, value, false)
             } else {
@@ -134,7 +134,7 @@ impl<'a> Walker<'a> {
         bf: BitfieldDesc,
         vol: bool,
     ) -> Halves {
-        let unit = self.int128_load_vol(b, addr, vol);
+        let unit = self.load_wide_unit(b, addr, bf, vol);
         let v = Self::int128_shift_const(b, BinOp::Shru, unit, bf.bit_offset as i64);
         let v = Self::int128_and_imm(b, v, bitfield_mask_halves(bf.bit_width, 0));
         self.bitfield_sign_extend_128(b, bf, v)
@@ -152,13 +152,37 @@ impl<'a> Walker<'a> {
     ) {
         let placed = Self::int128_shift_const(b, BinOp::Shl, masked, bf.bit_offset as i64);
         let (keep_lo, keep_hi) = bitfield_mask_halves(bf.bit_width, bf.bit_offset);
-        let old = self.int128_load_vol(b, addr, vol);
+        let old = self.load_wide_unit(b, addr, bf, vol);
         let cleared = Self::int128_and_imm(b, old, (!keep_lo, !keep_hi));
         let merged = (
             b.binop(BinOp::Or, cleared.0, placed.0),
             b.binop(BinOp::Or, cleared.1, placed.1),
         );
-        self.int128_store_vol(b, addr, merged, vol);
+        if bf.unit_size == 16 {
+            self.int128_store_vol(b, addr, merged, vol);
+        } else {
+            store_bytes(b, addr, 0, merged.0, 8, AsmSeg::None, vol, 0);
+            store_bytes(b, addr, 8, merged.1, bf.unit_size - 8, AsmSeg::None, vol, 0);
+        }
+    }
+
+    /// A storage unit wider than 8 bytes as its two halves: the 16 bytes
+    /// of a whole unit, or the low 8 and the 1 to 7 above them of a packed
+    /// field's unit, which no access reaches past (C99 6.7.2.1p11).
+    fn load_wide_unit(
+        &mut self,
+        b: &mut SsaBuilder,
+        addr: ValueId,
+        bf: BitfieldDesc,
+        vol: bool,
+    ) -> Halves {
+        if bf.unit_size == 16 {
+            return self.int128_load_vol(b, addr, vol);
+        }
+        (
+            load_bytes(b, addr, 0, 8, AsmSeg::None, vol, 0),
+            load_bytes(b, addr, 8, bf.unit_size - 8, AsmSeg::None, vol, 0),
+        )
     }
 
     /// Sign-extend a right-aligned signed field's value through all 128
@@ -202,7 +226,7 @@ impl<'a> Walker<'a> {
             Expr::Member {
                 bitfield: Some(bf),
                 ..
-            } if bf.unit_size == 16
+            } if bf.is_wide_unit()
         )
     }
 
@@ -233,7 +257,7 @@ impl<'a> Walker<'a> {
             return Ok(None);
         };
         let (bf, obj, field_off) = (*bf, *obj, *field_off);
-        if bf.unit_size != 16 {
+        if !bf.is_wide_unit() {
             return Ok(None);
         }
         let base = self.walk_expr_rvalue(b, obj)?;
@@ -348,9 +372,9 @@ fn unit_piece(b: &mut SsaBuilder, addr: ValueId, align: u8, off: i64, width: u32
     (at, bound)
 }
 
-/// The bitfield's storage unit at `addr`, zero-extended. The unsigned load
-/// kinds keep the unit's bits at their storage positions, so the extraction's
-/// shift and mask see no sign extension from above.
+/// The bitfield's storage unit of at most 8 bytes at `addr`, zero-extended.
+/// The unsigned load kinds keep the unit's bits at their storage positions,
+/// so the extraction's shift and mask see no sign extension from above.
 fn load_unit(
     b: &mut SsaBuilder,
     addr: ValueId,
@@ -359,19 +383,7 @@ fn load_unit(
     vol: bool,
     align: u8,
 ) -> ValueId {
-    let mut unit = None;
-    for (off, width) in unit_pieces(bf.unit_size) {
-        let (at, bound) = unit_piece(b, addr, align, off, width);
-        let mut piece = load_place(b, at, load_kind_for_width(width), seg, vol, bound);
-        if off > 0 {
-            piece = b.binop_imm(BinOp::Shl, piece, 8 * off);
-        }
-        unit = Some(match unit {
-            Some(low) => b.binop(BinOp::Or, low, piece),
-            None => piece,
-        });
-    }
-    unit.expect("a storage unit has a piece")
+    load_bytes(b, addr, 0, bf.unit_size, seg, vol, align)
 }
 
 /// Store the low `bf.unit_size` bytes of `unit` at `addr`, in the pieces
@@ -385,13 +397,63 @@ fn store_unit(
     vol: bool,
     align: u8,
 ) {
-    for (off, width) in unit_pieces(bf.unit_size) {
-        let (at, bound) = unit_piece(b, addr, align, off, width);
+    store_bytes(b, addr, 0, unit, bf.unit_size, seg, vol, align);
+}
+
+/// The `size` bytes (1 to 8) at `addr + at`, zero-extended, read in their
+/// [`unit_pieces`]; `align` bounds the access at `addr`.
+fn load_bytes(
+    b: &mut SsaBuilder,
+    addr: ValueId,
+    at: i64,
+    size: u8,
+    seg: AsmSeg,
+    vol: bool,
+    align: u8,
+) -> ValueId {
+    let mut bytes = None;
+    for (off, width) in unit_pieces(size) {
+        let (place, bound) = unit_piece(b, addr, align, at + off, width);
+        let mut piece = load_place(b, place, load_kind_for_width(width), seg, vol, bound);
+        if off > 0 {
+            piece = b.binop_imm(BinOp::Shl, piece, 8 * off);
+        }
+        bytes = Some(match bytes {
+            Some(low) => b.binop(BinOp::Or, low, piece),
+            None => piece,
+        });
+    }
+    bytes.expect("a storage unit has a piece")
+}
+
+/// Store the low `size` bytes of `value` at `addr + at`, in the pieces
+/// [`load_bytes`] reads.
+#[allow(clippy::too_many_arguments)]
+fn store_bytes(
+    b: &mut SsaBuilder,
+    addr: ValueId,
+    at: i64,
+    value: ValueId,
+    size: u8,
+    seg: AsmSeg,
+    vol: bool,
+    align: u8,
+) {
+    for (off, width) in unit_pieces(size) {
+        let (place, bound) = unit_piece(b, addr, align, at + off, width);
         let piece = if off > 0 {
-            b.binop_imm(BinOp::Shru, unit, 8 * off)
+            b.binop_imm(BinOp::Shru, value, 8 * off)
         } else {
-            unit
+            value
         };
-        store_place(b, at, piece, store_kind_for_width(width), seg, vol, bound);
+        store_place(
+            b,
+            place,
+            piece,
+            store_kind_for_width(width),
+            seg,
+            vol,
+            bound,
+        );
     }
 }

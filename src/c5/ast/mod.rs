@@ -208,7 +208,8 @@ pub(crate) struct BitfieldDesc {
     /// Storage-unit width in bytes (1, 2, 4, 8, or 16). Drives the
     /// load / store opcode pair per C99 6.7.2.1p11; a 16-byte unit is
     /// accessed as the two halves of a 128-bit value, and the 3, 5, 6
-    /// or 7 bytes of a packed field in its power-of-two pieces.
+    /// or 7 bytes of a packed field in its power-of-two pieces, as are
+    /// the 9 to 15 of a packed one's high half.
     pub unit_size: u8,
     /// True when the declared field type is signed -- C99
     /// 6.7.2.1p10 says the read sign-extends through the top of
@@ -223,11 +224,17 @@ pub(crate) struct BitfieldDesc {
 }
 
 impl BitfieldDesc {
+    /// True when the storage unit is wider than 8 bytes, accessed as the
+    /// two halves of a 128-bit value.
+    pub(crate) fn is_wide_unit(&self) -> bool {
+        self.unit_size > 8
+    }
+
     /// True when the access yields a 128-bit value: the field is stored
-    /// in a 16-byte unit and is too wide for the integer promotions to
-    /// narrow it (see [`bitfield_keeps_declared_ty`]).
+    /// in a unit wider than 8 bytes and is too wide for the integer
+    /// promotions to narrow it (see [`bitfield_keeps_declared_ty`]).
     pub(crate) fn is_wide_value(&self) -> bool {
-        self.unit_size == 16 && bitfield_keeps_declared_ty(self.bit_width as u32)
+        self.is_wide_unit() && bitfield_keeps_declared_ty(self.bit_width as u32)
     }
 }
 

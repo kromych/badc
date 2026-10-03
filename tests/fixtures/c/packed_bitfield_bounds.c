@@ -28,6 +28,8 @@ struct u3 { unsigned char c : 4; int f : 20; };
 #pragma pack(pop)
 struct __attribute__((packed)) p3 { unsigned f : 23; };
 struct __attribute__((packed)) p7 { unsigned char c; unsigned long long f : 48; };
+/* 14 bytes: a 16-byte window does not fit, the unit is the 13 the field spans. */
+struct __attribute__((packed)) w14 { char c; __int128 f : 100; };
 
 /* The first byte past the usable bytes that end at an inaccessible page. */
 static unsigned char *page_end(void) {
@@ -57,12 +59,14 @@ int main(void) {
     struct u3 *e = (struct u3 *)(end - sizeof(struct u3));
     struct p3 *f = (struct p3 *)(end - sizeof(struct p3));
     struct p7 *g = (struct p7 *)(end - sizeof(struct p7));
-    static const unsigned sizes[2][7] = { { 4, 8, 8, 8, 5, 4, 9 }, { 3, 5, 6, 7, 3, 3, 7 } };
+    struct w14 *h = (struct w14 *)(end - sizeof(struct w14));
+    static const unsigned sizes[2][8] = {
+        { 4, 8, 8, 8, 5, 4, 9, 17 }, { 3, 5, 6, 7, 3, 3, 7, 14 } };
     const unsigned *size = sizes[GNU_LAYOUT];
     if (sizeof(struct t3) != size[0] || sizeof(struct t5) != size[1]
         || sizeof(struct t6) != size[2] || sizeof(struct t7) != size[3]
         || sizeof(struct u3) != size[4] || sizeof(struct p3) != size[5]
-        || sizeof(struct p7) != size[6])
+        || sizeof(struct p7) != size[6] || sizeof(struct w14) != size[7])
         return 2;
 
     /* Each store keeps the bits above the field: the last byte's top bits. */
@@ -108,5 +112,18 @@ int main(void) {
     if (g->f != 0xfedcba987654ULL || g->c != 0x5a || !LAST_IS(0xfe)) return 12;
     g->f >>= 4;
     if (g->f != 0x0fedcba98765ULL || g->c != 0x5a) return 13;
+
+    /* A field wider than 8 bytes in a unit of 9 to 15: two halves, the
+       high one in pieces. Bits 96..99 of the field and four padding bits
+       share the last byte. */
+    memset(end - 32, 0xff, 32);
+    h->c = 3;
+    h->f = (__int128)0x123456789LL << 64 | 0xfedcba9876543210ULL;
+    h->f += 1;
+    if (h->f != ((__int128)0x123456789LL << 64 | 0xfedcba9876543211ULL) || h->c != 3
+        || !LAST_IS(0xf1))
+        return 14;
+    h->f = -2;
+    if (h->f != -2 || h->c != 3 || !LAST_IS(0xff)) return 15;
     return 0;
 }

@@ -653,6 +653,36 @@ impl Compiler {
         actual_is_zero_literal: bool,
         actual_is_untyped_call: bool,
     ) -> Option<TypeMismatch> {
+        let zero = actual_is_zero_literal;
+        Self::type_mismatch(structs, declared, actual, zero, actual_is_untyped_call)
+            .or_else(|| Self::discarded_qualifiers(structs, declared, actual))
+    }
+
+    /// C99 6.5.16.1p1: the type a converted pointer points to keeps the
+    /// qualifiers of the type the original points to.
+    pub(super) fn discarded_qualifiers(
+        structs: &[super::StructDef],
+        declared: i64,
+        actual: i64,
+    ) -> Option<TypeMismatch> {
+        let reason = match super::types::discarded_pointee_quals(declared, actual, structs) {
+            (true, true) => "discards `const volatile` qualifiers from pointer target type",
+            (true, false) => "discards `const` qualifier from pointer target type",
+            (false, true) => "discards `volatile` qualifier from pointer target type",
+            (false, false) => return None,
+        };
+        TypeMismatch::warn(Code::DISCARDED_QUALIFIERS, reason)
+    }
+
+    /// The mismatch [`Self::type_warning_with_flags`] reports other than a
+    /// discarded qualifier of the pointed-to type.
+    fn type_mismatch(
+        structs: &[super::StructDef],
+        declared: i64,
+        actual: i64,
+        actual_is_zero_literal: bool,
+        actual_is_untyped_call: bool,
+    ) -> Option<TypeMismatch> {
         // C99 6.5.16.1p1: the target may add qualifiers, and a
         // qualifier on either object is not part of the comparison.
         let declared = unqualified_object_ty(declared);
@@ -864,7 +894,8 @@ impl Compiler {
             .find(|f| {
                 f.array_size == 0
                     && f.bit_width == 0
-                    && Self::type_warning(structs, f.ty, actual, actual_is_zero_literal).is_none()
+                    && Self::type_mismatch(structs, f.ty, actual, actual_is_zero_literal, false)
+                        .is_none()
             })
             .map(|f| f.ty)
     }

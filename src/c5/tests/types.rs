@@ -3718,6 +3718,104 @@ fn gnu_void_pointer_builtins_are_void_pointers() {
     assert!(msg.contains("(param=struct S, arg=void*)"), "{msg}");
 }
 
+/// C99 6.5.16.1p1: the type a converted pointer points to keeps every
+/// qualifier of the type the original points to. An initializer, an
+/// assignment, an argument or a return that drops a `const` or a
+/// `volatile` of the pointed-to type warns under B3031
+/// discarded-qualifiers, at whatever level the pointee sits (`int *const
+/// *` to `int **`), a pointer to a function pointer included; one that
+/// adds a qualifier is silent. The diagnostic is controllable.
+#[test]
+fn a_pointer_conversion_that_drops_a_pointee_qualifier_warns() {
+    use crate::diag::{Code, Config, Level};
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "struct T { int x; };\n\
+               void take(int *p);\n\
+               int *ret(const int *c) { return c; }\n\
+               void f(void) {\n\
+               \tconst int *c = 0; int *d = c;\n\
+               \tint **p = (int *const *)0;\n\
+               \tvoid (**q)(void) = (void (*const *)(void))0;\n\
+               \tvolatile int *vp = 0; int *e = vp;\n\
+               \tvoid *v = c;\n\
+               \tconst void *cv = 0; char *s = cv;\n\
+               \ttake(c);\n\
+               \td = c;\n\
+               \tconst struct T *ct = 0; struct T *t = ct;\n\
+               \tint *const *a1 = (int **)0; const int *a2 = d; const volatile void *a3 = d;\n\
+               \t(void)p; (void)q; (void)e; (void)v; (void)s; (void)t; (void)a1; (void)a2; (void)a3;\n\
+               }\n\
+               int main(void) { return 0; }\n";
+    let compile = |config: Config| {
+        let opts = CompileOptions::default().with_diag(config);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts).compile()
+    };
+    let program = compile(Config::new()).unwrap_or_else(|e| panic!("{e}"));
+    let warnings: alloc::vec::Vec<String> =
+        program.warnings.iter().map(|w| w.to_string()).collect();
+    for (line, text) in [
+        (
+            3,
+            "`const` qualifier from pointer target type in return (declared=int*",
+        ),
+        (
+            5,
+            "`const` qualifier from pointer target type in initializer (declared=int*",
+        ),
+        (6, "(declared=int**, init=int* const *)"),
+        (
+            7,
+            "(declared=`void (**)(void)`, init=`void (* const *)(void)`)",
+        ),
+        (
+            8,
+            "`volatile` qualifier from pointer target type in initializer",
+        ),
+        (9, "(declared=void*, init=const int*)"),
+        (10, "(declared=char*, init=const void*)"),
+        (11, "in argument 1 of `take` (param=int*, arg=const int*)"),
+        (12, "in assignment (lhs=int*, rhs=const int*)"),
+        (13, "(declared=struct T*, init=const struct T*)"),
+    ] {
+        let at = format!(":{line}: warning: discards ");
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains(&at) && w.contains(text) && w.contains("[B3031]")),
+            "line {line}: {warnings:?}"
+        );
+    }
+    assert_eq!(warnings.len(), 10, "{warnings:?}");
+    let mut config = Config::new();
+    config.set_level(Code::DISCARDED_QUALIFIERS, Level::Ignore);
+    let quiet = compile(config).unwrap_or_else(|e| panic!("{e}"));
+    assert!(quiet.warnings.is_empty(), "{:?}", quiet.warnings);
+    let mut config = Config::new();
+    config.set_level(Code::DISCARDED_QUALIFIERS, Level::Error);
+    let raised = compile(config).unwrap_or_else(|e| panic!("{e}"));
+    let levels: alloc::vec::Vec<Level> = raised.warnings.iter().map(|d| d.level).collect();
+    assert_eq!(levels, [Level::Error; 10], "{:?}", raised.warnings);
+    // The qualifiers of an array are its elements' (C99 6.7.3p8).
+    let src = "void g(const int (*cq)[3], int (*q)[3]) {\n\
+               \tint (*p)[3] = cq;\n\
+               \tconst int (*ok)[3] = q;\n\
+               \t(void)p; (void)ok;\n\
+               }\n\
+               const char (*row)[4] = (const char (*)[4])\"abcdefgh\" + 1;\n\
+               int main(void) { return 0; }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let warnings: alloc::vec::Vec<String> =
+        program.warnings.iter().map(|w| w.to_string()).collect();
+    assert!(
+        warnings.len() == 1
+            && warnings[0].contains(":2: warning: discards `const`")
+            && warnings[0].contains("(declared=int (*)[3], init=const int (*)[3])"),
+        "{warnings:?}"
+    );
+}
+
 /// The three character types are incompatible (C99 6.2.7p1), so a
 /// redeclaration that swaps one for another conflicts, on the target whose
 /// plain `char` shares the other's representation too, and a diagnostic

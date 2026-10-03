@@ -368,6 +368,40 @@ pub(crate) fn pointee_qual_bits(from: i64, to: i64) -> i64 {
     bits
 }
 
+/// The `const` and `volatile` of the type `ty` points to, an array's being
+/// its elements' (C99 6.7.3p8); `None` when `ty` is no pointer.
+fn pointee_quals(ty: i64, structs: &[super::StructDef]) -> Option<(bool, bool)> {
+    let depth = ptr_depth_of(ty);
+    if depth == 0 {
+        return None;
+    }
+    let array = (depth == 1 && is_struct_ty(ty))
+        .then(|| structs.get(struct_id_of(ty)).filter(|s| s.is_array))
+        .flatten();
+    let (ty, level) = match array {
+        Some(s) => (s.fields[0].ty, ptr_depth_of(s.fields[0].ty)),
+        None => (ty, depth - 1),
+    };
+    Some((
+        ty & const_level_bit(level) != 0,
+        ty & volatile_level_bit(level) != 0,
+    ))
+}
+
+/// Whether converting a pointer of type `from` to type `to` drops the
+/// `const`, and the `volatile`, of the pointed-to type, which C99
+/// 6.5.16.1p1 requires `to`'s pointee to keep.
+pub(crate) fn discarded_pointee_quals(
+    to: i64,
+    from: i64,
+    structs: &[super::StructDef],
+) -> (bool, bool) {
+    match (pointee_quals(to, structs), pointee_quals(from, structs)) {
+        (Some(t), Some(f)) => (f.0 && !t.0, f.1 && !t.1),
+        _ => (false, false),
+    }
+}
+
 /// The x86 named address space a type tag carries.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Segment {
@@ -547,24 +581,28 @@ fn level_quals(ty: i64, level: i64) -> &'static str {
     }
 }
 
+/// The `*` of each pointer level of `ty` in `levels`, each followed by the
+/// `const` and `volatile` that qualify that level.
+fn qualified_stars(ty: i64, levels: core::ops::Range<usize>) -> alloc::string::String {
+    let mut s = alloc::string::String::new();
+    for level in levels {
+        if s.ends_with("const") || s.ends_with("volatile") {
+            s.push(' ');
+        }
+        s.push('*');
+        let quals = level_quals(ty, level as i64);
+        if !quals.is_empty() {
+            s.push(' ');
+            s.push_str(quals.trim_end());
+        }
+    }
+    s
+}
+
 /// The `*` run of a spelled type: a `const` and a `volatile` after each
 /// level they qualify and the segment keyword at the level it applies to.
 fn ptr_suffix(ty: i64, depth: usize) -> alloc::string::String {
-    let stars = |levels: core::ops::Range<usize>| {
-        let mut s = alloc::string::String::new();
-        for level in levels {
-            if s.ends_with("const") || s.ends_with("volatile") {
-                s.push(' ');
-            }
-            s.push('*');
-            let quals = level_quals(ty, level as i64);
-            if !quals.is_empty() {
-                s.push(' ');
-                s.push_str(quals.trim_end());
-            }
-        }
-        s
-    };
+    let stars = |levels: core::ops::Range<usize>| qualified_stars(ty, levels);
     let Some(seg) = segment_of_ty(ty) else {
         return stars(1..depth + 1);
     };
@@ -693,13 +731,15 @@ pub(super) fn format_signature(
 
 /// Render function type `f` with `depth` pointer levels above it, whose
 /// innermost return type is `ret`: `double (*)(double)`, `int (*)()` for
-/// one with no prototype.
+/// one with no prototype. The outermost levels carry the qualifiers `tag`
+/// records for its top `depth` levels: `void (* const *)(void)`.
 pub(super) fn format_fn_type(
     ret: i64,
     f: &crate::c5::symbol::FnType,
-    depth: i64,
+    (tag, depth): (i64, i64),
     structs: &[super::StructDef],
 ) -> alloc::string::String {
+    let top = ptr_depth_of(tag) as usize;
     let mut decl = alloc::string::String::new();
     let mut level = Some((f, depth));
     while let Some((f, depth)) = level {
@@ -708,10 +748,16 @@ pub(super) fn format_fn_type(
         } else {
             alloc::string::String::new()
         };
+        let depth = depth as usize;
+        let stars = if decl.is_empty() && depth <= top {
+            qualified_stars(tag, top + 1 - depth..top + 1)
+        } else {
+            "*".repeat(depth)
+        };
         decl = if depth == 0 && decl.is_empty() {
             alloc::format!("({params})")
         } else {
-            alloc::format!("({}{decl})({params})", "*".repeat(depth as usize))
+            alloc::format!("({stars}{decl})({params})")
         };
         level = f.ret.as_ref().map(|(r, d)| (&**r, *d));
     }

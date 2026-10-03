@@ -2476,9 +2476,11 @@ impl Compiler {
         // A GNU `transparent_union` parameter accepts an argument compatible
         // with any member and takes it as that member.
         let tu_member = Self::transparent_union_member(&self.structs, want, self.ty, zero);
+        // A `Token::Sys` prototype spells no `const` of the library's.
         if tu_member.is_none()
             && let Some(m) =
                 Self::type_warning_with_flags(&self.structs, want, self.ty, zero, untyped)
+                    .filter(|m| !(callee.is_sys_call && m.code == Code::DISCARDED_QUALIFIERS))
         {
             let got = self.ty;
             let want_s = format_type(want, &self.structs);

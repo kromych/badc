@@ -186,6 +186,9 @@ catalog! {
     3030, "pointer-difference", [], Error, Hard,
         [], Live,
         "a subtraction of two pointers that do not point to qualified or unqualified versions of compatible types";
+    3031, "discarded-qualifiers", ["incompatible-pointer-types-discards-qualifiers"], Warning, Controllable,
+        [DEFAULT], Live,
+        "a pointer assigned, initialized, passed or returned as a pointer to a type without a `const` or `volatile` the original pointed-to type has";
     4001, "unsupported", [], Error, Hard,
         [], Live,
         "a well-formed construct badc does not implement";
@@ -410,6 +413,7 @@ impl Code {
     pub const CONTROLLING_EXPRESSION: Code = Code::new(3028);
     pub const INCOMPATIBLE_POINTER_TYPES: Code = Code::new(3029);
     pub const POINTER_DIFFERENCE: Code = Code::new(3030);
+    pub const DISCARDED_QUALIFIERS: Code = Code::new(3031);
     pub const UNSUPPORTED: Code = Code::new(4001);
     pub const LIMIT: Code = Code::new(4002);
     pub const INLINE: Code = Code::new(4003);

@@ -102,17 +102,30 @@ impl Compiler {
         }
         let tags =
             self.tags_compatible(unqualified_object_ty(to_ty), unqualified_object_ty(from_ty));
-        if tags && self.value_fn_types_compatible(Some((tf, *td)), Some((ff, *fd))) {
+        let compatible = tags && self.value_fn_types_compatible(Some((tf, *td)), Some((ff, *fd)));
+        let discarded = Self::discarded_qualifiers(&self.structs, to_ty, from_ty);
+        if compatible && discarded.is_none() {
             return Ok(());
         }
         let (context, to_name, from_name) = what;
         let to_s = self.fn_type_text(to_ty, tf, *td);
         let from_s = self.fn_type_text(from_ty, ff, *fd);
-        let text = alloc::format!(
-            "incompatible function pointer types in {context} \
-             ({to_name}=`{to_s}`, {from_name}=`{from_s}`)"
-        );
-        self.report_at(Code::INCOMPATIBLE_POINTER_TYPES, line, text)
+        let sides = alloc::format!("({to_name}=`{to_s}`, {from_name}=`{from_s}`)");
+        match discarded.filter(|_| compatible) {
+            Some(m) => {
+                self.warn_at(
+                    m.code,
+                    line,
+                    alloc::format!("{} in {context} {sides}", m.reason),
+                );
+                Ok(())
+            }
+            None => {
+                let text =
+                    alloc::format!("incompatible function pointer types in {context} {sides}");
+                self.report_at(Code::INCOMPATIBLE_POINTER_TYPES, line, text)
+            }
+        }
     }
 
     /// Record that expression `id` has function type `f`, `depth` pointer
@@ -263,7 +276,7 @@ impl Compiler {
             next = r.ret.as_ref();
         }
         let ret = (0..levels).fold(tag, |t, _| pointee_ty(t));
-        format_fn_type(ret, f, depth, &self.structs)
+        format_fn_type(ret, f, (tag, depth), &self.structs)
     }
 
     /// The function type a call through `callee` has: the callee's, when

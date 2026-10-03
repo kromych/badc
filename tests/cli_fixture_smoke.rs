@@ -969,13 +969,11 @@ fn strict_flex_arrays_level_selects_the_bounded_members() {
     let interp = |flags: &[&str]| -> Option<i32> {
         let mut cmd = Command::new(badc);
         cmd.arg("--interp").args(flags);
-        let out = cmd.arg(&src).output().expect("run badc --interp");
-        let stdout = String::from_utf8_lossy(&out.stdout);
-        let line = stdout.lines().find(|l| l.starts_with("exit("))?;
-        line.trim_start_matches("exit(")
-            .trim_end_matches(')')
-            .parse()
-            .ok()
+        cmd.arg(&src)
+            .output()
+            .expect("run badc --interp")
+            .status
+            .code()
     };
 
     let levels: [(&str, &[&str], i32); 6] = [
@@ -1010,7 +1008,8 @@ fn strict_flex_arrays_level_selects_the_bounded_members() {
 
 // The interpreter holds the standard streams and `errno` itself, where the
 // host would resolve the C library's data symbol or `__iob_func()` outside its
-// memory. Each write lands on its stream's descriptor, in order.
+// memory. Each write lands on its stream's descriptor, in order, and the
+// streams carry only what the program wrote.
 #[test]
 fn interp_writes_to_the_standard_streams() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -1026,8 +1025,35 @@ fn interp_writes_to_the_standard_streams() {
     );
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
-        "out: fputs\nout: puts\nout: x\nexit(0)\n"
+        "out: fputs\nout: puts\nout: x\n"
     );
+    assert_eq!(out.status.code(), Some(0));
+}
+
+// `--interp` exits with the program's status, as `--jit` and the native
+// image do, and appends nothing to what the program wrote, a last line it
+// left unterminated included.
+#[test]
+fn interp_exits_with_the_program_status() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-interp-status");
+    let src = dir.join("r3.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\nint main(void) { printf(\"partial\"); return 3; }\n",
+    )
+    .expect("write source");
+    let run = |mode: &str| {
+        Command::new(badc)
+            .arg(mode)
+            .arg(&src)
+            .output()
+            .expect("run badc")
+    };
+    let interp = run("--interp");
+    assert_eq!(interp.status.code(), Some(3));
+    assert_eq!(String::from_utf8_lossy(&interp.stdout), "partial");
+    assert_eq!(run("--jit").status.code(), Some(3));
 }
 
 // `--install <dir>` writes every embedded header under <dir>/include

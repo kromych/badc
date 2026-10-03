@@ -1566,13 +1566,15 @@ fn member_vector_size_attribute_types_the_member() {
 
 /// Whether an unnamed bit-field's declared type raises the aggregate's
 /// alignment is the ABI's (C99 6.7.2.1p11): AAPCS64 counts it, the x86_64
-/// psABI and Apple's arm64 ABI do not. The values are gcc 16's on Linux
-/// x86_64 and AArch64 and Apple clang 21's on macOS arm64.
+/// psABI and Apple's arm64 ABI do not, a zero-width one included, which
+/// still moves the next member to its type's boundary. The values are gcc
+/// 16's on Linux x86_64 and AArch64, clang 22's there too, and Apple clang
+/// 21's on macOS arm64.
 #[test]
 fn unnamed_bitfield_alignment_follows_the_target_abi() {
     use super::Vm;
     use crate::{Compiler, Target};
-    const SHAPES: [&str; 8] = [
+    const SHAPES: [&str; 17] = [
         "struct { char c; unsigned : 1; }",
         "struct { char c; int : 4; char d; }",
         "struct { char c; long long : 3; }",
@@ -1581,10 +1583,23 @@ fn unnamed_bitfield_alignment_follows_the_target_abi() {
         "struct { unsigned char a; unsigned int : 0; unsigned char b; } __attribute__((packed))",
         "union { char c; unsigned : 3; }",
         "struct { char c; unsigned x : 3; unsigned : 3; }",
+        "struct { char c; int : 0; }",
+        "struct { int : 0; char c; }",
+        "struct { char c; long long : 0; char d; }",
+        "struct { char c; short : 0; char d; }",
+        "struct { char c; int : 0; int : 3; char d; }",
+        "struct { char c; int b : 3; int : 0; char d; }",
+        "struct { short s; int : 0; char d; }",
+        "union { char c; int : 0; }",
+        "struct { char c; int : 0 __attribute__((aligned(8))); char d; }",
     ];
     // `sizeof * 100 + _Alignof` per shape.
-    const SYSV: [i64; 8] = [201, 301, 201, 501, 602, 501, 101, 404];
-    const AAPCS64: [i64; 8] = [404, 404, 808, 804, 808, 804, 404, 404];
+    const SYSV: [i64; 17] = [
+        201, 301, 201, 501, 602, 501, 101, 404, 401, 101, 901, 301, 601, 804, 602, 101, 901,
+    ];
+    const AAPCS64: [i64; 17] = [
+        404, 404, 808, 804, 808, 804, 404, 404, 404, 404, 1608, 402, 804, 804, 804, 404, 1608,
+    ];
     for (t, want) in [
         (Target::LinuxX64, SYSV),
         (Target::MacOSAarch64, SYSV),

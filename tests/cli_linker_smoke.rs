@@ -7350,6 +7350,60 @@ fn bitfield_attributes_cross_the_system_compiler_boundary() {
     );
 }
 
+// A zero-width unnamed bit-field moves the next member to its type's
+// boundary and raises the aggregate's alignment where the ABI counts an
+// unnamed bit-field (AAPCS64), not where it does not (System V x86_64, Apple
+// arm64), `#pragma pack` and `aligned` included: the layout, a returned
+// aggregate and an array's stride agree with the system compiler's.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn zero_width_bitfields_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping zero_width_bitfields_cross_the_system_compiler_boundary: no system C \
+             compiler"
+        );
+        return;
+    };
+    let common = "#include <stddef.h>\n\
+        typedef long long ll;\n\
+        struct z1 { char c; int : 0; char d; };\n\
+        struct z2 { char c; long long : 0; char d; };\n\
+        struct z3 { short s; int : 0; char d; };\n\
+        union z4 { char c; int : 0; };\n\
+        struct z5 { char c; int : 0 __attribute__((aligned(8))); char d; };\n\
+        #pragma pack(push, 2)\n\
+        struct z6 { char c; int : 0; char d; };\n\
+        #pragma pack(pop)\n\
+        struct w { char c; struct z1 a[2]; char e; };\n\
+        static ll layout(void)\n\
+        { ll s = sizeof(struct z1) | sizeof(struct z2) << 6 | sizeof(struct z3) << 12\n\
+            | sizeof(union z4) << 18 | sizeof(struct z5) << 24 | (ll)sizeof(struct z6) << 30\n\
+            | (ll)sizeof(struct w) << 36;\n\
+          ll a = _Alignof(struct z1) | _Alignof(struct z2) << 5 | _Alignof(struct z3) << 10\n\
+            | _Alignof(union z4) << 15 | _Alignof(struct z5) << 20 | _Alignof(struct z6) << 25;\n\
+          ll o = offsetof(struct z1, d) | offsetof(struct z2, d) << 5 | offsetof(struct z5, d) << 10\n\
+            | offsetof(struct z6, d) << 15 | offsetof(struct w, e) << 20;\n\
+          return s ^ a << 13 ^ o << 29; }\n\
+        static struct z2 make_z2(char c, char d) { struct z2 r = { c, d }; return r; }\n\
+        static int read_w(const struct w *p) { return p->c + p->a[1].d * 10 + p->e * 100; }\n\
+        struct fns { ll (*layout)(void); struct z2 (*make_z2)(char, char);\n\
+          int (*read_w)(const struct w *); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { struct z2 m = f->make_z2(3, 4);\n\
+          struct w v = { 1, { { 2, 3 }, { 4, 5 } }, 6 };\n\
+          if (f->layout() != layout()) return base + 1;\n\
+          if (m.c != 3 || m.d != 4) return base + 2;\n\
+          if (f->read_w(&v) != 1 + 50 + 600) return base + 3;\n\
+          return 0; }\n";
+    drive_across_the_system_compiler(
+        &cc,
+        "zero-width-bitfield-interop",
+        common,
+        "layout, make_z2, read_w",
+    );
+}
+
 #[cfg(windows)]
 #[test]
 fn bitfield_attributes_cross_the_windows_compiler_boundary() {

@@ -3305,12 +3305,12 @@ fn resolve_evex(
     // immediate-led shape takes its immediate there. This is what tells apart
     // the rows of a name the ISA gives both an immediate-controlled and an
     // index-vector-controlled member.
-    let lead_vec_or_mem = operands.first().is_some_and(&is_mem)
+    let lead_vec_or_mem = operands.first().is_some_and(is_mem)
         || matches!(operands.first(), Some(&AsmOpnd::Reg { reg, .. }) if reg >= XMM_BASE);
     let lead_imm = !lead_vec_or_mem;
     let evex_only_operand = match mnemonic {
         Mnemonic::VexShiftImm { var_opcode, .. } => {
-            let count_mem = operands.first().is_some_and(&is_mem);
+            let count_mem = operands.first().is_some_and(is_mem);
             operands.iter().any(is_mem) && !(var_opcode.is_some() && count_mem)
         }
         // The element broadcasts read a general register under EVEX only.

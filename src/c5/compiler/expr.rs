@@ -3338,6 +3338,7 @@ impl Compiler {
         let is_inc = self.lex.tk == Token::Inc;
         self.next()?;
         self.expr(Token::Inc as i64)?;
+        self.require_modifiable(self.ty, if is_inc { "increment" } else { "decrement" })?;
         if let Some((lvalue, ty)) = self.direct_inc_lvalue() {
             return self.emit_direct_inc_dec(lvalue, ty, is_inc, false);
         }
@@ -3657,6 +3658,7 @@ impl Compiler {
     }
 
     fn parse_assignment(&mut self, lhs_ty: i64) -> Result<(), C5Error> {
+        self.require_modifiable(lhs_ty, "assignment")?;
         let lhs_fn = self.ast_acc.and_then(|id| self.expr_fn(id));
         self.next()?;
         // A parenthesized bitfield lvalue (`(s.f) = v`, C99 6.5.1p5) arrives
@@ -3798,6 +3800,7 @@ impl Compiler {
     }
 
     fn parse_compound_assignment(&mut self, lhs_ty: i64) -> Result<(), C5Error> {
+        self.require_modifiable(lhs_ty, "assignment")?;
         // The lexer left the operator's token in `lex.ival`.
         let binop = self.lex.ival;
         let compound_lhs_ast = self.ast_acc;
@@ -4719,6 +4722,7 @@ impl Compiler {
     /// accumulator.
     fn parse_postfix_inc_dec(&mut self) -> Result<(), C5Error> {
         let is_inc = self.lex.tk == Token::Inc;
+        self.require_modifiable(self.ty, if is_inc { "increment" } else { "decrement" })?;
         if let Some((lvalue, ty)) = self.direct_inc_lvalue() {
             return self.emit_direct_inc_dec(lvalue, ty, is_inc, true);
         }
@@ -5086,6 +5090,16 @@ impl Compiler {
         // preserves the other bits of the storage unit, and an extraction.
         let is_bf_assign = self.lex.tk == Token::Assign;
         let is_bf_incdec = self.lex.tk == Token::Inc || self.lex.tk == Token::Dec;
+        if is_bf_assign || is_bf_incdec {
+            let what = if self.lex.tk == Token::Inc {
+                "increment"
+            } else if self.lex.tk == Token::Dec {
+                "decrement"
+            } else {
+                "assignment"
+            };
+            self.require_modifiable(field_ty, what)?;
+        }
         let bf_desc = super::super::ast::BitfieldDesc {
             bit_offset: field.bit_offset as u8,
             bit_width: field.bit_width as u8,

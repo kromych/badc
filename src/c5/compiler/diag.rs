@@ -672,6 +672,47 @@ impl Compiler {
         ))
     }
 
+    /// C99 6.5.16p2, 6.5.2.4p1, 6.5.3.1p1: the left operand of an
+    /// assignment operator, and the operand of `++` or `--`, is a
+    /// modifiable lvalue, which an object of const-qualified type is not,
+    /// nor a structure or union with a const member at any depth
+    /// (6.3.2.1p1). `what` names the operation.
+    pub(super) fn require_modifiable(&self, ty: i64, what: &str) -> Result<(), C5Error> {
+        let t = super::types::format_type(ty, &self.structs);
+        let text = if super::types::is_const_object_ty(ty) {
+            alloc::format!("{what} of a read-only object of type `{t}`")
+        } else if let Some(member) = self.const_member_of(ty) {
+            alloc::format!("{what} of a `{t}` object, whose member `{member}` is read-only")
+        } else {
+            return Ok(());
+        };
+        Err(self.compile_err(Code::MODIFIABLE_LVALUE, text))
+    }
+
+    /// The name of a const-qualified member of the structure or union `ty`,
+    /// at any depth of its members' aggregates.
+    fn const_member_of(&self, ty: i64) -> Option<alloc::string::String> {
+        if !is_struct_value_ty(ty) {
+            return None;
+        }
+        let def = self.structs.get(super::types::struct_id_of(ty))?;
+        if def.is_array || def.is_vector || def.name == "__int128" {
+            return None;
+        }
+        def.fields.iter().find_map(|f| {
+            if super::types::is_const_object_ty(f.ty) {
+                Some(f.name.clone())
+            } else {
+                let inner = self.const_member_of(f.ty)?;
+                Some(if f.name.is_empty() {
+                    inner
+                } else {
+                    alloc::format!("{}.{inner}", f.name)
+                })
+            }
+        })
+    }
+
     /// Reject binary `op`, or `op=` when `compound`, on these operand types.
     pub(super) fn require_operands(
         &self,

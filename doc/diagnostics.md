@@ -82,6 +82,7 @@ regenerates.
 | B3030 | `pointer-difference` | error | hard | - | a subtraction of two pointers that do not point to qualified or unqualified versions of compatible types |
 | B3031 | `discarded-qualifiers` | warning | controllable | default | a pointer assigned, initialized, passed or returned as a pointer to a type without a `const` or `volatile` the original pointed-to type has |
 | B3032 | `pointer-sign` | warning | controllable | default | a pointer assigned, initialized, passed or returned as a pointer to an integer type that differs from the one it points to only in signedness |
+| B3033 | `modifiable-lvalue` | error | hard | - | an assignment, compound assignment, `++` or `--` whose operand is const-qualified, or is a structure or union with a const member |
 | B4001 | `unsupported` | error | hard | - | a well-formed construct badc does not implement |
 | B4002 | `limit` | error | hard | - | a translation limit badc imposes: nesting depth, include depth, alignment |
 | B4003 | `inline` | ignore | controllable | - | a function the source declared `inline` that the optimizer left out of line |

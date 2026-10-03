@@ -192,6 +192,9 @@ catalog! {
     3032, "pointer-sign", [], Warning, Controllable,
         [DEFAULT], Live,
         "a pointer assigned, initialized, passed or returned as a pointer to an integer type that differs from the one it points to only in signedness";
+    3033, "modifiable-lvalue", [], Error, Hard,
+        [], Live,
+        "an assignment, compound assignment, `++` or `--` whose operand is const-qualified, or is a structure or union with a const member";
     4001, "unsupported", [], Error, Hard,
         [], Live,
         "a well-formed construct badc does not implement";
@@ -418,6 +421,7 @@ impl Code {
     pub const POINTER_DIFFERENCE: Code = Code::new(3030);
     pub const DISCARDED_QUALIFIERS: Code = Code::new(3031);
     pub const POINTER_SIGN: Code = Code::new(3032);
+    pub const MODIFIABLE_LVALUE: Code = Code::new(3033);
     pub const UNSUPPORTED: Code = Code::new(4001);
     pub const LIMIT: Code = Code::new(4002);
     pub const INLINE: Code = Code::new(4003);

@@ -5054,3 +5054,106 @@ fn an_incompatible_object_pointer_conversion_is_an_error() {
     let program = compile(quiet).unwrap_or_else(|e| panic!("{e}"));
     assert!(program.warnings.is_empty(), "{:?}", program.warnings);
 }
+
+/// C99 6.5.16p2, 6.5.2.4p1 and 6.5.3.1p1: the left operand of an
+/// assignment operator, and the operand of `++` and `--`, is a modifiable
+/// lvalue, which an object of const-qualified type is not, nor a structure
+/// or union with a const member at any depth (6.3.2.1p1). Each form is
+/// B3033 modifiable-lvalue, an error as gcc and clang give it: a const
+/// object, a const pointer, a target through a pointer to const, a const
+/// member, a member of a const object, a bit-field of either, and a whole
+/// aggregate with a const member.
+#[test]
+fn an_assignment_to_a_read_only_object_is_an_error() {
+    use crate::{Compiler, Target};
+    let pre = "struct S { int a; const int c; unsigned bf : 3; };\n\
+               struct W { struct S in; int b; };\n\
+               union U { const int c; int i; };\n\
+               int g;\n";
+    let compile = |body: &str| {
+        let src = format!("{pre}void f(void) {{ {body} }}\nint main(void) {{ return 0; }}\n");
+        Compiler::with_target(src, Target::LinuxX64).compile()
+    };
+    for (body, text) in [
+        (
+            "const int x = 1; x = 2;",
+            "assignment of a read-only object of type `const int`",
+        ),
+        (
+            "const int x = 1; x += 2;",
+            "assignment of a read-only object of type `const int`",
+        ),
+        (
+            "const int x = 1; x++;",
+            "increment of a read-only object of type `const int`",
+        ),
+        (
+            "const int x = 1; --x;",
+            "decrement of a read-only object of type `const int`",
+        ),
+        (
+            "int *const p = &g; p = 0;",
+            "assignment of a read-only object of type `int* const`",
+        ),
+        (
+            "int *const p = &g; p++;",
+            "increment of a read-only object of type `int* const`",
+        ),
+        (
+            "const int *cp = &g; *cp = 1;",
+            "assignment of a read-only object of type `const int`",
+        ),
+        (
+            "const int *cp = &g; (*cp)++;",
+            "increment of a read-only object of type `const int`",
+        ),
+        (
+            "struct S s = {0}; s.c = 1;",
+            "assignment of a read-only object of type `const int`",
+        ),
+        (
+            "struct S s = {0}, t = {0}; s = t;",
+            "assignment of a `struct S` object, whose member `c` is read-only",
+        ),
+        (
+            "struct W w = {0}, v = {0}; w = v;",
+            "assignment of a `struct W` object, whose member `in.c` is read-only",
+        ),
+        (
+            "union U u = {0}, w = {0}; u = w;",
+            "assignment of a `union U` object, whose member `c` is read-only",
+        ),
+        (
+            "const struct S cs = {0}; cs.a = 1;",
+            "assignment of a read-only object of type `const int`",
+        ),
+        (
+            "const struct S cs = {0}; cs.bf++;",
+            "increment of a read-only object of type `const unsigned int`",
+        ),
+        (
+            "struct S s = {0}; struct S *sp = &s; sp->c = 1;",
+            "assignment of a read-only object of type `const int`",
+        ),
+        (
+            "int a[2]; const int (*pa)[2] = &a; (*pa)[0] = 1;",
+            "assignment of a read-only object of type `const int`",
+        ),
+    ] {
+        let msg = compile(body)
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        assert!(
+            msg.contains(text) && msg.contains("[B3033]"),
+            "`{body}`: {msg}"
+        );
+    }
+    for body in [
+        "const int *cp = &g; cp = 0; cp++;",
+        "struct W w = {0}; w.in.a = 1; w.b = 2; w.in.bf++;",
+        "int x = 0; x = 1; x += 2; x++; --x;",
+    ] {
+        compile(body).unwrap_or_else(|e| panic!("`{body}`: {e}"));
+    }
+}

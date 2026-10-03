@@ -282,6 +282,8 @@ pub struct LdsOptions {
     pub strip_debug: bool,
     /// `-X`: drop compiler-temporary local symbols (`.L*`).
     pub discard_locals: bool,
+    /// `-x`: drop every local symbol of the inputs.
+    pub discard_all: bool,
     /// `--discard-none`: keep every local symbol.
     pub discard_none: bool,
     /// `-z pack-relative-relocs`: RELR-pack aligned relative entries.
@@ -361,6 +363,7 @@ impl Default for LdsOptions {
             build_id_sha1: false,
             strip_debug: false,
             discard_locals: false,
+            discard_all: false,
             discard_none: false,
             pack_relative_relocs: false,
             apply_dynamic_relocs: true,

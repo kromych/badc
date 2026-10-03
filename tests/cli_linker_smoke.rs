@@ -4661,6 +4661,138 @@ fn the_ld_persona_and_the_script_link_answer_every_z_keyword_alike() {
     }
 }
 
+/// The `--ld` persona's options besides `-z`, each taken as GNU ld takes
+/// it or refused by name: `--no-dynamic-linker` withdraws an interpreter
+/// asked for before it, `-Bsymbolic-functions` records no `DT_SYMBOLIC`,
+/// `-x` drops every local symbol of the inputs where `-X` drops only the
+/// temporaries, `--as-needed` withholds the dependency record of a library
+/// nothing binds to (a script's `AS_NEEDED` span leaves it as it found
+/// it), and `--add-needed` and an x86-64 `--fix-cortex-a53-843419` are
+/// refused.
+#[test]
+fn the_ld_personas_other_options_take_effect_or_are_refused() {
+    let dir = tempdir("ld-persona-options");
+    let src = write_source(
+        &dir,
+        "m.c",
+        "static int helper(int x) { return x + 1; }\nint main(void) { return helper(-1); }\n",
+    );
+    let m = dir.join("m.o");
+    run(
+        Command::new(badc())
+            .args(["-q", "--target=linux-x64", "-c"])
+            .arg(&src)
+            .arg("-o")
+            .arg(&m),
+        "compile",
+    );
+    for lib in ["u", "w"] {
+        let src = write_source(
+            &dir,
+            &format!("{lib}.c"),
+            "int unused(void) { return 1; }\n",
+        );
+        run(
+            Command::new(badc())
+                .args(["-q", "--target=linux-x64", "-shared"])
+                .arg(&src)
+                .arg("-o")
+                .arg(dir.join(format!("lib{lib}.so"))),
+            "build a shared library",
+        );
+    }
+    let span = write_source(&dir, "span.ld", "INPUT ( AS_NEEDED ( libu.so ) )\n");
+    let image = dir.join("out");
+    let ld = |args: &[&str]| {
+        let _ = std::fs::remove_file(&image);
+        Command::new(badc())
+            .args(["--ld", "-m", "elf_x86_64", "-e", "main", "-L"])
+            .arg(&dir)
+            .args(args)
+            .arg(&m)
+            .arg("-o")
+            .arg(&image)
+            .output()
+            .expect("run badc --ld")
+    };
+    let linked = |args: &[&str]| {
+        let out = ld(args);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{args:?}: {err}");
+        std::fs::read(&image).expect("read the image")
+    };
+    let interp = "/lib64/ld-linux-x86-64.so.2";
+    let has_interp = |b: &[u8]| elf_segments(b).iter().any(|s| s.0 == 3);
+    assert!(!has_interp(&linked(&[
+        "-pie",
+        "--dynamic-linker",
+        interp,
+        "--no-dynamic-linker"
+    ])));
+    assert!(has_interp(&linked(&[
+        "-pie",
+        "--no-dynamic-linker",
+        "--dynamic-linker",
+        interp
+    ])));
+    let symbolic = |b: &[u8]| elf_dynamic_tags(b).0.iter().any(|t| t.0 == 16);
+    assert!(symbolic(&linked(&["-shared", "-Bsymbolic"])));
+    assert!(!symbolic(&linked(&["-shared", "-Bsymbolic-functions"])));
+    let locals = |b: &[u8]| {
+        let names: Vec<String> = elf_symbols(b).into_iter().map(|s| s.0).collect();
+        (
+            names.iter().any(|n| n == "helper"),
+            names.iter().any(|n| n.ends_with("m.c")),
+        )
+    };
+    assert_eq!(
+        locals(&linked(&[])),
+        (true, true),
+        "the default keeps locals"
+    );
+    assert_eq!(
+        locals(&linked(&["-X"])),
+        (true, true),
+        "-X keeps the named ones"
+    );
+    assert_eq!(locals(&linked(&["-x"])), (false, false), "-x keeps none");
+    let span_arg = span.to_string_lossy().into_owned();
+    for (args, want) in [
+        (&["-pie", "-lw"][..], true),
+        (&["-pie", "--as-needed", "-lw"], false),
+        (&["-pie", "--as-needed", "--no-as-needed", "-lw"], true),
+        (&["-pie", "--as-needed", &span_arg, "-lw"], false),
+        (&["-pie", &span_arg, "-lw"], true),
+    ] {
+        let needed = elf_needed(&linked(args));
+        assert_eq!(needed.iter().any(|n| n == "libw.so"), want, "{args:?}");
+        assert!(
+            !needed.iter().any(|n| n == "libu.so"),
+            "{args:?}: nothing binds to libu"
+        );
+    }
+    linked(&["--no-add-needed"]);
+    for (args, name) in [
+        (&["--add-needed"][..], "--add-needed"),
+        (&["--fix-cortex-a53-843419"], "--fix-cortex-a53-843419"),
+    ] {
+        let out = ld(args);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && err.contains(name),
+            "{args:?}: {err}"
+        );
+    }
+    let out = Command::new(badc())
+        .args(["--ld", "-r", "--fix-cortex-a53-843419"])
+        .arg(&m)
+        .arg("-o")
+        .arg(dir.join("r.o"))
+        .output()
+        .expect("run badc --ld -r");
+    assert!(out.status.success(), "a relocatable link takes it");
+}
+
 /// The link without -T keeps every local symbol of its inputs, which is
 /// what `--discard-none` asks for; `-X` drops the assembler temporaries
 /// (`.L*`) among them. The last of the two holds, as in GNU ld.
@@ -5449,8 +5581,9 @@ fn elf_segments(bytes: &[u8]) -> Vec<(u32, u32)> {
         .collect()
 }
 
-/// The `DT_NEEDED` library names of an ELF64 image, in tag order.
-fn elf_needed(bytes: &[u8]) -> Vec<String> {
+/// The `.dynamic` entries of an ELF64 image as `(d_tag, d_val)`, and the
+/// file offset of its `.dynstr`; empty and 0 when it has none.
+fn elf_dynamic_tags(bytes: &[u8]) -> (Vec<(u64, u64)>, usize) {
     let rd16 = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
     let rd32 = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap());
     let rd64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
@@ -5466,17 +5599,25 @@ fn elf_needed(bytes: &[u8]) -> Vec<String> {
         })
     };
     let (Some(dynamic), Some(dynstr)) = (named(".dynamic"), named(".dynstr")) else {
-        return Vec::new();
+        return (Vec::new(), 0);
     };
-    let str_off = rd64(sh(dynstr) + 0x18) as usize;
     let (off, size) = (
         rd64(sh(dynamic) + 0x18) as usize,
         rd64(sh(dynamic) + 0x20) as usize,
     );
-    (0..size / 16)
-        .filter(|i| rd64(off + i * 16) == 1)
-        .map(|i| {
-            let n = str_off + rd64(off + i * 16 + 8) as usize;
+    let tags = (0..size / 16)
+        .map(|i| (rd64(off + i * 16), rd64(off + i * 16 + 8)))
+        .collect();
+    (tags, rd64(sh(dynstr) + 0x18) as usize)
+}
+
+/// The `DT_NEEDED` library names of an ELF64 image, in tag order.
+fn elf_needed(bytes: &[u8]) -> Vec<String> {
+    let (tags, str_off) = elf_dynamic_tags(bytes);
+    tags.into_iter()
+        .filter(|&(tag, _)| tag == 1)
+        .map(|(_, val)| {
+            let n = str_off + val as usize;
             let end = bytes[n..].iter().position(|&b| b == 0).unwrap() + n;
             String::from_utf8_lossy(&bytes[n..end]).into_owned()
         })

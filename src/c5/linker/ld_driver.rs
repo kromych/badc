@@ -42,9 +42,13 @@ enum InputItem {
     GroupEnd,
     /// `-Bstatic` / `-Bdynamic`: what `-l` may find from here on.
     SearchShared(bool),
-    /// A linker script's `AS_NEEDED` span: a library inside one takes a
-    /// dependency record only where the link binds to it.
+    /// `--as-needed` / `--no-as-needed`: whether a library from here on
+    /// takes a dependency record only where the link binds to it.
     AsNeeded(bool),
+    /// A linker script's `AS_NEEDED` span opening (`true`) or closing:
+    /// every library inside it is as needed, and its close restores the
+    /// state before it.
+    AsNeededSpan(bool),
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -380,15 +384,19 @@ impl LdArgs {
                 "--pack-dyn-relocs=none" => a.z.push(ZKeyword::PackRelativeRelocs(false)),
                 "--apply-dynamic-relocs" => a.apply_dynamic_relocs = true,
                 "--no-apply-dynamic-relocs" => a.apply_dynamic_relocs = false,
-                // Accepted with no effect on the emitted image: badc emits
-                // no interpreter, no ld-generated unwind tables, and
-                // resolves every branch in range without veneers.
-                "--no-dynamic-linker" | "--pic-veneer" | "--no-ld-generated-unwind-info" => {}
+                "--no-dynamic-linker" => a.interp = None,
+                // The image has these by construction: no unwind table of
+                // the linker's own, and the only veneers, the AArch64
+                // erratum ones, address their targets PC-relative.
+                "--pic-veneer" | "--no-ld-generated-unwind-info" => {}
                 "--eh-frame-hdr" => a.eh_frame_hdr = true,
                 "--no-eh-frame-hdr" => a.eh_frame_hdr = false,
                 // `-n`: a segment aligns to its sections, not to a page.
                 "-n" | "--nmagic" => a.nmagic = true,
-                "-Bsymbolic" | "-Bsymbolic-functions" => a.symbolic = true,
+                "-Bsymbolic" => a.symbolic = true,
+                // A shared library binds every reference to its own
+                // definitions, which records nothing for functions alone.
+                "-Bsymbolic-functions" => {}
                 "-soname" | "-h" => a.soname = Some(next_of(&mut it, arg)?),
                 s if s.starts_with("-soname=") || s.starts_with("--soname=") => {
                     a.soname = Some(s.split_once('=').map(|(_, v)| v).unwrap_or("").to_string());
@@ -472,9 +480,17 @@ impl LdArgs {
                 "--no-warn-rwx-segments" | "--warn-rwx-segments" => {}
                 "--warn-execstack" => a.warn_execstack = Some(true),
                 "--no-warn-execstack" => a.warn_execstack = Some(false),
-                // badc records a DT_NEEDED for every shared library named
-                // on the command line, so neither keyword changes the tags.
-                "--as-needed" | "--no-as-needed" | "--add-needed" | "--no-add-needed" => {}
+                "--as-needed" => a.inputs.push(InputItem::AsNeeded(true)),
+                "--no-as-needed" => a.inputs.push(InputItem::AsNeeded(false)),
+                // A shared library's own dependencies are not read, so
+                // none of their names can be recorded.
+                "--no-add-needed" | "--no-copy-dt-needed-entries" => {}
+                "--add-needed" | "--copy-dt-needed-entries" => {
+                    return Err(ld_err(format!(
+                        "{arg} is not supported: the link reads no shared library's own \
+                         dependencies"
+                    )));
+                }
                 "--gc-sections" => a.gc_sections = true,
                 "--no-gc-sections" => a.gc_sections = false,
                 s if s.starts_with("--orphan-handling=") => {
@@ -673,6 +689,7 @@ fn collect_inputs<T: InputObject>(
     let mut libs: Vec<SharedInput> = Vec::new();
     let mut search_shared = true;
     let mut as_needed = false;
+    let mut as_needed_before: Vec<bool> = Vec::new();
     // `-u SYM` forces a reference before any input is read, so a
     // member defining it is pulled even though nothing else names it.
     let mut undef: HashSet<String> = a.undefined.iter().cloned().collect();
@@ -776,6 +793,15 @@ fn collect_inputs<T: InputObject>(
             }
             InputItem::AsNeeded(on) => {
                 as_needed = *on;
+                continue;
+            }
+            InputItem::AsNeededSpan(true) => {
+                as_needed_before.push(as_needed);
+                as_needed = true;
+                continue;
+            }
+            InputItem::AsNeededSpan(false) => {
+                as_needed = as_needed_before.pop().unwrap_or(false);
                 continue;
             }
             InputItem::Lib(name) => {
@@ -932,14 +958,14 @@ fn ld_script_inputs(text: &str) -> Vec<InputItem> {
                     Some("AS_NEEDED") if !listing.is_empty() => {
                         listing.push(depth);
                         as_needed_at = Some(depth);
-                        out.push(InputItem::AsNeeded(true));
+                        out.push(InputItem::AsNeededSpan(true));
                     }
                     _ => {}
                 }
             }
             ")" => {
                 if as_needed_at == Some(depth) {
-                    out.push(InputItem::AsNeeded(false));
+                    out.push(InputItem::AsNeededSpan(false));
                     as_needed_at = None;
                 }
                 if group_at == Some(depth) {
@@ -1007,6 +1033,9 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         return ld_err("no input files");
     }
     let m = machine.unwrap_or(objs[0].machine);
+    if a.fix_cortex_a53_843419 && m != EM_AARCH64 {
+        return ld_err("--fix-cortex-a53-843419 is not supported: it applies to AArch64 code");
+    }
     let mut opts = LdsOptions {
         emit: if a.shared {
             LdsEmit::Dyn
@@ -1032,7 +1061,8 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         },
         build_id_sha1: a.build_id == BuildId::Sha1,
         strip_debug: a.strip_debug,
-        discard_locals: a.discard_locals != DiscardLocals::None,
+        discard_locals: a.discard_locals == DiscardLocals::Temporaries,
+        discard_all: a.discard_locals == DiscardLocals::All,
         discard_none: a.discard_none,
         apply_dynamic_relocs: a.apply_dynamic_relocs,
         emit_relocs: a.emit_relocs,
@@ -1186,7 +1216,7 @@ mod tests {
             .map(|i| match i {
                 InputItem::GroupStart => String::from("{"),
                 InputItem::GroupEnd => String::from("}"),
-                InputItem::AsNeeded(on) => alloc::format!("as-needed={on}"),
+                InputItem::AsNeededSpan(on) => alloc::format!("as-needed={on}"),
                 InputItem::File(p) => p.display().to_string(),
                 InputItem::Lib(n) => alloc::format!("-l{n}"),
                 _ => String::from("?"),

@@ -111,8 +111,13 @@ impl<'a> LdsLinker<'a> {
             }
         }
         // Local symbols per input object, in the order bfd reaches the
-        // objects.
-        for obj_i in self.local_symbol_object_order(emit_order) {
+        // objects; `-x` keeps none.
+        let local_objects = if self.opts.discard_all {
+            Vec::new()
+        } else {
+            self.local_symbol_object_order(emit_order)
+        };
+        for obj_i in local_objects {
             let o = &self.objects[obj_i];
             // bfd carries the file symbol of the object whose locals
             // follow, synthesizing one from the input's name when the
@@ -409,20 +414,24 @@ impl<'a> LdsLinker<'a> {
 
     /// The `build_symtab` slot an emitted relocation's symbol maps to:
     /// a global by name, a section reference through the output
-    /// section's symbol, otherwise the surviving local.
+    /// section's symbol, otherwise the surviving local. A local `-x` or
+    /// `-X` dropped is named through its section's symbol, as bfd does;
+    /// the addend then carries its offset.
     fn emitted_sym_slot(&self, r: &EmittedReloc, index: &SymIndex) -> Option<usize> {
         let sym = self.objects[r.obj].symbols.get(r.sym as usize)?;
         if sym.binding() != STB_LOCAL && !sym.name.is_empty() {
             return index.by_name.get(&sym.name).copied();
         }
-        if sym.kind() == STT_SECTION {
+        let section = || {
             let sec = *self.objects[r.obj].shndx_map.get(&sym.shndx)?;
-            let i = self.insec_index(r.obj, sec);
-            let SecFate::Placed { out } = self.fates[i] else {
+            let SecFate::Placed { out } = self.fates[self.insec_index(r.obj, sec)] else {
                 return None;
             };
-            return index.sec.get(&out).copied();
+            index.sec.get(&out).copied()
+        };
+        if sym.kind() == STT_SECTION {
+            return section();
         }
-        index.local.get(&(r.obj, r.sym)).copied()
+        index.local.get(&(r.obj, r.sym)).copied().or_else(section)
     }
 }

@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 /// (DWARF 4 5.2, 5.3), so the debug-info writers read this to name a
 /// type the way the source did instead of naming the type it resolves
 /// to. `volatile` is absent because the tag already records it
-/// (`types::VOLATILE_BIT`), and nothing outside debug info reads any
+/// (`types::VOL_LVL_MASK`), and nothing outside debug info reads any
 /// of it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct DeclSpelling {

@@ -23,8 +23,8 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    self, CONST_BIT, SEG_FS_BIT, SEG_GS_BIT, UNSIGNED_BIT, VOLATILE_BIT, VOLATILE_INNER_BIT,
-    apply_qual_bits, is_decl_modifier, struct_ty_for,
+    self, CONST_BIT, SEG_FS_BIT, SEG_GS_BIT, UNSIGNED_BIT, VOLATILE_BIT, apply_qual_bits,
+    is_decl_modifier, struct_ty_for,
 };
 
 /// The declaration decorators a `__attribute__` / `__declspec` / `[[ ]]`
@@ -423,15 +423,9 @@ impl Compiler {
             self.seed_type_name_carriers(&name)?;
             name.ty
         } else {
-            // Pointer peels leave the inner-only marker describing a
-            // derivation the operand no longer has; drop it so a
-            // declaration through the specifier reads the whole tag. The
-            // unqualified form keeps it: the marker tells a pointee's
-            // `volatile`, which stays, from the object's, which goes.
-            let mut inner = self.parse_unevaluated_expr_ty(true)?;
-            if !unqual {
-                inner &= !VOLATILE_INNER_BIT;
-            }
+            // The conservative volatile marker a dereference leaves on the
+            // operand describes its accesses, not its type.
+            let mut inner = types::exact_volatile_ty(self.parse_unevaluated_expr_ty(true)?);
             // C99 6.5.3.2p4: `*` on a pointer to a function designates the
             // function, so `typeof(*p)` names a function type. Route it
             // through the function-TYPE carrier a `typedef RET F(args)`

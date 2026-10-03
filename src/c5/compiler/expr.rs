@@ -67,8 +67,9 @@ use super::types::{
     CONST_BIT, UNSIGNED_BIT, VOLATILE_BIT, add_ptr_level, apply_qual_bits, format_type,
     fp_result_ty, integer_promote, is_bool_ty, is_const_object_ty, is_float_ty, is_floating_scalar,
     is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_vector_ty, is_void_ptr_ty,
-    is_void_ty, narrow_const_int, object_segment_bits, pointee_const_bits, pointee_ty,
-    segment_of_ty, strip_object_const, struct_id_of, struct_ptr_depth, void_ty,
+    is_void_ty, narrow_const_int, object_segment_bits, pointee_qual_bits, pointee_ty,
+    segment_of_ty, strip_object_const, struct_id_of, struct_ptr_depth, unqualified_version_ty,
+    void_ty,
 };
 
 impl Compiler {
@@ -4091,16 +4092,14 @@ impl Compiler {
             let else_npc = else_ast.is_some_and(|e| self.expr_is_null_pointer_constant(e));
             let then_sp = is_struct_ty(then_ty) && struct_ptr_depth(then_ty) > 0;
             let else_sp = is_struct_ty(else_ty) && struct_ptr_depth(else_ty) > 0;
-            // A `void *` result carries both arms' `volatile`; the `const`
-            // composition below covers every pointer result.
+            // The composition below carries both pointees' qualifiers onto
+            // every pointer result.
             result_ty = if then_ptr && else_ptr && then_npc && !else_npc {
                 else_ty
-            } else if then_ptr && else_ptr && else_npc && !then_npc {
+            } else if then_ptr && else_ptr && ((else_npc && !then_npc) || is_void_ptr_ty(then_ty)) {
                 then_ty
-            } else if then_ptr && else_ptr && is_void_ptr_ty(then_ty) {
-                then_ty | (else_ty & VOLATILE_BIT)
             } else if then_ptr && else_ptr && is_void_ptr_ty(else_ty) {
-                else_ty | (then_ty & VOLATILE_BIT)
+                else_ty
             } else if then_sp && !else_sp {
                 then_ty
             } else if else_sp && !then_sp {
@@ -4111,11 +4110,11 @@ impl Compiler {
                 else_ty
             };
             // C99 6.5.15p6: the result points to a type qualified with
-            // both pointees' `const`.
+            // both pointees' qualifiers.
             if then_ptr && else_ptr {
                 result_ty = strip_object_const(result_ty)
-                    | pointee_const_bits(then_ty, result_ty)
-                    | pointee_const_bits(else_ty, result_ty);
+                    | pointee_qual_bits(then_ty, result_ty)
+                    | pointee_qual_bits(else_ty, result_ty);
             }
         }
         result_ty
@@ -5299,7 +5298,7 @@ impl Compiler {
         let saved_ast_acc = self.ast_acc;
         let saved_vstack = self.ast_vstack.len();
         self.expr_or_void(Token::Assign as i64)?;
-        let ctrl_ty = strip_object_const(self.ty);
+        let ctrl_ty = unqualified_version_ty(self.ty);
         // A function designator converts to a pointer to the function.
         let ctrl_fn = self
             .ast_acc
@@ -5415,7 +5414,7 @@ impl Compiler {
         // a function type's return type, so the signature settles the rest.
         let (fa, fb) = (a.fn_ty.as_ref(), b.fn_ty.as_ref());
         Ok(
-            (self.tags_compatible(strip_object_const(a.ty), strip_object_const(b.ty))
+            (self.tags_compatible(unqualified_version_ty(a.ty), unqualified_version_ty(b.ty))
                 && array_dims_match(&a.dims, &b.dims)
                 && self
                     .value_fn_types_compatible(fa.map(|f| f.at_depth()), fb.map(|f| f.at_depth())))
@@ -5424,9 +5423,9 @@ impl Compiler {
     }
 
     /// Flat-tag compatibility for `_Generic` association selection and
-    /// `__builtin_types_compatible_p`: equal tags with `volatile`
-    /// dropped (a `const` on the type itself is the caller's to drop,
-    /// a pointee's is compared), or pointers at equal depth to array
+    /// `__builtin_types_compatible_p`: equal tags (a qualifier on the
+    /// type itself is the caller's to drop, a pointee's is compared), or
+    /// pointers at equal depth to array
     /// pointees whose element types match and whose bounds are
     /// compatible (C99 6.7.5.1p2, 6.7.5.2p6: an unspecified bound is
     /// compatible with any). Distinct bounds or element qualifiers
@@ -5440,7 +5439,7 @@ impl Compiler {
             return false;
         };
         // The pointer levels' qualifiers, as `generic_type_match` compares them.
-        let quals = |t: i64| (t ^ super::types::strip_unsigned(t)) & !super::types::VOLATILE_MASK;
+        let quals = |t: i64| (t ^ super::types::strip_unsigned(t)) & !VOLATILE_BIT;
         if struct_ptr_depth(a) != struct_ptr_depth(b) || quals(a) != quals(b) {
             return false;
         }
@@ -5940,16 +5939,13 @@ impl Compiler {
 }
 
 /// C11 6.5.1.1p2 type match for a generic association: compare the flat
-/// type tags with `volatile` dropped, which the tag records at no
-/// level. `unsigned`-ness, each level's `const` and the pointer level /
-/// aggregate identity stay significant, so `unsigned int`, `const T *`
-/// and `T *` select distinct associations; an enumerated type matches
-/// itself and its integer type.
+/// type tags without the conservative [`VOLATILE_BIT`]. `unsigned`-ness,
+/// each level's `const` and `volatile` and the pointer level / aggregate
+/// identity stay significant, so `unsigned int`, `const T *`,
+/// `T *volatile *` and `T **` select distinct associations; an
+/// enumerated type matches itself and its integer type.
 fn generic_type_match(ctrl: i64, assoc: i64) -> bool {
-    super::types::enum_compatible(
-        ctrl & !super::types::VOLATILE_MASK,
-        assoc & !super::types::VOLATILE_MASK,
-    )
+    super::types::enum_compatible(ctrl & !VOLATILE_BIT, assoc & !VOLATILE_BIT)
 }
 
 /// A binary operator of C99 6.5.5-6.5.14 as the precedence-climbing loop

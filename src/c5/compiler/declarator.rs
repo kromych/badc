@@ -762,7 +762,7 @@ impl Compiler {
                 self.pending.fn_chain_array_levels += pointee_dims.len() as i64;
                 inner_ty = (self.array_agg_type(outer_ty_before_inner, &pointee_dims)
                     + inner_ptr_levels * (Ty::Ptr as i64))
-                    | (inner_ty & (super::types::VOLATILE_MASK | super::types::CONST_PTR_LVL_MASK));
+                    | (inner_ty & (super::types::VOLATILE_BIT | super::types::QUAL_PTR_LVL_MASK));
             }
             return Ok((idx, inner_ty, inner_array_size, own_levels + group_levels));
         }

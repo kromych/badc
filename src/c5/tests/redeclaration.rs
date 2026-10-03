@@ -141,6 +141,11 @@ fn function_redeclarations_of_another_type_are_rejected() {
             "enum A { A1 };\nenum B { B1 };\nint f(enum A);\nint f(enum B b) { return b; }\n",
             "now:      int (enum B)",
         ),
+        // C99 6.7.3: `volatile` below a parameter's own level takes part.
+        (
+            "int f(volatile int **);\nint f(int *volatile *p) { return p != 0; }\n",
+            "now:      int (int* volatile *)",
+        ),
         // The tag's definition fixes the type the earlier use names.
         (
             "enum E;\nint f(enum E);\nenum E { A } __attribute__((__mode__(__byte__)));\n\
@@ -184,6 +189,12 @@ fn object_redeclarations_of_another_type_are_rejected() {
             "enum A { A1 };\nenum B { B1 };\nextern enum A x;\nenum B x;\n",
             "now:      enum B",
         ),
+        // C99 6.7.3: `volatile` takes part at the level it qualifies.
+        (
+            "extern volatile int **x;\nint *volatile *x;\n",
+            "now:      int* volatile *",
+        ),
+        ("int x;\nvolatile int x;\n", "now:      volatile int"),
     ] {
         let src = alloc::format!("{decls}int main(void) {{ return 0; }}\n");
         expect_conflict(&src, &["conflicting types for `x`", needle]);
@@ -357,6 +368,11 @@ fn compatible_redeclarations_compose() {
         (
             "extern volatile int v;\nvolatile int v = 3;\nint main(void) { return v; }\n",
             3,
+        ),
+        // C99 6.7.5.3p15: a parameter's own qualifier takes no part.
+        (
+            "int h(volatile int);\nint h(int a) { return a; }\nint main(void) { return h(4); }\n",
+            4,
         ),
         (
             "typedef const int CI;\nextern CI c;\nconst int c = 2;\nint main(void) { return c; }\n",

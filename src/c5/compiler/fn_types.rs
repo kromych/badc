@@ -12,8 +12,8 @@ use super::super::symbol::{FnParams, FnType};
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    format_fn_type, is_pointer_ty, is_struct_ty, pointee_ty, strip_object_const, strip_unsigned,
-    struct_id_of, struct_ptr_depth, unqualified_object_ty,
+    format_fn_type, is_pointer_ty, is_struct_ty, pointee_ty, strip_unsigned, struct_id_of,
+    struct_ptr_depth, unqualified_object_ty, unqualified_version_ty,
 };
 
 /// True when the default argument promotions (C99 6.5.2.2p6) leave `ty`
@@ -300,7 +300,7 @@ impl Compiler {
                 a.variadic == b.variadic
                     && a.types.len() == b.types.len()
                     && a.types.iter().zip(&b.types).all(|(&x, &y)| {
-                        self.tags_compatible(strip_object_const(x), strip_object_const(y))
+                        self.tags_compatible(unqualified_version_ty(x), unqualified_version_ty(y))
                     })
             }
             (true, false) => unpromoted(a),

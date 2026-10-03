@@ -18,7 +18,7 @@ use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    CONST_PTR_LVL_MASK, UNSIGNED_BIT, VOLATILE_MASK, is_floating_scalar, is_long_double_scalar,
+    QUAL_PTR_LVL_MASK, UNSIGNED_BIT, VOLATILE_BIT, is_floating_scalar, is_long_double_scalar,
     is_pointer_ty, is_struct_ty, is_struct_value_ty, is_type_start_token, pointee_size_no_struct,
     strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
 };
@@ -666,7 +666,7 @@ impl Compiler {
     ) -> i64 {
         let dims = self.typedef_base_dims();
         let agg = self.array_agg_type(elem_ty, &dims);
-        (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & (VOLATILE_MASK | CONST_PTR_LVL_MASK))
+        (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & (VOLATILE_BIT | QUAL_PTR_LVL_MASK))
     }
 
     /// True when the current lexer position starts a type. The free

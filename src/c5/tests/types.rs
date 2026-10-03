@@ -4106,6 +4106,40 @@ fn an_array_of_arrays_converts_to_a_pointer_to_its_row() {
     );
 }
 
+/// C99 6.7.3: `volatile`, as `const`, qualifies the derivation it follows,
+/// so the pointer level it sits at is part of the type: `T *volatile *`,
+/// `volatile T **` and `T **` are three types, however the declarator
+/// spells them -- grouped, through a typedef, as a cast's abstract
+/// declarator -- and a type's own `volatile` goes with lvalue conversion.
+#[test]
+fn volatile_at_a_pointer_level_is_part_of_the_type() {
+    compile_str(
+        "typedef int *IP;\ntypedef volatile int VI;\n\
+         #define IS(t, e) _Generic((e), t: 1, default: 0)\n\
+         int *volatile *p; volatile IP *a; int *volatile (*b); int *volatile (*(c));\n\
+         VI **d; volatile int *volatile *f; int **volatile g; volatile int v;\n\
+         volatile int rows[2][3]; int *volatile prows[2][3];\n\
+         int main(void) {\n\
+           _Static_assert(IS(volatile int (*)[3], rows) && !IS(int (*)[3], rows), \"rows\");\n\
+           _Static_assert(IS(int *volatile (*)[3], prows) && !IS(int *(*)[3], prows), \"rows of pointers\");\n\
+           _Static_assert(IS(int *volatile *, (int *volatile *)0), \"cast\");\n\
+           _Static_assert(!IS(int **, (int *volatile *)0), \"cast vs plain\");\n\
+           _Static_assert(IS(int *volatile *, p) && !IS(int **, p) && !IS(volatile int **, p), \"p\");\n\
+           _Static_assert(IS(int *volatile *, a) && IS(int *volatile *, b), \"typedef, group\");\n\
+           _Static_assert(IS(int *volatile *, c), \"nested group\");\n\
+           _Static_assert(IS(volatile int **, d) && !IS(int *volatile *, d), \"base level\");\n\
+           _Static_assert(IS(volatile int *volatile *, f), \"two levels\");\n\
+           _Static_assert(IS(int **, g) && IS(int, v), \"own level\");\n\
+           _Static_assert(IS(int *, *p) && IS(int *volatile *, &*p), \"dereference\");\n\
+           _Static_assert(IS(volatile int *, 1 ? &v : (int *)0), \"conditional\");\n\
+           _Static_assert(!__builtin_types_compatible_p(int *volatile *, int **), \"compatible\");\n\
+           _Static_assert(__builtin_types_compatible_p(volatile int, int), \"top level\");\n\
+           _Static_assert(__builtin_types_compatible_p(__typeof__(*p), int *volatile), \"typeof\");\n\
+           return 0;\n\
+         }\n",
+    );
+}
+
 #[test]
 fn an_enumerated_type_is_a_type_of_its_own() {
     // C99 6.7.2.2p4: each enumerated type is compatible with the integer

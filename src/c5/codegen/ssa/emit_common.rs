@@ -2255,6 +2255,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pipeline.run("passes::tailrec::run", &mut ssa_funcs, |funcs| {
             super::super::passes::tailrec::run(funcs);
         });
+        // A function no path of which returns ends the blocks of the calls
+        // to it, once the inliner has taken the small callees whole.
+        pipeline.run("passes::noreturn::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::noreturn::run(funcs, program, true);
+        });
         // Forward an inlined one-word struct return out of its frame slot:
         // a single full-width store + slot reads collapse to the stored
         // register value. Runs after the inliner produces the slot and

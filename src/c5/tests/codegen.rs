@@ -10186,6 +10186,34 @@ fn a_call_to_a_function_that_never_returns_survives_at_opt() {
     }
 }
 
+/// A call to a function that does not return ends its block whatever
+/// expression holds it, at every level: the `return` of a call to a
+/// `_Noreturn` function, here one another unit defines. At -O a function of
+/// this unit no path of which returns ends the blocks of the calls to it
+/// too, in a chain: `die` never returns, so neither does `wrap`, spliced
+/// into `via_return`. Each call is followed by the trap, not by a return.
+#[test]
+fn a_call_to_a_function_that_does_not_return_ends_its_block() {
+    const SRC: &str = "extern _Noreturn long stop(int);\n\
+        static int die(int x) { stop(x); return 1; }\n\
+        static long wrap(int x) { long r = die(x); return r + 2; }\n\
+        long via_return(int x) { return wrap(x); }\n\
+        long declared(int x) { return stop(x) + 3; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for name in ["via_return", "declared"] {
+            let (body, insts) = optimized_function(SRC, name, target);
+            assert!(
+                body.contains("terminator Unreachable") && !body.contains("terminator Return"),
+                "{target:?}: {name} ends after its call: {body}"
+            );
+            assert!(
+                insts.iter().any(|(_, i)| i.starts_with("Call {")),
+                "{target:?}: {name} keeps its call: {body}"
+            );
+        }
+    }
+}
+
 /// A `long double` conditional merges its arms' binary64 values as a
 /// double. Given the object's F80 / F128 kinds, the merge slot fell back to
 /// I64: it stayed in memory and the result reached the return through a

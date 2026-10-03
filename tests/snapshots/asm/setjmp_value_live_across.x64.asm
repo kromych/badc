@@ -52,10 +52,7 @@ Disassembly of section .text:
                	leave
                	retq
                	callq	<addr>
-               	xorl	%eax, %eax
-               	popq	%rbx
-               	leave
-               	retq
+               	ud2
 
 <main>:
                	pushq	%rbp

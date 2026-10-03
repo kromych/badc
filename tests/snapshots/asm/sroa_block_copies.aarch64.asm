@@ -268,10 +268,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x20
                	ret
                	bl	<addr>
-               	mov	x0, #-0x1               // =-1
-               	ldp	x29, x30, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x20
-               	ret
+               	brk	#0x1
 
 <vla_copy>:
                	stp	x29, x30, [sp, #-0x10]!

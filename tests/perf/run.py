@@ -15,7 +15,7 @@ Legs probed (skipped when the compiler or the flag is absent):
 * badc               -- target/release/badc next to repo root.
 * badc -O            -- same with -O.
 * tcc                -- built by build_tcc.sh from demos/tinycc sources.
-* clang -O0, gcc -O0 -- the reference compilers on PATH.
+* clang -O0, gcc -O0 -- the reference compilers on PATH, off Windows.
 * clang -O2, gcc -O2 -- same.
 * <cc> -O2 -march=<level> -- the same pair pinned to the instruction-set
   level badc assumes for the host architecture (BASELINE_LEVEL), so the
@@ -152,11 +152,20 @@ BADC_FIXTURE_FLAGS: dict[str, list[str]] = {
 FIXTURE_SKIP_COMPILERS: dict[str, set[str]] = {
     "quickjs_bench.c": {"tcc", "cl"},
 }
+# The same, on Windows only.
+# TODO(#1382): badc builds quickjs_bench on Windows once its <stdlib.h> no
+# longer declares a setenv that conflicts with quickjs-libc.c's own.
+WINDOWS_FIXTURE_SKIP_COMPILERS: dict[str, set[str]] = {
+    "quickjs_bench.c": {"badc"},
+}
 
 
-def skips(fixture: str, leg: str) -> bool:
+def skips(fixture: str, leg: str, windows: bool = WIN) -> bool:
     """Whether the leg named `leg` sits out `fixture`."""
-    return leg.split()[0] in FIXTURE_SKIP_COMPILERS.get(fixture, set())
+    skip = FIXTURE_SKIP_COMPILERS.get(fixture, set())
+    if windows:
+        skip = skip | WINDOWS_FIXTURE_SKIP_COMPILERS.get(fixture, set())
+    return leg.split()[0] in skip
 
 
 @dataclass
@@ -228,6 +237,14 @@ def reference_legs(name: str, argv: list[str], level: str,
         print(f"info: {name} rejects {march}; skipping its baseline row",
               file=sys.stderr)
     return legs
+
+
+def reference_programs(windows: bool) -> tuple[str, ...]:
+    """The reference compilers probed on PATH. On Windows the reference is
+    cl alone: a gcc there is MinGW's, with another C runtime than the one
+    badc's binaries import, and machines differ in which of clang and gcc
+    they put on PATH."""
+    return () if windows else REFERENCE_CC
 
 
 def msvc_accepts(argv: list[str], flag: str) -> bool:
@@ -337,7 +354,7 @@ def probe_compilers() -> list[Compiler]:
     # `/usr/bin/gcc` on macOS is clang; without this its legs would
     # report one compiler's numbers twice, under two names.
     by_version: dict[str, str] = {}
-    for prog in REFERENCE_CC:
+    for prog in reference_programs(WIN):
         if not shutil.which(prog):
             continue
         version = program_version(prog)
@@ -660,6 +677,8 @@ def self_test() -> int:
         assert all("/MD" in c.flags and not c.output_dash_o for c in x64)
         assert x64[2].level == "x86-64-v3" and x64[1].level == ""
         assert [c.name for c in msvc_legs(cl, "armv8.4-a")] == ["cl /Od", "cl /O2"]
+        # Windows measures against cl alone.
+        assert reference_programs(True) == () and reference_programs(False) == REFERENCE_CC
         assert [c.name for c in msvc_legs(cl, "")] == ["cl /Od", "cl /O2"]
 
         # cl names the object as well as the executable, beside it; the
@@ -669,11 +688,15 @@ def self_test() -> int:
         assert f"/Fe:{exe}" in argv and f"/Fo:{exe}.obj" in argv, argv
         assert compile_argv(legs[0], src, d / "fib")[-4:] == [
             "-o", str(d / "fib"), str(src), "-lm"], compile_argv(legs[0], src, d / "fib")
-        # quickjs sits out every cl and tcc leg, nothing else does.
+        # quickjs sits out every cl and tcc leg, and badc's on Windows;
+        # nothing else does.
         assert skips("quickjs_bench.c", "cl /O2 /arch:AVX2")
         assert skips("quickjs_bench.c", "tcc")
         assert not skips("quickjs_bench.c", "clang -O2")
         assert not skips("fib.c", "cl /O2")
+        assert skips("quickjs_bench.c", "badc -O", windows=True)
+        assert not skips("quickjs_bench.c", "badc -O", windows=False)
+        assert not skips("fib.c", "badc", windows=True)
         # A failure reports what the compiler said on either stream.
         said = failure_text(subprocess.CompletedProcess(
             ["cl"], 2, stdout="bad.c\nbad.c(1): error C2065: 'x': undeclared\n",

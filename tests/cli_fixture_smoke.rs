@@ -1057,6 +1057,31 @@ fn interp_exits_with_the_program_status() {
     assert_eq!(run("--jit").status.code(), Some(3));
 }
 
+// `--jit` exits with the status a program passes to `exit` from a nested
+// call, after the output the program wrote (C99 7.20.4.3).
+#[test]
+fn jit_exits_with_the_status_exit_was_given() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-jit-exit");
+    let src = dir.join("e3.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\n#include <stdlib.h>\n\
+         static void f(void) { printf(\"partial\"); exit(3); }\n\
+         int main(void) { f(); return 4; }\n",
+    )
+    .expect("write source");
+    let out = Command::new(badc)
+        .arg("--jit")
+        .arg(&src)
+        .output()
+        .expect("run badc");
+    assert_eq!(out.status.code(), Some(3));
+    if !cfg!(windows) {
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "partial");
+    }
+}
+
 // `--install <dir>` writes every embedded header under <dir>/include
 // (recreating subdirectories) and the runtime source under <dir>/lib.
 #[test]

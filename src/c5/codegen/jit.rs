@@ -210,14 +210,11 @@ mod jit_impl {
         0
     }
 
-    /// Run `__attribute__((constructor))` functions before the JIT'd
-    /// entry and arrange for the destructors, on the worker thread.
-    /// `init_addrs` / `fini_addrs` are absolute code addresses in
-    /// `.init_array` layout order. Destructors are registered on the
-    /// atexit chain (drained LIFO after `main`), so they fire in reverse
-    /// of that layout -- matching a C library's `.fini_array` walk -- and
-    /// after any handler a constructor installs with `atexit`.
-    fn run_ctors_register_dtors(init_addrs: &[usize], fini_addrs: &[usize]) {
+    /// Register the guest's `__attribute__((destructor))` functions on the
+    /// atexit chain, which drains LIFO when the program ends, so they fire
+    /// in reverse of their `.init_array` layout -- a C library's
+    /// `.fini_array` walk -- and after any handler a constructor installs.
+    fn register_dtors(fini_addrs: &[usize]) {
         for &addr in fini_addrs {
             // A no-arg destructor is ABI-compatible with the `(void*)`
             // atexit handler shape; the extra argument register is unread.
@@ -225,22 +222,268 @@ mod jit_impl {
                 unsafe { core::mem::transmute(addr as *const ()) };
             push_atexit_entry(dtor, core::ptr::null_mut());
         }
+    }
+
+    thread_local! {
+        /// On the worker thread running the guest, where `enter_main` saved
+        /// the stack pointer (POSIX) or 1 (Windows); 0 on any other thread.
+        static JIT_EXIT_CONTEXT: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+        /// Set when the guest ended the program by an exit call rather than
+        /// by returning from the function `enter_main` called.
+        static JIT_EXITED: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+    }
+
+    unsafe extern "C" {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        fn fflush(stream: *mut c_void) -> c_int;
+        fn _exit(status: c_int) -> !;
+    }
+
+    /// Replacement for libc's `exit`. C99 7.20.4.3: the atexit handlers
+    /// run, then the open streams are flushed. `atexit` was intercepted into
+    /// the JIT-side chain, which the host's `exit` knows nothing about. The
+    /// program then ends as a return from its `main` does: the process is
+    /// the test runner's or the driver's, and outlives the program.
+    extern "C" fn jit_exit_thunk(status: c_int) -> ! {
+        drain_jit_atexit_chain();
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        unsafe {
+            fflush(core::ptr::null_mut());
+        }
+        end_program(status, true)
+    }
+
+    /// Replacement for `_exit`, `_Exit` and `quick_exit`, which run no
+    /// atexit handler (C99 7.20.4.4, POSIX `_exit`); the bundled headers
+    /// offer no `at_quick_exit`.
+    extern "C" fn jit_immediate_exit_thunk(status: c_int) -> ! {
+        JIT_ATEXIT_CHAIN.with(|chain| chain.borrow_mut().clear());
+        end_program(status, false)
+    }
+
+    /// End the guest program with `status`. On the worker thread the call
+    /// `run_program` made returns it; the frames between are the guest's
+    /// and the exit thunks', which hold nothing to drop. A thread the guest
+    /// started has nowhere to return to, and its exit ends the process, as
+    /// C specifies.
+    fn end_program(status: c_int, ran_handlers: bool) -> ! {
+        let context = JIT_EXIT_CONTEXT.with(|c| c.get());
+        if context != 0 {
+            JIT_EXITED.with(|e| e.set(true));
+            leave_program(context, status);
+        }
+        if ran_handlers {
+            std::process::exit(status);
+        }
+        unsafe { _exit(status) }
+    }
+
+    /// Run the guest's constructors and its `main` on this thread, then
+    /// end the program as `exit` does with `main`'s value (C99 5.1.2.2.3).
+    /// An exit call in any of them, or in a handler, ends it early; returns
+    /// the program's status.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn run_program(
+        init_addrs: &[usize],
+        fini_addrs: &[usize],
+        entry: usize,
+        argc: c_int,
+        argv: *const *const c_char,
+    ) -> c_int {
+        register_dtors(fini_addrs);
+        let mut saved = 0usize;
+        let saved = &raw mut saved;
+        JIT_EXIT_CONTEXT.with(|c| c.set(saved as usize));
+        let exited = || JIT_EXITED.with(|e| e.replace(false));
+        let status = 'run: {
+            for &ctor in init_addrs {
+                let status = unsafe { enter_main(saved, ctor, argc, argv) };
+                if exited() {
+                    break 'run status;
+                }
+            }
+            let status = unsafe { enter_main(saved, entry, argc, argv) };
+            if exited() {
+                break 'run status;
+            }
+            let exit = jit_exit_thunk as *const () as usize;
+            unsafe { enter_main(saved, exit, status, core::ptr::null()) }
+        };
+        JIT_EXIT_CONTEXT.with(|c| c.set(0));
+        status
+    }
+
+    /// The same on Windows, where the guest's thread ends with its status:
+    /// every path leaves through `ExitThread`, so this never returns.
+    #[cfg(target_os = "windows")]
+    fn run_program(
+        init_addrs: &[usize],
+        fini_addrs: &[usize],
+        entry: usize,
+        argc: c_int,
+        argv: *const *const c_char,
+    ) -> ! {
+        register_dtors(fini_addrs);
+        JIT_EXIT_CONTEXT.with(|c| c.set(1));
         for &addr in init_addrs {
             let ctor: extern "C" fn() = unsafe { core::mem::transmute(addr as *const ()) };
             ctor();
         }
+        let main_fn: extern "C" fn(c_int, *const *const c_char) -> c_int =
+            unsafe { core::mem::transmute(entry as *const ()) };
+        jit_exit_thunk(main_fn(argc, argv))
     }
 
-    /// Replacement for libc's `exit` when JIT'd code resolves the
-    /// symbol through `dlsym`. C99 7.20.4.3p2: `exit` runs the
-    /// registered atexit handlers first. `atexit` was intercepted
-    /// into the JIT-side chain, which the host's `exit` knows
-    /// nothing about, so drain the chain before terminating with
-    /// the given status. `_Exit` / `quick_exit` stay on the host
-    /// symbols -- neither runs atexit handlers (7.20.4.5).
-    extern "C" fn jit_exit_thunk(status: c_int) -> ! {
-        drain_jit_atexit_chain();
-        std::process::exit(status);
+    #[cfg(target_os = "windows")]
+    fn leave_program(_context: usize, status: c_int) -> ! {
+        unsafe extern "system" {
+            fn ExitThread(code: u32) -> !;
+        }
+        unsafe { ExitThread(status as u32) }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn leave_program(context: usize, status: c_int) -> ! {
+        unsafe { leave_main(context as *const usize, status) }
+    }
+
+    /// Call `f(argc, argv)` with the callee-saved registers on the stack and
+    /// the stack pointer in `*saved`, from where `leave_main` returns from
+    /// this call with a status in place of `f`'s value.
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    #[unsafe(naked)]
+    unsafe extern "C" fn enter_main(
+        saved: *mut usize,
+        f: usize,
+        argc: c_int,
+        argv: *const *const c_char,
+    ) -> c_int {
+        core::arch::naked_asm!(
+            "push rbp",
+            "mov rbp, rsp",
+            "push rbx",
+            "push r12",
+            "push r13",
+            "push r14",
+            "push r15",
+            "sub rsp, 8",
+            "mov [rdi], rsp",
+            "mov rax, rsi",
+            "mov edi, edx",
+            "mov rsi, rcx",
+            "call rax",
+            "add rsp, 8",
+            "pop r15",
+            "pop r14",
+            "pop r13",
+            "pop r12",
+            "pop rbx",
+            "pop rbp",
+            "ret",
+        )
+    }
+
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    #[unsafe(naked)]
+    unsafe extern "C" fn leave_main(saved: *const usize, status: c_int) -> ! {
+        core::arch::naked_asm!(
+            "mov rsp, [rdi]",
+            "mov eax, esi",
+            "add rsp, 8",
+            "pop r15",
+            "pop r14",
+            "pop r13",
+            "pop r12",
+            "pop rbx",
+            "pop rbp",
+            "ret",
+        )
+    }
+
+    #[cfg(all(any(target_os = "linux", target_os = "macos"), target_arch = "aarch64"))]
+    #[unsafe(naked)]
+    unsafe extern "C" fn enter_main(
+        saved: *mut usize,
+        f: usize,
+        argc: c_int,
+        argv: *const *const c_char,
+    ) -> c_int {
+        core::arch::naked_asm!(
+            "stp x29, x30, [sp, #-160]!",
+            "mov x29, sp",
+            "stp x19, x20, [sp, #16]",
+            "stp x21, x22, [sp, #32]",
+            "stp x23, x24, [sp, #48]",
+            "stp x25, x26, [sp, #64]",
+            "stp x27, x28, [sp, #80]",
+            "stp d8, d9, [sp, #96]",
+            "stp d10, d11, [sp, #112]",
+            "stp d12, d13, [sp, #128]",
+            "stp d14, d15, [sp, #144]",
+            "mov x9, sp",
+            "str x9, [x0]",
+            "mov x9, x1",
+            "mov w0, w2",
+            "mov x1, x3",
+            "blr x9",
+            "ldp d14, d15, [sp, #144]",
+            "ldp d12, d13, [sp, #128]",
+            "ldp d10, d11, [sp, #112]",
+            "ldp d8, d9, [sp, #96]",
+            "ldp x27, x28, [sp, #80]",
+            "ldp x25, x26, [sp, #64]",
+            "ldp x23, x24, [sp, #48]",
+            "ldp x21, x22, [sp, #32]",
+            "ldp x19, x20, [sp, #16]",
+            "ldp x29, x30, [sp], #160",
+            "ret",
+        )
+    }
+
+    #[cfg(all(any(target_os = "linux", target_os = "macos"), target_arch = "aarch64"))]
+    #[unsafe(naked)]
+    unsafe extern "C" fn leave_main(saved: *const usize, status: c_int) -> ! {
+        core::arch::naked_asm!(
+            "ldr x9, [x0]",
+            "mov sp, x9",
+            "mov w0, w1",
+            "ldp d14, d15, [sp, #144]",
+            "ldp d12, d13, [sp, #128]",
+            "ldp d10, d11, [sp, #112]",
+            "ldp d8, d9, [sp, #96]",
+            "ldp x27, x28, [sp, #80]",
+            "ldp x25, x26, [sp, #64]",
+            "ldp x23, x24, [sp, #48]",
+            "ldp x21, x22, [sp, #32]",
+            "ldp x19, x20, [sp, #16]",
+            "ldp x29, x30, [sp], #160",
+            "ret",
+        )
+    }
+
+    /// A Linux host the JIT has no register-level return for: the guest's
+    /// functions are called directly, and an exit call ends the process.
+    #[cfg(all(
+        target_os = "linux",
+        not(any(target_arch = "x86_64", target_arch = "aarch64"))
+    ))]
+    unsafe extern "C" fn enter_main(
+        _saved: *mut usize,
+        f: usize,
+        argc: c_int,
+        argv: *const *const c_char,
+    ) -> c_int {
+        let f: extern "C" fn(c_int, *const *const c_char) -> c_int =
+            unsafe { core::mem::transmute(f as *const ()) };
+        f(argc, argv)
+    }
+
+    #[cfg(all(
+        target_os = "linux",
+        not(any(target_arch = "x86_64", target_arch = "aarch64"))
+    ))]
+    unsafe extern "C" fn leave_main(_saved: *const usize, status: c_int) -> ! {
+        std::process::exit(status)
     }
 
     /// Return the JIT-side thunk address for a libc symbol whose
@@ -250,26 +493,28 @@ mod jit_impl {
     /// sit in the JIT mmap region that `JitRegion::drop` unmaps
     /// before the host process exits -- so handing the host's
     /// atexit address to JIT'd code yields a dangling pointer at
-    /// process teardown; the host's `exit` would skip the
-    /// intercepted handlers entirely. Intercepting the binding at
-    /// JIT bind_imports time means every JIT'd `atexit` /
-    /// `__cxa_atexit` / `exit` call lands on our thunk instead.
+    /// process teardown, and the host's exit functions would end
+    /// the host process. Intercepting the binding at JIT
+    /// bind_imports time means every JIT'd `atexit` /
+    /// `__cxa_atexit` / exit call lands on our thunks instead.
     fn atexit_thunk_addr(name: &str) -> u64 {
         match name {
             "atexit" => jit_atexit_thunk as *const () as usize as u64,
             "__cxa_atexit" => jit_cxa_atexit_thunk as *const () as usize as u64,
             "exit" => jit_exit_thunk as *const () as usize as u64,
+            "_exit" | "_Exit" | "quick_exit" => {
+                jit_immediate_exit_thunk as *const () as usize as u64
+            }
             _ => 0,
         }
     }
 
-    /// Drain and invoke every atexit handler registered during
-    /// the current `jit_run`. Called after JIT'd `main` returns
-    /// and before the code region is unmapped.
+    /// Run every atexit handler registered during the current program,
+    /// last registered first. A handler registered while the chain drains
+    /// runs next (C11 7.22.4.4). No borrow is held across a handler call,
+    /// which may itself end the program.
     fn drain_jit_atexit_chain() {
-        let entries: Vec<(extern "C" fn(*mut c_void), usize)> =
-            JIT_ATEXIT_CHAIN.with(|chain| chain.borrow_mut().drain(..).collect());
-        for (handler, arg) in entries.into_iter().rev() {
+        while let Some((handler, arg)) = JIT_ATEXIT_CHAIN.with(|chain| chain.borrow_mut().pop()) {
             handler(arg as *mut c_void);
         }
     }
@@ -646,37 +891,37 @@ mod jit_impl {
             fn pthread_attr_destroy(attr: *mut PthreadAttrT) -> c_int;
         }
 
-        // Payload moves to the worker by raw pointer; the worker
-        // reads it once, then ownership returns through `worker_ret`.
+        // The spawning thread owns the payload until the worker has
+        // joined; the worker reads it and leaves the status in it.
         struct Payload {
             entry_addr: usize,
             argc: c_int,
             argv: *const *const c_char,
             init_addrs: Vec<usize>,
             fini_addrs: Vec<usize>,
+            status: c_int,
         }
-        let payload = Box::new(Payload {
+        let mut payload = Payload {
             entry_addr: entry_ptr as usize,
             argc,
             argv,
             init_addrs,
             fini_addrs,
-        });
+            status: 0,
+        };
 
         unsafe extern "C" fn worker(arg: *mut c_void) -> *mut c_void {
-            // SAFETY: arg is the raw pointer the spawning thread
-            // produced via `Box::into_raw`. Boxing it back hands the
-            // payload's lifetime to this thread.
-            let payload = unsafe { Box::from_raw(arg as *mut Payload) };
-            run_ctors_register_dtors(&payload.init_addrs, &payload.fini_addrs);
-            let main_fn: extern "C" fn(c_int, *const *const c_char) -> c_int =
-                unsafe { std::mem::transmute::<usize, _>(payload.entry_addr) };
-            let rc = main_fn(payload.argc, payload.argv);
-            // C11 7.22.4.2p1: atexit handlers fire in LIFO order.
-            // Drain on the worker so any TLS the handlers touched
-            // belongs to the worker, not the spawning thread.
-            drain_jit_atexit_chain();
-            Box::into_raw(Box::new(rc)) as *mut c_void
+            // SAFETY: arg points at the spawning thread's payload, which
+            // that thread keeps alive and untouched until the join.
+            let payload = unsafe { &mut *(arg as *mut Payload) };
+            payload.status = run_program(
+                &payload.init_addrs,
+                &payload.fini_addrs,
+                payload.entry_addr,
+                payload.argc,
+                payload.argv,
+            );
+            core::ptr::null_mut()
         }
 
         // The guest's `main` gets a process-main-sized stack. The
@@ -692,29 +937,25 @@ mod jit_impl {
             core::ptr::null()
         };
         let mut tid: PthreadT = 0;
-        let raw_payload = Box::into_raw(payload) as *mut c_void;
+        let raw_payload = &raw mut payload as *mut c_void;
         let rc = unsafe { pthread_create(&mut tid, attr_ptr, worker, raw_payload) };
         if !attr_ptr.is_null() {
             unsafe { pthread_attr_destroy(&mut attr) };
         }
         if rc != 0 {
-            // Reclaim the payload box; the worker never ran.
-            drop(unsafe { Box::from_raw(raw_payload as *mut Payload) });
             return Err(C5Error::internal(format!(
                 "JIT: pthread_create failed (rc={rc})"
             )));
         }
-        let mut ret: *mut c_void = core::ptr::null_mut();
-        let join_rc = unsafe { pthread_join(tid, &mut ret) };
+        let join_rc = unsafe { pthread_join(tid, core::ptr::null_mut()) };
         if join_rc != 0 {
             return Err(C5Error::internal(format!(
                 "JIT: pthread_join failed (rc={join_rc})"
             )));
         }
-        let exit_code = unsafe { *Box::from_raw(ret as *mut c_int) };
         // _argv_owned dropped here, after the worker has joined and
         // any reads through `argv` have completed.
-        Ok(exit_code as i32)
+        Ok(payload.status)
     }
 
     #[cfg(target_os = "windows")]
@@ -746,6 +987,8 @@ mod jit_impl {
             fn CloseHandle(handle: Handle) -> i32;
         }
 
+        // The spawning thread owns the payload until the worker has
+        // ended; the worker only reads it.
         struct Payload {
             entry_addr: usize,
             argc: c_int,
@@ -753,29 +996,32 @@ mod jit_impl {
             init_addrs: Vec<usize>,
             fini_addrs: Vec<usize>,
         }
-        let payload = Box::new(Payload {
+        let payload = Payload {
             entry_addr: entry_ptr as usize,
             argc,
             argv,
             init_addrs,
             fini_addrs,
-        });
+        };
 
+        // The program's status is the thread's exit code, a 32-bit DWORD
+        // the caller widens back to i32; a negative status round-trips
+        // through the two's-complement representation.
         unsafe extern "system" fn worker(arg: *mut c_void) -> u32 {
-            let payload = unsafe { Box::from_raw(arg as *mut Payload) };
-            run_ctors_register_dtors(&payload.init_addrs, &payload.fini_addrs);
-            let main_fn: extern "C" fn(c_int, *const *const c_char) -> c_int =
-                unsafe { std::mem::transmute::<usize, _>(payload.entry_addr) };
-            let rc = main_fn(payload.argc, payload.argv);
-            drain_jit_atexit_chain();
-            // Thread exit code is a 32-bit DWORD; the caller widens
-            // back to i32 on retrieval. Negative `rc` round-trips
-            // through the two's-complement representation.
-            rc as u32
+            // SAFETY: arg points at the spawning thread's payload, which
+            // that thread keeps alive until this thread has ended.
+            let payload = unsafe { &*(arg as *const Payload) };
+            run_program(
+                &payload.init_addrs,
+                &payload.fini_addrs,
+                payload.entry_addr,
+                payload.argc,
+                payload.argv,
+            )
         }
 
         let mut thread_id: u32 = 0;
-        let raw_payload = Box::into_raw(payload) as *mut c_void;
+        let raw_payload = &raw const payload as *mut c_void;
         // Reserve a process-main-sized stack for the guest's `main`
         // (the PE-header default is 1 MiB); alloca / VLA storage now
         // genuinely consumes stack.
@@ -790,7 +1036,6 @@ mod jit_impl {
             )
         };
         if handle.is_null() {
-            drop(unsafe { Box::from_raw(raw_payload as *mut Payload) });
             return Err(C5Error::internal("JIT: CreateThread returned NULL"));
         }
         const INFINITE: u32 = 0xFFFF_FFFF;

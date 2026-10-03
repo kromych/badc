@@ -68,6 +68,30 @@ fn return_42() {
     assert_eq!(jit_exit("int main() { return 42; }", &["jit-ret42"]), 42);
 }
 
+/// A program ends with its status and the runner goes on, however it
+/// ends: `exit` from a nested call, `_exit` past a handler, a handler's
+/// `_exit` after `main` returns, `exit` in a constructor (C99 7.20.4.3,
+/// 5.1.2.2.3; POSIX `_exit`).
+#[test]
+fn exit_returns_to_the_runner() {
+    let nested = "#include <stdlib.h>\n\
+        int f(int n) { if (!n) exit(7); return f(n - 1) + 1; }\n\
+        int main(void) { return f(5); }";
+    assert_eq!(jit_exit(nested, &["jit-exit-nested"]), 7);
+    let immediate = "#include <stdlib.h>\n#include <unistd.h>\n\
+        static void h(void) { _exit(9); }\n\
+        int main(void) { atexit(h); _exit(8); }";
+    assert_eq!(jit_exit(immediate, &["jit-exit-immediate"]), 8);
+    let handler = "#include <stdlib.h>\n#include <unistd.h>\n\
+        static void h(void) { _exit(9); }\n\
+        int main(void) { atexit(h); return 4; }";
+    assert_eq!(jit_exit(handler, &["jit-exit-handler"]), 9);
+    let ctor = "#include <stdlib.h>\n\
+        __attribute__((constructor)) static void c(void) { exit(6); }\n\
+        int main(void) { return 1; }";
+    assert_eq!(jit_exit(ctor, &["jit-exit-ctor"]), 6);
+}
+
 /// Raw-byte inline asm executes natively: the literal bytes `B8 25 00 00 00`
 /// are `mov eax, 0x25`, and the `"=a"` output ties the result to the return
 /// value. x86_64 host only -- the bytes are x86 machine code, and the VM
@@ -2117,44 +2141,28 @@ fn undefined_extern_object_is_a_link_error() {
     );
 }
 
-/// C99 7.20.4.3p2: `exit` runs the registered atexit handlers. The
-/// JIT intercepts both `atexit` and `exit`, so the handler chain must
-/// drain before the process terminates with the passed status. `exit`
-/// ends the whole process, so the assertion drives a re-executed copy
-/// of this test binary gated by the marker env var.
+/// C99 7.20.4.3p2: `exit` runs the registered atexit handlers, and the
+/// program ends with the status `exit` was given. The JIT intercepts both
+/// `atexit` and `exit`, so the handler chain drains before the run returns
+/// the status to the runner.
 #[test]
 fn atexit_handlers_run_on_libc_exit() {
-    if let Ok(marker) = std::env::var("BADC_JIT_EXIT_MARKER") {
-        let src = format!(
-            "#include <stdio.h>\n\
-             #include <stdlib.h>\n\
-             static void h(void) {{\n\
-                 FILE *f = fopen(\"{marker}\", \"w\");\n\
-                 if (f) {{ fputs(\"ran\", f); fclose(f); }}\n\
-             }}\n\
-             int main(void) {{ atexit(h); exit(42); }}\n",
-        );
-        let program = Compiler::new(src).compile().expect("compile");
-        let _ = jit_run(&program, &["jit-exit".to_string()]);
-        unreachable!("exit(42) must terminate the process");
-    }
     let marker = std::env::temp_dir().join(format!("badc_jit_exit_{}", std::process::id()));
     let _ = std::fs::remove_file(&marker);
-    // libtest names tests without the crate segment of module_path!.
-    let module = module_path!();
-    let module = module.split_once("::").map_or(module, |(_, rest)| rest);
-    let test_name = format!("{module}::atexit_handlers_run_on_libc_exit");
-    let out = super::image_command(std::env::current_exe().expect("current_exe"))
-        .args(["--exact", &test_name, "--test-threads=1"])
-        .env("BADC_JIT_EXIT_MARKER", &marker)
-        .output()
-        .expect("re-exec the test binary");
+    let src = format!(
+        "#include <stdio.h>\n\
+         #include <stdlib.h>\n\
+         static void h(void) {{\n\
+             FILE *f = fopen(\"{}\", \"w\");\n\
+             if (f) {{ fputs(\"ran\", f); fclose(f); }}\n\
+         }}\n\
+         int main(void) {{ atexit(h); exit(42); }}\n",
+        marker.display()
+    );
+    let program = Compiler::new(src).compile().expect("compile");
     assert_eq!(
-        out.status.code(),
-        Some(42),
-        "stdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr),
+        jit_run(&program, &["jit-exit".to_string()]).expect("jit_run"),
+        42
     );
     let contents = std::fs::read_to_string(&marker).expect("atexit handler must write the marker");
     let _ = std::fs::remove_file(&marker);

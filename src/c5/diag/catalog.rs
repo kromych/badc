@@ -129,6 +129,9 @@ catalog! {
     2023, "static-assert", [], Error, Hard,
         [], Live,
         "a static assertion whose controlling expression is zero";
+    2024, "incomplete-element-type", [], Error, Hard,
+        [], Live,
+        "an array whose element type is incomplete: an array of unknown size, `void`, or a tag declared without its body";
     3001, "int-conversion", [], Warning, Controllable,
         [DEFAULT], Live,
         "an integer and a pointer exchanged with no cast";
@@ -395,6 +398,7 @@ impl Code {
     pub const INVALID_DECLARATION: Code = Code::new(2021);
     pub const UNDECLARED_IDENTIFIER: Code = Code::new(2022);
     pub const STATIC_ASSERT: Code = Code::new(2023);
+    pub const INCOMPLETE_ELEMENT_TYPE: Code = Code::new(2024);
     pub const INVALID_OPERANDS: Code = Code::new(3020);
     pub const CONSTANT_EXPRESSION: Code = Code::new(3021);
     pub const INVALID_INITIALIZER: Code = Code::new(3022);

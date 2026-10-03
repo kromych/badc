@@ -61,6 +61,7 @@ regenerates.
 | B2021 | `invalid-declaration` | error | hard | - | a declaration a C99 constraint rejects: a redefinition, conflicting types, an incomplete object, a bit-field width or an alignment out of range |
 | B2022 | `undeclared-identifier` | error | hard | - | a name no declaration in scope introduces |
 | B2023 | `static-assert` | error | hard | - | a static assertion whose controlling expression is zero |
+| B2024 | `incomplete-element-type` | error | hard | - | an array whose element type is incomplete: an array of unknown size, `void`, or a tag declared without its body |
 | B3001 | `int-conversion` | warning | controllable | default | an integer and a pointer exchanged with no cast |
 | B3002 | `incompatible-struct-types` | warning | controllable | default | an aggregate or enumerated type used where a different one is expected |
 | B3003 | `return-type` | ignore | controllable | all | control reaches the end of a value-returning function |

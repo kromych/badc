@@ -311,7 +311,11 @@ impl Compiler {
             // (`gf *`) absorbed them above.
             if self.lex.tk == ',' || self.lex.tk == ')' || self.lex.tk == Token::Brak {
                 let mut dims = self.parse_unnamed_param_bounds()?;
+                self.require_complete_elements(ty, &dims)?;
                 if self.pending.typedef_base_array_size != 0 && leading_ptr_count == 0 {
+                    if !dims.is_empty() && self.typedef_base_incomplete() {
+                        return Err(self.unknown_size_element_err());
+                    }
                     dims.extend(self.typedef_base_dims());
                 }
                 if !dims.is_empty() {
@@ -489,6 +493,8 @@ impl Compiler {
             if dims.is_empty() {
                 self.skip_array_dimension_expr()?;
                 dims.push(-1);
+            } else if self.lex.tk == ']' {
+                return Err(self.unknown_size_element_err());
             } else {
                 let Some(n) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
                 else {

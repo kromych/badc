@@ -2591,10 +2591,7 @@ impl Compiler {
             self.next()?; // consume `[`
             if self.lex.tk == ']' {
                 if !dims.is_empty() {
-                    return Err(self.compile_err(
-                        Code::INVALID_DECLARATION,
-                        "array type has an incomplete inner dimension",
-                    ));
+                    return Err(self.unknown_size_element_err());
                 }
                 dims.push(-1);
             } else {
@@ -2610,6 +2607,7 @@ impl Compiler {
             self.next()?; // consume `]`
         }
         dims.extend_from_slice(base_dims);
+        self.require_complete_elements(elem_ty, &dims)?;
         if self.lex.tk != ')' {
             return Err(
                 self.compile_err(Code::SYNTAX, "`)` expected to close compound-literal type")

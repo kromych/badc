@@ -5794,7 +5794,8 @@ impl Compiler {
     }
 
     /// An array of `n` of the type `t` holds; only its outermost bound may
-    /// be unspecified (C99 6.7.5.2p1), and its element is no function.
+    /// be unspecified, and its element is complete and no function (C99
+    /// 6.7.5.2p1).
     fn derive_array(&mut self, t: &mut DerivedType, n: i64) -> Result<(), C5Error> {
         if t.is_function {
             return Err(self.compile_err(Code::INVALID_DECLARATION, "array of functions"));
@@ -5805,13 +5806,8 @@ impl Compiler {
                 "a non-constant inner array dimension is not supported",
             ));
         }
-        if t.dims.first().is_some_and(|&d| d < 0) {
-            return Err(self.compile_err(
-                Code::INVALID_DECLARATION,
-                "array type has an incomplete inner dimension",
-            ));
-        }
         t.dims.insert(0, n);
+        self.require_complete_elements(t.ty, &t.dims)?;
         t.own_bounds += 1;
         if let Some(f) = t.fn_ty.as_mut() {
             f.ptr_depth += 1;
@@ -5831,12 +5827,15 @@ impl Compiler {
         if t.is_function {
             return Err(self.compile_err(Code::INVALID_DECLARATION, "array of functions"));
         }
-        if t.vla_value || t.dims.first().is_some_and(|&d| d < 0) {
+        if t.vla_value {
             return Err(self.compile_err(
                 Code::UNSUPPORTED,
                 "a non-constant inner array dimension is not supported",
             ));
         }
+        let mut dims = alloc::vec![-1];
+        dims.extend_from_slice(&t.dims);
+        self.require_complete_elements(t.ty, &dims)?;
         let elem = if t.dims.is_empty() {
             t.ty
         } else {

@@ -295,29 +295,9 @@ impl Compiler {
     /// array its constant inner dimensions and an array typedef base form,
     /// if any (C99 6.7.5.2p3).
     fn vla_element_type(&mut self, ty: i64) -> Result<i64, C5Error> {
-        let mut inner: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
-        while self.lex.tk == Token::Brak {
-            self.next()?;
-            let Some(m) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
-            else {
-                return Err(self.compile_err(
-                    Code::UNSUPPORTED,
-                    "a non-constant inner array dimension is not supported",
-                ));
-            };
-            if m <= 0 {
-                return Err(self.compile_err(
-                    Code::INVALID_DECLARATION,
-                    format!("array dimension must be positive (got {m})"),
-                ));
-            }
-            if self.lex.tk != ']' {
-                return Err(
-                    self.compile_err(Code::SYNTAX, "close bracket expected in array declarator")
-                );
-            }
-            self.next()?;
-            inner.push(m);
+        let mut inner = self.parse_inner_bounds(false)?;
+        if !self.pending.base_array_taken && self.typedef_base_incomplete() {
+            return Err(self.unknown_size_element_err());
         }
         if self.pending.typedef_base_array_size > 0 && !self.pending.base_array_taken {
             self.pending.base_array_taken = true;
@@ -758,7 +738,10 @@ impl Compiler {
                 // typedef base adds its bounds inside these.
                 if base_array_open && self.pending.typedef_base_array_size > 0 {
                     pointee_dims.extend(self.typedef_base_dims());
+                } else if base_array_open && self.typedef_base_incomplete() {
+                    return Err(self.unknown_size_element_err());
                 }
+                self.require_complete_elements(outer_ty_before_inner, &pointee_dims)?;
                 self.pending.fn_chain_array_levels += pointee_dims.len() as i64;
                 inner_ty = (self.array_agg_type(outer_ty_before_inner, &pointee_dims)
                     + inner_ptr_levels * (Ty::Ptr as i64))
@@ -833,6 +816,12 @@ impl Compiler {
     ) -> Result<(usize, i64, i64, i64), C5Error> {
         let mut array_size: i64 = 0;
         if self.lex.tk == Token::Brak {
+            // C99 6.7.5.2p1: the element type is complete and no function
+            // type.
+            if self.pending.bare_function_type_declarator {
+                return Err(self.compile_err(Code::INVALID_DECLARATION, "array of functions"));
+            }
+            self.require_complete_elements(ty, &[-1])?;
             self.pending.declarator_zero_len_array = false;
             self.next()?;
             // C99 6.7.5.3p7 + 6.7.5.2p1: `[`'s contents may be
@@ -951,6 +940,9 @@ impl Compiler {
             // observes `array_size != 0` and skips its own
             // typedef-dim fold to avoid double application.
             if array_size != 0 && !self.pending.base_array_taken {
+                if self.typedef_base_incomplete() {
+                    return Err(self.unknown_size_element_err());
+                }
                 self.pending.base_array_taken = true;
                 let typedef_dim = self.pending.typedef_base_array_size;
                 if typedef_dim > 0 {
@@ -1049,8 +1041,7 @@ impl Compiler {
                 self.next()?;
             }
             if self.lex.tk == ']' {
-                self.next()?;
-                continue;
+                return Err(self.unknown_size_element_err());
             }
             let Some(m) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
             else {

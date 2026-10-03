@@ -639,6 +639,12 @@ impl Compiler {
         self.tags_compatible_as(unqualified_pointee_ty(a), unqualified_pointee_ty(b), true)
     }
 
+    /// Whether the array-typedef base has unknown size (`typedef int T[];`),
+    /// an incomplete type (C99 6.2.5p22); a zero-length alias is complete.
+    pub(super) fn typedef_base_incomplete(&self) -> bool {
+        self.pending.typedef_base_array_size < 0 && !self.pending.typedef_base_zero_len
+    }
+
     /// The bounds of the array-typedef base, outermost first.
     pub(super) fn typedef_base_dims(&self) -> Vec<i64> {
         if self.pending.typedef_base_array_dims.len() >= 2 {
@@ -709,21 +715,59 @@ impl Compiler {
         (is_struct_value_ty(ty) && !self.structs[sid].is_complete).then_some(sid)
     }
 
-    /// Whether `ptr_ty` points to an incomplete type, which a subscript and
-    /// the additive operators cannot step over (C99 6.5.2.1p1, 6.5.6p2): a
-    /// struct or union without its body, or an array of unknown bound.
-    /// GNU C steps a pointer to `void` or to a function by one byte.
-    pub(super) fn points_to_incomplete(&self, ptr_ty: i64) -> bool {
-        if !is_struct_ty(ptr_ty) || struct_ptr_depth(ptr_ty) != 1 {
-            return false;
-        }
-        let s = &self.structs[struct_id_of(ptr_ty)];
+    /// Whether the aggregate tag `ty` names, at any pointer depth, is
+    /// incomplete: a struct or union without its body, or an array of
+    /// unknown bound.
+    fn is_incomplete_aggregate(&self, ty: i64) -> bool {
+        let s = &self.structs[struct_id_of(ty)];
         match s.fields.first().filter(|_| s.is_array) {
             _ if s.vla_size_slot.is_some() => false,
             Some(f) if f.array_dims.len() >= 2 => f.array_dims[0] < 0,
             Some(f) => f.array_size < 0,
             None => !s.is_complete,
         }
+    }
+
+    /// Whether `ptr_ty` points to an incomplete type, which a subscript and
+    /// the additive operators cannot step over (C99 6.5.2.1p1, 6.5.6p2).
+    /// GNU C steps a pointer to `void` or to a function by one byte.
+    pub(super) fn points_to_incomplete(&self, ptr_ty: i64) -> bool {
+        is_struct_ty(ptr_ty)
+            && struct_ptr_depth(ptr_ty) == 1
+            && self.is_incomplete_aggregate(ptr_ty)
+    }
+
+    /// C99 6.7.5.2p1: the element type of an array is complete. `dims` are
+    /// the array's bounds over `elem_ty`, outermost first; only the first
+    /// may be unspecified (negative).
+    pub(super) fn require_complete_elements(
+        &self,
+        elem_ty: i64,
+        dims: &[i64],
+    ) -> Result<(), C5Error> {
+        if dims.iter().skip(1).any(|&d| d < 0) {
+            return Err(self.unknown_size_element_err());
+        }
+        let incomplete_tag = is_struct_value_ty(elem_ty) && self.is_incomplete_aggregate(elem_ty);
+        if dims.is_empty() || !(incomplete_tag || super::types::is_void_ty(elem_ty)) {
+            return Ok(());
+        }
+        if incomplete_tag && self.structs[struct_id_of(elem_ty)].is_array {
+            return Err(self.unknown_size_element_err());
+        }
+        let t = super::types::format_type(elem_ty, &self.structs);
+        Err(self.compile_err(
+            Code::INCOMPLETE_ELEMENT_TYPE,
+            alloc::format!("array has incomplete element type `{t}`"),
+        ))
+    }
+
+    /// The error for an array whose element is an array of unknown size.
+    pub(super) fn unknown_size_element_err(&self) -> C5Error {
+        self.compile_err(
+            Code::INCOMPLETE_ELEMENT_TYPE,
+            "array has incomplete element type: an array of unknown size",
+        )
     }
 
     /// Reject an operand of `op` that [`Self::points_to_incomplete`].

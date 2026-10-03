@@ -1261,25 +1261,42 @@ impl Compiler {
             } | qual_bits;
             let base_enum_tag = self.pending.base_enum_tag.take();
             while self.lex.tk != ';' && self.lex.tk != 0 {
+                // C99 6.9.1p6: the list declares the parameters, so a bound
+                // and a function type adjust as a prototype's (6.7.5.3p7-8).
+                self.pending.param_decl_context = true;
                 let (decl_idx, mut decl_ty, decl_arr, _) = self.parse_declarator(base)?;
+                let (fn_ptr_indirection, fn_ptr_ret_indirection, fn_params, ret_fn) =
+                    self.take_param_fn_ptr_carriers();
                 if decl_idx != usize::MAX {
                     // An array parameter is adjusted to a pointer to its
                     // element type (6.7.5.3p7), a row for more than one
                     // bound; the bounds leave the symbol with it. An array
                     // typedef no derivation took is the parameter's type.
+                    let typedef_array =
+                        self.pending.typedef_base_array_size != 0 && !self.pending.base_array_taken;
                     if decl_arr != 0 {
                         let dims = core::mem::take(&mut self.symbols[decl_idx].array_dims);
                         self.symbols[decl_idx].inner_array_size = 0;
                         decl_ty = self.array_value_ty(decl_ty, &dims);
-                    } else if self.pending.typedef_base_array_size != 0
-                        && !self.pending.base_array_taken
-                    {
+                    } else if typedef_array {
                         let dims = self.typedef_base_dims();
                         decl_ty = self.array_value_ty(decl_ty, &dims);
                     }
                     if let Some(pos) = params.indices.iter().position(|&pi| pi == decl_idx) {
                         self.symbols[decl_idx].type_ = decl_ty;
                         self.symbols[decl_idx].incomplete_enum_tag = base_enum_tag;
+                        // The adjusted pointer is one more level above a
+                        // function-pointer element.
+                        let adjusted = decl_arr != 0 || typedef_array;
+                        self.symbols[decl_idx].fn_ptr_indirection =
+                            fn_ptr_indirection + i64::from(adjusted && fn_ptr_indirection > 0);
+                        self.symbols[decl_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
+                        self.symbols[decl_idx].ret_fn = ret_fn;
+                        if fn_ptr_indirection > 0
+                            && let Some(pp) = fn_params
+                        {
+                            self.symbols[decl_idx].set_fn_params(pp);
+                        }
                         params.types[pos] = decl_ty;
                         params.note_enum_tag(pos, base_enum_tag);
                     } else {

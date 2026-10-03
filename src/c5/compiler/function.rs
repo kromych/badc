@@ -117,7 +117,7 @@ impl Compiler {
     /// declarator to bind it) leaks into the next declaration -- e.g. the
     /// first field of a following struct definition would record a phantom
     /// function-pointer prototype.
-    fn take_param_fn_ptr_carriers(&mut self) -> ParamFnCarriers {
+    pub(super) fn take_param_fn_ptr_carriers(&mut self) -> ParamFnCarriers {
         let ret_fn = self.take_decl_ret_fn(false);
         let indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
         let ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);

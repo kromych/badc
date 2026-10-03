@@ -4540,3 +4540,34 @@ fn a_static_compound_literal_of_an_unsized_array_typedef_is_sized_by_its_list() 
         "{msg}"
     );
 }
+
+/// C99 6.9.1p6: the declarations of an old-style definition declare its
+/// parameters, so a parameter declared there with a function type or a
+/// variable-length array type is adjusted to a pointer as in a prototype
+/// (6.7.5.3p7-8), and its size has integer type (6.7.5.2p1).
+#[test]
+fn an_old_style_parameter_declaration_adjusts_as_a_prototype_does() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "static int seven(void) { return 7; }\n\
+               int callit(g) int g(void); { return g(); }\n\
+               int sum(a, n) int n; int a[n]; {\n\
+               \tint s = 0;\n\
+               \tfor (int i = 0; i < n; i++) s += a[i];\n\
+               \treturn s;\n\
+               }\n\
+               int main(void) { int v[3] = { 1, 2, 3 }; return callit(seven) * 10 + sum(v, 3); }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 76, "{src}");
+    let src = "int f(a, d) double d; int a[d]; { return a[0]; }\n\
+               int main(void) { return 0; }\n";
+    let msg = Compiler::new(src.to_string())
+        .compile()
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(
+        msg.contains("array size has type `double`, not an integer type"),
+        "{msg}"
+    );
+}

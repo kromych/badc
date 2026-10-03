@@ -320,14 +320,16 @@ AAPCS64 (6.4.2) has Short Vectors of 8 and 16 bytes and no rule for a
 narrower vector. badc follows clang on every AArch64 target: such a vector is
 passed as a 32-bit integer -- in the low word of the next general-purpose
 register, else in the stack slot an `int` takes, 4 bytes at a 4-byte boundary
-for a named argument on Apple's arm64 and 8 bytes elsewhere -- and
-`float __attribute__((vector_size(4)))` is returned in s0. gcc on Linux passes
-that vector on the stack, the arguments after it too, and returns it in w0, so
-it crosses a call to or from gcc-compiled AArch64 code misplaced as an
-argument or a result. A struct holding it crosses in general-purpose
-registers under either compiler. TODO: an integer vector narrower than 8
-bytes is returned in w0, where clang returns it in v0: one element in the low
-bytes, more than one widened to equal lanes of d0.
+for a named argument on Apple's arm64 and 8 bytes elsewhere -- and returned in
+v0: `float __attribute__((vector_size(4)))` and a vector of one element as its
+bytes in the low bytes (s0, h0 or b0), a vector of several integer elements
+with each element widened to an equal lane of d0 -- 16-bit lanes for four
+`char`s, 32-bit lanes for two `short`s or two `char`s. gcc on Linux passes
+the `float` vector on the stack, the arguments after it too, and returns it
+and the integer vectors in w0, so these vectors cross a call to or from
+gcc-compiled AArch64 code misplaced as a result, and the `float` one as an
+argument too. A struct holding such a vector crosses in general-purpose
+registers under either compiler.
 
 ## Extensions implemented
 

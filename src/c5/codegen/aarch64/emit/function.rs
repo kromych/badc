@@ -2174,6 +2174,13 @@ fn emit_aggregate_return(
                 scratch.secondary,
             );
         }
+        if let Some((elem, lane)) = super::abi_classify::narrow_vector_lanes(desc) {
+            let mut w = elem;
+            while w < lane {
+                emit(code, super::encode::enc_uxtl(0, 0, w));
+                w *= 2;
+            }
+        }
         return Ok(());
     }
     if size <= 16 {

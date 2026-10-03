@@ -224,15 +224,20 @@ pub(crate) fn is_abi_vector_width(width: u32) -> bool {
 
 /// A GNU vector narrower than the 8- and 16-byte Short Vectors, for which
 /// AAPCS64 6.4.2 has no rule. badc passes it as clang does on every
-/// AArch64 target, as a 32-bit integer argument.
+/// AArch64 target, as a 32-bit integer argument, and returns it in v0.
 pub(crate) fn is_narrow_vector(desc: &AggDesc) -> bool {
     desc.vector && desc.size < 8
 }
 
-/// A narrow vector of floating-point lanes, which clang returns in the low
-/// bytes of v0.
-fn returns_in_fp_reg(desc: &AggDesc) -> bool {
-    is_narrow_vector(desc) && desc.fields.iter().all(|f| f.kind.is_fp_scalar())
+/// `(element, lane)` byte widths of a narrow vector clang returns with its
+/// elements widened to equal lanes of d0: one of integer elements, more
+/// than one. Any other narrow vector returns as its bytes in the low bytes
+/// of v0.
+pub(crate) fn narrow_vector_lanes(desc: &AggDesc) -> Option<(u32, u32)> {
+    let elem = desc.fields.first()?;
+    let count = desc.fields.len() as u32;
+    (is_narrow_vector(desc) && elem.kind == ScalarKind::Int && count > 1)
+        .then_some((elem.size, 8 / count))
 }
 
 pub(crate) fn arg_align(align: u32, member_align: u32, abi: Abi) -> u32 {
@@ -396,7 +401,7 @@ impl Eightbyte {
 /// returned in consecutive SIMD registers, one per element. Otherwise
 /// a composite of 16 bytes or less occupies one or two GPRs; a larger
 /// one is passed by reference (argument) or via the x8 indirect-result
-/// register (return). A narrow floating-point vector returns in v0.
+/// register (return). A narrow vector returns in v0.
 fn classify_aapcs64(desc: &AggDesc, is_return: bool) -> AggClass {
     if let Some(hfa) = desc.homogeneous {
         return AggClass::Regs(alloc::vec![hfa.reg_class(); hfa.count()]);
@@ -408,7 +413,7 @@ fn classify_aapcs64(desc: &AggDesc, is_return: bool) -> AggClass {
     if let Some(c) = sole_vector_width(size, &desc.fields).and_then(vector_reg_class) {
         return AggClass::Regs(alloc::vec![c]);
     }
-    if is_return && returns_in_fp_reg(desc) {
+    if is_return && is_narrow_vector(desc) {
         return AggClass::Regs(alloc::vec![RegClass::Sse]);
     }
     if size <= 16 {
@@ -424,7 +429,7 @@ fn classify_aapcs64(desc: &AggDesc, is_return: bool) -> AggClass {
 /// `(byte_offset, byte_size)` of each SIMD register slot the aggregate
 /// occupies, passed or returned (`is_return`), in register order: an HFA's
 /// elements (AAPCS64 6.8.2), the single slot a Short Vector fills, or the
-/// low bytes of v0 a narrow floating-point vector returns in. `None` when
+/// low bytes of v0 a narrow vector returns in. `None` when
 /// the aggregate takes no SIMD register. The aarch64 emit drives its
 /// per-slot load / store width from this, so a 16-byte vector moves as one
 /// `q` access instead of the HFA element's `d` or `s`.
@@ -435,7 +440,7 @@ pub(crate) fn fp_member_layout(
     if let Some(hfa) = desc.homogeneous {
         return Some(hfa.members());
     }
-    if is_return && returns_in_fp_reg(desc) {
+    if is_return && is_narrow_vector(desc) {
         return Some(alloc::vec![(0, desc.size)]);
     }
     let width = sole_vector_width(desc.size, &desc.fields)?;
@@ -998,42 +1003,60 @@ mod tests {
     }
 
     #[test]
-    fn aapcs64_narrow_float_vector_returns_in_a_simd_register() {
-        // A bare 4-byte `float` vector passes as a 32-bit integer and returns
-        // in s0, as clang places it; a struct holding it and an integer vector
-        // of its width keep the general registers both ways.
+    fn aapcs64_narrow_vectors_return_in_a_simd_register() {
+        // A bare vector narrower than 8 bytes passes as a 32-bit integer and
+        // returns in v0, as clang places it: a `float` or a single element as
+        // its bytes in the low bytes, several integer elements widened to
+        // equal lanes of d0. A struct holding one keeps the general registers.
         let lane = FlatField {
             single_fp_vector: true,
             ..ff(0, 4, ScalarKind::F32)
         };
-        let bare = AggDesc {
-            vector: true,
-            ..desc(4, &[lane])
+        let lanes = |n: u32, w: u32| -> alloc::vec::Vec<FlatField> {
+            (0..n).map(|i| ff(i * w, w, ScalarKind::Int)).collect()
         };
-        assert_eq!(
-            classify_aggregate(&bare, aapcs(), false),
-            AggClass::Regs(alloc::vec![RegClass::Integer])
-        );
-        assert_eq!(
-            classify_aggregate(&bare, aapcs(), true),
-            AggClass::Regs(alloc::vec![RegClass::Sse])
-        );
-        assert_eq!(fp_member_layout(&bare, true), Some(alloc::vec![(0, 4)]));
-        assert_eq!(fp_member_layout(&bare, false), None);
-        let bytes: alloc::vec::Vec<FlatField> = (0..4).map(|i| ff(i, 1, ScalarKind::Int)).collect();
-        let ints = AggDesc {
+        let bare = |fields: &[FlatField]| AggDesc {
             vector: true,
-            ..desc(4, &bytes)
+            ..desc(fields.iter().map(|f| f.size).sum(), fields)
         };
-        for held in [&desc(4, &[lane]), &ints] {
+        // (element count, element bytes, widened (element, lane) bytes); no
+        // count is the `float` vector.
+        let cases = [
+            (0, 4, None),
+            (1, 4, None),
+            (1, 2, None),
+            (1, 1, None),
+            (2, 2, Some((2, 4))),
+            (4, 1, Some((1, 2))),
+            (2, 1, Some((1, 4))),
+        ];
+        for &(n, w, widened) in &cases {
+            let fields = if n == 0 {
+                alloc::vec![lane]
+            } else {
+                lanes(n, w)
+            };
+            let d = bare(&fields);
             assert_eq!(
-                classify_aggregate(held, aapcs(), true),
+                classify_aggregate(&d, aapcs(), false),
                 AggClass::Regs(alloc::vec![RegClass::Integer])
             );
-            assert_eq!(fp_member_layout(held, true), None);
+            assert_eq!(
+                classify_aggregate(&d, aapcs(), true),
+                AggClass::Regs(alloc::vec![RegClass::Sse])
+            );
+            assert_eq!(fp_member_layout(&d, true), Some(alloc::vec![(0, d.size)]));
+            assert_eq!(fp_member_layout(&d, false), None);
+            assert_eq!(narrow_vector_lanes(&d), widened, "{} bytes", d.size);
         }
+        let held = desc(4, &[lane]);
         assert_eq!(
-            classify_aggregate(&bare, sysv(), true),
+            classify_aggregate(&held, aapcs(), true),
+            AggClass::Regs(alloc::vec![RegClass::Integer])
+        );
+        assert_eq!(fp_member_layout(&held, true), None);
+        assert_eq!(
+            classify_aggregate(&bare(&[lane]), sysv(), true),
             AggClass::ReturnIndirect
         );
     }

@@ -14505,6 +14505,89 @@ fn aarch64_narrow_float_vector_crosses_as_clang_places_it() {
     }
 }
 
+/// An integer vector narrower than 8 bytes returns as clang returns it on
+/// every AArch64 target: a single element as its bytes in the low bytes of
+/// v0 (`ldr s0`, `ldr h0`, `ldr b0`), several widened to equal lanes of d0
+/// (`ushll` from the bytes), which the caller narrows back (`xtn`) before it
+/// stores them.
+#[test]
+fn aarch64_narrow_integer_vectors_return_as_clang_places_them() {
+    use crate::Target;
+    use crate::c5::codegen::aarch64::encode::{
+        Reg, enc_ldr_bh_imm, enc_ldr_s_imm, enc_uxtl, enc_xtn,
+    };
+    // (type, element bytes, element count)
+    const SHAPES: &[(&str, u32, u32)] = &[
+        ("int", 4, 1),
+        ("short", 2, 1),
+        ("char", 1, 1),
+        ("short", 2, 2),
+        ("char", 1, 4),
+        ("char", 1, 2),
+    ];
+    let mut src = alloc::string::String::new();
+    for (i, &(ty, elem, count)) in SHAPES.iter().enumerate() {
+        src += &alloc::format!(
+            "typedef {ty} v{i} __attribute__((vector_size({})));\n\
+             v{i} give{i}(v{i} *p) {{ return *p; }}\n\
+             v{i} ext{i}(void);\n\
+             int first{i}(void) {{ return ext{i}()[0]; }}\n",
+            elem * count
+        );
+    }
+    let x = Reg;
+    for target in [
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+    ] {
+        let obj = relocatable_object(&src, target);
+        for (i, &(_, elem, count)) in SHAPES.iter().enumerate() {
+            let size = elem * count;
+            let give = function_words(&obj, &alloc::format!("give{i}"));
+            let load_v0 = |b: Reg| {
+                if size == 4 {
+                    enc_ldr_s_imm(0, b, 0)
+                } else {
+                    enc_ldr_bh_imm(size, 0, b, 0)
+                }
+            };
+            assert!(
+                (0..31).any(|r| give.contains(&load_v0(x(r)))),
+                "{target:?} give{i}: the vector's bytes are not loaded into v0"
+            );
+            // The widening steps from the element width to 8 / count bytes.
+            let lane = if count > 1 { 8 / count } else { elem };
+            let mut w = elem;
+            while w < lane {
+                assert!(
+                    give.contains(&enc_uxtl(0, 0, w)),
+                    "{target:?} give{i}: no widening from {w}-byte lanes"
+                );
+                w *= 2;
+            }
+            let first = function_words(&obj, &alloc::format!("first{i}"));
+            let mut w = lane;
+            while w > elem {
+                w /= 2;
+                assert!(
+                    first.contains(&enc_xtn(0, 0, w)),
+                    "{target:?} first{i}: no narrowing to {w}-byte lanes"
+                );
+            }
+            if count == 1 {
+                assert!(
+                    !give
+                        .iter()
+                        .chain(&first)
+                        .any(|&w| w & 0xBF00_FC00 == 0x0F00_A400 || w & 0xBF3F_FC00 == 0x0E21_2800),
+                    "{target:?} {i}: a single element is widened or narrowed"
+                );
+            }
+        }
+    }
+}
+
 /// Arguments with 16-byte alignment: AAPCS64 C.10 starts one at an even
 /// general register, which the Apple arm64 convention does not, and C.14 and
 /// System V AMD64 3.5.7 align its stack slot and its `va_arg` read to 16.

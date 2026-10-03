@@ -9859,6 +9859,73 @@ fn single_fp_vectors_cross_the_system_compiler_boundary() {
     }
 }
 
+// An integer vector narrower than 8 bytes crosses an AArch64 call as clang
+// places it, both ways: passed as a 32-bit integer and returned in v0, one
+// element in the low bytes, several widened to equal lanes of d0. gcc
+// returns it in w0 instead, a recorded divergence, so only a clang peer is
+// driven.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn narrow_integer_vectors_cross_the_system_compiler_boundary() {
+    let ccs = host_cc_and_clang();
+    if ccs.is_empty() {
+        eprintln!(
+            "skipping narrow_integer_vectors_cross_the_system_compiler_boundary: no system C \
+             compiler"
+        );
+        return;
+    }
+    let common = "typedef int v1i __attribute__((vector_size(4)));\n\
+        typedef short v1s __attribute__((vector_size(2)));\n\
+        typedef signed char v1c __attribute__((vector_size(1)));\n\
+        typedef short v2s __attribute__((vector_size(4)));\n\
+        typedef signed char v4c __attribute__((vector_size(4)));\n\
+        typedef signed char v2c __attribute__((vector_size(2)));\n\
+        #if defined(__aarch64__) && defined(__clang__)\n\
+        #define CLANG_A64 1\n\
+        #else\n\
+        #define CLANG_A64 0\n\
+        #endif\n\
+        static int clang_a64(void) { return CLANG_A64; }\n\
+        static v1i make_1i(int a) { v1i r = { a }; return r; }\n\
+        static v1s make_1s(int a) { v1s r = { (short)a }; return r; }\n\
+        static v1c make_1c(int a) { v1c r = { (signed char)a }; return r; }\n\
+        static v2s make_2s(int a, int b) { v2s r = { (short)a, (short)b }; return r; }\n\
+        static v4c make_4c(int a, int b, int c, int d)\n\
+        { v4c r = { (signed char)a, (signed char)b, (signed char)c, (signed char)d }; return r; }\n\
+        static v2c make_2c(int a, int b) { v2c r = { (signed char)a, (signed char)b }; return r; }\n\
+        static int take_4c(int k, v4c v, int j) { return k * 100000 + v[0] * 1000 + v[3] * 10 + j; }\n\
+        static int take_2s(v2s v, v1s w, v1c c) { return v[0] * 10000 + v[1] * 100 + w[0] * 10 + c[0]; }\n\
+        struct fns { int (*clang_a64)(void); v1i (*make_1i)(int); v1s (*make_1s)(int);\n\
+          v1c (*make_1c)(int); v2s (*make_2s)(int, int); v4c (*make_4c)(int, int, int, int);\n\
+          v2c (*make_2c)(int, int); int (*take_4c)(int, v4c, int); int (*take_2s)(v2s, v1s, v1c); };\n\
+        static int drive(const struct fns *f, int base)\n\
+        { if (!f->clang_a64() && !CLANG_A64) return 0;\n\
+          v2s s = f->make_2s(-2, 30000); v4c c = f->make_4c(1, -2, 3, 100);\n\
+          v2c d = f->make_2c(-5, 7); v4c e = { 4, 5, 6, 7 };\n\
+          v2s t = { 3, -4 }; v1s w = { 5 }; v1c x = { -6 };\n\
+          if (f->make_1i(-7)[0] != -7) return base + 1;\n\
+          if (f->make_1s(-300)[0] != -300) return base + 2;\n\
+          if (f->make_1c(-9)[0] != -9) return base + 3;\n\
+          if (s[0] != -2 || s[1] != 30000) return base + 4;\n\
+          if (c[0] != 1 || c[1] != -2 || c[2] != 3 || c[3] != 100) return base + 5;\n\
+          if (d[0] != -5 || d[1] != 7) return base + 6;\n\
+          if (f->take_4c(2, e, 9) != 204079) return base + 7;\n\
+          if (f->take_2s(t, w, x) != 29644) return base + 8;\n\
+          return 0; }\n";
+    for (k, cc) in ccs.iter().enumerate() {
+        drive_across_the_system_compiler(
+            cc,
+            [
+                "narrow-int-vector-interop",
+                "narrow-int-vector-interop-clang",
+            ][k],
+            common,
+            "clang_a64, make_1i, make_1s, make_1c, make_2s, make_4c, make_2c, take_4c, take_2s",
+        );
+    }
+}
+
 // Aggregates whose eightbytes merge several fields or none cross the system
 // compiler boundary both ways. System V AMD64 3.2.3 gives an eightbyte no
 // field overlaps no register, a union's 16-byte vector beside a double or

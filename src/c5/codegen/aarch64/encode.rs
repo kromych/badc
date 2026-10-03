@@ -1150,6 +1150,33 @@ pub(crate) fn enc_str_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
     enc_mem(STR_D, dt, rn, STR_D.scaled(imm))
 }
 
+/// `LDR <Bt|Ht>, [<Xn|SP>, #imm]` -- the 1- or 2-byte unsigned-offset
+/// FP/SIMD load, by `width`.
+pub(crate) fn enc_ldr_bh_imm(width: u32, vt: u8, rn: Reg, imm: u32) -> u32 {
+    let op = if width == 1 { LDR_B } else { LDR_H };
+    enc_mem(op, vt, rn, op.scaled(imm))
+}
+
+/// `STR <Bt|Ht>, [<Xn|SP>, #imm]`, the partner of [`enc_ldr_bh_imm`].
+pub(crate) fn enc_str_bh_imm(width: u32, vt: u8, rn: Reg, imm: u32) -> u32 {
+    let op = if width == 1 { STR_B } else { STR_H };
+    enc_mem(op, vt, rn, op.scaled(imm))
+}
+
+/// `USHLL Vd.<2E>, Vn.<E>, #0` (UXTL) on the low 64 bits: each `elem`-byte
+/// lane (1 or 2) of `vn` zero-extended to twice its width in `vd`.
+pub(crate) fn enc_uxtl(vd: u8, vn: u8, elem: u32) -> u32 {
+    debug_assert!(matches!(elem, 1 | 2) && vd < 32 && vn < 32);
+    0x2F00_A400 | (elem << 19) | (u32::from(vn) << 5) | u32::from(vd)
+}
+
+/// `XTN Vd.<E>, Vn.<2E>`: each lane of `vn` narrowed to its low half, an
+/// `elem`-byte lane (1 or 2) of `vd`'s low 64 bits.
+pub(crate) fn enc_xtn(vd: u8, vn: u8, elem: u32) -> u32 {
+    debug_assert!(matches!(elem, 1 | 2) && vd < 32 && vn < 32);
+    0x0E21_2800 | ((elem - 1) << 22) | (u32::from(vn) << 5) | u32::from(vd)
+}
+
 /// `LDR <Qt>, [<Xn|SP>, #imm]` -- 128-bit unsigned-offset FP/SIMD
 /// load. The offset is byte-addressed but encoded as `imm/16`.
 pub(crate) fn enc_ldr_q_imm(qt: u8, rn: Reg, imm: u32) -> u32 {
@@ -1505,6 +1532,10 @@ pub(crate) const STRH: MemOp = MemOp::new(0x7800_0000, 1);
 pub(crate) const LDRB: MemOp = MemOp::new(0x3840_0000, 0);
 pub(crate) const LDRSB: MemOp = MemOp::new(0x3880_0000, 0);
 pub(crate) const STRB: MemOp = MemOp::new(0x3800_0000, 0);
+pub(crate) const LDR_B: MemOp = MemOp::new(0x3C40_0000, 0);
+pub(crate) const STR_B: MemOp = MemOp::new(0x3C00_0000, 0);
+pub(crate) const LDR_H: MemOp = MemOp::new(0x7C40_0000, 1);
+pub(crate) const STR_H: MemOp = MemOp::new(0x7C00_0000, 1);
 pub(crate) const LDR_S: MemOp = MemOp::new(0xBC40_0000, 2);
 pub(crate) const STR_S: MemOp = MemOp::new(0xBC00_0000, 2);
 pub(crate) const LDR_D: MemOp = MemOp::new(0xFC40_0000, 3);
@@ -2618,6 +2649,26 @@ mod tests {
     fn movz_x0_42() {
         // movz x0, #42  ->  0xD2800540
         assert_eq!(enc_movz(Reg::X0, 42, 0), 0xD280_0540);
+    }
+
+    #[test]
+    fn byte_and_half_vector_loads_and_lane_widths() {
+        // ushll v0.8h, v0.8b, #0; ushll v0.4s, v0.4h, #0; ushll v3.8h, v5.8b, #0;
+        // xtn v0.8b, v0.8h; xtn v0.4h, v0.4s; xtn v3.8b, v5.8h
+        assert_eq!(enc_uxtl(0, 0, 1), 0x2F08_A400);
+        assert_eq!(enc_uxtl(0, 0, 2), 0x2F10_A400);
+        assert_eq!(enc_uxtl(3, 5, 1), 0x2F08_A4A3);
+        assert_eq!(enc_xtn(0, 0, 1), 0x0E21_2800);
+        assert_eq!(enc_xtn(0, 0, 2), 0x0E61_2800);
+        assert_eq!(enc_xtn(3, 5, 1), 0x0E21_28A3);
+        // ldr b0, [x0]; ldr h0, [x0, #2]; str b1, [x3, #1]; str h1, [x3, #2];
+        // ldur b0, [x0, #-1]; stur h1, [x3, #-2]
+        assert_eq!(enc_ldr_bh_imm(1, 0, Reg::X0, 0), 0x3D40_0000);
+        assert_eq!(enc_ldr_bh_imm(2, 0, Reg::X0, 2), 0x7D40_0400);
+        assert_eq!(enc_str_bh_imm(1, 1, Reg(3), 1), 0x3D00_0461);
+        assert_eq!(enc_str_bh_imm(2, 1, Reg(3), 2), 0x7D00_0461);
+        assert_eq!(enc_mem(LDR_B, 0, Reg::X0, LDR_B.unscaled(-1)), 0x3C5F_F000);
+        assert_eq!(enc_mem(STR_H, 1, Reg(3), STR_H.unscaled(-2)), 0x7C1F_E061);
     }
 
     #[test]

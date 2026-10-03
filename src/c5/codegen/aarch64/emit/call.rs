@@ -700,7 +700,15 @@ fn finish_call_result(
         let slot = local_slot(ret_slot_off, func, frame);
         if let Some(members) = super::abi_classify::fp_member_layout(desc, true) {
             // AAPCS64 6.9: a homogeneous aggregate result arrives with element
-            // k in v[k], a Short Vector result whole in v0.
+            // k in v[k], a Short Vector result whole in v0, and a narrow one in
+            // v0's low bytes once its widened lanes narrow back.
+            if let Some((elem, lane)) = super::abi_classify::narrow_vector_lanes(desc) {
+                let mut w = lane;
+                while w > elem {
+                    w /= 2;
+                    emit(code, super::encode::enc_xtn(0, 0, w));
+                }
+            }
             let accesses = members
                 .iter()
                 .map(|&(off, msize)| (fp_store_op(msize), off));

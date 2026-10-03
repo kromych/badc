@@ -620,9 +620,10 @@ pub(crate) fn emit_agg_load_int(
 }
 
 /// `emit_agg_load_int` for an FP destination: `width` 16 for a whole
-/// `q` register (a Short Vector), 8 for a `d`, 4 for an `s`. Below the
-/// natural access the first piece arrives through `fmov` and the rest
-/// through element inserts, so `tmp` is the only extra register.
+/// `q` register (a Short Vector), 8 for a `d`, 4 for an `s`, 2 for an `h`
+/// and 1 for a `b`. Below the natural access the first piece arrives
+/// through `fmov` and the rest through element inserts, so `tmp` is the
+/// only extra register.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_agg_load_fp(
     code: &mut Vec<u8>,
@@ -640,6 +641,7 @@ pub(super) fn emit_agg_load_fp(
             match width {
                 16 => super::encode::enc_ldr_q_imm(dst, base, off),
                 8 => super::encode::enc_ldr_d_imm(dst, base, off),
+                1 | 2 => super::encode::enc_ldr_bh_imm(width, dst, base, off),
                 _ => super::encode::enc_ldr_s_imm(dst, base, off),
             },
         );
@@ -682,6 +684,7 @@ pub(super) fn emit_agg_store_fp(
             match width {
                 16 => super::encode::enc_str_q_imm(src, base, off),
                 8 => super::encode::enc_str_d_imm(src, base, off),
+                1 | 2 => super::encode::enc_str_bh_imm(width, src, base, off),
                 _ => super::encode::enc_str_s_imm(src, base, off),
             },
         );
@@ -816,6 +819,8 @@ pub(super) fn fp_store_op(width: u32) -> MemOp {
     match width {
         16 => STR_Q,
         8 => STR_D,
+        2 => super::encode::STR_H,
+        1 => super::encode::STR_B,
         _ => STR_S,
     }
 }

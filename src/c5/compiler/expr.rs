@@ -4101,7 +4101,9 @@ impl Compiler {
         let arms_fp = is_floating_scalar(then_ty) || is_floating_scalar(else_ty);
         let then_ptr = is_pointer_ty(then_ty);
         let else_ptr = is_pointer_ty(else_ty);
-        if (arms_fp || then_ty != else_ty) && arith(then_ty) && arith(else_ty) {
+        // Two arithmetic arms take the usual arithmetic conversions even
+        // when their types agree, so two `short` arms give an `int`.
+        if arith(then_ty) && arith(else_ty) {
             result_ty = if arms_fp {
                 fp_result_ty(then_ty, else_ty)
             } else {

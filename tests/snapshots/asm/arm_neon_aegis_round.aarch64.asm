@@ -193,13 +193,13 @@ Disassembly of section .text:
                	b.ge	<addr>
                	ldrb	w1, [x2, x0]
                	ldrb	w1, [x4, x1]
-               	cmp	w5, w1
-               	b.eq	<addr>
+               	eor	x1, x5, x1
+               	cbz	w1, <addr>
                	b	<addr>
                	sub	x1, x29, #0x40
                	ldrb	w1, [x1, x0]
-               	cmp	w5, w1
-               	b.ne	<addr>
+               	eor	x1, x5, x1
+               	cbnz	w1, <addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>

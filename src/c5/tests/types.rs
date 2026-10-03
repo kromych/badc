@@ -4105,3 +4105,24 @@ fn an_array_of_arrays_converts_to_a_pointer_to_its_row() {
          }\n",
     );
 }
+
+#[test]
+fn equal_arithmetic_arms_of_a_conditional_take_the_usual_conversions() {
+    // C99 6.5.15p5: two arithmetic operands take the usual arithmetic
+    // conversions, which promote a narrow type the arms share.
+    compile_str(
+        "int main(int c, char **v) {\n\
+           short s = 1; unsigned char uc = 2; char ch = 3; _Bool b = 1;\n\
+           long l = 4; float f = 5;\n\
+           (void)v;\n\
+           _Static_assert(_Generic(c ? s : s, int: 1, default: 0), \"short\");\n\
+           _Static_assert(_Generic(c ? uc : uc, int: 1, default: 0), \"unsigned char\");\n\
+           _Static_assert(_Generic(c ? ch : ch, int: 1, default: 0), \"char\");\n\
+           _Static_assert(_Generic(c ? b : b, int: 1, default: 0), \"_Bool\");\n\
+           _Static_assert(_Generic(c ? l : l, long: 1, default: 0), \"long\");\n\
+           _Static_assert(_Generic(c ? f : f, float: 1, default: 0), \"float\");\n\
+           _Static_assert(sizeof(c ? s : s) == sizeof(int), \"size\");\n\
+           return c ? s : s;\n\
+         }\n",
+    );
+}

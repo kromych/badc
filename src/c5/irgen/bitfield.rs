@@ -9,9 +9,10 @@ use super::*;
 use crate::c5::ast::{bitfield_keeps_declared_ty, expr_ty};
 
 impl<'a> Walker<'a> {
-    /// [`Self::access_seg`] for a bitfield's storage unit. A 16-byte
-    /// unit is accessed as two 64-bit halves through the generic-space
-    /// 128-bit helpers, which carry no segment; reject that combination.
+    /// [`Self::access_seg`] for a bitfield's storage unit, whose pieces
+    /// carry the segment at any unit width. A 128-bit value is carried in
+    /// a generic-space temporary its readers would reach through the
+    /// segment; reject that combination.
     pub(super) fn bitfield_access_seg(
         &self,
         id: ExprId,
@@ -19,10 +20,10 @@ impl<'a> Walker<'a> {
         bf: BitfieldDesc,
     ) -> Result<AsmSeg, WalkError> {
         let seg = self.access_seg(id, ty)?;
-        if seg != AsmSeg::None && bf.is_wide_unit() {
+        if seg != AsmSeg::None && self.bitfield_is_int128(bf) {
             return Err(WalkError::UnsupportedExpr {
                 id,
-                kind: "16-byte bitfield unit in a named address space",
+                kind: "128-bit access in a named address space",
             });
         }
         Ok(seg)

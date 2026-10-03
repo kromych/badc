@@ -10651,6 +10651,71 @@ fn packed_bitfield_accesses_stay_inside_the_object() {
     }
 }
 
+/// A bit-field in a unit wider than 8 bytes is read, written and updated
+/// through its named address space, every piece of the unit riding the
+/// segment. A 128-bit value read there is rejected, as any 128-bit access
+/// in a named address space is.
+#[test]
+fn wide_bitfield_unit_rides_its_named_address_space() {
+    use crate::c5::ir::{AsmSeg, Inst};
+    const SRC: &str = "struct v { __int128 f : 100; __int128 g : 20; };\n\
+        int get(struct v __seg_gs *p) { return p->g; }\n\
+        void set(struct v __seg_gs *p, int x) { p->g = x; }\n\
+        void inc(struct v __seg_gs *p) { p->g += 3; }\n";
+    let compile = |src: &str| {
+        let program = crate::Compiler::with_options(
+            src.into(),
+            crate::Target::LinuxX64,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            crate::Target::LinuxX64,
+            true,
+            true,
+        )
+    };
+    let funcs = compile(SRC).expect("ssa");
+    for (name, writes) in [("get", false), ("set", true), ("inc", true)] {
+        let func = funcs.iter().find(|g| g.name == name).expect("function");
+        let count = |want: fn(&Inst) -> bool| func.insts.iter().filter(|i| want(i)).count();
+        let seg_loads = count(|i| {
+            matches!(
+                i,
+                Inst::SegLoad {
+                    seg: AsmSeg::Gs,
+                    ..
+                }
+            )
+        });
+        let seg_stores = count(|i| {
+            matches!(
+                i,
+                Inst::SegStore {
+                    seg: AsmSeg::Gs,
+                    ..
+                }
+            )
+        });
+        let plain = count(|i| matches!(i, Inst::Load { .. } | Inst::Store { .. }));
+        assert!(
+            seg_loads > 0 && (seg_stores > 0) == writes && plain == 0,
+            "{name}: {seg_loads} segment loads, {seg_stores} segment stores, {plain} plain"
+        );
+    }
+    let err = compile(
+        "struct v { __int128 f : 100; };\n\
+         __int128 get(struct v __seg_gs *p) { return p->f; }\n",
+    )
+    .expect_err("a 128-bit read in a named address space is rejected");
+    assert!(
+        alloc::format!("{err}").contains("128-bit access in a named address space"),
+        "{err}"
+    );
+}
+
 /// The flexible array member is ignored by an assignment (C99 6.7.2.1p16):
 /// the copy out of a split object writes the named member alone.
 #[test]

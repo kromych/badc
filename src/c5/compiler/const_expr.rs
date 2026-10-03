@@ -2765,10 +2765,16 @@ impl Compiler {
                 let mut array_pointee = None;
                 if self.lex.tk == '(' {
                     let abs = self.parse_abstract_ptr_declarator(false)?;
-                    if let Some(dims) = abs.pointee_dims().filter(|d| d.iter().all(|&d| d > 0)) {
-                        array_pointee = Some(self.array_agg_type(target_ty, &dims));
+                    let levels = abs.pointer_levels() * Ty::Ptr as i64;
+                    match abs.pointee_dims().filter(|d| d.iter().all(|&d| d > 0)) {
+                        // The pointer to the array, which arithmetic strides
+                        // by (C99 6.5.6p8) and the value keeps as its type.
+                        Some(dims) => {
+                            target_ty = self.array_agg_type(target_ty, &dims) + levels;
+                            array_pointee = Some(pointee_ty(target_ty));
+                        }
+                        None => target_ty += levels,
                     }
-                    target_ty += abs.pointer_levels() * Ty::Ptr as i64;
                     while self.lex.tk == Token::TypeQual {
                         self.next()?;
                     }

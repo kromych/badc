@@ -4802,3 +4802,36 @@ int main(void) {
         .compile()
         .unwrap_or_else(|e| panic!("{e}"));
 }
+
+/// C99 6.5.4 and 6.3.2.1p3 in a constant initializer: a cast to a pointer
+/// to an array, and an array-of-arrays compound literal, give a pointer to
+/// an array, which stays the expression's type through arithmetic. The
+/// initializer conversion compares that type, so a dropped `const` names
+/// it, and a matching object draws nothing.
+#[test]
+fn a_constant_pointer_to_an_array_keeps_its_type() {
+    use crate::{Compiler, Target};
+    let src = "typedef const int CT2[][3];\n\
+               static int (*a)[4] = (const int (*)[4])0x100 + 1;\n\
+               static int (*b)[3] = (const int[2][3]){ { 1, 2, 3 }, { 4, 5, 6 } };\n\
+               static int (*c)[3] = (CT2){ { 1, 2, 3 } };\n\
+               static const char (*d)[4] = (const char (*)[4])\"abcdefgh\" + 1;\n\
+               int main(void) { return (a != 0) + (b != 0) + (c != 0) + (d != 0); }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let warnings: alloc::vec::Vec<String> =
+        program.warnings.iter().map(|w| w.to_string()).collect();
+    for (line, text) in [
+        (2, "(declared=int (*)[4], init=const int (*)[4])"),
+        (3, "(declared=int (*)[3], init=const int (*)[3])"),
+        (4, "(declared=int (*)[3], init=const int (*)[3])"),
+    ] {
+        let at = format!(":{line}: warning: discards `const`");
+        assert!(
+            warnings.iter().any(|w| w.contains(&at) && w.contains(text)),
+            "line {line}: {warnings:?}"
+        );
+    }
+    assert_eq!(warnings.len(), 3, "{warnings:?}");
+}

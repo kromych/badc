@@ -2212,12 +2212,14 @@ impl Compiler {
         // address. Distinguished from a plain cast by the `[`, or
         // for an array typedef (`(row){...}`) by the `{` past `)`.
         if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
-            let (v, reloc, _) = self.parse_array_compound_literal(cast_ty, &name.base_dims)?;
+            let (v, reloc, dims) = self.parse_array_compound_literal(cast_ty, &name.base_dims)?;
             if let InitElemReloc::Data(Some(sym)) = reloc {
                 self.symbols[sym].storage_is_const = name.object_is_const;
                 self.reject_automatic_compound_literal(sym)?;
             }
-            return Ok(InitLeaf::of(v, reloc, add_ptr_level(cast_ty)));
+            // An array of arrays decays to a pointer to its first row.
+            let ty = self.array_value_ty(cast_ty, &dims);
+            return Ok(InitLeaf::of(v, reloc, ty));
         }
         // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
         // brace holds a single value; the result is that value

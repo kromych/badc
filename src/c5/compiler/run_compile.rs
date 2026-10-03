@@ -2417,7 +2417,7 @@ impl Compiler {
         if self.lex.tk != '{' {
             return Err(self.compile_err(
                 Code::INVALID_INITIALIZER,
-                "array initializer must start with `{{`",
+                "array initializer must start with `{`",
             ));
         }
         let sid = struct_id_of(ty);
@@ -2705,7 +2705,7 @@ impl Compiler {
             if self.lex.tk != '{' {
                 return Err(self.compile_err(
                     Code::INVALID_INITIALIZER,
-                    "array initializer must start with `{{`",
+                    "array initializer must start with `{`",
                 ));
             }
             self.next()?;

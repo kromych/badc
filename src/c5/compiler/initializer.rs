@@ -1237,7 +1237,7 @@ impl Compiler {
         if self.lex.tk != '{' {
             return Err(self.compile_err(
                 Code::INVALID_INITIALIZER,
-                "array initializer must be a string literal or `{{ ... }}`",
+                "array initializer must be a string literal or `{ ... }`",
             ));
         }
         self.next()?;
@@ -3277,7 +3277,7 @@ impl Compiler {
         if self.lex.tk != '{' {
             return Err(self.compile_err(
                 Code::INVALID_INITIALIZER,
-                "struct initializer must start with `{{`",
+                "struct initializer must start with `{`",
             ));
         }
         self.next()?;
@@ -3303,7 +3303,7 @@ impl Compiler {
         if self.lex.tk != '{' {
             return Err(self.compile_err(
                 Code::INVALID_INITIALIZER,
-                "array initializer must start with `{{`",
+                "array initializer must start with `{`",
             ));
         }
         self.next()?;

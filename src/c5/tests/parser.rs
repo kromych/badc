@@ -3813,6 +3813,46 @@ fn an_array_of_an_incomplete_element_type_is_rejected() {
     }
 }
 
+/// A diagnostic that names the brace an initializer or a member's aggregate
+/// type expects spells it once.
+#[test]
+fn a_diagnostic_spells_an_expected_brace_once() {
+    for (src, needle) in [
+        (
+            "struct S { int x; }; struct S b = 1;",
+            "struct initializer must start with `{`",
+        ),
+        (
+            "int a[2] = 1;",
+            "array initializer must be a string literal or `{ ... }`",
+        ),
+        (
+            "struct S { int x; }; struct S s[2] = 1;",
+            "array initializer must start with `{`",
+        ),
+        (
+            "struct S { int x; }; struct S s[] = 1;",
+            "array initializer must start with `{`",
+        ),
+        (
+            "struct S { int x; }; void f(void) { static struct S s[] = 1; }",
+            "array initializer must start with `{`",
+        ),
+        (
+            "struct T { struct 5 x; };",
+            "aggregate name or `{` expected in field type",
+        ),
+    ] {
+        let src = alloc::format!("{src}\nint main(void) {{ return 0; }}\n");
+        let msg = Compiler::new(src.clone())
+            .compile()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        assert!(msg.contains(needle) && !msg.contains("{{"), "{src}: {msg}");
+    }
+}
+
 #[test]
 fn binary_operator_operand_constraints() {
     // C99 6.5.5p2: `%` takes integer operands, on either side; 6.5.6p2:

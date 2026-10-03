@@ -1018,10 +1018,9 @@ impl Compiler {
             inner_anonymous = true;
             format!("__{kind}_{}_in_{}", self.structs.len(), name)
         } else {
-            return Err(self.compile_err(
-                Code::SYNTAX,
-                "aggregate name or `{{` expected in field type",
-            ));
+            return Err(
+                self.compile_err(Code::SYNTAX, "aggregate name or `{` expected in field type")
+            );
         };
         let inner_id = if self.lex.tk == '{' {
             let id = self.parse_aggregate_body(&inner_name, nested_is_union, nested_packed)?;

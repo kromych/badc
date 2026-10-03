@@ -2553,13 +2553,15 @@ impl Compiler {
     /// Drain the array-typedef base carriers into the dimension list an
     /// array compound literal appends innermost (C99 6.7.7: the typedef
     /// name denotes the array type, so its bounds sit below any bracket
-    /// the literal's type name adds). Empty when a `*` absorbed the
-    /// typedef array into the pointee (`ptr_levels > 0`) or the base is
-    /// not a complete array.
+    /// the literal's type name adds; one of unknown size leads with `-1`,
+    /// which the initializer completes). Empty when a `*` absorbed the
+    /// typedef array into the pointee (`ptr_levels > 0`) or the base is no
+    /// array or a zero-length one.
     pub(super) fn take_typedef_literal_dims(&mut self, ptr_levels: i64) -> alloc::vec::Vec<i64> {
+        let unknown_size = self.typedef_base_incomplete();
         let extent = core::mem::take(&mut self.pending.typedef_base_array_size);
         let dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
-        if extent <= 0 || ptr_levels > 0 {
+        if (extent <= 0 && !unknown_size) || ptr_levels > 0 {
             return alloc::vec::Vec::new();
         }
         if dims.is_empty() {

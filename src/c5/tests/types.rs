@@ -4511,3 +4511,32 @@ fn a_block_scope_object_of_an_unsized_array_typedef_is_an_array() {
     let program = Compiler::new(src.to_string()).compile().expect(src);
     assert_eq!(Vm::new(program).run().unwrap(), 1, "{src}");
 }
+
+/// C99 6.5.2.5, 6.7.7p3: a compound literal of an array typedef of unknown
+/// size in a static initializer takes its size from its list, as one at
+/// block scope does; an array of such a typedef has an incomplete element
+/// (6.7.5.2p1).
+#[test]
+fn a_static_compound_literal_of_an_unsized_array_typedef_is_sized_by_its_list() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "typedef int T[];\n\
+               typedef int T2[][3];\n\
+               static int *p = (T){ 1, 2, 3 };\n\
+               static int (*q)[3] = (T2){ { 1, 2, 3 }, { 4, 5, 6 } };\n\
+               int main(void) { return p[2] == 3 && q[1][2] == 6; }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 1, "{src}");
+    let src = "typedef int T[];\n\
+               static int (*r)[2] = (T[2]){ { 1, 2 } };\n\
+               int main(void) { return 0; }\n";
+    let msg = Compiler::new(src.to_string())
+        .compile()
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(
+        msg.contains("array has incomplete element type: an array of unknown size"),
+        "{msg}"
+    );
+}

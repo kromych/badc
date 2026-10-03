@@ -23,12 +23,15 @@ fn object(
     opts: NativeOptions,
 ) -> Vec<u8> {
     use crate::{CompileOptions, Compiler, OutputKind, emit_native_with_options};
+    // The perf fixtures include `bench_clock.h` beside them.
+    let perf = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/perf").to_string();
     let program = Compiler::with_options(
         src.to_string(),
         target,
         CompileOptions::default()
             .with_no_entry_point(true)
-            .with_optimize(optimize),
+            .with_optimize(optimize)
+            .with_quote_include_paths(vec![perf]),
     )
     .compile()
     .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));

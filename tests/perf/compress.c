@@ -2,7 +2,7 @@
 // deflate round-trips (compress then decompress) of a fixed buffer via
 // miniz. The hot path is the LZ match-finder and Huffman coder, a mix
 // of byte shuffling, hash lookups, and bit packing with no I/O. Self-
-// times via clock_gettime and prints "in N ms".
+// times via bench_clock.h and prints "in N ms".
 //
 // The miniz amalgamation is included directly so the fixture is a
 // single translation unit. The harness puts demos/miniz on the include
@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
+#include "bench_clock.h"
 
 #include "miniz.h"
 #include "miniz.c"
@@ -33,8 +33,7 @@ int main(void) {
         return 2;
     }
 
-    struct timespec t0, t1;
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    double t0 = bench_ms();
     uint64_t acc = 0;
     mz_ulong last_clen = 0;
     for (int it = 0; it < ITERS; it++) {
@@ -52,7 +51,7 @@ int main(void) {
         // the loop carries a true dependency.
         src[it & (BUF_LEN - 1)] ^= (unsigned char)clen;
     }
-    clock_gettime(CLOCK_MONOTONIC, &t1);
+    double t1 = bench_ms();
 
     // The decompressed buffer must match the input the last iteration
     // compressed; a mismatch means a miscompiled codec.
@@ -60,9 +59,7 @@ int main(void) {
         return 5;
     }
 
-    long secs = t1.tv_sec - t0.tv_sec;
-    long nsecs = t1.tv_nsec - t0.tv_nsec;
-    double ms = (double)secs * 1000.0 + (double)nsecs / 1000000.0;
+    double ms = t1 - t0;
     printf("deflate x%d clen=%lu acc=%llu in %.2f ms\n", ITERS,
            (unsigned long)last_clen, (unsigned long long)acc, ms);
     free(comp);

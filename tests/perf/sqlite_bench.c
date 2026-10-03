@@ -4,7 +4,7 @@
 // path is the bytecode engine (VDBE), the B-tree, the sorter, and the
 // page cache, all serviced from the in-memory pager so the wall-clock
 // reflects compiled code rather than disk I/O. Self-times via
-// clock_gettime and prints "in N ms".
+// bench_clock.h and prints "in N ms".
 //
 // The statements come from a published compiler-comparison benchmark
 // driven through the sqlite3 CLI shell. The shell-only directives
@@ -20,7 +20,7 @@
 // needs to parse without the headers badc does not ship.
 #include <stdint.h>
 #include <stdio.h>
-#include <time.h>
+#include "bench_clock.h"
 
 #include "sqlite3.c"
 
@@ -105,8 +105,7 @@ int main(void) {
         return 1;
     }
 
-    struct timespec t0, t1;
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    double t0 = bench_ms();
 
     char *err = NULL;
     if (sqlite3_exec(db, BENCH_SQL, NULL, NULL, &err) != SQLITE_OK) {
@@ -124,7 +123,7 @@ int main(void) {
     long long test2_rows = scalar(db, "SELECT COUNT(*) FROM test2;", &ok);
     long long test3_rows = scalar(db, "SELECT COUNT(*) FROM test3;", &ok);
 
-    clock_gettime(CLOCK_MONOTONIC, &t1);
+    double t1 = bench_ms();
     sqlite3_close(db);
 
     if (!ok || after_delete != 85715 || test2_rows != 10000 || test3_rows != 50000) {
@@ -135,9 +134,7 @@ int main(void) {
         return 7;
     }
 
-    long secs = t1.tv_sec - t0.tv_sec;
-    long nsecs = t1.tv_nsec - t0.tv_nsec;
-    double ms = (double)secs * 1000.0 + (double)nsecs / 1000000.0;
+    double ms = t1 - t0;
     printf("sqlite_bench test1=%lld test2=%lld test3=%lld in %.2f ms\n",
            after_delete, test2_rows, test3_rows, ms);
     return 0;

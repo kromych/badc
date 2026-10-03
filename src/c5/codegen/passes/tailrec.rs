@@ -492,13 +492,20 @@ fn analyze(func: &FunctionSsa) -> Option<Plan> {
                 }
             }
         }
-        Mode::Accum { .. } => {
-            // Each base return needs a value to fold into the accumulator.
+        Mode::Accum { narrow, .. } => {
+            // Each base return needs a value to fold into the accumulator,
+            // and the loop narrows every return as the tail's does: a
+            // value that narrowing would change keeps the recursion.
             for &b in &base {
-                if matches!(
-                    func.blocks[b as usize].terminator,
-                    Terminator::Return(NO_VALUE)
-                ) {
+                let Terminator::Return(r) = func.blocks[b as usize].terminator else {
+                    continue;
+                };
+                if r == NO_VALUE {
+                    return None;
+                }
+                if let Some(kind) = narrow
+                    && !super::value_range::arg_range(&func.insts, r).fits(*kind)
+                {
                     return None;
                 }
             }

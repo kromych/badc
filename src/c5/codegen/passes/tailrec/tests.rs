@@ -278,6 +278,27 @@ fn narrow_return_reextends_the_accumulator() {
     );
 }
 
+#[test]
+fn a_base_return_the_narrowing_would_change_keeps_the_recursion() {
+    // `long f(long n){ if(n<2) return 1L << 40; return (int)(n + f(n-1)); }`:
+    // only the recursive return narrows. The loop would narrow the base
+    // return too, so the function keeps its recursion.
+    let mut f = accum_add_long();
+    f.insts.push(Inst::Extend {
+        value: 4,
+        kind: LoadKind::I32,
+        nsw: false,
+    });
+    f.insts.push(Inst::Imm(1 << 40));
+    f.inst_src = vec![(0, 0); f.insts.len()];
+    f.f32_values = vec![false; f.insts.len()];
+    f.blocks[1].inst_range = 6..7;
+    f.blocks[1].terminator = Terminator::Return(6);
+    f.blocks[2].inst_range = 2..6;
+    f.blocks[2].terminator = Terminator::Return(5);
+    assert!(unchanged(&f));
+}
+
 /// `void f(long n){ if(!n) return; g(); f(n-1); }` modelled as a void
 /// helper whose returns are Imm(0): the last effectful op is the
 /// self-call and the return is a constant.

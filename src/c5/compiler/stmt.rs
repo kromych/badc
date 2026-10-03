@@ -504,12 +504,14 @@ impl Compiler {
     /// Breaks inside the body decrement the break depth at switch
     /// exit through [`Self::close_loop_breaks`].
     pub(super) fn parse_switch_stmt(&mut self) -> Result<(), C5Error> {
+        let line = self.lex.line;
         self.next()?;
         self.consume(b'(', "open paren expected")?;
         self.parse_controlling_expr("switch", Category::Integer)?;
         let disc_ast = self.ast_acc;
         let operand_ty = self.ty;
         let promoted = integer_promote(operand_ty);
+        let boolean = self.has_boolean_value(disc_ast, operand_ty);
         self.consume(b')', "close paren expected")?;
 
         // Conservative drop of any pending dead-store entries at
@@ -532,13 +534,51 @@ impl Compiler {
 
         // Same conservative drop at the body-exit boundary.
         self.flush_pending_stores();
-        self.switch_cases.pop();
-        self.switch_defaults.pop();
+        let labels = self.switch_cases.pop();
+        let has_default = self.switch_defaults.pop().unwrap_or(false);
+        // gcc's -Wswitch-bool: a label the boolean value never takes, or a
+        // `default` the labels 0 and 1 leave unreachable.
+        if boolean && let Some(labels) = labels {
+            let low = labels.ranges.iter().map(|&(a, _)| a).min();
+            let high = labels.ranges.iter().map(|&(_, b)| b).max();
+            let outside = low.is_some_and(|l| l < 0) || high.is_some_and(|h| h > 1);
+            if outside || (has_default && low == Some(0) && high == Some(1)) {
+                self.warn_at(
+                    Code::SWITCH_BOOL,
+                    line,
+                    "switch condition has boolean value".into(),
+                );
+            }
+        }
         self.close_loop_breaks();
         if let Some(disc) = disc_ast {
             self.ast_emit_switch(disc, body_s);
         }
         Ok(())
+    }
+
+    /// Whether a controlling expression has a boolean value, as gcc's
+    /// -Wswitch-bool reads one: of type `_Bool`, or a comparison, `!`, `&&`
+    /// or `||`, through a comma's right operand. A cast to another integer
+    /// type marks a deliberate integer.
+    fn has_boolean_value(&self, e: Option<super::super::ast::ExprId>, ty: i64) -> bool {
+        use super::super::ast::{Expr, UnOp};
+        if super::types::is_bool_ty(unqualified_version_ty(ty)) {
+            return true;
+        }
+        let mut e = e;
+        while let Some(id) = e {
+            match self.ast.expr(id) {
+                Expr::Comma { rhs, .. } => e = Some(*rhs),
+                Expr::Binary { op, .. } => return crate::c5::ir::is_comparison_op(*op),
+                Expr::ShortCircuit { .. }
+                | Expr::Unary {
+                    op: UnOp::LogNot, ..
+                } => return true,
+                _ => return false,
+            }
+        }
+        false
     }
 
     /// The values a `case` label covers, converted to the promoted type of

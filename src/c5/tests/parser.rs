@@ -1428,7 +1428,13 @@ fn case_labels_check_ranges_against_each_other_and_the_controlling_type() {
         (
             Target::LinuxX64,
             "switch (b) { case 0: case 1: return 1; case 2: return 2; }",
-            vec![outside("case value 2", "_Bool")],
+            vec![
+                outside("case value 2", "_Bool"),
+                (
+                    Code::SWITCH_BOOL,
+                    "switch condition has boolean value".to_string(),
+                ),
+            ],
         ),
         (
             Target::LinuxX64,
@@ -1566,6 +1572,54 @@ fn a_parameter_array_size_is_evaluated_on_entry() {
         let calls = body.matches("Call {").count();
         assert_eq!(calls, if name == "o" { 2 } else { 1 }, "{name}:\n{body}");
     }
+}
+
+/// gcc's -Wswitch-bool: B3012 warns on a `switch` whose controlling
+/// expression has a boolean value -- `_Bool`, or a comparison, `!`, `&&` or
+/// `||`, seen through a comma -- when a case label lies outside 0 and 1, or
+/// a `default` stands beside labels that cover both. A cast to another
+/// integer type marks a deliberate integer. The lines are the ones gcc
+/// 16.2.1 reports.
+#[test]
+fn a_switch_on_a_boolean_value_warns_for_a_label_it_cannot_take() {
+    use crate::Target;
+    use crate::diag::Code;
+    let src = "int f(int a, int b, _Bool c) {\n\
+               \tswitch (a < b) { case 2: return 1; }\n\
+               \tswitch (c) { case 0: return 2; case 1: return 3; case 2: return 4; }\n\
+               \tswitch (c) { case 0: return 5; case 1: return 6; }\n\
+               \tswitch (a < b) { case 0: return 7; case 1: return 8; }\n\
+               \tswitch ((int)(a < b)) { case 2: return 9; }\n\
+               \tswitch (!a) { case -1: return 10; }\n\
+               \tswitch (a && b) { default: return 11; }\n\
+               \tswitch ((a, a < b)) { case 3: return 12; }\n\
+               \tswitch (a || b) { case 0 ... 2: return 13; }\n\
+               \tswitch ((_Bool)a) { case 5: return 14; }\n\
+               \tswitch (a) { case 5: return 15; }\n\
+               \tswitch (a == b) { case 1: return 16; case 0: return 17; default: return 18; }\n\
+               \tswitch ((unsigned char)(a < b)) { case 7: return 19; }\n\
+               \treturn 0;\n\
+               }\n\
+               int main(void) { return 0; }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let lines: Vec<u32> = program
+        .warnings
+        .iter()
+        .filter(|w| w.code == Code::SWITCH_BOOL)
+        .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [2, 3, 7, 9, 10, 11, 13], "{:?}", program.warnings);
+    assert!(
+        program
+            .warnings
+            .iter()
+            .filter(|w| w.code == Code::SWITCH_BOOL)
+            .all(|w| w.text == "switch condition has boolean value"),
+        "{:?}",
+        program.warnings
+    );
 }
 
 #[test]

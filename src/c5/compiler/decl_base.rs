@@ -444,13 +444,11 @@ impl Compiler {
                     self.pending.fn_ptr_ret_indirection = 0;
                 }
             }
-            // A 1D array expression operand decayed to a pointer to its
-            // element; recover the element type and put the element count
-            // on the carrier like an array typedef base, so a declarator
-            // through the specifier is an array, whose element's function
-            // type lies that many levels closer. TODO: multi-dim
-            // expression operands (the dims chain is not recoverable from
-            // the decay markers).
+            // An array expression operand decayed to a pointer to its first
+            // element; recover the element type and put the bounds on the
+            // carrier like an array typedef base, so a declarator through
+            // the specifier is an array, whose element's function type lies
+            // that many levels closer.
             let n = core::mem::take(&mut self.pending.typeof_operand_array_size);
             let bytes = core::mem::take(&mut self.pending.typeof_operand_array_bytes);
             let dims = core::mem::take(&mut self.pending.typeof_operand_array_dims);
@@ -471,13 +469,12 @@ impl Compiler {
                 *fpi -= levels;
             }
             if !dims.is_empty() && inner >= Ty::Ptr as i64 {
-                // The decay recorded the row's exact dimensions (a
-                // pointer-to-array deref / row select): the operand is
-                // that array type. -1 marks an unspecified bound and 0
-                // a zero-length one; either makes the size carrier the
-                // incomplete/-zero sentinel, and the dims list carries
-                // the exact bounds to a type-name reader.
-                inner -= Ty::Ptr as i64;
+                // The decay recorded the array's exact dimensions: the
+                // operand is that array type. -1 marks an unspecified bound
+                // and 0 a zero-length one; either makes the size carrier the
+                // incomplete/-zero sentinel, and the dims list carries the
+                // exact bounds to a type-name reader.
+                inner = self.decayed_elem_ty(inner, &dims);
                 let size = if dims.iter().all(|&d| d > 0) {
                     dims.iter().product::<i64>()
                 } else {
@@ -544,11 +541,11 @@ impl Compiler {
         let saved_vstack = self.ast_vstack.len();
         // Array-decay hints record that the operand's value came
         // from an array: `last_array_decay_size` (element count) for
-        // a 1D bare array, `last_array_decay_bytes` (byte width) for
-        // a multi-dim subscript row, a `*p` pointer-to-array row
-        // deref, or a string literal. Capture both so an array
-        // operand types distinctly from a pointer, then restore them
-        // so they do not leak into a surrounding `sizeof`.
+        // a bare array, `last_array_decay_bytes` (byte width) for a
+        // row a subscript or `*` selects, or a string literal, and
+        // `last_array_decay_dims` for the exact bounds. Capture them so
+        // an array operand types distinctly from a pointer, then
+        // restore them so they do not leak into a surrounding `sizeof`.
         let saved_decay = self.pending.last_array_decay_size;
         let saved_decay_bytes = self.pending.last_array_decay_bytes;
         let saved_decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
@@ -594,12 +591,10 @@ impl Compiler {
                 self.ty
             }
         };
-        // Either marker firing means the operand decayed from an
-        // array, so `typeof(x)` is an array type and
+        // Any marker firing means the operand decayed from an array, so
+        // `typeof(x)` is an array type and
         // `__builtin_types_compatible_p(typeof(x), typeof(&(x)[0]))`
-        // must report it as distinct from a pointer -- including a
-        // subscripted row of a multi-dim array (`arr2d[i]`), which
-        // sets only the byte marker.
+        // must report it as distinct from a pointer.
         let vla = core::mem::replace(&mut self.pending.last_array_decay_vla, saved_decay_vla);
         self.pending.typeof_operand_was_array = self.pending.last_array_decay_size != 0
             || self.pending.last_array_decay_bytes > 0
@@ -610,37 +605,9 @@ impl Compiler {
         } else {
             self.pending.last_array_decay_size
         };
-        // Capture the byte-width marker only for a 1D-reducible row: a
-        // pending multi-dim stride means the row is itself multi-dim and
-        // not expressible as a single element count.
-        let p = &self.pending;
-        let (head, tail) = if p.index_stride > 0 {
-            (p.index_stride, &p.index_strides_tail)
-        } else {
-            (p.end_of_expr_stride, &p.end_of_expr_strides_tail)
-        };
-        let row_strides: alloc::vec::Vec<i64> = if head > 0 {
-            core::iter::once(head).chain(tail.iter().copied()).collect()
-        } else {
-            alloc::vec::Vec::new()
-        };
-        self.pending.typeof_operand_array_bytes = if row_strides.is_empty() {
-            self.pending.last_array_decay_bytes
-        } else {
-            0
-        };
-        // The bounds the operand decayed from; a multi-dimensional row's come
-        // from the strides it left unconsumed, as `&` rebuilds them.
-        let row = self.pending.last_array_decay_bytes > 0 && !row_strides.is_empty();
-        let dims = if row && self.pending.last_array_decay_dims.is_empty() {
-            let elem = self.ty - Ty::Ptr as i64;
-            self.decayed_array_dims(elem, &row_strides)
-                .unwrap_or_default()
-        } else {
-            core::mem::take(&mut self.pending.last_array_decay_dims)
-        };
-        self.pending.last_array_decay_dims = saved_decay_dims;
-        self.pending.typeof_operand_array_dims = dims;
+        self.pending.typeof_operand_array_bytes = self.pending.last_array_decay_bytes;
+        self.pending.typeof_operand_array_dims =
+            core::mem::replace(&mut self.pending.last_array_decay_dims, saved_decay_dims);
         self.pending.last_array_decay_size = saved_decay;
         self.pending.last_array_decay_bytes = saved_decay_bytes;
         self.pending.indirect_callee_ret_fn_ptr = saved_callee_ret;

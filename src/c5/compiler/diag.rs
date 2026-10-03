@@ -700,11 +700,11 @@ impl Compiler {
             return None;
         }
 
-        // A pointer-to-array (aggregate-backed) accepts the flat pointer
-        // spellings of the same shape -- `&arr` and a decayed row carry
-        // the element-pointer tag -- so any pointer on the other side is
-        // quiet, mirroring the byte-pointer rule above. Real
-        // pointer-vs-integer mismatches still warn below.
+        // A pointer to an array against another pointer is a pointer
+        // conversion, quiet as the scalar pointees' are below rather than
+        // an aggregate mismatch. Real pointer-vs-integer mismatches still
+        // warn below. TODO: diagnose incompatible pointee types (C99
+        // 6.5.16.1p1).
         let is_array_agg_ptr = |ty: i64| {
             is_struct_ty(ty)
                 && struct_ptr_depth(ty) > 0

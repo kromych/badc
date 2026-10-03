@@ -407,8 +407,8 @@ pub struct StructField {
     pub inner_array_size: i64,
     /// Full dimension list for an N-dim array field, outermost
     /// first. Mirrors `Symbol::array_dims`. Empty for non-array
-    /// or 1D-array fields. The field-access decay path reads
-    /// this to compute the per-level strides for `s.xs[i][j][k]`.
+    /// or 1D-array fields. The field-access decay path forms the
+    /// row the member's value points to from it.
     pub array_dims: Vec<i64>,
     /// The bound was spelled `[0]` (a GNU zero-length array, complete
     /// with size zero) rather than `[]`; both store `array_size = -1`.
@@ -893,9 +893,9 @@ impl CompileOptions {
 /// Ephemeral side-channel state passed between parser layers --
 /// the "stuff a deeper parse needs to relay back to its caller
 /// without bloating its return type." Groups the
-/// declarator-handoff flags, the multi-dim subscript stride
-/// queue, the array-decay sizeof recovery channel, and the
-/// function-pointer chain-depth tracker into one carrier so the
+/// declarator-handoff flags, the array-decay sizeof recovery
+/// channel, and the function-pointer chain-depth tracker into
+/// one carrier so the
 /// `Compiler` field list reads as "lexer + symbols + codegen
 /// output + transient state" instead of eleven loose fields.
 /// Sentinel `array_size` for a C99 6.7.6.2 variable-length array
@@ -1019,36 +1019,6 @@ pub(in crate::c5::compiler) struct Pending {
     /// an identifier is a function declaration, not a function-pointer object.
     /// Read once by the file-scope declaration path.
     pub bare_function_type_declarator: bool,
-
-    /// Override stride for the next `[i]` postfix index. When we
-    /// load the address of a 2D-array variable (`T xs[N][M]`),
-    /// the first subscript should scale the index by
-    /// `M * sizeof(T)`, not `sizeof(T)`. The expr() identifier
-    /// branch sets this to `inner_array_size * sizeof(elem)` on a
-    /// 2D-array decay; the Brak postfix handler reads-and-clears
-    /// it before falling back to the regular pointer-arithmetic
-    /// stride. Zero means "use the regular stride."
-    pub index_stride: i64,
-
-    /// Strides for the *remaining* subscript levels of an N-dim
-    /// array (N >= 3), beyond the first one held in
-    /// `index_stride`. For `T xs[A][B][C]` after the
-    /// `xs` decay the levels are: first = `B*C*sizeof(T)`
-    /// (in `index_stride`), then `C*sizeof(T)` (in this
-    /// vec), then the regular `sizeof(T)` fall-through. Each
-    /// Brak postfix consumes one stride and shifts the rest
-    /// down. Empty means "no further multi-dim strides queued."
-    pub index_strides_tail: Vec<i64>,
-
-    /// Snapshot of the multi-dim stride queue taken at the bottom
-    /// of every `expr()` -- just before the defensive clear
-    /// runs. Lets an outer operator that ran a recursive `expr()`
-    /// (notably unary `*` on a pointer-to-array operand)
-    /// recover what the inner parse seeded but nothing
-    /// consumed. Reset to zero on the next `expr()` exit, so
-    /// the inspector window is one operator deep.
-    pub end_of_expr_stride: i64,
-    pub end_of_expr_strides_tail: Vec<i64>,
 
     /// Inner dimensions (below the outermost) for the next
     /// `collect_array_initializer` call, outermost first. Set by
@@ -1194,13 +1164,16 @@ pub(in crate::c5::compiler) struct Pending {
     /// `RET (name)(args)` decays to a pointer to function (C99 6.7.5.3p8),
     /// the same as `RET (*name)(args)`.
     pub param_decl_context: bool,
+    /// The element count of the array the value just parsed decayed from
+    /// (C99 6.3.2.1p3), its elements of the type the value points to: the
+    /// outermost bound, -1 for a zero-length array, 0 for no array.
     pub last_array_decay_size: i64,
 
-    /// Full dimension list of the array expression that most recently
-    /// decayed to a pointer at an identifier load. `&arr` reads it to
-    /// rebuild the pointer-to-array aggregate for a multi-dimensional
-    /// array (C99 6.5.3.2p3), where `last_array_decay_size` holds only
-    /// the outermost dimension. Cleared the same way so it doesn't leak.
+    /// Full dimension list, outermost first, of the array expression that
+    /// most recently decayed to a pointer. `&arr` reads it to rebuild the
+    /// pointer-to-array aggregate (C99 6.5.3.2p3), where
+    /// `last_array_decay_size` holds only the outermost dimension. Cleared
+    /// the same way so it doesn't leak.
     pub last_array_decay_dims: alloc::vec::Vec<i64>,
     /// The array type (struct id) of the variable-length array the value
     /// just parsed decayed from, for `&`, `sizeof` and `typeof`.
@@ -1221,12 +1194,10 @@ pub(in crate::c5::compiler) struct Pending {
     /// gets the dimension, mirroring an array typedef base.
     pub typeof_operand_array_size: i64,
 
-    /// Byte width of a `typeof` operand that decayed to the element
-    /// pointer with only the row size recorded (a pointer-to-array
-    /// deref `*p`, a string literal, or a 1D row of a multi-dim
-    /// subscript). Captured only when the row is 1D-reducible (no
-    /// pending multi-dim stride); `parse_typeof_specifier` recovers the
-    /// element count as `bytes / sizeof(elem)` so `typeof(*p)` is the
+    /// Byte width of a `typeof` operand that decayed with its byte count
+    /// recorded (a string literal, a row a subscript or `*` selects).
+    /// Without recorded bounds `parse_typeof_specifier` recovers the
+    /// element count as `bytes / sizeof(elem)`, so the specifier is the
     /// array type rather than the decayed element pointer.
     pub typeof_operand_array_bytes: i64,
 
@@ -1238,14 +1209,11 @@ pub(in crate::c5::compiler) struct Pending {
     /// cannot express those bounds or a multi-dimensional row.
     pub typeof_operand_array_dims: alloc::vec::Vec<i64>,
 
-    /// Companion to `last_array_decay_size` for cases where the
-    /// row's byte size is known directly but its shape can't be
-    /// reduced to a single `count * sizeof(elem_ty)` pair --
-    /// concretely, multi-dim subscripts of a pointer-to-array
-    /// like `T (*p)[A][B]; sizeof(p[0])`. The Brak postfix
-    /// handler stashes the consumed `multi_dim_stride` here so
-    /// `sizeof` can return the whole row size. Cleared the same
-    /// way as `last_array_decay_size` so it doesn't leak.
+    /// Companion to `last_array_decay_size` where the decay knows the
+    /// array's byte size directly: a row a subscript or unary `*` selects
+    /// through a pointer to an array, a string literal, a
+    /// multi-dimensional compound literal. `sizeof` prefers it. Cleared
+    /// the same way as `last_array_decay_size` so it doesn't leak.
     pub last_array_decay_bytes: i64,
 
     /// The object the running expression designates, for
@@ -1677,10 +1645,6 @@ impl Default for Pending {
             fn_decl_base: None,
             base_is_function_type: false,
             bare_function_type_declarator: false,
-            index_stride: 0,
-            index_strides_tail: Vec::new(),
-            end_of_expr_stride: 0,
-            end_of_expr_strides_tail: Vec::new(),
             init_inner_dims: alloc::vec::Vec::new(),
             init_target_array_size: 0,
             typedef_base_array_size: 0,
@@ -2394,7 +2358,7 @@ pub struct Compiler {
     target: Target,
 
     /// Side-channel state shared between parser layers -- the
-    /// 11 transient flags / stride queues / chain-depth counters
+    /// transient flags / decay records / chain-depth counters
     /// the recursive descent reaches for. Grouped into one
     /// carrier so `Compiler` doesn't grow per parser-feature.
     /// Reset to `Pending::default()` at compiler construction.

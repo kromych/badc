@@ -167,10 +167,10 @@ impl Compiler {
         if s.class == Token::Fun as i64 || s.class == Token::Sys as i64 {
             return Some(0);
         }
-        // An array parameter, adjusted to a pointer, keeps its inner
-        // bounds in `array_dims`; a pointer to an array in its tag.
+        // An array object's bounds are on the symbol; a pointer to an
+        // array, an adjusted array parameter included, keeps them in its tag.
         let dims = if s.array_size == 0 {
-            s.array_dims.len().saturating_sub(1)
+            0
         } else {
             s.array_dims.len().max(1)
         };

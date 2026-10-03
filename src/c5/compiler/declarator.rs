@@ -919,9 +919,8 @@ impl Compiler {
             // Trailing dimensions for N-dim arrays. c5 stores
             // `array_size = product(dims)` (total element count),
             // `inner_array_size = dims[1]` for the 2D-init padding
-            // path, and `array_dims = [dims..]` for the indexing
-            // path so 3D / 4D / ... arrays compute strides at
-            // every level.
+            // path, and `array_dims = [dims..]`, whose inner bounds
+            // form the row the array's value points to.
             let mut dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
             if array_size > 0 {
                 dims.push(array_size);
@@ -967,19 +966,10 @@ impl Compiler {
             }
             // Deferred-outer multi-dim arrays (`T arr[][N]`,
             // `T arr[][N][M]`, ...): the outermost dimension's count
-            // arrives later, from the initializer. The trailing
-            // inner dims still need to be recorded NOW so the
-            // indexer's stride math is correct -- otherwise
-            // `arr[i]` strides by `elem_size` instead of
-            // `inner_dim * elem_size` and an out-of-row reference
-            // walks into the previous row's tail bytes.
+            // arrives later, from the initializer. The trailing inner
+            // dims are recorded now: they form the row the array's
+            // value points to, which only the outer count leaves open.
             //
-            // Convention: `array_dims[0] = 0` marks the deferred
-            // outer dim. `seed_multi_dim_strides` only reads
-            // `dims[k+1..]` for stride[k] so the placeholder zero
-            // never propagates into a computed stride; the
-            // post-init fixup in `run_compile` overwrites it with
-            // the real count once the initializer has been parsed.
             // Unified dimension list, outermost first. For a deferred
             // outer dim (`array_size < 0`), `dims` holds only the
             // trailing inner dims, so prepend the `0` placeholder; an
@@ -996,9 +986,7 @@ impl Compiler {
             };
             // `inner_array_size` is the second overall dimension (the
             // immediate inner row width), used by the 2D-init padding
-            // path. `seed_multi_dim_strides` only reads `dims[k+1..]`
-            // for stride[k], so the placeholder zero never enters a
-            // computed stride.
+            // path.
             let inner_dim: i64 = if full_dims.len() >= 2 {
                 full_dims[1]
             } else {
@@ -1008,7 +996,7 @@ impl Compiler {
                 // Always overwrite, even with 0, so a rebinding of a
                 // name that previously carried a multi-dim shape (a
                 // struct field, an outer-scope local, etc.) doesn't
-                // inherit the stale strides. C99 6.2.1 identifier
+                // inherit the stale shape. C99 6.2.1 identifier
                 // scopes: each new binding starts fresh, so any
                 // per-symbol shape metadata must be cleared when the
                 // binding's scope begins.

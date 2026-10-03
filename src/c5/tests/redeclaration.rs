@@ -75,6 +75,12 @@ fn function_redeclarations_of_another_type_are_rejected() {
             "int f(int x) { return x; }\nlong f(int x);\n",
             "now:      long (int)",
         ),
+        // C99 6.7.5.3p7: an array parameter is a pointer to its element,
+        // the row for two bounds, which a pointer to the scalar is not.
+        (
+            "int f(int a[2][3]);\nint f(int *a) { return *a; }\n",
+            "previous: int (int (*)[3])",
+        ),
         (
             "int f(int x);\nint f(int x, int y) { return x + y; }\n",
             "now:      int (int, int)",

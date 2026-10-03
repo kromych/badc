@@ -1316,7 +1316,6 @@ impl Compiler {
         while self.lex.tk >= lev || self.lex.tk == '(' {
             self.parse_operator()?;
         }
-        self.end_expression();
         Ok(())
     }
 
@@ -2729,30 +2728,28 @@ impl Compiler {
     }
 
     /// C99 6.3.2.1p3: an array object used as a value is the address of
-    /// its first element, typed one pointer level up, with the shape
-    /// left for an enclosing `sizeof`, `typeof` or subscript to read.
+    /// its first element, typed as a pointer to that element, with the
+    /// shape left for an enclosing `sizeof`, `typeof` or `&` to read.
     fn decay_array_variable(&mut self, id_idx: usize, identifier_is_local: bool) {
         if identifier_is_local {
             // The decayed address may be indexed, passed or stored, none of
             // which is tracked; the array counts as address-escaped.
             self.symbols[id_idx].binding.address_escaped = true;
         }
-        self.ty += Ty::Ptr as i64;
+        let dims = self.symbols[id_idx].array_dims.clone();
+        self.ty = self.array_value_ty(self.ty, &dims);
         self.ast_emit_ident(id_idx as u32, self.ty);
-        // The element count reaches an enclosing `sizeof`. `array_size` is
-        // `-1` for `extern T x[]`, whose size this unit does not know (C99
-        // 6.7.5.2); the hint stays clear.
-        if self.symbols[id_idx].array_size > 0 {
-            self.pending.last_array_decay_size = self.symbols[id_idx].array_size;
+        // The count of elements the value points into reaches an enclosing
+        // `sizeof`. `array_size` is `-1` for `extern T x[]`, whose size this
+        // unit does not know (C99 6.7.5.2); the hint stays clear.
+        let count = self.symbols[id_idx].array_size;
+        if count > 0 {
+            self.pending.last_array_decay_size = dims.first().copied().unwrap_or(count);
         } else if self.symbols[id_idx].is_zero_len_array {
             // A zero-length array signals its array-ness with the `-1`
             // sentinel; its count of 0 would read as no hint.
             self.pending.last_array_decay_size = -1;
         }
-        let elem_ty = self.symbols[id_idx].type_;
-        let elem_size = self.size_of_type(elem_ty) as i64;
-        let dims = self.symbols[id_idx].array_dims.clone();
-        self.seed_multi_dim_strides(&dims, elem_size);
         // The dimension list lets `&arr` and `typeof` rebuild the array
         // type: a zero-length array records its bound so `typeof` reads
         // `T[0]`, and an unspecified outer bound (C99 6.7.5.2p4, `extern
@@ -2803,22 +2800,6 @@ impl Compiler {
         if fpi > 0 {
             self.pending.fn_ptr_chain_depth = fpi - 1;
         }
-        // A parameter declared `T name[A][B][C]` keeps its dimensions but
-        // decayed to a pointer (C99 6.7.5.3p7): the loaded value is one level
-        // below the array, so the strides come from the pointee.
-        let dims = self.symbols[id_idx].array_dims.clone();
-        if !dims.is_empty() && is_pointer_ty(self.ty) {
-            if dims[0] == 0 {
-                // For `T name[][M...]` the outermost dimension is the decayed
-                // pointer itself, so the inner strides come from the scalar element.
-                let scalar_ty = self.symbols[id_idx].type_ - (Ty::Ptr as i64);
-                let elem_size = self.size_of_type(scalar_ty) as i64;
-                self.seed_multi_dim_strides(&dims, elem_size);
-            } else {
-                let elem_size = self.pointee_size(self.ty);
-                self.seed_multi_dim_strides(&dims, elem_size);
-            }
-        }
     }
 
     fn parse_parenthesized(&mut self) -> Result<(), C5Error> {
@@ -2841,11 +2822,6 @@ impl Compiler {
             } else {
                 return Err(self.compile_err(Code::SYNTAX, "close paren expected"));
             }
-            // The inner expression's unconsumed strides carry on to this
-            // expression's postfix operators, as in `(*p)[k]`.
-            self.pending.index_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
-            self.pending.index_strides_tail =
-                core::mem::take(&mut self.pending.end_of_expr_strides_tail);
         }
         Ok(())
     }
@@ -2986,22 +2962,13 @@ impl Compiler {
 
     fn parse_deref(&mut self) -> Result<(), C5Error> {
         self.next()?;
-        // The operand's unconsumed strides, read from the end-of-expression
-        // snapshot its nested `expr` leaves, tell a pointer-to-array row
-        // dereference from a scalar one; the enclosing snapshot is kept.
-        let saved_eos_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
-        let saved_eos_tail = core::mem::take(&mut self.pending.end_of_expr_strides_tail);
         self.expr(Token::Inc as i64)?;
-        let leftover_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
-        let leftover_tail = core::mem::take(&mut self.pending.end_of_expr_strides_tail);
-        self.pending.end_of_expr_stride = saved_eos_stride;
-        self.pending.end_of_expr_strides_tail = saved_eos_tail;
         let operand_ref = self.pending.object_ref.take();
         if let Some(id) = self.ptr_array_id_depth1(self.ty) {
             // A pointer-to-array tag is never a function pointer, and a cast
             // leaves the decay depth at 0, so this is tested first: `*p` reaches
-            // the array, which decays to the element pointer (C99 6.3.2.1p3)
-            // with no load.
+            // the array, which decays to a pointer to its first element (C99
+            // 6.3.2.1p3) with no load. A decayed array of arrays is one.
             self.decay_ptr_array_value(id);
             self.retag_expr_fn_depth(|d| if d >= 2 { d - 1 } else { d });
         } else if self.value_is_function_pointer() {
@@ -3013,19 +2980,6 @@ impl Compiler {
             // the designator.
             self.pending.value_is_fn_designator = true;
             self.retag_expr_fn_depth(|_| 0);
-        } else if let Some(id) = self.ptr_array_id_depth1(self.ty) {
-            self.decay_ptr_array_value(id);
-        } else if leftover_stride > 0 {
-            // `*p` on a pointer-to-array row is `p[0]`: no load, the head
-            // stride is consumed and the rest queued for a following `[k]`;
-            // the row size reaches an enclosing `sizeof`, and the operand's
-            // own shape, which the row does not have, is dropped.
-            self.drop_operand_array_decay();
-            self.pending.last_array_decay_bytes = leftover_stride;
-            self.retag_expr_fn_depth(|d| if d >= 2 { d - 1 } else { d });
-            let mut tail = leftover_tail;
-            self.pending.index_stride = if tail.is_empty() { 0 } else { tail.remove(0) };
-            self.pending.index_strides_tail = tail;
         } else {
             if is_pointer_ty(self.ty) {
                 self.ty = pointee_ty(self.ty);
@@ -3107,17 +3061,7 @@ impl Compiler {
     fn parse_address_of(&mut self) -> Result<(), C5Error> {
         self.next()?;
         // The operand is designated, not read: `&*p` takes a `void *` `p`.
-        // The strides its parse left unconsumed are read from the
-        // end-of-expression snapshot, as under unary `*`; the enclosing
-        // snapshot is kept.
-        let saved_eos_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
-        let saved_eos_tail = core::mem::take(&mut self.pending.end_of_expr_strides_tail);
         self.expr_or_void(Token::Inc as i64)?;
-        let mut strides = alloc::vec![core::mem::take(&mut self.pending.end_of_expr_stride)];
-        strides.append(&mut self.pending.end_of_expr_strides_tail);
-        strides.retain(|&s| s > 0);
-        self.pending.end_of_expr_stride = saved_eos_stride;
-        self.pending.end_of_expr_strides_tail = saved_eos_tail;
         // The result type is set before the trailing load is dropped, so
         // the `AddrOf` node built there carries the pointer type. A struct
         // value's address is already the value, and a load emitted earlier
@@ -3135,7 +3079,7 @@ impl Compiler {
         // produced its value is considered: `&*p` on a pointer to an array
         // keeps the load of `p`, whose value is the array's address.
         let decayed_array = if is_pointer_ty(pre_addr_ty) {
-            self.decayed_array_dims(pre_addr_ty - Ty::Ptr as i64, &strides)
+            self.decayed_array(pre_addr_ty)
         } else {
             None
         };
@@ -3172,14 +3116,12 @@ impl Compiler {
             self.ty = super::types::struct_ty_for(id) + Ty::Ptr as i64;
             self.drop_operand_array_decay();
             self.retag_expr_fn_depth(|d| d + 1);
-        } else if let Some(dims) = decayed_array {
+        } else if let Some((elem_ty, dims)) = decayed_array {
             // A decayed array: its address was the value already, so `&` emits
             // nothing. C99 6.5.3.2p3: the type is pointer to the array, rebuilt
             // from the shape the decay left -- a whole array, a row of one or
             // of a pointer to one, a string literal -- so `(*p)[i]`, `p[i][j]`,
-            // `p + 1`, `sizeof(&arr)` and `typeof(&arr)` see it. The strides
-            // belonged to the decayed operand; the pointer seeds its own.
-            let elem_ty = pre_addr_ty - Ty::Ptr as i64;
+            // `p + 1`, `sizeof(&arr)` and `typeof(&arr)` see it.
             let agg = self.array_agg_type(elem_ty, &dims);
             self.ty = agg + Ty::Ptr as i64;
             self.drop_operand_array_decay();
@@ -3365,9 +3307,7 @@ impl Compiler {
         Ok(())
     }
 
-    /// C99 6.5.3.1: prefix `++` / `--`. The operand is parsed by a nested
-    /// `expr`, so a pointer-to-array operand's stride sits in the
-    /// end-of-expression snapshot.
+    /// C99 6.5.3.1: prefix `++` / `--`.
     fn parse_prefix_inc_dec(&mut self) -> Result<(), C5Error> {
         let is_inc = self.lex.tk == Token::Inc;
         self.next()?;
@@ -3380,11 +3320,7 @@ impl Compiler {
         let step = if fn_ptr_step {
             1
         } else {
-            self.pointer_to_array_arith_stride(
-                self.pending.end_of_expr_stride,
-                self.ty,
-                self.pointee_step(self.ty),
-            )
+            self.pointee_step(self.ty)
         };
         self.emit_imm(step);
         self.ast_binop(if is_inc {
@@ -3543,16 +3479,6 @@ impl Compiler {
             self.drop_operand_array_decay();
         }
         applied
-    }
-
-    fn end_expression(&mut self) {
-        // Strides an array decay seeded and no subscript consumed must not
-        // reach the next expression; they are snapshotted for one level so
-        // an enclosing unary `*` can read what its operand left.
-        self.pending.end_of_expr_stride = self.pending.index_stride;
-        self.pending.end_of_expr_strides_tail =
-            core::mem::take(&mut self.pending.index_strides_tail);
-        self.pending.index_stride = 0;
     }
 
     fn parse_indirect_call(&mut self) -> Result<(), C5Error> {
@@ -4426,11 +4352,8 @@ impl Compiler {
         Ok(())
     }
 
-    /// C99 6.5.6: `+` and `-`. The left operand's pointer-to-array stride
-    /// and function-pointer lineage are read before the right operand's
-    /// parse overwrites them; a stride wider than the pointee carries into
-    /// the next arithmetic step so `p + i - j` keeps the array element
-    /// size.
+    /// C99 6.5.6: `+` and `-`. The left operand's function-pointer lineage
+    /// is read before the right operand's parse overwrites it.
     fn parse_additive(
         &mut self,
         lhs_ty: i64,
@@ -4440,11 +4363,10 @@ impl Compiler {
         object_ref: Option<super::ObjectRef>,
     ) -> Result<(), C5Error> {
         self.next()?;
-        let lhs_stride = self.pending.index_stride;
         let lhs_fn_ptr = self.value_is_function_pointer();
         self.ast_psh();
         self.expr(op.rhs_lev as i64)?;
-        let displaced = self.additive_object_ref(lhs_ty, lhs_stride, op.tok, object_ref);
+        let displaced = self.additive_object_ref(lhs_ty, op.tok, object_ref);
         let fn_ptr_arith = lhs_fn_ptr || self.value_is_function_pointer();
         self.check_binary_operands(lhs_ty, self.ty, op.name)?;
         self.require_complete_pointee(lhs_ty, op.name)?;
@@ -4460,13 +4382,10 @@ impl Compiler {
             self.ty = fp_result_ty(lhs_ty, self.ty);
             return Ok(());
         }
-        let carry_stride = if op.tok == Token::AddOp {
-            self.add_values(lhs_ty, lhs_stride, fn_ptr_arith)
+        if op.tok == Token::AddOp {
+            self.add_values(lhs_ty, fn_ptr_arith);
         } else {
-            self.sub_values(lhs_ty, lhs_stride, fn_ptr_arith)
-        };
-        if carry_stride > 1 {
-            self.pending.index_stride = carry_stride;
+            self.sub_values(lhs_ty, fn_ptr_arith);
         }
         self.pending.object_ref = displaced;
         Ok(())
@@ -4479,7 +4398,6 @@ impl Compiler {
     fn additive_object_ref(
         &self,
         lhs_ty: i64,
-        lhs_stride: i64,
         tok: Token,
         object_ref: Option<super::ObjectRef>,
     ) -> Option<super::ObjectRef> {
@@ -4490,11 +4408,7 @@ impl Compiler {
         let super::super::ast::Expr::IntLit { val, .. } = *self.ast.expr(self.ast_acc?) else {
             return None;
         };
-        let scale = if lhs_stride > 0 {
-            lhs_stride
-        } else {
-            self.pointee_size(lhs_ty)
-        };
+        let scale = self.pointee_size(lhs_ty);
         let bytes = if tok == Token::SubOp {
             -val * scale
         } else {
@@ -4508,10 +4422,8 @@ impl Compiler {
         })
     }
 
-    /// Integer and pointer addition (C99 6.5.6p8). Returns the stride to
-    /// carry into the next arithmetic step.
-    fn add_values(&mut self, lhs_ty: i64, lhs_stride: i64, fn_ptr_arith: bool) -> i64 {
-        let mut carry_stride: i64 = 0;
+    /// Integer and pointer addition (C99 6.5.6p8).
+    fn add_values(&mut self, lhs_ty: i64, fn_ptr_arith: bool) {
         if !is_pointer_ty(lhs_ty) && is_pointer_ty(self.ty) {
             // `int + ptr` has the pointer type. A pointee wider than a byte
             // scales the integer, which sits on the c5 stack: the pointer is
@@ -4555,16 +4467,7 @@ impl Compiler {
                 let rhs_ast = self.ast_acc.take();
                 let saved_vstack = core::mem::take(&mut self.ast_vstack);
                 self.ast_vstack.push(None);
-                // A pointer-to-array operand left its array stride in the
-                // end-of-expression snapshot.
-                let scale = self.pointer_to_array_arith_stride(
-                    self.pending.end_of_expr_stride,
-                    rhs_ty,
-                    self.pointee_size(rhs_ty),
-                );
-                if scale > self.pointee_size(rhs_ty) {
-                    carry_stride = scale;
-                }
+                let scale = self.pointee_size(rhs_ty);
                 let rhs_temp = self.reserve_slots(1);
                 self.mark_emit_other();
                 self.emit_imm(0);
@@ -4618,14 +4521,7 @@ impl Compiler {
             if let Some(slot) = self.vla_pointee_slot(lhs_ty) {
                 self.emit_binop_with_vla_size(crate::c5::ir::BinOp::Mul, slot);
             } else if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(lhs_ty) {
-                let scale = self.pointer_to_array_arith_stride(
-                    lhs_stride,
-                    lhs_ty,
-                    self.pointee_size(lhs_ty),
-                );
-                if scale > self.pointee_size(lhs_ty) {
-                    carry_stride = scale;
-                }
+                let scale = self.pointee_size(lhs_ty);
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
             }
             // The result type is set before the node is built, so the node
@@ -4640,13 +4536,10 @@ impl Compiler {
                 self.maybe_mask_to_unsigned_width(lhs_ty, rhs_ty);
             }
         }
-        carry_stride
     }
 
-    /// Integer and pointer subtraction (C99 6.5.6p8-p9). Returns the stride
-    /// to carry into the next arithmetic step.
-    fn sub_values(&mut self, lhs_ty: i64, lhs_stride: i64, fn_ptr_arith: bool) -> i64 {
-        let mut carry_stride: i64 = 0;
+    /// Integer and pointer subtraction (C99 6.5.6p8-p9).
+    fn sub_values(&mut self, lhs_ty: i64, fn_ptr_arith: bool) {
         if is_pointer_ty(lhs_ty) && self.ptr_diff_compatible(lhs_ty, self.ty) {
             // C99 6.5.6p9: `ptr - ptr` is the element distance, the byte
             // distance divided by the pointee size both operands share, of
@@ -4656,11 +4549,7 @@ impl Compiler {
             if let Some(slot) = self.vla_pointee_slot(lhs_ty) {
                 self.emit_binop_with_vla_size(crate::c5::ir::BinOp::Div, slot);
             } else if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(lhs_ty) {
-                let scale = self.pointer_to_array_arith_stride(
-                    lhs_stride,
-                    lhs_ty,
-                    self.pointee_size(lhs_ty),
-                );
+                let scale = self.pointee_size(lhs_ty);
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Div, scale);
             }
         } else if let Some(slot) = self.vla_pointee_slot(lhs_ty) {
@@ -4668,11 +4557,7 @@ impl Compiler {
             self.ty = strip_object_const(lhs_ty);
             self.ast_binop(crate::c5::ir::BinOp::Sub);
         } else if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(lhs_ty) {
-            let scale =
-                self.pointer_to_array_arith_stride(lhs_stride, lhs_ty, self.pointee_size(lhs_ty));
-            if scale > self.pointee_size(lhs_ty) {
-                carry_stride = scale;
-            }
+            let scale = self.pointee_size(lhs_ty);
             self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, scale);
             // C99 6.5.6p8: the result has the pointer type, set before the node
             // is built.
@@ -4692,7 +4577,6 @@ impl Compiler {
                 self.maybe_mask_to_unsigned_width(lhs_ty, rhs_ty);
             }
         }
-        carry_stride
     }
 
     /// C99 6.5.5: `*`, `/`, `%`. An operator with no floating form
@@ -4787,8 +4671,7 @@ impl Compiler {
 
     /// C99 6.5.2.4: postfix `++` / `--`. The value is the operand before
     /// the update: the updated value is stored, then stepped back on the
-    /// accumulator. The operand was parsed in this scope, so a
-    /// pointer-to-array stride sits in the current stride slot.
+    /// accumulator.
     fn parse_postfix_inc_dec(&mut self) -> Result<(), C5Error> {
         let is_inc = self.lex.tk == Token::Inc;
         if let Some((lvalue, ty)) = self.direct_inc_lvalue() {
@@ -4796,11 +4679,12 @@ impl Compiler {
         }
         self.require_complete_pointee(self.ty, if is_inc { "++" } else { "--" })?;
         let (lvalue, fn_ptr_step) = self.inc_dec_lvalue("post-increment")?;
-        self.emit_imm(if fn_ptr_step {
+        let step = if fn_ptr_step {
             1
         } else {
             self.pointee_step(self.ty)
-        });
+        };
+        self.emit_imm(step);
         self.ast_binop(if is_inc {
             super::super::ir::BinOp::Add
         } else {
@@ -4808,15 +4692,6 @@ impl Compiler {
         });
         self.ast_assign();
         self.ast_psh();
-        let step = if fn_ptr_step {
-            1
-        } else {
-            self.pointer_to_array_arith_stride(
-                self.pending.index_stride,
-                self.ty,
-                self.pointee_step(self.ty),
-            )
-        };
         self.emit_imm(step);
         self.ast_binop(if is_inc {
             super::super::ir::BinOp::Sub
@@ -4871,7 +4746,6 @@ impl Compiler {
             base_ast: array_ast,
             idx_ty,
             idx_ast,
-            multi_dim_stride,
             fn_ptr_chain_depth: saved_fn_ptr_chain,
             fn_ptr_depth_is_array_elem: saved_fn_ptr_elem,
         } = self.parse_subscript_index(lhs_ty)?;
@@ -4909,8 +4783,9 @@ impl Compiler {
         let stride;
         let mut decays = true;
         if let Some(id) = self.ptr_array_id_depth1(lhs_ty) {
-            // `p[i]` on a single-level pointer to an array selects row `i` and
-            // decays to the element pointer with no load (C99 6.3.2.1p3).
+            // `p[i]` on a single-level pointer to an array selects row `i`,
+            // which decays to a pointer to its first element with no load
+            // (C99 6.3.2.1p3); a decayed array of arrays is such a pointer.
             let row = self.structs[id].size as i64;
             stride = row;
             if let Some(slot) = self.structs[id].vla_size_slot {
@@ -4925,19 +4800,6 @@ impl Compiler {
             // consumed, so the operand's decay depth stands.
             self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain;
             self.pending.fn_ptr_depth_is_array_elem = saved_fn_ptr_elem;
-        } else if multi_dim_stride > 0 {
-            self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, multi_dim_stride);
-            self.ast_binop(crate::c5::ir::BinOp::Add);
-            self.record_row_fn(array_ast);
-            // A row of a multi-dimensional array keeps the pointer level; the
-            // innermost subscript decays to the element.
-            self.ty = lhs_ty;
-            self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain;
-            self.pending.fn_ptr_depth_is_array_elem = saved_fn_ptr_elem;
-            // The row's byte count reaches an enclosing `sizeof`; a row may
-            // itself be multi-dimensional, which the flat type cannot express.
-            self.pending.last_array_decay_bytes = multi_dim_stride;
-            stride = multi_dim_stride;
         } else {
             decays = false;
             stride = self.pointee_size(lhs_ty);
@@ -4994,12 +4856,6 @@ impl Compiler {
     }
 
     fn parse_subscript_index(&mut self, lhs_ty: i64) -> Result<SubscriptIndex, C5Error> {
-        // The stride queue the operand seeded is parked across the index
-        // parse, which clears the pending state at its exit, and shifted
-        // one level afterwards.
-        let multi_dim_stride = self.pending.index_stride;
-        let saved_tail = core::mem::take(&mut self.pending.index_strides_tail);
-        self.pending.index_stride = 0;
         // The element keeps the return lineage and decay depth the array
         // decay left; the index expression must neither consume nor clear
         // them.
@@ -5011,21 +4867,16 @@ impl Compiler {
         self.expr(Token::Assign as i64)?;
         let idx_ast = self.ast_acc;
         // C99 6.5.2.1p1: the integer may come first. `i[p]` is `p[i]` with the
-        // strides and callee the pointer operand's parse left.
+        // callee lineage the pointer operand's parse left.
         if !is_pointer_ty(lhs_ty) && is_pointer_ty(self.ty) {
             self.ast_vstack.pop();
             self.ast_vstack.push(idx_ast);
             self.ast_acc = lhs_ast;
-            let mut tail = core::mem::take(&mut self.pending.end_of_expr_strides_tail);
-            let multi_dim_stride = core::mem::take(&mut self.pending.end_of_expr_stride);
-            self.pending.index_stride = if tail.is_empty() { 0 } else { tail.remove(0) };
-            self.pending.index_strides_tail = tail;
             return Ok(SubscriptIndex {
                 base_ty: self.ty,
                 base_ast: idx_ast,
                 idx_ty: lhs_ty,
                 idx_ast: lhs_ast,
-                multi_dim_stride,
                 fn_ptr_chain_depth: self.pending.fn_ptr_chain_depth,
                 fn_ptr_depth_is_array_elem: self.pending.fn_ptr_depth_is_array_elem,
             });
@@ -5033,18 +4884,11 @@ impl Compiler {
         self.pending.indirect_callee_ret_fn_ptr = saved_callee_ret;
         self.pending.fn_ptr_chain_depth = saved_fn_ptr_chain;
         self.pending.fn_ptr_depth_is_array_elem = saved_fn_ptr_elem;
-        self.pending.index_strides_tail = saved_tail;
-        self.pending.index_stride = if self.pending.index_strides_tail.is_empty() {
-            0
-        } else {
-            self.pending.index_strides_tail.remove(0)
-        };
         Ok(SubscriptIndex {
             base_ty: lhs_ty,
             base_ast: lhs_ast,
             idx_ty: self.ty,
             idx_ast,
-            multi_dim_stride,
             fn_ptr_chain_depth: saved_fn_ptr_chain,
             fn_ptr_depth_is_array_elem: saved_fn_ptr_elem,
         })
@@ -5284,7 +5128,7 @@ impl Compiler {
         // chains; an array member decays as an array object does.
         let field_is_struct_value = is_struct_value_ty(self.ty);
         if field.array_size != 0 {
-            self.ty += Ty::Ptr as i64;
+            self.ty = self.array_value_ty(self.ty, &field.array_dims);
             // A function-pointer element seeds the decay depth for
             // `(*s.fparr[i])(...)`, as an array object does.
             if field.fn_ptr_indirection > 0 {
@@ -5292,26 +5136,23 @@ impl Compiler {
                 self.pending.fn_ptr_depth_is_array_elem = true;
             }
             if field.array_size > 0 {
-                // The element count reaches an enclosing `sizeof`.
-                self.pending.last_array_decay_size = field.array_size;
+                // The count of elements the value points into reaches an
+                // enclosing `sizeof`, and the dimension list lets
+                // `typeof(s.xs)` rebuild the array type.
                 let dims = field.array_dims.clone();
-                let elem_size = self.size_of_type(field.ty) as i64;
-                // The dimension list lets `typeof(s.xs)` rebuild the array type.
-                self.pending.last_array_decay_dims = dims.clone();
-                self.seed_multi_dim_strides(&dims, elem_size);
+                self.pending.last_array_decay_size =
+                    dims.first().copied().unwrap_or(field.array_size);
+                self.pending.last_array_decay_dims = dims;
             } else {
                 // A flexible array member (C99 6.7.2.1p16) is an incomplete array,
                 // signalled to `typeof` / `__builtin_types_compatible_p` with the
                 // `-1` sentinel as for a zero-length array object.
                 self.pending.last_array_decay_size = -1;
                 // A multi-dimensional flexible member records a 0 placeholder for
-                // its outer dimension; the strides read only the inner ones. The
-                // dimension list spells that bound as unspecified, or as 0 for a
-                // member declared `[0]`, so `&s->fa` is `T (*)[]` or `T (*)[0]`.
-                let dims = field.array_dims.clone();
-                let elem_size = self.size_of_type(field.ty) as i64;
-                self.seed_multi_dim_strides(&dims, elem_size);
-                let mut shape = dims;
+                // its outer dimension. The dimension list spells that bound as
+                // unspecified, or as 0 for a member declared `[0]`, so `&s->fa`
+                // is `T (*)[]` or `T (*)[0]`.
+                let mut shape = field.array_dims.clone();
                 let outer = if field.zero_len { 0 } else { -1 };
                 match shape.first_mut() {
                     Some(d) => *d = outer,
@@ -5330,17 +5171,17 @@ impl Compiler {
     }
 
     /// C99 6.3.2.1p3 at the last level of a pointer to an array: the
-    /// value holds the array's address, so the dereference decays to the
-    /// element pointer with no load; the remaining strides and the row
-    /// size are left for the following subscripts and `sizeof`.
+    /// value holds the array's address, so the dereference decays to a
+    /// pointer to the array's first element with no load; the array's
+    /// shape is left for `sizeof`, `typeof` and `&`.
     fn decay_ptr_array_value(&mut self, id: usize) {
+        // The row is an array of its own: the operand's shape does not stand.
+        self.drop_operand_array_decay();
         if self.structs[id].vla_size_slot.is_some() {
-            self.drop_operand_array_decay();
             self.pending.last_array_decay_vla = Some(id);
             self.ty = self.structs[id].fields[0].ty + Ty::Ptr as i64;
             return;
         }
-        self.pending.last_array_decay_vla = None;
         let f = &self.structs[id].fields[0];
         let elem_ty = f.ty;
         let dims: alloc::vec::Vec<i64> = if f.array_dims.len() >= 2 {
@@ -5348,76 +5189,51 @@ impl Compiler {
         } else {
             alloc::vec![f.array_size]
         };
-        let elem_size = self.size_of_type(elem_ty) as i64;
-        self.seed_multi_dim_strides(&dims, elem_size);
         self.pending.last_array_decay_bytes = self.structs[id].size as i64;
         if self.structs[id].size == 0 {
             // A zero-size or unspecified row (`T (*p)[0]`, `T (*p)[]`): the
             // byte channel cannot say 0, so the sentinel does.
             self.pending.last_array_decay_size = -1;
         }
+        self.ty = self.array_value_ty(elem_ty, &dims);
         // Exact row dimensions (-1 = unspecified bound, C99 6.7.5.2p4)
         // for `typeof` / `&` recovery of the undecayed array type.
         self.pending.last_array_decay_dims = dims;
-        self.ty = elem_ty + Ty::Ptr as i64;
     }
 
-    /// The dimensions, outermost first, of the array the value just parsed
-    /// decayed from (C99 6.3.2.1p3), or `None` when it did not decay from
-    /// one. A bound is -1 when unspecified and 0 for a zero-length array.
-    /// The decay recorded either the exact dimensions, the byte count of a
-    /// row over the strides it left unconsumed (`strides`, head first), or
-    /// the element count of a 1D array, with -1 for a count of zero.
-    pub(super) fn decayed_array_dims(
-        &self,
-        elem_ty: i64,
-        strides: &[i64],
-    ) -> Option<alloc::vec::Vec<i64>> {
+    /// The array a value of type `value_ty` just decayed from (C99
+    /// 6.3.2.1p3) as its element type and its bounds, outermost first, or
+    /// `None` when it did not decay from one. A bound is -1 when unspecified
+    /// and 0 for a zero-length array. The decay recorded the exact bounds,
+    /// the byte count of a 1D array, or its element count, with -1 for a
+    /// count of zero.
+    pub(super) fn decayed_array(&self, value_ty: i64) -> Option<(i64, alloc::vec::Vec<i64>)> {
         let p = &self.pending;
-        if !p.last_array_decay_dims.is_empty() {
-            return Some(p.last_array_decay_dims.clone());
-        }
-        if p.last_array_decay_bytes > 0 {
-            let elem_size = self.size_of_type(elem_ty) as i64;
-            let mut dims = alloc::vec::Vec::with_capacity(strides.len() + 1);
-            let mut bytes = p.last_array_decay_bytes;
-            for &below in strides.iter().chain(core::iter::once(&elem_size)) {
-                if below <= 0 || bytes % below != 0 {
-                    return None;
-                }
-                dims.push(bytes / below);
-                bytes = below;
+        let dims = if !p.last_array_decay_dims.is_empty() {
+            p.last_array_decay_dims.clone()
+        } else if p.last_array_decay_bytes > 0 {
+            let elem_size = self.size_of_type(value_ty - Ty::Ptr as i64) as i64;
+            if elem_size <= 0 || p.last_array_decay_bytes % elem_size != 0 {
+                return None;
             }
-            return Some(dims);
-        }
-        match p.last_array_decay_size {
-            n if n > 0 => Some(alloc::vec![n]),
-            n if n < 0 => Some(alloc::vec![0]),
-            _ => None,
-        }
+            alloc::vec![p.last_array_decay_bytes / elem_size]
+        } else {
+            match p.last_array_decay_size {
+                n if n > 0 => alloc::vec![n],
+                n if n < 0 => alloc::vec![0],
+                _ => return None,
+            }
+        };
+        Some((self.decayed_elem_ty(value_ty, &dims), dims))
     }
 
-    /// The subscript strides of an N-dimensional array of `elem_size`
-    /// elements: for `T[A][B][C]` they are `[B*C*s, C*s]`, the head in
-    /// `index_stride` and the rest queued. A 1D shape seeds none.
-    pub(super) fn seed_multi_dim_strides(&mut self, dims: &[i64], elem_size: i64) {
-        self.pending.index_stride = 0;
-        self.pending.index_strides_tail.clear();
-        if dims.len() < 2 || elem_size <= 0 {
-            return;
-        }
-        // strides[k] = elem_size * product(dims[k+1..]) for k in 0..N-1.
-        let n = dims.len();
-        let mut strides: Vec<i64> = Vec::with_capacity(n - 1);
-        let mut running: i64 = elem_size;
-        for k in (0..n - 1).rev() {
-            running = running.saturating_mul(dims[k + 1]);
-            strides.push(running);
-        }
-        strides.reverse();
-        if let Some((&head, tail)) = strides.split_first() {
-            self.pending.index_stride = head;
-            self.pending.index_strides_tail.extend_from_slice(tail);
+    /// The element type of the array with bounds `dims` that a value of
+    /// type `value_ty` decayed from: the value points to the first element,
+    /// which for more than one bound is the row whose element it is.
+    pub(super) fn decayed_elem_ty(&self, value_ty: i64, dims: &[i64]) -> i64 {
+        match self.ptr_array_id_depth1(value_ty) {
+            Some(id) if dims.len() >= 2 => self.structs[id].fields[0].ty,
+            _ => value_ty - Ty::Ptr as i64,
         }
     }
 
@@ -6403,15 +6219,14 @@ struct DirectCallee {
     count_is_constraint: bool,
 }
 
-/// What a subscript's index parse hands back: the index expression, the
-/// row stride the operand seeded for this level, and the function-pointer
-/// decay depth parked across the parse.
+/// What a subscript's index parse hands back: the pointer and index
+/// operands, in either order the source gave them, and the
+/// function-pointer decay depth parked across the parse.
 struct SubscriptIndex {
     base_ty: i64,
     base_ast: Option<super::super::ast::ExprId>,
     idx_ty: i64,
     idx_ast: Option<super::super::ast::ExprId>,
-    multi_dim_stride: i64,
     fn_ptr_chain_depth: i64,
     fn_ptr_depth_is_array_elem: bool,
 }

@@ -2853,6 +2853,13 @@ fn paren_array_declarator() {
 }
 
 #[test]
+fn multidim_array_value() {
+    // C99 6.3.2.1p3, 6.7.5.3p7: an array of arrays converts to a pointer to
+    // its first row, and an array parameter is adjusted to the same type.
+    assert_eq!(run_fixture("multidim_array_value.c"), 0);
+}
+
+#[test]
 fn variably_modified_type_names() {
     // C99 6.7.5.2p4, 6.5.3.4p2: a variable-length array type name's size
     // is computed at run time, and a cast to a pointer to one strides by it.

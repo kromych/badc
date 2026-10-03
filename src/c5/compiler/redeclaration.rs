@@ -386,17 +386,7 @@ impl Compiler {
             return false;
         }
         let (a, b) = (a & !VOLATILE_MASK, b & !VOLATILE_MASK);
-        a == b
-            || self.tags_compatible(a, b)
-            || self.is_row_pointer(a, b)
-            || self.is_row_pointer(b, a)
-    }
-
-    /// `T a[][N]` as a parameter keeps only the element pointer in its tag.
-    fn is_row_pointer(&self, row: i64, flat: i64) -> bool {
-        self.ptr_array_id_depth1(row).is_some_and(|id| {
-            (self.structs[id].fields[0].ty & !VOLATILE_MASK) + Ty::Ptr as i64 == flat
-        })
+        a == b || self.tags_compatible(a, b)
     }
 
     fn describe(&self, ty: &DeclaredType) -> String {

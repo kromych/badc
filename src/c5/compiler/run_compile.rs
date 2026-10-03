@@ -1264,10 +1264,19 @@ impl Compiler {
             while self.lex.tk != ';' && self.lex.tk != 0 {
                 let (decl_idx, mut decl_ty, decl_arr) = self.parse_declarator(base)?;
                 if decl_idx != usize::MAX {
-                    // An array parameter is adjusted to a
-                    // pointer to the element type (6.7.5.3p7).
+                    // An array parameter is adjusted to a pointer to its
+                    // element type (6.7.5.3p7), a row for more than one
+                    // bound; the bounds leave the symbol with it. An array
+                    // typedef no derivation took is the parameter's type.
                     if decl_arr != 0 {
-                        decl_ty += Ty::Ptr as i64;
+                        let dims = core::mem::take(&mut self.symbols[decl_idx].array_dims);
+                        self.symbols[decl_idx].inner_array_size = 0;
+                        decl_ty = self.array_value_ty(decl_ty, &dims);
+                    } else if self.pending.typedef_base_array_size != 0
+                        && !self.pending.base_array_taken
+                    {
+                        let dims = self.typedef_base_dims();
+                        decl_ty = self.array_value_ty(decl_ty, &dims);
                     }
                     if let Some(pos) = params.indices.iter().position(|&pi| pi == decl_idx) {
                         self.symbols[decl_idx].type_ = decl_ty;

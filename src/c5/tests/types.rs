@@ -4039,3 +4039,35 @@ fn typeof_a_row_keeps_its_inner_bounds() {
          int main(void) { return 0; }\n",
     );
 }
+
+#[test]
+fn an_array_of_arrays_converts_to_a_pointer_to_its_row() {
+    // C99 6.3.2.1p3: the value of `int two[2][3]` points to its first
+    // element, the row `int[3]`, and 6.7.5.3p7 adjusts a parameter declared
+    // as the array to the same type.
+    compile_str(
+        "int two[2][3];\n\
+         int three[2][3][4];\n\
+         struct { int m[2][3]; } s;\n\
+         int (*pm)[2][3];\n\
+         int f(int a[2][3], int b[][3][4]) {\n\
+           _Static_assert(_Generic(a, int (*)[3]: 1, default: 0), \"parameter\");\n\
+           _Static_assert(_Generic(b, int (*)[3][4]: 1, default: 0), \"parameter of three bounds\");\n\
+           return a[1][2] + b[1][2][3];\n\
+         }\n\
+         int main(int c, char **v) {\n\
+           (void)v;\n\
+           _Static_assert(_Generic(two, int (*)[3]: 1, int *: 2, default: 0) == 1, \"array\");\n\
+           _Static_assert(_Generic(two + 0, int (*)[3]: 1, default: 0), \"sum\");\n\
+           _Static_assert(_Generic((0, two), int (*)[3]: 1, default: 0), \"comma\");\n\
+           _Static_assert(_Generic(c ? two : two, int (*)[3]: 1, default: 0), \"conditional\");\n\
+           _Static_assert(_Generic(three, int (*)[3][4]: 1, default: 0), \"three bounds\");\n\
+           _Static_assert(_Generic(three[1], int (*)[4]: 1, default: 0), \"row\");\n\
+           _Static_assert(_Generic(s.m, int (*)[3]: 1, default: 0), \"member\");\n\
+           _Static_assert(_Generic(*pm, int (*)[3]: 1, default: 0), \"pointee\");\n\
+           _Static_assert(__builtin_types_compatible_p(__typeof__(two + 0), int (*)[3]), \"typeof\");\n\
+           _Static_assert(sizeof *(two + 0) == 3 * sizeof(int), \"row size\");\n\
+           return f(two, three);\n\
+         }\n",
+    );
+}

@@ -302,32 +302,20 @@ impl Compiler {
                 };
                 self.pending.fn_ptr_indirection = Some(fpi + added);
             }
-            // Optional `[N]` / `[]` after an unnamed parameter
-            // type ('int []' / 'char [16]'). Per C99 6.7.5.3p7,
-            // a parameter declared with an array type is
-            // adjusted to a pointer to the element type; we
-            // bump the pointer level once and discard the size.
-            // The same adjustment applies when the base type is
-            // a typedef whose alias is an array (`typedef i64
-            // gf[16]; void f(gf x);` -- `x` is `i64 *`).
+            // An unnamed parameter, possibly of array type (`int [][3]`,
+            // `char [16]`). Per C99 6.7.5.3p7 a parameter declared with an
+            // array type is adjusted to a pointer to its element type, which
+            // a typedef whose alias is an array spells as well (`typedef i64
+            // gf[16]; void f(gf);` -- the parameter is `i64 *`). The alias's
+            // bounds are the inner ones (C99 6.7.7p3); a pointer-to-array
+            // (`gf *`) absorbed them above.
             if self.lex.tk == ',' || self.lex.tk == ')' || self.lex.tk == Token::Brak {
-                if self.lex.tk == Token::Brak {
-                    self.next()?;
-                    if self.lex.tk == ']' {
-                        self.next()?;
-                    } else {
-                        // Eat the constant int + `]`.
-                        let _ = self.parse_constant_int()?;
-                        self.accept(']')?;
-                    }
-                    ty += Ty::Ptr as i64;
-                }
-                // Bare array-typedef parameter (`Node`): adjust to a
-                // pointer per 6.7.5.3p7. A pointer-to-array (`Node *`)
-                // already has its pointer level from the leading `*`, so
-                // it must not gain a second one.
+                let mut dims = self.parse_unnamed_param_bounds()?;
                 if self.pending.typedef_base_array_size != 0 && leading_ptr_count == 0 {
-                    ty += Ty::Ptr as i64;
+                    dims.extend(self.typedef_base_dims());
+                }
+                if !dims.is_empty() {
+                    ty = self.array_value_ty(ty, &dims);
                 }
                 // An unnamed parameter binds no symbol to receive the
                 // fn-pointer carriers its base (a fn-pointer typedef) seeded.
@@ -356,33 +344,31 @@ impl Compiler {
             // (`PyObject *op __attribute__((unused))`).
             self.skip_attribute_specifiers()?;
             let param_maybe_unused = self.pending.attr_maybe_unused;
-            if array_size != 0 {
-                full_ty += Ty::Ptr as i64;
-            }
-            let adjusted = array_size != 0
-                || (self.pending.typedef_base_array_size != 0 && leading_ptr_count == 0);
-            // Per C99 6.7.5.3p7, a named array parameter is
-            // adjusted to a pointer to the element type. The
-            // same rule applies when the base type is a typedef
-            // whose alias is an array. Only consult the carrier
-            // when parse_declarator did not already absorb it
-            // into `array_size` (i.e., the declarator carried no
-            // explicit brackets). A pointer-to-array parameter
-            // (`Node *p`, leading `*` consumed above) already has
-            // the aggregate-backed tag and needs no adjustment.
-            if array_size == 0
+            // Per C99 6.7.5.3p7, a named array parameter is adjusted to a
+            // pointer to its element type, the row of the inner bounds for
+            // more than one. The same rule applies when the base type is a
+            // typedef whose alias is an array; its carrier is consulted only
+            // when parse_declarator did not already absorb it into
+            // `array_size` (the declarator carried no brackets). A
+            // pointer-to-array parameter (`Node *p`, leading `*` consumed
+            // above) already has the aggregate-backed tag.
+            let typedef_array = array_size == 0
                 && self.pending.typedef_base_array_size != 0
-                && leading_ptr_count == 0
-            {
-                full_ty += Ty::Ptr as i64;
-                // A multi-dim alias (`typedef T G[A][B]; void f(G g)`)
-                // decays to a row pointer; record the dims on the
-                // parameter like a bracket-declared `T g[A][B]` so the
-                // subscript path strides each level by its row width.
-                if param_idx != usize::MAX && self.pending.typedef_base_array_dims.len() >= 2 {
-                    let dims = self.pending.typedef_base_array_dims.clone();
-                    self.symbols[param_idx].inner_array_size = dims[1];
-                    self.symbols[param_idx].array_dims = dims;
+                && leading_ptr_count == 0;
+            let adjusted = array_size != 0 || typedef_array;
+            if adjusted {
+                let dims = if typedef_array {
+                    self.typedef_base_dims()
+                } else if param_idx != usize::MAX {
+                    self.symbols[param_idx].array_dims.clone()
+                } else {
+                    Vec::new()
+                };
+                full_ty = self.array_value_ty(full_ty, &dims);
+                // The parameter is the pointer: no bounds stay on its symbol.
+                if param_idx != usize::MAX {
+                    self.symbols[param_idx].inner_array_size = 0;
+                    self.symbols[param_idx].array_dims = Vec::new();
                 }
             }
             // Fn-pointer lineage: pick up the side-channels that
@@ -490,6 +476,38 @@ impl Compiler {
             form,
             enum_tags,
         })
+    }
+
+    /// The bounds of an unnamed parameter's array declarator (`int [][3]`),
+    /// outermost first. The outermost is adjusted away (C99 6.7.5.3p7), so
+    /// its contents -- `static`, qualifiers, `*`, any expression -- are
+    /// skipped and it reads as unspecified; an inner one is a constant.
+    fn parse_unnamed_param_bounds(&mut self) -> Result<Vec<i64>, C5Error> {
+        let mut dims = Vec::new();
+        while self.lex.tk == Token::Brak {
+            self.next()?;
+            if dims.is_empty() {
+                self.skip_array_dimension_expr()?;
+                dims.push(-1);
+            } else {
+                let Some(n) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
+                else {
+                    return Err(self.compile_err(
+                        Code::UNSUPPORTED,
+                        "a non-constant inner array dimension is not supported",
+                    ));
+                };
+                if n < 0 {
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        alloc::format!("array dimension must be positive (got {n})"),
+                    ));
+                }
+                dims.push(n);
+            }
+            self.consume(b']', "close bracket expected in array declarator")?;
+        }
+        Ok(dims)
     }
 
     /// The `,` after a parameter declaration: `true` past it, `false` at

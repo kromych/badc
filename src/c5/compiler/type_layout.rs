@@ -83,27 +83,6 @@ impl Compiler {
         }
     }
 
-    /// Pointer-arithmetic stride for `ty`. A pointer-to-array
-    /// `T (*p)[N]` carries the flat type of a `T*`, so `fallback`
-    /// (`pointee_size` / `pointee_step`) scales by `sizeof(T)` rather
-    /// than `sizeof(T[N])`. The array's per-element size is seeded
-    /// into the multi-dim stride snapshot when the operand is loaded
-    /// or an array decays; `seeded_stride` is that value (0 when the
-    /// operand is a plain pointer). When it is set, it is the correct
-    /// stride; otherwise fall back.
-    pub(super) fn pointer_to_array_arith_stride(
-        &self,
-        seeded_stride: i64,
-        ty: i64,
-        fallback: i64,
-    ) -> i64 {
-        if is_pointer_ty(ty) && seeded_stride > 1 {
-            seeded_stride
-        } else {
-            fallback
-        }
-    }
-
     /// Look up a tag in scope, searching from the innermost block
     /// outward (C99 6.2.1: tags have block scope). Struct, union and
     /// enum tags share one name space (6.2.3), so an inner tag of any
@@ -598,6 +577,18 @@ impl Compiler {
         struct_ty_for(self.structs.len() - 1)
     }
 
+    /// The type an array of `elem_ty` with bounds `dims` (outermost first)
+    /// converts to as a value (C99 6.3.2.1p3): a pointer to its first
+    /// element, which for more than one bound is the row of the inner
+    /// ones, with the tag a declared `T (*)[N]` has.
+    pub(super) fn array_value_ty(&mut self, elem_ty: i64, dims: &[i64]) -> i64 {
+        if dims.len() < 2 {
+            return elem_ty + Ty::Ptr as i64;
+        }
+        let row = self.array_agg_type(elem_ty, &dims[1..]);
+        super::types::add_ptr_level(row | (elem_ty & super::types::VOLATILE_BIT))
+    }
+
     /// The type of a variable-length array of `elem_ty` whose byte count the
     /// frame keeps in `size_slot` (C99 6.7.5.2), interned by the pair.
     pub(super) fn vla_array_type(&mut self, elem_ty: i64, size_slot: i64) -> i64 {
@@ -641,28 +632,11 @@ impl Compiler {
 
     /// True when `a` and `b` may form a C99 6.5.6p9 pointer
     /// difference: identical tags once each operand's own `const` is
-    /// dropped (a value's type, C99 6.3.2.1p2), or a single-level
-    /// pointer-to-array on one side with the flat element-pointer
-    /// spelling (a decayed outer array row) on the other.
+    /// dropped (a value's type, C99 6.3.2.1p2).
     pub(super) fn ptr_diff_compatible(&self, a: i64, b: i64) -> bool {
         // C99 6.5.6p3: pointers to qualified or unqualified versions of
         // compatible types, so no level's qualifier takes part.
-        let (a, b) = (
-            super::types::unqualified_object_ty(a),
-            super::types::unqualified_object_ty(b),
-        );
-        if a == b {
-            return true;
-        }
-        let flat_matches = |pa: i64, flat: i64| {
-            self.ptr_array_id_depth1(pa).is_some_and(|id| {
-                let elem = strip_unsigned(super::types::unqualified_object_ty(
-                    self.structs[id].fields[0].ty,
-                ));
-                strip_unsigned(flat) == elem + Ty::Ptr as i64
-            })
-        };
-        flat_matches(a, b) || flat_matches(b, a)
+        super::types::unqualified_object_ty(a) == super::types::unqualified_object_ty(b)
     }
 
     /// The bounds of the array-typedef base, outermost first.

@@ -2266,6 +2266,7 @@ impl Compiler {
         let old_style_def = s.class == Token::Fun as i64 && s.unprototyped_def;
         let callee = DirectCallee {
             params: s.params.clone(),
+            param_fns: s.param_fn_types.clone(),
             is_variadic: s.is_variadic,
             name: s.name.clone(),
             is_sys_call,
@@ -2485,14 +2486,23 @@ impl Compiler {
             Code::NESTED_QUALIFIERS,
             Code::POINTER_SIGN,
         ];
+        let arg_fn = self.value_fn_type(self.ast_acc);
+        let want_fn = callee.param_fn(nargs as usize);
+        let fn_checked = tu_member.is_none() && !callee.is_sys_call && {
+            let context = format!("argument {} of `{}`", nargs + 1, callee.name);
+            let what = (context.as_str(), "param", "arg");
+            let (to, from) = ((want, &want_fn), (self.ty, &arg_fn));
+            self.check_function_conversion(to, from, true, arg_line, what)?
+        };
         if tu_member.is_none()
+            && !fn_checked
             && let Some(m) =
                 Self::type_warning_with_flags(&self.structs, want, self.ty, zero, untyped)
                     .filter(|m| !(callee.is_sys_call && sys_exempt.contains(&m.code)))
         {
             let got = self.ty;
-            let want_s = format_type(want, &self.structs);
-            let got_s = format_type(got, &self.structs);
+            let want_s = self.typed_text(want, &want_fn);
+            let got_s = self.typed_text(got, &arg_fn);
             let text = format!(
                 "{} in argument {} of `{}` (param={want_s}, arg={got_s})",
                 m.reason,
@@ -3706,23 +3716,19 @@ impl Compiler {
             let rhs_is_zero = self.last_emit_is_zero();
             let rhs_is_untyped = self.last_emit_was_indirect_call();
             let rhs_fn = self.value_fn_type(self.ast_acc);
-            if lhs_fn.is_some() && rhs_fn.is_some() {
-                let what = ("assignment", "lhs", "rhs");
-                self.check_fn_pointer_conversion(
-                    (lhs_ty, &lhs_fn),
-                    (self.ty, &rhs_fn),
-                    line,
-                    what,
-                )?;
-            } else if let Some(m) = Self::type_warning_with_flags(
-                &self.structs,
-                lhs_ty,
-                self.ty,
-                rhs_is_zero,
-                rhs_is_untyped,
-            ) {
-                let lhs_s = format_type(lhs_ty, &self.structs);
-                let rhs_s = format_type(self.ty, &self.structs);
+            let what = ("assignment", "lhs", "rhs");
+            let (to, from) = ((lhs_ty, &lhs_fn), (self.ty, &rhs_fn));
+            if !self.check_function_conversion(to, from, false, line, what)?
+                && let Some(m) = Self::type_warning_with_flags(
+                    &self.structs,
+                    lhs_ty,
+                    self.ty,
+                    rhs_is_zero,
+                    rhs_is_untyped,
+                )
+            {
+                let lhs_s = self.typed_text(lhs_ty, &lhs_fn);
+                let rhs_s = self.typed_text(self.ty, &rhs_fn);
                 let text = format!("{} in assignment (lhs={lhs_s}, rhs={rhs_s})", m.reason);
                 if m.no_conversion {
                     return Err(self.compile_err_at(Code::INVALID_OPERANDS, line, text));
@@ -5080,26 +5086,10 @@ impl Compiler {
         {
             let mty = self.ty;
             self.ast_emit_member(obj, field.offset as i64, None, mty, field.array_size);
-            if field_is_fn_ptr && let Some(id) = self.ast_acc {
-                let params = crate::c5::symbol::FnParams {
-                    types: field.params.clone(),
-                    variadic: field.is_variadic,
-                    prototyped: field.prototyped,
-                    enum_tags: field.param_enum_tags.clone(),
-                };
-                let f = FnType {
-                    params,
-                    conv: field.conv,
-                    ret: field.ret_fn.clone(),
-                };
-                let dims = if field.array_size == 0 {
-                    0
-                } else {
-                    field.array_dims.len().max(1) as i64
-                };
-                let levels = field.fn_ptr_indirection.max(1);
-                let arrays = self.pointee_array_levels(field.ty, levels);
-                self.set_expr_fn(id, f, levels + dims + arrays);
+            if let Some(id) = self.ast_acc
+                && let Some((f, depth)) = self.field_fn_type(&field)
+            {
+                self.set_expr_fn(id, f, depth);
             }
         }
         Ok(())
@@ -6283,6 +6273,8 @@ struct IntrinsicOperands {
 /// per-argument checks.
 struct DirectCallee {
     params: Vec<i64>,
+    /// `FnParams::fn_types` of the callee's type.
+    param_fns: Vec<(usize, FnType, i64)>,
     is_variadic: bool,
     name: String,
     /// A libc import reads each argument at the ABI register width and
@@ -6302,6 +6294,14 @@ struct DirectCallee {
     /// the unit declared. An old-style definition binds no constraint, and a
     /// libc binding's prototype approximates the platform's; those warn.
     count_is_constraint: bool,
+}
+
+impl DirectCallee {
+    /// The function type parameter `pos` leads to, and its depth.
+    fn param_fn(&self, pos: usize) -> Option<(FnType, i64)> {
+        let (_, f, depth) = self.param_fns.iter().find(|(p, ..)| *p == pos)?;
+        Some((f.clone(), *depth))
+    }
 }
 
 /// What a subscript's index parse hands back: the pointer and index

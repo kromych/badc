@@ -338,7 +338,13 @@ impl Compiler {
                         && self.at_initializer_end() =>
                 {
                     if !fn_checked {
-                        self.check_initializer_conversion(var_ty, ty, (false, false), line)?;
+                        self.check_constant_init_conversion(
+                            var_ty,
+                            target_fn,
+                            ty,
+                            (false, false),
+                            line,
+                        )?;
                     }
                     if is_thread_local {
                         self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
@@ -448,7 +454,7 @@ impl Compiler {
                 && a.is_array
                 && (self.lex.tk == ';' || self.lex.tk == ',')
             {
-                self.check_initializer_conversion(var_ty, a.ty, (false, false), line)?;
+                self.check_constant_init_conversion(var_ty, target_fn, a.ty, (false, false), line)?;
                 if is_thread_local {
                     self.note_tls_init(var_offset);
                 }
@@ -509,7 +515,7 @@ impl Compiler {
                 Ok(leaf) if self.at_initializer_end() => {
                     let InitLeaf { value, reloc, ty } = leaf;
                     let flags = (leaf.is_zero_int(), false);
-                    self.check_initializer_conversion(var_ty, ty, flags, line)?;
+                    self.check_constant_init_conversion(var_ty, target_fn, ty, flags, line)?;
                     if is_thread_local {
                         self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
                     } else {
@@ -521,7 +527,28 @@ impl Compiler {
             }
         }
 
-        self.write_global_scalar_initializer(var_ty, var_offset, is_thread_local, line)
+        self.write_global_scalar_initializer(var_ty, var_offset, is_thread_local, target_fn, line)
+    }
+
+    /// The conversion check of a constant initializer of type `init_ty`
+    /// into an object of type `var_ty`, a pointer to the function
+    /// `target_fn` names when it is one. The constant records no function
+    /// type, so beside `void *` the tags decide. TODO: a designator or an
+    /// address constant carries the function type it leads to.
+    pub(super) fn check_constant_init_conversion(
+        &mut self,
+        var_ty: i64,
+        target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
+        init_ty: i64,
+        flags: (bool, bool),
+        line: usize,
+    ) -> Result<(), C5Error> {
+        let what = ("initializer", "declared", "init");
+        let (declared, init) = ((var_ty, target_fn), (init_ty, &None));
+        if !self.check_function_conversion(declared, init, true, line, what)? {
+            self.check_initializer_conversion(declared, init, flags, line)?;
+        }
+        Ok(())
     }
 
     /// A parenthesized scalar initializer: a `(T)expr` cast, an array or
@@ -583,6 +610,7 @@ impl Compiler {
         var_ty: i64,
         var_offset: i64,
         is_thread_local: bool,
+        target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
         line: usize,
     ) -> Result<(), C5Error> {
         // A floating destination takes the f64 folder: the integer
@@ -596,7 +624,7 @@ impl Compiler {
         // as if by assignment (6.7.8p11).
         let cv = self.parse_const_expr_cond_val()?;
         let zero = matches!(cv, ConstVal::Int { val: 0, .. });
-        self.check_initializer_conversion(var_ty, cv.expr_ty(), (zero, false), line)?;
+        self.check_constant_init_conversion(var_ty, target_fn, cv.expr_ty(), (zero, false), line)?;
         if let ConstVal::Int { val, ty } = cv {
             self.check_constant_conversion(val, ty, var_ty, 0, line);
         }

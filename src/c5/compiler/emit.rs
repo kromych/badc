@@ -742,6 +742,7 @@ impl Compiler {
         s.h_is_variadic = s.is_variadic;
         s.h_prototyped = s.prototyped;
         s.h_param_enum_tags = s.param_enum_tags.clone();
+        s.h_param_fn_types = s.param_fn_types.clone();
         // The inner binding's type records its own enum tag.
         s.h_incomplete_enum_tag = s.incomplete_enum_tag.take();
         s.h_conv = s.conv;
@@ -822,6 +823,7 @@ impl Compiler {
         sym.is_variadic = sym.h_is_variadic;
         sym.prototyped = sym.h_prototyped;
         sym.param_enum_tags = core::mem::take(&mut sym.h_param_enum_tags);
+        sym.param_fn_types = core::mem::take(&mut sym.h_param_fn_types);
         sym.incomplete_enum_tag = sym.h_incomplete_enum_tag.take();
         sym.conv = sym.h_conv;
         sym.array_size = sym.h_array_size;
@@ -884,6 +886,7 @@ impl Compiler {
             && sym.is_variadic == sym.h_is_variadic
             && sym.prototyped == sym.h_prototyped
             && sym.param_enum_tags == sym.h_param_enum_tags
+            && sym.param_fn_types == sym.h_param_fn_types
             && sym.incomplete_enum_tag == sym.h_incomplete_enum_tag
             && sym.conv == sym.h_conv
             && sym.array_size == sym.h_array_size

@@ -40,6 +40,8 @@ pub(super) struct ParsedParams {
     pub(super) form: ParamForm,
     /// Positions declared through an enum tag that had no definition yet.
     pub(super) enum_tags: Vec<(usize, u32)>,
+    /// `FnParams::fn_types`: the parameters that lead to a function.
+    pub(super) fn_types: Vec<(usize, crate::c5::symbol::FnType, i64)>,
     /// The array size expressions of the parameters, in declaration order.
     pub(super) sizes: Vec<ParamSize>,
 }
@@ -85,6 +87,7 @@ impl ParsedParams {
             variadic: self.is_variadic,
             prototyped: self.form == ParamForm::Prototype,
             enum_tags: self.enum_tags.clone(),
+            fn_types: self.fn_types.clone(),
         }
     }
 
@@ -101,6 +104,7 @@ impl ParsedParams {
             types: p.types,
             is_variadic: p.variadic,
             enum_tags: p.enum_tags,
+            fn_types: p.fn_types,
             sizes: Vec::new(),
         }
     }
@@ -109,6 +113,12 @@ impl ParsedParams {
     pub(super) fn note_enum_tag(&mut self, pos: usize, tag: Option<u32>) {
         self.enum_tags.retain(|(p, _)| *p != pos);
         self.enum_tags.extend(tag.map(|t| (pos, t)));
+    }
+
+    /// Record the function type parameter `pos` leads to, if any.
+    pub(super) fn note_fn_type(&mut self, pos: usize, f: Option<(crate::c5::symbol::FnType, i64)>) {
+        self.fn_types.retain(|(p, ..)| *p != pos);
+        self.fn_types.extend(f.map(|(f, d)| (pos, f, d)));
     }
 }
 
@@ -120,6 +130,20 @@ type ParamFnCarriers = (
     Option<crate::c5::symbol::FnParams>,
     Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
 );
+
+/// The function type a parameter with `carriers` leads to and the pointer
+/// levels above it; an adjusted array adds one (C99 6.7.5.3p7).
+pub(super) fn param_fn_type(
+    (depth, _, params, ret): ParamFnCarriers,
+    conv: crate::c5::codegen::CallConv,
+    adjusted: bool,
+) -> Option<(crate::c5::symbol::FnType, i64)> {
+    (depth > 0).then(|| {
+        let params = params.unwrap_or_default();
+        let f = crate::c5::symbol::FnType { params, conv, ret };
+        (f, depth + i64::from(adjusted))
+    })
+}
 
 /// How a function declarator specified its parameters (C99 6.7.5.3p14).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -206,6 +230,7 @@ impl Compiler {
         let mut args = Vec::new();
         let mut types = Vec::new();
         let mut enum_tags = Vec::new();
+        let mut fn_types = Vec::new();
         let mut is_variadic = false;
         // An empty list declares no prototype; `(void)` declares one with
         // no parameters. A list is an identifier list until a parameter
@@ -354,7 +379,12 @@ impl Compiler {
                 }
                 // An unnamed parameter binds no symbol to receive the
                 // fn-pointer carriers its base (a fn-pointer typedef) seeded.
-                let _ = self.take_param_fn_ptr_carriers();
+                let carriers = self.take_param_fn_ptr_carriers();
+                let conv = core::mem::take(&mut self.pending.attr_call_conv);
+                let adjusted = !dims.is_empty();
+                if let Some((f, depth)) = param_fn_type(carriers, conv, adjusted) {
+                    fn_types.push((types.len(), f, depth));
+                }
                 if implicit_int {
                     self.report_implicit_int(ImplicitInt::Declarator(usize::MAX), param_line)?;
                 }
@@ -417,15 +447,18 @@ impl Compiler {
             // populated. Drained even if the declarator didn't
             // set anything so they don't leak into the next
             // parameter or expression.
-            let (fn_ptr_indirection, fn_ptr_ret_indirection, fnptr_pp, ret_fn) =
-                self.take_param_fn_ptr_carriers();
+            let carriers = self.take_param_fn_ptr_carriers();
+            // Drained per parameter so one parameter's convention cannot
+            // leak into the next.
+            let param_conv = core::mem::take(&mut self.pending.attr_call_conv);
+            if let Some((f, depth)) = param_fn_type(carriers.clone(), param_conv, adjusted) {
+                fn_types.push((types.len(), f, depth));
+            }
+            let (fn_ptr_indirection, fn_ptr_ret_indirection, fnptr_pp, ret_fn) = carriers;
             // The adjusted pointer is one more level above a function-pointer
             // element, as `fn_t *p` counts it.
             let fn_ptr_indirection =
                 fn_ptr_indirection + i64::from(adjusted && fn_ptr_indirection > 0);
-            // Drained per parameter so one parameter's convention cannot
-            // leak into the next.
-            let param_conv = core::mem::take(&mut self.pending.attr_call_conv);
             self.ty = full_ty;
             // An unnamed parameter, or any parameter of a function-pointer
             // declarator's prototype, records its type without binding a
@@ -516,6 +549,7 @@ impl Compiler {
             is_variadic,
             form,
             enum_tags,
+            fn_types,
             sizes: Vec::new(),
         })
     }

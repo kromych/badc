@@ -996,18 +996,18 @@ impl Compiler {
     /// indirect call returned (see [`Self::type_warning_with_flags`]).
     pub(super) fn check_initializer_conversion(
         &mut self,
-        declared: i64,
-        actual: i64,
+        declared: (i64, &Option<(crate::c5::symbol::FnType, i64)>),
+        actual: (i64, &Option<(crate::c5::symbol::FnType, i64)>),
         (zero, untyped): (bool, bool),
         line: usize,
     ) -> Result<(), C5Error> {
         let structs = &self.structs;
-        let Some(m) = Self::type_warning_with_flags(structs, declared, actual, zero, untyped)
+        let Some(m) = Self::type_warning_with_flags(structs, declared.0, actual.0, zero, untyped)
         else {
             return Ok(());
         };
-        let want = super::types::format_type(declared, structs);
-        let got = super::types::format_type(actual, structs);
+        let want = self.typed_text(declared.0, declared.1);
+        let got = self.typed_text(actual.0, actual.1);
         let text = alloc::format!("{} in initializer (declared={want}, init={got})", m.reason);
         if m.no_conversion {
             return Err(self.compile_err_at(Code::INVALID_INITIALIZER, line, text));
@@ -1024,8 +1024,30 @@ impl Compiler {
         line: usize,
     ) -> Result<(), C5Error> {
         let flags = (self.last_emit_is_zero(), self.last_emit_was_indirect_call());
-        self.check_initializer_conversion(declared, self.ty, flags, line)?;
+        let actual_fn = self.value_fn_type(self.ast_acc);
+        self.check_initializer_conversion((declared, &None), (self.ty, &actual_fn), flags, line)?;
         self.check_constant_conversion_of(self.ast_acc, declared, bits, line);
+        Ok(())
+    }
+
+    /// [`Self::check_initializer_expr`] into an object whose declaration
+    /// records the function type it leads to, `declared.1`, which the
+    /// value's is compared with first.
+    pub(super) fn check_initializer_expr_to(
+        &mut self,
+        declared: (i64, &Option<(crate::c5::symbol::FnType, i64)>),
+        bits: u32,
+        line: usize,
+    ) -> Result<(), C5Error> {
+        let actual_fn = self.value_fn_type(self.ast_acc);
+        let actual = (self.ty, &actual_fn);
+        let what = ("initializer", "declared", "init");
+        if self.check_function_conversion(declared, actual, true, line, what)? {
+            return Ok(());
+        }
+        let flags = (self.last_emit_is_zero(), self.last_emit_was_indirect_call());
+        self.check_initializer_conversion(declared, actual, flags, line)?;
+        self.check_constant_conversion_of(self.ast_acc, declared.0, bits, line);
         Ok(())
     }
 

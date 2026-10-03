@@ -12,9 +12,24 @@ use super::super::symbol::{FnParams, FnType};
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    format_fn_type, is_pointer_ty, is_struct_ty, pointee_ty, strip_unsigned, struct_id_of,
-    struct_ptr_depth, unqualified_object_ty, unqualified_version_ty,
+    is_pointer_ty, is_struct_ty, ptr_depth_of, strip_unsigned, struct_id_of, struct_ptr_depth,
+    unqualified_at_level, unqualified_object_ty, unqualified_version_ty,
 };
+
+/// `tag` of a value leading to `f` at `depth`, each return type along the
+/// chain unqualified: a function returns the unqualified version of its
+/// declared type (C17 6.7.6.3p5), as gcc takes it in every mode.
+fn unqualified_returns(tag: i64, f: &FnType, depth: i64) -> i64 {
+    let mut level = ptr_depth_of(tag) - depth.max(1);
+    let mut tag = unqualified_at_level(tag, level);
+    let mut next = f.ret.as_ref();
+    while let Some((r, d)) = next {
+        level -= d;
+        tag = unqualified_at_level(tag, level);
+        next = r.ret.as_ref();
+    }
+    tag
+}
 
 /// True when the default argument promotions (C99 6.5.2.2p6) leave `ty`
 /// unchanged: integer types of rank below `int` promote to `int` and
@@ -100,10 +115,11 @@ impl Compiler {
         if self.ptr_array_id(to_ty).is_some() || self.ptr_array_id(from_ty).is_some() {
             return Ok(());
         }
-        let tags =
-            self.tags_compatible(unqualified_object_ty(to_ty), unqualified_object_ty(from_ty));
+        let to_q = unqualified_returns(to_ty, tf, *td);
+        let from_q = unqualified_returns(from_ty, ff, *fd);
+        let tags = self.tags_compatible(unqualified_object_ty(to_q), unqualified_object_ty(from_q));
         let compatible = tags && self.value_fn_types_compatible(Some((tf, *td)), Some((ff, *fd)));
-        let discarded = Self::discarded_qualifiers(&self.structs, to_ty, from_ty);
+        let discarded = Self::discarded_qualifiers(&self.structs, to_q, from_q);
         if compatible && discarded.is_none() {
             return Ok(());
         }
@@ -125,6 +141,99 @@ impl Compiler {
                     alloc::format!("incompatible function pointer types in {context} {sides}");
                 self.report_at(Code::INCOMPATIBLE_POINTER_TYPES, line, text)
             }
+        }
+    }
+
+    /// A conversion as if by assignment (C99 6.5.16.1p1) where a side is a
+    /// function or a pointer to one, which the `i64` tags spell as the
+    /// return type: two function types compare as such, and a pointer to
+    /// a function and `void *` convert either way (C99 J.5.7) with no
+    /// qualifier check, as gcc and clang take them. A declared target that
+    /// leads to no function, `to_declared`, makes any other pointer to one
+    /// incompatible; an expression target or a value with none recorded (a
+    /// libc binding, a constant) is left to the tags. Returns whether the
+    /// case was decided here.
+    pub(super) fn check_function_conversion(
+        &mut self,
+        to: (i64, &Option<(FnType, i64)>),
+        from: (i64, &Option<(FnType, i64)>),
+        to_declared: bool,
+        line: usize,
+        what: (&str, &str, &str),
+    ) -> Result<bool, C5Error> {
+        use super::types::is_void_ptr_ty;
+        let (fn_side, other) = match (to.1, from.1) {
+            (None, None) => return Ok(false),
+            (Some(_), Some(_)) => {
+                self.check_fn_pointer_conversion(to, from, line, what)?;
+                return Ok(true);
+            }
+            (Some(_), None) => (to, from),
+            (None, Some(_)) => (from, to),
+        };
+        let Some((_, depth)) = fn_side.1 else {
+            return Ok(false);
+        };
+        let decides_mismatch = to.1.is_none() && to_declared;
+        if !is_pointer_ty(other.0) || (!decides_mismatch && !is_void_ptr_ty(other.0)) {
+            return Ok(false);
+        }
+        let (context, to_name, from_name) = what;
+        let sides = alloc::format!(
+            "({to_name}=`{}`, {from_name}=`{}`)",
+            self.typed_text(to.0, to.1),
+            self.typed_text(from.0, from.1)
+        );
+        if is_void_ptr_ty(other.0) {
+            // A pointer to a function pointer is an object pointer, which
+            // may lose a qualifier of what it points to.
+            if *depth > 1
+                && let Some(m) = Self::discarded_qualifiers(&self.structs, to.0, from.0)
+            {
+                let text = alloc::format!("{} in {context} {sides}", m.reason);
+                self.warn_at(m.code, line, text);
+            }
+            return Ok(true);
+        }
+        let text = alloc::format!("incompatible pointer types in {context} {sides}");
+        self.report_at(Code::INCOMPATIBLE_POINTER_TYPES, line, text)?;
+        Ok(true)
+    }
+
+    /// The function type a member leads to and its depth, each array
+    /// dimension a level its value decays through.
+    pub(super) fn field_fn_type(&self, field: &super::StructField) -> Option<(FnType, i64)> {
+        if field.fn_ptr_indirection <= 0 && field.params.is_empty() {
+            return None;
+        }
+        let params = FnParams {
+            types: field.params.clone(),
+            variadic: field.is_variadic,
+            prototyped: field.prototyped,
+            enum_tags: field.param_enum_tags.clone(),
+            fn_types: field.param_fn_types.clone(),
+        };
+        let f = FnType {
+            params,
+            conv: field.conv,
+            ret: field.ret_fn.clone(),
+        };
+        let dims = if field.array_size == 0 {
+            0
+        } else {
+            field.array_dims.len().max(1) as i64
+        };
+        let levels = field.fn_ptr_indirection.max(1);
+        let arrays = self.pointee_array_levels(field.ty, levels);
+        Some((f, levels + dims + arrays))
+    }
+
+    /// The spelling of a value's type: the declarator of the function type
+    /// it leads to, else its tag's.
+    pub(super) fn typed_text(&self, ty: i64, f: &Option<(FnType, i64)>) -> alloc::string::String {
+        match f {
+            Some((f, depth)) => self.fn_type_text(ty, f, *depth),
+            None => super::types::format_type(ty, &self.structs),
         }
     }
 
@@ -269,14 +378,7 @@ impl Compiler {
     /// value tagged `tag`: the tag holds the return type plus a pointer
     /// level for each pointer in the chain, one for a designator.
     pub(super) fn fn_type_text(&self, tag: i64, f: &FnType, depth: i64) -> alloc::string::String {
-        let mut levels = depth.max(1);
-        let mut next = f.ret.as_ref();
-        while let Some((r, d)) = next {
-            levels += d;
-            next = r.ret.as_ref();
-        }
-        let ret = (0..levels).fold(tag, |t, _| pointee_ty(t));
-        format_fn_type(ret, f, (tag, depth), &self.structs)
+        super::types::fn_type_spelling(tag, f, depth, &self.structs)
     }
 
     /// The function type a call through `callee` has: the callee's, when
@@ -315,6 +417,8 @@ impl Compiler {
                     && a.types.iter().zip(&b.types).all(|(&x, &y)| {
                         self.tags_compatible(unqualified_version_ty(x), unqualified_version_ty(y))
                     })
+                    && (0..a.types.len())
+                        .all(|i| self.value_fn_types_compatible(a.fn_type(i), b.fn_type(i)))
             }
             (true, false) => unpromoted(a),
             (false, true) => unpromoted(b),

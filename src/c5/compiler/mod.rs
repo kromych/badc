@@ -469,6 +469,8 @@ pub struct StructField {
     pub prototyped: bool,
     /// Mirrors `Symbol::param_enum_tags`.
     pub param_enum_tags: Vec<(usize, u32)>,
+    /// Mirrors `Symbol::param_fn_types`.
+    pub(crate) param_fn_types: Vec<(usize, crate::c5::symbol::FnType, i64)>,
     /// Calling convention of the function a function-pointer field
     /// points to (`__attribute__((ms_abi))` / `((sysv_abi))`). Mirrors
     /// `Symbol::conv`; `CallConv::Target` for every other field. The

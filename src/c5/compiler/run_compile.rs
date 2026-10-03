@@ -1193,6 +1193,7 @@ impl Compiler {
         self.define_linked_function(id_idx, def, Params::of(&params, true))?;
         self.symbols[id_idx].params = arrival.clone();
         self.symbols[id_idx].param_enum_tags = params.enum_tags.clone();
+        self.symbols[id_idx].param_fn_types = params.fn_types.clone();
 
         if self.lex.tk != '{' {
             return Err(self.compile_err(Code::SYNTAX, "bad function definition"));
@@ -1313,6 +1314,15 @@ impl Compiler {
                         // The adjusted pointer is one more level above a
                         // function-pointer element.
                         let adjusted = decl_arr != 0 || typedef_array;
+                        let carriers = (
+                            fn_ptr_indirection,
+                            fn_ptr_ret_indirection,
+                            fn_params.clone(),
+                            ret_fn.clone(),
+                        );
+                        let conv = crate::c5::codegen::CallConv::Target;
+                        let fn_type = super::function::param_fn_type(carriers, conv, adjusted);
+                        params.note_fn_type(pos, fn_type);
                         self.symbols[decl_idx].fn_ptr_indirection =
                             fn_ptr_indirection + i64::from(adjusted && fn_ptr_indirection > 0);
                         self.symbols[decl_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;

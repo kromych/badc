@@ -311,6 +311,11 @@ pub(crate) const QUAL_PTR_LVL_MASK: i64 =
 /// [`CONST_LVL_MASK`] and clears it, so no stored tag carries it.
 pub(crate) const CONST_BIT: i64 = 1 << 60;
 
+/// `ty` without the `const` and `volatile` of derivation `level`.
+pub(crate) fn unqualified_at_level(ty: i64, level: i64) -> i64 {
+    ty & !(const_level_bit(level) | volatile_level_bit(level))
+}
+
 /// The [`CONST_LVL_MASK`] bit for `level`, 0 past the field.
 fn const_level_bit(level: i64) -> i64 {
     if (0..QUAL_LVL_BITS).contains(&level) {
@@ -799,7 +804,7 @@ pub(super) fn format_fn_type(
     let mut level = Some((f, depth));
     while let Some((f, depth)) = level {
         let params = if f.params.prototyped {
-            format_params(&f.params.types, f.params.variadic, structs)
+            format_fn_params(&f.params, structs)
         } else {
             alloc::string::String::new()
         };
@@ -817,6 +822,50 @@ pub(super) fn format_fn_type(
         level = f.ret.as_ref().map(|(r, d)| (&**r, *d));
     }
     alloc::format!("{} {decl}", format_type(ret, structs))
+}
+
+/// The spelling of a value tagged `tag` that leads to `f`, `depth` levels
+/// above it: the tag holds the return type plus a pointer level for each
+/// pointer in the chain, one for a designator.
+pub(super) fn fn_type_spelling(
+    tag: i64,
+    f: &crate::c5::symbol::FnType,
+    depth: i64,
+    structs: &[super::StructDef],
+) -> alloc::string::String {
+    let mut levels = depth.max(1);
+    let mut next = f.ret.as_ref();
+    while let Some((r, d)) = next {
+        levels += d;
+        next = r.ret.as_ref();
+    }
+    let ret = (0..levels).fold(tag, |t, _| pointee_ty(t));
+    format_fn_type(ret, f, (tag, depth), structs)
+}
+
+/// A function type's parameter list, each parameter that leads to a
+/// function by its declarator.
+fn format_fn_params(
+    p: &crate::c5::symbol::FnParams,
+    structs: &[super::StructDef],
+) -> alloc::string::String {
+    let mut parts: alloc::vec::Vec<alloc::string::String> = p
+        .types
+        .iter()
+        .enumerate()
+        .map(|(i, &t)| match p.fn_type(i) {
+            Some((f, depth)) => fn_type_spelling(t, f, depth, structs),
+            None => format_type(t, structs),
+        })
+        .collect();
+    if p.variadic {
+        parts.push("...".into());
+    }
+    if parts.is_empty() {
+        "void".into()
+    } else {
+        parts.join(", ")
+    }
 }
 
 /// A parameter list as a prototype spells it; an empty one is `void`.

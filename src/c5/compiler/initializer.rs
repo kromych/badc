@@ -1836,15 +1836,22 @@ impl Compiler {
     /// converts to as if by assignment (C99 6.7.8p11): the value and the
     /// relocation it needs.
     pub(super) fn parse_init_leaf_for(&mut self, ty: i64) -> Result<InitLeaf, C5Error> {
-        self.parse_init_leaf_for_bits(ty, 0)
+        self.parse_init_leaf_for_bits(ty, 0, &None)
     }
 
     /// [`Self::parse_init_leaf_for`] a bit-field of `bits` bits, or an
     /// object of type `ty` when `bits` is zero.
-    fn parse_init_leaf_for_bits(&mut self, ty: i64, bits: u32) -> Result<InitLeaf, C5Error> {
+    /// `target_fn` is the function type an object of pointer type leads to.
+    fn parse_init_leaf_for_bits(
+        &mut self,
+        ty: i64,
+        bits: u32,
+        target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
+    ) -> Result<InitLeaf, C5Error> {
         let line = self.lex.line;
         let leaf = self.parse_constant_init_value()?;
-        self.check_initializer_conversion(ty, leaf.ty, (leaf.is_zero_int(), false), line)?;
+        let flags = (leaf.is_zero_int(), false);
+        self.check_constant_init_conversion(ty, target_fn, leaf.ty, flags, line)?;
         if matches!(leaf.reloc, InitElemReloc::None) {
             self.check_constant_conversion(leaf.value, leaf.ty, ty, bits, line);
         }
@@ -4379,7 +4386,7 @@ impl Compiler {
             // the bitfield's bits into the existing storage
             // unit instead.
             let InitLeaf { value, reloc, .. } =
-                self.parse_init_leaf_for_bits(field.ty, field.bit_width)?;
+                self.parse_init_leaf_for_bits(field.ty, field.bit_width, &None)?;
             if !matches!(
                 self.init_reloc_for(reloc, field.ty)?,
                 InitElemReloc::None | InitElemReloc::Float64Bits
@@ -4415,7 +4422,9 @@ impl Compiler {
             if braced_scalar {
                 self.next()?;
             }
-            let InitLeaf { value, reloc, .. } = self.parse_init_leaf_for(field.ty)?;
+            let field_fn = self.field_fn_type(field);
+            let InitLeaf { value, reloc, .. } =
+                self.parse_init_leaf_for_bits(field.ty, 0, &field_fn)?;
             let field_size = self.size_of_type(field.ty);
             self.write_init_value(field_base, field_size, value, reloc, field.ty)?;
             if braced_scalar {
@@ -4591,7 +4600,8 @@ impl Compiler {
                 "brace elision into a non-constant struct member is not supported",
             ));
         }
-        self.check_initializer_expr(field.ty, field.bit_width, line)?;
+        let field_fn = self.field_fn_type(field);
+        self.check_initializer_expr_to((field.ty, &field_fn), field.bit_width, line)?;
         self.convert_assign_rhs(field.ty);
         let field_ast = self.ast_acc;
         self.ast_assign();
@@ -4881,18 +4891,7 @@ impl Compiler {
         }
         // C99 6.7.8p11: a scalar object's initializer converts as if by
         // assignment; function pointers are compared by their types.
-        let init_fn = self.value_fn_type(self.ast_acc);
-        if target_fn.is_some() && init_fn.is_some() {
-            let what = ("initializer", "declared", "init");
-            self.check_fn_pointer_conversion(
-                (ty, &target_fn),
-                (self.ty, &init_fn),
-                init_line,
-                what,
-            )?;
-        } else {
-            self.check_initializer_expr(ty, 0, init_line)?;
-        }
+        self.check_initializer_expr_to((ty, &target_fn), 0, init_line)?;
         // C99 6.5.16.1p2: the RHS of an assignment is converted
         // to the unqualified LHS type. For a float / double
         // destination with an integer-typed initializer (a

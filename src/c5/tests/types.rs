@@ -5141,9 +5141,9 @@ fn a_qualifier_on_a_pointer_to_a_function_type_qualifies_the_pointer() {
     let warnings: alloc::vec::Vec<String> =
         program.warnings.iter().map(|w| w.to_string()).collect();
     for (line, text) in [
-        (7, "(declared=double**, init=double* const *)"),
-        (8, "(declared=double**, init=double* const *)"),
-        (10, "(declared=int**, init=int* const *)"),
+        (7, "(declared=double (**)(double), init=double* const *)"),
+        (8, "(declared=double (**)(double), init=double* const *)"),
+        (10, "(declared=int (**)(int, int), init=int* const *)"),
         (
             11,
             "(declared=`double (**)(double)`, init=`double (* const *)(double)`)",
@@ -5312,6 +5312,96 @@ fn an_incompatible_object_pointer_conversion_is_an_error() {
     quiet.set_level(Code::NESTED_QUALIFIERS, Level::Ignore);
     let program = compile(quiet).unwrap_or_else(|e| panic!("{e}"));
     assert!(program.warnings.is_empty(), "{:?}", program.warnings);
+}
+
+/// A pointer to a function is no pointer to its return type. It converts to
+/// and from `void *` (C99 J.5.7) with no qualifier check, as gcc and clang
+/// give it; a return type's qualifiers do not take part in compatibility
+/// (C17 6.7.6.3p5), as in gcc; against any other object pointer it is
+/// incompatible (B3029). A parameter that leads to a function is compared
+/// by its function type, at a call and inside another function type, and
+/// every diagnostic prints the declarators. Only a pointer to a function
+/// pointer, an object pointer, can discard a qualifier of what it points to.
+#[test]
+fn a_pointer_to_a_function_converts_as_one() {
+    use crate::diag::{Code, Config, Level};
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "const void *get(void);\n\
+               typedef int (*probe_t)(void);\n\
+               void take_vp(void *p);\n\
+               void take_lp(long *p);\n\
+               void take_fp(probe_t p);\n\
+               void take_cb(void (*cb)(int (*)(void)));\n\
+               int (*fp)(void);\n\
+               const int (*cfp)(void);\n\
+               int g(int);\n\
+               struct ops { probe_t probe; };\n\
+               static probe_t s1 = (const void *)0;\n\
+               static struct ops s2 = { (const void *)0 };\n\
+               void c1(struct ops *o) { int (*f)(void) = get(); o->probe = get(); take_fp(get()); (void)f; }\n\
+               void c2(void) { const int (*f)(void) = 0; void *v = f; take_vp(cfp); fp = cfp; take_fp(cfp); (void)v; }\n\
+               void *c3(void) { return cfp; }\n\
+               probe_t c4(void) { return get(); }\n\
+               void c5(void) { long *q = &fp; int *ip = fp; take_lp(&fp); (void)q; (void)ip; }\n\
+               long *c6(void) { return fp; }\n\
+               void c7(void) { int (*const *pp)(void) = &fp; int (**qq)(void) = pp; (void)qq; }\n\
+               void c8(void (*h)(int (*)(int))) { take_fp(g); take_cb(h); }\n";
+    let compile = |config: Config| {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_diag(config);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts).compile()
+    };
+    let err = compile(Config::new()).err().map(|e| e.to_string());
+    assert!(
+        err.as_deref().is_some_and(|e| e.contains(":17: error")),
+        "{err:?}"
+    );
+    let mut lowered = Config::new();
+    lowered.set_level(Code::INCOMPATIBLE_POINTER_TYPES, Level::Warning);
+    let program = compile(lowered).unwrap_or_else(|e| panic!("{e}"));
+    let got: alloc::vec::Vec<(u32, Code, String)> = program
+        .warnings
+        .iter()
+        .filter_map(|w| w.loc.as_ref().map(|l| (l.line, w.code, w.text.clone())))
+        .collect();
+    let incompatible = Code::INCOMPATIBLE_POINTER_TYPES;
+    let want = [
+        (
+            17,
+            incompatible,
+            "(declared=`long*`, init=`int (**)(void)`)",
+        ),
+        (17, incompatible, "(declared=`int*`, init=`int (*)(void)`)"),
+        (17, incompatible, "(param=`long*`, arg=`int (**)(void)`)"),
+        (
+            18,
+            incompatible,
+            "(declared=`long*`, returned=`int (*)(void)`)",
+        ),
+        (
+            19,
+            Code::DISCARDED_QUALIFIERS,
+            "(declared=`int (**)(void)`, init=`int (* const *)(void)`)",
+        ),
+        (
+            20,
+            incompatible,
+            "(param=`int (*)(void)`, arg=`int (*)(int)`)",
+        ),
+        (
+            20,
+            incompatible,
+            "(param=`void (*)(int (*)(void))`, arg=`void (*)(int (*)(int))`)",
+        ),
+    ];
+    assert_eq!(got.len(), want.len(), "{got:?}");
+    for ((line, code, text), (wline, wcode, wtext)) in got.iter().zip(want) {
+        assert!(
+            *line == wline && *code == wcode && text.contains(wtext),
+            "{got:?}"
+        );
+    }
 }
 
 /// C99 6.5.16.1p1 lets a pointer gain qualifiers only on the type it points

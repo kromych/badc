@@ -3558,19 +3558,19 @@ impl Compiler {
                     let rhs_is_untyped = self.last_emit_was_indirect_call();
                     let ret_fn = self.current_func_ret_fn.clone().map(|(f, d)| (*f, d));
                     let value_fn = self.value_fn_type(self.ast_acc);
-                    if ret_fn.is_some() && value_fn.is_some() {
-                        let what = ("return", "declared", "returned");
-                        let (from, to) = ((self.ty, &value_fn), (ret_ty, &ret_fn));
-                        self.check_fn_pointer_conversion(to, from, line, what)?;
-                    } else if let Some(m) = Self::type_warning_with_flags(
-                        &self.structs,
-                        ret_ty,
-                        self.ty,
-                        rhs_is_zero,
-                        rhs_is_untyped,
-                    ) {
-                        let want = super::types::format_type(ret_ty, &self.structs);
-                        let got = super::types::format_type(self.ty, &self.structs);
+                    let what = ("return", "declared", "returned");
+                    let (from, to) = ((self.ty, &value_fn), (ret_ty, &ret_fn));
+                    if !self.check_function_conversion(to, from, true, line, what)?
+                        && let Some(m) = Self::type_warning_with_flags(
+                            &self.structs,
+                            ret_ty,
+                            self.ty,
+                            rhs_is_zero,
+                            rhs_is_untyped,
+                        )
+                    {
+                        let want = self.typed_text(ret_ty, &ret_fn);
+                        let got = self.typed_text(self.ty, &value_fn);
                         let text =
                             format!("{} in return (declared={want}, returned={got})", m.reason);
                         if m.no_conversion {

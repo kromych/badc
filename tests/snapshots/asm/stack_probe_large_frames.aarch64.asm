@@ -14,19 +14,17 @@ Disassembly of section .text:
                	brk	#0x1
 
 <touch>:
-               	mov	x2, #0x1                // =1
-               	strb	w2, [x0]
-               	mov	x3, #0x2                // =2
-               	lsr	x2, x1, #1
-               	strb	w3, [x0, x2]
-               	sub	x1, x1, #0x1
-               	mov	x3, #0x3                // =3
-               	strb	w3, [x0, x1]
-               	ldrb	w3, [x0]
-               	ldrb	w2, [x0, x2]
-               	add	x2, x3, x2
-               	ldrb	w0, [x0, x1]
-               	add	x0, x2, x0
+               	mov	x1, #0x1                // =1
+               	strb	w1, [x0]
+               	mov	x1, #0x2                // =2
+               	mov	x17, #0x1194            // =4500
+               	add	x2, x0, x17
+               	strb	w1, [x2]
+               	mov	x17, #0x2327            // =8999
+               	add	x0, x0, x17
+               	mov	x1, #0x3                // =3
+               	strb	w1, [x0]
+               	mov	x0, #0x6                // =6
                	ret
 
 <two_pages>:

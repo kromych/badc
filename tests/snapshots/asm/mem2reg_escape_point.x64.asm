@@ -32,7 +32,7 @@ Disassembly of section .text:
                	retq
 
 <noise>:
-               	leaq	(%rdi,%rdi,2), %rax
+               	movl	$0x1e, %eax
                	retq
 
 <main>:

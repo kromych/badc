@@ -2372,6 +2372,36 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 &param_ranges,
             );
         });
+        // The interprocedural constants again, over the folded bodies: an
+        // argument that only an inlined helper or a collapsed loop made
+        // constant reaches its out-of-line callee now, and that callee's
+        // branches fold on it, to a fixed point. Each round seeds a
+        // parameter no earlier round did, so the rounds are finite.
+        pipeline.run(
+            "passes::ipa_const_param::run post-fold",
+            &mut ssa_funcs,
+            |funcs| {
+                use super::super::passes::{ipa_const_param, simplify_branches};
+                loop {
+                    let escaping = ipa_const_param::escaping_functions(funcs, program);
+                    let before: alloc::vec::Vec<u64> =
+                        funcs.iter().map(|f| f.const_params).collect();
+                    ipa_const_param::run(funcs, &escaping);
+                    let seeded: alloc::collections::BTreeSet<usize> = funcs
+                        .iter()
+                        .zip(&before)
+                        .filter(|(f, b)| f.const_params != **b)
+                        .map(|(f, _)| f.ent_pc)
+                        .collect();
+                    if seeded.is_empty() {
+                        break;
+                    }
+                    simplify_branches::run_with_const_data_on(funcs, program, &param_ranges, |f| {
+                        seeded.contains(&f.ent_pc)
+                    });
+                }
+            },
+        );
     }
     // Re-run static DCE: inlining a static callee into its last caller,
     // and the branch fold dropping calls in unreachable arms, can leave

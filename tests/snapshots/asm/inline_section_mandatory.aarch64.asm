@@ -52,13 +52,9 @@ Disassembly of section .text:
                	ret
 
 <boot_offset>:
-               	add	x0, x0, #0x7
+               	mov	x0, #0xb                // =11
                	ret
 
 <boot_step>:
-               	mov	x17, #0x3               // =3
-               	mul	x1, x0, x17
-               	add	x1, x1, #0x1
-               	add	x0, x0, #0x7
-               	add	x0, x1, x0
+               	mov	x0, #0x1c               // =28
                	ret

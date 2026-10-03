@@ -27,17 +27,11 @@ Disassembly of section .text:
 
 <touch>:
                	movb	$0x1, (%rdi)
-               	movq	%rsi, %rax
-               	shrq	%rax
-               	movb	$0x2, (%rdi,%rax)
-               	leaq	-0x1(%rsi), %rdx
-               	movl	$0x3, %ecx
-               	movb	%cl, (%rdi,%rdx)
-               	movsbq	(%rdi), %rdx
-               	movsbq	(%rdi,%rax), %rax
-               	addq	%rdx, %rax
-               	movsbq	%cl, %rcx
-               	addq	%rcx, %rax
+               	leaq	0x1194(%rdi), %rcx
+               	movb	$0x2, (%rcx)
+               	leaq	0x2327(%rdi), %rax
+               	movb	$0x3, (%rax)
+               	movl	$0x6, %eax
                	retq
 
 <two_pages>:

@@ -14,15 +14,13 @@ Disassembly of section .text:
                	brk	#0x1
 
 <accumulate>:
-               	sxtw	x0, w0
-               	cbz	w0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	mov	x0, #0x64               // =100
                	ldr	x2, [x1]
                	add	x2, x2, x0
                	str	x2, [x1]
                	sub	x0, x0, #0x1
-               	sxtw	x0, w0
                	cbnz	w0, <addr>
                	ret
 

@@ -36,35 +36,32 @@ Disassembly of section .text:
                	retq
 
 <down>:
-               	xorl	%eax, %eax
-               	testq	%rdi, %rdi
-               	je	<addr>
-               	decq	%rdi
-               	addq	$-0x3, %rax
-               	testq	%rdi, %rdi
+               	movl	$0xa, %eax
+               	xorl	%ecx, %ecx
+               	decq	%rax
+               	addq	$-0x3, %rcx
+               	testq	%rax, %rax
                	jne	<addr>
-               	addq	$0x64, %rax
+               	leaq	0x64(%rcx), %rax
                	retq
 
 <twice>:
+               	movl	$0x14, %ecx
                	movl	$0x1, %eax
-               	testq	%rdi, %rdi
-               	je	<addr>
-               	decq	%rdi
+               	decq	%rcx
                	shlq	%rax
-               	testq	%rdi, %rdi
+               	testq	%rcx, %rcx
                	jne	<addr>
                	retq
 
 <wrap>:
-               	xorl	%eax, %eax
-               	testq	%rdi, %rdi
-               	je	<addr>
-               	decq	%rdi
-               	addq	$-0x7, %rax
-               	testq	%rdi, %rdi
+               	movl	$0xa, %eax
+               	xorl	%ecx, %ecx
+               	decq	%rax
+               	addq	$-0x7, %rcx
+               	testq	%rax, %rax
                	jne	<addr>
-               	addq	$0x5, %rax
+               	leaq	0x5(%rcx), %rax
                	retq
 
 <times8>:

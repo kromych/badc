@@ -65,12 +65,9 @@ Disassembly of section .text:
 		...
 
 <boot_offset>:
-               	leaq	0x7(%rdi), %rax
+               	movl	$0xb, %eax
                	retq
 
 <boot_step>:
-               	leaq	(%rdi,%rdi,2), %rax
-               	incq	%rax
-               	leaq	0x7(%rdi), %rcx
-               	addq	%rcx, %rax
+               	movl	$0x1c, %eax
                	retq

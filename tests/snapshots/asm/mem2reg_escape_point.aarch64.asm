@@ -20,8 +20,7 @@ Disassembly of section .text:
                	ret
 
 <noise>:
-               	mov	x17, #0x3               // =3
-               	mul	x0, x0, x17
+               	mov	x0, #0x1e               // =30
                	ret
 
 <main>:

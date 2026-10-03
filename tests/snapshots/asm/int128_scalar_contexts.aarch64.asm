@@ -678,9 +678,70 @@ Disassembly of section .text:
                	cmp	x0, x17
                	b	<addr>
 
+<builtins>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x20
+               	mov	x0, #0x5                // =5
+               	stur	w0, [x29, #-0x18]
+               	sub	x1, x29, #0x18
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x2, [x0]
+               	ldaddal	w2, w16, [x1]
+               	ldursw	x1, [x29, #-0x18]
+               	cmp	w1, #0x8
+               	b.eq	<addr>
+               	mov	x0, #0x16               // =22
+               	sub	sp, x29, #0x20
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	stur	xzr, [x29, #-0x10]
+               	sub	x1, x29, #0x10
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldr	x2, [x2]
+               	add	x2, x2, #0x2
+               	ldaddal	x2, x16, [x1]
+               	ldur	x1, [x29, #-0x10]
+               	cmp	x1, #0x2
+               	b.eq	<addr>
+               	mov	x0, #0x17               // =23
+               	sub	sp, x29, #0x20
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	ldr	x0, [x0]
+               	add	x17, x0, #0xf
+               	and	x17, x17, #0xfffffffffffffff0
+               	mov	x0, sp
+               	sub	x0, x0, x17
+               	lsr	x17, x17, #12
+               	cbz	x17, <addr>
+               	sub	sp, sp, #0x1, lsl #12   // =0x1000
+               	str	xzr, [sp]
+               	subs	x17, x17, #0x1
+               	b.ne	<addr>
+               	mov	sp, x0
+               	mov	x1, #0x78               // =120
+               	strb	w1, [x0, #0x2]
+               	strb	w1, [x0, #0x1]
+               	strb	w1, [x0]
+               	mov	x0, #0x0                // =0
+               	sub	sp, x29, #0x20
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbz	x0, <addr>
+               	ldp	x29, x30, [sp], #0x10
+               	ret
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

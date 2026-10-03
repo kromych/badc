@@ -3,8 +3,9 @@
 // its value, not the temporary the 128-bit value is held in -- as a
 // subscript, a pointer offset, a shift count, the operand of a compound
 // assignment to a narrower object, a value converted to `_Bool`, an array
-// dimension and a `switch` controlling expression, whose labels compare
-// with all 128 bits. Each check exits with its own code; success
+// dimension, a `switch` controlling expression, whose labels compare
+// with all 128 bits, and the operand of an atomic builtin or of
+// `__builtin_alloca`. Each check exits with its own code; success
 // returns 0.
 
 static int a[8] = {0, 10, 20, 30, 40, 50, 60, 70};
@@ -119,10 +120,25 @@ static int switches(void) {
     return 0;
 }
 
+static int builtins(void) {
+    int at = 5;
+    __atomic_fetch_add(&at, three, __ATOMIC_SEQ_CST);
+    if (at != 8) return 22;
+    long long ll = 0;
+    __sync_fetch_and_add(&ll, big + 2);
+    if (ll != 2) return 23;
+    char *m = __builtin_alloca(three);
+    m[0] = m[1] = m[2] = 'x';
+    if (m[2] != 'x') return 24;
+    return 0;
+}
+
 int main(void) {
     int r = pointers();
     if (r) return r;
     r = scalars();
     if (r) return r;
-    return switches();
+    r = switches();
+    if (r) return r;
+    return builtins();
 }

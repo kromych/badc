@@ -732,9 +732,70 @@ Disassembly of section .text:
                	cmpq	$-0x2, %rax
                	jmp	<addr>
 
+<builtins>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x20, %rsp
+               	movl	$0x5, -0x18(%rbp)
+               	leaq	-0x18(%rbp), %rcx
+               	leaq	<rip>, %rax      # <addr>
+               	movq	(%rax), %rdx
+               	movq	%rdx, %r10
+               	lock
+               	xaddl	%r10d, (%rcx)
+               	movslq	-0x18(%rbp), %rcx
+               	cmpl	$0x8, %ecx
+               	je	<addr>
+               	movl	$0x16, %eax
+               	leaq	-0x20(%rbp), %rsp
+               	leave
+               	retq
+               	movq	$0x0, -0x10(%rbp)
+               	leaq	-0x10(%rbp), %rcx
+               	leaq	<rip>, %rdx      # <addr>
+               	movq	(%rdx), %rdx
+               	addq	$0x2, %rdx
+               	movq	%rdx, %r10
+               	lock
+               	xaddq	%r10, (%rcx)
+               	movq	-0x10(%rbp), %rcx
+               	cmpq	$0x2, %rcx
+               	je	<addr>
+               	movl	$0x17, %eax
+               	leaq	-0x20(%rbp), %rsp
+               	leave
+               	retq
+               	movq	(%rax), %rax
+               	movq	%rax, %r11
+               	addq	$0xf, %r11
+               	andq	$-0x10, %r11
+               	movq	%rsp, %rax
+               	subq	%r11, %rax
+               	shrq	$0xc, %r11
+               	testq	%r11, %r11
+               	je	<addr>
+               	subq	$0x1000, %rsp           # imm = 0x1000
+               	movq	$0x0, (%rsp)
+               	subq	$0x1, %r11
+               	jne	<addr>
+               	movq	%rax, %rsp
+               	movb	$0x78, 0x2(%rax)
+               	movb	$0x78, 0x1(%rax)
+               	movb	$0x78, (%rax)
+               	xorl	%eax, %eax
+               	leaq	-0x20(%rbp), %rsp
+               	leave
+               	retq
+
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	callq	<addr>
+               	movslq	%eax, %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	popq	%rbp
+               	retq
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax

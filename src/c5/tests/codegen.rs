@@ -2974,6 +2974,62 @@ fn a_switch_on_an_int128_tests_the_high_half() {
     }
 }
 
+/// C11 7.17.7: an atomic builtin's value operand converts to the object's
+/// type, and an intrinsic's integer operand -- `__builtin_alloca`'s size --
+/// takes a floating or `__int128` value converted to an integer: the
+/// operation sees the `__int128`'s loaded low half and the double's
+/// truncation, not the temporary's address or the floating bits.
+#[test]
+fn a_builtin_operand_converts_to_the_type_the_builtin_takes() {
+    use crate::c5::ir::{FpCastKind, Inst};
+    use crate::{CompileOptions, Compiler, Target};
+    const SRC: &str = "int add(int *p, __int128 v) { return __atomic_fetch_add(p, v, 5); }\n\
+        void store(int *p, double d) { __atomic_store_n(p, d, 5); }\n\
+        char *wide(__int128 n) { char *m = __builtin_alloca(n); m[0] = 0; return 0; }\n\
+        char *fp(double d) { char *m = __builtin_alloca(d); m[0] = 0; return 0; }\n";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(SRC.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let find = |name: &str| funcs.iter().find(|f| f.name == name).expect(name);
+        let f = find("add");
+        let low_half = f.insts.iter().any(|i| {
+            matches!(i, Inst::AtomicRmw { value, .. }
+                if matches!(f.insts[*value as usize], Inst::Load { .. } | Inst::Extend { .. }))
+        });
+        assert!(low_half, "{target:?} add: {:?}", f.insts);
+        for name in ["store", "fp"] {
+            let f = find(name);
+            let truncated = f.insts.iter().any(|i| {
+                matches!(
+                    i,
+                    Inst::FpCast {
+                        kind: FpCastKind::FpToInt,
+                        ..
+                    }
+                )
+            });
+            assert!(truncated, "{target:?} {name}: {:?}", f.insts);
+        }
+        let f = find("wide");
+        let sized_by_value = f.insts.iter().any(|i| {
+            matches!(i, Inst::Intrinsic { args, .. }
+                if args.len() == 1 && matches!(f.insts[args[0] as usize], Inst::Load { .. }))
+        });
+        assert!(sized_by_value, "{target:?} wide: {:?}", f.insts);
+    }
+}
+
 /// ARM ARM C6.2: the aarch64 atomic read-modify-write lowering is one LSE
 /// instruction, for a seq_cst fetch-add the acquire-release `LDADDAL`.
 /// Match it by the bits that do not depend on the registers:

@@ -218,6 +218,8 @@ impl Compiler {
             ));
         }
         let elem_ty = pointee_ty(ptr_ty);
+        // C11 7.17.7: the value operand -- the last one -- has the object's
+        // type; a compare-exchange's `expected` operand is a pointer.
         while args.len() < want {
             if self.lex.tk != ',' {
                 return Err(self.compile_err(
@@ -227,6 +229,9 @@ impl Compiler {
             }
             self.next()?;
             self.expr(Token::Assign as i64)?;
+            if args.len() + 1 == want {
+                self.convert_assign_rhs(elem_ty);
+            }
             if let Some(a) = self.ast_acc {
                 args.push(a);
             }
@@ -258,6 +263,18 @@ impl Compiler {
         );
         self.ast_acc = Some(id);
         Ok(())
+    }
+
+    /// A GCC atomic builtin's value operand, converted to the type of the
+    /// object it is stored into or combined with (C11 7.17.7).
+    fn gcc_atomic_value(
+        &mut self,
+        a: Option<super::super::ast::ExprId>,
+        name: &str,
+        elem_ty: i64,
+    ) -> Result<super::super::ast::ExprId, C5Error> {
+        let a = self.require_gcc_arg(a, name)?;
+        Ok(self.convert_operand(a, elem_ty))
     }
 
     /// Fetch a required GCC-builtin operand or report an arity error.
@@ -830,7 +847,7 @@ impl Compiler {
                 order_at(self, 1).for_load(),
             ),
             "__atomic_store_n" => {
-                let v = self.require_gcc_arg(val1, name)?;
+                let v = self.gcc_atomic_value(val1, name, elem_ty)?;
                 (
                     AtomicKind::Store,
                     alloc::vec![ptr, v],
@@ -863,7 +880,7 @@ impl Compiler {
             // form is a full barrier, `__sync_lock_test_and_set` an
             // acquire barrier (gcc's documentation of the family).
             "__atomic_exchange_n" | "__sync_lock_test_and_set" => {
-                let v = self.require_gcc_arg(val1, name)?;
+                let v = self.gcc_atomic_value(val1, name, elem_ty)?;
                 let order = if name == "__atomic_exchange_n" {
                     order_at(self, 2)
                 } else {
@@ -872,7 +889,7 @@ impl Compiler {
                 (AtomicKind::Exchange, alloc::vec![ptr, v], elem_ty, order)
             }
             "__atomic_fetch_add" | "__sync_fetch_and_add" => {
-                let v = self.require_gcc_arg(val1, name)?;
+                let v = self.gcc_atomic_value(val1, name, elem_ty)?;
                 (
                     AtomicKind::FetchAdd,
                     alloc::vec![ptr, v],
@@ -881,7 +898,7 @@ impl Compiler {
                 )
             }
             "__atomic_fetch_sub" | "__sync_fetch_and_sub" => {
-                let v = self.require_gcc_arg(val1, name)?;
+                let v = self.gcc_atomic_value(val1, name, elem_ty)?;
                 (
                     AtomicKind::FetchSub,
                     alloc::vec![ptr, v],
@@ -890,7 +907,7 @@ impl Compiler {
                 )
             }
             "__atomic_fetch_and" | "__sync_fetch_and_and" => {
-                let v = self.require_gcc_arg(val1, name)?;
+                let v = self.gcc_atomic_value(val1, name, elem_ty)?;
                 (
                     AtomicKind::FetchAnd,
                     alloc::vec![ptr, v],
@@ -899,7 +916,7 @@ impl Compiler {
                 )
             }
             "__atomic_fetch_or" | "__sync_fetch_and_or" => {
-                let v = self.require_gcc_arg(val1, name)?;
+                let v = self.gcc_atomic_value(val1, name, elem_ty)?;
                 (
                     AtomicKind::FetchOr,
                     alloc::vec![ptr, v],
@@ -908,7 +925,7 @@ impl Compiler {
                 )
             }
             "__atomic_fetch_xor" | "__sync_fetch_and_xor" => {
-                let v = self.require_gcc_arg(val1, name)?;
+                let v = self.gcc_atomic_value(val1, name, elem_ty)?;
                 (
                     AtomicKind::FetchXor,
                     alloc::vec![ptr, v],
@@ -921,7 +938,7 @@ impl Compiler {
             // forms are the older two-argument spelling. Both map to the same
             // read-modify-write returning the updated value.
             "__atomic_add_fetch" | "__sync_add_and_fetch" => {
-                let v = self.require_gcc_arg(val1, name)?;
+                let v = self.gcc_atomic_value(val1, name, elem_ty)?;
                 (
                     AtomicKind::AddFetch,
                     alloc::vec![ptr, v],
@@ -930,7 +947,7 @@ impl Compiler {
                 )
             }
             "__atomic_sub_fetch" | "__sync_sub_and_fetch" => {
-                let v = self.require_gcc_arg(val1, name)?;
+                let v = self.gcc_atomic_value(val1, name, elem_ty)?;
                 (
                     AtomicKind::SubFetch,
                     alloc::vec![ptr, v],
@@ -939,7 +956,7 @@ impl Compiler {
                 )
             }
             "__atomic_and_fetch" | "__sync_and_and_fetch" => {
-                let v = self.require_gcc_arg(val1, name)?;
+                let v = self.gcc_atomic_value(val1, name, elem_ty)?;
                 (
                     AtomicKind::AndFetch,
                     alloc::vec![ptr, v],
@@ -948,7 +965,7 @@ impl Compiler {
                 )
             }
             "__atomic_or_fetch" | "__sync_or_and_fetch" => {
-                let v = self.require_gcc_arg(val1, name)?;
+                let v = self.gcc_atomic_value(val1, name, elem_ty)?;
                 (
                     AtomicKind::OrFetch,
                     alloc::vec![ptr, v],
@@ -957,7 +974,7 @@ impl Compiler {
                 )
             }
             "__atomic_xor_fetch" | "__sync_xor_and_fetch" => {
-                let v = self.require_gcc_arg(val1, name)?;
+                let v = self.gcc_atomic_value(val1, name, elem_ty)?;
                 (
                     AtomicKind::XorFetch,
                     alloc::vec![ptr, v],
@@ -970,7 +987,7 @@ impl Compiler {
             // permits.
             "__atomic_compare_exchange_n" => {
                 let exp = self.require_gcc_arg(val1, name)?;
-                let des = self.require_gcc_arg(val2, name)?;
+                let des = self.gcc_atomic_value(val2, name, elem_ty)?;
                 (
                     AtomicKind::CompareExchangeStrong,
                     alloc::vec![ptr, exp, des],
@@ -979,8 +996,8 @@ impl Compiler {
                 )
             }
             "__sync_val_compare_and_swap" => {
-                let old = self.require_gcc_arg(val1, name)?;
-                let new = self.require_gcc_arg(val2, name)?;
+                let old = self.gcc_atomic_value(val1, name, elem_ty)?;
+                let new = self.gcc_atomic_value(val2, name, elem_ty)?;
                 (
                     AtomicKind::SyncCasVal,
                     alloc::vec![ptr, old, new],
@@ -989,8 +1006,8 @@ impl Compiler {
                 )
             }
             "__sync_bool_compare_and_swap" => {
-                let old = self.require_gcc_arg(val1, name)?;
-                let new = self.require_gcc_arg(val2, name)?;
+                let old = self.gcc_atomic_value(val1, name, elem_ty)?;
+                let new = self.gcc_atomic_value(val2, name, elem_ty)?;
                 (
                     AtomicKind::SyncCasBool,
                     alloc::vec![ptr, old, new],
@@ -1909,12 +1926,10 @@ impl Compiler {
             }
             self.next()?;
             self.expr(Token::Assign as i64)?;
+            // C99 7.13.2.1: `val` is an `int`.
+            self.convert_assign_rhs(Ty::Int as i64);
             if let Some(a) = self.ast_acc {
                 ast_intrinsic_args.push(a);
-            }
-            if is_floating_scalar(self.ty) {
-                self.ast_fpcast();
-                self.ty = Ty::Int as i64;
             }
         } else if is(Intrinsic::FrameAddress) || is(Intrinsic::ReturnAddress) {
             // GCC defines the operand as the number of frames to walk up: level
@@ -1926,13 +1941,13 @@ impl Compiler {
             }
         } else {
             self.expr(Token::Assign as i64)?;
+            // The remaining intrinsics take an integer or pointer operand: a
+            // floating or 128-bit one converts to a 64-bit integer.
+            if is_floating_scalar(self.ty) || self.is_int128_ty(self.ty) {
+                self.convert_assign_rhs(Ty::LongLong as i64);
+            }
             if let Some(a) = self.ast_acc {
                 ast_intrinsic_args.push(a);
-            }
-            // The remaining intrinsics take an integer or pointer operand.
-            if is_floating_scalar(self.ty) {
-                self.ast_fpcast();
-                self.ty = Ty::Int as i64;
             }
         }
         Ok(IntrinsicOperands {

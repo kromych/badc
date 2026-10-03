@@ -1431,10 +1431,10 @@ impl Compiler {
     /// Each bitfield's addressable unit after a packed re-layout: the
     /// smallest 1/2/4/8-byte window covering its bits, slid back when it
     /// would extend past the aggregate's tail (a packed aggregate has no
-    /// tail padding to absorb the read-modify-write span). A window no
-    /// slide can fit stays at the field's own byte.
-    /// TODO: an access through a window wider than the aggregate reaches
-    /// past the object; such a field needs a split access.
+    /// tail padding to absorb the read-modify-write span). Where no window
+    /// fits inside the aggregate the unit is the 3, 5, 6 or 7 bytes the
+    /// field spans, which an access reaches in power-of-two pieces, as gcc
+    /// and clang split it.
     fn fit_bitfield_windows(&mut self, struct_id: usize, refit_all: bool) {
         let size = self.structs[struct_id].size;
         for f in &mut self.structs[struct_id].fields {
@@ -1442,11 +1442,12 @@ impl Compiler {
                 continue;
             }
             let bit_start = f.offset * 8 + f.bit_offset as usize;
-            let unit = (bit_start % 8 + f.bit_width as usize)
-                .div_ceil(8)
-                .next_power_of_two();
+            let span = (bit_start % 8 + f.bit_width as usize).div_ceil(8);
+            let mut unit = span.next_power_of_two();
             let mut off = bit_start / 8;
-            if off + unit > size && unit <= size {
+            if unit > size {
+                unit = span;
+            } else if off + unit > size {
                 off = size - unit;
             }
             f.offset = off;

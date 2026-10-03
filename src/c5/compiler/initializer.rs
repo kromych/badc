@@ -4381,13 +4381,10 @@ impl Compiler {
             // below expresses that for an integer field but not for a
             // floating source (C99 6.3.1.4) or a `_Bool` field (6.3.1.2).
             let value = self.to_storage_bits(value, reloc, field.ty);
-            // C99 6.7.2.1p11: the bitfield's addressable storage
-            // unit width is determined by the declared base type;
-            // the RMW span must match `bit_unit_size` so it does
-            // not read or write outside the unit. A packed field
-            // whose window no slide could fit inside its aggregate
-            // (`fit_bitfield_windows`) is merged within the object.
-            let unit_bytes = (field.bit_unit_size as usize).min(self.data.len() - field_base);
+            // C99 6.7.2.1p11: the RMW spans the field's storage unit,
+            // `bit_unit_size` bytes inside the object, so it reads and
+            // writes no byte outside it.
+            let unit_bytes = field.bit_unit_size as usize;
             let mut unit_value: u128 = 0;
             for i in 0..unit_bytes {
                 unit_value |= (self.data[field_base + i] as u128) << (i * 8);

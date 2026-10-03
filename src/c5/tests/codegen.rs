@@ -10343,6 +10343,105 @@ fn copied_bitfields_and_padding_carry_the_bytes_their_initializer_wrote() {
     }
 }
 
+/// A bit-field of a packed aggregate no 1-, 2-, 4- or 8-byte window fits is
+/// reached in power-of-two pieces inside the object, as gcc and clang split
+/// it: a read, a store and an update of a field spanning most of a 3-, 5-, 6-
+/// or 7-byte aggregate load and store only the aggregate's bytes. The MS
+/// layout of the PE targets gives each field a whole unit of its type, which
+/// its accesses stay inside as well.
+#[test]
+fn packed_bitfield_accesses_stay_inside_the_object() {
+    use crate::Target;
+    use crate::c5::ir::{BinOp, Inst, LoadKind, StoreKind};
+    // (tag, members, size in the GNU layout, size in the MS one)
+    const SHAPES: &[(&str, &str, u32, u32)] = &[
+        ("t3", "int f : 22;", 3, 4),
+        ("t5", "long long f : 36;", 5, 8),
+        ("t6", "long long f : 44;", 6, 8),
+        ("t7", "long long f : 52;", 7, 8),
+        ("u3", "unsigned char c : 4; int f : 20;", 3, 5),
+        ("p7", "unsigned char c; unsigned long long f : 48;", 7, 9),
+    ];
+    let mut src = alloc::string::String::from("#pragma pack(push, 1)\n");
+    for (name, members, ..) in SHAPES {
+        src += &alloc::format!(
+            "struct {name} {{ {members} }};\n\
+             long long get_{name}(struct {name} *p) {{ return p->f; }}\n\
+             void set_{name}(struct {name} *p, long long v) {{ p->f = v; }}\n\
+             void inc_{name}(struct {name} *p) {{ p->f += 3; }}\n"
+        );
+    }
+    src += "#pragma pack(pop)\n";
+    let load_bytes = |k: LoadKind| match k {
+        LoadKind::I8 | LoadKind::U8 => 1,
+        LoadKind::I16 | LoadKind::U16 => 2,
+        LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
+        _ => 8,
+    };
+    let store_bytes = |k: StoreKind| match k {
+        StoreKind::I8 => 1,
+        StoreKind::I16 => 2,
+        StoreKind::I32 | StoreKind::F32 => 4,
+        _ => 8,
+    };
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let program = crate::Compiler::with_options(
+            src.clone(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        for &(name, _, gnu, ms) in SHAPES {
+            let size = if target.ms_layout() { ms } else { gnu };
+            for f in ["get", "set", "inc"].map(|op| alloc::format!("{op}_{name}")) {
+                let func = funcs.iter().find(|g| g.name == f).expect("function");
+                // The byte offset an address adds to the struct pointer.
+                let offset = |mut v: u32| {
+                    let mut off = 0i64;
+                    while let Inst::BinopI {
+                        op: BinOp::Add,
+                        lhs,
+                        rhs_imm,
+                    } = func.insts[v as usize]
+                    {
+                        off += rhs_imm;
+                        v = lhs;
+                    }
+                    off
+                };
+                let accesses = func.insts.iter().filter_map(|i| match *i {
+                    Inst::Load {
+                        addr, disp, kind, ..
+                    } => Some((offset(addr) + i64::from(disp), load_bytes(kind))),
+                    Inst::Store {
+                        addr, disp, kind, ..
+                    } => Some((offset(addr) + i64::from(disp), store_bytes(kind))),
+                    _ => None,
+                });
+                let mut seen = 0;
+                for (at, bytes) in accesses {
+                    seen += 1;
+                    assert!(
+                        at >= 0 && at + bytes <= i64::from(size),
+                        "{target:?} {f}: {bytes} bytes at {at} in a {size}-byte object"
+                    );
+                }
+                assert!(seen > 0, "{target:?} {f}: no access");
+            }
+        }
+    }
+}
+
 /// The flexible array member is ignored by an assignment (C99 6.7.2.1p16):
 /// the copy out of a split object writes the named member alone.
 #[test]

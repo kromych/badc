@@ -1,7 +1,9 @@
 //! C99 6.7.2.1 bitfield access: reading a slice out of its storage unit
 //! and merging a value back into it.
 
-use super::access::{load_kind_for_width, load_place, store_kind_for_width, store_place};
+use super::access::{
+    access_align, load_kind_for_width, load_place, store_kind_for_width, store_place,
+};
 use super::types::{is_bool_scalar, is_floating_scalar};
 use super::*;
 use crate::c5::ast::expr_ty;
@@ -39,21 +41,11 @@ impl<'a> Walker<'a> {
         vol: bool,
         align: u8,
     ) -> ValueId {
-        let w = bf.bit_width as i64;
         if bf.unit_size == 16 {
             let v = self.bitfield_extract_128(b, addr, bf, vol);
             return self.bitfield_value_form(b, bf, v);
         }
-        let mut v = load_place(b, addr, bitfield_load_kind(bf), seg, vol, align);
-        if bf.bit_offset > 0 {
-            v = b.binop_imm(BinOp::Shr, v, bf.bit_offset as i64);
-        }
-        v = b.binop_imm(BinOp::And, v, bitfield_mask_halves(bf.bit_width, 0).0);
-        if bf.signed && w < 64 {
-            v = b.binop_imm(BinOp::Shl, v, 64 - w);
-            v = b.binop_imm(BinOp::Shr, v, 64 - w);
-        }
-        v
+        extract_bitfield(b, addr, bf, seg, vol, align)
     }
 
     /// Store `value`'s low `bf.bit_width` bits into the bitfield at
@@ -260,7 +252,6 @@ pub(super) fn merge_into_bitfield(
     vol: bool,
     align: u8,
 ) -> ValueId {
-    let (load_kind, store_kind) = (bitfield_load_kind(bf), bitfield_store_kind(bf));
     // C99 6.5.16.1p2 converts the value to the field's declared type.
     // The width mask below is that conversion for every integer type;
     // `_Bool` is not, since 6.3.1.2 maps every nonzero value to 1.
@@ -270,7 +261,7 @@ pub(super) fn merge_into_bitfield(
         value
     };
     let masked = b.binop_imm(BinOp::And, value, bitfield_mask_halves(bf.bit_width, 0).0);
-    let old = load_place(b, addr, load_kind, seg, vol, align);
+    let old = load_unit(b, addr, bf, seg, vol, align);
     let cleared = b.binop_imm(
         BinOp::And,
         old,
@@ -282,8 +273,32 @@ pub(super) fn merge_into_bitfield(
         masked
     };
     let combined = b.binop(BinOp::Or, cleared, shifted);
-    store_place(b, addr, combined, store_kind, seg, vol, align);
+    store_unit(b, addr, combined, bf, seg, vol, align);
     masked
+}
+
+/// Read the bitfield at `addr` out of its storage unit of at most 8 bytes:
+/// shift its slice to bit 0, mask, and sign-extend a signed field (C99
+/// 6.7.2.1p10).
+pub(super) fn extract_bitfield(
+    b: &mut SsaBuilder,
+    addr: ValueId,
+    bf: BitfieldDesc,
+    seg: AsmSeg,
+    vol: bool,
+    align: u8,
+) -> ValueId {
+    let w = bf.bit_width as i64;
+    let mut v = load_unit(b, addr, bf, seg, vol, align);
+    if bf.bit_offset > 0 {
+        v = b.binop_imm(BinOp::Shr, v, bf.bit_offset as i64);
+    }
+    v = b.binop_imm(BinOp::And, v, bitfield_mask_halves(bf.bit_width, 0).0);
+    if bf.signed && w < 64 {
+        v = b.binop_imm(BinOp::Shl, v, 64 - w);
+        v = b.binop_imm(BinOp::Shr, v, 64 - w);
+    }
+    v
 }
 
 /// A bitfield's slice mask as the low and high halves of a 128-bit
@@ -293,14 +308,82 @@ pub(super) fn bitfield_mask_halves(width: u8, offset: u8) -> (i64, i64) {
     (m as u64 as i64, (m >> 64) as u64 as i64)
 }
 
-/// Load kind for a bitfield's addressable storage unit (C99 6.7.2.1p11).
-/// The unsigned kinds keep the unit's bits at their storage positions so
-/// the extraction's shift and mask see no sign extension from above.
-pub(super) fn bitfield_load_kind(bf: BitfieldDesc) -> LoadKind {
-    load_kind_for_width(bf.unit_size as u32)
+/// `(offset, width)` of each access a `size`-byte storage unit takes: the
+/// unit itself at 1, 2, 4 and 8 bytes, else its power-of-two pieces, widest
+/// first, none of which reaches past the unit (C99 6.7.2.1p11).
+fn unit_pieces(size: u8) -> impl Iterator<Item = (i64, u32)> {
+    let mut at = 0i64;
+    [8u32, 4, 2, 1]
+        .into_iter()
+        .filter(move |&w| u32::from(size) & w != 0)
+        .map(move |w| {
+            let off = at;
+            at += i64::from(w);
+            (off, w)
+        })
 }
 
-/// Store kind for a bitfield's addressable storage unit.
-fn bitfield_store_kind(bf: BitfieldDesc) -> StoreKind {
-    store_kind_for_width(bf.unit_size as u32)
+/// The address and alignment bound of the piece at `off` of a unit at
+/// `addr` bounded by `align`; a split unit whose own bound is 0 is aligned
+/// to its width rounded up, which aligns every piece.
+fn unit_piece(b: &mut SsaBuilder, addr: ValueId, align: u8, off: i64, width: u32) -> (ValueId, u8) {
+    let at = if off == 0 {
+        addr
+    } else {
+        b.binop_imm(BinOp::Add, addr, off)
+    };
+    let bound = if align == 0 {
+        0
+    } else {
+        access_align(offset_align(u32::from(align), off), width)
+    };
+    (at, bound)
+}
+
+/// The bitfield's storage unit at `addr`, zero-extended. The unsigned load
+/// kinds keep the unit's bits at their storage positions, so the extraction's
+/// shift and mask see no sign extension from above.
+fn load_unit(
+    b: &mut SsaBuilder,
+    addr: ValueId,
+    bf: BitfieldDesc,
+    seg: AsmSeg,
+    vol: bool,
+    align: u8,
+) -> ValueId {
+    let mut unit = None;
+    for (off, width) in unit_pieces(bf.unit_size) {
+        let (at, bound) = unit_piece(b, addr, align, off, width);
+        let mut piece = load_place(b, at, load_kind_for_width(width), seg, vol, bound);
+        if off > 0 {
+            piece = b.binop_imm(BinOp::Shl, piece, 8 * off);
+        }
+        unit = Some(match unit {
+            Some(low) => b.binop(BinOp::Or, low, piece),
+            None => piece,
+        });
+    }
+    unit.expect("a storage unit has a piece")
+}
+
+/// Store the low `bf.unit_size` bytes of `unit` at `addr`, in the pieces
+/// [`load_unit`] reads.
+fn store_unit(
+    b: &mut SsaBuilder,
+    addr: ValueId,
+    unit: ValueId,
+    bf: BitfieldDesc,
+    seg: AsmSeg,
+    vol: bool,
+    align: u8,
+) {
+    for (off, width) in unit_pieces(bf.unit_size) {
+        let (at, bound) = unit_piece(b, addr, align, off, width);
+        let piece = if off > 0 {
+            b.binop_imm(BinOp::Shru, unit, 8 * off)
+        } else {
+            unit
+        };
+        store_place(b, at, piece, store_kind_for_width(width), seg, vol, bound);
+    }
 }

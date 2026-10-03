@@ -469,7 +469,10 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movl	(%rax), %eax
+               	movzwq	(%rax), %rcx
+               	movzbq	0x2(%rax), %rax
+               	shlq	$0x10, %rax
+               	orq	%rcx, %rax
                	andq	$0x3fffff, %rax         # imm = 0x3FFFFF
                	shlq	$0x2a, %rax
                	sarq	$0x2a, %rax
@@ -478,39 +481,14 @@ Disassembly of section .text:
                	movl	$0x13, %eax
                	leave
                	retq
-               	leaq	-0x78(%rbp), %rax
-               	leaq	<rip>, %rcx       # <addr>
-               	movzwq	(%rcx), %r10
-               	movw	%r10w, (%rax)
-               	movzbq	0x2(%rcx), %r10
-               	movb	%r10b, 0x2(%rax)
-               	movl	(%rax), %ecx
-               	andq	$0x3fffff, %rcx         # imm = 0x3FFFFF
-               	shlq	$0x2a, %rcx
-               	sarq	$0x2a, %rcx
-               	cmpl	$0xfff0bdc0, %ecx       # imm = 0xFFF0BDC0
-               	jne	<addr>
-               	leaq	<rip>, %rcx      # <addr>
-               	movzwq	(%rcx), %rcx
-               	andq	$0x7fff, %rcx           # imm = 0x7FFF
-               	shlq	$0x31, %rcx
-               	sarq	$0x31, %rcx
-               	cmpl	$-0x3, %ecx
+               	leaq	<rip>, %rax      # <addr>
+               	movzwq	(%rax), %rax
+               	andq	$0x7fff, %rax           # imm = 0x7FFF
+               	shlq	$0x31, %rax
+               	sarq	$0x31, %rax
+               	cmpl	$-0x3, %eax
                	je	<addr>
                	movl	$0x14, %eax
-               	leave
-               	retq
-               	movl	(%rax), %ecx
-               	andq	$-0x400000, %rcx        # imm = 0xFFC00000
-               	orq	$0xf4240, %rcx          # imm = 0xF4240
-               	movl	%ecx, (%rax)
-               	movq	%rcx, %rax
-               	andq	$0x3fffff, %rax         # imm = 0x3FFFFF
-               	shlq	$0x2a, %rax
-               	sarq	$0x2a, %rax
-               	cmpl	$0xf4240, %eax          # imm = 0xF4240
-               	je	<addr>
-               	movl	$0x15, %eax
                	leave
                	retq
                	leaq	<rip>, %rdi      # <addr>

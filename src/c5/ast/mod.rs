@@ -207,7 +207,8 @@ pub(crate) struct BitfieldDesc {
     pub bit_width: u8,
     /// Storage-unit width in bytes (1, 2, 4, 8, or 16). Drives the
     /// load / store opcode pair per C99 6.7.2.1p11; a 16-byte unit is
-    /// accessed as the two halves of a 128-bit value.
+    /// accessed as the two halves of a 128-bit value, and the 3, 5, 6
+    /// or 7 bytes of a packed field in its power-of-two pieces.
     pub unit_size: u8,
     /// True when the declared field type is signed -- C99
     /// 6.7.2.1p10 says the read sign-extends through the top of

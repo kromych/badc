@@ -425,7 +425,9 @@ pub struct StructField {
     /// Storage-unit size in bytes (1, 2, 4, or 8). Picks the
     /// matching `Lc/Lh/Lw/Li` and `Sc/Sh/Sw/Si` opcodes for the
     /// bitfield read / write so a 32-bit-base bitfield does not
-    /// load eight bytes (which would mix in adjacent fields).
+    /// load eight bytes (which would mix in adjacent fields). A packed
+    /// field no such window fits inside its aggregate has the 3, 5, 6
+    /// or 7 bytes it spans, accessed in pieces.
     /// Meaningful only when `bit_width > 0`; 0 otherwise.
     pub bit_unit_size: u8,
     /// Function-pointer lineage tag (mirrors

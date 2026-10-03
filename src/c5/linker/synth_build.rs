@@ -587,9 +587,9 @@ fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRe
 }
 
 /// An executable's default-visibility globals, exported so a
-/// dynamically loaded module resolves them (a Python C extension
-/// binding `PyFloat_Type` and the rest of the C-API against the
-/// interpreter executable). macOS publishes every global of every
+/// dynamically loaded module resolves them (an extension module binding
+/// the host program's objects and functions against its executable).
+/// macOS publishes every global of every
 /// executable through the Mach-O symtab. ELF and PE split the same
 /// coverage across two flags matching the toolchain's `-rdynamic`:
 /// `--export-all` adds functions, `--export-data` adds data globals.

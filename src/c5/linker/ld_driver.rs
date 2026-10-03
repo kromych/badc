@@ -55,11 +55,10 @@ enum InputItem {
 /// Binutils compatibility level reported by `--version`. Raise it only
 /// alongside the behaviour a consumer gates on that version.
 ///
-/// 2.33.1 is where `arch/arm64/Kconfig` enables
-/// `ARM64_PTR_AUTH_KERNEL`, which compiles the kernel with
-/// `-mbranch-protection=pac-ret`. Both halves that gate names are in
-/// place: the compiler emits the signing pair and the
-/// `.note.gnu.property` PAC note, and the linker merges those notes.
+/// 2.33.1 is the first GNU ld that reads the AArch64 `.note.gnu.property`
+/// PAC note, so a build gates `-mbranch-protection=pac-ret` on it. Both
+/// halves of that are in place: the compiler emits the signing pair and
+/// the PAC note, and the linker merges those notes.
 const LD_COMPAT_VERSION: &str = "2.33.1";
 
 struct LdArgs {
@@ -582,8 +581,8 @@ fn run_relocatable_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         allow_multiple_definition: a.z.muldefs(),
         expect_machine: machine,
     };
-    // ld writes a map for a relocatable link too, and kbuild's
-    // `modules.builtin.ranges` step reads `vmlinux.o.map`.
+    // ld writes a map for a relocatable link too, which attributes each
+    // merged section's bytes to its inputs.
     let want_map = a.map_path.is_some() || a.print_map;
     let (bytes, map) = if want_map {
         match link_relocatable_with_map(&objs, &opts, &a.output.display().to_string()) {
@@ -1168,10 +1167,10 @@ fn report_orphans(
 
 #[cfg(test)]
 mod tests {
-    /// The kernel links its kexec purgatory with dynamic-loader policy
-    /// keywords that a relocatable link cannot act on. Accepting them is
-    /// not the same as accepting anything: a keyword ld does not define
-    /// still has to be refused.
+    /// A relocatable link may be given dynamic-loader policy keywords it
+    /// cannot act on, which ld accepts. Accepting them is not the same as
+    /// accepting anything: a keyword ld does not define still has to be
+    /// refused.
     #[test]
     fn loader_policy_z_keywords_are_accepted_and_unknown_ones_are_not() {
         for kw in [
@@ -1255,7 +1254,7 @@ mod tests {
         assert_eq!(kind(&["-pie", "--no-pie", "a.o"]), (false, false));
     }
 
-    /// `scripts/ld-version.sh`: `10000*major + 100*minor + patch`, with a
+    /// A version as one number, `10000*major + 100*minor + patch`, with a
     /// missing field zero and anything past the third ignored.
     fn ld_canonical_version(v: &str) -> u32 {
         let mut it = v.split('.');
@@ -1264,12 +1263,11 @@ mod tests {
     }
 
     #[test]
-    fn reported_version_covers_the_ptr_auth_kernel_gate() {
-        // `arch/arm64/Kconfig` enables `ARM64_PTR_AUTH_KERNEL` at
-        // `LD_VERSION >= 23301`, and compiles the kernel with
-        // `-mbranch-protection=pac-ret` on the strength of it. Both the
-        // signing pair and the property note it names are emitted, so
-        // the claim is honest; dropping either has to drop this too.
+    fn reported_version_is_at_least_the_pac_note_release() {
+        // A build enables `-mbranch-protection=pac-ret` on an ld of at least
+        // 2.33.1, the first to read the PAC property note. Both the signing
+        // pair and that note are emitted, so the claim is honest; dropping
+        // either has to drop this too.
         assert!(ld_canonical_version(LD_COMPAT_VERSION) >= 23301);
         assert_eq!(ld_canonical_version("2.33.1"), 23301);
         assert_eq!(ld_canonical_version("2.30"), 23000);

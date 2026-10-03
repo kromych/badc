@@ -5757,15 +5757,15 @@ mod tests {
             size: 0x40,
             align: 4,
         }];
-        let origin = RelocOrigin::in_input("vmlinux.o", &sections, SectionFamily::Text);
+        let origin = RelocOrigin::in_input("image.o", &sections, SectionFamily::Text);
         // R_AARCH64_MOVW_PREL_G0 has no patcher in the native path.
         let e = origin
-            .at(NativeMachine::Aarch64, 287, "primary_entry", 0x30)
+            .at(NativeMachine::Aarch64, 287, "entry", 0x30)
             .unsupported();
         assert_eq!(
             alloc::format!("{e}"),
-            "error: vmlinux.o(.init.text+0x30): unsupported R_AARCH64_MOVW_PREL_G0 (287) \
-             against symbol `primary_entry` [B6012] [relocation]"
+            "error: image.o(.init.text+0x30): unsupported R_AARCH64_MOVW_PREL_G0 (287) \
+             against symbol `entry` [B6012] [relocation]"
         );
     }
 

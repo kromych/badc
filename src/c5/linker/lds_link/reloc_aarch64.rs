@@ -39,7 +39,7 @@ impl<'a> LdsLinker<'a> {
                 // an RELR-packed relative keeps its link-time value in
                 // place (the RELR format has no explicit addend);
                 // `--no-apply-dynamic-relocs` leaves only the RELA
-                // relative slots at zero for the kernel to fill.
+                // relative slots at zero for the loader to fill.
                 let relative = self.opts.emit == LdsEmit::Dyn
                     && alloc
                     && self.reloc_is_relative(oi, r.sym as usize);

@@ -642,10 +642,10 @@ pub struct OutSecRule {
     pub stmts: Vec<SecStmt>,
 }
 
-/// The `SECTIONS`-only linker-script subset the kernel's
-/// `scripts/module.lds` uses: `/DISCARD/` patterns, named output
-/// sections gathering `*(glob)` specs (with `SORT` / `KEEP`),
-/// `ALIGN` attributes, and `sym = .` assignments.
+/// The `SECTIONS`-only linker-script subset a relocatable module layout
+/// uses: `/DISCARD/` patterns, named output sections gathering `*(glob)`
+/// specs (with `SORT` / `KEEP`), `ALIGN` attributes, and `sym = .`
+/// assignments.
 /// TODO: replace with the full linker-script engine once it lands.
 #[derive(Debug, Clone, Default)]
 pub struct LdScript {
@@ -1012,9 +1012,8 @@ pub fn link_relocatable(objs: &[EtRel], opts: &RelinkOptions) -> Result<Vec<u8>,
 }
 
 /// `-r` merge that also renders the link map for `-Map` / `--print-map`.
-/// GNU ld writes one for a relocatable link, and kbuild's
-/// `modules.builtin.ranges` step reads `vmlinux.o.map` to attribute each
-/// section's bytes to the object that contributed them.
+/// GNU ld writes one for a relocatable link, attributing each section's
+/// bytes to the object that contributed them.
 pub fn link_relocatable_with_map(
     objs: &[EtRel],
     opts: &RelinkOptions,

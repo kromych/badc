@@ -3,8 +3,8 @@
 //! and `.dynamic`.
 //!
 //! An ET_DYN image carries these whether or not a loader will search
-//! them; bfd builds them for every `-shared` link and the kernel's own
-//! scripts discard the ones it does not want. Table shapes follow
+//! them; bfd builds them for every `-shared` link, and a script discards
+//! the ones it does not want. Table shapes follow
 //! bfd's: the bucket counts, the Bloom filter geometry and the
 //! symbol order are what a consumer reading `DT_GNU_HASH` expects.
 

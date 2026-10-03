@@ -644,8 +644,8 @@ fn script_link_places_sections_and_symbols() {
 
 /// `--emit-relocs`: every applied relocation reappears as a
 /// `.rela.<outsec>` entry whose `r_offset` is the final address and
-/// from which `S + A` reconstructs. This is what
-/// `arch/x86/tools/relocs` reads to build the KASLR table.
+/// from which `S + A` reconstructs, so a post-link tool can relocate the
+/// image again.
 #[test]
 fn emit_relocs_carries_applied_relocations_into_the_image() {
     let script = parse_linker_script(SCRIPT).expect("script parses");
@@ -813,8 +813,7 @@ fn an_object_definition_outranks_the_synthesized_bound() {
 }
 
 /// A script assignment outranks the synthesized bound, keeping the
-/// script symbol's own visibility. The kernel script bounds its
-/// tables this way.
+/// script symbol's own visibility: a script may bound a table itself.
 #[test]
 fn a_script_assignment_outranks_the_synthesized_bound() {
     let script_text = SCRIPT.replace(
@@ -1392,9 +1391,8 @@ fn a_read_write_execute_segment_draws_a_warning() {
 }
 
 /// The veneer symbol names its input section by the index the input
-/// file gives it, not by the position it holds in this link. The
-/// kernel links its kallsyms images with `--strip-debug` and the
-/// final one without, then requires the two symbol maps to agree.
+/// file gives it, not by the position it holds in this link, so a link
+/// with `--strip-debug` and one without produce the same symbol table.
 #[test]
 fn a53_veneer_name_is_independent_of_the_dropped_sections() {
     let insns = [A53_ADRP_FAR, A53_LDR, A53_DEP_LDR, A53_RET];
@@ -2370,9 +2368,9 @@ VERSION { LINUX_2.6 { global: __vdso_time; time; local: *; }; }
     assert_eq!(link_of(".dynamic"), section_index(&res.image, ".dynstr"));
 }
 
-/// A final link with no `-T` runs the built-in default script.
-/// This is the shape of kbuild's RELR probe: `void *p = &p;`
-/// linked `-shared -Bsymbolic -z pack-relative-relocs`.
+/// A final link with no `-T` runs the built-in default script, here
+/// over `void *p = &p;` linked `-shared -Bsymbolic -z
+/// pack-relative-relocs`.
 #[test]
 fn scriptless_shared_link_uses_the_default_script() {
     let script = parse_linker_script(&super::super::default_script::default_script(true))
@@ -2462,9 +2460,8 @@ fn scriptless_shared_link_uses_the_default_script() {
     assert!(phdrs.iter().any(|p| p.p_type == PT_DYNAMIC));
 }
 
-/// A script that discards the dynamic tables gets no dynamic
-/// sections, which is how the kernel's own `-shared` links stay
-/// unchanged.
+/// A `-shared` link whose script discards the dynamic tables gets no
+/// dynamic sections.
 #[test]
 fn shared_link_honours_discarding_the_dynamic_tables() {
     let script = parse_linker_script(

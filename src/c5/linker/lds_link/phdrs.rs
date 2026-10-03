@@ -123,8 +123,8 @@ impl<'a> LdsLinker<'a> {
         // `:phdr` carries to following sections that name none.
         // The carry runs over the script's section list, not the
         // kept one, so an empty section still passes its
-        // assignment on -- an empty `.hash` ahead of `.gnu.hash`
-        // is how the vDSO scripts rely on it.
+        // assignment on -- a script may rely on an empty `.hash`
+        // ahead of `.gnu.hash` for it.
         let kept: HashSet<usize> = emit_order.iter().copied().collect();
         let mut inherit: Vec<usize> = Vec::new();
         for st in &self.stmts {

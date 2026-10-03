@@ -113,8 +113,7 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// The dynamic-linking tables. bfd builds these for every ET_DYN
-    /// image; a script that does not want them discards them, which is
-    /// what the kernel's own scripts do.
+    /// image; a script that does not want them discards them.
     fn synthesize_dynamic_sections(&mut self) {
         self.verdefs = self.script_verdefs();
         let mut secs: Vec<(&str, u32, u64, u64)> = Vec::new();

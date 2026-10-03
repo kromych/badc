@@ -1602,7 +1602,8 @@ def main() -> int:
                 for line in excerpt(text, 12):
                     log(f"boot {i} console: {line}")
         failures.extend(kaslr.displacement_failures(
-            kaslr_configured(tree), plan, offsets))
+            kaslr_configured(tree), any(b["booted"] for b in boots), plan,
+            offsets))
         if args.payload and not failures:
             seed = plan[0] if plan else None
             unpacked, more = payload_boot(args, arch, tree, image, seed,

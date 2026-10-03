@@ -31,7 +31,7 @@ pub(super) fn embedded_header(name: &str) -> Option<&'static str> {
 /// built on badc's own inline-asm encoders. Another compiler's copy of such
 /// a header is written against that compiler's builtins and can never
 /// compile here, so when a build line puts a foreign toolchain's private
-/// include directory on the search path (kernel-style `-isystem
+/// include directory on the search path (an `-isystem
 /// $(cc -print-file-name=include)` folded into `-I`), these names must still
 /// resolve to the embedded copy. They are also the set `-nostdinc` keeps:
 /// that flag withdraws the standard library headers, as it does in gcc,
@@ -967,7 +967,7 @@ mod tests {
 
     /// A program may repeat the Win32 prototypes after the bundled
     /// `<windows.h>` with the SDK's types, spelled through the SDK's
-    /// typedefs or out in full as raylib does, with no redeclaration
+    /// typedefs or out in full, with no redeclaration
     /// diagnostic on either Windows target.
     #[test]
     fn win32_redeclarations_compose_with_the_bundled_windows_h() {

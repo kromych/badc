@@ -3,8 +3,7 @@
 //! The output is make syntax: one rule whose targets name the object and
 //! whose prerequisites are the translation unit's source and every header
 //! it opened, wrapped at 72 columns with ` \` line continuations,
-//! optionally followed by a phony target per prerequisite (`-MP`). `make`
-//! reads it, and so does the Linux kernel's `scripts/basic/fixdep`.
+//! optionally followed by a phony target per prerequisite (`-MP`).
 //!
 //! It follows gcc's writer: the same files, in the same order, with the
 //! same escaping and the same wrap points. It is not byte-for-byte
@@ -144,8 +143,8 @@ pub fn render(targets: &[String], prereqs: &[String], phony: bool) -> String {
 /// omitted from both forms -- a make prerequisite names a file, and no
 /// file backs it. A build that wants those listed can point
 /// `own_header_roots` at a checkout, which resolves the same headers to
-/// real files. Under `-nostdinc`, the case the kernel build exercises,
-/// every header comes from a `-I` directory and none of this applies.
+/// real files. Under `-nostdinc` every header comes from a `-I`
+/// directory and none of this applies.
 ///
 /// Names repeat in the include stream and are emitted once. gcc repeats
 /// them; make stats each prerequisite either way, so the shorter list
@@ -348,11 +347,11 @@ mod tests {
             rec("linux/a.h", Some("include/linux/a.h"), IncludeOrigin::User),
             // `..` stays: collapsing it names a different file across a
             // symlinked directory, and gcc keeps it too.
-            rec("vma.h", Some("kernel/../mm/vma.h"), IncludeOrigin::User),
+            rec("b.h", Some("src/../lib/b.h"), IncludeOrigin::User),
         ];
         assert_eq!(
             prerequisites("./m.c", &records, true),
-            strs(&["m.c", "include/linux/a.h", "kernel/../mm/vma.h"])
+            strs(&["m.c", "include/linux/a.h", "src/../lib/b.h"])
         );
     }
 

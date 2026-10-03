@@ -438,7 +438,7 @@ impl Preprocessor {
             }
             // A compiler-owned intrinsic header (built on badc's own inline-asm
             // encoders) resolves to the embedded copy before the search paths:
-            // a foreign toolchain's copy on `-I` (a kernel-style
+            // a foreign toolchain's copy on `-I` (an
             // `-isystem $(cc -print-file-name=include)` folded into `-I`) is
             // written against that compiler's builtins and can never compile
             // here. The quoted source-directory step above still precedes it

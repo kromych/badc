@@ -3627,8 +3627,7 @@ impl Compiler {
                 };
             }
             // An object alias keeps its declared type; its symbol takes
-            // the aliased object's size, as GNU as gives a `.set` alias,
-            // which Linux's modpost reads a `MODULE_DEVICE_TABLE` by.
+            // the aliased object's size, as GNU as gives a `.set` alias.
             for &(alias, target) in &self.object_aliases {
                 self.symbols[alias].data_byte_size = self.symbols[target].data_byte_size;
             }

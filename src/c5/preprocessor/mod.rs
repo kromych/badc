@@ -1274,9 +1274,9 @@ impl Preprocessor {
         self.macros
             .insert(inline_model_macro.to_string(), "1".to_string());
         // Dialect version first, then the real producer, as clang
-        // spells it ("4.2.1 Compatible Clang ..."), so code that
-        // embeds `__VERSION__` (`Py_GetCompiler`, sqlite's
-        // "compiled by") names badc rather than claiming to be gcc.
+        // spells it ("4.2.1 Compatible Clang ..."), so a program that
+        // reports `__VERSION__` as its compiler names badc rather than
+        // claiming to be gcc.
         self.macros.insert(
             "__VERSION__".to_string(),
             alloc::format!(

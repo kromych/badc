@@ -251,9 +251,9 @@ fn gnu_identity_macros_are_opt_in() {
 
     // `-std=gnu*` keeps `__GNUC__` and drops `__STRICT_ANSI__`, the
     // combination gcc and clang produce for a GNU dialect. A header that
-    // gates a GNU declaration on the pair -- `<asm/xen/interface_64.h>`
-    // gates the anonymous union naming both `rip` and `eip` on it --
-    // then reaches the same declarations it gives gcc.
+    // gates a GNU declaration on the pair -- an anonymous union naming
+    // both `rip` and `eip` -- then reaches the same declarations it gives
+    // gcc.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp.enable_gnu(false, false);
     let out = pp.process(probe).expect("preprocessor failed");
@@ -867,14 +867,14 @@ fn pragma_operator_once_marks_file() {
 fn variadic_stringize_keeps_the_source_spacing() {
     // C99 6.10.3.2p2: the stringized spelling keeps the argument tokens
     // as written -- a space only where the source had one. gcc 16:
-    // S(kvm-amd,kvm-intel) is "kvm-amd,kvm-intel", S1(one, two ,three)
+    // S(left-a,right-b) is "left-a,right-b", S1(one, two ,three)
     // is "one, two ,three".
     let out = process(
         "#define S1(x...) #x\n#define S(x...) S1(x)\n\
-         const char *a = S(kvm-amd,kvm-intel);\n\
+         const char *a = S(left-a,right-b);\n\
          const char *b = S1(one, two ,three);\n",
     );
-    assert!(out.contains("\"kvm-amd,kvm-intel\""), "{out}");
+    assert!(out.contains("\"left-a,right-b\""), "{out}");
     assert!(out.contains("\"one, two ,three\""), "{out}");
 }
 
@@ -1373,16 +1373,16 @@ fn if_string_comparison_keeps_slashes_inside_literal() {
 #[test]
 fn unterminated_quote_stops_at_end_of_line() {
     let src = "# Don't do it\n\
-               #define XLF_KERNEL_64 (1<<0)\n\
-               # define XLF0 XLF_KERNEL_64\t/* 64-bit kernel */\n\
-               \t.word XLF0\n";
+               #define FLAG_64 (1<<0)\n\
+               # define F0 FLAG_64\t/* 64-bit image */\n\
+               \t.word F0\n";
     let out = process(src);
     let last = out
         .lines()
         .rfind(|l| !l.trim().is_empty())
         .expect("output has a content line");
     assert_eq!(last, "\t.word (1<<0)", "{out}");
-    assert!(!out.contains("64-bit kernel"), "comment leaked: {out}");
+    assert!(!out.contains("64-bit image"), "comment leaked: {out}");
 }
 
 /// The bound applies to the primitive: text after an unterminated quote
@@ -1445,27 +1445,26 @@ fn process_asm(source: &str) -> String {
 
 /// Assembler-with-cpp: a `#` line naming no directive is text, passed
 /// through with the surrounding phase-3 rules intact, as GNU cpp emits
-/// it for assembler input. The kernel's `arch/x86/boot/header.S`
-/// reduces to this shape: an apostrophe in such a line, then a comment
+/// it for assembler input: an apostrophe in such a line, then a comment
 /// in a `# define` body.
 #[test]
 fn asm_hash_comment_line_passes_through() {
-    let src = "#define CONFIG_X86_64 1\n\
-               #define XLF_KERNEL_64 (1<<0)\n\
-               \t\t\t\t\t# with loadlin-1.5 (header v1.5). Don't\n\
-               #ifdef CONFIG_X86_64\n\
-               # define XLF0 XLF_KERNEL_64\t\t\t/* 64-bit kernel */\n\
+    let src = "#define HAVE_64 1\n\
+               #define FLAG_64 (1<<0)\n\
+               \t\t\t\t\t# set by the loader (header v1.5). Don't\n\
+               #ifdef HAVE_64\n\
+               # define F0 FLAG_64\t\t\t/* 64-bit image */\n\
                #else\n\
-               # define XLF0 0\n\
+               # define F0 0\n\
                #endif\n\
-               \t\t\t.word XLF0 | XLF1\n";
+               \t\t\t.word F0 | F1\n";
     let out = process_asm(src);
     assert!(
-        out.contains("# with loadlin-1.5 (header v1.5). Don't"),
+        out.contains("# set by the loader (header v1.5). Don't"),
         "{out}"
     );
-    assert!(out.contains("\t\t\t.word (1<<0) | XLF1"), "{out}");
-    assert!(!out.contains("64-bit kernel"), "comment leaked: {out}");
+    assert!(out.contains("\t\t\t.word (1<<0) | F1"), "{out}");
+    assert!(!out.contains("64-bit image"), "comment leaked: {out}");
 }
 
 /// The passed-through line's tail is macro-expanded and its comments
@@ -2572,8 +2571,8 @@ fn asm_unistd_on_a_search_path_shadows_the_bundled_copy() {
 
 #[test]
 fn nostdinc_takes_the_unistd_headers_from_the_uapi_paths_alone() {
-    // `-nostdinc` with a tree's uapi directories on `-I`, as the kernel builds:
-    // the unistd headers resolve there, and a name they lack is not found.
+    // `-nostdinc` with a source tree's uapi directories on `-I`: the unistd
+    // headers resolve there, and a name they lack is not found.
     let base = std::env::temp_dir().join(format!("badc-uapi-{}", std::process::id()));
     let arch = base.join("arch/x86/include/uapi");
     let generic = base.join("include/uapi");

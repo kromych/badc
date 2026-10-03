@@ -1571,8 +1571,8 @@ impl AsmBlock {
     /// An operand binding a storage-less register variable, an output one
     /// when `output`: the parser admits only the stack- and frame-pointer
     /// ones. A `%N` naming it reads or writes the register itself. One the
-    /// template never names (`ASM_CALL_CONSTRAINT`, which declares a call
-    /// inside the body) gives the template no way to reach it.
+    /// template never names (a `"+r"` stack-pointer operand that only orders
+    /// a call inside the body) gives the template no way to reach it.
     fn names_bound_operand(&self, output: bool) -> bool {
         self.operands.iter().enumerate().any(|(i, o)| {
             matches!(o.constraint, AsmConstraint::Bound(_))
@@ -2002,9 +2002,9 @@ pub(crate) struct FunctionSsa {
     pub is_internal: bool,
     /// Explicit placement from `__attribute__((section(...)))`, `None`
     /// for the default text section. Placement is a contract consumers
-    /// read (the kernel whitelists init references by section), so a
-    /// body with one is only spliced into a caller placed identically,
-    /// as gcc does.
+    /// read (a linker script places by it, a reference check keys on it),
+    /// so a body with one is only spliced into a caller placed
+    /// identically, as gcc does.
     pub section: Option<alloc::string::String>,
     /// `__attribute__((patchable_function_entry(N, M)))`: the NOP area
     /// this function takes in place of the option's.

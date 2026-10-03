@@ -62,8 +62,8 @@ impl Compiler {
     /// True when the value the parser just produced is a function
     /// designator or a pointer to a function: its expression's function
     /// type, or the lineage an identifier load seeds. The additive
-    /// operators step it by one byte, as GNU C does and the Linux kernel
-    /// relies on; C99 6.5.6p2 admits pointers to object types only.
+    /// operators step it by one byte, as GNU C does by giving a function
+    /// type size 1; C99 6.5.6p2 admits pointers to object types only.
     pub(super) fn value_is_function_pointer(&self) -> bool {
         (self.pending.fn_ptr_chain_depth == 0 && !self.pending.fn_ptr_depth_is_array_elem)
             || self

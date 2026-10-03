@@ -377,9 +377,10 @@ impl Compiler {
                 BlockItem::Stmt(s) => self.stmt_has_loop_break(*s),
                 BlockItem::Decl(_) => false,
             }),
-            // A constant condition's dead branch is entered only through a
-            // label, which this walk does not follow; the kernel's
-            // `scoped_class` guard breaks only from there.
+            // A constant condition's dead branch is entered only by a `goto`,
+            // which this walk does not follow, so its `break` does not count:
+            // `for (;; ({ goto l; })) if (0) { l: break; } else return v;`
+            // never reaches the jump, since the body returns.
             Stmt::If {
                 cond,
                 then_s,

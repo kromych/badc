@@ -437,7 +437,9 @@ int usleep(useconds_t microseconds);
 int pause(void);
 int isatty(int fd);
 ssize_t readlink(const char *path, char *buf, size_t n);
+#ifndef _WIN32
 int mkdir(const char *path, mode_t mode);
+#endif
 // POSIX: create a filesystem node. The device argument is unused for
 // regular / FIFO nodes; callers pass 0.
 int mknod(const char *path, mode_t mode, dev_t dev);
@@ -584,9 +586,12 @@ char *getenv(const char *name);
 // `char ***` whose deref yields the SysV-style `char **environ`.
 char ***_NSGetEnviron(void);
 #endif
+#ifndef _WIN32
+// mingw-w64 declares none of these; Windows programs supply their own.
 int setenv(const char *name, const char *value, int overwrite);
 int unsetenv(const char *name);
 char *realpath(const char *path, char *resolved);
+#endif
 int fchdir(int fd);
 int getopt(int argc, char *const argv[], const char *opts);
 // POSIX.1 requires <unistd.h> to declare the getopt parser state

@@ -23,6 +23,9 @@
 #pragma binding(msvcrt::_commit,  "_commit")
 #pragma binding(msvcrt::open,     "_open")
 #pragma binding(msvcrt::lseek,    "_lseek")
+#pragma binding(msvcrt::mkdir,    "_mkdir")
+#pragma binding(msvcrt::rmdir,    "_rmdir")
+#pragma binding(msvcrt::chdir,    "_chdir")
 
 int       _open(char *path, int oflag, int pmode);
 int       _close(int fd);
@@ -41,6 +44,11 @@ int       _commit(int fd);
 // The POSIX spellings, which <unistd.h> reaches through this header.
 int       open(const char *path, int oflag, ...);
 long      lseek(int fd, long offset, int origin);
+// The CRT's directory calls under their POSIX names, as mingw-w64
+// declares them here; its mkdir takes no mode.
+int       mkdir(const char *path);
+int       rmdir(const char *path);
+int       chdir(const char *path);
 
 #define _S_IREAD  0400
 #define _S_IWRITE 0200

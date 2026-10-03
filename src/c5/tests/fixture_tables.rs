@@ -3240,8 +3240,8 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("compound_literal_struct_field.c", 0),
     ("strtof_parses_float.c", 0),
     ("snprintf_truncation_c99.c", 0),
-    // Runtime CRT shim: POSIX setenv overwrite semantics over msvcrt's
-    // 2-parameter _putenv_s.
+    // POSIX setenv overwrite semantics, from the program's own setenv over
+    // msvcrt's 2-parameter _putenv_s: the headers declare none.
     ("setenv_overwrite.c", 0),
     // fnmatch and the regex quartet: msvcrt has neither, so this lane
     // runs badc's own engine (`libc/lib/pattern.c`) rather than a
@@ -3946,8 +3946,8 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("compound_literal_struct_field.c", 0),
     ("strtof_parses_float.c", 0),
     ("snprintf_truncation_c99.c", 0),
-    // Runtime CRT shim: POSIX setenv overwrite semantics over msvcrt's
-    // 2-parameter _putenv_s.
+    // POSIX setenv overwrite semantics, from the program's own setenv over
+    // msvcrt's 2-parameter _putenv_s: the headers declare none.
     ("setenv_overwrite.c", 0),
     // strchrnul / memrchr / explicit_bzero / strndup: msvcrt exports
     // none of them, so this lane runs `libc/lib/string_ext.c`.

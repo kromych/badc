@@ -1195,30 +1195,37 @@ fn environ_data_binding_records_copy_relocation() {
     );
 }
 
-/// POSIX `setenv` carries a third `overwrite` argument that msvcrt's
-/// 2-parameter `_putenv_s` lacks, so `<stdlib.h>` defines `setenv` as
-/// an inline wrapper that probes `getenv` before calling `_putenv_s`,
-/// honoring the flag. The wrapper compiles in place -- the object
-/// imports `_putenv_s` and carries no undefined `setenv` symbol -- and
-/// the same definition serves the interpreter and JIT paths.
+/// The Windows headers declare `setenv`, `unsetenv` and `realpath` no more
+/// than mingw-w64's do, and declare its one-argument `mkdir`, so a program's
+/// own Windows fallbacks -- a `static void setenv`, a `static char *realpath`
+/// over `_fullpath` -- compile there and a `mkdir(path)` calls the CRT's. The
+/// same fallback is a conflicting redeclaration where the headers declare
+/// POSIX's.
 #[test]
-fn setenv_inline_wrapper_imports_putenv_s_on_windows() {
-    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
-    let program = Compiler::with_target(
-        "#include <stdlib.h>\nint main(void){ setenv(\"K\", \"V\", 0); return 0; }".to_string(),
-        Target::WindowsX64,
-    )
-    .compile()
-    .expect("compile setenv TU for WindowsX64");
-    let opts = NativeOptions {
-        output_kind: OutputKind::Relocatable,
-        ..NativeOptions::default()
-    };
-    let obj = emit_native_with_options(&program, Target::WindowsX64, opts).expect("emit");
-    let contains = |needle: &[u8]| obj.windows(needle.len()).any(|w| w == needle);
+fn windows_headers_leave_posix_fallbacks_to_the_program() {
+    use crate::{Compiler, Target};
+    const SRC: &str = "#include <limits.h>\n#include <stdlib.h>\n#include <unistd.h>\n\
+        static void setenv(const char *name, const char *value, int overwrite)\n\
+        { if (overwrite || !getenv(name)) _putenv_s(name, value); }\n\
+        static int unsetenv(const char *name) { return _putenv_s(name, \"\"); }\n\
+        static char *realpath(const char *path, char *buf)\n\
+        { return _fullpath(buf, path, PATH_MAX); }\n\
+        int main(void) { char b[PATH_MAX]; setenv(\"K\", \"V\", 0);\n\
+          return unsetenv(\"K\") + mkdir(realpath(\".\", b)); }\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        if let Err(e) = Compiler::with_target(SRC.to_string(), target).compile() {
+            panic!("{target:?}: {e}");
+        }
+    }
+    let posix = "#include <stdlib.h>\n\
+        static void setenv(const char *name, const char *value, int overwrite) {}\n\
+        int main(void) { return 0; }\n";
+    let err = Compiler::with_target(posix.to_string(), Target::LinuxX64)
+        .compile()
+        .expect_err("POSIX <stdlib.h> declares setenv");
     assert!(
-        contains(b"_putenv_s"),
-        "the inline setenv wrapper must import _putenv_s"
+        alloc::format!("{err}").contains("conflicting types for `setenv`"),
+        "{err}"
     );
 }
 

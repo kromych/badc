@@ -153,8 +153,9 @@ FIXTURE_SKIP_COMPILERS: dict[str, set[str]] = {
     "quickjs_bench.c": {"tcc", "cl"},
 }
 # The same, on Windows only.
-# TODO(#1382): badc builds quickjs_bench on Windows once its <stdlib.h> no
-# longer declares a setenv that conflicts with quickjs-libc.c's own.
+# TODO(#1428): badc builds quickjs_bench on Windows once POSIX threads are
+# defined there; the fixture takes pthread mutexes, condition variables
+# and threads.
 WINDOWS_FIXTURE_SKIP_COMPILERS: dict[str, set[str]] = {
     "quickjs_bench.c": {"badc"},
 }

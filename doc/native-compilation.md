@@ -177,6 +177,18 @@ symbol binds through it: it is how a program names a library it reaches only by
 runtime lookup, such as a framework whose initializer has to run before
 `dlsym` or `objc_getClass` resolves a name.
 
+On the Windows targets, whose C runtime is `msvcrt.dll` as in mingw-w64's
+default configuration, a bundled header declares the names mingw-w64's header
+of the same name declares. A declaration resolves either through a binding to
+a system DLL or to a definition in `libc/lib/`, which the link joins as it
+would an archive member. A name mingw-w64 leaves undeclared stays undeclared,
+so a program's own Windows fallback for it compiles under badc as under
+mingw-w64. `setenv` is one such name.
+TODO(#1428): `<pthread.h>` declares POSIX threads on Windows, which nothing
+there defines yet.
+TODO(#1441): `<unistd.h>`, `<stdlib.h>` and other POSIX headers still
+declare names on Windows that have no definition there.
+
 ### Source-driven build flags via `#pragma`
 
 badc uses `#pragma`s to lighten the command line. Dylib bindings, exports,

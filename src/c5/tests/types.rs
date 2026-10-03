@@ -1530,6 +1530,40 @@ fn vector_type_alignment_follows_the_target_abi() {
     }
 }
 
+/// `vector_size` among a member's declaration specifiers makes the member a
+/// vector, through a pointer declarator too; after the declarator it types
+/// the member itself. Neither reaches the typedef or object the aggregate
+/// declares. The values are clang 21's on x86-64 and AArch64.
+#[test]
+fn member_vector_size_attribute_types_the_member() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    let decls = "struct M { float __attribute__((vector_size(16))) *p;\n\
+                   float __attribute__((vector_size(16))) a[2]; };\n\
+                 struct N { float v __attribute__((vector_size(8))); char c; };\n\
+                 typedef struct { float __attribute__((vector_size(4))) v; } T;\n\
+                 struct { int i; float __attribute__((vector_size(8))) v; } o;\n";
+    let cases: &[(&str, i64)] = &[
+        ("sizeof(struct M)", 48),
+        ("sizeof(*((struct M *)0)->p)", 16),
+        ("sizeof(((struct M *)0)->a)", 32),
+        ("sizeof(struct N)", 16),
+        ("_Alignof(struct N)", 8),
+        ("sizeof(T) * 10 + sizeof(((T *)0)->v)", 44),
+        ("sizeof(o) * 10 + sizeof(o.v)", 168),
+        ("((T){ { 7.0f } }).v[0]", 7),
+    ];
+    for t in [Target::LinuxX64, Target::LinuxAarch64] {
+        for &(expr, want) in cases {
+            let src = alloc::format!("{decls}int main(void) {{ return (int)({expr}); }}");
+            let program = Compiler::with_target(src, t)
+                .compile()
+                .unwrap_or_else(|e| panic!("{t:?} `{expr}`: {e}"));
+            assert_eq!(Vm::new(program).run().unwrap(), want, "{t:?}: {expr}");
+        }
+    }
+}
+
 /// Whether an unnamed bit-field's declared type raises the aggregate's
 /// alignment is the ABI's (C99 6.7.2.1p11): AAPCS64 counts it, the x86_64
 /// psABI and Apple's arm64 ABI do not. The values are gcc 16's on Linux

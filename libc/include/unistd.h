@@ -152,7 +152,6 @@
 #pragma binding(libc::getentropy, "_getentropy")
 #pragma binding(libc::getrusage, "_getrusage")
 #pragma binding(libc::flock,     "_flock")
-#pragma binding(libc::nanosleep, "_nanosleep")
 #pragma binding(libc::getenv,    "_getenv")
 #pragma binding(libc::setenv,    "_setenv")
 #pragma binding(libc::unsetenv,  "_unsetenv")
@@ -309,7 +308,6 @@ extern char **environ;
 #pragma binding(libc::getentropy, "getentropy")
 #pragma binding(libc::getrusage, "getrusage")
 #pragma binding(libc::flock,     "flock")
-#pragma binding(libc::nanosleep, "nanosleep")
 #pragma binding(libc::getenv,    "getenv")
 #pragma binding(libc::setenv,    "setenv")
 #pragma binding(libc::unsetenv,  "unsetenv")
@@ -579,7 +577,6 @@ int getdtablesize(void);
 char *crypt(char *key, char *salt);
 int getrusage(int who, char *usage);
 int flock(int fd, int operation);
-int nanosleep(const struct timespec *req, struct timespec *rem);
 char *getenv(const char *name);
 #ifdef __APPLE__
 // libSystem accessor for the per-process environ slot. Returns a

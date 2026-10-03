@@ -2355,6 +2355,8 @@ LSTATUS RegSetValueExW(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved, DWORD dwT
 #pragma binding(kernel32::GetConsoleWindow,        "GetConsoleWindow")
 #pragma binding(kernel32::GetSystemTimePreciseAsFileTime, "GetSystemTimePreciseAsFileTime")
 #pragma binding(kernel32::QueryPerformanceFrequency, "QueryPerformanceFrequency")
+#pragma binding(kernel32::GetSystemTimeAdjustment, "GetSystemTimeAdjustment")
+#pragma binding(kernel32::SetSystemTime,           "SetSystemTime")
 #pragma binding(kernel32::GetTickCount64,          "GetTickCount64")
 #pragma binding(kernel32::SwitchToThread,          "SwitchToThread")
 #pragma binding(kernel32::SleepEx,                 "SleepEx")
@@ -2670,6 +2672,9 @@ DWORD GetConsoleProcessList(LPDWORD lpdwProcessList, DWORD dwProcessCount);
 HWND GetConsoleWindow(VOID);
 VOID GetSystemTimePreciseAsFileTime(LPFILETIME lpSystemTimeAsFileTime);
 BOOL QueryPerformanceFrequency(LARGE_INTEGER *lpFrequency);
+BOOL GetSystemTimeAdjustment(PDWORD lpTimeAdjustment, PDWORD lpTimeIncrement,
+                             PBOOL lpTimeAdjustmentDisabled);
+BOOL SetSystemTime(const SYSTEMTIME *lpSystemTime);
 ULONGLONG GetTickCount64(VOID);
 BOOL SwitchToThread(VOID);
 DWORD SleepEx(DWORD dwMilliseconds, BOOL bAlertable);

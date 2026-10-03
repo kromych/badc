@@ -7494,6 +7494,25 @@ fn zero_width_bitfields_cross_the_system_compiler_boundary() {
     );
 }
 
+/// The POSIX clocks fixture, built by the badc binary for the host and run
+/// there at -O0 and -O. The binary prepends no headers, so the fixture's
+/// `_POSIX_C_SOURCE` precedes its first include, as a program's does: on
+/// Windows that declares the reentrant conversions it also checks.
+#[test]
+fn posix_clocks_run_through_the_driver() {
+    let dir = tempdir("posix-clocks");
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/c/posix_clocks.c");
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("clocks{opt}{}", std::env::consts::EXE_SUFFIX));
+        run(
+            Command::new(badc()).arg(opt).arg("-o").arg(&exe).arg(&src),
+            "build posix_clocks.c",
+        );
+        let out = Command::new(&exe).output().expect("run posix_clocks");
+        assert_eq!(out.status.code(), Some(0), "posix_clocks {opt}");
+    }
+}
+
 // A packed bit-field starts at the next bit even where its bits reach a 9th
 // or a 17th byte, under `packed` and `#pragma pack`: the layout, a returned
 // aggregate and the fields read and written across the boundary agree with

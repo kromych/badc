@@ -16,16 +16,14 @@
 
 // Per-target clockid_t values. POSIX leaves the integer assignments
 // implementation-defined and every libc picks its own; the constants
-// here must match what the host's `clock_gettime` accepts at runtime,
+// here must match what the target's `clock_gettime` accepts at runtime,
 // otherwise the call returns -1 with errno = EINVAL and the timespec
 // is left untouched.
 //
 //   * Linux / musl: REALTIME=0, MONOTONIC=1 (linux/time.h).
 //   * Apple libSystem:   REALTIME=0, MONOTONIC=6 (sys/_types/_clockid_t.h).
-//   * Windows: no POSIX `clock_gettime` -- the time.h surface routes
-//     through a c5-side shim that internally calls
-//     `QueryPerformanceCounter`, so the constant value is opaque to
-//     the host and only needs to be self-consistent within c5.
+//   * Windows: mingw-w64's numbering, REALTIME=0, MONOTONIC=1
+//     (pthread_time.h); libc/lib/time_ext.c defines the clocks.
 #ifdef __APPLE__
 #define CLOCK_REALTIME  0
 #define CLOCK_MONOTONIC 6
@@ -39,9 +37,14 @@
 #define CLOCK_PROCESS_CPUTIME_ID 2
 #define CLOCK_THREAD_CPUTIME_ID  3
 #endif
+#ifdef _WIN32
+// The system time at the scheduler tick's granularity (mingw-w64).
+#define CLOCK_REALTIME_COARSE 4
+#else
 // Raw hardware monotonic clock, unadjusted by NTP slewing. Same id on
 // macOS and Linux.
 #define CLOCK_MONOTONIC_RAW 4
+#endif
 // `clock_nanosleep` / `timer_settime` flag: the supplied time is
 // absolute, not a relative interval. Same value on every target.
 #define TIMER_ABSTIME 1
@@ -95,7 +98,8 @@ struct timeval {
 // reads the fields back, so the BSD extension members must sit at the
 // host's offsets. On macOS and Linux `tm_gmtoff` is a `long` (8 bytes,
 // 8-aligned), which places `tm_zone` at offset 48; an `int tm_gmtoff`
-// would put `tm_zone` at offset 40 and read a garbage pointer.
+// would put `tm_zone` at offset 40 and read a garbage pointer. msvcrt's
+// has the nine C99 members alone.
 struct tm {
     int tm_sec;
     int tm_min;
@@ -106,8 +110,10 @@ struct tm {
     int tm_wday;
     int tm_yday;
     int tm_isdst;
+#ifndef _WIN32
     long tm_gmtoff;
     char *tm_zone;
+#endif
 };
 
 // `time_t` and `clock_t` are 8-byte signed counts everywhere
@@ -134,6 +140,7 @@ typedef long clock_t;
 #pragma binding(libc::clock_gettime, "_clock_gettime")
 #pragma binding(libc::clock_settime, "_clock_settime")
 #pragma binding(libc::clock_getres,  "_clock_getres")
+#pragma binding(libc::nanosleep,     "_nanosleep")
 // libSystem exports no clock_nanosleep; unbound so a use fails at link.
 #pragma binding(libc::gettimeofday,  "_gettimeofday")
 #pragma binding(libc::difftime,      "_difftime")
@@ -162,6 +169,7 @@ typedef long clock_t;
 #pragma binding(libc::clock_settime, "clock_settime")
 #pragma binding(libc::clock_getres,  "clock_getres")
 #pragma binding(libc::clock_nanosleep, "clock_nanosleep")
+#pragma binding(libc::nanosleep,     "nanosleep")
 #pragma binding(libc::timer_create,  "timer_create")
 #pragma binding(libc::timer_delete,  "timer_delete")
 #pragma binding(libc::timer_settime, "timer_settime")
@@ -205,10 +213,19 @@ typedef long clock_t;
 #pragma binding(data msvcrt::tzname,   "_tzname")
 #pragma binding(data msvcrt::timezone, "_timezone")
 #pragma binding(data msvcrt::daylight, "_daylight")
-// Windows doesn't ship POSIX `clock_gettime` / `gettimeofday`. SQLite
-// has its own Win32-specific code path that calls
-// `GetSystemTimeAsFileTime`; programs that want a portable shape
-// either #ifdef _WIN32 themselves or use the kernel32 surface.
+// msvcrt has none of the POSIX clocks, nanosleep or gettimeofday, which
+// mingw-w64 declares here; libc/lib/time_ext.c defines them over
+// kernel32. The reentrant localtime_r / gmtime_r / ctime_r are declared,
+// as there, under `_POSIX_C_SOURCE` alone.
+#if defined(_POSIX_C_SOURCE) && !defined(_POSIX_THREAD_SAFE_FUNCTIONS)
+#define _POSIX_THREAD_SAFE_FUNCTIONS 200112L
+#endif
+#endif
+
+// POSIX: <time.h> defines clockid_t, as <sys/types.h> does.
+#ifndef __BADC_CLOCKID_T
+#define __BADC_CLOCKID_T
+typedef int clockid_t;
 #endif
 
 // C99 7.23.2: time / clock / mktime return time_t / clock_t, which are
@@ -220,14 +237,17 @@ typedef long clock_t;
 // 64-bit object, not an int.
 time_t time(time_t *out);
 clock_t clock(void);
-int clock_gettime(int clk_id, struct timespec *ts);
+int clock_gettime(clockid_t clk_id, struct timespec *ts);
 // Suspend until `request` (relative, or absolute under TIMER_ABSTIME);
 // `remain` receives the unslept interval on EINTR.
-int clock_nanosleep(int clk_id, int flags, struct timespec *request,
+int clock_nanosleep(clockid_t clk_id, int flags, const struct timespec *request,
                     struct timespec *remain);
-int clock_settime(int clk_id, const struct timespec *ts);
-int clock_getres(int clk_id, struct timespec *res);
-int gettimeofday(struct timeval *tv, char *tz);
+int clock_settime(clockid_t clk_id, const struct timespec *ts);
+int clock_getres(clockid_t clk_id, struct timespec *res);
+int nanosleep(const struct timespec *req, struct timespec *rem);
+// The zone argument is obsolete; glibc, libSystem and mingw-w64 all
+// spell it `void *`.
+int gettimeofday(struct timeval *restrict tv, void *restrict tz);
 double difftime(time_t t1, time_t t0);
 // C99 7.23.2.3: convert broken-down time to a `time_t`. The
 // caller's `struct tm` is updated in place (tm_wday / tm_yday and
@@ -235,12 +255,14 @@ double difftime(time_t t1, time_t t0);
 // count or (time_t)-1 on failure.
 time_t mktime(struct tm *tm);
 struct tm *localtime(const time_t *t);
-struct tm *localtime_r(const time_t *t, struct tm *result);
 struct tm *gmtime(const time_t *t);
+#if !defined(_WIN32) || defined(_POSIX_THREAD_SAFE_FUNCTIONS)
+struct tm *localtime_r(const time_t *t, struct tm *result);
 struct tm *gmtime_r(const time_t *t, struct tm *result);
 // POSIX `ctime_r` -- 26-byte timestamp string written into the
 // caller's buffer; returns the buffer pointer or NULL on error.
 char *ctime_r(const time_t *t, char *buf);
+#endif
 // C89 7.12.3.2: static 26-byte timestamp string; not reentrant.
 char *ctime(const time_t *t);
 size_t strftime(char *buf, size_t max, const char *fmt, const struct tm *tm);

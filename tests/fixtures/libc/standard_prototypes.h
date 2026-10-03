@@ -254,9 +254,15 @@ size_t strftime(char *restrict s, size_t maxsize, const char *restrict format,
 #ifndef _WIN32
 struct tm *localtime_r(const time_t *restrict timer, struct tm *restrict result);
 struct tm *gmtime_r(const time_t *restrict timer, struct tm *restrict result);
-int clock_gettime(clockid_t clock_id, struct timespec *tp);
-int nanosleep(const struct timespec *rqtp, struct timespec *rmtp);
 #endif
+/* POSIX <time.h> and <sys/time.h>, which mingw-w64 declares on Windows. */
+int clock_gettime(clockid_t clock_id, struct timespec *tp);
+int clock_getres(clockid_t clock_id, struct timespec *res);
+int clock_settime(clockid_t clock_id, const struct timespec *tp);
+int clock_nanosleep(clockid_t clock_id, int flags, const struct timespec *rqtp,
+                    struct timespec *rmtp);
+int nanosleep(const struct timespec *rqtp, struct timespec *rmtp);
+int gettimeofday(struct timeval *restrict tp, void *restrict tzp);
 
 /* C99 7.24 <wchar.h> */
 size_t wcslen(const wchar_t *s);

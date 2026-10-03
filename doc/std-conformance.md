@@ -407,11 +407,17 @@ registers under either compiler.
   `malloc_usable_size` and `sighandler_t` on Linux. The Windows targets
   carry `_fseeki64` / `_ftelli64` in their place, as their C library
   does.
-- On the Windows targets, `<dirent.h>` is mingw-w64's: `opendir` /
-  `readdir` / `closedir` / `rewinddir` / `telldir` / `seekdir` over
-  kernel32's file search, with its `struct dirent` (`d_name`, `d_namlen`).
-  Under msvc_compat.h's `_MSC_VER` the header declares nothing, as cl
-  ships none.
+- On the Windows targets, the POSIX names mingw-w64 declares and msvcrt
+  does not define are defined over kernel32 by sources in `libc/lib/`: the
+  clocks `clock_gettime` / `clock_getres` / `clock_settime` /
+  `clock_nanosleep` with mingw-w64's clock ids, `nanosleep`,
+  `gettimeofday`, `localtime_r` / `gmtime_r` / `ctime_r` under
+  `_POSIX_C_SOURCE`, and `dlopen` / `dlsym` / `dlclose` / `dlerror`.
+  `<dirent.h>` is mingw-w64's: `opendir` / `readdir` / `closedir` /
+  `rewinddir` / `telldir` / `seekdir` over kernel32's file search, with its
+  `struct dirent` (`d_name`, `d_namlen`); under msvc_compat.h's `_MSC_VER`
+  it declares nothing, as cl ships none. `native-compilation.md` states the
+  rule the Windows headers follow.
 
 ### GCC
 

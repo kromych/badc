@@ -7766,12 +7766,42 @@ fn cpu_time_clocks_follow_each_platform_libc() {
         assert!(header_snippet_compiles(gnu, target), "{target:?}");
         assert!(!header_snippet_compiles(apple, target), "{target:?}");
     }
-    // The three ids that were already defined keep their values.
+    // The three ids that were already defined keep their values. Id 4 is
+    // the raw monotonic clock on macOS and Linux, and on Windows the coarse
+    // realtime clock, as mingw-w64 numbers it.
     let common = "#include <time.h>\n\
-        int ck[(CLOCK_REALTIME==0 && CLOCK_MONOTONIC_RAW==4 \
+        int ck[(CLOCK_REALTIME==0 \
              && CLOCK_PROCESS_CPUTIME_ID!=CLOCK_THREAD_CPUTIME_ID)?1:-1];\n";
+    let raw = "#include <time.h>\nint ck[CLOCK_MONOTONIC_RAW==4?1:-1];\n";
+    let coarse = "#include <time.h>\nint ck[CLOCK_REALTIME_COARSE==4?1:-1];\n";
     for target in ALL_TARGETS {
         assert!(header_snippet_compiles(common, target), "{target:?}");
+        let windows = matches!(target, Target::WindowsX64 | Target::WindowsAarch64);
+        assert_eq!(header_snippet_compiles(raw, target), !windows, "{target:?}");
+        assert_eq!(
+            header_snippet_compiles(coarse, target),
+            windows,
+            "{target:?}"
+        );
+    }
+}
+
+#[test]
+fn reentrant_time_conversions_follow_posix_c_source_on_windows() {
+    use crate::Target;
+    // mingw-w64's <time.h> declares localtime_r, gmtime_r and ctime_r only
+    // when _POSIX_C_SOURCE precedes it, so without it the names are the
+    // program's: a definition of another type is no redeclaration there.
+    let posix = "#define _POSIX_C_SOURCE 200809L\n#include <time.h>\n\
+        void f(time_t t) { struct tm a; char s[26]; gmtime_r(&t, &a);\n\
+          localtime_r(&t, &a); ctime_r(&t, s); }\n";
+    let own = "#include <time.h>\n\
+        static int localtime_r(void) { return 0; }\n\
+        int f(void) { return localtime_r(); }\n";
+    for target in ALL_TARGETS {
+        assert!(header_snippet_compiles(posix, target), "{target:?}");
+        let windows = matches!(target, Target::WindowsX64 | Target::WindowsAarch64);
+        assert_eq!(header_snippet_compiles(own, target), windows, "{target:?}");
     }
 }
 

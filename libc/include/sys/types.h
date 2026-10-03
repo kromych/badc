@@ -116,7 +116,10 @@ typedef unsigned int id_t;
 typedef unsigned int useconds_t;
 #endif
 typedef int suseconds_t;
+#ifndef __BADC_CLOCKID_T
+#define __BADC_CLOCKID_T
 typedef int clockid_t;
+#endif
 typedef int timer_id_t;
 #ifdef __BADC_WINDOWS__
 typedef long long fsblkcnt_t;

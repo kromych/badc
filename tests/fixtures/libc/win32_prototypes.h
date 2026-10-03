@@ -508,6 +508,9 @@ DWORD GetConsoleProcessList(LPDWORD lpdwProcessList, DWORD dwProcessCount);
 HWND GetConsoleWindow(VOID);
 VOID GetSystemTimePreciseAsFileTime(LPFILETIME lpSystemTimeAsFileTime);
 BOOL QueryPerformanceFrequency(LARGE_INTEGER *lpFrequency);
+BOOL GetSystemTimeAdjustment(PDWORD lpTimeAdjustment, PDWORD lpTimeIncrement,
+                             PBOOL lpTimeAdjustmentDisabled);
+BOOL SetSystemTime(const SYSTEMTIME *lpSystemTime);
 ULONGLONG GetTickCount64(VOID);
 BOOL SwitchToThread(VOID);
 DWORD SleepEx(DWORD dwMilliseconds, BOOL bAlertable);

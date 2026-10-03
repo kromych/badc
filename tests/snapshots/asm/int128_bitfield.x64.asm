@@ -651,9 +651,47 @@ Disassembly of section .text:
                	je	<addr>
                	leave
                	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movl	0x1(%rax), %ecx
+               	movzbq	0x5(%rax), %rax
+               	shlq	$0x20, %rax
+               	orq	%rcx, %rax
+               	shlq	$0x18, %rax
+               	sarq	$0x18, %rax
+               	movq	%rax, %rcx
+               	sarq	$0x3f, %rcx
+               	cmpq	$-0x3, %rax
+               	je	<addr>
+               	movl	$0x79, %eax
+               	testq	%rax, %rax
+               	je	<addr>
+               	leave
+               	retq
+               	leaq	-0x8(%rbp), %rax
+               	leaq	<rip>, %rcx
+               	movl	(%rcx), %r10d
+               	movl	%r10d, (%rax)
+               	movzwq	0x4(%rcx), %r10
+               	movw	%r10w, 0x4(%rax)
+               	movzbq	0x6(%rcx), %r10
+               	movb	%r10b, 0x6(%rax)
+               	movl	$0xffffffff, 0x1(%rax)  # imm = 0xFFFFFFFF
+               	movb	$0x7f, 0x5(%rax)
+               	movl	$0x0, 0x1(%rax)
+               	movb	$-0x80, 0x5(%rax)
+               	movl	$0x1, 0x1(%rax)
+               	movb	$-0x80, 0x5(%rax)
+               	movl	$0xfffffffe, 0x1(%rax)  # imm = 0xFFFFFFFE
+               	movb	$-0x1, 0x5(%rax)
                	xorl	%eax, %eax
                	leave
                	retq
+               	cmpl	$-0x1, %ecx
+               	je	<addr>
+               	movl	$0x7a, %eax
+               	jmp	<addr>
+               	xorl	%eax, %eax
+               	jmp	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>
                	movl	$0x6e, %eax

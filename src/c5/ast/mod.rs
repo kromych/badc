@@ -229,13 +229,6 @@ impl BitfieldDesc {
     pub(crate) fn is_wide_unit(&self) -> bool {
         self.unit_size > 8
     }
-
-    /// True when the access yields a 128-bit value: the field is stored
-    /// in a unit wider than 8 bytes and is too wide for the integer
-    /// promotions to narrow it (see [`bitfield_keeps_declared_ty`]).
-    pub(crate) fn is_wide_value(&self) -> bool {
-        self.is_wide_unit() && bitfield_keeps_declared_ty(self.bit_width as u32)
-    }
 }
 
 /// True when a bitfield of `width` keeps its declared type under the

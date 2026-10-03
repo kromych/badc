@@ -645,10 +645,59 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldur	w1, [x0, #0x1]
+               	ldrb	w0, [x0, #0x5]
+               	lsl	x0, x0, #32
+               	orr	x0, x1, x0
+               	lsl	x0, x0, #24
+               	asr	x0, x0, #24
+               	asr	x1, x0, #63
+               	mov	x17, #-0x3              // =-3
+               	cmp	x0, x17
+               	b.eq	<addr>
+               	mov	x0, #0x79               // =121
+               	cbz	x0, <addr>
+               	add	sp, sp, #0x20
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+               	sub	x0, x29, #0x8
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	w16, [x1]
+               	str	w16, [x0]
+               	ldrh	w16, [x1, #0x4]
+               	strh	w16, [x0, #0x4]
+               	ldrb	w16, [x1, #0x6]
+               	strb	w16, [x0, #0x6]
+               	mov	x1, #0x7fffffffff       // =549755813887
+               	stur	w1, [x0, #0x1]
+               	mov	x1, #0x7f               // =127
+               	strb	w1, [x0, #0x5]
+               	mov	x1, #0x8000000000       // =549755813888
+               	stur	w1, [x0, #0x1]
+               	mov	x1, #0x80               // =128
+               	strb	w1, [x0, #0x5]
+               	mov	x2, #0x1                // =1
+               	movk	x2, #0x80, lsl #32
+               	stur	w2, [x0, #0x1]
+               	strb	w1, [x0, #0x5]
+               	mov	x1, #0xfffffffffe       // =1099511627774
+               	stur	w1, [x0, #0x1]
+               	mov	x1, #0xff               // =255
+               	strb	w1, [x0, #0x5]
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x17, #-0x1              // =-1
+               	cmp	w1, w17
+               	b.eq	<addr>
+               	mov	x0, #0x7a               // =122
+               	b	<addr>
+               	mov	x0, #0x0                // =0
+               	b	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
                	mov	x0, #0x6e               // =110

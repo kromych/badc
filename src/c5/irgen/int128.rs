@@ -2,7 +2,7 @@
 //! the arithmetic, the shifts, the division and the conversions are
 //! built from 64-bit operations.
 
-use super::bitfield::bitfield_mask_halves;
+use super::bitfield::{bitfield_mask_halves, extract_halves, insert_halves, sign_extend_halves};
 use super::types::{is_bool_scalar, is_float_ty, is_floating_scalar};
 use super::*;
 use crate::c5::ast::expr_ty;
@@ -864,15 +864,15 @@ impl<'a> Walker<'a> {
             });
         }
         // A bitfield target reads and writes its slice of the storage
-        // unit rather than the whole 16 bytes.
-        if let Some((unit, bf)) = self.wide_bitfield_place(b, lvalue)? {
+        // unit, whatever that unit's width.
+        if let Some((unit, bf, align)) = self.bitfield_place(b, lvalue)? {
             let vol = self.expr_is_volatile(lvalue);
-            let old = self.bitfield_extract_128(b, unit, bf, vol);
+            let old = extract_halves(b, unit, bf, AsmSeg::None, vol, align);
             let saved = keep_old.then(|| self.bitfield_value_form(b, bf, old));
             let new = update(self, b, old)?;
             let masked = Self::int128_and_imm(b, new, bitfield_mask_halves(bf.bit_width, 0));
-            self.bitfield_insert_128(b, unit, bf, masked, vol);
-            let stored = self.bitfield_sign_extend_128(b, bf, masked);
+            insert_halves(b, unit, bf, masked, AsmSeg::None, vol, align);
+            let stored = sign_extend_halves(b, bf, masked);
             let stored = self.bitfield_value_form(b, bf, stored);
             return Ok(saved.unwrap_or(stored));
         }

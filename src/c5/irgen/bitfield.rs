@@ -6,7 +6,7 @@ use super::access::{
 };
 use super::types::{is_bool_scalar, is_floating_scalar};
 use super::*;
-use crate::c5::ast::expr_ty;
+use crate::c5::ast::{bitfield_keeps_declared_ty, expr_ty};
 
 impl<'a> Walker<'a> {
     /// [`Self::access_seg`] for a bitfield's storage unit. A 16-byte
@@ -28,10 +28,17 @@ impl<'a> Walker<'a> {
         Ok(seg)
     }
 
+    /// True when the bitfield's value is a 128-bit integer: an `__int128`
+    /// field the integer promotions leave at its declared type (C99
+    /// 6.3.1.1p2), in a storage unit of any width.
+    pub(super) fn bitfield_is_int128(&self, bf: BitfieldDesc) -> bool {
+        bitfield_keeps_declared_ty(bf.bit_width as u32) && self.is_int128_value_ty(bf.ty)
+    }
+
     /// Read the bitfield at `addr` as a value of its declared type (C99
-    /// 6.7.2.1p10: a signed field sign-extends from its width). A
-    /// 16-byte unit yields the address of a fresh 128-bit temporary,
-    /// the form a 128-bit value takes everywhere else.
+    /// 6.7.2.1p10: a signed field sign-extends from its width). A 128-bit
+    /// value yields the address of a fresh 128-bit temporary, the form a
+    /// 128-bit value takes everywhere else.
     pub(super) fn load_from_bitfield(
         &mut self,
         b: &mut SsaBuilder,
@@ -41,9 +48,9 @@ impl<'a> Walker<'a> {
         vol: bool,
         align: u8,
     ) -> ValueId {
-        if bf.is_wide_unit() {
-            let v = self.bitfield_extract_128(b, addr, bf, vol);
-            return self.bitfield_value_form(b, bf, v);
+        if self.bitfield_is_int128(bf) {
+            let v = extract_halves(b, addr, bf, seg, vol, align);
+            return self.int128_materialize(b, v);
         }
         extract_bitfield(b, addr, bf, seg, vol, align)
     }
@@ -53,7 +60,7 @@ impl<'a> Walker<'a> {
     /// slice, shift + mask the value into place, OR, and store back.
     /// Returns the assignment's value per C99 6.5.16p3 -- the stored
     /// field converted to its declared type, not the storage word. A
-    /// 16-byte unit takes and returns a 128-bit object's address.
+    /// 128-bit value is taken and returned as a 128-bit object's address.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn store_into_bitfield(
         &mut self,
@@ -65,19 +72,14 @@ impl<'a> Walker<'a> {
         vol: bool,
         align: u8,
     ) -> ValueId {
-        let w = bf.bit_width as i64;
-        let (mask_lo, mask_hi) = bitfield_mask_halves(bf.bit_width, 0);
-        if bf.is_wide_unit() {
-            let src = if bf.is_wide_value() {
-                self.int128_load_vol(b, value, false)
-            } else {
-                (value, b.imm(0))
-            };
-            let masked = Self::int128_and_imm(b, src, (mask_lo, mask_hi));
-            self.bitfield_insert_128(b, addr, bf, masked, vol);
-            let out = self.bitfield_sign_extend_128(b, bf, masked);
-            return self.bitfield_value_form(b, bf, out);
+        if self.bitfield_is_int128(bf) {
+            let src = self.int128_load_vol(b, value, false);
+            let masked = Self::int128_and_imm(b, src, bitfield_mask_halves(bf.bit_width, 0));
+            insert_halves(b, addr, bf, masked, seg, vol, align);
+            let out = sign_extend_halves(b, bf, masked);
+            return self.int128_materialize(b, out);
         }
+        let w = bf.bit_width as i64;
         let masked = merge_into_bitfield(b, addr, bf, value, seg, vol, align);
         if bf.signed && w < 64 {
             let up = b.binop_imm(BinOp::Shl, masked, 64 - w);
@@ -97,7 +99,7 @@ impl<'a> Walker<'a> {
         bf: BitfieldDesc,
         rhs: ExprId,
     ) -> Result<ValueId, WalkError> {
-        if bf.is_wide_value() {
+        if self.bitfield_is_int128(bf) {
             let pair = self.int128_operand(b, rhs)?;
             return Ok(self.int128_materialize(b, pair));
         }
@@ -125,92 +127,16 @@ impl<'a> Walker<'a> {
         })
     }
 
-    /// The field's bits, right-aligned in a 128-bit storage unit and
-    /// converted to its declared type (C99 6.7.2.1p10 sign extension).
-    pub(super) fn bitfield_extract_128(
-        &mut self,
-        b: &mut SsaBuilder,
-        addr: ValueId,
-        bf: BitfieldDesc,
-        vol: bool,
-    ) -> Halves {
-        let unit = self.load_wide_unit(b, addr, bf, vol);
-        let v = Self::int128_shift_const(b, BinOp::Shru, unit, bf.bit_offset as i64);
-        let v = Self::int128_and_imm(b, v, bitfield_mask_halves(bf.bit_width, 0));
-        self.bitfield_sign_extend_128(b, bf, v)
-    }
-
-    /// Merge a right-aligned, already width-masked value into the
-    /// field's slice of its 128-bit storage unit.
-    pub(super) fn bitfield_insert_128(
-        &mut self,
-        b: &mut SsaBuilder,
-        addr: ValueId,
-        bf: BitfieldDesc,
-        masked: Halves,
-        vol: bool,
-    ) {
-        let placed = Self::int128_shift_const(b, BinOp::Shl, masked, bf.bit_offset as i64);
-        let (keep_lo, keep_hi) = bitfield_mask_halves(bf.bit_width, bf.bit_offset);
-        let old = self.load_wide_unit(b, addr, bf, vol);
-        let cleared = Self::int128_and_imm(b, old, (!keep_lo, !keep_hi));
-        let merged = (
-            b.binop(BinOp::Or, cleared.0, placed.0),
-            b.binop(BinOp::Or, cleared.1, placed.1),
-        );
-        if bf.unit_size == 16 {
-            self.int128_store_vol(b, addr, merged, vol);
-        } else {
-            store_bytes(b, addr, 0, merged.0, 8, AsmSeg::None, vol, 0);
-            store_bytes(b, addr, 8, merged.1, bf.unit_size - 8, AsmSeg::None, vol, 0);
-        }
-    }
-
-    /// A storage unit wider than 8 bytes as its two halves: the 16 bytes
-    /// of a whole unit, or the low 8 and the 1 to 7 above them of a packed
-    /// field's unit, which no access reaches past (C99 6.7.2.1p11).
-    fn load_wide_unit(
-        &mut self,
-        b: &mut SsaBuilder,
-        addr: ValueId,
-        bf: BitfieldDesc,
-        vol: bool,
-    ) -> Halves {
-        if bf.unit_size == 16 {
-            return self.int128_load_vol(b, addr, vol);
-        }
-        (
-            load_bytes(b, addr, 0, 8, AsmSeg::None, vol, 0),
-            load_bytes(b, addr, 8, bf.unit_size - 8, AsmSeg::None, vol, 0),
-        )
-    }
-
-    /// Sign-extend a right-aligned signed field's value through all 128
-    /// bits (C99 6.7.2.1p10); an unsigned field is already zero-filled.
-    pub(super) fn bitfield_sign_extend_128(
-        &mut self,
-        b: &mut SsaBuilder,
-        bf: BitfieldDesc,
-        v: Halves,
-    ) -> Halves {
-        let w = bf.bit_width as i64;
-        if !bf.signed || w >= 128 {
-            return v;
-        }
-        let up = Self::int128_shift_const(b, BinOp::Shl, v, 128 - w);
-        Self::int128_shift_const(b, BinOp::Shr, up, 128 - w)
-    }
-
-    /// A 128-bit unit's extracted value in the form the access yields:
-    /// a fresh 128-bit object's address for a 128-bit access, the low
-    /// half for one the integer promotions narrow.
+    /// A field's value extracted as 128 bits in the form the access
+    /// yields: a fresh 128-bit object's address for a 128-bit value, the
+    /// low half for one the integer promotions narrow.
     pub(super) fn bitfield_value_form(
         &mut self,
         b: &mut SsaBuilder,
         bf: BitfieldDesc,
         v: Halves,
     ) -> ValueId {
-        if bf.is_wide_value() {
+        if self.bitfield_is_int128(bf) {
             self.int128_materialize(b, v)
         } else {
             v.0
@@ -238,15 +164,14 @@ impl<'a> Walker<'a> {
         )
     }
 
-    /// The storage-unit address and descriptor when `lvalue` names a
-    /// bitfield in a 16-byte unit, evaluating the object once (C99
-    /// 6.5.16.2p3). Only the 128-bit read-modify-write path calls it; a
-    /// narrower unit stays on the scalar `RmwPlace` path.
-    pub(super) fn wide_bitfield_place(
+    /// The storage-unit address, descriptor and alignment bound when
+    /// `lvalue` names a bitfield, evaluating the object once (C99
+    /// 6.5.16.2p3). The 128-bit read-modify-write calls it.
+    pub(super) fn bitfield_place(
         &mut self,
         b: &mut SsaBuilder,
         lvalue: ExprId,
-    ) -> Result<Option<(ValueId, BitfieldDesc)>, WalkError> {
+    ) -> Result<Option<(ValueId, BitfieldDesc, u8)>, WalkError> {
         let Expr::Member {
             obj,
             field_off,
@@ -257,16 +182,14 @@ impl<'a> Walker<'a> {
             return Ok(None);
         };
         let (bf, obj, field_off) = (*bf, *obj, *field_off);
-        if !bf.is_wide_unit() {
-            return Ok(None);
-        }
         let base = self.walk_expr_rvalue(b, obj)?;
         let addr = if field_off != 0 {
             b.binop_imm(BinOp::Add, base, field_off)
         } else {
             base
         };
-        Ok(Some((addr, bf)))
+        let align = self.member_align(obj, field_off, bf.unit_size as u32);
+        Ok(Some((addr, bf, align)))
     }
 }
 
@@ -274,7 +197,7 @@ impl<'a> Walker<'a> {
 /// storage unit, clear the field's slice, shift the value into place,
 /// OR, and store back. Returns the value the width mask kept,
 /// right-aligned -- the assignment expression's value per C99 6.5.16p3.
-/// Every narrow bitfield store reaches this.
+/// Every bitfield store of a value of at most 64 bits reaches this.
 pub(super) fn merge_into_bitfield(
     b: &mut SsaBuilder,
     addr: ValueId,
@@ -293,6 +216,11 @@ pub(super) fn merge_into_bitfield(
         value
     };
     let masked = b.binop_imm(BinOp::And, value, bitfield_mask_halves(bf.bit_width, 0).0);
+    if bf.is_wide_unit() {
+        let high = b.imm(0);
+        insert_halves(b, addr, bf, (masked, high), seg, vol, align);
+        return masked;
+    }
     let old = load_unit(b, addr, bf, seg, vol, align);
     let cleared = b.binop_imm(
         BinOp::And,
@@ -309,9 +237,8 @@ pub(super) fn merge_into_bitfield(
     masked
 }
 
-/// Read the bitfield at `addr` out of its storage unit of at most 8 bytes:
-/// shift its slice to bit 0, mask, and sign-extend a signed field (C99
-/// 6.7.2.1p10).
+/// Read the bitfield at `addr` as a value of at most 64 bits: shift its
+/// slice to bit 0, mask, and sign-extend a signed field (C99 6.7.2.1p10).
 pub(super) fn extract_bitfield(
     b: &mut SsaBuilder,
     addr: ValueId,
@@ -320,6 +247,9 @@ pub(super) fn extract_bitfield(
     vol: bool,
     align: u8,
 ) -> ValueId {
+    if bf.is_wide_unit() {
+        return extract_halves(b, addr, bf, seg, vol, align).0;
+    }
     let w = bf.bit_width as i64;
     let mut v = load_unit(b, addr, bf, seg, vol, align);
     if bf.bit_offset > 0 {
@@ -331,6 +261,85 @@ pub(super) fn extract_bitfield(
         v = b.binop_imm(BinOp::Shr, v, 64 - w);
     }
     v
+}
+
+/// The bitfield at `addr` as 128 bits, right-aligned and sign-extended
+/// through both halves (C99 6.7.2.1p10), from a unit of any width.
+pub(super) fn extract_halves(
+    b: &mut SsaBuilder,
+    addr: ValueId,
+    bf: BitfieldDesc,
+    seg: AsmSeg,
+    vol: bool,
+    align: u8,
+) -> Halves {
+    if !bf.is_wide_unit() {
+        let low = extract_bitfield(b, addr, bf, seg, vol, align);
+        let high = if bf.signed {
+            b.binop_imm(BinOp::Shr, low, 63)
+        } else {
+            b.imm(0)
+        };
+        return (low, high);
+    }
+    let unit = load_wide_unit(b, addr, bf, seg, vol, align);
+    let v = Walker::int128_shift_const(b, BinOp::Shru, unit, bf.bit_offset as i64);
+    let v = Walker::int128_and_imm(b, v, bitfield_mask_halves(bf.bit_width, 0));
+    sign_extend_halves(b, bf, v)
+}
+
+/// Merge a right-aligned, width-masked 128-bit value into the bitfield at
+/// `addr`, in a unit of any width; a unit of at most 8 bytes holds the
+/// whole field in the low half.
+pub(super) fn insert_halves(
+    b: &mut SsaBuilder,
+    addr: ValueId,
+    bf: BitfieldDesc,
+    masked: Halves,
+    seg: AsmSeg,
+    vol: bool,
+    align: u8,
+) {
+    if !bf.is_wide_unit() {
+        merge_into_bitfield(b, addr, bf, masked.0, seg, vol, align);
+        return;
+    }
+    let placed = Walker::int128_shift_const(b, BinOp::Shl, masked, bf.bit_offset as i64);
+    let (keep_lo, keep_hi) = bitfield_mask_halves(bf.bit_width, bf.bit_offset);
+    let old = load_wide_unit(b, addr, bf, seg, vol, align);
+    let cleared = Walker::int128_and_imm(b, old, (!keep_lo, !keep_hi));
+    let low = b.binop(BinOp::Or, cleared.0, placed.0);
+    let high = b.binop(BinOp::Or, cleared.1, placed.1);
+    store_bytes(b, addr, 0, low, 8, seg, vol, align);
+    store_bytes(b, addr, 8, high, bf.unit_size - 8, seg, vol, align);
+}
+
+/// Sign-extend a right-aligned signed field's value through all 128
+/// bits (C99 6.7.2.1p10); an unsigned field is already zero-filled.
+pub(super) fn sign_extend_halves(b: &mut SsaBuilder, bf: BitfieldDesc, v: Halves) -> Halves {
+    let w = bf.bit_width as i64;
+    if !bf.signed || w >= 128 {
+        return v;
+    }
+    let up = Walker::int128_shift_const(b, BinOp::Shl, v, 128 - w);
+    Walker::int128_shift_const(b, BinOp::Shr, up, 128 - w)
+}
+
+/// A storage unit wider than 8 bytes as its low 8 bytes and the 1 to 8
+/// above them, each read in its [`unit_pieces`], so no access reaches
+/// past the unit (C99 6.7.2.1p11).
+fn load_wide_unit(
+    b: &mut SsaBuilder,
+    addr: ValueId,
+    bf: BitfieldDesc,
+    seg: AsmSeg,
+    vol: bool,
+    align: u8,
+) -> Halves {
+    (
+        load_bytes(b, addr, 0, 8, seg, vol, align),
+        load_bytes(b, addr, 8, bf.unit_size - 8, seg, vol, align),
+    )
 }
 
 /// A bitfield's slice mask as the low and high halves of a 128-bit

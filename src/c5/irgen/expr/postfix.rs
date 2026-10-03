@@ -28,6 +28,21 @@ fn after_out_ptr(aggs: &[Option<u32>]) -> alloc::vec::Vec<Option<u32>> {
     shifted
 }
 
+/// The FP mask of a call through `abi`: empty for a variadic callee under
+/// the Microsoft ARM64 convention, which takes every argument in the
+/// integer bank, a named `float` as its 32 bits; else `fp_mask`.
+fn call_fp_mask(
+    abi: crate::c5::codegen::Abi,
+    callee_variadic: bool,
+    fp_mask: crate::c5::ir::FpMask,
+) -> crate::c5::ir::FpMask {
+    if callee_variadic && abi.win_arm64_variadic() {
+        crate::c5::ir::FpMask::EMPTY
+    } else {
+        fp_mask
+    }
+}
+
 /// One call site's arguments and the ABI facts that place them.
 struct CallArgs<'e> {
     /// Argument expressions in source order.
@@ -253,18 +268,11 @@ impl<'a> Walker<'a> {
         // A variadic callee reaching here is on a `variadic_int_only` host
         // (the Microsoft conventions): Microsoft x64 keeps a floating-point
         // argument in its FP register and copies it into the integer one at
-        // the call, Windows arm64 passes every argument in the integer bank,
-        // a named `float` as its 32 bits.
-        let call_fp_mask = if callee_variadic {
+        // the call, Windows arm64 passes every argument in the integer bank.
+        if callee_variadic {
             self.widen_variadic_fp(b, &mut args, fixed_args);
-            if abi.position_indexed_args {
-                fp_mask
-            } else {
-                crate::c5::ir::FpMask::EMPTY
-            }
-        } else {
-            fp_mask
-        };
+        }
+        let call_fp_mask = call_fp_mask(abi, callee_variadic, fp_mask);
         // C99 6.2.5p10: a floating-point return rides the FP return
         // register; tag the call so the codegen reads it there.
         let fp_return = self.crosses_in_fp_reg(conv, ty);
@@ -620,8 +628,11 @@ impl<'a> Walker<'a> {
                 arg_aggs[i] = Some(b.intern_agg_desc(desc));
             }
         }
-        let (ty, fp_mask) = (args.ty, args.fp_mask.clone());
-        let params = &self.symbols[sym as usize].params;
+        let ty = args.ty;
+        let callee = &self.symbols[sym as usize];
+        let abi = self.target.abi_for(args.conv);
+        let fp_mask = call_fp_mask(abi, callee.is_variadic, args.fp_mask.clone());
+        let params = &callee.params;
         // System V AMD64 MEMORY class / Win64 oversize: the caller
         // allocates the result buffer and passes its address as the
         // hidden first integer argument, which shifts the FP-argument
@@ -761,17 +772,11 @@ impl<'a> Walker<'a> {
         // A variadic callee on a `variadic_int_only` host: Microsoft x64
         // keeps a floating-point argument in its FP register and copies it
         // into the integer one at the call, Windows arm64 passes every
-        // argument in the integer bank, a named `float` as its 32 bits.
-        let call_fp_mask = if callee_variadic {
+        // argument in the integer bank.
+        if callee_variadic {
             self.widen_variadic_fp(b, &mut args, callee_fixed);
-            if abi.position_indexed_args {
-                fp_mask
-            } else {
-                crate::c5::ir::FpMask::EMPTY
-            }
-        } else {
-            fp_mask
-        };
+        }
+        let call_fp_mask = call_fp_mask(abi, callee_variadic, fp_mask);
         // Non-macOS targets keep the c5 cdecl stack-push shape for the
         // indirect call regardless of `callee_variadic` (`fixed_args` is
         // unused there); the prototype is passed through so only the macOS

@@ -698,7 +698,7 @@ pub(crate) fn plan_mirrored_call(
 pub(crate) fn named_args(abi: Abi, callee_variadic: bool, fixed_args: usize, args: usize) -> usize {
     if !callee_variadic {
         args
-    } else if abi.variadic_int_only && abi.arch == Arch::Aarch64 {
+    } else if abi.win_arm64_variadic() {
         0
     } else {
         fixed_args
@@ -892,7 +892,7 @@ pub(super) fn plan_call_args_aggs(
             // copy's address an integer argument. The callee's va_arg walks
             // one 8-byte-stride region, so an FP bank placement would read
             // garbage on both sides.
-            if i >= fixed_args && abi.variadic_int_only && matches!(abi.arch, Arch::Aarch64) {
+            if i >= fixed_args && abi.win_arm64_variadic() {
                 let placement = if agg.size > 16 {
                     if int_idx < int_max {
                         let r = abi.int_arg_regs[int_idx];
@@ -4455,6 +4455,14 @@ impl Abi {
     /// for such a callee so floating-point varargs land in d0..d7.
     pub(crate) fn aarch64_host_variadic(self) -> bool {
         matches!(self.arch, Arch::Aarch64) && !self.variadic_on_stack && !self.variadic_int_only
+    }
+
+    /// True when a variadic callee follows the Microsoft ARM64 convention:
+    /// named and variadic arguments alike ride x0..x7 then the stack, a
+    /// floating-point one as its bits, a composite as if no SIMD and
+    /// floating-point register existed.
+    pub(crate) fn win_arm64_variadic(self) -> bool {
+        matches!(self.arch, Arch::Aarch64) && self.variadic_int_only
     }
 }
 

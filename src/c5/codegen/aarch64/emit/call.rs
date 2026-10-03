@@ -447,6 +447,32 @@ pub(super) struct CallOperands<'a> {
     pub(super) ret_slot_off: i64,
 }
 
+impl CallOperands<'_> {
+    /// The placement of the arguments, the same for every call form: the
+    /// leading [`super::named_args`] of them as named, the rest by the
+    /// callee convention's variadic rules. `fixed_args` is the prototype's
+    /// named parameter count.
+    fn plan(
+        &self,
+        agg_descs: &[super::super::ir::AggDesc],
+        abi: super::Abi,
+        callee_variadic: bool,
+        fixed_args: usize,
+    ) -> super::CallPlan {
+        let aggs = build_arg_aggs(self.arg_aggs, agg_descs, abi);
+        let named = super::named_args(abi, callee_variadic, fixed_args, self.args.len());
+        super::plan_call_args_aggs(
+            self.args.len(),
+            named,
+            self.fp_arg_mask,
+            abi,
+            &aggs,
+            false,
+            self.arg_widths,
+        )
+    }
+}
+
 /// An external library call: the same marshalling as `emit_call` with a
 /// `PltCallFixup` at the `bl`, patched once the trampolines are laid out.
 #[allow(clippy::too_many_arguments)]
@@ -472,35 +498,17 @@ pub(super) fn emit_call_ext(
     let agg_descs = &func.agg_descs;
     let CallOperands {
         args,
-        fp_arg_mask,
-        arg_widths,
         arg_aggs,
         ret_agg,
         ret_slot_off,
+        ..
     } = ops;
     let import_index = match imports.index_of_binding(binding_idx) {
         Some(i) => i,
         None => return fail("CallExt: binding index has no resolved import"),
     };
     let imp = &imports.imports[import_index];
-    // A variadic import gives the planner its fixed count so the tail
-    // follows the host's variadic placement; `fp_arg_mask` comes from the
-    // argument types.
-    let fixed = if imp.is_variadic {
-        imp.fixed_args.min(args.len())
-    } else {
-        args.len()
-    };
-    let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
-    let plan = super::plan_call_args_aggs(
-        args.len(),
-        fixed,
-        fp_arg_mask,
-        abi,
-        &aggs,
-        false,
-        arg_widths,
-    );
+    let plan = ops.plan(agg_descs, abi, imp.is_variadic, imp.fixed_args);
     emit_stack_alloc(code, plan.scratch_bytes, None);
     marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
@@ -597,35 +605,23 @@ pub(super) fn emit_call(
     let agg_descs = &func.agg_descs;
     let CallOperands {
         args,
-        fp_arg_mask,
-        arg_widths,
         arg_aggs,
         ret_agg,
         ret_slot_off,
+        ..
     } = ops;
-    let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
-    // A variadic callee is marshalled through `plan_call_args` like a libc
-    // variadic call: macOS puts every variadic argument on the stack at an
-    // 8-byte stride, Windows every argument in x0..x7 then the stack (a
-    // floating-point one as its bit pattern, a named `float` its 32 bits),
-    // Linux in both banks then the stack. `fp_arg_mask` comes from the
-    // argument types, since a floating-point constant rides an integer
-    // register as its bit pattern.
+    // A variadic callee is marshalled as a libc variadic call is: macOS
+    // puts every variadic argument on the stack at an 8-byte stride,
+    // Windows every argument in x0..x7 then the stack (a floating-point one
+    // as its bit pattern, a named `float` its 32 bits), Linux in both banks
+    // then the stack. `fp_arg_mask` comes from the argument types, since a
+    // floating-point constant rides an integer register as its bit pattern.
     if callee_is_variadic
         && !(abi.variadic_on_stack || abi.variadic_int_only || abi.aarch64_host_variadic())
     {
         return fail("Call: variadic callee not matched by a host-ABI branch");
     }
-    let fixed = super::named_args(abi, callee_is_variadic, fixed_args, args.len());
-    let plan = super::plan_call_args_aggs(
-        args.len(),
-        fixed,
-        fp_arg_mask,
-        abi,
-        &aggs,
-        false,
-        arg_widths,
-    );
+    let plan = ops.plan(agg_descs, abi, callee_is_variadic, fixed_args);
     emit_stack_alloc(code, plan.scratch_bytes, None);
     marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
@@ -800,13 +796,11 @@ pub(super) fn emit_call_indirect(
     let agg_descs = &func.agg_descs;
     let CallOperands {
         args,
-        fp_arg_mask,
-        arg_widths,
         arg_aggs,
         ret_agg,
         ret_slot_off,
+        ..
     } = ops;
-    let aggs = build_arg_aggs(arg_aggs, agg_descs, abi);
     let target_place = place_of(alloc, target);
     // The allocator's caller-saved pool includes x9..x15, so an argument
     // source may sit in one; the target must avoid those while the marshal
@@ -817,19 +811,9 @@ pub(super) fn emit_call_indirect(
             arg_source_regs.push(*r);
         }
     }
-    // The same placement `emit_call` uses for a direct call; a non-variadic
-    // call plans every argument as fixed, which also serves a prototype the
-    // walker could not recover.
-    let plan_fixed = super::named_args(abi, callee_variadic, fixed_args, args.len());
-    let mut plan = super::plan_call_args_aggs(
-        args.len(),
-        plan_fixed,
-        fp_arg_mask,
-        abi,
-        &aggs,
-        false,
-        arg_widths,
-    );
+    // A non-variadic call plans every argument as fixed, which also serves a
+    // prototype the walker could not recover.
+    let mut plan = ops.plan(agg_descs, abi, callee_variadic, fixed_args);
     // A target in a register the marshal does not write is called where it
     // is: no argument lands in it, and it is neither the scratch pair, x19,
     // which a lowering may take as a third scratch, nor x8, which carries an

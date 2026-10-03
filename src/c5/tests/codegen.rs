@@ -4107,6 +4107,92 @@ fn windows_arm64_variadic_calls_pass_a_named_float_as_its_own_bits() {
     assert!(f32_cell, "vf reads its named float's cell at 32 bits");
 }
 
+/// A variadic import takes the Microsoft ARM64 convention a variadic callee
+/// the unit defines takes: every argument in x0..x7 then the stack, a named
+/// `float` as its 32 bits, a named homogeneous aggregate as its bytes. The
+/// call carries no FP mask there, and only there.
+#[test]
+fn windows_arm64_variadic_imports_pass_named_arguments_in_the_integer_bank() {
+    use crate::Target;
+    use crate::c5::codegen::aarch64::encode::{
+        Reg, enc_fmov_d_to_x, enc_movz, enc_str_d_imm, enc_str_imm,
+    };
+    use crate::c5::ir::Inst;
+    const SRC: &str = "#pragma dylib(vlib, \"vlib.dll\")\n\
+        #pragma binding(vlib::vf, \"vf\")\n\
+        #pragma binding(vlib::vh, \"vh\")\n\
+        #pragma binding(vlib::vs, \"vs\")\n\
+        struct hf { float a, b; };\n\
+        void vf(float x, ...);\n\
+        void vh(struct hf h, float y, ...);\n\
+        void vs(int a, int b, int c, int d, int e, int f, int g, int h, float x, ...);\n\
+        void call_f(float x, double d) { vf(x, 1, d); }\n\
+        void call_k(void) { vf(1.5f, 2.5); }\n\
+        void call_h(struct hf h, float y) { vh(h, y, 7); }\n\
+        void call_s(float x) { vs(1, 2, 3, 4, 5, 6, 7, 8, x, 9); }\n";
+    for (target, masked) in [
+        (Target::WindowsAarch64, false),
+        (Target::LinuxAarch64, true),
+    ] {
+        let program = crate::Compiler::with_options(
+            SRC.into(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let f = funcs.iter().find(|f| f.name == "call_f").expect("call_f");
+        let mask = f
+            .insts
+            .iter()
+            .find_map(|i| match i {
+                Inst::CallExt { fp_arg_mask, .. } => Some(fp_arg_mask.clone()),
+                _ => None,
+            })
+            .expect("CallExt");
+        assert_eq!(
+            mask.has(0) && mask.has(2),
+            masked,
+            "{target:?}: FP mask {mask:x}"
+        );
+    }
+    let obj = relocatable_object(SRC, Target::WindowsAarch64);
+    let x = Reg;
+    expect_words(
+        &function_words(&obj, "call_f"),
+        &[
+            enc_fmov_d_to_x(x(0), 0),
+            enc_movz(x(1), 1, 0),
+            enc_fmov_d_to_x(x(2), 1),
+        ],
+        "call_f",
+    );
+    // 1.5f and 2.5 as their bit patterns.
+    expect_words(
+        &function_words(&obj, "call_k"),
+        &[enc_movz(x(0), 0x3fc0, 1), enc_movz(x(1), 0x4004, 3)],
+        "call_k",
+    );
+    expect_words(
+        &function_words(&obj, "call_h"),
+        &[enc_fmov_d_to_x(x(1), 2)],
+        "call_h",
+    );
+    // `x` in the first stack slot, 9 in the second.
+    let ws = function_words(&obj, "call_s");
+    assert!(
+        ws.contains(&enc_str_d_imm(0, x(31), 0)),
+        "call_s: x is not at [sp]"
+    );
+    assert!(
+        (0..31).any(|r| ws.contains(&enc_str_imm(x(r), x(31), 8))),
+        "call_s: 9 is not at [sp, #8]"
+    );
+}
+
 /// A call's aggregate result aligned above the 8-byte frame slot is a member
 /// of the over-aligned region, as a declared object of its type is, whether
 /// the callee stores it through the result pointer or it returns in

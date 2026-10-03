@@ -7243,6 +7243,39 @@ fn msvc_cl() -> Option<WindowsCc> {
     Some(WindowsCc::Msvc { cl, env })
 }
 
+/// `module` built by the platform compiler into `module.dll` in `dir`, without
+/// a C runtime.
+#[cfg(windows)]
+fn build_windows_module(cc: &WindowsCc, dir: &Path, module: &Path) -> PathBuf {
+    let dll = dir.join("module.dll");
+    let target = if cfg!(target_arch = "aarch64") {
+        "--target=aarch64-pc-windows-msvc"
+    } else {
+        "--target=x86_64-pc-windows-msvc"
+    };
+    let mut build = match cc {
+        WindowsCc::Clang(cc) => {
+            let mut c = Command::new(cc);
+            c.args([target, "-O2", "-shared", "-nostdlib", "-fuse-ld=lld"])
+                .args(["-Wl,-noentry", "-o"])
+                .arg(&dll)
+                .arg(module);
+            c
+        }
+        WindowsCc::Msvc { cl, env } => {
+            let mut c = Command::new(cl);
+            c.envs(env.iter().map(|(k, v)| (k, v)))
+                .args(["/nologo", "/O2", "/GS-", "/LD"])
+                .arg(module)
+                .arg(format!("/Fe{}", dll.display()))
+                .args(["/link", "/NOENTRY", "/NODEFAULTLIB"]);
+            c
+        }
+    };
+    run(build.current_dir(dir), "build the platform-compiled module");
+    dll
+}
+
 /// [`drive_across_the_system_compiler`] on Windows: the platform compiler links
 /// the module as a DLL without a C runtime, which the badc host loads.
 #[cfg(windows)]
@@ -7278,35 +7311,7 @@ fn drive_across_the_windows_compiler(cc: &WindowsCc, test: &str, common: &str, f
                return sys_drive(&mine); }}\n"
         ),
     );
-    let dll = dir.join("module.dll");
-    let target = if cfg!(target_arch = "aarch64") {
-        "--target=aarch64-pc-windows-msvc"
-    } else {
-        "--target=x86_64-pc-windows-msvc"
-    };
-    let mut build = match cc {
-        WindowsCc::Clang(cc) => {
-            let mut c = Command::new(cc);
-            c.args([target, "-O2", "-shared", "-nostdlib", "-fuse-ld=lld"])
-                .args(["-Wl,-noentry", "-o"])
-                .arg(&dll)
-                .arg(&module);
-            c
-        }
-        WindowsCc::Msvc { cl, env } => {
-            let mut c = Command::new(cl);
-            c.envs(env.iter().map(|(k, v)| (k, v)))
-                .args(["/nologo", "/O2", "/GS-", "/LD"])
-                .arg(&module)
-                .arg(format!("/Fe{}", dll.display()))
-                .args(["/link", "/NOENTRY", "/NODEFAULTLIB"]);
-            c
-        }
-    };
-    run(
-        build.current_dir(&dir),
-        "build the platform-compiled module",
-    );
+    let dll = build_windows_module(cc, &dir, &module);
     for opt in ["-O0", "-O"] {
         let exe = dir.join(format!("host{opt}.exe"));
         run(
@@ -7825,6 +7830,81 @@ fn variadic_fp_arguments_cross_the_windows_compiler_boundary() {
         common,
         "vsum, mixed, far, two, vfsum, fmixed, ffar",
     );
+}
+
+// A variadic function of a library the program binds by `#pragma binding`
+// reads its arguments where a variadic callee of the program does: on arm64
+// every one in the integer bank, a named `float` as its 32 bits, a named
+// homogeneous aggregate as its bytes, past x7 on the stack.
+#[cfg(windows)]
+#[test]
+fn variadic_imports_cross_the_windows_compiler_boundary() {
+    let Some(cc) = windows_cc() else {
+        eprintln!(
+            "skipping variadic_imports_cross_the_windows_compiler_boundary: \
+             no platform C compiler"
+        );
+        return;
+    };
+    let dir = tempdir("win-va-import-interop");
+    let module = write_source(
+        &dir,
+        "module.c",
+        "int _fltused;\n\
+         #include <stdarg.h>\n\
+         struct hf { float a, b; };\n\
+         __declspec(dllexport) double vfsum(float f, int n, ...)\n\
+         { va_list ap; va_start(ap, n); double s = f;\n\
+           for (int i = 0; i < n; i++) s = s * 10 + va_arg(ap, double);\n\
+           va_end(ap); return s; }\n\
+         __declspec(dllexport) double vhfa(struct hf h, float g, int n, ...)\n\
+         { va_list ap; va_start(ap, n); double t = va_arg(ap, double); va_end(ap);\n\
+           return h.a * 10000 + h.b * 1000 + g * 100 + n * 10 + t; }\n\
+         __declspec(dllexport) double vfar(int a, int b, int c, int d, int e, int f, int g,\n\
+           int h, float x, int k, ...)\n\
+         { va_list ap; va_start(ap, k); double l = va_arg(ap, double); va_end(ap);\n\
+           return a + b + c + d + e + f + g + h + x * 10 + k * 100 + l; }\n",
+    );
+    let host = write_source(
+        &dir,
+        "host.c",
+        "#pragma dylib(module, \"module.dll\")\n\
+         #pragma binding(module::vfsum, \"vfsum\")\n\
+         #pragma binding(module::vhfa, \"vhfa\")\n\
+         #pragma binding(module::vfar, \"vfar\")\n\
+         struct hf { float a, b; };\n\
+         double vfsum(float f, int n, ...);\n\
+         double vhfa(struct hf h, float g, int n, ...);\n\
+         double vfar(int a, int b, int c, int d, int e, int f, int g, int h, float x, int k,\n\
+           ...);\n\
+         int main(void)\n\
+         { float x = 2.5f; struct hf h = { 1.0f, 2.0f };\n\
+           if (vfsum(1.5f, 1, 2.5) != 17.5) return 1;\n\
+           if (vfsum(x, 2, x, 3.5f) != 278.5) return 2;\n\
+           if (vhfa(h, x, 7, 0.5) != 12320.5) return 3;\n\
+           if (vfar(1, 2, 3, 4, 5, 6, 7, 8, x, 9, 0.25) != 961.25) return 4;\n\
+           return 0; }\n",
+    );
+    build_windows_module(&cc, &dir, &module);
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("host{opt}.exe"));
+        run(
+            Command::new(badc())
+                .arg(opt)
+                .arg("-o")
+                .arg(&exe)
+                .arg(&host)
+                .current_dir(&dir),
+            "link the badc host",
+        );
+        let out = Command::new(&exe).output().expect("run the badc host");
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "host{opt}: a call to a variadic import misplaced an argument (stderr {:?})",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
 }
 
 // A function returning an aggregate through the hidden result pointer takes that

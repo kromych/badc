@@ -797,14 +797,14 @@ fn ent_pc=20 n_params=0 variadic=false locals=6
     v315 LocalAddr(-296)                                  -> x2
     v316 Store { addr=v312, disp=0, value=v314, kind=F80 } -> -
     v317 LocalAddr(-296)                                  -> x2
-    v318 LifetimeEnd(-296)                                -> -
-    v319 LocalAddr(-265)                                  -> x2
-    v320 Load { addr=v312, disp=0, kind=I64 }             -> x8
-    v321 Load { addr=v312, disp=8, kind=I64 }             -> x1
-    v322 Store { addr=v319, disp=0, value=v320, kind=I64 } -> -
-    v323 Store { addr=v319, disp=8, value=v321, kind=I64 } -> -
+    v318 LocalAddr(-265)                                  -> x2
+    v319 Load { addr=v312, disp=0, kind=I64 }             -> x8
+    v320 Load { addr=v312, disp=8, kind=I64 }             -> x1
+    v321 Store { addr=v318, disp=0, value=v319, kind=I64 } -> -
+    v322 Store { addr=v318, disp=8, value=v320, kind=I64 } -> -
+    v323 LifetimeEnd(-296)                                -> -
     v324 LocalAddr(-265)                                  -> x1
-    v325 Load { addr=v319, disp=0, kind=F80 }             -> d0
+    v325 Load { addr=v318, disp=0, kind=F80 }             -> d0
     v326 LocalAddr(-266)                                  -> x1
     v327 Store { addr=v326, disp=0, value=v325, kind=F80 } -> -
     v328 LocalAddr(-266)                                  -> x2
@@ -1082,14 +1082,14 @@ fn ent_pc=20 n_params=0 variadic=false locals=6
     v538 LocalAddr(-296)                                  -> x1
     v539 Store { addr=v535, disp=0, value=v537, kind=F80 } -> -
     v540 LocalAddr(-296)                                  -> x1
-    v541 LifetimeEnd(-296)                                -> -
-    v542 LocalAddr(-282)                                  -> x1
-    v543 Load { addr=v535, disp=0, kind=I64 }             -> x6
-    v544 Load { addr=v535, disp=8, kind=I64 }             -> x7
-    v545 Store { addr=v542, disp=0, value=v543, kind=I64 } -> -
-    v546 Store { addr=v542, disp=8, value=v544, kind=I64 } -> -
+    v541 LocalAddr(-282)                                  -> x1
+    v542 Load { addr=v535, disp=0, kind=I64 }             -> x6
+    v543 Load { addr=v535, disp=8, kind=I64 }             -> x7
+    v544 Store { addr=v541, disp=0, value=v542, kind=I64 } -> -
+    v545 Store { addr=v541, disp=8, value=v543, kind=I64 } -> -
+    v546 LifetimeEnd(-296)                                -> -
     v547 LocalAddr(-282)                                  -> x6
-    v548 Load { addr=v542, disp=0, kind=F80 }             -> d1
+    v548 Load { addr=v541, disp=0, kind=F80 }             -> d1
     v549 LocalAddr(-283)                                  -> x1
     v550 Store { addr=v549, disp=0, value=v548, kind=F80 } -> -
     v551 LocalAddr(-283)                                  -> x6
@@ -1105,18 +1105,18 @@ fn ent_pc=20 n_params=0 variadic=false locals=6
     v561 LocalAddr(-296)                                  -> x1
     v562 Store { addr=v535, disp=0, value=v560, kind=F80 } -> -
     v563 LocalAddr(-296)                                  -> x1
-    v564 LifetimeEnd(-296)                                -> -
-    v565 Imm(0)                                           -> x1
-    v566 Load { addr=v535, disp=0, kind=I64 }             -> x1
-    v567 Load { addr=v535, disp=8, kind=I64 }             -> x2
+    v564 Imm(0)                                           -> x1
+    v565 Load { addr=v535, disp=0, kind=I64 }             -> x1
+    v566 Load { addr=v535, disp=8, kind=I64 }             -> x2
+    v567 Imm(0)                                           -> x0
     v568 Imm(0)                                           -> x0
-    v569 Imm(0)                                           -> x0
+    v569 LifetimeEnd(-296)                                -> -
     v570 Imm(0)                                           -> x0
     v571 LocalAddr(-217)                                  -> x0
     v572 Imm(0)                                           -> x6
-    v573 Store { addr=v571, disp=0, value=v566, kind=I64 } -> -
+    v573 Store { addr=v571, disp=0, value=v565, kind=I64 } -> -
     v574 Imm(0)                                           -> x1
-    v575 Store { addr=v571, disp=8, value=v567, kind=I64 } -> -
+    v575 Store { addr=v571, disp=8, value=v566, kind=I64 } -> -
     v576 LocalAddr(-217)                                  -> x1
     v577 Load { addr=v571, disp=0, kind=F80 }             -> d0
     v578 Imm(10)                                          -> x0

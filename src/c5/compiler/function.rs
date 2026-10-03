@@ -149,8 +149,12 @@ impl Compiler {
         let outer_taken = p.base_array_taken;
         let outer_own = core::mem::take(&mut p.fn_own_sig);
         let outer_base = p.fn_decl_base.take();
+        // The shape the enclosing declarator's name had before it, which
+        // that name's binding restores; the parameters record their own.
+        let outer_prior = p.declarator_prior_shape.take();
         let r = self.parse_function_params_inner();
         let p = &mut self.pending;
+        p.declarator_prior_shape = outer_prior;
         p.attr_call_conv = outer_conv;
         (
             p.fn_ptr_indirection,
@@ -402,6 +406,12 @@ impl Compiler {
             // name that shadows an enclosing prototype's parameter must not
             // trip the duplicate-parameter check.
             if param_idx == usize::MAX || self.pending.parsing_fn_ptr_proto {
+                // The name's slot keeps the array shape of what it denotes
+                // outside the prototype (C99 6.2.1p4).
+                if let Some((inner, dims)) = self.take_prior_shape(param_idx) {
+                    self.symbols[param_idx].inner_array_size = inner;
+                    self.symbols[param_idx].array_dims = dims;
+                }
                 enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));
                 types.push(full_ty);
                 if !self.parameter_separator()? {

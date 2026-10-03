@@ -1560,6 +1560,13 @@ fn member_name_space_keeps_object_shape() {
 }
 
 #[test]
+fn prototype_param_keeps_object_shape() {
+    // C99 6.2.1p4: a parameter of a function pointer's prototype leaves the
+    // array dimensions of the object of its name intact.
+    assert_eq!(run_fixture("prototype_param_keeps_object_shape.c"), 0);
+}
+
+#[test]
 fn array_alias_param_outer_bracket() {
     // C99 6.7.7p3 + 6.7.5.3p7: `rows_t rows[]` over `typedef T rows_t[1]`
     // is pointer-to-row; one subscript strides a whole row and decays to

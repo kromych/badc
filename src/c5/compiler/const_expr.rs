@@ -2078,8 +2078,14 @@ impl Compiler {
         self.pending.bare_function_type_declarator = false;
         let base_is_const = self.pending.base_is_const;
         let ptr = self.consume_abstract_pointer(ty)?;
-        let ty = ptr.ty;
         let ptr_levels = ptr.levels;
+        // The first `*` on a function-type typedef forms the pointer to the
+        // function, as in a declarator.
+        let ty = if core::mem::take(&mut self.pending.base_is_function_type) && ptr_levels > 0 {
+            super::types::absorb_function_level(ptr.ty, super::types::ptr_depth_of(ty))
+        } else {
+            ptr.ty
+        };
         // A `const` after the outermost `*` qualifies the object itself.
         let outer_const = ptr.outer_const;
         while self.lex.tk == Token::TypeQual {

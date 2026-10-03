@@ -451,7 +451,7 @@ impl Compiler {
             self.pending.base_is_function_type = false;
         }
         if absorb_fn_type_ptr {
-            ty -= Ty::Ptr as i64;
+            ty = super::types::absorb_function_level(ty, super::types::ptr_depth_of(base));
         }
         let own_levels = leading_ptr_count - i64::from(absorb_fn_type_ptr);
         // The pointers of this frame and the enclosing ones apply to the base

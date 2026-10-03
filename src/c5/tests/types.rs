@@ -4835,3 +4835,52 @@ fn a_constant_pointer_to_an_array_keeps_its_type() {
     }
     assert_eq!(warnings.len(), 3, "{warnings:?}");
 }
+
+/// C99 6.7.5.1 and 6.7.7: in `F *const p` over a function-type typedef
+/// `F`, the `*` forms the pointer to the function and the `const`
+/// qualifies that pointer -- in a declarator, a parameter and a constant
+/// expression's type name alike -- so a conversion of `&p` that drops it
+/// warns as it does for the spelled-out `double (*const q)(double)`.
+#[test]
+fn a_qualifier_on_a_pointer_to_a_function_type_qualifies_the_pointer() {
+    use crate::{Compiler, Target};
+    let src = "typedef double F(double);\n\
+               typedef int BinOp(int, int);\n\
+               static double twice(double x) { return 2 * x; }\n\
+               static int add(int a, int b) { return a + b; }\n\
+               F *const p = twice;\n\
+               double (*const q)(double) = twice;\n\
+               F **pp = &p;\n\
+               double (**qq)(double) = &q;\n\
+               static BinOp *const op = add;\n\
+               static BinOp **x = (BinOp *const *)&op;\n\
+               void g(F *const r) { F **rr = &r; (void)rr; }\n\
+               typedef const char *const *SP(int);\n\
+               static const char *const *impl(int n) { (void)n; return 0; }\n\
+               SP *sp = impl;\n\
+               void h(void) { const char **s = sp(0); (void)s; }\n\
+               int main(void) { return pp != 0 && qq != 0 && x != 0; }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let warnings: alloc::vec::Vec<String> =
+        program.warnings.iter().map(|w| w.to_string()).collect();
+    for (line, text) in [
+        (7, "(declared=double**, init=double* const *)"),
+        (8, "(declared=double**, init=double* const *)"),
+        (10, "(declared=int**, init=int* const *)"),
+        (
+            11,
+            "(declared=`double (**)(double)`, init=`double (* const *)(double)`)",
+        ),
+        // The return type's own qualifiers stay below the absorbed level.
+        (15, "(declared=const char**, init=const char* const *)"),
+    ] {
+        let at = format!(":{line}: warning: discards `const`");
+        assert!(
+            warnings.iter().any(|w| w.contains(&at) && w.contains(text)),
+            "line {line}: {warnings:?}"
+        );
+    }
+    assert_eq!(warnings.len(), 5, "{warnings:?}");
+}

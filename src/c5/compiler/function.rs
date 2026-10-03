@@ -284,7 +284,7 @@ impl Compiler {
             let absorb_fn_type_ptr = self.pending.base_is_function_type && leading_ptr_count > 0;
             if absorb_fn_type_ptr {
                 self.pending.base_is_function_type = false;
-                ty -= Ty::Ptr as i64;
+                ty = super::types::absorb_function_level(ty, super::types::ptr_depth_of(base));
             }
             // A parameter that is a pointer to a function-pointer typedef
             // base (`curl_write_callback *p`) gains one fn-pointer

@@ -174,6 +174,27 @@ pub(crate) fn add_ptr_level(ty: i64) -> i64 {
     ty + Ty::Ptr as i64
 }
 
+/// `ty` with derivation level `level` removed: the function level of a
+/// function-type typedef's tag, which stands for the function as a pointer
+/// one level above its return type, absorbed by the first `*` applied to
+/// it. The qualifiers recorded for the levels above move down with them;
+/// the return type's, below it, stay.
+pub(crate) fn absorb_function_level(ty: i64, level: i64) -> i64 {
+    let drop_level = |mask: i64, shift: i64| {
+        let levels = (ty & mask) >> shift;
+        let below = levels & ((1 << level) - 1);
+        ((below | ((levels >> (level + 1)) << level)) << shift) & mask
+    };
+    let quals =
+        drop_level(CONST_LVL_MASK, CONST_LVL_SHIFT) | drop_level(VOL_LVL_MASK, VOL_LVL_SHIFT);
+    let mut out = ((ty & !(CONST_LVL_MASK | VOL_LVL_MASK)) - Ty::Ptr as i64) | quals;
+    let seg_level = (ty & SEG_LVL_MASK) >> SEG_LVL_SHIFT;
+    if ty & SEG_MASK != 0 && seg_level > level {
+        out = (out & !SEG_LVL_MASK) | ((seg_level - 1) << SEG_LVL_SHIFT);
+    }
+    out
+}
+
 /// The pointee type (C99 6.5.3.2p4): one level down, without the removed
 /// level's `const`, `volatile` and object address space, which qualified
 /// the pointer. [`VOLATILE_BIT`] stays.

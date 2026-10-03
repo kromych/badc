@@ -346,8 +346,9 @@ clang choose, for this form and for a `tls` guard that names no register; a
 Linux x86-64 build that names no guard register keeps its per-CPU canary at
 `%gs:0x28`. `tls` is the x86-64 segment-relative form the kernel selects
 (`-mstack-protector-guard=tls`, `-mstack-protector-guard-reg=gs`,
-`-mstack-protector-guard-symbol=__ref_stack_chk_guard`); `sysreg` is the
-aarch64 form that reads a per-task offset above a system register
+`-mstack-protector-guard-symbol=__ref_stack_chk_guard`); as in gcc, a
+register, an offset or a symbol named without the form selects it. `sysreg` is
+the aarch64 form that reads a per-task offset above a system register
 (`-mstack-protector-guard-reg=sp_el0`, `-mstack-protector-guard-offset=N`). The
 family needs relocatable output -- the failure branch is a relocation against
 `__stack_chk_fail` -- so `--jit` and `--interp` reject it, as do the Windows

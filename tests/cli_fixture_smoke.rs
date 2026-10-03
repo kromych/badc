@@ -1988,6 +1988,20 @@ fn the_x86_guard_form_defaults_the_way_gcc_does() {
         "the x86 guard register alone must select the tls form: {}",
         String::from_utf8_lossy(&out.stderr)
     );
+    // A symbol alone selects the form too, read through the code model's
+    // segment: `mov %seg:sym(%rip), %r11`.
+    for (model, seg, other) in [("small", 0x64u8, 0x65u8), ("kernel", 0x65, 0x64)] {
+        let out = compile(&[
+            "--target=linux-x64",
+            &format!("-mcmodel={model}"),
+            "-mstack-protector-guard-symbol=g",
+        ]);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{model}: {err}");
+        let bytes = std::fs::read(&obj).expect("read the object");
+        let reads = |prefix: u8| bytes.windows(4).any(|w| w == [prefix, 0x4C, 0x8B, 0x1D]);
+        assert!(reads(seg) && !reads(other), "{model}: the guard's segment");
+    }
     // The uniprocessor branch of the same Makefile still names its form.
     let out = compile(&["--target=linux-x64", "-mstack-protector-guard=global"]);
     assert!(out.status.success(), "`global` must stay accepted");

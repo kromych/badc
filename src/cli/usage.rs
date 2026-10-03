@@ -421,7 +421,9 @@ Compile knobs:
                            value (=sysreg).
   -mstack-protector-guard-symbol=NAME
                            Read the guard from NAME instead of
-                           __stack_chk_guard. Not combinable with
+                           __stack_chk_guard. On x86-64 a symbol named
+                           without the form selects =tls, as a
+                           register does. Not combinable with
                            -mstack-protector-guard-offset=.
   -ftrivial-auto-var-init=uninitialized|zero|pattern
                            Initialize every automatic object declared

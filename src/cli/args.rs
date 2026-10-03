@@ -2122,11 +2122,13 @@ impl Parser {
     /// wrong place would leave the image claiming a protection it does
     /// not have.
     fn resolve_stack_guard(&mut self, target: Target) -> Result<(), ParseError> {
-        // gcc's x86 default for `-mstack-protector-guard=` is `tls`, so
-        // the kernel names only the register and the symbol on SMP
-        // builds.
+        // gcc's x86 default for `-mstack-protector-guard=` is `tls`, so a
+        // register, an offset or a symbol named alone selects it; the
+        // kernel names only the register and the symbol on SMP builds.
         let kind = self.ssp_guard_kind.or_else(|| {
-            let named = self.ssp_guard_reg.is_some() || self.ssp_guard_offset.is_some();
+            let named = self.ssp_guard_reg.is_some()
+                || self.ssp_guard_offset.is_some()
+                || !self.codegen.stack_protect.guard_symbol.is_empty();
             (named && target.is_x86_64()).then_some("tls")
         });
         if let Some(kind) = kind {
@@ -3321,11 +3323,19 @@ mod tests {
             ),
             (&["-mstack-protector-guard=tls"], tls(fs)),
             (&["-mstack-protector-guard-reg=gs"], tls(gs)),
+            // A symbol alone selects `tls` as a register does, as in gcc.
+            (&["-mstack-protector-guard-symbol=g"], tls(fs)),
+            (
+                &["-mcmodel=kernel", "-mstack-protector-guard-symbol=g"],
+                tls(gs),
+            ),
             // No form named: the ABI's, which emission resolves per model.
             (&["-mcmodel=kernel"], badc::StackGuard::Abi),
         ] {
             assert_eq!(guard(flags), want, "{flags:?}");
         }
+        let cli = parse(&[X64, "-mstack-protector-guard-symbol=g", "-c", "a.c"]);
+        assert_eq!(cli.codegen.stack_protect.guard_symbol.as_str(), "g");
     }
 
     #[test]

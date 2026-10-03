@@ -4336,11 +4336,8 @@ impl Compiler {
             self.ast_binop(signed);
             return Ok(());
         }
-        let result_ty = if self.size_of_type(lhs_ty) <= 2 {
-            Ty::Int as i64
-        } else {
-            lhs_ty
-        };
+        // C99 6.5.7p3: the type of the promoted left operand.
+        let result_ty = integer_promote(lhs_ty);
         self.ty = result_ty;
         self.ast_binop(if is_unsigned_ty(lhs_ty) {
             unsigned
@@ -5941,9 +5938,13 @@ impl Compiler {
 /// type tags with `volatile` dropped, which the tag records at no
 /// level. `unsigned`-ness, each level's `const` and the pointer level /
 /// aggregate identity stay significant, so `unsigned int`, `const T *`
-/// and `T *` select distinct associations.
+/// and `T *` select distinct associations; an enumerated type matches
+/// itself and its integer type.
 fn generic_type_match(ctrl: i64, assoc: i64) -> bool {
-    (ctrl & !super::types::VOLATILE_MASK) == (assoc & !super::types::VOLATILE_MASK)
+    super::types::enum_compatible(
+        ctrl & !super::types::VOLATILE_MASK,
+        assoc & !super::types::VOLATILE_MASK,
+    )
 }
 
 /// A binary operator of C99 6.5.5-6.5.14 as the precedence-climbing loop

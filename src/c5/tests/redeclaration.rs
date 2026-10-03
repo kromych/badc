@@ -36,12 +36,12 @@ fn an_enum_is_compatible_with_int_on_the_pe_targets() {
     for (src, needles) in [
         (
             "enum E { A = 5 };\nint f(enum E);\nint f(unsigned int v) { return (int)v; }\n",
-            ["previous: int (int)", "now:      int (unsigned int)"],
+            ["previous: int (enum E)", "now:      int (unsigned int)"],
         ),
         (
             "enum E;\nextern enum E x;\nenum E { A } __attribute__((__mode__(__byte__)));\n\
              int x;\n",
-            ["previous: signed char", "now:      int"],
+            ["previous: enum E", "now:      int"],
         ),
     ] {
         let src = alloc::format!("{src}int main(void) {{ return 0; }}\n");
@@ -136,16 +136,21 @@ fn function_redeclarations_of_another_type_are_rejected() {
             "int f();\nextern __typeof__(f) f;\nint f(char c) { return c; }\n",
             "now:      int (char)",
         ),
+        // C99 6.7.2.2p4: two enumerated types of one integer type differ.
+        (
+            "enum A { A1 };\nenum B { B1 };\nint f(enum A);\nint f(enum B b) { return b; }\n",
+            "now:      int (enum B)",
+        ),
         // The tag's definition fixes the type the earlier use names.
         (
             "enum E;\nint f(enum E);\nenum E { A } __attribute__((__mode__(__byte__)));\n\
              int f(int x) { return x; }\n",
-            "previous: int (unsigned char)",
+            "previous: int (enum E)",
         ),
         (
             "typedef enum E T;\nint f(T);\nenum E { A = 3 } __attribute__((packed));\n\
              int f(int v) { return v; }\n",
-            "previous: int (unsigned char)",
+            "previous: int (enum E)",
         ),
     ] {
         let src = alloc::format!("{decls}int main(void) {{ return 0; }}\n");
@@ -173,7 +178,11 @@ fn object_redeclarations_of_another_type_are_rejected() {
         ),
         (
             "enum E;\nextern enum E x;\nenum E { A } __attribute__((__mode__(__byte__)));\nint x;\n",
-            "previous: unsigned char",
+            "previous: enum E",
+        ),
+        (
+            "enum A { A1 };\nenum B { B1 };\nextern enum A x;\nenum B x;\n",
+            "now:      enum B",
         ),
     ] {
         let src = alloc::format!("{decls}int main(void) {{ return 0; }}\n");

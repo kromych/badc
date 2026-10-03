@@ -134,7 +134,7 @@ catalog! {
         "an integer and a pointer exchanged with no cast";
     3002, "incompatible-struct-types", [], Warning, Controllable,
         [DEFAULT], Live,
-        "an aggregate used where a different aggregate type is expected";
+        "an aggregate or enumerated type used where a different one is expected";
     3003, "return-type", ["C4715"], Ignore, Controllable,
         [ALL], Live,
         "control reaches the end of a value-returning function";

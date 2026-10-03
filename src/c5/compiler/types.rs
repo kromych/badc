@@ -82,6 +82,54 @@ pub(crate) fn plain_char_ty(signed: bool) -> i64 {
     if signed { ty } else { ty | UNSIGNED_BIT }
 }
 
+/// High-bit flag marking an enumerated type (C99 6.7.2.2). The tag keeps
+/// the band and bits of the integer type the enum's definition chose, which
+/// loads, stores, promotions and conversions read, and carries the enum's
+/// tag-registry id for identity: generic selection, compatibility and type
+/// names tell two enumerated types apart, while each is compatible with
+/// its integer type (6.7.2.2p4). The id takes the bits above the scalar
+/// bands, which end below `1 << ENUM_ID_SHIFT`, and is meaningful only
+/// under this flag, which no aggregate tag carries. Stripped by
+/// [`strip_unsigned`] like the other markers.
+pub(crate) const ENUM_BIT: i64 = 1 << 62;
+const ENUM_ID_SHIFT: i64 = 10;
+const ENUM_ID_BITS: i64 = 18;
+const ENUM_ID_MASK: i64 = ((1 << ENUM_ID_BITS) - 1) << ENUM_ID_SHIFT;
+
+/// The tag of the enumerated type with registry id `id` over the integer
+/// type `underlying`. TODO: an id past the field keeps the integer type
+/// alone.
+pub(crate) fn enum_ty(underlying: i64, id: usize) -> i64 {
+    let id = id as i64;
+    if id >> ENUM_ID_BITS != 0 {
+        return underlying;
+    }
+    without_enum(underlying) | ENUM_BIT | (id << ENUM_ID_SHIFT)
+}
+
+/// The registry id of the enumerated type `ty` is or is derived from.
+pub(crate) fn enum_id_of(ty: i64) -> Option<usize> {
+    (ty & ENUM_BIT != 0).then_some(((ty & ENUM_ID_MASK) >> ENUM_ID_SHIFT) as usize)
+}
+
+/// `ty` with its enumerated type replaced by the compatible integer type.
+pub(crate) fn without_enum(ty: i64) -> i64 {
+    if ty & ENUM_BIT != 0 {
+        ty & !(ENUM_BIT | ENUM_ID_MASK)
+    } else {
+        ty
+    }
+}
+
+/// C99 6.2.7p1 over two tags that may name enumerated types: equal, or
+/// equal once the one enumerated type is replaced by its integer type
+/// (6.7.2.2p4). Two enumerated types are compatible only with themselves.
+pub(crate) fn enum_compatible(a: i64, b: i64) -> bool {
+    a == b
+        || (without_enum(a) == without_enum(b)
+            && (enum_id_of(a).is_none() || enum_id_of(b).is_none()))
+}
+
 /// High-bit flag marking a type tag `volatile`-qualified (C99 6.7.3).
 /// Orthogonal to the band scheme like [`UNSIGNED_BIT`]: stripped by
 /// [`strip_unsigned`] before any band classifier consults the tag. The
@@ -410,37 +458,39 @@ pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i
 
 /// Drop the qualifier bits (`UNSIGNED_BIT`, `PLAIN_CHAR_BIT`,
 /// `VOLATILE_BIT`, `VOLATILE_INNER_BIT`, `VOID_BIT`, the segment and
-/// `const` fields).
+/// `const` fields, the enumerated-type identity).
 /// Use to recover the bare band-encoded type before
 /// consulting a helper that classifies by band. Most of the helpers in
 /// this module call this at their entry; outside callers only need it
 /// when storing a type tag where a non-bit-flagged tag is expected
 /// (e.g., switch-table comparisons against `Ty::Int as i64`).
 pub(crate) fn strip_unsigned(ty: i64) -> i64 {
-    ty & !(UNSIGNED_BIT
-        | PLAIN_CHAR_BIT
-        | VOLATILE_BIT
-        | VOLATILE_INNER_BIT
-        | SEG_MASK
-        | SEG_LVL_MASK
-        | VOID_BIT
-        | LONG_DOUBLE_BIT
-        | CONST_LVL_MASK
-        | CONST_BIT)
+    without_enum(ty)
+        & !(UNSIGNED_BIT
+            | PLAIN_CHAR_BIT
+            | VOLATILE_BIT
+            | VOLATILE_INNER_BIT
+            | SEG_MASK
+            | SEG_LVL_MASK
+            | VOID_BIT
+            | LONG_DOUBLE_BIT
+            | CONST_LVL_MASK
+            | CONST_BIT)
 }
 
 /// `ty`, declared through an enum tag before its definition and so built on
 /// the tag's incomplete entry `id`, over the integer type `underlying` the
-/// definition chose: the same derivations and qualifiers. A type built on
-/// anything else is returned unchanged.
+/// definition chose: the enumerated type at the same derivations and
+/// qualifiers. A type built on anything else is returned unchanged.
 pub(crate) fn rebase_enum_placeholder(ty: i64, id: usize, underlying: i64) -> i64 {
     if !is_struct_ty(ty) || struct_id_of(ty) != id {
         return ty;
     }
     let bare = strip_unsigned(ty);
-    (bare - struct_ty_for(id) + strip_unsigned(underlying))
+    let rebased = (bare - struct_ty_for(id) + strip_unsigned(underlying))
         | (ty ^ bare)
-        | (underlying & UNSIGNED_BIT)
+        | (underlying & UNSIGNED_BIT);
+    enum_ty(rebased, id)
 }
 
 /// The scalar `void` type tag.
@@ -515,6 +565,15 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
     let prefix = format!("{base_const}{}", if unsigned { "unsigned " } else { "" });
     if (ty & VOID_BIT) != 0 && (0..100).contains(&bare) {
         return format!("{base_const}void{}", ptr_suffix(ty, (bare / 2) as usize));
+    }
+    if let Some(id) = enum_id_of(ty) {
+        let name = structs
+            .get(id)
+            .map(|s| s.name.as_str())
+            .filter(|n| !n.is_empty())
+            .unwrap_or("<anonymous>");
+        let depth = ptr_depth_of(ty) as usize;
+        return format!("{base_const}enum {name}{}", ptr_suffix(ty, depth));
     }
     if bare >= STRUCT_BASE {
         let id = struct_id_of(bare);
@@ -829,7 +888,8 @@ pub(super) fn long_long_ptr_depth(ty: i64) -> i64 {
 /// hold every value of the original type because c5's int is 4
 /// bytes vs char's 1 / short's 2, so the result is always the
 /// signed `Ty::Int` -- the "convert to unsigned int" branch of the
-/// C99 rule never fires here.
+/// C99 rule never fires here. An enumerated type yields its integer
+/// type, at every rank as gcc and clang convert one.
 pub(super) fn integer_promote(ty: i64) -> i64 {
     let stripped = strip_unsigned(ty);
     // `_Bool` (6.3.1.1) and the sub-int integer types all have a
@@ -838,7 +898,7 @@ pub(super) fn integer_promote(ty: i64) -> i64 {
     if stripped == Ty::Char as i64 || stripped == Ty::Short as i64 || stripped == Ty::Bool as i64 {
         Ty::Int as i64
     } else {
-        ty
+        without_enum(ty)
     }
 }
 

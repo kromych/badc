@@ -62,7 +62,7 @@ regenerates.
 | B2022 | `undeclared-identifier` | error | hard | - | a name no declaration in scope introduces |
 | B2023 | `static-assert` | error | hard | - | a static assertion whose controlling expression is zero |
 | B3001 | `int-conversion` | warning | controllable | default | an integer and a pointer exchanged with no cast |
-| B3002 | `incompatible-struct-types` | warning | controllable | default | an aggregate used where a different aggregate type is expected |
+| B3002 | `incompatible-struct-types` | warning | controllable | default | an aggregate or enumerated type used where a different one is expected |
 | B3003 | `return-type` | ignore | controllable | all | control reaches the end of a value-returning function |
 | B3004 | `too-few-arguments` | warning | controllable | default | a call passing fewer arguments than an old-style definition or a libc binding's prototype declares |
 | B3005 | `too-many-arguments` | warning | controllable | default | a call passing more arguments than an old-style definition or a libc binding's prototype declares |

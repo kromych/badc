@@ -660,6 +660,15 @@ impl Compiler {
         if declared == actual {
             return None;
         }
+        // Pointers to two enumerated types that share an integer type:
+        // C99 6.7.2.2p4 makes each compatible with that type, not with
+        // the other, and the conversion warns as between two structs.
+        if is_pointer_ty(declared)
+            && super::types::without_enum(declared) == super::types::without_enum(actual)
+            && !super::types::enum_compatible(declared, actual)
+        {
+            return TypeMismatch::warn(Code::INCOMPATIBLE_STRUCT_TYPES, "incompatible enum types");
+        }
         let decl_is_struct = is_struct_ty(declared);
         let act_is_struct = is_struct_ty(actual);
         let decl_is_ptr = is_pointer_ty(declared);

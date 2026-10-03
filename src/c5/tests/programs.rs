@@ -2860,6 +2860,13 @@ fn multidim_array_value() {
 }
 
 #[test]
+fn enum_type_identity() {
+    // C99 6.7.2.2p4: an enumerated type is a type of its own, compatible
+    // with its integer type, and its values behave as that type's.
+    assert_eq!(run_fixture("enum_type_identity.c"), 0);
+}
+
+#[test]
 fn variably_modified_type_names() {
     // C99 6.7.5.2p4, 6.5.3.4p2: a variable-length array type name's size
     // is computed at run time, and a cast to a pointer to one strides by it.

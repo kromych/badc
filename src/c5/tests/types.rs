@@ -4107,6 +4107,81 @@ fn an_array_of_arrays_converts_to_a_pointer_to_its_row() {
 }
 
 #[test]
+fn an_enumerated_type_is_a_type_of_its_own() {
+    // C99 6.7.2.2p4: each enumerated type is compatible with the integer
+    // type its definition chose -- `unsigned int` for non-negative values
+    // as gcc chooses, `int` under MSVC's rule on the PE targets -- and with
+    // no other enumerated type, an untagged one and one a block-scope tag
+    // declares included; arithmetic takes the integer type.
+    use crate::{Compiler, Target};
+    const SRC: &str = "#ifdef _WIN32\ntypedef int a_int;\n#else\ntypedef unsigned int a_int;\n#endif\n\
+         enum A { A1, A2 };\nenum B { B1 };\n\
+         typedef enum A OuterA;\ntypedef enum { U1 } U;\ntypedef enum { V1 } V;\n\
+         struct S { enum A m; };\nenum A fa(void);\n\
+         #define IS(t, e) _Generic((e), t: 1, default: 0)\n\
+         int main(int c, char **v) {\n\
+           enum A a = A1; a_int u = 0; struct S s = {A1};\n\
+           (void)v;\n\
+           _Static_assert(IS(enum A, a) && IS(a_int, a) && !IS(enum B, a), \"enum\");\n\
+           _Static_assert(IS(enum A, u) && IS(enum B, u), \"integer type\");\n\
+           _Static_assert(IS(enum A, s.m) && !IS(enum B, s.m), \"member\");\n\
+           _Static_assert(IS(enum A, fa()) && !IS(enum B, fa()), \"call\");\n\
+           _Static_assert(IS(enum A, (enum A)u) && !IS(enum B, (enum A)u), \"cast\");\n\
+           _Static_assert(IS(enum B, a + 0) && IS(enum B, -a) && IS(enum B, c ? a : a), \"arithmetic\");\n\
+           _Static_assert(IS(int, A1) && IS(int, A1 + 0), \"constant\");\n\
+           _Static_assert(IS(enum A *, &a) && IS(a_int *, &a) && !IS(enum B *, &a), \"pointer\");\n\
+           _Static_assert(!__builtin_types_compatible_p(enum A, enum B), \"A B\");\n\
+           _Static_assert(__builtin_types_compatible_p(enum A, a_int), \"A integer\");\n\
+           _Static_assert(!__builtin_types_compatible_p(enum A *, enum B *), \"A* B*\");\n\
+           _Static_assert(!__builtin_types_compatible_p(U, V), \"untagged\");\n\
+           __typeof__(a) t = a;\n\
+           _Static_assert(IS(OuterA, t) && !IS(enum B, t), \"typeof\");\n\
+           {\n\
+             enum A { Y1 = 5 } inner = Y1;\n\
+             _Static_assert(IS(enum A, inner) && !IS(OuterA, inner), \"block scope\");\n\
+             return inner + t;\n\
+           }\n\
+         }\n\
+         enum A fa(void) { return A2; }\n";
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        Compiler::with_target(SRC.to_string(), t)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+    }
+    // A packed enum takes the smallest integer type off the PE targets.
+    super::compile_str_bare_for(
+        "enum __attribute__((packed)) P { P1 };\nenum P p;\n\
+         _Static_assert(_Generic(p, enum P: 1, default: 0) && _Generic(p, unsigned char: 1, default: 0)\n\
+                        && sizeof p == 1, \"packed\");\n\
+         int main(void) { return p; }\n",
+        Target::LinuxX64,
+    );
+    // The pointer conversions between two enumerated types warn as between
+    // two structs; one to the integer type does not.
+    let p = super::compile_str_bare_for(
+        "enum A { A1 };\nenum B { B1 };\nenum A a;\n\
+         enum B *pb = &a;\nunsigned *pu = &a;\n\
+         int main(void) { enum A *pa = pu; return pa != &a; }\n",
+        Target::LinuxX64,
+    );
+    let w: alloc::vec::Vec<alloc::string::String> =
+        p.warnings.iter().map(|w| w.to_string()).collect();
+    assert!(
+        w.len() == 1
+            && w[0].contains("incompatible enum types in initializer")
+            && w[0].contains("declared=enum B*")
+            && w[0].contains("init=enum A*"),
+        "got: {w:?}"
+    );
+}
+
+#[test]
 fn equal_arithmetic_arms_of_a_conditional_take_the_usual_conversions() {
     // C99 6.5.15p5: two arithmetic operands take the usual arithmetic
     // conversions, which promote a narrow type the arms share.

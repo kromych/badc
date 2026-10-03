@@ -26,7 +26,7 @@ B2021  invalid-declaration            error    hard          -                  
 B2022  undeclared-identifier          error    hard          -                  live     a name no declaration in scope introduces
 B2023  static-assert                  error    hard          -                  live     a static assertion whose controlling expression is zero
 B3001  int-conversion                 warning  controllable  default            live     an integer and a pointer exchanged with no cast
-B3002  incompatible-struct-types      warning  controllable  default            live     an aggregate used where a different aggregate type is expected
+B3002  incompatible-struct-types      warning  controllable  default            live     an aggregate or enumerated type used where a different one is expected
 B3003  return-type                    ignore   controllable  all                live     control reaches the end of a value-returning function
 B3004  too-few-arguments              warning  controllable  default            live     a call passing fewer arguments than an old-style definition or a libc binding's prototype declares
 B3005  too-many-arguments             warning  controllable  default            live     a call passing more arguments than an old-style definition or a libc binding's prototype declares

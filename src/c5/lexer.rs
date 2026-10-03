@@ -364,6 +364,7 @@ fn parse_pragma_visibility_line(body: &[u8]) -> Option<VisibilityDirective> {
 #[derive(Clone, Copy)]
 pub(crate) struct LexerSnapshot {
     pos: usize,
+    tok_start: usize,
     line: usize,
     tk: Tok,
     ival: i64,
@@ -451,6 +452,8 @@ pub(crate) struct Lexer {
     /// See [`LineIndex`].
     line_index: core::cell::OnceCell<LineIndex>,
     pos: usize,
+    /// Byte offset in `src` where the current token begins.
+    tok_start: usize,
     pub line: usize,
     /// Name of the file `self.line` is counting within. Updated
     /// when the lexer crosses a GNU-style line marker (`# N "file"
@@ -669,6 +672,7 @@ impl Lexer {
             src: source.into_bytes(),
             line_index: core::cell::OnceCell::new(),
             pos: 0,
+            tok_start: 0,
             line: 1,
             file: String::from("<source>"),
             tk: Tok::EOF,
@@ -1341,6 +1345,19 @@ impl Lexer {
         }
     }
 
+    /// Where the current token begins, for [`Self::text_from`].
+    pub fn tok_start(&self) -> usize {
+        self.tok_start
+    }
+
+    /// The source text from offset `start` up to the current token,
+    /// without the white space before that token.
+    pub fn text_from(&self, start: usize) -> &str {
+        let end = self.tok_start.max(start).min(self.src.len());
+        let text = core::str::from_utf8(&self.src[start.min(end)..end]).unwrap_or("");
+        text.trim_end()
+    }
+
     /// Return true if the next non-whitespace byte (after the current position) equals `b`.
     /// Used by the compiler to detect `name:` label syntax without consuming the colon.
     pub fn peek_after_whitespace(&self, b: u8) -> bool {
@@ -1407,6 +1424,7 @@ impl Lexer {
     pub fn snapshot(&self) -> LexerSnapshot {
         LexerSnapshot {
             pos: self.pos,
+            tok_start: self.tok_start,
             line: self.line,
             tk: self.tk,
             ival: self.ival,
@@ -1431,6 +1449,7 @@ impl Lexer {
     /// restored token from whatever the abandoned parse lexed last.
     pub fn restore(&mut self, s: LexerSnapshot) {
         self.pos = s.pos;
+        self.tok_start = s.tok_start;
         self.line = s.line;
         self.tk = s.tk;
         self.ival = s.ival;
@@ -1776,6 +1795,7 @@ impl Lexer {
             }
 
             let c = self.src[self.pos] as char;
+            self.tok_start = self.pos;
             self.pos += 1;
 
             if c == '\n' {

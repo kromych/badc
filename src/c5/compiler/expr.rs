@@ -1331,11 +1331,15 @@ impl Compiler {
     }
 
     fn expr_inner(&mut self, lev: i64) -> Result<(), C5Error> {
-        self.parse_unary()?;
-        while self.lex.tk >= lev || self.lex.tk == '(' {
-            self.parse_operator()?;
-        }
-        Ok(())
+        let outer = core::mem::replace(&mut self.operand_start, self.lex.tok_start());
+        let r = self.parse_unary().and_then(|()| {
+            while self.lex.tk >= lev || self.lex.tk == '(' {
+                self.parse_operator()?;
+            }
+            Ok(())
+        });
+        self.operand_start = outer;
+        r
     }
 
     /// C99 6.5.1-6.5.3: a primary expression, or a unary operator applied
@@ -2270,6 +2274,7 @@ impl Compiler {
             is_variadic: s.is_variadic,
             name: s.name.clone(),
             is_sys_call,
+            narrows_to_params: is_sys_call,
             ret_ty: s.type_,
             returns_struct: s.class == Token::Fun as i64 && is_struct_value_ty(s.type_),
             count_known: s.prototyped || old_style_def,
@@ -2548,7 +2553,7 @@ impl Compiler {
         // C99 6.5.2.2p4: a libc import reads the argument at the full
         // register width, so an argument wider than an integer parameter is
         // narrowed here; a c5 callee narrows in its own parameter load.
-        if callee.is_sys_call
+        if callee.narrows_to_params
             && !is_pointer_ty(want)
             && !is_floating_scalar(want)
             && !is_struct_ty(want)
@@ -3526,6 +3531,7 @@ impl Compiler {
 
     fn parse_indirect_call(&mut self) -> Result<(), C5Error> {
         let callee_ast = self.ast_acc;
+        let callee_text = String::from(self.lex.text_from(self.operand_start));
         let ast_vstack_snapshot = self.ast_vstack.len();
         let mut indirect_arg_ids: alloc::vec::Vec<Option<super::super::ast::ExprId>> =
             alloc::vec::Vec::new();
@@ -3568,19 +3574,31 @@ impl Compiler {
         // converted to the parameter types of the callee expression's
         // function type (C99 6.5.2.2p7), as for a direct call.
         let callee_fn = self.callee_fn(callee_ast);
-        let callee_params = callee_fn.as_ref().map(|f| f.params.types.clone());
+        let callee = callee_fn.as_ref().map(|f| DirectCallee {
+            params: f.params.types.clone(),
+            param_fns: f.params.fn_types.clone(),
+            is_variadic: f.params.variadic,
+            name: callee_text,
+            is_sys_call: callee_ast.is_some_and(|id| self.fn_type_from_binding(id)),
+            narrows_to_params: false,
+            ret_ty: indirect_ret_ty,
+            returns_struct: false,
+            count_known: f.params.prototyped,
+            count_is_constraint: f.params.prototyped,
+        });
         let callee_ret_fn_ptr = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         let mut arg_idx: usize = 0;
         let call_line = self.lex.line;
         if self.lex.tk != ')' {
             loop {
                 let temp_off = self.reserve_slots(1);
+                let arg_line = self.lex.line;
                 self.emit_lea(temp_off);
                 self.ast_psh();
                 self.expr(Token::Assign as i64)?;
-                match &callee_params {
-                    Some(params) if arg_idx < params.len() => {
-                        self.convert_assign_rhs(params[arg_idx]);
+                match &callee {
+                    Some(c) if arg_idx < c.params.len() => {
+                        self.convert_declared_argument(c, arg_idx as i64, arg_line)?;
                     }
                     // C99 6.5.2.2p6: past the prototype, or with none, `float` becomes `double`.
                     Some(_) if is_float_ty(self.ty) => self.convert_assign_rhs(Ty::Double as i64),
@@ -6277,10 +6295,13 @@ struct DirectCallee {
     param_fns: Vec<(usize, FnType, i64)>,
     is_variadic: bool,
     name: String,
+    /// The prototype is a libc binding's, which approximates the
+    /// platform's, so its pointer parameters are not compared.
+    is_sys_call: bool,
     /// A libc import reads each argument at the ABI register width and
     /// never re-narrows to its declared parameter type, so the caller
     /// narrows for it; a c5 callee narrows in its own prologue.
-    is_sys_call: bool,
+    narrows_to_params: bool,
     ret_ty: i64,
     /// The struct result goes through a hidden out-pointer the caller
     /// allocates; for a `Token::Sys` callee the walker tags the call

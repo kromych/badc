@@ -5404,6 +5404,95 @@ fn a_pointer_to_a_function_converts_as_one() {
     }
 }
 
+/// C99 6.5.2.2p7 converts each argument as if by assignment to its
+/// parameter's type, whatever form the callee expression takes: a member,
+/// an element, a dereferenced pointer, a conditional, a cast or a call's
+/// result checks its arguments as a named function does, and the diagnostic
+/// spells the callee as written. A callee with no prototype takes the
+/// default argument promotions.
+#[test]
+fn a_call_through_any_callee_checks_its_arguments() {
+    use crate::diag::{Code, Config, Level};
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "typedef void (*int_fn)(int);\n\
+               typedef void (*ptr_fn)(long *);\n\
+               typedef void (*str_fn)(char *);\n\
+               typedef void (*cb_fn)(int (*)(void));\n\
+               struct S { int_fn cb; ptr_fn cq; str_fn cs; cb_fn cf; };\n\
+               int_fn tab[1];\n\
+               int_fn *pp;\n\
+               int_fn get_int(void);\n\
+               int x;\n\
+               const char *ro;\n\
+               int g(int);\n\
+               void (*unproto)();\n\
+               void calls(struct S *s, struct S v, int c, void *p) {\n\
+               \ts->cb(\"x\");\n\
+               \tv.cq(&x);\n\
+               \ttab[0](\"y\");\n\
+               \t(*pp)(\"z\");\n\
+               \t(c ? s->cs : v.cs)(ro);\n\
+               \t((cb_fn)p)(g);\n\
+               \tget_int()(&x);\n\
+               \tunproto(1.0f, \"w\");\n\
+               \ts->cb(1);\n\
+               \t(*pp)(2);\n\
+               }\n";
+    let compile = |config: Config| {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_diag(config);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts).compile()
+    };
+    let err = compile(Config::new()).err().map(|e| e.to_string());
+    let stops = ":15: error: incompatible pointer types in argument 1 of `v.cq`";
+    assert!(err.as_deref().is_some_and(|e| e.contains(stops)), "{err:?}");
+    let mut lowered = Config::new();
+    lowered.set_level(Code::INCOMPATIBLE_POINTER_TYPES, Level::Warning);
+    let program = compile(lowered).unwrap_or_else(|e| panic!("{e}"));
+    let got: alloc::vec::Vec<(u32, Code, Level, String)> = program
+        .warnings
+        .iter()
+        .filter_map(|w| {
+            let line = w.loc.as_ref()?.line;
+            Some((line, w.code, w.level, w.text.clone()))
+        })
+        .collect();
+    let (int_conv, pointers) = (Code::INT_CONVERSION, Code::INCOMPATIBLE_POINTER_TYPES);
+    let want = [
+        (14, int_conv, "argument 1 of `s->cb` (param=int, arg=char*)"),
+        (15, pointers, "argument 1 of `v.cq` (param=long*, arg=int*)"),
+        (
+            16,
+            int_conv,
+            "argument 1 of `tab[0]` (param=int, arg=char*)",
+        ),
+        (17, int_conv, "argument 1 of `(*pp)` (param=int, arg=char*)"),
+        (
+            18,
+            Code::DISCARDED_QUALIFIERS,
+            "argument 1 of `(c ? s->cs : v.cs)` (param=char*, arg=const char*)",
+        ),
+        (
+            19,
+            pointers,
+            "argument 1 of `((cb_fn)p)` (param=`int (*)(void)`, arg=`int (*)(int)`)",
+        ),
+        (
+            20,
+            int_conv,
+            "argument 1 of `get_int()` (param=int, arg=int*)",
+        ),
+    ];
+    assert_eq!(got.len(), want.len(), "{got:?}");
+    for ((line, code, level, text), (wline, wcode, wtext)) in got.iter().zip(want) {
+        assert!(
+            *line == wline && *code == wcode && *level == Level::Warning && text.contains(wtext),
+            "{got:?}"
+        );
+    }
+}
+
 /// C99 6.5.16.1p1 lets a pointer gain qualifiers only on the type it points
 /// to; a qualifier difference further down (`T **` as `const T **`) makes the
 /// pointed-to types incompatible (6.7.3p9). As clang gives it, that alone is

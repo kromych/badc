@@ -2389,6 +2389,9 @@ pub struct Compiler {
     /// return-type prototype (implicit int). Dedupes the diagnostic to
     /// one per callee.
     warned_implicit_ret: alloc::collections::BTreeSet<usize>,
+    /// Where the operand the precedence loop is extending begins, so a
+    /// diagnostic about a call can spell the callee expression.
+    operand_start: usize,
     /// The composite type and the function body of each identifier with
     /// linkage, by symbol index.
     linked_entities: hashbrown::HashMap<usize, redeclaration::LinkedEntity>,
@@ -3018,6 +3021,7 @@ impl Compiler {
             deferred_error,
             dylibs,
             warned_implicit_ret: alloc::collections::BTreeSet::new(),
+            operand_start: 0,
             linked_entities: hashbrown::HashMap::new(),
             target,
             next_ent_pc: 0,

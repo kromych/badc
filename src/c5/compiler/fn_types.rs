@@ -78,7 +78,7 @@ impl Compiler {
     /// Whether the function type expression `id` leads to is a libc
     /// binding's, reached through `&`, `*`, a comma, a conditional arm or a
     /// call's result.
-    fn fn_type_from_binding(&self, id: ExprId) -> bool {
+    pub(super) fn fn_type_from_binding(&self, id: ExprId) -> bool {
         match self.ast.expr(id) {
             Expr::Ident { class, .. } => *class == Token::Sys as i64,
             Expr::Unary {

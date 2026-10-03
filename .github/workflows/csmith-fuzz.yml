@@ -12,6 +12,14 @@ name: csmith-fuzz
 # The two lanes run one at a time. Both would otherwise open the week's issue
 # concurrently on the first finding of a week -- GitHub has no create-if-absent
 # for an issue -- and the week would start with two of them.
+#
+# Each lane runs the harness's legs one after another (`csmith_fuzz.py
+# --leg`): the default, an inlining cap of 4096, a codegen_test badc under
+# two registers per bank with the allocation check on, and csmith 2.4.0's
+# GNU extensions. A leg's name joins its findings' signatures, so the week's
+# issue holds each leg's findings apart. Ubuntu packages csmith 2.3.0, which
+# has none of those extensions; 2.4.0 is master past the last tag, built at
+# CSMITH_COMMIT and cached.
 
 on:
   workflow_dispatch:
@@ -52,10 +60,12 @@ jobs:
           - ubuntu-latest
           - ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
-    # The build dominates: five minutes of fuzzing and ten of reduction on
-    # top of a cold rust-cache build. The cap is a hang backstop, not the
-    # budget.
-    timeout-minutes: 45
+    # Four legs of five minutes of fuzzing and up to ten of reduction each,
+    # on top of two badc builds and, on a cold cache, the generator's. The
+    # cap is a hang backstop, not the budget.
+    timeout-minutes: 120
+    env:
+      CSMITH_COMMIT: 0cdc710315cfee9035e22ef4363ca479270d1934
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -70,14 +80,37 @@ jobs:
         # `csmith` carries /usr/bin/csmith, `libcsmith-dev` carries
         # /usr/include/csmith/csmith.h, which every generated program includes.
         # Both are in universe, 2.3.0 on noble and later, as is `cvise`,
-        # the reducer the harness prefers.
-        run: ./scripts/apt_resilient_install.sh csmith libcsmith-dev cvise
+        # the reducer the harness prefers. cmake and m4 build csmith 2.4.0.
+        run: ./scripts/apt_resilient_install.sh csmith libcsmith-dev cvise cmake m4
+      - name: csmith 2.4.0 from the cache
+        id: csmith24
+        uses: actions/cache@v4
+        with:
+          path: ~/csmith-2.4.0
+          key: csmith-${{ env.CSMITH_COMMIT }}-${{ matrix.os }}
+      - name: build csmith 2.4.0
+        if: steps.csmith24.outputs.cache-hit != 'true'
+        run: |
+          src="$RUNNER_TEMP/csmith"
+          git clone https://github.com/csmith-project/csmith "$src"
+          git -C "$src" checkout --detach "$CSMITH_COMMIT"
+          cmake -S "$src" -B "$src/build" -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$HOME/csmith-2.4.0"
+          cmake --build "$src/build" -j "$(nproc)"
+          cmake --install "$src/build"
       - name: build badc
-        run: cargo build --release --locked --features full --bin badc
+        # The pressure leg's badc reads BADC_MAX_GPR / BADC_MAX_FPR and
+        # BADC_VERIFY_ALLOC, which only a codegen_test build does.
+        run: |
+          cargo build --release --locked --features full --bin badc
+          cp target/release/badc target/release/badc-full
+          cargo build --release --locked --features "codegen_test full" --bin badc
+          cp target/release/badc target/release/badc-pressure
       - name: fuzz
         # The dispatch inputs reach the shell through the environment rather
         # than through expression interpolation, which would splice whatever
-        # was typed into the command line.
+        # was typed into the command line. A leg that fails leaves the others
+        # to run; the step fails after them.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MINUTES: ${{ inputs.minutes || '5' }}
@@ -86,21 +119,34 @@ jobs:
         run: |
           publish=
           if [ "$PUBLISH" = "true" ]; then publish=--publish; fi
-          python3 scripts/csmith_fuzz.py \
-            --minutes "$MINUTES" \
-            --reduce-minutes "$REDUCE_MINUTES" \
-            --badc target/release/badc \
-            --require-csmith \
-            --out-dir fuzz-cases \
-            --report fuzz-report.json \
-            $publish
-      - name: publish the run's cases and report
+          status=0
+          for leg in default inline-cap-4096 pressure gnu; do
+            badc=target/release/badc-full
+            generator=()
+            case $leg in
+              pressure) badc=target/release/badc-pressure ;;
+              gnu) generator=(--csmith "$HOME/csmith-2.4.0/bin/csmith"
+                              --csmith-include "$HOME/csmith-2.4.0/include") ;;
+            esac
+            python3 scripts/csmith_fuzz.py \
+              --leg "$leg" \
+              --minutes "$MINUTES" \
+              --reduce-minutes "$REDUCE_MINUTES" \
+              --badc "$badc" \
+              "${generator[@]}" \
+              --require-csmith \
+              --out-dir "fuzz-cases/$leg" \
+              --report "fuzz-report-$leg.json" \
+              $publish || status=1
+          done
+          exit $status
+      - name: publish the run's cases and reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: csmith-fuzz-${{ matrix.os }}
           path: |
             fuzz-cases
-            fuzz-report.json
+            fuzz-report-*.json
           if-no-files-found: ignore
           retention-days: 14

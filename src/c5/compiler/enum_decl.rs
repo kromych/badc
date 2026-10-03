@@ -22,7 +22,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::symbol::{FnParams, FnType};
 use super::super::token::{Token, Ty};
-use super::types::{UNSIGNED_BIT, rebase_enum_placeholder, struct_ty_for};
+use super::types::{UNSIGNED_BIT, enum_ty, rebase_enum_placeholder, struct_ty_for};
 use super::{Compiler, EnumDef};
 
 /// The definition of an enum tag, applied to the types an earlier use of
@@ -105,8 +105,9 @@ fn enumerator_constant_ty(v: i64, enum_ty: i64) -> i64 {
 }
 
 impl Compiler {
-    /// Parse an `enum` type reference / definition and return its underlying
-    /// integer type, with the tag when it has no definition yet. A plain
+    /// Parse an `enum` type reference / definition and return the enumerated
+    /// type -- its underlying integer type with the enum's identity -- or,
+    /// with the tag, the tag's entry when it has no definition yet. A plain
     /// enum takes `enum_compatible_ty` (C99 6.7.2.2p4 leaves the choice
     /// open; `int` when every value fits); an `enum __attribute__((packed))`
     /// (per-enum `-fshort-enums`) uses the smallest integer type holding its
@@ -129,10 +130,16 @@ impl Compiler {
         };
         packed = self.skip_attribute_specifiers()? || packed;
         if self.lex.tk == '{' {
-            // The tag's scope begins before the list (C99 6.2.1p7).
-            let tag = match &tag_name {
-                Some(name) => Some(self.define_enum_tag(name)?),
-                None => None,
+            // The tag's scope begins before the list (C99 6.2.1p7). An
+            // untagged enumeration is a type of its own all the same
+            // (6.7.2.2p4), on an entry no tag names.
+            let id = match &tag_name {
+                Some(name) => self.define_enum_tag(name)?,
+                None => {
+                    self.structs
+                        .push(super::StructDef::incomplete_tag("", false, true));
+                    self.structs.len() - 1
+                }
             };
             let (min, max, captured) = self.parse_enum_body()?;
             // An attribute after the closing brace binds to the enum type
@@ -177,19 +184,17 @@ impl Compiler {
                     underlying_ty: underlying,
                 });
             }
-            if let Some(id) = tag {
-                self.structs[id].enum_underlying = Some(underlying);
-                self.complete_enum_placeholders(id as u32, underlying);
-            }
-            return Ok((underlying, None));
+            self.structs[id].enum_underlying = Some(underlying);
+            self.complete_enum_placeholders(id as u32, underlying);
+            return Ok((enum_ty(underlying, id), None));
         }
         let Some(name) = tag_name else {
             return Err(self.compile_err(Code::SYNTAX, "enum name or `{` expected"));
         };
         // `enum Tag` names the visible tag's type: the integer type its
-        // definition chose, so a packed enum keeps its sub-int width. With
-        // no tag visible, GNU C declares an incomplete enum here, which C99
-        // 6.7.2.3p2 does not allow.
+        // definition chose, so a packed enum keeps its sub-int width, with
+        // the tag's identity. With no tag visible, GNU C declares an
+        // incomplete enum here, which C99 6.7.2.3p2 does not allow.
         let id = match self.find_tag(&name) {
             Some(id) => {
                 self.check_tag_kind(id, "enum")?;
@@ -198,7 +203,7 @@ impl Compiler {
             None => self.declare_tag(&name, false, true),
         };
         if let Some(underlying) = self.structs[id].enum_underlying {
-            return Ok((underlying, None));
+            return Ok((enum_ty(underlying, id), None));
         }
         // The incomplete type is the tag's entry, which the checks for an
         // incomplete struct reject where a complete type is required. The

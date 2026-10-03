@@ -13,15 +13,14 @@
 // measurable.
 
 #include <stdio.h>
-#include <time.h>
+#include "bench_clock.h"
 
 #define N 30000000
 
 static char composite[N];
 
 int main(void) {
-    struct timespec t0, t1;
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    double t0 = bench_ms();
 
     for (int i = 2; (long)i * i < N; i++) {
         if (!composite[i]) {
@@ -37,10 +36,8 @@ int main(void) {
         }
     }
 
-    clock_gettime(CLOCK_MONOTONIC, &t1);
-    long secs = t1.tv_sec - t0.tv_sec;
-    long nsecs = t1.tv_nsec - t0.tv_nsec;
-    double ms = (double)secs * 1000.0 + (double)nsecs / 1000000.0;
+    double t1 = bench_ms();
+    double ms = t1 - t0;
     printf("sieve(%d) = %ld in %.2f ms\n", N, count, ms);
 
     // Sanity-check against the known prime count so a miscompilation

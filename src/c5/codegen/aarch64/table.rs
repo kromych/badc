@@ -262,6 +262,26 @@ pub(crate) enum Opnd {
     SvePattern(u8),
     /// An SVE element-count multiplier `mul #imm`, as written.
     SveMul(i64),
+    /// An SVE vector register `zN`, with its element-size log2, if written.
+    ZReg {
+        num: u8,
+        size: Option<u8>,
+    },
+    /// An SVE predicate register `pN`, with its element-size log2, if written.
+    PReg {
+        num: u8,
+        size: Option<u8>,
+    },
+    /// `[base, #off, mul vl]`: an offset in vector or predicate lengths.
+    MemVl {
+        base: u8,
+        off: i64,
+    },
+    /// An SME ZA array vector `za[Wv, #off]`; `select` is the W register.
+    ZaVec {
+        select: u8,
+        off: i64,
+    },
 }
 
 fn reg(o: Opnd) -> Result<u8, String> {
@@ -451,6 +471,9 @@ pub(crate) fn encode(mnemonic: &str, ops: &[Opnd]) -> Result<u32, String> {
     // operand past them would silently drop the stack pointer.
     if ops.iter().any(|o| matches!(o, Opnd::Reg { sp: true, .. })) {
         return encode_catalogue(mnemonic, ops);
+    }
+    if let Some(word) = encode_sve_state(mnemonic, ops) {
+        return word;
     }
     // System-register move: `mrs Xt, <sysreg>` / `msr <sysreg>, Xt`. The
     // register is always 64-bit; the 16-bit `op0:op1:CRn:CRm:op2` field sits at
@@ -2600,6 +2623,76 @@ static MOPS_FORMS: &[(&str, u32)] = &[
     ("setmt", 0x19C05400), ("setmtn", 0x19C07400), ("setp", 0x19C00400),
     ("setpn", 0x19C02400), ("setpt", 0x19C01400), ("setptn", 0x19C03400),
 ];
+
+/// The SVE and SME forms over vector, predicate and ZA operands, which the
+/// instruction database the catalogue is generated from does not carry: LDR
+/// and STR of a vector or predicate register at a vector-length-scaled
+/// offset, the FFR moves and `pfalse` (Arm ARM C8.2), and SME `rdsvl` and
+/// LDR/STR of a ZA array vector. `None` for any other mnemonic or shape.
+fn encode_sve_state(mnemonic: &str, ops: &[Opnd]) -> Option<Result<u32, String>> {
+    // A base-only reference is offset 0.
+    let vl_mem = |o: Opnd| match o {
+        Opnd::Mem {
+            base,
+            off: 0,
+            pre: false,
+        } => Some((base, 0)),
+        Opnd::MemVl { base, off } => Some((base, off)),
+        _ => None,
+    };
+    let store = mnemonic == "str";
+    // The 9-bit signed offset splits into bits 21:16 and 12:10.
+    let scaled = |word: u32, rt: u8, m: Opnd| match vl_mem(m) {
+        Some((rn, off)) if (-256..=255).contains(&off) => {
+            let imm9 = off as u32 & 0x1FF;
+            Ok(word | (imm9 >> 3) << 16 | (imm9 & 7) << 10 | u32::from(rn) << 5 | u32::from(rt))
+        }
+        _ => Err(format!(
+            "inline asm: `{mnemonic}` needs `[Xn|SP{{, #-256..255, mul vl}}]`"
+        )),
+    };
+    Some(match (mnemonic, ops) {
+        ("ldr" | "str", &[Opnd::ZReg { num, size: None }, m]) => {
+            scaled(if store { 0xE580_4000 } else { 0x8580_4000 }, num, m)
+        }
+        ("ldr" | "str", &[Opnd::PReg { num, size: None }, m]) => {
+            scaled(if store { 0xE580_0000 } else { 0x8580_0000 }, num, m)
+        }
+        // The vector offset is repeated in the address, 0..15 both.
+        ("ldr" | "str", &[Opnd::ZaVec { select, off }, m]) => match vl_mem(m) {
+            Some((rn, at))
+                if (12..=15).contains(&select) && (0..=15).contains(&off) && at == off =>
+            {
+                let word = if store { 0xE120_0000 } else { 0xE100_0000 };
+                Ok(word | u32::from(select - 12) << 13 | u32::from(rn) << 5 | off as u32)
+            }
+            _ => Err(format!(
+                "inline asm: `{mnemonic}` needs `za[w12..w15, #off], [Xn|SP{{, #off, mul vl}}]`, off 0..15"
+            )),
+        },
+        ("rdffr", &[Opnd::PReg { num, size: Some(0) }]) => Ok(0x2519_F000 | u32::from(num)),
+        ("pfalse", &[Opnd::PReg { num, size: Some(0) }]) => Ok(0x2518_E400 | u32::from(num)),
+        ("wrffr", &[Opnd::PReg { num, size: Some(0) }]) => Ok(0x2528_9000 | u32::from(num) << 5),
+        (
+            "rdsvl",
+            &[
+                Opnd::Reg {
+                    num, is64: true, ..
+                },
+                Opnd::Imm(v),
+            ],
+        ) => {
+            if (-32..=31).contains(&v) {
+                Ok(0x04BF_5800 | (v as u32 & 63) << 5 | u32::from(num))
+            } else {
+                Err(format!(
+                    "inline asm: `rdsvl` multiplier {v} outside -32..31"
+                ))
+            }
+        }
+        _ => return None,
+    })
+}
 
 /// Look up a memory copy / set base word by mnemonic.
 fn mops_base(mnemonic: &str) -> Option<u32> {

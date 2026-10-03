@@ -36,12 +36,12 @@ fn an_enum_is_compatible_with_int_on_the_pe_targets() {
     for (src, needles) in [
         (
             "enum E { A = 5 };\nint f(enum E);\nint f(unsigned int v) { return (int)v; }\n",
-            ["previous: int (int)", "now:      int (unsigned int)"],
+            ["previous: int (enum E)", "now:      int (unsigned int)"],
         ),
         (
             "enum E;\nextern enum E x;\nenum E { A } __attribute__((__mode__(__byte__)));\n\
              int x;\n",
-            ["previous: signed char", "now:      int"],
+            ["previous: enum E", "now:      int"],
         ),
     ] {
         let src = alloc::format!("{src}int main(void) {{ return 0; }}\n");
@@ -74,6 +74,12 @@ fn function_redeclarations_of_another_type_are_rejected() {
         (
             "int f(int x) { return x; }\nlong f(int x);\n",
             "now:      long (int)",
+        ),
+        // C99 6.7.5.3p7: an array parameter is a pointer to its element,
+        // the row for two bounds, which a pointer to the scalar is not.
+        (
+            "int f(int a[2][3]);\nint f(int *a) { return *a; }\n",
+            "previous: int (int (*)[3])",
         ),
         (
             "int f(int x);\nint f(int x, int y) { return x + y; }\n",
@@ -130,16 +136,26 @@ fn function_redeclarations_of_another_type_are_rejected() {
             "int f();\nextern __typeof__(f) f;\nint f(char c) { return c; }\n",
             "now:      int (char)",
         ),
+        // C99 6.7.2.2p4: two enumerated types of one integer type differ.
+        (
+            "enum A { A1 };\nenum B { B1 };\nint f(enum A);\nint f(enum B b) { return b; }\n",
+            "now:      int (enum B)",
+        ),
+        // C99 6.7.3: `volatile` below a parameter's own level takes part.
+        (
+            "int f(volatile int **);\nint f(int *volatile *p) { return p != 0; }\n",
+            "now:      int (int* volatile *)",
+        ),
         // The tag's definition fixes the type the earlier use names.
         (
             "enum E;\nint f(enum E);\nenum E { A } __attribute__((__mode__(__byte__)));\n\
              int f(int x) { return x; }\n",
-            "previous: int (unsigned char)",
+            "previous: int (enum E)",
         ),
         (
             "typedef enum E T;\nint f(T);\nenum E { A = 3 } __attribute__((packed));\n\
              int f(int v) { return v; }\n",
-            "previous: int (unsigned char)",
+            "previous: int (enum E)",
         ),
     ] {
         let src = alloc::format!("{decls}int main(void) {{ return 0; }}\n");
@@ -167,8 +183,18 @@ fn object_redeclarations_of_another_type_are_rejected() {
         ),
         (
             "enum E;\nextern enum E x;\nenum E { A } __attribute__((__mode__(__byte__)));\nint x;\n",
-            "previous: unsigned char",
+            "previous: enum E",
         ),
+        (
+            "enum A { A1 };\nenum B { B1 };\nextern enum A x;\nenum B x;\n",
+            "now:      enum B",
+        ),
+        // C99 6.7.3: `volatile` takes part at the level it qualifies.
+        (
+            "extern volatile int **x;\nint *volatile *x;\n",
+            "now:      int* volatile *",
+        ),
+        ("int x;\nvolatile int x;\n", "now:      volatile int"),
     ] {
         let src = alloc::format!("{decls}int main(void) {{ return 0; }}\n");
         expect_conflict(&src, &["conflicting types for `x`", needle]);
@@ -342,6 +368,11 @@ fn compatible_redeclarations_compose() {
         (
             "extern volatile int v;\nvolatile int v = 3;\nint main(void) { return v; }\n",
             3,
+        ),
+        // C99 6.7.5.3p15: a parameter's own qualifier takes no part.
+        (
+            "int h(volatile int);\nint h(int a) { return a; }\nint main(void) { return h(4); }\n",
+            4,
         ),
         (
             "typedef const int CI;\nextern CI c;\nconst int c = 2;\nint main(void) { return c; }\n",

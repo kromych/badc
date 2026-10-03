@@ -31,6 +31,7 @@ mod block_plan;
 mod branch_reach;
 #[cfg(feature = "full")]
 mod codegen;
+mod compound_assign;
 #[cfg(feature = "full")]
 mod computed_goto;
 mod deferred;

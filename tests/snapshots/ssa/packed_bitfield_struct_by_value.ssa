@@ -127,15 +127,15 @@ fn ent_pc=4 n_params=0 variadic=false locals=4
     v106 BinopI { op=add, lhs=v105, rhs_imm=1 }           -> x1
     v107 Store { addr=v101, disp=11, value=v106, kind=I8 } -> -
     v108 LocalAddr(-2)                                    -> x1
-    v109 LifetimeEnd(-2)                                  -> -
-    v110 LocalAddr(-4)                                    -> x1
-    v111 Load { addr=v101, disp=0, kind=I64, align=1 }    -> x6
-    v112 Load { addr=v101, disp=8, kind=U32, align=1 }    -> x2
-    v113 Store { addr=v110, disp=0, value=v111, kind=I64 } -> -
-    v114 Store { addr=v110, disp=8, value=v112, kind=I32 } -> -
+    v109 LocalAddr(-4)                                    -> x1
+    v110 Load { addr=v101, disp=0, kind=I64, align=1 }    -> x6
+    v111 Load { addr=v101, disp=8, kind=U32, align=1 }    -> x2
+    v112 Store { addr=v109, disp=0, value=v110, kind=I64 } -> -
+    v113 Store { addr=v109, disp=8, value=v111, kind=I32 } -> -
+    v114 LifetimeEnd(-2)                                  -> -
     v115 LocalAddr(-4)                                    -> x6
     v116 LocalAddr(-2)                                    -> x6
-    v117 Mcpy { dst=v101, src=v110, size=12, align=1 }    -> -
+    v117 Mcpy { dst=v101, src=v109, size=12, align=1 }    -> -
     v118 LocalAddr(-2)                                    -> x1
     v119 Load { addr=v101, disp=0, kind=U32, align=1 }    -> x1
     v120 BinopI { op=and, lhs=v119, rhs_imm=1048575 }     -> x1
@@ -160,8 +160,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=4
   block 7  start_pc=0
     v136 LocalAddr(-2)                                    -> x1
     v137 BinopI { op=add, lhs=v136, rhs_imm=8 }           -> x1
-    v138 BinopI { op=and, lhs=v112, rhs_imm=4294967295 }  -> x1
-    v139 BinopI { op=and, lhs=v112, rhs_imm=1048575 }     -> x1
+    v138 BinopI { op=and, lhs=v111, rhs_imm=4294967295 }  -> x1
+    v139 BinopI { op=and, lhs=v111, rhs_imm=1048575 }     -> x1
     v140 BinopI { op=ne, lhs=v139, rhs_imm=703710 }       -> x1
     v141 BinopI { op=ne, lhs=v140, rhs_imm=0 }            -> x2
     v142 Imm(0)                                           -> x2

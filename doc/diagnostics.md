@@ -42,7 +42,7 @@ regenerates.
 | B1005 | `pragma-syntax` | warning | controllable | default | a diagnostic pragma badc implements whose operand is malformed |
 | B1006 | `pragma-pop-without-push` | warning | controllable | default | a diagnostic-pragma pop with no matching push |
 | B1007 | `ignored-pragma-intrinsic` | warning | controllable | default | a `#pragma intrinsic` naming a function badc has no intrinsic for; the name stays an ordinary call |
-| B1010 | `directive` | error | hard | - | a directive whose operand the preprocessor cannot process, or a conditional directive with no `#if` to match |
+| B1010 | `directive` | error | hard | - | a directive whose operand the preprocessor cannot process, a directive preprocessed input does not take, or a conditional directive with no `#if` to match |
 | B1011 | `invalid-pragma` | error | hard | - | a pragma badc implements whose operand cannot be applied |
 | B1012 | `invalid-token` | error | hard | - | a character sequence that forms no token: a malformed constant, escape sequence or universal character name |
 | B1013 | `error-directive` | error | hard | - | a `#error` directive reached in an active conditional block |
@@ -61,8 +61,9 @@ regenerates.
 | B2021 | `invalid-declaration` | error | hard | - | a declaration a C99 constraint rejects: a redefinition, conflicting types, an incomplete object, a bit-field width or an alignment out of range |
 | B2022 | `undeclared-identifier` | error | hard | - | a name no declaration in scope introduces |
 | B2023 | `static-assert` | error | hard | - | a static assertion whose controlling expression is zero |
+| B2024 | `incomplete-element-type` | error | hard | - | an array whose element type is incomplete: an array of unknown size, `void`, or a tag declared without its body |
 | B3001 | `int-conversion` | warning | controllable | default | an integer and a pointer exchanged with no cast |
-| B3002 | `incompatible-struct-types` | warning | controllable | default | an aggregate used where a different aggregate type is expected |
+| B3002 | `incompatible-struct-types` | warning | controllable | default | an aggregate or enumerated type used where a different one is expected |
 | B3003 | `return-type` | ignore | controllable | all | control reaches the end of a value-returning function |
 | B3004 | `too-few-arguments` | warning | controllable | default | a call passing fewer arguments than an old-style definition or a libc binding's prototype declares |
 | B3005 | `too-many-arguments` | warning | controllable | default | a call passing more arguments than an old-style definition or a libc binding's prototype declares |
@@ -77,7 +78,10 @@ regenerates.
 | B3026 | `return-mismatch` | error | controllable | default | a `return` with a value in a function returning `void`, or with none in a function returning a value |
 | B3027 | `void-value` | error | hard | - | the value of a `void` expression used: as an operand, an argument, an initializer, an assigned or returned value, or a controlling expression |
 | B3028 | `controlling-expression` | error | hard | - | a controlling expression of a type its statement does not take: a non-scalar `if`, `while`, `do` or `for` condition, a non-integer `switch` expression |
-| B3029 | `incompatible-pointer-types` | error | controllable | default | a pointer to a function assigned, initialized or returned as a pointer to an incompatible function type |
+| B3029 | `incompatible-pointer-types` | error | controllable | default | a pointer assigned, initialized, passed or returned as a pointer to a type incompatible with the type it points to, neither side a pointer to `void` |
+| B3030 | `pointer-difference` | error | hard | - | a subtraction of two pointers that do not point to qualified or unqualified versions of compatible types |
+| B3031 | `discarded-qualifiers` | warning | controllable | default | a pointer assigned, initialized, passed or returned as a pointer to a type without a `const` or `volatile` the original pointed-to type has |
+| B3032 | `pointer-sign` | warning | controllable | default | a pointer assigned, initialized, passed or returned as a pointer to an integer type that differs from the one it points to only in signedness |
 | B4001 | `unsupported` | error | hard | - | a well-formed construct badc does not implement |
 | B4002 | `limit` | error | hard | - | a translation limit badc imposes: nesting depth, include depth, alignment |
 | B4003 | `inline` | ignore | controllable | - | a function the source declared `inline` that the optimizer left out of line |
@@ -88,6 +92,8 @@ regenerates.
 | B6001 | `orphan-section` | warning | controllable | default | an input section no script rule names, placed by the linker's own rule |
 | B6002 | `missing-entry` | warning | controllable | default | no input defines the entry symbol, so the image enters at the first text address |
 | B6003 | `merged-section-access` | warning | controllable | default | a relocation reaches past the end of the merged section it names |
+| B6004 | `execstack` | warning | controllable | default | the image's stack is executable because an input's `.note.GNU-stack` asks for it, or because `-z execstack` does under `--warn-execstack` |
+| B6005 | `rwx-segment` | warning | controllable | default | a segment the image loads is readable, writable and executable, or its thread-local segment executable |
 | B6010 | `undefined-symbol` | error | hard | - | a reference no input object, archive or shared library defines |
 | B6011 | `duplicate-symbol` | error | hard | - | more than one input defines the same symbol |
 | B6012 | `relocation` | error | hard | - | a relocation the linker cannot apply, or a value its field cannot hold |

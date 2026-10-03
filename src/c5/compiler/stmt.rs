@@ -29,7 +29,9 @@ use super::super::error::C5Error;
 use super::super::token::{Tok, Token, Ty};
 use super::Compiler;
 use super::diag::Category;
-use super::types::{is_struct_ty, is_struct_value_ty, is_void_ty, struct_ptr_depth};
+use super::types::{
+    integer_promote, is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_void_ty, struct_ptr_depth,
+};
 
 /// The outer binding a nested block saved before rebinding a name, restored
 /// at the block's exit. A block nests arbitrarily, so unlike the single
@@ -492,13 +494,14 @@ impl Compiler {
         self.consume(b'(', "open paren expected")?;
         self.parse_controlling_expr("switch", Category::Integer)?;
         let disc_ast = self.ast_acc;
+        let promoted = integer_promote(self.ty);
         self.consume(b')', "close paren expected")?;
 
         // Conservative drop of any pending dead-store entries at
         // the switch entry boundary, matching the flush a
         // control-flow op would have produced through emit_cf_op.
         self.flush_pending_stores();
-        self.switch_cases.push(Vec::new());
+        self.switch_cases.push((promoted, Vec::new()));
         self.switch_defaults.push(false);
         self.enter_switch();
         self.enter_switch_body();
@@ -536,20 +539,9 @@ impl Compiler {
         let lbt = self.parse_decl_base_type()?;
         let base_enum_tag = self.pending.base_enum_tag.take();
         while self.lex.tk != ';' {
-            let (id_idx, mut ty, mut td_array) = self.parse_declarator(lbt)?;
+            let (id_idx, ty, mut td_array, mut td_zero_len) = self.parse_declarator(lbt)?;
             if id_idx == usize::MAX {
                 return Err(self.compile_err(Code::INVALID_DECLARATION, "typedef requires a name"));
-            }
-            // `__attribute__((vector_size(N)))` on the typedef rebuilds its type
-            // into a GCC vector here, matching the file-scope path. Without it
-            // the attribute leaked to the first subsequent declaration and was
-            // then consumed, so a second use of the typedef resolved as a scalar.
-            if self.pending.attr_vector_size > 0 {
-                let n = core::mem::take(&mut self.pending.attr_vector_size);
-                ty = self.make_vector_type(ty, n);
-            }
-            if let Some(m) = self.pending.attr_mode.take() {
-                ty = self.apply_mode_to_type(ty, m)?;
             }
             let declarator_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
@@ -636,8 +628,11 @@ impl Compiler {
             )?;
             if typedef_dim != 0 && td_array == 0 && !self.pending.base_array_taken {
                 td_array = typedef_dim;
+                td_zero_len = self.pending.typedef_base_zero_len;
             }
             self.symbols[id_idx].array_size = td_array;
+            // A zero-length alias shares the `-1` count of one of unknown size.
+            self.symbols[id_idx].is_zero_len_array = td_array < 0 && td_zero_len;
             self.symbols[id_idx].is_function_type = typedef_is_fn_type;
             // A function-type typedef records the calling convention its
             // declaration named, so a declarator through the alias
@@ -3164,43 +3159,61 @@ impl Compiler {
             // expression chain (`a ? b : c`), so we go in at the top.
             // Block-scope `const` scalar objects fold to their recorded
             // initializer values here, as GCC (GNU mode, at -O) accepts.
-            let lo = self.parse_constant_int_folding_const_objects()?;
+            let lo = self.parse_constant_folding_const_objects()?;
             // GNU case range `case lo ... hi:` (C extension): the label
             // covers every value in [lo, hi]. `hi == lo` for a single label.
             let hi = if self.lex.tk == Token::Ellipsis {
                 self.next()?;
-                self.parse_constant_int_folding_const_objects()?
+                self.parse_constant_folding_const_objects()?
             } else {
                 lo
             };
             self.consume(b':', "expected colon after case")?;
             self.check_switch_label(line)?;
-            if hi < lo {
+            let Some(&(promoted, _)) = self.switch_cases.last() else {
+                return Err(self.compile_err(Code::INVALID_STATEMENT, "case outside switch"));
+            };
+            // C99 6.8.4.2p5: each label converts to the promoted type of
+            // the controlling expression, which the comparisons are made in.
+            let lo = self.const_int_of(lo.as_i128(), promoted).as_i128();
+            let hi = self.const_int_of(hi.as_i128(), promoted).as_i128();
+            let unsigned = is_unsigned_ty(promoted);
+            let spell = |v: i128| {
+                if unsigned {
+                    format!("{}", v as u128)
+                } else {
+                    format!("{v}")
+                }
+            };
+            if (unsigned && (hi as u128) < (lo as u128)) || (!unsigned && hi < lo) {
                 return Err(self.compile_err(
                     Code::INVALID_STATEMENT,
-                    format!("case range `{lo} ... {hi}` is empty (low bound exceeds high)"),
+                    format!(
+                        "case range `{} ... {}` is empty (low bound exceeds high)",
+                        spell(lo),
+                        spell(hi)
+                    ),
                 ));
             }
             // C99 6.8.4.2p3: the case constant expressions in one switch
-            // must be distinct (constraint). A single label is tracked for
-            // duplicate detection; a `lo ... hi` range is dispatched by a
-            // bounds comparison (walk.rs) with no per-value expansion, so it
-            // is not enumerated here and an overlap involving a range is not
-            // diagnosed (a permitted relaxation of the constraint check).
-            match self.switch_cases.last_mut() {
-                Some(cases) => {
-                    if lo == hi {
-                        if cases.contains(&lo) {
-                            return Err(self.compile_err(
-                                Code::INVALID_STATEMENT,
-                                format!("duplicate case value {lo} in switch"),
-                            ));
-                        }
-                        cases.push(lo);
-                    }
+            // must be distinct after the conversion (constraint). A single
+            // label is tracked for duplicate detection; a `lo ... hi` range
+            // is dispatched by a bounds comparison with no per-value
+            // expansion, so it is not enumerated here and an overlap
+            // involving a range is not diagnosed.
+            if lo == hi {
+                if self
+                    .switch_cases
+                    .last()
+                    .is_some_and(|(_, c)| c.contains(&lo))
+                {
+                    return Err(self.compile_err(
+                        Code::INVALID_STATEMENT,
+                        format!("duplicate case value {} in switch", spell(lo)),
+                    ));
                 }
-                None => {
-                    return Err(self.compile_err(Code::INVALID_STATEMENT, "case outside switch"));
+                if let Some((_, cases)) = self.switch_cases.last_mut() {
+                    cases.push(lo);
                 }
             }
             let body_before = self.ast_stmts_snapshot();
@@ -3397,7 +3410,7 @@ impl Compiler {
                         if m.no_conversion {
                             return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
                         }
-                        self.warn_at(m.code, line, text);
+                        self.report_mismatch(&m, line, text)?;
                     }
                     self.mark_emit_other();
                     // Mirror the rhs expression into the walker's
@@ -3437,7 +3450,7 @@ impl Compiler {
                         if m.no_conversion {
                             return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
                         }
-                        self.warn_at(m.code, line, text);
+                        self.report_mismatch(&m, line, text)?;
                     }
                     // Reuse `convert_assign_rhs` so an `int`-typed
                     // `return` from a `double`-returning function lifts

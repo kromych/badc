@@ -145,6 +145,9 @@ impl<'a> LdsLinker<'a> {
                         if s.binding() == STB_WEAK {
                             weak.entry(s.name.clone()).or_insert((oi, si));
                         } else if let Some(&(poi, _)) = strong.get(&s.name) {
+                            if self.opts.allow_multiple_definition {
+                                continue;
+                            }
                             return Err(link_err(
                                 Code::DUPLICATE_SYMBOL,
                                 MODULE,

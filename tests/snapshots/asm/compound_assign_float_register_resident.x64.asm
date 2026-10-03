@@ -121,10 +121,10 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
                	movl	$0x40400000, %ecx       # imm = 0x40400000
-               	movabsq	$0x4010000000000000, %rdx # imm = 0x4010000000000000
                	movq	%rcx, %xmm14
                	cvtss2sd	%xmm14, %xmm0
-               	movq	%rdx, %xmm15
+               	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
+               	movq	%rcx, %xmm15
                	mulsd	%xmm15, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
                	movq	%rax, %xmm15

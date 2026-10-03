@@ -311,6 +311,9 @@ impl Compiler {
             self.next()?; // consume `}`
             return Ok(());
         }
+        // A function designator converting to a function pointer compares
+        // the function types, which the tags below do not record.
+        let mut fn_checked = false;
         if target_fn.is_some()
             && let Some(sym) = self.initializer_designator()?
             && self.symbols[sym].class == Token::Fun as i64
@@ -319,6 +322,7 @@ impl Compiler {
             let init_fn = Some((self.symbol_fn_type(sym), 1));
             let what = ("initializer", "declared", "init");
             self.check_fn_pointer_conversion((var_ty, target_fn), (init_ty, &init_fn), line, what)?;
+            fn_checked = true;
         }
         // C99 6.6p9 address constant, decided by the shared
         // constant-initializer evaluator, which sees the initializer
@@ -333,7 +337,9 @@ impl Compiler {
                     if !matches!(reloc, InitElemReloc::None | InitElemReloc::Float64Bits)
                         && self.at_initializer_end() =>
                 {
-                    self.check_initializer_conversion(var_ty, ty, (false, false), line)?;
+                    if !fn_checked {
+                        self.check_initializer_conversion(var_ty, ty, (false, false), line)?;
+                    }
                     if is_thread_local {
                         self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
                     } else {

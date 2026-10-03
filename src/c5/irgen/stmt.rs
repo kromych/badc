@@ -298,12 +298,7 @@ impl<'a> Walker<'a> {
         }
         let mut targets = alloc::vec![deflt; span as usize + 1];
         for &(v, blk) in cases {
-            let slot = &mut targets[(v as u64).wrapping_sub(lo as u64) as usize];
-            // First case wins on a converted-value collision, matching
-            // the compare tree's first-match order.
-            if *slot == deflt {
-                *slot = blk;
-            }
+            targets[(v as u64).wrapping_sub(lo as u64) as usize] = blk;
         }
         // idx = disc - lo; the wrapped 64-bit subtraction with the
         // unsigned bound accepts exactly disc in [lo, hi] for every
@@ -355,6 +350,50 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// The dispatcher over a 128-bit controlling value `d`, whose labels
+    /// compare with all 128 bits (C99 6.8.4.2p5). A range is two 128-bit
+    /// comparisons; the single values sharing a high half are dispatched
+    /// on the low half, unsigned, once the high half matched.
+    fn emit_switch_dispatch_128(
+        &mut self,
+        b: &mut SsaBuilder,
+        d: Halves,
+        labels: &SwitchLabels,
+        ge_op: BinOp,
+        le_op: BinOp,
+        deflt: BlockId,
+    ) {
+        let halves = |b: &mut SsaBuilder, v: i128| (b.imm(v as i64), b.imm((v >> 64) as i64));
+        for &(lo, hi, blk) in &labels.ranges {
+            let lo = halves(b, lo);
+            let ge_lo = Self::int128_cmp(b, ge_op, d, lo);
+            let hi_chk = b.new_block();
+            let next = b.new_block();
+            b.branch_nonzero(ge_lo, hi_chk, next);
+            b.switch_to(hi_chk);
+            let hi = halves(b, hi);
+            let le_hi = Self::int128_cmp(b, le_op, d, hi);
+            b.branch_nonzero(le_hi, blk, next);
+            b.switch_to(next);
+        }
+        let mut sorted = labels.cases.clone();
+        sorted.sort_by_key(|&(v, _)| ((v >> 64) as i64, v as u64));
+        for group in sorted.chunk_by(|x, y| x.0 >> 64 == y.0 >> 64) {
+            let low: alloc::vec::Vec<(i64, BlockId)> =
+                group.iter().map(|&(v, blk)| (v as i64, blk)).collect();
+            let high_eq = b.binop_imm(BinOp::Eq, d.1, (group[0].0 >> 64) as i64);
+            let hit = b.new_block();
+            let next = b.new_block();
+            b.branch_nonzero(high_eq, hit, next);
+            b.switch_to(hit);
+            if !self.jump_tables || !self.emit_switch_table(b, d.0, &low, deflt) {
+                self.emit_switch_search(b, d.0, &low, BinOp::Ult, deflt);
+            }
+            b.switch_to(next);
+        }
+        b.jmp(deflt);
+    }
+
     /// Reserve a block for every `case` value and for `default`,
     /// descending into nested statements but not into a nested switch,
     /// whose labels belong to it (C99 6.8.4.2).
@@ -363,8 +402,8 @@ impl<'a> Walker<'a> {
         &mut self,
         b: &mut SsaBuilder,
         stmt_id: StmtId,
-        cases: &mut alloc::vec::Vec<(i64, BlockId)>,
-        ranges: &mut alloc::vec::Vec<(i64, i64, BlockId)>,
+        cases: &mut alloc::vec::Vec<(i128, BlockId)>,
+        ranges: &mut alloc::vec::Vec<(i128, i128, BlockId)>,
         default_blk: &mut Option<BlockId>,
     ) {
         match self.ast.stmt(stmt_id) {
@@ -1078,77 +1117,62 @@ impl<'a> Walker<'a> {
         // C99 6.8.4.2: a case label at any depth scopes to the nearest
         // switch, so a marker inside a nested loop is reachable from
         // this dispatcher.
-        let mut cases: alloc::vec::Vec<(i64, BlockId)> = alloc::vec::Vec::new();
-        let mut ranges: alloc::vec::Vec<(i64, i64, BlockId)> = alloc::vec::Vec::new();
+        let mut cases: alloc::vec::Vec<(i128, BlockId)> = alloc::vec::Vec::new();
+        let mut ranges: alloc::vec::Vec<(i128, i128, BlockId)> = alloc::vec::Vec::new();
         let mut default_blk: Option<BlockId> = None;
         self.collect_switch_cases(b, body_id, &mut cases, &mut ranges, &mut default_blk);
+        let labels = SwitchLabels {
+            cases,
+            ranges,
+            default: default_blk,
+        };
 
-        // The dispatcher is a balanced binary search over the sorted,
-        // distinct (C99 6.8.4.2) case values: O(log n) branches against
-        // a compare chain's O(n). The discriminant's signedness selects
-        // both the ordering and the comparison, so an unsigned value
-        // with the high bit set still sorts correctly.
+        // The labels hold their values converted to the promoted type of
+        // the controlling expression (C99 6.8.4.2p5), whose signedness
+        // selects both the ordering and the comparison, so an unsigned
+        // value with the high bit set still sorts correctly. A type
+        // narrower than `int` promotes to `int`.
         let deflt = default_blk.unwrap_or(after_blk);
         let disc_ty = expr_ty(self.ast.expr(disc)).unwrap_or(Ty::Int as i64);
-        let disc_unsigned = disc_ty & UNSIGNED_BIT != 0;
-        let mut sorted = cases.clone();
-        if disc_unsigned {
-            // C99 6.8.4.2p1 + p5: the controlling expression is
-            // integer-promoted and each label converts to that promoted
-            // type. A 4-byte unsigned type promotes to itself, so a
-            // negative label wraps modulo 2^32 and needs the mask to
-            // match the zero-extended discriminant; an 8-byte one
-            // already matches at full width. A sub-`int` unsigned type
-            // promotes to signed `int` and takes the plain path.
-            if type_size_bytes(disc_ty, self.target) == 4 {
-                for c in sorted.iter_mut() {
-                    c.0 = (c.0 as u32) as i64;
-                }
-            }
-            sorted.sort_by_key(|p| p.0 as u64);
-        } else {
-            // A signed 4-byte or sub-`int` controlling type promotes
-            // to `int`, so the label sign-truncates to 32 bits:
-            // `case 0x80000000:` must match the sign-extended INT_MIN
-            // discriminant. An 8-byte type keeps the full-width label.
-            if type_size_bytes(disc_ty, self.target) <= 4 {
-                for c in sorted.iter_mut() {
-                    c.0 = (c.0 as i32) as i64;
-                }
-            }
-            sorted.sort_by_key(|p| p.0);
-        }
-        // A range case is dispatched by an explicit `lo <= disc <= hi`
-        // test ahead of the single-value search, its bounds converted to
-        // the promoted type as the labels above are.
+        let disc_unsigned =
+            disc_ty & UNSIGNED_BIT != 0 && type_size_bytes(disc_ty, self.target) >= 4;
         let (ge_op, le_op) = if disc_unsigned {
             (BinOp::Uge, BinOp::Ule)
         } else {
             (BinOp::Ge, BinOp::Le)
         };
-        let disc_bytes = type_size_bytes(disc_ty, self.target);
-        for &(mut lo, mut hi, blk) in &ranges {
-            if disc_unsigned {
-                if disc_bytes == 4 {
-                    lo = (lo as u32) as i64;
-                    hi = (hi as u32) as i64;
-                }
-            } else if disc_bytes <= 4 {
-                lo = (lo as i32) as i64;
-                hi = (hi as i32) as i64;
+        if self.expr_is_int128_value(disc) {
+            let d = self.int128_load(b, disc_val);
+            self.emit_switch_dispatch_128(b, d, &labels, ge_op, le_op, deflt);
+        } else {
+            // A range case is dispatched by an explicit `lo <= disc <= hi`
+            // test ahead of the single-value search.
+            for &(lo, hi, blk) in &labels.ranges {
+                let ge_lo = b.binop_imm(ge_op, disc_val, lo as i64);
+                let hi_chk = b.new_block();
+                let next = b.new_block();
+                b.branch_nonzero(ge_lo, hi_chk, next);
+                b.switch_to(hi_chk);
+                let le_hi = b.binop_imm(le_op, disc_val, hi as i64);
+                b.branch_nonzero(le_hi, blk, next);
+                b.switch_to(next);
             }
-            let ge_lo = b.binop_imm(ge_op, disc_val, lo);
-            let hi_chk = b.new_block();
-            let next = b.new_block();
-            b.branch_nonzero(ge_lo, hi_chk, next);
-            b.switch_to(hi_chk);
-            let le_hi = b.binop_imm(le_op, disc_val, hi);
-            b.branch_nonzero(le_hi, blk, next);
-            b.switch_to(next);
-        }
-        let lt_op = if disc_unsigned { BinOp::Ult } else { BinOp::Lt };
-        if !self.jump_tables || !self.emit_switch_table(b, disc_val, &sorted, deflt) {
-            self.emit_switch_search(b, disc_val, &sorted, lt_op, deflt);
+            // A balanced binary search over the sorted, distinct values:
+            // O(log n) branches against a compare chain's O(n).
+            let mut sorted: alloc::vec::Vec<(i64, BlockId)> = labels
+                .cases
+                .iter()
+                .map(|&(v, blk)| (v as i64, blk))
+                .collect();
+            if disc_unsigned {
+                sorted.sort_by_key(|p| p.0 as u64);
+            } else {
+                sorted.sort_by_key(|p| p.0);
+            }
+            let lt_op = if disc_unsigned { BinOp::Ult } else { BinOp::Lt };
+            if !self.jump_tables || !self.emit_switch_table(b, disc_val, &sorted, deflt) {
+                self.emit_switch_search(b, disc_val, &sorted, lt_op, deflt);
+            }
         }
 
         // Walk the body linearly. The opening block is reachable
@@ -1170,11 +1194,7 @@ impl<'a> Walker<'a> {
             brk_depth: depth,
             cont_depth,
         });
-        self.switch_dispatch.push(SwitchLabels {
-            cases,
-            ranges,
-            default: default_blk,
-        });
+        self.switch_dispatch.push(labels);
         let terminated = self.walk_stmt(b, body_id)?;
         self.switch_dispatch.pop();
         self.loop_ctx.pop();

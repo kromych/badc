@@ -254,10 +254,10 @@ fn ent_pc=10 n_params=5 variadic=false locals=2
     v25  InlineAsm { template="movdqu %1, %0", ops=2, args=[-, v13] } -> [spill 4]
     v26  Imm(0)                                           -> x0
     v27  Imm(0)                                           -> x0
-    v28  LifetimeEnd(0)                                   -> -
+    v28  Imm(0)                                           -> x0
     v29  Imm(0)                                           -> x0
     v30  Imm(0)                                           -> x0
-    v31  Imm(0)                                           -> x0
+    v31  LifetimeEnd(0)                                   -> -
     v32  Imm(0)                                           -> x0
     v33  LifetimeEnd(-2)                                  -> -
     v34  Imm(0)                                           -> x0
@@ -288,10 +288,10 @@ fn ent_pc=10 n_params=5 variadic=false locals=2
     v62  InlineAsm { template="movdqu %1, %0", ops=2, args=[-, v61] } -> [spill 0]
     v63  Imm(0)                                           -> x0
     v64  Imm(0)                                           -> x0
-    v65  LifetimeEnd(0)                                   -> -
+    v65  Imm(0)                                           -> x0
     v66  Imm(0)                                           -> x0
     v67  Imm(0)                                           -> x0
-    v68  Imm(0)                                           -> x0
+    v68  LifetimeEnd(0)                                   -> -
     v69  Imm(0)                                           -> x0
     v70  Imm(0)                                           -> x0
     v71  Imm(0)                                           -> x0
@@ -314,10 +314,10 @@ fn ent_pc=10 n_params=5 variadic=false locals=2
     v93  InlineAsm { template="movdqu %1, %0", ops=2, args=[-, v92] } -> d2
     v94  Imm(0)                                           -> x0
     v95  Imm(0)                                           -> x0
-    v96  LifetimeEnd(0)                                   -> -
+    v96  Imm(0)                                           -> x0
     v97  Imm(0)                                           -> x0
     v98  Imm(0)                                           -> x0
-    v99  Imm(0)                                           -> x0
+    v99  LifetimeEnd(0)                                   -> -
     v100 Imm(0)                                           -> x0
     v101 Imm(0)                                           -> x0
     v102 Imm(0)                                           -> x0
@@ -342,10 +342,10 @@ fn ent_pc=10 n_params=5 variadic=false locals=2
     v121 Imm(0)                                           -> x0
     v122 LifetimeEnd(0)                                   -> -
     v123 LifetimeEnd(0)                                   -> -
-    v124 LifetimeEnd(0)                                   -> -
+    v124 Imm(0)                                           -> x0
     v125 Imm(0)                                           -> x0
     v126 Imm(0)                                           -> x0
-    v127 Imm(0)                                           -> x0
+    v127 LifetimeEnd(0)                                   -> -
     v128 Imm(0)                                           -> x0
     v129 Imm(0)                                           -> x0
     v130 Imm(0)                                           -> x0
@@ -360,10 +360,10 @@ fn ent_pc=10 n_params=5 variadic=false locals=2
     v139 Imm(0)                                           -> x0
     v140 Imm(0)                                           -> x0
     v141 LifetimeEnd(0)                                   -> -
-    v142 LifetimeEnd(0)                                   -> -
+    v142 Imm(0)                                           -> x0
     v143 Imm(0)                                           -> x0
     v144 Imm(0)                                           -> x0
-    v145 Imm(0)                                           -> x0
+    v145 LifetimeEnd(0)                                   -> -
     v146 Imm(0)                                           -> x0
     v147 Imm(0)                                           -> x0
     v148 Imm(0)                                           -> x0
@@ -381,10 +381,10 @@ fn ent_pc=10 n_params=5 variadic=false locals=2
     v160 Imm(0)                                           -> x0
     v161 Imm(0)                                           -> x0
     v162 LifetimeEnd(0)                                   -> -
-    v163 LifetimeEnd(0)                                   -> -
+    v163 Imm(0)                                           -> x0
     v164 Imm(0)                                           -> x0
     v165 Imm(0)                                           -> x0
-    v166 Imm(0)                                           -> x0
+    v166 LifetimeEnd(0)                                   -> -
     v167 Imm(0)                                           -> x0
     v168 Imm(0)                                           -> x0
     v169 Imm(0)                                           -> x0
@@ -409,10 +409,10 @@ fn ent_pc=10 n_params=5 variadic=false locals=2
     v188 Imm(0)                                           -> x0
     v189 LifetimeEnd(0)                                   -> -
     v190 LifetimeEnd(0)                                   -> -
-    v191 LifetimeEnd(0)                                   -> -
+    v191 Imm(0)                                           -> x0
     v192 Imm(0)                                           -> x0
     v193 Imm(0)                                           -> x0
-    v194 Imm(0)                                           -> x0
+    v194 LifetimeEnd(0)                                   -> -
     v195 Imm(0)                                           -> x0
     v196 Imm(0)                                           -> x0
     v197 Imm(0)                                           -> x0
@@ -437,10 +437,10 @@ fn ent_pc=10 n_params=5 variadic=false locals=2
     v216 Imm(0)                                           -> x0
     v217 LifetimeEnd(0)                                   -> -
     v218 LifetimeEnd(0)                                   -> -
-    v219 LifetimeEnd(0)                                   -> -
+    v219 Imm(0)                                           -> x0
     v220 Imm(0)                                           -> x0
     v221 Imm(0)                                           -> x0
-    v222 Imm(0)                                           -> x0
+    v222 LifetimeEnd(0)                                   -> -
     v223 Imm(0)                                           -> x0
     v224 Imm(0)                                           -> x0
     v225 Imm(0)                                           -> x0
@@ -465,10 +465,10 @@ fn ent_pc=10 n_params=5 variadic=false locals=2
     v244 Imm(0)                                           -> x0
     v245 LifetimeEnd(0)                                   -> -
     v246 LifetimeEnd(0)                                   -> -
-    v247 LifetimeEnd(0)                                   -> -
+    v247 Imm(0)                                           -> x0
     v248 Imm(0)                                           -> x0
     v249 Imm(0)                                           -> x0
-    v250 Imm(0)                                           -> x0
+    v250 LifetimeEnd(0)                                   -> -
     v251 Imm(0)                                           -> x0
     v252 Imm(0)                                           -> x0
     v253 Imm(0)                                           -> x0

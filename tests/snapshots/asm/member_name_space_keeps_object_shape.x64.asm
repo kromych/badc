@@ -85,26 +85,37 @@ Disassembly of section .text:
                	movl	$0x1, 0x4(%rax)
                	movl	$0x2, 0x8(%rax)
                	movl	$0x3, 0xc(%rax)
-               	addq	$0x8, %rax
+               	addq	$0x10, %rax
                	movl	$0xa, (%rax)
                	movl	$0xb, 0x4(%rax)
                	movl	$0xc, 0x8(%rax)
                	leaq	<rip>, %rax      # <addr>
-               	leaq	0x8(%rax), %rcx
+               	leaq	0x10(%rax), %rcx
                	movl	$0xd, 0xc(%rcx)
-               	addq	$0x10, %rax
+               	addq	$0x20, %rax
                	movl	$0x14, (%rax)
                	movl	$0x15, 0x4(%rax)
                	movl	$0x16, 0x8(%rax)
                	movl	$0x17, 0xc(%rax)
                	leaq	<rip>, %rax      # <addr>
-               	movslq	0x1c(%rax), %rcx
+               	movslq	0x2c(%rax), %rcx
                	cmpl	$0x17, %ecx
                	jne	<addr>
-               	movslq	0x4(%rax), %rax
-               	cmpl	$0x1, %eax
+               	movslq	0x4(%rax), %rcx
+               	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x3, %eax
                	retq
+               	leaq	0x10(%rax), %rcx
+               	subq	%rax, %rcx
+               	movq	%rcx, %rax
+               	sarq	$0x3f, %rax
+               	shrq	$0x3e, %rax
+               	addq	%rcx, %rax
+               	sarq	$0x2, %rax
+               	cmpq	$0x4, %rax
+               	jne	<addr>
                	xorl	%eax, %eax
+               	retq
+               	movl	$0x6, %eax
                	retq

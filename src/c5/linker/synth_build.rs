@@ -36,9 +36,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use crate::c5::codegen::{
-    AddrPart, Build, CopyRelocReq, DataFixup, DynamicExport, DynamicExportSection, EmitStream,
-    EmitTarget, EmittedFinalReloc, ExecForm, FuncFixup, GotFixup, OutputKind, ResolvedDylib,
-    ResolvedImport, ResolvedImports, Target,
+    AddrPart, Build, CopyRelocReq, DataFixup, DynamicExport, DynamicExportSection, ElfImageOptions,
+    EmitStream, EmitTarget, EmittedFinalReloc, ExecForm, FuncFixup, GotFixup, OutputKind,
+    ResolvedDylib, ResolvedImport, ResolvedImports, Target,
 };
 use crate::c5::error::C5Error;
 use crate::c5::object::elf_reloc_types::{
@@ -80,18 +80,31 @@ pub fn write_native_image_from_merged(
         output_kind,
         target,
         shared_lib_name,
-        false,
-        false,
-        false,
-        ExecForm::Pie,
+        &ImageOptions::default(),
     )
 }
 
-/// As [`write_native_image_from_merged`], plus `--export-all` /
-/// `--export-data`: for an ELF executable, add every defined non-static
-/// function (`export_all`) and/or data global (`export_data`) to
-/// `.dynsym` for `dlopen` resolution. `exec_form` is an executable's
-/// form, see [`ExecForm`].
+/// How [`write_native_image_from_merged_ex`] shapes an image beyond what
+/// the merge decided.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ImageOptions {
+    /// `--export-all`: every defined non-static function joins an ELF
+    /// executable's `.dynsym`, for `dlopen` resolution.
+    pub export_all: bool,
+    /// `--export-data`: every defined non-static data global does.
+    pub export_data: bool,
+    /// `--emit-relocs`: the resolved relocations stay in the image.
+    pub emit_relocs: bool,
+    /// An executable's form, see [`ExecForm`].
+    pub exec_form: ExecForm,
+    /// `-S`: no debug sections.
+    pub strip_debug: bool,
+    /// `-X`: no assembler temporary (`.L*`) among the local symbols.
+    pub discard_temporaries: bool,
+    pub elf: ElfImageOptions,
+}
+
+/// As [`write_native_image_from_merged`], shaped by `opts`.
 #[allow(clippy::too_many_arguments)]
 pub fn write_native_image_from_merged_ex(
     merged: &MergedNative,
@@ -101,10 +114,7 @@ pub fn write_native_image_from_merged_ex(
     output_kind: OutputKind,
     target: Target,
     shared_lib_name: Option<&str>,
-    export_all: bool,
-    export_data: bool,
-    emit_relocs: bool,
-    exec_form: ExecForm,
+    opts: &ImageOptions,
 ) -> Result<Vec<u8>, C5Error> {
     let (program, build) = synth_program_and_build(
         merged,
@@ -114,10 +124,7 @@ pub fn write_native_image_from_merged_ex(
         output_kind,
         target,
         shared_lib_name,
-        export_all,
-        export_data,
-        emit_relocs,
-        exec_form,
+        opts,
     )?;
     write_native_image(&program, &build, target)
 }
@@ -131,10 +138,7 @@ fn synth_program_and_build(
     output_kind: OutputKind,
     target: Target,
     shared_lib_name: Option<&str>,
-    export_all: bool,
-    export_data: bool,
-    emit_relocs: bool,
-    exec_form: ExecForm,
+    opts: &ImageOptions,
 ) -> Result<(Program, Build), C5Error> {
     check_target_machine(target, merged.machine)?;
     // A shared library has no process entry point (ELF ET_DYN sets
@@ -158,13 +162,13 @@ fn synth_program_and_build(
     } = synth_fixups(
         merged,
         plt,
-        TextAbsolute::for_output(target, output_kind, exec_form),
+        TextAbsolute::for_output(target, output_kind, opts.exec_form),
     )?;
 
     let (data_relocs, code_relocs) = synth_relocs(merged);
     let (tls_data_relocs, tls_code_relocs) = synth_abs_relocs(&merged.tls_abs_relocs);
     let plt_trampoline_offsets = synth_plt_offsets(merged, plt)?;
-    let exports = synth_exports(merged, export_all, output_kind);
+    let exports = synth_exports(merged, opts.export_all, output_kind);
     // A TLS template slot may hold the only reference to a function, so
     // its target must be in the PC map the writers index.
     let mut code_reloc_pcs = code_relocs.clone();
@@ -193,9 +197,14 @@ fn synth_program_and_build(
         .collect();
     early_returns.sort_unstable_by_key(|e| e.begin);
     let copy_relocs = synth_copy_relocs(merged, target)?;
-    let dynamic_exports =
-        synth_dynamic_exports(merged, target, output_kind, export_all, export_data);
-    let emitted_relocs = if emit_relocs {
+    let dynamic_exports = synth_dynamic_exports(
+        merged,
+        target,
+        output_kind,
+        opts.export_all,
+        opts.export_data,
+    );
+    let emitted_relocs = if opts.emit_relocs {
         synth_emitted_relocs(merged)
     } else {
         Vec::new()
@@ -217,14 +226,22 @@ fn synth_program_and_build(
         text_data_ranges: Vec::new(),
         copy_relocs,
         dynamic_exports,
-        image_symbols: merged.symbols.clone(),
+        image_symbols: (merged.symbols.iter())
+            .filter(|s| {
+                !(opts.discard_temporaries
+                    && s.info >> 4 == 0
+                    && crate::c5::asm::is_local_label(&s.name))
+            })
+            .cloned()
+            .collect(),
         text: merged.text.clone(),
         text_align: merged.text_align,
         data: merged.data.clone(),
         data_ro_len: merged.data_ro_len,
         data_relro_len: merged.data_relro_len,
         pic_link: false,
-        exec_form,
+        exec_form: opts.exec_form,
+        elf: opts.elf,
         code_model: Default::default(),
 
         elf_class: Default::default(),
@@ -322,8 +339,8 @@ fn synth_program_and_build(
         // Empty merged blobs mean no input unit carried DWARF; the
         // writers then skip the section emit entirely instead of
         // dumping zero-length placeholders.
-        debug_info: !merged.debug_info.is_empty(),
-        merged_dwarf: synth_merged_dwarf(merged),
+        debug_info: !opts.strip_debug && !merged.debug_info.is_empty(),
+        merged_dwarf: synth_merged_dwarf(merged).filter(|_| !opts.strip_debug),
         plt_trampoline_offsets,
     };
 
@@ -707,6 +724,14 @@ fn synth_merged_dwarf(merged: &MergedNative) -> Option<crate::c5::codegen::Merge
         merged_data_offset: r.merged_data_offset,
         width: r.width,
     };
+    let section = |s: &super::link::MergedDebugSection| crate::c5::codegen::MergedDwarfSection {
+        name: s.name.clone(),
+        bytes: s.bytes.clone(),
+        text_relocs: s.text_relocs.iter().map(text_reloc).collect(),
+        data_relocs: s.data_relocs.iter().map(data_reloc).collect(),
+    };
+    let (frames, other): (Vec<_>, Vec<_>) =
+        (merged.debug_other.iter()).partition(|s| s.name == ".debug_frame");
     Some(crate::c5::codegen::MergedDwarf {
         debug_info: merged.debug_info.clone(),
         debug_abbrev: merged.debug_abbrev.clone(),
@@ -727,14 +752,8 @@ fn synth_merged_dwarf(merged: &MergedNative) -> Option<crate::c5::codegen::Merge
             .iter()
             .map(data_reloc)
             .collect(),
-        other: (merged.debug_other.iter())
-            .map(|s| crate::c5::codegen::MergedDwarfSection {
-                name: s.name.clone(),
-                bytes: s.bytes.clone(),
-                text_relocs: s.text_relocs.iter().map(text_reloc).collect(),
-                data_relocs: s.data_relocs.iter().map(data_reloc).collect(),
-            })
-            .collect(),
+        debug_frame: frames.first().map(|s| section(s)).unwrap_or_default(),
+        other: other.into_iter().map(section).collect(),
     })
 }
 
@@ -1577,6 +1596,7 @@ mod tests {
             tls_abs_relocs: Vec::new(),
             init_fini_arrays: Default::default(),
             section_map: Default::default(),
+            exec_stack_input: None,
         }
     }
 

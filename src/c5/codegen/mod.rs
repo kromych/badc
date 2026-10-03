@@ -698,7 +698,7 @@ pub(crate) fn plan_mirrored_call(
 pub(crate) fn named_args(abi: Abi, callee_variadic: bool, fixed_args: usize, args: usize) -> usize {
     if !callee_variadic {
         args
-    } else if abi.variadic_int_only && abi.arch == Arch::Aarch64 {
+    } else if abi.win_arm64_variadic() {
         0
     } else {
         fixed_args
@@ -750,6 +750,9 @@ pub(crate) struct ArgAgg {
     pub align: u32,
     /// `abi_classify::arg_align`; `align` still bounds the transfer width.
     pub arg_align: u32,
+    /// A narrow vector on AArch64, passed as a 32-bit integer
+    /// ([`abi_classify::is_narrow_vector`]).
+    pub int32: bool,
 }
 
 impl ArgAgg {
@@ -760,6 +763,7 @@ impl ArgAgg {
             size: desc.size,
             align: desc.align,
             arg_align: abi_classify::arg_align(desc.align, desc.member_align, abi),
+            int32: abi.arch == Arch::Aarch64 && abi_classify::is_narrow_vector(desc),
         }
     }
 }
@@ -892,7 +896,7 @@ pub(super) fn plan_call_args_aggs(
             // copy's address an integer argument. The callee's va_arg walks
             // one 8-byte-stride region, so an FP bank placement would read
             // garbage on both sides.
-            if i >= fixed_args && abi.variadic_int_only && matches!(abi.arch, Arch::Aarch64) {
+            if i >= fixed_args && abi.win_arm64_variadic() {
                 let placement = if agg.size > 16 {
                     if int_idx < int_max {
                         let r = abi.int_arg_regs[int_idx];
@@ -1008,9 +1012,20 @@ pub(super) fn plan_call_args_aggs(
                                 int_idx = int_max;
                             }
                         }
-                        let off = if abi.packed_stack_args && need_int == 0 && i < fixed_args {
-                            let off = stack_used.next_multiple_of(agg.arg_align.max(1));
-                            stack_used = off + agg.size;
+                        // Apple packs a named argument at its own size and
+                        // alignment, a narrow vector as the 32-bit integer
+                        // it crosses as.
+                        let packed = match (need_int, agg.int32) {
+                            (_, true) => Some((4, 4)),
+                            (0, false) => Some((agg.arg_align.max(1), agg.size)),
+                            _ => None,
+                        };
+                        let off = if let Some((align, bytes)) = packed
+                            && abi.packed_stack_args
+                            && i < fixed_args
+                        {
+                            let off = stack_used.next_multiple_of(align);
+                            stack_used = off + bytes;
                             off
                         } else {
                             let off = agg_stack_off(stack_used, agg.arg_align);
@@ -1349,6 +1364,9 @@ pub(crate) struct MergedDwarf {
     /// offset follows the linker's data convention, with the zero-fill
     /// tail continuing past the image length.
     pub debug_info_data_relocs: Vec<DwarfDataReloc>,
+    /// The inputs' `.debug_frame` records; the writer appends its own
+    /// table, for the functions the lowering emitted, behind them.
+    pub debug_frame: MergedDwarfSection,
     /// Every other `.debug_*` section the link merged.
     pub other: Vec<MergedDwarfSection>,
 }
@@ -1873,9 +1891,10 @@ pub(crate) struct EmittedFinalReloc {
     pub addend: i64,
 }
 
-/// A C-identifier-named input section the merge grouped across units,
-/// for a writer that gives it an output section of its own. `offset`
-/// is into `Build::data`, or into the zero-fill region when `bss`.
+/// An input section the merge grouped by name across units (a C-identifier
+/// name, or `.eh_frame`), for a writer that gives it an output section of
+/// its own. `offset` is into `Build::data`, or into the zero-fill region
+/// when `bss`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NamedSection {
     pub name: String,
@@ -2186,6 +2205,8 @@ pub(crate) struct Build {
     /// placed form at its link address and adds the loader tables when
     /// it binds a shared-library symbol.
     pub exec_form: ExecForm,
+    /// The container options a link asked for.
+    pub elf: ElfImageOptions,
     /// Mirror of [`NativeOptions::code_model`]. The relocatable writer
 
     /// reads it to pick the external-address form; see [`CodeModel`].
@@ -3151,8 +3172,9 @@ pub enum StackProtector {
 /// `-mstack-protector-guard=`: where the canary value is read from.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum StackGuard {
-    /// The target's C-library ABI: `%fs:0x28` on Linux/x86-64, the
-    /// `__stack_chk_guard` object on every other target.
+    /// The target's ABI: `%fs:0x28` on Linux/x86-64 (`%gs:0x28` under
+    /// the kernel code model), the `__stack_chk_guard` object on every
+    /// other target.
     #[default]
     Abi,
     /// `global`: the `__stack_chk_guard` object, or the
@@ -3170,13 +3192,24 @@ pub enum StackGuard {
 
 /// Segment register a `tls` stack guard is read through
 /// (`-mstack-protector-guard-reg=`).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GuardSeg {
     /// `%fs`, the System V x86-64 thread pointer.
-    #[default]
     Fs,
     /// `%gs`, which the Linux kernel uses for its per-CPU base.
     Gs,
+}
+
+impl GuardSeg {
+    /// The segment a guard is read through when none is named: `%gs`
+    /// under the kernel code model, `%fs` otherwise, as gcc and clang
+    /// choose.
+    pub fn for_code_model(code_model: CodeModel) -> Self {
+        match code_model {
+            CodeModel::Kernel => GuardSeg::Gs,
+            CodeModel::Small => GuardSeg::Fs,
+        }
+    }
 }
 
 /// Guard object name for `-mstack-protector-guard-symbol=`. Held inline
@@ -3267,16 +3300,17 @@ impl StackProtect {
     };
 
     /// Replace [`StackGuard::Abi`] with the target's own form, so the
-    /// emitters see a concrete one. Linux/x86-64 keeps the canary in the
-    /// thread control block at [`SYSV_TLS_GUARD_OFFSET`]; every other
-    /// target reads the C library's `__stack_chk_guard` object.
-    pub(crate) fn resolved_for(self, target: Target) -> Self {
+    /// emitters see a concrete one. Linux/x86-64 keeps the canary at
+    /// [`SYSV_TLS_GUARD_OFFSET`] from the base of the segment
+    /// [`GuardSeg::for_code_model`] names; every other target reads the
+    /// C library's `__stack_chk_guard` object.
+    pub(crate) fn resolved_for(self, target: Target, code_model: CodeModel) -> Self {
         if self.guard != StackGuard::Abi {
             return self;
         }
         let guard = match target {
             Target::LinuxX64 => StackGuard::Tls {
-                seg: GuardSeg::Fs,
+                seg: GuardSeg::for_code_model(code_model),
                 offset: SYSV_TLS_GUARD_OFFSET,
             },
             _ => StackGuard::Global,
@@ -3425,8 +3459,9 @@ pub fn fixed_register(target: Target, name: &str) -> Result<FixedReg, String> {
 /// gcc's `--param ssp-buffer-size=` default.
 pub const DEFAULT_SSP_BUFFER_SIZE: u32 = 8;
 
-/// Byte offset of the canary within the System V x86-64 thread control
-/// block, which glibc and musl both honour.
+/// Byte offset of the canary from the guard segment's base: its slot in
+/// the System V x86-64 thread control block, which glibc and musl both
+/// honour, and in the per-CPU area Linux reaches through `%gs`.
 pub const SYSV_TLS_GUARD_OFFSET: i32 = 0x28;
 
 /// The object a `global` stack guard is read from, and the name
@@ -3843,6 +3878,83 @@ impl ExecForm {
     pub fn placed(self) -> bool {
         self != ExecForm::Pie
     }
+}
+
+/// `--build-id` styles: GNU ld's SHA-1, which lld also writes for `tree`,
+/// and lld's `fast`, an XXH3-64. Each hashes the image with its
+/// descriptor zero.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum BuildId {
+    #[default]
+    None,
+    Sha1,
+    Fast,
+}
+
+impl BuildId {
+    /// The style a `--build-id=` value names; `None` when none does.
+    pub fn parse(style: &str) -> Option<BuildId> {
+        match style {
+            "none" => Some(Self::None),
+            "sha1" | "tree" => Some(Self::Sha1),
+            "fast" => Some(Self::Fast),
+            _ => None,
+        }
+    }
+
+    /// The descriptor's size in bytes.
+    pub fn digest_len(self) -> usize {
+        match self {
+            Self::None => 0,
+            Self::Sha1 => 20,
+            Self::Fast => 8,
+        }
+    }
+
+    /// The note's size: its 16-byte header and name, then the descriptor;
+    /// nothing when no id is asked for.
+    pub fn note_len(self) -> usize {
+        match self {
+            Self::None => 0,
+            _ => 16 + self.digest_len(),
+        }
+    }
+
+    /// `.note.gnu.build-id` with a zero descriptor.
+    pub fn note(self) -> Vec<u8> {
+        const NT_GNU_BUILD_ID: u32 = 3;
+        let mut note = Vec::with_capacity(self.note_len());
+        if self != Self::None {
+            note.extend_from_slice(&4u32.to_le_bytes());
+            note.extend_from_slice(&(self.digest_len() as u32).to_le_bytes());
+            note.extend_from_slice(&NT_GNU_BUILD_ID.to_le_bytes());
+            note.extend_from_slice(b"GNU\0");
+            note.resize(self.note_len(), 0);
+        }
+        note
+    }
+
+    /// The id of `image`, whose descriptor bytes are still zero.
+    #[cfg(feature = "native-emit")]
+    pub(crate) fn digest(self, image: &[u8]) -> Vec<u8> {
+        match self {
+            Self::None => Vec::new(),
+            Self::Sha1 => crate::c5::object::sha1::sha1(image).to_vec(),
+            Self::Fast => crate::c5::object::xxh3::build_id_fast(image).to_vec(),
+        }
+    }
+}
+
+/// The link options an ELF image's container takes: `--build-id`, `-z
+/// max-page-size=` (`None` keeps the target's), `-z
+/// pack-relative-relocs`, `--no-apply-dynamic-relocs`, `-z execstack`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ElfImageOptions {
+    pub build_id: BuildId,
+    pub max_page_size: Option<u64>,
+    pub pack_relative_relocs: bool,
+    pub no_apply_dynamic_relocs: bool,
+    pub exec_stack: bool,
 }
 
 impl Default for NativeOptions {
@@ -4428,6 +4540,14 @@ impl Abi {
     pub(crate) fn aarch64_host_variadic(self) -> bool {
         matches!(self.arch, Arch::Aarch64) && !self.variadic_on_stack && !self.variadic_int_only
     }
+
+    /// True when a variadic callee follows the Microsoft ARM64 convention:
+    /// named and variadic arguments alike ride x0..x7 then the stack, a
+    /// floating-point one as its bits, a composite as if no SIMD and
+    /// floating-point register existed.
+    pub(crate) fn win_arm64_variadic(self) -> bool {
+        matches!(self.arch, Arch::Aarch64) && self.variadic_int_only
+    }
 }
 
 impl Default for Abi {
@@ -4677,6 +4797,7 @@ mod abi_plan_tests {
             size: 16,
             align: 8,
             arg_align: 8,
+            int32: false,
         };
         // five int scalars, a 2-eightbyte GP aggregate that can't fit the
         // one remaining int reg, then one int scalar.
@@ -4708,6 +4829,7 @@ mod abi_plan_tests {
             size: 16,
             align: 4,
             arg_align: 4,
+            int32: false,
         };
         // five FP scalars, a 4-float HFA that can't fit the remaining FP
         // regs, then one int scalar that the integer file must still hold.
@@ -4737,6 +4859,7 @@ mod abi_plan_tests {
             size: 16,
             align: 16,
             arg_align: 16,
+            int32: false,
         }
     }
 
@@ -4896,6 +5019,7 @@ mod abi_plan_tests {
             size: 8,
             align: 4,
             arg_align: 4,
+            int32: false,
         };
         let mut fp = FpMask::EMPTY;
         for i in 0..11 {
@@ -4929,6 +5053,7 @@ mod abi_plan_tests {
             size: 16,
             align: 8,
             arg_align: 8,
+            int32: false,
         });
         let plan = plan_call_args_aggs(
             9,
@@ -4980,6 +5105,7 @@ mod abi_plan_tests {
             member_align: 8,
             fields: alloc::vec![half(0), half(8)],
             homogeneous: None,
+            vector: false,
         };
         for (target, pair, slot) in [
             (Target::LinuxAarch64, [1, 2], 8),

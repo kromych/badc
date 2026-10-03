@@ -2,7 +2,7 @@
 // hashing of a small buffer via the TweetNaCl primitives. The hot path
 // is 64-bit integer mixing (adds, xors, rotations, shifts) with no I/O,
 // so the wall-clock reflects the codegen of the compression loop rather
-// than syscall or allocator behaviour. Self-times via clock_gettime and
+// than syscall or allocator behaviour. Self-times via bench_clock.h and
 // prints "in N ms".
 //
 // The TweetNaCl source is included directly so the fixture is a single
@@ -11,7 +11,7 @@
 // through the header pulled in by tweetnacl.c.
 #include <stdint.h>
 #include <stdio.h>
-#include <time.h>
+#include "bench_clock.h"
 
 // Include the header explicitly: badc resolves quoted includes against
 // the search path rather than the including file's directory, so the
@@ -38,8 +38,7 @@ int main(void) {
     }
     unsigned char hash[64];
 
-    struct timespec t0, t1;
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    double t0 = bench_ms();
     uint64_t acc = 0;
     for (int it = 0; it < HASH_ITERS; it++) {
         crypto_hash(hash, buf, sizeof buf);
@@ -48,11 +47,9 @@ int main(void) {
         buf[it & 0x7f] ^= hash[0];
         acc += hash[0];
     }
-    clock_gettime(CLOCK_MONOTONIC, &t1);
+    double t1 = bench_ms();
 
-    long secs = t1.tv_sec - t0.tv_sec;
-    long nsecs = t1.tv_nsec - t0.tv_nsec;
-    double ms = (double)secs * 1000.0 + (double)nsecs / 1000000.0;
+    double ms = t1 - t0;
     printf("sha512 x%d acc=%llu in %.2f ms\n", HASH_ITERS,
            (unsigned long long)acc, ms);
     return 0;

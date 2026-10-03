@@ -82,17 +82,63 @@ pub(crate) fn plain_char_ty(signed: bool) -> i64 {
     if signed { ty } else { ty | UNSIGNED_BIT }
 }
 
-/// High-bit flag marking a type tag `volatile`-qualified (C99 6.7.3).
-/// Orthogonal to the band scheme like [`UNSIGNED_BIT`]: stripped by
-/// [`strip_unsigned`] before any band classifier consults the tag. The
-/// single bit does not record which indirection level carries the
-/// qualifier, so `volatile T *`, `T * volatile`, and `volatile T`
-/// all set it; every access *through* such a tag is treated as a
-/// volatile access (a conservative over-approximation -- extra
-/// volatility only inhibits optimization, per 5.1.2.3p2 an access to
-/// a volatile object may not be elided or coalesced). Whether the
-/// declared object itself is volatile is the separate question
-/// [`VOLATILE_INNER_BIT`] answers.
+/// High-bit flag marking an enumerated type (C99 6.7.2.2). The tag keeps
+/// the band and bits of the integer type the enum's definition chose, which
+/// loads, stores, promotions and conversions read, and carries the enum's
+/// tag-registry id for identity: generic selection, compatibility and type
+/// names tell two enumerated types apart, while each is compatible with
+/// its integer type (6.7.2.2p4). The id takes the bits above the scalar
+/// bands, which end below `1 << ENUM_ID_SHIFT`, and is meaningful only
+/// under this flag, which no aggregate tag carries. Stripped by
+/// [`strip_unsigned`] like the other markers.
+pub(crate) const ENUM_BIT: i64 = 1 << 62;
+const ENUM_ID_SHIFT: i64 = 10;
+const ENUM_ID_BITS: i64 = 18;
+const ENUM_ID_MASK: i64 = ((1 << ENUM_ID_BITS) - 1) << ENUM_ID_SHIFT;
+
+/// The tag of the enumerated type with registry id `id` over the integer
+/// type `underlying`. TODO: an id past the field keeps the integer type
+/// alone.
+pub(crate) fn enum_ty(underlying: i64, id: usize) -> i64 {
+    let id = id as i64;
+    if id >> ENUM_ID_BITS != 0 {
+        return underlying;
+    }
+    without_enum(underlying) | ENUM_BIT | (id << ENUM_ID_SHIFT)
+}
+
+/// The registry id of the enumerated type `ty` is or is derived from.
+pub(crate) fn enum_id_of(ty: i64) -> Option<usize> {
+    (ty & ENUM_BIT != 0).then_some(((ty & ENUM_ID_MASK) >> ENUM_ID_SHIFT) as usize)
+}
+
+/// `ty` with its enumerated type replaced by the compatible integer type.
+pub(crate) fn without_enum(ty: i64) -> i64 {
+    if ty & ENUM_BIT != 0 {
+        ty & !(ENUM_BIT | ENUM_ID_MASK)
+    } else {
+        ty
+    }
+}
+
+/// C99 6.2.7p1 over two tags that may name enumerated types: equal, or
+/// equal once the one enumerated type is replaced by its integer type
+/// (6.7.2.2p4). Two enumerated types are compatible only with themselves.
+pub(crate) fn enum_compatible(a: i64, b: i64) -> bool {
+    a == b
+        || (without_enum(a) == without_enum(b)
+            && (enum_id_of(a).is_none() || enum_id_of(b).is_none()))
+}
+
+/// High-bit flag marking a type tag `volatile`-qualified at some level
+/// (C99 6.7.3), the conservative reading code generation takes: every
+/// access *through* such a tag is a volatile access, so the bit stays
+/// when a dereference drops the qualified level (extra volatility only
+/// inhibits optimization; 5.1.2.3p2 forbids eliding or coalescing an
+/// access to a volatile object). Orthogonal to the band scheme like
+/// [`UNSIGNED_BIT`] and stripped by [`strip_unsigned`]. The levels the
+/// qualifier applies to are [`VOL_LVL_MASK`]'s; type identity reads them
+/// and never this bit.
 pub(crate) const VOLATILE_BIT: i64 = 1 << 29;
 
 /// `true` if `ty` carries the volatile qualifier at any level.
@@ -100,67 +146,76 @@ pub(crate) fn is_volatile_ty(ty: i64) -> bool {
     (ty & VOLATILE_BIT) != 0
 }
 
-/// High-bit flag recording that [`VOLATILE_BIT`] came from a derivation
-/// below the outermost one: `volatile T *p` qualifies the pointee, not
-/// `p` (C99 6.7.5.1p1). Set by [`add_ptr_level`] when a declarator adds
-/// a pointer level, cleared by [`apply_qual_bits`] when a qualifier
-/// applies to the type built so far. Absence is the conservative
-/// answer, so a tag that never passed through the declarator keeps the
-/// whole-tag reading; only [`is_volatile_object_ty`] consults it.
-pub(crate) const VOLATILE_INNER_BIT: i64 = 1 << 33;
-
 /// `true` if the object a declaration gives this tag is itself
 /// volatile-qualified (`volatile T x`, `T *volatile p`), as opposed to
 /// one that merely points at volatile data (`volatile T *p`). Governs
 /// whether the object's own storage is a volatile lvalue; accesses
-/// *through* the tag stay on [`is_volatile_ty`].
+/// *through* the tag stay on [`is_volatile_ty`]. A level past the field
+/// takes the conservative answer.
 pub(crate) fn is_volatile_object_ty(ty: i64) -> bool {
-    is_volatile_ty(ty) && (ty & VOLATILE_INNER_BIT) == 0
-}
-
-/// Both volatile markers. Sites that move the qualifier onto a
-/// rebuilt tag, or that must ignore volatility entirely, take the pair
-/// as a unit -- splitting them would make two spellings of the same
-/// qualified type compare unequal.
-pub(crate) const VOLATILE_MASK: i64 = VOLATILE_BIT | VOLATILE_INNER_BIT;
-
-/// Add one pointer derivation level. The pointer object is unqualified
-/// until a post-`*` qualifier says otherwise, so any volatile already
-/// on the tag becomes inner-only. The marker qualifies
-/// [`VOLATILE_BIT`] and is never set without it, which keeps every
-/// unqualified tag numerically identical to what plain `+ Ty::Ptr`
-/// produced.
-pub(crate) fn add_ptr_level(ty: i64) -> i64 {
-    let ty = ty + Ty::Ptr as i64;
-    if ty & VOLATILE_BIT != 0 {
-        ty | VOLATILE_INNER_BIT
-    } else {
-        ty
+    match volatile_level_bit(ptr_depth_of(ty)) {
+        0 => is_volatile_ty(ty),
+        bit => ty & bit != 0,
     }
 }
 
+/// Every volatile marker. Sites that move the qualifier onto a rebuilt
+/// tag, or that must ignore volatility entirely, take them as a unit.
+pub(crate) const VOLATILE_MASK: i64 = VOLATILE_BIT | VOL_LVL_MASK;
+
+/// The bits qualifying a tag's derivations level by level -- `const`,
+/// `volatile` and a named address space -- rather than naming its type.
+pub(crate) const DERIVATION_QUAL_MASK: i64 =
+    VOLATILE_MASK | CONST_LVL_MASK | SEG_MASK | SEG_LVL_MASK;
+
+/// Add one pointer derivation level. The pointer object is unqualified
+/// until a post-`*` qualifier says otherwise.
+pub(crate) fn add_ptr_level(ty: i64) -> i64 {
+    ty + Ty::Ptr as i64
+}
+
+/// `ty` with derivation level `level` removed: the function level of a
+/// function-type typedef's tag, which stands for the function as a pointer
+/// one level above its return type, absorbed by the first `*` applied to
+/// it. The qualifiers recorded for the levels above move down with them;
+/// the return type's, below it, stay.
+pub(crate) fn absorb_function_level(ty: i64, level: i64) -> i64 {
+    let drop_level = |mask: i64, shift: i64| {
+        let levels = (ty & mask) >> shift;
+        let below = levels & ((1 << level) - 1);
+        ((below | ((levels >> (level + 1)) << level)) << shift) & mask
+    };
+    let quals =
+        drop_level(CONST_LVL_MASK, CONST_LVL_SHIFT) | drop_level(VOL_LVL_MASK, VOL_LVL_SHIFT);
+    let mut out = ((ty & !(CONST_LVL_MASK | VOL_LVL_MASK)) - Ty::Ptr as i64) | quals;
+    let seg_level = (ty & SEG_LVL_MASK) >> SEG_LVL_SHIFT;
+    if ty & SEG_MASK != 0 && seg_level > level {
+        out = (out & !SEG_LVL_MASK) | ((seg_level - 1) << SEG_LVL_SHIFT);
+    }
+    out
+}
+
 /// The pointee type (C99 6.5.3.2p4): one level down, without the removed
-/// level's `const` and object address space, which qualified the pointer.
+/// level's `const`, `volatile` and object address space, which qualified
+/// the pointer. [`VOLATILE_BIT`] stays.
 pub(crate) fn pointee_ty(ty: i64) -> i64 {
-    let mut ty = strip_object_const(ty);
+    let mut ty = strip_object_const(ty) & !volatile_level_bit(ptr_depth_of(ty));
     if segment_of_object_ty(ty).is_some() {
         ty &= !(SEG_MASK | SEG_LVL_MASK);
     }
     ty - Ty::Ptr as i64
 }
 
-/// Fold type-qualifier bits into a tag. A `volatile` among them
-/// qualifies the outermost derivation built so far, which is what
-/// [`VOLATILE_INNER_BIT`] denies. A `const` is recorded at the tag's
-/// current pointer depth in [`CONST_LVL_MASK`]. A segment qualifier
-/// records the derivation it applies to by stamping the tag's current
-/// pointer depth into [`SEG_LVL_MASK`].
+/// Fold type-qualifier bits into a tag. A `const` or a `volatile` is
+/// recorded at the tag's current pointer depth in [`CONST_LVL_MASK`] or
+/// [`VOL_LVL_MASK`], the latter beside [`VOLATILE_BIT`]. A segment
+/// qualifier records the derivation it applies to by stamping the tag's
+/// current pointer depth into [`SEG_LVL_MASK`].
 pub(crate) fn apply_qual_bits(ty: i64, bits: i64) -> i64 {
-    let mut ty = if bits & VOLATILE_BIT != 0 {
-        (ty | bits) & !VOLATILE_INNER_BIT
-    } else {
-        ty | bits
-    };
+    let mut ty = ty | bits;
+    if bits & VOLATILE_BIT != 0 {
+        ty |= volatile_level_bit(ptr_depth_of(ty));
+    }
     if bits & CONST_BIT != 0 {
         ty = (ty & !CONST_BIT) | const_level_bit(ptr_depth_of(ty));
     }
@@ -230,22 +285,26 @@ pub(crate) fn is_long_double_scalar(ty: i64) -> bool {
     is_long_double_ty(ty) && strip_unsigned(ty) == Ty::Double as i64
 }
 
-/// Bit field marking the derivation levels a `const` qualifies (C99
-/// 6.7.3), one bit per absolute level as [`SEG_LVL_MASK`] counts them:
-/// `const T *` sets level 0, `T *const` level 1, and an array's level
-/// 0 is its elements' (6.7.3p8). Band arithmetic leaves the field in
-/// place; [`pointee_ty`] drops the removed level's bit, and
-/// [`is_const_object_ty`] answers per derivation.
-/// Sits above [`LONG_DOUBLE_BIT`] (bits 44..59).
-/// TODO: a `const` past level 15 is not recorded.
+/// Bit fields marking the derivation levels a `const` and a `volatile`
+/// qualify (C99 6.7.3), one bit per absolute level as [`SEG_LVL_MASK`]
+/// counts them: `const T *` sets level 0, `T *const` level 1, and an
+/// array's level 0 is its elements' (6.7.3p8). Band arithmetic leaves
+/// the fields in place; [`pointee_ty`] drops the removed level's bits,
+/// and [`is_const_object_ty`] / [`is_volatile_object_ty`] answer per
+/// derivation. Bits 44..51 and 52..59, above [`LONG_DOUBLE_BIT`].
+/// TODO: a qualifier past level 7 is not recorded.
+const QUAL_LVL_BITS: i64 = 8;
 const CONST_LVL_SHIFT: i64 = 44;
-const CONST_LVL_BITS: i64 = 16;
-pub(crate) const CONST_LVL_MASK: i64 = ((1 << CONST_LVL_BITS) - 1) << CONST_LVL_SHIFT;
+pub(crate) const CONST_LVL_MASK: i64 = ((1 << QUAL_LVL_BITS) - 1) << CONST_LVL_SHIFT;
+const VOL_LVL_SHIFT: i64 = 52;
+pub(crate) const VOL_LVL_MASK: i64 = ((1 << QUAL_LVL_BITS) - 1) << VOL_LVL_SHIFT;
 
-/// The levels of [`CONST_LVL_MASK`] above the base: the pointer
-/// derivations' own qualifiers, which a rebuilt aggregate-backed tag
-/// carries over while the element's level lives in the aggregate.
-pub(crate) const CONST_PTR_LVL_MASK: i64 = CONST_LVL_MASK & !(1 << CONST_LVL_SHIFT);
+/// The levels of [`CONST_LVL_MASK`] and [`VOL_LVL_MASK`] above the base:
+/// the pointer derivations' own qualifiers, which a rebuilt
+/// aggregate-backed tag carries over while the element's level lives in
+/// the aggregate.
+pub(crate) const QUAL_PTR_LVL_MASK: i64 =
+    (CONST_LVL_MASK & !(1 << CONST_LVL_SHIFT)) | (VOL_LVL_MASK & !(1 << VOL_LVL_SHIFT));
 
 /// The request `Compiler::lex_qualifier_bits` returns for `const`:
 /// [`apply_qual_bits`] records it at the tag's current depth in
@@ -254,8 +313,17 @@ pub(crate) const CONST_BIT: i64 = 1 << 60;
 
 /// The [`CONST_LVL_MASK`] bit for `level`, 0 past the field.
 fn const_level_bit(level: i64) -> i64 {
-    if (0..CONST_LVL_BITS).contains(&level) {
+    if (0..QUAL_LVL_BITS).contains(&level) {
         1 << (CONST_LVL_SHIFT + level)
+    } else {
+        0
+    }
+}
+
+/// The [`VOL_LVL_MASK`] bit for `level`, 0 past the field.
+fn volatile_level_bit(level: i64) -> i64 {
+    if (0..QUAL_LVL_BITS).contains(&level) {
+        1 << (VOL_LVL_SHIFT + level)
     } else {
         0
     }
@@ -271,34 +339,111 @@ pub(crate) fn is_const_object_ty(ty: i64) -> bool {
 /// Drop the `const` on the type itself, keeping a pointee's: the
 /// conversion C99 6.3.2.1p2 applies to an lvalue's value, 6.5.4p5 to a
 /// cast's and 6.7.5.3p15 to a parameter's type, as far as the tag
-/// records it exactly. `volatile` stays, since the tag records it at
-/// no level and a value keeps any volatility of its pointee.
+/// records it exactly. `volatile` stays for the accesses the value
+/// reaches; [`unqualified_version_ty`] drops it as well.
 pub(crate) fn strip_object_const(ty: i64) -> i64 {
     ty & !const_level_bit(ptr_depth_of(ty))
 }
 
 /// The unqualified version of a type (C99 6.2.5p25) as C23 6.7.2.5
-/// `typeof_unqual` names it: [`strip_object_const`] plus the `volatile`
-/// the inner marker does not place below the outermost derivation.
-/// The segment qualifier is kept. TODO: its lvalue conversion.
+/// `typeof_unqual` names it: no `const` or `volatile` on the type
+/// itself. The segment qualifier is kept. TODO: its lvalue conversion.
 pub(crate) fn unqualified_version_ty(ty: i64) -> i64 {
-    let ty = strip_object_const(ty);
-    if ty & VOLATILE_INNER_BIT == 0 {
-        ty & !VOLATILE_MASK
+    let ty = strip_object_const(ty) & !volatile_level_bit(ptr_depth_of(ty));
+    exact_volatile_ty(ty)
+}
+
+/// `ty` with no qualifier on itself or on what it points to: the form in
+/// which C99 6.5.6p3 compares the operands of a pointer difference,
+/// pointers to qualified or unqualified versions of compatible types.
+pub(crate) fn unqualified_pointee_ty(ty: i64) -> i64 {
+    let depth = ptr_depth_of(ty);
+    let ty = unqualified_version_ty(ty);
+    if depth == 0 {
+        return ty;
+    }
+    exact_volatile_ty(ty & !(const_level_bit(depth - 1) | volatile_level_bit(depth - 1)))
+}
+
+/// `ty` without [`VOLATILE_BIT`] when no level it records is volatile,
+/// as a dereference of a volatile pointer level leaves it: the type
+/// itself, rather than the conservative reading of its accesses.
+pub(crate) fn exact_volatile_ty(ty: i64) -> i64 {
+    if ty & VOL_LVL_MASK == 0 && volatile_level_bit(ptr_depth_of(ty)) != 0 {
+        ty & !VOLATILE_BIT
     } else {
         ty
     }
 }
 
-/// The `const` of `from`'s pointee placed at `to`'s pointee level, or
-/// 0: the qualification C99 6.5.15p6 carries from either arm onto the
-/// result pointer type.
-pub(crate) fn pointee_const_bits(from: i64, to: i64) -> i64 {
+/// The `const` and `volatile` of `from`'s pointee placed at `to`'s
+/// pointee level, with `from`'s [`VOLATILE_BIT`]: the qualification
+/// C99 6.5.15p6 carries from either arm onto the result pointer type.
+pub(crate) fn pointee_qual_bits(from: i64, to: i64) -> i64 {
     let (from_depth, to_depth) = (ptr_depth_of(from), ptr_depth_of(to));
-    if from_depth == 0 || to_depth == 0 || from & const_level_bit(from_depth - 1) == 0 {
-        0
+    if from_depth == 0 || to_depth == 0 {
+        return 0;
+    }
+    let mut bits = from & VOLATILE_BIT;
+    if from & const_level_bit(from_depth - 1) != 0 {
+        bits |= const_level_bit(to_depth - 1);
+    }
+    if from & volatile_level_bit(from_depth - 1) != 0 {
+        bits |= volatile_level_bit(to_depth - 1);
+    }
+    bits
+}
+
+/// The `const` and `volatile` of the type `ty` points to, an array's being
+/// its elements' (C99 6.7.3p8); `None` when `ty` is no pointer.
+fn pointee_quals(ty: i64, structs: &[super::StructDef]) -> Option<(bool, bool)> {
+    let depth = ptr_depth_of(ty);
+    if depth == 0 {
+        return None;
+    }
+    let array = (depth == 1 && is_struct_ty(ty))
+        .then(|| structs.get(struct_id_of(ty)).filter(|s| s.is_array))
+        .flatten();
+    let (ty, level) = match array {
+        Some(s) => (s.fields[0].ty, ptr_depth_of(s.fields[0].ty)),
+        None => (ty, depth - 1),
+    };
+    Some((
+        ty & const_level_bit(level) != 0,
+        ty & volatile_level_bit(level) != 0,
+    ))
+}
+
+/// Whether converting a pointer of type `from` to type `to` drops the
+/// `const`, and the `volatile`, of the pointed-to type, which C99
+/// 6.5.16.1p1 requires `to`'s pointee to keep.
+pub(crate) fn discarded_pointee_quals(
+    to: i64,
+    from: i64,
+    structs: &[super::StructDef],
+) -> (bool, bool) {
+    match (pointee_quals(to, structs), pointee_quals(from, structs)) {
+        (Some(t), Some(f)) => (f.0 && !t.0, f.1 && !t.1),
+        _ => (false, false),
+    }
+}
+
+/// A pointer tag as C99 6.5.16.1p1 compares it with another: without the
+/// qualifiers of the pointer and of the type it points to, the latter being
+/// [`discarded_pointee_quals`]' to check, and without [`VOLATILE_BIT`].
+/// Each deeper level keeps its qualifiers, which a compatible type matches
+/// exactly (6.7.3p9).
+pub(crate) fn pointer_conversion_key(ty: i64) -> i64 {
+    let depth = ptr_depth_of(ty);
+    let outer = const_level_bit(depth)
+        | volatile_level_bit(depth)
+        | const_level_bit(depth - 1)
+        | volatile_level_bit(depth - 1);
+    let ty = ty & !(outer | VOLATILE_BIT | CONST_BIT);
+    if segment_of_object_ty(ty).is_some() {
+        ty & !(SEG_MASK | SEG_LVL_MASK)
     } else {
-        const_level_bit(to_depth - 1)
+        ty
     }
 }
 
@@ -338,8 +483,7 @@ pub(crate) fn segment_of_object_ty(ty: i64) -> Option<Segment> {
 /// gives the value of an lvalue the unqualified version of the
 /// lvalue's type, and 6.5.16.1p1 constrains only the pointed-to
 /// types, so a qualifier on the object itself never takes part in
-/// compatibility. `volatile` goes at every level because the single
-/// bit does not record one; `const` goes at every level as well, the
+/// compatibility. `const` and `volatile` go at every level, the
 /// constraint on a pointee's qualification being undiagnosed (TODO); a
 /// named address space records its level and is dropped only when it
 /// qualifies the object.
@@ -364,7 +508,7 @@ pub(crate) fn object_segment_bits(ty: i64) -> i64 {
 }
 
 /// Pointer-derivation depth of a tag, across every band.
-fn ptr_depth_of(ty: i64) -> i64 {
+pub(crate) fn ptr_depth_of(ty: i64) -> i64 {
     let ty = strip_unsigned(ty);
     if is_struct_ty(ty) {
         struct_ptr_depth(ty)
@@ -409,43 +553,50 @@ pub(crate) fn narrow_const_int(bytes: usize, unsigned: bool, is_bool: bool, v: i
 }
 
 /// Drop the qualifier bits (`UNSIGNED_BIT`, `PLAIN_CHAR_BIT`,
-/// `VOLATILE_BIT`, `VOLATILE_INNER_BIT`, `VOID_BIT`, the segment and
-/// `const` fields).
+/// `VOLATILE_BIT`, `VOID_BIT`, the segment, `const` and `volatile`
+/// fields, the enumerated-type identity).
 /// Use to recover the bare band-encoded type before
 /// consulting a helper that classifies by band. Most of the helpers in
 /// this module call this at their entry; outside callers only need it
 /// when storing a type tag where a non-bit-flagged tag is expected
 /// (e.g., switch-table comparisons against `Ty::Int as i64`).
 pub(crate) fn strip_unsigned(ty: i64) -> i64 {
-    ty & !(UNSIGNED_BIT
-        | PLAIN_CHAR_BIT
-        | VOLATILE_BIT
-        | VOLATILE_INNER_BIT
-        | SEG_MASK
-        | SEG_LVL_MASK
-        | VOID_BIT
-        | LONG_DOUBLE_BIT
-        | CONST_LVL_MASK
-        | CONST_BIT)
+    without_enum(ty)
+        & !(UNSIGNED_BIT
+            | PLAIN_CHAR_BIT
+            | VOLATILE_BIT
+            | VOL_LVL_MASK
+            | SEG_MASK
+            | SEG_LVL_MASK
+            | VOID_BIT
+            | LONG_DOUBLE_BIT
+            | CONST_LVL_MASK
+            | CONST_BIT)
 }
 
 /// `ty`, declared through an enum tag before its definition and so built on
 /// the tag's incomplete entry `id`, over the integer type `underlying` the
-/// definition chose: the same derivations and qualifiers. A type built on
-/// anything else is returned unchanged.
+/// definition chose: the enumerated type at the same derivations and
+/// qualifiers. A type built on anything else is returned unchanged.
 pub(crate) fn rebase_enum_placeholder(ty: i64, id: usize, underlying: i64) -> i64 {
     if !is_struct_ty(ty) || struct_id_of(ty) != id {
         return ty;
     }
     let bare = strip_unsigned(ty);
-    (bare - struct_ty_for(id) + strip_unsigned(underlying))
+    let rebased = (bare - struct_ty_for(id) + strip_unsigned(underlying))
         | (ty ^ bare)
-        | (underlying & UNSIGNED_BIT)
+        | (underlying & UNSIGNED_BIT);
+    enum_ty(rebased, id)
 }
 
 /// The scalar `void` type tag.
 pub(crate) fn void_ty() -> i64 {
     Ty::Char as i64 | UNSIGNED_BIT | VOID_BIT
+}
+
+/// The `void *` type tag.
+pub(crate) fn void_ptr_ty() -> i64 {
+    void_ty() + Ty::Ptr as i64
 }
 
 /// True for scalar `void`, at any qualification.
@@ -463,22 +614,40 @@ pub(crate) fn is_void_ptr_ty(ty: i64) -> bool {
 /// one `*` per level, with any named-address-space keyword written at
 /// the derivation [`SEG_LVL_MASK`] records. Two tags that differ only
 /// in that qualifier must not render alike.
-/// The `*` run of a spelled type: a `const` after each level it
-/// qualifies and the segment keyword at the level it applies to.
-fn ptr_suffix(ty: i64, depth: usize) -> alloc::string::String {
-    let stars = |levels: core::ops::Range<usize>| {
-        let mut s = alloc::string::String::new();
-        for level in levels {
-            if s.ends_with("const") {
-                s.push(' ');
-            }
-            s.push('*');
-            if ty & const_level_bit(level as i64) != 0 {
-                s.push_str(" const");
-            }
+/// The qualifier keywords `ty` records at derivation `level`, each
+/// followed by a space.
+fn level_quals(ty: i64, level: i64) -> &'static str {
+    let is_const = ty & const_level_bit(level) != 0;
+    match (is_const, ty & volatile_level_bit(level) != 0) {
+        (true, true) => "const volatile ",
+        (true, false) => "const ",
+        (false, true) => "volatile ",
+        (false, false) => "",
+    }
+}
+
+/// The `*` of each pointer level of `ty` in `levels`, each followed by the
+/// `const` and `volatile` that qualify that level.
+fn qualified_stars(ty: i64, levels: core::ops::Range<usize>) -> alloc::string::String {
+    let mut s = alloc::string::String::new();
+    for level in levels {
+        if s.ends_with("const") || s.ends_with("volatile") {
+            s.push(' ');
         }
-        s
-    };
+        s.push('*');
+        let quals = level_quals(ty, level as i64);
+        if !quals.is_empty() {
+            s.push(' ');
+            s.push_str(quals.trim_end());
+        }
+    }
+    s
+}
+
+/// The `*` run of a spelled type: a `const` and a `volatile` after each
+/// level they qualify and the segment keyword at the level it applies to.
+fn ptr_suffix(ty: i64, depth: usize) -> alloc::string::String {
+    let stars = |levels: core::ops::Range<usize>| qualified_stars(ty, levels);
     let Some(seg) = segment_of_ty(ty) else {
         return stars(1..depth + 1);
     };
@@ -507,14 +676,19 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
     use alloc::format;
     let unsigned = (ty & UNSIGNED_BIT) != 0;
     let bare = strip_unsigned(ty);
-    let base_const = if ty & const_level_bit(0) != 0 {
-        "const "
-    } else {
-        ""
-    };
+    let base_const = level_quals(ty, 0);
     let prefix = format!("{base_const}{}", if unsigned { "unsigned " } else { "" });
     if (ty & VOID_BIT) != 0 && (0..100).contains(&bare) {
         return format!("{base_const}void{}", ptr_suffix(ty, (bare / 2) as usize));
+    }
+    if let Some(id) = enum_id_of(ty) {
+        let name = structs
+            .get(id)
+            .map(|s| s.name.as_str())
+            .filter(|n| !n.is_empty())
+            .unwrap_or("<anonymous>");
+        let depth = ptr_depth_of(ty) as usize;
+        return format!("{base_const}enum {name}{}", ptr_suffix(ty, depth));
     }
     if bare >= STRUCT_BASE {
         let id = struct_id_of(bare);
@@ -531,6 +705,16 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
             return format!(
                 "{} ({}){dims}",
                 format_type(f.ty, structs),
+                ptr_suffix(ty, depth)
+            );
+        }
+        // A GNU vector, spelled as its lane type and the attribute that
+        // declares it; its interned name encodes the lane type's tag.
+        if let Some(s) = structs.get(id).filter(|s| s.is_vector) {
+            let lane = format_type(s.fields[0].ty, structs);
+            return format!(
+                "{base_const}{lane} __attribute__((vector_size({}))){}",
+                s.size,
                 ptr_suffix(ty, depth)
             );
         }
@@ -602,13 +786,15 @@ pub(super) fn format_signature(
 
 /// Render function type `f` with `depth` pointer levels above it, whose
 /// innermost return type is `ret`: `double (*)(double)`, `int (*)()` for
-/// one with no prototype.
+/// one with no prototype. The outermost levels carry the qualifiers `tag`
+/// records for its top `depth` levels: `void (* const *)(void)`.
 pub(super) fn format_fn_type(
     ret: i64,
     f: &crate::c5::symbol::FnType,
-    depth: i64,
+    (tag, depth): (i64, i64),
     structs: &[super::StructDef],
 ) -> alloc::string::String {
+    let top = ptr_depth_of(tag) as usize;
     let mut decl = alloc::string::String::new();
     let mut level = Some((f, depth));
     while let Some((f, depth)) = level {
@@ -617,10 +803,16 @@ pub(super) fn format_fn_type(
         } else {
             alloc::string::String::new()
         };
+        let depth = depth as usize;
+        let stars = if decl.is_empty() && depth <= top {
+            qualified_stars(tag, top + 1 - depth..top + 1)
+        } else {
+            "*".repeat(depth)
+        };
         decl = if depth == 0 && decl.is_empty() {
             alloc::format!("({params})")
         } else {
-            alloc::format!("({}{decl})({params})", "*".repeat(depth as usize))
+            alloc::format!("({stars}{decl})({params})")
         };
         level = f.ret.as_ref().map(|(r, d)| (&**r, *d));
     }
@@ -829,7 +1021,8 @@ pub(super) fn long_long_ptr_depth(ty: i64) -> i64 {
 /// hold every value of the original type because c5's int is 4
 /// bytes vs char's 1 / short's 2, so the result is always the
 /// signed `Ty::Int` -- the "convert to unsigned int" branch of the
-/// C99 rule never fires here.
+/// C99 rule never fires here. An enumerated type yields its integer
+/// type, at every rank as gcc and clang convert one.
 pub(super) fn integer_promote(ty: i64) -> i64 {
     let stripped = strip_unsigned(ty);
     // `_Bool` (6.3.1.1) and the sub-int integer types all have a
@@ -838,7 +1031,7 @@ pub(super) fn integer_promote(ty: i64) -> i64 {
     if stripped == Ty::Char as i64 || stripped == Ty::Short as i64 || stripped == Ty::Bool as i64 {
         Ty::Int as i64
     } else {
-        ty
+        without_enum(ty)
     }
 }
 
@@ -1262,8 +1455,9 @@ mod ty_tag {
         assert_eq!(pointee_size_no_struct(strip_unsigned(void_ty() + ptr)), 1);
     }
 
-    /// The declarator's qualifier algebra: `add_ptr_level` demotes a
-    /// volatile to inner-only, `apply_qual_bits` promotes it back.
+    /// The declarator's qualifier algebra: `apply_qual_bits` records a
+    /// volatile at the derivation built so far, which `add_ptr_level`
+    /// leaves below the new one.
     #[test]
     fn volatile_object_tracks_the_outermost_derivation() {
         let int = Ty::Int as i64;
@@ -1286,13 +1480,27 @@ mod ty_tag {
             pointee_vol,
             vol
         ))));
-        // The marker never appears without the qualifier it modifies, so
-        // an unqualified tag keeps the value plain `+ Ty::Ptr` produced.
         assert_eq!(add_ptr_level(int), int + Ty::Ptr as i64);
         assert_eq!(strip_unsigned(pointee_vol), int + Ty::Ptr as i64);
-        // Band classifiers see through both markers.
+        // Band classifiers see through every marker.
         assert!(is_pointer_ty(pointee_vol));
         assert!(is_pointer_ty(obj_vol));
+        // The level is part of the tag: `T *volatile *` and `volatile T **`
+        // differ from each other and from `T **`.
+        let inner_vol = add_ptr_level(obj_vol);
+        let base_vol = add_ptr_level(pointee_vol);
+        let plain = int + 2 * Ty::Ptr as i64;
+        assert!(inner_vol != base_vol && inner_vol != plain && base_vol != plain);
+        assert_eq!(strip_unsigned(inner_vol), plain);
+        // A dereference drops the removed level's qualifier from the type
+        // and keeps the conservative marker for the access.
+        let deref = pointee_ty(obj_vol);
+        assert!(!is_volatile_object_ty(deref) && is_volatile_ty(deref));
+        assert_eq!(exact_volatile_ty(deref), int);
+        assert_eq!(pointee_ty(inner_vol), obj_vol);
+        // Past the recorded levels, the object takes the conservative answer.
+        let deep = apply_qual_bits(int + 8 * Ty::Ptr as i64, vol);
+        assert!(is_volatile_object_ty(deep) && is_volatile_object_ty(deep + Ty::Ptr as i64));
     }
 
     /// The segment qualifier records the derivation level it applies
@@ -1360,9 +1568,9 @@ mod ty_tag {
         // pointee's.
         let r = apply_qual_bits(p, CONST_BIT);
         assert_eq!(strip_object_const(r), p);
-        assert_eq!(pointee_const_bits(r, int + ptr), p - (int + ptr));
-        assert_eq!(pointee_const_bits(q, int + ptr), 0);
-        assert_eq!(pointee_const_bits(int, int + ptr), 0);
+        assert_eq!(pointee_qual_bits(r, int + ptr), p - (int + ptr));
+        assert_eq!(pointee_qual_bits(q, int + ptr), 0);
+        assert_eq!(pointee_qual_bits(int, int + ptr), 0);
         // A struct-band tag records its own depth the same way.
         let cs = apply_qual_bits(STRUCT_BASE, CONST_BIT);
         assert!(is_const_object_ty(cs));
@@ -1380,10 +1588,9 @@ mod ty_tag {
             CONST_BIT
         )));
         assert!(is_void_ty(apply_qual_bits(void_ty(), CONST_BIT)));
-        assert_eq!(CONST_PTR_LVL_MASK & r, q & CONST_LVL_MASK);
-        // `volatile` is not the object-level strip's to drop; the
-        // unqualified version drops it only when the inner marker does
-        // not place it on a pointee.
+        assert_eq!(QUAL_PTR_LVL_MASK & r, q & CONST_LVL_MASK);
+        // `volatile` is not the object-level const strip's to drop; the
+        // unqualified version drops it at the type's own level only.
         let pv = apply_qual_bits(add_ptr_level(int), VOLATILE_BIT);
         assert_eq!(strip_object_const(pv), pv);
         assert_eq!(unqualified_version_ty(pv), int + ptr);
@@ -1415,6 +1622,18 @@ mod ty_tag {
             "const unsigned int"
         );
         assert_eq!(format_type(add_ptr_level(int), &[]), "int*");
+        // `volatile` is spelled at its level as `const` is.
+        let v = VOLATILE_BIT;
+        let pv = apply_qual_bits(add_ptr_level(int), v);
+        assert_eq!(format_type(add_ptr_level(pv), &[]), "int* volatile *");
+        assert_eq!(
+            format_type(apply_qual_bits(cint, v), &[]),
+            "const volatile int"
+        );
+        assert_eq!(
+            format_type(apply_qual_bits(q, v), &[]),
+            "int* const volatile"
+        );
     }
 
     #[test]

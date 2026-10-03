@@ -481,18 +481,23 @@ typedef UINTN (*ALLOC_PAGES)(int type, int memtype, UINTN pages, UINTN *memory);
 /* UEFI maps loaded data execute-never, so the vector table cannot live in a
  * static array. Allocate a page of EfiLoaderCode (executable) through
  * BootServices->AllocatePages, reached by word index (SystemTable.BootServices
- * at +96, BootServices.AllocatePages at +40). Fill the 16 exception slots with
- * `b .` and the IRQ / current-EL / SP_ELx slot (0x280) with a branch to the ISR;
- * publish the writes to the instruction fetch before pointing VBAR_EL1 at it. */
-static void install_vectors(void *st) {
+ * at +96, BootServices.AllocatePages at +40). */
+static UINTN alloc_vector_page(void *st) {
     UINTN *stw = (UINTN *)st;
     UINTN *bs = (UINTN *)stw[12];
     ALLOC_PAGES alloc_pages = (ALLOC_PAGES)bs[5];
     UINTN pg = 0;
     if (alloc_pages(0, 1, 1, &pg) != 0 || !pg) {
         serial_puts("BADC-PREEMPT: alloc failed\r\n");
-        return;
+        return 0;
     }
+    return pg;
+}
+
+/* Fill the 16 exception slots with `b .` and the IRQ / current-EL / SP_ELx
+ * slot (0x280) with a branch to the ISR; publish the writes to the instruction
+ * fetch before pointing VBAR_EL1 at the page. */
+static void install_vectors(UINTN pg) {
     unsigned *v = (unsigned *)pg;
     for (int i = 0; i < 16; i++) {
         v[i * 0x20] = 0x14000000u; /* b . */
@@ -511,6 +516,17 @@ static void install_vectors(void *st) {
     __asm__ volatile("isb" ::: "memory");
     g_state.sched = schedule;
     __asm__ volatile("msr vbar_el1, %0" : : "r"(pg));
+#ifdef PREEMPT_VBAR_WINDOW_STRESS
+    /* Hold the window before TPIDR_EL1 is set open for 40 ms, past a firmware
+     * timer period, so a setup that runs with IRQ unmasked takes a tick here
+     * on every boot rather than on the one that lands in it. */
+    UINTN frq, t0, t;
+    __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frq));
+    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(t0));
+    do {
+        __asm__ volatile("mrs %0, cntvct_el0" : "=r"(t));
+    } while (t - t0 < frq / 25);
+#endif
     __asm__ volatile("msr tpidr_el1, %0" : : "r"((UINTN)&g_state));
     __asm__ volatile("isb");
 }
@@ -543,10 +559,15 @@ static void halt(void) { __asm__ volatile("wfi"); }
 
 static void arch_start_scheduler(void *st) {
     UINTN frq;
+    UINTN pg = alloc_vector_page(st);
+    if (!pg) {
+        return;
+    }
     /* UEFI enters with IRQ unmasked, so the firmware's timer would vector
-     * through the table below before the GIC and the timer are the demo's. */
+     * through the table below before the GIC and the timer are the demo's.
+     * AllocatePages returns with IRQ unmasked, so the mask follows it. */
     cli();
-    install_vectors(st);
+    install_vectors(pg);
     gic_init();
     __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frq));
     __asm__ volatile("msr cntv_tval_el0, %0" : : "r"(frq / 100));

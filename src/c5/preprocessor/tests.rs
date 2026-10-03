@@ -896,6 +896,81 @@ fn pragma_operator_pack_emits_inline_directive() {
 }
 
 #[test]
+fn a_pragma_operator_leaves_its_line_numbered() {
+    // The re-emitted directive takes a line of its own; a marker after it
+    // gives the rest of the source line its number back.
+    let out = process("int a;\n_Pragma(\"pack(1)\") struct S { char a; };\nint b;\n");
+    assert!(
+        out.contains("\n#pragma pack(1)\n# 2 \"<source>\"\n struct S { char a; };\nint b;"),
+        "{out:?}"
+    );
+}
+
+#[test]
+fn preprocessed_output_keeps_the_pragmas_the_pass_consumes() {
+    // `-E` output is compiled again, so a pragma the pass acted on is
+    // written where it stood, directive or operator. A compile keeps
+    // its output free of them; both register the intrinsics.
+    let src = "#pragma intrinsic(\"alloca\")\n\
+               #define FABS _Pragma(\"intrinsic(\\\"fabs\\\")\")\n\
+               FABS int x;\n";
+    for keep in [true, false] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.set_keep_pragmas(keep);
+        let out = pp.process(src).expect("preprocessor failed");
+        assert!(pp.intrinsics.contains_key("alloca") && pp.intrinsics.contains_key("fabs"));
+        assert_eq!(
+            out.contains("\n#pragma intrinsic(\"alloca\")\n"),
+            keep,
+            "{out:?}"
+        );
+        assert_eq!(
+            out.contains("\n#pragma intrinsic(\"fabs\")\n# 3 \"<source>\"\n int x;"),
+            keep,
+            "{out:?}"
+        );
+        assert_eq!(out.matches("intrinsic").count(), if keep { 2 } else { 0 });
+    }
+}
+
+#[test]
+fn preprocessed_input_is_not_preprocessed_again() {
+    // A `.i` unit, as gcc reads one: no text is expanded, `#define`
+    // has no effect, line markers and pragmas act, and nothing is
+    // force-included.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.set_preprocessed(true);
+    pp.force_includes.push("never_opened.h".to_string());
+    let src = "# 7 \"orig.c\"\n\
+               #define A 1\n\
+               int a = A + __LINE__;\n\
+               #pragma intrinsic(\"alloca\")\n\
+               #\n\
+               _Pragma(\"pack(1)\") int b;\n";
+    let out = pp.process(src).expect("preprocessed input passes");
+    assert!(
+        out.contains("# 7 \"orig.c\"\n\nint a = A + __LINE__;\n"),
+        "{out:?}"
+    );
+    assert!(out.contains("_Pragma(\"pack(1)\") int b;"), "{out:?}");
+    assert!(!out.contains("never_opened"), "{out:?}");
+    assert!(pp.intrinsics.contains_key("alloca"));
+
+    for directive in ["#include \"x.h\"", "#if 0", "#error no"] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.set_preprocessed(true);
+        let err = pp
+            .process(&format!("int x;\n{directive}\n"))
+            .expect_err(directive);
+        let d = &err.diagnostics()[0];
+        assert_eq!(
+            (d.code, d.loc.as_ref().map(|l| l.line)),
+            (Code::DIRECTIVE, Some(2))
+        );
+    }
+}
+
+#[test]
 fn pragma_operator_ignored_inside_string_literal() {
     // The operator name inside a string literal is ordinary text.
     let out = process("const char *s = \"_Pragma(\\\"once\\\")\";\n");
@@ -4497,6 +4572,8 @@ fn target_predefines_are_locked() {
         ("_POSIX_SOURCE", "1"),
         ("_POSIX_C_SOURCE", "200809L"),
     ];
+    // The object format's, not the OS's: the Linux targets are the ELF ones.
+    const ELF: &[(&str, &str)] = &[("__ELF__", "1")];
     const WINDOWS: &[(&str, &str)] = &[
         ("_WIN32", "1"),
         ("_WIN64", "1"),
@@ -4511,13 +4588,14 @@ fn target_predefines_are_locked() {
         .chain(X86_64)
         .chain(MACOS)
         .chain(LINUX)
+        .chain(ELF)
         .chain(WINDOWS)
         .copied()
         .collect();
     for (spec, target) in PREDEFINE_TARGETS {
         let want: Vec<(&str, &str)> = match target {
-            Target::LinuxX64 => X86_64.iter().chain(LINUX).copied().collect(),
-            Target::LinuxAarch64 => AARCH64.iter().chain(LINUX).copied().collect(),
+            Target::LinuxX64 => X86_64.iter().chain(LINUX).chain(ELF).copied().collect(),
+            Target::LinuxAarch64 => AARCH64.iter().chain(LINUX).chain(ELF).copied().collect(),
             Target::MacOSAarch64 => AARCH64.iter().chain(MACOS).copied().collect(),
             Target::WindowsX64 => X86_64.iter().chain(WINDOWS).copied().collect(),
             Target::WindowsAarch64 => AARCH64.iter().chain(WINDOWS).copied().collect(),

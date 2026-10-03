@@ -245,8 +245,9 @@ typedef unsigned int pthread_key_t;
 typedef int pthread_once_t;
 #endif
 
-int pthread_create(pthread_t *thread, char *attr, int *start, char *arg);
-int pthread_join(pthread_t thread, int **retval);
+int pthread_create(pthread_t *thread, const pthread_attr_t *attr, void *(*start)(void *),
+                   void *arg);
+int pthread_join(pthread_t thread, void **retval);
 void pthread_exit(void *retval);
 int pthread_detach(pthread_t thread);
 pthread_t pthread_self(void);
@@ -376,11 +377,11 @@ static inline int pthread_atfork(void (*prepare)(void), void (*parent)(void),
 #else
 int pthread_atfork(void (*prepare)(void), void (*parent)(void), void (*child)(void));
 #endif
-int pthread_key_create(pthread_key_t *key, int *destructor);
+int pthread_key_create(pthread_key_t *key, void (*destructor)(void *));
 int pthread_key_delete(pthread_key_t key);
-int pthread_setspecific(pthread_key_t key, char *val);
-char *pthread_getspecific(pthread_key_t key);
-int pthread_once(pthread_once_t *once_control, int *init_routine);
+int pthread_setspecific(pthread_key_t key, const void *val);
+void *pthread_getspecific(pthread_key_t key);
+int pthread_once(pthread_once_t *once_control, void (*init_routine)(void));
 
 // Mutex-type constants used by pthread_mutexattr_settype. Values
 // match the POSIX defaults; the bound libc reads them by integer

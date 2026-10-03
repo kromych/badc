@@ -85,11 +85,12 @@ impl Mode {
 }
 
 /// The language a positional input's suffix selects, following gcc's
-/// suffix table. `.S` and `.sx` are assembler with the preprocessor run
-/// first; `.s` is assembler taken verbatim.
+/// suffix table. `.i` is C that needs no preprocessing; `.S` and `.sx`
+/// are assembler with the preprocessor run first; `.s` is assembler
+/// taken verbatim.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SourceKind {
-    C,
+    C { preprocessed: bool },
     Asm { preprocess: bool },
 }
 
@@ -100,14 +101,21 @@ impl SourceKind {
             .and_then(|s| s.to_str())
             .unwrap_or("")
         {
+            "i" => SourceKind::C { preprocessed: true },
             "s" => SourceKind::Asm { preprocess: false },
             "S" | "sx" => SourceKind::Asm { preprocess: true },
-            _ => SourceKind::C,
+            _ => SourceKind::C {
+                preprocessed: false,
+            },
         }
     }
 
     pub(crate) fn is_asm(self) -> bool {
         matches!(self, SourceKind::Asm { .. })
+    }
+
+    pub(crate) fn is_preprocessed(self) -> bool {
+        matches!(self, SourceKind::C { preprocessed: true })
     }
 }
 

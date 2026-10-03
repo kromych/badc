@@ -23,6 +23,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
+use crate::c5::codegen::BuildId;
 use crate::c5::error::C5Error;
 use crate::c5::object::strtab::build_string_table;
 
@@ -821,12 +822,14 @@ pub struct RelinkOptions {
     pub script: Option<LdScript>,
     pub discard_locals: DiscardLocals,
     pub strip_debug: bool,
-    /// `--build-id=sha1`: append a `.note.gnu.build-id` section.
-    pub build_id_sha1: bool,
+    /// `--build-id`: append a `.note.gnu.build-id` section.
+    pub build_id: BuildId,
     /// `-z noexecstack` (`Some(false)`) / `-z execstack`
     /// (`Some(true)`): ensure a `.note.GNU-stack` marker section with
     /// the requested execute flag, as GNU ld does.
     pub gnu_stack: Option<bool>,
+    /// `-z muldefs`: the first of two definitions of a symbol stands.
+    pub allow_multiple_definition: bool,
     /// Machine constraint from `-m <emulation>`.
     pub expect_machine: Option<u16>,
 }
@@ -1061,7 +1064,7 @@ fn link_relocatable_inner(
         build_output_sections(objs, script, &dropped, opts, exec_fill);
     push_side_sections(&mut outsecs, objs, machine, opts, &side, exec_fill)?;
     let placed = placement_lookup(&outsecs);
-    let globals = resolve_globals(objs, &dropped, &outsecs)?;
+    let globals = resolve_globals(objs, &dropped, &outsecs, opts.allow_multiple_definition)?;
     let symtab = build_symtab(objs, opts, &outsecs, &placed, &globals)?;
     let out_relocs = rewrite_relocs(objs, &outsecs, &placed, &symtab)?;
     let out_groups = kept_output_groups(objs, &kept_groups, &group_outsec);
@@ -1103,7 +1106,7 @@ fn link_relocatable_inner(
         &sig_index,
         raw_syms,
         symtab.first_global,
-        opts.build_id_sha1,
+        opts.build_id,
     )?;
     Ok((file, rows))
 }
@@ -1318,17 +1321,12 @@ fn push_side_sections(
         out.bytes = p.bytes;
         outsecs.push(out);
     }
-    if opts.build_id_sha1 {
-        // Note body: nhdr + "GNU\0" + 20-byte digest.
+    if opts.build_id != BuildId::None {
         let mut out = OutSec::new(".note.gnu.build-id", exec_fill);
         out.sh_type = SHT_NOTE;
         out.flags = SHF_ALLOC;
         out.addralign = 4;
-        out.bytes.extend_from_slice(&4u32.to_le_bytes());
-        out.bytes.extend_from_slice(&20u32.to_le_bytes());
-        out.bytes.extend_from_slice(&3u32.to_le_bytes()); // NT_GNU_BUILD_ID
-        out.bytes.extend_from_slice(b"GNU\0");
-        out.bytes.extend_from_slice(&[0u8; 20]);
+        out.bytes = opts.build_id.note();
         outsecs.push(out);
     }
     Ok(())
@@ -1372,6 +1370,7 @@ fn resolve_globals(
     objs: &[EtRel],
     dropped: &HashSet<SecId>,
     outsecs: &[OutSec],
+    allow_multiple_definition: bool,
 ) -> Result<Globals, C5Error> {
     let mut order: Vec<String> = Vec::new();
     let mut globals: HashMap<String, GState> = HashMap::new();
@@ -1459,7 +1458,7 @@ fn resolve_globals(
                     EtSymRef::Undef | EtSymRef::Common => GState::Def { obj, sym: ds, weak },
                     _ => {
                         let new_weak = sym.binding == STB_WEAK;
-                        if !weak && !new_weak {
+                        if !weak && !new_weak && !allow_multiple_definition {
                             return Err(link_err(
                                 Code::DUPLICATE_SYMBOL,
                                 MODULE,
@@ -1942,7 +1941,7 @@ fn write_et_rel(
     group_sig_sym: &[u32],
     mut syms: Vec<RawSym>,
     first_global: u32,
-    build_id: bool,
+    build_id: BuildId,
 ) -> Result<Vec<u8>, C5Error> {
     // Final section numbering. Entries: (kind, payload index).
     enum Ent {
@@ -2149,7 +2148,7 @@ fn write_et_rel(
         } else {
             let at = (file.len() as u64).next_multiple_of(align);
             file.resize(at as usize, 0);
-            if build_id
+            if build_id != BuildId::None
                 && let Ent::Sec(i) = e
                 && outsecs[*i].name == ".note.gnu.build-id"
             {
@@ -2240,59 +2239,8 @@ fn write_et_rel(
     file[62..64].copy_from_slice(&e_shstrndx.to_le_bytes());
 
     if let Some(off) = build_id_desc_off {
-        let digest = sha1(&file);
-        file[off..off + 20].copy_from_slice(&digest);
+        let digest = build_id.digest(&file);
+        file[off..off + digest.len()].copy_from_slice(&digest);
     }
     Ok(file)
-}
-
-/// SHA-1 (FIPS 180-4) for `--build-id=sha1`.
-fn sha1(data: &[u8]) -> [u8; 20] {
-    let mut h: [u32; 5] = [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0];
-    let ml = (data.len() as u64) * 8;
-    let mut msg = data.to_vec();
-    msg.push(0x80);
-    while msg.len() % 64 != 56 {
-        msg.push(0);
-    }
-    msg.extend_from_slice(&ml.to_be_bytes());
-    let mut w = [0u32; 80];
-    for chunk in msg.as_chunks::<64>().0.iter() {
-        for (i, word) in chunk.as_chunks::<4>().0.iter().enumerate() {
-            w[i] = u32::from_be_bytes(*word);
-        }
-        for i in 16..80 {
-            w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1);
-        }
-        let (mut a, mut b, mut c, mut d, mut e) = (h[0], h[1], h[2], h[3], h[4]);
-        for (i, &wi) in w.iter().enumerate() {
-            let (f, k) = match i {
-                0..=19 => ((b & c) | ((!b) & d), 0x5A827999),
-                20..=39 => (b ^ c ^ d, 0x6ED9EBA1),
-                40..=59 => ((b & c) | (b & d) | (c & d), 0x8F1BBCDC),
-                _ => (b ^ c ^ d, 0xCA62C1D6),
-            };
-            let tmp = a
-                .rotate_left(5)
-                .wrapping_add(f)
-                .wrapping_add(e)
-                .wrapping_add(k)
-                .wrapping_add(wi);
-            e = d;
-            d = c;
-            c = b;
-            b = a.rotate_left(30);
-            a = tmp;
-        }
-        h[0] = h[0].wrapping_add(a);
-        h[1] = h[1].wrapping_add(b);
-        h[2] = h[2].wrapping_add(c);
-        h[3] = h[3].wrapping_add(d);
-        h[4] = h[4].wrapping_add(e);
-    }
-    let mut out = [0u8; 20];
-    for (i, x) in h.iter().enumerate() {
-        out[i * 4..i * 4 + 4].copy_from_slice(&x.to_be_bytes());
-    }
-    out
 }

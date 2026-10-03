@@ -782,6 +782,12 @@ impl Compiler {
         offset
     }
 
+    /// The type `__func__` decays to: a pointer to `const char`.
+    pub(super) fn func_name_ptr_ty(&self) -> i64 {
+        let c = super::types::plain_char_ty(self.lex.char_signed);
+        add_ptr_level(super::types::apply_qual_bits(c, super::types::CONST_BIT))
+    }
+
     /// Internal-linkage symbol naming the `__func__` storage at `off`, as
     /// `<spelling>.<n>`. Registered against its storage like a compound
     /// literal, so a rolled-back speculative parse retires it.
@@ -1237,7 +1243,7 @@ impl Compiler {
         if self.lex.tk != '{' {
             return Err(self.compile_err(
                 Code::INVALID_INITIALIZER,
-                "array initializer must be a string literal or `{{ ... }}`",
+                "array initializer must be a string literal or `{ ... }`",
             ));
         }
         self.next()?;
@@ -2017,12 +2023,7 @@ impl Compiler {
         }
         if self.lex.tk == '"' {
             let cp = self.init_checkpoint();
-            let addr = self.lex.ival;
-            self.next()?;
-            while self.lex.tk == '"' {
-                self.next()?;
-            }
-            self.push_literal_nul();
+            let (addr, elem_ty, _) = self.stage_const_string()?;
             // A subscript or an operator makes the literal an operand
             // (`"..."[i]`, `"..." + n`); rewind past the staged bytes and
             // let the scalar evaluator fold the whole expression.
@@ -2035,7 +2036,7 @@ impl Compiler {
                 self.restore_init_checkpoint(cp);
                 return self.parse_constant_init_scalar();
             }
-            let ty = add_ptr_level(Ty::Char as i64);
+            let ty = add_ptr_level(elem_ty);
             return Ok(InitLeaf::of(addr as i128, InitElemReloc::Data(None), ty));
         }
         if self.lex.tk == Token::AndOp {
@@ -2212,12 +2213,14 @@ impl Compiler {
         // address. Distinguished from a plain cast by the `[`, or
         // for an array typedef (`(row){...}`) by the `{` past `)`.
         if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
-            let (v, reloc, _) = self.parse_array_compound_literal(cast_ty, &name.base_dims)?;
+            let (v, reloc, dims) = self.parse_array_compound_literal(cast_ty, &name.base_dims)?;
             if let InitElemReloc::Data(Some(sym)) = reloc {
                 self.symbols[sym].storage_is_const = name.object_is_const;
                 self.reject_automatic_compound_literal(sym)?;
             }
-            return Ok(InitLeaf::of(v, reloc, add_ptr_level(cast_ty)));
+            // An array of arrays decays to a pointer to its first row.
+            let ty = self.array_value_ty(cast_ty, &dims);
+            return Ok(InitLeaf::of(v, reloc, ty));
         }
         // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
         // brace holds a single value; the result is that value
@@ -2362,7 +2365,7 @@ impl Compiler {
         if self.is_func_name_ident() {
             let off = self.intern_func_name();
             self.next()?;
-            let ty = add_ptr_level(Ty::Char as i64);
+            let ty = self.func_name_ptr_ty();
             return Ok(InitLeaf::of(off as i128, InitElemReloc::Data(None), ty));
         }
         // A name with no declaration is either a builtin the constant
@@ -2553,13 +2556,15 @@ impl Compiler {
     /// Drain the array-typedef base carriers into the dimension list an
     /// array compound literal appends innermost (C99 6.7.7: the typedef
     /// name denotes the array type, so its bounds sit below any bracket
-    /// the literal's type name adds). Empty when a `*` absorbed the
-    /// typedef array into the pointee (`ptr_levels > 0`) or the base is
-    /// not a complete array.
+    /// the literal's type name adds; one of unknown size leads with `-1`,
+    /// which the initializer completes). Empty when a `*` absorbed the
+    /// typedef array into the pointee (`ptr_levels > 0`) or the base is no
+    /// array or a zero-length one.
     pub(super) fn take_typedef_literal_dims(&mut self, ptr_levels: i64) -> alloc::vec::Vec<i64> {
+        let unknown_size = self.typedef_base_incomplete();
         let extent = core::mem::take(&mut self.pending.typedef_base_array_size);
         let dims = core::mem::take(&mut self.pending.typedef_base_array_dims);
-        if extent <= 0 || ptr_levels > 0 {
+        if (extent <= 0 && !unknown_size) || ptr_levels > 0 {
             return alloc::vec::Vec::new();
         }
         if dims.is_empty() {
@@ -2591,10 +2596,7 @@ impl Compiler {
             self.next()?; // consume `[`
             if self.lex.tk == ']' {
                 if !dims.is_empty() {
-                    return Err(self.compile_err(
-                        Code::INVALID_DECLARATION,
-                        "array type has an incomplete inner dimension",
-                    ));
+                    return Err(self.unknown_size_element_err());
                 }
                 dims.push(-1);
             } else {
@@ -2610,6 +2612,7 @@ impl Compiler {
             self.next()?; // consume `]`
         }
         dims.extend_from_slice(base_dims);
+        self.require_complete_elements(elem_ty, &dims)?;
         if self.lex.tk != ')' {
             return Err(
                 self.compile_err(Code::SYNTAX, "`)` expected to close compound-literal type")
@@ -3279,7 +3282,7 @@ impl Compiler {
         if self.lex.tk != '{' {
             return Err(self.compile_err(
                 Code::INVALID_INITIALIZER,
-                "struct initializer must start with `{{`",
+                "struct initializer must start with `{`",
             ));
         }
         self.next()?;
@@ -3305,7 +3308,7 @@ impl Compiler {
         if self.lex.tk != '{' {
             return Err(self.compile_err(
                 Code::INVALID_INITIALIZER,
-                "array initializer must start with `{{`",
+                "array initializer must start with `{`",
             ));
         }
         self.next()?;
@@ -4381,23 +4384,18 @@ impl Compiler {
             // below expresses that for an integer field but not for a
             // floating source (C99 6.3.1.4) or a `_Bool` field (6.3.1.2).
             let value = self.to_storage_bits(value, reloc, field.ty);
-            // C99 6.7.2.1p11: the bitfield's addressable storage
-            // unit width is determined by the declared base type;
-            // the RMW span must match `bit_unit_size` so it does
-            // not read or write outside the unit. A packed field
-            // whose window no slide could fit inside its aggregate
-            // (`fit_bitfield_windows`) is merged within the object.
-            let unit_bytes = (field.bit_unit_size as usize).min(self.data.len() - field_base);
-            let mut unit_value: u128 = 0;
-            for i in 0..unit_bytes {
-                unit_value |= (self.data[field_base + i] as u128) << (i * 8);
-            }
-            let mask = super::super::ast::bitfield_slice_mask(field.bit_width, 0);
-            let placed = super::super::ast::bitfield_slice_mask(field.bit_width, field.bit_offset);
-            let cleared = unit_value & !placed;
-            let merged = cleared | (((value as u128) & mask) << field.bit_offset);
-            for i in 0..unit_bytes {
-                self.data[field_base + i] = ((merged >> (i * 8)) & 0xFF) as u8;
+            // C99 6.7.2.1p11: only the field's bits change, which lie in
+            // its storage unit, up to 17 bytes from `field_base`.
+            let bits = value as u128 & super::super::ast::bitfield_slice_mask(field.bit_width, 0);
+            for i in 0..field.bit_width as usize {
+                let at = field.bit_offset as usize + i;
+                let byte = &mut self.data[field_base + at / 8];
+                let set = 1u8 << (at % 8);
+                *byte = if bits >> i & 1 != 0 {
+                    *byte | set
+                } else {
+                    *byte & !set
+                };
             }
         } else {
             // C99 6.7.9p11: a scalar member's initializer may be

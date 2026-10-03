@@ -141,9 +141,9 @@ struct AddrConst {
 #[derive(Default)]
 struct SwitchLabels {
     /// `(value, block)` per `case`.
-    cases: alloc::vec::Vec<(i64, BlockId)>,
+    cases: alloc::vec::Vec<(i128, BlockId)>,
     /// `(low, high, block)` per GNU `case lo ... hi`.
-    ranges: alloc::vec::Vec<(i64, i64, BlockId)>,
+    ranges: alloc::vec::Vec<(i128, i128, BlockId)>,
     /// The block for `default`, when the switch has one.
     default: Option<BlockId>,
 }

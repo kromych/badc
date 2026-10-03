@@ -52,7 +52,7 @@ use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
 use hashbrown::HashMap;
 
-use super::codegen::{CodeModel, ElfClass, Target};
+use super::codegen::{BinaryFormat, CodeModel, ElfClass, Target};
 use super::diag::{Code, Diagnostic, Loc, Sink};
 use super::error::C5Error;
 
@@ -260,6 +260,13 @@ pub(crate) struct Preprocessor {
     /// costs one push to `include_records` per `#include` resolve
     /// attempt and nothing else.
     track_includes: bool,
+    /// `true` for `-E` output: a pragma the pass consumes is also written
+    /// at its position, `_Pragma` as a `#pragma` line, so the expansion
+    /// compiles to the program its source does.
+    keep_pragmas: bool,
+    /// `true` for a `.i` unit, which translation phases 1-4 already
+    /// produced: see [`Self::set_preprocessed`].
+    preprocessed: bool,
     /// `true` for assembler-with-cpp input (a `.S` unit). A `#` line
     /// whose name is no directive then passes through with its tail
     /// macro-expanded, as GNU cpp does for assembler input; in C such
@@ -713,6 +720,7 @@ fn install_data_model(
     macros.insert("__PTRDIFF_TYPE__".to_string(), ptrdiff_ty.to_string());
     macros.insert("__INTPTR_TYPE__".to_string(), ptrdiff_ty.to_string());
     macros.insert("__UINTPTR_TYPE__".to_string(), size_ty.to_string());
+    install_stdint_model(macros, target, ilp32);
     let ptr_bytes = if ilp32 { "4" } else { "8" };
     for name in [
         "__SIZEOF_POINTER__",
@@ -756,6 +764,83 @@ fn install_data_model(
     }
 }
 
+/// The `<stdint.h>` types each platform's own headers give, under gcc's and
+/// clang's predefined names. glibc makes `int64_t`, `intmax_t` and the
+/// fastest 16- and 32-bit types `long` on LP64; Apple's headers make them
+/// `long long`, `long`, `short` and `int`; Windows `long long`, `long long`
+/// and `int`; glibc on ILP32 `long long`, `long long` and `int`. The constant
+/// suffixes, the limits and the `<inttypes.h>` length modifiers follow.
+fn install_stdint_model(macros: &mut HashMap<String, String>, target: Target, ilp32: bool) {
+    let lp64 = !ilp32 && !target.is_windows();
+    let apple = target == Target::MacOSAarch64;
+    let int64 = if lp64 && !apple { "long" } else { "long long" };
+    let intmax = if lp64 { "long" } else { "long long" };
+    let intptr = match (ilp32, target.is_windows()) {
+        (true, _) => "int",
+        (false, true) => "long long",
+        (false, false) => "long",
+    };
+    let (fast16, fast32) = match (lp64, apple) {
+        (true, false) => ("long", "long"),
+        (true, true) => ("short", "int"),
+        (false, _) => ("int", "int"),
+    };
+    let suffix = |ty: &str| match ty {
+        "long" => "L",
+        "long long" => "LL",
+        _ => "",
+    };
+    let length = |ty: &str| match ty {
+        "short" => "h",
+        "long" => "l",
+        "long long" => "ll",
+        _ => "",
+    };
+    let limits = |ty: &str| match ty {
+        "short" => ("32767".to_string(), "65535".to_string()),
+        "int" => ("2147483647".to_string(), "4294967295U".to_string()),
+        _ => {
+            let s = suffix(ty);
+            (
+                format!("9223372036854775807{s}"),
+                format!("18446744073709551615U{s}"),
+            )
+        }
+    };
+    // `__INTPTR_TYPE__` is the data model's, installed with `__SIZE_TYPE__`.
+    for (name, ty) in [
+        ("INT64", int64),
+        ("INTMAX", intmax),
+        ("INTPTR", intptr),
+        ("INT_FAST16", fast16),
+        ("INT_FAST32", fast32),
+    ] {
+        let (s, l) = (suffix(ty), length(ty));
+        if name != "INTPTR" {
+            macros.insert(format!("__{name}_TYPE__"), ty.to_string());
+            macros.insert(format!("__U{name}_TYPE__"), format!("unsigned {ty}"));
+        }
+        if matches!(name, "INT64" | "INTMAX") {
+            macros.insert(format!("__{name}_C_SUFFIX__"), s.to_string());
+            macros.insert(format!("__U{name}_C_SUFFIX__"), format!("U{s}"));
+        }
+        if matches!(name, "INTPTR" | "INT_FAST16" | "INT_FAST32") {
+            let (max, umax) = limits(ty);
+            macros.insert(format!("__{name}_MAX__"), max);
+            macros.insert(format!("__U{name}_MAX__"), umax);
+        }
+        for conv in ["d", "i"] {
+            macros.insert(format!("__{name}_FMT{conv}__"), format!("\"{l}{conv}\""));
+        }
+        for conv in ["o", "u", "x", "X"] {
+            macros.insert(format!("__U{name}_FMT{conv}__"), format!("\"{l}{conv}\""));
+        }
+    }
+    let (max, umax) = limits(intptr);
+    macros.insert("__PTRDIFF_MAX__".to_string(), max);
+    macros.insert("__SIZE_MAX__".to_string(), umax);
+}
+
 /// The targets one predefine row covers.
 #[derive(Clone, Copy)]
 enum PredefOn {
@@ -765,6 +850,8 @@ enum PredefOn {
     MacOS,
     Linux,
     Windows,
+    /// Targets whose objects are ELF, whichever the OS.
+    Elf,
     /// Targets whose plain `char` is unsigned. C99 6.2.5p15 leaves the
     /// choice to the implementation; gcc and clang report it here.
     UnsignedChar,
@@ -782,6 +869,7 @@ impl PredefOn {
             PredefOn::MacOS => matches!(target, Target::MacOSAarch64),
             PredefOn::Linux => matches!(target, Target::LinuxAarch64 | Target::LinuxX64),
             PredefOn::Windows => matches!(target, Target::WindowsX64 | Target::WindowsAarch64),
+            PredefOn::Elf => target.binary_format() == BinaryFormat::Elf,
             PredefOn::UnsignedChar => !target.plain_char_signed(),
         }
     }
@@ -881,6 +969,10 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
         &[("__SEG_FS", "1"), ("__SEG_GS", "1")],
     ),
     (PredefOn::UnsignedChar, &[("__CHAR_UNSIGNED__", "1")]),
+    // gcc and clang define it for the ELF object format, and sources key
+    // ELF-only directives and attributes on it (`.type`, `.size`,
+    // `.symver`, `.hidden`, `@progbits` section types, visibility).
+    (PredefOn::Elf, &[("__ELF__", "1")]),
     (
         PredefOn::MacOS,
         &[
@@ -1106,6 +1198,8 @@ impl Preprocessor {
             include_records: Vec::new(),
             system_headers: BTreeSet::new(),
             track_includes: false,
+            keep_pragmas: false,
+            preprocessed: false,
             asm_source: false,
             entrypoint: None,
             subsystem: None,
@@ -1246,6 +1340,22 @@ impl Preprocessor {
     /// the `-M` family's dependency output.
     pub fn set_track_includes(&mut self, enabled: bool) {
         self.track_includes = enabled;
+    }
+
+    /// Write the pragmas the pass consumes into its output. See
+    /// [`Self::keep_pragmas`].
+    pub fn set_keep_pragmas(&mut self, on: bool) {
+        self.keep_pragmas = on;
+    }
+
+    /// Read the source as preprocessed already, as gcc reads a `.i`
+    /// unit: its text is not macro-expanded, nothing is included, the
+    /// `-include` list included, and of the directives only line
+    /// markers, `#line` and `#pragma` act. `#define` / `#undef`, which
+    /// gcc's `-dD` output carries, are accepted without effect; any other
+    /// directive is an error, as gcc's front end reports a stray `#`.
+    pub fn set_preprocessed(&mut self, on: bool) {
+        self.preprocessed = on;
     }
 
     /// Mark the input as assembler-with-cpp (a `.S` unit).
@@ -1394,7 +1504,7 @@ impl Preprocessor {
     /// a diagnostic on one of its lines does not claim a line of the
     /// user's source.
     fn process_preamble(&mut self, out: &mut String) -> Result<(), C5Error> {
-        if self.force_includes.is_empty() {
+        if self.force_includes.is_empty() || self.preprocessed {
             return Ok(());
         }
         let mut preamble = String::new();
@@ -1908,6 +2018,14 @@ impl<'p, 's> LinePass<'p, 's> {
             // covers this one; its extent ends where this line's
             // output does.
             let closing = self.pp.sink.control().has_open_suppress();
+            if self.pp.preprocessed {
+                self.preprocessed_line(line, line_no)?;
+                if closing {
+                    let end = self.out.len() as u32;
+                    self.pp.sink.control_mut().close_suppress(end);
+                }
+                continue;
+            }
             let hash = line.trim_start().strip_prefix('#').map(|rest| {
                 let spelling = rest.trim_start();
                 (spelling, parse_directive(spelling, self.pp.asm_source))
@@ -1971,6 +2089,48 @@ impl<'p, 's> LinePass<'p, 's> {
             file: self.filename,
             line: line_no,
             offset: self.out.len() as u32,
+        }
+    }
+
+    /// One line of preprocessed input ([`Preprocessor::set_preprocessed`]):
+    /// text as it stands, a line marker, `#line` or `#pragma` as in any
+    /// unit, `#define` / `#undef` as a blank, and any other directive an
+    /// error.
+    fn preprocessed_line(&mut self, line: &str, line_no: usize) -> Result<(), C5Error> {
+        let Some(spelling) = line.trim_start().strip_prefix('#').map(str::trim_start) else {
+            self.out.push_str(line);
+            self.blank();
+            self.idx += 1;
+            return Ok(());
+        };
+        let parsed = parse_directive(spelling, false);
+        match parsed {
+            Directive::Line { .. } | Directive::Pragma(_) => {
+                self.directive(&parsed, spelling, line_no)
+            }
+            Directive::Define(..) | Directive::DefineFn(..) | Directive::Undef(_) => {
+                self.blank();
+                self.idx += 1;
+                Ok(())
+            }
+            // C99 6.10.7: the null directive.
+            Directive::Other if spelling.is_empty() => {
+                self.blank();
+                self.idx += 1;
+                Ok(())
+            }
+            _ => {
+                let name = spelling.split_whitespace().next().unwrap_or_default();
+                Err(C5Error::at(
+                    Code::DIRECTIVE,
+                    self.filename,
+                    line_no,
+                    format!(
+                        "`#{name}` in preprocessed input, which takes no directive but \
+                         line markers, `#line` and `#pragma`"
+                    ),
+                ))
+            }
         }
     }
 
@@ -2067,17 +2227,27 @@ impl<'p, 's> LinePass<'p, 's> {
             // order, so the line passes through and the lexer folds it
             // into its `pack_stack` / `visibility_stack` in place.
             PragmaDirective::Other if pragma_is_pack(args) || pragma_is_visibility(args) => {
-                self.out.push('#');
-                self.out.push_str(spelling);
-                self.out.push('\n');
-                self.presumed += 1;
+                self.pass_through(spelling);
                 return Ok(Emitted::Yes);
             }
             PragmaDirective::Other => {
                 self.pp.parse_pragma(args, site)?;
+                if self.pp.keep_pragmas {
+                    self.pass_through(spelling);
+                    return Ok(Emitted::Yes);
+                }
             }
         }
         Ok(Emitted::No)
+    }
+
+    /// The directive line `#<spelling>` as it stands, in place of the
+    /// blank a consumed directive leaves.
+    fn pass_through(&mut self, spelling: &str) {
+        self.out.push('#');
+        self.out.push_str(spelling);
+        self.out.push('\n');
+        self.presumed += 1;
     }
 
     /// `#include` / `#include_next` with a literal header name. The
@@ -2223,7 +2393,9 @@ impl<'p, 's> LinePass<'p, 's> {
         // retarget (C99 6.10.4); absent one it is the physical line.
         let substituted = self.pp.substitute(&buffer, self.filename, self.presumed);
         let site = self.site(self.presumed);
-        let processed = self.pp.apply_pragma_operators(&substituted, site)?;
+        let processed = self
+            .pp
+            .apply_pragma_operators(&substituted, site, &self.current_file)?;
         self.out.push_str(&processed);
         // One newline for the line itself, one per joined continuation,
         // so source line numbering survives the join.

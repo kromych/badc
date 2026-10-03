@@ -20,7 +20,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <time.h>
+#include "bench_clock.h"
 
 #define MAX 44000000
 
@@ -54,10 +54,9 @@ void set_cache(void)
 
 int main(void)
 {
-    struct timespec t0, t1;
     set_cache();
 
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    double t0 = bench_ms();
     long found = 0;
     long sum = 0;
     for (int i = 0; i < MAX; ++i)
@@ -67,11 +66,9 @@ int main(void)
             sum += i;
         }
     }
-    clock_gettime(CLOCK_MONOTONIC, &t1);
+    double t1 = bench_ms();
 
-    long secs = t1.tv_sec - t0.tv_sec;
-    long nsecs = t1.tv_nsec - t0.tv_nsec;
-    double ms = (double)secs * 1000.0 + (double)nsecs / 1000000.0;
+    double ms = t1 - t0;
     printf("munchausen(%d) = %ld in %.2f ms\n", MAX, found, ms);
 
     // 0, 1 and 3435 are the Munchausen numbers below MAX; the fourth

@@ -40,8 +40,6 @@ pub(crate) mod comdat;
 pub(crate) mod default_script;
 #[cfg(feature = "std")]
 pub(crate) mod dynamic;
-#[cfg(feature = "std")]
-pub(crate) mod eh_frame;
 pub(crate) mod erratum;
 #[cfg(feature = "std")]
 pub(crate) mod gnu_property;
@@ -72,6 +70,7 @@ mod synth_build;
 pub(crate) mod target_libc;
 #[cfg(feature = "std")]
 mod tls_relax;
+pub(crate) mod zkeyword;
 
 /// A link failure that is badc's own: an invariant the linker relies on
 /// did not hold. `module` prefixes the message with the module's name.
@@ -145,7 +144,10 @@ pub use relocatable::{
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
-pub use synth_build::{write_native_image_from_merged, write_native_image_from_merged_ex};
+pub use synth_build::{
+    ImageOptions, write_native_image_from_merged, write_native_image_from_merged_ex,
+};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use target_libc::{TargetCLibrary, library_bindings};
+pub use zkeyword::{ZKeyword, ZKeywords, ZSupport, parse_z_keyword, resolve_exec_stack};

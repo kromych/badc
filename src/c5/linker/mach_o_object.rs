@@ -501,6 +501,7 @@ pub fn parse_native_mach_o(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         source: String::new(),
         sections: blobs.sections,
         discarded: blobs.discarded,
+        exec_stack: false,
         machine,
         text: blobs.text,
         text_align: blobs.text_align,

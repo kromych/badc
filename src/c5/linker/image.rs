@@ -1389,6 +1389,7 @@ mod tests {
             tls_align: 8,
             init_fini_arrays: Default::default(),
             section_map: Default::default(),
+            exec_stack_input: None,
         }
     }
 

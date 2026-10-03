@@ -3,11 +3,13 @@
 //! `.eh_frame`. `--eh-frame-hdr` asks for it and `PT_GNU_EH_FRAME`
 //! points at it.
 
-#![cfg(feature = "std")]
-
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
+
+/// The unwind table every input contributes to, which an image keeps as
+/// one section for `PT_GNU_EH_FRAME` to index.
+pub(crate) const EH_FRAME: &str = ".eh_frame";
 
 // DWARF pointer encodings, as they appear in a CIE's `R` augmentation.
 const DW_EH_PE_OMIT: u8 = 0xff;

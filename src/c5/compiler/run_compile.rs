@@ -487,7 +487,7 @@ impl Compiler {
         // list -- for diagnostics that would otherwise point at the
         // function body's opening brace parsed further below.
         let signature_line = self.lex.line;
-        let (id_idx, mut ty, mut array_size) = self.parse_declarator(bt)?;
+        let (id_idx, mut ty, mut array_size, mut zero_len_array) = self.parse_declarator(bt)?;
         // `register T name asm("reg")` at file scope is a GNU global
         // register variable; any other `asm(...)` suffix is the
         // assembler name and the object declaration continues
@@ -511,19 +511,10 @@ impl Compiler {
         }
         // A declarator may carry a trailing attribute before the
         // terminator (`name(args) __attribute__((...));`, an
-        // initializer, a comma, or a function body's `{`).
+        // initializer, a comma, or a function body's `{`), and after an
+        // asm label, where it types the declarator as well.
         self.skip_attribute_specifiers()?;
-        // `typedef T name __attribute__((vector_size(N)))` (and the
-        // object form) binds the attribute to the declarator, not the
-        // base type, so it lands here rather than at the base-type
-        // sites. The leading form already consumed it, leaving 0.
-        if self.pending.attr_vector_size > 0 {
-            let n = core::mem::take(&mut self.pending.attr_vector_size);
-            ty = self.make_vector_type(ty, n);
-        }
-        if let Some(m) = self.pending.attr_mode.take() {
-            ty = self.apply_mode_to_type(ty, m)?;
-        }
+        ty = self.apply_pending_type_attributes(ty)?;
         let declarator_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
         // Captured per declarator, before a nested parse (a later parameter
         // of function type) can overwrite it.
@@ -551,7 +542,6 @@ impl Compiler {
         // A fixed dimension (`> 0`) sizes the object; a deferred array
         // typedef (`typedef T X[]`, carried as `-1`) makes the object
         // a deferred array whose size the initializer fixes.
-        let mut zero_len_array = self.pending.declarator_zero_len_array;
         if typedef_dim != 0 && array_size == 0 && !self.pending.base_array_taken {
             array_size = typedef_dim;
             zero_len_array = self.pending.typedef_base_zero_len;
@@ -1262,16 +1252,42 @@ impl Compiler {
             } | qual_bits;
             let base_enum_tag = self.pending.base_enum_tag.take();
             while self.lex.tk != ';' && self.lex.tk != 0 {
-                let (decl_idx, mut decl_ty, decl_arr) = self.parse_declarator(base)?;
+                // C99 6.9.1p6: the list declares the parameters, so a bound
+                // and a function type adjust as a prototype's (6.7.5.3p7-8).
+                self.pending.param_decl_context = true;
+                let (decl_idx, mut decl_ty, decl_arr, _) = self.parse_declarator(base)?;
+                let (fn_ptr_indirection, fn_ptr_ret_indirection, fn_params, ret_fn) =
+                    self.take_param_fn_ptr_carriers();
                 if decl_idx != usize::MAX {
-                    // An array parameter is adjusted to a
-                    // pointer to the element type (6.7.5.3p7).
+                    // An array parameter is adjusted to a pointer to its
+                    // element type (6.7.5.3p7), a row for more than one
+                    // bound; the bounds leave the symbol with it. An array
+                    // typedef no derivation took is the parameter's type.
+                    let typedef_array =
+                        self.pending.typedef_base_array_size != 0 && !self.pending.base_array_taken;
                     if decl_arr != 0 {
-                        decl_ty += Ty::Ptr as i64;
+                        let dims = core::mem::take(&mut self.symbols[decl_idx].array_dims);
+                        self.symbols[decl_idx].inner_array_size = 0;
+                        decl_ty = self.array_value_ty(decl_ty, &dims);
+                    } else if typedef_array {
+                        let dims = self.typedef_base_dims();
+                        decl_ty = self.array_value_ty(decl_ty, &dims);
                     }
                     if let Some(pos) = params.indices.iter().position(|&pi| pi == decl_idx) {
                         self.symbols[decl_idx].type_ = decl_ty;
                         self.symbols[decl_idx].incomplete_enum_tag = base_enum_tag;
+                        // The adjusted pointer is one more level above a
+                        // function-pointer element.
+                        let adjusted = decl_arr != 0 || typedef_array;
+                        self.symbols[decl_idx].fn_ptr_indirection =
+                            fn_ptr_indirection + i64::from(adjusted && fn_ptr_indirection > 0);
+                        self.symbols[decl_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
+                        self.symbols[decl_idx].ret_fn = ret_fn;
+                        if fn_ptr_indirection > 0
+                            && let Some(pp) = fn_params
+                        {
+                            self.symbols[decl_idx].set_fn_params(pp);
+                        }
                         params.types[pos] = decl_ty;
                         params.note_enum_tag(pos, base_enum_tag);
                     } else {
@@ -2366,7 +2382,7 @@ impl Compiler {
         // at the end of the unit is completed to one
         // element. A GNU `T x[0]` is complete already and
         // holds no elements, so it keeps the zero count.
-        let zero_len = self.pending.declarator_zero_len_array;
+        let zero_len = self.symbols[id_idx].is_zero_len_array;
         let count = if zero_len { 0 } else { 1 };
         self.symbols[id_idx].array_size = count;
         self.symbols[id_idx].is_zero_len_array = zero_len;
@@ -2409,7 +2425,7 @@ impl Compiler {
         if self.lex.tk != '{' {
             return Err(self.compile_err(
                 Code::INVALID_INITIALIZER,
-                "array initializer must start with `{{`",
+                "array initializer must start with `{`",
             ));
         }
         let sid = struct_id_of(ty);
@@ -2697,7 +2713,7 @@ impl Compiler {
             if self.lex.tk != '{' {
                 return Err(self.compile_err(
                     Code::INVALID_INITIALIZER,
-                    "array initializer must start with `{{`",
+                    "array initializer must start with `{`",
                 ));
             }
             self.next()?;

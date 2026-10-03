@@ -2359,6 +2359,53 @@ fn piece_kinds(size: u32) -> (LoadKind, StoreKind) {
     }
 }
 
+/// The callee's own objects (`off < 0`) with a lifetime marker that an
+/// aggregate `Return` may hand out, each returned address traced through
+/// phis, copies and constant offsets to the `LocalAddr` it derives from.
+/// An address of any other origin may name every marked object.
+fn returned_marked_slots(callee: &FunctionSsa) -> BTreeSet<i64> {
+    let marked: BTreeSet<i64> = callee
+        .insts
+        .iter()
+        .filter_map(|i| match i {
+            Inst::LifetimeEnd(off) if *off < 0 => Some(*off),
+            _ => None,
+        })
+        .collect();
+    let mut work: Vec<ValueId> = callee
+        .blocks
+        .iter()
+        .filter_map(|b| match b.terminator {
+            Terminator::Return(v) if v != NO_VALUE => Some(v),
+            _ => None,
+        })
+        .collect();
+    let mut seen = BTreeSet::new();
+    let mut out = BTreeSet::new();
+    while let Some(v) = work.pop() {
+        if !seen.insert(v) {
+            continue;
+        }
+        match callee.insts.get(v as usize) {
+            Some(Inst::LocalAddr(s)) => {
+                if marked.contains(s) {
+                    out.insert(*s);
+                }
+            }
+            Some(Inst::Phi { incoming, .. }) => work.extend(incoming.iter().map(|&(_, x)| x)),
+            Some(Inst::Copy { value, .. }) => work.push(*value),
+            Some(Inst::BinopI {
+                op: BinOp::Add | BinOp::Sub,
+                lhs,
+                ..
+            }) => work.push(*lhs),
+            Some(Inst::ParamRef { .. } | Inst::ImmData(_)) => {}
+            _ => return marked,
+        }
+    }
+    out
+}
+
 fn splice_multi_block(
     caller: &mut FunctionSsa,
     callee: Callee<'_>,
@@ -2396,6 +2443,14 @@ fn splice_multi_block(
     let ret_align: u32 = callee
         .ret_agg
         .map_or(0, |i| callee.agg_descs[i as usize].align);
+    // The callee ends a returned object's lifetime ahead of its `Return`,
+    // which reads it out of line; spliced, the postfix copy reads it, so
+    // its markers move to follow the copy.
+    let held_ends: BTreeSet<i64> = if ret_pieces.is_some() {
+        returned_marked_slots(callee)
+    } else {
+        BTreeSet::new()
+    };
     // Frame slots holding a register-passed struct parameter's bytes,
     // mapped to (parameter index, layout). The cell relocates into the
     // caller frame with the callee's other own locals; the prefix copies
@@ -2633,7 +2688,7 @@ fn splice_multi_block(
         // stores reference them.
         if let Some(pieces) = &ret_pieces {
             pieces_base = at;
-            at += 1 + 2 * pieces.len() as u32;
+            at += 1 + 2 * pieces.len() as u32 + held_ends.len() as u32;
         }
         for pc in (call_pc + 1)..splice_block.inst_range.end {
             count(pc, &mut remap, &mut at);
@@ -2697,7 +2752,8 @@ fn splice_multi_block(
                     // region's other occupants are the objects of splices
                     // that ran before this one or run after it, never
                     // during it, so the end it states holds for them too.
-                    Inst::LifetimeEnd(off) if *off < 0 => {
+                    // A returned object's marker follows the postfix copy.
+                    Inst::LifetimeEnd(off) if *off < 0 && !held_ends.contains(off) => {
                         callee_remap[ce_pc as usize] = at;
                         at += 1;
                     }
@@ -2897,6 +2953,11 @@ fn splice_multi_block(
                     volatile: false,
                     align: 0,
                 });
+                new_inst_src.push((0, 0));
+                new_f32.push(false);
+            }
+            for &s in &held_ends {
+                new_insts.push(Inst::LifetimeEnd(s - region_base));
                 new_inst_src.push((0, 0));
                 new_f32.push(false);
             }
@@ -3108,7 +3169,7 @@ fn splice_multi_block(
                         new_f32.push(false);
                         continue;
                     }
-                    Inst::LifetimeEnd(off) if *off < 0 => {
+                    Inst::LifetimeEnd(off) if *off < 0 && !held_ends.contains(off) => {
                         callee_remap[ce_pc as usize] = new_insts.len() as u32;
                         new_insts.push(Inst::LifetimeEnd(off - region_base));
                         new_inst_src.push((0, 0));

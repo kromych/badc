@@ -81,8 +81,8 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ret
                	fmov	s1, #3.00000000
-               	fmov	d2, #4.00000000
                	fcvt	d1, s1
+               	fmov	d2, #4.00000000
                	fmul	d1, d1, d2
                	fcvt	s1, d1
                	fdiv	s0, s1, s0

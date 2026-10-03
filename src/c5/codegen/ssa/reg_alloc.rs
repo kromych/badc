@@ -1981,14 +1981,29 @@ fn asm_preserve_masks(func: &FunctionSsa, target: Target) -> (u32, u32) {
     (abi_reserved_gprs(target), 0)
 }
 
+/// [`check_allocation`], under the `codegen_test` feature and only when
+/// `BADC_VERIFY_ALLOC` is set, so it never runs in a production or
+/// normal test build.
+#[cfg(feature = "codegen_test")]
+fn verify_allocation(
+    func: &FunctionSsa,
+    places: &[Place],
+    target: Target,
+    banks: &RegBanks,
+    liveness: &super::liveness::Liveness,
+    fp_const: &[bool],
+    use_counts: &[u32],
+) {
+    if std::env::var("BADC_VERIFY_ALLOC").is_ok() {
+        check_allocation(func, places, target, banks, liveness, fp_const, use_counts);
+    }
+}
+
 /// Check the register-allocation correctness invariants against the
-/// CFG liveness and report any violation. Enabled only under the
-/// `codegen_test` feature and only when `BADC_VERIFY_ALLOC` is set, so
-/// it never runs in a production or normal test build. The check is a
-/// diagnostic: it prints each violating value, the invariant it broke,
-/// and the function's entry pc, then returns. It is intentionally
-/// O(n^2) within a physical location -- correctness, not speed, is the
-/// goal here.
+/// CFG liveness. Prints each violating value, the invariant it broke,
+/// and the function's entry pc, then stops the compile naming the
+/// first, as the SSA checks do. It is intentionally O(n^2) within a
+/// physical location -- correctness, not speed, is the goal here.
 ///
 /// Invariants checked:
 ///
@@ -2012,7 +2027,7 @@ fn asm_preserve_masks(func: &FunctionSsa, target: Target) -> (u32, u32) {
 /// their place names no register any code writes. The coverage check is
 /// what establishes that per function rather than assuming it.
 #[cfg(feature = "codegen_test")]
-fn verify_allocation(
+fn check_allocation(
     func: &FunctionSsa,
     places: &[Place],
     target: Target,
@@ -2021,14 +2036,13 @@ fn verify_allocation(
     fp_const: &[bool],
     use_counts: &[u32],
 ) {
-    if std::env::var("BADC_VERIFY_ALLOC").is_err() {
-        return;
-    }
+    let first = core::cell::RefCell::new(None::<alloc::string::String>);
     let report = |msg: alloc::string::String| {
         eprintln!(
             "VERIFY-VIOLATION fn={} ent_pc={}: {msg}",
             func.name, func.ent_pc
         );
+        first.borrow_mut().get_or_insert(msg);
     };
     let covered = |v: usize| liveness.in_cfg(v as ValueId);
 
@@ -2299,6 +2313,9 @@ fn verify_allocation(
                 ));
             }
         }
+    }
+    if let Some(msg) = first.into_inner() {
+        panic!("ICE: allocation check: `{}`: {msg}", func.name);
     }
 }
 
@@ -4032,6 +4049,61 @@ mod tests {
                 "{target:?}: no site's registers came out free of a save",
             );
         }
+    }
+
+    /// The allocation check passes what the allocator places and stops
+    /// the compile on a placement that breaks an invariant: here an
+    /// integer value moved to an FP register.
+    #[cfg(feature = "codegen_test")]
+    #[test]
+    fn the_allocation_check_stops_a_broken_placement() {
+        let target = Target::LinuxX64;
+        let src = "long f(long a, long b) { return a * b + a; }\n\
+                   int main(void) { return (int)f(2, 3); }\n";
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &Compiler::with_target(src.into(), target)
+                .compile()
+                .expect("compile"),
+            target,
+            false,
+            true,
+        )
+        .expect("produce_ssa_funcs");
+        let func = funcs.iter().find(|f| f.name == "f").expect("f");
+        let alloc = super::allocate(func, target, FixedRegs::NONE);
+        let reads = operands_read(func, &alloc.use_counts);
+        let fp_const = fp_constants(func, target, &reads);
+        let liveness = super::super::liveness::Liveness::compute_reading(func, reads);
+        let banks = RegBanks::new(target, FixedRegs::NONE);
+        let check = |places: &[Place]| {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                check_allocation(
+                    func,
+                    places,
+                    target,
+                    &banks,
+                    &liveness,
+                    &fp_const,
+                    &alloc.use_counts,
+                )
+            }))
+        };
+        assert!(
+            check(&alloc.places).is_ok(),
+            "the allocator's own placement is reported"
+        );
+        let mut broken = alloc.places.clone();
+        let v = broken
+            .iter()
+            .position(|p| matches!(p, Place::IntReg(_)))
+            .expect("an integer register value");
+        broken[v] = Place::FpReg(0);
+        let message = check(&broken).expect_err("a broken placement passes");
+        let text = message
+            .downcast_ref::<alloc::string::String>()
+            .map(|s| s.as_str())
+            .unwrap_or_default();
+        assert!(text.starts_with("ICE: allocation check: `f`:"), "{text}");
     }
 
     /// A callee-saved register an inline-asm block writes rides the

@@ -12,8 +12,8 @@ use super::super::symbol::{FnParams, FnType};
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    format_fn_type, is_pointer_ty, is_struct_ty, pointee_ty, strip_object_const, strip_unsigned,
-    struct_id_of, struct_ptr_depth, unqualified_object_ty,
+    format_fn_type, is_pointer_ty, is_struct_ty, pointee_ty, strip_unsigned, struct_id_of,
+    struct_ptr_depth, unqualified_object_ty, unqualified_version_ty,
 };
 
 /// True when the default argument promotions (C99 6.5.2.2p6) leave `ty`
@@ -102,17 +102,30 @@ impl Compiler {
         }
         let tags =
             self.tags_compatible(unqualified_object_ty(to_ty), unqualified_object_ty(from_ty));
-        if tags && self.value_fn_types_compatible(Some((tf, *td)), Some((ff, *fd))) {
+        let compatible = tags && self.value_fn_types_compatible(Some((tf, *td)), Some((ff, *fd)));
+        let discarded = Self::discarded_qualifiers(&self.structs, to_ty, from_ty);
+        if compatible && discarded.is_none() {
             return Ok(());
         }
         let (context, to_name, from_name) = what;
         let to_s = self.fn_type_text(to_ty, tf, *td);
         let from_s = self.fn_type_text(from_ty, ff, *fd);
-        let text = alloc::format!(
-            "incompatible function pointer types in {context} \
-             ({to_name}=`{to_s}`, {from_name}=`{from_s}`)"
-        );
-        self.report_at(Code::INCOMPATIBLE_POINTER_TYPES, line, text)
+        let sides = alloc::format!("({to_name}=`{to_s}`, {from_name}=`{from_s}`)");
+        match discarded.filter(|_| compatible) {
+            Some(m) => {
+                self.warn_at(
+                    m.code,
+                    line,
+                    alloc::format!("{} in {context} {sides}", m.reason),
+                );
+                Ok(())
+            }
+            None => {
+                let text =
+                    alloc::format!("incompatible function pointer types in {context} {sides}");
+                self.report_at(Code::INCOMPATIBLE_POINTER_TYPES, line, text)
+            }
+        }
     }
 
     /// Record that expression `id` has function type `f`, `depth` pointer
@@ -167,10 +180,10 @@ impl Compiler {
         if s.class == Token::Fun as i64 || s.class == Token::Sys as i64 {
             return Some(0);
         }
-        // An array parameter, adjusted to a pointer, keeps its inner
-        // bounds in `array_dims`; a pointer to an array in its tag.
+        // An array object's bounds are on the symbol; a pointer to an
+        // array, an adjusted array parameter included, keeps them in its tag.
         let dims = if s.array_size == 0 {
-            s.array_dims.len().saturating_sub(1)
+            0
         } else {
             s.array_dims.len().max(1)
         };
@@ -263,7 +276,7 @@ impl Compiler {
             next = r.ret.as_ref();
         }
         let ret = (0..levels).fold(tag, |t, _| pointee_ty(t));
-        format_fn_type(ret, f, depth, &self.structs)
+        format_fn_type(ret, f, (tag, depth), &self.structs)
     }
 
     /// The function type a call through `callee` has: the callee's, when
@@ -300,7 +313,7 @@ impl Compiler {
                 a.variadic == b.variadic
                     && a.types.len() == b.types.len()
                     && a.types.iter().zip(&b.types).all(|(&x, &y)| {
-                        self.tags_compatible(strip_object_const(x), strip_object_const(y))
+                        self.tags_compatible(unqualified_version_ty(x), unqualified_version_ty(y))
                     })
             }
             (true, false) => unpromoted(a),

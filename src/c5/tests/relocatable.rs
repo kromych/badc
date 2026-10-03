@@ -105,6 +105,30 @@ fn merge(objs: &[EtRel], opts: &RelinkOptions) -> EtRel {
     parse_et_rel(&bytes, "merged").expect("round-trip parse")
 }
 
+/// `-z muldefs` in a relocatable link: the first of two definitions
+/// stands, where without it the link fails.
+#[test]
+fn muldefs_keeps_the_first_definition_in_a_relocatable_link() {
+    let a = compile_obj("int f(void) { return 1; }\n", "a.o");
+    let b = compile_obj("int f(void) { return 2; }\n", "b.o");
+    let pair = [a, b];
+    let err = link_relocatable(&pair, &RelinkOptions::default()).expect_err("two definitions");
+    assert!(
+        format!("{err}").contains("multiple definition of `f'"),
+        "{err}"
+    );
+    let merged = merge(
+        &pair,
+        &RelinkOptions {
+            allow_multiple_definition: true,
+            ..Default::default()
+        },
+    );
+    let defs: Vec<_> = merged.symbols.iter().filter(|s| s.name == "f").collect();
+    assert_eq!(defs.len(), 1, "one global f");
+    assert_eq!(defs[0].value, 0, "a.o's body opens the merged .text");
+}
+
 #[test]
 fn merges_sections_symbols_and_relocs() {
     let a = compile_obj(
@@ -1082,26 +1106,37 @@ fn a_hardened_object_carries_the_matching_property_note() {
     }
 }
 
+/// The note's descriptor is the style's digest of the output file, with
+/// the descriptor zero: 20 bytes of SHA-1, or lld's 8-byte `fast` id.
 #[test]
 fn build_id_note_is_emitted_and_stable() {
+    use crate::c5::codegen::BuildId;
     let a = compile_obj("int v(void) { return 2; }\n", "a.o");
-    let opts = RelinkOptions {
-        build_id_sha1: true,
-        ..Default::default()
-    };
-    let one = link_relocatable(std::slice::from_ref(&a), &opts).expect("merge");
-    let two = link_relocatable(&[a], &opts).expect("merge");
-    assert_eq!(one, two, "deterministic output");
-    let merged = parse_et_rel(&one, "merged").expect("parse");
-    let note = merged
-        .sections
-        .iter()
-        .find(|s| s.name == ".note.gnu.build-id")
-        .expect("build-id note");
-    // nhdr(12) + "GNU\0" + 20-byte SHA-1 digest.
-    assert_eq!(note.bytes.len(), 36);
-    assert_eq!(&note.bytes[12..16], b"GNU\0");
-    assert!(note.bytes[16..36].iter().any(|&b| b != 0));
+    for (style, len) in [(BuildId::Sha1, 20), (BuildId::Fast, 8)] {
+        let opts = RelinkOptions {
+            build_id: style,
+            ..Default::default()
+        };
+        let one = link_relocatable(std::slice::from_ref(&a), &opts).expect("merge");
+        let two = link_relocatable(std::slice::from_ref(&a), &opts).expect("merge");
+        assert_eq!(one, two, "{style:?}: deterministic output");
+        let merged = parse_et_rel(&one, "merged").expect("parse");
+        let note = merged
+            .sections
+            .iter()
+            .find(|s| s.name == ".note.gnu.build-id")
+            .expect("build-id note");
+        assert_eq!(note.bytes.len(), 16 + len, "{style:?}");
+        assert_eq!(&note.bytes[4..8], &(len as u32).to_le_bytes());
+        assert_eq!(&note.bytes[12..16], b"GNU\0");
+        let desc = &note.bytes[16..];
+        let at = (one.windows(desc.len()))
+            .position(|w| w == desc)
+            .expect("the descriptor in the file");
+        let mut zeroed = one.clone();
+        zeroed[at..at + len].fill(0);
+        assert_eq!(desc, &style.digest(&zeroed)[..], "{style:?}");
+    }
 }
 
 /// `.debug_str` is `SHF_MERGE | SHF_STRINGS`, so the link folds it:
@@ -1234,10 +1269,10 @@ fn emit_relocs_survive_into_final_elf() {
             OutputKind::Executable,
             Target::LinuxX64,
             None,
-            false,
-            false,
-            emit,
-            crate::c5::ExecForm::Pie,
+            &crate::c5::ImageOptions {
+                emit_relocs: emit,
+                ..Default::default()
+            },
         )
         .expect("write")
     };

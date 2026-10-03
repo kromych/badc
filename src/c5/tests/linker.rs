@@ -4434,10 +4434,10 @@ fn export_data_exposes_data_globals_in_dynsym() {
             OutputKind::Executable,
             Target::LinuxX64,
             None,
-            false,
-            export_data,
-            false,
-            crate::c5::ExecForm::Pie,
+            &crate::c5::ImageOptions {
+                export_data,
+                ..Default::default()
+            },
         )
         .expect("write executable")
     };
@@ -4560,10 +4560,11 @@ fn dynamic_exports_carry_section_size_binding_and_visibility() {
         OutputKind::Executable,
         Target::LinuxX64,
         None,
-        true,
-        true,
-        false,
-        crate::c5::ExecForm::Pie,
+        &crate::c5::ImageOptions {
+            export_all: true,
+            export_data: true,
+            ..Default::default()
+        },
     )
     .expect("write executable");
 
@@ -5909,6 +5910,7 @@ fn minimal_native_object(
         source: alloc::string::String::new(),
         sections: alloc::vec::Vec::new(),
         discarded: alloc::vec::Vec::new(),
+        exec_stack: false,
         text_align: 16,
         rodata: Vec::new(),
         rodata_align: 8,
@@ -6223,6 +6225,7 @@ fn aarch64_data_ref_object_ex(
         source: alloc::string::String::new(),
         sections: alloc::vec::Vec::new(),
         discarded: alloc::vec::Vec::new(),
+        exec_stack: false,
         machine: NativeMachine::Aarch64,
         text,
         text_align: 16,
@@ -6480,6 +6483,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         source: alloc::string::String::new(),
         sections: alloc::vec::Vec::new(),
         discarded: alloc::vec::Vec::new(),
+        exec_stack: false,
         machine: NativeMachine::Aarch64,
         text: alloc::vec::Vec::new(),
         text_align: 16,
@@ -16730,8 +16734,7 @@ fn no_option_moves_a_hard_link_error() {
 }
 
 /// `emit_warnings` reaches the sink: cleared, the link reports nothing
-/// and writes the same image. The field had no reader, so `--quiet`
-/// left the script linker's warnings on stderr.
+/// and writes the same image. Set, it leaves a `-w` the levels carry.
 #[test]
 fn a_link_with_warnings_off_reports_none() {
     use crate::c5::Target;
@@ -16741,17 +16744,22 @@ fn a_link_with_warnings_off_reports_none() {
         parse_linker_script("ENTRY(nosuch) SECTIONS { . = 0x400000; .text : { *(.text*) } }")
             .expect("parses");
     let obj = asm_reloc_tu(".text\n.globl f\nf:\n\tret\n", Target::LinuxX64);
-    let build = |emit_warnings: bool| {
+    let build = |emit_warnings: bool, dash_w: bool| {
+        let mut diag = crate::c5::diag::Config::new();
+        diag.inhibit_warnings(dash_w);
         let opts = LdsOptions {
             emit_warnings,
+            diag,
             ..Default::default()
         };
         let objs = alloc::vec![parse_lds_object("a.o", obj.clone()).expect("parses")];
         link_with_script(&script, objs, &opts).expect("links")
     };
-    let loud = build(true);
+    let loud = build(true, false);
     assert_eq!(loud.warnings.len(), 1, "{:?}", loud.warnings);
-    let quiet = build(false);
+    let quiet = build(false, false);
     assert!(quiet.warnings.is_empty(), "{:?}", quiet.warnings);
     assert_eq!(quiet.image, loud.image, "silencing changed the image");
+    let dash_w = build(true, true);
+    assert!(dash_w.warnings.is_empty(), "-w: {:?}", dash_w.warnings);
 }

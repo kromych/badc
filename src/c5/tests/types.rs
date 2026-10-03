@@ -1353,19 +1353,27 @@ fn bool_target_accepts_a_pointer_in_every_assignment_context() {
     // The reverse direction is still a mismatch: only `_Bool` on the left
     // is exempt, and `_Bool *` is a pointer, not the exempt scalar.
     let p = compile_str(
-        "void f(_Bool b, _Bool *bp) { int *q; q = b; struct S { int a; } *s; s = bp; (void)q; \
-         (void)s; }\n\
+        "void f(_Bool b) { int *q; q = b; (void)q; }\n\
          int main(void) { return 0; }",
     );
     assert!(
         p.warnings.iter().any(|w| w
             .to_string()
-            .contains("integer assigned to pointer in assignment"))
-            && p.warnings.iter().any(|w| w
-                .to_string()
-                .contains("incompatible struct types in assignment")),
+            .contains("integer assigned to pointer in assignment")),
         "got: {:?}",
         p.warnings
+    );
+    let msg = crate::Compiler::new(super::with_prelude(
+        "void f(_Bool *bp) { struct S { int a; } *s; s = bp; (void)s; }\n\
+         int main(void) { return 0; }",
+    ))
+    .compile()
+    .err()
+    .map(|e| e.to_string())
+    .unwrap_or_default();
+    assert!(
+        msg.contains("incompatible pointer types in assignment"),
+        "got: {msg}"
     );
 }
 
@@ -1418,19 +1426,16 @@ fn a_named_address_space_on_the_pointee_is_named_in_the_diagnostic() {
                extern __seg_gs struct task_struct *cur;\n\
                struct task_struct *f(void) { return cur; }\n\
                int main(void) { return 0; }";
-    let p = Compiler::with_target(src.to_string(), Target::LinuxX64)
+    let msg = Compiler::with_target(src.to_string(), Target::LinuxX64)
         .compile()
-        .unwrap();
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
     assert!(
-        p.warnings.iter().any(|w| {
-            w.to_string()
-                .contains("incompatible struct types in return")
-                && w.to_string().contains("declared=struct task_struct*")
-                && w.to_string()
-                    .contains("returned=struct task_struct __seg_gs *")
-        }),
-        "got: {:?}",
-        p.warnings
+        msg.contains("incompatible pointer types in return")
+            && msg.contains("declared=struct task_struct*")
+            && msg.contains("returned=struct task_struct __seg_gs *"),
+        "got: {msg}"
     );
 }
 
@@ -1530,15 +1535,51 @@ fn vector_type_alignment_follows_the_target_abi() {
     }
 }
 
+/// `vector_size` among a member's declaration specifiers makes the member a
+/// vector, through a pointer declarator too; after the declarator it types
+/// the member itself. Neither reaches the typedef or object the aggregate
+/// declares. The values are clang 21's on x86-64 and AArch64.
+#[test]
+fn member_vector_size_attribute_types_the_member() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    let decls = "struct M { float __attribute__((vector_size(16))) *p;\n\
+                   float __attribute__((vector_size(16))) a[2]; };\n\
+                 struct N { float v __attribute__((vector_size(8))); char c; };\n\
+                 typedef struct { float __attribute__((vector_size(4))) v; } T;\n\
+                 struct { int i; float __attribute__((vector_size(8))) v; } o;\n";
+    let cases: &[(&str, i64)] = &[
+        ("sizeof(struct M)", 48),
+        ("sizeof(*((struct M *)0)->p)", 16),
+        ("sizeof(((struct M *)0)->a)", 32),
+        ("sizeof(struct N)", 16),
+        ("_Alignof(struct N)", 8),
+        ("sizeof(T) * 10 + sizeof(((T *)0)->v)", 44),
+        ("sizeof(o) * 10 + sizeof(o.v)", 168),
+        ("((T){ { 7.0f } }).v[0]", 7),
+    ];
+    for t in [Target::LinuxX64, Target::LinuxAarch64] {
+        for &(expr, want) in cases {
+            let src = alloc::format!("{decls}int main(void) {{ return (int)({expr}); }}");
+            let program = Compiler::with_target(src, t)
+                .compile()
+                .unwrap_or_else(|e| panic!("{t:?} `{expr}`: {e}"));
+            assert_eq!(Vm::new(program).run().unwrap(), want, "{t:?}: {expr}");
+        }
+    }
+}
+
 /// Whether an unnamed bit-field's declared type raises the aggregate's
 /// alignment is the ABI's (C99 6.7.2.1p11): AAPCS64 counts it, the x86_64
-/// psABI and Apple's arm64 ABI do not. The values are gcc 16's on Linux
-/// x86_64 and AArch64 and Apple clang 21's on macOS arm64.
+/// psABI and Apple's arm64 ABI do not, a zero-width one included, which
+/// still moves the next member to its type's boundary. The values are gcc
+/// 16's on Linux x86_64 and AArch64, clang 22's there too, and Apple clang
+/// 21's on macOS arm64.
 #[test]
 fn unnamed_bitfield_alignment_follows_the_target_abi() {
     use super::Vm;
     use crate::{Compiler, Target};
-    const SHAPES: [&str; 8] = [
+    const SHAPES: [&str; 17] = [
         "struct { char c; unsigned : 1; }",
         "struct { char c; int : 4; char d; }",
         "struct { char c; long long : 3; }",
@@ -1547,10 +1588,23 @@ fn unnamed_bitfield_alignment_follows_the_target_abi() {
         "struct { unsigned char a; unsigned int : 0; unsigned char b; } __attribute__((packed))",
         "union { char c; unsigned : 3; }",
         "struct { char c; unsigned x : 3; unsigned : 3; }",
+        "struct { char c; int : 0; }",
+        "struct { int : 0; char c; }",
+        "struct { char c; long long : 0; char d; }",
+        "struct { char c; short : 0; char d; }",
+        "struct { char c; int : 0; int : 3; char d; }",
+        "struct { char c; int b : 3; int : 0; char d; }",
+        "struct { short s; int : 0; char d; }",
+        "union { char c; int : 0; }",
+        "struct { char c; int : 0 __attribute__((aligned(8))); char d; }",
     ];
     // `sizeof * 100 + _Alignof` per shape.
-    const SYSV: [i64; 8] = [201, 301, 201, 501, 602, 501, 101, 404];
-    const AAPCS64: [i64; 8] = [404, 404, 808, 804, 808, 804, 404, 404];
+    const SYSV: [i64; 17] = [
+        201, 301, 201, 501, 602, 501, 101, 404, 401, 101, 901, 301, 601, 804, 602, 101, 901,
+    ];
+    const AAPCS64: [i64; 17] = [
+        404, 404, 808, 804, 808, 804, 404, 404, 404, 404, 1608, 402, 804, 804, 804, 404, 1608,
+    ];
     for (t, want) in [
         (Target::LinuxX64, SYSV),
         (Target::MacOSAarch64, SYSV),
@@ -1640,6 +1694,90 @@ fn bitfields_take_the_ms_layout_on_pe_targets() {
         "|struct { long long a:3; int b:3; char c:3; }|16/8|a@0 b@64 c@96",
     ];
     layout_rows_hold("", SHAPES, &[Target::WindowsX64, Target::WindowsAarch64]);
+}
+
+/// A packed bit-field starts at the next bit even where its bits span more
+/// than 8 bytes, up to the 17 a 128-bit field reaches from bit 1, under the
+/// attribute on the aggregate or the member and under `#pragma pack`. The
+/// GNU rows are gcc 16's and clang 21's for x86_64- and aarch64-linux-gnu
+/// and Apple clang 21's; the MS rows, clang 21's for both windows-msvc
+/// triples, place each field in a whole unit of its type.
+#[test]
+fn packed_bitfields_start_at_the_next_bit() {
+    use crate::Target;
+    const P1: &str = "struct __attribute__((packed)) { unsigned char c:1; unsigned long long f:64; unsigned char d:7; }";
+    const P2: &str =
+        "struct __attribute__((packed)) { unsigned char c:4; unsigned long long f:61; }";
+    const P3: &str = "struct __attribute__((packed)) { unsigned a:31; unsigned long long f:63; unsigned long long g:64; unsigned char d:2; }";
+    const P4: &str =
+        "struct __attribute__((packed)) { char x; unsigned char c:3; long long f:62; short s:9; }";
+    const F1: &str = "struct { unsigned char c:1; unsigned long long f:64 __attribute__((packed)); unsigned char d:7; }";
+    const Q: &str = "struct { unsigned char c:1; unsigned long long f:64; unsigned char d:7; }";
+    const QB: &str = "struct { unsigned char c:4; unsigned long long f:61; }";
+    const W: &str = "struct { unsigned char c:1; unsigned __int128 f:128; unsigned char d:7; }";
+    const W1: &str = "struct __attribute__((packed)) { unsigned char c:1; unsigned __int128 f:128; unsigned char d:7; }";
+    const W2: &str = "struct __attribute__((packed)) { unsigned char c:7; __int128 f:122; }";
+    const W3: &str = "struct __attribute__((packed)) { unsigned char c:3; unsigned __int128 f:125; unsigned g:20; }";
+    let rows = |layouts: [&str; 13]| {
+        let decls = [
+            ("", P1),
+            ("", P2),
+            ("", P3),
+            ("", P4),
+            ("", F1),
+            ("1", Q),
+            ("1", QB),
+            ("1", W),
+            ("2", Q),
+            ("4", Q),
+            ("", W1),
+            ("", W2),
+            ("", W3),
+        ];
+        decls
+            .iter()
+            .zip(layouts)
+            .map(|((pack, decl), layout)| alloc::format!("{pack}|{decl}|{layout}"))
+            .collect::<alloc::vec::Vec<_>>()
+    };
+    let gnu = rows([
+        "9/1|c@0 f@1 d@65",
+        "9/1|c@0 f@4",
+        "20/1|a@0 f@31 g@94 d@158",
+        "11/1|x@0 c@8 f@11 s@73",
+        "9/1|c@0 f@1 d@65",
+        "9/1|c@0 f@1 d@65",
+        "9/1|c@0 f@4",
+        "17/1|c@0 f@1 d@129",
+        "10/2|c@0 f@1 d@65",
+        "12/4|c@0 f@1 d@65",
+        "17/1|c@0 f@1 d@129",
+        "17/1|c@0 f@7",
+        "19/1|c@0 f@3 g@128",
+    ]);
+    let ms = rows([
+        "10/1|c@0 f@8 d@72",
+        "9/1|c@0 f@8",
+        "21/1|a@0 f@32 g@96 d@160",
+        "12/1|x@0 c@8 f@16 s@80",
+        "10/1|c@0 f@8 d@72",
+        "10/1|c@0 f@8 d@72",
+        "9/1|c@0 f@8",
+        "18/1|c@0 f@8 d@136",
+        "12/2|c@0 f@16 d@80",
+        "16/4|c@0 f@32 d@96",
+        "18/1|c@0 f@8 d@136",
+        "17/1|c@0 f@8",
+        "21/1|c@0 f@8 g@136",
+    ]);
+    let gnu: alloc::vec::Vec<&str> = gnu.iter().map(|r| r.as_str()).collect();
+    let ms: alloc::vec::Vec<&str> = ms.iter().map(|r| r.as_str()).collect();
+    layout_rows_hold(
+        "",
+        &gnu,
+        &[Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64],
+    );
+    layout_rows_hold("", &ms, &[Target::WindowsX64, Target::WindowsAarch64]);
 }
 
 /// An aggregate with no storage has MSVC's size on the PE targets: 4, or
@@ -3064,9 +3202,9 @@ fn a_pointer_against_a_scalar_reports_the_same_row_whatever_the_pointee() {
 #[test]
 fn the_signedness_marker_is_not_part_of_an_aggregate_identity() {
     // `__int128` is modeled as an aggregate, so the signed and unsigned
-    // spellings of a pointer to it differ only in the marker. C99
-    // 6.3.1.3 makes that an integer conversion, and c5 reports pointee
-    // signedness nowhere else, so it is not a struct mismatch.
+    // spellings of a pointer to it differ only in the marker: pointers to
+    // integer types that differ in signedness, which convert with a
+    // pointer-sign warning as clang gives, not as two aggregates.
     let p = compile_str(
         "typedef unsigned __int128 u128;\n\
          static u128 swap128(volatile u128 *p, u128 v) { u128 o = *p; *p = v; return o; }\n\
@@ -3075,21 +3213,28 @@ fn the_signedness_marker_is_not_part_of_an_aggregate_identity() {
          void w(struct dte *p) { set(&p->data[1], 0); }\n\
          int main(void) { return 0; }",
     );
-    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+    let codes: alloc::vec::Vec<crate::diag::Code> = p.warnings.iter().map(|w| w.code).collect();
+    assert_eq!(
+        codes,
+        [crate::diag::Code::POINTER_SIGN; 2],
+        "got: {:?}",
+        p.warnings
+    );
 
-    // Two different aggregates are still a mismatch at pointer depth.
-    let p = compile_str(
+    // Two different aggregates are incompatible at pointer depth.
+    let msg = crate::Compiler::new(super::with_prelude(
         "struct A { int a; };\n\
          struct B { int b; };\n\
          void bad(struct A *a) { struct B *b; b = a; (void)b; }\n\
          int main(void) { return 0; }",
-    );
+    ))
+    .compile()
+    .err()
+    .map(|e| e.to_string())
+    .unwrap_or_default();
     assert!(
-        p.warnings.iter().any(|w| w
-            .to_string()
-            .contains("incompatible struct types in assignment")),
-        "got: {:?}",
-        p.warnings
+        msg.contains("incompatible pointer types in assignment"),
+        "got: {msg}"
     );
 }
 
@@ -3529,6 +3674,72 @@ fn an_integer_constant_expression_rejects_a_floating_result() {
     assert_eq!(Vm::new(program).run().unwrap(), 18, "{src}");
 }
 
+/// C99 6.7.5.2p1: the size of an array declarator has integer type, a
+/// variable-length array's, a type name's and a parameter's as well as a
+/// constant one's. A floating, pointer or structure size is an error in
+/// the front end; a character, enumeration, `_Bool` or `__int128` size and
+/// a converted floating value size their arrays, and `[*]` has no size.
+#[test]
+fn an_array_size_has_integer_type() {
+    use super::Vm;
+    use crate::Compiler;
+    let compile = |src: &str| {
+        Compiler::new(format!(
+            "struct P {{ int x; }};\n{src}\nint main(void) {{ return 0; }}\n"
+        ))
+        .compile()
+    };
+    for (src, ty) in [
+        (
+            "int f(double d) { int a[d]; return (int)sizeof a; }",
+            "double",
+        ),
+        (
+            "int f(long double d) { int a[d]; return (int)sizeof a; }",
+            "long double",
+        ),
+        ("int f(int *p) { int a[p]; return (int)sizeof a; }", "int*"),
+        (
+            "int f(struct P s) { int a[s]; return (int)sizeof a; }",
+            "struct P",
+        ),
+        (
+            "int f(double d) { int a[2][d]; return (int)sizeof a; }",
+            "double",
+        ),
+        ("int f(float d) { return (int)sizeof(int[d]); }", "float"),
+        ("int f(int *p) { return (int)sizeof(int[p]); }", "int*"),
+        ("void g(double d, int a[d]);", "double"),
+        ("void g(int *p, int a[p]);", "int*"),
+        ("void g(double d, int [d]);", "double"),
+        ("void g(double d, int a[static d]);", "double"),
+        ("void g(double d, int a[2][d]);", "double"),
+        ("void g(double d, int a[d]) { (void)a; }", "double"),
+        ("int a[(int *)0 + 1];", "int*"),
+    ] {
+        let msg = compile(src)
+            .err()
+            .unwrap_or_else(|| panic!("`{src}` compiled"))
+            .to_string();
+        let want = format!("array size has type `{ty}`, not an integer type");
+        assert!(
+            msg.contains(&want) && msg.contains("[invalid-declaration]"),
+            "`{src}`: {msg}"
+        );
+    }
+    let src = "enum K { K1 = 3 };\n\
+               void g(int n, int a[n]);\n\
+               void h(int a[*]);\n\
+               int f(int n, char c, enum K k, _Bool b, __int128 w, double d) {\n\
+               \tint a[n], e[c], g[k], h[b + 1], i[w], j[(int)d];\n\
+               \treturn (int)((sizeof a + sizeof e + sizeof g + sizeof h + sizeof i + sizeof j\n\
+               \t\t+ sizeof(int[n])) / sizeof(int));\n\
+               }\n\
+               int main(void) { return f(1, 2, K1, 1, 4, 5.5); }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 18, "{src}");
+}
+
 /// C99 6.2.5p15: plain `char` is a type distinct from `signed char` and
 /// `unsigned char`, with the representation of one of them. Generic
 /// selection (C11 6.5.1.1) and `__builtin_types_compatible_p` see three
@@ -3576,6 +3787,144 @@ fn plain_char_is_a_third_character_type() {
         assert_eq!(run(t, Some(true)), SIGNED, "{t:?} under -fsigned-char");
         assert_eq!(run(t, Some(false)), UNSIGNED, "{t:?} under -funsigned-char");
     }
+}
+
+/// GNU C types `__builtin_alloca`, `__builtin_frame_address`,
+/// `__builtin_return_address` and the return-address conversions, the
+/// memory-transfer builtins, `__builtin_assume_aligned` and `&&label` as
+/// `void *`: generic selection picks the `void *` association, a
+/// diagnostic spells `void*`, and arithmetic on the value steps one byte
+/// as on any `void *`.
+#[test]
+fn gnu_void_pointer_builtins_are_void_pointers() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "#define K(e) _Generic((e), void *: 1, char *: 2, signed char *: 3, \
+               unsigned char *: 4, default: 0)\n\
+               int main(void) {\n\
+               \tchar buf[8];\n\
+               \tint n = 0;\n\
+               lab:\n\
+               \tn += K(__builtin_alloca(4)) + K(__builtin_alloca(4) + 1)\n\
+               \t\t+ K(__builtin_frame_address(0)) + K(__builtin_frame_address(1))\n\
+               \t\t+ K(__builtin_return_address(0))\n\
+               \t\t+ K(__builtin_extract_return_addr(__builtin_return_address(0)))\n\
+               \t\t+ K(__builtin_frob_return_addr(__builtin_return_address(0)))\n\
+               \t\t+ K(__builtin_memcpy(buf, \"ab\", 2)) + K(__builtin_memmove(buf, \"ab\", 2))\n\
+               \t\t+ K(__builtin_memset(buf, 0, 2)) + K(__builtin_assume_aligned(buf, 1))\n\
+               \t\t+ K(&&lab);\n\
+               \treturn n * 10 + (int)((char *)(__builtin_memcpy(buf, \"ab\", 2) + 3) - buf);\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 12 * 10 + 3, "{src}");
+    let src = "struct S { int x; };\n\
+               void take(struct S s);\n\
+               void f(void) { take(__builtin_alloca(4)); }\n\
+               int main(void) { return 0; }\n";
+    let msg = Compiler::new(src.to_string())
+        .compile()
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(msg.contains("(param=struct S, arg=void*)"), "{msg}");
+}
+
+/// C99 6.5.16.1p1: the type a converted pointer points to keeps every
+/// qualifier of the type the original points to. An initializer, an
+/// assignment, an argument or a return that drops a `const` or a
+/// `volatile` of the pointed-to type warns under B3031
+/// discarded-qualifiers, at whatever level the pointee sits (`int *const
+/// *` to `int **`), a pointer to a function pointer included; one that
+/// adds a qualifier is silent. The diagnostic is controllable.
+#[test]
+fn a_pointer_conversion_that_drops_a_pointee_qualifier_warns() {
+    use crate::diag::{Code, Config, Level};
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "struct T { int x; };\n\
+               void take(int *p);\n\
+               int *ret(const int *c) { return c; }\n\
+               void f(void) {\n\
+               \tconst int *c = 0; int *d = c;\n\
+               \tint **p = (int *const *)0;\n\
+               \tvoid (**q)(void) = (void (*const *)(void))0;\n\
+               \tvolatile int *vp = 0; int *e = vp;\n\
+               \tvoid *v = c;\n\
+               \tconst void *cv = 0; char *s = cv;\n\
+               \ttake(c);\n\
+               \td = c;\n\
+               \tconst struct T *ct = 0; struct T *t = ct;\n\
+               \tint *const *a1 = (int **)0; const int *a2 = d; const volatile void *a3 = d;\n\
+               \t(void)p; (void)q; (void)e; (void)v; (void)s; (void)t; (void)a1; (void)a2; (void)a3;\n\
+               }\n\
+               int main(void) { return 0; }\n";
+    let compile = |config: Config| {
+        let opts = CompileOptions::default().with_diag(config);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts).compile()
+    };
+    let program = compile(Config::new()).unwrap_or_else(|e| panic!("{e}"));
+    let warnings: alloc::vec::Vec<String> =
+        program.warnings.iter().map(|w| w.to_string()).collect();
+    for (line, text) in [
+        (
+            3,
+            "`const` qualifier from pointer target type in return (declared=int*",
+        ),
+        (
+            5,
+            "`const` qualifier from pointer target type in initializer (declared=int*",
+        ),
+        (6, "(declared=int**, init=int* const *)"),
+        (
+            7,
+            "(declared=`void (**)(void)`, init=`void (* const *)(void)`)",
+        ),
+        (
+            8,
+            "`volatile` qualifier from pointer target type in initializer",
+        ),
+        (9, "(declared=void*, init=const int*)"),
+        (10, "(declared=char*, init=const void*)"),
+        (11, "in argument 1 of `take` (param=int*, arg=const int*)"),
+        (12, "in assignment (lhs=int*, rhs=const int*)"),
+        (13, "(declared=struct T*, init=const struct T*)"),
+    ] {
+        let at = format!(":{line}: warning: discards ");
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains(&at) && w.contains(text) && w.contains("[B3031]")),
+            "line {line}: {warnings:?}"
+        );
+    }
+    assert_eq!(warnings.len(), 10, "{warnings:?}");
+    let mut config = Config::new();
+    config.set_level(Code::DISCARDED_QUALIFIERS, Level::Ignore);
+    let quiet = compile(config).unwrap_or_else(|e| panic!("{e}"));
+    assert!(quiet.warnings.is_empty(), "{:?}", quiet.warnings);
+    let mut config = Config::new();
+    config.set_level(Code::DISCARDED_QUALIFIERS, Level::Error);
+    let raised = compile(config).unwrap_or_else(|e| panic!("{e}"));
+    let levels: alloc::vec::Vec<Level> = raised.warnings.iter().map(|d| d.level).collect();
+    assert_eq!(levels, [Level::Error; 10], "{:?}", raised.warnings);
+    // The qualifiers of an array are its elements' (C99 6.7.3p8).
+    let src = "void g(const int (*cq)[3], int (*q)[3]) {\n\
+               \tint (*p)[3] = cq;\n\
+               \tconst int (*ok)[3] = q;\n\
+               \t(void)p; (void)ok;\n\
+               }\n\
+               const char (*row)[4] = (const char (*)[4])\"abcdefgh\" + 1;\n\
+               int main(void) { return 0; }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let warnings: alloc::vec::Vec<String> =
+        program.warnings.iter().map(|w| w.to_string()).collect();
+    assert!(
+        warnings.len() == 1
+            && warnings[0].contains(":2: warning: discards `const`")
+            && warnings[0].contains("(declared=int (*)[3], init=const int (*)[3])"),
+        "{warnings:?}"
+    );
 }
 
 /// The three character types are incompatible (C99 6.2.7p1), so a
@@ -3887,7 +4236,6 @@ fn an_initializer_reports_the_conversions_an_assignment_reports() {
     let pre = "int g, arr[2];\nint f(void) { return 0; }\n\
                struct A { int x; }; struct B { int y; } b;\n";
     let int_conv = Some(Code::INT_CONVERSION);
-    let struct_conv = Some(Code::INCOMPATIBLE_STRUCT_TYPES);
     for (body, want) in [
         ("long long s = &g;", int_conv),
         ("long long s = f;", int_conv),
@@ -3899,7 +4247,6 @@ fn an_initializer_reports_the_conversions_an_assignment_reports() {
         ("struct { int *p; } t = { 5 };", int_conv),
         ("long long a[2] = { 0, &g };", int_conv),
         ("long long s = (long long){ &g };", int_conv),
-        ("struct A *p = &b;", struct_conv),
         (
             "int main(void) { static long long z = &g; return (int)z; }",
             int_conv,
@@ -3920,10 +4267,6 @@ fn an_initializer_reports_the_conversions_an_assignment_reports() {
         (
             "int main(void) { long long z = (long long){ &g }; return (int)z; }",
             int_conv,
-        ),
-        (
-            "int main(void) { struct A *p = &b; return p != 0; }",
-            struct_conv,
         ),
         ("long long s = (long long)&g;", None),
         ("unsigned long long s = (unsigned long long)f;", None),
@@ -3963,6 +4306,20 @@ fn an_initializer_reports_the_conversions_an_assignment_reports() {
     let text = p.warnings[0].to_string();
     let row = "pointer assigned to integer in initializer (declared=long long, init=int*)";
     assert!(text.contains(row), "{text}");
+    // An incompatible pointer is an error in either initializer.
+    for body in [
+        "struct A *p = &b;\nint main(void) { return 0; }",
+        "int main(void) { struct A *p = &b; return p != 0; }",
+    ] {
+        let src = alloc::format!("{pre}{body}\n");
+        let msg = crate::Compiler::new(super::with_prelude(&src))
+            .compile()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        let row = "incompatible pointer types in initializer (declared=struct A*, init=struct B*)";
+        assert!(msg.contains(row), "{src}{msg}");
+    }
 }
 
 /// C23 6.7.2.5: `typeof` of a type name takes every derivation of its
@@ -4038,4 +4395,662 @@ fn typeof_a_row_keeps_its_inner_bounds() {
          _Static_assert(__builtin_types_compatible_p(__typeof__(p[1]), int[3][4]), \"pointer\");\n\
          int main(void) { return 0; }\n",
     );
+}
+
+#[test]
+fn an_array_of_arrays_converts_to_a_pointer_to_its_row() {
+    // C99 6.3.2.1p3: the value of `int two[2][3]` points to its first
+    // element, the row `int[3]`, and 6.7.5.3p7 adjusts a parameter declared
+    // as the array to the same type.
+    compile_str(
+        "int two[2][3];\n\
+         int three[2][3][4];\n\
+         struct { int m[2][3]; } s;\n\
+         int (*pm)[2][3];\n\
+         int f(int a[2][3], int b[][3][4]) {\n\
+           _Static_assert(_Generic(a, int (*)[3]: 1, default: 0), \"parameter\");\n\
+           _Static_assert(_Generic(b, int (*)[3][4]: 1, default: 0), \"parameter of three bounds\");\n\
+           return a[1][2] + b[1][2][3];\n\
+         }\n\
+         int main(int c, char **v) {\n\
+           (void)v;\n\
+           _Static_assert(_Generic(two, int (*)[3]: 1, int *: 2, default: 0) == 1, \"array\");\n\
+           _Static_assert(_Generic(two + 0, int (*)[3]: 1, default: 0), \"sum\");\n\
+           _Static_assert(_Generic((0, two), int (*)[3]: 1, default: 0), \"comma\");\n\
+           _Static_assert(_Generic(c ? two : two, int (*)[3]: 1, default: 0), \"conditional\");\n\
+           _Static_assert(_Generic(three, int (*)[3][4]: 1, default: 0), \"three bounds\");\n\
+           _Static_assert(_Generic(three[1], int (*)[4]: 1, default: 0), \"row\");\n\
+           _Static_assert(_Generic(s.m, int (*)[3]: 1, default: 0), \"member\");\n\
+           _Static_assert(_Generic(*pm, int (*)[3]: 1, default: 0), \"pointee\");\n\
+           _Static_assert(__builtin_types_compatible_p(__typeof__(two + 0), int (*)[3]), \"typeof\");\n\
+           _Static_assert(sizeof *(two + 0) == 3 * sizeof(int), \"row size\");\n\
+           return f(two, three);\n\
+         }\n",
+    );
+}
+
+/// C99 6.7.3: `volatile`, as `const`, qualifies the derivation it follows,
+/// so the pointer level it sits at is part of the type: `T *volatile *`,
+/// `volatile T **` and `T **` are three types, however the declarator
+/// spells them -- grouped, through a typedef, as a cast's abstract
+/// declarator -- and a type's own `volatile` goes with lvalue conversion.
+#[test]
+fn volatile_at_a_pointer_level_is_part_of_the_type() {
+    compile_str(
+        "typedef int *IP;\ntypedef volatile int VI;\n\
+         #define IS(t, e) _Generic((e), t: 1, default: 0)\n\
+         int *volatile *p; volatile IP *a; int *volatile (*b); int *volatile (*(c));\n\
+         VI **d; volatile int *volatile *f; int **volatile g; volatile int v;\n\
+         volatile int rows[2][3]; int *volatile prows[2][3];\n\
+         int main(void) {\n\
+           _Static_assert(IS(volatile int (*)[3], rows) && !IS(int (*)[3], rows), \"rows\");\n\
+           _Static_assert(IS(int *volatile (*)[3], prows) && !IS(int *(*)[3], prows), \"rows of pointers\");\n\
+           _Static_assert(IS(int *volatile *, (int *volatile *)0), \"cast\");\n\
+           _Static_assert(!IS(int **, (int *volatile *)0), \"cast vs plain\");\n\
+           _Static_assert(IS(int *volatile *, p) && !IS(int **, p) && !IS(volatile int **, p), \"p\");\n\
+           _Static_assert(IS(int *volatile *, a) && IS(int *volatile *, b), \"typedef, group\");\n\
+           _Static_assert(IS(int *volatile *, c), \"nested group\");\n\
+           _Static_assert(IS(volatile int **, d) && !IS(int *volatile *, d), \"base level\");\n\
+           _Static_assert(IS(volatile int *volatile *, f), \"two levels\");\n\
+           _Static_assert(IS(int **, g) && IS(int, v), \"own level\");\n\
+           _Static_assert(IS(int *, *p) && IS(int *volatile *, &*p), \"dereference\");\n\
+           _Static_assert(IS(volatile int *, 1 ? &v : (int *)0), \"conditional\");\n\
+           _Static_assert(!__builtin_types_compatible_p(int *volatile *, int **), \"compatible\");\n\
+           _Static_assert(__builtin_types_compatible_p(volatile int, int), \"top level\");\n\
+           _Static_assert(__builtin_types_compatible_p(__typeof__(*p), int *volatile), \"typeof\");\n\
+           return 0;\n\
+         }\n",
+    );
+}
+
+#[test]
+fn an_enumerated_type_is_a_type_of_its_own() {
+    // C99 6.7.2.2p4: each enumerated type is compatible with the integer
+    // type its definition chose -- `unsigned int` for non-negative values
+    // as gcc chooses, `int` under MSVC's rule on the PE targets -- and with
+    // no other enumerated type, an untagged one and one a block-scope tag
+    // declares included; arithmetic takes the integer type.
+    use crate::{Compiler, Target};
+    const SRC: &str = "#ifdef _WIN32\ntypedef int a_int;\n#else\ntypedef unsigned int a_int;\n#endif\n\
+         enum A { A1, A2 };\nenum B { B1 };\n\
+         typedef enum A OuterA;\ntypedef enum { U1 } U;\ntypedef enum { V1 } V;\n\
+         struct S { enum A m; };\nenum A fa(void);\n\
+         #define IS(t, e) _Generic((e), t: 1, default: 0)\n\
+         int main(int c, char **v) {\n\
+           enum A a = A1; a_int u = 0; struct S s = {A1};\n\
+           (void)v;\n\
+           _Static_assert(IS(enum A, a) && IS(a_int, a) && !IS(enum B, a), \"enum\");\n\
+           _Static_assert(IS(enum A, u) && IS(enum B, u), \"integer type\");\n\
+           _Static_assert(IS(enum A, s.m) && !IS(enum B, s.m), \"member\");\n\
+           _Static_assert(IS(enum A, fa()) && !IS(enum B, fa()), \"call\");\n\
+           _Static_assert(IS(enum A, (enum A)u) && !IS(enum B, (enum A)u), \"cast\");\n\
+           _Static_assert(IS(enum B, a + 0) && IS(enum B, -a) && IS(enum B, c ? a : a), \"arithmetic\");\n\
+           _Static_assert(IS(int, A1) && IS(int, A1 + 0), \"constant\");\n\
+           _Static_assert(IS(enum A *, &a) && IS(a_int *, &a) && !IS(enum B *, &a), \"pointer\");\n\
+           _Static_assert(!__builtin_types_compatible_p(enum A, enum B), \"A B\");\n\
+           _Static_assert(__builtin_types_compatible_p(enum A, a_int), \"A integer\");\n\
+           _Static_assert(!__builtin_types_compatible_p(enum A *, enum B *), \"A* B*\");\n\
+           _Static_assert(!__builtin_types_compatible_p(U, V), \"untagged\");\n\
+           __typeof__(a) t = a;\n\
+           _Static_assert(IS(OuterA, t) && !IS(enum B, t), \"typeof\");\n\
+           {\n\
+             enum A { Y1 = 5 } inner = Y1;\n\
+             _Static_assert(IS(enum A, inner) && !IS(OuterA, inner), \"block scope\");\n\
+             return inner + t;\n\
+           }\n\
+         }\n\
+         enum A fa(void) { return A2; }\n";
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        Compiler::with_target(SRC.to_string(), t)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+    }
+    // A packed enum takes the smallest integer type off the PE targets.
+    super::compile_str_bare_for(
+        "enum __attribute__((packed)) P { P1 };\nenum P p;\n\
+         _Static_assert(_Generic(p, enum P: 1, default: 0) && _Generic(p, unsigned char: 1, default: 0)\n\
+                        && sizeof p == 1, \"packed\");\n\
+         int main(void) { return p; }\n",
+        Target::LinuxX64,
+    );
+    // A pointer conversion between two enumerated types is incompatible
+    // (C99 6.5.16.1p1); one to the integer type is not.
+    let msg = Compiler::with_target(
+        "enum A { A1 };\nenum B { B1 };\nenum A a;\nenum B *pb = &a;\n\
+         int main(void) { return pb != 0; }\n"
+            .to_string(),
+        Target::LinuxX64,
+    )
+    .compile()
+    .err()
+    .map(|e| e.to_string())
+    .unwrap_or_default();
+    assert!(
+        msg.contains(":4: error: incompatible pointer types in initializer")
+            && msg.contains("(declared=enum B*, init=enum A*)"),
+        "got: {msg}"
+    );
+    let p = super::compile_str_bare_for(
+        "enum A { A1 };\nenum A a;\nunsigned *pu = &a;\n\
+         int main(void) { enum A *pa = pu; return pa != &a; }\n",
+        Target::LinuxX64,
+    );
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+}
+
+#[test]
+fn equal_arithmetic_arms_of_a_conditional_take_the_usual_conversions() {
+    // C99 6.5.15p5: two arithmetic operands take the usual arithmetic
+    // conversions, which promote a narrow type the arms share.
+    compile_str(
+        "int main(int c, char **v) {\n\
+           short s = 1; unsigned char uc = 2; char ch = 3; _Bool b = 1;\n\
+           long l = 4; float f = 5;\n\
+           (void)v;\n\
+           _Static_assert(_Generic(c ? s : s, int: 1, default: 0), \"short\");\n\
+           _Static_assert(_Generic(c ? uc : uc, int: 1, default: 0), \"unsigned char\");\n\
+           _Static_assert(_Generic(c ? ch : ch, int: 1, default: 0), \"char\");\n\
+           _Static_assert(_Generic(c ? b : b, int: 1, default: 0), \"_Bool\");\n\
+           _Static_assert(_Generic(c ? l : l, long: 1, default: 0), \"long\");\n\
+           _Static_assert(_Generic(c ? f : f, float: 1, default: 0), \"float\");\n\
+           _Static_assert(sizeof(c ? s : s) == sizeof(int), \"size\");\n\
+           return c ? s : s;\n\
+         }\n",
+    );
+}
+
+/// A diagnostic presents a GNU vector type as a vector: it spells the type
+/// as its lane type with the `vector_size` attribute that declares it,
+/// rather than as the aggregate badc models it with, and calls a mismatch
+/// with it a mismatch of types rather than of struct types, in an error, a
+/// warning and behind a pointer.
+#[test]
+fn a_vector_type_spells_as_its_lane_type_and_size() {
+    use crate::{Compiler, Target};
+    let head = "typedef char v16 __attribute__((vector_size(16)));\n\
+                typedef unsigned u16 __attribute__((vector_size(16)));\n\
+                struct S { int x; };\n\
+                void g(struct S s);\n";
+    let diags = |body: &str| -> String {
+        let src = format!("{head}{body}\nint main(void) {{ return 0; }}\n");
+        match Compiler::with_target(src, Target::LinuxX64).compile() {
+            Ok(p) => p.warnings.iter().map(|w| w.to_string()).collect(),
+            Err(e) => e.to_string(),
+        }
+    };
+    for (body, text) in [
+        (
+            "void f(void) { struct S s; v16 v; s = v; }",
+            "types differ on either side of `=` \
+             (lhs=struct S, rhs=char __attribute__((vector_size(16))))",
+        ),
+        (
+            "void f(void) { u16 u; g(u); }",
+            "incompatible types in argument 1 of `g` \
+             (param=struct S, arg=unsigned int __attribute__((vector_size(16))))",
+        ),
+        (
+            "void f(void) { v16 *pv = 0; struct S *ps = pv; (void)ps; }",
+            "incompatible pointer types in initializer \
+             (declared=struct S*, init=char __attribute__((vector_size(16)))*)",
+        ),
+    ] {
+        let msg = diags(body);
+        assert!(
+            msg.contains(text) && !msg.contains("struct types") && !msg.contains("__vector_"),
+            "`{body}`: {msg}"
+        );
+    }
+}
+
+/// C99 6.7.7p3: a typedef names its array type, bound included, so a
+/// block-scope object of an array typedef of unknown size takes its size
+/// from its initializer and one of a GNU zero-length alias is empty, as at
+/// file scope; a zero-length alias declared at block scope is complete.
+#[test]
+fn a_block_scope_object_of_an_unsized_array_typedef_is_an_array() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "typedef int T[];\n\
+               typedef int ZF[0];\n\
+               typedef int R[][2];\n\
+               int main(void) {\n\
+               \tT t = { 1, 2, 3 };\n\
+               \tZF a;\n\
+               \ttypedef int ZB[0];\n\
+               \tZB b;\n\
+               \ttypedef int TB[];\n\
+               \tTB c = { 4, 5 };\n\
+               \tstatic T s = { 6, 7, 8, 9 };\n\
+               \tR r = { { 1, 2 }, { 3, 4 }, { 5, 6 } };\n\
+               \treturn sizeof t == 12 && t[2] == 3 && sizeof a == 0 && sizeof(ZB) == 0\n\
+               \t\t&& sizeof b == 0 && sizeof c == 8 && c[1] == 5 && sizeof s == 16 && s[3] == 9\n\
+               \t\t&& sizeof r == 24 && r[2][1] == 6;\n\
+               }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 1, "{src}");
+}
+
+/// C99 6.5.2.5, 6.7.7p3: a compound literal of an array typedef of unknown
+/// size in a static initializer takes its size from its list, as one at
+/// block scope does; an array of such a typedef has an incomplete element
+/// (6.7.5.2p1).
+#[test]
+fn a_static_compound_literal_of_an_unsized_array_typedef_is_sized_by_its_list() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "typedef int T[];\n\
+               typedef int T2[][3];\n\
+               static int *p = (T){ 1, 2, 3 };\n\
+               static int (*q)[3] = (T2){ { 1, 2, 3 }, { 4, 5, 6 } };\n\
+               int main(void) { return p[2] == 3 && q[1][2] == 6; }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 1, "{src}");
+    let src = "typedef int T[];\n\
+               static int (*r)[2] = (T[2]){ { 1, 2 } };\n\
+               int main(void) { return 0; }\n";
+    let msg = Compiler::new(src.to_string())
+        .compile()
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(
+        msg.contains("array has incomplete element type: an array of unknown size"),
+        "{msg}"
+    );
+}
+
+/// C99 6.9.1p6: the declarations of an old-style definition declare its
+/// parameters, so a parameter declared there with a function type or a
+/// variable-length array type is adjusted to a pointer as in a prototype
+/// (6.7.5.3p7-8), and its size has integer type (6.7.5.2p1).
+#[test]
+fn an_old_style_parameter_declaration_adjusts_as_a_prototype_does() {
+    use super::Vm;
+    use crate::Compiler;
+    let src = "static int seven(void) { return 7; }\n\
+               int callit(g) int g(void); { return g(); }\n\
+               int sum(a, n) int n; int a[n]; {\n\
+               \tint s = 0;\n\
+               \tfor (int i = 0; i < n; i++) s += a[i];\n\
+               \treturn s;\n\
+               }\n\
+               int main(void) { int v[3] = { 1, 2, 3 }; return callit(seven) * 10 + sum(v, 3); }\n";
+    let program = Compiler::new(src.to_string()).compile().expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 76, "{src}");
+    let src = "int f(a, d) double d; int a[d]; { return a[0]; }\n\
+               int main(void) { return 0; }\n";
+    let msg = Compiler::new(src.to_string())
+        .compile()
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(
+        msg.contains("array size has type `double`, not an integer type"),
+        "{msg}"
+    );
+}
+
+/// GNU C's `vector_size` makes a vector of the innermost element type,
+/// through pointer, array and function derivations, at the sizes gcc gives;
+/// the element is an integer type other than `_Bool`, or a floating type, so
+/// a structure, `void` or `_Bool` element is an error on a typedef, a member,
+/// an object or a pointer.
+#[test]
+fn vector_size_applies_to_the_innermost_element_type() {
+    use crate::{Compiler, Target};
+    let compile = |src: &str| {
+        let src = format!("struct S {{ int x; }};\n{src}\nint main(void) {{ return 0; }}\n");
+        Compiler::with_target(src, Target::LinuxX64).compile()
+    };
+    for (src, ty) in [
+        (
+            "typedef struct S SV __attribute__((vector_size(16)));",
+            "struct S",
+        ),
+        ("typedef void VV __attribute__((vector_size(16)));", "void"),
+        (
+            "typedef _Bool BV __attribute__((vector_size(16)));",
+            "_Bool",
+        ),
+        (
+            "struct M { struct S m __attribute__((vector_size(16))); };",
+            "struct S",
+        ),
+        ("struct S obj __attribute__((vector_size(16)));", "struct S"),
+        (
+            "struct S *ptr __attribute__((vector_size(16)));",
+            "struct S",
+        ),
+    ] {
+        let msg = compile(src)
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        let want = format!("invalid vector element type `{ty}`");
+        assert!(
+            msg.contains(&want) && msg.contains("[invalid-declaration]"),
+            "`{src}`: {msg}"
+        );
+    }
+    for src in [
+        "typedef int IV __attribute__((vector_size(16)));",
+        "typedef double DV __attribute__((vector_size(16)));",
+        "typedef long double LV __attribute__((vector_size(32)));",
+        "typedef __int128 WV __attribute__((vector_size(16)));",
+        "struct M { short m __attribute__((vector_size(8))); };",
+        "float obj __attribute__((vector_size(16)));",
+        "enum E { E0 }; typedef enum E EV __attribute__((vector_size(16)));
+         _Static_assert(sizeof(EV) == 16, \"enum lanes\");",
+        "typedef float *P __attribute__((vector_size(16)));
+         _Static_assert(sizeof(P) == 8 && sizeof(*(P)0) == 16, \"pointer typedef\");",
+        "int *obj __attribute__((vector_size(16)));
+         _Static_assert(sizeof obj == 8 && sizeof *obj == 16, \"pointer object\");",
+        "struct M { char *m __attribute__((vector_size(16))); };
+         _Static_assert(sizeof(struct M) == 8 && sizeof(*((struct M *)0)->m) == 16, \"member\");",
+        "int (*pa)[2] __attribute__((vector_size(16)));
+         _Static_assert(sizeof *pa == 32, \"pointer to array\");",
+        "int a[2] __attribute__((vector_size(16)));
+         _Static_assert(sizeof a == 32, \"array\");",
+        "float (*fn(void)) __attribute__((vector_size(16)));
+         _Static_assert(sizeof *fn() == 16, \"function\");",
+        "__attribute__((vector_size(16))) int *lead;
+         _Static_assert(sizeof *lead == 16, \"leading\");",
+    ] {
+        compile(src).unwrap_or_else(|e| panic!("`{src}`: {e}"));
+    }
+}
+
+/// A `vector_size` or `mode` attribute after a declarator types that
+/// declarator's entity at every declarator site, and no later declaration.
+#[test]
+fn a_trailing_type_attribute_types_its_own_declarator() {
+    use crate::{Compiler, Target};
+    let src = r#"
+int proto(int v __attribute__((vector_size(16))), int m __attribute__((mode(QI))), int y) {
+    _Static_assert(sizeof v == 16 && sizeof m == 1 && sizeof y == 4, "prototype");
+    return 0;
+}
+int knr(v, y)
+int v __attribute__((vector_size(16)));
+int y;
+{
+    _Static_assert(sizeof v == 16 && sizeof y == 4, "old-style");
+    return 0;
+}
+int main(void) {
+    int a __attribute__((vector_size(16)));
+    int b;
+    int c __attribute__((mode(QI))), d;
+    static int s __attribute__((vector_size(16)));
+    extern int e __attribute__((vector_size(16)));
+    int t;
+    _Static_assert(sizeof a == 16 && sizeof b == 4, "automatic");
+    _Static_assert(sizeof c == 1 && sizeof d == 4, "comma list");
+    _Static_assert(sizeof s == 16 && sizeof e == 16 && sizeof t == 4, "static, extern");
+    for (int i __attribute__((mode(QI))) = 0, j = 0; i < 1; i++) {
+        _Static_assert(sizeof i == 1 && sizeof j == 4, "for");
+    }
+    return 0;
+}
+"#;
+    Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+}
+
+/// GNU C: an attribute list may trail a grouped declarator (a pointer to a
+/// function or to an array) at block scope as at file scope, and applies to
+/// that declarator.
+#[test]
+fn an_attribute_may_trail_a_grouped_declarator_at_block_scope() {
+    use crate::{Compiler, Target};
+    let src = r#"
+int main(void) {
+    int (*ap)[4] __attribute__((aligned(16))) = 0;
+    int (*fp)(int) __attribute__((aligned(32))) = 0;
+    typedef int (*fp_t)(int) __attribute__((aligned(16)));
+    _Static_assert(__alignof__(ap) == 16 && __alignof__(fp) == 32, "objects");
+    _Static_assert(__alignof__(fp_t) == 16, "typedef");
+    for (int (*q)[2] __attribute__((aligned(64))) = 0; q;) {
+        _Static_assert(__alignof__(q) == 64, "for");
+    }
+    return ap != 0 || fp != 0;
+}
+"#;
+    Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+}
+
+/// C99 6.5.4 and 6.3.2.1p3 in a constant initializer: a cast to a pointer
+/// to an array, and an array-of-arrays compound literal, give a pointer to
+/// an array, which stays the expression's type through arithmetic. The
+/// initializer conversion compares that type, so a dropped `const` names
+/// it, and a matching object draws nothing.
+#[test]
+fn a_constant_pointer_to_an_array_keeps_its_type() {
+    use crate::{Compiler, Target};
+    let src = "typedef const int CT2[][3];\n\
+               static int (*a)[4] = (const int (*)[4])0x100 + 1;\n\
+               static int (*b)[3] = (const int[2][3]){ { 1, 2, 3 }, { 4, 5, 6 } };\n\
+               static int (*c)[3] = (CT2){ { 1, 2, 3 } };\n\
+               static const char (*d)[4] = (const char (*)[4])\"abcdefgh\" + 1;\n\
+               int main(void) { return (a != 0) + (b != 0) + (c != 0) + (d != 0); }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let warnings: alloc::vec::Vec<String> =
+        program.warnings.iter().map(|w| w.to_string()).collect();
+    for (line, text) in [
+        (2, "(declared=int (*)[4], init=const int (*)[4])"),
+        (3, "(declared=int (*)[3], init=const int (*)[3])"),
+        (4, "(declared=int (*)[3], init=const int (*)[3])"),
+    ] {
+        let at = format!(":{line}: warning: discards `const`");
+        assert!(
+            warnings.iter().any(|w| w.contains(&at) && w.contains(text)),
+            "line {line}: {warnings:?}"
+        );
+    }
+    assert_eq!(warnings.len(), 3, "{warnings:?}");
+}
+
+/// C99 6.7.5.1 and 6.7.7: in `F *const p` over a function-type typedef
+/// `F`, the `*` forms the pointer to the function and the `const`
+/// qualifies that pointer -- in a declarator, a parameter and a constant
+/// expression's type name alike -- so a conversion of `&p` that drops it
+/// warns as it does for the spelled-out `double (*const q)(double)`.
+#[test]
+fn a_qualifier_on_a_pointer_to_a_function_type_qualifies_the_pointer() {
+    use crate::{Compiler, Target};
+    let src = "typedef double F(double);\n\
+               typedef int BinOp(int, int);\n\
+               static double twice(double x) { return 2 * x; }\n\
+               static int add(int a, int b) { return a + b; }\n\
+               F *const p = twice;\n\
+               double (*const q)(double) = twice;\n\
+               F **pp = &p;\n\
+               double (**qq)(double) = &q;\n\
+               static BinOp *const op = add;\n\
+               static BinOp **x = (BinOp *const *)&op;\n\
+               void g(F *const r) { F **rr = &r; (void)rr; }\n\
+               typedef const char *const *SP(int);\n\
+               static const char *const *impl(int n) { (void)n; return 0; }\n\
+               SP *sp = impl;\n\
+               void h(void) { const char **s = sp(0); (void)s; }\n\
+               int main(void) { return pp != 0 && qq != 0 && x != 0; }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let warnings: alloc::vec::Vec<String> =
+        program.warnings.iter().map(|w| w.to_string()).collect();
+    for (line, text) in [
+        (7, "(declared=double**, init=double* const *)"),
+        (8, "(declared=double**, init=double* const *)"),
+        (10, "(declared=int**, init=int* const *)"),
+        (
+            11,
+            "(declared=`double (**)(double)`, init=`double (* const *)(double)`)",
+        ),
+        // The return type's own qualifiers stay below the absorbed level.
+        (15, "(declared=const char**, init=const char* const *)"),
+    ] {
+        let at = format!(":{line}: warning: discards `const`");
+        assert!(
+            warnings.iter().any(|w| w.contains(&at) && w.contains(text)),
+            "line {line}: {warnings:?}"
+        );
+    }
+    assert_eq!(warnings.len(), 5, "{warnings:?}");
+}
+
+/// C99 6.4.2.2p1 declares `__func__` as `static const char __func__[]`, so
+/// it decays to a pointer to `const char` in an expression and in a
+/// constant initializer alike, and a conversion to `char *` drops the
+/// `const`.
+#[test]
+fn func_name_points_to_const_char() {
+    use crate::{Compiler, Target};
+    let src = "int f(void) {\n\
+               \tchar *p = __func__;\n\
+               \tstatic char *q = __func__;\n\
+               \tconst char *ok = __func__;\n\
+               \tstatic const char *sok = __func__;\n\
+               \tchar *r;\n\
+               \tr = __FUNCTION__;\n\
+               \treturn p[0] + q[0] + ok[0] + sok[0] + r[0];\n\
+               }\n\
+               int main(void) { return f() == 5 * 'f' ? 0 : 1; }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let warnings: alloc::vec::Vec<String> =
+        program.warnings.iter().map(|w| w.to_string()).collect();
+    for (line, text) in [
+        (2, "in initializer (declared=char*, init=const char*)"),
+        (3, "in initializer (declared=char*, init=const char*)"),
+        (7, "in assignment (lhs=char*, rhs=const char*)"),
+    ] {
+        let at = format!(":{line}: warning: discards `const`");
+        assert!(
+            warnings.iter().any(|w| w.contains(&at) && w.contains(text)),
+            "line {line}: {warnings:?}"
+        );
+    }
+    assert_eq!(warnings.len(), 3, "{warnings:?}");
+    assert_eq!(super::run_str(src), 0);
+}
+
+/// C99 6.5.16.1p1: a pointer converts as if by assignment to a pointer to a
+/// compatible type, and between any object pointer and a pointer to `void`;
+/// a `char *` is no `void *`. Any other pair of pointers is B3029
+/// incompatible-pointer-types, an error by default as in gcc 14 and a
+/// warning under `-Wno-error=incompatible-pointer-types`, in an initializer,
+/// an assignment, an argument and a return alike. Pointers to integer types
+/// that differ only in signedness warn under B3032 pointer-sign, as clang
+/// does by default.
+#[test]
+fn an_incompatible_object_pointer_conversion_is_an_error() {
+    use crate::diag::{Code, Config, Level};
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "struct A { int a; }; struct B { int b; };\n\
+               enum E { E0 }; enum F { F0 }; enum G { G0 = -1 };\n\
+               void take(int *p);\n\
+               char **ret(const char **p) { return p; }\n\
+               void t(struct B *b, char *c, struct A *a, long *l, int two[2][3],\n\
+               \tenum E *e, enum F *f, char **pp, double *d, long long *ll) {\n\
+               \tstruct A *x1 = b; a = c; take(l); int *x2 = two; int (*x3)[4] = two;\n\
+               \tint *x4 = e; enum E *x5 = f; const char *const *x6 = pp; void **x7 = (int **)0;\n\
+               \tunsigned char **x8 = pp; float *x9 = d; long *x10 = ll;\n\
+               \t(void)x1; (void)x2; (void)x3; (void)x4; (void)x5; (void)x6; (void)x7;\n\
+               \t(void)x8; (void)x9; (void)x10;\n\
+               }\n\
+               void s(unsigned *u, unsigned char *uc, signed char *sc, unsigned short *us,\n\
+               \tunsigned __int128 *uw) {\n\
+               \tint *y1 = u; char *y2 = uc; char *y3 = sc; short *y4 = us; __int128 *y5 = uw;\n\
+               \t(void)y1; (void)y2; (void)y3; (void)y4; (void)y5;\n\
+               }\n\
+               void ok(void *v, char *c, struct A *a, enum E *e, enum G *g, int (*n)[],\n\
+               \tint (*q)[3], int *i) {\n\
+               \tchar *z1 = v; void *z2 = c; struct A *z3 = v; unsigned *z4 = e; int *z5 = g;\n\
+               \tint (*z6)[3] = n; const int (*z7)[3] = q; const int *z8 = i; const void *z9 = a;\n\
+               \t(void)z1; (void)z2; (void)z3; (void)z4; (void)z5; (void)z6; (void)z7; (void)z8;\n\
+               \t(void)z9;\n\
+               }\n\
+               int main(void) { return 0; }\n";
+    let compile = |config: Config| {
+        let opts = CompileOptions::default().with_diag(config);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts).compile()
+    };
+    let msg = compile(Config::new())
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(
+        msg.contains(":4: error: incompatible pointer types in return")
+            && msg.contains("(declared=char**, returned=const char**) [B3029]"),
+        "{msg}"
+    );
+    let mut lowered = Config::new();
+    lowered.set_level(Code::INCOMPATIBLE_POINTER_TYPES, Level::Warning);
+    let program = compile(lowered).unwrap_or_else(|e| panic!("{e}"));
+    let warnings: alloc::vec::Vec<String> =
+        program.warnings.iter().map(|w| w.to_string()).collect();
+    let incompatible = [
+        (4, "in return (declared=char**, returned=const char**)"),
+        (7, "in initializer (declared=struct A*, init=struct B*)"),
+        (7, "in assignment (lhs=struct A*, rhs=char*)"),
+        (7, "in argument 1 of `take` (param=int*, arg=long*)"),
+        (7, "in initializer (declared=int*, init=int (*)[3])"),
+        (7, "in initializer (declared=int (*)[4], init=int (*)[3])"),
+        (8, "(declared=int*, init=enum E*)"),
+        (8, "(declared=enum E*, init=enum F*)"),
+        (8, "(declared=const char* const *, init=char**)"),
+        (8, "(declared=void**, init=int**)"),
+        (9, "(declared=unsigned char**, init=char**)"),
+        (9, "(declared=float*, init=double*)"),
+        (9, "(declared=long*, init=long long*)"),
+    ];
+    let sign = [
+        (15, "(declared=int*, init=unsigned int*)"),
+        (15, "(declared=char*, init=unsigned char*)"),
+        (15, "(declared=char*, init=signed char*)"),
+        (15, "(declared=short*, init=unsigned short*)"),
+        (15, "__int128*, init=unsigned "),
+    ];
+    let found = |line: usize, code: &str, text: &str| {
+        let at = format!(":{line}: warning: ");
+        warnings
+            .iter()
+            .any(|w| w.contains(&at) && w.contains(text) && w.contains(code))
+    };
+    for (line, text) in incompatible {
+        assert!(
+            found(line, "[B3029]", text),
+            "line {line} {text}: {warnings:?}"
+        );
+    }
+    for (line, text) in sign {
+        assert!(
+            found(line, "[B3032]", text),
+            "line {line} {text}: {warnings:?}"
+        );
+    }
+    assert_eq!(
+        warnings.len(),
+        incompatible.len() + sign.len(),
+        "{warnings:?}"
+    );
+    let mut quiet = Config::new();
+    quiet.set_level(Code::INCOMPATIBLE_POINTER_TYPES, Level::Ignore);
+    quiet.set_level(Code::POINTER_SIGN, Level::Ignore);
+    let program = compile(quiet).unwrap_or_else(|e| panic!("{e}"));
+    assert!(program.warnings.is_empty(), "{:?}", program.warnings);
 }

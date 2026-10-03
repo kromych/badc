@@ -1560,6 +1560,13 @@ fn member_name_space_keeps_object_shape() {
 }
 
 #[test]
+fn prototype_param_keeps_object_shape() {
+    // C99 6.2.1p4: a parameter of a function pointer's prototype leaves the
+    // array dimensions of the object of its name intact.
+    assert_eq!(run_fixture("prototype_param_keeps_object_shape.c"), 0);
+}
+
+#[test]
 fn array_alias_param_outer_bracket() {
     // C99 6.7.7p3 + 6.7.5.3p7: `rows_t rows[]` over `typedef T rows_t[1]`
     // is pointer-to-row; one subscript strides a whole row and decays to
@@ -2836,6 +2843,43 @@ fn typeof_row_bounds() {
     // C23 6.7.2.5: `typeof` of a row of a multi-dimensional array keeps the
     // row's inner bounds.
     assert_eq!(run_fixture("typeof_row_bounds.c"), 0);
+}
+
+#[test]
+fn paren_array_declarator() {
+    // C99 6.7.5p6: bounds after a parenthesized declarator are the declared
+    // name's own, whatever the declaration declares.
+    assert_eq!(run_fixture("paren_array_declarator.c"), 0);
+}
+
+#[test]
+fn multidim_array_value() {
+    // C99 6.3.2.1p3, 6.7.5.3p7: an array of arrays converts to a pointer to
+    // its first row, and an array parameter is adjusted to the same type.
+    assert_eq!(run_fixture("multidim_array_value.c"), 0);
+}
+
+#[test]
+fn enum_type_identity() {
+    // C99 6.7.2.2p4: an enumerated type is a type of its own, compatible
+    // with its integer type, and its values behave as that type's.
+    assert_eq!(run_fixture("enum_type_identity.c"), 0);
+}
+
+#[test]
+fn compound_assign_once() {
+    // C99 6.5.16.2p3: `E1 op= E2` evaluates `E1` once and computes in the
+    // type of `E1 op E2`, for a bit-field and an `__int128` object as for
+    // any other lvalue.
+    assert_eq!(run_fixture("compound_assign_once.c"), 0);
+}
+
+#[test]
+fn int128_scalar_contexts() {
+    // An `__int128` operand takes part through its value as a subscript,
+    // a pointer offset, a shift count, a compound-assignment operand, a
+    // `_Bool` source, an array dimension and a `switch` value.
+    assert_eq!(run_fixture("int128_scalar_contexts.c"), 0);
 }
 
 #[test]
@@ -5580,9 +5624,9 @@ fn inttypes_header_supplies_types_and_format_macros() {
     // C99 7.8: `<inttypes.h>` layers on top of `<stdint.h>` and adds
     // the PRI / SCN conversion-specifier macros. The fixture
     // includes only `<inttypes.h>` and asserts the fixed-width
-    // typedefs still resolve transitively, plus the macro
-    // expansions match the LP64 / LLP64 contract c5 ships
-    // (int64_t aliases `long long`, so PRId64 is "lld" uniformly).
+    // typedefs still resolve transitively, and that each 64-bit,
+    // greatest-width and pointer-width macro agrees with the type the
+    // target gives its typedef.
     assert_eq!(run_fixture("inttypes_header.c"), 0);
 }
 
@@ -7903,4 +7947,47 @@ fn integer_constant_added_to_an_address_constant() {
     for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
         assert_eq!(super::run_str_for(src, target), 42, "{target:?}");
     }
+}
+
+#[test]
+fn preprocessed_output_compiles_to_the_same_program() {
+    use crate::{CompileOptions, Compiler, Target, Vm};
+    // `-E` output is a translation unit of its own: <stdatomic.h>'s
+    // generic functions exist only through the `#pragma intrinsic` lines
+    // the preprocessor consumes, so the output has to carry them for its
+    // compile to reach the same program.
+    let src = "#include <stdatomic.h>\n\
+               int f(atomic_int *p) { return atomic_fetch_add(p, 1); }\n\
+               int main(void) { atomic_int x = 41; f(&x); return atomic_load(&x); }\n";
+    let target = Target::host();
+    let text = Compiler::preprocess(
+        src.to_string(),
+        target,
+        CompileOptions::default().with_keep_pragmas(true),
+    )
+    .expect("the unit preprocesses");
+    let program = Compiler::with_options(text, target, CompileOptions::default())
+        .compile()
+        .expect("the preprocessed unit compiles");
+    assert_eq!(Vm::new(program).run().unwrap(), 42);
+}
+
+#[test]
+fn a_pragma_operator_keeps_the_lines_after_it_numbered() {
+    use crate::{CompileOptions, Compiler, Target};
+    // The `#pragma pack` an operator re-emits takes a line of its own; the
+    // diagnostic two lines further down still names its source line.
+    let src = "#define PACK _Pragma(\"pack(1)\")\n\
+               PACK\n\
+               struct s { char c; int i; };\n\
+               int main(void) { return undeclared_x; }\n";
+    let err = Compiler::with_options(src.to_string(), Target::host(), CompileOptions::default())
+        .compile()
+        .expect_err("an undeclared identifier is an error");
+    let lines: alloc::vec::Vec<u32> = err
+        .diagnostics()
+        .iter()
+        .filter_map(|d| d.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [4], "{err}");
 }

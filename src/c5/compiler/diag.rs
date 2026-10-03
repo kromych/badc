@@ -93,6 +93,71 @@ fn binary_operands_fit(op: &str, compound: bool, l: Operand, r: Operand) -> bool
     }
 }
 
+/// Whether the pointer keys `a` and `b` (`types::pointer_conversion_key`)
+/// point to compatible types (C99 6.2.7): equal ones, an enumerated type
+/// and its integer type (6.7.2.2p4), or arrays of compatible elements whose
+/// bounds agree where both are known (6.7.5.2p6). An array's qualifiers are
+/// its elements' (6.7.3p8), so one directly pointed to compares without them.
+fn pointees_compatible(structs: &[super::StructDef], a: i64, b: i64) -> bool {
+    use super::types::{VOLATILE_BIT, enum_compatible, struct_id_of, unqualified_version_ty};
+    if enum_compatible(a & !VOLATILE_BIT, b & !VOLATILE_BIT) {
+        return true;
+    }
+    let array = |t: i64| {
+        (is_struct_ty(t) && struct_ptr_depth(t) > 0)
+            .then(|| structs.get(struct_id_of(t)))
+            .flatten()
+            .filter(|s| s.is_array)
+    };
+    let (Some(x), Some(y)) = (array(a), array(b)) else {
+        return false;
+    };
+    let depth = struct_ptr_depth(a);
+    if depth != struct_ptr_depth(b) || a ^ strip_unsigned(a) != b ^ strip_unsigned(b) {
+        return false;
+    }
+    let (fx, fy) = (&x.fields[0], &y.fields[0]);
+    let elem = |t: i64| {
+        let t = if depth == 1 {
+            unqualified_version_ty(t)
+        } else {
+            t
+        };
+        t & !VOLATILE_BIT
+    };
+    let dims = |f: &super::StructField| {
+        if f.array_dims.len() >= 2 {
+            f.array_dims.clone()
+        } else {
+            alloc::vec![f.array_size]
+        }
+    };
+    let (dx, dy) = (dims(fx), dims(fy));
+    enum_compatible(elem(fx.ty), elem(fy.ty))
+        && dx.len() == dy.len()
+        && dx.iter().zip(&dy).all(|(m, n)| *m < 0 || *n < 0 || m == n)
+}
+
+/// Whether the pointer keys `a` and `b` point directly to integer types,
+/// neither enumerated nor `_Bool`, that differ only in signedness, plain
+/// `char` being a type of its own (C99 6.2.5p15).
+fn sign_only_difference(structs: &[super::StructDef], a: i64, b: i64) -> bool {
+    use super::types::{ENUM_BIT, PLAIN_CHAR_BIT, ptr_depth_of, struct_id_of};
+    if (a ^ b) & !(UNSIGNED_BIT | PLAIN_CHAR_BIT) != 0 || a & ENUM_BIT != 0 || ptr_depth_of(a) != 1
+    {
+        return false;
+    }
+    let pointee = strip_unsigned(a) - Ty::Ptr as i64;
+    let int128 = is_struct_ty(pointee)
+        && structs
+            .get(struct_id_of(pointee))
+            .is_some_and(|s| s.name == "__int128");
+    int128
+        || [Ty::Char, Ty::Short, Ty::Int, Ty::Long, Ty::LongLong]
+            .iter()
+            .any(|&t| pointee == t as i64)
+}
+
 impl Compiler {
     /// C99 6.9.1p12: reaching the closing brace of a value-returning
     /// function without executing a `return value;` leaves the value
@@ -653,6 +718,39 @@ impl Compiler {
         actual_is_zero_literal: bool,
         actual_is_untyped_call: bool,
     ) -> Option<TypeMismatch> {
+        let zero = actual_is_zero_literal;
+        Self::type_mismatch(structs, declared, actual, zero, actual_is_untyped_call)
+            .or_else(|| Self::discarded_qualifiers(structs, declared, actual))
+    }
+
+    /// C99 6.5.16.1p1: the type a converted pointer points to keeps the
+    /// qualifiers of the type the original points to.
+    pub(super) fn discarded_qualifiers(
+        structs: &[super::StructDef],
+        declared: i64,
+        actual: i64,
+    ) -> Option<TypeMismatch> {
+        let reason = match super::types::discarded_pointee_quals(declared, actual, structs) {
+            (true, true) => "discards `const volatile` qualifiers from pointer target type",
+            (true, false) => "discards `const` qualifier from pointer target type",
+            (false, true) => "discards `volatile` qualifier from pointer target type",
+            (false, false) => return None,
+        };
+        TypeMismatch::warn(Code::DISCARDED_QUALIFIERS, reason)
+    }
+
+    /// The mismatch [`Self::type_warning_with_flags`] reports other than a
+    /// discarded qualifier of the pointed-to type.
+    fn type_mismatch(
+        structs: &[super::StructDef],
+        declared: i64,
+        actual: i64,
+        actual_is_zero_literal: bool,
+        actual_is_untyped_call: bool,
+    ) -> Option<TypeMismatch> {
+        if is_pointer_ty(declared) && is_pointer_ty(actual) {
+            return Self::pointer_mismatch(structs, declared, actual);
+        }
         // C99 6.5.16.1p1: the target may add qualifiers, and a
         // qualifier on either object is not part of the comparison.
         let declared = unqualified_object_ty(declared);
@@ -674,48 +772,6 @@ impl Compiler {
         // C99 6.5.16.1p1 admits a pointer as the right operand when the
         // left has type `_Bool`; 6.3.1.2 converts it to 0 or 1.
         if is_bool_ty(declared) && bool_ptr_depth(declared) == 0 && act_is_ptr {
-            return None;
-        }
-
-        // C's `void *` rule: a pointer to `char` (which c5 uses as
-        // its `void *`) is freely interconvertible with any other
-        // pointer type. The dialect's headers declare libc functions
-        // like `memset(char *, int, int)` and `malloc -> char *`;
-        // real-world C routinely passes struct pointers to memset
-        // and assigns malloc's result to struct* variables. Without
-        // this rule every such site fires "incompatible struct
-        // types" / "pointer assigned to integer" noise.
-        let char_ptr = (Ty::Char as i64) + (Ty::Ptr as i64);
-        // Strip UNSIGNED_BIT before comparing: `char *` (which c5
-        // treats as unsigned), `signed char *`, and `unsigned char *`
-        // are all interchangeable here -- the compatibility rule
-        // is "is this any kind of byte pointer?", not "do the
-        // signedness tags line up".
-        let decl_is_char_ptr = decl_is_ptr && strip_unsigned(declared) == char_ptr;
-        let act_is_char_ptr = act_is_ptr && strip_unsigned(actual) == char_ptr;
-        if decl_is_char_ptr && act_is_ptr {
-            return None;
-        }
-        if act_is_char_ptr && decl_is_ptr {
-            return None;
-        }
-
-        // A pointer-to-array (aggregate-backed) accepts the flat pointer
-        // spellings of the same shape -- `&arr` and a decayed row carry
-        // the element-pointer tag -- so any pointer on the other side is
-        // quiet, mirroring the byte-pointer rule above. Real
-        // pointer-vs-integer mismatches still warn below.
-        let is_array_agg_ptr = |ty: i64| {
-            is_struct_ty(ty)
-                && struct_ptr_depth(ty) > 0
-                && structs
-                    .get(super::types::struct_id_of(ty))
-                    .is_some_and(|s| s.is_array)
-        };
-        if is_array_agg_ptr(declared) && act_is_ptr {
-            return None;
-        }
-        if is_array_agg_ptr(actual) && decl_is_ptr {
             return None;
         }
 
@@ -767,8 +823,7 @@ impl Compiler {
                 return None;
             }
             // C99 6.5.16.1p1 offers no conversion involving a structure or
-            // union *object*: that is a constraint violation, while the
-            // pointer-shaped mismatches do convert and stay warnings. Two
+            // union *object*: that is a constraint violation. Two
             // aggregate spellings are excluded because the mismatch would
             // not be the source's fault: a value-form array reflects a
             // missed 6.3.2.1p3 decay, and a union target keeps warning
@@ -780,16 +835,68 @@ impl Compiler {
                 && !is_array_agg(declared)
                 && !is_array_agg(actual)
                 && !def_of(declared).is_some_and(|s| s.is_union);
+            let is_vector = |ty: i64| def_of(ty).is_some_and(|s| s.is_vector);
+            let reason = if is_vector(declared) || is_vector(actual) {
+                "incompatible types"
+            } else {
+                "incompatible struct types"
+            };
             return Some(TypeMismatch {
                 code: Code::INCOMPATIBLE_STRUCT_TYPES,
-                reason: "incompatible struct types",
+                reason,
                 no_conversion: object_mismatch,
             });
         }
 
-        // Two pointers with scalar pointees, or two arithmetic scalars:
-        // the conversion is silent.
+        // Two arithmetic scalars: the conversion is silent.
         None
+    }
+
+    /// C99 6.5.16.1p1 between two pointers: the types they point to are
+    /// compatible, or one side points to `void`. Pointers to integer types
+    /// that differ only in signedness convert with a `pointer-sign`
+    /// warning; any other pair is an incompatible conversion, an error by
+    /// default as in gcc 14. The pointed-to types' own qualifiers are
+    /// [`Self::discarded_qualifiers`]' to check.
+    fn pointer_mismatch(
+        structs: &[super::StructDef],
+        declared: i64,
+        actual: i64,
+    ) -> Option<TypeMismatch> {
+        use super::types::{is_void_ptr_ty, pointer_conversion_key};
+        if is_void_ptr_ty(declared) || is_void_ptr_ty(actual) {
+            return None;
+        }
+        let (d, a) = (
+            pointer_conversion_key(declared),
+            pointer_conversion_key(actual),
+        );
+        if pointees_compatible(structs, d, a) {
+            return None;
+        }
+        if sign_only_difference(structs, d, a) {
+            return TypeMismatch::warn(Code::POINTER_SIGN, "pointer targets differ in signedness");
+        }
+        TypeMismatch::warn(
+            Code::INCOMPATIBLE_POINTER_TYPES,
+            "incompatible pointer types",
+        )
+    }
+
+    /// Report the conversion mismatch `m` at `line`: a row whose default
+    /// is `Error` through [`Self::report_at`], stopping here unless the
+    /// user lowered it, any other as a warning.
+    pub(super) fn report_mismatch(
+        &mut self,
+        m: &TypeMismatch,
+        line: usize,
+        text: alloc::string::String,
+    ) -> Result<(), C5Error> {
+        if m.code.default_level() == super::super::diag::Level::Error {
+            return self.report_at(m.code, line, text);
+        }
+        self.warn_at(m.code, line, text);
+        Ok(())
     }
 
     /// C99 6.7.8p11: an initializer converts to its object's type as if by
@@ -815,8 +922,7 @@ impl Compiler {
         if m.no_conversion {
             return Err(self.compile_err_at(Code::INVALID_INITIALIZER, line, text));
         }
-        self.warn_at(m.code, line, text);
-        Ok(())
+        self.report_mismatch(&m, line, text)
     }
 
     /// [`Self::check_initializer_conversion`] for the expression just parsed.
@@ -855,7 +961,8 @@ impl Compiler {
             .find(|f| {
                 f.array_size == 0
                     && f.bit_width == 0
-                    && Self::type_warning(structs, f.ty, actual, actual_is_zero_literal).is_none()
+                    && Self::type_mismatch(structs, f.ty, actual, actual_is_zero_literal, false)
+                        .is_none()
             })
             .map(|f| f.ty)
     }

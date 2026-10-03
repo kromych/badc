@@ -59,5 +59,7 @@ int main(void)
         return 4;
     if (sizeof grid != 3 * 4 * sizeof(int))
         return 5;
+    if (&grid[1][0] - &grid[0][0] != 4 || sizeof grid[0] != 4 * sizeof(int))
+        return 6;
     return 0;
 }

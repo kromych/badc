@@ -2066,6 +2066,7 @@ mod tests {
                 member_align: 8,
                 fields: alloc::vec![],
                 homogeneous: None,
+                vector: false,
             }];
             f
         };

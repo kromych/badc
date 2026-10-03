@@ -21,6 +21,8 @@ pub(crate) mod dwarf;
 #[cfg(feature = "native-emit")]
 pub(crate) mod dwarf_reloc;
 #[cfg(feature = "native-emit")]
+pub(crate) mod eh_frame;
+#[cfg(feature = "native-emit")]
 pub(crate) mod elf;
 pub(crate) mod elf_class;
 #[cfg(feature = "native-emit")]
@@ -33,12 +35,18 @@ pub(crate) mod image;
 pub(crate) mod mach_o;
 #[cfg(feature = "native-emit")]
 pub(crate) mod pe;
+#[cfg(feature = "native-emit")]
+pub(crate) mod relr;
 pub(crate) mod section_table;
+#[cfg(feature = "native-emit")]
+pub(crate) mod sha1;
 #[cfg(feature = "std")]
 pub(crate) mod so_versions;
 #[cfg(feature = "std")]
 pub(crate) mod strtab;
 pub(crate) mod weak_undef;
+#[cfg(feature = "native-emit")]
+pub(crate) mod xxh3;
 
 #[cfg(feature = "native-emit")]
 use crate::c5::diag::Code;
@@ -1149,6 +1157,7 @@ pub(crate) mod test_support {
 
     pub(crate) fn empty_build() -> Build {
         Build {
+            elf: Default::default(),
             diagnostics: Vec::new(),
             text_data_ranges: Vec::new(),
             emitted_relocs: Vec::new(),

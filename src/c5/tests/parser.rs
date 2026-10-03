@@ -1301,6 +1301,42 @@ fn duplicate_case_value_is_rejected() {
     );
 }
 
+/// C99 6.8.4.2p5 converts each case label to the promoted type of the
+/// controlling expression, and p3 requires the converted values to be
+/// distinct: `-1` and `0xffffffffu` collide for an `unsigned` controlling
+/// expression and stay apart for an `__int128` one, and a GNU range is
+/// empty or not in that type.
+#[test]
+fn case_labels_compare_in_the_promoted_controlling_type() {
+    expect_compile_error(
+        "int f(unsigned u){ switch(u){ case -1: return 1; case 0xffffffffu: return 2; } \
+         return 0; } int main(void){ return 0; }",
+        "duplicate case value 4294967295",
+    );
+    expect_compile_error(
+        "int f(unsigned __int128 x){ switch(x){ case -1: return 1; \
+         case ~(unsigned __int128)0: return 2; } return 0; } int main(void){ return 0; }",
+        "duplicate case value 340282366920938463463374607431768211455",
+    );
+    expect_compile_error(
+        "int f(int i){ switch(i){ case 5 ... 1: return 1; } return 0; } \
+         int main(void){ return 0; }",
+        "case range `5 ... 1` is empty",
+    );
+    for src in [
+        "int f(__int128 x){ switch(x){ case -1: return 1; case 0xffffffffffffffffULL: \
+         return 2; } return 0; } int main(void){ return 0; }",
+        "int f(unsigned u){ switch(u){ case 1 ... -1: return 1; } return 0; } \
+         int main(void){ return 0; }",
+        "int f(unsigned char c){ switch(c){ case 1: return 1; case 257: return 2; } \
+         return 0; } int main(void){ return 0; }",
+    ] {
+        Compiler::new(src.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("{src}: {e}"));
+    }
+}
+
 #[test]
 fn duplicate_case_value_in_inner_switch_only() {
     // Distinct values across nested switches are fine; the duplicate is
@@ -2398,15 +2434,15 @@ fn aggregate_with_no_named_member_is_zero_sized() {
 
 #[test]
 fn member_of_incomplete_aggregate_type_rejected() {
-    // C99 6.7.2.1: a member must have complete type, and an array of an
-    // incomplete type is itself incomplete. gcc and clang reject both.
+    // C99 6.7.2.1p2: a member has complete type; 6.7.5.2p1: so has the
+    // element of an array. gcc and clang reject both.
     expect_compile_error(
         "struct fwd; struct s { struct fwd f; }; int main(void) { return 0; }",
         "incomplete type",
     );
     expect_compile_error(
         "struct fwd; struct s { struct fwd f[2]; }; int main(void) { return 0; }",
-        "incomplete type",
+        "array has incomplete element type `struct fwd`",
     );
     // A complete but zero-sized member stays accepted.
     expect_compiles(
@@ -2694,12 +2730,13 @@ fn object_of_incomplete_type_is_diagnosed() {
          int main(void) { return (int)(long)&file_scope_obj; }",
         "object `file_scope_obj` has incomplete type",
     );
-    // An array of an incomplete element type is incomplete too.
+    // C99 6.7.5.2p1: the element type is complete where the array is
+    // declared.
     expect_compile_error(
         "struct never_defined;\n\
          struct never_defined arr[4];\n\
          int main(void) { return (int)(long)&arr; }",
-        "object `arr` has incomplete type",
+        "array has incomplete element type `struct never_defined`",
     );
     // C99 6.7.2.3p2: an enum used before its definition is incomplete, for
     // an automatic and a block-scope `static` object alike.
@@ -2839,7 +2876,7 @@ fn incomplete_enum_is_rejected_where_an_incomplete_struct_is() {
         ),
         (
             "enum E; struct S { enum E m[2]; };",
-            "field `m` has incomplete type",
+            "array has incomplete element type `enum E`",
         ),
         (
             "enum E; int n = sizeof(enum E);",
@@ -2857,7 +2894,10 @@ fn incomplete_enum_is_rejected_where_an_incomplete_struct_is() {
             "enum E; enum E *f(enum E *p) { return p + 1; }",
             "a pointer to an incomplete type",
         ),
-        ("enum E; enum E a[3];", "object `a` has incomplete type"),
+        (
+            "enum E; enum E a[3];",
+            "array has incomplete element type `enum E`",
+        ),
         ("enum E; static enum E x;", "object `x` has incomplete type"),
         ("enum E; enum E x;", "object `x` has incomplete type"),
     ] {
@@ -3063,12 +3103,12 @@ fn multi_dim_compound_literal_dimension_constraints() {
     // block-scope and the static-initializer literal paths reject it.
     expect_compile_error(
         "int main(void) { int (*p)[3] = (int[2][]){ { 1, 2, 3 } }; return p[0][0]; }",
-        "array type has an incomplete inner dimension",
+        "array has incomplete element type: an array of unknown size",
     );
     expect_compile_error(
         "static int (*p)[3] = (int[2][]){ { 1, 2, 3 } };\n\
          int main(void) { return p[0][0]; }",
-        "array type has an incomplete inner dimension",
+        "array has incomplete element type: an array of unknown size",
     );
     // A const-qualified object is not an integer constant expression
     // (C99 6.6p6), so the dimension makes the literal variably sized,
@@ -3081,6 +3121,16 @@ fn multi_dim_compound_literal_dimension_constraints() {
     expect_compile_error(
         "int main(void) { const int h = 2; static int *p = (int[h]){ 1, 2 }; return p[0]; }",
         "constant integer expected",
+    );
+}
+
+#[test]
+fn bounds_after_a_parenthesized_variable_length_array_are_rejected() {
+    // The bounds would be the rows of the variable-length array, whose
+    // element the group has already formed.
+    expect_compile_error(
+        "int main(int c, char **v) { (void)v; int (a[c])[2]; return (int)sizeof a; }",
+        "bounds after a parenthesized variable-length array are not supported",
     );
 }
 
@@ -3609,21 +3659,20 @@ fn type_name_abstract_declarators_parse_in_every_consumer() {
 #[test]
 fn type_name_array_bound_constraints() {
     // C99 6.7.5.2p1: a bound in a type name is a constant expression
-    // greater than zero, and only the outermost bound may be omitted;
-    // 6.5.3.4p1: `_Alignof` does not apply to an incomplete type, an
-    // array of an incomplete struct included.
+    // greater than zero, only the outermost bound may be omitted, and the
+    // element type is complete.
     expect_compile_error(
         "int main(void) { return (int)sizeof(int[-1]); }",
         "must not be negative",
     );
     expect_compile_error(
         "int main(void) { return (int)sizeof(int[3][]); }",
-        "incomplete inner dimension",
+        "array has incomplete element type: an array of unknown size",
     );
     expect_compile_error(
         "struct t;\n\
          int main(void) { return (int)_Alignof(struct t[2]); }",
-        "applied to an incomplete type",
+        "array has incomplete element type `struct t`",
     );
     // A bound inside a group derives the same array, of pointers here
     // (C99 6.7.6); 6.7.5.2p1 and 6.7.5.3p1 rule out an array of functions
@@ -3631,7 +3680,7 @@ fn type_name_array_bound_constraints() {
     for (type_name, needle) in [
         ("int *[]", "`sizeof` applied to an incomplete type"),
         ("int (*[])(int)", "`sizeof` applied to an incomplete type"),
-        ("int (*[3][])(int)", "incomplete inner dimension"),
+        ("int (*[3][])(int)", "an array of unknown size"),
         ("int (*[-1])(int)", "must not be negative"),
         ("int (*([3])(int))", "array of functions"),
         (
@@ -3651,6 +3700,156 @@ fn type_name_array_bound_constraints() {
             &alloc::format!("{base}\nint main(void) {{ return (int)sizeof(t (void)); }}"),
             "function returning an array or a function",
         );
+    }
+}
+
+/// C99 6.7.5.2p1: the element type of an array is complete and no function
+/// type wherever the array is formed: an object, a member, a parameter
+/// before its adjustment, a typedef composition, a type name, a compound
+/// literal and a variable-length array. Only the outermost bound may be
+/// omitted, and a pointer to an incomplete type is complete.
+#[test]
+fn an_array_of_an_incomplete_element_type_is_rejected() {
+    const UNKNOWN_SIZE: &str = "array has incomplete element type: an array of unknown size";
+    const STRUCT_S: &str = "array has incomplete element type `struct S`";
+    const VOID: &str = "array has incomplete element type `void`";
+    let compile = |src: &str| {
+        Compiler::new(alloc::format!(
+            "struct S; enum E; typedef int T[]; typedef int Z[0]; typedef int F(void);\n\
+             typedef void V;\n{src}\nint main(void) {{ return 0; }}\n"
+        ))
+        .compile()
+    };
+    for (src, needle) in [
+        ("int a[2][];", UNKNOWN_SIZE),
+        ("extern int a[][2][];", UNKNOWN_SIZE),
+        ("void f(void) { int a[2][]; }", UNKNOWN_SIZE),
+        ("extern struct S s[2];", STRUCT_S),
+        ("extern struct S s[];", STRUCT_S),
+        ("void f(void) { struct S a[2]; }", STRUCT_S),
+        ("extern void v[2];", VOID),
+        ("V v[2];", VOID),
+        (
+            "extern enum E e[2];",
+            "array has incomplete element type `enum E`",
+        ),
+        ("struct M { int m[2][]; };", UNKNOWN_SIZE),
+        ("struct M { struct S s[2]; };", STRUCT_S),
+        ("struct M { int n; struct S fam[]; };", STRUCT_S),
+        ("struct L { struct L self[2]; };", "`struct L`"),
+        ("void f(int a[][]);", UNKNOWN_SIZE),
+        ("void f(int [][]);", UNKNOWN_SIZE),
+        ("void f(struct S a[]);", STRUCT_S),
+        ("void f(struct S []);", STRUCT_S),
+        ("int f(a) int a[][]; { return 0; }", UNKNOWN_SIZE),
+        ("T x[2];", UNKNOWN_SIZE),
+        ("typedef int TT[2][];", UNKNOWN_SIZE),
+        ("typedef struct S SA[];", STRUCT_S),
+        ("T (*p)[2];", UNKNOWN_SIZE),
+        ("void f(T a[2]);", UNKNOWN_SIZE),
+        ("void f(T [2]);", UNKNOWN_SIZE),
+        ("__typeof__(int[]) x[2];", UNKNOWN_SIZE),
+        ("struct M { int n; T m[2]; };", UNKNOWN_SIZE),
+        (
+            "int f(void) { return (int)sizeof(int[2][]); }",
+            UNKNOWN_SIZE,
+        ),
+        (
+            "int f(void) { return (int)sizeof(int (*)[3][]); }",
+            UNKNOWN_SIZE,
+        ),
+        (
+            "int f(void) { return (int)sizeof(struct S (*)[2]); }",
+            STRUCT_S,
+        ),
+        ("int f(void) { return (int)sizeof(void[2]); }", VOID),
+        ("int f(void) { return (int)sizeof(T[2]); }", UNKNOWN_SIZE),
+        ("void *p = (struct S[2]){ 0 };", STRUCT_S),
+        (
+            "int f(void) { void *p = (struct S[2]){ 0 }; return p != 0; }",
+            STRUCT_S,
+        ),
+        ("void f(int n) { int a[n][]; }", UNKNOWN_SIZE),
+        ("void f(int n) { struct S a[n]; }", STRUCT_S),
+        ("void f(int n) { T a[n]; }", UNKNOWN_SIZE),
+        (
+            "int f(int n) { return (int)sizeof(int[n][]); }",
+            UNKNOWN_SIZE,
+        ),
+        (
+            "int f(int n) { return (int)sizeof(struct S[n]); }",
+            STRUCT_S,
+        ),
+    ] {
+        let msg = compile(src)
+            .err()
+            .unwrap_or_else(|| panic!("`{src}` compiled"))
+            .to_string();
+        assert!(
+            msg.contains(needle) && msg.contains("[incomplete-element-type]"),
+            "`{src}`: {msg}"
+        );
+    }
+    let Err(e) = compile("extern F fa[2];") else {
+        panic!("an array of functions compiled");
+    };
+    assert!(e.to_string().contains("array of functions"), "{e}");
+    for src in [
+        "extern int ok[][3];",
+        "struct M { int n; int fam[]; };",
+        "int (*p)[];",
+        "int (*pp)[][3];",
+        "struct S *ps[2];",
+        "struct S *(*q)[2];",
+        "T *tp[2];",
+        "void f(T); void g(T a);",
+        "void f(int (*a)[][2]);",
+        "extern int (*fa[])(int);",
+        "Z zz[2];",
+        "struct D; struct D *dp; struct D { int x; }; struct D d[2];",
+        "int f(void) { return (int)sizeof(T *[2]); }",
+    ] {
+        compile(src).unwrap_or_else(|e| panic!("`{src}`: {e}"));
+    }
+}
+
+/// A diagnostic that names the brace an initializer or a member's aggregate
+/// type expects spells it once.
+#[test]
+fn a_diagnostic_spells_an_expected_brace_once() {
+    for (src, needle) in [
+        (
+            "struct S { int x; }; struct S b = 1;",
+            "struct initializer must start with `{`",
+        ),
+        (
+            "int a[2] = 1;",
+            "array initializer must be a string literal or `{ ... }`",
+        ),
+        (
+            "struct S { int x; }; struct S s[2] = 1;",
+            "array initializer must start with `{`",
+        ),
+        (
+            "struct S { int x; }; struct S s[] = 1;",
+            "array initializer must start with `{`",
+        ),
+        (
+            "struct S { int x; }; void f(void) { static struct S s[] = 1; }",
+            "array initializer must start with `{`",
+        ),
+        (
+            "struct T { struct 5 x; };",
+            "aggregate name or `{` expected in field type",
+        ),
+    ] {
+        let src = alloc::format!("{src}\nint main(void) {{ return 0; }}\n");
+        let msg = Compiler::new(src.clone())
+            .compile()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        assert!(msg.contains(needle) && !msg.contains("{{"), "{src}: {msg}");
     }
 }
 

@@ -63,6 +63,8 @@ struct LocalDeclarator {
     ty: i64,
     enum_tag: Option<u32>,
     array_size: i64,
+    /// `array_size` is -1 for a GNU zero-length `[0]`, not for `[]`.
+    zero_len: bool,
     is_static: bool,
     is_extern: bool,
     is_thread_local: bool,
@@ -469,7 +471,7 @@ impl Compiler {
             let saved_vla = core::mem::replace(&mut self.pending.vla_allowed, true);
             // Filled by a declarator group holding its entity's own list.
             self.pending.fn_params = None;
-            let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
+            let (loc_idx, ty, mut array_size, mut zero_len) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = saved_vla;
             self.pending.attr_transparent_union = false;
             // C99 6.7.1p5 + 6.9.1: a declarator of bare function type (a
@@ -501,11 +503,13 @@ impl Compiler {
             // C99 6.7.7p3: an array typedef contributes its dimension only
             // when no derivation of the declarator applied to it; `A *p`
             // points to the array. Peek without clearing so the rest of the
-            // comma list keeps it.
+            // comma list keeps it. An alias of unknown size (`-1`) leaves
+            // the size to the initializer, and a zero-length one is empty.
             let typedef_dim = self.pending.typedef_base_array_size;
             self.check_array_elem_align(array_size, ty, typedef_dim, base_type_align)?;
-            if typedef_dim > 0 && array_size == 0 && !self.pending.base_array_taken {
+            if typedef_dim != 0 && array_size == 0 && !self.pending.base_array_taken {
                 array_size = typedef_dim;
+                zero_len = self.pending.typedef_base_zero_len;
                 self.apply_typedef_array_dims(loc_idx);
             }
             self.ty = ty;
@@ -557,7 +561,6 @@ impl Compiler {
             }
 
             if is_extern {
-                let zero_len = array_size < 0 && self.pending.declarator_zero_len_array;
                 let bounds = self.declared_bounds(loc_idx, array_size, zero_len);
                 let spelled = super::redeclaration::Spelled {
                     ty,
@@ -590,6 +593,7 @@ impl Compiler {
                 ty,
                 enum_tag: base_enum_tag,
                 array_size,
+                zero_len,
                 is_static,
                 is_extern,
                 is_thread_local,
@@ -770,7 +774,7 @@ impl Compiler {
             // element initializer (an element that is a statement
             // expression), so keep the carriers reentrant.
             let saved = self.take_pending_local_carriers();
-            let r = self.allocate_local_with_init(d.loc_idx, d.ty, d.array_size, fill);
+            let r = self.allocate_local_with_init(d.loc_idx, d.ty, d.array_size, d.zero_len, fill);
             if r.is_ok() {
                 self.finalize_local_init(d.loc_idx);
             }
@@ -1124,7 +1128,7 @@ impl Compiler {
                 if self.lex.tk != '{' {
                     return Err(self.compile_err(
                         Code::INVALID_INITIALIZER,
-                        "array initializer must start with `{{`",
+                        "array initializer must start with `{`",
                     ));
                 }
                 let sid = struct_id_of(ty);
@@ -1247,7 +1251,7 @@ impl Compiler {
             if self.lex.tk != '{' {
                 return Err(self.compile_err(
                     Code::INVALID_INITIALIZER,
-                    "array initializer must start with `{{`",
+                    "array initializer must start with `{`",
                 ));
             }
             self.next()?;
@@ -1806,6 +1810,7 @@ impl Compiler {
         loc_idx: usize,
         ty: i64,
         declared_array_size: i64,
+        zero_len: bool,
         fill: Option<u8>,
     ) -> Result<(), C5Error> {
         if declared_array_size == super::VLA_ARRAY_SIZE {
@@ -1822,7 +1827,7 @@ impl Compiler {
             self.record_local_store(loc_idx, self.lex.line);
         }
         if declared_array_size == -1 {
-            return self.allocate_deferred_size_local(loc_idx, ty, fill);
+            return self.allocate_deferred_size_local(loc_idx, ty, zero_len, fill);
         }
 
         self.symbols[loc_idx].array_size = declared_array_size;
@@ -1945,11 +1950,13 @@ impl Compiler {
     /// A deferred-size automatic array (`T x[] = ...`): the element count
     /// comes from the initializer, so the frame slot is reserved after it is
     /// parsed (C99 6.7.8p22). Also covers the GNU `T x[0]` and the
-    /// initializer-less `T x[]` a declarator completes to one element.
+    /// initializer-less `T x[]` a declarator completes to one element;
+    /// `zero_len` tells the first from the second.
     fn allocate_deferred_size_local(
         &mut self,
         loc_idx: usize,
         ty: i64,
+        zero_len: bool,
         fill: Option<u8>,
     ) -> Result<(), C5Error> {
         if self.lex.tk != Token::Assign {
@@ -1964,7 +1971,6 @@ impl Compiler {
             // TODO: empty brackets with no initializer leave the type
             // incomplete (C99 6.7.5.2p4); the bound is completed to one
             // element rather than diagnosed.
-            let zero_len = self.pending.declarator_zero_len_array;
             self.symbols[loc_idx].array_size = if zero_len { 0 } else { 1 };
             self.symbols[loc_idx].is_zero_len_array = zero_len;
             self.symbols[loc_idx].val = self.reserve_slots(self.local_storage_slots(ty, 1));

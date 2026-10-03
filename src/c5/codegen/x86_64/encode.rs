@@ -1997,7 +1997,7 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
             native.output_kind == super::OutputKind::Relocatable && !native.pic,
             native.abs32_addrs(target),
             native.hardening,
-            native.stack_protect.resolved_for(target),
+            native.stack_protect.resolved_for(target, native.code_model),
             entry,
             native.fixed_regs,
             native.optimize,

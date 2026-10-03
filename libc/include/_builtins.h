@@ -18,7 +18,7 @@
 // drop; a malformed one is not diagnosed.
 #define __builtin_expect(exp, c) (exp)
 #define __builtin_prefetch(...) ((void) (__VA_ARGS__))
-#define __builtin_assume_aligned(p, ...) (p)
+#define __builtin_assume_aligned(p, ...) ((void *)(p))
 // GCC exposes the infinity / NaN constants as builtins. The double form
 // overflows to +inf the same way <math.h>'s INFINITY does; the float and
 // long-double forms cast that value, and NaN is 0.0/0.0. The NaN payload
@@ -41,8 +41,8 @@
 // `__builtin_return_address` already strips the aarch64 authentication
 // code, and no supported target carries other flag bits there. gcc and
 // clang define the pair the same way on aarch64.
-#define __builtin_extract_return_addr(a) (a)
-#define __builtin_frob_return_addr(a) (a)
+#define __builtin_extract_return_addr(a) ((void *)(a))
+#define __builtin_frob_return_addr(a) ((void *)(a))
 // `__builtin_choose_expr` and `__builtin_constant_p` are first-class
 // builtins handled by the compiler: the chosen `choose_expr` operand IS
 // the expression, keeping its exact type (a `?:` rewrite would apply the

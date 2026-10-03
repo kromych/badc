@@ -3,7 +3,7 @@
 // aggregate query. The hot path is the bytecode engine (VDBE), the
 // B-tree, and the page cache, all serviced from the in-memory pager so
 // the wall-clock reflects compiled code rather than disk I/O. Self-
-// times via clock_gettime and prints "in N ms".
+// times via bench_clock.h and prints "in N ms".
 //
 // The SQLite amalgamation is included directly so the fixture is a
 // single translation unit. The harness puts demos/sqlite3 on the
@@ -11,7 +11,7 @@
 // needs to parse without the headers badc does not ship.
 #include <stdint.h>
 #include <stdio.h>
-#include <time.h>
+#include "bench_clock.h"
 
 #include "sqlite3.c"
 
@@ -33,8 +33,7 @@ int main(void) {
         return 2;
     }
 
-    struct timespec t0, t1;
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    double t0 = bench_ms();
 
     sqlite3_exec(db, "BEGIN;", NULL, NULL, &err);
     sqlite3_stmt *ins;
@@ -63,7 +62,7 @@ int main(void) {
     }
     sqlite3_finalize(q);
 
-    clock_gettime(CLOCK_MONOTONIC, &t1);
+    double t1 = bench_ms();
     sqlite3_close(db);
 
     // The hash distributes v across [0, 65535], so a sizable fraction
@@ -74,9 +73,7 @@ int main(void) {
         return 7;
     }
 
-    long secs = t1.tv_sec - t0.tv_sec;
-    long nsecs = t1.tv_nsec - t0.tv_nsec;
-    double ms = (double)secs * 1000.0 + (double)nsecs / 1000000.0;
+    double ms = t1 - t0;
     printf("sqlite rows=%d cnt=%lld sum=%lld in %.2f ms\n", ROWS, cnt, sum, ms);
     return 0;
 }

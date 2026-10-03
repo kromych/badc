@@ -177,15 +177,15 @@ def check_va_arg_bridge(badc: Path) -> None:
     The unbridged form repeats the first argument and never advances the
     cursor. Built with `--gnu` (the __GNUC__ Base.h path that uses
     __builtin_va_arg) and run under the SSA interpreter, so no QEMU or a
-    remote box is needed. The interpreter prints the program's exit as
-    `exit(N)`; 0 is a correct walk."""
+    remote box is needed. The interpreter exits with the program's
+    status; 0 is a correct walk."""
     src = EDK2_DEMO / "va_arg_walk.c"
     for target in ("windows-x64", "windows-arm64"):
         cmd = [str(badc), "--gnu", f"--target={target}", "--freestanding",
                "-I", str(EDK2_DEMO), "--interp", str(src)]
         r = subprocess.run(cmd, capture_output=True, text=True)
         out = r.stdout + r.stderr
-        if r.returncode != 0 or "exit(0)" not in out:
+        if r.returncode != 0:
             fail(f"[{target}] va_arg bridge check failed -- edk2-style VA_ARG "
                  f"walked its arguments incorrectly:\n{out.strip()[-800:]}")
         log(f"[{target}] va_arg bridge OK (edk2-style VA_ARG walks correctly)")

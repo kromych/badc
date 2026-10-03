@@ -164,6 +164,17 @@ pub(crate) enum AsmOpndA64 {
     SvePattern(u8),
     /// An SVE element-count multiplier `mul #imm`, as written.
     SveMul(i64),
+    /// An SVE vector register `zN`, with the element-size log2 of a `.b`,
+    /// `.h`, `.s` or `.d` suffix, if one is written.
+    ZReg { num: u8, size: Option<u8> },
+    /// An SVE predicate register `pN` (0..15), with its element-size suffix.
+    PReg { num: u8, size: Option<u8> },
+    /// `[base, #imm, mul vl]`: a memory reference whose offset counts vector
+    /// or predicate lengths, as the SVE and SME loads and stores scale it.
+    MemVl { base: MemBase, off: i64 },
+    /// An SME ZA array vector `za[Wv, #off]`: the vector-select register
+    /// (w12..w15, an operand reference or explicit) and the offset.
+    ZaVec { select: MemBase, off: i64 },
 }
 
 /// Which part of a symbol expression's value an operand takes, from the
@@ -547,6 +558,43 @@ fn element_size(letter: &str) -> Option<u8> {
     })
 }
 
+/// An SVE register `<prefix>N` below `count` (`z0`..`z31`, `p0`..`p15`),
+/// case-blind, with the element-size log2 of a `.b`/`.h`/`.s`/`.d` suffix.
+fn parse_sve_reg(tok: &str, prefix: char, count: u8) -> Option<(u8, Option<u8>)> {
+    let rest = tok
+        .strip_prefix(prefix)
+        .or_else(|| tok.strip_prefix(prefix.to_ascii_uppercase()))?;
+    let (digits, size) = match rest.split_once('.') {
+        Some((digits, letter)) => (digits, Some(element_size(&letter.to_ascii_lowercase())?)),
+        None => (rest, None),
+    };
+    if digits.is_empty() || !digits.bytes().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let num = digits.parse::<u8>().ok().filter(|&n| n < count)?;
+    Some((num, size))
+}
+
+/// The body of an SME ZA array vector `za[Wv, #off]`, the `#` optional: the
+/// select register as a W register or an operand reference, and the offset.
+fn parse_za_vec(inner: &str) -> Result<AsmOpndA64, String> {
+    let bad = || format!("inline asm: bad ZA array vector `za[{inner}]`");
+    let [select, off] = split_operands(inner)[..] else {
+        return Err(bad());
+    };
+    let select = match parse_operand(select)? {
+        AsmOpndA64::Reg {
+            num, is64: false, ..
+        } => MemBase::Reg(num),
+        AsmOpndA64::Ref { idx, .. } => MemBase::Ref(idx),
+        _ => return Err(bad()),
+    };
+    let off =
+        crate::c5::asm::eval_const_expr_ops(off.strip_prefix('#').unwrap_or(off).trim(), &|_| None)
+            .ok_or_else(bad)?;
+    Ok(AsmOpndA64::ZaVec { select, off })
+}
+
 /// A SIMD vector-arrangement register `vN.T` (e.g. `v5.4s`): the register
 /// number, the element-size log2, and the 128-bit flag.
 fn parse_vec_reg(tok: &str) -> Option<(u8, u8, bool)> {
@@ -781,6 +829,19 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
             option,
             shift,
         });
+    }
+    // `[base, #imm, mul vl]`: the SVE and SME loads and stores count the
+    // offset in vector or predicate lengths; they have no writeback form.
+    if parts.len() == 3 {
+        let mul_vl = parts[2]
+            .split_ascii_whitespace()
+            .map(str::to_ascii_lowercase)
+            .eq(["mul", "vl"]);
+        let expr = parts[1].strip_prefix('#').unwrap_or(parts[1]).trim();
+        return match crate::c5::asm::eval_const_expr_ops(expr, &|_| None) {
+            Some(off) if mul_vl && !pre => Ok(AsmOpndA64::MemVl { base, off }),
+            _ => Err(format!("inline asm: bad memory operand `[{inner}]`")),
+        };
     }
     let off = if parts.len() == 2 {
         // The offset is a GNU as constant expression, not just a literal
@@ -1117,6 +1178,19 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     }
     if let Some((num, size)) = parse_vscalar(tok) {
         return Ok(AsmOpndA64::VScalar { num, size });
+    }
+    if let Some((num, size)) = parse_sve_reg(tok, 'z', 32) {
+        return Ok(AsmOpndA64::ZReg { num, size });
+    }
+    if let Some((num, size)) = parse_sve_reg(tok, 'p', 16) {
+        return Ok(AsmOpndA64::PReg { num, size });
+    }
+    if let Some(inner) = tok
+        .get(..3)
+        .filter(|za| za.eq_ignore_ascii_case("za["))
+        .and_then(|_| tok[3..].strip_suffix(']'))
+    {
+        return parse_za_vec(inner);
     }
     if let Some((num, is64, sp)) = parse_reg(tok) {
         return Ok(AsmOpndA64::Reg { num, is64, sp });
@@ -2282,6 +2356,95 @@ mod tests {
             }
         );
         assert_eq!(insns[2].mnemonic, "mov"); // register move kept for the encoder
+    }
+
+    #[test]
+    fn parse_sve_and_sme_state_operands() {
+        // The SVE vector and predicate registers, a vector-length-scaled
+        // address, and an SME ZA array vector, as the kernel's fpsimd.h
+        // spells them, its `MUL VL` in capitals.
+        let insns = parse_template(
+            b"str z31, [%0, #31, MUL VL]; ldr p15, [x1, #-256, mul vl]; \
+              pfalse p0.b; ldr za[%w1, #0], [%2]; str ZA[w15, 15], [sp, 15, mul vl]",
+        )
+        .unwrap();
+        let ops: Vec<_> = insns.iter().map(|i| i.operands.clone()).collect();
+        assert_eq!(
+            ops[0],
+            [
+                AsmOpndA64::ZReg {
+                    num: 31,
+                    size: None
+                },
+                AsmOpndA64::MemVl {
+                    base: MemBase::Ref(0),
+                    off: 31
+                },
+            ]
+        );
+        assert_eq!(
+            ops[1],
+            [
+                AsmOpndA64::PReg {
+                    num: 15,
+                    size: None
+                },
+                AsmOpndA64::MemVl {
+                    base: MemBase::Reg(1),
+                    off: -256
+                },
+            ]
+        );
+        assert_eq!(
+            ops[2],
+            [AsmOpndA64::PReg {
+                num: 0,
+                size: Some(0)
+            }]
+        );
+        assert_eq!(
+            ops[3][0],
+            AsmOpndA64::ZaVec {
+                select: MemBase::Ref(1),
+                off: 0
+            }
+        );
+        assert_eq!(
+            ops[4],
+            [
+                AsmOpndA64::ZaVec {
+                    select: MemBase::Reg(15),
+                    off: 15
+                },
+                AsmOpndA64::MemVl {
+                    base: MemBase::Reg(31),
+                    off: 15
+                },
+            ]
+        );
+        assert_eq!(
+            parse_operand("z5.d"),
+            Ok(AsmOpndA64::ZReg {
+                num: 5,
+                size: Some(3)
+            })
+        );
+        // A third address part other than `mul vl`, a writeback on one, and a
+        // 64-bit select register are errors.
+        assert!(parse_operand("[x0, #3, mul]").is_err());
+        assert!(parse_operand("[x0, #3, mul vl]!").is_err());
+        assert!(parse_operand("za[x12, #0]").is_err());
+        assert!(!matches!(parse_operand("p16"), Ok(AsmOpndA64::PReg { .. })));
+    }
+
+    #[test]
+    fn an_immediate_offset_ends_the_address() {
+        // No form takes a part after an immediate offset (llvm-mc: "invalid
+        // operand for instruction"), so the address is an error rather than
+        // its bare base.
+        assert!(parse_operand("[x0, #8, lsl #2]").is_err());
+        assert!(parse_operand("[%1, 8, uxtw]").is_err());
+        assert!(parse_template(b"ldr %0, [%1, #8, lsl #2]").is_err());
     }
 
     #[test]

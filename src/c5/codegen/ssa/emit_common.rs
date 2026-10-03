@@ -2893,6 +2893,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         output_kind: super::OutputKind::Executable,
         pic_link: native.pic || native.pic_link,
         exec_form: Default::default(),
+        elf: Default::default(),
 
         code_model: native.code_model,
         elf_class: native.elf_class,

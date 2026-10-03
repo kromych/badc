@@ -103,8 +103,9 @@ impl<'a> Walker<'a> {
                 lhs,
                 rhs,
                 ty,
+                op_ty,
                 nsw,
-            } => self.walk_compound_assign(b, *op, *lhs, *rhs, *ty, *nsw),
+            } => self.walk_compound_assign(b, *op, *lhs, *rhs, *ty, *op_ty, *nsw),
             Expr::PreInc {
                 lvalue,
                 by,

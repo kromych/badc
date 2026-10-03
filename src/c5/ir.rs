@@ -1885,6 +1885,8 @@ pub(crate) struct AggDesc {
     /// The AAPCS64 homogeneous aggregate the members form; `None` on the
     /// other ABIs.
     pub homogeneous: Option<crate::c5::codegen::abi_classify::HomogeneousAggregate>,
+    /// The value is a GNU vector itself, not a composite holding one.
+    pub vector: bool,
 }
 
 /// A static-initializer data slot holding the address of a labelled

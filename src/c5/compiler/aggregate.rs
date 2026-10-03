@@ -297,10 +297,7 @@ impl Compiler {
             self.pending.member_decl_save = None;
             let declared = self.parse_declarator(field_base);
             self.pending.in_member_declarator = saved_member_ctx;
-            let (id_idx, mut field_ty, mut field_array_size) = declared?;
-            // The pending flag describes the last bracketed declarator, so
-            // it holds for this member only with the `-1` count.
-            let mut field_zero_len = field_array_size < 0 && self.pending.declarator_zero_len_array;
+            let (id_idx, mut field_ty, mut field_array_size, mut field_zero_len) = declared?;
             // A member may carry a trailing attribute
             // (`int x __attribute__((aligned(16)));`,
             // `int x __attribute__((deprecated));`). Member-level
@@ -332,9 +329,8 @@ impl Compiler {
                 0
             };
             self.pending.attr_transparent_union = false;
-            if let Some(m) = self.pending.attr_mode.take() {
-                field_ty = self.apply_mode_to_type(field_ty, m)?;
-            }
+            // An attribute after the bit-field width types the member too.
+            field_ty = self.apply_pending_type_attributes(field_ty)?;
             let field_packed = core::mem::take(&mut self.pending.attr_packed);
             let m_align = self.take_member_align()?;
             // Alignment for this declarator only (a comma-list peer
@@ -668,9 +664,6 @@ impl Compiler {
                 // GCC: the next bit, whatever units it straddles, and no
                 // alignment; the access window is fitted to the final size.
                 align_bit_cursor(layout, required);
-                if layout.bf_bit_cursor % 8 + bit_width as usize > 64 {
-                    layout.bf_bit_cursor = round_up(layout.bf_bit_cursor, 8);
-                }
                 field_offset = layout.bf_bit_cursor / 8;
                 bit_offset = (layout.bf_bit_cursor % 8) as u32;
                 layout.bf_bit_cursor += bit_width as usize;
@@ -960,6 +953,9 @@ impl Compiler {
                 field_base |= super::types::LONG_DOUBLE_BIT;
             }
         }
+        // `vector_size(N)` among the specifiers makes the base type a vector,
+        // as for any other declaration, so a pointer declarator points to one.
+        field_base = self.apply_pending_vector_size(field_base)?;
         field_base = super::types::apply_qual_bits(field_base, leading_quals | trailing_quals);
         let base_spelling = self.take_base_spelling();
 
@@ -1009,10 +1005,9 @@ impl Compiler {
             inner_anonymous = true;
             format!("__{kind}_{}_in_{}", self.structs.len(), name)
         } else {
-            return Err(self.compile_err(
-                Code::SYNTAX,
-                "aggregate name or `{{` expected in field type",
-            ));
+            return Err(
+                self.compile_err(Code::SYNTAX, "aggregate name or `{` expected in field type")
+            );
         };
         let inner_id = if self.lex.tk == '{' {
             let id = self.parse_aggregate_body(&inner_name, nested_is_union, nested_packed)?;
@@ -1366,12 +1361,6 @@ impl Compiler {
                 if packing == Packing::Attribute {
                     max_explicit_align = max_explicit_align.max(explicit_align);
                 }
-                // TODO: a field whose bits would span more than an
-                // 8-byte load window (start % 8 + width > 64) is bumped
-                // to the next byte; gcc packs it contiguously.
-                if bit_cursor % 8 + bit_width as usize > 64 {
-                    bit_cursor = round_up(bit_cursor, 8);
-                }
                 bitfields.push((i, bit_cursor));
                 bit_cursor += bit_width as usize;
                 i += 1;
@@ -1417,12 +1406,13 @@ impl Compiler {
     }
 
     /// Each bitfield's addressable unit after a packed re-layout: the
-    /// smallest 1/2/4/8-byte window covering its bits, slid back when it
+    /// smallest 1/2/4/8/16-byte window covering its bits, slid back when it
     /// would extend past the aggregate's tail (a packed aggregate has no
-    /// tail padding to absorb the read-modify-write span). A window no
-    /// slide can fit stays at the field's own byte.
-    /// TODO: an access through a window wider than the aggregate reaches
-    /// past the object; such a field needs a split access.
+    /// tail padding to absorb the read-modify-write span). Where no window
+    /// fits inside the aggregate, or the bits of a 128-bit field starting
+    /// past its first byte's bit 0 reach a 17th byte, the unit is the 3 to
+    /// 17 bytes the field spans, which an access reaches in power-of-two
+    /// pieces, as gcc and clang split it.
     fn fit_bitfield_windows(&mut self, struct_id: usize, refit_all: bool) {
         let size = self.structs[struct_id].size;
         for f in &mut self.structs[struct_id].fields {
@@ -1430,11 +1420,12 @@ impl Compiler {
                 continue;
             }
             let bit_start = f.offset * 8 + f.bit_offset as usize;
-            let unit = (bit_start % 8 + f.bit_width as usize)
-                .div_ceil(8)
-                .next_power_of_two();
+            let span = (bit_start % 8 + f.bit_width as usize).div_ceil(8);
+            let mut unit = span.next_power_of_two();
             let mut off = bit_start / 8;
-            if off + unit > size && unit <= size {
+            if unit > size || unit > 16 {
+                unit = span;
+            } else if off + unit > size {
                 off = size - unit;
             }
             f.offset = off;

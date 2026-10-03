@@ -518,6 +518,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("declared_object_copied_whole.c", 0),
     ("merged_chain_empty_edge_block.c", 0),
     ("address_retested_after_calls.c", 0),
+    ("inlined_struct_return_lifetime.c", 0),
 ];
 
 /// The sweep's target for this host, or `None` when the host cannot
@@ -968,13 +969,11 @@ fn strict_flex_arrays_level_selects_the_bounded_members() {
     let interp = |flags: &[&str]| -> Option<i32> {
         let mut cmd = Command::new(badc);
         cmd.arg("--interp").args(flags);
-        let out = cmd.arg(&src).output().expect("run badc --interp");
-        let stdout = String::from_utf8_lossy(&out.stdout);
-        let line = stdout.lines().find(|l| l.starts_with("exit("))?;
-        line.trim_start_matches("exit(")
-            .trim_end_matches(')')
-            .parse()
-            .ok()
+        cmd.arg(&src)
+            .output()
+            .expect("run badc --interp")
+            .status
+            .code()
     };
 
     let levels: [(&str, &[&str], i32); 6] = [
@@ -1009,7 +1008,8 @@ fn strict_flex_arrays_level_selects_the_bounded_members() {
 
 // The interpreter holds the standard streams and `errno` itself, where the
 // host would resolve the C library's data symbol or `__iob_func()` outside its
-// memory. Each write lands on its stream's descriptor, in order.
+// memory. Each write lands on its stream's descriptor, in order, and the
+// streams carry only what the program wrote.
 #[test]
 fn interp_writes_to_the_standard_streams() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -1025,8 +1025,35 @@ fn interp_writes_to_the_standard_streams() {
     );
     assert_eq!(
         String::from_utf8_lossy(&out.stdout),
-        "out: fputs\nout: puts\nout: x\nexit(0)\n"
+        "out: fputs\nout: puts\nout: x\n"
     );
+    assert_eq!(out.status.code(), Some(0));
+}
+
+// `--interp` exits with the program's status, as `--jit` and the native
+// image do, and appends nothing to what the program wrote, a last line it
+// left unterminated included.
+#[test]
+fn interp_exits_with_the_program_status() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-interp-status");
+    let src = dir.join("r3.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\nint main(void) { printf(\"partial\"); return 3; }\n",
+    )
+    .expect("write source");
+    let run = |mode: &str| {
+        Command::new(badc)
+            .arg(mode)
+            .arg(&src)
+            .output()
+            .expect("run badc")
+    };
+    let interp = run("--interp");
+    assert_eq!(interp.status.code(), Some(3));
+    assert_eq!(String::from_utf8_lossy(&interp.stdout), "partial");
+    assert_eq!(run("--jit").status.code(), Some(3));
 }
 
 // `--install <dir>` writes every embedded header under <dir>/include
@@ -1988,6 +2015,20 @@ fn the_x86_guard_form_defaults_the_way_gcc_does() {
         "the x86 guard register alone must select the tls form: {}",
         String::from_utf8_lossy(&out.stderr)
     );
+    // A symbol alone selects the form too, read through the code model's
+    // segment: `mov %seg:sym(%rip), %r11`.
+    for (model, seg, other) in [("small", 0x64u8, 0x65u8), ("kernel", 0x65, 0x64)] {
+        let out = compile(&[
+            "--target=linux-x64",
+            &format!("-mcmodel={model}"),
+            "-mstack-protector-guard-symbol=g",
+        ]);
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{model}: {err}");
+        let bytes = std::fs::read(&obj).expect("read the object");
+        let reads = |prefix: u8| bytes.windows(4).any(|w| w == [prefix, 0x4C, 0x8B, 0x1D]);
+        assert!(reads(seg) && !reads(other), "{model}: the guard's segment");
+    }
     // The uniprocessor branch of the same Makefile still names its form.
     let out = compile(&["--target=linux-x64", "-mstack-protector-guard=global"]);
     assert!(out.status.success(), "`global` must stay accepted");

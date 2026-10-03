@@ -42,8 +42,20 @@ struct G {
     unsigned long long t : 20;
 };
 
+// Packed fields of 33 to 64 bits: the GNU layout gives each a unit of at
+// most 8 bytes, yet the value keeps the 128-bit type (C99 6.3.1.1p2).
+struct __attribute__((packed)) H {
+    char c;
+    s128 f : 40;
+    unsigned char t;
+};
+struct __attribute__((packed)) I {
+    u128 g : 64;
+};
+
 static struct A sa = {((u128)1 << 99) | 0x1234};
 static struct B sb = {7, 9};
+static struct H sh = {1, -3, 9};
 
 static int chk(u128 got, unsigned long long want_hi, unsigned long long want_lo, int code) {
     if ((unsigned long long)got != want_lo) {
@@ -279,6 +291,62 @@ int main(void) {
     }
     if ((r = chk(ib.g, 0, 0x123, 117))) {
         return r;
+    }
+
+    // A 128-bit value in a unit of at most 8 bytes: read, written,
+    // updated in place, with its neighbours kept.
+#if defined(_WIN32)
+    if (sizeof(struct H) != 18 || sizeof(struct I) != 16) {
+        return 120;
+    }
+#else
+    if (sizeof(struct H) != 7 || sizeof(struct I) != 8) {
+        return 120;
+    }
+#endif
+    if (sizeof(sh.f + 0) != 16 || (r = chk((u128)sh.f, ~0ULL, -3ULL, 121))) {
+        return r ? r : 123;
+    }
+    struct H h = {0x5a, 0, 0xa5};
+    h.f = ((s128)1 << 39) - 1;
+    if ((r = chk((u128)h.f, 0, 0x7fffffffffULL, 124))) {
+        return r;
+    }
+    h.f += 1;
+    if ((r = chk((u128)h.f, ~0ULL, 0xffffff8000000000ULL, 127))) {
+        return r;
+    }
+    if ((r = chk((u128)(h.f++), ~0ULL, 0xffffff8000000000ULL, 130))) {
+        return r;
+    }
+    h.f *= -2;
+    if ((r = chk((u128)h.f, ~0ULL, -2ULL, 133))) {
+        return r;
+    }
+    if (h.c != 0x5a || h.t != 0xa5) {
+        return 136;
+    }
+    struct I i;
+    i.g = ~(u128)0;
+    if ((r = chk(i.g, 0, ~0ULL, 137))) {
+        return r;
+    }
+    i.g -= 2;
+    if ((r = chk(i.g, 0, ~0ULL - 2, 140))) {
+        return r;
+    }
+
+    // C99 6.5.16.2p3: a promoted field in a 16-byte unit computes in the
+    // type of E1 op E2, here `unsigned int`, not in 128 bits.
+    ne.g = -1;
+    ne.g /= 11u;
+    if (ne.g != 122016116) {
+        return 143;
+    }
+    ne.g = -1;
+    ne.g %= 11u;
+    if (ne.g != 3 || (r = chk((u128)ne.f, 0, 0, 144))) {
+        return r ? r : 146;
     }
     return 0;
 }

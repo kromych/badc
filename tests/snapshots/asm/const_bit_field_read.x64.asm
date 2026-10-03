@@ -67,5 +67,12 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
+               	leaq	<rip>, %rax      # <addr>
+               	movq	(%rax), %rax
+               	movabsq	$-0x123456789abcdef, %r11 # imm = 0xFEDCBA9876543211
+               	cmpq	%r11, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	retq
                	xorl	%eax, %eax
                	retq

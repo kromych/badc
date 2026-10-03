@@ -74,7 +74,7 @@ catalog! {
         "a `#pragma intrinsic` naming a function badc has no intrinsic for; the name stays an ordinary call";
     1010, "directive", [], Error, Hard,
         [], Live,
-        "a directive whose operand the preprocessor cannot process, or a conditional directive with no `#if` to match";
+        "a directive whose operand the preprocessor cannot process, a directive preprocessed input does not take, or a conditional directive with no `#if` to match";
     1011, "invalid-pragma", [], Error, Hard,
         [], Live,
         "a pragma badc implements whose operand cannot be applied";
@@ -129,12 +129,15 @@ catalog! {
     2023, "static-assert", [], Error, Hard,
         [], Live,
         "a static assertion whose controlling expression is zero";
+    2024, "incomplete-element-type", [], Error, Hard,
+        [], Live,
+        "an array whose element type is incomplete: an array of unknown size, `void`, or a tag declared without its body";
     3001, "int-conversion", [], Warning, Controllable,
         [DEFAULT], Live,
         "an integer and a pointer exchanged with no cast";
     3002, "incompatible-struct-types", [], Warning, Controllable,
         [DEFAULT], Live,
-        "an aggregate used where a different aggregate type is expected";
+        "an aggregate or enumerated type used where a different one is expected";
     3003, "return-type", ["C4715"], Ignore, Controllable,
         [ALL], Live,
         "control reaches the end of a value-returning function";
@@ -179,7 +182,16 @@ catalog! {
         "a controlling expression of a type its statement does not take: a non-scalar `if`, `while`, `do` or `for` condition, a non-integer `switch` expression";
     3029, "incompatible-pointer-types", ["incompatible-function-pointer-types"], Error, Controllable,
         [DEFAULT], Live,
-        "a pointer to a function assigned, initialized or returned as a pointer to an incompatible function type";
+        "a pointer assigned, initialized, passed or returned as a pointer to a type incompatible with the type it points to, neither side a pointer to `void`";
+    3030, "pointer-difference", [], Error, Hard,
+        [], Live,
+        "a subtraction of two pointers that do not point to qualified or unqualified versions of compatible types";
+    3031, "discarded-qualifiers", ["incompatible-pointer-types-discards-qualifiers"], Warning, Controllable,
+        [DEFAULT], Live,
+        "a pointer assigned, initialized, passed or returned as a pointer to a type without a `const` or `volatile` the original pointed-to type has";
+    3032, "pointer-sign", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a pointer assigned, initialized, passed or returned as a pointer to an integer type that differs from the one it points to only in signedness";
     4001, "unsupported", [], Error, Hard,
         [], Live,
         "a well-formed construct badc does not implement";
@@ -210,6 +222,12 @@ catalog! {
     6003, "merged-section-access", [], Warning, Controllable,
         [DEFAULT], Live,
         "a relocation reaches past the end of the merged section it names";
+    6004, "execstack", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "the image's stack is executable because an input's `.note.GNU-stack` asks for it, or because `-z execstack` does under `--warn-execstack`";
+    6005, "rwx-segment", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a segment the image loads is readable, writable and executable, or its thread-local segment executable";
     6010, "undefined-symbol", [], Error, Hard,
         [], Live,
         "a reference no input object, archive or shared library defines";
@@ -277,6 +295,8 @@ impl Code {
     pub const ORPHAN_SECTION: Code = Code::new(6001);
     pub const MISSING_ENTRY: Code = Code::new(6002);
     pub const MERGED_SECTION_ACCESS: Code = Code::new(6003);
+    pub const EXEC_STACK: Code = Code::new(6004);
+    pub const RWX_SEGMENT: Code = Code::new(6005);
     pub const UNDEFINED_SYMBOL: Code = Code::new(6010);
     pub const DUPLICATE_SYMBOL: Code = Code::new(6011);
     pub const RELOCATION: Code = Code::new(6012);
@@ -384,6 +404,7 @@ impl Code {
     pub const INVALID_DECLARATION: Code = Code::new(2021);
     pub const UNDECLARED_IDENTIFIER: Code = Code::new(2022);
     pub const STATIC_ASSERT: Code = Code::new(2023);
+    pub const INCOMPLETE_ELEMENT_TYPE: Code = Code::new(2024);
     pub const INVALID_OPERANDS: Code = Code::new(3020);
     pub const CONSTANT_EXPRESSION: Code = Code::new(3021);
     pub const INVALID_INITIALIZER: Code = Code::new(3022);
@@ -394,6 +415,9 @@ impl Code {
     pub const VOID_VALUE: Code = Code::new(3027);
     pub const CONTROLLING_EXPRESSION: Code = Code::new(3028);
     pub const INCOMPATIBLE_POINTER_TYPES: Code = Code::new(3029);
+    pub const POINTER_DIFFERENCE: Code = Code::new(3030);
+    pub const DISCARDED_QUALIFIERS: Code = Code::new(3031);
+    pub const POINTER_SIGN: Code = Code::new(3032);
     pub const UNSUPPORTED: Code = Code::new(4001);
     pub const LIMIT: Code = Code::new(4002);
     pub const INLINE: Code = Code::new(4003);

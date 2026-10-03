@@ -4,14 +4,14 @@
 // adds, the gradient dot products and smoothstep interpolation) with
 // integer lattice indexing, so the wall-clock reflects the FP codegen
 // path rather than the integer one the other fixtures exercise. Self-
-// times via clock_gettime and prints "in N ms".
+// times via bench_clock.h and prints "in N ms".
 //
 // stb_perlin is a single header; defining the implementation macro and
 // including it makes the fixture one translation unit. The harness puts
 // demos/stb on the include search path.
 #include <stdint.h>
 #include <stdio.h>
-#include <time.h>
+#include "bench_clock.h"
 
 #define STB_PERLIN_IMPLEMENTATION
 #include "stb_perlin.h"
@@ -20,8 +20,7 @@
 #define FRAMES 300
 
 int main(void) {
-    struct timespec t0, t1;
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    double t0 = bench_ms();
     // Truncate each sample to a fixed-point integer before summing so
     // the checksum is stable against the small result differences an
     // optimizing compiler's FP reassociation can introduce.
@@ -36,11 +35,9 @@ int main(void) {
             }
         }
     }
-    clock_gettime(CLOCK_MONOTONIC, &t1);
+    double t1 = bench_ms();
 
-    long secs = t1.tv_sec - t0.tv_sec;
-    long nsecs = t1.tv_nsec - t0.tv_nsec;
-    double ms = (double)secs * 1000.0 + (double)nsecs / 1000000.0;
+    double ms = t1 - t0;
     long long samples = (long long)FRAMES * DIM * DIM;
     printf("perlin %lldx checksum=%lld in %.2f ms\n", samples,
            (long long)checksum, ms);

@@ -237,6 +237,14 @@ fn a_second_body_is_rejected() {
 #[test]
 fn compatible_redeclarations_compose() {
     for (src, want) in [
+        // C17 6.7.6.3p5: a function returns the unqualified version of its
+        // declared type, so the return type's own qualifiers do not count.
+        (
+            "const int f(void);\nint f(void) { return 8; }\nvolatile int f(void);\n\
+          const char *const k(void);\nconst char *k(void) { return \"\"; }\n\
+          int main(void) { return f() + *k(); }\n",
+            8,
+        ),
         // C99 6.7.5.3p15: no parameter information beside a prototype or an
         // old-style definition that agrees with it.
         (
@@ -409,11 +417,6 @@ fn gnu_redeclarations_warn() {
         (
             "#pragma GCC diagnostic warning \"-Wimplicit-int\"\n\
              void f(void);\nf(void) { }\nint main(void) { f(); return 0; }\n",
-            "now:      int (void)",
-        ),
-        // C11 6.7.6.3p5 drops a return type's qualifiers; C99 6.7.3p9 does not.
-        (
-            "const int f(void);\nint f(void) { return 0; }\nint main(void) { return f(); }\n",
             "now:      int (void)",
         ),
         // GCC lets the prototype's `char` stand for the promoted `int` of an

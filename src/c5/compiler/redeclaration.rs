@@ -12,7 +12,7 @@ use super::super::token::Ty;
 use super::Compiler;
 use super::function::{ParamForm, ParsedParams};
 use super::types::{
-    VOL_LVL_MASK, VOLATILE_MASK, format_signature, format_type, is_const_object_ty, is_void_ty,
+    VOL_LVL_MASK, VOLATILE_MASK, format_signature, format_type, is_void_ty,
     rebase_enum_placeholder, strip_object_const, strip_unsigned, unqualified_version_ty,
 };
 
@@ -315,17 +315,13 @@ impl Compiler {
         (ra, pa): (Spelled, &Params),
         (rb, pb): (Spelled, &Params),
     ) -> Verdict {
-        let (ra, rb) = (self.spelled_ty(ra), self.spelled_ty(rb));
-        if !self.tags_agree(strip_object_const(ra), strip_object_const(rb), false) {
+        // C17 6.7.6.3p5: a function returns the unqualified version of its
+        // declared type, which gcc applies in every mode.
+        let ret = |s: Spelled| unqualified_version_ty(self.spelled_ty(s));
+        if !self.tags_agree(ret(ra), ret(rb), false) {
             return Verdict::Conflict;
         }
-        match self.params_verdict(pa, pb) {
-            // C17 6.7.6.3p5 drops a return type's qualifiers; C99 6.7.3p9 does not.
-            Verdict::Compatible if is_const_object_ty(ra) != is_const_object_ty(rb) => {
-                Verdict::Extension
-            }
-            v => v,
-        }
+        self.params_verdict(pa, pb)
     }
 
     /// C99 6.7.5.3p15.

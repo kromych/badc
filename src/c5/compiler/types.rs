@@ -327,6 +327,18 @@ pub(crate) fn unqualified_version_ty(ty: i64) -> i64 {
     exact_volatile_ty(ty)
 }
 
+/// `ty` with no qualifier on itself or on what it points to: the form in
+/// which C99 6.5.6p3 compares the operands of a pointer difference,
+/// pointers to qualified or unqualified versions of compatible types.
+pub(crate) fn unqualified_pointee_ty(ty: i64) -> i64 {
+    let depth = ptr_depth_of(ty);
+    let ty = unqualified_version_ty(ty);
+    if depth == 0 {
+        return ty;
+    }
+    exact_volatile_ty(ty & !(const_level_bit(depth - 1) | volatile_level_bit(depth - 1)))
+}
+
 /// `ty` without [`VOLATILE_BIT`] when no level it records is volatile,
 /// as a dereference of a volatile pointer level leaves it: the type
 /// itself, rather than the conservative reading of its accesses.

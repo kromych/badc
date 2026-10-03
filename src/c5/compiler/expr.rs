@@ -4344,6 +4344,20 @@ impl Compiler {
         self.check_binary_operands(lhs_ty, self.ty, op.name)?;
         self.require_complete_pointee(lhs_ty, op.name)?;
         self.require_complete_pointee(self.ty, op.name)?;
+        if op.tok == Token::SubOp
+            && is_pointer_ty(lhs_ty)
+            && is_pointer_ty(self.ty)
+            && !self.ptr_diff_compatible(lhs_ty, self.ty)
+        {
+            let (l, r) = (
+                format_type(lhs_ty, &self.structs),
+                format_type(self.ty, &self.structs),
+            );
+            return Err(self.compile_err(
+                Code::POINTER_DIFFERENCE,
+                format!("`{l}` and `{r}` are not pointers to compatible types"),
+            ));
+        }
         if let Some(vty) = self.vector_binop_ty(lhs_ty, self.ty, op.name) {
             self.ty = vty;
             self.ast_binop(int);
@@ -5432,6 +5446,15 @@ impl Compiler {
     /// intern distinct aggregate tags, so the second test is what lets
     /// `T (*)[]` match `T (*)[N]`.
     pub(super) fn tags_compatible(&self, a: i64, b: i64) -> bool {
+        self.tags_compatible_as(a, b, false)
+    }
+
+    /// [`Self::tags_compatible`] where, with `pointee_unqualified`, the
+    /// elements of an array a single-level pointer points to compare
+    /// without their own qualifiers: an array's qualifiers are its
+    /// elements' (C99 6.7.3p8), and a pointer difference lets the
+    /// pointees' differ (6.5.6p3).
+    pub(super) fn tags_compatible_as(&self, a: i64, b: i64, pointee_unqualified: bool) -> bool {
         if generic_type_match(a, b) {
             return true;
         }
@@ -5451,8 +5474,15 @@ impl Compiler {
                 alloc::vec![f.array_size]
             }
         };
-        generic_type_match(self.structs[ia].fields[0].ty, self.structs[ib].fields[0].ty)
-            && array_dims_match(&dims_of(ia), &dims_of(ib))
+        let elem = |id: usize| {
+            let ty = self.structs[id].fields[0].ty;
+            if pointee_unqualified && struct_ptr_depth(a) == 1 {
+                unqualified_version_ty(ty)
+            } else {
+                ty
+            }
+        };
+        generic_type_match(elem(ia), elem(ib)) && array_dims_match(&dims_of(ia), &dims_of(ib))
     }
 
     /// `__builtin_offsetof ( type-name , member-designator )` (GCC / C11

@@ -14001,7 +14001,7 @@ fn a_pointer_difference_ignores_the_pointees_qualifiers() {
     let src = "long const_left(const unsigned *p, unsigned *q) { return p - q; }\n\
                long const_right(unsigned *p, const unsigned *q) { return p - q; }\n\
                long volatile_left(volatile unsigned *p, unsigned *q) { return p - q; }\n\
-               long both(const unsigned *const *p, unsigned **q) { return p - q; }\n\
+               long both(unsigned *const *p, unsigned **q) { return p - q; }\n\
                long scaled(const unsigned *p, long n) { return (long)(p - n); }\n";
     let program = Compiler::with_options(
         alloc::string::String::from(src),
@@ -14037,6 +14037,58 @@ fn a_pointer_difference_ignores_the_pointees_qualifiers() {
             Inst::BinopI { op: BinOp::Mul | BinOp::Shl, lhs, .. } if param_load(body, *lhs, 3))),
         "a pointer minus an integer scales the integer: {body:?}"
     );
+}
+
+/// C99 6.5.6p3: the operands of a pointer difference point to qualified or
+/// unqualified versions of compatible types. Two pointers to other types --
+/// `int` and `long`, a row and its element, `char` and `unsigned char`, or
+/// pointees whose qualifiers differ below their own level -- are an error
+/// naming both types; the pointee's own qualifiers, an array pointee's
+/// element qualifiers and an enumerated type against its integer type are
+/// not.
+#[test]
+fn a_difference_of_pointers_to_incompatible_types_is_rejected() {
+    use crate::{Compiler, Target};
+    let decls = "int a[4]; long b[4]; int two[2][3]; int (*rp)[3]; const int (*crp)[3];\n\
+                 const int *cp; int *ip; volatile int *vp; const int **cpp; int **ipp;\n\
+                 int *const *icpp; char *c1; unsigned char *uc1; enum E { E1 = 1 } *ep;\n\
+                 unsigned *up; void *v1, *v2;\n";
+    let compile = |body: &str| {
+        let src = alloc::format!(
+            "{decls}long f(void) {{ return {body}; }}\nint main(void) {{ return 0; }}\n"
+        );
+        Compiler::with_target(src, Target::LinuxX64).compile()
+    };
+    for (body, types) in [
+        ("(a + 3) - b", "`int*` and `long*`"),
+        ("rp - ip", "`int (*)[3]` and `int*`"),
+        ("cpp - ipp", "`const int**` and `int**`"),
+        ("c1 - uc1", "`char*` and `unsigned char*`"),
+        ("v1 - ip", "`void*` and `int*`"),
+    ] {
+        let err = compile(body)
+            .err()
+            .unwrap_or_else(|| panic!("`{body}` compiled"));
+        let msg = err.to_string();
+        assert!(
+            msg.contains(&alloc::format!(
+                "{types} are not pointers to compatible types"
+            )) && msg.contains("[pointer-difference]"),
+            "`{body}`: {msg}"
+        );
+    }
+    for body in [
+        "cp - ip",
+        "vp - ip",
+        "icpp - ipp",
+        "crp - rp",
+        "ep - up",
+        "two[1] - two[0]",
+        "&two[1] - rp",
+        "v1 - v2",
+    ] {
+        compile(body).unwrap_or_else(|e| panic!("`{body}`: {e}"));
+    }
 }
 
 /// A `void` function's returns name no value -- its end, a bare `return`

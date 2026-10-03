@@ -630,16 +630,13 @@ impl Compiler {
             .flatten()
     }
 
-    /// True when `a` and `b` may form a C99 6.5.6p9 pointer
-    /// difference: compatible tags once each operand's own `const` is
-    /// dropped (a value's type, C99 6.3.2.1p2).
+    /// True when `a` and `b` may form a C99 6.5.6p9 pointer difference:
+    /// pointers to qualified or unqualified versions of compatible types
+    /// (6.5.6p3), so the qualifiers of the operands and of what they
+    /// point to take no part and every other level's do.
     pub(super) fn ptr_diff_compatible(&self, a: i64, b: i64) -> bool {
-        // C99 6.5.6p3: pointers to qualified or unqualified versions of
-        // compatible types, so no level's qualifier takes part.
-        super::types::enum_compatible(
-            super::types::unqualified_object_ty(a),
-            super::types::unqualified_object_ty(b),
-        )
+        use super::types::unqualified_pointee_ty;
+        self.tags_compatible_as(unqualified_pointee_ty(a), unqualified_pointee_ty(b), true)
     }
 
     /// The bounds of the array-typedef base, outermost first.

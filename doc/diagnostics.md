@@ -78,6 +78,7 @@ regenerates.
 | B3027 | `void-value` | error | hard | - | the value of a `void` expression used: as an operand, an argument, an initializer, an assigned or returned value, or a controlling expression |
 | B3028 | `controlling-expression` | error | hard | - | a controlling expression of a type its statement does not take: a non-scalar `if`, `while`, `do` or `for` condition, a non-integer `switch` expression |
 | B3029 | `incompatible-pointer-types` | error | controllable | default | a pointer to a function assigned, initialized or returned as a pointer to an incompatible function type |
+| B3030 | `pointer-difference` | error | hard | - | a subtraction of two pointers that do not point to qualified or unqualified versions of compatible types |
 | B4001 | `unsupported` | error | hard | - | a well-formed construct badc does not implement |
 | B4002 | `limit` | error | hard | - | a translation limit badc imposes: nesting depth, include depth, alignment |
 | B4003 | `inline` | ignore | controllable | - | a function the source declared `inline` that the optimizer left out of line |

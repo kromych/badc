@@ -4381,20 +4381,18 @@ impl Compiler {
             // below expresses that for an integer field but not for a
             // floating source (C99 6.3.1.4) or a `_Bool` field (6.3.1.2).
             let value = self.to_storage_bits(value, reloc, field.ty);
-            // C99 6.7.2.1p11: the RMW spans the field's storage unit,
-            // `bit_unit_size` bytes inside the object, so it reads and
-            // writes no byte outside it.
-            let unit_bytes = field.bit_unit_size as usize;
-            let mut unit_value: u128 = 0;
-            for i in 0..unit_bytes {
-                unit_value |= (self.data[field_base + i] as u128) << (i * 8);
-            }
-            let mask = super::super::ast::bitfield_slice_mask(field.bit_width, 0);
-            let placed = super::super::ast::bitfield_slice_mask(field.bit_width, field.bit_offset);
-            let cleared = unit_value & !placed;
-            let merged = cleared | (((value as u128) & mask) << field.bit_offset);
-            for i in 0..unit_bytes {
-                self.data[field_base + i] = ((merged >> (i * 8)) & 0xFF) as u8;
+            // C99 6.7.2.1p11: only the field's bits change, which lie in
+            // its storage unit, up to 17 bytes from `field_base`.
+            let bits = value as u128 & super::super::ast::bitfield_slice_mask(field.bit_width, 0);
+            for i in 0..field.bit_width as usize {
+                let at = field.bit_offset as usize + i;
+                let byte = &mut self.data[field_base + at / 8];
+                let set = 1u8 << (at % 8);
+                *byte = if bits >> i & 1 != 0 {
+                    *byte | set
+                } else {
+                    *byte & !set
+                };
             }
         } else {
             // C99 6.7.9p11: a scalar member's initializer may be

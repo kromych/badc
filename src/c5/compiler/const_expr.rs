@@ -2604,7 +2604,7 @@ impl Compiler {
         ty: i64,
     ) -> Option<ConstVal> {
         let image = self.object_image(tls);
-        if !(1..=8).contains(&size)
+        if width > 64
             || at + size > image.len()
             || bit + width > (size * 8) as u32
             || (tls && self.tls_range_relocated(at, size))
@@ -2612,8 +2612,12 @@ impl Compiler {
         {
             return None;
         }
-        let unit = read_image_int(image, at, size, ty | UNSIGNED_BIT) as u64;
-        let field = (unit >> bit) & (u64::MAX >> (64 - width));
+        // The at most 9 bytes the field's bits reach; a packed unit may be
+        // wider than 8 bytes.
+        let first = at + bit as usize / 8;
+        let span = (bit as usize % 8 + width as usize).div_ceil(8);
+        let bytes = (0..span).fold(0u128, |v, k| v | u128::from(image[first + k]) << (8 * k));
+        let field = (bytes >> (bit % 8)) as u64 & (u64::MAX >> (64 - width));
         let v = if is_unsigned_ty(ty) || strip_unsigned(ty) == Ty::Bool as i64 {
             field as i128
         } else {

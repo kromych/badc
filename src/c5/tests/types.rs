@@ -1691,6 +1691,90 @@ fn bitfields_take_the_ms_layout_on_pe_targets() {
     layout_rows_hold("", SHAPES, &[Target::WindowsX64, Target::WindowsAarch64]);
 }
 
+/// A packed bit-field starts at the next bit even where its bits span more
+/// than 8 bytes, up to the 17 a 128-bit field reaches from bit 1, under the
+/// attribute on the aggregate or the member and under `#pragma pack`. The
+/// GNU rows are gcc 16's and clang 21's for x86_64- and aarch64-linux-gnu
+/// and Apple clang 21's; the MS rows, clang 21's for both windows-msvc
+/// triples, place each field in a whole unit of its type.
+#[test]
+fn packed_bitfields_start_at_the_next_bit() {
+    use crate::Target;
+    const P1: &str = "struct __attribute__((packed)) { unsigned char c:1; unsigned long long f:64; unsigned char d:7; }";
+    const P2: &str =
+        "struct __attribute__((packed)) { unsigned char c:4; unsigned long long f:61; }";
+    const P3: &str = "struct __attribute__((packed)) { unsigned a:31; unsigned long long f:63; unsigned long long g:64; unsigned char d:2; }";
+    const P4: &str =
+        "struct __attribute__((packed)) { char x; unsigned char c:3; long long f:62; short s:9; }";
+    const F1: &str = "struct { unsigned char c:1; unsigned long long f:64 __attribute__((packed)); unsigned char d:7; }";
+    const Q: &str = "struct { unsigned char c:1; unsigned long long f:64; unsigned char d:7; }";
+    const QB: &str = "struct { unsigned char c:4; unsigned long long f:61; }";
+    const W: &str = "struct { unsigned char c:1; unsigned __int128 f:128; unsigned char d:7; }";
+    const W1: &str = "struct __attribute__((packed)) { unsigned char c:1; unsigned __int128 f:128; unsigned char d:7; }";
+    const W2: &str = "struct __attribute__((packed)) { unsigned char c:7; __int128 f:122; }";
+    const W3: &str = "struct __attribute__((packed)) { unsigned char c:3; unsigned __int128 f:125; unsigned g:20; }";
+    let rows = |layouts: [&str; 13]| {
+        let decls = [
+            ("", P1),
+            ("", P2),
+            ("", P3),
+            ("", P4),
+            ("", F1),
+            ("1", Q),
+            ("1", QB),
+            ("1", W),
+            ("2", Q),
+            ("4", Q),
+            ("", W1),
+            ("", W2),
+            ("", W3),
+        ];
+        decls
+            .iter()
+            .zip(layouts)
+            .map(|((pack, decl), layout)| alloc::format!("{pack}|{decl}|{layout}"))
+            .collect::<alloc::vec::Vec<_>>()
+    };
+    let gnu = rows([
+        "9/1|c@0 f@1 d@65",
+        "9/1|c@0 f@4",
+        "20/1|a@0 f@31 g@94 d@158",
+        "11/1|x@0 c@8 f@11 s@73",
+        "9/1|c@0 f@1 d@65",
+        "9/1|c@0 f@1 d@65",
+        "9/1|c@0 f@4",
+        "17/1|c@0 f@1 d@129",
+        "10/2|c@0 f@1 d@65",
+        "12/4|c@0 f@1 d@65",
+        "17/1|c@0 f@1 d@129",
+        "17/1|c@0 f@7",
+        "19/1|c@0 f@3 g@128",
+    ]);
+    let ms = rows([
+        "10/1|c@0 f@8 d@72",
+        "9/1|c@0 f@8",
+        "21/1|a@0 f@32 g@96 d@160",
+        "12/1|x@0 c@8 f@16 s@80",
+        "10/1|c@0 f@8 d@72",
+        "10/1|c@0 f@8 d@72",
+        "9/1|c@0 f@8",
+        "18/1|c@0 f@8 d@136",
+        "12/2|c@0 f@16 d@80",
+        "16/4|c@0 f@32 d@96",
+        "18/1|c@0 f@8 d@136",
+        "17/1|c@0 f@8",
+        "21/1|c@0 f@8 g@136",
+    ]);
+    let gnu: alloc::vec::Vec<&str> = gnu.iter().map(|r| r.as_str()).collect();
+    let ms: alloc::vec::Vec<&str> = ms.iter().map(|r| r.as_str()).collect();
+    layout_rows_hold(
+        "",
+        &gnu,
+        &[Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64],
+    );
+    layout_rows_hold("", &ms, &[Target::WindowsX64, Target::WindowsAarch64]);
+}
+
 /// An aggregate with no storage has MSVC's size on the PE targets: 4, or
 /// its alignment where an explicit one of at least 4 applies, never its
 /// natural alignment; a member of such a type takes that storage. The

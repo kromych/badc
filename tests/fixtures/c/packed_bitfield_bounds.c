@@ -1,6 +1,7 @@
 // A bit-field of a packed aggregate is read and written with accesses that
 // stay inside the object: placed against an inaccessible page, fields spanning
-// most of 3-, 5-, 6- and 7-byte aggregates, under `#pragma pack` and
+// most of 3-, 5-, 6- and 7-byte aggregates, and 64- and 128-bit fields from
+// bit 1 of 9- and 17-byte ones, under `#pragma pack` and
 // `__attribute__((packed))`, at the first byte and past it, are stored,
 // updated in place and read back, and the bits beside each field keep their
 // values. The MS layout of the Windows targets gives each field a whole unit
@@ -30,6 +31,9 @@ struct __attribute__((packed)) p3 { unsigned f : 23; };
 struct __attribute__((packed)) p7 { unsigned char c; unsigned long long f : 48; };
 /* 14 bytes: a 16-byte window does not fit, the unit is the 13 the field spans. */
 struct __attribute__((packed)) w14 { char c; __int128 f : 100; };
+/* Fields starting at bit 1 whose bits reach a 9th and a 17th byte. */
+struct __attribute__((packed)) n9 { unsigned char c : 1; unsigned long long f : 64; unsigned char d : 7; };
+struct __attribute__((packed)) w17 { unsigned char c : 1; unsigned __int128 f : 128; unsigned char d : 7; };
 
 /* The first byte past the usable bytes that end at an inaccessible page. */
 static unsigned char *page_end(void) {
@@ -60,13 +64,16 @@ int main(void) {
     struct p3 *f = (struct p3 *)(end - sizeof(struct p3));
     struct p7 *g = (struct p7 *)(end - sizeof(struct p7));
     struct w14 *h = (struct w14 *)(end - sizeof(struct w14));
-    static const unsigned sizes[2][8] = {
-        { 4, 8, 8, 8, 5, 4, 9, 17 }, { 3, 5, 6, 7, 3, 3, 7, 14 } };
+    struct n9 *n = (struct n9 *)(end - sizeof(struct n9));
+    struct w17 *w = (struct w17 *)(end - sizeof(struct w17));
+    static const unsigned sizes[2][10] = {
+        { 4, 8, 8, 8, 5, 4, 9, 17, 10, 18 }, { 3, 5, 6, 7, 3, 3, 7, 14, 9, 17 } };
     const unsigned *size = sizes[GNU_LAYOUT];
     if (sizeof(struct t3) != size[0] || sizeof(struct t5) != size[1]
         || sizeof(struct t6) != size[2] || sizeof(struct t7) != size[3]
         || sizeof(struct u3) != size[4] || sizeof(struct p3) != size[5]
-        || sizeof(struct p7) != size[6] || sizeof(struct w14) != size[7])
+        || sizeof(struct p7) != size[6] || sizeof(struct w14) != size[7]
+        || sizeof(struct n9) != size[8] || sizeof(struct w17) != size[9])
         return 2;
 
     /* Each store keeps the bits above the field: the last byte's top bits. */
@@ -125,5 +132,29 @@ int main(void) {
         return 14;
     h->f = -2;
     if (h->f != -2 || h->c != 3 || !LAST_IS(0xff)) return 15;
+
+    /* The 9th byte holds the field's top bit under `d`; the division is
+       in `unsigned long long`, where -3 exceeds the field's value. */
+    memset(end - 32, 0, 32);
+    n->c = 1;
+    n->d = 0x55;
+    n->f = 0x8123456789abcdefULL;
+    if (n->f != 0x8123456789abcdefULL || n->c != 1 || n->d != 0x55 || !LAST_IS(0xab))
+        return 16;
+    n->f /= -3;
+    if (n->f != 0 || n->c != 1 || n->d != 0x55 || !LAST_IS(0xaa)) return 17;
+
+    /* The 17th byte holds the field's bit 127 under `d`. */
+    memset(end - 32, 0, 32);
+    w->c = 1;
+    w->d = 0x2a;
+    w->f = (unsigned __int128)0x0123456789abcdefULL << 64 | 0xfedcba9876543210ULL;
+    w->f += 1;
+    if (w->f != ((unsigned __int128)0x0123456789abcdefULL << 64 | 0xfedcba9876543211ULL)
+        || w->c != 1 || w->d != 0x2a || !LAST_IS(0x54))
+        return 18;
+    w->f = ~(unsigned __int128)0;
+    if (w->f != ~(unsigned __int128)0 || w->c != 1 || w->d != 0x2a || !LAST_IS(0x55))
+        return 19;
     return 0;
 }

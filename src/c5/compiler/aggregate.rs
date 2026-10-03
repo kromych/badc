@@ -664,9 +664,6 @@ impl Compiler {
                 // GCC: the next bit, whatever units it straddles, and no
                 // alignment; the access window is fitted to the final size.
                 align_bit_cursor(layout, required);
-                if layout.bf_bit_cursor % 8 + bit_width as usize > 64 {
-                    layout.bf_bit_cursor = round_up(layout.bf_bit_cursor, 8);
-                }
                 field_offset = layout.bf_bit_cursor / 8;
                 bit_offset = (layout.bf_bit_cursor % 8) as u32;
                 layout.bf_bit_cursor += bit_width as usize;
@@ -1364,12 +1361,6 @@ impl Compiler {
                 if packing == Packing::Attribute {
                     max_explicit_align = max_explicit_align.max(explicit_align);
                 }
-                // TODO: a field whose bits would span more than an
-                // 8-byte load window (start % 8 + width > 64) is bumped
-                // to the next byte; gcc packs it contiguously.
-                if bit_cursor % 8 + bit_width as usize > 64 {
-                    bit_cursor = round_up(bit_cursor, 8);
-                }
                 bitfields.push((i, bit_cursor));
                 bit_cursor += bit_width as usize;
                 i += 1;
@@ -1415,12 +1406,13 @@ impl Compiler {
     }
 
     /// Each bitfield's addressable unit after a packed re-layout: the
-    /// smallest 1/2/4/8-byte window covering its bits, slid back when it
+    /// smallest 1/2/4/8/16-byte window covering its bits, slid back when it
     /// would extend past the aggregate's tail (a packed aggregate has no
     /// tail padding to absorb the read-modify-write span). Where no window
-    /// fits inside the aggregate the unit is the 3, 5, 6 or 7 bytes the
-    /// field spans, which an access reaches in power-of-two pieces, as gcc
-    /// and clang split it.
+    /// fits inside the aggregate, or the bits of a 128-bit field starting
+    /// past its first byte's bit 0 reach a 17th byte, the unit is the 3 to
+    /// 17 bytes the field spans, which an access reaches in power-of-two
+    /// pieces, as gcc and clang split it.
     fn fit_bitfield_windows(&mut self, struct_id: usize, refit_all: bool) {
         let size = self.structs[struct_id].size;
         for f in &mut self.structs[struct_id].fields {
@@ -1431,7 +1423,7 @@ impl Compiler {
             let span = (bit_start % 8 + f.bit_width as usize).div_ceil(8);
             let mut unit = span.next_power_of_two();
             let mut off = bit_start / 8;
-            if unit > size {
+            if unit > size || unit > 16 {
                 unit = span;
             } else if off + unit > size {
                 off = size - unit;

@@ -10552,12 +10552,13 @@ fn copied_bitfields_and_padding_carry_the_bytes_their_initializer_wrote() {
     }
 }
 
-/// A bit-field of a packed aggregate no 1-, 2-, 4- or 8-byte window fits is
-/// reached in power-of-two pieces inside the object, as gcc and clang split
-/// it: a read, a store and an update of a field spanning most of a 3-, 5-, 6-
-/// or 7-byte aggregate load and store only the aggregate's bytes. The MS
-/// layout of the PE targets gives each field a whole unit of its type, which
-/// its accesses stay inside as well.
+/// A bit-field of a packed aggregate no 1-, 2-, 4-, 8- or 16-byte window fits
+/// is reached in power-of-two pieces inside the object, as gcc and clang
+/// split it: a read, a store and an update of a field spanning most of a 3-,
+/// 5-, 6- or 7-byte aggregate, or reaching the 9th or 17th byte from bit 1,
+/// load and store only the aggregate's bytes. The MS layout of the PE
+/// targets gives each field a whole unit of its type, which its accesses
+/// stay inside as well.
 #[test]
 fn packed_bitfield_accesses_stay_inside_the_object() {
     use crate::Target;
@@ -10570,6 +10571,18 @@ fn packed_bitfield_accesses_stay_inside_the_object() {
         ("t7", "long long f : 52;", 7, 8),
         ("u3", "unsigned char c : 4; int f : 20;", 3, 5),
         ("p7", "unsigned char c; unsigned long long f : 48;", 7, 9),
+        (
+            "n9",
+            "unsigned char c : 1; unsigned long long f : 64; unsigned char d : 7;",
+            9,
+            10,
+        ),
+        (
+            "w17",
+            "unsigned char c : 1; unsigned __int128 f : 128; unsigned char d : 7;",
+            17,
+            18,
+        ),
     ];
     let mut src = alloc::string::String::from("#pragma pack(push, 1)\n");
     for (name, members, ..) in SHAPES {

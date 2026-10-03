@@ -205,11 +205,11 @@ pub(crate) struct BitfieldDesc {
     pub bit_offset: u8,
     /// Bit width of the field. Range `[1, 128]`.
     pub bit_width: u8,
-    /// Storage-unit width in bytes (1, 2, 4, 8, or 16). Drives the
-    /// load / store opcode pair per C99 6.7.2.1p11; a 16-byte unit is
-    /// accessed as the two halves of a 128-bit value, and the 3, 5, 6
-    /// or 7 bytes of a packed field in its power-of-two pieces, as are
-    /// the 9 to 15 of a packed one's high half.
+    /// Storage-unit width in bytes: 1, 2, 4, 8 or 16, or the 3 to 17
+    /// bytes a packed field spans where no such window fits. Drives the
+    /// load / store opcode pair per C99 6.7.2.1p11: a split unit is
+    /// reached in its power-of-two pieces, and one wider than 8 bytes as
+    /// the two halves of a 128-bit value plus a 17th byte.
     pub unit_size: u8,
     /// True when the declared field type is signed -- C99
     /// 6.7.2.1p10 says the read sign-extends through the top of

@@ -7494,6 +7494,81 @@ fn zero_width_bitfields_cross_the_system_compiler_boundary() {
     );
 }
 
+// A packed bit-field starts at the next bit even where its bits reach a 9th
+// or a 17th byte, under `packed` and `#pragma pack`: the layout, a returned
+// aggregate and the fields read and written across the boundary agree with
+// the system compiler's.
+const PACKED_SPANS_COMMON: &str = "typedef long long ll;\n\
+    typedef unsigned long long ull;\n\
+    typedef unsigned __int128 u128;\n\
+    struct __attribute__((packed)) s9 { unsigned char c : 1; ull f : 64; unsigned char d : 7; };\n\
+    struct __attribute__((packed)) s20 { unsigned a : 31; ull f : 63; ull g : 64;\n\
+      unsigned char d : 2; };\n\
+    struct __attribute__((packed)) s17 { unsigned char c : 1; u128 f : 128; unsigned char d : 7; };\n\
+    #pragma pack(push, 2)\n\
+    struct q10 { unsigned char c : 1; ull f : 64; unsigned char d : 7; };\n\
+    #pragma pack(pop)\n\
+    static ll layout(void)\n\
+    { return sizeof(struct s9) | sizeof(struct s20) << 8 | sizeof(struct s17) << 16\n\
+        | (ll)sizeof(struct q10) << 24 | (ll)_Alignof(struct q10) << 32; }\n\
+    static struct s9 make_s9(ull f, int d) { struct s9 r = { 1, f, d }; return r; }\n\
+    static ull read_s20(const struct s20 *p) { return p->f ^ p->g ^ p->a ^ p->d; }\n\
+    static void set_s17(struct s17 *p, const u128 *v) { p->f = *v; p->f += 1; }\n\
+    static ull read_q10(const struct q10 *p) { return p->f + p->d; }\n\
+    struct fns { ll (*layout)(void); struct s9 (*make_s9)(ull, int);\n\
+      ull (*read_s20)(const struct s20 *); void (*set_s17)(struct s17 *, const u128 *);\n\
+      ull (*read_q10)(const struct q10 *); };\n\
+    static int drive(const struct fns *f, int base)\n\
+    { struct s9 m = f->make_s9(0x8123456789abcdefULL, 0x55);\n\
+      struct s20 t = { 0x7fffffff, 0x4000000000000001ULL, 0x8000000000000003ULL, 2 };\n\
+      struct s17 w = { 1, 0, 0x2a };\n\
+      struct q10 q = { 1, 0xfedcba9876543210ULL, 9 };\n\
+      u128 v = (u128)0x0123456789abcdefULL << 64 | 0xfedcba9876543210ULL;\n\
+      if (f->layout() != layout()) return base + 1;\n\
+      if (m.c != 1 || m.f != 0x8123456789abcdefULL || m.d != 0x55) return base + 2;\n\
+      if (f->read_s20(&t) != (0x4000000000000001ULL ^ 0x8000000000000003ULL ^ 0x7fffffff ^ 2))\n\
+        return base + 3;\n\
+      f->set_s17(&w, &v);\n\
+      if (w.c != 1 || w.d != 0x2a || w.f != v + 1) return base + 4;\n\
+      if (f->read_q10(&q) != 0xfedcba9876543210ULL + 9) return base + 5;\n\
+      return 0; }\n";
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn packed_spanning_bitfields_cross_the_system_compiler_boundary() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping packed_spanning_bitfields_cross_the_system_compiler_boundary: no system C \
+             compiler"
+        );
+        return;
+    };
+    drive_across_the_system_compiler(
+        &cc,
+        "packed-span-interop",
+        PACKED_SPANS_COMMON,
+        "layout, make_s9, read_s20, set_s17, read_q10",
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn packed_spanning_bitfields_cross_the_windows_compiler_boundary() {
+    // MSVC has no GNU attributes, so only a clang build is a peer here.
+    let Some(cc @ WindowsCc::Clang(_)) = windows_cc() else {
+        eprintln!(
+            "skipping packed_spanning_bitfields_cross_the_windows_compiler_boundary: no clang"
+        );
+        return;
+    };
+    drive_across_the_windows_compiler(
+        &cc,
+        "win-packed-span-interop",
+        PACKED_SPANS_COMMON,
+        "layout, make_s9, read_s20, set_s17, read_q10",
+    );
+}
+
 #[cfg(windows)]
 #[test]
 fn bitfield_attributes_cross_the_windows_compiler_boundary() {

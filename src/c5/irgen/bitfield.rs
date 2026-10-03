@@ -254,8 +254,14 @@ pub(super) fn extract_halves(
         };
         return (low, high);
     }
-    let unit = load_wide_unit(b, addr, bf, seg, vol, align);
-    let v = Walker::int128_shift_const(b, BinOp::Shru, unit, bf.bit_offset as i64);
+    let (unit, top) = load_wide_unit(b, addr, bf, seg, vol, align);
+    let k = bf.bit_offset as i64;
+    let mut v = Walker::int128_shift_const(b, BinOp::Shru, unit, k);
+    if let Some(top) = top {
+        // A 17-byte unit's field starts 1 to 7 bits into its first byte.
+        let up = b.binop_imm(BinOp::Shl, top, 64 - k);
+        v.1 = b.binop(BinOp::Or, v.1, up);
+    }
     let v = Walker::int128_and_imm(b, v, bitfield_mask_halves(bf.bit_width, 0));
     sign_extend_halves(b, bf, v)
 }
@@ -276,14 +282,23 @@ pub(super) fn insert_halves(
         merge_into_bitfield(b, addr, bf, masked.0, seg, vol, align);
         return;
     }
-    let placed = Walker::int128_shift_const(b, BinOp::Shl, masked, bf.bit_offset as i64);
+    let k = bf.bit_offset as i64;
+    let placed = Walker::int128_shift_const(b, BinOp::Shl, masked, k);
     let (keep_lo, keep_hi) = bitfield_mask_halves(bf.bit_width, bf.bit_offset);
-    let old = load_wide_unit(b, addr, bf, seg, vol, align);
+    let (old, top) = load_wide_unit(b, addr, bf, seg, vol, align);
     let cleared = Walker::int128_and_imm(b, old, (!keep_lo, !keep_hi));
     let low = b.binop(BinOp::Or, cleared.0, placed.0);
     let high = b.binop(BinOp::Or, cleared.1, placed.1);
     store_bytes(b, addr, 0, low, 8, seg, vol, align);
-    store_bytes(b, addr, 8, high, bf.unit_size - 8, seg, vol, align);
+    store_bytes(b, addr, 8, high, (bf.unit_size - 8).min(8), seg, vol, align);
+    if let Some(top) = top {
+        // The field's bits past the 16th byte: the top of the high half.
+        let keep = (1i64 << (k + i64::from(bf.bit_width) - 128)) - 1;
+        let spill = b.binop_imm(BinOp::Shru, masked.1, 64 - k);
+        let kept = b.binop_imm(BinOp::And, top, !keep);
+        let byte = b.binop(BinOp::Or, kept, spill);
+        store_bytes(b, addr, 16, byte, bf.unit_size - 16, seg, vol, align);
+    }
 }
 
 /// Sign-extend a right-aligned signed field's value through all 128
@@ -297,9 +312,9 @@ pub(super) fn sign_extend_halves(b: &mut SsaBuilder, bf: BitfieldDesc, v: Halves
     Walker::int128_shift_const(b, BinOp::Shr, up, 128 - w)
 }
 
-/// A storage unit wider than 8 bytes as its low 8 bytes and the 1 to 8
-/// above them, each read in its [`unit_pieces`], so no access reaches
-/// past the unit (C99 6.7.2.1p11).
+/// A storage unit wider than 8 bytes as the two halves of its first 16
+/// bytes and, for a 17-byte unit, its last byte; each read in its
+/// [`unit_pieces`], so no access reaches past the unit (C99 6.7.2.1p11).
 fn load_wide_unit(
     b: &mut SsaBuilder,
     addr: ValueId,
@@ -307,11 +322,12 @@ fn load_wide_unit(
     seg: AsmSeg,
     vol: bool,
     align: u8,
-) -> Halves {
-    (
-        load_bytes(b, addr, 0, 8, seg, vol, align),
-        load_bytes(b, addr, 8, bf.unit_size - 8, seg, vol, align),
-    )
+) -> (Halves, Option<ValueId>) {
+    let size = bf.unit_size;
+    let low = load_bytes(b, addr, 0, 8, seg, vol, align);
+    let high = load_bytes(b, addr, 8, (size - 8).min(8), seg, vol, align);
+    let top = (size > 16).then(|| load_bytes(b, addr, 16, size - 16, seg, vol, align));
+    ((low, high), top)
 }
 
 /// A bitfield's slice mask as the low and high halves of a 128-bit

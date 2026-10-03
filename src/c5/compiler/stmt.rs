@@ -28,9 +28,11 @@ use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::{Tok, Token, Ty};
 use super::Compiler;
+use super::const_expr::ConstVal;
 use super::diag::Category;
 use super::types::{
-    integer_promote, is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_void_ty, struct_ptr_depth,
+    format_type, integer_promote, is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_void_ty,
+    narrow_const_int, strip_unsigned, struct_ptr_depth, unqualified_version_ty,
 };
 
 /// The outer binding a nested block saved before rebinding a name, restored
@@ -51,6 +53,16 @@ pub(super) struct CleanupVar {
     is_thread_local: bool,
     array_size: i64,
     fn_ty: i64,
+}
+
+/// The case labels of one `switch` body.
+pub(super) struct SwitchLabels {
+    /// The type of the controlling expression, before promotion.
+    operand_ty: i64,
+    /// The promoted type each label converts to (C99 6.8.4.2p5).
+    promoted: i64,
+    /// The converted labels as closed ranges, disjoint per 6.8.4.2p3.
+    ranges: Vec<(i128, i128)>,
 }
 
 pub(super) struct BlockShadow {
@@ -494,14 +506,19 @@ impl Compiler {
         self.consume(b'(', "open paren expected")?;
         self.parse_controlling_expr("switch", Category::Integer)?;
         let disc_ast = self.ast_acc;
-        let promoted = integer_promote(self.ty);
+        let operand_ty = self.ty;
+        let promoted = integer_promote(operand_ty);
         self.consume(b')', "close paren expected")?;
 
         // Conservative drop of any pending dead-store entries at
         // the switch entry boundary, matching the flush a
         // control-flow op would have produced through emit_cf_op.
         self.flush_pending_stores();
-        self.switch_cases.push((promoted, Vec::new()));
+        self.switch_cases.push(SwitchLabels {
+            operand_ty,
+            promoted,
+            ranges: Vec::new(),
+        });
         self.switch_defaults.push(false);
         self.enter_switch();
         self.enter_switch_body();
@@ -520,6 +537,108 @@ impl Compiler {
             self.ast_emit_switch(disc, body_s);
         }
         Ok(())
+    }
+
+    /// The values a `case` label covers, converted to the promoted type of
+    /// the controlling expression (C99 6.8.4.2p5) and recorded against the
+    /// switch's other labels, which 6.8.4.2p3 keeps distinct. `None` for an
+    /// empty GNU range, which is dropped with a warning as gcc and clang
+    /// drop it.
+    fn case_label_range(
+        &mut self,
+        line: usize,
+        lo: ConstVal,
+        hi: Option<ConstVal>,
+    ) -> Result<Option<(i128, i128)>, C5Error> {
+        let Some(&SwitchLabels {
+            operand_ty,
+            promoted,
+            ..
+        }) = self.switch_cases.last()
+        else {
+            return Err(self.compile_err(Code::INVALID_STATEMENT, "case outside switch"));
+        };
+        let raw = (lo.as_i128(), hi.unwrap_or(lo).as_i128());
+        let (a, b) = (
+            self.const_int_of(raw.0, promoted).as_i128(),
+            self.const_int_of(raw.1, promoted).as_i128(),
+        );
+        // The controlling expression takes only the values of its own type.
+        // A label outside them never matches, or its conversion to the
+        // promoted type discarded value bits; a conversion that reinterprets
+        // the sign at the same width is not diagnosed, as in gcc.
+        let own = unqualified_version_ty(operand_ty);
+        let (bytes, own_unsigned) = (self.size_of_type(own), is_unsigned_ty(own));
+        let is_bool = strip_unsigned(own) == Ty::Bool as i64;
+        let wide = self.size_of_type(promoted);
+        let fits = |raw: i128, v: i128| {
+            narrow_const_int(bytes, own_unsigned, is_bool, v) == v
+                && (narrow_const_int(wide, true, false, raw) == raw
+                    || narrow_const_int(wide, false, false, raw) == raw)
+        };
+        if !fits(raw.0, a) || !fits(raw.1, b) {
+            let written = |c: ConstVal| {
+                if is_unsigned_ty(c.expr_ty()) {
+                    format!("{}", c.as_i128() as u128)
+                } else {
+                    format!("{}", c.as_i128())
+                }
+            };
+            let label = match hi {
+                None => format!("case value {}", written(lo)),
+                Some(hi) => format!("case range `{} ... {}`", written(lo), written(hi)),
+            };
+            let t = format_type(own, &self.structs);
+            self.warn_at(
+                Code::SWITCH_OUTSIDE_RANGE,
+                line,
+                format!("{label} is not within the range of `{t}`, the type of the controlling expression"),
+            );
+        }
+        let unsigned = is_unsigned_ty(promoted);
+        let less = |x: i128, y: i128| {
+            if unsigned {
+                (x as u128) < (y as u128)
+            } else {
+                x < y
+            }
+        };
+        let spell = |v: i128| {
+            if unsigned {
+                format!("{}", v as u128)
+            } else {
+                format!("{v}")
+            }
+        };
+        if less(b, a) {
+            self.warn_at(
+                Code::EMPTY_CASE_RANGE,
+                line,
+                format!(
+                    "case range `{} ... {}` is empty; the label is dropped",
+                    spell(a),
+                    spell(b)
+                ),
+            );
+            return Ok(None);
+        }
+        let overlap = self.switch_cases.last().and_then(|labels| {
+            labels
+                .ranges
+                .iter()
+                .find(|&&(c, d)| !less(d, a) && !less(b, c))
+                .map(|&(c, _)| if less(a, c) { c } else { a })
+        });
+        if let Some(first) = overlap {
+            return Err(self.compile_err(
+                Code::INVALID_STATEMENT,
+                format!("duplicate case value {} in switch", spell(first)),
+            ));
+        }
+        if let Some(labels) = self.switch_cases.last_mut() {
+            labels.ranges.push((a, b));
+        }
+        Ok(Some((a, b)))
     }
 
     /// Parse a `typedef` declaration at function/block scope (C99
@@ -3161,61 +3280,16 @@ impl Compiler {
             // initializer values here, as GCC (GNU mode, at -O) accepts.
             let lo = self.parse_constant_folding_const_objects()?;
             // GNU case range `case lo ... hi:` (C extension): the label
-            // covers every value in [lo, hi]. `hi == lo` for a single label.
+            // covers every value in [lo, hi].
             let hi = if self.lex.tk == Token::Ellipsis {
                 self.next()?;
-                self.parse_constant_folding_const_objects()?
+                Some(self.parse_constant_folding_const_objects()?)
             } else {
-                lo
+                None
             };
             self.consume(b':', "expected colon after case")?;
             self.check_switch_label(line)?;
-            let Some(&(promoted, _)) = self.switch_cases.last() else {
-                return Err(self.compile_err(Code::INVALID_STATEMENT, "case outside switch"));
-            };
-            // C99 6.8.4.2p5: each label converts to the promoted type of
-            // the controlling expression, which the comparisons are made in.
-            let lo = self.const_int_of(lo.as_i128(), promoted).as_i128();
-            let hi = self.const_int_of(hi.as_i128(), promoted).as_i128();
-            let unsigned = is_unsigned_ty(promoted);
-            let spell = |v: i128| {
-                if unsigned {
-                    format!("{}", v as u128)
-                } else {
-                    format!("{v}")
-                }
-            };
-            if (unsigned && (hi as u128) < (lo as u128)) || (!unsigned && hi < lo) {
-                return Err(self.compile_err(
-                    Code::INVALID_STATEMENT,
-                    format!(
-                        "case range `{} ... {}` is empty (low bound exceeds high)",
-                        spell(lo),
-                        spell(hi)
-                    ),
-                ));
-            }
-            // C99 6.8.4.2p3: the case constant expressions in one switch
-            // must be distinct after the conversion (constraint). A single
-            // label is tracked for duplicate detection; a `lo ... hi` range
-            // is dispatched by a bounds comparison with no per-value
-            // expansion, so it is not enumerated here and an overlap
-            // involving a range is not diagnosed.
-            if lo == hi {
-                if self
-                    .switch_cases
-                    .last()
-                    .is_some_and(|(_, c)| c.contains(&lo))
-                {
-                    return Err(self.compile_err(
-                        Code::INVALID_STATEMENT,
-                        format!("duplicate case value {} in switch", spell(lo)),
-                    ));
-                }
-                if let Some((_, cases)) = self.switch_cases.last_mut() {
-                    cases.push(lo);
-                }
-            }
+            let range = self.case_label_range(line, lo, hi)?;
             let body_before = self.ast_stmts_snapshot();
             // C23 6.8.1: a label may precede a declaration. badc parses
             // block-local declarations in the enclosing block loop, where
@@ -3235,7 +3309,9 @@ impl Compiler {
                 self.stmt()?;
             }
             let body_s = self.ast_wrap_stmts_since(body_before);
-            self.ast_emit_case(lo, hi, body_s);
+            if let Some((lo, hi)) = range {
+                self.ast_emit_case(lo, hi, body_s);
+            }
         } else if self.lex.tk == Token::Default {
             let line = self.lex.line;
             self.next()?;

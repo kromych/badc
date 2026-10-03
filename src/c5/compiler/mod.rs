@@ -2133,12 +2133,10 @@ pub struct Compiler {
     /// declaring the same name get distinct keys. Cleared at every
     /// function start.
     local_label_scopes: LocalLabelScopes,
-    /// Per nested `switch` body: the promoted type of its controlling
-    /// expression, which each case label converts to (C99 6.8.4.2p5),
-    /// and the converted single-label values, distinct per 6.8.4.2p3.
-    /// The AST emitter records each case's value on its `Stmt::Case`
-    /// node; this stack also gates `case` legality.
-    switch_cases: Vec<(i64, Vec<i128>)>,
+    /// Per nested `switch` body, the labels seen so far. The AST emitter
+    /// records each case's value on its `Stmt::Case` node; this stack also
+    /// gates `case` legality.
+    switch_cases: Vec<stmt::SwitchLabels>,
     /// Per nested `switch` body: `true` once a `default:` label
     /// was seen.
     switch_defaults: Vec<bool>,

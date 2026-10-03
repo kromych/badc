@@ -234,6 +234,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
   block 22  start_pc=0
     v82  Imm(0)                                           -> x0
     terminator Return(v82)   (exit_acc=v82)
+switch_unsigned_negative_case.c:24: warning: case value -1 is not within the range of `unsigned short`, the type of the controlling expression [B3008] [-Wswitch-outside-range]
+    case -1: return 100;
+switch_unsigned_negative_case.c:32: warning: case value -1 is not within the range of `unsigned char`, the type of the controlling expression [B3008] [-Wswitch-outside-range]
+    case -1: return 100;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -33,6 +33,8 @@ B3004  too-few-arguments              warning  controllable  default            
 B3005  too-many-arguments             warning  controllable  default            live     a call passing more arguments than an old-style definition or a libc binding's prototype declares
 B3006  long-double-abi                warning  controllable  default            retired  a `long double` argument passed in a format this target's ABI does not use
 B3007  dead-store                     ignore   controllable  -                  live     a value assigned to a local and replaced before any read
+B3008  switch-outside-range           warning  controllable  default            live     a `case` label whose value lies outside the range of the controlling expression's type before promotion
+B3009  empty-case-range               warning  controllable  default            live     a GNU case range `lo ... hi` whose low bound exceeds its high bound in the promoted type of the controlling expression; the label is dropped
 B3020  invalid-operands               error    hard          -                  live     an operator applied to operands its constraints reject, or a non-lvalue where an lvalue is required
 B3021  constant-expression            error    hard          -                  live     an expression that must be constant and is not, or one the compiler cannot evaluate at translation time
 B3022  invalid-initializer            error    hard          -                  live     an initializer C99 6.7.8 rejects: a mismatched brace form, a designator naming nothing, an index out of range

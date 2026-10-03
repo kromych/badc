@@ -1305,7 +1305,7 @@ fn duplicate_case_value_is_rejected() {
 /// controlling expression, and p3 requires the converted values to be
 /// distinct: `-1` and `0xffffffffu` collide for an `unsigned` controlling
 /// expression and stay apart for an `__int128` one, and a GNU range is
-/// empty or not in that type.
+/// ordered in that type.
 #[test]
 fn case_labels_compare_in_the_promoted_controlling_type() {
     expect_compile_error(
@@ -1317,11 +1317,6 @@ fn case_labels_compare_in_the_promoted_controlling_type() {
         "int f(unsigned __int128 x){ switch(x){ case -1: return 1; \
          case ~(unsigned __int128)0: return 2; } return 0; } int main(void){ return 0; }",
         "duplicate case value 340282366920938463463374607431768211455",
-    );
-    expect_compile_error(
-        "int f(int i){ switch(i){ case 5 ... 1: return 1; } return 0; } \
-         int main(void){ return 0; }",
-        "case range `5 ... 1` is empty",
     );
     for src in [
         "int f(__int128 x){ switch(x){ case -1: return 1; case 0xffffffffffffffffULL: \
@@ -1335,6 +1330,137 @@ fn case_labels_compare_in_the_promoted_controlling_type() {
             .compile()
             .unwrap_or_else(|e| panic!("{src}: {e}"));
     }
+}
+
+/// A GNU case range takes part in the distinctness C99 6.8.4.2p3 requires
+/// with every value it covers. A range whose bounds are out of order in the
+/// promoted type is empty: B3009 warns and the label is dropped, as gcc and
+/// clang drop it. A label value outside the range of the controlling
+/// expression's own type warns, B3008, as gcc's -Wswitch-outside-range does:
+/// it never matches, or its conversion to the promoted type discarded value
+/// bits. A sign reinterpretation at the same width does not warn.
+#[test]
+fn case_labels_check_ranges_against_each_other_and_the_controlling_type() {
+    use crate::Target;
+    use crate::diag::Code;
+    let unit = |body: &str| {
+        format!(
+            "int f(int x, unsigned char c, signed char s, _Bool b, char pc, unsigned u) \
+             {{ {body} return 0; }}\nint main(void) {{ return 0; }}\n"
+        )
+    };
+    for (body, text) in [
+        (
+            "switch (x) { case 1 ... 5: return 1; case 3: return 2; }",
+            "duplicate case value 3 in switch",
+        ),
+        (
+            "switch (x) { case 3: return 1; case 1 ... 5: return 2; }",
+            "duplicate case value 3 in switch",
+        ),
+        (
+            "switch (x) { case 1 ... 5: return 1; case 4 ... 8: return 2; }",
+            "duplicate case value 4 in switch",
+        ),
+        (
+            "switch (u) { case 4294967290u ... -1: return 1; case 4294967295u: return 2; }",
+            "duplicate case value 4294967295 in switch",
+        ),
+    ] {
+        expect_compile_error(&unit(body), text);
+    }
+    let warnings = |target: Target, body: &str| -> Vec<(Code, String)> {
+        let program = Compiler::with_target(unit(body), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("`{body}`: {e}"));
+        program
+            .warnings
+            .iter()
+            .map(|w| (w.code, w.text.clone()))
+            .collect()
+    };
+    let outside = |label: &str, ty: &str| {
+        (
+            Code::SWITCH_OUTSIDE_RANGE,
+            format!(
+                "{label} is not within the range of `{ty}`, the type of the controlling expression"
+            ),
+        )
+    };
+    let empty = |bounds: &str| {
+        (
+            Code::EMPTY_CASE_RANGE,
+            format!("case range `{bounds}` is empty; the label is dropped"),
+        )
+    };
+    for (target, body, want) in [
+        (
+            Target::LinuxX64,
+            "switch (x) { case 5 ... 1: return 1; case 1: return 2; }",
+            vec![empty("5 ... 1")],
+        ),
+        (
+            Target::LinuxX64,
+            "switch (u) { case -1 ... 5: return 1; }",
+            vec![empty("4294967295 ... 5")],
+        ),
+        (
+            Target::LinuxX64,
+            "switch (c) { case 257: return 1; case -1: return 2; case 255: return 3; }",
+            vec![
+                outside("case value 257", "unsigned char"),
+                outside("case value -1", "unsigned char"),
+            ],
+        ),
+        (
+            Target::LinuxX64,
+            "switch (c) { case -5 ... 3: return 1; case 4 ... 255: return 2; }",
+            vec![outside("case range `-5 ... 3`", "unsigned char")],
+        ),
+        (
+            Target::LinuxX64,
+            "switch (s) { case 200: return 1; case -129: return 2; case -128 ... 127: return 3; }",
+            vec![
+                outside("case value 200", "signed char"),
+                outside("case value -129", "signed char"),
+            ],
+        ),
+        (
+            Target::LinuxX64,
+            "switch (b) { case 0: case 1: return 1; case 2: return 2; }",
+            vec![outside("case value 2", "_Bool")],
+        ),
+        (
+            Target::LinuxX64,
+            "switch (u) { case -1: return 1; case 0x100000000LL: return 2; case 0xfffffffeu: return 3; }",
+            vec![outside("case value 4294967296", "unsigned int")],
+        ),
+        (
+            Target::LinuxX64,
+            "switch (x) { case 0xffffffffu: return 1; case 0x7fffffff: return 2; }",
+            vec![],
+        ),
+        (
+            Target::LinuxX64,
+            "switch (pc) { case -1: return 1; case 255: return 2; }",
+            vec![outside("case value 255", "char")],
+        ),
+        (
+            Target::LinuxAarch64,
+            "switch (pc) { case -1: return 1; case 255: return 2; }",
+            vec![outside("case value -1", "char")],
+        ),
+    ] {
+        assert_eq!(warnings(target, body), want, "`{body}`");
+    }
+    // The dropped range matches nothing; the labels around it still do.
+    let src = "int f(int x) { switch (x) { case 5 ... 1: return 1; case 3: return 2; \
+               case 6 ... 9: return 3; } return 0; }\n\
+               int main(void) { return f(3) * 100 + f(5) * 10 + f(7); }\n";
+    let program = Compiler::new(src.to_string())
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(crate::c5::Vm::new(program).run().unwrap(), 203);
 }
 
 #[test]

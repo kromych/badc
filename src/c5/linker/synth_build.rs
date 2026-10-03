@@ -213,6 +213,8 @@ fn synth_program_and_build(
         diagnostics: Vec::new(),
         emitted_relocs,
         named_sections: merged.named_sections.clone(),
+        compact_unwind: merged.compact_unwind.clone(),
+        eh_frame: merged.eh_frame.clone(),
         orphaned_data: None,
         stopped_at_data_liveness: false,
         ssa_dump: alloc::string::String::new(),
@@ -1597,6 +1599,8 @@ mod tests {
             init_fini_arrays: Default::default(),
             section_map: Default::default(),
             exec_stack_input: None,
+            compact_unwind: Vec::new(),
+            eh_frame: Vec::new(),
         }
     }
 

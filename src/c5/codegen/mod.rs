@@ -1891,6 +1891,50 @@ pub(crate) struct EmittedFinalReloc {
     pub addend: i64,
 }
 
+/// A slot an unwinder reads a routine's address from: an import's, which
+/// the loader binds, or one in the data-byte space.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PointerSlot {
+    Import(usize),
+    Data(u64),
+}
+
+/// A linked Mach-O input's compact unwind entry at its `Build::text`
+/// offset, with its personality routine's slot and its LSDA's data offset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CompactUnwind {
+    pub text_offset: u64,
+    pub encoding: u32,
+    pub personality: Option<PointerSlot>,
+    pub lsda: Option<u64>,
+}
+
+/// A linked Mach-O input's `__eh_frame`: the bytes, the fields the writer
+/// fills, and each FDE's offset with its function's `Build::text` offset.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EhFrameBlock {
+    pub bytes: Vec<u8>,
+    pub fields: Vec<EhFrameField>,
+    pub fdes: Vec<(u32, u64)>,
+}
+
+/// `width` (4 or 8) bytes at `offset` holding `target - field`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EhFrameField {
+    pub offset: u32,
+    pub width: u8,
+    pub target: EhFrameTarget,
+}
+
+/// A text offset, a data offset attributed to the region of `anchor` (as
+/// [`DataPcRelReloc`] does), or a slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EhFrameTarget {
+    Text(u64),
+    Data { offset: u64, anchor: u64 },
+    Slot(PointerSlot),
+}
+
 /// An input section the merge grouped by name across units (a C-identifier
 /// name, or `.eh_frame`), for a writer that gives it an output section of
 /// its own. `offset` is into `Build::data`, or into the zero-fill region
@@ -1920,6 +1964,10 @@ pub(crate) struct Build {
     /// the Mach-O and PE writers still fold the bytes into the family
     /// segment they belong to.
     pub named_sections: Vec<NamedSection>,
+    /// The linked Mach-O inputs' unwind tables; only the merged link path
+    /// fills them.
+    pub compact_unwind: Vec<CompactUnwind>,
+    pub eh_frame: Vec<EhFrameBlock>,
     /// `--emit-relocs` records; empty unless the link requested them.
     pub emitted_relocs: Vec<EmittedFinalReloc>,
     /// Data-import copy relocations resolved against the merged symbol

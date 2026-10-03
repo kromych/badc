@@ -44,6 +44,8 @@ pub(crate) mod sha1;
 pub(crate) mod so_versions;
 #[cfg(feature = "std")]
 pub(crate) mod strtab;
+#[cfg(feature = "native-emit")]
+pub(crate) mod unwind_info;
 pub(crate) mod weak_undef;
 #[cfg(feature = "native-emit")]
 pub(crate) mod xxh3;
@@ -1162,6 +1164,8 @@ pub(crate) mod test_support {
             text_data_ranges: Vec::new(),
             emitted_relocs: Vec::new(),
             named_sections: Vec::new(),
+            compact_unwind: Vec::new(),
+            eh_frame: Vec::new(),
             got_base_fixups: Vec::new(),
             got_rel_fields: Vec::new(),
             got_pcrel_fixups: Vec::new(),

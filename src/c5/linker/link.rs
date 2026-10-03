@@ -28,8 +28,9 @@ use crate::c5::error::C5Error;
 use super::got_relax::{self, is_x86_64_got_pcrel, is_x86_64_got_slot_ref};
 use super::object::{
     EH_FRAME, ElfTpoffTarget, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
-    NativeSymbol, RelocOrigin, RelocSite, SectionFamily, SharedLibrary, reloc_desc,
+    NativeSymbol, RelocOrigin, RelocSite, SectionFamily, SharedLibrary, SymRef, reloc_desc,
 };
+use crate::c5::codegen::{CompactUnwind, EhFrameBlock, EhFrameField, EhFrameTarget, PointerSlot};
 use crate::c5::layout::{pad_to_align as align_up, round_up as align_usize};
 // A tail-call `b <sym>` reaches its target the same way `bl` does --
 // a 26-bit PC-relative branch immediate -- so `R_AARCH64_JUMP26` shares
@@ -315,6 +316,9 @@ pub struct MergedNative {
     /// The first input whose `.note.GNU-stack` asks for an executable
     /// stack.
     pub exec_stack_input: Option<String>,
+    /// The Mach-O inputs' unwind tables, placed in the merged streams.
+    pub compact_unwind: Vec<CompactUnwind>,
+    pub eh_frame: Vec<EhFrameBlock>,
     /// C-identifier-named sections grouped across units, in the order
     /// their bytes sit in the merged streams. A writer able to carry a
     /// variable section list gives each its own output section; the
@@ -429,6 +433,20 @@ pub enum MergedTarget {
 /// `RoData` and `Data` share the data-byte space by construction (the
 /// layout lays the read-only payload down first), so a caller never has to
 /// know which side of the boundary a reference fell on.
+/// The symbol an unwind table of `obj` names.
+fn unwind_symbol(obj: &NativeObject, idx: usize) -> Result<&NativeSymbol, C5Error> {
+    obj.symbols.get(idx).ok_or_else(|| {
+        link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            &format!(
+                "{}: an unwind table names symbol {idx} past the symbol table",
+                obj.source
+            ),
+        )
+    })
+}
+
 fn merged_target(
     section: NativeSymSection,
     value: i64,
@@ -698,7 +716,7 @@ fn group_named_bytes(
         if s.name == EH_FRAME
             && let Some((start, end)) = last_eh
         {
-            absorb_eh_frame_padding(data, start, end, pad);
+            crate::c5::object::eh_frame::absorb_padding(data, start, end, pad);
         }
         let at = data.len() as u64;
         let src = blob(&objs[i]);
@@ -740,25 +758,6 @@ fn close_named_group(data: &mut Vec<u8>, name: &str, extents: &mut [NamedExtent]
     if let Some(e) = extents.iter_mut().find(|e| e.name == name) {
         e.end = data.len() as u64;
     }
-}
-
-/// Grow the last record of the unwind-table contribution at
-/// `data[start..end]` over the `pad` zero bytes behind it, `DW_CFA_nop`s
-/// inside a record; between records, a zero word ends the table. A
-/// contribution its records do not tile exactly keeps the padding.
-fn absorb_eh_frame_padding(data: &mut [u8], start: usize, end: usize, pad: usize) {
-    if pad == 0 {
-        return;
-    }
-    let Ok(entries) = crate::c5::object::eh_frame::entries(&data[start..end]) else {
-        return;
-    };
-    let Some(last) = entries.last().filter(|e| e.off + e.len == end - start) else {
-        return;
-    };
-    let at = start + last.off;
-    let len = u32::from_le_bytes(data[at..at + 4].try_into().unwrap());
-    data[at..at + 4].copy_from_slice(&(len + pad as u32).to_le_bytes());
 }
 
 /// The zero-fill counterpart: bss carries sizes, not bytes.
@@ -870,6 +869,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
     link.define_link_symbols();
     link.collect_import_facts();
     link.allocate_got_slots();
+    link.place_unwind_tables()?;
     link.resolve_text_relocs()?;
     link.resolve_tls_fixups()?;
     link.resolve_data_relocs()?;
@@ -1044,9 +1044,13 @@ struct Link<'a> {
     /// `.data` slot of each x86-64 GOT reference `allocate_got_slots`
     /// gave one, keyed by `(unit, relocation offset)`.
     got_slot_sites: BTreeMap<(usize, u64), u64>,
-    /// `(unit, symbol index, slot)` of each such slot, resolved as a
+    /// `(unit, symbol and addend, slot)` of each such slot, resolved as a
     /// pointer initializer.
-    got_slot_relocs: Vec<(usize, usize, u64)>,
+    got_slot_relocs: Vec<(usize, SymRef, u64)>,
+    /// The slot of each unwind table personality routine the link defines.
+    unwind_slots: BTreeMap<(usize, SymRef), u64>,
+    compact_unwind: Vec<CompactUnwind>,
+    eh_frame: Vec<EhFrameBlock>,
     /// Import indices the note channel names as data references, and
     /// those some site branches to; a branch makes the import code.
     object_imports: BTreeSet<usize>,
@@ -1138,6 +1142,9 @@ impl<'a> Link<'a> {
             copies: Vec::new(),
             got_slot_sites: BTreeMap::new(),
             got_slot_relocs: Vec::new(),
+            unwind_slots: BTreeMap::new(),
+            compact_unwind: Vec::new(),
+            eh_frame: Vec::new(),
             object_imports: BTreeSet::new(),
             branch_imports: BTreeSet::new(),
             pending_imports: Vec::new(),
@@ -2128,18 +2135,19 @@ impl<'a> Link<'a> {
     /// defines the symbol and the instruction has a direct form. A symbol
     /// the link defines, or holds as an absolute value, whose instruction
     /// has none gets an 8-byte `.data` slot holding its address, as does
-    /// an unresolved weak symbol no zero rewrite reaches; the slot is
-    /// resolved like a pointer initializer, so a PIE takes an
-    /// `R_X86_64_RELATIVE` for it. Imports read the writer's GOT.
+    /// an unresolved weak symbol no zero rewrite reaches, and as does an
+    /// unwind table's personality routine the link defines, which ld64
+    /// gives a GOT entry. The slot is resolved like a pointer initializer,
+    /// so a PIE takes an `R_X86_64_RELATIVE` for it. Imports read the
+    /// writer's GOT.
     fn allocate_got_slots(&mut self) {
-        if self.machine != NativeMachine::X86_64 {
-            return;
-        }
         let objs = self.objs;
-        // A global names one slot for the link, a local one in its unit.
-        let mut slot_of: BTreeMap<(usize, usize, &'a str), u64> = BTreeMap::new();
+        let mut slot_of = BTreeMap::new();
         let first = align_usize(self.data.len(), 8) as u64;
         for (i, obj) in objs.iter().enumerate() {
+            if self.machine != NativeMachine::X86_64 {
+                break;
+            }
             let resolver = self.resolver_calls(obj);
             for reloc in &obj.text_relocs {
                 if !is_x86_64_got_slot_ref(reloc.rtype) || resolver.calls.contains(&reloc.offset) {
@@ -2152,19 +2160,21 @@ impl<'a> Link<'a> {
                 if !self.needs_got_slot(sym, reloc.rtype, field) {
                     continue;
                 }
-                let key = if sym.binding == 0 {
-                    (i, reloc.sym_idx, "")
-                } else {
-                    (usize::MAX, usize::MAX, sym.name.as_str())
-                };
-                let slot = *slot_of.entry(key).or_insert_with(|| {
-                    align_up(&mut self.data, 8);
-                    let slot = self.data.len() as u64;
-                    self.data.resize(self.data.len() + 8, 0);
-                    self.got_slot_relocs.push((i, reloc.sym_idx, slot));
-                    slot
-                });
+                let slot = self.data_slot(&mut slot_of, i, (reloc.sym_idx, 0));
                 self.got_slot_sites.insert((i, reloc.offset), slot);
+            }
+        }
+        for (i, obj) in objs.iter().enumerate() {
+            let personalities = (obj.compact_unwind.iter().filter_map(|e| e.personality)).chain(
+                (obj.eh_frame.iter().flat_map(|t| &t.fields))
+                    .filter(|f| f.got)
+                    .map(|f| f.target),
+            );
+            for target in personalities {
+                if obj.symbols.get(target.0).is_some_and(|s| self.defines(s)) {
+                    let slot = self.data_slot(&mut slot_of, i, target);
+                    self.unwind_slots.insert((i, target), slot);
+                }
             }
         }
         if self.got_slot_relocs.is_empty() {
@@ -2182,6 +2192,199 @@ impl<'a> Link<'a> {
                 crate::c5::layout::bss_image_align(self.data_align),
             );
         }
+    }
+
+    /// The `.data` slot holding `symbol + addend` of `unit`: one per global
+    /// for the link, one per local in its unit.
+    fn data_slot(
+        &mut self,
+        slot_of: &mut BTreeMap<(usize, usize, &'a str, i64), u64>,
+        unit: usize,
+        (sym_idx, addend): SymRef,
+    ) -> u64 {
+        let objs = self.objs;
+        let sym = &objs[unit].symbols[sym_idx];
+        let key = if sym.binding == 0 {
+            (unit, sym_idx, "", addend)
+        } else {
+            (usize::MAX, usize::MAX, sym.name.as_str(), addend)
+        };
+        *slot_of.entry(key).or_insert_with(|| {
+            align_up(&mut self.data, 8);
+            let slot = self.data.len() as u64;
+            self.data.resize(self.data.len() + 8, 0);
+            self.got_slot_relocs.push((unit, (sym_idx, addend), slot));
+            slot
+        })
+    }
+
+    /// Whether some unit defines `sym` or holds it as an absolute value.
+    fn defines(&self, sym: &NativeSymbol) -> bool {
+        match sym.section {
+            NativeSymSection::Undef | NativeSymSection::Common => {
+                let name = sym.name.as_str();
+                self.defined.contains_key(name) || self.absolute_defined.contains_key(name)
+            }
+            NativeSymSection::Text
+            | NativeSymSection::RoData
+            | NativeSymSection::RelRo
+            | NativeSymSection::Data
+            | NativeSymSection::Bss
+            | NativeSymSection::Abs => true,
+            _ => false,
+        }
+    }
+
+    /// The Mach-O inputs' unwind tables against the merged streams: each
+    /// function, LSDA and `__eh_frame` target at its merged offset, each
+    /// personality routine through its slot. An entry and an FDE describe
+    /// their own unit's copy of a function, whichever copy the name binds.
+    fn place_unwind_tables(&mut self) -> Result<(), C5Error> {
+        let objs = self.objs;
+        for (i, obj) in objs.iter().enumerate() {
+            for e in &obj.compact_unwind {
+                let personality = e.personality.map(|r| self.pointer_slot(i, r)).transpose()?;
+                let lsda = match e.lsda.map(|r| self.unwind_target(i, r)).transpose()? {
+                    None => None,
+                    Some(EhFrameTarget::Data { offset, .. }) => Some(offset),
+                    Some(_) => {
+                        return Err(link_err(
+                            Code::MALFORMED_INPUT,
+                            MODULE,
+                            &format!(
+                                "{}: a compact unwind entry's LSDA lies outside the data",
+                                obj.source
+                            ),
+                        ));
+                    }
+                };
+                self.compact_unwind.push(CompactUnwind {
+                    text_offset: self.text_bases[i] as u64 + e.text_offset,
+                    encoding: e.encoding,
+                    personality,
+                    lsda,
+                });
+            }
+            let Some(table) = &obj.eh_frame else {
+                continue;
+            };
+            let mut fields = Vec::with_capacity(table.fields.len());
+            for f in &table.fields {
+                let target = if f.got {
+                    EhFrameTarget::Slot(self.pointer_slot(i, f.target)?)
+                } else {
+                    self.unwind_target(i, f.target)?
+                };
+                fields.push(EhFrameField {
+                    offset: f.offset,
+                    width: f.width,
+                    target,
+                });
+            }
+            let mut fdes = Vec::with_capacity(table.fdes.len());
+            for &fde in &table.fdes {
+                let initial = fields.iter().find(|f| f.offset == fde + 8);
+                let Some(EhFrameTarget::Text(text)) = initial.map(|f| f.target) else {
+                    return Err(link_err(
+                        Code::MALFORMED_INPUT,
+                        MODULE,
+                        &format!(
+                            "{}: the `__eh_frame` FDE at offset {fde:#x} describes no code",
+                            obj.source
+                        ),
+                    ));
+                };
+                fdes.push((fde, text));
+            }
+            self.eh_frame.push(EhFrameBlock {
+                bytes: table.bytes.clone(),
+                fields,
+                fdes,
+            });
+        }
+        Ok(())
+    }
+
+    /// The slot `allocate_got_slots` gave a routine the link defines, else
+    /// the import's.
+    fn pointer_slot(&mut self, unit: usize, target: SymRef) -> Result<PointerSlot, C5Error> {
+        if let Some(&slot) = self.unwind_slots.get(&(unit, target)) {
+            return Ok(PointerSlot::Data(slot));
+        }
+        let objs = self.objs;
+        let sym = unwind_symbol(&objs[unit], target.0)?;
+        let name = sym.name.as_str();
+        let routed = self.is_routed_import(name);
+        let shlib_exported = self.shlib_exports.contains(name);
+        if !routed && !shlib_exported && !self.allow_undefined {
+            return Err(link_err(
+                Code::UNDEFINED_SYMBOL,
+                MODULE,
+                &format!("undefined reference to `{name}` (unwind table personality routine)"),
+            ));
+        }
+        if target.1 != 0 {
+            return Err(link_err(
+                Code::RELOCATION,
+                MODULE,
+                &format!(
+                    "unwind table names imported `{name}` with addend {}; an import's slot \
+                     holds the symbol alone",
+                    target.1
+                ),
+            ));
+        }
+        Ok(PointerSlot::Import(self.bind_import(
+            sym,
+            routed,
+            shlib_exported,
+        )))
+    }
+
+    /// Where `symbol + addend` of `unit` lies in the merged streams.
+    fn unwind_target(
+        &self,
+        unit: usize,
+        (sym_idx, addend): SymRef,
+    ) -> Result<EhFrameTarget, C5Error> {
+        let objs = self.objs;
+        let sym = unwind_symbol(&objs[unit], sym_idx)?;
+        let (section, value) = match sym.section {
+            NativeSymSection::Undef | NativeSymSection::Common => {
+                let d = self.defined.get(sym.name.as_str()).ok_or_else(|| {
+                    link_err(
+                        Code::UNDEFINED_SYMBOL,
+                        MODULE,
+                        &format!("undefined reference to `{}` (unwind table)", sym.name),
+                    )
+                })?;
+                (d.section, d.value)
+            }
+            other => {
+                let value = self
+                    .unit_symbol_offset(unit, other, sym.value)
+                    .ok_or_else(|| {
+                        link_err(
+                            Code::MALFORMED_INPUT,
+                            MODULE,
+                            &format!(
+                                "{}: an unwind table names `{}`, which no merged stream holds",
+                                objs[unit].source, sym.name
+                            ),
+                        )
+                    })?;
+                (other, value)
+            }
+        };
+        Ok(
+            match merged_target(section, value as i64, addend, self.data.len())? {
+                MergedTarget::Text(t) => EhFrameTarget::Text(t as u64),
+                MergedTarget::Data(d) => EhFrameTarget::Data {
+                    offset: d as u64,
+                    anchor: (d - addend) as u64,
+                },
+            },
+        )
     }
 
     /// Whether the GOT reference at `field` to `sym` reads a slot this
@@ -2632,14 +2835,7 @@ impl<'a> Link<'a> {
                 &format!("undefined reference to `{}`", sym.name,),
             ));
         }
-        // A global UNDEF admitted here has no dylib routing; mark it
-        // flat so the writer emits a load-time flat-namespace import. A
-        // weak one admitted through a shared library's export needs the
-        // same marking; a routed weak carries its own dylib assignment.
-        if sym.binding == 1 || (sym.binding == 2 && shlib_exported && !routed) {
-            self.flat_imports.insert(sym.name.clone());
-        }
-        let idx = self.record_import(name);
+        let idx = self.bind_import(sym, routed, shlib_exported);
         if is_branch_reloc(self.machine, reloc.rtype) {
             self.branch_imports.insert(idx);
         } else if self.extern_data_names.contains(name) {
@@ -2655,6 +2851,18 @@ impl<'a> Link<'a> {
             sym_name: None,
         });
         Ok(())
+    }
+
+    /// Record admitted `sym` as an import. A global UNDEF admitted has no
+    /// dylib routing; it is marked flat so the writer emits a load-time
+    /// flat-namespace import. A weak one admitted through a shared
+    /// library's export needs the same marking; a routed weak carries its
+    /// own dylib assignment.
+    fn bind_import(&mut self, sym: &'a NativeSymbol, routed: bool, shlib_exported: bool) -> usize {
+        if sym.binding == 1 || (sym.binding == 2 && shlib_exported && !routed) {
+            self.flat_imports.insert(sym.name.clone());
+        }
+        self.record_import(sym.name.as_str())
     }
 
     /// Apply or park a text relocation whose target is known.
@@ -2840,12 +3048,15 @@ impl<'a> Link<'a> {
                 self.resolve_data_reloc(i, obj, reloc, slot_offset, in_tls)?;
             }
         }
-        for (unit, sym_idx, slot) in core::mem::take(&mut self.got_slot_relocs) {
+        for (unit, (sym_idx, addend), slot) in core::mem::take(&mut self.got_slot_relocs) {
             let reloc = NativeReloc {
                 offset: slot,
                 sym_idx,
-                rtype: R_X86_64_64,
-                addend: 0,
+                rtype: match self.machine {
+                    NativeMachine::X86_64 => R_X86_64_64,
+                    NativeMachine::Aarch64 => R_AARCH64_ABS64,
+                },
+                addend,
             };
             self.resolve_data_reloc(unit, &objs[unit], &reloc, slot, false)?;
         }
@@ -3889,6 +4100,8 @@ impl<'a> Link<'a> {
             },
             section_map: self.section_map,
             exec_stack_input,
+            compact_unwind: self.compact_unwind,
+            eh_frame: self.eh_frame,
         })
     }
 }
@@ -4875,11 +5088,119 @@ mod tests {
             debug_info_relocs: Vec::new(),
             debug_line_relocs: Vec::new(),
             debug_other: Vec::new(),
+            compact_unwind: Vec::new(),
+            eh_frame: None,
         }
     }
 
     fn site(machine: NativeMachine, rtype: u32, offset: u64) -> RelocSite<'static> {
         RelocOrigin::merged(".text").at(machine, rtype, "gfar", offset)
+    }
+
+    /// A Mach-O input's unwind tables reach the merged streams: an imported
+    /// personality routine through the import's slot, one another unit
+    /// defines through a `.data` slot an `__eh_frame` field shares.
+    #[test]
+    fn unwind_tables_reach_the_merged_streams() {
+        use crate::c5::linker::object::{CompactUnwindEntry, EhFrameInput, EhFrameInputField};
+        let sym = |name: &str, section, value| NativeSymbol {
+            name: name.into(),
+            section,
+            value,
+            size: 0,
+            binding: 1,
+            kind: 2,
+            visibility: 0,
+        };
+        let ret4: Vec<u8> = [0xd65f_03c0u32; 4]
+            .iter()
+            .flat_map(|w| w.to_le_bytes())
+            .collect();
+        let mut lib = blank_object(NativeMachine::Aarch64);
+        lib.text = ret4.clone();
+        lib.symbols = alloc::vec![
+            sym("", NativeSymSection::Undef, 0),
+            sym("my_personality", NativeSymSection::Text, 0),
+        ];
+        let mut a = blank_object(NativeMachine::Aarch64);
+        a.text = [ret4.clone(), ret4].concat();
+        a.rodata = alloc::vec![0; 16];
+        a.symbols = alloc::vec![
+            sym("", NativeSymSection::Undef, 0),
+            sym("f", NativeSymSection::Text, 0),
+            sym("g", NativeSymSection::Text, 0x10),
+            sym("__gxx_personality_v0", NativeSymSection::Undef, 0),
+            sym("my_personality", NativeSymSection::Undef, 0),
+            sym("table", NativeSymSection::RoData, 0),
+        ];
+        let entry = |text_offset, personality, lsda| CompactUnwindEntry {
+            text_offset,
+            encoding: 0x0400_0000,
+            personality: Some((personality, 0)),
+            lsda,
+        };
+        a.compact_unwind = alloc::vec![entry(0, 3, Some((5, 8))), entry(0x10, 4, None)];
+        a.eh_frame = Some(EhFrameInput {
+            bytes: alloc::vec![0; 32],
+            fields: alloc::vec![
+                EhFrameInputField {
+                    offset: 8,
+                    width: 8,
+                    target: (2, 4),
+                    got: false,
+                },
+                EhFrameInputField {
+                    offset: 16,
+                    width: 4,
+                    target: (4, 0),
+                    got: true,
+                },
+            ],
+            fdes: alloc::vec![0],
+        });
+        let objs = [lib, a];
+        let merged = link_native_objects_with_shared_libs(&objs, true, &[]).expect("link");
+        let at = |name: &str| merged.defined[name].value;
+        let import = merged
+            .imports
+            .iter()
+            .position(|n| n == "__gxx_personality_v0")
+            .expect("the imported routine");
+        let slot = match merged.compact_unwind[1].personality {
+            Some(PointerSlot::Data(slot)) => slot,
+            other => panic!("the defined routine's slot: {other:?}"),
+        };
+        assert_eq!(
+            merged.compact_unwind,
+            [
+                CompactUnwind {
+                    text_offset: at("f"),
+                    encoding: 0x0400_0000,
+                    personality: Some(PointerSlot::Import(import)),
+                    lsda: Some(at("table") + 8),
+                },
+                CompactUnwind {
+                    text_offset: at("g"),
+                    encoding: 0x0400_0000,
+                    personality: Some(PointerSlot::Data(slot)),
+                    lsda: None,
+                },
+            ]
+        );
+        assert!(
+            merged.data_abs_relocs.iter().any(|r| r.slot_offset == slot
+                && matches!(r.target, MergedTarget::Text(t) if t as u64 == at("my_personality"))),
+            "the slot holds the routine's address"
+        );
+        let block = &merged.eh_frame[0];
+        assert_eq!(
+            block.fields.iter().map(|f| f.target).collect::<Vec<_>>(),
+            [
+                EhFrameTarget::Text(at("g") + 4),
+                EhFrameTarget::Slot(PointerSlot::Data(slot)),
+            ]
+        );
+        assert_eq!(block.fdes, [(0, at("g") + 4)]);
     }
 
     /// The fold keeps one copy of each distinct string and maps every
@@ -6037,6 +6358,8 @@ mod tests {
                 debug_info_relocs: alloc::vec::Vec::new(),
                 debug_line_relocs: alloc::vec::Vec::new(),
                 debug_other: alloc::vec::Vec::new(),
+                compact_unwind: alloc::vec::Vec::new(),
+                eh_frame: None,
             }
         };
         // Weak definition of `weak_target` in `.text`.

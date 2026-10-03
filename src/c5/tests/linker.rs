@@ -5951,6 +5951,8 @@ fn minimal_native_object(
         debug_info_relocs: alloc::vec::Vec::new(),
         debug_line_relocs: alloc::vec::Vec::new(),
         debug_other: alloc::vec::Vec::new(),
+        compact_unwind: alloc::vec::Vec::new(),
+        eh_frame: None,
     }
 }
 
@@ -6281,6 +6283,8 @@ fn aarch64_data_ref_object_ex(
         debug_info_relocs: alloc::vec::Vec::new(),
         debug_line_relocs: alloc::vec::Vec::new(),
         debug_other: alloc::vec::Vec::new(),
+        compact_unwind: alloc::vec::Vec::new(),
+        eh_frame: None,
     }
 }
 
@@ -6524,6 +6528,8 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         debug_info_relocs: alloc::vec::Vec::new(),
         debug_line_relocs: alloc::vec::Vec::new(),
         debug_other: alloc::vec::Vec::new(),
+        compact_unwind: alloc::vec::Vec::new(),
+        eh_frame: None,
     }
 }
 

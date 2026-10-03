@@ -9320,6 +9320,182 @@ fn all_zero_thread_locals_take_the_zero_fill() {
     }
 }
 
+/// A directory holding `uw.o`, a clang-built `frames(char *out)` that walks
+/// the stack with the system unwinder and lists each frame's function, and
+/// the SDK's root for `-L<sdk>/usr/lib -lSystem`; `None` without a C
+/// compiler or an SDK.
+#[cfg(target_os = "macos")]
+fn system_unwinder_fixture(test: &str) -> Option<(TempDir, std::ffi::OsString, String)> {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping {test}: no system C compiler");
+        return None;
+    };
+    let sdk = Command::new("xcrun").arg("--show-sdk-path").output();
+    let Some(sdk) = sdk.ok().filter(|o| o.status.success()) else {
+        eprintln!("skipping {test}: no SDK");
+        return None;
+    };
+    let sdk = String::from_utf8_lossy(&sdk.stdout).trim().to_string();
+    let dir = tempdir(test);
+    write_source(
+        &dir,
+        "uw.c",
+        "#include <dlfcn.h>\n#include <string.h>\n#include <unwind.h>\n\
+         static _Unwind_Reason_Code step(struct _Unwind_Context *c, void *out) {\n\
+           Dl_info info;\n\
+           if (dladdr((void *)_Unwind_GetIP(c), &info) && info.dli_sname) {\n\
+             strcat((char *)out, info.dli_sname);\n\
+             strcat((char *)out, \" \");\n\
+           }\n\
+           return _URC_NO_REASON;\n\
+         }\n\
+         __attribute__((noinline)) int frames(char *out) {\n\
+           _Unwind_Backtrace(step, out);\n\
+           return (int)strlen(out);\n\
+         }\n",
+    );
+    run(
+        Command::new(&cc)
+            .args(["-O1", "-c", "uw.c", "-o", "uw.o"])
+            .current_dir(&dir),
+        "compile the unwinding unit",
+    );
+    Some((dir, cc, sdk))
+}
+
+/// The system unwinder walks a badc image from a clang-built function
+/// through the badc functions that called it to `main`. It reads
+/// `__unwind_info`, which an input's `__compact_unwind` and the lowering's
+/// own frames fill; `backtrace(3)` follows frame pointers instead.
+#[cfg(target_os = "macos")]
+#[test]
+fn the_system_unwinder_walks_a_badc_image_to_main() {
+    let test = "the_system_unwinder_walks_a_badc_image_to_main";
+    let Some((dir, _, sdk)) = system_unwinder_fixture(test) else {
+        return;
+    };
+    write_source(
+        &dir,
+        "mw.c",
+        "#include <stdio.h>\nint frames(char *out);\n\
+         void inner(char *out) { frames(out); }\n\
+         int main(void) { char out[512] = \"\"; inner(out); puts(out); return 0; }\n",
+    );
+    run(
+        Command::new(badc())
+            .args(["-q", "mw.c", "uw.o"])
+            .arg(format!("-L{sdk}/usr/lib"))
+            .args(["-lSystem", "-o", "mw"])
+            .current_dir(&dir),
+        "link the image",
+    );
+    let out = run(&mut Command::new(dir.join("mw")), "run the image");
+    let walked = String::from_utf8_lossy(&out.stdout);
+    assert!(walked.contains("frames inner main"), "walked: {walked:?}");
+}
+
+/// A function whose saves no compact encoding states -- x19 away from
+/// the slot a frame encoding names -- unwinds through the FDE its
+/// assembler wrote, which the image's `__eh_frame` keeps and its
+/// `__unwind_info` entry names.
+#[cfg(target_os = "macos")]
+#[test]
+fn the_system_unwinder_reads_an_input_fde() {
+    let test = "the_system_unwinder_reads_an_input_fde";
+    let Some((dir, cc, sdk)) = system_unwinder_fixture(test) else {
+        return;
+    };
+    write_source(
+        &dir,
+        "odd.s",
+        "\t.text\n\t.globl _odd\n\t.p2align 2\n_odd:\n\t.cfi_startproc\n\
+         \tsub sp, sp, #48\n\t.cfi_def_cfa_offset 48\n\
+         \tstp x29, x30, [sp, #32]\n\tstr x19, [sp, #8]\n\tadd x29, sp, #32\n\
+         \t.cfi_def_cfa w29, 16\n\t.cfi_offset w30, -8\n\t.cfi_offset w29, -16\n\
+         \t.cfi_offset w19, -40\n\
+         \tmov x19, x0\n\tbl _frames\n\tmov x0, x19\n\
+         \tldr x19, [sp, #8]\n\tldp x29, x30, [sp, #32]\n\tadd sp, sp, #48\n\tret\n\
+         \t.cfi_endproc\n",
+    );
+    write_source(
+        &dir,
+        "om.c",
+        "#include <stdio.h>\nchar *odd(char *out);\n\
+         int main(void) { char out[512] = \"\"; puts(odd(out)); return 0; }\n",
+    );
+    run(
+        Command::new(&cc)
+            .args(["-c", "odd.s", "-o", "odd.o"])
+            .current_dir(&dir),
+        "assemble the FDE-described function",
+    );
+    run(
+        Command::new(badc())
+            .args(["-q", "om.c", "odd.o", "uw.o"])
+            .arg(format!("-L{sdk}/usr/lib"))
+            .args(["-lSystem", "-o", "om"])
+            .current_dir(&dir),
+        "link the image",
+    );
+    let out = run(&mut Command::new(dir.join("om")), "run the image");
+    let walked = String::from_utf8_lossy(&out.stdout);
+    assert!(walked.contains("frames odd main"), "walked: {walked:?}");
+}
+
+/// A C++ exception thrown in clang++-built code runs a cleanup and lands
+/// in a catch-all of a badc-linked image: the personality routine and
+/// the LSDA reach `__unwind_info`, the routine through its import's slot.
+#[cfg(target_os = "macos")]
+#[test]
+fn a_cxx_exception_lands_in_a_badc_linked_image() {
+    let test = "a_cxx_exception_lands_in_a_badc_linked_image";
+    let cxx = std::env::var_os("CXX").unwrap_or_else(|| "c++".into());
+    if !Command::new(&cxx)
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+    {
+        eprintln!("skipping {test}: no system C++ compiler");
+        return;
+    }
+    let Some((dir, _, sdk)) = system_unwinder_fixture(test) else {
+        return;
+    };
+    write_source(
+        &dir,
+        "eh.cpp",
+        "#include <cstdio>\n\
+         struct Guard { ~Guard() { std::puts(\"cleanup\"); } };\n\
+         void thrower(int x) { if (x) throw 7; }\n\
+         extern \"C\" int catches(int x) {\n\
+           try { Guard g; thrower(x); } catch (...) { std::puts(\"caught\"); return 1; }\n\
+           return 0;\n\
+         }\n",
+    );
+    write_source(
+        &dir,
+        "em.c",
+        "#include <stdio.h>\nint catches(int);\n\
+         int main(void) { printf(\"%d\\n\", catches(1)); return 0; }\n",
+    );
+    run(
+        Command::new(&cxx)
+            .args(["-O1", "-c", "eh.cpp", "-o", "eh.o"])
+            .current_dir(&dir),
+        "compile the throwing unit",
+    );
+    run(
+        Command::new(badc())
+            .args(["-q", "em.c", "eh.o"])
+            .arg(format!("-L{sdk}/usr/lib"))
+            .args(["-lc++", "-lSystem", "-o", "em"])
+            .current_dir(&dir),
+        "link the image",
+    );
+    let out = run(&mut Command::new(dir.join("em")), "run the image");
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "cleanup\ncaught\n1\n");
+}
+
 /// The loader publishes its link map through the executable's `DT_DEBUG`,
 /// so gdb lists the C library a badc executable runs with and, through
 /// that library's thread debugging, reads its thread-locals.

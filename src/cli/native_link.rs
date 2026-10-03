@@ -28,7 +28,8 @@ use super::stats::LinkStats;
 /// the merged per-`.o` `.debug_info`; `.debug_frame` keeps the
 /// inputs' records and adds the writer's for the functions badc
 /// lowered), every input's `.eh_frame` as one table under
-/// `PT_GNU_EH_FRAME`,
+/// `PT_GNU_EH_FRAME`, on Mach-O an `__unwind_info` over every function
+/// beside the inputs' `__eh_frame`,
 /// variadic libc imports, `#pragma` exports, and `_Thread_local`
 /// storage in each format's native shape: ELF PT_TLS, the PE TLS
 /// directory + `_tls_index`, the Mach-O TLV descriptors. Mach-O

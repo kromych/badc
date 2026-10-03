@@ -323,6 +323,63 @@ impl FrameRules {
     }
 }
 
+/// The rules a lowered function's `.debug_frame` record gives its body: a
+/// frame record at `CFA - 16`, the entry's rules throughout, or neither
+/// where the prologue stores a callee-saved register the record leaves
+/// out. TODO: the record describes no callee-saved register.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LoweredFrame {
+    Record,
+    Leaf,
+    UndescribedSaves,
+}
+
+/// Each lowered function's text offset and rules.
+pub(crate) fn lowered_frames(build: &Build, target: Target) -> Vec<(usize, LoweredFrame)> {
+    let arch = CfiArch::of(target);
+    (build.func_ent_pcs.iter())
+        .filter(|pc| build.func_prologue_native.contains_key(pc))
+        .filter_map(|&pc| {
+            let lo = *build.pc_to_native.get(pc).filter(|&&n| n != usize::MAX)?;
+            let frame = if arch == CfiArch::Aarch64 && a64_prologue_saves(build, pc, lo) {
+                LoweredFrame::UndescribedSaves
+            } else if FrameRules::of(build, arch, pc, lo) == FrameRules::Leaf {
+                LoweredFrame::Leaf
+            } else {
+                LoweredFrame::Record
+            };
+            Some((lo, frame))
+        })
+        .collect()
+}
+
+/// Whether the prologue at `low_pc` stores x19-x28 or v8-v15, which
+/// AAPCS64 has the callee preserve and the a64 emitter saves with `stp`
+/// and `str`.
+fn a64_prologue_saves(build: &Build, ent_pc: usize, low_pc: usize) -> bool {
+    let Some(&body) = build.func_prologue_native.get(&ent_pc) else {
+        return false;
+    };
+    let preserved = |simd: bool, reg: u32| {
+        if simd {
+            (8..=15).contains(&reg)
+        } else {
+            (19..=28).contains(&reg)
+        }
+    };
+    let prologue = build.text.get(low_pc..body).unwrap_or_default();
+    prologue.as_chunks::<4>().0.iter().any(|w| {
+        let w = u32::from_le_bytes(*w);
+        let simd = w & (1 << 26) != 0;
+        // STP / STNP in every addressing form: bit 22 clear stores.
+        let pair = w & 0x3A40_0000 == 0x2800_0000;
+        // STR (unsigned offset), and STR (pre- / post-index) and STUR.
+        let single = w & 0x3B40_0000 == 0x3900_0000 || w & 0x3B60_0000 == 0x3800_0000;
+        (pair && (preserved(simd, w & 0x1F) || preserved(simd, (w >> 10) & 0x1F)))
+            || (single && preserved(simd, w & 0x1F))
+    })
+}
+
 struct Subprog {
     name_off: u32,
     low_pc: u64,

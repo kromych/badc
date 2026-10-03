@@ -1003,6 +1003,40 @@ pub struct NativeObject {
     /// `.debug_rnglists`, `.debug_loclists`, `.debug_str_offsets`,
     /// `.debug_addr` and the rest -- with its relocations.
     pub debug_other: Vec<DebugInput>,
+    /// A Mach-O object's `__LD,__compact_unwind` and `__TEXT,__eh_frame`.
+    pub compact_unwind: Vec<CompactUnwindEntry>,
+    pub eh_frame: Option<EhFrameInput>,
+}
+
+/// A symbol of the unit, by index, and an addend.
+pub type SymRef = (usize, i64);
+
+/// One `__LD,__compact_unwind` entry: a function by its offset in the
+/// unit's text, its arm64 encoding, its personality routine and its LSDA.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CompactUnwindEntry {
+    pub text_offset: u64,
+    pub encoding: u32,
+    pub personality: Option<SymRef>,
+    pub lsda: Option<SymRef>,
+}
+
+/// A Mach-O input's `__eh_frame`: the bytes, each field holding its
+/// distance to `target` (with `got`, to a slot holding its address), and
+/// each FDE's offset; the field 8 bytes in names its function.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EhFrameInput {
+    pub bytes: Vec<u8>,
+    pub fields: Vec<EhFrameInputField>,
+    pub fdes: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EhFrameInputField {
+    pub offset: u32,
+    pub width: u8,
+    pub target: SymRef,
+    pub got: bool,
 }
 
 /// One `.debug_*` section outside the four `NativeObject` names.
@@ -1136,6 +1170,8 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         debug_info_relocs: debug.info_relocs,
         debug_line_relocs: debug.line_relocs,
         debug_other: debug.other,
+        compact_unwind: Vec::new(),
+        eh_frame: None,
     })
 }
 

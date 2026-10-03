@@ -200,6 +200,25 @@ pub fn entries(data: &[u8]) -> Result<Vec<Entry>, String> {
     Ok(out)
 }
 
+/// Grow the last record of the unwind-table contribution at
+/// `data[start..end]` over the `pad` zero bytes behind it, `DW_CFA_nop`s
+/// inside a record; between records, a zero word ends the table. A
+/// contribution its records do not tile exactly keeps the padding.
+pub(crate) fn absorb_padding(data: &mut [u8], start: usize, end: usize, pad: usize) {
+    if pad == 0 {
+        return;
+    }
+    let Ok(entries) = entries(&data[start..end]) else {
+        return;
+    };
+    let Some(last) = entries.last().filter(|e| e.off + e.len == end - start) else {
+        return;
+    };
+    let at = start + last.off;
+    let len = u32::from_le_bytes(data[at..at + 4].try_into().unwrap());
+    data[at..at + 4].copy_from_slice(&(len + pad as u32).to_le_bytes());
+}
+
 /// Walk `.eh_frame`, returning one entry per FDE. `sec_addr` is the
 /// section's final address; entries come back in address order, which
 /// is the order an unwinder binary-searches.

@@ -1390,6 +1390,8 @@ mod tests {
             init_fini_arrays: Default::default(),
             section_map: Default::default(),
             exec_stack_input: None,
+            compact_unwind: Vec::new(),
+            eh_frame: Vec::new(),
         }
     }
 

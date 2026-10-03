@@ -214,6 +214,8 @@ pub(crate) struct Link {
     pub(crate) z: badc::ZKeywords,
     /// The last of `--warn-execstack` / `--no-warn-execstack`.
     pub(crate) warn_execstack: Option<bool>,
+    /// Cleared by `--no-warn-rwx-segments`.
+    pub(crate) warn_rwx_segments: bool,
     /// `--fatal-warnings`: a link warning fails the link.
     pub(crate) fatal_warnings: bool,
     /// `-Bsymbolic`: a shared library binds its references to its own
@@ -288,6 +290,7 @@ impl Default for Link {
             fix_cortex_a53_843419: false,
             z: badc::ZKeywords::default(),
             warn_execstack: None,
+            warn_rwx_segments: true,
             fatal_warnings: false,
             symbolic: false,
             emit_relocs: false,
@@ -1737,11 +1740,14 @@ impl Parser {
             "--no-undefined" => link.z.push(badc::ZKeyword::Defs(true)),
             "--fatal-warnings" => link.fatal_warnings = true,
             "-Bsymbolic" => link.symbolic = true,
+            // A -T link warns of a read-write-execute segment, which the
+            // image without -T never has.
+            "--warn-rwx-segments" => link.warn_rwx_segments = true,
+            "--no-warn-rwx-segments" => link.warn_rwx_segments = false,
             // Properties every badc image has: little-endian, no
-            // read-write-execute segment, no generated unwind tables, and
-            // no veneer that is not position-independent.
-            "--no-warn-rwx-segments" | "-EL" | "--pic-veneer" | "--no-ld-generated-unwind-info" => {
-            }
+            // generated unwind tables, and no veneer that is not
+            // position-independent.
+            "-EL" | "--pic-veneer" | "--no-ld-generated-unwind-info" => {}
             "--fix-cortex-a53-843419" => link.fix_cortex_a53_843419 = true,
             // ld accepts the emulation joined (`-maarch64linux`) or
             // separate (`-m aarch64linux`).

@@ -4793,6 +4793,64 @@ fn the_ld_personas_other_options_take_effect_or_are_refused() {
     assert!(out.status.success(), "a relocatable link takes it");
 }
 
+/// Both front ends of the script engine report a segment the image loads
+/// readable, writable and executable, as GNU ld does, naming the output;
+/// `--no-warn-rwx-segments` withholds the warning.
+#[test]
+fn an_rwx_segment_is_reported_unless_the_warning_is_withdrawn() {
+    let dir = tempdir("rwx-segment");
+    let src = write_source(
+        &dir,
+        "m.c",
+        "int g = 1;\nint main(void) { return g - 1; }\n",
+    );
+    let obj = dir.join("m.o");
+    run(
+        Command::new(badc())
+            .args(["-q", "--target=linux-x64", "-c"])
+            .arg(&src)
+            .arg("-o")
+            .arg(&obj),
+        "compile",
+    );
+    let script = write_source(
+        &dir,
+        "t.lds",
+        "ENTRY(main) SECTIONS { . = 0x400000; .text : { *(.text*) } .data : { *(.data*) } }\n",
+    );
+    let out = dir.join("rwx.out");
+    let warning = "rwx.out has a LOAD segment with RWX permissions";
+    for (persona, withdraw) in [(true, false), (true, true), (false, false), (false, true)] {
+        let mut cmd = Command::new(badc());
+        if persona {
+            cmd.args(["--ld", "-m", "elf_x86_64"]);
+            if withdraw {
+                cmd.arg("--no-warn-rwx-segments");
+            }
+        } else {
+            cmd.args(["-q", "--target=linux-x64"]);
+            if withdraw {
+                cmd.arg("-Wl,--no-warn-rwx-segments");
+            }
+        }
+        let res = cmd
+            .arg("-T")
+            .arg(&script)
+            .arg(&obj)
+            .arg("-o")
+            .arg(&out)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&res.stderr);
+        assert!(res.status.success(), "{err}");
+        assert_eq!(
+            err.contains(warning),
+            !withdraw,
+            "persona={persona} withdraw={withdraw}: {err}"
+        );
+    }
+}
+
 /// The link without -T keeps every local symbol of its inputs, which is
 /// what `--discard-none` asks for; `-X` drops the assembler temporaries
 /// (`.L*`) among them. The last of the two holds, as in GNU ld.

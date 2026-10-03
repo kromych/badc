@@ -1343,6 +1343,53 @@ fn an_executable_stack_note_makes_the_stack_executable() {
     }
 }
 
+/// GNU ld's warnings for a loaded segment that is readable, writable and
+/// executable and for an executable thread-local one, naming the output;
+/// `--no-warn-rwx-segments` withholds both, and a layout keeping code and
+/// data on pages of their own draws neither.
+#[test]
+fn a_read_write_execute_segment_draws_a_warning() {
+    let obj = || {
+        let o = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sec(
+                ".tdata",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_WRITE | SHF_TLS,
+                8,
+                &[0u8; 8],
+            )
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1);
+        alloc::vec![parse_lds_object("a.o", o.build(EM_X86_64)).expect("parses")]
+    };
+    let shared_page = "SECTIONS { . = 0x400000; .text : { *(.text) } .data : { *(.data) } \
+                       .tdata : { *(.tdata) } }";
+    let own_pages = "SECTIONS { . = 0x400000; .text : { *(.text) } . = ALIGN(0x1000); \
+                     .data : { *(.data) } .tdata : { *(.tdata) } }";
+    let tls_x = "PHDRS { all PT_LOAD FLAGS(5); tls PT_TLS FLAGS(5); } SECTIONS { \
+                 . = 0x400000; .text : { *(.text) } :all .data : { *(.data) } :all \
+                 .tdata : { *(.tdata) } :all :tls }";
+    let rwx = "out has a LOAD segment with RWX permissions";
+    let tls = "out has a TLS segment with execute permission";
+    for (script, warn, want) in [
+        (shared_page, true, &[rwx][..]),
+        (shared_page, false, &[]),
+        (own_pages, true, &[]),
+        (tls_x, true, &[tls]),
+    ] {
+        let opts = LdsOptions {
+            warn_rwx_segments: warn,
+            output_name: String::from("out"),
+            ..Default::default()
+        };
+        let script = parse_linker_script(script).expect("parses");
+        let res = link_with_script(&script, obj(), &opts).expect("links");
+        let texts: Vec<&str> = res.warnings.iter().map(|w| w.text.as_str()).collect();
+        assert_eq!(texts, want, "warn={warn}");
+    }
+}
+
 /// The veneer symbol names its input section by the index the input
 /// file gives it, not by the position it holds in this link. The
 /// kernel links its kallsyms images with `--strip-debug` and the

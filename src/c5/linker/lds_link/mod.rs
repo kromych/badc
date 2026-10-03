@@ -169,6 +169,7 @@ const PT_INTERP: u32 = 3;
 const PT_PHDR: u32 = 6;
 
 const PT_NOTE: u32 = 4;
+const PT_TLS: u32 = 7;
 
 const PT_GNU_EH_FRAME: u32 = 0x6474e550;
 
@@ -301,6 +302,9 @@ pub struct LdsOptions {
     pub exec_stack: Option<bool>,
     /// `--warn-execstack` (`Some(true)`) / `--no-warn-execstack`.
     pub warn_execstack: Option<bool>,
+    /// Cleared by `--no-warn-rwx-segments`: a segment the image loads
+    /// readable, writable and executable draws a warning.
+    pub warn_rwx_segments: bool,
     /// `-z text`: a dynamic relocation against read-only memory is an
     /// error rather than a `DT_TEXTREL`.
     pub text: bool,
@@ -370,6 +374,7 @@ impl Default for LdsOptions {
             emit_relocs: false,
             exec_stack: None,
             warn_execstack: None,
+            warn_rwx_segments: true,
             text: false,
             common_page_size: None,
             allow_multiple_definition: false,
@@ -1255,6 +1260,9 @@ impl<'a> LdsLinker<'a> {
 
         // Program headers.
         let phdrs = self.build_phdrs(&emit_order)?;
+        if self.opts.warn_rwx_segments {
+            self.report_rwx_segments(&phdrs);
+        }
 
         // Symbol table.
         let mut sym_index = SymIndex::default();

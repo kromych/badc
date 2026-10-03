@@ -111,7 +111,8 @@ Multi-TU knobs:
                            GNU ld's image options. Every link takes
                            --build-id, -z max-page-size=, -z
                            [no]pack-relative-relocs, -z [no]execstack,
-                           --[no-]warn-execstack, -z now, -z [no]text,
+                           --[no-]warn-execstack,
+                           --[no-]warn-rwx-segments, -z now, -z [no]text,
                            --no-apply-dynamic-relocs, -S /
                            --strip-debug, -X, --discard-none,
                            --emit-relocs, --no-undefined / -z defs,

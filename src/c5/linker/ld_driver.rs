@@ -87,6 +87,8 @@ struct LdArgs {
     z: ZKeywords,
     /// `--warn-execstack` / `--no-warn-execstack`.
     warn_execstack: Option<bool>,
+    /// Cleared by `--no-warn-rwx-segments`.
+    warn_rwx_segments: bool,
     print_version: bool,
     // Final-link options; ignored under `-r`, which has no layout.
     /// `-shared` / `-pie`: ET_DYN output. The last of those two and
@@ -301,6 +303,7 @@ impl LdArgs {
             orphan_handling: None,
             z: ZKeywords::default(),
             warn_execstack: None,
+            warn_rwx_segments: true,
             print_version: false,
             shared: false,
             shared_object: false,
@@ -477,7 +480,8 @@ impl LdArgs {
                 "--strip-debug" | "-S" => a.strip_debug = true,
                 "-EL" => {} // little-endian, the only byte order supported
                 "-EB" => return Err(ld_err("big-endian output is not supported")),
-                "--no-warn-rwx-segments" | "--warn-rwx-segments" => {}
+                "--warn-rwx-segments" => a.warn_rwx_segments = true,
+                "--no-warn-rwx-segments" => a.warn_rwx_segments = false,
                 "--warn-execstack" => a.warn_execstack = Some(true),
                 "--no-warn-execstack" => a.warn_execstack = Some(false),
                 "--as-needed" => a.inputs.push(InputItem::AsNeeded(true)),
@@ -1067,6 +1071,7 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         apply_dynamic_relocs: a.apply_dynamic_relocs,
         emit_relocs: a.emit_relocs,
         warn_execstack: a.warn_execstack,
+        warn_rwx_segments: a.warn_rwx_segments,
         emit_warnings: true,
         diag: crate::c5::diag::Config::new(),
         soname: a.soname.clone(),

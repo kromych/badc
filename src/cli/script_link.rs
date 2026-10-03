@@ -156,6 +156,10 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
         fail("error: no input objects".to_string());
     }
     let machine = inputs[0].machine;
+    let out = cli
+        .output_path
+        .clone()
+        .unwrap_or_else(|| std::path::PathBuf::from("a.out"));
     let mut opts = badc::LdsOptions {
         emit: if shared || cli.link.pie == Some(true) {
             badc::LdsEmit::Dyn
@@ -185,6 +189,10 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
         fix_cortex_a53_843419: cli.link.fix_cortex_a53_843419,
         symbolic: cli.link.symbolic,
         warn_execstack: cli.link.warn_execstack,
+        warn_rwx_segments: cli.link.warn_rwx_segments,
+        output_name: (out.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default(),
         ..Default::default()
     };
     // `refuse_link_options` asked the same table before the link began.
@@ -204,10 +212,6 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
     if cli.link.fatal_warnings && !res.warnings.is_empty() {
         fail("error: warnings treated as errors (--fatal-warnings)".to_string());
     }
-    let out = cli
-        .output_path
-        .clone()
-        .unwrap_or_else(|| std::path::PathBuf::from("a.out"));
     if let Err(e) = badc::write_output_file(&out, &res.image, true) {
         fail(format!("error: failed to write {}: {e}", out.display()));
     }

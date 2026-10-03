@@ -89,6 +89,7 @@ regenerates.
 | B6002 | `missing-entry` | warning | controllable | default | no input defines the entry symbol, so the image enters at the first text address |
 | B6003 | `merged-section-access` | warning | controllable | default | a relocation reaches past the end of the merged section it names |
 | B6004 | `execstack` | warning | controllable | default | the image's stack is executable because an input's `.note.GNU-stack` asks for it, or because `-z execstack` does under `--warn-execstack` |
+| B6005 | `rwx-segment` | warning | controllable | default | a segment the image loads is readable, writable and executable, or its thread-local segment executable |
 | B6010 | `undefined-symbol` | error | hard | - | a reference no input object, archive or shared library defines |
 | B6011 | `duplicate-symbol` | error | hard | - | more than one input defines the same symbol |
 | B6012 | `relocation` | error | hard | - | a relocation the linker cannot apply, or a value its field cannot hold |

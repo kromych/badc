@@ -25,14 +25,14 @@ Disassembly of section .text:
                	int3
                	int3
 
-<cache_alloc>:
+<fill>:
                	leaq	<rip>, %rax      # <addr>
                	movl	(%rax), %eax
                	addq	%rdi, %rax
                	movl	%eax, %eax
                	retq
 
-<cache_alloc_folio>:
+<fill_first>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp

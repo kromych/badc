@@ -13,7 +13,7 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<cache_alloc>:
+<fill>:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	w1, [x1]
@@ -21,7 +21,7 @@ Disassembly of section .text:
                	mov	w0, w0
                	ret
 
-<cache_alloc_folio>:
+<fill_first>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30

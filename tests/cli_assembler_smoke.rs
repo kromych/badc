@@ -1558,6 +1558,23 @@ fn dash_p_drops_the_line_markers() {
     run_ok(&d, &["-q", "-P", "-c", "t.c"]);
 }
 
+/// `-E` output compiles as its source does: the pragmas the preprocessor
+/// consumed, <stdatomic.h>'s `#pragma intrinsic` lines among them, are
+/// written where they stood.
+#[test]
+fn preprocessed_output_compiles_again() {
+    let d = dir("pp-recompile");
+    write(
+        &d,
+        "a.c",
+        "#include <stdatomic.h>\n\
+         int f(atomic_int *p) { return atomic_fetch_add(p, 1); }\n\
+         int main(void) { atomic_int x = 1; return f(&x) - 1; }\n",
+    );
+    run_ok(&d, &["-q", "-E", "a.c", "-o", "a_pp.c"]);
+    run_ok(&d, &["-q", "-c", "a_pp.c", "-o", "a.o"]);
+}
+
 /// Which headers a unit opens depends on the predefine set, so the
 /// preprocess-only modes take the code model too, as gcc does. Refusing
 /// them would leave `-MM` describing a unit nobody builds.

@@ -580,6 +580,10 @@ pub struct CompileOptions {
     /// family's prerequisite source). Set by `-H` and by any
     /// dependency-output flag.
     pub track_includes: bool,
+    /// When true the preprocessor writes every pragma it consumes into
+    /// its output, so `-E` output compiles to the program its source
+    /// does. Set by the `-E` path only.
+    pub keep_pragmas: bool,
     /// The level each diagnostic reports at, as the `-W` family left
     /// it. The pragmas in the unit apply on top of this.
     pub diag: crate::c5::diag::Config,
@@ -861,6 +865,11 @@ impl CompileOptions {
     /// Flip include tracking on or off. See [`Self::track_includes`].
     pub fn with_track_includes(mut self, on: bool) -> Self {
         self.track_includes = on;
+        self
+    }
+    /// See [`Self::keep_pragmas`].
+    pub fn with_keep_pragmas(mut self, on: bool) -> Self {
+        self.keep_pragmas = on;
         self
     }
     /// Install the levels the `-W` family selected. See
@@ -2725,6 +2734,7 @@ impl Compiler {
         }
         pp.set_source_label(&opts.source_label);
         pp.set_track_includes(opts.track_includes);
+        pp.set_keep_pragmas(opts.keep_pragmas);
         pp.set_asm_source(opts.asm_source);
         if let Some(secs) = opts.translation_time {
             pp.set_translation_time(secs);

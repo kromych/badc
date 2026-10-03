@@ -907,6 +907,33 @@ fn a_pragma_operator_leaves_its_line_numbered() {
 }
 
 #[test]
+fn preprocessed_output_keeps_the_pragmas_the_pass_consumes() {
+    // `-E` output is compiled again, so a pragma the pass acted on is
+    // written where it stood, directive or operator. A compile keeps
+    // its output free of them; both register the intrinsics.
+    let src = "#pragma intrinsic(\"alloca\")\n\
+               #define FABS _Pragma(\"intrinsic(\\\"fabs\\\")\")\n\
+               FABS int x;\n";
+    for keep in [true, false] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.set_keep_pragmas(keep);
+        let out = pp.process(src).expect("preprocessor failed");
+        assert!(pp.intrinsics.contains_key("alloca") && pp.intrinsics.contains_key("fabs"));
+        assert_eq!(
+            out.contains("\n#pragma intrinsic(\"alloca\")\n"),
+            keep,
+            "{out:?}"
+        );
+        assert_eq!(
+            out.contains("\n#pragma intrinsic(\"fabs\")\n# 3 \"<source>\"\n int x;"),
+            keep,
+            "{out:?}"
+        );
+        assert_eq!(out.matches("intrinsic").count(), if keep { 2 } else { 0 });
+    }
+}
+
+#[test]
 fn pragma_operator_ignored_inside_string_literal() {
     // The operator name inside a string literal is ordinary text.
     let out = process("const char *s = \"_Pragma(\\\"once\\\")\";\n");

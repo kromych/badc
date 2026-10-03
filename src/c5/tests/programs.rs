@@ -7950,6 +7950,29 @@ fn integer_constant_added_to_an_address_constant() {
 }
 
 #[test]
+fn preprocessed_output_compiles_to_the_same_program() {
+    use crate::{CompileOptions, Compiler, Target, Vm};
+    // `-E` output is a translation unit of its own: <stdatomic.h>'s
+    // generic functions exist only through the `#pragma intrinsic` lines
+    // the preprocessor consumes, so the output has to carry them for its
+    // compile to reach the same program.
+    let src = "#include <stdatomic.h>\n\
+               int f(atomic_int *p) { return atomic_fetch_add(p, 1); }\n\
+               int main(void) { atomic_int x = 41; f(&x); return atomic_load(&x); }\n";
+    let target = Target::host();
+    let text = Compiler::preprocess(
+        src.to_string(),
+        target,
+        CompileOptions::default().with_keep_pragmas(true),
+    )
+    .expect("the unit preprocesses");
+    let program = Compiler::with_options(text, target, CompileOptions::default())
+        .compile()
+        .expect("the preprocessed unit compiles");
+    assert_eq!(Vm::new(program).run().unwrap(), 42);
+}
+
+#[test]
 fn a_pragma_operator_keeps_the_lines_after_it_numbered() {
     use crate::{CompileOptions, Compiler, Target};
     // The `#pragma pack` an operator re-emits takes a line of its own; the

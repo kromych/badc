@@ -91,9 +91,9 @@ impl Preprocessor {
 
     /// Apply a single destringized `_Pragma` operand through the same
     /// dispatch as the `#pragma` directive (see the `Directive::Pragma`
-    /// arm in `process_named`). The position-sensitive pragmas are
-    /// re-emitted as a `#pragma` directive on its own line for the lexer
-    /// to fold in at this source position, followed by a line marker so
+    /// arm in `process_named`). The position-sensitive pragmas, and under
+    /// [`Self::keep_pragmas`] every consumed one, are re-emitted as a
+    /// `#pragma` directive on its own line, followed by a line marker so
     /// the rest of the source line keeps its number.
     pub(super) fn dispatch_pragma_operator(
         &mut self,
@@ -107,13 +107,15 @@ impl Preprocessor {
                 self.pragma_once_files.insert(site.file.to_string());
             }
             PragmaDirective::Other => {
-                if pragma_is_pack(args) || pragma_is_visibility(args) {
+                let lexer_reads = pragma_is_pack(args) || pragma_is_visibility(args);
+                if !lexer_reads {
+                    self.parse_pragma(args, site)?;
+                }
+                if lexer_reads || self.keep_pragmas {
                     out.push_str("\n#pragma ");
                     out.push_str(args.trim());
                     out.push('\n');
                     out.push_str(&format_line_marker(site.line, presumed_file));
-                } else {
-                    self.parse_pragma(args, site)?;
                 }
             }
         }

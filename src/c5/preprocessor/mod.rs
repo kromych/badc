@@ -260,6 +260,10 @@ pub(crate) struct Preprocessor {
     /// costs one push to `include_records` per `#include` resolve
     /// attempt and nothing else.
     track_includes: bool,
+    /// `true` for `-E` output: a pragma the pass consumes is also written
+    /// at its position, `_Pragma` as a `#pragma` line, so the expansion
+    /// compiles to the program its source does.
+    keep_pragmas: bool,
     /// `true` for assembler-with-cpp input (a `.S` unit). A `#` line
     /// whose name is no directive then passes through with its tail
     /// macro-expanded, as GNU cpp does for assembler input; in C such
@@ -1191,6 +1195,7 @@ impl Preprocessor {
             include_records: Vec::new(),
             system_headers: BTreeSet::new(),
             track_includes: false,
+            keep_pragmas: false,
             asm_source: false,
             entrypoint: None,
             subsystem: None,
@@ -1331,6 +1336,12 @@ impl Preprocessor {
     /// the `-M` family's dependency output.
     pub fn set_track_includes(&mut self, enabled: bool) {
         self.track_includes = enabled;
+    }
+
+    /// Write the pragmas the pass consumes into its output. See
+    /// [`Self::keep_pragmas`].
+    pub fn set_keep_pragmas(&mut self, on: bool) {
+        self.keep_pragmas = on;
     }
 
     /// Mark the input as assembler-with-cpp (a `.S` unit).
@@ -2152,17 +2163,27 @@ impl<'p, 's> LinePass<'p, 's> {
             // order, so the line passes through and the lexer folds it
             // into its `pack_stack` / `visibility_stack` in place.
             PragmaDirective::Other if pragma_is_pack(args) || pragma_is_visibility(args) => {
-                self.out.push('#');
-                self.out.push_str(spelling);
-                self.out.push('\n');
-                self.presumed += 1;
+                self.pass_through(spelling);
                 return Ok(Emitted::Yes);
             }
             PragmaDirective::Other => {
                 self.pp.parse_pragma(args, site)?;
+                if self.pp.keep_pragmas {
+                    self.pass_through(spelling);
+                    return Ok(Emitted::Yes);
+                }
             }
         }
         Ok(Emitted::No)
+    }
+
+    /// The directive line `#<spelling>` as it stands, in place of the
+    /// blank a consumed directive leaves.
+    fn pass_through(&mut self, spelling: &str) {
+        self.out.push('#');
+        self.out.push_str(spelling);
+        self.out.push('\n');
+        self.presumed += 1;
     }
 
     /// `#include` / `#include_next` with a literal header name. The

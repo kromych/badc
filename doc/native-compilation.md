@@ -128,6 +128,7 @@ gcc / clang / msvc convention so it does not collide with user identifiers:
     __BADC_WINDOWS__                     // Windows targets only
     __APPLE__                            // macOS target only
     __linux__                            // Linux targets only
+    __ELF__                              // ELF targets (the Linux ones)
 ```
 
 alongside the C99 / C11 set (`__STDC__`, `__STDC_VERSION__`, `__SIZEOF_*__`,

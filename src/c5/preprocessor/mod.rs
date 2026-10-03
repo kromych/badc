@@ -52,7 +52,7 @@ use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
 use hashbrown::HashMap;
 
-use super::codegen::{CodeModel, ElfClass, Target};
+use super::codegen::{BinaryFormat, CodeModel, ElfClass, Target};
 use super::diag::{Code, Diagnostic, Loc, Sink};
 use super::error::C5Error;
 
@@ -843,6 +843,8 @@ enum PredefOn {
     MacOS,
     Linux,
     Windows,
+    /// Targets whose objects are ELF, whichever the OS.
+    Elf,
     /// Targets whose plain `char` is unsigned. C99 6.2.5p15 leaves the
     /// choice to the implementation; gcc and clang report it here.
     UnsignedChar,
@@ -860,6 +862,7 @@ impl PredefOn {
             PredefOn::MacOS => matches!(target, Target::MacOSAarch64),
             PredefOn::Linux => matches!(target, Target::LinuxAarch64 | Target::LinuxX64),
             PredefOn::Windows => matches!(target, Target::WindowsX64 | Target::WindowsAarch64),
+            PredefOn::Elf => target.binary_format() == BinaryFormat::Elf,
             PredefOn::UnsignedChar => !target.plain_char_signed(),
         }
     }
@@ -959,6 +962,10 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
         &[("__SEG_FS", "1"), ("__SEG_GS", "1")],
     ),
     (PredefOn::UnsignedChar, &[("__CHAR_UNSIGNED__", "1")]),
+    // gcc and clang define it for the ELF object format, and sources key
+    // ELF-only directives and attributes on it (`.type`, `.size`,
+    // `.symver`, `.hidden`, `@progbits` section types, visibility).
+    (PredefOn::Elf, &[("__ELF__", "1")]),
     (
         PredefOn::MacOS,
         &[

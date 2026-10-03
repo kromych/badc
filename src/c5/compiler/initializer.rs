@@ -2023,12 +2023,7 @@ impl Compiler {
         }
         if self.lex.tk == '"' {
             let cp = self.init_checkpoint();
-            let addr = self.lex.ival;
-            self.next()?;
-            while self.lex.tk == '"' {
-                self.next()?;
-            }
-            self.push_literal_nul();
+            let (addr, elem_ty, _) = self.stage_const_string()?;
             // A subscript or an operator makes the literal an operand
             // (`"..."[i]`, `"..." + n`); rewind past the staged bytes and
             // let the scalar evaluator fold the whole expression.
@@ -2041,7 +2036,7 @@ impl Compiler {
                 self.restore_init_checkpoint(cp);
                 return self.parse_constant_init_scalar();
             }
-            let ty = add_ptr_level(Ty::Char as i64);
+            let ty = add_ptr_level(elem_ty);
             return Ok(InitLeaf::of(addr as i128, InitElemReloc::Data(None), ty));
         }
         if self.lex.tk == Token::AndOp {

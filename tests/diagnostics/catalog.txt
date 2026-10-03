@@ -42,9 +42,10 @@ B3025  incompatible-types             error    hard          -                  
 B3026  return-mismatch                error    controllable  default            live     a `return` with a value in a function returning `void`, or with none in a function returning a value
 B3027  void-value                     error    hard          -                  live     the value of a `void` expression used: as an operand, an argument, an initializer, an assigned or returned value, or a controlling expression
 B3028  controlling-expression         error    hard          -                  live     a controlling expression of a type its statement does not take: a non-scalar `if`, `while`, `do` or `for` condition, a non-integer `switch` expression
-B3029  incompatible-pointer-types     error    controllable  default            live     a pointer to a function assigned, initialized or returned as a pointer to an incompatible function type
+B3029  incompatible-pointer-types     error    controllable  default            live     a pointer assigned, initialized, passed or returned as a pointer to a type incompatible with the type it points to, neither side a pointer to `void`
 B3030  pointer-difference             error    hard          -                  live     a subtraction of two pointers that do not point to qualified or unqualified versions of compatible types
 B3031  discarded-qualifiers           warning  controllable  default            live     a pointer assigned, initialized, passed or returned as a pointer to a type without a `const` or `volatile` the original pointed-to type has
+B3032  pointer-sign                   warning  controllable  default            live     a pointer assigned, initialized, passed or returned as a pointer to an integer type that differs from the one it points to only in signedness
 B4001  unsupported                    error    hard          -                  live     a well-formed construct badc does not implement
 B4002  limit                          error    hard          -                  live     a translation limit badc imposes: nesting depth, include depth, alignment
 B4003  inline                         ignore   controllable  -                  live     a function the source declared `inline` that the optimizer left out of line

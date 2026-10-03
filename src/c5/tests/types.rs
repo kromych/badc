@@ -1353,19 +1353,27 @@ fn bool_target_accepts_a_pointer_in_every_assignment_context() {
     // The reverse direction is still a mismatch: only `_Bool` on the left
     // is exempt, and `_Bool *` is a pointer, not the exempt scalar.
     let p = compile_str(
-        "void f(_Bool b, _Bool *bp) { int *q; q = b; struct S { int a; } *s; s = bp; (void)q; \
-         (void)s; }\n\
+        "void f(_Bool b) { int *q; q = b; (void)q; }\n\
          int main(void) { return 0; }",
     );
     assert!(
         p.warnings.iter().any(|w| w
             .to_string()
-            .contains("integer assigned to pointer in assignment"))
-            && p.warnings.iter().any(|w| w
-                .to_string()
-                .contains("incompatible struct types in assignment")),
+            .contains("integer assigned to pointer in assignment")),
         "got: {:?}",
         p.warnings
+    );
+    let msg = crate::Compiler::new(super::with_prelude(
+        "void f(_Bool *bp) { struct S { int a; } *s; s = bp; (void)s; }\n\
+         int main(void) { return 0; }",
+    ))
+    .compile()
+    .err()
+    .map(|e| e.to_string())
+    .unwrap_or_default();
+    assert!(
+        msg.contains("incompatible pointer types in assignment"),
+        "got: {msg}"
     );
 }
 
@@ -1418,19 +1426,16 @@ fn a_named_address_space_on_the_pointee_is_named_in_the_diagnostic() {
                extern __seg_gs struct task_struct *cur;\n\
                struct task_struct *f(void) { return cur; }\n\
                int main(void) { return 0; }";
-    let p = Compiler::with_target(src.to_string(), Target::LinuxX64)
+    let msg = Compiler::with_target(src.to_string(), Target::LinuxX64)
         .compile()
-        .unwrap();
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
     assert!(
-        p.warnings.iter().any(|w| {
-            w.to_string()
-                .contains("incompatible struct types in return")
-                && w.to_string().contains("declared=struct task_struct*")
-                && w.to_string()
-                    .contains("returned=struct task_struct __seg_gs *")
-        }),
-        "got: {:?}",
-        p.warnings
+        msg.contains("incompatible pointer types in return")
+            && msg.contains("declared=struct task_struct*")
+            && msg.contains("returned=struct task_struct __seg_gs *"),
+        "got: {msg}"
     );
 }
 
@@ -3197,9 +3202,9 @@ fn a_pointer_against_a_scalar_reports_the_same_row_whatever_the_pointee() {
 #[test]
 fn the_signedness_marker_is_not_part_of_an_aggregate_identity() {
     // `__int128` is modeled as an aggregate, so the signed and unsigned
-    // spellings of a pointer to it differ only in the marker. C99
-    // 6.3.1.3 makes that an integer conversion, and c5 reports pointee
-    // signedness nowhere else, so it is not a struct mismatch.
+    // spellings of a pointer to it differ only in the marker: pointers to
+    // integer types that differ in signedness, which convert with a
+    // pointer-sign warning as clang gives, not as two aggregates.
     let p = compile_str(
         "typedef unsigned __int128 u128;\n\
          static u128 swap128(volatile u128 *p, u128 v) { u128 o = *p; *p = v; return o; }\n\
@@ -3208,21 +3213,28 @@ fn the_signedness_marker_is_not_part_of_an_aggregate_identity() {
          void w(struct dte *p) { set(&p->data[1], 0); }\n\
          int main(void) { return 0; }",
     );
-    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
+    let codes: alloc::vec::Vec<crate::diag::Code> = p.warnings.iter().map(|w| w.code).collect();
+    assert_eq!(
+        codes,
+        [crate::diag::Code::POINTER_SIGN; 2],
+        "got: {:?}",
+        p.warnings
+    );
 
-    // Two different aggregates are still a mismatch at pointer depth.
-    let p = compile_str(
+    // Two different aggregates are incompatible at pointer depth.
+    let msg = crate::Compiler::new(super::with_prelude(
         "struct A { int a; };\n\
          struct B { int b; };\n\
          void bad(struct A *a) { struct B *b; b = a; (void)b; }\n\
          int main(void) { return 0; }",
-    );
+    ))
+    .compile()
+    .err()
+    .map(|e| e.to_string())
+    .unwrap_or_default();
     assert!(
-        p.warnings.iter().any(|w| w
-            .to_string()
-            .contains("incompatible struct types in assignment")),
-        "got: {:?}",
-        p.warnings
+        msg.contains("incompatible pointer types in assignment"),
+        "got: {msg}"
     );
 }
 
@@ -4224,7 +4236,6 @@ fn an_initializer_reports_the_conversions_an_assignment_reports() {
     let pre = "int g, arr[2];\nint f(void) { return 0; }\n\
                struct A { int x; }; struct B { int y; } b;\n";
     let int_conv = Some(Code::INT_CONVERSION);
-    let struct_conv = Some(Code::INCOMPATIBLE_STRUCT_TYPES);
     for (body, want) in [
         ("long long s = &g;", int_conv),
         ("long long s = f;", int_conv),
@@ -4236,7 +4247,6 @@ fn an_initializer_reports_the_conversions_an_assignment_reports() {
         ("struct { int *p; } t = { 5 };", int_conv),
         ("long long a[2] = { 0, &g };", int_conv),
         ("long long s = (long long){ &g };", int_conv),
-        ("struct A *p = &b;", struct_conv),
         (
             "int main(void) { static long long z = &g; return (int)z; }",
             int_conv,
@@ -4257,10 +4267,6 @@ fn an_initializer_reports_the_conversions_an_assignment_reports() {
         (
             "int main(void) { long long z = (long long){ &g }; return (int)z; }",
             int_conv,
-        ),
-        (
-            "int main(void) { struct A *p = &b; return p != 0; }",
-            struct_conv,
         ),
         ("long long s = (long long)&g;", None),
         ("unsigned long long s = (unsigned long long)f;", None),
@@ -4300,6 +4306,20 @@ fn an_initializer_reports_the_conversions_an_assignment_reports() {
     let text = p.warnings[0].to_string();
     let row = "pointer assigned to integer in initializer (declared=long long, init=int*)";
     assert!(text.contains(row), "{text}");
+    // An incompatible pointer is an error in either initializer.
+    for body in [
+        "struct A *p = &b;\nint main(void) { return 0; }",
+        "int main(void) { struct A *p = &b; return p != 0; }",
+    ] {
+        let src = alloc::format!("{pre}{body}\n");
+        let msg = crate::Compiler::new(super::with_prelude(&src))
+            .compile()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        let row = "incompatible pointer types in initializer (declared=struct A*, init=struct B*)";
+        assert!(msg.contains(row), "{src}{msg}");
+    }
 }
 
 /// C23 6.7.2.5: `typeof` of a type name takes every derivation of its
@@ -4499,23 +4519,29 @@ fn an_enumerated_type_is_a_type_of_its_own() {
          int main(void) { return p; }\n",
         Target::LinuxX64,
     );
-    // The pointer conversions between two enumerated types warn as between
-    // two structs; one to the integer type does not.
+    // A pointer conversion between two enumerated types is incompatible
+    // (C99 6.5.16.1p1); one to the integer type is not.
+    let msg = Compiler::with_target(
+        "enum A { A1 };\nenum B { B1 };\nenum A a;\nenum B *pb = &a;\n\
+         int main(void) { return pb != 0; }\n"
+            .to_string(),
+        Target::LinuxX64,
+    )
+    .compile()
+    .err()
+    .map(|e| e.to_string())
+    .unwrap_or_default();
+    assert!(
+        msg.contains(":4: error: incompatible pointer types in initializer")
+            && msg.contains("(declared=enum B*, init=enum A*)"),
+        "got: {msg}"
+    );
     let p = super::compile_str_bare_for(
-        "enum A { A1 };\nenum B { B1 };\nenum A a;\n\
-         enum B *pb = &a;\nunsigned *pu = &a;\n\
+        "enum A { A1 };\nenum A a;\nunsigned *pu = &a;\n\
          int main(void) { enum A *pa = pu; return pa != &a; }\n",
         Target::LinuxX64,
     );
-    let w: alloc::vec::Vec<alloc::string::String> =
-        p.warnings.iter().map(|w| w.to_string()).collect();
-    assert!(
-        w.len() == 1
-            && w[0].contains("incompatible enum types in initializer")
-            && w[0].contains("declared=enum B*")
-            && w[0].contains("init=enum A*"),
-        "got: {w:?}"
-    );
+    assert!(p.warnings.is_empty(), "got: {:?}", p.warnings);
 }
 
 #[test]
@@ -4571,7 +4597,7 @@ fn a_vector_type_spells_as_its_lane_type_and_size() {
         ),
         (
             "void f(void) { v16 *pv = 0; struct S *ps = pv; (void)ps; }",
-            "incompatible types in initializer \
+            "incompatible pointer types in initializer \
              (declared=struct S*, init=char __attribute__((vector_size(16)))*)",
         ),
     ] {
@@ -4920,4 +4946,111 @@ fn func_name_points_to_const_char() {
     }
     assert_eq!(warnings.len(), 3, "{warnings:?}");
     assert_eq!(super::run_str(src), 0);
+}
+
+/// C99 6.5.16.1p1: a pointer converts as if by assignment to a pointer to a
+/// compatible type, and between any object pointer and a pointer to `void`;
+/// a `char *` is no `void *`. Any other pair of pointers is B3029
+/// incompatible-pointer-types, an error by default as in gcc 14 and a
+/// warning under `-Wno-error=incompatible-pointer-types`, in an initializer,
+/// an assignment, an argument and a return alike. Pointers to integer types
+/// that differ only in signedness warn under B3032 pointer-sign, as clang
+/// does by default.
+#[test]
+fn an_incompatible_object_pointer_conversion_is_an_error() {
+    use crate::diag::{Code, Config, Level};
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "struct A { int a; }; struct B { int b; };\n\
+               enum E { E0 }; enum F { F0 }; enum G { G0 = -1 };\n\
+               void take(int *p);\n\
+               char **ret(const char **p) { return p; }\n\
+               void t(struct B *b, char *c, struct A *a, long *l, int two[2][3],\n\
+               \tenum E *e, enum F *f, char **pp, double *d, long long *ll) {\n\
+               \tstruct A *x1 = b; a = c; take(l); int *x2 = two; int (*x3)[4] = two;\n\
+               \tint *x4 = e; enum E *x5 = f; const char *const *x6 = pp; void **x7 = (int **)0;\n\
+               \tunsigned char **x8 = pp; float *x9 = d; long *x10 = ll;\n\
+               \t(void)x1; (void)x2; (void)x3; (void)x4; (void)x5; (void)x6; (void)x7;\n\
+               \t(void)x8; (void)x9; (void)x10;\n\
+               }\n\
+               void s(unsigned *u, unsigned char *uc, signed char *sc, unsigned short *us,\n\
+               \tunsigned __int128 *uw) {\n\
+               \tint *y1 = u; char *y2 = uc; char *y3 = sc; short *y4 = us; __int128 *y5 = uw;\n\
+               \t(void)y1; (void)y2; (void)y3; (void)y4; (void)y5;\n\
+               }\n\
+               void ok(void *v, char *c, struct A *a, enum E *e, enum G *g, int (*n)[],\n\
+               \tint (*q)[3], int *i) {\n\
+               \tchar *z1 = v; void *z2 = c; struct A *z3 = v; unsigned *z4 = e; int *z5 = g;\n\
+               \tint (*z6)[3] = n; const int (*z7)[3] = q; const int *z8 = i; const void *z9 = a;\n\
+               \t(void)z1; (void)z2; (void)z3; (void)z4; (void)z5; (void)z6; (void)z7; (void)z8;\n\
+               \t(void)z9;\n\
+               }\n\
+               int main(void) { return 0; }\n";
+    let compile = |config: Config| {
+        let opts = CompileOptions::default().with_diag(config);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts).compile()
+    };
+    let msg = compile(Config::new())
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(
+        msg.contains(":4: error: incompatible pointer types in return")
+            && msg.contains("(declared=char**, returned=const char**) [B3029]"),
+        "{msg}"
+    );
+    let mut lowered = Config::new();
+    lowered.set_level(Code::INCOMPATIBLE_POINTER_TYPES, Level::Warning);
+    let program = compile(lowered).unwrap_or_else(|e| panic!("{e}"));
+    let warnings: alloc::vec::Vec<String> =
+        program.warnings.iter().map(|w| w.to_string()).collect();
+    let incompatible = [
+        (4, "in return (declared=char**, returned=const char**)"),
+        (7, "in initializer (declared=struct A*, init=struct B*)"),
+        (7, "in assignment (lhs=struct A*, rhs=char*)"),
+        (7, "in argument 1 of `take` (param=int*, arg=long*)"),
+        (7, "in initializer (declared=int*, init=int (*)[3])"),
+        (7, "in initializer (declared=int (*)[4], init=int (*)[3])"),
+        (8, "(declared=int*, init=enum E*)"),
+        (8, "(declared=enum E*, init=enum F*)"),
+        (8, "(declared=const char* const *, init=char**)"),
+        (8, "(declared=void**, init=int**)"),
+        (9, "(declared=unsigned char**, init=char**)"),
+        (9, "(declared=float*, init=double*)"),
+        (9, "(declared=long*, init=long long*)"),
+    ];
+    let sign = [
+        (15, "(declared=int*, init=unsigned int*)"),
+        (15, "(declared=char*, init=unsigned char*)"),
+        (15, "(declared=char*, init=signed char*)"),
+        (15, "(declared=short*, init=unsigned short*)"),
+        (15, "__int128*, init=unsigned "),
+    ];
+    let found = |line: usize, code: &str, text: &str| {
+        let at = format!(":{line}: warning: ");
+        warnings
+            .iter()
+            .any(|w| w.contains(&at) && w.contains(text) && w.contains(code))
+    };
+    for (line, text) in incompatible {
+        assert!(
+            found(line, "[B3029]", text),
+            "line {line} {text}: {warnings:?}"
+        );
+    }
+    for (line, text) in sign {
+        assert!(
+            found(line, "[B3032]", text),
+            "line {line} {text}: {warnings:?}"
+        );
+    }
+    assert_eq!(
+        warnings.len(),
+        incompatible.len() + sign.len(),
+        "{warnings:?}"
+    );
+    let mut quiet = Config::new();
+    quiet.set_level(Code::INCOMPATIBLE_POINTER_TYPES, Level::Ignore);
+    quiet.set_level(Code::POINTER_SIGN, Level::Ignore);
+    let program = compile(quiet).unwrap_or_else(|e| panic!("{e}"));
+    assert!(program.warnings.is_empty(), "{:?}", program.warnings);
 }

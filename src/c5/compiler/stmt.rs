@@ -3410,7 +3410,7 @@ impl Compiler {
                         if m.no_conversion {
                             return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
                         }
-                        self.warn_at(m.code, line, text);
+                        self.report_mismatch(&m, line, text)?;
                     }
                     self.mark_emit_other();
                     // Mirror the rhs expression into the walker's
@@ -3450,7 +3450,7 @@ impl Compiler {
                         if m.no_conversion {
                             return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
                         }
-                        self.warn_at(m.code, line, text);
+                        self.report_mismatch(&m, line, text)?;
                     }
                     // Reuse `convert_assign_rhs` so an `int`-typed
                     // `return` from a `double`-returning function lifts

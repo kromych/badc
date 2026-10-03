@@ -31,10 +31,8 @@ typedef union {
 
 int main(void) {
 #if defined(__aarch64__)
-    static const unsigned long long av[2] = {0xF00DFACEDEADBEEFull,
-                                             0x0123456789ABCDEFull};
-    static const unsigned long long bv[2] = {0x1122334455667788ull,
-                                             0x99AABBCCDDEEFF00ull};
+    static const uint64_t av[2] = {0xF00DFACEDEADBEEFull, 0x0123456789ABCDEFull};
+    static const uint64_t bv[2] = {0x1122334455667788ull, 0x99AABBCCDDEEFF00ull};
     uint64x2_t a = vld1q_u64(av);
     uint64x2_t b = vld1q_u64(bv);
     unsigned long long lo, hi;

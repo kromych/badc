@@ -428,6 +428,25 @@ pub(crate) fn discarded_pointee_quals(
     }
 }
 
+/// A pointer tag as C99 6.5.16.1p1 compares it with another: without the
+/// qualifiers of the pointer and of the type it points to, the latter being
+/// [`discarded_pointee_quals`]' to check, and without [`VOLATILE_BIT`].
+/// Each deeper level keeps its qualifiers, which a compatible type matches
+/// exactly (6.7.3p9).
+pub(crate) fn pointer_conversion_key(ty: i64) -> i64 {
+    let depth = ptr_depth_of(ty);
+    let outer = const_level_bit(depth)
+        | volatile_level_bit(depth)
+        | const_level_bit(depth - 1)
+        | volatile_level_bit(depth - 1);
+    let ty = ty & !(outer | VOLATILE_BIT | CONST_BIT);
+    if segment_of_object_ty(ty).is_some() {
+        ty & !(SEG_MASK | SEG_LVL_MASK)
+    } else {
+        ty
+    }
+}
+
 /// The x86 named address space a type tag carries.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Segment {

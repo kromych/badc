@@ -2376,7 +2376,7 @@ impl Compiler {
     /// designates (C99 6.4.5p5), its parts joined (6.4.5p4) and terminated,
     /// and return its data offset, element type and size in bytes. The
     /// element type follows the encoding prefix, plain `char` without one.
-    fn stage_const_string(&mut self) -> Result<(i64, i64, i64), C5Error> {
+    pub(super) fn stage_const_string(&mut self) -> Result<(i64, i64, i64), C5Error> {
         let off = self.lex.ival;
         let wide = self.lex.str_is_wide;
         let elem_ty = self.string_literal_elem_ty();

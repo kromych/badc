@@ -2476,11 +2476,17 @@ impl Compiler {
         // A GNU `transparent_union` parameter accepts an argument compatible
         // with any member and takes it as that member.
         let tu_member = Self::transparent_union_member(&self.structs, want, self.ty, zero);
-        // A `Token::Sys` prototype spells no `const` of the library's.
+        // A `Token::Sys` prototype spells no `const` of the library's, and
+        // `char *` for `void *`, so its pointer parameters are not compared.
+        let sys_exempt = [
+            Code::DISCARDED_QUALIFIERS,
+            Code::INCOMPATIBLE_POINTER_TYPES,
+            Code::POINTER_SIGN,
+        ];
         if tu_member.is_none()
             && let Some(m) =
                 Self::type_warning_with_flags(&self.structs, want, self.ty, zero, untyped)
-                    .filter(|m| !(callee.is_sys_call && m.code == Code::DISCARDED_QUALIFIERS))
+                    .filter(|m| !(callee.is_sys_call && sys_exempt.contains(&m.code)))
         {
             let got = self.ty;
             let want_s = format_type(want, &self.structs);
@@ -2497,7 +2503,7 @@ impl Compiler {
             if m.no_conversion && !callee.is_sys_call {
                 return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, arg_line, text));
             }
-            self.warn_at(m.code, arg_line, text);
+            self.report_mismatch(&m, arg_line, text)?;
         }
         if let Some(member_ty) = tu_member {
             // The member is materialized in an anonymous union object, so every
@@ -3711,7 +3717,7 @@ impl Compiler {
                 if m.no_conversion {
                     return Err(self.compile_err_at(Code::INVALID_OPERANDS, line, text));
                 }
-                self.warn_at(m.code, line, text);
+                self.report_mismatch(&m, line, text)?;
             }
             self.convert_assign_rhs(lhs_ty);
             self.ty = lhs_ty;

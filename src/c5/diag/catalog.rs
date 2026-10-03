@@ -182,13 +182,16 @@ catalog! {
         "a controlling expression of a type its statement does not take: a non-scalar `if`, `while`, `do` or `for` condition, a non-integer `switch` expression";
     3029, "incompatible-pointer-types", ["incompatible-function-pointer-types"], Error, Controllable,
         [DEFAULT], Live,
-        "a pointer to a function assigned, initialized or returned as a pointer to an incompatible function type";
+        "a pointer assigned, initialized, passed or returned as a pointer to a type incompatible with the type it points to, neither side a pointer to `void`";
     3030, "pointer-difference", [], Error, Hard,
         [], Live,
         "a subtraction of two pointers that do not point to qualified or unqualified versions of compatible types";
     3031, "discarded-qualifiers", ["incompatible-pointer-types-discards-qualifiers"], Warning, Controllable,
         [DEFAULT], Live,
         "a pointer assigned, initialized, passed or returned as a pointer to a type without a `const` or `volatile` the original pointed-to type has";
+    3032, "pointer-sign", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a pointer assigned, initialized, passed or returned as a pointer to an integer type that differs from the one it points to only in signedness";
     4001, "unsupported", [], Error, Hard,
         [], Live,
         "a well-formed construct badc does not implement";
@@ -414,6 +417,7 @@ impl Code {
     pub const INCOMPATIBLE_POINTER_TYPES: Code = Code::new(3029);
     pub const POINTER_DIFFERENCE: Code = Code::new(3030);
     pub const DISCARDED_QUALIFIERS: Code = Code::new(3031);
+    pub const POINTER_SIGN: Code = Code::new(3032);
     pub const UNSUPPORTED: Code = Code::new(4001);
     pub const LIMIT: Code = Code::new(4002);
     pub const INLINE: Code = Code::new(4003);

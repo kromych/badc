@@ -4884,3 +4884,40 @@ fn a_qualifier_on_a_pointer_to_a_function_type_qualifies_the_pointer() {
     }
     assert_eq!(warnings.len(), 5, "{warnings:?}");
 }
+
+/// C99 6.4.2.2p1 declares `__func__` as `static const char __func__[]`, so
+/// it decays to a pointer to `const char` in an expression and in a
+/// constant initializer alike, and a conversion to `char *` drops the
+/// `const`.
+#[test]
+fn func_name_points_to_const_char() {
+    use crate::{Compiler, Target};
+    let src = "int f(void) {\n\
+               \tchar *p = __func__;\n\
+               \tstatic char *q = __func__;\n\
+               \tconst char *ok = __func__;\n\
+               \tstatic const char *sok = __func__;\n\
+               \tchar *r;\n\
+               \tr = __FUNCTION__;\n\
+               \treturn p[0] + q[0] + ok[0] + sok[0] + r[0];\n\
+               }\n\
+               int main(void) { return f() == 5 * 'f' ? 0 : 1; }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let warnings: alloc::vec::Vec<String> =
+        program.warnings.iter().map(|w| w.to_string()).collect();
+    for (line, text) in [
+        (2, "in initializer (declared=char*, init=const char*)"),
+        (3, "in initializer (declared=char*, init=const char*)"),
+        (7, "in assignment (lhs=char*, rhs=const char*)"),
+    ] {
+        let at = format!(":{line}: warning: discards `const`");
+        assert!(
+            warnings.iter().any(|w| w.contains(&at) && w.contains(text)),
+            "line {line}: {warnings:?}"
+        );
+    }
+    assert_eq!(warnings.len(), 3, "{warnings:?}");
+    assert_eq!(super::run_str(src), 0);
+}

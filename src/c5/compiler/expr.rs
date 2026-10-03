@@ -1552,7 +1552,7 @@ impl Compiler {
         let offset = self.intern_func_name();
         self.emit_data_imm(offset);
         self.next()?;
-        self.ty = super::types::plain_char_ty(self.lex.char_signed) + Ty::Ptr as i64;
+        self.ty = self.func_name_ptr_ty();
         // The array size reaches an enclosing `sizeof` as for any decayed
         // array.
         self.pending.last_array_decay_size = self.current_function_name.len() as i64 + 1;

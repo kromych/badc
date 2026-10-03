@@ -782,6 +782,12 @@ impl Compiler {
         offset
     }
 
+    /// The type `__func__` decays to: a pointer to `const char`.
+    pub(super) fn func_name_ptr_ty(&self) -> i64 {
+        let c = super::types::plain_char_ty(self.lex.char_signed);
+        add_ptr_level(super::types::apply_qual_bits(c, super::types::CONST_BIT))
+    }
+
     /// Internal-linkage symbol naming the `__func__` storage at `off`, as
     /// `<spelling>.<n>`. Registered against its storage like a compound
     /// literal, so a rolled-back speculative parse retires it.
@@ -2364,7 +2370,7 @@ impl Compiler {
         if self.is_func_name_ident() {
             let off = self.intern_func_name();
             self.next()?;
-            let ty = add_ptr_level(Ty::Char as i64);
+            let ty = self.func_name_ptr_ty();
             return Ok(InitLeaf::of(off as i128, InitElemReloc::Data(None), ty));
         }
         // A name with no declaration is either a builtin the constant

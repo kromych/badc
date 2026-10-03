@@ -1463,6 +1463,52 @@ fn case_labels_check_ranges_against_each_other_and_the_controlling_type() {
     assert_eq!(crate::c5::Vm::new(program).run().unwrap(), 203);
 }
 
+/// C99 6.7.5 and 6.7.6: a declarator, abstract or not, begins with `*`,
+/// `(`, `[` or an identifier, so a type qualifier cannot lead one: not
+/// inside a parenthesized declarator, not in a later declarator of a list,
+/// and not in a type name's group. gcc and clang reject each form; a
+/// calling-convention keyword and an attribute may still lead a group.
+#[test]
+fn a_type_qualifier_cannot_begin_a_declarator() {
+    for (unit, qual) in [
+        ("int *(volatile *c) = 0;", "volatile"),
+        ("int *(const *c) = 0;", "const"),
+        ("int *(restrict *c) = 0;", "restrict"),
+        ("int (volatile x)[2];", "volatile"),
+        ("void (const *fp)(void);", "const"),
+        ("int x, const y;", "const"),
+        ("int x, volatile *p;", "volatile"),
+        ("typedef int T, const U;", "const"),
+        ("struct S { int a, const b; };", "const"),
+        ("void f(void) { int x, const y = 0; }", "const"),
+        (
+            "void f(void) { for (int i = 0, const j = 0; i < j; i++) {} }",
+            "const",
+        ),
+        ("void f(int *(const *x));", "const"),
+        ("void *v = (int (const *))0;", "const"),
+    ] {
+        expect_compile_error(
+            &format!("{unit}\nint main(void) {{ return 0; }}\n"),
+            &format!("expected identifier or `(` before `{qual}`"),
+        );
+    }
+    for unit in [
+        "int (__stdcall *sp)(void);",
+        "void *cv = (int (__cdecl *)(void))0;",
+        "int (__attribute__((unused)) *ap) = 0;",
+        "int x __attribute__((unused)), __attribute__((unused)) y;",
+        "struct T { int a; } const t = {0};",
+        "typedef int I; I const i = 0;",
+        "int const *pc, *const cp = 0, *volatile vp;",
+        "void *g = (int (*const)(void))0;",
+    ] {
+        Compiler::new(format!("{unit}\nint main(void) {{ return 0; }}\n"))
+            .compile()
+            .unwrap_or_else(|e| panic!("`{unit}`: {e}"));
+    }
+}
+
 #[test]
 fn duplicate_case_value_in_inner_switch_only() {
     // Distinct values across nested switches are fine; the duplicate is

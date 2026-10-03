@@ -191,6 +191,18 @@ impl Compiler {
         is_param_list
     }
 
+    /// A declarator, abstract or not, begins with `*`, `(`, `[` or an
+    /// identifier (C99 6.7.5, 6.7.6): of the qualifier tokens only a
+    /// calling-convention keyword may lead one.
+    fn reject_leading_qualifier(&self) -> Result<(), C5Error> {
+        if self.lex_is_calling_convention() {
+            return Ok(());
+        }
+        let name = &self.symbols[self.lex.curr_id_idx].name;
+        let text = alloc::format!("expected identifier or `(` before `{name}`");
+        Err(self.compile_err(Code::SYNTAX, text))
+    }
+
     /// Parse an abstract parenthesized declarator tail that follows a
     /// base type in a type-name (C99 6.7.6): the `(*)(args)` of
     /// `int (*)(int)`, the `(*)[N]` of `int (*)[N]`, and their nested
@@ -217,6 +229,8 @@ impl Compiler {
                 ptrs.push(0);
             } else if let Some(quals) = ptrs.last_mut() {
                 *quals |= self.lex_qualifier_bits();
+            } else {
+                self.reject_leading_qualifier()?;
             }
             self.next()?;
         }
@@ -357,7 +371,7 @@ impl Compiler {
         // Consume either here so neither stands in for the declarator name.
         loop {
             if self.lex.tk == Token::TypeQual {
-                ty = apply_qual_bits(ty, self.lex_qualifier_bits());
+                self.reject_leading_qualifier()?;
                 self.next()?;
             } else if self.at_attribute_specifier() {
                 self.skip_attribute_specifiers()?;

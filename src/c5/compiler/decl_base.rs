@@ -1699,6 +1699,23 @@ impl Compiler {
         }
     }
 
+    /// True when the current token is an MSVC calling-convention keyword,
+    /// which lexes as a qualifier with no effect on the type.
+    pub(super) fn lex_is_calling_convention(&self) -> bool {
+        self.lex.tk == Token::TypeQual
+            && matches!(
+                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                "__cdecl"
+                    | "__stdcall"
+                    | "__fastcall"
+                    | "__thiscall"
+                    | "__vectorcall"
+                    | "_cdecl"
+                    | "_stdcall"
+                    | "_fastcall"
+            )
+    }
+
     /// True when the current token is the `restrict` type qualifier
     /// (C99 6.7.3). It constrains aliasing, which badc does not act
     /// on; the spelling is recorded for debug info.

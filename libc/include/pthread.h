@@ -383,11 +383,15 @@ int pthread_setspecific(pthread_key_t key, const void *val);
 void *pthread_getspecific(pthread_key_t key);
 int pthread_once(pthread_once_t *once_control, void (*init_routine)(void));
 
-// Mutex-type constants used by pthread_mutexattr_settype. Values
-// match the POSIX defaults; the bound libc reads them by integer
-// comparison so the exact platform mapping isn't c5's concern as
-// long as `RECURSIVE` is non-zero (sqlite uses recursive mutexes).
+// Mutex-type constants for pthread_mutexattr_settype, which the C
+// library compares against its own numbering: glibc gives RECURSIVE 1
+// and ERRORCHECK 2, Darwin the reverse.
 #define PTHREAD_MUTEX_NORMAL        0
-#define PTHREAD_MUTEX_RECURSIVE     2
+#ifdef __APPLE__
 #define PTHREAD_MUTEX_ERRORCHECK    1
+#define PTHREAD_MUTEX_RECURSIVE     2
+#else
+#define PTHREAD_MUTEX_RECURSIVE     1
+#define PTHREAD_MUTEX_ERRORCHECK    2
+#endif
 #define PTHREAD_MUTEX_DEFAULT       0

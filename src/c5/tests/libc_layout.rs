@@ -1129,6 +1129,30 @@ fn stdint_types_are_the_platforms() {
     }
 }
 
+/// The mutex types pthread_mutexattr_settype takes are the platform C
+/// library's numbers: glibc's RECURSIVE is 1 and ERRORCHECK 2, Darwin's
+/// the reverse. Darwin's values on Linux made a recursive mutex an
+/// error-checking one there.
+#[test]
+fn mutex_types_take_the_platform_values() {
+    for (target, recursive, errorcheck) in [
+        (Target::LinuxX64, 1, 2),
+        (Target::LinuxAarch64, 1, 2),
+        (Target::MacOSAarch64, 2, 1),
+    ] {
+        let src = format!(
+            "#include <pthread.h>\n\
+             _Static_assert(PTHREAD_MUTEX_RECURSIVE == {recursive}, \"recursive\");\n\
+             _Static_assert(PTHREAD_MUTEX_ERRORCHECK == {errorcheck}, \"errorcheck\");\n\
+             _Static_assert(PTHREAD_MUTEX_NORMAL == 0 && PTHREAD_MUTEX_DEFAULT == 0, \"normal\");\n\
+             int main(void) {{ return 0; }}\n"
+        );
+        if let Err(err) = compile(&src, target) {
+            panic!("{}: {err}", target.id_str());
+        }
+    }
+}
+
 /// POSIX's memory-mapping and thread-specific interfaces traffic in
 /// `void *`: `mmap` and `mremap` return one, `pthread_getspecific` too, and
 /// the address, value and start-routine parameters take one, so their

@@ -2857,6 +2857,44 @@ fn int128_scalar_conversions_run_correctly() {
     );
 }
 
+/// C99 6.3.1.2: an `__int128` converted to `_Bool` is 0 only when the
+/// whole value is: the conversion ORs both loaded halves ahead of the
+/// test, in a cast, a `return`, an argument and a bit-field store.
+#[test]
+fn an_int128_converts_to_bool_by_testing_both_halves() {
+    use crate::c5::ir::{BinOp, Inst};
+    use crate::{CompileOptions, Compiler, Target};
+    const SRC: &str = "struct S { _Bool f : 1; };\n\
+        _Bool cast(__int128 *p) { return (_Bool)*p; }\n\
+        _Bool ret(__int128 *p) { return *p; }\n\
+        static int take(_Bool b) { return b; }\n\
+        int arg(__int128 *p) { return take(*p); }\n\
+        void field(struct S *s, __int128 *p) { s->f = *p; }\n";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(SRC.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        for name in ["cast", "ret", "arg", "field"] {
+            let f = funcs.iter().find(|f| f.name == name).expect(name);
+            let is_load = |v: u32| matches!(f.insts[v as usize], Inst::Load { .. });
+            let halves = f.insts.iter().any(
+                |i| matches!(i, Inst::Binop { op: BinOp::Or, lhs, rhs } if is_load(*lhs) && is_load(*rhs)),
+            );
+            assert!(halves, "{target:?} {name}: {:?}", f.insts);
+        }
+    }
+}
+
 /// ARM ARM C6.2: the aarch64 atomic read-modify-write lowering is one LSE
 /// instruction, for a seq_cst fetch-add the acquire-release `LDADDAL`.
 /// Match it by the bits that do not depend on the registers:

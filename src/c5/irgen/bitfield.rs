@@ -104,8 +104,16 @@ impl<'a> Walker<'a> {
         let is128 = self.expr_is_int128_value(rhs);
         let v = self.walk_copy_operand(b, rhs)?;
         // C99 6.3.1.3: a 128-bit source narrows to the field's type,
-        // which is its low half -- not the address the value is carried as.
-        let v = if is128 { b.load(v, LoadKind::I64) } else { v };
+        // which is its low half -- not the address the value is carried
+        // as. A `_Bool` field tests the whole value (6.3.1.2).
+        let v = if is128 && is_bool_scalar(bf.ty) {
+            let pair = self.int128_load(b, v);
+            Self::int128_to_bool(b, pair)
+        } else if is128 {
+            b.load(v, LoadKind::I64)
+        } else {
+            v
+        };
         // C99 6.5.16.1p2: the value is converted to the type of the left
         // operand. A floating source needs the 6.3.1.4 conversion here --
         // the store's mask is an integer operation and cannot express it.

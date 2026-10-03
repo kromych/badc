@@ -782,6 +782,10 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
             shift,
         });
     }
+    // An immediate offset ends the address: no form takes a part after it.
+    if parts.len() == 3 {
+        return Err(format!("inline asm: bad memory operand `[{inner}]`"));
+    }
     let off = if parts.len() == 2 {
         // The offset is a GNU as constant expression, not just a literal
         // (`[xN, #4 * 0]` folds to 0), with the `#` optional. Operand
@@ -2282,6 +2286,16 @@ mod tests {
             }
         );
         assert_eq!(insns[2].mnemonic, "mov"); // register move kept for the encoder
+    }
+
+    #[test]
+    fn an_immediate_offset_ends_the_address() {
+        // No form takes a part after an immediate offset (llvm-mc: "invalid
+        // operand for instruction"), so the address is an error rather than
+        // its bare base.
+        assert!(parse_operand("[x0, #8, lsl #2]").is_err());
+        assert!(parse_operand("[%1, 8, uxtw]").is_err());
+        assert!(parse_template(b"ldr %0, [%1, #8, lsl #2]").is_err());
     }
 
     #[test]

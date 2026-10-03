@@ -4505,6 +4505,62 @@ fn an_executable_stack_note_follows_gnu_lds_rule_in_every_link() {
     }
 }
 
+/// A link's warnings follow `-w`, which withholds them, and not `-q`, which
+/// quiets the `info:` lines only; `--fatal-warnings` makes one fail the
+/// link. The same holds for the link without -T and the -T link.
+#[test]
+fn a_links_warnings_follow_dash_w_and_not_dash_q() {
+    let dir = tempdir("link-warnings-quiet");
+    let compile = |name: &str, body: &str| {
+        let src = write_source(&dir, name, body);
+        let obj = dir.join(name.replace(".c", ".o"));
+        run(
+            Command::new(badc())
+                .args(["-q", "--target=linux-x64", "-c"])
+                .arg(&src)
+                .arg("-o")
+                .arg(&obj),
+            "compile",
+        );
+        obj
+    };
+    let m = compile("m.c", "int f(void);\nint main(void) { return f() - 1; }\n");
+    let x = compile(
+        "x.c",
+        "__asm__(\".section .note.GNU-stack,\\\"x\\\",@progbits\\n.text\");\n\
+         int f(void) { return 1; }\n",
+    );
+    let script = write_source(
+        &dir,
+        "t.lds",
+        "ENTRY(main) SECTIONS { . = 0x400000; .text : { *(.text*) } .data : { *(.data*) } }\n",
+    );
+    for script_link in [false, true] {
+        for (opts, warns, links) in [
+            (&["-q"][..], true, true),
+            (&["-w"], false, true),
+            (&["-q", "-w"], false, true),
+            (&["-q", "-Wl,--fatal-warnings"], true, false),
+        ] {
+            let mut cmd = Command::new(badc());
+            cmd.arg("--target=linux-x64").args(opts);
+            if script_link {
+                cmd.arg("-T").arg(&script);
+            }
+            let out = cmd
+                .args([&m, &x])
+                .arg("-o")
+                .arg(dir.join("out"))
+                .output()
+                .expect("run badc");
+            let err = String::from_utf8_lossy(&out.stderr);
+            let what = format!("-T {script_link} {opts:?}: {err}");
+            assert_eq!(err.contains("requires executable stack"), warns, "{what}");
+            assert_eq!(out.status.success(), links, "{what}");
+        }
+    }
+}
+
 /// The link without -T keeps every local symbol of its inputs, which is
 /// what `--discard-none` asks for; `-X` drops the assembler temporaries
 /// (`.L*`) among them. The last of the two holds, as in GNU ld.

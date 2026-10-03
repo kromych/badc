@@ -910,7 +910,9 @@ impl<'a> LdsLinker<'a> {
 
         let class = class_for_machine(machine);
         let mut config = opts.diag.clone();
-        config.inhibit_warnings(!opts.emit_warnings);
+        if !opts.emit_warnings {
+            config.inhibit_warnings(true);
+        }
         let mut sink = Sink::new(config, Control::default());
         if let Some(warning) = stack_warning {
             sink.emit(Code::EXEC_STACK, None, warning);

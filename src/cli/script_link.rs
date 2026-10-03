@@ -179,9 +179,9 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
         pack_relative_relocs: cli.link.pack_relative_relocs,
         apply_dynamic_relocs: cli.link.apply_dynamic_relocs,
         emit_relocs: cli.link.emit_relocs,
-        emit_warnings: !cli.quiet,
-        // The `-W` family the command line left. A link diagnostic has
-        // no position in a translation unit, so no pragma applies.
+        // The `-W` family the command line left, `-w` among them. A link
+        // diagnostic has no position in a translation unit, so no pragma
+        // applies.
         diag: cli.front.diag.clone(),
         fix_cortex_a53_843419: cli.link.fix_cortex_a53_843419,
         symbolic: cli.link.symbolic,

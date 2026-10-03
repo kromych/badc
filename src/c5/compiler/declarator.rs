@@ -563,7 +563,7 @@ impl Compiler {
                 );
             }
             self.next()?;
-            // C99 6.7.5p1: a parenthesised declarator `(D)` is
+            // C99 6.7.5p6: a parenthesised declarator `(D)` is
             // equivalent to `D`. When the inner is a plain
             // identifier with no `*` and no fn-pointer signature
             // got consumed already, the parens are redundant and
@@ -571,29 +571,59 @@ impl Compiler {
             // pointer or a following `[N]` to a pointer-to-array.
             // Return immediately so the dispatch in `run_compile`
             // parses `(args)` as a regular function signature on
-            // the identifier and a plain `[N]` (handled by the
-            // array-suffix branch below) lands as a real array.
+            // the identifier, and take a following `[N]` as the
+            // identifier's own bounds.
             // In parameter position a `(name)(args)` shape is a
             // function-typed parameter that decays to a pointer to
             // function (C99 6.7.5.3p8), so it must fall through to the
             // function-signature handling below rather than return the
             // bare identifier for `run_compile` to treat as a function
             // definition.
-            if !param_ctx
-                && !own_sig
-                && inner_ptr_levels == 0
-                && idx != usize::MAX
-                && self.lex.tk == '('
-            {
+            let redundant = !own_sig && inner_ptr_levels == 0 && idx != usize::MAX;
+            if redundant && !param_ctx && self.lex.tk == '(' {
                 return Ok((idx, inner_ty, inner_array_size, own_levels + group_levels));
             }
-            // Trailing decorations on the parenthesised group.
-            // Multiple are legal: `(*pp)[N](args)` etc. Each
-            // `[N]` adds a pointer level to `inner_ty` and a
-            // dimension to the symbol's `array_dims` so the
-            // indexing path can stride correctly through a
-            // `T (*p)[N]` shape (`p[i]` strides by
-            // `N * sizeof(T)`, not `sizeof(T*)`).
+            if redundant && self.lex.tk == Token::Brak {
+                if inner_array_size == 0 {
+                    return self
+                        .parse_declarator_bounds(idx, inner_ty, param_ctx, own_levels, true);
+                }
+                // TODO: bounds after a parenthesized variable-length array.
+                if inner_array_size == super::VLA_ARRAY_SIZE {
+                    return Err(self.compile_err(
+                        Code::UNSUPPORTED,
+                        "bounds after a parenthesized variable-length array are not supported",
+                    ));
+                }
+                // `(x[2])[3]`: the bounds follow the group's own, a deferred
+                // outer one recorded by its placeholder, and precede an
+                // array typedef base's, which the group took (C99 6.7.7p3).
+                let mut dims = core::mem::take(&mut self.symbols[idx].array_dims);
+                if dims.is_empty() {
+                    dims.push(inner_array_size.max(0));
+                }
+                let typedef_dims = if base_array_open && self.pending.typedef_base_array_size > 0 {
+                    self.typedef_base_dims().len()
+                } else {
+                    0
+                };
+                let at = dims.len().saturating_sub(typedef_dims).max(1);
+                let inner = self.parse_inner_bounds(param_ctx)?;
+                let mut array_size = inner_array_size;
+                if array_size > 0 {
+                    array_size *= inner.iter().product::<i64>();
+                }
+                dims.splice(at..at, inner);
+                if dims.len() >= 2 {
+                    self.symbols[idx].inner_array_size = dims[1];
+                    self.symbols[idx].array_dims = dims;
+                }
+                return Ok((idx, inner_ty, array_size, own_levels));
+            }
+            // Trailing decorations on the parenthesised group: a
+            // signature makes a pointer to a function (`(*pf)(args)`),
+            // bounds a pointer to an array (`(*p)[N]`), whose
+            // dimensions fold into the aggregate-backed pointee below.
             let mut pointee_dims: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
             let mut after_sig = false;
             loop {
@@ -678,14 +708,6 @@ impl Compiler {
                         pointee_dims.push(m);
                         self.accept(']')?;
                     }
-                    // The aggregate-backed rebuild below carries the
-                    // dimensions for the pointer form; only the
-                    // redundant-paren shape `T (name)[N]` keeps the
-                    // per-bracket level bump.
-                    if inner_ptr_levels == 0 {
-                        inner_ty += Ty::Ptr as i64;
-                        group_levels += 1;
-                    }
                 } else {
                     break;
                 }
@@ -727,32 +749,20 @@ impl Compiler {
                 self.pending.fn_ptr_indirection = Some(1);
                 self.pending.fn_ptr_group_resolved = true;
             }
-            if !pointee_dims.is_empty() {
-                if !after_sig && inner_ptr_levels > 0 {
-                    // Pointer-to-array shape `T (*p)[M1]...[Mn]`: fold
-                    // the pointee dimensions into the aggregate-backed
-                    // tag, one pointer level per inner `*`. Also covers
-                    // the abstract form `T (*)[N]` (no symbol) and a
-                    // function's result (`T (*f(void))[N]`). An array
-                    // typedef base adds its bounds inside these.
-                    if base_array_open && self.pending.typedef_base_array_size > 0 {
-                        pointee_dims.extend(self.typedef_base_dims());
-                    }
-                    self.pending.fn_chain_array_levels += pointee_dims.len() as i64;
-                    inner_ty = (self.array_agg_type(outer_ty_before_inner, &pointee_dims)
-                        + inner_ptr_levels * (Ty::Ptr as i64))
-                        | (inner_ty
-                            & (super::types::VOLATILE_MASK | super::types::CONST_PTR_LVL_MASK));
-                } else if idx != usize::MAX && pointee_dims.iter().all(|&d| d > 0) {
-                    // Redundant-paren shape `T (name)[N]`: keep the
-                    // per-bracket level plus the leading-0 sentinel dims
-                    // the indexing paths expect. A zero dimension keeps
-                    // the pre-aggregate handling (same as `T name[0]`).
-                    let mut dims = alloc::vec::Vec::with_capacity(pointee_dims.len() + 1);
-                    dims.push(0);
-                    dims.extend(pointee_dims);
-                    self.symbols[idx].array_dims = dims;
+            if !pointee_dims.is_empty() && !after_sig && inner_ptr_levels > 0 {
+                // Pointer-to-array shape `T (*p)[M1]...[Mn]`: fold
+                // the pointee dimensions into the aggregate-backed
+                // tag, one pointer level per inner `*`. Also covers
+                // the abstract form `T (*)[N]` (no symbol) and a
+                // function's result (`T (*f(void))[N]`). An array
+                // typedef base adds its bounds inside these.
+                if base_array_open && self.pending.typedef_base_array_size > 0 {
+                    pointee_dims.extend(self.typedef_base_dims());
                 }
+                self.pending.fn_chain_array_levels += pointee_dims.len() as i64;
+                inner_ty = (self.array_agg_type(outer_ty_before_inner, &pointee_dims)
+                    + inner_ptr_levels * (Ty::Ptr as i64))
+                    | (inner_ty & (super::types::VOLATILE_MASK | super::types::CONST_PTR_LVL_MASK));
             }
             return Ok((idx, inner_ty, inner_array_size, own_levels + group_levels));
         }
@@ -805,6 +815,22 @@ impl Compiler {
             return Ok((idx, ty + Ty::Ptr as i64, 0, own_levels + 1));
         }
 
+        self.parse_declarator_bounds(idx, ty, param_ctx, own_levels, false)
+    }
+
+    /// The bounds following the declarator of `idx`, whose type so far is
+    /// `ty` (C99 6.7.5.2), and the attributes after them: the array size is
+    /// returned with the element type and the dimensions are recorded on
+    /// the symbol. After a parenthesized group (`in_group`) the identifier
+    /// already recorded the shape its prior binding had.
+    fn parse_declarator_bounds(
+        &mut self,
+        idx: usize,
+        ty: i64,
+        param_ctx: bool,
+        own_levels: i64,
+        in_group: bool,
+    ) -> Result<(usize, i64, i64, i64), C5Error> {
         let mut array_size: i64 = 0;
         if self.lex.tk == Token::Brak {
             self.pending.declarator_zero_len_array = false;
@@ -900,46 +926,7 @@ impl Compiler {
             if array_size > 0 {
                 dims.push(array_size);
             }
-            while self.lex.tk == Token::Brak {
-                self.next()?;
-                // Same C99 6.7.5.3p7 qualifier-skip as the leading
-                // dimension above; applies to every trailing
-                // dimension too.
-                while self.lex.tk == Token::Static || self.lex.tk == Token::TypeQual {
-                    self.next()?;
-                }
-                if self.lex.tk == ']' {
-                    self.next()?;
-                    continue;
-                }
-                let Some(m) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
-                else {
-                    // A non-constant inner dimension makes the whole
-                    // object a variably-modified type (C99 6.7.6.2); c5's
-                    // stride model is compile-time only, so reject it
-                    // cleanly rather than miscompile the row stride.
-                    if self.pending.vla_allowed || param_ctx {
-                        return Err(self.compile_err(
-                            Code::UNSUPPORTED,
-                            "a non-constant inner array dimension is not supported",
-                        ));
-                    }
-                    return Err(self.compile_err(
-                        Code::CONSTANT_EXPRESSION,
-                        "constant integer expected in array declarator",
-                    ));
-                };
-                if m <= 0 {
-                    return Err(self.compile_err(
-                        Code::INVALID_DECLARATION,
-                        format!("array dimension must be positive (got {m})"),
-                    ));
-                }
-                if self.lex.tk != ']' {
-                    return Err(self
-                        .compile_err(Code::SYNTAX, "close bracket expected in array declarator"));
-                }
-                self.next()?;
+            for m in self.parse_inner_bounds(param_ctx)? {
                 dims.push(m);
                 if array_size > 0 {
                     array_size *= m;
@@ -1025,7 +1012,9 @@ impl Compiler {
                 // scopes: each new binding starts fresh, so any
                 // per-symbol shape metadata must be cleared when the
                 // binding's scope begins.
-                self.record_prior_shape(idx);
+                if !in_group {
+                    self.record_prior_shape(idx);
+                }
                 self.symbols[idx].inner_array_size = inner_dim;
                 self.symbols[idx].array_dims = if full_dims.len() >= 2 {
                     full_dims
@@ -1054,5 +1043,53 @@ impl Compiler {
         }
 
         Ok((idx, ty, array_size, own_levels))
+    }
+
+    /// The bounds below an array's outermost one, each a positive constant.
+    fn parse_inner_bounds(&mut self, param_ctx: bool) -> Result<alloc::vec::Vec<i64>, C5Error> {
+        let mut dims = alloc::vec::Vec::new();
+        while self.lex.tk == Token::Brak {
+            self.next()?;
+            // Same C99 6.7.5.3p7 qualifier-skip as the leading
+            // dimension; applies to every trailing dimension too.
+            while self.lex.tk == Token::Static || self.lex.tk == Token::TypeQual {
+                self.next()?;
+            }
+            if self.lex.tk == ']' {
+                self.next()?;
+                continue;
+            }
+            let Some(m) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
+            else {
+                // A non-constant inner dimension makes the whole
+                // object a variably-modified type (C99 6.7.6.2); c5's
+                // stride model is compile-time only, so reject it
+                // cleanly rather than miscompile the row stride.
+                if self.pending.vla_allowed || param_ctx {
+                    return Err(self.compile_err(
+                        Code::UNSUPPORTED,
+                        "a non-constant inner array dimension is not supported",
+                    ));
+                }
+                return Err(self.compile_err(
+                    Code::CONSTANT_EXPRESSION,
+                    "constant integer expected in array declarator",
+                ));
+            };
+            if m <= 0 {
+                return Err(self.compile_err(
+                    Code::INVALID_DECLARATION,
+                    format!("array dimension must be positive (got {m})"),
+                ));
+            }
+            if self.lex.tk != ']' {
+                return Err(
+                    self.compile_err(Code::SYNTAX, "close bracket expected in array declarator")
+                );
+            }
+            self.next()?;
+            dims.push(m);
+        }
+        Ok(dims)
     }
 }

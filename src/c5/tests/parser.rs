@@ -3085,6 +3085,16 @@ fn multi_dim_compound_literal_dimension_constraints() {
 }
 
 #[test]
+fn bounds_after_a_parenthesized_variable_length_array_are_rejected() {
+    // The bounds would be the rows of the variable-length array, whose
+    // element the group has already formed.
+    expect_compile_error(
+        "int main(int c, char **v) { (void)v; int (a[c])[2]; return (int)sizeof a; }",
+        "bounds after a parenthesized variable-length array are not supported",
+    );
+}
+
+#[test]
 fn a_variably_modified_type_name_is_diagnosed_where_c99_forbids_it() {
     // C99 6.7.5.2p2 admits a variably modified type only at block scope,
     // 6.5.2.5p1 no variable-length array compound literal, and C11

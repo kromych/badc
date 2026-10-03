@@ -5326,18 +5326,6 @@ impl Compiler {
             if field.fn_ptr_indirection > 0 {
                 self.pending.fn_ptr_chain_depth = field.fn_ptr_indirection - 1;
             }
-            // A pointer-to-array member (`T (*m)[M1]...[Mn]`) records its
-            // dimensions as `[0, M1, ...]` and one pointer level per `[Mi]` on
-            // its type as a positional record of the shape; those levels
-            // collapse to the one decayed pointer to the element.
-            if field.array_dims.len() >= 2 && field.array_dims[0] == 0 && is_pointer_ty(self.ty) {
-                let dims = field.array_dims.clone();
-                let array_ptrs = (dims.len() as i64) - 1;
-                let scalar_ty = field.ty - (dims.len() as i64) * (Ty::Ptr as i64);
-                self.ty -= array_ptrs * (Ty::Ptr as i64);
-                let elem_size = self.size_of_type(scalar_ty) as i64;
-                self.seed_multi_dim_strides(&dims, elem_size);
-            }
         }
     }
 

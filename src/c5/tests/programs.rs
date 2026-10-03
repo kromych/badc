@@ -2839,6 +2839,13 @@ fn typeof_row_bounds() {
 }
 
 #[test]
+fn paren_array_declarator() {
+    // C99 6.7.5p6: bounds after a parenthesized declarator are the declared
+    // name's own, whatever the declaration declares.
+    assert_eq!(run_fixture("paren_array_declarator.c"), 0);
+}
+
+#[test]
 fn variably_modified_type_names() {
     // C99 6.7.5.2p4, 6.5.3.4p2: a variable-length array type name's size
     // is computed at run time, and a cast to a pointer to one strides by it.

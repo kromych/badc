@@ -405,9 +405,10 @@ fn compatible_redeclarations_compose() {
 fn gnu_redeclarations_warn() {
     for (src, now) in [
         // GCC keeps `void` for an implicit `int` definition of a function
-        // declared `void`.
+        // declared `void`, once the implicit `int` is lowered to a warning.
         (
-            "void f(void);\nf(void) { }\nint main(void) { f(); return 0; }\n",
+            "#pragma GCC diagnostic warning \"-Wimplicit-int\"\n\
+             void f(void);\nf(void) { }\nint main(void) { f(); return 0; }\n",
             "now:      int (void)",
         ),
         // C11 6.7.6.3p5 drops a return type's qualifiers; C99 6.7.3p9 does not.

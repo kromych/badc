@@ -21,6 +21,7 @@ B2007  redeclaration-mismatch                          warning  controllable  de
 B2008  attributes                                      warning  controllable  default            live     an attribute the declaration cannot carry, so it is ignored
 B2009  ignored-asm-label                               warning  controllable  default            live     an assembler name on a declaration that has no symbol to rename
 B2010  shadowed-binding                                warning  controllable  default            live     a `#pragma binding` for a name an earlier binding already claimed
+B2011  implicit-int                                    error    controllable  default            live     a declaration or type name with no type specifier, whose type defaults to `int`
 B2020  syntax                                          error    hard          -                  live     a token the grammar does not admit at its position; the parser has no resynchronisation point
 B2021  invalid-declaration                             error    hard          -                  live     a declaration a C99 constraint rejects: a redefinition, conflicting types, an incomplete object, a bit-field width or an alignment out of range
 B2022  undeclared-identifier                           error    hard          -                  live     a name no declaration in scope introduces

@@ -4859,6 +4859,93 @@ fn a_type_attribute_trailing_a_function_declarator_types_its_return() {
     assert_eq!(Vm::new(program).run().unwrap(), 0, "{src}");
 }
 
+/// C99 6.7.2p2 requires a type specifier in every declaration and type
+/// name. Specifiers that give none take `int`, as under C89, and B2011
+/// implicit-int reports each declarator in gcc's words: an error by default,
+/// as gcc 14 and clang make it, a warning under `-Wno-error=implicit-int` or
+/// the matching pragma, and nothing under `-Wno-implicit-int`.
+#[test]
+fn a_declaration_without_a_type_specifier_takes_int_and_reports_it() {
+    use super::Vm;
+    use crate::diag::{Code, Config, Level, Selector};
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "static x;\n\
+               const y = 1;\n\
+               typedef const ct;\n\
+               g(void) { return 0; }\n\
+               k(void);\n\
+               void p(const a, register);\n\
+               struct S { const c; const : 3; };\n\
+               int r(e) { return e; }\n\
+               int main(void) {\n\
+               \tstatic i; register j = 1; typedef volatile vt;\n\
+               \tfor (register n = 0; n < 1; n++) j += n;\n\
+               \treturn i + j - 1 + (sizeof(const) != 4) + (const)0;\n\
+               }\n";
+    let compile = |config: Config| {
+        let opts = CompileOptions::default().with_diag(config);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts).compile()
+    };
+    let err = compile(Config::new()).err().map(|e| e.to_string());
+    let err = err.unwrap_or_default();
+    assert!(
+        err.contains(":1: error: type defaults to `int` in declaration of `x` [B2011]"),
+        "{err}"
+    );
+    assert_eq!(
+        Selector::parse("implicit-int"),
+        Some(Selector::Diagnostic(Code::IMPLICIT_INT))
+    );
+    let mut lowered = Config::new();
+    lowered.error_for(Code::IMPLICIT_INT, false);
+    let program = compile(lowered).unwrap_or_else(|e| panic!("{e}"));
+    let got: alloc::vec::Vec<(u32, String)> = program
+        .warnings
+        .iter()
+        .filter(|w| w.code == Code::IMPLICIT_INT && w.level == Level::Warning)
+        .filter_map(|w| w.loc.as_ref().map(|l| (l.line, w.text.clone())))
+        .collect();
+    let decl = |name: &str| alloc::format!("type defaults to `int` in declaration of `{name}`");
+    let type_name = "type defaults to `int` in type name".to_string();
+    let want = [
+        (1, decl("x")),
+        (2, decl("y")),
+        (3, decl("ct")),
+        (4, "return type defaults to `int`".to_string()),
+        (5, decl("k")),
+        (6, decl("a")),
+        (6, type_name.clone()),
+        (7, decl("c")),
+        (7, type_name.clone()),
+        (8, "type of `e` defaults to `int`".to_string()),
+        (10, decl("i")),
+        (10, decl("j")),
+        (10, decl("vt")),
+        (11, decl("n")),
+        (12, type_name.clone()),
+        (12, type_name),
+    ];
+    assert_eq!(got, want);
+    assert_eq!(Vm::new(program).run().unwrap(), 0);
+    let mut silenced = Config::new();
+    silenced.set_level(Code::IMPLICIT_INT, Level::Ignore);
+    let program = compile(silenced).unwrap_or_else(|e| panic!("{e}"));
+    assert!(
+        program
+            .warnings
+            .iter()
+            .all(|w| w.code != Code::IMPLICIT_INT),
+        "{:?}",
+        program.warnings
+    );
+    let pragma = alloc::format!("#pragma GCC diagnostic warning \"-Wimplicit-int\"\n{src}");
+    let program = Compiler::with_target(pragma, Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let lowered = program.warnings.iter();
+    assert_eq!(lowered.filter(|w| w.code == Code::IMPLICIT_INT).count(), 16);
+}
+
 /// GNU C's `vector_size` makes a vector of the innermost element type,
 /// through pointer, array and function derivations, at the sizes gcc gives;
 /// the element is an integer type other than `_Bool`, or a floating type, so

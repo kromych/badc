@@ -2,7 +2,10 @@
 // jump targets the dispatcher reaches, and the loop's back edge
 // re-enters the body at its first case (C99 6.8.4.2). Also exercises
 // K&R old-style parameters with storage-class specifiers and the
-// C89 implicit-int local declaration.
+// C89 implicit-int declarations, which gcc and clang accept once
+// -Wimplicit-int is a warning, as the pragma below makes it.
+
+#pragma GCC diagnostic warning "-Wimplicit-int"
 
 send(to, from, count)
     register char *to, *from;

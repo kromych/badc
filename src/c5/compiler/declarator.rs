@@ -90,14 +90,14 @@ impl Compiler {
     /// `[*]name(params);`. C99 6.7p1 / 6.2.2p5: with no storage-class
     /// specifier or `extern`, such a name has external linkage
     /// (internal under `static`), so bind a function symbol and let
-    /// the call resolve at link time. Returns `true` with the cursor
-    /// past the prototype when one was consumed, `false` with
+    /// the call resolve at link time. Returns the declared name with the
+    /// cursor past the prototype when one was consumed, `None` with
     /// the lexer restored when the tokens are an ordinary declarator.
     pub(super) fn try_parse_block_fn_prototype(
         &mut self,
         base: super::redeclaration::Spelled,
         is_static: bool,
-    ) -> Result<bool, C5Error> {
+    ) -> Result<Option<usize>, C5Error> {
         let lbt = base.ty;
         // Snapshot before the speculative `*` walk so a plain pointer
         // declaration with multiple declarators (`int *p, *q;`) keeps
@@ -170,10 +170,10 @@ impl Compiler {
             if self.lex.tk == Token::Asm {
                 self.parse_declarator_asm_label(id_idx)?;
             }
-            return Ok(true);
+            return Ok(Some(id_idx));
         }
         self.restore_lex(proto_snap);
-        Ok(false)
+        Ok(None)
     }
 
     /// At `(` in a declarator, peek whether the parenthesized content

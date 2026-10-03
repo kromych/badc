@@ -160,8 +160,17 @@ pub(super) struct DeclStorage {
     pub is_static: bool,
     pub is_extern: bool,
     pub is_thread_local: bool,
-    /// No type specifier was given, so the base type is the implicit `int`.
-    pub implicit_int: bool,
+}
+
+/// What takes the implicit `int`, as the diagnostic words it.
+#[derive(Clone, Copy)]
+pub(super) enum ImplicitInt {
+    /// Symbol `idx`'s declarator; `usize::MAX` reads as a type name.
+    Declarator(usize),
+    /// A function definition's return type.
+    Return,
+    /// A parameter of an identifier list that no declaration types.
+    UndeclaredParameter(usize),
 }
 
 /// The pointer part of an abstract declarator (C99 6.7.6): the type it
@@ -307,7 +316,7 @@ impl Compiler {
         }
         self.next()?; // _Atomic
         self.next()?; // (
-        let inner = self.parse_decl_base_type()?;
+        let inner = self.parse_type_name_base()?;
         let inner = self.consume_abstract_pointer(inner)?.ty;
         if self.lex.tk != ')' {
             return Err(self.compile_err(Code::SYNTAX, "`)` expected after `_Atomic(type-name)`"));
@@ -1110,7 +1119,7 @@ impl Compiler {
                 if is_alignas {
                     self.next()?; // (
                     if self.lex_is_type_start() {
-                        let ty = self.parse_decl_base_type()?;
+                        let ty = self.parse_type_name_base()?;
                         let ty = self.consume_abstract_pointer(ty)?.ty;
                         alignas_align = alignas_align.max(self.align_of_type(ty) as i64);
                         align = align.max(alignas_align);
@@ -1767,10 +1776,11 @@ impl Compiler {
     /// specifiers, in any order (6.7.1p1, 6.7.2p2). Returns the base type.
     ///
     /// `storage` collects the storage-class and linkage keywords for the
-    /// contexts that own them, and selects the implicit-int rule for a
-    /// declaration with no type specifier. A type-name context passes none:
-    /// there a storage-class keyword ends the specifier run and a missing
-    /// type specifier is an error.
+    /// contexts that own them. A type-name context passes none: there a
+    /// storage-class keyword ends the specifier run. Specifiers that name
+    /// no type give the implicit `int` (C99 6.7.2p2), recorded in
+    /// `pending.base_implicit_int` for the declaration to report; with no
+    /// specifier at all outside a declaration, a type is expected.
     pub(super) fn parse_decl_specifiers(
         &mut self,
         mut storage: Option<&mut DeclStorage>,
@@ -1779,6 +1789,7 @@ impl Compiler {
         let mut m = IntModifiers::default();
         let mut qual_bits: i64 = 0;
         let mut atomic_base: Option<i64> = None;
+        let mut saw_specifier = false;
         loop {
             // C23 6.7.13 `[[...]]` and the GNU / MSVC attribute keywords may
             // lead the declaration specifiers.
@@ -1793,6 +1804,7 @@ impl Compiler {
             if !is_decl_modifier(self.lex.tk) {
                 break;
             }
+            saw_specifier = true;
             // C11 6.7.2.4 `_Atomic ( type-name )` names the type; the
             // `_Atomic` qualifier below does not. c5 does not model
             // atomicity, so the declared type is the unqualified inner
@@ -1810,6 +1822,7 @@ impl Compiler {
 
         let base_tok = self.lex.tk;
         let mut enum_tag = None;
+        let mut implicit_int = false;
         let mut bt = if let Some(inner) = atomic_base {
             inner
         } else if self.lex.tk == Token::Typeof {
@@ -1855,8 +1868,8 @@ impl Compiler {
             // Bare `unsigned x;` / `long x;` / `long long x;` / `short x;`
             // -- the implicit-int rule for int-modifier-only declarations.
             m.int_base()
-        } else if let Some(s) = storage.as_deref_mut() {
-            s.implicit_int = true;
+        } else if storage.is_some() || saw_specifier {
+            implicit_int = true;
             self.implicit_int_base_type()?
         } else {
             return Err(self.compile_err(Code::SYNTAX, "type expected"));
@@ -1889,6 +1902,7 @@ impl Compiler {
         // Written after the base type is complete, so a nested parse inside
         // it (a parameter list in an aggregate body) leaves nothing behind.
         self.pending.base_enum_tag = enum_tag;
+        self.pending.base_implicit_int = implicit_int;
 
         Ok(apply_qual_bits(bt, qual_bits))
     }
@@ -1977,13 +1991,13 @@ impl Compiler {
     /// `int`. An identifier in type-specifier position is the declarator
     /// only when a declarator punctuator follows it; any other shape is a
     /// type name that does not resolve, and is reported as one rather than
-    /// silently accepted as `int`.
-    fn implicit_int_base_type(&mut self) -> Result<i64, C5Error> {
+    /// silently accepted as `int`. TODO: a name followed by an `asm` label
+    /// or an attribute reads as an unknown type name.
+    pub(super) fn implicit_int_base_type(&mut self) -> Result<i64, C5Error> {
         if self.lex.tk == Token::Id
-            && !self.lex.peek_after_whitespace(b'(')
-            && !self.lex.peek_after_whitespace(b';')
-            && !self.lex.peek_after_whitespace(b',')
-            && !self.lex.peek_after_whitespace(b'=')
+            && !b"(;,=)[:"
+                .iter()
+                .any(|&c| self.lex.peek_after_whitespace(c))
         {
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
             return Err(self.compile_err(
@@ -1992,6 +2006,40 @@ impl Compiler {
             ));
         }
         Ok(Ty::Int as i64)
+    }
+
+    /// C99 6.7.2p2: a declaration or type name without a type specifier
+    /// takes `int`, an error by default as in gcc 14, in gcc's words.
+    pub(super) fn report_implicit_int(
+        &mut self,
+        what: ImplicitInt,
+        line: usize,
+    ) -> Result<(), C5Error> {
+        let name = |c: &Self, idx: usize| c.symbols[idx].name.clone();
+        let text = match what {
+            ImplicitInt::Declarator(usize::MAX) => "type defaults to `int` in type name".into(),
+            ImplicitInt::Declarator(idx) => {
+                format!(
+                    "type defaults to `int` in declaration of `{}`",
+                    name(self, idx)
+                )
+            }
+            ImplicitInt::Return => "return type defaults to `int`".into(),
+            ImplicitInt::UndeclaredParameter(idx) => {
+                format!("type of `{}` defaults to `int`", name(self, idx))
+            }
+        };
+        self.report_at(Code::IMPLICIT_INT, line, text)
+    }
+
+    /// The base type of a type name (C99 6.7.6), reporting an implicit `int`.
+    pub(super) fn parse_type_name_base(&mut self) -> Result<i64, C5Error> {
+        let line = self.lex.line;
+        let ty = self.parse_decl_base_type()?;
+        if core::mem::take(&mut self.pending.base_implicit_int) {
+            self.report_implicit_int(ImplicitInt::Declarator(usize::MAX), line)?;
+        }
+        Ok(ty)
     }
 
     /// Resolve the typedef-name at the cursor to its aliased type and seed

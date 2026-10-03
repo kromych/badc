@@ -947,6 +947,10 @@ pub(in crate::c5::compiler) struct Pending {
     /// declarator added no leading `*`s.
     pub base_was_void: bool,
 
+    /// The last base-type parse read specifiers naming no type and took
+    /// `int` (C99 6.7.2p2); the declaration or type name reports it.
+    pub base_implicit_int: bool,
+
     /// Side channel from `parse_decl_base_type`: the base specifiers
     /// included a `const` qualifier. The declaration path reads it to mark
     /// a plain integer-scalar object `const`-qualified so a later constant
@@ -1651,6 +1655,7 @@ impl Default for Pending {
     fn default() -> Self {
         Self {
             base_was_void: false,
+            base_implicit_int: false,
             base_is_const: false,
             spell_base_const: false,
             spell_base_restrict: false,

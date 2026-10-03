@@ -225,6 +225,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v45  LifetimeEnd(-5)                                  -> -
     v46  LifetimeEnd(-10)                                 -> -
     terminator Return(v44)   (exit_acc=v44)
+duff_switch_into_loop.c:10: warning: return type defaults to `int` [B2011] [-Wimplicit-int]
+send(to, from, count)
+duff_switch_into_loop.c:12: warning: type defaults to `int` in declaration of `count` [B2011] [-Wimplicit-int]
+    register count;
+duff_switch_into_loop.c:14: warning: type defaults to `int` in declaration of `n` [B2011] [-Wimplicit-int]
+    register n = (count + 7) / 8;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

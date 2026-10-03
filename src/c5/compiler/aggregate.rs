@@ -66,6 +66,8 @@ struct MemberBase {
     group_packed: bool,
     base_spelling: crate::c5::symbol::DeclSpelling,
     type_align_override: usize,
+    /// The specifiers name no type: each declarator takes `int`.
+    implicit_int: bool,
 }
 
 /// How a packed re-layout clamps its members: the attribute drops every
@@ -233,6 +235,7 @@ impl Compiler {
             group_packed,
             base_spelling,
             type_align_override,
+            implicit_int,
             ..
         } = base;
         // A function-pointer typedef base (`fn_t a, b;`) seeds its lineage
@@ -257,6 +260,10 @@ impl Compiler {
             // appearing in declarator position.
             if self.lex.tk == ':' {
                 self.pending.attr_packed = false;
+                if implicit_int {
+                    let what = super::decl_base::ImplicitInt::Declarator(usize::MAX);
+                    self.report_implicit_int(what, self.lex.line)?;
+                }
                 if group_alignas {
                     return Err(self.compile_err(
                         Code::INVALID_DECLARATION,
@@ -295,9 +302,14 @@ impl Compiler {
             let saved_member_ctx = self.pending.in_member_declarator;
             self.pending.in_member_declarator = true;
             self.pending.member_decl_save = None;
+            let declarator_line = self.lex.line;
             let declared = self.parse_declarator(field_base);
             self.pending.in_member_declarator = saved_member_ctx;
             let (id_idx, mut field_ty, mut field_array_size, mut field_zero_len) = declared?;
+            if implicit_int {
+                let what = super::decl_base::ImplicitInt::Declarator(id_idx);
+                self.report_implicit_int(what, declarator_line)?;
+            }
             // A member may carry a trailing attribute
             // (`int x __attribute__((aligned(16)));`,
             // `int x __attribute__((deprecated));`). Member-level
@@ -841,6 +853,7 @@ impl Compiler {
         // C99 6.7.2p2 admits the qualifiers in any order, so a leading
         // `volatile int x;` folds like the trailing spelling.
         let mut leading_quals: i64 = 0;
+        let mut saw_qualifier = false;
         while is_decl_modifier(self.lex.tk) {
             if self.lex.tk == Token::Attribute {
                 group_packed |= self.skip_attribute_specifiers()?;
@@ -864,8 +877,10 @@ impl Compiler {
             leading_quals |= self.lex_qualifier_bits();
             self.pending.spell_base_const |= self.lex_is_const_qual();
             self.pending.spell_base_restrict |= self.lex_is_restrict_qual();
+            saw_qualifier = true;
             self.next()?;
         }
+        let mut implicit_int = false;
         let mut incomplete_enum_tag = None;
         let field_base_tok = self.lex.tk;
         let mut field_base = if let Some(inner) = atomic_field_base {
@@ -929,6 +944,9 @@ impl Compiler {
             ty
         } else if mods.saw_int_mod {
             mods.int_base()
+        } else if saw_qualifier {
+            implicit_int = true;
+            self.implicit_int_base_type()?
         } else {
             return Err(self.compile_err(Code::SYNTAX, "type expected in struct field"));
         };
@@ -973,6 +991,7 @@ impl Compiler {
             group_packed,
             base_spelling,
             type_align_override,
+            implicit_int,
         })
     }
 

@@ -432,7 +432,7 @@ impl Compiler {
             static_seen: storage.is_static,
             extern_seen: storage.is_extern,
             thread_local: storage.is_thread_local,
-            implicit_int: storage.implicit_int,
+            implicit_int: core::mem::take(&mut self.pending.base_implicit_int),
             base_spelling: self.take_base_spelling(),
             base_enum_tag: self.pending.base_enum_tag.take(),
             // A typedef-carried type alignment applies to every declarator;
@@ -489,6 +489,13 @@ impl Compiler {
         // function body's opening brace parsed further below.
         let signature_line = self.lex.line;
         let (id_idx, mut ty, mut array_size, mut zero_len_array) = self.parse_declarator(bt)?;
+        // A function declarator reports in `define_file_scope_function`.
+        if decl.implicit_int
+            && (is_typedef || (self.lex.tk != '(' && self.pending.fn_params.is_none()))
+        {
+            let what = decl_base::ImplicitInt::Declarator(id_idx);
+            self.report_implicit_int(what, signature_line)?;
+        }
         // `register T name asm("reg")` at file scope is a GNU global
         // register variable; any other `asm(...)` suffix is the
         // assembler name and the object declaration continues
@@ -914,6 +921,14 @@ impl Compiler {
         // information, so the composite type keeps the prior list (6.2.7p4); in a
         // definition the same spelling does specify "no parameters".
         let is_defining_declarator = self.lex.tk != ';' && self.lex.tk != ',';
+        if implicit_int {
+            let what = if is_defining_declarator {
+                decl_base::ImplicitInt::Return
+            } else {
+                decl_base::ImplicitInt::Declarator(id_idx)
+            };
+            self.report_implicit_int(what, b.signature_line)?;
+        }
         let keeps_prior_list = params.form == super::function::ParamForm::Empty
             && !is_defining_declarator
             && !prior_params.types.is_empty();
@@ -1153,7 +1168,7 @@ impl Compiler {
                 "parameter name omitted in a function definition",
             ));
         }
-        self.parse_kr_parameter_declarations(&mut params)?;
+        self.parse_kr_parameter_declarations(&mut params, def.line)?;
         self.check_complete_parameters(&params, def.line)?;
         // C99 6.9.1p3: a definition returns void or a complete object type.
         let ret = self.symbols[id_idx].type_;
@@ -1226,7 +1241,9 @@ impl Compiler {
     fn parse_kr_parameter_declarations(
         &mut self,
         params: &mut super::function::ParsedParams,
+        line: usize,
     ) -> Result<(), C5Error> {
+        let mut declared = alloc::vec![false; params.indices.len()];
         // C99 6.9.1: an old-style (K&R) definition lists the
         // parameter names in the declarator and gives their
         // types in declarations between the `)` and the
@@ -1252,19 +1269,26 @@ impl Compiler {
                 self.next()?;
                 saw_specifier = true;
             }
-            let base = if self.lex_is_type_start() {
-                self.parse_decl_base_type()?
+            let (base, implicit_int) = if self.lex_is_type_start() {
+                let base = self.parse_decl_base_type()?;
+                (base, core::mem::take(&mut self.pending.base_implicit_int))
             } else if saw_specifier || self.lex.tk == Token::Id {
-                Ty::Int as i64
+                (Ty::Int as i64, true)
             } else {
                 break;
-            } | qual_bits;
+            };
+            let base = base | qual_bits;
             let base_enum_tag = self.pending.base_enum_tag.take();
             while self.lex.tk != ';' && self.lex.tk != 0 {
                 // C99 6.9.1p6: the list declares the parameters, so a bound
                 // and a function type adjust as a prototype's (6.7.5.3p7-8).
                 self.pending.param_decl_context = true;
+                let decl_line = self.lex.line;
                 let (decl_idx, mut decl_ty, decl_arr, _) = self.parse_declarator(base)?;
+                if implicit_int {
+                    let what = decl_base::ImplicitInt::Declarator(decl_idx);
+                    self.report_implicit_int(what, decl_line)?;
+                }
                 let (fn_ptr_indirection, fn_ptr_ret_indirection, fn_params, ret_fn) =
                     self.take_param_fn_ptr_carriers();
                 if decl_idx != usize::MAX {
@@ -1283,6 +1307,7 @@ impl Compiler {
                         decl_ty = self.array_value_ty(decl_ty, &dims);
                     }
                     if let Some(pos) = params.indices.iter().position(|&pi| pi == decl_idx) {
+                        declared[pos] = true;
                         self.symbols[decl_idx].type_ = decl_ty;
                         self.symbols[decl_idx].incomplete_enum_tag = base_enum_tag;
                         // The adjusted pointer is one more level above a
@@ -1311,6 +1336,15 @@ impl Compiler {
             self.accept(';')?;
         }
         params.sizes.append(&mut self.param_sizes);
+        // C99 6.9.1p6: an identifier the list leaves undeclared takes `int`.
+        if params.form == super::function::ParamForm::IdentifierList {
+            for (pos, &idx) in params.indices.iter().enumerate() {
+                if !declared[pos] {
+                    let what = decl_base::ImplicitInt::UndeclaredParameter(idx);
+                    self.report_implicit_int(what, line)?;
+                }
+            }
+        }
         Ok(())
     }
 

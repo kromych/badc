@@ -57,6 +57,7 @@ regenerates.
 | B2008 | `attributes` | warning | controllable | default | an attribute the declaration cannot carry, so it is ignored |
 | B2009 | `ignored-asm-label` | warning | controllable | default | an assembler name on a declaration that has no symbol to rename |
 | B2010 | `shadowed-binding` | warning | controllable | default | a `#pragma binding` for a name an earlier binding already claimed |
+| B2011 | `implicit-int` | error | controllable | default | a declaration or type name with no type specifier, whose type defaults to `int` |
 | B2020 | `syntax` | error | hard | - | a token the grammar does not admit at its position; the parser has no resynchronisation point |
 | B2021 | `invalid-declaration` | error | hard | - | a declaration a C99 constraint rejects: a redefinition, conflicting types, an incomplete object, a bit-field width or an alignment out of range |
 | B2022 | `undeclared-identifier` | error | hard | - | a name no declaration in scope introduces |

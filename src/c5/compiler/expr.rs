@@ -5675,7 +5675,7 @@ impl Compiler {
     pub(super) fn parse_type_name(&mut self) -> Result<TypeName, C5Error> {
         self.pending.typeof_operand_was_array = false;
         self.pending.clear_base_array();
-        let base = self.parse_decl_base_type()?;
+        let base = self.parse_type_name_base()?;
         let is_function = core::mem::take(&mut self.pending.base_is_function_type);
         let base_params = self.pending.fn_ptr_params.take();
         self.pending.fn_ptr_ret_indirection = 0;

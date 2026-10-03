@@ -418,12 +418,13 @@ impl Compiler {
         if is_thread_local && !is_extern {
             is_static = true;
         }
-        // K&R implicit int (`register n = ...;`). Gated on an explicit
-        // specifier so a mistyped type name still surfaces as an error.
-        let base = if !self.lex_is_type_start() && saw_specifier {
-            Ty::Int as i64
+        // Implicit int (`register n = ...;`), gated on an explicit specifier
+        // so a mistyped type name still surfaces as an error.
+        let (base, implicit_int) = if !self.lex_is_type_start() && saw_specifier {
+            (Ty::Int as i64, true)
         } else {
-            self.parse_decl_base_type()?
+            let base = self.parse_decl_base_type()?;
+            (base, core::mem::take(&mut self.pending.base_implicit_int))
         };
         // C99 6.7.1: specifiers may also trail the type (`int const y;`).
         self.consume_local_decl_specifiers(
@@ -471,7 +472,12 @@ impl Compiler {
                 ty: lbt,
                 enum_tag: base_enum_tag,
             };
-            if self.try_parse_block_fn_prototype(base, is_static)? {
+            let declarator_line = self.lex.line;
+            if let Some(fn_idx) = self.try_parse_block_fn_prototype(base, is_static)? {
+                if implicit_int {
+                    let what = super::decl_base::ImplicitInt::Declarator(fn_idx);
+                    self.report_implicit_int(what, declarator_line)?;
+                }
                 self.accept_declarator_separator()?;
                 continue;
             }
@@ -485,6 +491,10 @@ impl Compiler {
             self.pending.fn_params = None;
             let (loc_idx, ty, mut array_size, mut zero_len) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = saved_vla;
+            if implicit_int {
+                let what = super::decl_base::ImplicitInt::Declarator(loc_idx);
+                self.report_implicit_int(what, declarator_line)?;
+            }
             self.pending.attr_transparent_union = false;
             // C99 6.7.1p5 + 6.9.1: a declarator of bare function type (a
             // function-TYPE typedef with no pointer level) declares a

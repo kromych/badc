@@ -34,6 +34,12 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 2  start_pc=0
     v13  Imm(0)                                           -> x0
     terminator Return(v13)   (exit_acc=v13)
+implicit_int_decl.c:10: warning: return type defaults to `int` [B2011] [-Wimplicit-int]
+f(int x) { return x + 1; }
+implicit_int_decl.c:12: warning: type defaults to `int` in declaration of `g` [B2011] [-Wimplicit-int]
+g = 5;
+implicit_int_decl.c:14: warning: return type defaults to `int` [B2011] [-Wimplicit-int]
+main()
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

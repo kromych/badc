@@ -698,11 +698,17 @@ impl Compiler {
         self.pending.attr_align = 0;
         self.pending.attr_alignas = 0;
         let lbt = self.parse_decl_base_type()?;
+        let implicit_int = core::mem::take(&mut self.pending.base_implicit_int);
         let base_enum_tag = self.pending.base_enum_tag.take();
         while self.lex.tk != ';' {
+            let declarator_line = self.lex.line;
             let (id_idx, ty, mut td_array, mut td_zero_len) = self.parse_declarator(lbt)?;
             if id_idx == usize::MAX {
                 return Err(self.compile_err(Code::INVALID_DECLARATION, "typedef requires a name"));
+            }
+            if implicit_int {
+                let what = super::decl_base::ImplicitInt::Declarator(id_idx);
+                self.report_implicit_int(what, declarator_line)?;
             }
             let declarator_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);

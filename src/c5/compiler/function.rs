@@ -25,6 +25,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::decl_base::ImplicitInt;
 use super::types::{add_ptr_level, apply_qual_bits};
 
 /// Bundle returned from `parse_function_params` -- keeps the per-param
@@ -257,11 +258,13 @@ impl Compiler {
             // leading form, the post-declarator skip for the trailing.
             self.pending.attr_maybe_unused = false;
             let _ = self.take_base_spelling();
-            let base = if self.lex_is_type_start() {
+            let param_line = self.lex.line;
+            let (base, implicit_int) = if self.lex_is_type_start() {
                 form = ParamForm::Prototype;
-                self.parse_decl_base_type()?
+                let base = self.parse_decl_base_type()?;
+                (base, core::mem::take(&mut self.pending.base_implicit_int))
             } else {
-                Ty::Int as i64
+                (Ty::Int as i64, false)
             };
             let base_spelling = self.take_base_spelling();
             let base_enum_tag = self.pending.base_enum_tag.take();
@@ -352,6 +355,9 @@ impl Compiler {
                 // An unnamed parameter binds no symbol to receive the
                 // fn-pointer carriers its base (a fn-pointer typedef) seeded.
                 let _ = self.take_param_fn_ptr_carriers();
+                if implicit_int {
+                    self.report_implicit_int(ImplicitInt::Declarator(usize::MAX), param_line)?;
+                }
                 self.ty = ty;
                 enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));
                 types.push(ty);
@@ -372,6 +378,9 @@ impl Compiler {
             // type but don't bind any symbol.
             self.pending.param_decl_context = true;
             let (param_idx, mut full_ty, array_size, _) = self.parse_declarator(ty)?;
+            if implicit_int {
+                self.report_implicit_int(ImplicitInt::Declarator(param_idx), param_line)?;
+            }
             // A parameter may carry a trailing attribute
             // (`PyObject *op __attribute__((unused))`).
             self.skip_attribute_specifiers()?;

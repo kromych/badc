@@ -2251,8 +2251,8 @@ pub(crate) struct Build {
     /// executable image. macOS links an executable so its
     /// default-visibility globals are exported, which lets a
     /// dynamically loaded module (`dlopen`) bind against the
-    /// executable's symbols (a Python C extension `.so` resolving
-    /// `PyBool_Type` and the C-API). Populated only for executable
+    /// executable's symbols (an extension module resolving the host
+    /// program's objects and functions). Populated only for executable
     /// Mach-O output; empty for shared libraries (which use
     /// `exports`) and on other targets, whose writers ignore it.
     pub dynamic_exports: Vec<DynamicExport>,
@@ -3221,8 +3221,7 @@ pub enum IndirectBranch {
     /// `thunk-extern`: transfer through `__x86_indirect_thunk_<reg>`.
     ThunkExtern,
     /// `thunk-inline`: the retpoline sequence embedded at the site,
-    /// for objects that may not reference external symbols (the
-    /// kernel's vDSO).
+    /// for objects that may not reference external symbols (a vDSO).
     ThunkInline,
 }
 
@@ -3274,7 +3273,7 @@ pub enum StackGuard {
 pub enum GuardSeg {
     /// `%fs`, the System V x86-64 thread pointer.
     Fs,
-    /// `%gs`, which the Linux kernel uses for its per-CPU base.
+    /// `%gs`, the per-CPU base `swapgs` installs in kernel mode.
     Gs,
 }
 
@@ -3638,8 +3637,8 @@ pub struct NativeOptions {
     /// Whether a switch may dispatch through a jump table
     /// (`-fno-jump-tables` clears it). Cleared, a dense switch lowers
     /// to the compare tree a sparse one gets, so no indirect branch is
-    /// taken and no table reaches the image -- what retpoline and
-    /// indirect-branch-tracking kernel configurations require.
+    /// taken and no table reaches the image -- what a build under
+    /// retpolines or indirect-branch tracking requires.
     pub jump_tables: bool,
     /// Whether a call whose result the function returns unchanged may
     /// become a jump after the epilogue (gcc and clang
@@ -3698,8 +3697,8 @@ pub struct NativeOptions {
     /// default and pads nothing, which is what a function packed against
     /// its predecessor gets. A larger value fills the gap with the
     /// target's NOP encoding and raises [`Build::text_align`] to match,
-    /// so the alignment holds absolutely once the section is placed --
-    /// what `CONFIG_FUNCTION_ALIGNMENT` states. A symbol's `st_size`
+    /// so the alignment holds absolutely once the section is placed.
+    /// A symbol's `st_size`
     /// covers its code only; the fill belongs to no function.
     pub min_function_alignment: u32,
     /// `-fpatchable-function-entry=N,M`: the NOP area at every function
@@ -4249,8 +4248,8 @@ pub(crate) fn lower_for_with_prebuilt(
             return Err(C5Error::hard(
                 Code::UNSUPPORTED,
                 alloc::string::String::from(
-                    "`-pg` is not implemented for aarch64; the kernel's \
-                 `-fpatchable-function-entry=` form is",
+                    "`-pg` is not implemented for aarch64; \
+                 `-fpatchable-function-entry=` is",
                 ),
             ));
         }
@@ -4674,8 +4673,7 @@ impl Default for Abi {
 /// when it is not the target's own. GCC spells the two x86_64
 /// conventions `__attribute__((ms_abi))` and
 /// `__attribute__((sysv_abi))`; both are x86-only and inert on other
-/// architectures, which is what `__efiapi` relies on (it expands to
-/// `ms_abi` under `CONFIG_X86_64` and to nothing elsewhere).
+/// architectures.
 ///
 /// A convention names an existing ABI row rather than a new one:
 /// `Ms` is what [`Target::WindowsX64`] already describes (arguments in

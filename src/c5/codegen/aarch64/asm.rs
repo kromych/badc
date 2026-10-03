@@ -2361,8 +2361,8 @@ mod tests {
     #[test]
     fn parse_sve_and_sme_state_operands() {
         // The SVE vector and predicate registers, a vector-length-scaled
-        // address, and an SME ZA array vector, as the kernel's fpsimd.h
-        // spells them, its `MUL VL` in capitals.
+        // address, and an SME ZA array vector, `MUL VL` spelled in either
+        // case.
         let insns = parse_template(
             b"str z31, [%0, #31, MUL VL]; ldr p15, [x1, #-256, mul vl]; \
               pfalse p0.b; ldr za[%w1, #0], [%2]; str ZA[w15, 15], [sp, 15, mul vl]",

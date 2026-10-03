@@ -21,10 +21,10 @@ pub(super) struct AsmGotoDirectBranch {
     pub(super) target: u32,
 }
 
-/// A deferred ALTERNATIVE replacement (`.subsection 1`): its encoded
+/// A deferred replacement sequence (`.subsection 1`): its encoded
 /// bytes, appended to `.text` after the function body so the main
 /// sequence does not fall into it, and each local label's offset within
-/// them for the `.altinstructions` fields (`.word 663f - .`).
+/// them for the pushed-section fields that name it (`.word 663f - .`).
 pub(super) struct DeferredAsmRegion {
     pub(super) bytes: alloc::vec::Vec<u8>,
     pub(super) labels: alloc::vec::Vec<(u32, usize)>,
@@ -231,7 +231,7 @@ fn build_label_branch(
     })
 }
 
-/// Encode an ALTERNATIVE `.subsection` replacement into a deferred
+/// Encode a `.subsection` replacement sequence into a deferred
 /// region. A branch to a local label or `.` resolves within the region
 /// (the displacement is placement-invariant); a `%l[...]` branch is
 /// returned as `(region offset, kind, label index)` for the caller to
@@ -278,7 +278,7 @@ fn encode_deferred_asm_region(
             continue;
         }
         // `.org <expr>`: pad forward to the target; a backward move is the
-        // ALTERNATIVE length-mismatch assertion firing, an error as in GNU as.
+        // replacement-length assertion firing, an error as in GNU as.
         if let Some(rest) = stmt.strip_prefix(".org")
             && (rest.is_empty() || rest.starts_with(char::is_whitespace))
         {
@@ -305,7 +305,7 @@ fn encode_deferred_asm_region(
                 })?;
             if target < cur {
                 return Err(String::from(
-                    "inline asm: ALTERNATIVE replacement and original differ in length",
+                    "inline asm: `.subsection` replacement and original differ in length",
                 ));
             }
             bytes.resize(target as usize, 0);
@@ -2254,11 +2254,11 @@ fn lower_inline_asm(
     let gas = crate::c5::asm::expand_asm_gas_macros(&text, 4, &|tok| ops.gas_subst(tok))?;
     let text = gas.as_deref().unwrap_or(&text);
     // The section blocks and the deferred region look a numeric label up by
-    // number, so a label defined twice (two chained ALTERNATIVEs) is numbered
-    // apart by position first.
+    // number, so a label defined twice (two chained replacement sequences)
+    // is numbered apart by position first.
     let apart = crate::c5::asm::number_local_labels_apart(text);
     let text = apart.as_deref().unwrap_or(text);
-    // Every ALTERNATIVE `.subsection` replacement joins the deferred region
+    // Every `.subsection` replacement sequence joins the deferred region
     // appended after the function body.
     let (main_text, deferred_text) = crate::c5::asm::split_asm_subsections(text);
     let extracted = crate::c5::asm::extract_asm_sections(&main_text, true)?;

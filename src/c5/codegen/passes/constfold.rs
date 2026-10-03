@@ -398,8 +398,7 @@ pub(crate) fn fold_selects(func: &mut FunctionSsa) -> bool {
 /// symbol may bind to address zero (a weak reference by ELF rule, any
 /// extern under a model that places objects at absolute addresses), and
 /// a weak definition is preemptible, so both stay out -- the behavior
-/// GCC keeps under `-fno-delete-null-pointer-checks`, which the
-/// affected kernel-style code is built with.
+/// GCC keeps under `-fno-delete-null-pointer-checks`.
 pub(crate) struct AddrFacts {
     /// Parser-symbol indices with a non-weak definition in this unit.
     nonnull_syms: BTreeSet<u32>,

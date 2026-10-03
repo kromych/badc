@@ -1925,10 +1925,10 @@ fn abi_reserved_gprs(target: Target) -> u32 {
 /// label the exception table branches to, and any other reference to a
 /// label that is not a branch of the template -- then carry the register
 /// saved where the rest carry it live, so its location differs between
-/// the paths that join, which neither DWARF CFI nor the kernel's ORC has
-/// a form for, and the value the site saved is never read back. The
-/// prologue's save is the form both express and it costs the function
-/// one pair rather than one per site.
+/// the paths that join, which a per-address unwind table such as DWARF
+/// CFI has no form for, and the value the site saved is never read back.
+/// The prologue's save is the form such a table expresses and it costs
+/// the function one pair rather than one per site.
 ///
 /// The registers [`abi_reserved_gprs`] names are excluded: the frame
 /// owns them, and a naked function has no prologue at all, so their

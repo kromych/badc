@@ -100,7 +100,8 @@ pub(crate) const STACK_PROBE_PAGE: u32 = 4096;
 /// end is protected by a guard region reports an overflow only when the
 /// access that oversteps the end lands inside that region; the smallest
 /// such region in practice is one page (a Windows thread's guard page, a
-/// pthread stack's default guard, a kernel vmap stack's unmapped page).
+/// pthread stack's default guard, the unmapped page below a kernel-mode
+/// stack).
 /// Decrementing by at most `STACK_PROBE_PAGE - 16` from an address the
 /// stack still covers leaves the pointer at least 16 bytes above the
 /// guard region's base, so both the frame's own stores at non-negative

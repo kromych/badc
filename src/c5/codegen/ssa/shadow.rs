@@ -689,9 +689,9 @@ pub(crate) fn compute_live_sets(
     // alive -- `used` asks for that. An included header's `static
     // inline` would otherwise become an out-of-line definition of this
     // unit, and a reference the program means for another unit's
-    // definition would bind to it: the kernel's generated export table
-    // names `migrate_disable`, whose exported body one unit compiles
-    // out of line while every other unit sees a header's inline copy.
+    // definition would bind to it: a file-scope `asm()` naming a function
+    // that one unit defines out of line while every other unit sees a
+    // header's inline copy.
     if assume_data_live {
         for i in 0..n {
             work.push(Node::Data(i));

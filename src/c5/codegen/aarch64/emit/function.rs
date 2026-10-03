@@ -142,7 +142,8 @@ struct FunctionEmitter<'a, 'b> {
     jump_table_fixups: Vec<(usize, u32)>,
     /// `(site, bits, single)` per floating literal load.
     fp_literals: Vec<(usize, u64, bool)>,
-    /// ALTERNATIVE `.subsection` replacements, appended after the body.
+    /// Inline-asm `.subsection` replacement sequences, appended after the
+    /// body.
     deferred_regions: Vec<DeferredAsmRegion>,
 }
 
@@ -1217,10 +1218,10 @@ impl FunctionEmitter<'_, '_> {
         Ok(())
     }
 
-    /// Append each ALTERNATIVE replacement after the body, out of the main
-    /// sequence's fall-through path (GNU as puts it at the end of the
-    /// section); resolve the `.altinstructions` fields, symbol branches
-    /// and `%l[...]` branches that point into or out of it.
+    /// Append each `.subsection` replacement after the body, out of the
+    /// main sequence's fall-through path (GNU as puts it at the end of the
+    /// section); resolve the pushed-section fields, symbol branches and
+    /// `%l[...]` branches that point into or out of it.
     fn append_deferred_regions(&mut self) -> Emit {
         let name2entpc = self.fcx.name2entpc;
         let regions = core::mem::take(&mut self.deferred_regions);

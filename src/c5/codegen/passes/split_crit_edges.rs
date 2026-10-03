@@ -496,9 +496,10 @@ mod tests {
 
     /// A conditional whose merge block carries a phi: the split must happen
     /// even though the function records an address-taken label. Taking a
-    /// label's address without ever branching to it (the kernel's
-    /// `_THIS_IP_`) leaves `computed_goto_targets` non-empty in a function
-    /// the inliner has already given phis.
+    /// label's address without ever branching to it (`({ __label__ h; h:
+    /// (unsigned long)&&h; })`, the current instruction address) leaves
+    /// `computed_goto_targets` non-empty in a function the inliner has
+    /// already given phis.
     #[test]
     fn address_taken_label_does_not_block_the_split() {
         let mut f = fresh(

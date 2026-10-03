@@ -24,9 +24,8 @@
 //! Only a target with a three-operand multiply-accumulate runs this.
 //! x86-64 lowers the node back to the `imul` pair it replaced (see the
 //! emit), and holding both multiplicands live to the accumulate rather
-//! than the product costs it: +17 instructions over `tests/snapshots`
-//! and +14 over `demos/sqlite3/sqlite3.c`, against -45 and -17 on
-//! aarch64.
+//! than the product costs it: +17 instructions over `tests/snapshots`,
+//! against -45 on aarch64.
 //!
 //! TODO: a constant multiplier stays in `BinopI` and does not
 //! contract, which leaves the constant-divisor remainder

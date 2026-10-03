@@ -88,12 +88,12 @@ fn refused(text: &str, needle: &str) {
     }
 }
 
-/// The instructions that kept the x86_64 defconfig kernel's last assembly
-/// units on gas.
+/// One operation at its VEX and EVEX vector lengths, and the operand forms
+/// that select between the two encodings.
 #[test]
-fn kernel_units() {
-    // lib/crypto/x86/poly1305-x86_64-cryptogams.S: the same lane permute in
-    // its AVX2 (VEX, 256-bit) and AVX-512 (EVEX, 512-bit) instantiations.
+fn vex_and_evex_forms_of_one_operation() {
+    // The same lane permute in its AVX2 (VEX, 256-bit) and AVX-512 (EVEX,
+    // 512-bit) forms.
     gas(
         "vpermq $0x2,%ymm3,%ymm10",
         &[0xC4, 0x63, 0xFD, 0x00, 0xD3, 0x02],
@@ -106,19 +106,18 @@ fn kernel_units() {
         "vpermq $0xb1,%zmm15,%zmm4",
         &[0x62, 0xD3, 0xFD, 0x48, 0x00, 0xE7, 0xB1],
     );
-    // The same unit's widening multiply, which EVEX gives a qword broadcast
+    // A widening multiply, which EVEX gives a qword broadcast
     // and so W=1 where VEX ignores the bit.
     gas(
         "vpmuludq %zmm7,%zmm16,%zmm11",
         &[0x62, 0x71, 0xFD, 0x40, 0xF4, 0xDF],
     );
-    // arch/x86/crypto/aes-ctr-avx-x86_64.S: `vpbroadcastq XCTR_CTR, LE_CTR`
-    // with XCTR_CTR = %r9 and LE_CTR = V9 at vl=64.
+    // A general register broadcast to a 512-bit register.
     gas(
         "vpbroadcastq %r9,%zmm9",
         &[0x62, 0x52, 0xFD, 0x48, 0x7C, 0xC9],
     );
-    // lib/crypto/x86/blake2s-core.S.
+    // A two-table permute at 256 bits, which only EVEX encodes.
     gas(
         "vpermi2d %ymm7,%ymm6,%ymm8",
         &[0x62, 0x72, 0x4D, 0x28, 0x76, 0xC7],
@@ -127,8 +126,8 @@ fn kernel_units() {
         "vpermi2d %ymm7,%ymm6,%ymm9",
         &[0x62, 0x72, 0x4D, 0x28, 0x76, 0xCF],
     );
-    // lib/crc/x86/crc32-pclmul.S: `_cond_vex "pextrd $1 + LSB_CRC,"` with
-    // LSB_CRC = 1, so the immediate is the expression `1 + 1`.
+    // An immediate written as an expression, as a macro argument pasted
+    // into a template produces it.
     gas(
         "vpextrd $1 + 1, %xmm0, %eax",
         &[0xC4, 0xE3, 0x79, 0x16, 0xC0, 0x02],
@@ -137,7 +136,8 @@ fn kernel_units() {
         "vpextrd $2,%xmm0,%eax",
         &[0xC4, 0xE3, 0x79, 0x16, 0xC0, 0x02],
     );
-    // The rest of that unit's AVX-512 instantiation (vl=64, avx_level=512).
+    // AVX-512 logic, moves, broadcasts, extracts and carry-less multiplies,
+    // with memory displacements scaled to disp8.
     gas(
         "vpternlogq $0x96,%xmm2,%xmm1,%xmm0",
         &[0x62, 0xF3, 0xF5, 0x08, 0x25, 0xC2, 0x96],
@@ -183,9 +183,8 @@ fn kernel_units() {
         "vpclmulqdq $0x00,%xmm7,%xmm0,%xmm0",
         &[0xC4, 0xE3, 0x79, 0x44, 0xC7, 0x00],
     );
-    // arch/x86/crypto/aria-{aesni-avx,aesni-avx2,gfni-avx512}-asm_64.S: the
-    // same affine transform at each of the three vector lengths, VEX below
-    // 512 bits and EVEX at it.
+    // The same affine transform at each of the three vector lengths, VEX
+    // below 512 bits and EVEX at it.
     gas(
         "vgf2p8affineqb $0x2c,%xmm4,%xmm15,%xmm15",
         &[0xC4, 0x63, 0x81, 0xCE, 0xFC, 0x2C],
@@ -212,9 +211,8 @@ fn kernel_units() {
     );
 }
 
-/// The AVX-512 forms the distribution-configuration crypto units name:
-/// `arch/x86/crypto/aes-{ctr,xts}-avx-x86_64.S` (VAES on zmm) and
-/// `arch/x86/crypto/aes-gcm-vaes-avx512.S` (the 128-bit lane shuffles).
+/// VAES on zmm registers and the 128-bit lane shuffles: EVEX at 512 bits
+/// or with a high register, VEX otherwise.
 #[test]
 fn vaes_and_lane_shuffles() {
     gas(
@@ -265,10 +263,10 @@ fn vaes_and_lane_shuffles() {
     );
 }
 
-/// GFNI under EVEX, the form `arch/x86/crypto/aria-gfni-avx512-asm_64.S`
-/// names. The affine transforms read qword elements: W is set, the tuple is
-/// Full, and a `{1toN}` broadcast reads one qword. The field multiply reads
-/// bytes: W is clear, the tuple is Full Mem, and it has no broadcast.
+/// GFNI under EVEX. The affine transforms read qword elements: W is set, the
+/// tuple is Full, and a `{1toN}` broadcast reads one qword. The field
+/// multiply reads bytes: W is clear, the tuple is Full Mem, and it has no
+/// broadcast.
 #[test]
 fn gfni_evex() {
     // The whole register file through R', X, V' and B.
@@ -1119,8 +1117,7 @@ fn non_temporal_moves() {
     refused("vmovntdqa %zmm1,%zmm2", "memory source");
 }
 
-/// GNU as reads register names without regard to case; the kernel's AVX-512
-/// RAID-6 syndrome spells `%Zmm14`.
+/// GNU as reads register names without regard to case.
 #[test]
 fn register_names_fold_case() {
     gas(
@@ -1135,10 +1132,10 @@ fn register_names_fold_case() {
     gas("vmovdqa (%RDI),%ymm0", &[0xC5, 0xFD, 0x6F, 0x07]);
 }
 
-/// Every mnemonic and operand form the RAID-6 units spell (`lib/raid6/avx2.c`,
-/// `avx512.c`, `recov_avx2.c`, `recov_avx512.c`), at both vector lengths.
+/// The integer vector moves, logic, byte arithmetic, compares and shuffles of
+/// a GF(2^8) syndrome computation, in their 256-bit VEX and 512-bit EVEX forms.
 #[test]
-fn raid6_units() {
+fn integer_vector_ops_at_both_lengths() {
     gas(
         "vmovdqa64 (%rdi),%zmm0",
         &[0x62, 0xF1, 0xFD, 0x48, 0x6F, 0x07],
@@ -1296,8 +1293,7 @@ fn evex_element_insert_extract() {
     );
 }
 
-/// The VEX element insert / extract family, which the AVX-512 CRC template
-/// reaches through `vpextrd`.
+/// The VEX element insert / extract family.
 #[test]
 fn vex_element_insert_extract() {
     gas(

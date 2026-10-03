@@ -131,8 +131,8 @@ const FRAME_GROWTH_FACTOR: i64 = 4;
 /// The `CALLER_FRAME_SLOTS` / `FRAME_GROWTH_FACTOR` pair is relative, so a
 /// caller that already declares a large frame may still multiply it, and
 /// neither bounds the frame itself; a frame that spans a page costs a
-/// noticeable fraction of the smallest stacks a target runs on (a 16 KiB
-/// kernel task stack), which is worth paying for a mandatory
+/// noticeable fraction of the smallest stacks a target runs on (16 KiB
+/// for a kernel-mode thread), which is worth paying for a mandatory
 /// (`always_inline`) request and not for a size-driven candidate.
 ///
 /// Checked per splice rather than per round: a splice exposes the callee's
@@ -1673,13 +1673,13 @@ impl<'a> CandidatePool<'a> {
 /// One caller's view of a pool. The caller's own entry is excluded:
 /// splicing a self-recursive call would expand without bound. A
 /// size-driven callee with an explicit section is visible only to
-/// callers placed in the same section: its placement is a contract (the
-/// kernel's section whitelists) that the splice moves the body out of.
-/// A mandatory (`always_inline`) request overrides it, as gcc and clang
-/// do -- both splice such a body into a caller in any section and emit
-/// no out-of-line copy at all -- and as the kernel needs: a call left
-/// out of line from `.text` into an `__init` helper outlives the
-/// section it targets.
+/// callers placed in the same section: its placement is a contract (a
+/// linker script places by it, a reference check keys on it) that the
+/// splice moves the body out of. A mandatory (`always_inline`) request
+/// overrides it, as gcc and clang do -- both splice such a body into a
+/// caller in any section and emit no out-of-line copy at all -- so a
+/// call from `.text` never targets a helper in a section the image
+/// discards after startup.
 struct CandidateSet<'p, 'a> {
     pool: &'p CandidatePool<'a>,
     exclude: usize,

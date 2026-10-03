@@ -809,7 +809,11 @@ impl Parser {
                     self.front.diag.set_level(row.code, level);
                 }
             }
-            badc::diag::Selector::Diagnostic(code) => self.front.diag.set_level(code, level),
+            sel => {
+                for code in sel.codes() {
+                    self.front.diag.set_level(code, level);
+                }
+            }
         }
         Ok(())
     }
@@ -822,7 +826,11 @@ impl Parser {
                     self.front.diag.error_for(row.code, on);
                 }
             }
-            badc::diag::Selector::Diagnostic(code) => self.front.diag.error_for(code, on),
+            sel => {
+                for code in sel.codes() {
+                    self.front.diag.error_for(code, on);
+                }
+            }
         }
         Ok(())
     }

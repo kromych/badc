@@ -5072,8 +5072,9 @@ fn func_name_points_to_const_char() {
 /// incompatible-pointer-types, an error by default as in gcc 14 and a
 /// warning under `-Wno-error=incompatible-pointer-types`, in an initializer,
 /// an assignment, an argument and a return alike. Pointers to integer types
-/// that differ only in signedness warn under B3032 pointer-sign, as clang
-/// does by default.
+/// that differ only in signedness warn under B3032 pointer-sign, and pointed-to
+/// types that differ only in nested qualifiers under B3011, as clang does by
+/// default.
 #[test]
 fn an_incompatible_object_pointer_conversion_is_an_error() {
     use crate::diag::{Code, Config, Level};
@@ -5112,8 +5113,8 @@ fn an_incompatible_object_pointer_conversion_is_an_error() {
         .map(|e| e.to_string())
         .unwrap_or_default();
     assert!(
-        msg.contains(":4: error: incompatible pointer types in return")
-            && msg.contains("(declared=char**, returned=const char**) [B3029]"),
+        msg.contains(":7: error: incompatible pointer types in initializer")
+            && msg.contains("(declared=struct A*, init=struct B*) [B3029]"),
         "{msg}"
     );
     let mut lowered = Config::new();
@@ -5122,7 +5123,6 @@ fn an_incompatible_object_pointer_conversion_is_an_error() {
     let warnings: alloc::vec::Vec<String> =
         program.warnings.iter().map(|w| w.to_string()).collect();
     let incompatible = [
-        (4, "in return (declared=char**, returned=const char**)"),
         (7, "in initializer (declared=struct A*, init=struct B*)"),
         (7, "in assignment (lhs=struct A*, rhs=char*)"),
         (7, "in argument 1 of `take` (param=int*, arg=long*)"),
@@ -5130,11 +5130,14 @@ fn an_incompatible_object_pointer_conversion_is_an_error() {
         (7, "in initializer (declared=int (*)[4], init=int (*)[3])"),
         (8, "(declared=int*, init=enum E*)"),
         (8, "(declared=enum E*, init=enum F*)"),
-        (8, "(declared=const char* const *, init=char**)"),
         (8, "(declared=void**, init=int**)"),
         (9, "(declared=unsigned char**, init=char**)"),
         (9, "(declared=float*, init=double*)"),
         (9, "(declared=long*, init=long long*)"),
+    ];
+    let nested = [
+        (4, "in return (declared=char**, returned=const char**)"),
+        (8, "(declared=const char* const *, init=char**)"),
     ];
     let sign = [
         (15, "(declared=int*, init=unsigned int*)"),
@@ -5161,16 +5164,108 @@ fn an_incompatible_object_pointer_conversion_is_an_error() {
             "line {line} {text}: {warnings:?}"
         );
     }
+    for (line, text) in nested {
+        assert!(
+            found(line, "[B3011]", text),
+            "line {line} {text}: {warnings:?}"
+        );
+    }
     assert_eq!(
         warnings.len(),
-        incompatible.len() + sign.len(),
+        incompatible.len() + sign.len() + nested.len(),
         "{warnings:?}"
     );
     let mut quiet = Config::new();
     quiet.set_level(Code::INCOMPATIBLE_POINTER_TYPES, Level::Ignore);
     quiet.set_level(Code::POINTER_SIGN, Level::Ignore);
+    quiet.set_level(Code::NESTED_QUALIFIERS, Level::Ignore);
     let program = compile(quiet).unwrap_or_else(|e| panic!("{e}"));
     assert!(program.warnings.is_empty(), "{:?}", program.warnings);
+}
+
+/// C99 6.5.16.1p1 lets a pointer gain qualifiers only on the type it points
+/// to; a qualifier difference further down (`T **` as `const T **`) makes the
+/// pointed-to types incompatible (6.7.3p9). As clang gives it, that alone is
+/// B3011 incompatible-pointer-types-discards-qualifiers, a warning on every
+/// target, in either direction and at any depth. A qualifier the pointed-to
+/// type loses stays B3031, a gained one is silent, and any other mismatch is
+/// still the B3029 error. A `wchar_t *` passed by address to a `PCWSTR *`
+/// parameter (`const wchar_t **`) through a `WINAPI` function pointer is the
+/// first shape.
+#[test]
+fn a_nested_qualifier_difference_between_pointer_targets_warns() {
+    use crate::diag::Code;
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "void f(char **pp, const char **cpp, char *const *pcp, char ***ppp) {\n\
+               \tconst char **a = pp;\n\
+               \tchar **b = cpp;\n\
+               \tchar *const *c = pp;\n\
+               \tchar **d = pcp;\n\
+               \tconst char *const *e = pp;\n\
+               \tconst char ***g = ppp;\n\
+               \t(void)a; (void)b; (void)c; (void)d; (void)e; (void)g;\n\
+               }\n";
+    let shape = "#include <windows.h>\n\
+                 typedef HRESULT (WINAPI *describe_fn)(HANDLE, PCWSTR *);\n\
+                 static describe_fn get;\n\
+                 int describe(void) {\n\
+                 \twchar_t *name = 0;\n\
+                 \tHRESULT hr = get(GetCurrentThread(), &name);\n\
+                 \treturn hr >= 0 && name != 0;\n\
+                 }\n";
+    let codes = |src: &str, target: Target| -> alloc::vec::Vec<(u32, Code)> {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{}: {e}", target.id_str()))
+            .warnings
+            .iter()
+            .filter_map(|w| w.loc.as_ref().map(|l| (l.line, w.code)))
+            .collect()
+    };
+    let (nested, discarded) = (Code::NESTED_QUALIFIERS, Code::DISCARDED_QUALIFIERS);
+    for target in [Target::LinuxX64, Target::MacOSAarch64, Target::WindowsX64] {
+        assert_eq!(
+            codes(src, target),
+            [
+                (2, nested),
+                (3, nested),
+                (5, discarded),
+                (6, nested),
+                (7, nested)
+            ],
+            "{}",
+            target.id_str()
+        );
+    }
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        assert_eq!(codes(shape, target), [(6, nested)], "{}", target.id_str());
+    }
+    // clang's group name reaches both rows, as in clang; gcc's name only the
+    // top-level discard.
+    let pragma = |p: &str| format!("#pragma {p}\n{src}");
+    let ignored = codes(
+        &pragma(r#"clang diagnostic ignored "-Wincompatible-pointer-types-discards-qualifiers""#),
+        Target::LinuxX64,
+    );
+    assert!(ignored.is_empty(), "{ignored:?}");
+    let gcc = codes(
+        &pragma(r#"GCC diagnostic ignored "-Wdiscarded-qualifiers""#),
+        Target::LinuxX64,
+    );
+    assert!(
+        gcc.iter().all(|&(_, c)| c == nested) && gcc.len() == 4,
+        "{gcc:?}"
+    );
+    let msg = Compiler::with_target(
+        "void f(int *ip) { long *l = ip; (void)l; }\nint main(void) { return 0; }\n".to_string(),
+        Target::LinuxX64,
+    )
+    .compile()
+    .err()
+    .map(|e| e.to_string())
+    .unwrap_or_default();
+    assert!(msg.contains("[B3029]"), "{msg}");
 }
 
 /// C99 6.5.16p2, 6.5.2.4p1 and 6.5.3.1p1: the left operand of an

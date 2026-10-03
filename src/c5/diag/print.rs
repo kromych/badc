@@ -128,7 +128,6 @@ fn render_line(
 }
 
 const W_CODE: usize = 6;
-const W_NAME: usize = 30;
 const W_LEVEL: usize = 8;
 const W_CLASS: usize = 13;
 const W_GROUPS: usize = 18;
@@ -138,8 +137,12 @@ const W_STATUS: usize = 8;
 /// `--list-diagnostics` prints and what `tests/diagnostics/catalog.txt`
 /// pins, so a change to the contract is a visible diff.
 pub fn list_catalog(out: &mut impl fmt::Write) -> fmt::Result {
+    // The name column fits the longest name, so a separator of at least
+    // two spaces keeps every column apart.
+    let w_name = rows().map(|r| r.name.len()).max().unwrap_or(0) + 1;
     write_row(
         out,
+        w_name,
         [
             "code",
             "name",
@@ -153,6 +156,7 @@ pub fn list_catalog(out: &mut impl fmt::Write) -> fmt::Result {
     for row in rows() {
         write_row(
             out,
+            w_name,
             [
                 &format!("{}", row.code),
                 row.name,
@@ -167,11 +171,11 @@ pub fn list_catalog(out: &mut impl fmt::Write) -> fmt::Result {
     Ok(())
 }
 
-fn write_row(out: &mut impl fmt::Write, cells: [&str; 7]) -> fmt::Result {
+fn write_row(out: &mut impl fmt::Write, w_name: usize, cells: [&str; 7]) -> fmt::Result {
     let [code, name, level, class, groups, status, description] = cells;
     writeln!(
         out,
-        "{code:<W_CODE$} {name:<W_NAME$} {level:<W_LEVEL$} {class:<W_CLASS$} \
+        "{code:<W_CODE$} {name:<w_name$} {level:<W_LEVEL$} {class:<W_CLASS$} \
          {groups:<W_GROUPS$} {status:<W_STATUS$} {description}"
     )
 }

@@ -977,8 +977,10 @@ pub fn diag_config(selectors: &[&str]) -> crate::diag::Config {
     for sel in selectors {
         match crate::diag::Selector::parse(sel).expect("a catalogue selector") {
             crate::diag::Selector::Group(g) => config.enable_group(g),
-            crate::diag::Selector::Diagnostic(c) => {
-                config.set_level(c, crate::diag::Level::Warning)
+            sel => {
+                for c in sel.codes() {
+                    config.set_level(c, crate::diag::Level::Warning);
+                }
             }
         }
     }

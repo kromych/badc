@@ -17,13 +17,24 @@ fn codes_are_unique() {
     }
 }
 
+/// Canonical names are unique, and a spelling more than one row carries is
+/// one of the deliberate shared spellings: clang's group spanning a
+/// top-level and a nested qualifier discard.
 #[test]
 fn names_and_aliases_are_unique() {
+    const SHARED: [&str; 1] = ["incompatible-pointer-types-discards-qualifiers"];
+    let mut names = BTreeSet::new();
+    for row in rows() {
+        assert!(names.insert(row.name), "duplicate name `{}`", row.name);
+    }
     let mut seen = BTreeSet::new();
     for row in rows() {
-        assert!(seen.insert(row.name), "duplicate name `{}`", row.name);
-        for alias in row.aliases {
-            assert!(seen.insert(alias), "duplicate alias `{alias}`");
+        for spelling in core::iter::once(&row.name).chain(row.aliases) {
+            let fresh = seen.insert(*spelling);
+            assert!(
+                fresh || SHARED.contains(spelling),
+                "duplicate spelling `{spelling}`"
+            );
         }
     }
 }
@@ -63,6 +74,30 @@ fn selectors_resolve_by_name_alias_and_code() {
         );
         assert_eq!(Code::from_selector(row.name), Some(row.code));
     }
+}
+
+/// clang's `incompatible-pointer-types-discards-qualifiers` spans a qualifier
+/// the pointed-to type loses (B3031, gcc's `discarded-qualifiers`) and a
+/// nested qualifier mismatch (B3011): the spelling selects both rows, gcc's
+/// name only its own, and a `B` code its row alone.
+#[test]
+fn a_shared_spelling_selects_every_row_that_carries_it() {
+    let (nested, discarded) = (code("B3011"), code("B3031"));
+    let shared = Selector::parse("incompatible-pointer-types-discards-qualifiers");
+    assert!(matches!(shared, Some(Selector::Shared(_))), "{shared:?}");
+    assert_eq!(
+        shared.map(Selector::codes),
+        Some(alloc::vec![nested, discarded])
+    );
+    assert_eq!(
+        Selector::parse("discarded-qualifiers").map(Selector::codes),
+        Some(alloc::vec![discarded])
+    );
+    assert_eq!(Selector::parse("B3011"), Some(Selector::Diagnostic(nested)));
+    assert_eq!(
+        Code::from_selector("incompatible-pointer-types-discards-qualifiers"),
+        Some(nested)
+    );
 }
 
 #[test]

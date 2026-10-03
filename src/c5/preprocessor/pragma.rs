@@ -327,10 +327,14 @@ impl Preprocessor {
             None => control.reset(offset, code),
         };
         match selector {
-            Selector::Diagnostic(code) => apply(code),
             Selector::Group(group) => {
                 for row in rows().filter(|r| r.groups.contains(group)) {
                     apply(row.code);
+                }
+            }
+            sel => {
+                for code in sel.codes() {
+                    apply(code);
                 }
             }
         }

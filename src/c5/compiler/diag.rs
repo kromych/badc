@@ -954,6 +954,16 @@ impl Compiler {
         if pointees_compatible(structs, d, a) {
             return None;
         }
+        // The key drops the qualifiers of the pointer and of what it points
+        // to; ones further down are part of the pointed-to type's identity
+        // (C99 6.7.3p9), and a difference there alone warns, as in clang.
+        let nested = super::types::CONST_LVL_MASK | super::types::VOL_LVL_MASK;
+        if pointees_compatible(structs, d & !nested, a & !nested) {
+            return TypeMismatch::warn(
+                Code::NESTED_QUALIFIERS,
+                "pointer targets differ in nested qualifiers",
+            );
+        }
         if sign_only_difference(structs, d, a) {
             return TypeMismatch::warn(Code::POINTER_SIGN, "pointer targets differ in signedness");
         }

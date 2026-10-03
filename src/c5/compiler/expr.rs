@@ -2482,6 +2482,7 @@ impl Compiler {
         let sys_exempt = [
             Code::DISCARDED_QUALIFIERS,
             Code::INCOMPATIBLE_POINTER_TYPES,
+            Code::NESTED_QUALIFIERS,
             Code::POINTER_SIGN,
         ];
         if tu_member.is_none()

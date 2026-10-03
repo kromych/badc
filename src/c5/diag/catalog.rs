@@ -6,8 +6,10 @@
 //! ignored "-W..."` in real source applies. Aliases accept the other
 //! compilers' identifiers as selectors: gcc and clang names where they
 //! differ, and MSVC numbers spelled with their letter prefix (`C4101`,
-//! `D9002`), which `#pragma warning(...)` spells bare. Only the
-//! canonical name and the `B` code are ever printed.
+//! `D9002`), which `#pragma warning(...)` spells bare. A spelling several
+//! rows carry selects all of them, as a clang diagnostic group spans
+//! several diagnostics. Only the canonical name and the `B` code are ever
+//! printed.
 
 use alloc::format;
 
@@ -162,6 +164,9 @@ catalog! {
     3010, "constant-conversion", ["overflow"], Warning, Controllable,
         [DEFAULT], Live,
         "an integer constant converted implicitly to an integer type or a bit-field whose width holds the value at neither signedness";
+    3011, "incompatible-pointer-types-discards-qualifiers", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a pointer assigned, initialized, passed or returned as a pointer to a type that differs from the one it points to only in the qualifiers of a type further down: `T **` as `const T **`";
     3020, "invalid-operands", [], Error, Hard,
         [], Live,
         "an operator applied to operands its constraints reject, or a non-lvalue where an lvalue is required";
@@ -360,6 +365,18 @@ impl Code {
         self.status() == Status::Retired
     }
 
+    /// The spelling `sel` as the catalogue holds it, when more than one row
+    /// answers to it by name or alias.
+    pub fn shared_spelling(sel: &str) -> Option<&'static str> {
+        let mut carriers = ROWS.iter().filter_map(|r| {
+            (r.name == sel)
+                .then_some(r.name)
+                .or_else(|| r.aliases.iter().copied().find(|a| *a == sel))
+        });
+        let first = carriers.next()?;
+        carriers.next().map(|_| first)
+    }
+
     /// Resolve a selector: the canonical name, an alias, or the `B`
     /// code as printed. The `-W` / `-Wno-` prefix and the `error=`
     /// head belong to the option grammar and the caller strips them.
@@ -371,7 +388,8 @@ impl Code {
             return Code::new(value).row().map(|r| r.code);
         }
         ROWS.iter()
-            .find(|r| r.name == sel || r.aliases.contains(&sel))
+            .find(|r| r.name == sel)
+            .or_else(|| ROWS.iter().find(|r| r.aliases.contains(&sel)))
             .map(|r| r.code)
     }
 
@@ -406,6 +424,7 @@ impl Code {
     pub const SWITCH_OUTSIDE_RANGE: Code = Code::new(3008);
     pub const EMPTY_CASE_RANGE: Code = Code::new(3009);
     pub const CONSTANT_CONVERSION: Code = Code::new(3010);
+    pub const NESTED_QUALIFIERS: Code = Code::new(3011);
     pub const LINK_PRAGMA_IGNORED: Code = Code::new(7008);
     pub const FREESTANDING_IMPORT: Code = Code::new(7010);
     pub const DWARF_OUTPUT: Code = Code::new(7011);

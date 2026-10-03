@@ -689,6 +689,29 @@ impl AsmOperands<'_> {
                 };
                 Opnd::Mem { base, off, pre }
             }
+            // The register-concrete forms are converted above.
+            AsmOpndA64::MemVl {
+                base: super::asm::MemBase::Ref(idx),
+                off,
+            } => match self.resolve_ref(idx) {
+                Some(base) => Opnd::MemVl { base, off },
+                None => {
+                    return Err(String::from(
+                        "aarch64 inline asm: memory base is not a register",
+                    ));
+                }
+            },
+            AsmOpndA64::ZaVec {
+                select: super::asm::MemBase::Ref(idx),
+                off,
+            } => match self.resolve_ref(idx) {
+                Some(select) => Opnd::ZaVec { select, off },
+                None => {
+                    return Err(String::from(
+                        "aarch64 inline asm: ZA vector select is not a register",
+                    ));
+                }
+            },
             AsmOpndA64::MemReg {
                 base,
                 index,
@@ -2402,6 +2425,16 @@ fn concrete_opnd(o: &super::asm::AsmOpndA64) -> Option<super::table::Opnd> {
             size,
             index,
         },
+        AsmOpndA64::ZReg { num, size } => Opnd::ZReg { num, size },
+        AsmOpndA64::PReg { num, size } => Opnd::PReg { num, size },
+        AsmOpndA64::MemVl {
+            base: super::asm::MemBase::Reg(base),
+            off,
+        } => Opnd::MemVl { base, off },
+        AsmOpndA64::ZaVec {
+            select: super::asm::MemBase::Reg(select),
+            off,
+        } => Opnd::ZaVec { select, off },
         _ => return None,
     })
 }

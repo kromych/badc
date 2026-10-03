@@ -3920,11 +3920,11 @@ impl Compiler {
             let op = if bop == B::Add { "+=" } else { "-=" };
             self.require_complete_pointee(lhs_ty, op)?;
             self.int128_offset_acc_to_ptrdiff();
-            let elem_size = self.size_of_type(pointee_ty(lhs_ty)) as i64;
             if let Some(slot) = self.vla_pointee_slot(lhs_ty) {
                 self.emit_binop_with_vla_size(B::Mul, slot);
-            } else if !lhs_fn_ptr && elem_size > 1 {
-                self.emit_binop_with_imm(B::Mul, elem_size);
+            } else if !lhs_fn_ptr && self.is_ptr_scaling_nontrivial(lhs_ty) {
+                let scale = self.pointee_size(lhs_ty);
+                self.emit_binop_with_imm(B::Mul, scale);
             }
             return Ok((bop, lhs_ty));
         }
@@ -4596,7 +4596,9 @@ impl Compiler {
             self.ast_binop(crate::c5::ir::BinOp::Sub);
             if let Some(slot) = self.vla_pointee_slot(lhs_ty) {
                 self.emit_binop_with_vla_size(crate::c5::ir::BinOp::Div, slot);
-            } else if !fn_ptr_arith && self.is_ptr_scaling_nontrivial(lhs_ty) {
+            } else if !fn_ptr_arith && self.pointee_size(lhs_ty) > 1 {
+                // Zero-size elements share one address, so their byte
+                // distance, zero, is the result, as clang gives it.
                 let scale = self.pointee_size(lhs_ty);
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Div, scale);
             }
@@ -4850,7 +4852,7 @@ impl Compiler {
             stride = row;
             if let Some(slot) = self.structs[id].vla_size_slot {
                 self.emit_binop_with_vla_size(crate::c5::ir::BinOp::Mul, slot);
-            } else if row > 1 {
+            } else if row != 1 {
                 self.emit_binop_with_imm(crate::c5::ir::BinOp::Mul, row);
             }
             self.ast_binop(crate::c5::ir::BinOp::Add);

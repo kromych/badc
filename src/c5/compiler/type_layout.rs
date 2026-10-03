@@ -52,11 +52,11 @@ impl Compiler {
     }
 
     /// True if pointer arithmetic on `ptr_ty` scales the offset by
-    /// the pointee's byte size. False only for `char*` (one byte
-    /// per element, no scaling). Replaces the old fixed-8 check
-    /// which got struct-pointer scaling wrong.
+    /// the pointee's byte size: any size but one, zero included -- an
+    /// element of a zero-length array or an empty structure occupies no
+    /// bytes, so the pointer does not move, as in gcc and clang.
     pub(super) fn is_ptr_scaling_nontrivial(&self, ptr_ty: i64) -> bool {
-        is_pointer_ty(ptr_ty) && self.pointee_size(ptr_ty) > 1
+        is_pointer_ty(ptr_ty) && self.pointee_size(ptr_ty) != 1
     }
 
     /// True when the value the parser just produced is a function
@@ -566,12 +566,19 @@ impl Compiler {
         // kept on the field so 6.7.5.2p6 compatibility and `typeof`
         // recovery see the unspecified bound.
         let unspecified = dims.iter().any(|&d| d < 0);
+        if !unspecified && let Some((inner_elem, inner_dims)) = self.array_agg_parts(elem_ty) {
+            // An array of arrays is one array of the innermost element, so
+            // each shape has one tag however it was spelled (`Z a[4]` over
+            // `typedef int Z[0]`, `int (*)[4][0]`).
+            let all: Vec<i64> = dims.iter().copied().chain(inner_dims).collect();
+            return self.array_agg_type(inner_elem, &all);
+        }
         let count: i64 = if unspecified {
             -1
         } else {
             dims.iter().product()
         };
-        let elem_size = (self.size_of_type(elem_ty) as i64).max(1);
+        let elem_size = self.size_of_type(elem_ty) as i64;
         let mut name = alloc::format!("__array_{}", elem_ty);
         for d in dims {
             name.push_str(&alloc::format!("_{d}"));
@@ -636,6 +643,27 @@ impl Compiler {
             enum_underlying: None,
         });
         struct_ty_for(self.structs.len() - 1)
+    }
+
+    /// The element and the bounds of `ty` when it is an unqualified array
+    /// aggregate of known size.
+    fn array_agg_parts(&self, ty: i64) -> Option<(i64, Vec<i64>)> {
+        let id = struct_id_of(ty);
+        let s = self.structs.get(id)?;
+        if !is_struct_value_ty(ty)
+            || ty != struct_ty_for(id)
+            || !s.is_array
+            || s.vla_size_slot.is_some()
+        {
+            return None;
+        }
+        let f = s.fields.first()?;
+        let dims = if f.array_dims.is_empty() {
+            alloc::vec![f.array_size]
+        } else {
+            f.array_dims.clone()
+        };
+        dims.iter().all(|&d| d >= 0).then_some((f.ty, dims))
     }
 
     /// The type an array of `elem_ty` with bounds `dims` (outermost first)
@@ -706,10 +734,19 @@ impl Compiler {
         self.pending.typedef_base_array_size < 0 && !self.pending.typedef_base_zero_len
     }
 
-    /// The bounds of the array-typedef base, outermost first.
+    /// Whether the base is an array typedef of known size, a zero-length
+    /// one included.
+    pub(super) fn typedef_base_sized(&self) -> bool {
+        self.pending.typedef_base_array_size > 0 || self.pending.typedef_base_zero_len
+    }
+
+    /// The bounds of the array-typedef base, outermost first; `[0]` for a
+    /// zero-length alias, which the carrier records as unsized.
     pub(super) fn typedef_base_dims(&self) -> Vec<i64> {
         if self.pending.typedef_base_array_dims.len() >= 2 {
             self.pending.typedef_base_array_dims.clone()
+        } else if self.pending.typedef_base_zero_len {
+            alloc::vec![0]
         } else {
             alloc::vec![self.pending.typedef_base_array_size]
         }

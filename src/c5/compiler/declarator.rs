@@ -300,7 +300,7 @@ impl Compiler {
         if !self.pending.base_array_taken && self.typedef_base_incomplete() {
             return Err(self.unknown_size_element_err());
         }
-        if self.pending.typedef_base_array_size > 0 && !self.pending.base_array_taken {
+        if self.typedef_base_sized() && !self.pending.base_array_taken {
             self.pending.base_array_taken = true;
             inner.extend(self.typedef_base_dims());
         }
@@ -757,7 +757,7 @@ impl Compiler {
                 // the abstract form `T (*)[N]` (no symbol) and a
                 // function's result (`T (*f(void))[N]`). An array
                 // typedef base adds its bounds inside these.
-                if base_array_open && self.pending.typedef_base_array_size > 0 {
+                if base_array_open && self.typedef_base_sized() {
                     pointee_dims.extend(self.typedef_base_dims());
                 } else if base_array_open && self.typedef_base_incomplete() {
                     return Err(self.unknown_size_element_err());
@@ -830,7 +830,7 @@ impl Compiler {
     fn parse_declarator_bounds(
         &mut self,
         idx: usize,
-        ty: i64,
+        mut ty: i64,
         param_ctx: bool,
         own_levels: i64,
         in_group: bool,
@@ -976,10 +976,11 @@ impl Compiler {
                         array_size *= typedef_dim;
                     }
                 } else if typedef_dim < 0 && self.pending.typedef_base_zero_len {
-                    // An array of a zero-length-array alias has zero
-                    // elements whatever the declarator's own bounds are.
-                    array_size = -1;
-                    self.pending.declarator_zero_len_array = true;
+                    // The elements are zero-length arrays, of size zero
+                    // (GNU C). The flat bounds cannot hold an inner zero,
+                    // so each element takes the aggregate form a pointer
+                    // to the alias points to.
+                    ty = self.array_agg_type(ty, &[0]);
                 }
             }
             // Deferred-outer multi-dim arrays (`T arr[][N]`,

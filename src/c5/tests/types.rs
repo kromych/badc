@@ -4637,6 +4637,57 @@ fn a_block_scope_object_of_an_unsized_array_typedef_is_an_array() {
     assert_eq!(Vm::new(program).run().unwrap(), 1, "{src}");
 }
 
+/// A GNU zero-length array typedef keeps its zero bound under every
+/// derivation: a pointer to it, a pointer to an array of it, an array of
+/// it and a variable-length array of it all have zero-size elements, as in
+/// gcc and clang. A pointer to a zero-size element, an empty structure's
+/// included, steps by zero bytes, and an array of arrays has one type
+/// however it was spelled (`&zs` is a `Z (*)[4]`).
+#[test]
+fn a_zero_length_array_typedef_keeps_its_bound_under_derivations() {
+    use super::Vm;
+    use crate::{Compiler, Target};
+    let src = "typedef int Z[0];\n\
+               struct E {};\n\
+               Z (*zp)[2];\n\
+               Z *zq;\n\
+               static Z zs[4];\n\
+               static struct E es[4];\n\
+               static Z (*zr)[4] = &zs;\n\
+               static Z *zt = &zs[3];\n\
+               _Static_assert(sizeof(*zp) == 0 && sizeof((*zp)[0]) == 0, \"group\");\n\
+               _Static_assert(sizeof(*zq) == 0, \"pointer\");\n\
+               _Static_assert(sizeof(zs) == 0 && sizeof(zs[0]) == 0 && sizeof(*&zs) == 0, \"array\");\n\
+               _Static_assert(sizeof(*&es) == 0 && sizeof(struct E[4]) == 0, \"empty\");\n\
+               _Static_assert(__builtin_types_compatible_p(__typeof__(&zs), Z (*)[4]), \"one type\");\n\
+               static int vla(int n) { Z v[n]; return (int)sizeof(v); }\n\
+               int main(void) {\n\
+               \tstatic int buf[16];\n\
+               \tchar *b = (char *)buf;\n\
+               \tzp = (Z (*)[2])buf;\n\
+               \tzq = (Z *)buf;\n\
+               \tZ *zu = zq;\n\
+               \tzu += 3;\n\
+               \tstruct E *e = (struct E *)buf;\n\
+               \tint bad = 0;\n\
+               \tbad |= ((char *)(zp + 1) != b) << 0;\n\
+               \tbad |= ((char *)&zp[2] != b) << 1;\n\
+               \tbad |= ((char *)(zq + 3) != b) << 2;\n\
+               \tbad |= ((char *)zu != b) << 3;\n\
+               \tbad |= ((char *)&zs[3] != (char *)zs) << 4;\n\
+               \tbad |= ((char *)zt != (char *)zs || (char *)zr != (char *)zs) << 5;\n\
+               \tbad |= ((char *)(e + 2) != b || (char *)&es[3] != (char *)es) << 6;\n\
+               \tbad |= (vla(5) != 0) << 7;\n\
+               \treturn bad;\n\
+               }\n";
+    // An empty structure has GNU C's zero size; the MSVC ABI gives it four
+    // bytes, so the program is compiled for an ELF target.
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .expect(src);
+    assert_eq!(Vm::new(program).run().unwrap(), 0, "{src}");
+}
+
 /// C99 6.5.2.5, 6.7.7p3: a compound literal of an array typedef of unknown
 /// size in a static initializer takes its size from its list, as one at
 /// block scope does; an array of such a typedef has an incomplete element

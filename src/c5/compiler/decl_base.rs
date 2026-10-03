@@ -1906,7 +1906,7 @@ impl Compiler {
         // vector of N bytes before qualifiers apply.
         if self.pending.attr_vector_size > 0 {
             let n = core::mem::take(&mut self.pending.attr_vector_size);
-            bt = self.make_vector_type(bt, n);
+            bt = self.apply_vector_size_to_type(bt, n)?;
         }
         if let Some(m) = self.pending.attr_mode.take() {
             bt = self.apply_mode_to_type(bt, m)?;

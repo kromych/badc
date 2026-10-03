@@ -309,6 +309,10 @@ impl Compiler {
             // from raising the aggregate's alignment), independent of
             // a struct-level `packed`.
             self.skip_attribute_specifiers()?;
+            if self.pending.attr_vector_size > 0 {
+                let n = core::mem::take(&mut self.pending.attr_vector_size);
+                field_ty = self.apply_vector_size_to_type(field_ty, n)?;
+            }
             let bit_width = if self.lex.tk == ':' {
                 // The 128-bit integer shares the aggregate machinery
                 // but is a scalar type, so it takes a bitfield like

@@ -7904,3 +7904,46 @@ fn integer_constant_added_to_an_address_constant() {
         assert_eq!(super::run_str_for(src, target), 42, "{target:?}");
     }
 }
+
+#[test]
+fn gcc_vector_size_applies_to_inner_type_before_declarator() {
+    let src = "
+        typedef float *P __attribute__((vector_size(16)));
+        struct S { char *m __attribute__((vector_size(16))); };
+        int *obj __attribute__((vector_size(16)));
+        int arr[2] __attribute__((vector_size(16)));
+        int (*pa)[2] __attribute__((vector_size(16)));
+        P get_vector(void);
+        float *vector_return(void) __attribute__((vector_size(16)));
+        enum Lane { lane_zero, lane_one } enum_vector __attribute__((vector_size(16)));
+        int main(void) {
+            int *local __attribute__((vector_size(16)));
+            typedef float *LocalP __attribute__((vector_size(16)));
+            LocalP local_typedef;
+            float *local_vector_return(void) __attribute__((vector_size(16)));
+            if (sizeof(P) != sizeof(int *)) return 1;
+            if (sizeof(*((P)0)) != 16) return 2;
+            if (sizeof(((struct S *)0)->m) != sizeof(int *)) return 3;
+            if (sizeof(*((struct S *)0)->m) != 16) return 4;
+            if (sizeof(obj) != sizeof(int *)) return 5;
+            if (sizeof(*obj) != 16) return 6;
+            if (sizeof(arr) != 32) return 7;
+            if (sizeof(arr[0]) != 16) return 8;
+            if (sizeof(pa) != sizeof(int *)) return 9;
+            if (sizeof(*pa) != 32) return 10;
+            if (sizeof((*pa)[0]) != 16) return 11;
+            if (sizeof(get_vector()) != sizeof(int *)) return 12;
+            if (sizeof(*get_vector()) != 16) return 13;
+            if (sizeof(*vector_return()) != 16) return 14;
+            if (sizeof(local) != sizeof(int *)) return 15;
+            if (sizeof(*local) != 16) return 16;
+            if (sizeof(local_typedef) != sizeof(float *)) return 17;
+            if (sizeof(*local_typedef) != 16) return 18;
+            if (sizeof(enum_vector) != 16) return 19;
+            if (sizeof(enum_vector[0]) != sizeof(int)) return 20;
+            if (sizeof(*local_vector_return()) != 16) return 21;
+            return 0;
+        }
+    ";
+    assert_eq!(run_str(src), 0);
+}

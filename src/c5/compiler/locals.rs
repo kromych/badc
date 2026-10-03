@@ -469,8 +469,12 @@ impl Compiler {
             let saved_vla = core::mem::replace(&mut self.pending.vla_allowed, true);
             // Filled by a declarator group holding its entity's own list.
             self.pending.fn_params = None;
-            let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
+            let (loc_idx, mut ty, mut array_size) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = saved_vla;
+            if self.pending.attr_vector_size > 0 {
+                let n = core::mem::take(&mut self.pending.attr_vector_size);
+                ty = self.apply_vector_size_to_type(ty, n)?;
+            }
             self.pending.attr_transparent_union = false;
             // C99 6.7.1p5 + 6.9.1: a declarator of bare function type (a
             // function-TYPE typedef with no pointer level) declares a

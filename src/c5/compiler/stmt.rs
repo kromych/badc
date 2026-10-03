@@ -546,7 +546,7 @@ impl Compiler {
             // then consumed, so a second use of the typedef resolved as a scalar.
             if self.pending.attr_vector_size > 0 {
                 let n = core::mem::take(&mut self.pending.attr_vector_size);
-                ty = self.make_vector_type(ty, n);
+                ty = self.apply_vector_size_to_type(ty, n)?;
             }
             if let Some(m) = self.pending.attr_mode.take() {
                 ty = self.apply_mode_to_type(ty, m)?;

@@ -18,8 +18,10 @@ use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    CONST_PTR_LVL_MASK, UNSIGNED_BIT, VOLATILE_MASK, is_floating_scalar, is_long_double_scalar,
-    is_pointer_ty, is_struct_ty, is_struct_value_ty, is_type_start_token, pointee_size_no_struct,
+    CONST_BIT, CONST_PTR_LVL_MASK, UNSIGNED_BIT, VOLATILE_BIT, VOLATILE_MASK, add_ptr_level,
+    apply_qual_bits, is_bool_ty, is_const_object_ty, is_floating_scalar, is_integer_scalar_ty,
+    is_long_double_scalar, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_type_start_token,
+    is_void_ty, is_volatile_object_ty, object_segment_bits, pointee_size_no_struct, pointee_ty,
     strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
 };
 use super::{StructDef, StructField};
@@ -442,12 +444,80 @@ impl Compiler {
         }
     }
 
-    /// Synthesize the aggregate that models a GCC `vector_size(n_bytes)` vector
-    /// of `elem_ty`: a single array field of `n_bytes / sizeof(elem)` lanes,
-    /// flagged `is_vector`. sizeof / initialization / by-value pass reuse the
-    /// struct machinery; the cast and binary-operator paths read the flag.
-    /// The object is the width rounded up to a power of two and aligned to
-    /// that width up to the target's ceiling, as gcc and clang lay it out.
+    /// Apply GCC vector_size to the innermost scalar element while
+    /// preserving pointer and array derivations around that element.
+    pub(super) fn apply_vector_size_to_type(
+        &mut self,
+        ty: i64,
+        n_bytes: i64,
+    ) -> Result<i64, C5Error> {
+        if is_pointer_ty(ty) {
+            let pointee = self.apply_vector_size_to_type(pointee_ty(ty), n_bytes)?;
+            let mut pointer = add_ptr_level(pointee);
+            if is_const_object_ty(ty) {
+                pointer = apply_qual_bits(pointer, CONST_BIT);
+            }
+            if is_volatile_object_ty(ty) {
+                pointer = apply_qual_bits(pointer, VOLATILE_BIT);
+            }
+            let segment = object_segment_bits(ty);
+            if segment != 0 {
+                pointer = apply_qual_bits(pointer, segment);
+            }
+            return Ok(pointer);
+        }
+
+        if is_struct_ty(ty) {
+            let id = struct_id_of(ty);
+            let def = &self.structs[id];
+            if def.is_array {
+                let Some(field) = def.fields.first() else {
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        "invalid array type for attribute 'vector_size'",
+                    ));
+                };
+                let elem_ty = field.ty;
+                let dims = if field.array_dims.len() >= 2 {
+                    field.array_dims.clone()
+                } else {
+                    alloc::vec![field.array_size]
+                };
+                let vector_elem = self.apply_vector_size_to_type(elem_ty, n_bytes)?;
+                return Ok(self.array_agg_type(vector_elem, &dims));
+            }
+            if def.is_enum {
+                let mut underlying = def.enum_underlying.unwrap_or(Ty::Int as i64);
+                if is_const_object_ty(ty) {
+                    underlying = apply_qual_bits(underlying, CONST_BIT);
+                }
+                if is_volatile_object_ty(ty) {
+                    underlying = apply_qual_bits(underlying, VOLATILE_BIT);
+                }
+                return self.apply_vector_size_to_type(underlying, n_bytes);
+            }
+            if self.is_int128_ty(ty) {
+                return Ok(self.make_vector_type(ty, n_bytes));
+            }
+        }
+
+        if is_bool_ty(ty)
+            || is_void_ty(ty)
+            || !(is_integer_scalar_ty(ty) || is_floating_scalar(ty) || is_long_double_scalar(ty))
+        {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "invalid vector element type for attribute 'vector_size'",
+            ));
+        }
+        Ok(self.make_vector_type(ty, n_bytes))
+    }
+
+    /// Synthesize the aggregate that models a GCC vector of elem_ty:
+    /// a single array field of n_bytes / sizeof(elem) lanes, flagged
+    /// is_vector. sizeof / initialization / by-value pass reuse the struct
+    /// machinery; cast and binary-operator paths read the flag. The object
+    /// width is rounded up to a power of two and aligned to the target cap.
     pub(super) fn make_vector_type(&mut self, elem_ty: i64, n_bytes: i64) -> i64 {
         let elem_size = (self.size_of_type(elem_ty) as i64).max(1);
         let lanes = (n_bytes / elem_size).max(1);

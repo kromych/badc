@@ -519,7 +519,7 @@ impl Compiler {
         // sites. The leading form already consumed it, leaving 0.
         if self.pending.attr_vector_size > 0 {
             let n = core::mem::take(&mut self.pending.attr_vector_size);
-            ty = self.make_vector_type(ty, n);
+            ty = self.apply_vector_size_to_type(ty, n)?;
         }
         if let Some(m) = self.pending.attr_mode.take() {
             ty = self.apply_mode_to_type(ty, m)?;
@@ -883,6 +883,7 @@ impl Compiler {
             declarator_is_bare_void,
             ..
         } = b;
+        let mut ret_ty = ty;
         let PriorDecl {
             was_sys,
             prior_params,
@@ -911,6 +912,12 @@ impl Compiler {
             self.skip_attribute_specifiers()?;
         }
 
+        if self.pending.attr_vector_size > 0 {
+            let n = core::mem::take(&mut self.pending.attr_vector_size);
+            ret_ty = self.apply_vector_size_to_type(ret_ty, n)?;
+            // The redeclaration pass ran before trailing function attributes.
+            self.symbols[id_idx].type_ = ret_ty;
+        }
         // C99 6.7.5.3p14: an empty list outside a definition supplies no parameter
         // information, so the composite type keeps the prior list (6.2.7p4); in a
         // definition the same spelling does specify "no parameters".
@@ -953,7 +960,7 @@ impl Compiler {
         // first one the unit spells starts the composite type.
         if !is_defining_declarator {
             let ret = Spelled {
-                ty,
+                ty: ret_ty,
                 enum_tag: decl.base_enum_tag,
             };
             let declared = DeclaredType::Function(ret, Params::of(&params, false));
@@ -967,7 +974,7 @@ impl Compiler {
         // instead of consulting the symbol table at
         // codegen time -- it is out of scope by then.
         if was_sys {
-            self.update_libc_binding(id_idx, &params, ty);
+            self.update_libc_binding(id_idx, &params, ret_ty);
         }
 
         if self.lex.tk == ';' || self.lex.tk == ',' {
@@ -986,7 +993,7 @@ impl Compiler {
             || self.inline_model == crate::c5::symbol::InlineModel::Gnu89;
         let def = Definition {
             ret: Spelled {
-                ty,
+                ty: ret_ty,
                 enum_tag: decl.base_enum_tag,
             },
             line: declarator_line,

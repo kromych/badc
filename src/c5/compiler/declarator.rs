@@ -121,7 +121,12 @@ impl Compiler {
             let params = self.parse_function_params();
             self.pending.parsing_fn_ptr_proto = saved_proto;
             let params = params?;
-            let ret = lbt + ret_ptr_levels * Ty::Ptr as i64;
+            self.skip_attribute_specifiers()?;
+            let mut ret = lbt + ret_ptr_levels * Ty::Ptr as i64;
+            if self.pending.attr_vector_size > 0 {
+                let n = core::mem::take(&mut self.pending.attr_vector_size);
+                ret = self.apply_vector_size_to_type(ret, n)?;
+            }
             let declared = super::redeclaration::Params::of(&params, false);
             let spelled = super::redeclaration::Spelled {
                 ty: ret,
@@ -156,7 +161,6 @@ impl Compiler {
                     crate::c5::symbol::Linkage::External
                 };
             }
-            self.skip_attribute_specifiers()?;
             // A block-scope prototype takes the same GNU asm-label rename a
             // file-scope one does; the declared entity has external linkage
             // either way (C99 6.2.2p4).

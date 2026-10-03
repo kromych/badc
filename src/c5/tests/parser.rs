@@ -4504,3 +4504,14 @@ fn static_init_reads_only_a_const_object_in_bounds() {
         );
     }
 }
+
+#[test]
+fn vector_size_rejects_non_arithmetic_element_types() {
+    for src in [
+        "typedef struct S { int x; } S __attribute__((vector_size(16))); int main(void) { return 0; }",
+        "typedef void V __attribute__((vector_size(16))); int main(void) { return 0; }",
+        "typedef __attribute__((vector_size(16))) _Bool V; int main(void) { return 0; }",
+    ] {
+        expect_compile_error(src, "vector_size");
+    }
+}

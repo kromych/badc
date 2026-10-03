@@ -1331,11 +1331,7 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
             *slot = Some(i);
             continue;
         }
-        // `.debug_frame` is the image writer's own, built from the CFI.
-        if name.starts_with(".debug_")
-            && name != ".debug_frame"
-            && !matches!(sh.sh_type, SHT_RELA | SHT_NOBITS)
-        {
+        if name.starts_with(".debug_") && !matches!(sh.sh_type, SHT_RELA | SHT_NOBITS) {
             roles.debug_other.push(i);
             continue;
         }

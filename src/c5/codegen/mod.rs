@@ -1364,6 +1364,9 @@ pub(crate) struct MergedDwarf {
     /// offset follows the linker's data convention, with the zero-fill
     /// tail continuing past the image length.
     pub debug_info_data_relocs: Vec<DwarfDataReloc>,
+    /// The inputs' `.debug_frame` records; the writer appends its own
+    /// table, for the functions the lowering emitted, behind them.
+    pub debug_frame: MergedDwarfSection,
     /// Every other `.debug_*` section the link merged.
     pub other: Vec<MergedDwarfSection>,
 }

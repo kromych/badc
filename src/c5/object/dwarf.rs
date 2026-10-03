@@ -328,7 +328,9 @@ struct Subprog {
     low_pc: u64,
     high_pc: u64,
     prologue_size: u32,
-    frame_rules: FrameRules,
+    /// `None` for a function the lowering did not emit: its producer's
+    /// unwind table describes it, and this writer cannot.
+    frame_rules: Option<FrameRules>,
     ra_signed_at: Option<u32>,
     /// Offset of the return taken ahead of the frame, where the entry's
     /// rules hold again.
@@ -660,7 +662,8 @@ fn collect_subprograms(
             low_pc: code_vmaddr + lo as u64,
             high_pc: code_vmaddr + hi as u64,
             prologue_size: prologue_size_for(ent_pc, lo, build),
-            frame_rules: FrameRules::of(build, CfiArch::of(target), ent_pc, lo),
+            frame_rules: (build.func_prologue_native.contains_key(&ent_pc))
+                .then(|| FrameRules::of(build, CfiArch::of(target), ent_pc, lo)),
             ra_signed_at: paciasp_offset(build, lo, early.map(|e| e.frame)),
             early_return: early.map(|e| e.exit),
             variables,
@@ -2024,15 +2027,15 @@ fn plt_pool_range(build: &Build, code_vmaddr: u64) -> Option<(u64, u64)> {
 }
 
 /// Build the `.debug_frame` section: one CIE at offset 0, one FDE per
-/// `Subprog`, plus optional final FDEs covering the PLT trampoline pool and
-/// the ELF `_start` stub.
+/// `Subprog` with frame rules, plus optional final FDEs covering the PLT
+/// trampoline pool and the ELF `_start` stub.
 fn build_debug_frame(
     target: Target,
     subs: &[Subprog],
     plt_pool: Option<(u64, u64)>,
     start_stub: Option<(u64, u64)>,
 ) -> Vec<u8> {
-    if subs.is_empty() && plt_pool.is_none() && start_stub.is_none() {
+    if subs.iter().all(|s| s.frame_rules.is_none()) && plt_pool.is_none() && start_stub.is_none() {
         return Vec::new();
     }
     let arch = CfiArch::of(target);
@@ -2067,9 +2070,12 @@ fn build_debug_frame(
     out.extend_from_slice(&cie);
 
     for sub in subs {
+        let Some(frame_rules) = sub.frame_rules else {
+            continue;
+        };
         let mut fde_body: Vec<u8> = Vec::new();
         // Where the rules below end, and whether they sign the return address.
-        let (ruled, signed) = match sub.frame_rules {
+        let (ruled, signed) = match frame_rules {
             // An aarch64 leaf under `pac-ret+leaf` signs at its `paciasp`.
             FrameRules::Leaf => match sub.ra_signed_at {
                 Some(at) => {
@@ -2164,6 +2170,23 @@ fn fde_with_body(start: u64, end: u64, body: &[u8]) -> Vec<u8> {
     let actual_fde_unit_length = (fde.len() - 4) as u32;
     fde[..4].copy_from_slice(&actual_fde_unit_length.to_le_bytes());
     fde
+}
+
+/// Append a table [`build_debug_frame`] wrote to the `.debug_frame` records
+/// in `out`. An FDE's CIE pointer is a section offset, so each one in
+/// `table` moves by the bytes ahead of it.
+pub(crate) fn append_frame_table(out: &mut Vec<u8>, table: &[u8]) {
+    let base = out.len();
+    out.extend_from_slice(table);
+    let mut at = base;
+    while at + 8 <= out.len() {
+        let len = u32::from_le_bytes(out[at..at + 4].try_into().unwrap()) as usize;
+        let id = u32::from_le_bytes(out[at + 4..at + 8].try_into().unwrap());
+        if id != u32::MAX {
+            out[at + 4..at + 8].copy_from_slice(&(id + base as u32).to_le_bytes());
+        }
+        at += 4 + len;
+    }
 }
 
 /// Build the line-number program for the whole binary in one
@@ -2673,6 +2696,74 @@ mod tests {
         assert_eq!(&last_24[16..24], &0x40u64.to_le_bytes());
     }
 
+    /// `(offset, CIE pointer, initial location)` of each FDE in a
+    /// `.debug_frame` table.
+    fn frame_fdes(table: &[u8]) -> Vec<(usize, u32, u64)> {
+        let mut fdes = Vec::new();
+        let mut at = 0;
+        while at + 8 <= table.len() {
+            let len = u32::from_le_bytes(table[at..at + 4].try_into().unwrap()) as usize;
+            let id = u32::from_le_bytes(table[at + 4..at + 8].try_into().unwrap());
+            if id != u32::MAX {
+                let loc = u64::from_le_bytes(table[at + 8..at + 16].try_into().unwrap());
+                fdes.push((at, id, loc));
+            }
+            at += 4 + len;
+        }
+        fdes
+    }
+
+    fn framed_sub(low_pc: u64, frame_rules: Option<FrameRules>) -> Subprog {
+        Subprog {
+            name_off: 0,
+            low_pc,
+            high_pc: low_pc + 0x20,
+            prologue_size: 4,
+            frame_rules,
+            ra_signed_at: None,
+            early_return: None,
+            variables: Vec::new(),
+            external: true,
+            prototyped: true,
+        }
+    }
+
+    /// A function the lowering did not emit takes no FDE: its producer's
+    /// own table describes it, by that producer's rules.
+    #[test]
+    fn debug_frame_describes_only_the_functions_the_lowering_emitted() {
+        let subs = [
+            framed_sub(0x1000, Some(FrameRules::PostPrologue)),
+            framed_sub(0x1020, None),
+        ];
+        let out = build_debug_frame(Target::LinuxX64, &subs, None, None);
+        let locs: Vec<u64> = frame_fdes(&out).iter().map(|f| f.2).collect();
+        assert_eq!(locs, [0x1000]);
+        assert!(build_debug_frame(Target::LinuxX64, &subs[1..], None, None).is_empty());
+    }
+
+    /// Behind the inputs' records, each FDE of the writer's table still
+    /// names the writer's CIE, and the inputs' FDEs keep theirs.
+    #[test]
+    fn an_appended_frame_table_keeps_its_cie() {
+        let table = build_debug_frame(
+            Target::LinuxX64,
+            &[framed_sub(0x1000, Some(FrameRules::PostPrologue))],
+            None,
+            None,
+        );
+        let mut out = table.clone();
+        append_frame_table(&mut out, &table);
+        let fdes = frame_fdes(&out);
+        assert_eq!(fdes.len(), 2);
+        assert_eq!(fdes[0].1, 0, "the input FDE keeps its CIE");
+        assert_eq!(
+            fdes[1].1 as usize,
+            table.len(),
+            "the appended FDE names its own"
+        );
+    }
+
     #[test]
     fn debug_frame_follows_the_x86_64_frame_instructions() {
         let sub = |frame_rules| Subprog {
@@ -2680,7 +2771,7 @@ mod tests {
             low_pc: 0x1000,
             high_pc: 0x1040,
             prologue_size: 12,
-            frame_rules,
+            frame_rules: Some(frame_rules),
             ra_signed_at: None,
             early_return: None,
             variables: Vec::new(),
@@ -2738,7 +2829,7 @@ mod tests {
             low_pc: 0x1000,
             high_pc: 0x1040,
             prologue_size: 12,
-            frame_rules: FrameRules::PostPrologue,
+            frame_rules: Some(FrameRules::PostPrologue),
             ra_signed_at,
             early_return: None,
             variables: Vec::new(),
@@ -3067,7 +3158,7 @@ mod info_golden {
             low_pc: 0x1000,
             high_pc: 0x1010,
             prologue_size: 4,
-            frame_rules: FrameRules::PostPrologue,
+            frame_rules: Some(FrameRules::PostPrologue),
             ra_signed_at: None,
             early_return: None,
             variables: alloc::vec![],

@@ -215,8 +215,7 @@ pub(crate) fn image_dwarf(
         for r in &md.debug_line_text_relocs {
             super::apply_merged_dwarf_text_reloc(&mut debug_line, r, text_vmaddr)?;
         }
-        let mut other = Vec::with_capacity(md.other.len());
-        for s in &md.other {
+        let relocated = |s: &crate::c5::codegen::MergedDwarfSection| -> Result<Vec<u8>, C5Error> {
             let mut bytes = s.bytes.clone();
             for r in &s.text_relocs {
                 super::apply_merged_dwarf_text_reloc(&mut bytes, r, text_vmaddr)?;
@@ -226,19 +225,25 @@ pub(crate) fn image_dwarf(
                     super::apply_merged_dwarf_data_reloc(&mut bytes, r, data)?;
                 }
             }
-            other.push((s.name.clone(), bytes));
+            Ok(bytes)
+        };
+        let mut other = Vec::with_capacity(md.other.len());
+        for s in &md.other {
+            other.push((s.name.clone(), relocated(s)?));
         }
         if let Some(data) = data {
             for r in &md.debug_info_data_relocs {
                 super::apply_merged_dwarf_data_reloc(&mut debug_info, r, data)?;
             }
         }
+        let mut debug_frame = relocated(&md.debug_frame)?;
+        dwarf::append_frame_table(&mut debug_frame, &fresh().debug_frame);
         return Ok(dwarf::DwarfSections {
             debug_info,
             debug_abbrev: md.debug_abbrev.clone(),
             debug_line,
             debug_str: md.debug_str.clone(),
-            debug_frame: fresh().debug_frame,
+            debug_frame,
             other,
         });
     }

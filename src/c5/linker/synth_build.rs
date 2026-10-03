@@ -724,6 +724,14 @@ fn synth_merged_dwarf(merged: &MergedNative) -> Option<crate::c5::codegen::Merge
         merged_data_offset: r.merged_data_offset,
         width: r.width,
     };
+    let section = |s: &super::link::MergedDebugSection| crate::c5::codegen::MergedDwarfSection {
+        name: s.name.clone(),
+        bytes: s.bytes.clone(),
+        text_relocs: s.text_relocs.iter().map(text_reloc).collect(),
+        data_relocs: s.data_relocs.iter().map(data_reloc).collect(),
+    };
+    let (frames, other): (Vec<_>, Vec<_>) =
+        (merged.debug_other.iter()).partition(|s| s.name == ".debug_frame");
     Some(crate::c5::codegen::MergedDwarf {
         debug_info: merged.debug_info.clone(),
         debug_abbrev: merged.debug_abbrev.clone(),
@@ -744,14 +752,8 @@ fn synth_merged_dwarf(merged: &MergedNative) -> Option<crate::c5::codegen::Merge
             .iter()
             .map(data_reloc)
             .collect(),
-        other: (merged.debug_other.iter())
-            .map(|s| crate::c5::codegen::MergedDwarfSection {
-                name: s.name.clone(),
-                bytes: s.bytes.clone(),
-                text_relocs: s.text_relocs.iter().map(text_reloc).collect(),
-                data_relocs: s.data_relocs.iter().map(data_reloc).collect(),
-            })
-            .collect(),
+        debug_frame: frames.first().map(|s| section(s)).unwrap_or_default(),
+        other: other.into_iter().map(section).collect(),
     })
 }
 

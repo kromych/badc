@@ -11175,11 +11175,29 @@ fn framed_asm(target: &str, name: &str, table: &str) -> String {
     )
 }
 
-/// Another producer's unwind table reaches the image: every input's
-/// `.eh_frame` forms one terminated section that `.eh_frame_hdr` indexes
-/// under `PT_GNU_EH_FRAME`, as `ld --eh-frame-hdr` links it. The table
-/// rides the relro region: writable until the loader has relocated a
-/// position-independent image, read-only in a placed one.
+/// `(CIE pointer, initial location)` of each FDE in a `.debug_frame`.
+fn debug_frame_fdes(table: &[u8]) -> Vec<(usize, u64)> {
+    let rd32 = |o: usize| u32::from_le_bytes(table[o..o + 4].try_into().unwrap());
+    let mut fdes = Vec::new();
+    let mut at = 0;
+    while at + 8 <= table.len() {
+        if rd32(at + 4) != u32::MAX {
+            let loc = u64::from_le_bytes(table[at + 8..at + 16].try_into().unwrap());
+            fdes.push((rd32(at + 4) as usize, loc));
+        }
+        at += 4 + rd32(at) as usize;
+    }
+    fdes
+}
+
+/// Another producer's call-frame information reaches the image: every
+/// input's `.eh_frame` forms one terminated section that `.eh_frame_hdr`
+/// indexes under `PT_GNU_EH_FRAME`, as `ld --eh-frame-hdr` links it; an
+/// input's `.debug_frame` records stay, and the link adds records only for
+/// the functions it lowered, so a debugger unwinds each function by its
+/// producer's rules. The table rides the relro region: writable until the
+/// loader has relocated a position-independent image, read-only in a
+/// placed one.
 #[test]
 fn input_call_frame_tables_reach_the_image() {
     const PT_GNU_EH_FRAME: u32 = 0x6474_e550;
@@ -11192,22 +11210,26 @@ fn input_call_frame_tables_reach_the_image() {
     ] {
         let dir = tempdir(&format!("call-frames-{target}{form}"));
         write_source(&dir, "eh.s", &framed_asm(target, "eh_fn", ".eh_frame"));
+        write_source(&dir, "dbg.s", &framed_asm(target, "dbg_fn", ".debug_frame"));
         write_source(
             &dir,
             "main.c",
-            "int eh_fn(void);\nint main(void) { return eh_fn() == 20 ? 0 : 1; }\n",
+            "int eh_fn(void);\nint dbg_fn(void);\n\
+             int main(void) { return eh_fn() + dbg_fn() == 40 ? 0 : 1; }\n",
         );
+        for unit in ["eh", "dbg"] {
+            run(
+                Command::new(badc())
+                    .arg(format!("--target={target}"))
+                    .args(["-c", &format!("{unit}.s"), "-o", &format!("{unit}.o")])
+                    .current_dir(&dir),
+                "assemble a framed function",
+            );
+        }
         run(
             Command::new(badc())
                 .arg(format!("--target={target}"))
-                .args(["-c", "eh.s", "-o", "eh.o"])
-                .current_dir(&dir),
-            "assemble a framed function",
-        );
-        run(
-            Command::new(badc())
-                .arg(format!("--target={target}"))
-                .args([form, "-g", "main.c", "eh.o", "-o", "prog"])
+                .args([form, "-g", "main.c", "eh.o", "dbg.o", "-o", "prog"])
                 .current_dir(&dir),
             "link the framed functions",
         );
@@ -11257,6 +11279,24 @@ fn input_call_frame_tables_reach_the_image() {
         let fde = rel(hdr_addr, hdr_off + 16);
         let fde_off = eh_off + (fde - eh_addr) as usize;
         assert_eq!(rel(fde + 8, fde_off + 8), addr("eh_fn"), "{what}: pc_begin");
+        let (_, frame_off, frame_size) = span(".debug_frame");
+        let frames = &bytes[frame_off..frame_off + frame_size];
+        let fdes = debug_frame_fdes(frames);
+        let locs: Vec<u64> = fdes.iter().map(|f| f.1).collect();
+        for (name, present) in [("main", true), ("dbg_fn", true), ("eh_fn", false)] {
+            assert_eq!(
+                locs.contains(&addr(name)),
+                present,
+                "{what}: {name} in {locs:x?}"
+            );
+        }
+        for (cie, _) in fdes {
+            assert_eq!(
+                frames[cie + 4..cie + 8],
+                [0xff; 4],
+                "{what}: a CIE at {cie:#x}"
+            );
+        }
     }
 }
 

@@ -2137,6 +2137,8 @@ pub struct Compiler {
     /// records each case's value on its `Stmt::Case` node; this stack also
     /// gates `case` legality.
     switch_cases: Vec<stmt::SwitchLabels>,
+    /// The array size expressions of the parameter list being parsed.
+    param_sizes: Vec<function::ParamSize>,
     /// Per nested `switch` body: `true` once a `default:` label
     /// was seen.
     switch_defaults: Vec<bool>,
@@ -3035,6 +3037,7 @@ impl Compiler {
             unresolved_gotos: Vec::new(),
             local_label_scopes: LocalLabelScopes::default(),
             switch_cases: Vec::new(),
+            param_sizes: Vec::new(),
             switch_defaults: Vec::new(),
             structs: Vec::new(),
             tag_scopes: alloc::vec![alloc::vec::Vec::new()],

@@ -1177,7 +1177,7 @@ impl Compiler {
 
         let ent_pc = self.open_function_body(id_idx, &params);
         self.copy_by_value_parameters(&params)?;
-        self.parse_function_body_items()?;
+        self.parse_function_body_items(&params)?;
         self.finish_function_body(ent_pc, &params, arrival)?;
         // The capture runs before the scope unwind restores the outer bindings.
         // DWARF 5 3.3.4 groups the DIEs by the subprogram's entry pc and locates
@@ -1301,7 +1301,42 @@ impl Compiler {
             }
             self.accept(';')?;
         }
+        params.sizes.append(&mut self.param_sizes);
         Ok(())
+    }
+
+    /// C99 6.9.1p10: on entry the size expressions of the parameters are
+    /// evaluated, in order. Each parameter is adjusted to a pointer
+    /// (6.7.5.3p7), so only the side effects remain. Each expression is
+    /// parsed again where the body begins, where a name a later parameter
+    /// declares would bind to that parameter.
+    fn evaluate_parameter_sizes(
+        &mut self,
+        params: &super::function::ParsedParams,
+    ) -> Result<Vec<super::super::ast::StmtId>, C5Error> {
+        let mut items = Vec::new();
+        if params.sizes.is_empty() {
+            return Ok(items);
+        }
+        let resume = self.lex.snapshot();
+        for size in &params.sizes {
+            // TODO: evaluate such a size in the scope it was written in.
+            if let Some(&idx) = size.outer_names.iter().find(|i| params.indices.contains(i)) {
+                let name = self.symbols[idx].name.clone();
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    format!(
+                        "a parameter's array size naming `{name}`, which a later parameter \
+                         declares, is not supported"
+                    ),
+                ));
+            }
+            self.restore_lex(size.at);
+            self.expr(Token::Assign as i64)?;
+            items.extend(self.ast_emit_expr_stmt());
+        }
+        self.restore_lex(resume);
+        Ok(items)
     }
 
     /// Open the frame the body emits into: the return-type state the
@@ -1477,13 +1512,16 @@ impl Compiler {
         Ok(())
     }
 
-    fn parse_function_body_items(&mut self) -> Result<(), C5Error> {
+    fn parse_function_body_items(
+        &mut self,
+        params: &super::function::ParsedParams,
+    ) -> Result<(), C5Error> {
         // C99 block-scope: declarations may appear
         // anywhere a statement may. Each iteration
         // either parses a local decl (with optional
         // initializer) into the function's symbol
         // frame, or parses a statement.
-        let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
+        let mut top_level_ids = self.evaluate_parameter_sizes(params)?;
         self.stmt_expr_arena_ranges.clear();
         // C99 6.2.1: a tag declared in a function body has
         // block scope. Push a tag scope so a struct / union /

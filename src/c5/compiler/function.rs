@@ -39,6 +39,26 @@ pub(super) struct ParsedParams {
     pub(super) form: ParamForm,
     /// Positions declared through an enum tag that had no definition yet.
     pub(super) enum_tags: Vec<(usize, u32)>,
+    /// The array size expressions of the parameters, in declaration order.
+    pub(super) sizes: Vec<ParamSize>,
+}
+
+/// A parameter's array size expression, which a definition evaluates on
+/// entry (C99 6.9.1p10) although the adjusted parameter is a pointer
+/// (6.7.5.3p7): where it is written, and the identifiers it names that
+/// were not parameters there.
+#[derive(Clone)]
+pub(super) struct ParamSize {
+    pub(super) at: crate::c5::lexer::LexerSnapshot,
+    pub(super) outer_names: Vec<usize>,
+}
+
+impl core::fmt::Debug for ParamSize {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ParamSize")
+            .field("outer_names", &self.outer_names)
+            .finish_non_exhaustive()
+    }
 }
 
 impl ParsedParams {
@@ -80,6 +100,7 @@ impl ParsedParams {
             types: p.types,
             is_variadic: p.variadic,
             enum_tags: p.enum_tags,
+            sizes: Vec::new(),
         }
     }
 
@@ -152,7 +173,12 @@ impl Compiler {
         // The shape the enclosing declarator's name had before it, which
         // that name's binding restores; the parameters record their own.
         let outer_prior = p.declarator_prior_shape.take();
-        let r = self.parse_function_params_inner();
+        let outer_sizes = core::mem::take(&mut self.param_sizes);
+        let mut r = self.parse_function_params_inner();
+        let sizes = core::mem::replace(&mut self.param_sizes, outer_sizes);
+        if let Ok(params) = &mut r {
+            params.sizes = sizes;
+        }
         let p = &mut self.pending;
         p.declarator_prior_shape = outer_prior;
         p.attr_call_conv = outer_conv;
@@ -479,6 +505,7 @@ impl Compiler {
             is_variadic,
             form,
             enum_tags,
+            sizes: Vec::new(),
         })
     }
 

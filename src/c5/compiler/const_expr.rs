@@ -672,16 +672,29 @@ impl Compiler {
             self.next()?;
         }
         let star = self.lex.tk == Token::MulOp && self.lex.peek_after_whitespace(b']');
+        let mut size = None;
         if self.lex.tk != ']' && !star {
+            let at = self.lex.snapshot();
             let ty = self.peek_expr_type()?;
             self.require_integer_size(ty)?;
+            size = Some(super::function::ParamSize {
+                at,
+                outer_names: alloc::vec::Vec::new(),
+            });
         }
         let mut depth: i64 = 0;
         loop {
+            if self.lex.tk == Token::Id
+                && self.symbols[self.lex.curr_id_idx].class != Token::Loc as i64
+                && let Some(size) = &mut size
+            {
+                size.outer_names.push(self.lex.curr_id_idx);
+            }
             if self.lex.tk == Token::Brak {
                 depth += 1;
             } else if self.lex.tk == ']' {
                 if depth == 0 {
+                    self.param_sizes.extend(size);
                     return Ok(());
                 }
                 depth -= 1;

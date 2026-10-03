@@ -1509,6 +1509,65 @@ fn a_type_qualifier_cannot_begin_a_declarator() {
     }
 }
 
+/// C99 6.9.1p10: on entry to a function, the size expressions of its
+/// parameters are evaluated, in order, although each such parameter is
+/// adjusted to a pointer (6.7.5.3p7): once per call, through a prototype
+/// list and an old-style declaration list, at -O0 and -O. A declaration
+/// that is no definition evaluates none, nor does a parameter's own
+/// parameter list.
+#[test]
+fn a_parameter_array_size_is_evaluated_on_entry() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, Target};
+    let fns = "void g(int n, int a[next()]) { (void)n; (void)a; }\n\
+               void o(int a[first()], int b[second()]) { (void)a; (void)b; }\n\
+               int kr(n, a) int n; int a[n + next()]; { return n + a[0]; }\n\
+               void cb(void (*f)(int x[next()])) { (void)f; }\n\
+               void proto(int n, int a[next()]);\n";
+    let src = format!(
+        "static int calls, order;\n\
+         static int next(void) {{ return ++calls; }}\n\
+         static int first(void) {{ order = order * 10 + 1; return 2; }}\n\
+         static int second(void) {{ order = order * 10 + 2; return 3; }}\n\
+         {fns}\
+         int main(void) {{\n\
+         \tint buf[4] = {{ 7 }};\n\
+         \tg(1, buf);\n\
+         \tg(2, buf);\n\
+         \to(buf, buf);\n\
+         \tcb(0);\n\
+         \treturn kr(3, buf) == 10 && calls == 3 && order == 12;\n\
+         }}\n"
+    );
+    let program = Compiler::new(src.clone())
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(crate::c5::Vm::new(program).run().unwrap(), 1, "{src}");
+    // Helpers defined elsewhere stay calls under -O.
+    let src = format!("int next(void);\nint first(void);\nint second(void);\n{fns}");
+    let opts = CompileOptions::default()
+        .with_no_entry_point(true)
+        .with_optimize(true);
+    let program = Compiler::with_options(src, Target::LinuxX64, opts)
+        .compile()
+        .expect("compile");
+    let nopts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::new().with_optimize().with_dump_ssa()
+    };
+    let text = crate::c5::codegen::lower_for(&program, Target::LinuxX64, nopts)
+        .expect("lower")
+        .ssa_dump;
+    for name in ["g", "o", "kr"] {
+        let body = text
+            .split("; name=")
+            .find(|f| f.starts_with(&format!("{name}\n")))
+            .unwrap_or_else(|| panic!("no `{name}` in the dump:\n{text}"));
+        let body = body.split("\n; ").next().unwrap_or(body);
+        let calls = body.matches("Call {").count();
+        assert_eq!(calls, if name == "o" { 2 } else { 1 }, "{name}:\n{body}");
+    }
+}
+
 #[test]
 fn duplicate_case_value_in_inner_switch_only() {
     // Distinct values across nested switches are fine; the duplicate is

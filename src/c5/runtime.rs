@@ -57,6 +57,7 @@ pub fn embedded_libc() -> &'static [(&'static str, &'static str)] {
 }
 
 pub(super) static EMBEDDED_LIBC: &[(&str, &str)] = &[
+    ("dirent_ext.c", include_str!("../../libc/lib/dirent_ext.c")),
     ("dlfcn_ext.c", include_str!("../../libc/lib/dlfcn_ext.c")),
     ("pattern.c", include_str!("../../libc/lib/pattern.c")),
     ("stdio_ext.c", include_str!("../../libc/lib/stdio_ext.c")),

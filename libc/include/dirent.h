@@ -6,18 +6,27 @@
 
 #pragma once
 
-// On Windows, sqlite's bundled shell.c rolls its own DIR / dirent
-// implementation on top of FindFirstFile / FindNextFile. The
-// roll-your-own struct has Windows-flavoured fields
-// (`d_attributes`) that don't appear on POSIX, so we skip the
-// POSIX layout here and let shell.c's `#if defined(_WIN32) &&
-// defined(_MSC_VER)` block define everything itself. Programs
-// that include `<dirent.h>` on Windows for the function decls
-// alone get the empty-but-flagged-included header.
 #ifdef _WIN32
+// mingw-w64's directory stream, which libc/lib/dirent_ext.c defines over
+// FindFirstFileA. Under msvc_compat.h's `_MSC_VER` the header declares
+// nothing, as cl ships none, so a program built as MSVC keeps its own DIR
+// and opendir.
+#ifndef _MSC_VER
+struct dirent {
+    long d_ino;              /* always 0 */
+    unsigned short d_reclen; /* always 0 */
+    unsigned short d_namlen; /* the length of d_name */
+    char d_name[260];
+};
+typedef struct __c5_DIR DIR;
+DIR *opendir(const char *name);
+struct dirent *readdir(DIR *dir);
+int closedir(DIR *dir);
+void rewinddir(DIR *dir);
+long telldir(DIR *dir);
+void seekdir(DIR *dir, long loc);
 #endif
-
-#ifndef _WIN32
+#else
 
 #include <sys/types.h>
 

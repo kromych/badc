@@ -407,6 +407,11 @@ registers under either compiler.
   `malloc_usable_size` and `sighandler_t` on Linux. The Windows targets
   carry `_fseeki64` / `_ftelli64` in their place, as their C library
   does.
+- On the Windows targets, `<dirent.h>` is mingw-w64's: `opendir` /
+  `readdir` / `closedir` / `rewinddir` / `telldir` / `seekdir` over
+  kernel32's file search, with its `struct dirent` (`d_name`, `d_namlen`).
+  Under msvc_compat.h's `_MSC_VER` the header declares nothing, as cl
+  ships none.
 
 ### GCC
 

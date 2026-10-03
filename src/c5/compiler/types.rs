@@ -163,6 +163,11 @@ pub(crate) fn is_volatile_object_ty(ty: i64) -> bool {
 /// tag, or that must ignore volatility entirely, take them as a unit.
 pub(crate) const VOLATILE_MASK: i64 = VOLATILE_BIT | VOL_LVL_MASK;
 
+/// The bits qualifying a tag's derivations level by level -- `const`,
+/// `volatile` and a named address space -- rather than naming its type.
+pub(crate) const DERIVATION_QUAL_MASK: i64 =
+    VOLATILE_MASK | CONST_LVL_MASK | SEG_MASK | SEG_LVL_MASK;
+
 /// Add one pointer derivation level. The pointer object is unqualified
 /// until a post-`*` qualifier says otherwise.
 pub(crate) fn add_ptr_level(ty: i64) -> i64 {
@@ -463,7 +468,7 @@ pub(crate) fn object_segment_bits(ty: i64) -> i64 {
 }
 
 /// Pointer-derivation depth of a tag, across every band.
-fn ptr_depth_of(ty: i64) -> i64 {
+pub(crate) fn ptr_depth_of(ty: i64) -> i64 {
     let ty = strip_unsigned(ty);
     if is_struct_ty(ty) {
         struct_ptr_depth(ty)

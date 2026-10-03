@@ -1865,10 +1865,7 @@ impl Compiler {
 
         // `__attribute__((vector_size(N)))` rebuilds the base type into a GCC
         // vector of N bytes before qualifiers apply.
-        if self.pending.attr_vector_size > 0 {
-            let n = core::mem::take(&mut self.pending.attr_vector_size);
-            bt = self.make_vector_type(bt, n);
-        }
+        bt = self.apply_pending_vector_size(bt)?;
         if let Some(m) = self.pending.attr_mode.take() {
             bt = self.apply_mode_to_type(bt, m)?;
         }

@@ -421,6 +421,58 @@ impl Compiler {
         }
     }
 
+    /// The type a pending `vector_size(N)` attribute makes of `ty`, or `ty`
+    /// when none is pending. As in GNU C, a vector of `N` bytes replaces the
+    /// innermost element type through the pointer, array and function
+    /// derivations; the element is an integer type other than `_Bool`, or a
+    /// floating type.
+    pub(super) fn apply_pending_vector_size(&mut self, ty: i64) -> Result<i64, C5Error> {
+        let n = core::mem::take(&mut self.pending.attr_vector_size);
+        if n <= 0 {
+            return Ok(ty);
+        }
+        self.vectorize_innermost(ty, n)
+    }
+
+    /// `ty` with its innermost element type made a vector of `n` bytes, each
+    /// derivation keeping its qualifiers.
+    fn vectorize_innermost(&mut self, ty: i64, n: i64) -> Result<i64, C5Error> {
+        use super::types::{DERIVATION_QUAL_MASK, ptr_depth_of};
+        let levels = ptr_depth_of(ty) * Ty::Ptr as i64;
+        let base = ty - levels;
+        let array = is_struct_ty(base)
+            .then(|| struct_id_of(base))
+            .filter(|&id| self.structs[id].is_array);
+        if let Some(id) = array {
+            if self.structs[id].vla_size_slot.is_some() {
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    "`vector_size` on a variable-length array",
+                ));
+            }
+            let field = &self.structs[id].fields[0];
+            let dims = if field.array_dims.len() >= 2 {
+                field.array_dims.clone()
+            } else {
+                alloc::vec![field.array_size]
+            };
+            let elem = self.vectorize_innermost(field.ty, n)?;
+            let agg = self.array_agg_type(elem, &dims);
+            return Ok((agg + levels) | (ty & (VOLATILE_BIT | QUAL_PTR_LVL_MASK)));
+        }
+        let elem = base & !DERIVATION_QUAL_MASK;
+        use super::diag::Operand;
+        let arithmetic = matches!(self.operand(elem), Operand::Integer | Operand::Floating);
+        if !arithmetic || super::types::is_bool_ty(elem) {
+            let t = super::types::format_type(elem, &self.structs);
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                alloc::format!("invalid vector element type `{t}`"),
+            ));
+        }
+        Ok((self.make_vector_type(elem, n) + levels) | (ty & DERIVATION_QUAL_MASK))
+    }
+
     /// Synthesize the aggregate that models a GCC `vector_size(n_bytes)` vector
     /// of `elem_ty`: a single array field of `n_bytes / sizeof(elem)` lanes,
     /// flagged `is_vector`. sizeof / initialization / by-value pass reuse the

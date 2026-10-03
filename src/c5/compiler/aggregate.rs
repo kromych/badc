@@ -331,10 +331,7 @@ impl Compiler {
             self.pending.attr_transparent_union = false;
             // After the declarator `vector_size(N)` types the member itself,
             // as the typedef and object declarators take it.
-            if self.pending.attr_vector_size > 0 {
-                let n = core::mem::take(&mut self.pending.attr_vector_size);
-                field_ty = self.make_vector_type(field_ty, n);
-            }
+            field_ty = self.apply_pending_vector_size(field_ty)?;
             if let Some(m) = self.pending.attr_mode.take() {
                 field_ty = self.apply_mode_to_type(field_ty, m)?;
             }
@@ -965,10 +962,7 @@ impl Compiler {
         }
         // `vector_size(N)` among the specifiers makes the base type a vector,
         // as for any other declaration, so a pointer declarator points to one.
-        if self.pending.attr_vector_size > 0 {
-            let n = core::mem::take(&mut self.pending.attr_vector_size);
-            field_base = self.make_vector_type(field_base, n);
-        }
+        field_base = self.apply_pending_vector_size(field_base)?;
         field_base = super::types::apply_qual_bits(field_base, leading_quals | trailing_quals);
         let base_spelling = self.take_base_spelling();
 

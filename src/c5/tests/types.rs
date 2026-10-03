@@ -4571,3 +4571,73 @@ fn an_old_style_parameter_declaration_adjusts_as_a_prototype_does() {
         "{msg}"
     );
 }
+
+/// GNU C's `vector_size` makes a vector of the innermost element type,
+/// through pointer, array and function derivations, at the sizes gcc gives;
+/// the element is an integer type other than `_Bool`, or a floating type, so
+/// a structure, `void` or `_Bool` element is an error on a typedef, a member,
+/// an object or a pointer.
+#[test]
+fn vector_size_applies_to_the_innermost_element_type() {
+    use crate::{Compiler, Target};
+    let compile = |src: &str| {
+        let src = format!("struct S {{ int x; }};\n{src}\nint main(void) {{ return 0; }}\n");
+        Compiler::with_target(src, Target::LinuxX64).compile()
+    };
+    for (src, ty) in [
+        (
+            "typedef struct S SV __attribute__((vector_size(16)));",
+            "struct S",
+        ),
+        ("typedef void VV __attribute__((vector_size(16)));", "void"),
+        (
+            "typedef _Bool BV __attribute__((vector_size(16)));",
+            "_Bool",
+        ),
+        (
+            "struct M { struct S m __attribute__((vector_size(16))); };",
+            "struct S",
+        ),
+        ("struct S obj __attribute__((vector_size(16)));", "struct S"),
+        (
+            "struct S *ptr __attribute__((vector_size(16)));",
+            "struct S",
+        ),
+    ] {
+        let msg = compile(src)
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        let want = format!("invalid vector element type `{ty}`");
+        assert!(
+            msg.contains(&want) && msg.contains("[invalid-declaration]"),
+            "`{src}`: {msg}"
+        );
+    }
+    for src in [
+        "typedef int IV __attribute__((vector_size(16)));",
+        "typedef double DV __attribute__((vector_size(16)));",
+        "typedef long double LV __attribute__((vector_size(32)));",
+        "typedef __int128 WV __attribute__((vector_size(16)));",
+        "struct M { short m __attribute__((vector_size(8))); };",
+        "float obj __attribute__((vector_size(16)));",
+        "enum E { E0 }; typedef enum E EV __attribute__((vector_size(16)));
+         _Static_assert(sizeof(EV) == 16, \"enum lanes\");",
+        "typedef float *P __attribute__((vector_size(16)));
+         _Static_assert(sizeof(P) == 8 && sizeof(*(P)0) == 16, \"pointer typedef\");",
+        "int *obj __attribute__((vector_size(16)));
+         _Static_assert(sizeof obj == 8 && sizeof *obj == 16, \"pointer object\");",
+        "struct M { char *m __attribute__((vector_size(16))); };
+         _Static_assert(sizeof(struct M) == 8 && sizeof(*((struct M *)0)->m) == 16, \"member\");",
+        "int (*pa)[2] __attribute__((vector_size(16)));
+         _Static_assert(sizeof *pa == 32, \"pointer to array\");",
+        "int a[2] __attribute__((vector_size(16)));
+         _Static_assert(sizeof a == 32, \"array\");",
+        "float (*fn(void)) __attribute__((vector_size(16)));
+         _Static_assert(sizeof *fn() == 16, \"function\");",
+        "__attribute__((vector_size(16))) int *lead;
+         _Static_assert(sizeof *lead == 16, \"leading\");",
+    ] {
+        compile(src).unwrap_or_else(|e| panic!("`{src}`: {e}"));
+    }
+}

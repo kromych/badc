@@ -517,10 +517,7 @@ impl Compiler {
         // object form) binds the attribute to the declarator, not the
         // base type, so it lands here rather than at the base-type
         // sites. The leading form already consumed it, leaving 0.
-        if self.pending.attr_vector_size > 0 {
-            let n = core::mem::take(&mut self.pending.attr_vector_size);
-            ty = self.make_vector_type(ty, n);
-        }
+        ty = self.apply_pending_vector_size(ty)?;
         if let Some(m) = self.pending.attr_mode.take() {
             ty = self.apply_mode_to_type(ty, m)?;
         }

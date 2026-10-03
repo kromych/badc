@@ -547,10 +547,7 @@ impl Compiler {
             // into a GCC vector here, matching the file-scope path. Without it
             // the attribute leaked to the first subsequent declaration and was
             // then consumed, so a second use of the typedef resolved as a scalar.
-            if self.pending.attr_vector_size > 0 {
-                let n = core::mem::take(&mut self.pending.attr_vector_size);
-                ty = self.make_vector_type(ty, n);
-            }
+            ty = self.apply_pending_vector_size(ty)?;
             if let Some(m) = self.pending.attr_mode.take() {
                 ty = self.apply_mode_to_type(ty, m)?;
             }

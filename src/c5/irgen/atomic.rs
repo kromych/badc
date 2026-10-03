@@ -520,9 +520,8 @@ impl RmwPlace {
                 seg,
                 align,
             } => {
-                // A 128-bit field never reaches here: its operators route
+                // A 128-bit value never reaches here: its operators route
                 // through the walker's 128-bit read-modify-write.
-                debug_assert!(bf.unit_size <= 8);
                 extract_bitfield(b, addr, bf, seg, vol, align)
             }
         }
@@ -555,7 +554,6 @@ impl RmwPlace {
                 seg,
                 align,
             } => {
-                debug_assert!(bf.unit_size <= 8);
                 merge_into_bitfield(b, addr, bf, value, seg, vol, align);
             }
         }

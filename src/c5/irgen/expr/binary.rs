@@ -486,7 +486,7 @@ impl<'a> Walker<'a> {
         op_ty: i64,
         nsw: bool,
     ) -> Result<ValueId, WalkError> {
-        if self.is_int128_value_ty(ty) || self.is_wide_unit_bitfield(lhs) {
+        if self.is_int128_value_ty(ty) {
             return self.walk_int128_compound_assign(b, op, lhs, rhs, ty, op_ty);
         }
         let RmwOpen {

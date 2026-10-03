@@ -846,8 +846,8 @@ impl<'a> Walker<'a> {
     /// new value from the old one. With `keep_old` the prior value is
     /// copied out before the update and is the result, as the postfix
     /// operators require; otherwise the result is the stored value --
-    /// the object's address for a whole object, and the field's value
-    /// form for a bitfield.
+    /// the object's address for a whole object, and a fresh copy of the
+    /// value for a bitfield.
     fn int128_rmw(
         &mut self,
         b: &mut SsaBuilder,
@@ -868,12 +868,12 @@ impl<'a> Walker<'a> {
         if let Some((unit, bf, align)) = self.bitfield_place(b, lvalue)? {
             let vol = self.expr_is_volatile(lvalue);
             let old = extract_halves(b, unit, bf, AsmSeg::None, vol, align);
-            let saved = keep_old.then(|| self.bitfield_value_form(b, bf, old));
+            let saved = keep_old.then(|| self.int128_materialize(b, old));
             let new = update(self, b, old)?;
             let masked = Self::int128_and_imm(b, new, bitfield_mask_halves(bf.bit_width, 0));
             insert_halves(b, unit, bf, masked, AsmSeg::None, vol, align);
             let stored = sign_extend_halves(b, bf, masked);
-            let stored = self.bitfield_value_form(b, bf, stored);
+            let stored = self.int128_materialize(b, stored);
             return Ok(saved.unwrap_or(stored));
         }
         let addr = self.walk_expr_lvalue(b, lvalue)?;

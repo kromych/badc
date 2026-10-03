@@ -127,35 +127,6 @@ impl<'a> Walker<'a> {
         })
     }
 
-    /// A field's value extracted as 128 bits in the form the access
-    /// yields: a fresh 128-bit object's address for a 128-bit value, the
-    /// low half for one the integer promotions narrow.
-    pub(super) fn bitfield_value_form(
-        &mut self,
-        b: &mut SsaBuilder,
-        bf: BitfieldDesc,
-        v: Halves,
-    ) -> ValueId {
-        if self.bitfield_is_int128(bf) {
-            self.int128_materialize(b, v)
-        } else {
-            v.0
-        }
-    }
-
-    /// True when `lvalue` names a bitfield stored in a 16-byte unit.
-    /// Its read-modify-write operators go through the 128-bit path even
-    /// when the integer promotions narrow the value.
-    pub(super) fn is_wide_unit_bitfield(&self, lvalue: ExprId) -> bool {
-        matches!(
-            self.ast.expr(lvalue),
-            Expr::Member {
-                bitfield: Some(bf),
-                ..
-            } if bf.is_wide_unit()
-        )
-    }
-
     /// Mask both halves of a 128-bit value with a constant pair.
     pub(super) fn int128_and_imm(b: &mut SsaBuilder, v: Halves, (lo, hi): (i64, i64)) -> Halves {
         (
@@ -166,7 +137,7 @@ impl<'a> Walker<'a> {
 
     /// The storage-unit address, descriptor and alignment bound when
     /// `lvalue` names a bitfield, evaluating the object once (C99
-    /// 6.5.16.2p3). The 128-bit read-modify-write calls it.
+    /// 6.5.16.2p3). The read-modify-write of a 128-bit value calls it.
     pub(super) fn bitfield_place(
         &mut self,
         b: &mut SsaBuilder,

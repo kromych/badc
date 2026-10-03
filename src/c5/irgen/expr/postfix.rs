@@ -941,7 +941,7 @@ impl<'a> Walker<'a> {
         post: bool,
         nsw: bool,
     ) -> Result<ValueId, WalkError> {
-        if self.is_int128_value_ty(ty) || self.is_wide_unit_bitfield(lvalue) {
+        if self.is_int128_value_ty(ty) {
             return self.walk_int128_inc(b, lvalue, by, post);
         }
         let RmwOpen {

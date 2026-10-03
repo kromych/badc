@@ -335,5 +335,18 @@ int main(void) {
     if ((r = chk(i.g, 0, ~0ULL - 2, 140))) {
         return r;
     }
+
+    // C99 6.5.16.2p3: a promoted field in a 16-byte unit computes in the
+    // type of E1 op E2, here `unsigned int`, not in 128 bits.
+    ne.g = -1;
+    ne.g /= 11u;
+    if (ne.g != 122016116) {
+        return 143;
+    }
+    ne.g = -1;
+    ne.g %= 11u;
+    if (ne.g != 3 || (r = chk((u128)ne.f, 0, 0, 144))) {
+        return r ? r : 146;
+    }
     return 0;
 }

@@ -2895,6 +2895,50 @@ fn an_int128_converts_to_bool_by_testing_both_halves() {
     }
 }
 
+/// C99 6.5.2.1, 6.5.6p8, 6.5.7p3 and 6.7.5.2p5: an `__int128` subscript,
+/// pointer offset, shift count of a narrower operand and array dimension
+/// take the operand's value, its low half: no 128-bit product or shift is
+/// formed in a temporary whose address would stand in for the value.
+#[test]
+fn an_int128_offset_count_or_dimension_takes_its_low_half() {
+    use crate::c5::ir::{BinOp, Inst};
+    use crate::{CompileOptions, Compiler, Target};
+    const SRC: &str = "int sub(int *p, __int128 i) { return p[i]; }\n\
+        int rsub(int *p, __int128 i) { return i[p]; }\n\
+        int add(int *p, __int128 i) { return *(i + p); }\n\
+        int *step(int *p, __int128 i) { p -= i; return p; }\n\
+        int shl(int v, __int128 n) { return v << n; }\n\
+        int shl_assign(int v, __int128 n) { v <<= n; return v; }\n\
+        int vla(__int128 n) { int a[n]; a[0] = 1; return a[0] + (int)sizeof a; }\n";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(SRC.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let find = |name: &str| funcs.iter().find(|f| f.name == name).expect(name);
+        for name in ["sub", "rsub", "add", "step", "shl", "shl_assign"] {
+            let f = find(name);
+            let stores = f.insts.iter().any(|i| matches!(i, Inst::Store { .. }));
+            assert!(!stores, "{target:?} {name}: {:?}", f.insts);
+        }
+        let f = find("vla");
+        let scaled_low_half = f.insts.iter().any(|i| {
+            matches!(i, Inst::BinopI { op: BinOp::Mul | BinOp::Shl, lhs, .. }
+                if matches!(f.insts[*lhs as usize], Inst::Load { .. }))
+        });
+        assert!(scaled_low_half, "{target:?} vla: {:?}", f.insts);
+    }
+}
+
 /// ARM ARM C6.2: the aarch64 atomic read-modify-write lowering is one LSE
 /// instruction, for a seq_cst fetch-add the acquire-release `LDADDAL`.
 /// Match it by the bits that do not depend on the registers:

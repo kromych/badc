@@ -3890,6 +3890,7 @@ impl Compiler {
         if is_pointer_ty(lhs_ty) {
             let op = if bop == B::Add { "+=" } else { "-=" };
             self.require_complete_pointee(lhs_ty, op)?;
+            self.int128_offset_acc_to_ptrdiff();
             let elem_size = self.size_of_type(pointee_ty(lhs_ty)) as i64;
             if let Some(slot) = self.vla_pointee_slot(lhs_ty) {
                 self.emit_binop_with_vla_size(B::Mul, slot);
@@ -3899,6 +3900,7 @@ impl Compiler {
             return Ok((bop, lhs_ty));
         }
         if matches!(bop, B::Shl | B::Shr | B::Shru) {
+            self.narrow_int128_shift_count(lhs_ty);
             return Ok((bop, integer_promote(lhs_ty)));
         }
         if !op_is_fp {
@@ -4293,6 +4295,7 @@ impl Compiler {
             self.ast_binop(signed);
             return Ok(());
         }
+        self.narrow_int128_shift_count(lhs_ty);
         // C99 6.5.7p3: the type of the promoted left operand.
         let result_ty = integer_promote(lhs_ty);
         self.ty = result_ty;
@@ -4378,8 +4381,53 @@ impl Compiler {
         })
     }
 
+    /// C99 6.5.7p3 promotes each operand of a shift on its own. An
+    /// `__int128` count of a narrower left operand converts to `long long`,
+    /// which holds every count the shift is defined for.
+    fn narrow_int128_shift_count(&mut self, lhs_ty: i64) {
+        if self.is_int128_ty(self.ty) && !self.is_int128_ty(lhs_ty) {
+            self.ast_apply_assign_conv(Ty::LongLong as i64);
+            self.ty = Ty::LongLong as i64;
+        }
+    }
+
+    /// C99 6.5.6p8 adds an integer of any type to a pointer. An `__int128`
+    /// offset converts to `ptrdiff_t`, which holds every displacement the
+    /// result is defined for, so the scaling and the add stay scalar.
+    fn int128_offset_to_ptrdiff(
+        &mut self,
+        offset: Option<super::super::ast::ExprId>,
+    ) -> (Option<super::super::ast::ExprId>, i64) {
+        let to_ty = self.ptrdiff_t_ty();
+        let pos = self.ast_src_pos();
+        let offset = offset.map(|child| {
+            self.ast
+                .push_expr(super::super::ast::Expr::Cast { child, to_ty }, pos)
+        });
+        (offset, to_ty)
+    }
+
+    /// [`Self::int128_offset_to_ptrdiff`] over the accumulator.
+    fn int128_offset_acc_to_ptrdiff(&mut self) {
+        if self.is_int128_ty(self.ty) {
+            (self.ast_acc, self.ty) = self.int128_offset_to_ptrdiff(self.ast_acc);
+        }
+    }
+
     /// Integer and pointer addition (C99 6.5.6p8).
     fn add_values(&mut self, lhs_ty: i64, fn_ptr_arith: bool) {
+        let mut lhs_ty = lhs_ty;
+        if is_pointer_ty(lhs_ty) {
+            self.int128_offset_acc_to_ptrdiff();
+        } else if is_pointer_ty(self.ty)
+            && self.is_int128_ty(lhs_ty)
+            && let Some(top) = self.ast_vstack.pop()
+        {
+            // `int + ptr`: the integer is the stacked left operand.
+            let (top, ty) = self.int128_offset_to_ptrdiff(top);
+            self.ast_vstack.push(top);
+            lhs_ty = ty;
+        }
         if !is_pointer_ty(lhs_ty) && is_pointer_ty(self.ty) {
             // `int + ptr` has the pointer type. A pointee wider than a byte
             // scales the integer, which sits on the c5 stack: the pointer is
@@ -4496,6 +4544,9 @@ impl Compiler {
 
     /// Integer and pointer subtraction (C99 6.5.6p8-p9).
     fn sub_values(&mut self, lhs_ty: i64, fn_ptr_arith: bool) {
+        if is_pointer_ty(lhs_ty) {
+            self.int128_offset_acc_to_ptrdiff();
+        }
         if is_pointer_ty(lhs_ty) && self.ptr_diff_compatible(lhs_ty, self.ty) {
             // C99 6.5.6p9: `ptr - ptr` is the element distance, the byte
             // distance divided by the pointee size both operands share, of
@@ -4734,6 +4785,17 @@ impl Compiler {
             Code::INVALID_OPERANDS,
             "array subscript",
         )?;
+        // The accumulator holds the index in either operand order.
+        let idx_ast = if self.is_int128_ty(idx_ty) {
+            let (idx, ty) = self.int128_offset_to_ptrdiff(idx_ast);
+            self.ast_acc = idx;
+            if !is_pointer_ty(self.ty) {
+                self.ty = ty;
+            }
+            idx
+        } else {
+            idx_ast
+        };
         // The step the index moves the designated object by, and whether
         // the element is itself an array whose address is the value.
         let stride;

@@ -896,6 +896,11 @@ impl Compiler {
                     array_size = -1;
                 } else if self.pending.vla_allowed {
                     self.expr(Token::Assign as i64)?;
+                    // C99 6.7.5.2p5: the size is the dimension's value; an
+                    // `__int128` one converts to the `size_t` it is taken in.
+                    if self.is_int128_ty(self.ty) {
+                        self.ast_apply_assign_conv(self.size_t_ty());
+                    }
                     self.pending.vla_dim_expr = self.ast_acc.take();
                     if self.lex.tk != ']' {
                         return Err(self.compile_err(

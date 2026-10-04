@@ -2,8 +2,8 @@
 // assignment. The GCC 128-bit integer shares the aggregate carrier but is
 // an integer type, so a scalar operand widens into it -- sign-extended
 // from a signed source, zero-extended from an unsigned one -- exactly as
-// the assignment and argument paths already convert one. lib/ubsan.c
-// returns an `s64` load from an `s_max`-returning function this way.
+// the assignment and argument paths already convert one: an `s64` load
+// returned from an `s_max`-returning function.
 typedef __int128 s_max;
 typedef unsigned __int128 u_max;
 

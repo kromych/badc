@@ -988,8 +988,8 @@ fn movw_script(base: &str) -> crate::c5::linker::lds::LinkerScript {
     .expect("script parses")
 }
 
-/// The `tramp_alias` sequence linked through a script: each half takes
-/// its own 16-bit group of the target's final address. Words checked
+/// A `movz` / `movk` address load linked through a script: each instruction
+/// takes its own 16-bit group of the target's final address. Words checked
 /// against `ld -T` over the same script and object.
 #[test]
 fn aarch64_movw_groups_resolve_like_gnu_ld() {

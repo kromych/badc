@@ -1,7 +1,7 @@
-/* The x86 bug-table shape: an `i`-operand link-time address as a
+/* An x86 trap-table entry: an `i`-operand link-time address as a
  * PC-relative section value (`.long %c0 - .`), constant operand words,
  * and `.org 2b + %c3` sizing the entry from a numeric section label. */
-struct bug_entry { int bug_addr_disp; int file_disp; unsigned short line; unsigned short flags; };
+struct trap_entry { int addr_disp; int file_disp; unsigned short line; unsigned short flags; };
 static volatile int never;
 
 static void trigger(void)
@@ -15,7 +15,7 @@ static void trigger(void)
         "\t.org 2b+%c3\n"
         ".popsection\n"
         : : "i" (__FILE__), "i" (__LINE__), "i" (0),
-            "i" (sizeof(struct bug_entry)));
+            "i" (sizeof(struct trap_entry)));
 }
 
 int main(void)

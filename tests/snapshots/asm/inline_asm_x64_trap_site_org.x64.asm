@@ -1,5 +1,5 @@
 
-inline_asm_x64_bug_table_org.x64:	file format elf64-x86-64
+inline_asm_x64_trap_site_org.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 

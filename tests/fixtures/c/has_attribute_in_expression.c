@@ -2,7 +2,7 @@
 // appear, not only inside a conditional directive, so an ordinary
 // expression can gate on a capability:
 //
-//     if (IS_ENABLED(X) && __has_attribute(some_attr)) ...
+//     if (ENABLED(X) && __has_attribute(some_attr)) ...
 //
 // The verdict is the one the `#if` path reports for the same operand, so
 // a header and the code it guards cannot disagree. Only the truth of the

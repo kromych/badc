@@ -9,7 +9,7 @@ struct S {
     int x;
 };
 
-// The `READ_ONCE` shape: the scalar type of the operand, requalified.
+// A volatile-read macro's shape: the scalar type of the operand, requalified.
 int f(const volatile int *p) {
     return *(const volatile __typeof_unqual__(*(int *)p) *)&(*(int *)p);
 }

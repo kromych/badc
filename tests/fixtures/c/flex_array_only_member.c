@@ -73,8 +73,8 @@ union flex_union_packed {
 // `packed` removes the padding between a struct's own members, not the
 // padding inside a member's type: the anonymous union below keeps the
 // 4-byte alignment its widest arm gives it and stays 12 bytes wide, so
-// the enclosing struct is 13. The shape is the ChromeOS EC host-command
-// parameter block, whose arms mix packed and unpacked structs.
+// the enclosing struct is 13. The shape is a command parameter block
+// whose arms mix packed and unpacked structs.
 struct arm_packed {
     unsigned char sensor_num;
     unsigned short flags;

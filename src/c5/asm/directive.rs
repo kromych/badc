@@ -821,7 +821,7 @@ pub(crate) fn parse_section_item(
         ".type" => parse_type_directive(rest),
         ".size" => parse_size_directive(rest),
         // `name = expr` in a section is the assignment spelling of `.set`
-        // (the piggyback length constants). The expander folds the constant
+        // (a payload's length constants). The expander folds the constant
         // form it sees; one reaching here carries an expression or a symbol.
         _ if !tok.starts_with('.')
             && (rest.starts_with('=') && !rest.starts_with("==")

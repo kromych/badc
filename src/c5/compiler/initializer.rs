@@ -2146,7 +2146,7 @@ impl Compiler {
         }
         // A parenthesised relocation-bearing leaf -- `(func)`,
         // `(&global)`, possibly multiply parenthesised, as produced
-        // by the `(PyCFunction)(((void(*)(void))((fn))))` method-table
+        // by the `(method_fn)(((void(*)(void))((fn))))` method-table
         // idiom. Recurse on the inner value and consume the matching
         // `)` when it carries a relocation; a parenthesised arithmetic
         // constant rewinds and falls through to the folders below,

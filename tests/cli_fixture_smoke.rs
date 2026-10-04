@@ -163,10 +163,10 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("file_scope_asm_sym_riprel.c", "linux-aarch64"), // x86-64 `sym(%rip)` displacement expressions
     ("inline_asm_x64_align_above_section.c", "linux-aarch64"), // x86-64 alignment above the section default
     ("inline_asm_x64_mmx_fpu.c", "linux-aarch64"),             // x86-64 MMX movq + fwait
-    ("inline_asm_x64_bug_table_org.c", "linux-aarch64"),       // x86-64 ud2 bug-table entry
+    ("inline_asm_x64_trap_site_org.c", "linux-aarch64"),       // x86-64 ud2 trap-table entry
     ("inline_asm_x64_patch_site.c", "linux-aarch64"),          // x86-64 jmp %l jump-table entry
     ("inline_asm_x64_m_global_call.c", "linux-aarch64"), // x86-64 indirect call through an "m" operand
-    ("inline_asm_a64_bug_table_labels.c", "linux-x64"),  // aarch64 brk bug-table entry
+    ("inline_asm_a64_trap_site_labels.c", "linux-x64"),  // aarch64 brk trap-table entry
 ];
 
 /// Targets the sweep below builds every fixture for. Also the set the
@@ -3420,7 +3420,7 @@ fn parse_function(lines: &[String], func: &str) -> Vec<DisInsn> {
 /// instruction that returns; a `ud2` ends a path. Returns the offset
 /// of an offending return, if any.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn return_with_uaccess_enabled(dis: &str, func: &str) -> Option<u64> {
+fn return_inside_stac_region(dis: &str, func: &str) -> Option<u64> {
     let insns = parse_function(&function_lines(dis, func), func);
     let base = insns.first().map_or(0, |i| i.at);
     let index_of = |off: u64| insns.iter().position(|i| i.at == base + off);
@@ -3473,7 +3473,7 @@ fn every_path_from_stac_reaches_clac_before_returning() {
         return;
     };
     for func in ["put_user_word", "put_user_pair"] {
-        if let Some(at) = return_with_uaccess_enabled(&dis, func) {
+        if let Some(at) = return_inside_stac_region(&dis, func) {
             panic!(
                 "{func}: return at {at:#x} reachable from `stac` without `clac`\n{}",
                 function_lines(&dis, func).join("\n")

@@ -33,7 +33,7 @@ static void fill(struct notify_out *o) {
 }
 
 // Reached only through a volatile pointer, so the store side stays out
-// of sight of the caller the way a copy_from_user-style filler does.
+// of sight of the caller the way an out-of-line copy-in filler does.
 static void (*volatile fill_p)(struct notify_out *) = fill;
 
 static int notify_store(void) {

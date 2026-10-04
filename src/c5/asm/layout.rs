@@ -1427,11 +1427,11 @@ pub(crate) fn materialize_asm_sections(
 ) -> Result<alloc::vec::Vec<MaterializedLabel>, alloc::string::String> {
     let (const_of, operand_sym) = (operands.const_of, operands.symbol_of);
     // GNU as numeric labels (`2:`, `14470:`) are local to one asm instance;
-    // the same digits recur across every expansion of a macro like the bug
-    // table, so the accumulating sink would collide them. Rename each
+    // the same digits recur across every expansion of a macro that emits a
+    // table entry, so the accumulating sink would collide them. Rename each
     // definition to a per-instance-unique symbol. Built once for the whole
-    // call so a reference in one block resolves a definition in another (the
-    // bug table's `.long 14472b - .` reaches a label defined in `.rodata.str`).
+    // call so a reference in one block resolves a definition in another (a
+    // trap-table entry's `.long 14472b - .` reaches a label in `.rodata.str`).
     let uniq = next_asm_instance();
     let mut num_unique: alloc::collections::BTreeMap<&str, alloc::string::String> =
         alloc::collections::BTreeMap::new();

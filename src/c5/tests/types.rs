@@ -3287,8 +3287,8 @@ fn typeof_a_dereferenced_function_pointer_names_the_function_type() {
     // C99 6.5.3.2p4: `*` on a pointer to a function designates the
     // function, so `typeof(*p)` is a function type and a `*` in a
     // declarator through the specifier forms the pointer to it rather
-    // than adding a level -- the shape `rcu_dereference` and
-    // `rcu_assign_pointer` expand to over a function-pointer field.
+    // than adding a level -- the shape a `typeof(*p) *` cast takes over a
+    // function-pointer field.
     let p = compile_str(
         "struct T { int a; };\n\
          typedef struct T *sel_t(int, int);\n\
@@ -4294,9 +4294,9 @@ fn uses_before_an_enums_definition_take_the_enums_type() {
 #[test]
 fn a_typeof_of_an_array_of_arrays_leaves_no_bounds_behind() {
     use crate::{Compiler, Target};
-    let src = "typedef struct cpumask { unsigned long bits[1]; } cpumask_var_t[1];\n\
+    let src = "typedef struct bitmask { unsigned long bits[1]; } bitmask_var_t[1];\n\
                extern unsigned long off[256];\n\
-               cpumask_var_t map[16];\n\
+               bitmask_var_t map[16];\n\
                extern typeof(map) map;\n\
                unsigned long off[256] __attribute__((__section__(\".data..read_mostly\")));\n\
                extern typeof(off) off;\n\
@@ -4305,7 +4305,7 @@ fn a_typeof_of_an_array_of_arrays_leaves_no_bounds_behind() {
                #define SAME(a, b) _Static_assert(__builtin_types_compatible_p(a, b), #a)\n\
                SAME(__typeof__(off), unsigned long [256]);\n\
                SAME(__typeof__(copy), unsigned long [256]);\n\
-               SAME(__typeof__(map), struct cpumask [16][1]);\n\
+               SAME(__typeof__(map), struct bitmask [16][1]);\n\
                int main(void) { return 0; }\n";
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
         Compiler::with_target(src.to_string(), target)
@@ -4314,12 +4314,12 @@ fn a_typeof_of_an_array_of_arrays_leaves_no_bounds_behind() {
     }
 }
 
-/// The function-pointer conversions three Linux units make convert between
-/// compatible types: a trampoline declared through `typeof(*fp)`, a member
-/// typed before the definition of the enum its result names, and a result
-/// pointing to const function pointers returned from an array of them.
+/// Function-pointer conversions between compatible types: a trampoline
+/// declared through `typeof(*fp)`, a member typed before the definition of
+/// the enum its result names, and a result pointing to const function
+/// pointers returned from an array of them.
 #[test]
-fn function_pointer_conversions_of_linux_shapes_are_compatible() {
+fn function_pointer_conversions_through_typeof_and_late_enums_are_compatible() {
     compile_str(
         "struct ops { void (*run)(void *ctx, _Bool now); };\n\
          struct ops ops;\n\

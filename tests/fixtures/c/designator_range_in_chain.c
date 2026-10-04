@@ -1,17 +1,16 @@
 // The GNU range designator `[lo ... hi]` inside a designator list, not
 // only as a whole-array designator: one entry value fills every index in
-// the range, and any step after it applies to each. The shape
-// security/integrity/ima/ima_queue.c initializes its hash table with:
-// `.queue[0 ... IMA_MEASURE_HTABLE_SIZE - 1] = HLIST_HEAD_INIT`.
+// the range, and any step after it applies to each: a hash table whose
+// buckets one entry initializes, `.queue[0 ... TABLE - 1] = { ... }`.
 #define TABLE 4
 
-struct hlist_head {
+struct bucket {
 	void *first;
 };
 
 struct h_table {
 	long len;
-	struct hlist_head queue[TABLE];
+	struct bucket queue[TABLE];
 	long violations;
 };
 

@@ -42,8 +42,8 @@ int main(void) {
         return 3;
     }
 
-    // Load through a `char *` of a byte with the high bit set, the
-    // exact shape of TclGetInt1AtPtr's `(int) *((char *) p)`.
+    // Load through a `char *` of a byte with the high bit set:
+    // `(int) *((char *) p)`.
     unsigned char raw = 0xE3;
     char *p = (char *)&raw;
     if ((int)*p != EXPECT_NEG_BYTE) {

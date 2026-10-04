@@ -11,8 +11,8 @@
 // runs through the c5 VM without any libc shim. Each failure
 // path returns a distinct nonzero code. Two invocation shapes
 // are covered: a bare function pointer and a function returned
-// by the second operand of a comma operator (the upstream
-// `tcc_error_noabort` / `TCC_SET_STATE` macro shape).
+// by the second operand of a comma operator, as a macro that
+// records state before naming the callee expands to.
 
 #include <stdarg.h>
 

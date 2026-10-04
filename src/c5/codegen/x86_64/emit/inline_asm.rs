@@ -2971,7 +2971,7 @@ impl AsmPass<'_> {
             && matches!(insn.mnemonic, Mnemonic::Table("call" | "jmp"))
         {
             let is_call = matches!(insn.mnemonic, Mnemonic::Table(n) if n.starts_with("call"));
-            // The name may embed operand references (`__get_user_%c0`).
+            // The name may embed operand references (`helper_%c0`).
             let name = match crate::c5::asm::resolve_asm_symbol_target(
                 name,
                 &crate::c5::asm::X64_SYMBOL_SUBST,

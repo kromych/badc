@@ -497,10 +497,10 @@ fn an_inline_only_definition_splits_its_body_from_its_identifier() {
     assert_ne!(body.section, NativeSymSection::Undef, "the body is defined");
 }
 
-/// Sources shaped like `<linux/fortify-string.h>`: an inline definition
-/// of a library function whose body calls the builtin of the same name
-/// to reach the unfortified one, plus a caller that keeps the body
-/// live. Each row is `(name, definition, caller)`.
+/// `_FORTIFY_SOURCE`-style wrappers: an inline definition of a library
+/// function whose body calls the builtin of the same name to reach the
+/// unfortified one, plus a caller that keeps the body live. Each row is
+/// `(name, definition, caller)`.
 const FORTIFY_WRAPPERS: &[(&str, &str, &str)] = &[
     (
         "memcmp",

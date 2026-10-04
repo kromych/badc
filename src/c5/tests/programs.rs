@@ -1421,7 +1421,7 @@ fn typeof_array_row() {
 fn typeof_addr_of_array() {
     // C99 6.5.3.2p3: `&arr` is a pointer-to-array, so `sizeof(&arr)` is a
     // pointer's width and `typeof(&arr)` / `typeof(*(&arr))` round-trip. Drives
-    // the per-CPU `SHIFT_PERCPU_PTR` shape `(typeof(*(ptr)) *)(addr + off)`.
+    // the per-CPU pointer shape `(typeof(*(ptr)) *)(addr + off)`.
     assert_eq!(run_fixture("typeof_addr_of_array.c"), 0);
 }
 
@@ -2283,7 +2283,7 @@ fn address_of_parenthesized_compound_literal_static_init() {
 fn array_compound_literal_address_const() {
     // C99 6.5.2.5 / 6.6: `&(T[]){ ... }[i].member` as an address constant in a
     // static initializer -- an anonymous static array whose designated member
-    // address is stored (a sysfs attribute-table shape).
+    // address is stored (an attribute-table shape).
     assert_eq!(run_fixture("array_compound_literal_address_const.c"), 0);
 }
 
@@ -3636,7 +3636,7 @@ fn linux_block_device_and_file_headers() {
     use crate::{CompileOptions, Compiler, Target};
     // The bundled linux/cdrom.h, dm-ioctl.h, hdreg.h, fd.h, the FS_IOC_* /
     // FS_*_FL additions to linux/fs.h, the POSIX_FADV_* advice, and the
-    // mincore binding -- everything block/file drivers pull in. Constant
+    // mincore binding -- the block-device and file-control interfaces. Constant
     // values are arch independent; a successful compile is the check.
     let compiles = |src: &str| -> bool {
         let opts = CompileOptions::default().with_no_entry_point(true);
@@ -4057,7 +4057,7 @@ fn packed_anon_union_layout() {
     // A trailing `__attribute__((packed))` repacks the fields; the promoted
     // members of an anonymous union must keep overlapping (and a nested
     // anonymous struct keeps its in-arm offsets) instead of being laid out
-    // sequentially. Mirrors the ACPI bios-linker-loader command entry.
+    // sequentially. Mirrors a fixed-size firmware command record.
     assert_eq!(run_fixture("packed_anon_union_layout.c"), 0);
 }
 
@@ -6992,8 +6992,8 @@ fn address_of_deref_null_folds_to_null() {
 #[test]
 fn struct_member_two_dimensional_scalar_array_init() {
     // A struct's scalar 2D-array member takes a fully-braced initializer
-    // with a brace per row (C99 6.7.8p20), the `DEFINE_PER_CPU(... ) =
-    // {{{0}}}` shape reduced to non-zero values.
+    // with a brace per row (C99 6.7.8p20), the `= {{{0}}}` shape of a
+    // per-CPU definition with non-zero values.
     let src = "
         struct s { long long a[2][3]; };
         static struct s x = { .a = { {1, 2, 3}, {4, 5, 6} } };
@@ -7018,9 +7018,10 @@ fn typeof_multidimensional_array_redeclaration_keeps_inner_dim() {
 #[test]
 fn const_expr_dead_ternary_arm_keeps_function_call() {
     // The address-constant folding must not intercept a function
-    // designator in an unevaluated `?:` arm: `ilog2`'s dead arm holds a
-    // non-constant call the constant evaluator skips. A constant condition
-    // selects the live arm, so the array dimension folds.
+    // designator in an unevaluated `?:` arm: a `__builtin_constant_p`
+    // selection's dead arm holds a non-constant call the constant evaluator
+    // skips. A constant condition selects the live arm, so the array
+    // dimension folds.
     let src = "
         extern int probe_u32(unsigned);
         extern int probe_u64(unsigned long long);

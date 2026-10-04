@@ -735,7 +735,7 @@ mod tests {
     /// materialization into a dominating block whose instruction range sits
     /// later in the tape. A walk that stops at a rising id reports a
     /// link-time address as naming none, and the section field referencing it
-    /// (`.quad %c0 + %c1 - .`, the static-key jump entry) is rejected.
+    /// (`.quad %c0 + %c1 - .`, a patch-site entry's key) is rejected.
     #[test]
     fn address_operand_resolves_through_a_forward_reference() {
         let fwd = one_block(alloc::vec![add(1, 8), Inst::ImmData(64)]);

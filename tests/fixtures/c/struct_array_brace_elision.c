@@ -1,9 +1,8 @@
 // C99 6.7.9p20: a sub-array whose braces are elided takes as many entries
 // as it holds from the enclosing list and leaves the rest to the sub-array
 // after it; 6.7.9p21 zeroes what no entry reaches. A multi-dimensional
-// array of structs is the case that needs it -- `struct thermal_trip
-// trips[N][M] = { 0 };` in drivers/thermal/intel is the whole-object zero
-// spelling of it.
+// array of structs is the case that needs it -- `struct trip
+// trips[N][M] = { 0 };` is the whole-object zero spelling of it.
 struct trip {
 	int temp;
 	int hyst;

@@ -55,9 +55,10 @@ pub(crate) enum AsmSectionValue {
     LocExpr(alloc::string::String),
     /// A relocation whose base is an `i`-class operand naming a link-time
     /// address (`%cN`) or an `asm goto` label (`%lN`), optionally with a
-    /// constant addend and minus a location. `%c0 + %c1 - .` (a static-key
-    /// jump entry) folds `%c1` into the addend; `.long %c0 - .` and `.long
-    /// %c0 - 2b` (the bug table's file pointer, 7.x and 5.15) have none.
+    /// constant addend and minus a location. `%c0 + %c1 - .` (a patch-site
+    /// entry's key) folds `%c1` into the addend; `.long %c0 - .` and `.long
+    /// %c0 - 2b` (a trap-table entry's file name, relative to the field or
+    /// to the entry's label) have none.
     OperandReloc {
         idx: u8,
         /// `%l` (an `asm goto` label) rather than `%c` (an operand address).
@@ -442,8 +443,8 @@ pub(crate) enum AsmSectionTarget {
     /// naming a link-time address, `.long %c0 - .`). Resolved against the
     /// `.data` / `.bss` section symbol like a `DataFixup`.
     Data(u64),
-    /// An `asm goto` label's block (`.long %l0 - .`, a static-key jump
-    /// entry). The block's text offset is not known when the section
+    /// An `asm goto` label's block (`.long %l0 - .`, a patch-site entry's
+    /// branch target). The block's text offset is not known when the section
     /// materializes -- the walker leaves `start_pc` at 0 and the block is
     /// laid out later -- so the block index is carried here and rewritten to
     /// [`Self::Text`] once the function's `block_offsets` are final. It never

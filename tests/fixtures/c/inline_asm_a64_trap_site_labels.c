@@ -1,4 +1,4 @@
-/* The arm64 bug-table shape: numeric labels defined inside pushed
+/* An arm64 trap-table entry: numeric labels defined inside pushed
  * sections recur across asm instances (each definition is its own
  * per-instance symbol), and the table holds a cross-section reference
  * into the merged string section (`.long 14472b - .`). */

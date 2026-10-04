@@ -1768,7 +1768,7 @@ fn tab_separated_directives_and_trailing_whitespace() {
 
 #[test]
 fn gas_macro_sysreg_read_folds_to_inst_word() {
-    // The read_sysreg_s construct: an `.irp`-generated `.L__gpr_num_*`
+    // A system-register read: an `.irp`-generated `.L__gpr_num_*`
     // table, a local `mrs_s` macro, its invocation, and `.purgem`. `%0`
     // stands for the destination register x1.
     let text = concat!(
@@ -1838,7 +1838,7 @@ fn gas_macro_empty_arguments_bind_like_gnu_as() {
 #[test]
 fn gas_macro_expansions_are_independent_per_call() {
     // A second expansion redefines the macro and equates cleanly: the
-    // per-call tables are what makes two read_sysreg_s in one unit work.
+    // per-call tables are what makes two system-register reads in one unit work.
     let block = |sreg: &str, reg: &str| {
         let text = alloc::format!(
             concat!(

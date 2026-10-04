@@ -2,7 +2,7 @@
    compound literal `&(T[]){ ... }[i].member.member` is an address constant.
    The literal is an anonymous static array; a following `[i]` and `.member`
    chain designates the object whose address is stored. Exercised as an array
-   of pointers, the shape a sysfs attribute table uses. */
+   of pointers, the shape of an attribute table. */
 
 struct inner {
     int tag;

@@ -189,9 +189,9 @@ fn overaligned_automatic_aarch64_realigns_prologue() {
 
 #[test]
 fn inline_asm_gas_macro_sysreg_read_encodes_numeric_mrs() {
-    // A system-register read through assembler macros: `DEFINE_GPR_NUMS`
-    // builds the `.L__gpr_num_*` register-number table with `.irp`/`.equ`,
-    // a local `mrs_s` macro emits the numeric MRS through `.inst`, and `.purgem`
+    // A system-register read through assembler macros: an `.irp`/`.equ`
+    // loop builds the `.L__gpr_num_*` register-number table, a local
+    // `mrs_s` macro emits the numeric MRS through `.inst`, and `.purgem`
     // removes it. Two reads in one unit must both encode, each expansion
     // independent. The sysreg field is byte-identical to GNU as: a read of
     // sys_reg(3,0,0,0,0) (midr_el1) is 0xd538_0000 | Rt and of
@@ -200,27 +200,27 @@ fn inline_asm_gas_macro_sysreg_read_encodes_numeric_mrs() {
     use crate::c5::linker::parse_native_elf;
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = r#"
-#define __stringify_1(x...) #x
-#define __stringify(x...)   __stringify_1(x)
-#define __emit_inst(x)      ".inst " __stringify((x)) "\n\t"
-#define DEFINE_GPR_NUMS \
+#define STR_1(x...) #x
+#define STR(x...)   STR_1(x)
+#define EMIT_INST(x)      ".inst " STR((x)) "\n\t"
+#define GPR_NUMS \
 "\t.irp\tnum,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30\n" \
 "\t.equ\t.L__gpr_num_x\\num, \\num\n" \
 "\t.equ\t.L__gpr_num_w\\num, \\num\n" \
 "\t.endr\n" \
 "\t.equ\t.L__gpr_num_xzr, 31\n" \
 "\t.equ\t.L__gpr_num_wzr, 31\n"
-#define DEFINE_MRS_S \
-	DEFINE_GPR_NUMS \
+#define MRS_S_DEF \
+	GPR_NUMS \
 "\t.macro\tmrs_s, rt, sreg\n" \
-	__emit_inst(0xd5200000|(\\sreg)|(.L__gpr_num_\\rt)) \
+	EMIT_INST(0xd5200000|(\\sreg)|(.L__gpr_num_\\rt)) \
 "\t.endm\n"
-#define UNDEFINE_MRS_S "\t.purgem\tmrs_s\n"
-#define __mrs_s(v, r) DEFINE_MRS_S "\tmrs_s " v ", " __stringify(r) "\n" UNDEFINE_MRS_S
+#define MRS_S_UNDEF "\t.purgem\tmrs_s\n"
+#define MRS_S(v, r) MRS_S_DEF "\tmrs_s " v ", " STR(r) "\n" MRS_S_UNDEF
 #define sys_reg(op0,op1,crn,crm,op2) (((op0)<<19)|((op1)<<16)|((crn)<<12)|((crm)<<8)|((op2)<<5))
-#define read_sysreg_s(r) ({ unsigned long __val; __asm__ volatile(__mrs_s("%0", r) : "=r"(__val)); __val; })
+#define read_sreg(r) ({ unsigned long __val; __asm__ volatile(MRS_S("%0", r) : "=r"(__val)); __val; })
 unsigned long two_reads(void) {
-	return read_sysreg_s(sys_reg(3,0,0,0,0)) + read_sysreg_s(sys_reg(3,0,0,4,0));
+	return read_sreg(sys_reg(3,0,0,0,0)) + read_sreg(sys_reg(3,0,0,4,0));
 }
 "#;
     let copts = CompileOptions {
@@ -9714,8 +9714,8 @@ fn file_scope_asm_numeric_labels_bind_per_definition() {
 #[test]
 fn file_scope_asm_weak_and_set_emit_weak_symbols() {
     // `.set alias, target` + `.weak alias` is a weak alias of a function
-    // in the unit (the conditional-syscall shape): FUNC, WEAK, the
-    // target's value and size. `.weak` on a section label binds the label
+    // in the unit (an optional entry point aliased to a stub): FUNC, WEAK,
+    // the target's value and size. `.weak` on a section label binds the label
     // weak; `.weak` of a name the unit neither defines nor references
     // yields no entry at all, as GNU as 2.46.1 emits none for one.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
@@ -10358,7 +10358,7 @@ fn asm_section_is_not_duplicated_by_branch_relaxation() {
 #[test]
 fn asm_section_numeric_labels_are_per_instance_unique() {
     // GNU as numeric labels inside a section are local to one asm instance.
-    // Two expansions of the same bug-table-shaped block must not collide:
+    // Two expansions of the same trap-table block must not collide:
     // each cross-section `.long 14472b - .` relocates to its own copy of the
     // string in `.bstr`, a distinct per-instance symbol. Without unique
     // identities the second `14472:` is a duplicate-label error, or both
@@ -10436,7 +10436,7 @@ fn asm_section_numeric_labels_are_per_instance_unique() {
 
 #[test]
 fn asm_section_org_pads_to_label_plus_operand() {
-    // `.org 2b + %c0` (the `__bug_table` entry size) pads to a section-local
+    // `.org 2b + %c0` (a table entry's size) pads to a section-local
     // label's offset plus an `i`-class operand constant. Two instances of the
     // numeric label `2` stay independent. Byte-identical padding to gas.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
@@ -10857,11 +10857,11 @@ fn asm_string_operand_data_is_emitted() {
 #[test]
 fn asm_section_operand_symbol_relocates_to_data() {
     // `.long %c0 - .` where `%c0` is an `i`-class operand naming a link-time
-    // address (a string literal, the bug table's file pointer) relocates
+    // address (a string literal, a trap-table entry's file name) relocates
     // PC-relative to that data. The string must be emitted -- it is interned
     // while lexing the operand and referenced only by the section field. A
     // second field adds a constant operand to the base (`.quad %c1 + %c2 - .`,
-    // the static-key jump entry). Byte-structure identical to gas.
+    // a patch-site entry's key). Byte-structure identical to gas.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "\
         int probe(void) {\n\
@@ -10929,12 +10929,13 @@ fn asm_section_operand_symbol_relocates_to_data() {
 #[test]
 fn asm_section_operand_extern_symbol_relocates_to_symbol() {
     // `.long %c0 - .` / `.quad %c0 + %c1 - .` where `%c0` is an `i`-class
-    // operand naming a *cross-TU* address (`&extern_var`, a static key defined
-    // in another unit) relocates against that symbol, not this unit's `.data`
-    // image -- a `.data + off` relocation would name unrelated local bytes. A
-    // constant offset folds into the addend, whether spelled `%c0 + %c1` or
-    // folded into the operand (`&sym + n`). Byte-identical to gas: the
-    // referenced symbol, PC-relative type by field width, and the addend.
+    // operand naming a *cross-TU* address (`&extern_var`, a patch-site key
+    // defined in another unit) relocates against that symbol, not this unit's
+    // `.data` image -- a `.data + off` relocation would name unrelated local
+    // bytes. A constant offset folds into the addend, whether spelled
+    // `%c0 + %c1` or folded into the operand (`&sym + n`). Byte-identical to
+    // gas: the referenced symbol, PC-relative type by field width, and the
+    // addend.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "\
         struct sk { int x; };\n\
@@ -11539,11 +11540,12 @@ fn asm_section_pcrel_label_minus_operand_const_relocates_like_gas() {
 
 #[test]
 fn asm_section_goto_label_relocates_to_block() {
-    // `.long %l0 - .` (a static-key jump entry) relocates PC-relative to an
-    // `asm goto` label's block. The block's text offset is not known when the
-    // section materializes, so the reloc carries the block and is rewritten
-    // after layout. The label ref lands in `.text`, alongside the template's
-    // own `1b`, while the operand address (`%c0`) targets the data image.
+    // `.long %l0 - .` (a patch-site entry's branch target) relocates
+    // PC-relative to an `asm goto` label's block. The block's text offset is
+    // not known when the section materializes, so the reloc carries the block
+    // and is rewritten after layout. The label ref lands in `.text`, alongside
+    // the template's own `1b`, while the operand address (`%c0`) targets the
+    // data image.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "\
         static int key;\n\
@@ -14079,8 +14081,8 @@ fn inline_asm_branch_to_local_definition_stays_local() {
 }
 
 /// A branch target assembled from template text plus a `%c` operand
-/// names the symbol the substituted text spells: `__get_user_%c0` with
-/// a constant 4 relocates against `__get_user_4`. Resolution therefore
+/// names the symbol the substituted text spells: `name_%c0` with a
+/// constant 4 relocates against `name_4`. Resolution therefore
 /// happens after substitution, not at template-parse time.
 #[cfg(feature = "native-emit")]
 #[test]
@@ -14407,9 +14409,8 @@ int main(void) { return 0; }
 #[test]
 fn empty_and_flexible_arrays_decay_in_static_initializers() {
     // The array side of the address-constant rule: a zero-length array
-    // (`u8 none[] = {}` -- crypto/rsassa-pkcs1.c, virtio feature
-    // tables) and a flexible array member (`fontdata.data` --
-    // lib/fonts) still decay to addresses, C99 6.3.2.1p3 / GNU
+    // (`u8 none[] = {}`) and a flexible array member
+    // (`fontdata.data`) still decay to addresses, C99 6.3.2.1p3 / GNU
     // zero-length arrays; only bare non-array scalars are values.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = r#"typedef unsigned char u8;
@@ -14588,15 +14589,15 @@ fn inline_asm_string_directives_follow_gas() {
     "\t.asciz \"GPL\"\n"
     "\t.ascii \"\" \"\\0\"\n"
     "\t.asciz \"\"\n"
-    "\t.ascii \"KVM\" \"\\0\"\n"
+    "\t.ascii \"XYZ\" \"\\0\"\n"
     "\t.asciz \"a\", \"b\"\n"
     "\t.ascii \"\\101\\x42\"\n"
     "\t.string \"s\"\n"
     ".previous\n");
 int main(void) { return 0; }
 "#;
-    // gas emits: GPL\0, \0, \0, KVM\0, a\0b\0, AB, s\0.
-    const WANT: &[u8] = b"GPL\0\0\0KVM\0a\0b\0ABs\0";
+    // gas emits: GPL\0, \0, \0, XYZ\0, a\0b\0, AB, s\0.
+    const WANT: &[u8] = b"GPL\0\0\0XYZ\0a\0b\0ABs\0";
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
         let program = Compiler::new(String::from(src)).compile().expect("compile");
         let opts = NativeOptions {

@@ -771,7 +771,7 @@ impl AsmOperands<'_> {
     }
 
     /// A symbol name with its operand references substituted, which is what
-    /// makes `__get_user_%c0` name `__get_user_4`.
+    /// makes `helper_%c0` name `helper_4`.
     fn symbol_name(&self, name: &str) -> Result<alloc::string::String, alloc::string::String> {
         crate::c5::asm::resolve_asm_symbol_target(name, &crate::c5::asm::A64_SYMBOL_SUBST, &|i| {
             self.const_of(i)

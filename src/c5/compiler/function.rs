@@ -343,7 +343,7 @@ impl Compiler {
                 ty = super::types::absorb_function_level(ty, super::types::ptr_depth_of(base));
             }
             // A parameter that is a pointer to a function-pointer typedef
-            // base (`curl_write_callback *p`) gains one fn-pointer
+            // base (`write_fn *p`) gains one fn-pointer
             // indirection level per leading `*`, matching the general
             // declarator path. Without it the fn-pointer decay no-op
             // (`*fp == fp`) misfires on `*p`, landing the load/store one
@@ -412,7 +412,7 @@ impl Compiler {
                 self.report_implicit_int(ImplicitInt::Declarator(param_idx), param_line)?;
             }
             // A parameter may carry a trailing attribute
-            // (`PyObject *op __attribute__((unused))`).
+            // (`T *op __attribute__((unused))`).
             self.skip_attribute_specifiers()?;
             let param_maybe_unused = self.pending.attr_maybe_unused;
             // Per C99 6.7.5.3p7, a named array parameter is adjusted to a

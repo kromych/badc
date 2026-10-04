@@ -375,10 +375,10 @@ impl Compiler {
             // (correct for a single nested statement, not for sibling
             // decls), which drops every initializer but the last.
             // A statement-expression initializer interleaves its own
-            // sub-statements here (e.g. the `while` of a `qatomic_read`
-            // build-assert); skip them as `parse_block_stmt` does, else
-            // the wrapped for-init Compound lists a nested `while`'s body
-            // as a sibling and the walker runs it unconditionally.
+            // sub-statements here (e.g. the `while` of a build-assert in
+            // an atomic-read macro); skip them as `parse_block_stmt` does,
+            // else the wrapped for-init Compound lists a nested `while`'s
+            // body as a sibling and the walker runs it unconditionally.
             if init_after > init_before {
                 let ids: alloc::vec::Vec<super::super::ast::StmtId> = (init_before..init_after)
                     .filter(|&i| !self.in_stmt_expr_range(i))

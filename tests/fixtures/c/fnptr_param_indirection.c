@@ -7,8 +7,8 @@
 // The c5 parameter parser added the pointer level to the type but
 // not to the fn-pointer indirection count, so `*out = v` and
 // `return *in` on such a parameter mis-fired the decay no-op and
-// read/wrote at the pointer's own slot instead of through it. This
-// is the shape libcurl's setopt / write-callback plumbing uses.
+// read/wrote at the pointer's own slot instead of through it.
+// Callback registration through an out-parameter takes this shape.
 //
 // Returns 0 only when the store and load through the parameter
 // pointer address the pointed-to function-pointer object.

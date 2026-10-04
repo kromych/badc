@@ -51,7 +51,7 @@ fn split_operand_ref(s: &str) -> Option<(Option<u8>, u8, &str)> {
 }
 
 /// True when `s` can spell a branch-target symbol name: an identifier body
-/// that may embed operand references (`__get_user_%c0`). The leading
+/// that may embed operand references (`helper_%c0`). The leading
 /// identifier character keeps a whole-operand target (`*%rax`, `%c0`) out.
 /// Whether each reference is substitutable is settled at emit time, once the
 /// operands' constants are known.

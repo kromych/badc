@@ -3069,7 +3069,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
         // reference; the target is resolved to a rel32 by a relocation, not
         // parsed as a register / immediate / memory operand. A name the
         // template defines as a label resolves locally instead. The name may
-        // embed operand references (`call __get_user_%c0`), which are
+        // embed operand references (`call helper_%c0`), which are
         // substituted at emit time, so the text is kept verbatim here.
         let is_symbol_target = !rest.is_empty()
             && (crate::c5::asm::is_asm_symbol_template(rest)

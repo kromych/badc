@@ -565,9 +565,9 @@ fn section_data(bytes: &[u8], want: &str) -> Vec<u8> {
     Vec::new()
 }
 
-/// The exception-table macros of `asm/asm-extable.h` each paste their own
-/// copy of the `.L__gpr_num_*` table from `asm/gpr-num.h`, so a template
-/// with two entries assigns every name twice with a read in between. Both
+/// Exception-table macros that each paste their own copy of a
+/// `.L__gpr_num_*` register-number table make a template with two entries
+/// assign every name twice with a read in between. Both
 /// reads fold against the assignment in effect, so neither assignment may
 /// reach the code stream: what is left of a function-body template is an
 /// instruction stream, and no backend encodes `.set` as an instruction.
@@ -577,7 +577,7 @@ fn section_data(bytes: &[u8], want: &str) -> Vec<u8> {
 ///
 /// The section is GNU as 2.46.1's for the same source: two PC-relative
 /// `.long`s per entry, then the type and data shorts as `02 00 ff 03`
-/// (`EX_TYPE_UACCESS_ERR_ZERO`, and 31 in both 5-bit register fields).
+/// (type 2, and 31 in both 5-bit register fields).
 #[test]
 fn a_reassigned_gpr_number_table_leaves_the_exception_table_encodable() {
     const HEAD: &str = r#"
@@ -1625,7 +1625,7 @@ fn the_dependency_scan_follows_the_code_model() {
 #[test]
 fn m16_selects_the_realmode_cpuid_check() {
     const SRC: &str = concat!(
-        "\t.code16\n\t.text\nverify_cpu:\n\tpushf\n\tpush\t$0\n\tpopf\n",
+        "\t.code16\n\t.text\nprobe_cpu:\n\tpushf\n\tpush\t$0\n\tpopf\n",
         "#ifndef __x86_64__\n",
         "\tpushfl\n\tpopl\t%eax\n\tmovl\t%eax,%ebx\n\txorl\t$0x200000,%eax\n",
         "\tpushl\t%eax\n\tpopfl\n\tpushfl\n\tpopl\t%eax\n\tcmpl\t%eax,%ebx\n",
@@ -1641,7 +1641,7 @@ fn m16_selects_the_realmode_cpuid_check() {
     ];
     // movl $0x0,%eax; cpuid
     const LEAF0: &[u8] = &[0x66, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x0f, 0xa2];
-    let d = dir("m16-verify-cpu");
+    let d = dir("m16-cpuid-probe");
     write(&d, "vc.S", SRC);
     run_ok(
         &d,

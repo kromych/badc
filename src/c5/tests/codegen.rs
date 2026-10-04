@@ -11904,37 +11904,36 @@ fn constant_p_marker_folds_through_an_aggregate_returning_splice() {
 
 /// A local whose address escapes keeps its frame slot, so every read of
 /// it is a reload. What the body last stored into that slot still bounds
-/// the reload, which is what decides the signedness tag `clamp()` and
-/// `min()` assert on. `drivers/iio/adc/ad7768-1.c` is this shape:
-/// `regmap_read(&val)` takes the address, `val &= GENMASK(2, 0)` bounds
-/// it, and `clamp(val, 1, rdev->desc->n_voltages)` compares it against
-/// an `unsigned`. Without the mask the tag really is open and the call
-/// stays, and without `-O` both stay, as they do under gcc.
+/// the reload, which is what decides the signedness tag a type-checked
+/// `clamp` asserts on: a call fills `val` through its address, `val &= 7`
+/// bounds it, and the clamp compares it against an `unsigned` field.
+/// Without the mask the tag really is open and the call stays, and
+/// without `-O` both stay, as they do under gcc.
 #[test]
 fn stored_bound_decides_a_clamp_signedness_assert() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
     const SRC: &str = "\
         extern void __compiletime_assert_612(void) __attribute__((__error__(\"clamp() signedness error\")));\n\
         extern void __compiletime_assert_613(void) __attribute__((__error__(\"held\")));\n\
-        extern int regmap_read(void *m, unsigned reg, int *val);\n\
-        struct desc { unsigned int n_voltages; };\n\
-        struct rdev { struct desc *desc; };\n\
+        extern int read_reg(void *m, unsigned reg, int *val);\n\
+        struct desc { unsigned int count; };\n\
+        struct dev { struct desc *desc; };\n\
         #define TAG(v) ((((typeof(v))(-1)) < (typeof(v))1) \\\n\
                 ? (2 + (__builtin_constant_p((long long)(v) >= 0) && ((long long)(v) >= 0))) \\\n\
                 : (1 + 2 * (sizeof(v) < 4)))\n\
         #define CLAMP(a, b, c, fail) ({ __auto_type __v = (a); __auto_type __l = (b); __auto_type __h = (c); \\\n\
                 do { if (!(!(!(TAG(__v) & TAG(__l) & TAG(__h))))) fail(); } while (0); \\\n\
                 ((__v) >= (__h) ? (__h) : ((__v) <= (__l) ? (__l) : (__v))); })\n\
-        int bounded(void *m, struct rdev *rdev) {\n\
+        int bounded(void *m, struct dev *dev) {\n\
             int val;\n\
-            if (regmap_read(m, 0x2c, &val)) return -1;\n\
+            if (read_reg(m, 0x2c, &val)) return -1;\n\
             val = val & 0x7;\n\
-            return CLAMP(val, 1, rdev->desc->n_voltages, __compiletime_assert_612) - 1;\n\
+            return CLAMP(val, 1, dev->desc->count, __compiletime_assert_612) - 1;\n\
         }\n\
-        int open_range(void *m, struct rdev *rdev) {\n\
+        int open_range(void *m, struct dev *dev) {\n\
             int val;\n\
-            if (regmap_read(m, 0x2c, &val)) return -1;\n\
-            return CLAMP(val, 1, rdev->desc->n_voltages, __compiletime_assert_613) - 1;\n\
+            if (read_reg(m, 0x2c, &val)) return -1;\n\
+            return CLAMP(val, 1, dev->desc->count, __compiletime_assert_613) - 1;\n\
         }\n";
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
         let prog = crate::Compiler::with_options(

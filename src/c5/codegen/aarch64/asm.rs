@@ -1772,7 +1772,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
         // symbol (`bl schedule`); the target is resolved to a rel26 by the fixup
         // pass, not parsed as a register operand. A local-label branch (`b 1f`)
         // starts with a digit, so it is excluded. The name may embed operand
-        // references (`bl __get_user_%c0`), which are substituted at emit time,
+        // references (`bl helper_%c0`), which are substituted at emit time,
         // so the text is kept verbatim here.
         if matches!(mnem, "bl" | "b") {
             let is_symbol_target = !rest.is_empty()

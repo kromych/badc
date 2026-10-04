@@ -13,7 +13,7 @@ static long mix_iu(int a, unsigned c) { return (int)(a | c); }
 static long xor_ui(unsigned a, int c) { return (int)(a ^ c); }
 static long and_ui(unsigned a, int c) { return (int)(a & c); }
 
-// The TclGetInt4AtPtr shape: build a 32-bit value from four bytes with
+// A big-endian operand read: build a 32-bit value from four bytes with
 // the high bit set, cast to int, use it as a (negative) pointer offset.
 static long pc_advance(unsigned char *pc, unsigned char *base) {
     int off = (int)(((unsigned)pc[0] << 24) | (pc[1] << 16)

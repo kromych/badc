@@ -51,8 +51,8 @@ typedef unsigned int gid_t;
 #endif
 // The UCRT spells `mode_t` as `_mode_t`, an `unsigned short`, and the
 // Windows `struct stat` carries `st_mode` at that width. Source that
-// declares its own `mode_t` on Windows -- as CPython's `_stat.c` does,
-// because MSVC's headers leave it to the program -- then redefines the
+// declares its own `mode_t` on Windows -- MSVC's headers leave it to
+// the program -- then redefines the
 // name to the same type, which C11 6.7p3 permits. glibc's is `unsigned
 // int`, Darwin's `__uint16_t`.
 #if defined(__BADC_WINDOWS__) || defined(__APPLE__)

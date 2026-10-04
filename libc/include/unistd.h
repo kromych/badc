@@ -382,8 +382,7 @@ ssize_t write(int fd, const void *buf, size_t n);
 ssize_t pwrite(int fd, const void *buf, size_t n, off_t offset);
 #ifdef __linux__
 // Linux large-file variants (`_LARGEFILE64_SOURCE`). The offset and
-// result are 64-bit; programs configured with `USE_PREAD64` (e.g.
-// sqlite) reach for these names directly.
+// result are 64-bit; a program may reach for these names directly.
 long pread64(int fd, void *buf, unsigned long n, long offset);
 long pwrite64(int fd, const void *buf, unsigned long n, long offset);
 #endif
@@ -874,8 +873,8 @@ struct rusage {
 #endif
 
 // confstr(3) selectors. As with the sysconf table, the numeric value is
-// the one the bound libc reads -- different on Darwin and Linux. CPython
-// builds os.confstr_names from a table gated on `#ifdef _CS_*`.
+// the one the bound libc reads -- different on Darwin and Linux. A
+// program may build a name table gated on `#ifdef _CS_*`.
 #ifdef __APPLE__
 #define _CS_PATH                     1
 #define _CS_XBS5_ILP32_OFF32_CFLAGS  20
@@ -924,8 +923,8 @@ struct rusage {
 #define _CS_XBS5_LPBIG_OFFBIG_LINTFLAGS 1115
 #endif
 
-// pathconf(3)/fpathconf(3) selectors. CPython builds os.pathconf_names
-// from a table gated on `#ifdef _PC_*`.
+// pathconf(3)/fpathconf(3) selectors. A program may build a name table
+// gated on `#ifdef _PC_*`.
 #ifdef __APPLE__
 #define _PC_LINK_MAX                 1
 #define _PC_MAX_CANON                2

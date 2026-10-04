@@ -179,8 +179,8 @@
 // Opaque storage for the POSIX thread types. The libc reads the real
 // platform layout through a passed pointer; c5 only needs each object to
 // occupy the exact platform size and alignment, because these types are
-// embedded in larger structs (CPython's `_PyRuntime`) whose field
-// offsets a separately-compiled module reads back. An over-wide object
+// embedded in larger structs whose field offsets a separately-compiled
+// module reads back. An over-wide object
 // shifts every later field. The leading word carries 8-byte alignment;
 // macOS additionally uses it for the signature the static initialisers
 // seed (its libpthread rejects a zero-signature statically-allocated
@@ -253,8 +253,7 @@ typedef struct __c5_pthread_attr pthread_attr_t;
 //
 // `pthread_key_t` and `pthread_once_t` must match the platform
 // layout exactly, not a wider catch-all: they appear inside
-// structs whose layout a program reads back (CPython's `Py_tss_t`
-// wraps `pthread_key_t` in `_PyRuntime`, and a dlopen'd extension
+// structs whose layout a program reads back (a dlopen'd extension
 // computes field offsets against the host's struct). macOS uses
 // `unsigned long` for the key and the 16-byte signature-carrying
 // struct for the once control; Linux uses `unsigned int` / `int`.

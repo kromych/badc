@@ -265,7 +265,7 @@ int fstat(int fd, struct stat *buf);
 
 // statfs / statvfs -- filesystem-level metadata. The real layout
 // differs across platforms; this opaque buffer is wide enough for
-// every common shape so libc can write into it. SQLite reads
+// every common shape so libc can write into it. A program may read
 // f_bsize after a statfs to size scratch buffers; the offset of
 // f_bsize varies, so we expose typedefs that cover the union of
 // known layouts.

@@ -1,5 +1,5 @@
 
-inline_asm_a64_chained_alternatives.aarch64:	file format elf64-littleaarch64
+inline_asm_a64_chained_replacements.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 

@@ -1,11 +1,11 @@
 // snapshot-flags: -c -mcmodel=kernel -mfunction-return=thunk-extern -fcf-protection=branch
-// `BUG()`: a trapping asm followed by `__builtin_unreachable()`. The
+// `TRAP()`: a trapping asm followed by `__builtin_unreachable()`. The
 // statement seals its block, so what the source places after it -- the
 // `return` of a `default:` arm, the fall-off return of an inlined
-// helper -- is unreachable and not emitted; objtool reports every
-// instruction after a trap that no path reaches.
+// helper -- is unreachable and not emitted: no instruction after a trap
+// is left that no path reaches.
 
-#define BUG()                                                                      \
+#define TRAP()                                                                     \
 	do {                                                                       \
 		asm volatile("1:\tud2\n" : : "i"(__FILE__), "i"(__LINE__), "i"(0), \
 			     "i"(12));                                             \
@@ -22,7 +22,7 @@ static _Bool wants_ingress(int action)
 	case 4:
 		return 1;
 	default:
-		BUG();
+		TRAP();
 	}
 }
 
@@ -39,7 +39,7 @@ int run_request(int test_case)
 	case 2:
 		return 6;
 	default:
-		BUG();
+		TRAP();
 		return -22;
 	}
 }

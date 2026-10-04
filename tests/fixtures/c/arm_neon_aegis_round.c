@@ -1,7 +1,7 @@
-/* <arm_neon.h>: the intrinsics and vector-operator mix the kernel's aegis128
- * NEON unit uses -- table lookup with fallback, byte equality, halfword
+/* <arm_neon.h>: the intrinsics and vector-operator mix of an AEGIS-128 NEON
+ * round -- table lookup with fallback, byte equality, halfword
  * reversal, across-lanes minimum, 64-bit lane composition, and its
- * mix-columns step verbatim -- each checked against a scalar reference.
+ * mix-columns step -- each checked against a scalar reference.
  * Native-only on AArch64; elsewhere only the trailing return runs. */
 
 #if defined(__aarch64__)

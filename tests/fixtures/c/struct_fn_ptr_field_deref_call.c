@@ -3,7 +3,7 @@
 // the stored function pointer; the unary `*` is the C99-mandated
 // decay no-op.
 //
-// Lua's `(*g->frealloc)(g->ud, NULL, 0, size)` in `lmem.c`
+// An allocator hook called as `(*g->frealloc)(g->ud, NULL, 0, size)`
 // follows the latter shape. Without this fix the struct-member
 // load left `fn_ptr_chain_depth` at -1, the unary `*` handler
 // emitted a spurious `Li` that loaded through the function's

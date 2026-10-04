@@ -7,8 +7,8 @@
 // Operand placement is the statement's own effect, not the template's,
 // so an output still receives its value: an input tied to it by a
 // matching constraint, or by naming the same fixed register, has to
-// reach the output object. That is the `RELOC_HIDE` idiom the Linux
-// per-CPU accessors are built on.
+// reach the output object. A macro that hides a pointer from the
+// optimizer this way relies on it.
 
 static int sink;
 

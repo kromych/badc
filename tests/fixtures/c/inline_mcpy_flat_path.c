@@ -7,9 +7,8 @@
    caller's object, and the source is any value -- a compound-literal
    template or, as here, the caller's argument.
 
-   `HUF_decodeSymbolX2` in the kernel's zstd decompressor is the first
-   shape: a `__always_inline` body whose only obstacle was a two-byte
-   `ZSTD_memcpy` through a `void *` parameter. */
+   A decoder step is the first shape: a `__always_inline` body whose only
+   obstacle was a two-byte `memcpy` through a `void *` parameter. */
 
 struct entry {
 	unsigned short sequence;

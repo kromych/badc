@@ -9,7 +9,7 @@
 // expansion rejects it. Linking is the assertion; main checks the
 // values the copies compute.
 
-#define BUILD_BUG_ON(cond, tag)                                                                    \
+#define FAIL_IF(cond, tag)                                                                         \
     do {                                                                                           \
         extern void compiletime_assert_##tag(void);                                                \
         if (!(!(cond)))                                                                            \
@@ -38,14 +38,14 @@ struct counter_bank {
 static const int event_ids[NR_FIXED] = {11, 22, 33};
 
 static __attribute__((always_inline)) unsigned long long eventsel_of(unsigned int index) {
-    BUILD_BUG_ON(index >= NR_FIXED, 670);
+    FAIL_IF(index >= NR_FIXED, 670);
     return (unsigned long long)event_ids[index] << 8;
 }
 
 // A second helper reached from the same loop, guarding the derived
 // slot number rather than the index itself.
 static __attribute__((always_inline)) unsigned int slot_of(unsigned int index) {
-    BUILD_BUG_ON(FIXED_BASE_IDX + index >= 64u, 671);
+    FAIL_IF(FIXED_BASE_IDX + index >= 64u, 671);
     return index + FIXED_BASE_IDX;
 }
 

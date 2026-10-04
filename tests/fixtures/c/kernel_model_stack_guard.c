@@ -1,9 +1,8 @@
 // snapshot-flags: -c -mcmodel=kernel -fstack-protector-strong
-// x86-64 kernel code model, stack protector on, no guard register named, as
-// Linux 5.10 to 6.12 build: the canary is read from %gs:0x28, the per-CPU
-// slot the kernel fills, as gcc and clang read it. The shape is
-// arch/x86/kernel/idt.c's. aarch64 rejects the flag, so this snapshots for
-// x64 only.
+// x86-64 kernel code model, stack protector on, no guard register named:
+// the canary is read from %gs:0x28, as gcc and clang read it under this
+// model, around an interrupt-gate setup with a local descriptor. aarch64
+// rejects the flag, so this snapshots for x64 only.
 
 struct idt_data {
     unsigned int vector;

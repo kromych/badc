@@ -486,7 +486,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
 
-<__free_kfree>:
+<__free_heap>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	ldr	x0, [x0]

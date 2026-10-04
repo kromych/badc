@@ -4,9 +4,9 @@
    that only masks the value to `bit_width` drops every set bit above
    bit 0, so `flag = x & 4` lands as 0 for every x.
 
-   The shape is the kernel's `data->allow_reinit = flags &
-   PERCPU_REF_ALLOW_REINIT`, where the tested flag sits above the
-   field's own bit. Non-`_Bool` fields keep the C99 6.7.2.1 truncation. */
+   The shape is `data->flag = flags & FLAG_BIT`, where the tested flag
+   sits above the field's own bit. Non-`_Bool` fields keep the C99
+   6.7.2.1 truncation. */
 
 struct Ref {
     _Bool force_atomic : 1;

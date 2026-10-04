@@ -2,9 +2,8 @@
    initializers, one string literal each -- NOT a brace-wrapped string
    initializing one array. The array path applied the brace-wrap unwrap
    whenever the first element was a wide string, regardless of the element
-   type, so `wchar_t *names[] = { L"a", L"b" }` (the edk2 firmware form
-   `CHAR16 *mDeviceTypeStr[]`) was rejected: after the first literal it
-   demanded the closing `}`. The unwrap now requires a wchar_t-width scalar
+   type, so `wchar_t *names[] = { L"a", L"b" }` was rejected: after the
+   first literal it demanded the closing `}`. The unwrap now requires a wchar_t-width scalar
    element, mirroring the narrow char[] guard, so a pointer array stays a
    brace list. The legitimate brace-wrapped and bare wide-array forms still
    work. Comparisons use code points, which hold at either wchar_t width. */

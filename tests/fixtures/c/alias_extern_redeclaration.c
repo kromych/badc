@@ -1,6 +1,6 @@
 /* An `extern` declaration carrying `alias("target")` defines the name at
  * the target's storage. A later no-initializer redeclaration of the name
- * (`extern typeof(x) x;` precedes the kernel's export annotations) denotes
+ * (`extern typeof(x) x;`, as an export macro writes it) denotes
  * that definition; it must not allocate fresh storage or detach the name
  * from the target's bytes. */
 

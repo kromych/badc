@@ -1,7 +1,7 @@
 /* A parenthesized constant conditional in an initializer element may be
    followed by any binary operator or another `?:`; the whole chain folds
-   as one constant (the kernel SPI-NAND op tables use
-   `(cond ? a : b) | (cond ? a : b) << 8` for 2-byte opcodes). */
+   as one constant (`(cond ? a : b) | (cond ? a : b) << 8` builds a 2-byte
+   opcode). */
 typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned long long u64;

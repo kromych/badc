@@ -6,13 +6,11 @@
 // leaves it in the frame.
 //
 // The loop condition excludes `ss_done`, so the arm the switch keeps for
-// it is unreachable; proving that needs `state` in SSA form. This is the
-// shape of the kernel's `scoped_seqlock_read` (include/linux/seqlock.h),
-// whose `__scoped_seqlock_bug` is declared and never defined precisely
-// so that a compiler which cannot prove the state impossible fails the
-// link rather than silently emitting the arm. `scoped_seqlock_bug` here
-// serves the same purpose, so linking is the assertion. gcc 16 links
-// this at -O2 and fails to at -O0.
+// it is unreachable; proving that needs `state` in SSA form. The arm calls
+// `unreachable_state_check`, declared and never defined, so a compiler
+// that cannot prove the state impossible fails the link rather than
+// silently emitting the arm: linking is the assertion. gcc 16 links this
+// at -O2 and fails to at -O0.
 //
 // Two properties this fixture needs, which a reduction of this shape
 // tends to lose:
@@ -37,7 +35,7 @@ struct ss_tmp {
     void *lock;
 };
 
-extern void scoped_seqlock_bug(void);
+extern void unreachable_state_check(void);
 
 // The sequence counter and the data it protects. Both volatile: the
 // reader must not be able to fold the retry away, or the loop would
@@ -59,7 +57,7 @@ static int seqretry(unsigned long started) {
 static inline void ss_next(struct ss_tmp *s) {
     switch (s->state) {
     case ss_done:
-        scoped_seqlock_bug();
+        unreachable_state_check();
         return;
     case ss_lock:
         s->state = ss_done;

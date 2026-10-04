@@ -5,9 +5,9 @@
 // `__builtin_types_compatible_p` guard rejects a decayed pointer -- and
 // evaluates to 0 for an empty array and N for a sized one.
 #define IS_ARRAY(x) (!__builtin_types_compatible_p(typeof(x), typeof(&(x)[0])))
-#define BUILD_BUG_STRUCT(x) struct { int : (x) ? -1 : 1; }
-#define BUILD_BUG_ZERO(x) (sizeof(BUILD_BUG_STRUCT(x)) - sizeof(BUILD_BUG_STRUCT(x)))
-#define ARRAY_SIZE(x) ((sizeof(x) / sizeof((x)[0])) + BUILD_BUG_ZERO(!IS_ARRAY(x)))
+#define FAIL_STRUCT(x) struct { int : (x) ? -1 : 1; }
+#define ZERO_OR_FAIL(x) (sizeof(FAIL_STRUCT(x)) - sizeof(FAIL_STRUCT(x)))
+#define ARRAY_SIZE(x) ((sizeof(x) / sizeof((x)[0])) + ZERO_OR_FAIL(!IS_ARRAY(x)))
 
 static const struct {
     const char *name;

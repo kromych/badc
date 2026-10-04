@@ -164,7 +164,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_align_above_section.c", "linux-aarch64"), // x86-64 alignment above the section default
     ("inline_asm_x64_mmx_fpu.c", "linux-aarch64"),             // x86-64 MMX movq + fwait
     ("inline_asm_x64_bug_table_org.c", "linux-aarch64"),       // x86-64 ud2 bug-table entry
-    ("inline_asm_x64_jump_label.c", "linux-aarch64"),          // x86-64 jmp %l jump-table entry
+    ("inline_asm_x64_patch_site.c", "linux-aarch64"),          // x86-64 jmp %l jump-table entry
     ("inline_asm_x64_m_global_call.c", "linux-aarch64"), // x86-64 indirect call through an "m" operand
     ("inline_asm_a64_bug_table_labels.c", "linux-x64"),  // aarch64 brk bug-table entry
 ];
@@ -3326,7 +3326,7 @@ fn has_indirect_branch(lines: &[String]) -> bool {
 #[test]
 fn asm_call_of_a_function_operand_is_direct() {
     let dir = TempDir::new("badc-asm-call-const");
-    let obj = compile_fixture_object(&dir, "kernel_asm_call_const_operand.c");
+    let obj = compile_fixture_object(&dir, "asm_call_function_operand.c");
     let Some(dis) = disassemble_relocs(&obj) else {
         eprintln!("no disassembler on PATH; the emitted-code check was skipped");
         return;
@@ -3466,8 +3466,8 @@ fn return_with_uaccess_enabled(dis: &str, func: &str) -> Option<u64> {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn every_path_from_stac_reaches_clac_before_returning() {
-    let dir = TempDir::new("badc-uaccess-phi");
-    let obj = compile_fixture_object(&dir, "kernel_uaccess_phi_branch.c");
+    let dir = TempDir::new("badc-stac-phi");
+    let obj = compile_fixture_object(&dir, "stac_region_phi_branch.c");
     let Some(dis) = disassemble_relocs(&obj) else {
         eprintln!("no disassembler on PATH; the emitted-code check was skipped");
         return;
@@ -3492,9 +3492,9 @@ fn every_path_from_stac_reaches_clac_before_returning() {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn asm_table_call_accessors_with_a_stack_pointer_operand_inline() {
-    let dir = TempDir::new("badc-pvirq");
-    let fixture = fixtures_dir().join("kernel_paravirt_irqflags.c");
-    let obj = dir.join("kernel_paravirt_irqflags.o");
+    let dir = TempDir::new("badc-table-call");
+    let fixture = fixtures_dir().join("asm_table_call_accessors.c");
+    let obj = dir.join("asm_table_call_accessors.o");
     let out = Command::new(env!("CARGO_BIN_EXE_badc"))
         .env_remove("BADC_MAX_GPR")
         .env_remove("BADC_MAX_FPR")
@@ -3507,13 +3507,7 @@ fn asm_table_call_accessors_with_a_stack_pointer_operand_inline() {
         .expect("run badc");
     let log = String::from_utf8_lossy(&out.stderr).into_owned();
     assert!(out.status.success(), "{log}");
-    let accessors = [
-        "arch_local_save_flags",
-        "arch_local_irq_disable",
-        "arch_local_irq_enable",
-        "arch_local_irq_save",
-        "arch_local_irq_restore",
-    ];
+    let accessors = ["save_flags", "irq_off", "irq_on", "irq_save", "irq_restore"];
     for name in accessors {
         assert!(!log.contains(name), "-Winline names {name}: {log}");
     }
@@ -3527,15 +3521,15 @@ fn asm_table_call_accessors_with_a_stack_pointer_operand_inline() {
             "{name} stayed out of line\n{dis}"
         );
     }
-    // `pv_ops.irq` holds save_fl, irq_disable and irq_enable in that
+    // `ops_table.irq` holds save_fl, irq_disable and irq_enable in that
     // order, so a site's call reaches its member at +0, +8 and +16. The
     // RIP-relative addend is that offset less the four bytes from the
     // relocation to the end of the instruction.
     for (func, members) in [
-        ("spin_lock_irqsave", &["pv_ops-0x4", "pv_ops+0x4"][..]),
-        ("spin_unlock_irqrestore", &["pv_ops+0xc"][..]),
-        ("local_irq_enable", &["pv_ops+0xc"][..]),
-        ("local_irq_disable", &["pv_ops+0x4"][..]),
+        ("lock_irqsave", &["ops_table-0x4", "ops_table+0x4"][..]),
+        ("unlock_irqrestore", &["ops_table+0xc"][..]),
+        ("enable_irqs", &["ops_table+0xc"][..]),
+        ("disable_irqs", &["ops_table+0x4"][..]),
     ] {
         let lines = function_lines(&dis, func);
         let text = lines.join("\n");
@@ -3543,7 +3537,7 @@ fn asm_table_call_accessors_with_a_stack_pointer_operand_inline() {
             let folded = lines.windows(2).any(|w| {
                 w[0].contains("call") && w[1].contains("R_X86_64_PC32") && w[1].ends_with(member)
             });
-            assert!(folded, "{func}: no paravirt call at {member}\n{text}");
+            assert!(folded, "{func}: no table call at {member}\n{text}");
         }
     }
 }
@@ -3559,19 +3553,19 @@ fn asm_table_call_accessors_with_a_stack_pointer_operand_inline() {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn a_call_through_a_constant_function_address_is_direct() {
-    let dir = TempDir::new("badc-seamcall");
-    let obj = compile_fixture_object(&dir, "kernel_seamcall_direct_call.c");
+    let dir = TempDir::new("badc-const-fnptr");
+    let obj = compile_fixture_object(&dir, "const_fnptr_arg_direct_call.c");
     let Some(dis) = disassemble_relocs(&obj) else {
         eprintln!("no disassembler on PATH; the emitted-code check was skipped");
         return;
     };
     assert!(
-        !dis.contains("<sc_retry>:"),
+        !dis.contains("<retry_call>:"),
         "the always_inline retry loop stayed out of line"
     );
     for (func, entry) in [
-        ("tdh_vp_rd", "__seamcall_ret"),
-        ("tdh_vp_enter", "__seamcall_saved_ret"),
+        ("read_field", "entry_ret"),
+        ("enter_entry", "entry_saved_ret"),
     ] {
         let lines = function_lines(&dis, func);
         let text = lines.join("\n");
@@ -3583,7 +3577,7 @@ fn a_call_through_a_constant_function_address_is_direct() {
         assert!(
             !lines
                 .iter()
-                .any(|l| l.contains("R_X86_64_32S") && l.contains("__seamcall")),
+                .any(|l| l.contains("R_X86_64_32S") && l.contains("entry_")),
             "{func}: takes the entry's address\n{text}"
         );
         let direct = lines.windows(2).any(|w| {
@@ -3636,8 +3630,8 @@ fn unreachable_instruction(dis: &str, func: &str) -> Option<u64> {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn no_instruction_follows_a_trap_unreached() {
-    let dir = TempDir::new("badc-bug-tail");
-    let obj = compile_fixture_object(&dir, "kernel_bug_unreachable_tail.c");
+    let dir = TempDir::new("badc-trap-tail");
+    let obj = compile_fixture_object(&dir, "trap_seals_unreachable_tail.c");
     let Some(dis) = disassemble_relocs(&obj) else {
         eprintln!("no disassembler on PATH; the emitted-code check was skipped");
         return;

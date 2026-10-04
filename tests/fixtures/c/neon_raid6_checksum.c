@@ -1,8 +1,8 @@
 /* RAID-6 P / Q syndromes of a stripe, computed by an eight-lane NEON chain
- * in the statement order of the kernel's lib/raid6/neon.uc, checked against
- * the scalar GF(2^8) reference, then folded into a checksum through inline
- * asm operands of each kind that binds to a register: a vector, a double, a
- * constant, and a link-time address with and without an offset. Exits 0, or
+ * and checked against the scalar GF(2^8) reference, then folded into a
+ * checksum through inline asm operands of each kind that binds to a
+ * register: a vector, a double, a constant, and a link-time address with
+ * and without an offset. Exits 0, or
  * the number of the first failed check. The NEON path runs on AArch64; the
  * scalar reference alone runs elsewhere. */
 

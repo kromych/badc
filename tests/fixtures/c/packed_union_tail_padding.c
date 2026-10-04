@@ -2,9 +2,9 @@
 // padding its natural alignment added: the union's size becomes the
 // widest member's storage and its alignment becomes 1. Members already
 // sit at offset 0, so nothing moves. Only the size changed, which is
-// what a hardware-register overlay asserts -- the kernel's ionic device
-// registers are a union of a packed aggregate and a word array, sized to
-// the register page.
+// what a hardware-register overlay asserts -- a device register block as
+// a union of a packed aggregate and a word array, sized to the register
+// page.
 
 #include <stddef.h>
 

@@ -1,5 +1,5 @@
 
-inline_asm_alternative_replacement.x64:	file format elf64-x86-64
+inline_asm_a64_chained_replacements.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
@@ -25,32 +25,27 @@ Disassembly of section .text:
                	int3
                	int3
 
-<cs_inner>:
-               	leaq	0x5(%rdi), %rax
-               	retq
-
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movl	$0x25, %edi
-               	callq	<addr>
-               	cmpl	$0x2a, %eax
+               	subq	$0x10, %rsp
+               	movq	$0x7, -0x10(%rbp)
+               	movq	$0xb, -0x8(%rbp)
+               	leaq	-0x10(%rbp), %rax
+               	movq	(%rax), %rcx
+               	cmpq	$0x7, %rcx
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	leave
                	retq
-               	movl	$0x2a, %eax
-               	popq	%rbp
+               	movq	-0x8(%rbp), %rcx
+               	movq	(%rax), %rax
+               	addq	%rcx, %rax
+               	cmpq	$0x12, %rax
+               	je	<addr>
+               	movl	$0x2, %eax
+               	leave
                	retq
-               	addb	%al, (%rax)
-
-<cs_wrapper>:
-               	pushq	%rcx
-               	pushq	%rdx
-               	pushq	%rsi
-               	callq	<addr>
-               	popq	%rsi
-               	popq	%rdx
-               	popq	%rcx
+               	xorl	%eax, %eax
+               	leave
                	retq
-               	leaq	<rip>, %rdi      # <addr>

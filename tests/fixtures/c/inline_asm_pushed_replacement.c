@@ -1,4 +1,4 @@
-/* GNU-as ALTERNATIVE / callee-save inline-asm section forms on x86-64.
+/* GNU as replacement-section and callee-save inline-asm forms on x86-64.
  *
  *  - A callee-save wrapper whose label is written with no whitespace before
  *    the first instruction (`name:push %rcx`) and is followed by a
@@ -7,8 +7,8 @@
  *    instructions, not one, and the wrapper preserves the pushed registers
  *    across the forwarded call.
  *
- *  - A memory-constraint (`m`) operand used as the source of a `lea` inside an
- *    ALTERNATIVE replacement section: `%N` is the operand's address, lowered
+ *  - A memory-constraint (`m`) operand used as the source of a `lea` inside a
+ *    pushed replacement section: `%N` is the operand's address, lowered
  *    to the register-indirect form the code stream uses.
  *
  * The wrapper is executed; the replacement section is assembled to bytes at

@@ -16,8 +16,8 @@ struct F { int n; int fa[]; };
 int (*pa)[2] = m;
 int (*p3)[3][4] = t;
 
-// `typeof` of a pointer difference is the difference's type, as the Linux
-// kernel's ALIGN relies on.
+// `typeof` of a pointer difference is the difference's type, as an
+// `ALIGN_UP` macro relies on.
 #define ALIGN_UP(x, a) (((x) + ((__typeof__(x))(a) - 1)) & ~((__typeof__(x))(a) - 1))
 
 static int through_params(int p[3], int q[][2], int r[2][3][4]) {

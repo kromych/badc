@@ -1,13 +1,13 @@
 // AArch64 128-bit compare-and-swap via the pre-LSE ldxp/stxp exclusive
-// pair -- the shape the kernel's __ll_sc__cmpxchg128 uses when the CPU has
-// no native 16-byte CAS. The 128-bit object is split into 64-bit halves so
-// every asm operand is a plain 64-bit register, and the memory operand uses
+// pair, the form a 128-bit CAS takes when the CPU has no native 16-byte
+// CAS. The 128-bit object is split into 64-bit halves so every asm
+// operand is a plain 64-bit register, and the memory operand uses
 // the `Q` constraint (a base register with no offset) the exclusive forms
 // require. Unlike the recognized load/store idioms this is not lowered to an
 // intrinsic: each instruction goes through the per-instruction inline-asm
 // encoder, which is why it exercises the generic `ldxp` encoding and runs on
-// native aarch64 only. Two variants mirror the kernel's plain and
-// release-ordered instantiations (stxp vs stlxp + dmb ish).
+// native aarch64 only. Two variants: plain and release-ordered (stxp vs
+// stlxp + dmb ish).
 //
 // unsigned long long keeps each half 64-bit; the object is a 16-byte
 // __int128 so the `Q` operand covers the whole pair.
@@ -46,8 +46,7 @@ static int cmpxchg128(volatile u128 *ptr, u64 ol, u64 oh, u64 nl, u64 nh,
     return rl == ol && rh == oh;
 }
 
-// Release-ordered variant: stlxp plus a trailing dmb ish, the kernel's _mb
-// instantiation.
+// Release-ordered variant: stlxp plus a trailing dmb ish.
 static int cmpxchg128_mb(volatile u128 *ptr, u64 ol, u64 oh, u64 nl, u64 nh,
                          u64 *rlo, u64 *rhi) {
     u64 rl, rh;

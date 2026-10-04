@@ -3,10 +3,9 @@
    block ids shifted into the caller and the row index shifted past the
    caller's own rows; the switch's index operand remaps like any other
    value. The caller here has a switch of its own and two call sites, so
-   the rows must land after the caller's and after each other.
-
-   `mas_find_setup` in the kernel's maple tree is this shape: a
-   `__always_inline` body that is a switch over a status enum. */
+   the rows must land after the caller's and after each other. An
+   `__always_inline` body that is a switch over a status enum has this
+   shape. */
 
 struct pair {
 	long x, y;

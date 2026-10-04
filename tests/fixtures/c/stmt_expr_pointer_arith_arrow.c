@@ -1,8 +1,7 @@
 // A GNU statement expression whose last operation is pointer arithmetic
 // keeps the pointer result type, so `({ ...; p - 1; })->field` resolves
-// through the single-level struct pointer (C99 6.5.6p8). The Linux
-// `task_pt_regs` shape -- `({ ...; (struct regs *)x - 1; })->cs` -- needs
-// this. Returns 0 on success.
+// through the single-level struct pointer (C99 6.5.6p8), as
+// `({ ...; (struct regs *)x - 1; })->cs` needs. Returns 0 on success.
 
 struct regs {
     int cs;
@@ -18,7 +17,7 @@ int main(void) {
     int cs = ({ p - 1; })->cs;
     if (cs != 11) return 1;
 
-    // Cast then subtraction, exactly the kernel macro shape.
+    // Cast then subtraction.
     unsigned long long a = (unsigned long long)&r[1];
     int cs2 = ({ ((struct regs *)a) - 1; })->cs;
     if (cs2 != 11) return 2;

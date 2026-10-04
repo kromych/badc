@@ -443,7 +443,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
 
-<__free_kfree>:
+<__free_heap>:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movq	(%rdi), %rdi

@@ -1,6 +1,5 @@
-/* Linux 7.3's arm64 __raw_readl chains two ALTERNATIVEs in one template, each
-   defining 661..664 and placing its replacement in `.subsection 1` behind the
-   function's code. The original sequence runs -- a nop, then the load --
+/* A template chaining two patch sites, each defining 661..664 and placing its
+   replacement in `.subsection 1` behind the function's code. The original sequence runs -- a nop, then the load --
    and neither replacement (a barrier, a load-acquire) does. Other targets
    take the plain load. */
 

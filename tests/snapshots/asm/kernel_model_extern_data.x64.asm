@@ -3,40 +3,40 @@ kernel_model_extern_data.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<read_jiffies>:
+<read_ticks>:
                	movq	$0x0, %rax
-		R_X86_64_32S	jiffies
+		R_X86_64_32S	ticks
                	movq	(%rax), %rax
                	retq
 
-<jiffies_addr>:
+<ticks_addr>:
                	movq	$0x0, %rax
-		R_X86_64_32S	jiffies
+		R_X86_64_32S	ticks
                	retq
 
 <net_index>:
                	movq	$0x0, %rax
-		R_X86_64_32S	init_net
+		R_X86_64_32S	net0
                	movslq	(%rax), %rax
                	retq
 
 <family>:
                	movq	$0x0, %rax
-		R_X86_64_32S	cpu_info
+		R_X86_64_32S	cpu0
                	movzbq	(%rax), %rax
                	retq
 
-<pcpu_base>:
+<cpu_base>:
                	movslq	%edi, %rdi
                	movq	(,%rdi,8), %rax
-		R_X86_64_32S	__per_cpu_offset
+		R_X86_64_32S	cpu_offset
                	retq
 
-<ctype_class>:
+<char_class>:
                	movq	%rdi, %rax
                	andq	$0xff, %rax
                	movzbq	(,%rax), %rax
-		R_X86_64_32S	_ctype
+		R_X86_64_32S	class_tab
                	retq
 
 <cmp_fn>:

@@ -18,7 +18,7 @@ unsigned long read_named_sysregs(void) {
     return v;
 }
 
-/* The kernel indexes the whole DBGBVR/DBGBCR/DBGWVR/DBGWCR families 0..15 via a
+/* The whole DBGBVR/DBGBCR/DBGWVR/DBGWCR families 0..15, indexed through a
  * macro-generated switch; the low and a high index cover the encoding range. */
 unsigned long read_debug_family(void) {
     unsigned long v = 0, t;

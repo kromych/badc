@@ -1,5 +1,5 @@
 
-kernel_bug_unreachable_tail.x64:	file format elf64-x86-64
+trap_seals_unreachable_tail.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 

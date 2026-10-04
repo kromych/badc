@@ -1,4 +1,4 @@
-// The shape the kernel's AEGIS-128 NEON unit is built from: a five-element
+// The shape of an AEGIS-128 NEON state: a five-element
 // array of 16-byte vectors carried in a struct, loaded from memory into a
 // brace list of whole-vector values, threaded through a by-value update, and
 // stored back. Each step is checked against a scalar loop over the same

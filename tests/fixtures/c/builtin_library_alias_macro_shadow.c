@@ -40,7 +40,7 @@ extern unsigned long __fortify_strlen(const char *p);
 #define realloc(p, n) ((void *) 0)
 #define free(p) ((void) 0)
 
-// The constant arms the kernel's MODULE_INFO shape depends on.
+// The constant arms a module-information string table depends on.
 _Static_assert(sizeof("GPL") - 1 == __builtin_strlen("GPL"), "embedded NUL");
 _Static_assert(__builtin_strlen("abcd") == 4, "literal length");
 _Static_assert(__builtin_strcmp("ab", "ab") == 0, "equal literals");

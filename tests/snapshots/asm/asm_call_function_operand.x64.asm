@@ -1,5 +1,5 @@
 
-kernel_asm_call_const_operand.x64:	file format elf64-x86-64
+asm_call_function_operand.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
@@ -14,7 +14,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	$0x0, %rax
-		R_X86_64_32S	irq_stack_ptr
+		R_X86_64_32S	other_stack_ptr
                	movq	(%rax), %rax
                	movq	%rax, -0x8(%rbp)
                	movq	%rsp, %rax
@@ -38,7 +38,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movq	$0x0, %rax
-		R_X86_64_32S	irq_stack_ptr
+		R_X86_64_32S	other_stack_ptr
                	movq	(%rax), %rax
                	movq	%rax, -0x8(%rbp)
                	movq	%rsp, %rax

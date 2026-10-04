@@ -1,7 +1,7 @@
 /* C99 6.5.2.5p5-6: a compound literal outside a function body has static
  * storage duration, and 6.6p9 makes its address an address constant, so it
- * can initialize static storage. The kernel's WMI id tables take the
- * address of an enum literal as a `void *` context. A literal inside a
+ * can initialize static storage, as an id table taking the address of an
+ * enum literal as a `void *` context does. A literal inside a
  * function has automatic storage; its address is not a constant there. */
 enum e { A = 7, B = 3 };
 

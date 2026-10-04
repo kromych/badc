@@ -61,14 +61,14 @@ static ALWAYS void pcpu_inc32(unsigned long base, unsigned long off) {
     (*(u32 __seg_gs *)(base + off))++;
 }
 
-/* A two-level accessor: the outer body is what the kernel's percpu
- * helpers look like, and it inlines only once the inner one does. */
+/* A two-level accessor: the outer body wraps the inner one, and it
+ * inlines only once the inner one does. */
 static ALWAYS u64 pcpu_read64_off(unsigned long off) {
     return pcpu_read64(v_zero, off);
 }
 
-/* An `"=rm"` output block, the shape the kernel's interrupt-flag save
- * takes. Its operand handling assigns a register per constraint and saves
+/* An `"=rm"` output block, the shape an interrupt-flag save takes. Its
+ * operand handling assigns a register per constraint and saves
  * and restores every register the block writes, so an accessor address the
  * allocator parked in one of them names the same slot on both sides. The
  * block also takes the address of a local for the store-back, which is

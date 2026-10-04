@@ -1,9 +1,9 @@
 
-kernel_seamcall_direct_call.x64:	file format elf64-x86-64
+const_fnptr_arg_direct_call.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<tdh_vp_rd>:
+<read_field>:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
@@ -26,18 +26,18 @@ Disassembly of section .text:
                	testq	%rbx, %rbx
                	je	<addr>
                	addl	$0x1, (%rip)            # <addr>
-		R_X86_64_PC32	preempt_count-0x5
+		R_X86_64_PC32	nest_count-0x5
                	movb	$0x1, (%rip)            # <addr>
-		R_X86_64_PC32	cache_state_incoherent-0x5
+		R_X86_64_PC32	cache_dirty-0x5
                	movq	%r13, %rdi
                	movq	%r12, %rsi
                	callq	<addr>
-		R_X86_64_PLT32	__seamcall_ret-0x4
+		R_X86_64_PLT32	entry_ret-0x4
                	subl	$0x1, (%rip)            # <addr>
-		R_X86_64_PC32	preempt_count-0x5
+		R_X86_64_PC32	nest_count-0x5
                	movq	%rsp, %rcx
                	callq	<addr>
-		R_X86_64_PLT32	preempt_schedule_thunk-0x4
+		R_X86_64_PLT32	resched_thunk-0x4
                	movabsq	$-0x7ffffdfd00000000, %r11 # imm = 0x8000020300000000
                	movq	%rax, %rcx
                	cmpq	%r11, %rax
@@ -53,14 +53,14 @@ Disassembly of section .text:
                	jmp	<addr>
 		R_X86_64_PLT32	__x86_return_thunk-0x4
 
-<tdh_vp_enter>:
+<enter_entry>:
                	endbr64
                	pushq	%rbp
                	movq	%rsp, %rbp
                	movq	%rdi, (%rsi)
                	xorl	%edi, %edi
                	movb	$0x1, (%rip)            # <addr>
-		R_X86_64_PC32	cache_state_incoherent-0x5
+		R_X86_64_PC32	cache_dirty-0x5
                	popq	%rbp
                	jmp	<addr>
-		R_X86_64_PLT32	__seamcall_saved_ret-0x4
+		R_X86_64_PLT32	entry_saved_ret-0x4

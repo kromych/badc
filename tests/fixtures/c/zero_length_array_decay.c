@@ -1,5 +1,5 @@
 // A zero-length array is array-shaped with a zero element count (a GNU
-// extension the kernel uses for permanently empty tables). Reading it as
+// extension for permanently empty tables). Reading it as
 // an rvalue must yield the object's address, not a load of its storage
 // (C99 6.3.2.1p3) -- the object occupies no bytes, so a load reads
 // whatever follows it. Both spellings count: an explicit `[0]` and a

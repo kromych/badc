@@ -1,5 +1,5 @@
 
-inline_asm_alternative_replacement.aarch64:	file format elf64-littleaarch64
+inline_asm_pushed_replacement.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 

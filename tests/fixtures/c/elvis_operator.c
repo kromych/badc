@@ -1,6 +1,6 @@
 // GNU conditional with omitted middle operand `a ?: b` (GCC extension):
-// equivalent to `a ? a : b` but `a` is evaluated exactly once. Ubiquitous
-// in real-world C (`x ?: "default"`) such as the Linux kernel.
+// equivalent to `a ? a : b` but `a` is evaluated exactly once
+// (`x ?: "default"`).
 
 static int calls = 0;
 static int side_effect(int v) {

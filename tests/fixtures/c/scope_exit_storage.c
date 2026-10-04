@@ -1,7 +1,7 @@
 // Objects whose blocks are left by return, goto, break, continue and a
-// switch fall-through, in the shape of the kernel's `crc_t10dif_arch`: a
-// 528-byte state aligned 16, filled and checked through pointers passed to
-// callees, while another object must keep its contents. Storage may be
+// switch fall-through, around a SIMD routine's 528-byte state aligned 16,
+// filled and checked through pointers passed to callees, while another
+// object must keep its contents. Storage may be
 // shared only between objects whose lifetimes do not overlap (C99 6.2.4p2).
 // VLA blocks left early, or first entered by a goto ahead of the VLA, free
 // their storage as their own exit does. Exits 0 when every object keeps its
@@ -29,8 +29,8 @@ __attribute__((noinline)) static int intact(const struct state *s, unsigned tag)
     return s->fpsr == tag && s->fpcr == ~tag;
 }
 
-// The kernel's `scoped_ksimd()`: a for-scope declaring the state, whose
-// cleanup checks it as the scope is left.
+// A scope-guard `for` declaring the state, whose cleanup checks it as the
+// scope is left.
 static unsigned released;
 
 __attribute__((noinline)) static void release(struct state **pp) {

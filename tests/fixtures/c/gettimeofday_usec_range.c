@@ -4,8 +4,7 @@
 // adjacent storage into the high half and yields a microsecond count
 // far outside [0, 1000000). Linux and Windows use a 64-bit-wide field.
 // A garbage tv_usec corrupts any select / pthread_cond timeout computed
-// from gettimeofday, which manifested as a 100% busy-loop in the Tcl
-// event loop on macOS.
+// from gettimeofday, which turns a timed event loop into a busy loop.
 #include <sys/time.h>
 
 int main(void) {

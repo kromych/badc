@@ -12,9 +12,9 @@
 // indexes into the returned `_iob` array by 48 bytes per slot
 // (`sizeof(_iobuf)` on Win64 msvcrt).
 //
-// Stays in the parity tables as a regression marker; the
-// fputs / fprintf paths in shell.c break loudly if the stream
-// macros ever go back to NULL on any target.
+// Stays in the parity tables as a regression marker: an fputs /
+// fprintf through the stream macros breaks loudly if they ever go back
+// to NULL on any target.
 #include <stdio.h>
 
 int main() {

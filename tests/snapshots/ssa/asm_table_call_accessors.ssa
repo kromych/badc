@@ -1,5 +1,5 @@
 ; --- SSA dump (ok=true) ent_pc=6 ---
-; name=spin_lock_irqsave
+; name=lock_irqsave
 fn ent_pc=6 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
@@ -27,7 +27,7 @@ fn ent_pc=6 n_params=1 variadic=false locals=0
     v17  Imm(0)                                           -> x0
     terminator Return(v5)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=7 ---
-; name=spin_unlock_irqrestore
+; name=unlock_irqrestore
 fn ent_pc=7 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
@@ -54,7 +54,7 @@ fn ent_pc=7 n_params=2 variadic=false locals=0
   block 2  start_pc=0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=8 ---
-; name=local_irq_enable
+; name=enable_irqs
 fn ent_pc=8 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
@@ -65,7 +65,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v4   InlineAsm { template="call *%2", ops=3, args=[-, v1, v3] } -> x0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=9 ---
-; name=local_irq_disable
+; name=disable_irqs
 fn ent_pc=9 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0

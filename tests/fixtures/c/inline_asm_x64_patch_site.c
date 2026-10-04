@@ -1,10 +1,10 @@
-/* The jump-label shape: an `asm goto` whose pushed section stores the
+/* A patch site: an `asm goto` whose pushed section stores the
  * label's text offset (`.long %l[l_yes] - .`) and the key address with
  * a constant addend (`.quad %c0 + %c1 - .`). */
-struct static_key { int enabled; };
-static struct static_key key;
+struct patch_key { int enabled; };
+static struct patch_key key;
 
-static inline __attribute__((always_inline)) int arch_static_branch(void)
+static inline __attribute__((always_inline)) int patched_branch(void)
 {
     asm goto("1:"
         "jmp %l[l_yes]\n\t"
@@ -20,4 +20,4 @@ l_yes:
     return 0;
 }
 
-int main(void) { return arch_static_branch(); }
+int main(void) { return patched_branch(); }

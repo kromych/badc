@@ -6,7 +6,7 @@
 // condition reaches it in -- a block-scope declaration of an undefined
 // function, called when the condition holds. Linking is the assertion.
 
-#define BUILD_BUG_ON(cond, tag)                                                                    \
+#define FAIL_IF(cond, tag)                                                                         \
     do {                                                                                           \
         extern void compiletime_assert_##tag(void);                                                \
         if (!(!(cond)))                                                                            \
@@ -21,7 +21,7 @@
 
 static __attribute__((always_inline)) unsigned long encode_page(unsigned long page,
                                                                 unsigned long flags) {
-    BUILD_BUG_ON(flags > ENCODED_PAGE_BITS, 122);
+    FAIL_IF(flags > ENCODED_PAGE_BITS, 122);
     return flags | page;
 }
 
@@ -64,7 +64,7 @@ static struct task *current = &task_state;
 #define VM_STACK_INCOMPLETE_SETUP (VM_SOFTDIRTY | VM_UFFD_WP)
 
 static unsigned long setup_stack_flags(void) {
-    BUILD_BUG_ON(VM_STACK_FLAGS & VM_STACK_INCOMPLETE_SETUP, 771);
+    FAIL_IF(VM_STACK_FLAGS & VM_STACK_INCOMPLETE_SETUP, 771);
     return VM_STACK_FLAGS;
 }
 
@@ -74,8 +74,8 @@ static int tier_selector;
 
 static unsigned long tier_bits(void) {
     unsigned long v = tier_selector ? (rmap_delay_requested ? 1ul : 2ul) : 3ul;
-    BUILD_BUG_ON(v > 3ul, 772);
-    BUILD_BUG_ON(v == 0ul, 773);
+    FAIL_IF(v > 3ul, 772);
+    FAIL_IF(v == 0ul, 773);
     return v;
 }
 

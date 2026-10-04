@@ -1,5 +1,5 @@
 ; --- SSA dump (ok=true) ent_pc=2 ---
-; name=tdh_vp_rd
+; name=read_field
 fn ent_pc=2 n_params=3 variadic=false locals=4
   spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
@@ -45,7 +45,7 @@ fn ent_pc=2 n_params=3 variadic=false locals=4
     v35  ImmData(0)                                       -> x1
     v36  InlineAsm { template="subl $1, %0", ops=1, args=[v35] } -> -
     v37  Intrinsic { kind=StackPointer, args=[] }         -> x1
-    v38  InlineAsm { template="call preempt_schedule_thunk", ops=1, args=[v37] } -> -
+    v38  InlineAsm { template="call resched_thunk", ops=1, args=[v37] } -> -
     v39  BinopI { op=eq, lhs=v34, rhs_imm=-9223369824946618368 } -> x1
     terminator Bz { cond=v39, target=b4, fall=b1 }   (exit_acc=v39)
   block 4  start_pc=0
@@ -59,7 +59,7 @@ fn ent_pc=2 n_params=3 variadic=false locals=4
     v28  LifetimeEnd(-4)                                  -> -
     terminator Return(v34)   (exit_acc=v34)
 ; --- SSA dump (ok=true) ent_pc=3 ---
-; name=tdh_vp_enter
+; name=enter_entry
 fn ent_pc=3 n_params=2 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0

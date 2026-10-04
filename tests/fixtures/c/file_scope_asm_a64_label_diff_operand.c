@@ -2,9 +2,8 @@
  * memory offset. Both are absolute values only the section layout knows, and
  * on A64 the value picks the encoding -- `prfm` takes the scaled form only
  * for a multiple of its access size and `prfum` otherwise, `ldr` likewise
- * becomes `ldur`. This is the vector-entry shape in the kernel's
- * `arch/arm64/kernel/entry.S`, which computes the entry's own slot from
- * `1b - \vector_start`. */
+ * becomes `ldur`. An exception-vector entry computes its own slot this
+ * way, from `1b - \vector_start`. */
 
 __asm__(".pushsection .probe.text, \"ax\"\n"
         ".globl slot_probe\n"

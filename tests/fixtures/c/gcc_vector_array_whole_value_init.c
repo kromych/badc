@@ -1,8 +1,8 @@
 // C99 6.7.8p13 over the GCC vector extension: an initializer for an object
 // of vector type is either a brace list of lanes or a single expression of
 // compatible vector type. The second form has to hold where the object is
-// an array element or an array member of a struct -- the shape the kernel's
-// AEGIS-128 NEON unit uses -- because the vector is modeled as an aggregate
+// an array element or an array member of a struct -- the shape an
+// AEGIS-128 NEON state takes -- because the vector is modeled as an aggregate
 // of lanes and the traversal would otherwise elide into it and spend one
 // sibling value per lane.
 

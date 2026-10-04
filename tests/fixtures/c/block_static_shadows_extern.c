@@ -3,9 +3,9 @@
 // its own static storage; same-named statics in sibling scopes and in
 // different functions are all distinct. A prior bug re-resolved every
 // reference through the shared per-name symbol slot after scope exit
-// restored the extern binding (the kernel's or51132.c against
-// `sections.h`'s `extern char _data[]`), so the emitted object lost
-// every definition and carried one undefined `_data` global.
+// restored the extern binding (`extern char _data[]` at file scope), so
+// the emitted object lost every definition and carried one undefined
+// `_data` global.
 //
 // Each check returns a distinct nonzero code; success returns 0.
 
@@ -23,8 +23,7 @@ static int sink(const u8 *p, int n) {
 // Opaque callee: the address of each array must materialize.
 static int (*volatile call)(const u8 *, int) = sink;
 
-// The or51132 shape: same-named statics in statement expressions under
-// sibling `if` arms.
+// Same-named statics in statement expressions under sibling `if` arms.
 static int stmt_expr_arms(int pick) {
     if (pick)
         return ({ static const u8 _data[] = {1, 2}; call(_data, (int)sizeof(_data)); });

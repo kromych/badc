@@ -1,5 +1,5 @@
 
-kernel_uaccess_phi_branch.x64:	file format elf64-x86-64
+stac_region_phi_branch.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 

@@ -1,4 +1,4 @@
-// AArch64 inline asm: the LL/SC atomic-add loop as the kernel spells it --
+// AArch64 inline asm: an LL/SC atomic-add loop --
 // a `prfm` prefetch plus an exclusive load/store retry over one `+Q` memory
 // operand, all naming that operand with a bare `%N` reference, and a
 // multi-letter `"Ir"` constraint on the addend. main returns 42 when the

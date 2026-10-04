@@ -1,11 +1,10 @@
 /* An inline-asm `"m"` / `"+m"` operand is a memory reference, not a
-   register. edk2's BaseSynchronizationLib reaches the interlocked
-   primitives through `lock cmpxchg %2, %1` / `lock xadd %0, %1` with `%1`
-   constrained `"+m"(*Value)`. Treating the operand as a register emitted
-   `lock cmpxchg %reg`, an invalid encoding that faults (#UD) at runtime --
-   which crashed the badc-built firmware in early boot. The operand now
-   emits `(%reg)`, so the instruction reads and writes memory directly and
-   the `lock` prefix is valid. The checks confirm the memory object is
+   register: interlocked primitives written as `lock cmpxchg %2, %1` /
+   `lock xadd %0, %1` with `%1` constrained `"+m"(*Value)`. Treating the
+   operand as a register emitted `lock cmpxchg %reg`, an invalid encoding
+   that faults (#UD) at runtime. The operand now emits `(%reg)`, so the
+   instruction reads and writes memory directly and the `lock` prefix is
+   valid. The checks confirm the memory object is
    updated (compare-and-swap succeeds / fails, exchange-and-add). */
 
 typedef unsigned int       U32;

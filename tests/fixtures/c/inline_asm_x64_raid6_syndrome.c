@@ -1,5 +1,5 @@
-/* x86-64 RAID-6 P/Q syndrome through the AVX2 and AVX-512 inline-asm
-   sequences lib/raid6 spells, checked byte for byte against a scalar
+/* x86-64 RAID-6 P/Q syndrome through AVX2 and AVX-512 inline-asm
+   sequences, checked byte for byte against a scalar
    GF(2^8) reference: vmovdqa / vpxor / vpcmpgtb / vpaddb / vpand /
    vmovntdq / prefetchnta over ymm, and vmovdqa64 / vpxorq / vpcmpgtb
    into an opmask / vpmovm2b / vpandq / vmovntdq over zmm. The recovery

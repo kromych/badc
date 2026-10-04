@@ -1,6 +1,6 @@
 /* x86-64 percpu accessor shapes: a `%c` / `%P` operand substituted into a
  * `%%gs:` memory reference, at every access width, in load, store and
- * read-modify-write position, and inside an alternative replacement
+ * read-modify-write position, and inside a pushed replacement
  * section. The addresses are segment-relative, so the bodies are compiled
  * but not executed. */
 
@@ -9,14 +9,14 @@ typedef unsigned short u16;
 typedef unsigned int u32;
 typedef unsigned long long u64;
 
-u64 this_cpu_off;
+u64 cpu_off;
 u64 current_task;
 
 volatile int run_percpu;
 
-static u64 my_cpu_offset(void) {
+static u64 read_cpu_offset(void) {
     u64 v;
-    __asm__("movq %%gs:%P1, %0" : "=r"(v) : "p"(&this_cpu_off));
+    __asm__("movq %%gs:%P1, %0" : "=r"(v) : "p"(&cpu_off));
     return v;
 }
 
@@ -47,8 +47,8 @@ static void percpu_write(u64 v) {
 }
 
 /* The same reference assembled into a pushed executable section, the
- * alternative-replacement shape. */
-static void percpu_alternative(void) {
+ * replacement-section shape. */
+static void percpu_replacement(void) {
     __asm__ volatile("nop\n\t"
                      ".pushsection .altinstr_replacement,\"ax\"\n"
                      "771:\n\t"
@@ -56,7 +56,7 @@ static void percpu_alternative(void) {
                      "movq %%gs:%P1, %%rdx\n\t"
                      ".popsection\n"
                      :
-                     : "i"(0x40), "p"(&this_cpu_off)
+                     : "i"(0x40), "p"(&cpu_off)
                      : "rax", "rdx", "memory");
 }
 
@@ -69,8 +69,8 @@ static u64 fs_read(void) {
 
 int main(void) {
     if (run_percpu) {
-        percpu_write(my_cpu_offset() + get_current() + percpu_read(1) + fs_read());
-        percpu_alternative();
+        percpu_write(read_cpu_offset() + get_current() + percpu_read(1) + fs_read());
+        percpu_replacement();
     }
     return 42;
 }

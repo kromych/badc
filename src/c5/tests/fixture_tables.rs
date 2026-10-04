@@ -646,7 +646,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_comments.c", 42),
     ("inline_asm_pushsection.c", 42),
     ("inline_asm_quoted_symbol_data.c", 42),
-    ("inline_asm_alternative_replacement.c", 42),
+    ("inline_asm_pushed_replacement.c", 42),
     ("file_scope_asm_decls.c", 0),
     ("file_scope_asm_label_binding.c", 42),
     ("file_scope_asm_section_placement.c", 42),
@@ -1311,7 +1311,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_fmov_forms.c", 42),
     ("inline_asm_a64_sve_counts.c", 0),
     ("inline_asm_a64_sve_state.c", 0),
-    ("inline_asm_a64_chained_alternatives.c", 0),
+    ("inline_asm_a64_chained_replacements.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
     ("plain_char_distinct_type.c", 0),
@@ -1989,7 +1989,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_comments.c", 42),
     ("inline_asm_pushsection.c", 42),
     ("inline_asm_quoted_symbol_data.c", 42),
-    ("inline_asm_alternative_replacement.c", 42),
+    ("inline_asm_pushed_replacement.c", 42),
     ("file_scope_asm_decls.c", 0),
     ("file_scope_asm_label_binding.c", 42),
     ("file_scope_asm_section_placement.c", 42),
@@ -2275,7 +2275,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_fmov_forms.c", 42),
     ("inline_asm_a64_sve_counts.c", 0),
     ("inline_asm_a64_sve_state.c", 0),
-    ("inline_asm_a64_chained_alternatives.c", 0),
+    ("inline_asm_a64_chained_replacements.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
     ("plain_char_distinct_type.c", 0),
@@ -2446,7 +2446,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("file_scope_asm_local_label_branch.c", 42),
     ("inline_asm_pushsection.c", 42),
     ("inline_asm_quoted_symbol_data.c", 42),
-    ("inline_asm_alternative_replacement.c", 42),
+    ("inline_asm_pushed_replacement.c", 42),
     ("file_scope_asm_decls.c", 0),
     ("file_scope_asm_label_binding.c", 42),
     ("file_scope_asm_section_placement.c", 42),
@@ -3215,7 +3215,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_fmov_forms.c", 42),
     ("inline_asm_a64_sve_counts.c", 0),
     ("inline_asm_a64_sve_state.c", 0),
-    ("inline_asm_a64_chained_alternatives.c", 0),
+    ("inline_asm_a64_chained_replacements.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
     ("plain_char_distinct_type.c", 0),
@@ -3935,7 +3935,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_fmov_forms.c", 42),
     ("inline_asm_a64_sve_counts.c", 0),
     ("inline_asm_a64_sve_state.c", 0),
-    ("inline_asm_a64_chained_alternatives.c", 0),
+    ("inline_asm_a64_chained_replacements.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
     ("plain_char_distinct_type.c", 0),
@@ -4600,7 +4600,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_fmov_forms.c", 42),
     ("inline_asm_a64_sve_counts.c", 0),
     ("inline_asm_a64_sve_state.c", 0),
-    ("inline_asm_a64_chained_alternatives.c", 0),
+    ("inline_asm_a64_chained_replacements.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
     ("plain_char_distinct_type.c", 0),
@@ -5567,7 +5567,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_fmov_forms.c", 42),
     ("inline_asm_a64_sve_counts.c", 0),
     ("inline_asm_a64_sve_state.c", 0),
-    ("inline_asm_a64_chained_alternatives.c", 0),
+    ("inline_asm_a64_chained_replacements.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
     ("plain_char_distinct_type.c", 0),

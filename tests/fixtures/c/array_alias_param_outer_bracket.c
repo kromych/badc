@@ -2,8 +2,7 @@
 // array typedef composes both dimension lists before the outermost one
 // adjusts to a pointer. `rows_t rows[]` with `typedef struct mask
 // rows_t[1]` is `struct mask (*rows)[1]`; `rows[i]` selects row i (one
-// row stride) and decays to the element pointer. The kernel's
-// cpumask_var_t at CONFIG_CPUMASK_OFFSTACK=n has exactly this shape.
+// row stride) and decays to the element pointer.
 
 struct mask {
     unsigned long bits[4];

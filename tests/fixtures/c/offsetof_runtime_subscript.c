@@ -1,8 +1,8 @@
 /* GCC extension: `__builtin_offsetof(T, member[i])` accepts a non-constant
    array subscript, yielding the runtime offset `offsetof(T, member) + i *
    element-stride`. badc folded offsetof to a constant and rejected a
-   variable subscript (`constant integer expected`), which edk2 firmware
-   relies on (`__builtin_offsetof(VIRTIO_FS_CONFIG, Tag[Idx])`). The offset
+   variable subscript such as `__builtin_offsetof(CONFIG, Tag[Idx])`
+   (`constant integer expected`). The offset
    is now emitted as a runtime expression when a subscript is non-constant;
    a constant subscript still folds. The checks compare the runtime form to
    the constant base plus the scaled index, so they hold at any layout. */
@@ -13,8 +13,8 @@ struct S {
     long  v[8];
     short m[4][6];
     /* A zero-length trailing array records no dimension; offsetof still
-       subscripts it, striding by the element size (edk2's UDF descriptor
-       ends in `UINT8 Data[0]`). */
+       subscripts it, striding by the element size (a descriptor ending in
+       `UINT8 Data[0]`). */
     char  data[0];
 };
 

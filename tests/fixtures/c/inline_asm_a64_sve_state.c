@@ -2,7 +2,7 @@
    gives them (-mattr=+sve,+sme): LDR/STR of a vector and of a predicate
    register at a vector-length-scaled offset, rdffr, wrffr, pfalse, rdsvl,
    and LDR/STR of a ZA array vector, whose address repeats the vector offset.
-   The kernel's save and restore sequences compile as written. Nothing here
+   Save and restore sequences in these spellings compile. Nothing here
    is called, so the host need not implement SVE or SME; main compares the
    naked function's code with the expected words. gcc has no naked functions
    on AArch64, and other targets have no SVE, so there the comparison does
@@ -11,7 +11,7 @@
 #include <stdint.h>
 
 #if defined(__aarch64__)
-/* The kernel's spellings (Linux 7.2 arch/arm64/include/asm/fpsimd.h). */
+/* Register-state moves generated through `.irp` loops over the registers. */
 #define FOR_EACH_Z_REG(idx_str, asm_str)                                                       \
     "	.irp " idx_str ",0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26," \
     "27,28,29,30,31\n" asm_str "\n"                                                            \

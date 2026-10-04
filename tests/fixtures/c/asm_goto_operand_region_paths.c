@@ -2,9 +2,9 @@
  * enclosing frame, so sp is balanced on every path out of the template:
  * the fall-through, a template `%l` branch (through the restore
  * trampoline), and a branch that reaches the label without any
- * compiler-planted exit path -- the shape a runtime patcher plants at a
- * jump-label site, simulated here by an indirect branch to the label's
- * own address. */
+ * compiler-planted exit path -- the branch a runtime patcher plants at a
+ * patch site, simulated here by an indirect branch to the label's own
+ * address. */
 
 /* Live value across the asm: `keep` must survive the operand loads,
  * the template, and both exits. */

@@ -8,26 +8,26 @@
 // `const char *t[2]` the elements are writable, so `t[0]`'s load must
 // not fold. That case is checked by value below.
 
-#define BUILD_BUG_ON(cond, tag)                                                                    \
+#define FAIL_IF(cond, tag)                                                                         \
     do {                                                                                           \
         extern void compiletime_assert_##tag(void);                                                \
         if (!(!(cond)))                                                                            \
             compiletime_assert_##tag();                                                            \
     } while (0)
 
-static const _Bool class_mutex_intr_is_conditional = 1;
-static const _Bool class_mutex_is_conditional = 0;
-static const int class_mutex_intr_depth = 3;
-static const unsigned char class_mutex_intr_kind = 200;
-static const long class_mutex_intr_mask = -4;
+static const _Bool guard_intr_is_conditional = 1;
+static const _Bool guard_is_conditional = 0;
+static const int guard_intr_depth = 3;
+static const unsigned char guard_intr_kind = 200;
+static const long guard_intr_mask = -4;
 
 static int scoped_cond_guard(void) {
-    BUILD_BUG_ON(!class_mutex_intr_is_conditional, 424);
-    BUILD_BUG_ON(class_mutex_is_conditional, 386);
-    BUILD_BUG_ON(class_mutex_intr_depth != 3, 425);
-    BUILD_BUG_ON(class_mutex_intr_kind != 200, 426);
-    BUILD_BUG_ON(class_mutex_intr_mask >= 0, 427);
-    return class_mutex_intr_depth;
+    FAIL_IF(!guard_intr_is_conditional, 424);
+    FAIL_IF(guard_is_conditional, 386);
+    FAIL_IF(guard_intr_depth != 3, 425);
+    FAIL_IF(guard_intr_kind != 200, 426);
+    FAIL_IF(guard_intr_mask >= 0, 427);
+    return guard_intr_depth;
 }
 
 // Static storage duration reached from a block, in the function's own
@@ -37,10 +37,10 @@ static int block_scope_guard(void) {
     static const int outer_depth = 5;
     {
         static const _Bool inner_is_conditional = 1;
-        BUILD_BUG_ON(!inner_is_conditional, 428);
+        FAIL_IF(!inner_is_conditional, 428);
     }
-    BUILD_BUG_ON(!outer_is_conditional, 429);
-    BUILD_BUG_ON(outer_depth != 5, 430);
+    FAIL_IF(!outer_is_conditional, 429);
+    FAIL_IF(outer_depth != 5, 430);
     return outer_depth;
 }
 

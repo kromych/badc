@@ -3,7 +3,7 @@
    (`(cond ? a : b) * N`). In an aggregate initializer the constant-init
    evaluator selected the arm but returned before absorbing the trailing
    operators, so the brace list misread `* N` as extra elements ("too many
-   initializers"). OpenSSL's cipher tables use exactly this form, e.g.
+   initializers"), as in a table entry
    `(0x6==0x10001||0x6==0x10004 ? 2 : 1) * 128 / 8`. The evaluator now
    continues the const-expr chain after a pure-integer conditional. */
 

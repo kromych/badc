@@ -1,7 +1,7 @@
 /* The Win32 prototypes a program may repeat after the bundled <windows.h>,
 ** each with the types the Windows SDK 10.0.26100.0 gives the function
 ** (C99 6.7p4). Compiled for the Windows targets. The last block spells
-** the types out as raylib's rcore.c does. */
+** the types out in full. */
 
 #include <windows.h>
 
@@ -725,7 +725,7 @@ HDC wglGetCurrentDC(VOID);
 HGLRC wglGetCurrentContext(VOID);
 BOOL wglShareLists(HGLRC hglrc1, HGLRC hglrc2);
 
-/* rcore.c (raylib 6.0), lines 159-166: the SDK's types spelled out. */
+/* The SDK's types spelled out in full. */
 struct HINSTANCE__;
 __declspec(dllimport) unsigned long __stdcall GetModuleFileNameA(struct HINSTANCE__ *hModule,
                                                                  char *lpFilename,

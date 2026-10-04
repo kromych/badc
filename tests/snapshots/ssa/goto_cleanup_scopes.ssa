@@ -810,7 +810,7 @@ fn ent_pc=27 n_params=1 variadic=false locals=0
     v9   Store { addr=v1, disp=0, value=v8, kind=I32 }    -> -
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=31 ---
-; name=__free_kfree
+; name=__free_heap
 fn ent_pc=31 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0

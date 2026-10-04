@@ -2,9 +2,8 @@
 // link-time constant: the data image holds a relocation against the
 // label's code location, so the table is a genuine read-only constant and
 // no stores initialize it at the declaration point. Covers the plain
-// dispatch table, the section-attributed spelling (the shape the Linux
-// BPF interpreter's jump table takes), a range designator, and re-entry
-// across calls. Asserted by return code.
+// dispatch table, the section-attributed spelling, a range designator,
+// and re-entry across calls. Asserted by return code.
 
 static int dispatch(int n) {
     static const void *const t[2] = {&&a, &&b};
@@ -29,8 +28,8 @@ j3:
     return 23;
 }
 
-// The kernel's dispatch table shape: a range designator fills the holes
-// with the default label, named entries override individual slots.
+// A range designator fills the holes with the default label, named
+// entries override individual slots.
 static int ranged(int n) {
     static const void *const t[8] = {[0 ... 7] = &&dflt, [3] = &&three,
                                      [5] = &&five};

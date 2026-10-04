@@ -321,9 +321,8 @@ pub struct Program {
     /// `(ent_pc, binding index)` of each libc trampoline: the function a static
     /// initializer stores in place of a binding's load-time address.
     pub(crate) sys_trampolines: Vec<(u64, i64)>,
-    /// The loader binds data slots, so one naming a trampoline is bound to the
-    /// binding instead: the address code reads from the GOT, as C99 6.5.9p6
-    /// requires of two pointers to one function.
+    /// A data slot naming a trampoline names the binding's import instead: the
+    /// address code takes, as C99 6.5.9p6 requires of two pointers to one function.
     pub(crate) bind_trampoline_slots: bool,
     /// Address-constant initializers of `_Thread_local` objects (C99
     /// 6.7.8p4). `data_offset` is a byte offset into [`Self::tls_data`],

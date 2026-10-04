@@ -947,7 +947,8 @@ fn compact_and_lower(
 ) -> Result<(Program, i64, Build), C5Error> {
     use crate::c5::codegen::LowerMode;
     use crate::c5::codegen::ssa::shadow;
-    program.bind_trampoline_slots = target.binds_data_imports();
+    program.bind_trampoline_slots =
+        target.binds_data_imports() || options.output_kind == OutputKind::Relocatable;
     let segregate = options.bss_segregate && !bss_segregation_disabled();
     let first =
         crate::c5::codegen::ssa::emit_common::time_pass("object::compact_program_data", || {

@@ -1613,63 +1613,57 @@ int main(void) { return 0; }
     );
 }
 
+/// Two units each taking a libc function's address in a `const` table name the
+/// import itself on every target, and carry no forwarding body to merge.
 #[test]
-fn libc_address_trampoline_is_per_tu_local() {
-    // On PE, whose loader binds no data slot to an import, two
-    // translation units that each take the address of the same libc
-    // function in a `.data` function-pointer table both emit a
-    // synthetic `__c5_sys_exp` forwarding trampoline. The trampoline
-    // is referenced only within its own unit (via a `.text`-section
-    // reloc carrying its byte offset, not by name), so it must have
-    // internal linkage; binding it STB_GLOBAL would make the merge
-    // reject the second definition. Verifies the per-TU local
-    // classification in `elf_reloc::write_relocatable`.
+fn libc_address_tables_in_two_units_name_the_import() {
     use crate::c5::compiler::CompileOptions;
     use crate::c5::linker::{link_native_objects, parse_native_elf};
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
-    let unit = |table: &str, extra: &str| {
-        let program = Compiler::with_options(
-            alloc::format!(
-                "#include <math.h>\n\
-                 typedef double (*mathfn)(double);\n\
-                 const mathfn {table}[] = {{ exp, log }};\n\
-                 {extra}"
-            ),
-            Target::WindowsX64,
-            CompileOptions::default().with_no_entry_point(true),
-        )
-        .compile()
-        .expect("compile");
-        let opts = NativeOptions {
-            output_kind: OutputKind::Relocatable,
-            ..Default::default()
+    for target in [Target::WindowsX64, Target::LinuxX64, Target::MacOSAarch64] {
+        let unit = |table: &str, extra: &str| {
+            let program = Compiler::with_options(
+                alloc::format!(
+                    "#include <math.h>\n\
+                     typedef double (*mathfn)(double);\n\
+                     const mathfn {table}[] = {{ exp, log }};\n\
+                     {extra}"
+                ),
+                target,
+                CompileOptions::default().with_no_entry_point(true),
+            )
+            .compile()
+            .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            };
+            let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+            parse_native_elf(&bytes).expect("parse ET_REL")
         };
-        let bytes = emit_native_with_options(&program, Target::WindowsX64, opts).expect("emit");
-        parse_native_elf(&bytes).expect("parse ET_REL")
-    };
-    let a = unit(
-        "a_tbl",
-        "double call_a(int i, double x) { return a_tbl[i](x); }\n",
-    );
-    let b = unit(
-        "b_tbl",
-        "double call_a(int i, double x);\n\
-         int main(void) { return call_a(0, 0.0) == 1.0 ? 0 : 1; }\n",
-    );
-    // The merge must not reject the duplicate `__c5_sys_exp` /
-    // `__c5_sys_log` trampolines.
-    let merged = link_native_objects(&[a, b]).expect("link must not collide on libc trampolines");
-    // Each unit kept its own local copy: the merged static-function
-    // list carries the trampoline name from both units.
-    let exp_copies = merged
-        .local_funcs
-        .iter()
-        .filter(|(n, _)| n == "__c5_sys_exp")
-        .count();
-    assert!(
-        exp_copies >= 2,
-        "each TU must keep its own local __c5_sys_exp trampoline, got {exp_copies}"
-    );
+        let a = unit(
+            "a_tbl",
+            "double call_a(int i, double x) { return a_tbl[i](x); }\n",
+        );
+        let b = unit(
+            "b_tbl",
+            "double call_a(int i, double x);\n\
+             int main(void) { return call_a(0, 0.0) == 1.0 ? 0 : 1; }\n",
+        );
+        for obj in [&a, &b] {
+            assert!(
+                !obj.symbols.iter().any(|s| s.name.starts_with("__c5_sys_")),
+                "{target:?}: {:?}",
+                obj.symbols
+            );
+        }
+        let merged = link_native_objects(&[a, b]).expect("link");
+        let mut named: alloc::vec::Vec<&str> = (merged.data_import_refs.iter())
+            .map(|r| merged.imports[r.import].trim_start_matches('_'))
+            .collect();
+        named.sort_unstable();
+        assert_eq!(named, ["exp", "exp", "log", "log"], "{target:?}");
+    }
 }
 
 /// A `const` table entry naming a libc function folds, under `-O`, to the
@@ -4536,6 +4530,96 @@ fn elf_dynsym_entries(bytes: &[u8]) -> std::collections::BTreeMap<String, Dynsym
         }
     }
     out
+}
+
+/// Within a PE image a function import's address is its stub: the data slot
+/// holds it, and a slot load of the address is rewritten to take it.
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_pe_image_takes_a_function_imports_address_from_its_stub() {
+    use crate::c5::linker::link::MergedTarget;
+    use crate::c5::linker::{emit_plt_for, link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let program = Compiler::with_target(
+            String::from(
+                "#include <stdio.h>\n#include <stdlib.h>\n\
+                 int (*fp)(const char *) = puts;\n\
+                 int *nerr(void) { return &_sys_nerr; }\n\
+                 int main(void) { int (*volatile q)(const char *) = puts; return fp == q; }\n",
+            ),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let mut merged =
+            link_native_objects(&[parse_native_elf(&bytes).expect("parse")]).expect("link");
+        let puts = merged
+            .imports
+            .iter()
+            .position(|n| n == "puts")
+            .expect("import");
+        let stubs = emit_plt_for(&mut merged, target, false).expect("plt");
+        let stub = stubs
+            .iter()
+            .find(|t| t.import_index == puts)
+            .expect("stub")
+            .text_offset;
+        assert!(
+            (merged.data_abs_relocs.iter())
+                .any(|r| matches!(r.target, MergedTarget::Text(t) if t == stub as i64)),
+            "{target:?}: the data slot holds the stub"
+        );
+        assert!(
+            !merged
+                .pending_imports
+                .iter()
+                .any(|r| r.import_index == puts),
+            "{target:?}: no site reads the import's slot"
+        );
+        let nerr = merged.imports.iter().position(|n| n == "_sys_nerr");
+        let nerr = nerr.expect("data import");
+        assert!(
+            !stubs.iter().any(|t| t.import_index == nerr)
+                && (merged.pending_imports.iter()).any(|r| r.import_index == nerr),
+            "{target:?}: a data import keeps its slot"
+        );
+        match target {
+            Target::WindowsX64 => {
+                let text = &merged.text;
+                let reaches = |at: usize| {
+                    let disp = i32::from_le_bytes(text[at + 3..at + 7].try_into().unwrap());
+                    at as i64 + 7 + disp as i64 == stub as i64
+                };
+                assert!(
+                    (0..text.len().saturating_sub(7)).any(|at| text[at] == 0x48
+                        && text[at + 1] == 0x8D
+                        && text[at + 2] & 0xC7 == 0x05
+                        && reaches(at)),
+                    "{target:?}: `lea reg, [rip + stub]`"
+                );
+            }
+            _ => {
+                let parked: alloc::vec::Vec<u32> = (merged.pending_imports.iter())
+                    .filter(|r| r.addend == stub as i64)
+                    .map(|r| {
+                        let at = r.text_offset as usize;
+                        u32::from_le_bytes(merged.text[at..at + 4].try_into().unwrap())
+                    })
+                    .collect();
+                assert!(
+                    parked.iter().any(|w| w & 0x9F00_0000 == 0x9000_0000)
+                        && parked.iter().any(|w| w & 0xFFC0_0000 == 0x9100_0000),
+                    "{target:?}: `adrp` + `add` reach the stub: {parked:#010x?}"
+                );
+            }
+        }
+    }
 }
 
 /// Code taking an import's address as an absolute immediate reaches its stub,

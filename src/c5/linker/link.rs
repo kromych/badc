@@ -4365,27 +4365,86 @@ fn plt_eligible(machine: NativeMachine, rtype: u32) -> bool {
 
 /// What a data slot naming an import holds: the import's call stub, made
 /// even for an import only data names, or the symbol itself, which the
-/// loader binds as it binds a GOT entry (Mach-O, ELF). Only the bind equals the
-/// address code reads from the GOT.
+/// loader binds as it binds a GOT entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataImportSlots {
+    /// The stub, which an ELF executable placed at its link address publishes
+    /// as the import's address (GNU ld's canonical PLT entry).
     Stub,
+    /// The symbol (Mach-O, ELF).
     Bind,
+    /// The stub, a function import's address throughout a PE image: code
+    /// reading the address from the import's slot takes the stub's instead.
+    Thunk,
 }
 
 impl DataImportSlots {
-    /// The resolution `target`'s loader supports. An ELF executable
-    /// `placed` at its link address keeps read-only storage free of load-time
-    /// relocations, so its slots hold the stub, which it publishes as the
-    /// import's address (GNU ld's canonical PLT entry).
+    /// The resolution `target`'s loader supports for an image `placed` or not.
     pub fn of(target: crate::c5::codegen::Target, placed: bool) -> Self {
-        let elf = target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
-        if target.binds_data_imports() && !(placed && elf) {
-            DataImportSlots::Bind
-        } else {
-            DataImportSlots::Stub
+        use crate::c5::codegen::BinaryFormat;
+        match target.binary_format() {
+            BinaryFormat::Pe => DataImportSlots::Thunk,
+            BinaryFormat::Elf if placed => DataImportSlots::Stub,
+            _ => DataImportSlots::Bind,
         }
     }
+}
+
+/// Whether `import` is a data object the image reaches through its slot (an
+/// object import, a `#pragma binding(data ...)`), not a function.
+fn is_data_import(merged: &MergedNative, import: usize) -> bool {
+    let name = import_name(merged, import);
+    merged.object_imports.contains(&import)
+        || merged.copy_relocs.iter().any(|(local, _)| local == name)
+}
+
+/// Whether the site loads the import's address from its slot in a form that can
+/// take the stub's instead: x86-64 `mov reg, [rip + slot]`, aarch64 `adrp` + `ldr`.
+fn slot_load_relaxes(merged: &MergedNative, reloc: &PendingImportReloc) -> bool {
+    match merged.machine {
+        NativeMachine::X86_64 => {
+            got_relax::got_use(&merged.text, reloc.text_offset as usize, reloc.rtype)
+                == got_relax::GotUse::Load
+        }
+        NativeMachine::Aarch64 => matches!(
+            reloc.rtype,
+            R_AARCH64_ADR_GOT_PAGE | R_AARCH64_LD64_GOT_LO12_NC
+        ),
+    }
+}
+
+/// Rewrite a slot load to take its target's address directly (`lea`; `adrp` +
+/// `add`), returning the address-of reference that now patches it.
+fn relax_slot_load(
+    merged: &mut MergedNative,
+    reloc: &PendingImportReloc,
+) -> Result<PendingImportReloc, C5Error> {
+    let at = reloc.text_offset as usize;
+    let rtype = match (merged.machine, reloc.rtype) {
+        (NativeMachine::X86_64, _) => {
+            got_relax::relax(&mut merged.text, at, got_relax::GotUse::Load);
+            R_X86_64_PC32
+        }
+        (NativeMachine::Aarch64, R_AARCH64_ADR_GOT_PAGE) => R_AARCH64_ADR_PREL_PG_HI21,
+        (NativeMachine::Aarch64, _) => {
+            let word = u32::from_le_bytes(merged.text[at..at + 4].try_into().expect("4 bytes"));
+            // `ldr xT, [xN, #imm]` becomes `add xT, xN, #imm`.
+            if word & 0xFFC0_0000 != 0xF940_0000 {
+                return Err(internal_err(
+                    MODULE,
+                    &format!("a GOT low-12 site at .text+{at:#x} is no 64-bit ldr: {word:#010x}"),
+                ));
+            }
+            let add = 0x9100_0000 | (word & 0x3FF);
+            merged.text[at..at + 4].copy_from_slice(&add.to_le_bytes());
+            R_AARCH64_ADD_ABS_LO12_NC
+        }
+    };
+    Ok(PendingImportReloc {
+        rtype,
+        slot_load: false,
+        ..reloc.clone()
+    })
 }
 
 /// The PLT pass for `merged`'s machine, resolving data slots as `target`'s
@@ -4428,12 +4487,21 @@ fn emit_plt(
     let mut trampolines: Vec<PltTrampoline> = Vec::new();
     let pending = core::mem::take(&mut merged.pending_imports);
     let mut parked_back: Vec<PendingImportReloc> = Vec::new();
-    for reloc in &pending {
-        if reloc.import_index == usize::MAX || reloc.slot_load {
+    let takes_stub: Vec<bool> = (pending.iter())
+        .map(|r| {
+            r.import_index != usize::MAX
+                && (!r.slot_load
+                    || slots == DataImportSlots::Thunk
+                        && !is_data_import(merged, r.import_index)
+                        && slot_load_relaxes(merged, r))
+        })
+        .collect();
+    for (reloc, &stubbed) in pending.iter().zip(&takes_stub) {
+        if !stubbed {
             parked_back.push(reloc.clone());
             continue;
         }
-        if !plt_eligible(machine, reloc.rtype) {
+        if !reloc.slot_load && !plt_eligible(machine, reloc.rtype) {
             return Err(link_err(
                 Code::RELOCATION,
                 MODULE,
@@ -4457,8 +4525,8 @@ fn emit_plt(
             merged.text.extend_from_slice(&stub);
         }
     }
-    for reloc in &pending {
-        if reloc.import_index == usize::MAX || reloc.slot_load {
+    for (reloc, &stubbed) in pending.iter().zip(&takes_stub) {
+        if !stubbed {
             continue;
         }
         let tramp = tramp_for_import
@@ -4468,10 +4536,17 @@ fn emit_plt(
         if !is_branch_reloc(machine, reloc.rtype) {
             merged.stub_address_imports.insert(reloc.import_index);
         }
-        patch_site(merged, reloc, tramp, &mut parked_back)?;
+        let reloc = if reloc.slot_load {
+            relax_slot_load(merged, reloc)?
+        } else {
+            reloc.clone()
+        };
+        patch_site(merged, &reloc, tramp, &mut parked_back)?;
     }
     let data_import_refs = match slots {
-        DataImportSlots::Stub => core::mem::take(&mut merged.data_import_refs),
+        DataImportSlots::Stub | DataImportSlots::Thunk => {
+            core::mem::take(&mut merged.data_import_refs)
+        }
         DataImportSlots::Bind => Vec::new(),
     };
     for DataImportBind {

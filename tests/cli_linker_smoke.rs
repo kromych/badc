@@ -9636,6 +9636,44 @@ fn a_cxx_exception_lands_in_a_badc_linked_image() {
     assert_eq!(String::from_utf8_lossy(&out.stdout), "cleanup\ncaught\n1\n");
 }
 
+/// Within a PE image a function import has one address, its thunk: a pointer a
+/// static initializer holds equals the one code takes.
+#[cfg(windows)]
+#[test]
+fn a_static_pointer_to_an_import_is_the_address_code_takes() {
+    let dir = tempdir("pe-import-identity");
+    write_source(
+        &dir,
+        "id.c",
+        "#include <stdio.h>\n\
+         #include <stdlib.h>\n\
+         typedef int (*put_t)(const char *);\n\
+         put_t fp = puts;\n\
+         static put_t const table[] = { atoi, puts };\n\
+         struct ops { int tag; put_t put; };\n\
+         static const struct ops ops = { 7, puts };\n\
+         static put_t const *second = &table[1];\n\
+         int main(void) {\n\
+           put_t volatile q = puts;\n\
+           put_t volatile a = atoi;\n\
+           return (fp == q) | (table[1] == q) << 1 | (table[0] == a) << 2 |\n\
+                  (ops.put == q) << 3 | (*second == q) << 4;\n\
+         }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        run(
+            Command::new(badc())
+                .args(["-q", opt, "id.c", "-o", "id.exe"])
+                .current_dir(&dir),
+            "build the image",
+        );
+        let out = Command::new(dir.join("id.exe"))
+            .output()
+            .expect("run the image");
+        assert_eq!(out.status.code(), Some(31), "{opt}: {out:?}");
+    }
+}
+
 /// A static initializer naming an imported object or function, writable or
 /// `const`, with or without an offset, holds the address dyld binds: the
 /// one code takes at run time (C99 6.5.9p6). Compiled by badc, and compiled

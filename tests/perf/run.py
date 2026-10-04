@@ -152,21 +152,11 @@ BADC_FIXTURE_FLAGS: dict[str, list[str]] = {
 FIXTURE_SKIP_COMPILERS: dict[str, set[str]] = {
     "quickjs_bench.c": {"tcc", "cl"},
 }
-# The same, on Windows only.
-# TODO(#1428): badc builds quickjs_bench on Windows once POSIX threads are
-# defined there; the fixture takes pthread mutexes, condition variables
-# and threads.
-WINDOWS_FIXTURE_SKIP_COMPILERS: dict[str, set[str]] = {
-    "quickjs_bench.c": {"badc"},
-}
 
 
-def skips(fixture: str, leg: str, windows: bool = WIN) -> bool:
+def skips(fixture: str, leg: str) -> bool:
     """Whether the leg named `leg` sits out `fixture`."""
-    skip = FIXTURE_SKIP_COMPILERS.get(fixture, set())
-    if windows:
-        skip = skip | WINDOWS_FIXTURE_SKIP_COMPILERS.get(fixture, set())
-    return leg.split()[0] in skip
+    return leg.split()[0] in FIXTURE_SKIP_COMPILERS.get(fixture, set())
 
 
 @dataclass
@@ -689,15 +679,12 @@ def self_test() -> int:
         assert f"/Fe:{exe}" in argv and f"/Fo:{exe}.obj" in argv, argv
         assert compile_argv(legs[0], src, d / "fib")[-4:] == [
             "-o", str(d / "fib"), str(src), "-lm"], compile_argv(legs[0], src, d / "fib")
-        # quickjs sits out every cl and tcc leg, and badc's on Windows;
-        # nothing else does.
+        # quickjs sits out every cl and tcc leg; nothing else does.
         assert skips("quickjs_bench.c", "cl /O2 /arch:AVX2")
         assert skips("quickjs_bench.c", "tcc")
         assert not skips("quickjs_bench.c", "clang -O2")
+        assert not skips("quickjs_bench.c", "badc -O")
         assert not skips("fib.c", "cl /O2")
-        assert skips("quickjs_bench.c", "badc -O", windows=True)
-        assert not skips("quickjs_bench.c", "badc -O", windows=False)
-        assert not skips("fib.c", "badc", windows=True)
         # A failure reports what the compiler said on either stream.
         said = failure_text(subprocess.CompletedProcess(
             ["cl"], 2, stdout="bad.c\nbad.c(1): error C2065: 'x': undeclared\n",

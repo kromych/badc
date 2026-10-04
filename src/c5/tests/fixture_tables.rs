@@ -905,6 +905,9 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("posix_clocks.c", 0),
     ("exit_from_nested_call.c", 3),
     ("popen_reads_command_output.c", 0),
+    ("pthread_lifecycle.c", 0),
+    ("pthread_mutex_cond.c", 0),
+    ("pthread_once_keys.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
     ("setenv_overwrite.c", 0),
     // Runtime dynamic linking. Opens the global symbol table,
@@ -1677,6 +1680,9 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("posix_clocks.c", 0),
     ("exit_from_nested_call.c", 3),
     ("popen_reads_command_output.c", 0),
+    ("pthread_lifecycle.c", 0),
+    ("pthread_mutex_cond.c", 0),
+    ("pthread_once_keys.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
     ("setenv_overwrite.c", 0),
     // Runtime dynamic linking through libdl (libdl.so.2 +
@@ -2703,6 +2709,9 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("posix_clocks.c", 0),
     ("exit_from_nested_call.c", 3),
     ("popen_reads_command_output.c", 0),
+    ("pthread_lifecycle.c", 0),
+    ("pthread_mutex_cond.c", 0),
+    ("pthread_once_keys.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
     ("setenv_overwrite.c", 0),
     ("dlopen_atoi.c", 123),
@@ -3484,6 +3493,12 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("posix_clocks.c", 0),
     ("exit_from_nested_call.c", 3),
     ("popen_reads_command_output.c", 0),
+    ("pthread_lifecycle.c", 0),
+    ("pthread_mutex_cond.c", 0),
+    ("pthread_once_keys.c", 0),
+    ("pthread_cond_timedwait.c", 0),
+    ("pthread_static_init.c", 0),
+    ("pthread_key_once_width.c", 0),
     ("clock_monotonic_advances.c", 0),
     // c5-side vprintf -- the variadic walk happens in c5 source,
     // so the call into msvcrt is just `_write`. No libc va_list
@@ -4202,6 +4217,12 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("posix_clocks.c", 0),
     ("exit_from_nested_call.c", 3),
     ("popen_reads_command_output.c", 0),
+    ("pthread_lifecycle.c", 0),
+    ("pthread_mutex_cond.c", 0),
+    ("pthread_once_keys.c", 0),
+    ("pthread_cond_timedwait.c", 0),
+    ("pthread_static_init.c", 0),
+    ("pthread_key_once_width.c", 0),
     ("clock_monotonic_advances.c", 0),
     // c5-side vprintf -- variadic walking happens in c5 source
     // and the only Win32 call is `_write`, so this fixture stays
@@ -4972,6 +4993,11 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("posix_clocks.c", 0),
     ("exit_from_nested_call.c", 3),
     ("popen_reads_command_output.c", 0),
+    // pthread_lifecycle.c and pthread_once_keys.c run only as executables:
+    // the JIT unmaps a program once its main returns, while a detached
+    // thread may still run the program's code, and runs main on a thread
+    // whose exit runs the destructors main's keys leave set.
+    ("pthread_mutex_cond.c", 0),
     // dlopen+dlsym+blr finds libc atoi and the indirect call passes
     // "123" in the System V argument register.
     ("dlopen_atoi.c", 123),

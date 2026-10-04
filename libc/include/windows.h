@@ -326,6 +326,8 @@ typedef enum {
 #pragma binding(kernel32::CloseHandle,             "CloseHandle")
 #pragma binding(kernel32::GetExitCodeThread,       "GetExitCodeThread")
 #pragma binding(kernel32::SetThreadPriority,       "SetThreadPriority")
+#pragma binding(kernel32::GetThreadPriority,       "GetThreadPriority")
+#pragma binding(kernel32::ExitThread,              "ExitThread")
 #pragma binding(kernel32::GetCurrentThreadId,      "GetCurrentThreadId")
 #pragma binding(kernel32::InitializeCriticalSection, "InitializeCriticalSection")
 #pragma binding(kernel32::InitializeCriticalSectionEx, "InitializeCriticalSectionEx")
@@ -339,6 +341,13 @@ typedef enum {
 #pragma binding(kernel32::TlsGetValue,             "TlsGetValue")
 #pragma binding(kernel32::TlsSetValue,             "TlsSetValue")
 #pragma binding(kernel32::TlsFree,                 "TlsFree")
+// Fiber-local storage: slots like TlsAlloc's, each with a callback the system
+// runs on a slot's non-null value when its thread exits, when the process
+// ends, and, for every thread's value, when FlsFree releases the index.
+#pragma binding(kernel32::FlsAlloc,                "FlsAlloc")
+#pragma binding(kernel32::FlsGetValue,             "FlsGetValue")
+#pragma binding(kernel32::FlsSetValue,             "FlsSetValue")
+#pragma binding(kernel32::FlsFree,                 "FlsFree")
 // Slim reader/writer locks and condition variables (Vista+).
 #pragma binding(kernel32::InitializeSRWLock,           "InitializeSRWLock")
 #pragma binding(kernel32::AcquireSRWLockExclusive,     "AcquireSRWLockExclusive")
@@ -1036,6 +1045,7 @@ typedef enum _COMPUTER_NAME_FORMAT {
 #define LOAD_LIBRARY_SEARCH_DEFAULT_DIRS   0x00001000
 #define BCRYPT_SUCCESS(status) (((NTSTATUS)(status)) >= 0)
 #define TLS_OUT_OF_INDEXES             0xFFFFFFFF
+#define FLS_OUT_OF_INDEXES             0xFFFFFFFF
 #define TIMER_ALL_ACCESS               0x1F0003
 #define VOLUME_NAME_DOS                0x0
 #define VOLUME_NAME_GUID               0x1
@@ -1322,6 +1332,7 @@ typedef enum _FILE_INFO_BY_HANDLE_CLASS {
 #define DEBUG_PROCESS                  0x00000001
 #define DEBUG_ONLY_THIS_PROCESS        0x00000002
 #define CREATE_SUSPENDED               0x00000004
+#define STACK_SIZE_PARAM_IS_A_RESERVATION 0x00010000
 #define DETACHED_PROCESS               0x00000008
 #define CREATE_NEW_CONSOLE             0x00000010
 #define NORMAL_PRIORITY_CLASS          0x00000020
@@ -1997,6 +2008,17 @@ DWORD WaitForSingleObject(HANDLE hHandle, DWORD dwMilliseconds);
 BOOL CloseHandle(HANDLE hObject);
 BOOL GetExitCodeThread(HANDLE hThread, LPDWORD lpExitCode);
 BOOL SetThreadPriority(HANDLE hThread, int nPriority);
+int GetThreadPriority(HANDLE hThread);
+// The levels SetThreadPriority takes (winbase.h).
+#define THREAD_PRIORITY_IDLE          (-15)
+#define THREAD_PRIORITY_LOWEST        (-2)
+#define THREAD_PRIORITY_BELOW_NORMAL  (-1)
+#define THREAD_PRIORITY_NORMAL        0
+#define THREAD_PRIORITY_ABOVE_NORMAL  1
+#define THREAD_PRIORITY_HIGHEST       2
+#define THREAD_PRIORITY_TIME_CRITICAL 15
+#define THREAD_PRIORITY_ERROR_RETURN  0x7FFFFFFF
+__attribute__((noreturn)) VOID ExitThread(DWORD dwExitCode);
 DWORD GetCurrentThreadId(VOID);
 VOID InitializeCriticalSection(LPCRITICAL_SECTION lpCriticalSection);
 // InitializeCriticalSectionEx(cs, spin, flags): the flag word selects debug
@@ -2010,6 +2032,11 @@ DWORD TlsAlloc(VOID);
 LPVOID TlsGetValue(DWORD dwTlsIndex);
 BOOL TlsSetValue(DWORD dwTlsIndex, LPVOID lpTlsValue);
 BOOL TlsFree(DWORD dwTlsIndex);
+typedef VOID (WINAPI *PFLS_CALLBACK_FUNCTION)(PVOID lpFlsData);
+DWORD FlsAlloc(PFLS_CALLBACK_FUNCTION lpCallback);
+PVOID FlsGetValue(DWORD dwFlsIndex);
+BOOL FlsSetValue(DWORD dwFlsIndex, PVOID lpFlsData);
+BOOL FlsFree(DWORD dwFlsIndex);
 VOID InitializeSRWLock(PSRWLOCK SRWLock);
 VOID AcquireSRWLockExclusive(PSRWLOCK SRWLock);
 VOID ReleaseSRWLockExclusive(PSRWLOCK SRWLock);

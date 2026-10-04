@@ -184,8 +184,6 @@ a system DLL or to a definition in `libc/lib/`, which the link joins as it
 would an archive member. A name mingw-w64 leaves undeclared stays undeclared,
 so a program's own Windows fallback for it compiles under badc as under
 mingw-w64. `setenv` is one such name.
-TODO(#1428): `<pthread.h>` declares POSIX threads on Windows, which nothing
-there defines yet.
 TODO(#1441): `<unistd.h>`, `<stdlib.h>` and other POSIX headers still
 declare names on Windows that have no definition there.
 

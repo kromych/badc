@@ -4,7 +4,8 @@
 // These types appear inside structs whose layout a program reads back
 // (a separately-compiled module computes field offsets against the host
 // struct). An over-wide slot shifts every later field. macOS uses an
-// 8-byte key and a 16-byte once control; Linux uses 4 bytes for both.
+// 8-byte key and a 16-byte once control; Linux uses 4 bytes for both, as
+// does Windows (winpthreads' `unsigned` key and `long` once control).
 
 #include <pthread.h>
 
@@ -62,6 +63,23 @@ int main(void) {
         return 4;
     }
 #endif
+#elif defined(_WIN32)
+    if (sizeof(pthread_key_t) != 4 || sizeof(pthread_once_t) != 4) {
+        return 1;
+    }
+    if (sizeof(struct tss) != 8) {
+        return 2;
+    }
+    // A slim reader/writer lock with an owner, depth and type; a condition
+    // variable with its clock; winpthreads' attribute layout.
+    if (sizeof(pthread_mutex_t) != 24 || sizeof(pthread_cond_t) != 16 ||
+        sizeof(pthread_attr_t) != 32) {
+        return 3;
+    }
+    if (sizeof(pthread_mutexattr_t) != 4 || sizeof(pthread_condattr_t) != 4 ||
+        sizeof(pthread_t) != 8) {
+        return 4;
+    }
 #endif
     return 0;
 }

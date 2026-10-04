@@ -2,12 +2,8 @@
 // (init / setdetachstate / destroy) and a timed condition wait. A
 // pthread_cond_timedwait whose absolute deadline has already passed returns
 // ETIMEDOUT per POSIX, so the call is deterministic and needs no second
-// thread. Windows has no pthreads (the primitives come from <windows.h>), so
-// the body is POSIX-only.
+// thread.
 
-#ifdef _WIN32
-int main(void) { return 0; }
-#else
 #include <pthread.h>
 #include <time.h>
 
@@ -36,4 +32,3 @@ int main(void) {
     // mean the wait reported a signal that never came.
     return (r != 0) ? 0 : 4;
 }
-#endif

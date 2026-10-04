@@ -416,8 +416,14 @@ registers under either compiler.
   `<dirent.h>` is mingw-w64's: `opendir` / `readdir` / `closedir` /
   `rewinddir` / `telldir` / `seekdir` over kernel32's file search, with its
   `struct dirent` (`d_name`, `d_namlen`); under msvc_compat.h's `_MSC_VER`
-  it declares nothing, as cl ships none. `native-compilation.md` states the
-  rule the Windows headers follow.
+  it declares nothing, as cl ships none. `<pthread.h>` carries winpthreads'
+  types and numbering, and its threads, mutexes (normal, recursive and
+  error-checking), condition variables on either clock, once controls,
+  thread-specific data and creation attributes over kernel32; a destructor
+  also runs when a thread CreateThread started exits, and none at process
+  exit. Cancellation, `pthread_kill` and the scheduling setters of a running
+  thread are not declared there. `native-compilation.md` states the rule the
+  Windows headers follow.
 
 ### GCC
 

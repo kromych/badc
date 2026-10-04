@@ -1208,6 +1208,48 @@ fn windows_headers_leave_posix_fallbacks_to_the_program() {
     );
 }
 
+/// Every function the Windows `<pthread.h>` and `<sched.h>` declare has a
+/// definition the link finds, in the C-library sources it offers like
+/// archive members. The PE fixtures run them on a Windows host; this links
+/// them on any host.
+#[test]
+fn windows_pthread_declarations_link() {
+    use crate::{Compiler, NativeOptions, Target};
+    const SRC: &str = "#include <pthread.h>\n#include <sched.h>\n\
+        typedef void (*fn)(void);\n\
+        static const fn used[] = {\n\
+          (fn)pthread_create, (fn)pthread_join, (fn)pthread_exit, (fn)pthread_detach,\n\
+          (fn)pthread_self, (fn)pthread_equal, (fn)pthread_once,\n\
+          (fn)pthread_key_create, (fn)pthread_key_delete,\n\
+          (fn)pthread_setspecific, (fn)pthread_getspecific,\n\
+          (fn)pthread_mutex_init, (fn)pthread_mutex_lock, (fn)pthread_mutex_trylock,\n\
+          (fn)pthread_mutex_unlock, (fn)pthread_mutex_destroy,\n\
+          (fn)pthread_mutexattr_init, (fn)pthread_mutexattr_settype,\n\
+          (fn)pthread_mutexattr_destroy,\n\
+          (fn)pthread_cond_init, (fn)pthread_cond_destroy, (fn)pthread_cond_wait,\n\
+          (fn)pthread_cond_timedwait, (fn)pthread_cond_signal, (fn)pthread_cond_broadcast,\n\
+          (fn)pthread_condattr_init, (fn)pthread_condattr_destroy,\n\
+          (fn)pthread_condattr_setclock,\n\
+          (fn)pthread_attr_init, (fn)pthread_attr_destroy, (fn)pthread_attr_setdetachstate,\n\
+          (fn)pthread_attr_setstacksize, (fn)pthread_attr_setscope,\n\
+          (fn)pthread_attr_setschedpolicy, (fn)pthread_attr_setschedparam,\n\
+          (fn)pthread_attr_getschedparam, (fn)pthread_attr_getguardsize,\n\
+          (fn)pthread_attr_getstack, (fn)pthread_attr_setinheritsched,\n\
+          (fn)sched_yield, (fn)sched_get_priority_min, (fn)sched_get_priority_max,\n\
+        };\n\
+        int main(void) { return used[0] == 0 || pthread_atfork(0, 0, 0); }\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let program = Compiler::with_target(SRC.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        if let Err(e) =
+            super::link_executable_with_runtime(&program, target, NativeOptions::default())
+        {
+            panic!("{target:?}: {e}");
+        }
+    }
+}
+
 /// A `#pragma binding(data lib::sym, ...)` import on the Windows
 /// x86-64 PE target must lower the data reference as a load of the
 /// import's IAT slot, not as the address of a `jmp [IAT]` call

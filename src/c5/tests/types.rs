@@ -2153,6 +2153,7 @@ fn enums_take_the_types_gcc_gives_on_every_target() {
 /// targets, as mingw-w64's gcc and clang for the windows-gnu triples read it:
 /// the field is masked and nothing sign-extends it. `_Generic` selects
 /// `unsigned int` for the enum and its value 4 survives the 3-bit field.
+#[cfg(feature = "full")]
 #[test]
 fn an_unsigned_enums_bit_field_reads_unsigned_on_the_pe_targets() {
     use crate::{Compiler, Target};

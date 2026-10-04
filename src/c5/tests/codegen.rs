@@ -10214,6 +10214,44 @@ fn a_call_to_a_function_that_does_not_return_ends_its_block() {
     }
 }
 
+/// An always_inline function returning an aggregate it did not build in a
+/// local of its own -- its by-value parameter, a global, a pointer's
+/// target, a member reached through one -- is inlined: the splice copies
+/// the result from the returned address, as for a multi-block body, where
+/// it once refused with B4004. A result stored through a pointer takes the
+/// same path.
+#[test]
+fn an_always_inline_aggregate_return_from_any_address_is_inlined() {
+    const SRC: &str = "#define AI static inline __attribute__((always_inline))\n\
+        typedef struct { unsigned long v; } word_t;\n\
+        struct holder { int pad; word_t p; };\n\
+        word_t global_word;\n\
+        AI word_t same(word_t p) { return p; }\n\
+        AI word_t global(void) { return global_word; }\n\
+        AI word_t through(const word_t *q) { return *q; }\n\
+        AI word_t member(struct holder *q) { return q->p; }\n\
+        unsigned long via_param(word_t p) { return same(p).v; }\n\
+        unsigned long via_global(void) { return global().v; }\n\
+        unsigned long via_pointer(const word_t *q) { return through(q).v; }\n\
+        unsigned long via_member(struct holder *q) { return member(q).v; }\n\
+        void store_through(word_t *d, word_t p) { *d = same(p); }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for name in [
+            "via_param",
+            "via_global",
+            "via_pointer",
+            "via_member",
+            "store_through",
+        ] {
+            let (body, insts) = optimized_function(SRC, name, target);
+            assert!(
+                !insts.iter().any(|(_, i)| i.starts_with("Call {")),
+                "{target:?}: {name} keeps a call: {body}"
+            );
+        }
+    }
+}
+
 /// A `long double` conditional merges its arms' binary64 values as a
 /// double. Given the object's F80 / F128 kinds, the merge slot fell back to
 /// I64: it stayed in memory and the result reached the return through a

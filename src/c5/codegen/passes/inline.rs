@@ -1044,19 +1044,13 @@ fn is_inline_candidate(
     // the flat path and keeps its strict gates.
     let reloc = func.blocks.len() > 1 || needs_reloc_splice(func, &used);
     // On the flat path an aggregate return rides the one slot
-    // `flat_result_slot` names, redirected to the caller's return slot.
-    // A Return naming anything else -- a global address, an
-    // indirect-result pointer -- has nothing to redirect. The reloc path
-    // has no result slot: it copies from whatever address each `Return`
-    // carries, so it only rejects a value-less aggregate Return.
+    // `flat_result_slot` names, redirected to the caller's return slot; a
+    // body returning anything else takes the reloc path
+    // (`needs_reloc_splice`). That path has no result slot: it copies from
+    // whatever address each `Return` carries, so it only rejects a
+    // value-less aggregate Return.
     let result_slot: Option<i64> = if func.ret_agg.is_some() && !reloc {
-        let Some(s) = flat_result_slot(func) else {
-            say(format_args!(
-                "aggregate return not via a redirectable local slot"
-            ));
-            return false;
-        };
-        Some(s)
+        flat_result_slot(func)
     } else {
         None
     };
@@ -3567,10 +3561,11 @@ fn param_read_insts(kind: LoadKind) -> u32 {
 ///
 /// A by-value aggregate parameter's slot is not one: it already redirects
 /// to the caller's argument, and one slot cannot take both redirects. A
-/// body returning such a parameter (`pte_t f(pte_t p) { return p; }`) has
-/// no flat result slot, so `needs_reloc_splice` sends it to the reloc
-/// path, which binds the parameter slot to the argument address and
-/// copies from there into the caller's return slot.
+/// body returning such a parameter (`struct s f(struct s p) { return p; }`),
+/// an object at a global's or a pointer's address has no flat result slot,
+/// so `needs_reloc_splice` sends it to the reloc path, which copies from
+/// the returned address -- the argument's, for a parameter -- into the
+/// caller's return slot.
 fn flat_result_slot(c: &FunctionSsa) -> Option<i64> {
     if c.blocks.len() != 1 {
         return None;
@@ -3615,6 +3610,11 @@ fn needs_reloc_splice(c: &FunctionSsa, used: &[bool]) -> bool {
         return true;
     }
     if c.insts.iter().any(|i| matches!(i, Inst::InlineAsm { .. })) {
+        return true;
+    }
+    // An aggregate returned from anywhere but the one slot the flat path
+    // redirects is copied from its address, which the relocating path does.
+    if c.ret_agg.is_some() && flat_result_slot(c).is_none() {
         return true;
     }
     // A by-value aggregate parameter's cell that needs the argument copy

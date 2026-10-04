@@ -13,13 +13,6 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<ret_s>:
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	mov	x16, x0
-               	ldr	x0, [x16]
-               	ret
-
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
@@ -67,15 +60,9 @@ Disassembly of section .text:
                	movk	x17, #0x9, lsl #32
                	orr	x1, x1, x17
                	str	x1, [x0]
-               	bl	<addr>
-               	stur	x0, [x29, #-0x18]
-               	sub	x0, x29, #0x18
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x16, [x0]
-               	str	x16, [x1]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
+               	str	x1, [x0]
                	ldr	w1, [x0]
                	and	x1, x1, #0x1fffffff
                	lsl	x1, x1, #35

@@ -734,21 +734,24 @@ image as the guest: the initramfs is 31.6 MB compressed (36 MB emulator,
 
 ### Text sizes
 
-The build's `System.map` is measured after the link: the largest text
-symbol and the count of functions over 4 KiB, against the architecture's
-budgets in `TEXT_BUDGETS` in `verify.py`. An inliner that duplicated a
-callee's body at every site moved aggregate text by 8% while single
-functions moved 18-34x, so a budget on the total cannot separate the two
-and the budget is on the distribution. The map records no sizes, so a
-symbol's size is the gap to the next address any symbol holds, one name per
-address, with the linker labels of `asm-generic/sections.h` left out and a
-gap of a megabyte or more read as a section boundary; weak symbols are
-functions and count. `scripts/function_sizes.py` sizes a map the same way
-and reports two ratios over an object set; this is the linked image's own
-count. aarch64's badc-built defconfig map measures 84530 functions, largest
-101612 bytes (`hidinput_configure_usage`, 21192 in the gcc-built
-distribution kernel on the same box) and 451 over 4 KiB; the budgets are
-131072 and 520. An architecture without a budget is reported only.
+The linked image is measured after the link: the largest function and
+the count of functions over 4 KiB, against the architecture's budgets in
+`TEXT_BUDGETS` in `verify.py`. An inliner that duplicated a callee's body
+at every site moved aggregate text by 8% while single functions moved
+18-34x, so a budget on the total cannot separate the two and the budget is
+on the distribution. A function's size is the `st_size` of its `STT_FUNC`
+symbol in `vmlinux`, what `nm -S --defined-only` prints, one per address:
+the largest there, a global name before a local one. `System.map` records
+no sizes, and the gap to the next symbol it lists credits a function with
+what follows it: the SRSO alignment gap of the x86_64 linker script made
+`srso_alias_return_thunk`, 7 bytes, read as 1031925, and arm64's EFI stub
+symbols, which the map leaves out, made `no_hash_pointers_enable`, 36
+bytes, read as 57368. `scripts/function_sizes.py` reports the same
+distribution as two ratios over an object set. The badc-built 7.1.10
+defconfig images measure 88347 functions on aarch64, largest 22680 bytes
+(`ma35d1_clocks_probe`) and 88 over 4 KiB, and 158778 on x86_64, largest
+44352 (`hidinput_configure_usage`) and 114 over 4 KiB; the budgets are
+29696 and 103, and 57344 and 133.
 
 ### KASLR displacements
 

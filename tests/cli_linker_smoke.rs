@@ -9166,11 +9166,12 @@ fn a_system_compiled_object_reaches_thread_locals_in_every_model() {
 }
 
 // A shared library's thread-locals, read from a badc unit and from a
-// system-compiled `-fPIE` object in the initial-exec model, in the calling
-// thread and a new one, PIE and -no-pie: the loader places the library's
-// block and fills the GOT slot each access reads with the variable's offset
-// from the thread pointer, so every reader reaches the thread's own copy,
-// initialized from the library's template.
+// system-compiled object in the initial-exec model and in the general-dynamic
+// and descriptor ones the link rewrites to it, in the calling thread and a
+// new one, PIE and -no-pie: the loader places the library's block and fills
+// the GOT slot each access reads with the variable's offset from the thread
+// pointer, so every reader reaches the thread's own copy, initialized from
+// the library's template. A dialect the compiler lacks is skipped.
 #[cfg(target_os = "linux")]
 #[test]
 fn a_shared_library_thread_local_is_read_through_the_got() {
@@ -9205,15 +9206,6 @@ fn a_shared_library_thread_local_is_read_through_the_got() {
          int *sys_addr(void) { return &lib_tl; }\n\
          long long sys_wide(int i) { return lib_wide[i]; }\n",
     );
-    let reader_obj = dir.join("reader.o");
-    run(
-        Command::new(&cc)
-            .args(["-O2", "-fPIE", "-c"])
-            .arg(&reader)
-            .arg("-o")
-            .arg(&reader_obj),
-        "build the reading object",
-    );
     let main = write_source(
         &dir,
         "main.c",
@@ -9246,29 +9238,58 @@ fn a_shared_library_thread_local_is_read_through_the_got() {
            return check(6, 40) ? 3 : 0;\n\
          }\n",
     );
-    for form in [&[][..], &["-no-pie"][..]] {
-        let exe = dir.join("prog");
-        run(
-            Command::new(badc())
-                .args(["-q", "-O"])
-                .args(form)
-                .arg(&main)
-                .arg(&reader_obj)
-                .arg(format!("-L{}", dir.display()))
-                .arg("-ltl")
-                .arg("-o")
-                .arg(&exe),
-            "link against the library",
-        );
-        let out = Command::new(&exe)
-            .env("LD_LIBRARY_PATH", &dir)
+    let (dynamic, descriptor) = if cfg!(target_arch = "aarch64") {
+        ("-mtls-dialect=trad", "-mtls-dialect=desc")
+    } else {
+        ("-mtls-dialect=gnu", "-mtls-dialect=gnu2")
+    };
+    let models: &[&[&str]] = &[
+        &["-O2", "-fPIE"],
+        &["-O2", "-fPIC", dynamic],
+        &["-O0", "-fPIC", dynamic, "-fno-plt"],
+        &["-O2", "-fPIC", descriptor],
+    ];
+    let reader_obj = dir.join("reader.o");
+    for model in models {
+        let built = Command::new(&cc)
+            .args(*model)
+            .arg("-c")
+            .arg(&reader)
+            .arg("-o")
+            .arg(&reader_obj)
             .output()
-            .expect("run");
-        assert_eq!(
-            out.status.code(),
-            Some(0),
-            "{form:?}: a library thread-local read wrong"
-        );
+            .expect("run the system compiler");
+        if !built.status.success() {
+            eprintln!(
+                "skipping {model:?}: {}",
+                String::from_utf8_lossy(&built.stderr)
+            );
+            continue;
+        }
+        for form in [&[][..], &["-no-pie"][..]] {
+            let exe = dir.join("prog");
+            run(
+                Command::new(badc())
+                    .args(["-q", "-O"])
+                    .args(form)
+                    .arg(&main)
+                    .arg(&reader_obj)
+                    .arg(format!("-L{}", dir.display()))
+                    .arg("-ltl")
+                    .arg("-o")
+                    .arg(&exe),
+                "link against the library",
+            );
+            let out = Command::new(&exe)
+                .env("LD_LIBRARY_PATH", &dir)
+                .output()
+                .expect("run");
+            assert_eq!(
+                out.status.code(),
+                Some(0),
+                "{model:?} {form:?}: a library thread-local read wrong"
+            );
+        }
     }
 }
 

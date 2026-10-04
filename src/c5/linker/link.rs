@@ -41,7 +41,7 @@ use crate::c5::layout::{pad_to_align as align_up, round_up as align_usize};
 // `R_X86_64_REX_GOTPCRELX` is the relaxable variant of GOTPCREL marking
 // a `REX mov reg, [rip+disp32]` GOT load (psABI B.2); emitted by c5's
 // writer and other toolchains.
-use super::tls_relax::{self, TLS_GET_ADDR, TLS_MODULE_BASE};
+use super::tls_relax::{self, Model, TLS_GET_ADDR, TLS_MODULE_BASE};
 use super::{internal_err, link_err};
 use crate::c5::object::elf_reloc_types::AbsCheck;
 use crate::c5::object::elf_reloc_types::{
@@ -1501,8 +1501,10 @@ impl<'a> Link<'a> {
     /// other models' sequences to it ([`tls_relax`]) where it defines the
     /// variable. A shared library's thread-local sits where the loader places
     /// that library's block, so an initial-exec reference to it reads a GOT
-    /// slot the loader fills. A shared library needs the loader's dynamic TLS
-    /// relocations, which this link does not make.
+    /// slot the loader fills, and a general-dynamic or descriptor sequence is
+    /// rewritten to that reference, as GNU ld rewrites it. A shared library
+    /// needs the loader's dynamic TLS relocations, which this link does not
+    /// make.
     fn apply_tls_reloc(
         &mut self,
         unit: usize,
@@ -1520,65 +1522,92 @@ impl<'a> Link<'a> {
         if !local_exec && (self.allow_undefined || !tls_relax::transitions(machine, reloc.rtype)) {
             return Err(site.unsupported());
         }
-        let tpoff = match self.tls_binding(unit, sym)? {
-            TlsBinding::Static(tpoff) => tpoff,
+        let to = match self.tls_binding(unit, sym)? {
+            TlsBinding::Static(tpoff) => Model::LocalExec(tpoff + reloc.addend),
             TlsBinding::Library(_) if tls_relax::is_initial_exec(machine, reloc.rtype) => {
-                let idx = self.bind_import(sym, false, true);
-                self.tls_imports.insert(idx);
-                self.pending_imports.push(PendingImportReloc {
-                    text_offset: patch_offset as u64,
-                    import_index: idx,
-                    rtype: reloc.rtype,
-                    addend: reloc.addend,
-                    target_section: NativeSymSection::Undef,
-                    slot_load: true,
-                    sym_name: None,
-                });
+                self.import_thread_local(sym, patch_offset, reloc.rtype, reloc.addend);
                 return Ok(());
             }
-            TlsBinding::Library(lib) if local_exec => {
+            TlsBinding::Library(lib)
+                if local_exec || tls_relax::is_local_dynamic(machine, reloc.rtype) =>
+            {
                 return Err(site.library_thread_local(
                     &lib.soname,
-                    "a local-exec access reaches only the executable's own thread-locals",
+                    "a local-exec or local-dynamic access reaches only the executable's own \
+                     thread-locals",
                 ));
             }
-            // TODO: rewrite the general-dynamic and descriptor sequences to
-            // initial-exec, as GNU ld does.
-            TlsBinding::Library(lib) => {
-                return Err(site.library_thread_local(
-                    &lib.soname,
-                    "this link reaches it from an initial-exec access only",
-                ));
-            }
+            TlsBinding::Library(_) => Model::InitialExec,
         };
-        let value = tpoff + reloc.addend;
-        if local_exec
-            || (machine == NativeMachine::X86_64
-                && tls_relax::x86_64_dtpoff_field(reloc.rtype).is_some())
+        if let Model::LocalExec(value) = to
+            && (local_exec
+                || (machine == NativeMachine::X86_64
+                    && tls_relax::x86_64_dtpoff_field(reloc.rtype).is_some()))
         {
             return apply_tprel_reloc(&mut self.text, patch_offset, value, site);
         }
         if tls_relax::calls_resolver(machine, reloc.rtype)
             && !resolver.opening.contains(&reloc.offset)
         {
-            return Err(site.tls_sequence("followed by a relocated call to `__tls_get_addr`"));
+            return Err(site.tls_sequence(
+                to.name(),
+                "followed by a relocated call to `__tls_get_addr`",
+            ));
         }
         // The rewrite reads and writes the unit's own bytes only.
         let base = self.text_bases[unit];
         let text = &mut self.text[base..base + self.objs[unit].text.len()];
         let at = reloc.offset as usize;
-        match machine {
-            NativeMachine::X86_64 => {
+        let field = match (machine, to) {
+            (NativeMachine::X86_64, Model::LocalExec(value)) => {
                 let value = value + tls_relax::x86_64_addend_bias(reloc.rtype);
                 let imm = i32::try_from(value).map_err(|_| site.truncated(value))?;
-                tls_relax::x86_64_local_exec(text, at, reloc.rtype, imm)
+                tls_relax::x86_64_rewrite(text, at, reloc.rtype, Model::LocalExec(imm))
             }
-            NativeMachine::Aarch64 => {
+            (NativeMachine::X86_64, Model::InitialExec) => {
+                tls_relax::x86_64_rewrite(text, at, reloc.rtype, Model::InitialExec)
+            }
+            (NativeMachine::Aarch64, Model::LocalExec(value)) => {
                 let imm = u32::try_from(value).map_err(|_| site.truncated(value))?;
-                tls_relax::aarch64_local_exec(text, at, reloc.rtype, imm)
+                tls_relax::aarch64_rewrite(text, at, reloc.rtype, Model::LocalExec(imm))
+            }
+            (NativeMachine::Aarch64, Model::InitialExec) => {
+                tls_relax::aarch64_rewrite(text, at, reloc.rtype, Model::InitialExec)
             }
         }
-        .map_err(|expected| site.tls_sequence(expected))
+        .map_err(|expected| site.tls_sequence(to.name(), expected))?;
+        if let Some((field, rtype)) = field {
+            // A RIP-relative field ends its instruction.
+            let addend = if machine == NativeMachine::X86_64 {
+                -4
+            } else {
+                0
+            };
+            self.import_thread_local(sym, base + field, rtype, addend);
+        }
+        Ok(())
+    }
+
+    /// An initial-exec reference at `text_offset` to a shared library's
+    /// thread-local reads the GOT slot of an import of the thread-local kind.
+    fn import_thread_local(
+        &mut self,
+        sym: &'a NativeSymbol,
+        text_offset: usize,
+        rtype: u32,
+        addend: i64,
+    ) {
+        let idx = self.bind_import(sym, false, true);
+        self.tls_imports.insert(idx);
+        self.pending_imports.push(PendingImportReloc {
+            text_offset: text_offset as u64,
+            import_index: idx,
+            rtype,
+            addend,
+            target_section: NativeSymSection::Undef,
+            slot_load: true,
+            sym_name: None,
+        });
     }
 
     /// Where the thread-local `sym` names resolves for a reference from
@@ -7767,37 +7796,157 @@ mod tests {
         }
     }
 
-    /// A local-exec access cannot reach a shared library's thread-local,
-    /// and the link rewrites no other model's sequence to initial-exec.
+    /// The general-dynamic and descriptor sequences reaching a shared
+    /// library's thread-local become the initial-exec ones GNU ld makes of
+    /// them, reading the GOT slot of the thread-local's import, without the
+    /// `__tls_get_addr` call.
+    #[test]
+    fn a_library_thread_locals_dynamic_sequences_become_initial_exec() {
+        use crate::c5::object::elf_reloc_types::{
+            R_AARCH64_TLSDESC_ADD_LO12, R_AARCH64_TLSDESC_ADR_PAGE21, R_AARCH64_TLSDESC_CALL,
+            R_AARCH64_TLSDESC_LD64_LO12, R_AARCH64_TLSGD_ADD_LO12_NC, R_AARCH64_TLSGD_ADR_PAGE21,
+            R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21, R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC,
+            R_X86_64_GOTPC32_TLSDESC, R_X86_64_GOTPCRELX, R_X86_64_GOTTPOFF, R_X86_64_TLSDESC_CALL,
+            R_X86_64_TLSGD,
+        };
+        let link = |machine, code: Vec<u8>, relocs: &[(u64, usize, u32, i64)]| {
+            let objs = tls_accessor(machine, code, relocs);
+            let lib = tls_library(machine, true);
+            let merged =
+                link_native_objects_with_shared_libs(&objs[..1], false, &[lib]).expect("link");
+            assert_eq!(merged.imports, ["ext"], "{machine:?}");
+            assert_eq!(merged.tls_imports, [0].into(), "{machine:?}");
+            let slots: Vec<_> = (merged.pending_imports.iter())
+                .map(|p| {
+                    (
+                        p.text_offset,
+                        p.import_index,
+                        p.rtype,
+                        p.addend,
+                        p.slot_load,
+                    )
+                })
+                .collect();
+            (merged.text, slots)
+        };
+        let x86_64: &[&[u8]] = &[
+            &[0x66, 0x48, 0x8d, 0x3d, 0, 0, 0, 0], // 0: data16 lea ext@tlsgd(%rip), %rdi
+            &[0x66, 0x66, 0x48, 0xe8, 0, 0, 0, 0], // 8: call __tls_get_addr@plt
+            &[0x66, 0x48, 0x8d, 0x3d, 0, 0, 0, 0], // 16: the -fno-plt form
+            &[0x66, 0x48, 0xff, 0x15, 0, 0, 0, 0], // 24: call *__tls_get_addr@gotpcrel
+            &[0x4c, 0x8d, 0x05, 0, 0, 0, 0],       // 32: lea ext@tlsdesc(%rip), %r8
+            &[0xff, 0x10],                         // 39: call *ext@tlscall(%rax)
+        ];
+        let (text, slots) = link(
+            NativeMachine::X86_64,
+            x86_64.concat(),
+            &[
+                (4, 2, R_X86_64_TLSGD, -4),
+                (12, 3, R_X86_64_PLT32, -4),
+                (20, 2, R_X86_64_TLSGD, -4),
+                (28, 3, R_X86_64_GOTPCRELX, -4),
+                (35, 2, R_X86_64_GOTPC32_TLSDESC, -4),
+                (39, 2, R_X86_64_TLSDESC_CALL, 0),
+            ],
+        );
+        let load_tp = [0x64, 0x48, 0x8b, 0x04, 0x25, 0, 0, 0, 0];
+        let want: &[&[u8]] = &[
+            &load_tp,
+            &[0x48, 0x03, 0x05, 0, 0, 0, 0], // add ext@gottpoff(%rip), %rax
+            &load_tp,
+            &[0x48, 0x03, 0x05, 0, 0, 0, 0],
+            &[0x4c, 0x8b, 0x05, 0, 0, 0, 0], // mov ext@gottpoff(%rip), %r8
+            &[0x66, 0x90],
+        ];
+        assert_eq!(&text[..41], &want.concat()[..]);
+        let gottpoff = |at| (at, 0, R_X86_64_GOTTPOFF, -4, true);
+        assert_eq!(slots, [gottpoff(12), gottpoff(28), gottpoff(35)]);
+
+        let words = |w: &[u32]| -> Vec<u8> { w.iter().flat_map(|w| w.to_le_bytes()).collect() };
+        let nop = 0xd503_201f;
+        let (text, slots) = link(
+            NativeMachine::Aarch64,
+            words(&[
+                0x9000_0000, // 0: adrp x0, :tlsgd:ext
+                0x9100_0000, // 4: add x0, x0, :tlsgd_lo12:ext
+                0x9400_0000, // 8: bl __tls_get_addr
+                nop,         // 12
+                0x9000_0000, // 16: adrp x0, :tlsdesc:ext
+                0xf940_0001, // 20: ldr x1, [x0, :tlsdesc_lo12:ext]
+                0x9100_0000, // 24: add x0, x0, :tlsdesc_lo12:ext
+                0xd63f_0020, // 28: blr x1
+            ]),
+            &[
+                (0, 2, R_AARCH64_TLSGD_ADR_PAGE21, 0),
+                (4, 2, R_AARCH64_TLSGD_ADD_LO12_NC, 0),
+                (8, 3, R_AARCH64_CALL26, 0),
+                (16, 2, R_AARCH64_TLSDESC_ADR_PAGE21, 0),
+                (20, 2, R_AARCH64_TLSDESC_LD64_LO12, 0),
+                (24, 2, R_AARCH64_TLSDESC_ADD_LO12, 0),
+                (28, 2, R_AARCH64_TLSDESC_CALL, 0),
+            ],
+        );
+        let want = words(&[
+            0x9000_0000, // adrp x0, :gottprel:ext
+            0xf940_0000, // ldr x0, [x0, :gottprel_lo12:ext]
+            0xd53b_d041, // mrs x1, tpidr_el0
+            0x8b00_0020, // add x0, x1, x0
+            0x9000_0000,
+            0xf940_0000,
+            nop,
+            nop,
+        ]);
+        assert_eq!(&text[..32], &want[..]);
+        let page = |at| (at, 0, R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21, 0, true);
+        let in_page = |at| (at, 0, R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, 0, true);
+        assert_eq!(slots, [page(0), in_page(4), page(16), in_page(20)]);
+    }
+
+    /// A local-exec or local-dynamic access cannot reach a shared
+    /// library's thread-local, and a sequence the rewrite does not
+    /// recognize is refused.
     #[test]
     fn a_library_thread_local_is_refused_to_the_other_models() {
-        use crate::c5::object::elf_reloc_types::{R_X86_64_TLSGD, R_X86_64_TPOFF32};
+        use crate::c5::object::elf_reloc_types::{
+            R_X86_64_DTPOFF32, R_X86_64_TLSGD, R_X86_64_TPOFF32,
+        };
         let refused = |code: &[u8], relocs: &[(u64, usize, u32, i64)]| {
             let objs = tls_accessor(NativeMachine::X86_64, code.to_vec(), relocs);
             let lib = tls_library(NativeMachine::X86_64, true);
             let err = link_native_objects_with_shared_libs(&objs[..1], false, &[lib]);
             format!("{}", err.expect_err("refused"))
         };
-        let msg = refused(
-            &[0x48, 0x81, 0xc0, 0, 0, 0, 0], // add $ext@tpoff, %rax
-            &[(3, 2, R_X86_64_TPOFF32, 0)],
-        );
-        assert!(
-            msg.contains(
-                "R_X86_64_TPOFF32 (23) against symbol `ext`, a thread-local of shared library \
-                 `libtl.so`: a local-exec access reaches only the executable's own thread-locals"
-            ),
-            "{msg}"
-        );
+        for (code, rtype, name) in [
+            (
+                &[0x48, 0x81, 0xc0, 0, 0, 0, 0][..],
+                R_X86_64_TPOFF32,
+                "R_X86_64_TPOFF32 (23)",
+            ), // add $ext@tpoff, %rax
+            (
+                &[0x8b, 0x80, 0, 0, 0, 0, 0][..],
+                R_X86_64_DTPOFF32,
+                "R_X86_64_DTPOFF32 (21)",
+            ), // mov ext@dtpoff(%rax), %eax
+        ] {
+            let msg = refused(code, &[(2, 2, rtype, 0)]);
+            assert!(
+                msg.contains(&format!(
+                    "{name} against symbol `ext`, a thread-local of shared library `libtl.so`: \
+                     a local-exec or local-dynamic access reaches only the executable's own \
+                     thread-locals"
+                )),
+                "{msg}"
+            );
+        }
         let msg = refused(
             &[
-                0x66, 0x48, 0x8d, 0x3d, 0, 0, 0, 0, // data16 lea ext@tlsgd(%rip), %rdi
+                0x48, 0x8d, 0x3d, 0, 0, 0, 0, // lea ext@tlsgd(%rip), %rdi, no data16
                 0x66, 0x66, 0x48, 0xe8, 0, 0, 0, 0, // call __tls_get_addr@plt
             ],
-            &[(4, 2, R_X86_64_TLSGD, -4), (12, 3, R_X86_64_PLT32, -4)],
+            &[(3, 2, R_X86_64_TLSGD, -4), (11, 3, R_X86_64_PLT32, -4)],
         );
         assert!(
-            msg.contains("R_X86_64_TLSGD (19) against symbol `ext`, a thread-local of shared"),
+            msg.contains("cannot rewrite R_X86_64_TLSGD (19) against symbol `ext` to initial-exec"),
             "{msg}"
         );
     }

@@ -583,11 +583,11 @@ impl RelocSite<'_> {
         ))
     }
 
-    /// A thread-local access the link rewrites whose bytes are not the
-    /// sequence its ABI states; `expected` names what they had to be.
-    pub(crate) fn tls_sequence(&self, expected: &str) -> C5Error {
+    /// A thread-local access the link rewrites to `model` whose bytes are
+    /// not the sequence its ABI states; `expected` names what they had to be.
+    pub(crate) fn tls_sequence(&self, model: &str, expected: &str) -> C5Error {
         self.located(&format!(
-            "cannot rewrite {} against symbol `{}` to local-exec: the site is not {expected}",
+            "cannot rewrite {} against symbol `{}` to {model}: the site is not {expected}",
             reloc_desc(self.machine, self.rtype),
             self.symbol,
         ))

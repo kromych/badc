@@ -117,10 +117,10 @@ pub use lds_link::{
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use link::{
-    DataImportSlots, MergedNative, MergedSymbol, PendingImportReloc, PltTrampoline,
-    SectionContribution, SectionMap, copy_candidates, emit_aarch64_plt, emit_plt_for,
-    emit_x86_64_plt, link_native_objects, link_native_objects_with_options,
-    link_native_objects_with_shared_libs, link_resolves_symbol,
+    DataImportSlots, LinkOptions, MergedNative, MergedSymbol, PendingImportReloc, PltTrampoline,
+    Preemption, SectionContribution, SectionMap, copy_candidates, emit_aarch64_plt, emit_plt_for,
+    emit_x86_64_plt, link_native_objects, link_native_objects_with,
+    link_native_objects_with_options, link_native_objects_with_shared_libs, link_resolves_symbol,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

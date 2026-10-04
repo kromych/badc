@@ -223,6 +223,8 @@ pub(crate) struct Link {
     /// `-Bsymbolic`: a shared library binds its references to its own
     /// definitions.
     pub(crate) symbolic: bool,
+    /// `-Bsymbolic-functions`; the later of it and `-Bsymbolic` holds, as in GNU ld.
+    pub(crate) symbolic_functions: bool,
     /// `--emit-relocs`: keep the resolved relocations in the image.
     pub(crate) emit_relocs: bool,
     /// `--export-all`: every non-static function joins the dynamic
@@ -295,6 +297,7 @@ impl Default for Link {
             warn_rwx_segments: true,
             fatal_warnings: false,
             symbolic: false,
+            symbolic_functions: false,
             emit_relocs: false,
             export_all: false,
             export_data: false,
@@ -388,7 +391,21 @@ impl Cli {
                 pack_relative_relocs: link.z.pack_relative_relocs(),
                 no_apply_dynamic_relocs: !link.apply_dynamic_relocs,
                 exec_stack,
+                symbolic: link.symbolic && self.mode == Mode::SharedLibrary,
             },
+        }
+    }
+
+    /// Which of its own definitions the image binds through `.dynsym`.
+    pub(crate) fn preemption(&self) -> badc::Preemption {
+        let elf_library = self.mode == Mode::SharedLibrary
+            && self.target.binary_format() == badc::BinaryFormat::Elf;
+        if !elf_library || self.link.symbolic {
+            badc::Preemption::None
+        } else if self.link.symbolic_functions {
+            badc::Preemption::Objects
+        } else {
+            badc::Preemption::All
         }
     }
 
@@ -397,8 +414,7 @@ impl Cli {
     /// of the link without one. The `-z` keywords take the answers of the
     /// table the `--ld` persona shares ([`badc::ZKeyword::in_script_link`],
     /// [`badc::ZKeyword::in_hosted_link`]). The image without -T keeps
-    /// every local symbol of its inputs (`--discard-none`), and a shared
-    /// library it writes binds its own references directly.
+    /// every local symbol of its inputs (`--discard-none`).
     pub(crate) fn link_refusal(&self, script: bool) -> Option<(String, &'static str)> {
         let link = &self.link;
         let elf = self.target.binary_format() == badc::BinaryFormat::Elf;
@@ -1753,7 +1769,8 @@ impl Parser {
             "--no-apply-dynamic-relocs" => link.apply_dynamic_relocs = false,
             "--no-undefined" => link.z.push(badc::ZKeyword::Defs(true)),
             "--fatal-warnings" => link.fatal_warnings = true,
-            "-Bsymbolic" => link.symbolic = true,
+            "-Bsymbolic" => (link.symbolic, link.symbolic_functions) = (true, false),
+            "-Bsymbolic-functions" => (link.symbolic, link.symbolic_functions) = (false, true),
             // A -T link warns of a read-write-execute segment, which the
             // image without -T never has.
             "--warn-rwx-segments" => link.warn_rwx_segments = true,

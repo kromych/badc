@@ -1172,6 +1172,7 @@ pub(crate) mod test_support {
             eh_frame: Vec::new(),
             data_import_binds: Vec::new(),
             canonical_imports: Vec::new(),
+            preemptible_imports: Vec::new(),
             got_base_fixups: Vec::new(),
             got_rel_fields: Vec::new(),
             got_pcrel_fixups: Vec::new(),

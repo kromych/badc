@@ -19,7 +19,13 @@ Output mode -- pick at most one (defaults to a native binary):
   --jit                    Lower in-process and call main() directly.
   --shared                 Produce a shared library (.dylib / .so /
                            .dll) exporting every #pragma export(name)
-                           function.
+                           function. An ELF library reaches what it
+                           exports through its PLT and GOT, so a
+                           definition the loader finds first takes its
+                           place; -Bsymbolic binds the library's
+                           references to its own definitions,
+                           -Bsymbolic-functions only those to its
+                           functions.
   --list-symbols           Print built-in keywords / library calls /
                            constants and exit.
   --list-diagnostics       Print the diagnostic catalogue -- code,
@@ -120,7 +126,8 @@ Multi-TU knobs:
                            --no-apply-dynamic-relocs, -S /
                            --strip-debug, -X, --discard-none,
                            --emit-relocs, --no-undefined / -z defs,
-                           -Bsymbolic and --fatal-warnings; one without
+                           -Bsymbolic, -Bsymbolic-functions and
+                           --fatal-warnings; one without
                            -T also -z relro and, for --shared, -z
                            undefs; one with -T --orphan-handling=, -z
                            norelro, -z muldefs, -z common-page-size=,
@@ -299,9 +306,10 @@ Compile knobs:
                            #pragma export. Applies to --shared and
                            executable output.
   --export-data            Export every non-static data global from an
-                           ELF executable into .dynsym (STT_OBJECT) so a
-                           dlopen'd module resolves it, the data half of
-                           the toolchain's -rdynamic. Pair with
+                           ELF executable or --shared library into
+                           .dynsym (STT_OBJECT) so another module
+                           resolves it, the data half of the
+                           toolchain's -rdynamic. Pair with
                            --export-all for full coverage.
   --gnu                    Define the GCC identity macros (__GNUC__,
                            __VERSION__, __extension__, ...). Off by

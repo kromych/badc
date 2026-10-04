@@ -1365,6 +1365,7 @@ mod tests {
             copy_relocs: alloc::vec![],
             object_imports: alloc::collections::BTreeSet::new(),
             stub_address_imports: alloc::collections::BTreeSet::new(),
+            preemptible_imports: alloc::collections::BTreeSet::new(),
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],
             debug_line: alloc::vec![],

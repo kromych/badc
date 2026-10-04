@@ -1980,6 +1980,8 @@ pub(crate) struct Build {
     /// Imports, ascending, whose call stub code takes as a value: an ELF
     /// executable publishes it as the import's address (a canonical PLT entry).
     pub canonical_imports: Vec<usize>,
+    /// Imports, ascending, that name the image's own definitions.
+    pub preemptible_imports: Vec<usize>,
     /// `--emit-relocs` records; empty unless the link requested them.
     pub emitted_relocs: Vec<EmittedFinalReloc>,
     /// Data-import copy relocations resolved against the merged symbol
@@ -4013,7 +4015,8 @@ impl BuildId {
 
 /// The link options an ELF image's container takes: `--build-id`, `-z
 /// max-page-size=` (`None` keeps the target's), `-z
-/// pack-relative-relocs`, `--no-apply-dynamic-relocs`, `-z execstack`.
+/// pack-relative-relocs`, `--no-apply-dynamic-relocs`, `-z execstack`,
+/// `-Bsymbolic` (`DT_SYMBOLIC` and `DF_SYMBOLIC`).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ElfImageOptions {
     pub build_id: BuildId,
@@ -4021,6 +4024,7 @@ pub struct ElfImageOptions {
     pub pack_relative_relocs: bool,
     pub no_apply_dynamic_relocs: bool,
     pub exec_stack: bool,
+    pub symbolic: bool,
 }
 
 impl Default for NativeOptions {

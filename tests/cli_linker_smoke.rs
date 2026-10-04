@@ -8856,6 +8856,113 @@ fn a_data_initializer_holds_a_library_functions_address() {
     }
 }
 
+// A shared library reaches the functions and objects it exports through its
+// PLT and GOT, so the executable's definitions of those names preempt the
+// library's own (System V gABI, symbol visibility): the library's calls,
+// reads, addresses and pointer initializers reach the executable's.
+// -Bsymbolic binds the library to its own definitions, -Bsymbolic-functions
+// its functions. Where a system compiler is present, a -fPIC object in the
+// library calls its own function through the PLT as well.
+#[cfg(target_os = "linux")]
+#[test]
+fn an_executables_definitions_preempt_a_shared_librarys_own() {
+    let dir = tempdir("preempt");
+    let mut inputs = vec![
+        write_source(
+            &dir,
+            "defs.c",
+            "int lib_value(void) { return 1; }\nint lib_var = 1;\n",
+        ),
+        write_source(
+            &dir,
+            "uses.c",
+            "int lib_value(void);\n\
+             extern int lib_var;\n\
+             int (*const lib_slot)(void) = lib_value;\n\
+             int *const lib_var_slot = &lib_var;\n\
+             int lib_results(int (*value)(void), int *var) {\n\
+               return (lib_value() == 2) | (lib_slot() == 2) << 1 | (lib_value == value) << 2 |\n\
+                      (lib_slot == value) << 3 | (lib_var == 2) << 4 | (*lib_var_slot == 2) << 5 |\n\
+                      (&lib_var == var) << 6 | (lib_var_slot == var) << 7;\n\
+             }\n",
+        ),
+    ];
+    let own = host_cc().map(|cc| {
+        let src = write_source(
+            &dir,
+            "own.c",
+            "int lib_own(void) { return 1; }\nint lib_calls_own(void) { return lib_own(); }\n",
+        );
+        let obj = dir.join("own.o");
+        run(
+            Command::new(&cc)
+                .args(["-O0", "-fPIC", "-c"])
+                .arg(&src)
+                .arg("-o")
+                .arg(&obj),
+            "build the -fPIC object",
+        );
+        inputs.push(obj);
+    });
+    let modes = [
+        ("default", None, "255 2"),
+        ("symbolic", Some("-Bsymbolic"), "0 1"),
+        ("functions", Some("-Bsymbolic-functions"), "240 1"),
+    ];
+    for (name, flag, _) in modes {
+        std::fs::create_dir_all(dir.join(name)).expect("mkdir");
+        run(
+            Command::new(badc())
+                .args(["-q", "--shared", "--export-all", "--export-data"])
+                .args(flag)
+                .args(&inputs)
+                .arg("-o")
+                .arg(dir.join(name).join("libpreempt.so")),
+            "build the shared library",
+        );
+    }
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <stdio.h>\n\
+         int lib_value(void) { return 2; }\n\
+         int lib_var = 2;\n\
+         int lib_own(void) { return 2; }\n\
+         int lib_results(int (*value)(void), int *var);\n\
+         int lib_calls_own(void) __attribute__((weak));\n\
+         int main(void) {\n\
+           printf(\"%d %d\\n\", lib_results(lib_value, &lib_var),\n\
+                  lib_calls_own ? lib_calls_own() : -1);\n\
+           return 0;\n\
+         }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .args(["-q", "--export-all", "--export-data"])
+            .arg(&main)
+            .arg(format!("-L{}", dir.join("default").display()))
+            .args(["-lpreempt", "-o"])
+            .arg(&exe),
+        "link the executable",
+    );
+    for (name, _, expected) in modes {
+        let out = run(
+            Command::new(&exe).env("LD_LIBRARY_PATH", dir.join(name)),
+            "run",
+        );
+        let expected = match own {
+            Some(()) => expected.to_string(),
+            None => format!("{} -1", expected.split(' ').next().unwrap()),
+        };
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout).trim(),
+            expected,
+            "{name}"
+        );
+    }
+}
+
 // An object the system compiler built references its thread-locals by
 // local-exec relocations alone, with no note of badc's: a static, a global
 // a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own

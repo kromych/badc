@@ -84,6 +84,22 @@ pub(crate) const fn is_branch_reloc(machine: NativeMachine, rtype: u32) -> bool 
     }
 }
 
+/// Whether an image exports `sym`: at default visibility, a function a `#pragma
+/// export` names or any under `--export-all`, an object under `--export-data`.
+pub(crate) fn exports_definition(
+    sym: &MergedSymbol,
+    named: bool,
+    export_all: bool,
+    export_data: bool,
+) -> bool {
+    sym.visibility == super::object::STV_DEFAULT
+        && match sym.section {
+            NativeSymSection::Text => named || export_all,
+            NativeSymSection::Data | NativeSymSection::Bss => export_data,
+            _ => false,
+        }
+}
+
 /// Result of merging N [`NativeObject`]s. Carries enough state
 /// for a final-image writer to lay out `.text` / `.data` at the
 /// target's expected virtual addresses, materialise the PLT
@@ -227,6 +243,8 @@ pub struct MergedNative {
     /// Indices into [`Self::imports`] whose call stub code takes as a value,
     /// not as a branch target; filled by the PLT pass.
     pub stub_address_imports: alloc::collections::BTreeSet<usize>,
+    /// Indices into [`Self::imports`] the image defines; see [`Preemption`].
+    pub preemptible_imports: alloc::collections::BTreeSet<usize>,
     /// Concatenated standard DWARF byte streams from every
     /// input unit. Each unit's blob starts at
     /// `debug_*_bases[unit_idx]` inside the merged stream; the
@@ -855,7 +873,40 @@ pub fn link_native_objects_with_shared_libs<'a>(
     allow_undefined: bool,
     shared_libs: &'a [SharedLibrary],
 ) -> Result<MergedNative, C5Error> {
-    let mut link = Link::new(objs, allow_undefined, shared_libs)?;
+    let opts = LinkOptions {
+        allow_undefined,
+        ..Default::default()
+    };
+    link_native_objects_with(objs, shared_libs, &opts)
+}
+
+/// Which of an ELF shared library's exported default-visibility definitions
+/// its own references reach through `.dynsym`, so that one the loader finds
+/// first preempts them (System V gABI, symbol visibility): `All` by default,
+/// `Objects` under `-Bsymbolic-functions`, `None` under `-Bsymbolic`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Preemption {
+    #[default]
+    None,
+    Objects,
+    All,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LinkOptions {
+    pub allow_undefined: bool,
+    pub preemption: Preemption,
+    pub export_all: bool,
+    pub export_data: bool,
+}
+
+/// [`link_native_objects_with_shared_libs`] under `opts`.
+pub fn link_native_objects_with<'a>(
+    objs: &'a [NativeObject],
+    shared_libs: &'a [SharedLibrary],
+    opts: &LinkOptions,
+) -> Result<MergedNative, C5Error> {
+    let mut link = Link::new(objs, opts, shared_libs)?;
     link.lay_out_tls()?;
     link.lay_out_sections();
     link.lay_out_init_fini_arrays();
@@ -866,6 +917,7 @@ pub fn link_native_objects_with_shared_libs<'a>(
     link.allocate_copies()?;
     link.define_link_symbols();
     link.collect_import_facts();
+    link.collect_preemptible();
     link.allocate_got_slots();
     link.place_unwind_tables()?;
     link.resolve_text_relocs()?;
@@ -958,6 +1010,10 @@ struct Link<'a> {
     objs: &'a [NativeObject],
     machine: NativeMachine,
     allow_undefined: bool,
+    preemption: Preemption,
+    export_all: bool,
+    export_data: bool,
+    preemptible: hashbrown::HashSet<&'a str>,
     shared_libs: &'a [SharedLibrary],
     /// Union of every shared library's exports: an undefined global
     /// reference whose name appears here is a load-time import, not a
@@ -1067,7 +1123,7 @@ struct Link<'a> {
 impl<'a> Link<'a> {
     fn new(
         objs: &'a [NativeObject],
-        allow_undefined: bool,
+        opts: &LinkOptions,
         shared_libs: &'a [SharedLibrary],
     ) -> Result<Link<'a>, C5Error> {
         if objs.is_empty() {
@@ -1091,7 +1147,11 @@ impl<'a> Link<'a> {
         Ok(Link {
             objs,
             machine,
-            allow_undefined,
+            allow_undefined: opts.allow_undefined,
+            preemption: opts.preemption,
+            export_all: opts.export_all,
+            export_data: opts.export_data,
+            preemptible: hashbrown::HashSet::new(),
             shared_libs,
             shlib_exports: shared_libs
                 .iter()
@@ -2128,6 +2188,61 @@ impl<'a> Link<'a> {
             .collect();
     }
 
+    /// The exported definitions [`Preemption`] leaves to the loader.
+    fn collect_preemptible(&mut self) {
+        if self.preemption == Preemption::None {
+            return;
+        }
+        let objs = self.objs;
+        let named: hashbrown::HashSet<&str> = (objs.iter())
+            .flat_map(|o| o.exports.iter().map(String::as_str))
+            .collect();
+        for sym in objs.iter().flat_map(|o| &o.symbols) {
+            let name = sym.name.as_str();
+            let Some(def) = self.defined.get(name).filter(|_| sym.binding != 0) else {
+                continue;
+            };
+            let left = self.preemption == Preemption::All || def.section != NativeSymSection::Text;
+            let exported =
+                exports_definition(def, named.contains(name), self.export_all, self.export_data);
+            if left && exported {
+                self.preemptible.insert(name);
+            }
+        }
+    }
+
+    /// Whether a reference reaches a preemptible definition through `.dynsym`:
+    /// a branch, a GOT load, or an aarch64 page pair the note names, which a
+    /// slot load replaces. Other fields bind to the image's own definition.
+    fn preempts(&self, sym: &NativeSymbol, rtype: u32) -> bool {
+        let name = sym.name.as_str();
+        let noted_pair = self.machine == NativeMachine::Aarch64
+            && matches!(
+                rtype,
+                R_AARCH64_ADR_PREL_PG_HI21 | R_AARCH64_ADD_ABS_LO12_NC
+            )
+            && self.extern_data_names.contains(name);
+        sym.binding != 0
+            && (is_branch_reloc(self.machine, rtype)
+                || is_got_reloc(self.machine, rtype)
+                || noted_pair)
+            && self.preemptible.contains(name)
+    }
+
+    /// Route a reference [`Self::preempts`] to a call stub or a loader-filled slot.
+    fn admit_preempted(&mut self, sym: &'a NativeSymbol, reloc: &NativeReloc, patch_offset: usize) {
+        let import_index = self.record_import(sym.name.as_str());
+        self.pending_imports.push(PendingImportReloc {
+            text_offset: patch_offset as u64,
+            import_index,
+            rtype: reloc.rtype,
+            addend: reloc.addend,
+            target_section: NativeSymSection::Undef,
+            slot_load: !is_branch_reloc(self.machine, reloc.rtype),
+            sym_name: None,
+        });
+    }
+
     /// An x86-64 GOT reference is relaxed to a direct one where the link
     /// defines the symbol and the instruction has a direct form. A symbol
     /// the link defines, or holds as an absolute value, whose instruction
@@ -2154,7 +2269,8 @@ impl<'a> Link<'a> {
                     continue;
                 };
                 let field = self.text_bases[i] + reloc.offset as usize;
-                if !self.needs_got_slot(sym, reloc.rtype, field) {
+                if self.preempts(sym, reloc.rtype) || !self.needs_got_slot(sym, reloc.rtype, field)
+                {
                     continue;
                 }
                 let slot = self.data_slot(&mut slot_of, i, (reloc.sym_idx, 0));
@@ -2500,6 +2616,10 @@ impl<'a> Link<'a> {
                         );
                         self.apply_tls_reloc(i, sym, reloc, patch_offset, &site, &resolver)?;
                     }
+                    continue;
+                }
+                if self.preempts(sym, reloc.rtype) {
+                    self.admit_preempted(sym, reloc, patch_offset);
                     continue;
                 }
                 // An STB_WEAK definition is overridable: a strong
@@ -3142,6 +3262,15 @@ impl<'a> Link<'a> {
         if let Some(value) = abs_value {
             return self.write_data_slot(slot_offset, in_tls, value + reloc.addend, "absolute");
         }
+        if !in_tls && sym.binding != 0 && self.preemptible.contains(sym.name.as_str()) {
+            let import = self.record_import(sym.name.as_str());
+            self.data_import_refs.push(DataImportBind {
+                data_offset: slot_offset,
+                import,
+                addend: reloc.addend,
+            });
+            return Ok(());
+        }
         let resolved_section = match sym.section {
             NativeSymSection::Undef | NativeSymSection::Common => {
                 // Common targets were coalesced into `.bss` and join
@@ -3493,8 +3622,10 @@ impl<'a> Link<'a> {
         }
         let mut bound = alloc::vec![false; declared.len()];
         bound[..declared_by_objs].fill(true);
+        // No binding map or library routes a preemptible definition.
+        routing.retain(|name, _| !self.preemptible.contains(name));
         let mut import_symbols: BTreeMap<String, String> = BTreeMap::new();
-        for name in &self.imports {
+        for name in (self.imports.iter()).filter(|n| !self.preemptible.contains(n.as_str())) {
             if let Some(&idx) = routing.get(name.as_str()) {
                 bound[idx as usize] = true;
                 continue;
@@ -4026,6 +4157,13 @@ impl<'a> Link<'a> {
             })
             .collect();
         self.object_imports = object_imports;
+        // A preemptible definition binds in the loader's global scope, unversioned.
+        let preemptible_imports: BTreeSet<usize> = (0..self.imports.len())
+            .filter(|&i| self.preemptible.contains(self.imports[i].as_str()))
+            .collect();
+        for &i in &preemptible_imports {
+            self.flat_imports.insert(self.imports[i].clone());
+        }
         let symbols = self.image_symbols();
         let exec_stack_input = (self.objs.iter().find(|o| o.exec_stack)).map(|o| o.source.clone());
         let defined: BTreeMap<String, MergedSymbol> = self
@@ -4070,6 +4208,7 @@ impl<'a> Link<'a> {
             copy_relocs,
             object_imports: self.object_imports,
             stub_address_imports: BTreeSet::new(),
+            preemptible_imports,
             debug_info: dbg.info.bytes,
             debug_abbrev: dbg.abbrev,
             debug_line: dbg.line.bytes,

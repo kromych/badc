@@ -4551,16 +4551,141 @@ fn dynamic_symbol_relocs(image: &[u8]) -> (Vec<(String, u32)>, Vec<String>) {
     (relocs, (1..dynsym.len() / 24).map(name).collect())
 }
 
+/// An ELF shared library reaches the definitions it exports through
+/// `.dynsym`, so one the loader finds first preempts them (System V gABI,
+/// symbol visibility): a call goes through a PLT stub and an address or an
+/// object read through a GOT slot, each bound by `GLOB_DAT`, and a pointer
+/// initializer takes a symbolic relocation, all naming the definition's own
+/// entry. `-Bsymbolic-functions` keeps the functions' references direct, and
+/// `-Bsymbolic` all of them, recording `DT_SYMBOLIC`.
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_shared_librarys_exported_definitions_bind_through_its_dynamic_symbols() {
+    use crate::c5::codegen::ElfImageOptions;
+    use crate::c5::linker::{
+        ImageOptions, LinkOptions, Preemption, emit_plt_for, link_native_objects_with,
+        parse_native_elf, write_native_image_from_merged_ex,
+    };
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ABS64, R_AARCH64_GLOB_DAT, R_X86_64_64, R_X86_64_GLOB_DAT,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let units = [
+        "int lib_value(void) { return 1; }\nint lib_var = 1;\n",
+        "int lib_value(void);\nextern int lib_var;\n\
+         int lib_calls(void) { return lib_value(); }\n\
+         int (*lib_address(void))(void) { return lib_value; }\n\
+         int lib_reads(void) { return lib_var; }\n\
+         int (*const lib_slot)(void) = lib_value;\n\
+         int *const lib_var_slot = &lib_var;\n",
+    ];
+    for (target, abs, glob_dat) in [
+        (Target::LinuxX64, R_X86_64_64, R_X86_64_GLOB_DAT),
+        (Target::LinuxAarch64, R_AARCH64_ABS64, R_AARCH64_GLOB_DAT),
+    ] {
+        let objs: Vec<_> = (units.iter())
+            .map(|src| {
+                let options = crate::CompileOptions::default().with_no_entry_point(true);
+                let program = Compiler::with_options(src.to_string(), target, options)
+                    .compile()
+                    .expect("compile");
+                let opts = NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    pic_link: true,
+                    ..Default::default()
+                };
+                let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+                parse_native_elf(&bytes).expect("parse ET_REL")
+            })
+            .collect();
+        for (preemption, functions, objects) in [
+            (Preemption::All, true, true),
+            (Preemption::Objects, false, true),
+            (Preemption::None, false, false),
+        ] {
+            let opts = LinkOptions {
+                allow_undefined: true,
+                preemption,
+                export_all: true,
+                export_data: true,
+            };
+            let mut merged = link_native_objects_with(&objs, &[], &opts).expect("link");
+            let what = format!("{target:?} {preemption:?}");
+            // Whether some site of `name` branches to its stub and some loads its slot.
+            let sites = |name: &str| {
+                let import = merged.imports.iter().position(|n| n == name);
+                let routed =
+                    || (merged.pending_imports.iter()).filter(|r| Some(r.import_index) == import);
+                (
+                    routed().any(|r| !r.slot_load),
+                    routed().any(|r| r.slot_load),
+                )
+            };
+            assert_eq!(sites("lib_value"), (functions, functions), "{what}");
+            assert_eq!(sites("lib_var"), (false, objects), "{what}");
+            let stubs = emit_plt_for(&mut merged, target, false).expect("plt");
+            let symbolic = preemption == Preemption::None;
+            let image_opts = ImageOptions {
+                export_all: true,
+                export_data: true,
+                elf: ElfImageOptions {
+                    symbolic,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let image = write_native_image_from_merged_ex(
+                &merged,
+                &stubs,
+                "",
+                None,
+                OutputKind::SharedLibrary,
+                target,
+                Some("libp.so"),
+                &image_opts,
+            )
+            .expect("image");
+            let (relocs, names) = dynamic_symbol_relocs(&image);
+            let entries = elf_dynsym_entries(&image);
+            for (name, section, preempted) in [
+                ("lib_value", ".text", functions),
+                ("lib_var", ".data", objects),
+            ] {
+                let held = names.iter().filter(|n| *n == name).count();
+                assert_eq!((held, entries[name].0.as_str()), (1, section), "{what}");
+                for kind in [glob_dat, abs] {
+                    let bound = relocs.contains(&(name.to_string(), kind));
+                    assert_eq!(bound, preempted, "{what}: {name} {kind}: {relocs:?}");
+                }
+            }
+            let dynamic = elf_section_bytes(&image, b".dynamic");
+            let tags: Vec<(u64, u64)> = (dynamic.chunks(16))
+                .map(|d| {
+                    let word = |at: usize| u64::from_le_bytes(d[at..at + 8].try_into().unwrap());
+                    (word(0), word(8))
+                })
+                .collect();
+            // DT_SYMBOLIC (16), and DF_SYMBOLIC (2) in DT_FLAGS (30).
+            assert_eq!(tags.iter().any(|t| t.0 == 16), symbolic, "{what}");
+            assert!(
+                tags.contains(&(30, if symbolic { 0xa } else { 0x8 })),
+                "{what}"
+            );
+        }
+    }
+}
+
 /// The bounds a link defines take GNU ld's visibility: the init and fini
 /// array bounds hidden, as its default script provides them, a section's
 /// `__start_` and `__stop_` protected, `-z start-stop-visibility`'s default.
-/// An image exporting every definition publishes none of them.
+/// An image exporting every definition publishes none of them, and a shared
+/// library's references to them bind to its own.
 #[cfg(feature = "native-emit")]
 #[test]
 fn link_defined_bounds_are_hidden_or_protected() {
     use crate::c5::linker::{
-        ImageOptions, emit_plt_for, link_native_objects, parse_native_elf,
-        write_native_image_from_merged_ex,
+        ImageOptions, LinkOptions, Preemption, emit_plt_for, link_native_objects_with,
+        parse_native_elf, write_native_image_from_merged_ex,
     };
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let units = [
@@ -4587,39 +4712,51 @@ fn link_defined_bounds_are_hidden_or_protected() {
                 parse_native_elf(&bytes).expect("parse ET_REL")
             })
             .collect();
-        let mut merged = link_native_objects(&objs).expect("link");
-        let stubs = emit_plt_for(&mut merged, target, false).expect("plt");
-        let image_opts = ImageOptions {
-            export_all: true,
-            export_data: true,
-            ..Default::default()
-        };
-        let image = write_native_image_from_merged_ex(
-            &merged,
-            &stubs,
-            "main",
-            None,
-            OutputKind::Executable,
-            target,
-            None,
-            &image_opts,
-        )
-        .expect("image");
-        let what = format!("{target:?}");
-        let (relocs, names) = dynamic_symbol_relocs(&image);
-        assert!(relocs.is_empty(), "{what}: {relocs:?}");
-        assert!(names.iter().any(|n| n == "tab_entry"), "{what}: {names:?}");
-        // `(binding, visibility)` of each bound in the image's symbol table.
-        for (bound, row) in [
-            ("__init_array_start", (0, 2)),
-            ("__fini_array_end", (0, 2)),
-            ("__start_mytab", (1, 3)),
-            ("__stop_mytab", (1, 3)),
+        for (kind, preemption) in [
+            (OutputKind::Executable, Preemption::None),
+            (OutputKind::SharedLibrary, Preemption::All),
         ] {
-            assert!(!names.iter().any(|n| n == bound), "{what}: {names:?}");
-            let sym = (merged.symbols.iter()).find(|s| s.name == bound);
-            let sym = sym.expect(bound);
-            assert_eq!((sym.info >> 4, sym.other & 3), row, "{what}: {bound}");
+            let opts = LinkOptions {
+                allow_undefined: true,
+                preemption,
+                export_all: true,
+                export_data: true,
+            };
+            let mut merged = link_native_objects_with(&objs, &[], &opts).expect("link");
+            assert!(merged.preemptible_imports.is_empty(), "{target:?} {kind:?}");
+            let stubs = emit_plt_for(&mut merged, target, false).expect("plt");
+            let image_opts = ImageOptions {
+                export_all: true,
+                export_data: true,
+                ..Default::default()
+            };
+            let image = write_native_image_from_merged_ex(
+                &merged,
+                &stubs,
+                "main",
+                None,
+                kind,
+                target,
+                Some("libb.so"),
+                &image_opts,
+            )
+            .expect("image");
+            let what = format!("{target:?} {kind:?}");
+            let (relocs, names) = dynamic_symbol_relocs(&image);
+            assert!(relocs.is_empty(), "{what}: {relocs:?}");
+            assert!(names.iter().any(|n| n == "tab_entry"), "{what}: {names:?}");
+            // `(binding, visibility)` of each bound in the image's symbol table.
+            for (bound, row) in [
+                ("__init_array_start", (0, 2)),
+                ("__fini_array_end", (0, 2)),
+                ("__start_mytab", (1, 3)),
+                ("__stop_mytab", (1, 3)),
+            ] {
+                assert!(!names.iter().any(|n| n == bound), "{what}: {names:?}");
+                let sym = (merged.symbols.iter()).find(|s| s.name == bound);
+                let sym = sym.expect(bound);
+                assert_eq!((sym.info >> 4, sym.other & 3), row, "{what}: {bound}");
+            }
         }
     }
 }

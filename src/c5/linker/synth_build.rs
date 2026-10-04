@@ -52,8 +52,10 @@ use crate::c5::object::write_native_image;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
 use super::internal_err;
-use super::link::{DataAbsReloc, DebugTextReloc, MergedNative, MergedTarget, PltTrampoline};
-use super::object::{NativeMachine, NativeSymSection, STT_FUNC, STT_OBJECT, STV_DEFAULT};
+use super::link::{
+    DataAbsReloc, DebugTextReloc, MergedNative, MergedTarget, PltTrampoline, exports_definition,
+};
+use super::object::{NativeMachine, NativeSymSection, STT_FUNC, STT_OBJECT};
 
 /// The tag this module's diagnostics carry.
 const MODULE: &str = "";
@@ -166,13 +168,22 @@ fn synth_program_and_build(
         ));
     }
     // A stub code takes as a value is the import's address in an ELF executable.
-    let canonical_imports = if target.binary_format() == crate::c5::codegen::BinaryFormat::Elf
-        && output_kind != OutputKind::SharedLibrary
-    {
+    let elf = target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
+    let canonical_imports = if elf && output_kind != OutputKind::SharedLibrary {
         merged.stub_address_imports.iter().copied().collect()
     } else {
         Vec::new()
     };
+    if !merged.preemptible_imports.is_empty() && !(elf && output_kind == OutputKind::SharedLibrary)
+    {
+        return Err(internal_err(
+            MODULE,
+            &alloc::format!(
+                "preemptible definitions reached a {target:?} {output_kind:?}; only an ELF shared \
+                 library binds its own definitions through `.dynsym`"
+            ),
+        ));
+    }
     let SynthFixups {
         got: got_fixups,
         got_base: got_base_fixups,
@@ -240,6 +251,7 @@ fn synth_program_and_build(
         eh_frame: merged.eh_frame.clone(),
         data_import_binds,
         canonical_imports,
+        preemptible_imports: merged.preemptible_imports.iter().copied().collect(),
         orphaned_data: None,
         stopped_at_data_liveness: false,
         ssa_dump: alloc::string::String::new(),
@@ -581,7 +593,7 @@ fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRe
 /// coverage across two flags matching the toolchain's `-rdynamic`:
 /// `--export-all` adds functions, `--export-data` adds data globals.
 /// Both gate the export because it widens the global symbol scope.
-/// Shared libraries use `exports` instead.
+/// A shared library exports functions through `exports`; an ELF one data here.
 fn synth_dynamic_exports(
     merged: &MergedNative,
     target: Target,
@@ -595,8 +607,10 @@ fn synth_dynamic_exports(
         target,
         Target::LinuxX64 | Target::LinuxAarch64 | Target::WindowsX64 | Target::WindowsAarch64
     ) && is_exec;
+    let elf_library = output_kind == OutputKind::SharedLibrary
+        && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
     let export_funcs = macos_exec || (flagged_exec && export_all);
-    let export_data_globals = macos_exec || (flagged_exec && export_data);
+    let export_data_globals = macos_exec || ((flagged_exec || elf_library) && export_data);
     if !export_funcs && !export_data_globals {
         return Vec::new();
     }
@@ -604,21 +618,19 @@ fn synth_dynamic_exports(
         .defined
         .iter()
         .filter_map(|(name, sym)| {
-            if name.is_empty() || sym.visibility != STV_DEFAULT {
+            if name.is_empty() || !exports_definition(sym, false, export_funcs, export_data_globals)
+            {
                 return None;
             }
             // A `.bss` definition rides the same data-byte offset
             // space as `.data`, biased past the file image.
             let (section, offset) = match sym.section {
-                NativeSymSection::Text if export_funcs => (DynamicExportSection::Text, sym.value),
-                NativeSymSection::Data if export_data_globals => {
-                    (DynamicExportSection::Data, sym.value)
-                }
-                NativeSymSection::Bss if export_data_globals => (
+                NativeSymSection::Text => (DynamicExportSection::Text, sym.value),
+                NativeSymSection::Bss => (
                     DynamicExportSection::Data,
                     merged.data.len() as u64 + sym.value,
                 ),
-                _ => return None,
+                _ => (DynamicExportSection::Data, sym.value),
             };
             Some(DynamicExport {
                 name: name.clone(),
@@ -829,9 +841,9 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
     // `.badc.dylibs` section landed surfaces none, so an import with
     // nowhere to bind falls back to the per-target default and the
     // legacy single-libc link path stays runnable; with no import at
-    // all there is nothing to resolve and the image names no library.
+    // all, or only the image's own definitions, the image names no library.
     let dylibs: Vec<ResolvedDylib> = if merged.dylibs.is_empty() {
-        if merged.imports.is_empty() {
+        if merged.imports.len() == merged.preemptible_imports.len() {
             Vec::new()
         } else {
             alloc::vec![ResolvedDylib::runtime_default(target)]
@@ -1498,8 +1510,7 @@ fn synth_exports(
     let mut seen: alloc::collections::BTreeSet<String> = alloc::collections::BTreeSet::new();
     for name in &merged.exports {
         if let Some(sym) = merged.defined.get(name)
-            && matches!(sym.section, NativeSymSection::Text)
-            && sym.visibility == STV_DEFAULT
+            && exports_definition(sym, true, false, false)
             && seen.insert(name.clone())
         {
             exports.push(ExportedFunction {
@@ -1514,8 +1525,7 @@ fn synth_exports(
     if export_all && output_kind == OutputKind::SharedLibrary {
         for (name, sym) in &merged.defined {
             if !name.is_empty()
-                && matches!(sym.section, NativeSymSection::Text)
-                && sym.visibility == STV_DEFAULT
+                && exports_definition(sym, false, true, false)
                 && seen.insert(name.clone())
             {
                 exports.push(ExportedFunction {
@@ -1600,6 +1610,7 @@ mod tests {
             copy_relocs: alloc::vec![],
             object_imports: alloc::collections::BTreeSet::new(),
             stub_address_imports: alloc::collections::BTreeSet::new(),
+            preemptible_imports: alloc::collections::BTreeSet::new(),
             dylibs: alloc::vec![],
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],

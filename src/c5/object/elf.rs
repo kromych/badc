@@ -63,6 +63,7 @@ const DT_INIT_ARRAY: u64 = 25;
 const DT_FINI_ARRAY: u64 = 26;
 const DT_INIT_ARRAYSZ: u64 = 27;
 const DT_FINI_ARRAYSZ: u64 = 28;
+const DT_SYMBOLIC: u64 = 16;
 const DT_BIND_NOW: u64 = 24;
 const DT_FLAGS: u64 = 30;
 const DT_VERSYM: u64 = 0x6fff_fff0;
@@ -73,6 +74,7 @@ const DT_RELRSZ: u64 = 35;
 const DT_RELR: u64 = 36;
 const DT_RELRENT: u64 = 37;
 
+const DF_SYMBOLIC: u64 = 0x2;
 const DF_BIND_NOW: u64 = 0x8;
 const DF_1_PIE: u64 = 0x0800_0000;
 
@@ -822,6 +824,7 @@ fn build_dynsym(
     import_name_offsets: &[u32],
     import_is_object: &[bool],
     import_values: &[u64],
+    import_defs: &[(usize, DynsymExport)],
     exports: &[DynsymExport],
     copies: &DynsymCopyTargets<'_>,
 ) -> Vec<u8> {
@@ -852,6 +855,21 @@ fn build_dynsym(
 
     debug_assert_eq!(import_name_offsets.len(), import_is_object.len());
     for (i, &name_off) in import_name_offsets.iter().enumerate() {
+        if let Ok(k) = import_defs.binary_search_by_key(&i, |d| d.0) {
+            let def = &import_defs[k].1;
+            write_struct(
+                &mut out,
+                &Elf64Sym {
+                    st_name: name_off,
+                    st_info: def.st_info,
+                    st_other: 0,
+                    st_shndx: def.shndx,
+                    st_value: def.addr,
+                    st_size: def.size,
+                },
+            );
+            continue;
+        }
         write_struct(
             &mut out,
             &Elf64Sym {
@@ -1004,12 +1022,16 @@ fn build_dynamic(lib_strtab_offsets: &[u32], info: DynamicInfo) -> Vec<u8> {
     if info.executable {
         entries.push((DT_DEBUG, 0));
     }
+    if info.symbolic {
+        entries.push((DT_SYMBOLIC, 0));
+    }
+    let symbolic = if info.symbolic { DF_SYMBOLIC } else { 0 };
     entries.extend([
         (DT_RELA, info.rela_vmaddr),
         (DT_RELASZ, info.rela_size),
         (DT_RELAENT, ELF64_RELA_SIZE),
         (DT_BIND_NOW, 0),
-        (DT_FLAGS, DF_BIND_NOW),
+        (DT_FLAGS, DF_BIND_NOW | symbolic),
     ]);
     if info.pie {
         entries.push((DT_FLAGS_1, DF_1_PIE));
@@ -1059,6 +1081,8 @@ struct DynamicInfo {
     executable: bool,
     /// A position-independent executable: `DF_1_PIE`.
     pie: bool,
+    /// `-Bsymbolic`: `DT_SYMBOLIC` and `DF_SYMBOLIC`.
+    symbolic: bool,
     /// `.relr.dyn`'s address and size: `DT_RELR`.
     relr: Option<(u64, u64)>,
 }
@@ -1531,6 +1555,7 @@ struct ElfImageWriter<'a> {
     stub_len: u64,
     text_gap: u64,
     exports: Vec<ElfExport>,
+    defined_imports: Vec<(usize, ElfExport)>,
     dynamic: DynTables,
     seg: Segments,
     tail: Tail<'a>,
@@ -1619,6 +1644,7 @@ impl<'a> ElfImageWriter<'a> {
             stub_len,
             text_gap: stub_len - stub_body_len,
             exports: Vec::new(),
+            defined_imports: Vec::new(),
             dynamic: DynTables::default(),
             seg: Segments::default(),
             tail: Tail::default(),
@@ -1709,6 +1735,15 @@ impl<'a> ElfImageWriter<'a> {
                 weak: false,
             });
         }
+        for &i in &build.preemptible_imports {
+            let name = &build.imports.imports[i].real_symbol;
+            let Some(at) = exports.iter().position(|e| e.name == *name) else {
+                return Err(Self::internal(format!(
+                    "ELF: preemptible import `{name}` is not among the exports"
+                )));
+            };
+            self.defined_imports.push((i, exports.remove(at)));
+        }
         self.exports = exports;
         Ok(())
     }
@@ -1749,6 +1784,7 @@ impl<'a> ElfImageWriter<'a> {
         let dynsym = build_dynsym(
             &name_offsets,
             &import_is_object,
+            &[],
             &[],
             &exports_placeholder,
             &DynsymCopyTargets {
@@ -2982,6 +3018,28 @@ impl<'a> ElfImageWriter<'a> {
         self.out[at..at + digest.len()].copy_from_slice(&digest);
     }
 
+    /// `e`'s `.dynsym` entry, under the name at `name_off`, against the final layout.
+    fn dynsym_export(&self, e: &ElfExport, name_off: u32) -> DynsymExport {
+        let (addr, shndx) = match e.section {
+            super::DynamicExportSection::Text => {
+                (self.text_vmaddr() + e.offset, self.dynamic.text_shndx)
+            }
+            super::DynamicExportSection::Data => {
+                let addr = self.data_off_to_vaddr(e.offset);
+                (addr, self.data_addr_shndx(addr, e.offset))
+            }
+        };
+        let binding = if e.weak { STB_WEAK } else { STB_GLOBAL };
+        let st_type = if e.is_object { STT_OBJECT } else { STT_FUNC };
+        DynsymExport {
+            name_off,
+            addr,
+            size: e.size,
+            st_info: (binding << 4) | st_type,
+            shndx,
+        }
+    }
+
     /// `.interp`, the final `.dynsym` (each export's `st_value` is its
     /// runtime address now that the layout is fixed, the placeholder having
     /// had the same byte count), `.dynstr`, `.hash`, the version sections,
@@ -2999,32 +3057,13 @@ impl<'a> ElfImageWriter<'a> {
         let build = self.build;
         let machine = self.machine;
         let (seg, dynamic, tail) = (&self.seg, &self.dynamic, &self.tail);
-        let text_shndx = dynamic.text_shndx;
         let (data_shndx, bss_shndx) = (tail.plan.index_of(Sec::Data), tail.plan.index_of(Sec::Bss));
-        let final_exports: Vec<DynsymExport> = self
-            .exports
-            .iter()
+        let final_exports: Vec<DynsymExport> = (self.exports.iter())
             .zip(dynamic.export_name_offsets.iter())
-            .map(|(e, &name_off)| {
-                let (addr, shndx) = match e.section {
-                    super::DynamicExportSection::Text => {
-                        (self.text_vmaddr() + e.offset, text_shndx)
-                    }
-                    super::DynamicExportSection::Data => {
-                        let addr = self.data_off_to_vaddr(e.offset);
-                        (addr, self.data_addr_shndx(addr, e.offset))
-                    }
-                };
-                let binding = if e.weak { STB_WEAK } else { STB_GLOBAL };
-                let st_type = if e.is_object { STT_OBJECT } else { STT_FUNC };
-                DynsymExport {
-                    name_off,
-                    addr,
-                    size: e.size,
-                    st_info: (binding << 4) | st_type,
-                    shndx,
-                }
-            })
+            .map(|(e, &name_off)| self.dynsym_export(e, name_off))
+            .collect();
+        let import_defs: Vec<(usize, DynsymExport)> = (self.defined_imports.iter())
+            .map(|(i, e)| (*i, self.dynsym_export(e, dynamic.name_offsets[*i])))
             .collect();
         let copy_addrs: Vec<u64> = build
             .copy_relocs
@@ -3050,6 +3089,7 @@ impl<'a> ElfImageWriter<'a> {
             &dynamic.name_offsets,
             &dynamic.import_is_object,
             &import_values,
+            &import_defs,
             &final_exports,
             &DynsymCopyTargets {
                 name_offsets: &dynamic.copy_name_offsets,
@@ -3262,6 +3302,7 @@ impl<'a> ElfImageWriter<'a> {
                     .map(|(off, len)| (data_va(off), len)),
                 executable: build.output_kind != super::OutputKind::SharedLibrary,
                 pie: self.emit_dyn && build.output_kind != super::OutputKind::SharedLibrary,
+                symbolic: build.elf.symbolic,
                 relr: self.relr.then(|| (va(seg.relr_off), seg.relr_size)),
             },
         )

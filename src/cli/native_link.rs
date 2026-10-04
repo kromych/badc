@@ -883,12 +883,13 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
     // A shared library may reference symbols the host executable
     // supplies at `dlopen` time; let an unresolved global become a
     // load-time import instead of a link error, unless `--no-undefined`.
-    let allow_undefined = cli.mode == Mode::SharedLibrary && cli.link.z.defs() != Some(true);
-    let mut merged = match badc::link_native_objects_with_shared_libs(
-        image.objs,
-        allow_undefined,
-        image.shared_libs,
-    ) {
+    let opts = badc::LinkOptions {
+        allow_undefined: cli.mode == Mode::SharedLibrary && cli.link.z.defs() != Some(true),
+        preemption: cli.preemption(),
+        export_all: cli.link.export_all,
+        export_data: cli.link.export_data,
+    };
+    let mut merged = match badc::link_native_objects_with(image.objs, image.shared_libs, &opts) {
         Ok(m) => m,
         Err(e) => {
             eprint_diagnostic(format!("badc: {e}"));

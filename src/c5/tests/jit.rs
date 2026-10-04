@@ -92,6 +92,37 @@ fn exit_returns_to_the_runner() {
     assert_eq!(jit_exit(ctor, &["jit-exit-ctor"]), 6);
 }
 
+/// A program's end leaves the C library's streams alone: they belong to the
+/// process, which every program it runs shares. One program blocked reading
+/// a stream holds that stream's lock while another one ends.
+#[test]
+fn a_program_ends_while_another_holds_a_stream() {
+    use std::io::Write;
+    use std::os::fd::{IntoRawFd, OwnedFd};
+    let (reader, mut writer) = std::io::pipe().expect("pipe");
+    let fd = OwnedFd::from(reader).into_raw_fd();
+    let blocked = std::thread::spawn(move || {
+        let reads = "#include <stdio.h>\n#include <stdlib.h>\n\
+            int main(int argc, char **argv) {\n\
+              char line[16]; FILE *f = fdopen(atoi(argv[1]), \"r\");\n\
+              if (!f || !fgets(line, sizeof line, f)) return 1;\n\
+              fclose(f); return line[0] == 'g' ? 0 : 2; }";
+        jit_exit(reads, &["jit-reads", &fd.to_string()])
+    });
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    let (done, ended) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = done.send(jit_exit("int main(void) { return 7; }", &["jit-ends"]));
+    });
+    let status = ended.recv_timeout(std::time::Duration::from_secs(20));
+    writer.write_all(b"go\n").expect("write the line");
+    assert_eq!(
+        status.expect("the program's end waited on a stream another program holds"),
+        7
+    );
+    assert_eq!(blocked.join().expect("reader thread"), 0);
+}
+
 /// Raw-byte inline asm executes natively: the literal bytes `B8 25 00 00 00`
 /// are `mov eax, 0x25`, and the `"=a"` output ties the result to the return
 /// value. x86_64 host only -- the bytes are x86 machine code, and the VM

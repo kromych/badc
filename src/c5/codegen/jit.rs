@@ -234,22 +234,18 @@ mod jit_impl {
     }
 
     unsafe extern "C" {
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
-        fn fflush(stream: *mut c_void) -> c_int;
         fn _exit(status: c_int) -> !;
     }
 
     /// Replacement for libc's `exit`. C99 7.20.4.3: the atexit handlers
-    /// run, then the open streams are flushed. `atexit` was intercepted into
-    /// the JIT-side chain, which the host's `exit` knows nothing about. The
-    /// program then ends as a return from its `main` does: the process is
-    /// the test runner's or the driver's, and outlives the program.
+    /// run first. `atexit` was intercepted into the JIT-side chain, which the
+    /// host's `exit` knows nothing about. The program then ends as a return
+    /// from its `main` does: the process is the test runner's or the
+    /// driver's, and outlives the program. The C library's streams are the
+    /// process's, and the process's own `exit` flushes them; walking them
+    /// here would contend with every other program the process runs.
     extern "C" fn jit_exit_thunk(status: c_int) -> ! {
         drain_jit_atexit_chain();
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
-        unsafe {
-            fflush(core::ptr::null_mut());
-        }
         end_program(status, true)
     }
 

@@ -150,10 +150,11 @@ jobs:
           - windows-latest
           - windows-11-arm
     runs-on: ${{ matrix.os }}
-    # The Linux and macOS lanes finish in about 7 minutes, the Windows ones in
-    # 9-10: process spawning dominates the per-fixture demos there. The cap is
-    # a hang backstop, so it sits above the slowest lane, not at it.
-    timeout-minutes: 20
+    # windows-latest takes about 22 minutes and windows-11-arm 18 (measured at
+    # 11d3ec96e); the Linux and macOS lanes finish well inside that. Process
+    # spawning dominates the per-fixture runs on Windows. The cap is a hang
+    # backstop, so it sits above the slowest lane, not at it.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

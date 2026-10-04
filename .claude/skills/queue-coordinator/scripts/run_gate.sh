@@ -29,7 +29,8 @@ release_box() {  # $1 host
 echo "$(date '+%H:%M:%S') waiting for locks on ${hosts[*]}" > "$status"
 for h in "${hosts[@]}"; do take_lock "$h" heavy; take_lock "$h" kernel; done
 echo "$(date '+%H:%M:%S') locks held; gate running on $sha" >> "$status"
-bash .claude/skills/pre-push-validation/scripts/gate.sh "$@" > "$log" 2>&1 &
+# Unbuffered, so each lane line reaches the log when the lane prints it.
+PYTHONUNBUFFERED=1 bash .claude/skills/pre-push-validation/scripts/gate.sh "$@" > "$log" 2>&1 &
 gate=$!
 released=()
 while kill -0 "$gate" 2>/dev/null; do

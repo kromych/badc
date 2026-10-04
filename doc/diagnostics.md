@@ -109,7 +109,7 @@ regenerates.
 | B6015 | `object-format` | error | hard | - | a construct the selected object format cannot express |
 | B6016 | `link` | error | hard | - | a link-time failure with no more specific row |
 | B7001 | `unknown-argument` | error | hard | - | command-line option or operand the driver does not implement |
-| B7002 | `unknown-warning-option` | warning | controllable | default | a diagnostic pragma names a selector that is not in the catalogue |
+| B7002 | `unknown-warning-option` | warning | controllable | default | a diagnostic pragma names a selector that is neither in the catalogue nor a gcc or clang warning |
 | B7003 | `unused-command-line-argument` | ignore | controllable | all,extra | an accepted option that selects nothing in the mode the command line picked |
 | B7004 | `no-input-files` | error | hard | - | the command line names nothing to compile, assemble or link |
 | B7005 | `input-unreadable` | error | hard | - | an input file the driver cannot read |
@@ -119,4 +119,5 @@ regenerates.
 | B7009 | `cross-target-output` | warning | note | - | the image is for another host and will not run where it was built |
 | B7010 | `freestanding-import` | warning | controllable | default | a freestanding image binds a shared-library symbol, so it runs through the dynamic loader |
 | B7011 | `dwarf-output` | warning | controllable | default | a `-gdwarf` option asks for a DWARF version or format the emitter does not produce |
+| B7012 | `unimplemented-warning-option` | warning | controllable | default | a diagnostic pragma turns on a gcc or clang warning that badc does not implement, so it has no effect |
 | B9001 | `internal-error` | error | hard | - | an invariant inside badc did not hold |

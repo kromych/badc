@@ -305,14 +305,30 @@ impl Preprocessor {
             return None;
         };
         let selector = Selector::parse(name);
-        if selector.is_none() {
-            self.warn(
-                UNKNOWN_WARNING_OPTION,
-                site,
-                format!("unknown option `-W{name}` in `#pragma {vendor} diagnostic {action}`"),
-            );
+        if selector.is_some() {
+            return selector;
         }
-        selector
+        // A warning another compiler defines and badc does not implement is
+        // never reported, so ignoring it already holds.
+        if crate::c5::diag::defined_elsewhere(name) {
+            if action != "ignored" {
+                self.warn(
+                    Code::UNIMPLEMENTED_WARNING_OPTION,
+                    site,
+                    format!(
+                        "`-W{name}` is a gcc or clang warning badc does not implement; \
+                         `#pragma {vendor} diagnostic {action}` has no effect"
+                    ),
+                );
+            }
+            return None;
+        }
+        self.warn(
+            UNKNOWN_WARNING_OPTION,
+            site,
+            format!("unknown option `-W{name}` in `#pragma {vendor} diagnostic {action}`"),
+        );
+        None
     }
 
     /// Record what a selector asks for at `offset`. `None` restores

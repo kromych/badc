@@ -540,3 +540,27 @@ fn explain_prints_one_row() {
     assert_eq!(lines[0], "B7001 unknown-argument");
     assert!(lines.iter().any(|l| l.contains("aliases      D9002")));
 }
+
+/// The table of other compilers' warning names is sorted, which its binary
+/// search needs, and resolves each form a pragma spells: a gcc name, a gcc
+/// name taking a value, a clang group, and none for a misspelling.
+#[test]
+fn other_compilers_warning_names_resolve() {
+    use super::foreign_names::NAMES;
+    assert!(NAMES.windows(2).all(|w| w[0].0 < w[1].0));
+    for name in [
+        "missing-prototypes",
+        "override-init",
+        "suggest-attribute=format",
+        "format-overflow=2",
+        "alloc-size-larger-than=100",
+        "format-overflow",
+        "shorten-64-to-32",
+        "format=2",
+    ] {
+        assert!(super::defined_elsewhere(name), "{name}");
+    }
+    for name in ["bogus-name", "suggest-attribute=bogus", "no-unused"] {
+        assert!(!super::defined_elsewhere(name), "{name}");
+    }
+}

@@ -4632,6 +4632,7 @@ fn preprocessor_codes_are_live_catalogue_rows() {
         PRAGMA_POP_WITHOUT_PUSH,
         IGNORED_PRAGMA_INTRINSIC,
         UNKNOWN_WARNING_OPTION,
+        crate::c5::diag::Code::UNIMPLEMENTED_WARNING_OPTION,
     ] {
         let row = code.row().unwrap_or_else(|| panic!("{code} has no row"));
         assert_eq!(row.status, crate::c5::diag::Status::Live, "{code}");
@@ -4750,6 +4751,45 @@ fn an_unknown_pragma_selector_is_reported_and_covers_nothing() {
     let src = format!("#pragma GCC diagnostic ignored \"-Wno-such-option\"\n{UNKNOWN_PRAGMA_LINE}");
     let _ = pp.process(&src).expect("preprocessor failed");
     assert_eq!(codes(&pp), vec![UNKNOWN_WARNING_OPTION, UNKNOWN_PRAGMA]);
+}
+
+/// A diagnostic pragma naming a warning gcc or clang defines and badc does
+/// not implement asks for nothing badc reports: `ignored` holds already,
+/// and `warning` or `error` has no effect, which B7012 says. A name
+/// neither compiler defines is B7002 under every kind; one badc implements
+/// applies.
+#[test]
+fn a_pragma_naming_another_compilers_warning_is_not_unknown() {
+    use crate::c5::diag::Code;
+    let unimplemented = Code::UNIMPLEMENTED_WARNING_OPTION;
+    // gcc only, gcc with a value, clang only, neither, badc.
+    let names = [
+        ("-Wsuggest-attribute=format", Some(unimplemented)),
+        ("-Wformat-overflow=2", Some(unimplemented)),
+        ("-Wshorten-64-to-32", Some(unimplemented)),
+        ("-Wsuggest-attribute=bogus", None),
+        ("-Wunused-variable", Some(Code::UNUSED_VARIABLE)),
+    ];
+    for (name, raised) in names {
+        for (vendor, kind) in [("GCC", "ignored"), ("clang", "warning"), ("GCC", "error")] {
+            let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+            let src = format!("#pragma {vendor} diagnostic {kind} \"{name}\"\n");
+            let _ = pp.process(&src).expect("preprocessor failed");
+            let want = match raised {
+                None => vec![UNKNOWN_WARNING_OPTION],
+                Some(code) if code == unimplemented && kind != "ignored" => vec![code],
+                Some(_) => vec![],
+            };
+            assert_eq!(codes(&pp), want, "{src}");
+        }
+    }
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let src = "#pragma GCC diagnostic push\n\
+               #pragma GCC diagnostic ignored \"-Wmissing-prototypes\"\n\
+               #pragma GCC diagnostic ignored \"-Woverride-init\"\n\
+               #pragma GCC diagnostic pop\n";
+    let _ = pp.process(src).expect("preprocessor failed");
+    assert!(codes(&pp).is_empty(), "{:?}", codes(&pp));
 }
 
 #[test]

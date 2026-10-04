@@ -277,7 +277,7 @@ catalog! {
         "command-line option or operand the driver does not implement";
     7002, "unknown-warning-option", ["pragmas"], Warning, Controllable,
         [DEFAULT], Live,
-        "a diagnostic pragma names a selector that is not in the catalogue";
+        "a diagnostic pragma names a selector that is neither in the catalogue nor a gcc or clang warning";
     7003, "unused-command-line-argument", [], Ignore, Controllable,
         [ALL, EXTRA], Live,
         "an accepted option that selects nothing in the mode the command line picked";
@@ -305,6 +305,9 @@ catalog! {
     7011, "dwarf-output", [], Warning, Controllable,
         [DEFAULT], Live,
         "a `-gdwarf` option asks for a DWARF version or format the emitter does not produce";
+    7012, "unimplemented-warning-option", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a diagnostic pragma turns on a gcc or clang warning that badc does not implement, so it has no effect";
 
     9001, "internal-error", [], Error, Hard,
         [], Live,
@@ -436,6 +439,7 @@ impl Code {
     pub const LINK_PRAGMA_IGNORED: Code = Code::new(7008);
     pub const FREESTANDING_IMPORT: Code = Code::new(7010);
     pub const DWARF_OUTPUT: Code = Code::new(7011);
+    pub const UNIMPLEMENTED_WARNING_OPTION: Code = Code::new(7012);
 
     pub const DIRECTIVE: Code = Code::new(1010);
     pub const INVALID_PRAGMA: Code = Code::new(1011);

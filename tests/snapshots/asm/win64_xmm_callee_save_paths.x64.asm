@@ -1,5 +1,5 @@
 
-win64_xmm_scratch_callee_save.x64:	file format elf64-x86-64
+win64_xmm_callee_save_paths.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 

@@ -5196,14 +5196,17 @@ fn block_extern_shadows_local() {
 }
 
 #[test]
-fn win64_xmm_scratch_callee_save() {
-    // The x86_64 emit pass uses xmm13/14/15 as fixed FP scratch, which
-    // Win64 marks non-volatile. An FP function that returns a small
-    // struct by value (the register-aggregate return path) must save and
-    // restore those registers at offsets that match the prologue, or the
-    // epilogue restores callee-saved GPRs from the wrong slot and leaves
-    // the caller's xmm clobbered. Correctness check on every target.
-    assert_eq!(run_fixture("win64_xmm_scratch_callee_save.c"), 0);
+fn win64_xmm_callee_save_paths() {
+    // Win64 marks xmm6..xmm15 non-volatile; the allocator holds FP
+    // values live across calls there, and the prologue saves each one
+    // the body uses. An FP function that returns a small struct by
+    // value (the register-aggregate return path) must save and restore
+    // those registers at offsets that match the prologue, or the
+    // epilogue restores callee-saved GPRs from the wrong slot and
+    // leaves the caller's xmm clobbered. Correctness check on every
+    // target; on System V / AAPCS64 the values are volatile and no
+    // xmm is saved.
+    assert_eq!(run_fixture("win64_xmm_callee_save_paths.c"), 0);
 }
 
 #[test]

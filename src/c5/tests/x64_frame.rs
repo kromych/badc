@@ -363,9 +363,10 @@ fn the_canary_is_checked_ahead_of_the_pops() {
     }
 }
 
-/// Win64 saves its non-volatile FP scratch above the pushed registers: the
-/// `movups` stores follow the pushes at `slots16(pushes)` up, and every
-/// exit reloads them from the same offsets ahead of the pops.
+/// Win64 saves the non-volatile xmms the allocator assigned above the
+/// pushed registers: the `movups` stores follow the pushes at
+/// `slots16(pushes)` up, and every exit reloads them from the same
+/// offsets ahead of the pops.
 #[test]
 fn win64_xmm_saves_sit_above_the_pushed_registers() {
     const SRC: &str = "double g(double); long h(long);\n\
@@ -406,6 +407,46 @@ fn win64_xmm_saves_sit_above_the_pushed_registers() {
     let sysv = insns_of(&optimized(SRC, Target::LinuxX64), "mixed");
     let frame = frame_of(&sysv, Target::LinuxX64).expect("a frame");
     assert!(xmm_slot(&sysv[frame.body], 0x0F11).is_none(), "{sysv:x?}");
+}
+
+/// A Win64 function whose FP values live across calls holds them in
+/// xmm6..xmm15, one `movups` save per register; the emit scratch
+/// (xmm3..xmm5) is volatile, so no function saves it, and a leaf FP
+/// function builds no frame at all. Pre-fix every FP function saved
+/// the callee-saved scratch xmm13/14/15 and spilled the live values.
+#[test]
+fn win64_fp_values_live_across_calls_take_the_callee_saved_xmms() {
+    const SRC: &str = "double g(double);\n\
+        double f(double a, double b, double c) {\n\
+            double s = a + b + c;\n\
+            double t = g(a) + b;\n\
+            return s + g(t) + c;\n\
+        }\n\
+        double leaf(double a, double b) { return a * b + a + b; }\n";
+    let target = Target::WindowsX64;
+    let saves = |name: &str| -> Vec<(u8, i64)> {
+        let insns = insns_of(&optimized(SRC, target), name);
+        let Some(frame) = frame_of(&insns, target) else {
+            return Vec::new();
+        };
+        insns[frame.body..]
+            .iter()
+            .map_while(|x| {
+                (x.op == 0x0F11 && x.mem_base() == Some(4)).then_some((x.regs().0, x.disp))
+            })
+            .collect()
+    };
+    let f_saves = saves("f");
+    assert!(!f_saves.is_empty(), "f spills its live-across-call values");
+    assert!(
+        f_saves.iter().all(|&(r, _)| (6..=15).contains(&r)),
+        "f saves a volatile xmm: {f_saves:?}"
+    );
+    let leaf_insns = insns_of(&optimized(SRC, target), "leaf");
+    assert!(
+        frame_of(&leaf_insns, target).is_none(),
+        "a leaf FP function pays no scratch save: {leaf_insns:x?}"
+    );
 }
 
 /// A tail call marshals its arguments, then restores and tears the frame

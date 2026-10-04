@@ -2217,6 +2217,10 @@ const UWOP_SET_FPREG: u8 = 3;
 /// Non-volatile GPR save at a scaled RSP offset.
 #[cfg(test)]
 const UWOP_SAVE_NONVOL: u8 = 4;
+/// 128-bit non-volatile xmm save (see `build_unwind_codes`: the saves
+/// are undescribed while the prologue keeps its frame-pointer layout).
+#[cfg(test)]
+const UWOP_SAVE_XMM128: u8 = 8;
 const UNWIND_REG_RBP: u8 = 5;
 
 /// Append one `UWOP_ALLOC_SMALL` / `UWOP_ALLOC_LARGE` to a reversed
@@ -2253,19 +2257,27 @@ fn push_alloc_code(codes: &mut Vec<u8>, code_offset: u8, size: u32) {
 /// leaves RSP at the return address.
 ///
 /// The callee-saved GPRs are pushed after the frame allocation, at the
-/// frame bottom, and are not described. RIP/RSP/RBP recover exactly at any
-/// body fault through the frame pointer, but a debugger / profiler / SEH /
-/// C++ unwind crossing this frame does not recover those GPR values. Codes
-/// are listed in descending prologue offset, so a `UWOP_PUSH_NONVOL` for
-/// one of these pushes would be processed before `UWOP_SET_FPREG`, against
-/// the running `context->Rsp`; and the body lowers each call as `sub
-/// rsp,scratch; call; add rsp,scratch` with per-site scratch, so at a call
-/// return address that RSP is `frame_rsp - scratch`. A faithful description
-/// pushes the GPRs before the frame pointer is established, so each recovers
-/// after `UWOP_SET_FPREG` resets RSP to rbp. TODO: that prologue restructure
-/// (prologue, epilogue and the decoder in lockstep, plus an 8*count shift of
-/// the rbp-relative offsets). badc emits no exception-using code today, so
-/// execution is unaffected until then.
+/// frame bottom, and are not described; neither are the `movups` saves
+/// of the non-volatile xmms that follow them. RIP/RSP/RBP recover exactly
+/// at any body fault through the frame pointer, but a debugger / profiler /
+/// SEH / C++ unwind crossing this frame does not recover those register
+/// values. Codes are listed in descending prologue offset, so a
+/// `UWOP_PUSH_NONVOL` for one of these pushes would be processed before
+/// `UWOP_SET_FPREG`, against the running `context->Rsp`; and the body
+/// lowers each call as `sub rsp,scratch; call; add rsp,scratch` with
+/// per-site scratch, so at a call return address that RSP is
+/// `frame_rsp - scratch`. A `UWOP_SAVE_XMM128` reads its scaled,
+/// unsigned offset from the frame register's establishment point
+/// (`mov rbp,rsp` puts rbp at the frame top), so an in-frame xmm save
+/// is inexpressible while rbp sits above it. A faithful description
+/// pushes the GPRs before the frame pointer is established, so each
+/// recovers after `UWOP_SET_FPREG` resets RSP to rbp, and keeps the
+/// body's RSP fixed, so the xmm saves read their exact offsets at a
+/// call site too. TODO: that prologue restructure (prologue, epilogue
+/// and the decoder in lockstep, plus an 8*count shift of the
+/// rbp-relative offsets) with a frame-resident outgoing area and
+/// `UWOP_SAVE_XMM128` codes for the saves. badc emits no
+/// exception-using code today, so execution is unaffected until then.
 fn build_unwind_codes(uw: &super::FnUnwind, frame_start: u32) -> (Vec<u8>, u8, u8) {
     if uw.leaf {
         return (Vec::new(), 0, 0);
@@ -3247,9 +3259,9 @@ mod tests {
     }
 
     /// Locks the documented unwind-metadata limitation: a non-leaf x64
-    /// Windows function that saves callee-saved GPRs describes only the
-    /// frame-pointer prologue (SET_FPREG + one PUSH_NONVOL, of rbp), never
-    /// the GPR saves.
+    /// Windows function that saves callee-saved GPRs or non-volatile
+    /// xmms describes only the frame-pointer prologue (SET_FPREG + one
+    /// PUSH_NONVOL, of rbp), never the saves (see `build_unwind_codes`).
     #[test]
     fn win64_gpr_spill_unwind_omits_save_nonvol() {
         use crate::Compiler;
@@ -3312,6 +3324,10 @@ mod tests {
             assert!(
                 !ops.contains(&UWOP_SAVE_NONVOL),
                 "GPR saves are not (yet) described"
+            );
+            assert!(
+                !ops.contains(&UWOP_SAVE_XMM128),
+                "xmm saves are not described until the prologue restructure"
             );
         }
         assert!(saw_non_leaf, "expected at least one non-leaf frame");

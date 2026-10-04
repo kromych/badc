@@ -1243,7 +1243,7 @@ fn saved_xmm_off(alloc: &Allocation) -> i32 {
 /// Save the callee-saved registers the allocator reported, with rsp
 /// `pushed_gpr_bytes` above the frame bottom: the GPRs are pushed in
 /// descending index order, so `gpr_used[i]` lands at `[rsp + 8 * i]` of the
-/// completed frame, and the non-volatile xmm scratch is stored above them
+/// completed frame, and the non-volatile xmms are stored above them
 /// (full 128-bit `movups`, the caller may use the upper lanes). The offsets
 /// have one source, so the prologue and every return path agree.
 fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation) {
@@ -1370,8 +1370,10 @@ fn emit_prologue(
             code[rel32_at..rel32_at + 4].copy_from_slice(&rel.to_le_bytes());
         }
     }
-    // The allocator never assigns a non-volatile xmm (`callee_fprs` is empty);
-    // `fp_used` lists the fixed FP scratch of a Win64 function doing FP work.
+    // The pushed GPRs, then the movups saves of the non-volatile xmms
+    // the allocator assigned (on Win64; System V allocates none), and
+    // of any callee-saved scratch a `-ffixed-` fallback moved off the
+    // Win64 volatile set.
     save_callee_saved(code, alloc);
     // The canary slot is rbp-relative, so it is stored before the realign.
     emit_canary_store(code, frame, abi, extern_data_refs);

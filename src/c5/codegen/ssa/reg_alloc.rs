@@ -774,11 +774,10 @@ pub(crate) struct RegBanks {
     /// allocator spills them to memory instead.
     pub caller_gprs: Vec<u8>,
     /// Callee-saved FP regs the allocator may use. AAPCS64 marks
-    /// d8..d15 callee-saved. SysV AMD64 marks no xmm callee-saved.
-    /// Win64 marks xmm6..xmm15 non-volatile, but the x86_64
-    /// prologue/epilogue emit no FP save/restore, so this bank is
-    /// left empty there as well; both x86_64 ABIs force every
-    /// live-across-call FP value to memory.
+    /// d8..d15 callee-saved; Win64 marks xmm6..xmm15 non-volatile and
+    /// the x86_64 prologue/epilogue save and restore the full 128
+    /// bits of each one the body uses. SysV AMD64 marks no xmm
+    /// callee-saved.
     pub callee_fprs: Vec<u8>,
     /// Caller-saved FP regs (d0..d7 on aarch64; xmm0..xmm15 on
     /// x86_64).
@@ -786,6 +785,11 @@ pub(crate) struct RegBanks {
     /// FP registers the emit pass writes within one instruction's
     /// lowering, outside every bank; see [`FP_SCRATCH_COUNT`].
     pub fp_scratch: [u8; FP_SCRATCH_COUNT],
+    /// A callee-saved FP register preserves only its low 64 bits
+    /// across a call (AAPCS64 6.1.2), so a 128-bit value live across
+    /// one cannot take the callee bank. False where the convention
+    /// preserves the whole register, Win64 xmm6..xmm15 included.
+    pub callee_fpr_low64_only: bool,
 }
 
 impl RegBanks {
@@ -837,6 +841,7 @@ impl RegBanks {
             callee_fprs,
             caller_fprs,
             fp_scratch,
+            callee_fpr_low64_only: !target.is_x86_64(),
         }
     }
 }
@@ -930,22 +935,19 @@ impl Rows {
                 // r9) plus rax.
                 callee_gprs: &[3, 6, 7, 12, 13, 14, 15],
                 caller_gprs: &[0, 1, 2, 8, 9],
-                // Win64 marks xmm6..xmm15 non-volatile (callee-saved),
-                // but the x86_64 prologue/epilogue and `Frame` layout
-                // reserve no space for and emit no save/restore of FP
-                // registers (`emit_prologue` only spills `gpr_used`).
-                // Assigning a live-across-call FP value to xmm6..xmm15
-                // would therefore corrupt the caller's non-volatile
-                // state on return. Keep the FP pool empty like SysV so
-                // the allocator forces every live-across-call FP value
-                // to memory and only ever uses the caller-saved
-                // (volatile) xmm0..xmm5. xmm0..xmm5 are the Win64
-                // volatile set per the x64 calling convention.
-                callee_fprs: &[],
-                caller_fprs: &[0, 1, 2, 3, 4, 5],
-                // xmm6..xmm15 are non-volatile and outside the banks; the
-                // prologue saves the scratch the body touches.
-                fp_scratch: &[14, 15, 13, 6, 7, 8, 9, 10, 11, 12],
+                // Win64 marks xmm6..xmm15 non-volatile (callee-saved);
+                // the prologue and every epilogue path save and restore
+                // the full 128 bits of each one the body uses, so the
+                // allocator may hold a live-across-call FP value there.
+                // The volatile set is xmm0..xmm5. xmm0..xmm2 are the
+                // return and first three FP argument registers and stay
+                // allocatable; xmm4, xmm5 and xmm3 are the emit pass's
+                // scratch (xmm3 is the fourth FP argument register, so
+                // only a call with four FP arguments pays a marshal
+                // move into it).
+                callee_fprs: &[6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+                caller_fprs: &[0, 1, 2],
+                fp_scratch: &[4, 5, 3],
             },
         }
     }
@@ -1003,11 +1005,12 @@ pub(crate) fn bank_capacity(target: Target, fixed: FixedRegs) -> BankCapacity {
 /// f64->f32 through the second, and the FMA lowering uses the third as
 /// its accumulator slot. Every use of the first two materialises or
 /// produces an FP value, so any FP-classed value implies the demand.
-/// A scratch the target's ABI marks callee-saved (Win64 xmm6..xmm15, or
-/// the AAPCS64 d8..d15 tail taken under `-ffixed-`) then joins the
-/// prologue's save list, so a foreign caller holding a live value there
-/// across a call into this code does not see it corrupted. A zero fill or a
-/// population count writes no scratch that owes a save ([`free_fp_register`]).
+/// A scratch the target's ABI marks callee-saved (the AAPCS64
+/// d8..d15 tail taken under `-ffixed-`, or a Win64 fallback off a
+/// reserved volatile scratch) then joins the prologue's save list, so
+/// a foreign caller holding a live value there across a call into this
+/// code does not see it corrupted. A zero fill or a population count
+/// writes no scratch that owes a save ([`free_fp_register`]).
 pub(crate) fn fp_scratch_demand(func: &FunctionSsa) -> [bool; FP_SCRATCH_COUNT] {
     // Tail-call forwarders jmp out with no epilogue, so a saved register
     // could never be restored; they touch no FP scratch either.
@@ -2551,9 +2554,10 @@ pub(crate) fn color_graph(
         } else {
             (&banks.callee_gprs[..], &banks.caller_gprs[..])
         };
-        // A callee-saved SIMD register keeps only its low 64 bits across a
-        // call (AAPCS64 6.1.2), so a 128-bit value live across one spills.
-        let callee = if c.wide && c.must_callee {
+        // A callee-saved register of a low64-only convention keeps just
+        // its low 64 bits across a call, so a 128-bit value live across
+        // one spills; Win64 saves the whole register and takes it.
+        let callee = if c.wide && c.must_callee && banks.callee_fpr_low64_only {
             &callee_full[..0]
         } else {
             &callee_full[..callee_full.len().min(cap)]
@@ -3985,6 +3989,7 @@ mod tests {
             callee_fprs: Vec::new(),
             caller_fprs: Vec::new(),
             fp_scratch: [NO_FP_SCRATCH; FP_SCRATCH_COUNT],
+            callee_fpr_low64_only: true,
         }
     }
 
@@ -4290,43 +4295,34 @@ mod tests {
     }
 
     #[test]
-    fn x86_64_register_banks_expose_no_callee_saved_fp() {
-        // The x86_64 prologue/epilogue (`emit_prologue` / `emit_return`
-        // in ssa_emit_x86_64) and the `Frame` layout reserve no space
-        // for FP-register saves and emit no save/restore of any xmm.
-        // Both x86_64 ABIs must therefore expose an empty callee-saved
-        // FP bank: the allocator keeps every live-across-call FP value
-        // in memory and only ever uses the volatile xmm regs. Win64
-        // marks xmm6..xmm15 non-volatile (x64 calling convention); if
-        // they leaked into `callee_fprs` the allocator could park a
-        // value there and corrupt the caller's xmm6..xmm15 on return,
-        // since nothing saves them.
-        for target in [Target::LinuxX64, Target::WindowsX64] {
-            let banks = RegBanks::for_target(target);
-            assert!(
-                banks.callee_fprs.is_empty(),
-                "{target:?} exposes callee-saved FP regs {:?} but the x86_64 \
-                 prologue/epilogue emit no FP save/restore",
-                banks.callee_fprs
-            );
-        }
-        // The Win64 volatile xmm set is xmm0..xmm5; the caller-saved FP
-        // bank must not advertise a non-volatile register either.
-        let win = RegBanks::for_target(Target::WindowsX64);
+    fn sysv_exposes_no_callee_saved_fp_and_win64_the_nonvolatile_xmm() {
+        // SysV AMD64 marks no xmm callee-saved, so its bank is empty
+        // and every live-across-call FP value spills. Win64 marks
+        // xmm6..xmm15 non-volatile (x64 calling convention) and the
+        // x86_64 prologue/epilogue save and restore the full 128 bits
+        // of each one the body uses, so the bank opens to them; the
+        // volatile xmm0..xmm2 (return and first three argument
+        // registers) stay the caller-saved bank and xmm3..xmm5 the
+        // emit pass's scratch.
         assert!(
-            win.caller_fprs.iter().all(|&r| r <= 5),
-            "Win64 caller_fprs {:?} includes a non-volatile xmm (>= xmm6)",
-            win.caller_fprs
+            RegBanks::for_target(Target::LinuxX64)
+                .callee_fprs
+                .is_empty()
         );
+        let win = RegBanks::for_target(Target::WindowsX64);
+        assert_eq!(win.callee_fprs, [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+        assert_eq!(win.caller_fprs, [0, 1, 2]);
+        assert_eq!(win.fp_scratch, [4, 5, 3]);
     }
 
     #[test]
-    fn win64_fp_value_live_across_call_does_not_use_callee_saved_xmm() {
-        // An FP local live across a call must not be parked in a Win64
-        // non-volatile xmm (xmm6..xmm15): the x86_64 prologue/epilogue
-        // emit no FP save/restore, so such a placement would corrupt
-        // the caller's register on return. Pre-fix the allocator put
-        // the sum `s` in xmm6 and read it back after the `g()` calls.
+    fn win64_fp_value_live_across_a_call_takes_a_callee_saved_xmm() {
+        // An FP local live across a call takes a Win64 non-volatile
+        // xmm (xmm6..xmm15); the prologue and every epilogue path save
+        // and restore the full 128 bits, so the placement survives the
+        // calls. Pre-fix the allocator spilled the sum `s`; every
+        // placement in xmm6..xmm15 must now reach `fp_used`, and a
+        // volatile placement must stay below xmm3.
         let src = r#"
 double g(double);
 double sink;
@@ -4348,24 +4344,38 @@ int main(void) { return 0; }
         .expect("produce_ssa_funcs");
         for func in &funcs {
             let alloc = allocate(func, Target::WindowsX64);
+            let mut saved_any = false;
             for place in &alloc.places {
                 if let Place::FpReg(r) = place {
-                    assert!(
-                        *r <= 5,
-                        "Win64 allocation parked an FP value in non-volatile xmm{r} \
-                         ({}); the prologue/epilogue do not save it",
-                        func.name
-                    );
+                    if *r >= 6 {
+                        assert!(
+                            alloc.fp_used.contains(r),
+                            "Win64 allocation parked an FP value in non-volatile xmm{r} \
+                             ({}) outside the save list",
+                            func.name
+                        );
+                        saved_any = true;
+                    } else {
+                        assert!(
+                            *r <= 2,
+                            "Win64 allocation parked an FP value in the scratch xmm{r} ({})",
+                            func.name
+                        );
+                    }
                 }
             }
-            // `fp_used` may now list the emit pass's fixed FP scratch
-            // (xmm13/14/15), which the prologue/epilogue save and restore
-            // on Win64. No other non-volatile xmm may appear: a value
-            // parked outside the scratch set would not be saved.
+            if func.name == "f" {
+                assert!(
+                    saved_any,
+                    "the sum live across the g() calls must take a callee-saved xmm"
+                );
+            }
+            // The volatile scratch owes no save; only allocator-assigned
+            // non-volatile xmms reach the list.
             for &r in &alloc.fp_used {
                 assert!(
-                    matches!(r, 13..=15),
-                    "Win64 fp_used in {} lists xmm{r}, not a saved scratch reg",
+                    (6..=15).contains(&r),
+                    "Win64 fp_used in {} lists the volatile xmm{r}",
                     func.name
                 );
             }
@@ -4373,12 +4383,13 @@ int main(void) { return 0; }
     }
 
     #[test]
-    fn win64_fp_function_saves_nonvolatile_xmm_scratch() {
-        // The x86_64 emit pass uses xmm14/15 (and xmm13 for FMA) as its default
-        // FP scratch; they are non-volatile under Win64, so a function
-        // that performs FP work must report them in `fp_used` for the
-        // prologue/epilogue to preserve. System V marks every xmm
-        // volatile, so the same body reports none.
+    fn win64_fp_scratch_is_volatile_and_owes_no_save() {
+        // The Win64 emit pass scratch is xmm4/xmm5/xmm3 (the FMA
+        // accumulator), all volatile under the x64 calling convention,
+        // so a function doing FP work never saves a scratch register:
+        // `fp_used` holds only allocator-assigned non-volatile xmms.
+        // With the volatile scratch reserved it falls back to the
+        // callee-saved xmm tail, which then joins the save list.
         let fp_src = r#"
 double f(double a, double b, double c, double d, double e, double h) {
     double s = a * b + c * d;
@@ -4390,19 +4401,32 @@ int main(void) { return 0; }
         let program = Compiler::new(fp_src.to_string())
             .compile()
             .expect("compile");
-        for (target, want_scratch) in [(Target::WindowsX64, true), (Target::LinuxX64, false)] {
-            let funcs =
-                crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
-                    .expect("ssa");
-            let f = funcs.iter().find(|f| f.name == "f").expect("f");
-            let alloc = allocate(f, target);
-            let saves_14_15 = alloc.fp_used.contains(&14) && alloc.fp_used.contains(&15);
-            assert_eq!(
-                saves_14_15, want_scratch,
-                "{target:?}: fp_used = {:?}, expected scratch-saved = {want_scratch}",
-                alloc.fp_used
-            );
-        }
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            Target::WindowsX64,
+            false,
+            true,
+        )
+        .expect("ssa");
+        let f = funcs.iter().find(|f| f.name == "f").expect("f");
+        let alloc = allocate(f, Target::WindowsX64);
+        assert!(
+            !alloc.fp_used.iter().any(|&r| (3..=5).contains(&r)),
+            "a Win64 FP function saves no volatile scratch: {:?}",
+            alloc.fp_used
+        );
+        assert_eq!(alloc.fp_scratch, [4, 5, 3]);
+        let fixed = FixedRegs {
+            gpr: 0,
+            fpr: (1 << 3) | (1 << 4) | (1 << 5),
+        };
+        let alloc = super::allocate(f, Target::WindowsX64, fixed);
+        assert_eq!(alloc.fp_scratch, [15, 14, 13]);
+        assert!(
+            alloc.fp_used.contains(&14) && alloc.fp_used.contains(&15),
+            "the fallback scratch xmm14/15 must join the save list: {:?}",
+            alloc.fp_used
+        );
 
         // A non-FP function reports no FP scratch even on Win64.
         let int_src = "int g(int a, int b) { return a * b + a; }\nint main(void){return 0;}";
@@ -4980,8 +5004,9 @@ int main(void) { return 0; }
         }
     }
 
-    /// The zero fill's FP register owes no save: the System V scratch, a bank register when
-    /// the scratch is reserved or on Win64 without FP work, and the saved scratch with it.
+    /// The zero fill's FP register owes no save: the System V scratch,
+    /// a bank register when the scratch is reserved, and the volatile
+    /// Win64 scratch (xmm4) whether or not the body does FP work.
     #[test]
     fn a_zero_fill_takes_an_fp_register_that_owes_no_save() {
         let src = "struct S { long long w[4]; };\n\
@@ -5009,12 +5034,14 @@ int main(void) { return 0; }
         assert_eq!(pick(Target::LinuxX64, "plain", FixedRegs::NONE).0, Some(14));
         assert_eq!(pick(Target::LinuxX64, "fp", FixedRegs::NONE).0, Some(14));
         assert_eq!(pick(Target::LinuxX64, "plain", scratch_fixed).0, Some(7));
+        // The Win64 scratch (xmm4) is volatile, so it needs no save
+        // whether or not the body does FP work.
         assert_eq!(
             pick(Target::WindowsX64, "plain", FixedRegs::NONE),
-            (Some(5), Vec::new())
+            (Some(4), Vec::new())
         );
         let (r, saved) = pick(Target::WindowsX64, "fp", FixedRegs::NONE);
-        assert!(r == Some(14) && saved.contains(&14), "{r:?} {saved:?}");
+        assert!(r == Some(4) && saved.is_empty(), "{r:?} {saved:?}");
     }
 
     /// A struct copy yields its destination as the assignment expression's

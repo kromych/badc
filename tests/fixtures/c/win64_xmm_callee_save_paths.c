@@ -1,15 +1,16 @@
-// Win64 marks xmm6..xmm15 non-volatile. The x86_64 emit pass uses
-// xmm13/14/15 as fixed FP scratch, so a function performing FP work must
-// save and restore them around its body. The save offsets in the
-// prologue and every epilogue path (scalar return, register-aggregate
-// return, intra-unit tail call) must agree: a mismatch restores
-// callee-saved GPRs from the wrong slot and leaves the caller's
-// non-volatile xmm clobbered. This fixture exercises an FP function that
-// returns a small struct by value (the register-aggregate return path)
-// and one that does FP work across a call, then checks the results so a
-// stack-corrupting epilogue mismatch fails the run on the Win64 target.
-// It is a correctness check on every target; the saves are inert where
-// the scratch registers are volatile (System V / AAPCS64).
+// Win64 marks xmm6..xmm15 non-volatile. The allocator holds FP values
+// that live across a call there, and the prologue saves and restores
+// each one the body uses with a full 128-bit movups (the caller may
+// occupy the upper lanes). The save offsets in the prologue and every
+// epilogue path (scalar return, register-aggregate return, intra-unit
+// tail call) must agree: a mismatch restores callee-saved GPRs from
+// the wrong slot and leaves the caller's non-volatile xmm clobbered.
+// This fixture exercises an FP function that returns a small struct by
+// value (the register-aggregate return path) and one that does FP work
+// across a call, then checks the results so a stack-corrupting epilogue
+// mismatch fails the run on the Win64 target. It is a correctness check
+// on every target; on System V / AAPCS64 the FP values live in volatile
+// registers and no xmm is saved.
 
 struct pair {
     int lo;

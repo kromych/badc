@@ -340,6 +340,10 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::_wpopen,   "_wpopen")
 #pragma binding(msvcrt::_popen,    "_popen")
 #pragma binding(msvcrt::_pclose,   "_pclose")
+// The POSIX names, which mingw-w64 declares and its oldnames library
+// forwards to the CRT's underscored entry points.
+#pragma binding(msvcrt::popen,     "_popen")
+#pragma binding(msvcrt::pclose,    "_pclose")
 // shell.c reaches for the wide-string fs APIs to walk archives /
 // snapshots whose paths contain non-ASCII characters, plus a few
 // Win32-spelled fileno / setmode / isatty / access helpers that

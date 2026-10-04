@@ -26,8 +26,8 @@ way, by class. A kernel build does not fail on them (CONFIG_OBJTOOL_WERROR
 is off in defconfig), so the classes where objtool reports the frame state
 it derived is inconsistent -- the state ORC is generated from -- are held
 to a budget here instead (OBJTOOL_BUDGETS); the rest are reported only.
-Only x86 selects HAVE_OBJTOOL in this tree, so the aarch64 build reports
-none.
+Only x86 selects HAVE_OBJTOOL in this tree, so the aarch64 build runs no
+objtool; the log line and the report state whether the build ran it.
 
 The build step also re-records the compiler identification: it re-runs the
 configuration with the build shim as CC, so CONFIG_CC_VERSION_TEXT -- the
@@ -965,6 +965,21 @@ def objtool_warnings(text: str) -> collections.Counter:
         objtool_class(m) for m in re.findall(r"warning: objtool: (.+)", text))
 
 
+def objtool_report(configured: str, text: str) -> tuple[bool, collections.Counter]:
+    """Whether the build ran objtool, and its verdicts in the log by class.
+    kbuild runs it on every object when the configuration sets OBJTOOL
+    (`configured`, its value); a verdict in the log is a run as well."""
+    counts = objtool_warnings(text)
+    return configured == "y" or bool(counts), counts
+
+
+def objtool_line(ran: bool, counts: collections.Counter) -> str:
+    """The log line stating whether objtool ran and what it reported."""
+    if not ran:
+        return "objtool: not run (CONFIG_OBJTOOL unset)"
+    return f"objtool: ran, {sum(counts.values())} warnings"
+
+
 def objtool_budget_failures(counts: collections.Counter,
                             budget: dict | None) -> list[str]:
     """What the objtool counts exceed, or nothing."""
@@ -1177,6 +1192,18 @@ def _self_test() -> int:
     assert objtool_budget_failures(
         collections.Counter({"redundant UACCESS disable": 9}),
         OBJTOOL_BUDGETS["x86_64"]) == []
+
+    # Whether objtool ran comes from the build, not from what it reported:
+    # a configured build whose objects all pass ran it, and one that does
+    # not configure it ran none, though both logs hold no verdict.
+    clean = "  DESCEND objtool\n  LINK    tools/objtool/objtool\n  LD      vmlinux.o\n"
+    for configured, log_text, line in [
+            ("y", clean, "objtool: ran, 0 warnings"),
+            ("y", clean + build, "objtool: ran, 5 warnings"),
+            ("", "  CC      arch/arm64/kernel/setup.o\n",
+             "objtool: not run (CONFIG_OBJTOOL unset)")]:
+        ran, found = objtool_report(configured, log_text)
+        assert objtool_line(ran, found) == line, (configured, line)
 
     # The nested boot, read from an inline console: the outer kernel's
     # lines and /init's report around the guest's own console, which the
@@ -1470,6 +1497,7 @@ def main() -> int:
     links = {"badc": [], "ld": [], "fallback": [], "fail": []}
     diagnostics: collections.Counter = collections.Counter()
     objtool: collections.Counter = collections.Counter()
+    objtool_ran: bool | None = None
     text_report: dict = {}
     rc, secs, undef = 0, 0.0, 0
     if args.build:
@@ -1522,10 +1550,10 @@ def main() -> int:
         for line in lines:
             log(line)
 
-        objtool = objtool_warnings(text)
+        objtool_ran, objtool = objtool_report(config_value(tree, "OBJTOOL"),
+                                              text)
         if rc == 0:
-            log(f"objtool: {sum(objtool.values())} warnings"
-                + ("" if objtool else "; the build ran none"))
+            log(objtool_line(objtool_ran, objtool))
             for cls, n in objtool.most_common():
                 log(f"  objtool: {n} x {cls}")
             failures.extend(objtool_budget_failures(
@@ -1651,9 +1679,11 @@ def main() -> int:
             "diagnostics": [[list(k), n]
                             for k, n in diagnostics.most_common()],
             "undefined_refs": undef,
-            # objtool's verdicts on the built objects, by class and
-            # ranked by incidence; the CFI classes are gated.
-            "objtool": objtool.most_common(),
+            # Whether the build ran objtool (null without a build), and its
+            # verdicts by class, ranked by incidence; the CFI classes are
+            # gated.
+            "objtool": {"ran": objtool_ran,
+                        "warnings": objtool.most_common()},
             # The linked image's text sizes against their budget.
             "text": text_report,
             "boots": boots,

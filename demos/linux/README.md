@@ -461,7 +461,10 @@ object, the vmlinux script asserts an empty `.got` (badc's GOTPCRELX
 relocs must relax), and the boot exercises the asm-emitted metadata
 sections (`__jump_table`, `.altinstructions`, `__ex_table`, `.smp_locks`).
 A minimal initramfs whose `/init` prints a marker and powers off makes the
-boot a pass/fail check under `qemu-system-x86_64 -nographic`.
+boot a pass/fail check under `qemu-system-x86_64 -nographic`. The verify
+step states whether the build ran objtool, from `CONFIG_OBJTOOL` and the
+warnings in the build log, as `objtool: ran, N warnings` or `objtool: not
+run (CONFIG_OBJTOOL unset)`; its report records the same.
 
 ## Building on macOS
 

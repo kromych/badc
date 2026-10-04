@@ -32,33 +32,31 @@ Disassembly of section .text:
 
 <func_10>:
                	mov	x3, #0x5                // =5
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x0, [x1]
-               	ldrh	w0, [x0]
-               	sxtb	x0, w0
-               	cmp	w0, #0x0
-               	b.lt	<addr>
-               	cmp	w0, #0x1
-               	b.le	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
-               	orr	x0, x0, x3
-               	lsr	x3, x0, #2
-               	lsl	x3, x3, #2
-               	sub	x0, x0, x3
-               	ldr	x1, [x1]
+               	ldr	x1, [x0]
                	ldrh	w1, [x1]
-               	sxth	x0, w0
+               	sxtb	x1, w1
+               	cmp	w1, #0x0
+               	b.lt	<addr>
+               	cmp	w1, #0x1
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x1, [x1]
+               	orr	x1, x1, x3
+               	lsr	x3, x1, #2
+               	lsl	x3, x3, #2
+               	sub	x1, x1, x3
+               	ldr	x0, [x0]
+               	ldrh	w0, [x0]
                	sxth	x1, w1
-               	cbz	w1, <addr>
+               	sxth	x0, w0
+               	cbz	w0, <addr>
                	mov	x17, #-0x8000           // =-32768
-               	cmp	w0, w17
-               	b.ne	<addr>
-               	mov	x17, #-0x1              // =-1
                	cmp	w1, w17
                	b.ne	<addr>
+               	mov	x17, #-0x1              // =-1
+               	cmp	w0, w17
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	adrp	x1, <page>
@@ -80,10 +78,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrh	w0, [x0]
                	ret
-               	sdiv	x0, x0, x1
-               	b	<addr>
-               	lsl	x0, x0, #6
-               	b	<addr>
 
 <func_17>:
                	adrp	x0, <page>

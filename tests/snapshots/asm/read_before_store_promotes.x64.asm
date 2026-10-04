@@ -30,9 +30,6 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	je	<addr>
                	movl	$0x1, %eax
-               	testq	%rdi, %rdi
-               	je	<addr>
-               	movl	$0x1, %eax
                	retq
                	movl	$0x2, %eax
                	jmp	<addr>
@@ -72,18 +69,12 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	je	<addr>
                	movq	$-0x3, %rax
-               	testq	%rdi, %rdi
-               	je	<addr>
-               	movq	$-0x3, %rax
                	retq
                	movl	$0x7, %eax
                	jmp	<addr>
 
 <u8_maybe>:
                	movslq	%edi, %rdi
-               	testq	%rdi, %rdi
-               	je	<addr>
-               	movl	$0xc8, %eax
                	testq	%rdi, %rdi
                	je	<addr>
                	movl	$0xc8, %eax
@@ -132,13 +123,13 @@ Disassembly of section .text:
 
 <self_loop>:
                	xorl	%eax, %eax
-               	movq	%rax, %rdx
-               	leaq	(%rax,%rax,2), %rcx
-               	addq	%rcx, %rdx
+               	movq	%rax, %rcx
+               	leaq	(%rax,%rax,2), %rdx
+               	addq	%rdx, %rcx
                	incq	%rax
                	cmpl	$0x4, %eax
                	jb	<addr>
-               	movq	%rdx, %rax
+               	movq	%rcx, %rax
                	retq
 
 <inlined>:

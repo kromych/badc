@@ -327,8 +327,7 @@ Disassembly of section .text:
                	setb	%dl
                	movzbq	%dl, %rdx
                	andq	%rdx, %rcx
-               	orq	%rax, %rcx
-               	movl	$0x1, %eax
+               	orq	%rcx, %rax
                	movq	%r12, %rax
                	xorq	%r12, %rax
                	movq	%rbx, %rcx

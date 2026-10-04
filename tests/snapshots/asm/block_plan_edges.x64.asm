@@ -456,7 +456,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorl	%eax, %eax
-               	movq	%rax, %rcx
                	incq	%rax
                	cmpl	$0x3, %eax
                	jl	<addr>

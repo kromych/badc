@@ -474,7 +474,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x20
                	add	x1, x0, #0x9
-               	mov	x0, #0x2                // =2
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x3, x0, #0x9
@@ -654,7 +653,6 @@ Disassembly of section .text:
                	strb	w2, [x0, #0x2]
                	add	x2, x0, #0x3
                	add	x1, x1, #0x3
-               	mov	x0, #0x2                // =2
                	b	<addr>
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp, #0x30]

@@ -177,12 +177,12 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v182 Imm(2)                                           -> x0
     terminator Jmp(b15)   (exit_acc=v182)
   block 15  start_pc=0
-    v184 Phi { incoming=[b14:v182, b17:v183], kind=I64 }  -> x0
-    v185 Extend { value=v184, kind=I32 }                  -> x1
+    v184 Phi { incoming=[b14:v182, b17:v183], kind=I64 }  -> -
+    v185 Extend { value=v184, kind=I32 }                  -> x0
     v186 LifetimeEnd(-2)                                  -> -
     terminator Jmp(b16)   (exit_acc=v184)
   block 16  start_pc=0
-    v208 Phi { incoming=[b15:v184, b21:v205], kind=I64 }  -> x0
+    v208 Phi { incoming=[b15:v184, b21:v205], kind=I64 }  -> -
     v209 Extend { value=v208, kind=I32 }                  -> x0
     v210 Imm(1)                                           -> x0
     v211 Imm(8)                                           -> x0
@@ -194,19 +194,19 @@ fn ent_pc=13 n_params=0 variadic=false locals=2
     v181 BinopI { op=eq, lhs=v137, rhs_imm=2047 }         -> x2
     terminator Bz { cond=v181, target=b23, fall=b19 }   (exit_acc=v181)
   block 19  start_pc=0
-    v187 BinopI { op=eq, lhs=v140, rhs_imm=0 }            -> x2
+    v187 BinopI { op=eq, lhs=v140, rhs_imm=0 }            -> x0
     terminator Bnz { cond=v140, target=b22, fall=b20 }   (exit_acc=v187)
   block 20  start_pc=0
     v203 Imm(1)                                           -> x0
     terminator Jmp(b21)   (exit_acc=v203)
   block 21  start_pc=0
-    v205 Phi { incoming=[b20:v203, b22:v112], kind=I64 }  -> x0
-    v206 Extend { value=v205, kind=I32 }                  -> x1
+    v205 Phi { incoming=[b20:v203, b22:v204], kind=I64 }  -> -
+    v206 Extend { value=v205, kind=I32 }                  -> x0
     v207 LifetimeEnd(-2)                                  -> -
     terminator Jmp(b16)   (exit_acc=v205)
   block 22  start_pc=0
-    v204 Imm(0)                                           -> x1
-    terminator Jmp(b21)   (exit_acc=v112)
+    v204 Imm(0)                                           -> x0
+    terminator Jmp(b21)   (exit_acc=v204)
   block 23  start_pc=0
     v188 Imm(4)                                           -> x1
     v189 LifetimeEnd(-2)                                  -> -

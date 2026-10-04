@@ -485,7 +485,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax      # <addr>
                	addq	$0x20, %rax
                	addq	$0x9, %rax
-               	movl	$0x2, %ecx
                	leaq	<rip>, %rdi      # <addr>
                	leaq	0x9(%rdi), %rcx
                	cmpq	%rcx, %rdx
@@ -636,7 +635,6 @@ Disassembly of section .text:
                	movb	%dl, 0x2(%rax)
                	leaq	0x3(%rax), %rdx
                	leaq	0x3(%rcx), %rax
-               	movl	$0x2, %ecx
                	jmp	<addr>
                	movl	$0xa, %eax
                	popq	%rbx

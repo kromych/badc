@@ -110,12 +110,8 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	je	<addr>
                	cmpl	$0x0, (%rax)
-               	je	<addr>
-               	movl	$0x1, %eax
                	movl	$0x8, %eax
                	retq
-               	movl	$0x2, %eax
-               	jmp	<addr>
                	xorl	%eax, %eax
                	retq
                	movl	$0x6, %eax

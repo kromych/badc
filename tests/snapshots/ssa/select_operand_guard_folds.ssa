@@ -209,7 +209,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v162 Imm(1)                                           -> x0
     terminator Jmp(b26)   (exit_acc=v162)
   block 26  start_pc=0
-    v164 Phi { incoming=[b25:v162, b27:v163], kind=I64 }  -> x0
+    v164 Phi { incoming=[b25:v162, b27:v163], kind=I64 }  -> -
     v165 Imm(0)                                           -> x0
     v166 Imm(0)                                           -> x0
     v167 Imm(1)                                           -> x0

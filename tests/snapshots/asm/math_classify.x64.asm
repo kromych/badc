@@ -264,21 +264,11 @@ Disassembly of section .text:
                	andq	%r11, %rcx
                	testl	%edx, %edx
                	jne	<addr>
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	movl	$0x2, %eax
                	movl	$0xe, %eax
                	leave
                	retq
-               	movl	$0x3, %eax
-               	jmp	<addr>
                	cmpl	$0x7ff, %edx            # imm = 0x7FF
                	jne	<addr>
-               	testq	%rcx, %rcx
-               	jne	<addr>
-               	movl	$0x1, %eax
-               	jmp	<addr>
-               	xorl	%eax, %eax
                	jmp	<addr>
                	movsd	%xmm2, -0x8(%rbp)
                	movq	-0x8(%rbp), %rcx

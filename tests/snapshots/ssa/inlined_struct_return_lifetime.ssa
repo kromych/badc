@@ -225,7 +225,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=4
     v40  LifetimeEnd(0)                                   -> -
     terminator Jmp(b2)   (exit_acc=v4)
   block 2  start_pc=0
-    v66  Phi { incoming=[b1:v4, b4:v4, b5:v4], kind=I64 } -> x0
+    v66  Phi { incoming=[b1:v4, b4:v4, b5:v4], kind=I64 } -> -
     v67  LocalAddr(-3)                                    -> x0
     v68  Mcpy { dst=v3, src=v67, size=24, align=8 }       -> -
     v69  ImmData(40)                                      -> x0

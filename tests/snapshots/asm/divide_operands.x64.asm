@@ -234,36 +234,22 @@ Disassembly of section .text:
                	subq	%rax, %rdi
                	movq	%rsi, %rax
                	subq	%rdx, %rax
-               	negq	%rbx
-               	addq	%rax, %rbx
-               	cmpq	%r9, %rbx
-               	setb	%al
-               	movzbq	%al, %rax
-               	cmpq	%r9, %rbx
-               	sete	%dl
+               	subq	%rbx, %rax
+               	cmpq	%r9, %rax
+               	setb	%dl
                	movzbq	%dl, %rdx
+               	cmpq	%r9, %rax
+               	sete	%al
+               	movzbq	%al, %rax
                	cmpq	%r8, %rdi
                	setb	%sil
                	movzbq	%sil, %rsi
-               	andq	%rsi, %rdx
+               	andq	%rsi, %rax
                	orq	%rdx, %rax
-               	movq	%rax, %rsi
-               	xorq	$0x1, %rsi
-               	leaq	(%rcx,%rsi), %rax
-               	xorl	%edx, %edx
-               	movq	%rsi, %rcx
-               	negq	%rcx
-               	andq	%rcx, %r8
-               	andq	%r9, %rcx
-               	cmpq	%r8, %rdi
-               	setb	%r9b
-               	movzbq	%r9b, %r9
-               	movq	%rdi, %rsi
-               	subq	%r8, %rsi
-               	movq	%rbx, %rdi
-               	subq	%rcx, %rdi
-               	movq	%rdi, %rcx
-               	subq	%r9, %rcx
+               	xorq	$0x1, %rax
+               	addq	%rcx, %rax
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %rdx
                	popq	%rbx
                	popq	%r12
                	popq	%rbp
@@ -274,30 +260,19 @@ Disassembly of section .text:
                	movq	%rsi, %rax
                	xorl	%edx, %edx
                	divq	%r8
-               	movq	%rax, %rdx
-               	movq	%rdx, %rax
+               	movq	%rax, %rcx
+               	movq	%rcx, %rax
                	imulq	%r8, %rax
                	subq	%rax, %rsi
-               	pushq	%rdx
                	movq	%rsi, %rdx
                	movq	%rdi, %rax
                	divq	%r8
-               	popq	%rdx
-               	imulq	%rax, %r8
-               	movq	%rdi, %rsi
-               	subq	%r8, %rsi
-               	jmp	<addr>
-               	movq	%rcx, %rdx
                	jmp	<addr>
                	movq	%rdi, %rax
                	xorl	%edx, %edx
                	divq	%r8
-               	movq	%rax, %rcx
-               	imulq	%r8, %rcx
-               	movq	%rdi, %rsi
-               	subq	%rcx, %rsi
-               	xorl	%ecx, %ecx
-               	movq	%rcx, %rdx
+               	xorl	%edx, %edx
+               	movq	%rdx, %rcx
                	jmp	<addr>
 
 <main>:

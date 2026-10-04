@@ -1618,7 +1618,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // downstream reads it, the emit path's mov-to-dst is dead work.
     // Setting the Place to None makes the propagate skip. An atomic's
     // unread prior contents take no register either, which lets a bitwise
-    // read-modify-write keep none.
+    // read-modify-write keep none. A phi nothing reads has no reader to
+    // place either: None drops its predecessor-exit moves in
+    // `edge_moves`.
     for (v, inst) in func.insts.iter().enumerate() {
         if use_counts[v] == 0
             && matches!(
@@ -1630,6 +1632,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                     | Inst::Mcpy { .. }
                     | Inst::AtomicRmw { .. }
                     | Inst::AtomicCas { .. }
+                    | Inst::Phi { .. }
             )
         {
             places[v] = Place::None;
@@ -1645,7 +1648,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // writer's fixed scratch -- are covered by the aarch64 frame's x19
     // decision and the Win64 xmm listing below, and phi-predecessor
     // moves write the phi's own place, which is reached through the
-    // phi (never dead-pure).
+    // phi's row (a live phi is never dead-pure; a dead one holds no
+    // place).
     let mut gpr_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     let mut fp_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     for (v, inst) in func.insts.iter().enumerate() {
@@ -2708,9 +2712,14 @@ fn compute_spill_weights(
 }
 
 /// Count consumers for every SSA value, then iterate to fixed point
-/// so transitively-dead pure insts also drop to use_count == 0.
-/// Drives the emit pass's dead-code skip, and the static DCE's
-/// address edges: both must agree on which materializations lower.
+/// so transitively-dead pure insts and phis also drop to
+/// use_count == 0. A phi nothing reads keeps its incoming values
+/// alive no more: its predecessor-exit moves are dropped, so its
+/// reads stop counting. Phis reading only one another form cycles,
+/// so the live phis grow backward from those some instruction or
+/// terminator reads, and the rest die. Drives the emit pass's
+/// dead-code skip, and the static DCE's address edges: both must
+/// agree on which materializations lower.
 pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
     let n = func.insts.len();
     let mut counts: Vec<u32> = vec![0; n];
@@ -2739,21 +2748,91 @@ pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
             _ => {}
         }
     }
-    // Iterate to fixed point: a pure inst with zero uses is dead;
-    // its operand references stop counting. Worst case O(n^2)
-    // but n is typically small (per-function inst count) and the
-    // fixed point converges in few passes (chain length).
+    // Iterate to fixed point: a pure inst with zero uses is dead, and
+    // so is a phi nothing reads. Worst case O(n^2) but n is typically
+    // small (per-function inst count) and the fixed point converges in
+    // few passes (chain length).
     let mut killed: Vec<bool> = vec![false; n];
     loop {
         let mut changed = false;
+        loop {
+            let mut pure_changed = false;
+            for (i, inst) in func.insts.iter().enumerate() {
+                if killed[i] || !inst.is_pure() {
+                    continue;
+                }
+                if counts[i] == 0 {
+                    killed[i] = true;
+                    changed = true;
+                    pure_changed = true;
+                    for_each_operand(inst, |op| decrement(&mut counts, op));
+                }
+            }
+            if !pure_changed {
+                break;
+            }
+        }
+        // Phi liveness: a phi read by a non-phi instruction or a
+        // terminator that still emits is live, and liveness flows
+        // backward along the phi edges, so a phi read only by dead
+        // phis dies -- a cycle of phis reading only one another dies
+        // as a whole.
+        let mut live: Vec<bool> = vec![false; n];
+        let mut work: Vec<usize> = Vec::new();
+        let seed = |live: &mut Vec<bool>, work: &mut Vec<usize>, v: ValueId| {
+            if v != NO_VALUE
+                && (v as usize) < n
+                && !killed[v as usize]
+                && matches!(func.insts[v as usize], Inst::Phi { .. })
+                && !live[v as usize]
+            {
+                live[v as usize] = true;
+                work.push(v as usize);
+            }
+        };
         for (i, inst) in func.insts.iter().enumerate() {
-            if killed[i] || !inst.is_pure() {
+            if killed[i] || matches!(inst, Inst::Phi { .. }) {
                 continue;
             }
-            if counts[i] == 0 {
-                killed[i] = true;
-                changed = true;
-                for_each_operand(inst, |op| decrement(&mut counts, op));
+            for_each_operand(inst, |op| seed(&mut live, &mut work, op));
+        }
+        for block in &func.blocks {
+            match block.terminator {
+                super::super::ir::Terminator::Bz { cond, .. }
+                | super::super::ir::Terminator::Bnz { cond, .. } => {
+                    seed(&mut live, &mut work, cond)
+                }
+                super::super::ir::Terminator::Return(v) => seed(&mut live, &mut work, v),
+                super::super::ir::Terminator::GotoIndirect { target }
+                | super::super::ir::Terminator::JumpTable { idx: target, .. } => {
+                    seed(&mut live, &mut work, target)
+                }
+                _ => {}
+            }
+        }
+        while let Some(p) = work.pop() {
+            let Inst::Phi { incoming, .. } = &func.insts[p] else {
+                continue;
+            };
+            for &(_, s) in incoming {
+                seed(&mut live, &mut work, s);
+            }
+        }
+        for (i, inst) in func.insts.iter().enumerate() {
+            let Inst::Phi { incoming, kind } = inst else {
+                continue;
+            };
+            if killed[i] || live[i] {
+                continue;
+            }
+            killed[i] = true;
+            changed = true;
+            // Decrement the incomes whose edge move read a place;
+            // `drop_unread_incomes` removes the no-place ones.
+            for &(_, s) in incoming {
+                if !super::emit_common::phi_income_reads_no_place(func, *kind, s) {
+                    decrement(&mut counts, s);
+                }
             }
         }
         if !changed {
@@ -2784,13 +2863,19 @@ pub(crate) fn x86_mask_takes_bt(imm: i64) -> bool {
 
 /// Per instruction: whether its lowering reads its operands. A dead pure
 /// value ([`super::emit_common::is_dead_pure_counts`]) lowers to nothing,
-/// so the liveness and pressure walks skip its reads; the instruction
-/// itself stays as it is, since a site that folds it reads its contents.
+/// and so does a phi nothing reads, whose predecessor-exit moves are
+/// dropped, so the liveness and pressure walks skip its reads; the
+/// instruction itself stays as it is, since a site that folds it reads
+/// its contents.
 pub(crate) fn operands_read(func: &FunctionSsa, use_counts: &[u32]) -> Vec<bool> {
     func.insts
         .iter()
         .enumerate()
-        .map(|(v, inst)| !super::emit_common::is_dead_pure_counts(inst, v as ValueId, use_counts))
+        .map(|(v, inst)| {
+            let dead_phi =
+                matches!(inst, Inst::Phi { .. }) && use_counts.get(v).copied().unwrap_or(0) == 0;
+            !dead_phi && !super::emit_common::is_dead_pure_counts(inst, v as ValueId, use_counts)
+        })
         .collect()
 }
 
@@ -4993,22 +5078,26 @@ int main(void) { return 0; }
                 // non-None place, except for store-class insts
                 // whose "side-output" value (the propagated acc)
                 // is unread -- the allocator nulls those out so
-                // the emit pass skips the dst-propagate step.
+                // the emit pass skips the dst-propagate step --
+                // and a phi nothing reads, whose edge moves are
+                // dropped.
                 let kind = result_kind(&f.insts[i]);
-                let store_with_dead_dst = matches!(
-                    f.insts[i],
-                    Inst::Store { .. }
-                        | Inst::StoreLocal { .. }
-                        | Inst::StoreIndexed { .. }
-                        | Inst::SegStore { .. }
-                        | Inst::Mcpy { .. }
-                        | Inst::AtomicRmw { .. }
-                        | Inst::AtomicCas { .. }
-                ) && alloc.use_counts.get(i).copied().unwrap_or(0) == 0;
+                let dead_dst = alloc.use_counts.get(i).copied().unwrap_or(0) == 0
+                    && matches!(
+                        f.insts[i],
+                        Inst::Store { .. }
+                            | Inst::StoreLocal { .. }
+                            | Inst::StoreIndexed { .. }
+                            | Inst::SegStore { .. }
+                            | Inst::Mcpy { .. }
+                            | Inst::AtomicRmw { .. }
+                            | Inst::AtomicCas { .. }
+                            | Inst::Phi { .. }
+                    );
                 match kind {
                     ResultKind::None => assert_eq!(*p, Place::None),
                     ResultKind::Int | ResultKind::Fp => {
-                        if store_with_dead_dst {
+                        if dead_dst {
                             continue;
                         }
                         assert!(
@@ -5693,6 +5782,77 @@ int main(void) { return 0; }
         };
         let f = branch_func(vec![load_i64(), load_i64(), call], 2);
         assert_eq!(compute_use_counts(&f)[..2], [1, 1]);
+    }
+
+    /// A phi nothing reads is dead, and so, transitively, are the pure
+    /// values only it read: the phi's incoming values lose the phi's
+    /// read. A cycle of phis reading only one another dies as a whole;
+    /// a phi a terminator reads stays alive with its incomes counted.
+    #[test]
+    fn dead_phi_releases_its_incoming_values() {
+        use super::super::super::ir::Block;
+        // b0: v0=Imm(0); Jmp b1
+        // b1: v1=Phi[b0:v0, b1:v2]; v2=Phi[b0:v0, b1:v1]  (dead cycle)
+        //     v3=Phi[b0:v0, b1:v4]; v4=add v3, 1; v5=add v3, v4
+        //     ; Bz v5 -> b1 else b2
+        // b2: Return v3
+        let insts = vec![
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 2)],
+                kind: LoadKind::I64,
+            },
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 1)],
+                kind: LoadKind::I64,
+            },
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 4)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 3,
+                rhs_imm: 1,
+            },
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 3,
+                rhs: 4,
+            },
+        ];
+        let blocks = vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Jmp(1),
+                exit_acc: 0,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 1..6,
+                terminator: Terminator::Bz {
+                    cond: 5,
+                    target: 1,
+                    fall_through: 2,
+                },
+                exit_acc: 5,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 6..6,
+                terminator: Terminator::Return(3),
+                exit_acc: 3,
+            },
+        ];
+        let f = func_with(insts, blocks);
+        let counts = compute_use_counts(&f);
+        assert_eq!(counts[1], 0, "the dead cycle's phis read nothing");
+        assert_eq!(counts[2], 0, "the dead cycle's phis read nothing");
+        assert_eq!(counts[0], 1, "only the live phi reads the entry value");
+        assert_eq!(counts[3], 3, "v3: v4, v5 and the return");
+        assert_eq!(counts[4], 2, "v4: v5 and the phi's back edge");
+        assert_eq!(counts[5], 1, "v5: the branch");
     }
 
     fn store_of(value: ValueId) -> Inst {

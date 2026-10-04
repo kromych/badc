@@ -16,8 +16,6 @@ Disassembly of section .text:
 <maybe>:
                	sxtw	x0, w0
                	cbz	x0, <addr>
-               	mov	x1, #0x1                // =1
-               	cbz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	mov	x0, #0x2                // =2
@@ -48,8 +46,6 @@ Disassembly of section .text:
 <narrow_maybe>:
                	sxtw	x0, w0
                	cbz	x0, <addr>
-               	mov	x1, #-0x3               // =-3
-               	cbz	x0, <addr>
                	mov	x0, #-0x3               // =-3
                	ret
                	mov	x0, #0x7                // =7
@@ -57,8 +53,6 @@ Disassembly of section .text:
 
 <u8_maybe>:
                	sxtw	x0, w0
-               	cbz	x0, <addr>
-               	mov	x1, #0xc8               // =200
                	cbz	x0, <addr>
                	mov	x0, #0xc8               // =200
                	ret
@@ -100,14 +94,14 @@ Disassembly of section .text:
 
 <self_loop>:
                	mov	x0, #0x0                // =0
-               	mov	x3, #0x3                // =3
-               	mov	x2, x0
-               	mul	x1, x0, x3
-               	add	x2, x2, x1
+               	mov	x2, #0x3                // =3
+               	mov	x1, x0
+               	mul	x3, x0, x2
+               	add	x1, x1, x3
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lo	<addr>
-               	mov	x0, x2
+               	mov	x0, x1
                	ret
 
 <inlined>:

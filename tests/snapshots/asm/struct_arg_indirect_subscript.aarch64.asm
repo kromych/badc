@@ -64,8 +64,6 @@ Disassembly of section .text:
                	mul	x1, x1, x17
                	add	x1, x6, x1
                	add	x6, x1, #0x3
-               	cbz	x4, <addr>
-               	mov	x1, #0x0                // =0
                	cbz	x5, <addr>
                	mov	x1, #0x1                // =1
                	add	x1, x6, x1
@@ -118,7 +116,5 @@ Disassembly of section .text:
                	add	sp, sp, #0xb0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
-               	b	<addr>
                	mov	x1, #0x0                // =0
                	b	<addr>

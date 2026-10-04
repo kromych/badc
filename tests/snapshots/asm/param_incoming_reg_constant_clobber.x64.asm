@@ -43,31 +43,29 @@ Disassembly of section .text:
 <func_10>:
                	movl	$0x5, %esi
                	movq	%rdx, %rdi
-               	leaq	<rip>, %rcx      # <addr>
-               	movq	(%rcx), %rax
-               	movzwq	(%rax), %rax
-               	movsbq	%al, %rax
-               	testl	%eax, %eax
-               	jl	<addr>
-               	cmpl	$0x1, %eax
-               	jle	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
-               	orq	%rsi, %rax
-               	movq	%rax, %rdx
+               	movq	(%rax), %rcx
+               	movzwq	(%rcx), %rcx
+               	movsbq	%cl, %rcx
+               	testl	%ecx, %ecx
+               	jl	<addr>
+               	cmpl	$0x1, %ecx
+               	leaq	<rip>, %rcx      # <addr>
+               	movslq	(%rcx), %rcx
+               	orq	%rsi, %rcx
+               	movq	%rcx, %rdx
                	shrq	$0x2, %rdx
                	shlq	$0x2, %rdx
-               	subq	%rdx, %rax
-               	movq	(%rcx), %rcx
-               	movzwq	(%rcx), %rcx
-               	movswq	%ax, %rax
-               	movswq	%cx, %rcx
+               	subq	%rdx, %rcx
+               	movq	(%rax), %rax
+               	movzwq	(%rax), %rdx
+               	movswq	%cx, %rax
+               	movswq	%dx, %rcx
                	testl	%ecx, %ecx
                	je	<addr>
                	cmpl	$0xffff8000, %eax       # imm = 0xFFFF8000
                	jne	<addr>
                	cmpl	$-0x1, %ecx
-               	jne	<addr>
                	leaq	<rip>, %rsi      # <addr>
                	leaq	<rip>, %rcx      # <addr>
                	movslq	(%rsi), %rax
@@ -86,11 +84,6 @@ Disassembly of section .text:
                	leaq	<rip>, %rax      # <addr>
                	movzwq	(%rax), %rax
                	retq
-               	cqto
-               	idivq	%rcx
-               	jmp	<addr>
-               	shlq	$0x6, %rax
-               	jmp	<addr>
 
 <func_17>:
                	leaq	<rip>, %rax      # <addr>

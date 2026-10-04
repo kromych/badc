@@ -239,9 +239,14 @@ impl BlockLiveness {
             let (start, end) = (blk.inst_range.start, blk.inst_range.end);
             for idx in start..end {
                 if let Inst::Phi { incoming, kind } = &func.insts[idx as usize] {
-                    for (_, v) in incoming {
-                        if *v != NO_VALUE && (*v as usize) < n && !reads_no_place(func, *kind, *v) {
-                            crossing[*v as usize] = true;
+                    if reads_at(reads, idx) {
+                        for (_, v) in incoming {
+                            if *v != NO_VALUE
+                                && (*v as usize) < n
+                                && !reads_no_place(func, *kind, *v)
+                            {
+                                crossing[*v as usize] = true;
+                            }
                         }
                     }
                     continue;
@@ -344,13 +349,15 @@ impl BlockLiveness {
             };
             for idx in start..end {
                 if let Inst::Phi { incoming, kind } = &func.insts[idx as usize] {
-                    for (pred, v) in incoming {
-                        if *v != NO_VALUE
-                            && !reads_no_place(func, *kind, *v)
-                            && let Some(&r) = rank.get(*v as usize)
-                            && r != NO_RANK
-                        {
-                            set(&mut phi_live_out, (*pred as usize) * words, r);
+                    if reads_at(reads, idx) {
+                        for (pred, v) in incoming {
+                            if *v != NO_VALUE
+                                && !reads_no_place(func, *kind, *v)
+                                && let Some(&r) = rank.get(*v as usize)
+                                && r != NO_RANK
+                            {
+                                set(&mut phi_live_out, (*pred as usize) * words, r);
+                            }
                         }
                     }
                     continue;
@@ -431,6 +438,9 @@ impl BlockLiveness {
                 let Inst::Phi { incoming, kind } = &func.insts[idx as usize] else {
                     continue;
                 };
+                if !reads_at(reads, idx) {
+                    continue;
+                }
                 for (pred, v) in incoming {
                     if *v != NO_VALUE
                         && !reads_no_place(func, *kind, *v)

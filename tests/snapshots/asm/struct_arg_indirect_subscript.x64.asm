@@ -71,9 +71,6 @@ Disassembly of section .text:
                	imulq	$0xa, %rcx, %rcx
                	addq	%rsi, %rcx
                	addq	$0x3, %rcx
-               	testq	%rax, %rax
-               	je	<addr>
-               	xorl	%eax, %eax
                	testq	%rdx, %rdx
                	je	<addr>
                	movl	$0x1, %eax
@@ -152,7 +149,5 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leave
                	retq
-               	xorl	%eax, %eax
-               	jmp	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>

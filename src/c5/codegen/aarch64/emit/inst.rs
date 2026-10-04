@@ -67,11 +67,12 @@ pub(super) fn emit_inst(
         // lifetime marker states a fact about storage the frame already
         // holds, so it emits nothing either, the return moves the parts
         // of an `AggParts`, and an inline asm statement places its
-        // `AsmOut`s.
+        // `AsmOut`s. An indeterminate value is whatever its place holds.
         Inst::AllocaInit(_)
         | Inst::LifetimeEnd(_)
         | Inst::AggParts { .. }
-        | Inst::AsmOut { .. } => Ok(()),
+        | Inst::AsmOut { .. }
+        | Inst::Undef => Ok(()),
         Inst::ParamRef { .. } | Inst::ParamPart { .. } | Inst::RetPart { .. } => {
             let src = super::ssa::reg_alloc::incoming_reg(param_plan, inst)
                 .or_else(|| super::ssa::reg_alloc::ret_part_reg(target, inst));

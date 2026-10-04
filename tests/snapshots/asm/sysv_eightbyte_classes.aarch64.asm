@@ -54,17 +54,8 @@ Disassembly of section .text:
                	ret
 
 <make_b2>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x1, #0x9                // =9
-               	sub	x0, x29, #0x10
-               	ldr	w2, [x0]
-               	ldr	w0, [x0, #0x4]
-               	lsl	x0, x0, #32
-               	orr	x0, x2, x0
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	mov	x0, #0x0                // =0
                	ret
 
 <main>:

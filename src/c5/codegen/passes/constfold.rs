@@ -695,22 +695,33 @@ fn imm_through_phis_depth(
 ) -> Option<i64> {
     match insts.get(v as usize)? {
         Inst::Imm(k) if !matches!(f32_values.get(v as usize), Some(true)) => Some(*k),
+        // An instruction reads an indeterminate value as the zero the
+        // allocation places for it.
+        Inst::Undef if !matches!(f32_values.get(v as usize), Some(true)) => Some(0),
         // Every predecessor supplying the same constant makes the merge
         // that constant, whichever edge is taken. A `&&` / `||` whose
         // arms decide the same way reaches the fold in this shape, as
         // does any merge of equal constants an inline exposed, and a
-        // merge a pruned branch left with one predecessor. The depth
-        // bound also terminates a loop phi, whose back edge reaches
-        // itself.
+        // merge a pruned branch left with one predecessor. An
+        // indeterminate income may be any value, so it takes the one the
+        // others agree on. The depth bound also terminates a loop phi,
+        // whose back edge reaches itself.
         Inst::Phi { incoming, .. } => {
             if depth == 0 {
                 return None;
             }
-            let mut vals = incoming
-                .iter()
-                .map(|&(_, v)| imm_through_phis_depth(insts, f32_values, v, depth - 1));
-            let first = vals.next()??;
-            vals.all(|k| k == Some(first)).then_some(first)
+            let mut agreed = None;
+            for &(_, v) in incoming {
+                if matches!(insts.get(v as usize), Some(Inst::Undef)) {
+                    continue;
+                }
+                let k = imm_through_phis_depth(insts, f32_values, v, depth - 1)?;
+                if agreed.is_some_and(|a| a != k) {
+                    return None;
+                }
+                agreed = Some(k);
+            }
+            agreed
         }
         _ => None,
     }
@@ -1454,6 +1465,65 @@ mod tests {
         ]);
         run_one(&mut f);
         assert!(matches!(f.insts[1], Inst::Imm(-32768)));
+    }
+
+    #[test]
+    fn an_undefined_phi_income_takes_the_constant_the_others_agree_on() {
+        // `int x; if (c) x = 7; return x + 1;`: the edge with no store may
+        // carry any value, so the merge is 7. Two disagreeing constants
+        // still leave it unknown.
+        let merge = |second: Inst| {
+            fresh(vec![
+                Inst::Undef,
+                Inst::Imm(7),
+                second,
+                Inst::Phi {
+                    incoming: vec![(0, 0), (1, 1), (2, 2)],
+                    kind: LoadKind::I64,
+                },
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 3,
+                    rhs_imm: 1,
+                },
+            ])
+        };
+        let mut f = merge(Inst::Imm(7));
+        run_one(&mut f);
+        assert!(matches!(f.insts[4], Inst::Imm(8)), "{:?}", f.insts[4]);
+        let mut f = merge(Inst::Imm(9));
+        run_one(&mut f);
+        assert!(matches!(f.insts[4], Inst::BinopI { .. }));
+        // A phi none of whose incomes is defined has no value to agree on.
+        let all_undef = [
+            Inst::Undef,
+            Inst::Phi {
+                incoming: vec![(0, 0)],
+                kind: LoadKind::I64,
+            },
+        ];
+        assert_eq!(imm_through_phis(&all_undef, &[], 1), None);
+    }
+
+    #[test]
+    fn an_undefined_value_an_instruction_reads_folds_as_zero() {
+        // A bit-field store into a fresh object reads its storage unit:
+        // `(u & ~3) | 1` over the unread unit is 1.
+        let mut f = fresh(vec![
+            Inst::Undef,
+            Inst::BinopI {
+                op: BinOp::And,
+                lhs: 0,
+                rhs_imm: !3,
+            },
+            Inst::BinopI {
+                op: BinOp::Or,
+                lhs: 1,
+                rhs_imm: 1,
+            },
+        ]);
+        run_one(&mut f);
+        assert!(matches!(f.insts[2], Inst::Imm(1)), "{:?}", f.insts);
     }
 
     /// `phi(1, 0)` at index 2, with `insts[3..]` as the consumers under test.

@@ -75,32 +75,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x8
-               	ldr	w1, [x0]
-               	and	x1, x1, #0xfffffffffffffff8
-               	mov	x17, #0x5               // =5
-               	orr	x1, x1, x17
-               	str	w1, [x0]
-               	and	x1, x1, #0xffffffffffffff07
-               	mov	x17, #0xa8              // =168
-               	orr	x1, x1, x17
-               	str	w1, [x0]
-               	and	x0, x1, #0x7
-               	cmp	w0, #0x5
-               	b.eq	<addr>
-               	mov	x0, #0x28               // =40
-               	add	sp, sp, #0x50
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	mov	w0, w1
-               	asr	x0, x0, #3
-               	and	x0, x0, #0x1f
-               	cmp	w0, #0x15
-               	b.eq	<addr>
-               	mov	x0, #0x29               // =41
-               	add	sp, sp, #0x50
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x0, [x0]

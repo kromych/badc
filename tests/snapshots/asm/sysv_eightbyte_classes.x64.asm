@@ -48,28 +48,12 @@ Disassembly of section .text:
                	retq
 
 <make_b1>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
-               	movl	(%rax), %ecx
-               	movl	0x4(%rax), %eax
-               	shlq	$0x20, %rax
-               	orq	%rcx, %rax
-               	leave
+               	xorl	%eax, %eax
                	retq
 
 <make_b2>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movl	$0x9, %edx
-               	leaq	-0x10(%rbp), %rax
-               	movl	(%rax), %ecx
-               	movl	0x4(%rax), %eax
-               	shlq	$0x20, %rax
-               	orq	%rcx, %rax
-               	leave
+               	xorl	%eax, %eax
                	retq
 
 <take_a1>:

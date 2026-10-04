@@ -628,6 +628,7 @@ fn walk_block(
             // Pure value producers and reads neither write nor
             // invalidate.
             Inst::Imm(_)
+            | Inst::Undef
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)

@@ -658,6 +658,23 @@ mod tests {
     }
 
     #[test]
+    fn an_undefined_income_moves_nothing() {
+        // The phi's place differs from the income's, but an indeterminate
+        // value needs no copy: the edge is silent in either register file.
+        for (kind, place) in [
+            (LoadKind::I64, Place::IntReg(4)),
+            (LoadKind::F64, Place::FpReg(0)),
+        ] {
+            let (mut f, mut a) = chain(place);
+            f.insts[0] = Inst::Undef;
+            f.insts[1] = phi(&[(1, 0)], kind);
+            a.places[0] = Place::IntReg(3);
+            assert!(edge_moves(&f, &a, 1, 2).is_empty());
+            assert_eq!(skipped(&BlockPlan::build(&f, &a, false, None)), [1, 2]);
+        }
+    }
+
+    #[test]
     fn a_constant_into_an_fp_phi_keeps_its_block() {
         let f = func_with(
             alloc::vec![Inst::Imm(0), phi(&[(1, 0)], LoadKind::F64)],

@@ -38,6 +38,12 @@ pub(crate) enum Inst {
     /// Plain integer immediate with no data / code segment
     /// provenance. Lowering uses `load_imm64`.
     Imm(i64),
+    /// An indeterminate value (C99 6.2.4p5, 6.7.8p10): what a read of an
+    /// automatic object yields where no store reaches it. It emits
+    /// nothing, and a phi income of it emits no move and keeps no value
+    /// live; before allocation one any other instruction reads becomes
+    /// `Imm(0)`.
+    Undef,
     /// Integer immediate whose operand is a data-segment byte
     /// offset. The per-arch lowering emits an `adrp + add`
     /// placeholder pair and records a `DataFixup` so the writer
@@ -632,6 +638,7 @@ impl Inst {
         matches!(
             self,
             Inst::Imm(_)
+                | Inst::Undef
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
                 | Inst::ImmExtCode(_)
@@ -680,6 +687,7 @@ impl Inst {
     pub(crate) fn variant_name(&self) -> &'static str {
         match self {
             Inst::Imm(_) => "Imm",
+            Inst::Undef => "Undef",
             Inst::ImmData(_) => "ImmData",
             Inst::ImmCode(_) => "ImmCode",
             Inst::ImmExtCode(_) => "ImmExtCode",
@@ -740,6 +748,7 @@ impl Inst {
     pub(crate) fn for_each_operand(&self, mut f: impl FnMut(ValueId)) {
         match self {
             Inst::Imm(_)
+            | Inst::Undef
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
@@ -853,6 +862,7 @@ impl Inst {
     pub(crate) fn for_each_operand_mut(&mut self, mut f: impl FnMut(&mut ValueId)) {
         match self {
             Inst::Imm(_)
+            | Inst::Undef
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
@@ -2400,6 +2410,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             // separate add, so the payload is always an object base.
             Inst::ImmData(off) => crate::c5::layout::remap_self(off, r),
             Inst::Imm { .. }
+            | Inst::Undef
             | Inst::ImmCode { .. }
             | Inst::ImmExtCode { .. }
             | Inst::BlockAddr { .. }

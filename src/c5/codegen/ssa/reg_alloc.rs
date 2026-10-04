@@ -450,7 +450,7 @@ fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bo
         }
         Inst::Phi { incoming, kind } => {
             for &(_, v) in incoming {
-                if !super::emit_common::phi_rebuilds_income(func, *kind, v) {
+                if !super::emit_common::phi_income_reads_no_place(func, *kind, v) {
                     f(v, produces_fp_result(inst));
                 }
             }
@@ -464,14 +464,14 @@ fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bo
     }
 }
 
-/// Take the phi incomes an edge rebuilds from their bits off the use counts.
-pub(crate) fn drop_rebuilt_incomes(func: &FunctionSsa, use_counts: &mut [u32]) {
+/// Take the phi incomes whose edge move reads no place off the use counts.
+pub(crate) fn drop_unread_incomes(func: &FunctionSsa, use_counts: &mut [u32]) {
     for inst in &func.insts {
         let Inst::Phi { incoming, kind } = inst else {
             continue;
         };
         for &(_, v) in incoming {
-            if super::emit_common::phi_rebuilds_income(func, *kind, v) {
+            if super::emit_common::phi_income_reads_no_place(func, *kind, v) {
                 let c = &mut use_counts[v as usize];
                 *c = c.saturating_sub(1);
             }
@@ -1082,7 +1082,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // An instruction the emitters skip reads nothing, so it keeps no
     // operand live and weighs on no spill decision.
     let mut use_counts = compute_use_counts(func);
-    drop_rebuilt_incomes(func, &mut use_counts);
+    drop_unread_incomes(func, &mut use_counts);
     let reads = operands_read(func, &use_counts);
     let fp_const = fp_constants(func, target, &reads);
     populate_return_hints(func, conv_target, &fp_const, &mut hints);
@@ -1307,6 +1307,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let clobber_free = |inst: &Inst| -> bool {
         match inst {
             Inst::Imm(_)
+            | Inst::Undef
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
@@ -1473,7 +1474,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let flags_survive = |inst: &Inst| -> bool {
         match inst {
             Inst::Imm(k) => !(is_x86 && *k == 0),
-            Inst::ImmData(_)
+            Inst::Undef
+            | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
             | Inst::BlockAddr(_)
@@ -2117,7 +2119,7 @@ fn check_allocation(
     // register file, so a class-crossing operand would emit a bit-
     // reinterpreting move into the wrong file.
     for (v, inst) in func.insts.iter().enumerate() {
-        let Inst::Phi { incoming, .. } = inst else {
+        let Inst::Phi { incoming, kind } = inst else {
             continue;
         };
         if !covered(v) {
@@ -2131,8 +2133,9 @@ fn check_allocation(
             // `result_kind` classes every `Imm` in the integer file, so a
             // float constant reaches an FP phi integer-classed;
             // `emit_phi_predecessor_moves` re-materialises it into the FP
-            // destination rather than copying within a file.
-            if matches!(func.insts[src as usize], Inst::Imm(_)) && phi_fp {
+            // destination rather than copying within a file. An
+            // indeterminate income takes no move.
+            if super::emit_common::phi_income_reads_no_place(func, *kind, src) {
                 continue;
             }
             let op_fp = produces_fp_result(&func.insts[src as usize]);
@@ -2914,7 +2917,7 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<bool> {
 fn result_kind(inst: &Inst) -> ResultKind {
     use Inst::*;
     match inst {
-        Imm(_) | ImmData(_) | ImmCode(_) | ImmExtCode(_) | BlockAddr(_) | LocalAddr(_)
+        Imm(_) | Undef | ImmData(_) | ImmCode(_) | ImmExtCode(_) | BlockAddr(_) | LocalAddr(_)
         | TlsAddr(_) => ResultKind::Int,
         // A parameter seeded with an FP load kind arrives in an FP
         // argument register; classify it accordingly so the seed and

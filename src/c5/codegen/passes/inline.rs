@@ -1129,6 +1129,7 @@ fn is_inline_candidate(
         }
         match inst {
             Inst::Imm(_)
+            | Inst::Undef
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
@@ -2102,6 +2103,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
             .stores()
             .any(|(i, _)| !args.get(i).is_some_and(|&a| own(a))),
         Inst::Imm(_)
+        | Inst::Undef
         | Inst::ImmData(_)
         | Inst::ImmCode(_)
         | Inst::ImmExtCode(_)

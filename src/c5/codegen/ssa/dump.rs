@@ -95,7 +95,7 @@ fn fmt_inst(inst: &Inst) -> String {
     use Inst::*;
     match inst {
         Imm(v) => format!("Imm({v})"),
-
+        Undef => "Undef".into(),
         ImmData(v) => format!("ImmData({v})"),
         ImmCode(pc) => format!("ImmCode(ent_pc={pc})"),
         ImmExtCode(binding) => format!("ImmExtCode(binding={binding})"),

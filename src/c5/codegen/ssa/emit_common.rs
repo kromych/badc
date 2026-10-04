@@ -1089,18 +1089,23 @@ impl EdgeMoves {
     }
 }
 
-/// Whether the edge move of a phi of `kind` builds its income `v` from `v`'s
-/// bits, which reads no place: a constant feeding a floating phi.
-pub(crate) fn phi_rebuilds_income(
+/// Whether the edge move of a phi of `kind` reads no place for its income
+/// `v`: an indeterminate value takes no move, and a constant feeding a
+/// floating phi is built from its bits.
+pub(crate) fn phi_income_reads_no_place(
     func: &super::super::ir::FunctionSsa,
     kind: super::super::ir::LoadKind,
     v: super::super::ir::ValueId,
 ) -> bool {
     use super::super::ir::{Inst, LoadKind};
-    matches!(
-        kind,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
-    ) && matches!(func.insts.get(v as usize), Some(Inst::Imm(_)))
+    match func.insts.get(v as usize) {
+        Some(Inst::Undef) => true,
+        Some(Inst::Imm(_)) => matches!(
+            kind,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+        ),
+        _ => false,
+    }
 }
 
 /// Collect every phi of `succ` that names `pred`. A register reg-to-reg move
@@ -1131,7 +1136,9 @@ pub(crate) fn edge_moves(
             continue;
         };
         let (src_place, dst_place) = (place(*src_v), place(id));
-        if matches!(dst_place, Place::None) {
+        if matches!(dst_place, Place::None)
+            || matches!(func.insts.get(*src_v as usize), Some(Inst::Undef))
+        {
             continue;
         }
         let wide = matches!(kind, LoadKind::V128);
@@ -1142,9 +1149,7 @@ pub(crate) fn edge_moves(
         if phi_is_fp {
             // `phi_class` never coalesces a constant into an FP phi's class,
             // wherever the constant is placed; the move rebuilds it.
-            if phi_rebuilds_income(func, *kind, *src_v)
-                && let Inst::Imm(bits) = func.insts[*src_v as usize]
-            {
+            if let Inst::Imm(bits) = func.insts[*src_v as usize] {
                 let is_f64 = matches!(kind, LoadKind::F64 | LoadKind::V128);
                 m.fp_const.push((bits, dst_place, is_f64, wide));
                 continue;
@@ -2584,6 +2589,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             funcs
                 .iter_mut()
                 .map(|f| {
+                    super::mem2reg::zero_read_undefs(f);
                     if native.optimize {
                         super::remat::split_across_calls(f, target);
                         super::licm::allocate_hoisted(f, target, native.fixed_regs)

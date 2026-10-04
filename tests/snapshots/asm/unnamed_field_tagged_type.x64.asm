@@ -79,29 +79,6 @@ Disassembly of section .text:
                	movl	$0x7, %eax
                	leave
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	movl	(%rax), %ecx
-               	andq	$-0x8, %rcx
-               	orq	$0x5, %rcx
-               	movl	%ecx, (%rax)
-               	andq	$-0xf9, %rcx
-               	orq	$0xa8, %rcx
-               	movl	%ecx, (%rax)
-               	movq	%rcx, %rax
-               	andq	$0x7, %rax
-               	cmpl	$0x5, %eax
-               	je	<addr>
-               	movl	$0x28, %eax
-               	leave
-               	retq
-               	movl	%ecx, %eax
-               	sarq	$0x3, %rax
-               	andq	$0x1f, %rax
-               	cmpl	$0x15, %eax
-               	je	<addr>
-               	movl	$0x29, %eax
-               	leave
-               	retq
                	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	leaq	<rip>, %rcx

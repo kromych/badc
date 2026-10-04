@@ -490,6 +490,7 @@ fn run_one(func: &mut FunctionSsa) {
                 Inst::SegLoad { .. }
                 | Inst::SegStore { .. }
                 | Inst::Imm(_)
+                | Inst::Undef
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
                 | Inst::ImmExtCode(_)
@@ -865,6 +866,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::SegStore { .. }
                 | Inst::LoadIndexed { .. }
                 | Inst::Imm(_)
+                | Inst::Undef
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
                 | Inst::ImmExtCode(_)

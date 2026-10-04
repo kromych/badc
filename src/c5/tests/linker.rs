@@ -4031,6 +4031,173 @@ fn thread_local_storage_links_into_pt_tls_executable() {
     );
 }
 
+/// A unit reads an extern thread-local through the initial-exec model.
+/// Defined by a shared library, the variable's offset is the loader's to
+/// choose: the executable gives it an `STT_TLS` import whose GOT slot the
+/// loader fills (`R_X86_64_TPOFF64`, `R_AARCH64_TLS_TPREL64`), and the
+/// access reads that slot. Defined by another unit of the link, the access
+/// is rewritten to local-exec and nothing is imported.
+#[test]
+fn an_extern_thread_local_is_read_from_a_got_slot_unless_the_link_defines_it() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{
+        SharedLibrary, emit_aarch64_plt, emit_x86_64_plt, link_native_objects,
+        link_native_objects_with_shared_libs, parse_native_elf, write_native_image_from_merged,
+    };
+    use crate::c5::{NativeMachine, NativeOptions, OutputKind, Target, emit_native_with_options};
+    const READER: &str = "extern _Thread_local int counter;\n\
+                          int main(void) { return counter; }\n";
+    const DEFINER: &str = "_Thread_local int counter = 5;\n";
+    // `(sh_addr, bytes)` of the section named `want`.
+    let section = |img: &[u8], want: &str| {
+        let at = |o: usize, n: usize| {
+            let mut v = [0u8; 8];
+            v[..n].copy_from_slice(&img[o..o + n]);
+            u64::from_le_bytes(v) as usize
+        };
+        let (shoff, shentsize, shstrndx) = (at(0x28, 8), at(0x3a, 2), at(0x3e, 2));
+        let names = at(shoff + shstrndx * shentsize + 0x18, 8);
+        (0..at(0x3c, 2))
+            .map(|i| shoff + i * shentsize)
+            .find(|&sh| {
+                let n = names + at(sh, 4);
+                img[n..].starts_with(want.as_bytes()) && img[n + want.len()] == 0
+            })
+            .map(|sh| {
+                (
+                    at(sh + 0x10, 8),
+                    img[at(sh + 0x18, 8)..][..at(sh + 0x20, 8)].to_vec(),
+                )
+            })
+            .unwrap_or_else(|| panic!("no {want}"))
+    };
+    for (target, tpoff_reloc) in [(Target::LinuxX64, 18u64), (Target::LinuxAarch64, 1030)] {
+        let unit = |src: &str| {
+            let program = Compiler::with_options(
+                src.to_string(),
+                target,
+                CompileOptions::default().with_no_entry_point(true),
+            )
+            .compile()
+            .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            };
+            let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+            parse_native_elf(&bytes).expect("parse ET_REL")
+        };
+        let image = |mut merged: crate::c5::linker::MergedNative| {
+            let plt = match merged.machine {
+                NativeMachine::X86_64 => emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub),
+                NativeMachine::Aarch64 => {
+                    emit_aarch64_plt(&mut merged, crate::DataImportSlots::Stub)
+                }
+            }
+            .expect("plt");
+            let opts = OutputKind::Executable;
+            write_native_image_from_merged(&merged, &plt, "main", None, opts, target, None)
+                .expect("write executable")
+        };
+        let reader = unit(READER);
+        assert!(
+            reader.elf_tpoff_fixups.is_empty(),
+            "{target:?}: the initial-exec site is stated by relocations alone"
+        );
+        let lib = SharedLibrary {
+            soname: "libtl.so".to_string(),
+            machine: reader.machine,
+            exports: ["counter".to_string()].into_iter().collect(),
+            data_exports: Default::default(),
+            tls_exports: ["counter".to_string()].into_iter().collect(),
+            object_sizes: Default::default(),
+            export_symbols: Default::default(),
+            export_versions: Default::default(),
+            from_image: true,
+        };
+        let merged =
+            link_native_objects_with_shared_libs(core::slice::from_ref(&reader), false, &[lib])
+                .expect("link against the library");
+        let idx = merged
+            .imports
+            .iter()
+            .position(|n| n == "counter")
+            .expect("import");
+        assert!(merged.tls_imports.contains(&idx), "{target:?}");
+        let img = image(merged);
+        let (_, dynsym) = section(&img, ".dynsym");
+        assert_eq!(
+            dynsym[(idx + 1) * 24 + 4],
+            0x16,
+            "{target:?}: STB_GLOBAL STT_TLS"
+        );
+        let (got, _) = section(&img, ".got");
+        let slot = got + idx * 8;
+        let (_, rela) = section(&img, ".rela.dyn");
+        assert!(
+            rela.as_chunks::<24>().0.iter().any(|r| {
+                let word = |o: usize| u64::from_le_bytes(r[o..o + 8].try_into().unwrap());
+                (word(0), word(8), word(16))
+                    == (slot as u64, (idx as u64 + 1) << 32 | tpoff_reloc, 0)
+            }),
+            "{target:?}: the slot's relocation"
+        );
+        // The access reads the slot: `add rd, [rip + disp32]` after the
+        // thread pointer's load, or `adrp x17` and `ldr x17, [x17, #lo12]`.
+        let (text_addr, text) = section(&img, ".text");
+        let read = match target {
+            Target::LinuxX64 => text.windows(16).enumerate().find_map(|(i, w)| {
+                let tp_load = w[0] == 0x64 && w[2] == 0x8b && w[4] == 0x25;
+                let add = w[9] & 0xfb == 0x48 && w[10] == 0x03 && w[11] & 0xc7 == 0x05;
+                let disp = i32::from_le_bytes(w[12..16].try_into().unwrap()) as i64;
+                (tp_load && add).then(|| (text_addr + i + 16) as i64 + disp)
+            }),
+            _ => text
+                .as_chunks::<4>()
+                .0
+                .windows(2)
+                .enumerate()
+                .find_map(|(i, w)| {
+                    let (adrp, ldr) = (u32::from_le_bytes(w[0]), u32::from_le_bytes(w[1]));
+                    (adrp & 0x9f00_001f == 0x9000_0011 && ldr & 0xffc0_03ff == 0xf940_0231).then(
+                        || {
+                            let pc = (text_addr + i * 4) as i64;
+                            let pages =
+                                ((adrp >> 29 & 3 | (adrp >> 5 & 0x7_ffff) << 2) << 11) as i32 >> 11;
+                            (pc & !0xfff)
+                                + ((pages as i64) << 12)
+                                + ((ldr >> 10 & 0xfff) * 8) as i64
+                        },
+                    )
+                }),
+        };
+        assert_eq!(
+            read,
+            Some(slot as i64),
+            "{target:?}: the access reads the slot"
+        );
+
+        // Defined by another unit, the variable sits in the executable's
+        // own block and the access takes its offset directly.
+        let merged = link_native_objects(&[reader, unit(DEFINER)]).expect("link both units");
+        assert!(
+            merged.imports.is_empty(),
+            "{target:?}: {:?}",
+            merged.imports
+        );
+        let img = image(merged);
+        let (_, text) = section(&img, ".text");
+        let initial_exec = match target {
+            Target::LinuxX64 => text
+                .windows(3)
+                .any(|w| w[0] & 0xfb == 0x48 && w[1] == 0x03 && w[2] & 0xc7 == 0x05),
+            _ => (text.as_chunks::<4>().0.iter())
+                .any(|w| u32::from_le_bytes(*w) & 0x9f00_001f == 0x9000_0011),
+        };
+        assert!(!initial_exec, "{target:?}: rewritten to local-exec");
+    }
+}
+
 /// Two units with over-aligned thread-locals whose images are not
 /// multiples of their alignment: the second unit's block starts on its
 /// own alignment in the merged image, the image takes the widest
@@ -4152,12 +4319,17 @@ fn thread_local_blocks_merge_on_their_alignment() {
 /// badc's own object states every local-exec site twice, as the
 /// relocation another linker applies and as the note fixup this one
 /// applies, so the link skips exactly the relocations a fixup covers:
-/// the x86_64 field, the aarch64 `add` pair.
+/// the x86_64 field, the aarch64 `add` pair. The initial-exec access to
+/// another unit's thread-local is stated by its relocations alone.
 #[test]
 fn every_local_exec_relocation_of_a_badc_object_has_its_note_fixup() {
     use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::object::NativeReloc;
     use crate::c5::linker::parse_native_elf;
-    use crate::c5::object::elf_reloc_types::{aarch64_is_tls, x86_64_is_tls};
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21, R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC,
+        R_X86_64_GOTTPOFF, aarch64_is_tls, x86_64_is_tls,
+    };
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     const UNIT: &str = "static _Thread_local int tl = 5;\n\
          _Thread_local long long tg = 7;\n\
@@ -4179,9 +4351,15 @@ fn every_local_exec_relocation_of_a_badc_object_has_its_note_fixup() {
         let obj = parse_native_elf(&emit_native_with_options(&prog, target, opts).expect("emit"))
             .expect("parse");
         let aarch64 = target == Target::LinuxAarch64;
-        let sites: Vec<u64> = obj
-            .text_relocs
-            .iter()
+        let initial_exec = |rtype: u32| {
+            matches!(
+                rtype,
+                R_X86_64_GOTTPOFF
+                    | R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21
+                    | R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC
+            )
+        };
+        let (ie, le): (Vec<&NativeReloc>, Vec<&NativeReloc>) = (obj.text_relocs.iter())
             .filter(|r| {
                 if aarch64 {
                     aarch64_is_tls(r.rtype)
@@ -4189,15 +4367,21 @@ fn every_local_exec_relocation_of_a_badc_object_has_its_note_fixup() {
                     x86_64_is_tls(r.rtype)
                 }
             })
-            .map(|r| r.offset)
-            .collect();
+            .partition(|r| initial_exec(r.rtype));
+        let sites: Vec<u64> = le.iter().map(|r| r.offset).collect();
         let noted: Vec<u64> = obj
             .elf_tpoff_fixups
             .iter()
             .flat_map(|&(off, _)| core::iter::once(off).chain(aarch64.then_some(off + 4)))
             .collect();
-        assert_eq!(sites.len(), if aarch64 { 8 } else { 4 }, "{target:?}");
+        assert_eq!(sites.len(), if aarch64 { 6 } else { 3 }, "{target:?}");
         assert_eq!(sites, noted, "{target:?}: each site and its fixup");
+        let te = |r: &&NativeReloc| obj.symbols[r.sym_idx].name == "te";
+        assert_eq!(
+            (ie.len(), ie.iter().all(te)),
+            (if aarch64 { 2 } else { 1 }, true),
+            "{target:?}: the access to `te`"
+        );
     }
 }
 
@@ -4887,6 +5071,7 @@ fn an_import_only_addressed_keeps_its_function_type() {
             machine,
             exports: core::iter::once("lib_fn".to_string()).collect(),
             data_exports: Default::default(),
+            tls_exports: Default::default(),
             object_sizes: Default::default(),
             export_symbols: Default::default(),
             export_versions: Default::default(),
@@ -6633,6 +6818,7 @@ fn weak_undef_binds_against_a_shared_library_export() {
         machine: NativeMachine::X86_64,
         exports: core::iter::once("hook".to_string()).collect(),
         data_exports: Default::default(),
+        tls_exports: Default::default(),
         object_sizes: Default::default(),
         export_symbols: Default::default(),
         export_versions: Default::default(),
@@ -13401,6 +13587,7 @@ fn imported_function_called_and_address_taken_links_through_own_linker() {
                 .into_iter()
                 .collect(),
             data_exports: alloc::collections::BTreeSet::new(),
+            tls_exports: Default::default(),
             object_sizes: Default::default(),
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),

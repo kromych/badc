@@ -37,16 +37,17 @@ use alloc::vec::Vec;
 
 use crate::c5::codegen::{
     AddrPart, Build, CopyRelocReq, DataFixup, DynamicExport, DynamicExportSection, ElfImageOptions,
-    EmitStream, EmitTarget, EmittedFinalReloc, ExecForm, FuncFixup, GotFixup, OutputKind,
-    ResolvedDylib, ResolvedImport, ResolvedImports, Target,
+    EmitStream, EmitTarget, EmittedFinalReloc, ExecForm, FuncFixup, GotFixup, ImportKind,
+    OutputKind, ResolvedDylib, ResolvedImport, ResolvedImports, Target,
 };
 use crate::c5::error::C5Error;
 use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE, R_AARCH64_ADR_PREL_PG_HI21,
-    R_AARCH64_CALL26, R_AARCH64_JUMP26, R_AARCH64_LD64_GOT_LO12_NC, R_X86_64_GOT64,
-    R_X86_64_GOTOFF64, R_X86_64_GOTPC32, R_X86_64_GOTPC64, R_X86_64_GOTPCREL, R_X86_64_PC32,
-    R_X86_64_PLT32, R_X86_64_PLTOFF64, R_X86_64_REX_GOTPCRELX, aarch64_ldst_lo12_scale,
-    aarch64_movw_field,
+    R_AARCH64_CALL26, R_AARCH64_JUMP26, R_AARCH64_LD64_GOT_LO12_NC,
+    R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21, R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, R_X86_64_GOT64,
+    R_X86_64_GOTOFF64, R_X86_64_GOTPC32, R_X86_64_GOTPC64, R_X86_64_GOTPCREL, R_X86_64_GOTTPOFF,
+    R_X86_64_PC32, R_X86_64_PLT32, R_X86_64_PLTOFF64, R_X86_64_REX_GOTPCRELX,
+    aarch64_ldst_lo12_scale, aarch64_movw_field,
 };
 use crate::c5::object::write_native_image;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
@@ -920,7 +921,13 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
             },
             dylib_index,
             flat_lookup,
-            is_object: merged.object_imports.contains(&i),
+            kind: if merged.tls_imports.contains(&i) {
+                ImportKind::ThreadLocal
+            } else if merged.object_imports.contains(&i) {
+                ImportKind::Object
+            } else {
+                ImportKind::Function
+            },
             is_variadic: false,
             fixed_args: 0,
             return_type_tag: 0,
@@ -1047,11 +1054,13 @@ fn synth_fixups(
         }
         // An x86-64 slot read the object's code already addresses through
         // the GOT: its instruction is final, so the field takes the
-        // import's slot whatever the instruction is.
+        // import's slot whatever the instruction is. A thread-local's
+        // initial-exec slot holds its offset from the thread pointer.
         if reloc.slot_load
             && reloc.target_section == NativeSymSection::Undef
             && merged.machine == NativeMachine::X86_64
-            && super::got_relax::is_x86_64_got_pcrel(reloc.rtype)
+            && (super::got_relax::is_x86_64_got_pcrel(reloc.rtype)
+                || reloc.rtype == R_X86_64_GOTTPOFF)
         {
             got_pcrel.push(crate::c5::codegen::GotPcRelFixup {
                 site_text_offset: reloc.text_offset,
@@ -1111,9 +1120,11 @@ fn project_aarch64_pending(
     // addresses the GOT slot rather than the symbol itself.
     let (part, got_slot) = match reloc.rtype {
         R_AARCH64_ADR_PREL_PG_HI21 => (AddrPart::Page, false),
-        R_AARCH64_ADR_GOT_PAGE => (AddrPart::Page, true),
+        R_AARCH64_ADR_GOT_PAGE | R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21 => (AddrPart::Page, true),
         R_AARCH64_ADD_ABS_LO12_NC => (AddrPart::InPage, false),
-        R_AARCH64_LD64_GOT_LO12_NC => (AddrPart::InPage, true),
+        R_AARCH64_LD64_GOT_LO12_NC | R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC => {
+            (AddrPart::InPage, true)
+        }
         // The PLT pass drains every import call; one still here is a
         // broken invariant. A parked *section* reference is not: it
         // reached a target whose runtime address only the writer
@@ -1611,6 +1622,7 @@ mod tests {
             object_imports: alloc::collections::BTreeSet::new(),
             stub_address_imports: alloc::collections::BTreeSet::new(),
             preemptible_imports: alloc::collections::BTreeSet::new(),
+            tls_imports: alloc::collections::BTreeSet::new(),
             dylibs: alloc::vec![],
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],

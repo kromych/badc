@@ -20,23 +20,6 @@ pub(super) fn emit_tls_addr(
     };
     match target {
         Target::LinuxX64 => {
-            // A cross-unit `extern _Thread_local` (`extern_tls_names`) has no TPOFF
-            // until the link merges the TLS blocks: a 0 placeholder and an extern
-            // fixup. A same-unit access bakes the single-unit TPOFF and records a
-            // fixup for the merged layout.
-            let extern_sym = extern_tls_names.get(&v).cloned();
-            // Variant-2 TPOFF is negative (`var = fs:[0] + (offset - tls_total)`);
-            // an `add` with the signed immediate keeps the field patchable with the
-            // standard value.
-            let tpoff = if extern_sym.is_some() {
-                0
-            } else {
-                let t = offset - (tls_total_size as i64);
-                if !(i32::MIN as i64..=0).contains(&t) {
-                    return fail("TlsAddr: tpoff out of i32 range");
-                }
-                t
-            };
             // mov rd, qword ptr fs:[0]
             //   FS prefix 64; REX.W=1, REX.R = (rd >= 8);
             //   opcode 8B; ModR/M mod=00 reg=rd.lo rm=100 (SIB);
@@ -49,6 +32,32 @@ pub(super) fn emit_tls_addr(
             code.push(0x04 | ((rd.0 & 7) << 3));
             code.push(0x25);
             code.extend_from_slice(&0u32.to_le_bytes());
+            // A cross-unit `extern _Thread_local` (`extern_tls_names`) may live
+            // in a shared library, whose block the loader places, so its offset
+            // comes from the GOT (initial-exec, as gcc's code for an executable
+            // reads it): add rd, qword ptr [rip + disp32], REX.W=1, REX.R =
+            // (rd >= 8), opcode 03, ModR/M mod=00 reg=rd.lo rm=101.
+            if let Some(name) = extern_tls_names.get(&v) {
+                code.push(rex);
+                code.push(0x03);
+                code.push(0x05 | ((rd.0 & 7) << 3));
+                let imm_offset = code.len();
+                code.extend_from_slice(&0i32.to_le_bytes());
+                elf_tpoff_fixups.push(super::ElfTpoffFixup {
+                    imm_offset,
+                    target: super::ElfTpoffTarget::InitialExec(name.clone()),
+                });
+                spill_dst_to_slot(code, dst, rd, frame);
+                return Ok(());
+            }
+            // A same-unit access bakes the single-unit TPOFF and records a
+            // fixup for the merged layout. Variant-2 TPOFF is negative (`var =
+            // fs:[0] + (offset - tls_total)`); an `add` with the signed
+            // immediate keeps the field patchable with the standard value.
+            let tpoff = offset - (tls_total_size as i64);
+            if !(i32::MIN as i64..=0).contains(&tpoff) {
+                return fail("TlsAddr: tpoff out of i32 range");
+            }
             // add rd, imm32
             //   REX.W=1, REX.B = (rd >= 8);
             //   opcode 81 /0;
@@ -62,10 +71,7 @@ pub(super) fn emit_tls_addr(
             code.extend_from_slice(&(tpoff as i32).to_le_bytes());
             elf_tpoff_fixups.push(super::ElfTpoffFixup {
                 imm_offset,
-                target: match extern_sym {
-                    Some(name) => super::ElfTpoffTarget::Extern(name),
-                    None => super::ElfTpoffTarget::Local(offset as u64),
-                },
+                target: super::ElfTpoffTarget::Local(offset as u64),
             });
             spill_dst_to_slot(code, dst, rd, frame);
             Ok(())

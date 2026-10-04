@@ -13,11 +13,12 @@ use super::super::error::C5Error;
 use super::super::program::Program;
 use super::elf_reloc_types::{
     R_AARCH64_ABS64, R_AARCH64_COPY, R_AARCH64_GLOB_DAT, R_AARCH64_JUMP_SLOT, R_AARCH64_RELATIVE,
-    R_X86_64_64, R_X86_64_COPY, R_X86_64_GLOB_DAT, R_X86_64_JUMP_SLOT, R_X86_64_RELATIVE,
+    R_AARCH64_TLS_TPREL64, R_X86_64_64, R_X86_64_COPY, R_X86_64_GLOB_DAT, R_X86_64_JUMP_SLOT,
+    R_X86_64_RELATIVE, R_X86_64_TPOFF64,
 };
 use super::{Abi, AddrPart, Build, DataRegion, ExecForm, Machine, data_region_addr};
 use super::{aarch64, dwarf, eh_frame, image, x86_64};
-use crate::c5::codegen::BuildId;
+use crate::c5::codegen::{BuildId, ImportKind};
 use crate::c5::layout::{round_up, write_struct};
 
 const EI_NIDENT: usize = 16;
@@ -87,6 +88,7 @@ const STB_WEAK: u8 = 2;
 const STT_FUNC: u8 = 2;
 const STT_OBJECT: u8 = 1;
 const STT_SECTION: u8 = 3;
+const STT_TLS: u8 = 6;
 const SHF_INFO_LINK: u64 = 0x40;
 const SHN_UNDEF: u16 = 0;
 const SHN_ABS: u16 = 0xfff1;
@@ -430,12 +432,15 @@ fn e_machine(machine: Machine) -> u16 {
     }
 }
 
-/// `R_*_GLOB_DAT` relocation type: stores the symbol's resolved address
-/// into the GOT slot.
-fn r_glob_dat(machine: Machine) -> u64 {
-    match machine {
-        Machine::Aarch64 => R_AARCH64_GLOB_DAT.into(),
-        Machine::X86_64 => R_X86_64_GLOB_DAT.into(),
+/// The relocation type filling an import's GOT slot: the symbol's
+/// address (`R_*_GLOB_DAT`), or a thread-local's offset from the thread
+/// pointer (`R_X86_64_TPOFF64`, `R_AARCH64_TLS_TPREL64`).
+fn r_got_slot(machine: Machine, kind: ImportKind) -> u64 {
+    match (machine, kind) {
+        (Machine::Aarch64, ImportKind::ThreadLocal) => R_AARCH64_TLS_TPREL64.into(),
+        (Machine::Aarch64, _) => R_AARCH64_GLOB_DAT.into(),
+        (Machine::X86_64, ImportKind::ThreadLocal) => R_X86_64_TPOFF64.into(),
+        (Machine::X86_64, _) => R_X86_64_GLOB_DAT.into(),
     }
 }
 
@@ -822,7 +827,7 @@ fn eh_frame_hdr_len(build: &Build) -> u64 {
 /// Build .dynsym; an import's `st_value` is its canonical PLT entry's address, or 0.
 fn build_dynsym(
     import_name_offsets: &[u32],
-    import_is_object: &[bool],
+    import_kinds: &[ImportKind],
     import_values: &[u64],
     import_defs: &[(usize, DynsymExport)],
     exports: &[DynsymExport],
@@ -853,8 +858,8 @@ fn build_dynsym(
         },
     );
 
-    debug_assert_eq!(import_name_offsets.len(), import_is_object.len());
-    for (i, &name_off) in import_name_offsets.iter().enumerate() {
+    debug_assert_eq!(import_name_offsets.len(), import_kinds.len());
+    for (i, (&name_off, kind)) in import_name_offsets.iter().zip(import_kinds).enumerate() {
         if let Ok(k) = import_defs.binary_search_by_key(&i, |d| d.0) {
             let def = &import_defs[k].1;
             write_struct(
@@ -875,10 +880,10 @@ fn build_dynsym(
             &Elf64Sym {
                 st_name: name_off,
                 st_info: (STB_GLOBAL << 4)
-                    | if import_is_object[i] {
-                        STT_OBJECT
-                    } else {
-                        STT_FUNC
+                    | match kind {
+                        ImportKind::Function => STT_FUNC,
+                        ImportKind::Object => STT_OBJECT,
+                        ImportKind::ThreadLocal => STT_TLS,
                     },
                 st_other: 0, // STV_DEFAULT
                 st_shndx: SHN_UNDEF,
@@ -981,17 +986,16 @@ fn name_bytes(strtab: &[u8], offset: usize) -> &[u8] {
     &strtab[offset..end]
 }
 
-/// Build .rela.dyn -- one `R_*_GLOB_DAT` relocation per import.
-fn build_rela_dyn(got_vmaddr: u64, n_imports: usize, machine: Machine) -> Vec<u8> {
-    let r_type = r_glob_dat(machine);
-    let mut out = Vec::with_capacity(n_imports * ELF64_RELA_SIZE as usize);
-    for i in 0..n_imports {
+/// Build .rela.dyn -- one relocation per import filling its GOT slot.
+fn build_rela_dyn(got_vmaddr: u64, import_kinds: &[ImportKind], machine: Machine) -> Vec<u8> {
+    let mut out = Vec::with_capacity(import_kinds.len() * ELF64_RELA_SIZE as usize);
+    for (i, &kind) in import_kinds.iter().enumerate() {
         let sym_idx = (i as u64) + 1;
         write_struct(
             &mut out,
             &Elf64Rela {
                 r_offset: got_vmaddr + (i as u64) * 8,
-                r_info: (sym_idx << 32) | r_type,
+                r_info: (sym_idx << 32) | r_got_slot(machine, kind),
                 r_addend: 0,
             },
         );
@@ -1371,7 +1375,7 @@ struct DynTables {
     lib_strtab_offsets: Vec<u32>,
     export_name_offsets: Vec<u32>,
     copy_name_offsets: Vec<u32>,
-    import_is_object: Vec<bool>,
+    import_kinds: Vec<ImportKind>,
     copy_sizes: Vec<u64>,
     copy_is_bss: Vec<bool>,
     dynsym: Vec<u8>,
@@ -1766,8 +1770,7 @@ impl<'a> ElfImageWriter<'a> {
         let export_names: Vec<&str> = self.exports.iter().map(|e| e.name.as_str()).collect();
         let (dynstr, name_offsets, lib_strtab_offsets, export_name_offsets, copy_name_offsets) =
             build_dynstr(&build.imports, &export_names, &build.copy_relocs);
-        let import_is_object: Vec<bool> =
-            build.imports.imports.iter().map(|i| i.is_object).collect();
+        let import_kinds: Vec<ImportKind> = build.imports.imports.iter().map(|i| i.kind).collect();
         let copy_sizes: Vec<u64> = build.copy_relocs.iter().map(|cr| cr.size).collect();
         let copy_is_bss: Vec<bool> = build.copy_relocs.iter().map(|cr| cr.is_bss).collect();
         let copy_addrs_placeholder: Vec<u64> = vec![0; build.copy_relocs.len()];
@@ -1783,7 +1786,7 @@ impl<'a> ElfImageWriter<'a> {
             .collect();
         let dynsym = build_dynsym(
             &name_offsets,
-            &import_is_object,
+            &import_kinds,
             &[],
             &[],
             &exports_placeholder,
@@ -1809,7 +1812,7 @@ impl<'a> ElfImageWriter<'a> {
             lib_strtab_offsets,
             export_name_offsets,
             copy_name_offsets,
-            import_is_object,
+            import_kinds,
             copy_sizes,
             copy_is_bss,
             dynsym,
@@ -3087,7 +3090,7 @@ impl<'a> ElfImageWriter<'a> {
         }
         let final_dynsym = build_dynsym(
             &dynamic.name_offsets,
-            &dynamic.import_is_object,
+            &dynamic.import_kinds,
             &import_values,
             &import_defs,
             &final_exports,
@@ -3101,7 +3104,7 @@ impl<'a> ElfImageWriter<'a> {
             },
         );
         debug_assert_eq!(final_dynsym.len(), dynamic.dynsym.len());
-        let mut rela = build_rela_dyn(self.va(seg.got_off), self.n_imports, machine);
+        let mut rela = build_rela_dyn(self.va(seg.got_off), &dynamic.import_kinds, machine);
         let r_type = r_relative(machine);
         for site in self.relative_sites()? {
             if !self.in_relr(&site) {
@@ -4203,7 +4206,7 @@ mod tests {
                 real_symbol: "exit".into(),
                 dylib_index: 0,
                 flat_lookup: false,
-                is_object: false,
+                kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: false,
                 fixed_args: 1,
                 return_type_tag: 0,
@@ -4799,6 +4802,58 @@ mod tests {
         let (_, _, data_addr, _, _) = find_section(&bytes, ".data").expect(".data");
         let slot = section_file_off(&bytes, ".data").expect(".data") as usize;
         assert_eq!(read_u64(&bytes, slot), data_addr + 8, "baked pointer");
+    }
+
+    /// A shared library's thread-local is published `STT_TLS`, and its GOT
+    /// slot takes the relocation by which the loader stores the variable's
+    /// offset from the thread pointer instead of an address.
+    #[test]
+    fn a_thread_local_import_slot_takes_its_thread_pointer_offset() {
+        for (machine, target, glob_dat, tpoff) in [
+            (
+                Machine::Aarch64,
+                super::super::Target::LinuxAarch64,
+                R_AARCH64_GLOB_DAT,
+                R_AARCH64_TLS_TPREL64,
+            ),
+            (
+                Machine::X86_64,
+                super::super::Target::LinuxX64,
+                R_X86_64_GLOB_DAT,
+                R_X86_64_TPOFF64,
+            ),
+        ] {
+            let mut b = tiny_build();
+            b.abi = target.abi();
+            let mut tv = b.imports.imports[0].clone();
+            tv.binding_idx = 1;
+            tv.local_name = "tv".into();
+            tv.real_symbol = "tv".into();
+            tv.kind = ImportKind::ThreadLocal;
+            b.imports.imports.push(tv);
+            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let dynsym = section_file_off(&bytes, ".dynsym").expect(".dynsym") as usize;
+            let st_info = |i: usize| bytes[dynsym + i * ELF64_SYM_SIZE as usize + 4];
+            assert_eq!(
+                (st_info(1), st_info(2)),
+                (STB_GLOBAL << 4 | STT_FUNC, STB_GLOBAL << 4 | STT_TLS),
+                "{machine:?}"
+            );
+            let (_, _, got, _, _) = find_section(&bytes, ".got").expect(".got");
+            let rela = section_file_off(&bytes, ".rela.dyn").expect(".rela.dyn") as usize;
+            let entry = |i: u64| {
+                let r: Elf64Rela = read_struct(&bytes, rela + (i * ELF64_RELA_SIZE) as usize);
+                (r.r_offset, r.r_info, r.r_addend)
+            };
+            assert_eq!(
+                (entry(0), entry(1)),
+                (
+                    (got, 1 << 32 | u64::from(glob_dat), 0),
+                    (got + 8, 2 << 32 | u64::from(tpoff), 0)
+                ),
+                "{machine:?}"
+            );
+        }
     }
 
     /// A `-no-pie` image is placed as a freestanding one is and keeps
@@ -5664,7 +5719,10 @@ mod tests {
             let (_, _, got, got_size, _) = find_section(&bytes, ".got").expect(".got");
             assert_eq!(got_size, 16, "{machine:?}");
             let rela = rela_dyn(&bytes);
-            for want in [(got, r_glob_dat(machine)), (got + 8, r_symbolic(machine).1)] {
+            for want in [
+                (got, r_got_slot(machine, ImportKind::Function)),
+                (got + 8, r_symbolic(machine).1),
+            ] {
                 assert!(
                     rela.contains(&(want.0, (1 << 32) | want.1, 0)),
                     "{machine:?}: {rela:x?}"

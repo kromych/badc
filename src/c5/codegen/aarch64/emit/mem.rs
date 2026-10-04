@@ -306,28 +306,35 @@ pub(super) fn emit_tls_addr(
             // the 16-byte TCB rounded up to the block's alignment, so the
             // local-exec form is `tp + tprel_hi12 + tprel_lo12` (24-bit TPOFF,
             // two linker-patchable immediates). A unit-local access bakes its
-            // TPOFF, a cross-unit one the reserve alone; both record an
-            // `elf_tpoff_fixups` entry at the first add for the linker to rebase
-            // against the merged TLS layout.
+            // TPOFF and records an `elf_tpoff_fixups` entry at the first add for
+            // the linker to rebase against the merged TLS layout.
             let tcb_reserve = 16usize.next_multiple_of(tls_align.max(1)) as i64;
-            let tpoff = if tls_extern_sym.is_some() {
-                tcb_reserve as u32
-            } else {
-                (offset + tcb_reserve) as u32
-            };
-            if tpoff >= (1 << 24) {
+            let tpoff = (offset + tcb_reserve) as u32;
+            if tls_extern_sym.is_none() && tpoff >= (1 << 24) {
                 return fail("TlsAddr: tpoff exceeds the hi12/lo12 range");
             }
             emit(code, enc_mrs_tpidr_el0(rd));
-            let add_off = code.len();
-            emit(code, enc_add_imm_lsl12(rd, rd, tpoff >> 12));
-            emit(code, enc_add_imm(rd, rd, tpoff & 0xFFF));
+            let field = code.len();
+            let target = match tls_extern_sym {
+                // A cross-unit `extern _Thread_local` may live in a shared
+                // library, whose block the loader places, so its offset comes
+                // from the GOT (initial-exec, as gcc's code for an executable
+                // reads it); x17 holds the slot's address, then its value.
+                Some(name) => {
+                    emit(code, enc_adrp(Reg(17), 0));
+                    emit(code, enc_ldr_imm(Reg(17), Reg(17), 0));
+                    emit(code, enc_add_reg(rd, rd, Reg(17)));
+                    super::ElfTpoffTarget::InitialExec(name.into())
+                }
+                None => {
+                    emit(code, enc_add_imm_lsl12(rd, rd, tpoff >> 12));
+                    emit(code, enc_add_imm(rd, rd, tpoff & 0xFFF));
+                    super::ElfTpoffTarget::Local(offset as u64)
+                }
+            };
             elf_tpoff_fixups.push(super::ElfTpoffFixup {
-                imm_offset: add_off,
-                target: match tls_extern_sym {
-                    Some(name) => super::ElfTpoffTarget::Extern(name.into()),
-                    None => super::ElfTpoffTarget::Local(offset as u64),
-                },
+                imm_offset: field,
+                target,
             });
             Ok(())
         }

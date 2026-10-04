@@ -1297,11 +1297,9 @@ pub(crate) struct ResolvedImport {
     /// `dlopen`. The Mach-O writer emits a flat-lookup bind; the ELF
     /// writer an undefined `.dynsym` entry with no `DT_NEEDED`.
     pub flat_lookup: bool,
-    /// `true` when an input symbol table typed the symbol `STT_OBJECT`.
-    /// The ELF writer republishes the type on the undefined `.dynsym`
-    /// entry; `false` publishes `STT_FUNC`, which is what a reference
-    /// with no type information carries.
-    pub is_object: bool,
+    /// What the symbol is; the ELF writer republishes it on the
+    /// undefined `.dynsym` entry.
+    pub kind: ImportKind,
     /// `true` if the binding's prototype ended with `, ...)`. The
     /// lowering reads this to decide whether the call site needs
     /// the platform's variadic ABI (macOS arm64 stack-packing,
@@ -1334,6 +1332,19 @@ pub(crate) struct ResolvedImport {
     /// signature in `bt`. Empty when the parser hasn't seen the
     /// prototype.
     pub param_types: Vec<i64>,
+}
+
+/// What an import names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ImportKind {
+    /// A function, or a reference with no type information (`STT_FUNC`).
+    Function,
+    /// A data object an input symbol table typed `STT_OBJECT`.
+    Object,
+    /// A shared library's thread-local (`STT_TLS`): its slot holds the
+    /// variable's offset from the thread pointer, which the loader writes
+    /// (`R_X86_64_TPOFF64`, `R_AARCH64_TLS_TPREL64`).
+    ThreadLocal,
 }
 
 /// Pre-baked DWARF byte streams from the multi-TU link.
@@ -1530,7 +1541,7 @@ impl ResolvedImports {
             real_symbol: b.real_symbol.clone(),
             dylib_index,
             flat_lookup: false,
-            is_object: false,
+            kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: b.is_variadic,
             fixed_args: b.fixed_args,
             return_type_tag: b.return_type_tag,
@@ -1667,7 +1678,7 @@ impl ResolvedImports {
                 real_symbol: b.real_symbol.clone(),
                 dylib_index,
                 flat_lookup: false,
-                is_object: false,
+                kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: b.is_variadic,
                 fixed_args: b.fixed_args,
                 return_type_tag: b.return_type_tag,
@@ -2996,45 +3007,50 @@ pub(crate) struct MachoTlvFixup {
     pub descriptor_index: usize,
 }
 
-/// TLS access relocation whose immediate the linker resolves against
-/// the merged TLS block once every unit's `.tdata` / `.tbss` is
-/// concatenated. Three access shapes record it, distinguished by the
-/// linker (see `link_native_objects` Pass 4.1):
-///   * Linux/x86_64 -- `mov rd, fs:[0]; sub rd, imm32`: variant-2
+/// A thread-local access whose operand the link supplies. The local-exec
+/// shapes carry an immediate the linker resolves against the merged TLS
+/// block once every unit's `.tdata` / `.tbss` is concatenated:
+///   * Linux/x86_64 -- `mov rd, fs:[0]; add rd, imm32`: variant-2
 ///     places the block below the thread pointer, so `imm32 =
-///     merged_size - merged_offset` and the access computes `TP -
-///     imm32`.
-///   * Linux/aarch64 -- `mrs rd, tpidr_el0; add rd, rd, #imm12`:
-///     variant-1 places the block above the thread pointer after a
-///     16-byte TCB reserve, so `imm12 = 16 + merged_offset`.
-///   * Windows/aarch64 -- the TEB sequence (`ldr x16, [x18, #0x58]`,
-///     index by `_tls_index`, `add rd, x16, #imm12`): x16 already
-///     holds the module's TLS block base, so `imm12 = merged_offset`
-///     with no thread-pointer bias. This shape also records a
-///     `TlsIndexFixup`, which is how the linker tells it apart from
-///     the variant-1 ELF shape on the same machine.
-/// The codegen leaves the immediate at a single-unit default (or 0 for
-/// an extern access); `target` selects how the linker finds
-/// `merged_offset`.
+///     merged_offset - roundup(merged_size, align)`.
+///   * Linux/aarch64 -- `mrs rd, tpidr_el0; add rd, rd, #hi12, lsl 12;
+///     add rd, rd, #lo12`: variant-1 places the block above the thread
+///     pointer after a 16-byte TCB reserve, so the pair adds
+///     `roundup(16, align) + merged_offset`.
+///   * Windows -- the TEB sequence ending in `lea rd, [r10 + disp32]` /
+///     `add rd, x16, #imm12`: the register already holds the module's
+///     TLS block base, so the field is `merged_offset`. This shape also
+///     records a `TlsIndexFixup`, which is how the linker tells it apart
+///     from the ELF shape on the same machine.
+/// The codegen leaves the immediate at a single-unit default (or 0 for an
+/// extern access); `target` selects how the linker finds `merged_offset`.
+/// [`ElfTpoffTarget::InitialExec`] marks the initial-exec shape instead,
+/// whose operand is a GOT slot.
 #[derive(Debug, Clone)]
 pub(crate) struct ElfTpoffFixup {
-    /// Byte offset within `Build::text` of the immediate field the
-    /// linker rewrites (the `sub` imm32 / the `add` imm12 word).
+    /// Byte offset within `Build::text` of the field the linker rewrites:
+    /// the x86_64 imm32 or disp32, the first aarch64 `add`, or the
+    /// initial-exec `adrp`.
     pub imm_offset: usize,
     pub target: ElfTpoffTarget,
 }
 
-/// How the linker resolves an [`ElfTpoffFixup`] to a byte offset in
-/// the merged TLS block.
+/// How the link resolves an [`ElfTpoffFixup`].
 #[derive(Debug, Clone)]
 pub(crate) enum ElfTpoffTarget {
-    /// Cross-unit `extern _Thread_local`: the merged offset is the
-    /// named symbol's entry in the merged TLS symbol table.
+    /// Cross-unit `extern _Thread_local` in the Windows TEB shape: the
+    /// merged offset is the named symbol's entry in the merged TLS symbol
+    /// table.
     Extern(String),
     /// Same-unit `_Thread_local`: the merged offset is this unit's
     /// base in the merged TLS block plus this byte offset within the
     /// unit's own block.
     Local(u64),
+    /// A thread-local another ELF unit or a shared library defines, read
+    /// initial-exec through the GOT slot holding its offset from the
+    /// thread pointer (R_X86_64_GOTTPOFF, R_AARCH64_TLSIE_*); an executable
+    /// link rewrites it to local-exec where it defines the variable.
+    InitialExec(String),
 }
 
 /// Relocatable-object call site: the byte offset of the BL / B

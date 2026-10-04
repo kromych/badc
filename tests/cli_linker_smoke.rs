@@ -9165,6 +9165,113 @@ fn a_system_compiled_object_reaches_thread_locals_in_every_model() {
     }
 }
 
+// A shared library's thread-locals, read from a badc unit and from a
+// system-compiled `-fPIE` object in the initial-exec model, in the calling
+// thread and a new one, PIE and -no-pie: the loader places the library's
+// block and fills the GOT slot each access reads with the variable's offset
+// from the thread pointer, so every reader reaches the thread's own copy,
+// initialized from the library's template.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_shared_library_thread_local_is_read_through_the_got() {
+    let Some(cc) = host_cc() else {
+        eprintln!(
+            "skipping a_shared_library_thread_local_is_read_through_the_got: no system C compiler"
+        );
+        return;
+    };
+    let dir = tempdir("lib-tls");
+    let lib = write_source(
+        &dir,
+        "tl.c",
+        "_Thread_local int lib_tl = 5;\n\
+         _Thread_local long long lib_wide[4] = {1, 2, 3, 4};\n\
+         _Thread_local char lib_zero[100];\n\
+         int *lib_addr(void) { return &lib_tl; }\n\
+         long long *lib_wide_addr(void) { return lib_wide; }\n",
+    );
+    run(
+        Command::new(&cc)
+            .args(["-O2", "-shared", "-fPIC", "-o"])
+            .arg(dir.join("libtl.so"))
+            .arg(&lib),
+        "build the shared library",
+    );
+    let reader = write_source(
+        &dir,
+        "reader.c",
+        "extern _Thread_local int lib_tl;\n\
+         extern _Thread_local long long lib_wide[4];\n\
+         int *sys_addr(void) { return &lib_tl; }\n\
+         long long sys_wide(int i) { return lib_wide[i]; }\n",
+    );
+    let reader_obj = dir.join("reader.o");
+    run(
+        Command::new(&cc)
+            .args(["-O2", "-fPIE", "-c"])
+            .arg(&reader)
+            .arg("-o")
+            .arg(&reader_obj),
+        "build the reading object",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <pthread.h>\n\
+         extern _Thread_local int lib_tl;\n\
+         extern _Thread_local long long lib_wide[4];\n\
+         extern _Thread_local char lib_zero[100];\n\
+         int *lib_addr(void);\n\
+         long long *lib_wide_addr(void);\n\
+         int *sys_addr(void);\n\
+         long long sys_wide(int i);\n\
+         static int check(int tl, long long wide) {\n\
+           return &lib_tl != lib_addr() || sys_addr() != lib_addr() || lib_tl != tl\n\
+             || lib_wide != lib_wide_addr() || sys_wide(3) != wide || lib_wide[3] != wide\n\
+             || lib_zero[99] != 0;\n\
+         }\n\
+         static void *worker(void *arg) {\n\
+           (void)arg;\n\
+           if (check(5, 4) || lib_wide[2] != 3) return (void *)1;\n\
+           lib_tl = 9;\n\
+           return (void *)(long)check(9, 4);\n\
+         }\n\
+         int main(void) {\n\
+           if (check(5, 4)) return 1;\n\
+           lib_tl = 6;\n\
+           lib_wide[3] = 40;\n\
+           pthread_t t;\n\
+           void *bad = (void *)1;\n\
+           if (pthread_create(&t, 0, worker, 0) || pthread_join(t, &bad) || bad) return 2;\n\
+           return check(6, 40) ? 3 : 0;\n\
+         }\n",
+    );
+    for form in [&[][..], &["-no-pie"][..]] {
+        let exe = dir.join("prog");
+        run(
+            Command::new(badc())
+                .args(["-q", "-O"])
+                .args(form)
+                .arg(&main)
+                .arg(&reader_obj)
+                .arg(format!("-L{}", dir.display()))
+                .arg("-ltl")
+                .arg("-o")
+                .arg(&exe),
+            "link against the library",
+        );
+        let out = Command::new(&exe)
+            .env("LD_LIBRARY_PATH", &dir)
+            .output()
+            .expect("run");
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{form:?}: a library thread-local read wrong"
+        );
+    }
+}
+
 /// gcc `-fno-plt` code reaches every external function through its GOT
 /// slot (GOTPCRELX, x86-64 psABI B.2). The link reads an import's slot,
 /// which the loader fills through `R_X86_64_GLOB_DAT`; relaxes a call, a

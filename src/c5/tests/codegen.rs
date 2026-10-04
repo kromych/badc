@@ -5289,16 +5289,21 @@ fn x64_int_to_float_breaks_dep_and_avoids_double_hop() {
 
 /// A relocatable Linux unit surfaces its `_Thread_local` layout to an
 /// external linker: STT_TLS symbols for the defined globals (UNDEF for
-/// the externs) and standard local-exec relocations at each access
-/// site, so several units' TLS blocks merge with per-symbol offsets.
-/// Without them every unit's baked single-unit offsets alias onto the
-/// merged block's first slots and the units clobber each other.
+/// the externs) and standard relocations at each access site, so several
+/// units' TLS blocks merge with per-symbol offsets. Without them every
+/// unit's baked single-unit offsets alias onto the merged block's first
+/// slots and the units clobber each other. The unit's own thread-locals
+/// take the local-exec relocations against its TLS sections; an extern
+/// one, which a shared library may define, the initial-exec ones against
+/// its symbol, as gcc's code for an executable reads it.
 #[test]
-fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
+fn relocatable_elf_reads_own_thread_locals_local_exec_and_others_initial_exec() {
     use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
-    for (target, want_types) in [
-        (Target::LinuxAarch64, &[549u32, 551][..]),
-        (Target::LinuxX64, &[23u32][..]),
+    // R_AARCH64_TLSLE_ADD_TPREL_HI12 / _LO12_NC, R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21 /
+    // _LD64_GOTTPREL_LO12_NC; R_X86_64_TPOFF32, R_X86_64_GOTTPOFF.
+    for (target, local_exec, initial_exec) in [
+        (Target::LinuxAarch64, &[549u32, 551][..], &[541u32, 542][..]),
+        (Target::LinuxX64, &[23u32][..], &[22u32][..]),
     ] {
         let src = "_Thread_local long counter = 7;\n\
                    static _Thread_local long private_counter = 9;\n\
@@ -5317,24 +5322,36 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
             },
         )
         .expect("emit relocatable");
-        let rela = elf64_section(&obj, ".rela.text").expect(".rela.text");
-        let mut types = std::collections::BTreeSet::new();
-        for e in rela.as_chunks::<24>().0.iter() {
-            let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
-            types.insert((r_info & 0xffff_ffff) as u32);
-        }
-        for want in want_types {
-            assert!(
-                types.contains(want),
-                "{target:?}: expected TLS reloc type {want} in .rela.text, got {types:?}"
-            );
-        }
         let symtab = elf64_section(&obj, ".symtab").expect(".symtab");
         let strtab = elf64_section(&obj, ".strtab").expect(".strtab");
         let name_at = |off: usize| {
             let end = strtab[off..].iter().position(|b| *b == 0).unwrap() + off;
             core::str::from_utf8(&strtab[off..end]).unwrap()
         };
+        // Each TLS relocation's type, by the name of the symbol it names:
+        // `other`, or a section symbol's empty name.
+        let rela = elf64_section(&obj, ".rela.text").expect(".rela.text");
+        let mut types: std::collections::BTreeMap<&str, std::collections::BTreeSet<u32>> =
+            Default::default();
+        for e in rela.as_chunks::<24>().0.iter() {
+            let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
+            let rtype = (r_info & 0xffff_ffff) as u32;
+            let sym = &symtab[(r_info >> 32) as usize * 24..][..24];
+            let name = name_at(u32::from_le_bytes(sym[0..4].try_into().unwrap()) as usize);
+            if local_exec.contains(&rtype) || initial_exec.contains(&rtype) {
+                types.entry(name).or_default().insert(rtype);
+            }
+        }
+        assert_eq!(
+            types,
+            [
+                ("", local_exec.iter().copied().collect()),
+                ("other", initial_exec.iter().copied().collect())
+            ]
+            .into_iter()
+            .collect(),
+            "{target:?}"
+        );
         let (mut saw_counter, mut saw_other_undef, mut saw_private) = (false, false, false);
         for e in symtab.as_chunks::<24>().0.iter() {
             let st_name = u32::from_le_bytes(e[0..4].try_into().unwrap()) as usize;

@@ -2644,6 +2644,7 @@ fn shared_input(soname: &str, funcs: &[&str], data: &[&str]) -> SharedInput {
             machine: NativeMachine::X86_64,
             exports: funcs.iter().chain(data).map(|s| s.to_string()).collect(),
             data_exports: data.iter().map(|s| s.to_string()).collect(),
+            tls_exports: Default::default(),
             object_sizes: Default::default(),
             export_symbols: Default::default(),
             export_versions: Default::default(),

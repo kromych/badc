@@ -245,6 +245,10 @@ pub struct MergedNative {
     pub stub_address_imports: alloc::collections::BTreeSet<usize>,
     /// Indices into [`Self::imports`] the image defines; see [`Preemption`].
     pub preemptible_imports: alloc::collections::BTreeSet<usize>,
+    /// Indices into [`Self::imports`] of shared-library thread-locals,
+    /// read through GOT slots that hold their offsets from the thread
+    /// pointer.
+    pub tls_imports: alloc::collections::BTreeSet<usize>,
     /// Concatenated standard DWARF byte streams from every
     /// input unit. Each unit's blob starts at
     /// `debug_*_bases[unit_idx]` inside the merged stream; the
@@ -997,6 +1001,14 @@ struct ResolverCalls {
     calls: BTreeSet<u64>,
 }
 
+/// Where a thread-local reference resolves.
+enum TlsBinding<'a> {
+    /// The executable's own block, at this offset from the thread pointer.
+    Static(i64),
+    /// A shared library's block, which the loader places.
+    Library(&'a SharedLibrary),
+}
+
 /// The state one native link accumulates. Each pass is a method;
 /// [`link_native_objects_with_shared_libs`] states their order.
 ///
@@ -1109,6 +1121,8 @@ struct Link<'a> {
     /// those some site branches to; a branch makes the import code.
     object_imports: BTreeSet<usize>,
     branch_imports: BTreeSet<usize>,
+    /// Import indices of shared-library thread-locals.
+    tls_imports: BTreeSet<usize>,
 
     pending_imports: Vec<PendingImportReloc>,
     applied_text_relocs: Vec<AppliedTextReloc>,
@@ -1204,6 +1218,7 @@ impl<'a> Link<'a> {
             eh_frame: Vec::new(),
             object_imports: BTreeSet::new(),
             branch_imports: BTreeSet::new(),
+            tls_imports: BTreeSet::new(),
             pending_imports: Vec::new(),
             applied_text_relocs: Vec::new(),
             data_abs_relocs: Vec::new(),
@@ -1483,12 +1498,15 @@ impl<'a> Link<'a> {
 
     /// A thread-local relocation no note fixup covers. A local-exec form
     /// takes `TPREL(S + A)` ([`Self::tp_offset`]); an executable rewrites the
-    /// other models' sequences to it ([`tls_relax`]). A shared library needs
-    /// the loader's dynamic TLS relocations, which this link does not make.
+    /// other models' sequences to it ([`tls_relax`]) where it defines the
+    /// variable. A shared library's thread-local sits where the loader places
+    /// that library's block, so an initial-exec reference to it reads a GOT
+    /// slot the loader fills. A shared library needs the loader's dynamic TLS
+    /// relocations, which this link does not make.
     fn apply_tls_reloc(
         &mut self,
         unit: usize,
-        sym: &NativeSymbol,
+        sym: &'a NativeSymbol,
         reloc: &NativeReloc,
         patch_offset: usize,
         site: &RelocSite<'_>,
@@ -1502,7 +1520,38 @@ impl<'a> Link<'a> {
         if !local_exec && (self.allow_undefined || !tls_relax::transitions(machine, reloc.rtype)) {
             return Err(site.unsupported());
         }
-        let value = self.tls_symbol_tpoff(unit, sym)? + reloc.addend;
+        let tpoff = match self.tls_binding(unit, sym)? {
+            TlsBinding::Static(tpoff) => tpoff,
+            TlsBinding::Library(_) if tls_relax::is_initial_exec(machine, reloc.rtype) => {
+                let idx = self.bind_import(sym, false, true);
+                self.tls_imports.insert(idx);
+                self.pending_imports.push(PendingImportReloc {
+                    text_offset: patch_offset as u64,
+                    import_index: idx,
+                    rtype: reloc.rtype,
+                    addend: reloc.addend,
+                    target_section: NativeSymSection::Undef,
+                    slot_load: true,
+                    sym_name: None,
+                });
+                return Ok(());
+            }
+            TlsBinding::Library(lib) if local_exec => {
+                return Err(site.library_thread_local(
+                    &lib.soname,
+                    "a local-exec access reaches only the executable's own thread-locals",
+                ));
+            }
+            // TODO: rewrite the general-dynamic and descriptor sequences to
+            // initial-exec, as GNU ld does.
+            TlsBinding::Library(lib) => {
+                return Err(site.library_thread_local(
+                    &lib.soname,
+                    "this link reaches it from an initial-exec access only",
+                ));
+            }
+        };
+        let value = tpoff + reloc.addend;
         if local_exec
             || (machine == NativeMachine::X86_64
                 && tls_relax::x86_64_dtpoff_field(reloc.rtype).is_some())
@@ -1532,11 +1581,12 @@ impl<'a> Link<'a> {
         .map_err(|expected| site.tls_sequence(expected))
     }
 
-    /// Offset from the thread pointer of the thread-local `sym` names, for a
-    /// reference from `unit`; 0 for the module base.
-    fn tls_symbol_tpoff(&self, unit: usize, sym: &NativeSymbol) -> Result<i64, C5Error> {
+    /// Where the thread-local `sym` names resolves for a reference from
+    /// `unit`: an offset from the thread pointer into the executable's own
+    /// block (0 for the module base), or the shared library defining it.
+    fn tls_binding(&self, unit: usize, sym: &NativeSymbol) -> Result<TlsBinding<'a>, C5Error> {
         if sym.section == NativeSymSection::Undef && sym.name == TLS_MODULE_BASE {
-            return Ok(0);
+            return Ok(TlsBinding::Static(0));
         }
         // A weak definition yields to a strong one elsewhere, so only a
         // local or strong definition in this unit resolves here.
@@ -1544,37 +1594,56 @@ impl<'a> Link<'a> {
             self.unit_tls_offset(unit, sym.value)
         } else if let Some(&at) = self.tls_symbol_offsets.get(sym.name.as_str()) {
             at
-        } else if self.defined.contains_key(sym.name.as_str()) {
-            return Err(link_err(
-                Code::RELOCATION,
-                MODULE,
-                &format!(
-                    "`{}` is accessed as a thread-local but defined as an ordinary object",
-                    sym.name
-                ),
-            ));
-        } else if let Some(lib) = self
-            .shared_libs
-            .iter()
-            .find(|l| l.exports.contains(&sym.name))
-        {
-            return Err(link_err(
-                Code::RELOCATION,
-                MODULE,
-                &format!(
-                    "thread-local `{}` is defined in shared library `{}`: an executable reaches \
-                     it through a GOT entry the loader fills, which this link does not make",
-                    sym.name, lib.soname,
-                ),
-            ));
         } else {
-            return Err(link_err(
+            return self
+                .library_thread_local(&sym.name)
+                .map(TlsBinding::Library);
+        };
+        Ok(TlsBinding::Static(self.tp_offset(offset)))
+    }
+
+    /// A reference other than a thread-local access to a name the binding
+    /// shared library exports as a thread-local is refused, as GNU ld
+    /// refuses it: the variable has an offset in each thread's block, not
+    /// an address the loader could bind.
+    fn refuse_library_thread_local(&self, name: &str) -> Result<(), C5Error> {
+        match self.shared_libs.iter().find(|l| l.exports.contains(name)) {
+            Some(lib) if lib.tls_exports.contains(name) => Err(link_err(
+                Code::RELOCATION,
+                MODULE,
+                &format!(
+                    "`{name}` is a thread-local of shared library `{}` but is referenced as \
+                     an ordinary symbol",
+                    lib.soname
+                ),
+            )),
+            _ => Ok(()),
+        }
+    }
+
+    /// The shared library defining the thread-local `name`, which the link
+    /// does not; what the name is instead is an error. The first `-l`
+    /// library exporting a name is the one a reference binds to.
+    fn library_thread_local(&self, name: &str) -> Result<&'a SharedLibrary, C5Error> {
+        let ordinary = |what: &str| {
+            let msg = format!("`{name}` is accessed as a thread-local but {what}");
+            Err(link_err(Code::RELOCATION, MODULE, &msg))
+        };
+        if self.defined.contains_key(name) {
+            return ordinary("defined as an ordinary object");
+        }
+        match self.shared_libs.iter().find(|l| l.exports.contains(name)) {
+            Some(lib) if lib.tls_exports.contains(name) => Ok(lib),
+            Some(lib) => ordinary(&format!(
+                "shared library `{}` defines it as an ordinary symbol",
+                lib.soname
+            )),
+            None => Err(link_err(
                 Code::UNDEFINED_SYMBOL,
                 MODULE,
-                &format!("undefined reference to `{}`", sym.name),
-            ));
-        };
-        Ok(self.tp_offset(offset))
+                &format!("undefined reference to `{name}`"),
+            )),
+        }
     }
 
     /// The `__tls_get_addr` sequences of `obj` an executable link rewrites.
@@ -2912,6 +2981,9 @@ impl<'a> Link<'a> {
                 && self.extern_data_names.contains(name));
         let routed = self.is_routed_import(name);
         let shlib_exported = self.shlib_exports.contains(name);
+        if shlib_exported && !routed {
+            self.refuse_library_thread_local(name)?;
+        }
         if sym.binding == 2 && !is_data_binding && !routed && !shlib_exported {
             // A distance from the GOT base takes address 0 for the
             // symbol, as GNU ld resolves it; the site's guard skips it.
@@ -3032,12 +3104,19 @@ impl<'a> Link<'a> {
                     ElfTpoffTarget::Extern(name) => {
                         match self.tls_symbol_offsets.get(name.as_str()) {
                             Some(o) => *o,
+                            // These forms reach the image's own block only.
                             None => {
-                                return Err(internal_err(
+                                let lib = self.library_thread_local(name)?;
+                                let at =
+                                    super::object::locate_reloc(&obj.source, ".text", *text_off);
+                                return Err(link_err(
+                                    Code::RELOCATION,
                                     MODULE,
                                     &format!(
-                                        "link_native_objects: TLS access references undefined \
-                                 `_Thread_local` symbol `{name}`",
+                                        "{at}: `{name}` is a thread-local of shared library \
+                                         `{}`, and this access reaches only the image's own \
+                                         thread-locals",
+                                        lib.soname,
                                     ),
                                 ));
                             }
@@ -3305,6 +3384,9 @@ impl<'a> Link<'a> {
                                     sym.name,
                                 ),
                             ));
+                        }
+                        if !self.is_routed_import(sym.name.as_str()) {
+                            self.refuse_library_thread_local(&sym.name)?;
                         }
                         let idx = self.record_import(sym.name.as_str());
                         self.flat_imports.insert(sym.name.clone());
@@ -4209,6 +4291,7 @@ impl<'a> Link<'a> {
             object_imports: self.object_imports,
             stub_address_imports: BTreeSet::new(),
             preemptible_imports,
+            tls_imports: self.tls_imports,
             debug_info: dbg.info.bytes,
             debug_abbrev: dbg.abbrev,
             debug_line: dbg.line.bytes,
@@ -5944,6 +6027,7 @@ mod tests {
             machine: NativeMachine::Aarch64,
             exports: names("tbl"),
             data_exports: names("tbl"),
+            tls_exports: Default::default(),
             object_sizes: Default::default(),
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
@@ -6054,6 +6138,7 @@ mod tests {
             machine: NativeMachine::Aarch64,
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
             data_exports: alloc::collections::BTreeSet::new(),
+            tls_exports: Default::default(),
             object_sizes: Default::default(),
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
@@ -6092,6 +6177,7 @@ mod tests {
             machine: NativeMachine::Aarch64,
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
             data_exports: alloc::collections::BTreeSet::new(),
+            tls_exports: Default::default(),
             object_sizes: Default::default(),
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
@@ -7604,32 +7690,216 @@ mod tests {
         );
     }
 
-    /// A thread-local a shared library defines is refused by name.
-    #[test]
-    fn a_thread_local_of_a_shared_library_is_refused_by_name() {
-        use crate::c5::object::elf_reloc_types::R_X86_64_GOTTPOFF;
-        let objs = tls_accessor(
-            NativeMachine::X86_64,
-            alloc::vec![0x48, 0x8b, 0x05, 0, 0, 0, 0],
-            &[(3, 2, R_X86_64_GOTTPOFF, -4)],
-        );
-        let lib = SharedLibrary {
+    /// `libtl.so` exporting `ext`, as a thread-local or an ordinary object.
+    fn tls_library(machine: NativeMachine, tls: bool) -> SharedLibrary {
+        let ext = || ["ext".to_string()].into_iter().collect();
+        SharedLibrary {
             soname: "libtl.so".to_string(),
-            machine: NativeMachine::X86_64,
-            exports: ["ext".to_string()].into_iter().collect(),
-            data_exports: Default::default(),
+            machine,
+            exports: ext(),
+            data_exports: if tls { Default::default() } else { ext() },
+            tls_exports: if tls { ext() } else { Default::default() },
             object_sizes: Default::default(),
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+        }
+    }
+
+    /// An initial-exec reference to a thread-local a shared library
+    /// defines keeps its code and reads the GOT slot of an import, which
+    /// the loader fills with the variable's offset from the thread pointer.
+    #[test]
+    fn an_initial_exec_reference_to_a_library_thread_local_reads_a_got_slot() {
+        use crate::c5::object::elf_reloc_types::{
+            R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21, R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC,
+            R_X86_64_GOTTPOFF,
         };
-        let msg = format!(
-            "{}",
-            link_native_objects_with_shared_libs(&objs[..1], false, &[lib]).expect_err("refused")
+        let words = |w: &[u32]| -> Vec<u8> { w.iter().flat_map(|w| w.to_le_bytes()).collect() };
+        let cases = [
+            (
+                NativeMachine::X86_64,
+                alloc::vec![
+                    0x48, 0x8b, 0x05, 0, 0, 0, 0, // mov ext@gottpoff(%rip), %rax
+                    0x4c, 0x03, 0x25, 0, 0, 0, 0, // add ext@gottpoff(%rip), %r12
+                ],
+                alloc::vec![
+                    (3, 2, R_X86_64_GOTTPOFF, -4),
+                    (10, 2, R_X86_64_GOTTPOFF, -4)
+                ],
+            ),
+            (
+                NativeMachine::Aarch64,
+                words(&[
+                    0x9000_0003, // adrp x3, :gottprel:ext
+                    0xf940_0063, // ldr x3, [x3, :gottprel_lo12:ext]
+                ]),
+                alloc::vec![
+                    (0, 2, R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21, 0),
+                    (4, 2, R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, 0),
+                ],
+            ),
+        ];
+        for (machine, code, relocs) in cases {
+            let objs = tls_accessor(machine, code.clone(), &relocs);
+            let lib = tls_library(machine, true);
+            let merged =
+                link_native_objects_with_shared_libs(&objs[..1], false, &[lib]).expect("link");
+            assert_eq!(merged.imports, ["ext"], "{machine:?}");
+            assert_eq!(merged.tls_imports, [0].into(), "{machine:?}");
+            assert_eq!(merged.dylibs, ["libtl.so"], "{machine:?}");
+            assert_eq!(&merged.text[..code.len()], &code[..], "{machine:?}");
+            let sites: Vec<_> = (merged.pending_imports.iter())
+                .map(|p| {
+                    (
+                        p.text_offset,
+                        p.import_index,
+                        p.rtype,
+                        p.addend,
+                        p.slot_load,
+                    )
+                })
+                .collect();
+            let want: Vec<_> = (relocs.iter())
+                .map(|&(at, _, rtype, addend)| (at, 0, rtype, addend, true))
+                .collect();
+            assert_eq!(sites, want, "{machine:?}");
+        }
+    }
+
+    /// A local-exec access cannot reach a shared library's thread-local,
+    /// and the link rewrites no other model's sequence to initial-exec.
+    #[test]
+    fn a_library_thread_local_is_refused_to_the_other_models() {
+        use crate::c5::object::elf_reloc_types::{R_X86_64_TLSGD, R_X86_64_TPOFF32};
+        let refused = |code: &[u8], relocs: &[(u64, usize, u32, i64)]| {
+            let objs = tls_accessor(NativeMachine::X86_64, code.to_vec(), relocs);
+            let lib = tls_library(NativeMachine::X86_64, true);
+            let err = link_native_objects_with_shared_libs(&objs[..1], false, &[lib]);
+            format!("{}", err.expect_err("refused"))
+        };
+        let msg = refused(
+            &[0x48, 0x81, 0xc0, 0, 0, 0, 0], // add $ext@tpoff, %rax
+            &[(3, 2, R_X86_64_TPOFF32, 0)],
         );
         assert!(
-            msg.contains("thread-local `ext` is defined in shared library `libtl.so`"),
+            msg.contains(
+                "R_X86_64_TPOFF32 (23) against symbol `ext`, a thread-local of shared library \
+                 `libtl.so`: a local-exec access reaches only the executable's own thread-locals"
+            ),
             "{msg}"
+        );
+        let msg = refused(
+            &[
+                0x66, 0x48, 0x8d, 0x3d, 0, 0, 0, 0, // data16 lea ext@tlsgd(%rip), %rdi
+                0x66, 0x66, 0x48, 0xe8, 0, 0, 0, 0, // call __tls_get_addr@plt
+            ],
+            &[(4, 2, R_X86_64_TLSGD, -4), (12, 3, R_X86_64_PLT32, -4)],
+        );
+        assert!(
+            msg.contains("R_X86_64_TLSGD (19) against symbol `ext`, a thread-local of shared"),
+            "{msg}"
+        );
+    }
+
+    /// A thread-local access binds no library's ordinary symbol, and no
+    /// other reference binds a library's thread-local: neither names an
+    /// address the loader could give the other, and GNU ld refuses both.
+    #[test]
+    fn a_thread_local_and_an_ordinary_symbol_do_not_bind_to_each_other() {
+        use crate::c5::object::elf_reloc_types::R_X86_64_GOTTPOFF;
+        let link = |obj: NativeObject, tls: bool| {
+            let lib = tls_library(NativeMachine::X86_64, tls);
+            let err = link_native_objects_with_shared_libs(&[obj], false, &[lib]);
+            format!("{}", err.expect_err("refused"))
+        };
+        let objs = tls_accessor(
+            NativeMachine::X86_64,
+            alloc::vec![0x48, 0x8b, 0x05, 0, 0, 0, 0], // mov ext@gottpoff(%rip), %rax
+            &[(3, 2, R_X86_64_GOTTPOFF, -4)],
+        );
+        let msg = link(objs[0].clone(), false);
+        assert!(
+            msg.contains(
+                "`ext` is accessed as a thread-local but shared library `libtl.so` defines it \
+                 as an ordinary symbol"
+            ),
+            "{msg}"
+        );
+        let ordinary = |text: bool| {
+            let mut o = blank_object(NativeMachine::X86_64);
+            o.symbols = alloc::vec![
+                NativeSymbol {
+                    name: String::new(),
+                    section: NativeSymSection::Undef,
+                    value: 0,
+                    size: 0,
+                    binding: 0,
+                    kind: 0,
+                    visibility: 0,
+                },
+                NativeSymbol {
+                    name: "ext".to_string(),
+                    section: NativeSymSection::Undef,
+                    value: 0,
+                    size: 0,
+                    binding: 1,
+                    kind: 0,
+                    visibility: 0,
+                },
+            ];
+            let reloc = |offset, rtype, addend| NativeReloc {
+                offset,
+                sym_idx: 1,
+                rtype,
+                addend,
+            };
+            if text {
+                // `movl ext(%rip), %eax`
+                o.text = alloc::vec![0x8b, 0x05, 0, 0, 0, 0];
+                o.text_relocs = alloc::vec![reloc(2, R_X86_64_PC32, -4)];
+            } else {
+                // `void *p = &ext;`
+                o.data = alloc::vec![0; 8];
+                o.data_relocs = alloc::vec![reloc(0, R_X86_64_64, 0)];
+            }
+            o
+        };
+        for text in [true, false] {
+            let msg = link(ordinary(text), true);
+            assert!(
+                msg.contains(
+                    "`ext` is a thread-local of shared library `libtl.so` but is referenced as \
+                     an ordinary symbol"
+                ),
+                "{msg}"
+            );
+        }
+    }
+
+    /// A noted thread-local access no unit defines is an undefined
+    /// reference, and one to a shared library's thread-local is refused:
+    /// the noted forms reach the image's own block only.
+    #[test]
+    fn a_noted_access_to_an_undefined_thread_local_is_diagnosed() {
+        let mut obj = blank_object(NativeMachine::X86_64);
+        // mov %fs:0, %rax; add $0, %rax
+        obj.text = alloc::vec![0x64, 0x48, 0x8b, 0x04, 0x25, 0, 0, 0, 0, 0x48, 0x81, 0xc0];
+        obj.text.extend_from_slice(&[0; 4]);
+        obj.elf_tpoff_fixups = alloc::vec![(12, ElfTpoffTarget::Extern("ext".to_string()))];
+        let err = link_native_objects(core::slice::from_ref(&obj)).expect_err("undefined");
+        assert!(
+            format!("{err}").contains("undefined reference to `ext`"),
+            "{err}"
+        );
+        let lib = tls_library(NativeMachine::X86_64, true);
+        let err = link_native_objects_with_shared_libs(&[obj], false, &[lib]).expect_err("lib");
+        assert!(
+            format!("{err}").contains(
+                "`ext` is a thread-local of shared library `libtl.so`, and this access reaches \
+                 only the image's own thread-locals"
+            ),
+            "{err}"
         );
     }
 
@@ -7646,6 +7916,7 @@ mod tests {
             machine: NativeMachine::X86_64,
             exports: ["counter".to_string()].into_iter().collect(),
             data_exports: ["counter".to_string()].into_iter().collect(),
+            tls_exports: Default::default(),
             object_sizes: if sizes {
                 [("counter".to_string(), (24, 8))].into_iter().collect()
             } else {
@@ -7734,6 +8005,7 @@ mod tests {
             machine: NativeMachine::X86_64,
             exports: ["counter".to_string()].into_iter().collect(),
             data_exports: ["counter".to_string()].into_iter().collect(),
+            tls_exports: Default::default(),
             object_sizes: [("counter".to_string(), (4, 4))].into_iter().collect(),
             export_symbols: Default::default(),
             export_versions: Default::default(),

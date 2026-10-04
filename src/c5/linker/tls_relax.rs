@@ -57,6 +57,19 @@ pub(crate) fn transitions(machine: NativeMachine, rtype: u32) -> bool {
     }
 }
 
+/// Whether a relocation of this type addresses the GOT slot holding a
+/// thread-local's offset from the thread pointer: the initial-exec model.
+pub(crate) fn is_initial_exec(machine: NativeMachine, rtype: u32) -> bool {
+    matches!(
+        (machine, rtype),
+        (NativeMachine::X86_64, R_X86_64_GOTTPOFF)
+            | (
+                NativeMachine::Aarch64,
+                R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21 | R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC
+            )
+    )
+}
+
 /// Whether a relocation of this type opens a sequence calling `__tls_get_addr`.
 pub(crate) fn calls_resolver(machine: NativeMachine, rtype: u32) -> bool {
     matches!(

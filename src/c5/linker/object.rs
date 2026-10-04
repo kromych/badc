@@ -732,6 +732,7 @@ pub const STT_FILE: u8 = 4;
 pub const STV_DEFAULT: u8 = 0;
 pub const STV_INTERNAL: u8 = 1;
 pub const STV_HIDDEN: u8 = 2;
+pub const STV_PROTECTED: u8 = 3;
 
 /// One entry from the unit's `.symtab`. Section symbols (the
 /// `STT_SECTION` LOCAL entries the writer emits) are dropped

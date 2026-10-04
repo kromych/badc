@@ -2061,11 +2061,10 @@ impl<'a> Link<'a> {
                     section: NativeSymSection::Data,
                     value: off,
                     size: 0,
-                    // A boundary address, not an object: the same
-                    // `STT_NOTYPE` the reference toolchain gives `_edata`
-                    // and `__bss_start`.
+                    // A boundary address, not an object: `STT_NOTYPE`, hidden
+                    // as GNU ld's default script provides it.
                     kind: super::object::STT_NOTYPE,
-                    visibility: super::object::STV_DEFAULT,
+                    visibility: super::object::STV_HIDDEN,
                     weak: false,
                 },
             );
@@ -2087,6 +2086,7 @@ impl<'a> Link<'a> {
                 },
             );
         }
+        // Protected, GNU ld's `-z start-stop-visibility` default.
         for (sym, section, value) in &self.start_stop_bounds {
             if self.defined.contains_key(sym.as_str()) {
                 continue;
@@ -2098,7 +2098,7 @@ impl<'a> Link<'a> {
                     value: *value,
                     size: 0,
                     kind: super::object::STT_NOTYPE,
-                    visibility: super::object::STV_DEFAULT,
+                    visibility: super::object::STV_PROTECTED,
                     weak: false,
                 },
             );

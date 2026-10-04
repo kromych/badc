@@ -4532,6 +4532,98 @@ fn elf_dynsym_entries(bytes: &[u8]) -> std::collections::BTreeMap<String, Dynsym
     out
 }
 
+/// Each `.rela.dyn` entry naming a `.dynsym` symbol, as `(name, type)`, and
+/// every name `.dynsym` holds, as often as it holds it.
+#[cfg(feature = "native-emit")]
+fn dynamic_symbol_relocs(image: &[u8]) -> (Vec<(String, u32)>, Vec<String>) {
+    let dynsym = elf_section_bytes(image, b".dynsym");
+    let dynstr = elf_section_bytes(image, b".dynstr");
+    let name = |k: usize| {
+        let at = u32::from_le_bytes(dynsym[k * 24..k * 24 + 4].try_into().unwrap()) as usize;
+        let end = at + dynstr[at..].iter().position(|&b| b == 0).unwrap();
+        String::from_utf8_lossy(&dynstr[at..end]).into_owned()
+    };
+    let relocs = (elf_section_bytes(image, b".rela.dyn").chunks(24))
+        .map(|e| u64::from_le_bytes(e[8..16].try_into().unwrap()))
+        .filter(|info| info >> 32 != 0)
+        .map(|info| (name((info >> 32) as usize), info as u32))
+        .collect();
+    (relocs, (1..dynsym.len() / 24).map(name).collect())
+}
+
+/// The bounds a link defines take GNU ld's visibility: the init and fini
+/// array bounds hidden, as its default script provides them, a section's
+/// `__start_` and `__stop_` protected, `-z start-stop-visibility`'s default.
+/// An image exporting every definition publishes none of them.
+#[cfg(feature = "native-emit")]
+#[test]
+fn link_defined_bounds_are_hidden_or_protected() {
+    use crate::c5::linker::{
+        ImageOptions, emit_plt_for, link_native_objects, parse_native_elf,
+        write_native_image_from_merged_ex,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let units = [
+        "__attribute__((section(\"mytab\"), used)) int tab_entry = 1;\n",
+        "extern int __start_mytab[], __stop_mytab[];\n\
+         extern char __init_array_start[], __fini_array_end[];\n\
+         int main(void) { return __stop_mytab - __start_mytab; }\n\
+         char *init_start(void) { return __init_array_start; }\n\
+         char *fini_end(void) { return __fini_array_end; }\n",
+    ];
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let objs: Vec<_> = (units.iter())
+            .map(|src| {
+                let options = crate::CompileOptions::default().with_no_entry_point(true);
+                let program = Compiler::with_options(src.to_string(), target, options)
+                    .compile()
+                    .expect("compile");
+                let opts = NativeOptions {
+                    output_kind: OutputKind::Relocatable,
+                    pic_link: true,
+                    ..Default::default()
+                };
+                let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+                parse_native_elf(&bytes).expect("parse ET_REL")
+            })
+            .collect();
+        let mut merged = link_native_objects(&objs).expect("link");
+        let stubs = emit_plt_for(&mut merged, target, false).expect("plt");
+        let image_opts = ImageOptions {
+            export_all: true,
+            export_data: true,
+            ..Default::default()
+        };
+        let image = write_native_image_from_merged_ex(
+            &merged,
+            &stubs,
+            "main",
+            None,
+            OutputKind::Executable,
+            target,
+            None,
+            &image_opts,
+        )
+        .expect("image");
+        let what = format!("{target:?}");
+        let (relocs, names) = dynamic_symbol_relocs(&image);
+        assert!(relocs.is_empty(), "{what}: {relocs:?}");
+        assert!(names.iter().any(|n| n == "tab_entry"), "{what}: {names:?}");
+        // `(binding, visibility)` of each bound in the image's symbol table.
+        for (bound, row) in [
+            ("__init_array_start", (0, 2)),
+            ("__fini_array_end", (0, 2)),
+            ("__start_mytab", (1, 3)),
+            ("__stop_mytab", (1, 3)),
+        ] {
+            assert!(!names.iter().any(|n| n == bound), "{what}: {names:?}");
+            let sym = (merged.symbols.iter()).find(|s| s.name == bound);
+            let sym = sym.expect(bound);
+            assert_eq!((sym.info >> 4, sym.other & 3), row, "{what}: {bound}");
+        }
+    }
+}
+
 /// Within a PE image a function import's address is its stub: the data slot
 /// holds it, and a slot load of the address is rewritten to take it.
 #[cfg(feature = "native-emit")]

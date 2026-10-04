@@ -122,6 +122,8 @@ pub(super) struct ConstTypeName {
     /// `const` among the specifiers of a non-pointer type, or one after
     /// the outermost `*`.
     pub object_is_const: bool,
+    /// The function type the named type leads to, and its depth.
+    pub fn_ty: Option<(crate::c5::symbol::FnType, i64)>,
 }
 
 impl ConstRoot {
@@ -2086,6 +2088,7 @@ impl Compiler {
 
     fn parse_const_type_name_inner(&mut self) -> Result<ConstTypeName, C5Error> {
         let ty = self.parse_type_name_base()?;
+        let base_fn = self.carriers_fn_type();
         self.note_cast_type_name(ty);
         // Consumed as a type name, not bound through a declarator.
         self.pending.bare_function_type_declarator = false;
@@ -2094,11 +2097,13 @@ impl Compiler {
         let ptr_levels = ptr.levels;
         // The first `*` on a function-type typedef forms the pointer to the
         // function, as in a declarator.
-        let ty = if core::mem::take(&mut self.pending.base_is_function_type) && ptr_levels > 0 {
+        let absorbed = core::mem::take(&mut self.pending.base_is_function_type) && ptr_levels > 0;
+        let ty = if absorbed {
             super::types::absorb_function_level(ptr.ty, super::types::ptr_depth_of(ty))
         } else {
             ptr.ty
         };
+        let fn_ty = base_fn.map(|(f, d)| (f, d + ptr_levels - i64::from(absorbed)));
         // A `const` after the outermost `*` qualifies the object itself.
         let outer_const = ptr.outer_const;
         while self.lex.tk == Token::TypeQual {
@@ -2109,6 +2114,7 @@ impl Compiler {
             ty,
             base_dims,
             object_is_const: outer_const || (base_is_const && ptr_levels == 0),
+            fn_ty,
         })
     }
 
@@ -2190,8 +2196,9 @@ impl Compiler {
                 // element for one dimension, by the array-aggregate tag for
                 // more so each subscript strides by its row.
                 if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
+                    let elem = (ty, name.fn_ty.clone());
                     let (off, sym, dims) =
-                        self.emit_array_compound_literal_body(ty, &name.base_dims)?;
+                        self.emit_array_compound_literal_body(elem, &name.base_dims)?;
                     self.symbols[sym].storage_is_const = name.object_is_const;
                     let count = dims.first().copied().unwrap_or(0);
                     let desig_ty = self.array_desig_ty(ty, &dims, count);
@@ -2735,8 +2742,9 @@ impl Compiler {
                 // per leading index; the final index reads the staged
                 // element back as the constant value.
                 if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
+                    let elem = (target_ty, name.fn_ty.clone());
                     let (off, sym, dims) =
-                        self.emit_array_compound_literal_body(target_ty, &name.base_dims)?;
+                        self.emit_array_compound_literal_body(elem, &name.base_dims)?;
                     self.pending.const_expr_compound_literal = true;
                     self.symbols[sym].storage_is_const = name.object_is_const;
                     let elem_size = (self.size_of_type(target_ty) as i64).max(1);

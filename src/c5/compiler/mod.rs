@@ -2392,6 +2392,9 @@ pub struct Compiler {
     /// Where the operand the precedence loop is extending begins, so a
     /// diagnostic about a call can spell the callee expression.
     operand_start: usize,
+    /// The function type the elements of the array being initialized lead
+    /// to and their depth, for the conversion check of each element.
+    array_elem_fn: Option<(crate::c5::symbol::FnType, i64)>,
     /// The composite type and the function body of each identifier with
     /// linkage, by symbol index.
     linked_entities: hashbrown::HashMap<usize, redeclaration::LinkedEntity>,
@@ -3022,6 +3025,7 @@ impl Compiler {
             dylibs,
             warned_implicit_ret: alloc::collections::BTreeSet::new(),
             operand_start: 0,
+            array_elem_fn: None,
             linked_entities: hashbrown::HashMap::new(),
             target,
             next_ent_pc: 0,

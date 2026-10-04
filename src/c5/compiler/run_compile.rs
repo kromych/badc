@@ -2386,7 +2386,7 @@ impl Compiler {
         was_tentative_glo: bool,
     ) -> Result<(), C5Error> {
         self.pending.init_inner_dims = self.inner_dims_of(id_idx);
-        let elements = self.collect_array_initializer(ty)?;
+        let elements = self.collect_array_initializer(ty, self.elem_fn_type(id_idx))?;
         let final_size = elements.len() as i64;
         self.symbols[id_idx].array_size = final_size;
         // `T xs[] = {}` resolves to zero elements; keep the
@@ -2820,7 +2820,7 @@ impl Compiler {
         } else if array_size > 0 {
             self.pending.init_inner_dims = self.inner_dims_of(id_idx);
             self.pending.init_target_array_size = array_size;
-            let elements = self.collect_array_initializer(ty)?;
+            let elements = self.collect_array_initializer(ty, self.elem_fn_type(id_idx))?;
             if elements.len() > array_size as usize {
                 return Err(self.compile_err(
                     Code::INVALID_INITIALIZER,

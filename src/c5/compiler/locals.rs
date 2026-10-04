@@ -1257,7 +1257,7 @@ impl Compiler {
                 return Ok(());
             }
             self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
-            let elements = self.collect_array_initializer(ty)?;
+            let elements = self.collect_array_initializer(ty, self.elem_fn_type(loc_idx))?;
             let final_size = elements.len() as i64;
             let total_bytes = (self.size_of_type(ty) as i64) * final_size;
             let aligned = ((total_bytes + 7) / 8) * 8;
@@ -1292,7 +1292,7 @@ impl Compiler {
         } else if array_size > 0 {
             self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
             self.pending.init_target_array_size = array_size;
-            let elements = self.collect_array_initializer(ty)?;
+            let elements = self.collect_array_initializer(ty, self.elem_fn_type(loc_idx))?;
             // C99 6.7.8p2: the initializer may not provide a value for an
             // object outside the entity being initialized. The storage
             // reserved above holds `array_size` elements, so a longer list
@@ -1910,7 +1910,7 @@ impl Compiler {
                     self.emit_local_array_init_runtime(
                         local_val,
                         0,
-                        ty,
+                        (ty, self.elem_fn_type(loc_idx)),
                         declared_array_size,
                         &inner,
                         &var_name,
@@ -1919,7 +1919,7 @@ impl Compiler {
                 }
                 self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
                 self.pending.init_target_array_size = declared_array_size;
-                let elements = self.collect_array_initializer(ty)?;
+                let elements = self.collect_array_initializer(ty, self.elem_fn_type(loc_idx))?;
                 let init_count = elements.len();
                 let max = declared_array_size as usize;
                 if init_count > max {
@@ -2051,7 +2051,7 @@ impl Compiler {
                 self.emit_local_array_init_runtime(
                     local_val,
                     0,
-                    ty,
+                    (ty, None),
                     total,
                     &inner_dims,
                     &var_name,
@@ -2115,7 +2115,12 @@ impl Compiler {
                 let zero_off = self.stage_template_bytes(full_bytes);
                 self.emit_local_array_init(local_val, zero_off, full_bytes);
                 self.emit_local_array_init_runtime(
-                    local_val, 0, ty, final_size, &inner, &var_name,
+                    local_val,
+                    0,
+                    (ty, self.elem_fn_type(loc_idx)),
+                    final_size,
+                    &inner,
+                    &var_name,
                 )?;
                 return Ok(());
             }
@@ -2127,7 +2132,7 @@ impl Compiler {
             // expressions are present.
         }
         self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
-        let elements = self.collect_array_initializer(ty)?;
+        let elements = self.collect_array_initializer(ty, self.elem_fn_type(loc_idx))?;
         let final_size = elements.len() as i64;
         self.symbols[loc_idx].array_size = final_size;
         self.symbols[loc_idx].val = self.reserve_slots(self.local_storage_slots(ty, final_size));
@@ -2180,7 +2185,7 @@ impl Compiler {
             self.emit_local_array_init_runtime(
                 local_val,
                 0,
-                ty,
+                (ty, None),
                 declared_array_size,
                 &inner,
                 var_name,
@@ -2409,7 +2414,7 @@ impl Compiler {
     #[allow(clippy::needless_late_init)]
     pub(super) fn parse_block_compound_literal(
         &mut self,
-        t: i64,
+        (t, elem_fn): (i64, Option<(crate::c5::symbol::FnType, i64)>),
         array_dims: &[i64],
     ) -> Result<(), C5Error> {
         // A compound literal reuses the three pending-init carriers as
@@ -2481,7 +2486,7 @@ impl Compiler {
                     self.emit_local_array_init_runtime(
                         slot,
                         0,
-                        elem_ty,
+                        (elem_ty, elem_fn.clone()),
                         count,
                         inner_dims,
                         "<compound literal>",
@@ -2490,7 +2495,7 @@ impl Compiler {
                     self.stage_struct_array_literal(slot, elem_ty, rows, inner_dims, full)?;
                 } else {
                     self.pending.init_inner_dims = inner_dims.to_vec();
-                    let elements = self.collect_array_initializer(elem_ty)?;
+                    let elements = self.collect_array_initializer(elem_ty, elem_fn.clone())?;
                     let (start, packed) = self.pack_initializer_into_data(elem_ty, &elements)?;
                     // C99 6.7.8p21: positions the list leaves out are
                     // zero; pad so the single Mcpy covers the object.
@@ -2522,7 +2527,7 @@ impl Compiler {
                     self.emit_local_array_init_runtime(
                         slot,
                         0,
-                        elem_ty,
+                        (elem_ty, elem_fn.clone()),
                         count,
                         inner_dims,
                         "<compound literal>",
@@ -2542,7 +2547,7 @@ impl Compiler {
                 } else {
                     self.pending.init_target_array_size = count;
                     self.pending.init_inner_dims = inner_dims.to_vec();
-                    let elements = self.collect_array_initializer(elem_ty)?;
+                    let elements = self.collect_array_initializer(elem_ty, elem_fn.clone())?;
                     if elements.len() as i64 > count {
                         return Err(self.compile_err(
                             Code::INVALID_INITIALIZER,
@@ -2874,15 +2879,18 @@ impl Compiler {
     /// `ty` the element type; `max` the declared dimension. On
     /// entry the current token is `{`; on return it's the token
     /// after the matching `}`.
+    /// `elem` is the element type and the function type an element leads
+    /// to, if any.
     pub(super) fn emit_local_array_init_runtime(
         &mut self,
         local_val: i64,
         base: i64,
-        ty: i64,
+        elem: (i64, Option<(crate::c5::symbol::FnType, i64)>),
         total_count: i64,
         inner_dims: &[i64],
         var_name: &str,
     ) -> Result<(), C5Error> {
+        let (ty, elem_fn) = elem;
         let elem_size = self.size_of_type(ty) as i64;
         // Build the full dimension list, outermost first. `inner_dims`
         // are the fixed inner dimensions (`array_dims[1..]`); the outer
@@ -2897,7 +2905,10 @@ impl Compiler {
         let mut dims = alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
         dims.push(outer.max(0));
         dims.extend_from_slice(inner_dims);
-        self.fill_array_init_runtime(local_val, base, &dims, ty, elem_size, var_name)
+        let outer = core::mem::replace(&mut self.array_elem_fn, elem_fn);
+        let r = self.fill_array_init_runtime(local_val, base, &dims, ty, elem_size, var_name);
+        self.array_elem_fn = outer;
+        r
     }
 
     /// Parse one brace level of a runtime array initializer at byte

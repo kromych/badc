@@ -5493,6 +5493,67 @@ fn a_call_through_any_callee_checks_its_arguments() {
     }
 }
 
+/// C99 6.7.8p11 converts each scalar of a brace initializer as by
+/// assignment, so a pointer to a function initializes one only from a
+/// compatible function type (6.7.5.3p15): a member, an element, a nested
+/// aggregate's leaf, a designated one and a compound literal's alike, in
+/// static and automatic objects. An incompatible one is the B3029 error; a
+/// compatible one, a null pointer and a cast are silent.
+#[test]
+fn a_brace_initializer_compares_function_pointer_leaves() {
+    use crate::diag::{Code, Config, Level};
+    use crate::{CompileOptions, Compiler, Target};
+    let src = "int f(void);\n\
+               int g(int);\n\
+               typedef int (*fn_t)(void);\n\
+               struct T { fn_t m; fn_t arr[2]; };\n\
+               struct T s1 = { g };\n\
+               struct T s2 = { f, { f, g } };\n\
+               fn_t a1[2] = { f, g };\n\
+               fn_t a2[] = { g };\n\
+               fn_t a3[2][1] = { { f }, { g } };\n\
+               struct T s3 = { .m = g };\n\
+               fn_t a4[3] = { [2] = g };\n\
+               struct T st[2] = { { f }, { g } };\n\
+               static fn_t *cl = (fn_t[]){ g };\n\
+               fn_t ok[3] = { f, 0, (fn_t)g };\n\
+               void h(int c) {\n\
+               \tstruct T t1 = { g };\n\
+               \tfn_t b1[2] = { f, g };\n\
+               \tfn_t b2[1] = { c ? f : f };\n\
+               \tstatic fn_t b3[1] = { g };\n\
+               \tstruct T t2 = { .arr = { f, g } };\n\
+               \tstruct T *t3 = &(struct T){ g };\n\
+               \tfn_t *b4 = (fn_t[1]){ g };\n\
+               \t(void)t1; (void)b1; (void)b2; (void)b3; (void)t2; (void)t3; (void)b4;\n\
+               }\n";
+    let compile = |config: Config| {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_diag(config);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts).compile()
+    };
+    let err = compile(Config::new()).err().map(|e| e.to_string());
+    let stops = ":5: error: incompatible function pointer types in initializer";
+    assert!(err.as_deref().is_some_and(|e| e.contains(stops)), "{err:?}");
+    let mut lowered = Config::new();
+    lowered.set_level(Code::INCOMPATIBLE_POINTER_TYPES, Level::Warning);
+    let program = compile(lowered).unwrap_or_else(|e| panic!("{e}"));
+    let lines: alloc::vec::Vec<u32> = program
+        .warnings
+        .iter()
+        .filter(|w| {
+            w.code == Code::INCOMPATIBLE_POINTER_TYPES
+                && w.text
+                    .contains("(declared=`int (*)(void)`, init=`int (*)(int)`)")
+        })
+        .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+        .collect();
+    let want = [5, 6, 7, 8, 9, 10, 11, 12, 13, 16, 17, 19, 20, 21, 22];
+    assert_eq!(lines, want, "{:?}", program.warnings);
+    assert_eq!(program.warnings.len(), want.len(), "{:?}", program.warnings);
+}
+
 /// C99 6.5.16.1p1 lets a pointer gain qualifiers only on the type it points
 /// to; a qualifier difference further down (`T **` as `const T **`) makes the
 /// pointed-to types incompatible (6.7.3p9). As clang gives it, that alone is

@@ -2898,7 +2898,12 @@ impl Compiler {
             // `(row[2]){...}` with `typedef int row[3]` is `int[2][3]`
             // (C99 6.7.7); a `*` absorbed the typedef array into the
             // pointee instead.
-            self.parse_block_compound_literal(type_name.ty, &type_name.dims)?;
+            let elem_fn = type_name
+                .fn_ty
+                .as_ref()
+                .filter(|f| f.ptr_depth >= 1 && !type_name.dims.is_empty())
+                .map(|f| (f.f.clone(), f.ptr_depth as i64));
+            self.parse_block_compound_literal((type_name.ty, elem_fn), &type_name.dims)?;
             // gcc answers unknown for a compound literal's object.
             self.pending.object_ref = None;
             if let Some(id) = self.ast_acc

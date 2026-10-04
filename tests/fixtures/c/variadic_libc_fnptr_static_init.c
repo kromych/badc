@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-typedef int (*psn)(char *, unsigned long, const char *, ...);
+typedef int (*psn)(char *, size_t, const char *, ...);
 psn table[2] = { snprintf, snprintf };
 
 int main(void) {

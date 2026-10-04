@@ -990,13 +990,18 @@ impl Compiler {
     /// literal, valid for a target whose element type matches it, and a
     /// brace list; a string literal inside a brace list contributes its
     /// data-segment offset and the relocation for it.
+    /// `elem_fn` is the function type an element leads to, if any.
     pub(super) fn collect_array_initializer(
         &mut self,
         elem_ty: i64,
+        elem_fn: Option<(crate::c5::symbol::FnType, i64)>,
     ) -> Result<Vec<(i128, InitElemReloc)>, C5Error> {
-        self.with_nesting("initializer", |c| {
+        let outer = core::mem::replace(&mut self.array_elem_fn, elem_fn);
+        let r = self.with_nesting("initializer", |c| {
             c.collect_array_initializer_inner(elem_ty)
-        })
+        });
+        self.array_elem_fn = outer;
+        r
     }
 
     /// Consume `[` and one array designator's index, plus the GNU
@@ -1313,7 +1318,7 @@ impl Compiler {
                 } else {
                     dims_below[1..].to_vec()
                 };
-                let inner = self.collect_array_initializer(elem_ty)?;
+                let inner = self.collect_array_initializer(elem_ty, self.array_elem_fn.clone())?;
                 let written = inner.len();
                 // One sub-array copy spans its declared element count, or
                 // its own length when the brace list is longer (no declared
@@ -1387,7 +1392,9 @@ impl Compiler {
             }
             // One element takes the same leaf parser a struct member's
             // value does.
-            let InitLeaf { value, reloc, .. } = self.parse_init_leaf_for(elem_ty)?;
+            let elem_fn = self.array_elem_fn.clone();
+            let InitLeaf { value, reloc, .. } =
+                self.parse_init_leaf_for_bits(elem_ty, 0, &elem_fn)?;
             // A range designator fills `[cursor, end)` with the value;
             // a plain entry fills the single slot at `cursor`.
             let end = desig_range_end.take().unwrap_or(cursor + 1);
@@ -1849,9 +1856,12 @@ impl Compiler {
         target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
     ) -> Result<InitLeaf, C5Error> {
         let line = self.lex.line;
+        let fn_checked = self.check_designator_initializer(ty, target_fn, line)?;
         let leaf = self.parse_constant_init_value()?;
-        let flags = (leaf.is_zero_int(), false);
-        self.check_constant_init_conversion(ty, target_fn, leaf.ty, flags, line)?;
+        if !fn_checked {
+            let flags = (leaf.is_zero_int(), false);
+            self.check_constant_init_conversion(ty, target_fn, leaf.ty, flags, line)?;
+        }
         if matches!(leaf.reloc, InitElemReloc::None) {
             self.check_constant_conversion(leaf.value, leaf.ty, ty, bits, line);
         }
@@ -2229,7 +2239,8 @@ impl Compiler {
         // address. Distinguished from a plain cast by the `[`, or
         // for an array typedef (`(row){...}`) by the `{` past `)`.
         if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
-            let (v, reloc, dims) = self.parse_array_compound_literal(cast_ty, &name.base_dims)?;
+            let elem = (cast_ty, name.fn_ty.clone());
+            let (v, reloc, dims) = self.parse_array_compound_literal(elem, &name.base_dims)?;
             if let InitElemReloc::Data(Some(sym)) = reloc {
                 self.symbols[sym].storage_is_const = name.object_is_const;
                 self.reject_automatic_compound_literal(sym)?;
@@ -2602,7 +2613,7 @@ impl Compiler {
     /// the subscript paths.
     fn parse_array_compound_literal(
         &mut self,
-        elem_ty: i64,
+        (elem_ty, elem_fn): (i64, Option<(crate::c5::symbol::FnType, i64)>),
         base_dims: &[i64],
     ) -> Result<(i128, InitElemReloc, alloc::vec::Vec<i64>), C5Error> {
         // Bracket run, outermost first; only the leading dimension may be
@@ -2672,7 +2683,7 @@ impl Compiler {
         } else {
             self.pending.init_target_array_size = count as i64;
             self.pending.init_inner_dims = dims[1..].to_vec();
-            let elements = self.collect_array_initializer(elem_ty)?;
+            let elements = self.collect_array_initializer(elem_ty, elem_fn)?;
             if elements.len() > count {
                 return Err(self.compile_err(
                     Code::INVALID_INITIALIZER,
@@ -2702,10 +2713,10 @@ impl Compiler {
     /// constant-expression address path.
     pub(super) fn emit_array_compound_literal_body(
         &mut self,
-        elem_ty: i64,
+        elem: (i64, Option<(crate::c5::symbol::FnType, i64)>),
         base_dims: &[i64],
     ) -> Result<(i64, usize, alloc::vec::Vec<i64>), C5Error> {
-        match self.parse_array_compound_literal(elem_ty, base_dims)? {
+        match self.parse_array_compound_literal(elem, base_dims)? {
             (off, InitElemReloc::Data(Some(sym)), dims) => Ok((off as i64, sym, dims)),
             _ => Err(self.compile_err(
                 Code::INTERNAL,
@@ -3758,7 +3769,7 @@ impl Compiler {
     fn fill_flexible_array_member(
         &mut self,
         field_base: usize,
-        elem_ty: i64,
+        (elem_ty, elem_fn): (i64, Option<(crate::c5::symbol::FnType, i64)>),
         inner_dims: &[i64],
     ) -> Result<(), C5Error> {
         let elem_size = self.size_of_type(elem_ty);
@@ -3817,7 +3828,7 @@ impl Compiler {
         // uses to size its tail (bytes = count * sizeof(base element)).
         if !inner_dims.is_empty() && self.lex.tk == '{' && !(is_struct_value_ty(elem_ty)) {
             self.pending.init_inner_dims = inner_dims.to_vec();
-            let elems = self.collect_array_initializer(elem_ty)?;
+            let elems = self.collect_array_initializer(elem_ty, elem_fn)?;
             grow_to(&mut self.data, field_base + elems.len() * elem_size);
             self.write_array_init_into_data(field_base as i64, elem_ty, &elems)?;
             self.flex_array_measured_count = Some(elems.len());
@@ -3864,7 +3875,8 @@ impl Compiler {
                 grow_to(&mut self.data, here + elem_size);
                 self.init_struct_array_element(struct_id_of(elem_ty), here as i64)?;
             } else {
-                let InitLeaf { value, reloc, .. } = self.parse_init_leaf_for(elem_ty)?;
+                let InitLeaf { value, reloc, .. } =
+                    self.parse_init_leaf_for_bits(elem_ty, 0, &elem_fn)?;
                 for i in idx..=range_hi {
                     let here = field_base + i * elem_size;
                     grow_to(&mut self.data, here + elem_size);
@@ -4073,7 +4085,8 @@ impl Compiler {
                     .get(1..)
                     .map(|s| s.to_vec())
                     .unwrap_or_default();
-                self.fill_flexible_array_member(field_base, field.ty, &inner_dims)?;
+                let elem = (field.ty, self.field_elem_fn_type(&field));
+                self.fill_flexible_array_member(field_base, elem, &inner_dims)?;
                 pos = field_idx + 1;
                 if !self.initializer_separator(!braced && pos >= n_fields)? {
                     break;
@@ -4324,7 +4337,8 @@ impl Compiler {
             } else {
                 self.pending.init_inner_dims = field.array_dims.get(1..).unwrap_or(&[]).to_vec();
                 self.pending.init_target_array_size = field.array_size;
-                let elements = self.collect_array_initializer(field.ty)?;
+                let elem_fn = self.field_elem_fn_type(field);
+                let elements = self.collect_array_initializer(field.ty, elem_fn)?;
                 if elements.len() as i64 > field.array_size {
                     return Err(self.compile_err(
                         Code::INVALID_INITIALIZER,
@@ -4518,7 +4532,7 @@ impl Compiler {
                 self.emit_local_array_init_runtime(
                     local_val,
                     field_base,
-                    field.ty,
+                    (field.ty, self.field_elem_fn_type(field)),
                     field.array_size,
                     inner,
                     "<array member>",
@@ -4643,15 +4657,16 @@ impl Compiler {
         &mut self,
         target: InitTarget,
         at: i64,
-        ty: i64,
+        leaf: (i64, &Option<(crate::c5::symbol::FnType, i64)>),
     ) -> Result<(), C5Error> {
+        let ty = leaf.0;
         // C99 6.7.9p11: a scalar member's initializer may be enclosed
         // in braces; strip a single wrapper on either target path.
         let braced_scalar = !self.is_traversable_aggregate_ty(ty) && self.lex.tk == '{';
         if braced_scalar {
             self.next()?;
         }
-        let r = self.init_leaf_scalar_value(target, at, ty);
+        let r = self.init_leaf_scalar_value(target, at, leaf);
         if braced_scalar && r.is_ok() {
             self.accept(',')?;
             if self.lex.tk != '}' {
@@ -4669,11 +4684,12 @@ impl Compiler {
         &mut self,
         target: InitTarget,
         at: i64,
-        ty: i64,
+        (ty, target_fn): (i64, &Option<(crate::c5::symbol::FnType, i64)>),
     ) -> Result<(), C5Error> {
         match target {
             InitTarget::Data { .. } => {
-                let InitLeaf { value, reloc, .. } = self.parse_init_leaf_for(ty)?;
+                let InitLeaf { value, reloc, .. } =
+                    self.parse_init_leaf_for_bits(ty, 0, target_fn)?;
                 let size = self.size_of_type(ty);
                 self.write_init_value(at as usize, size, value, reloc, ty)?;
                 Ok(())
@@ -4692,7 +4708,11 @@ impl Compiler {
                 self.expr(Token::Assign as i64)?;
                 // C99 6.7.9p11: convert as in assignment (integer leaf
                 // of a floating member rounds through IEEE-754).
-                self.check_initializer_expr(ty, 0, line)?;
+                if target_fn.is_some() {
+                    self.check_initializer_expr_to((ty, target_fn), 0, line)?;
+                } else {
+                    self.check_initializer_expr(ty, 0, line)?;
+                }
                 self.convert_assign_rhs(ty);
                 let v = self.ast_acc;
                 self.ast_assign();
@@ -4719,7 +4739,9 @@ impl Compiler {
         off: i64,
         ty: i64,
     ) -> Result<(), C5Error> {
-        self.init_leaf_scalar(InitTarget::Runtime { local_val, base: 0 }, off, ty)
+        let elem_fn = self.array_elem_fn.clone();
+        let target = InitTarget::Runtime { local_val, base: 0 };
+        self.init_leaf_scalar(target, off, (ty, &elem_fn))
     }
 
     /// Write `field_size` little-endian bytes of an initializer element

@@ -228,6 +228,21 @@ impl Compiler {
         Some((f, levels + dims + arrays))
     }
 
+    /// The function type an element of array object `idx` leads to, and
+    /// its depth.
+    pub(super) fn elem_fn_type(&self, idx: usize) -> Option<(FnType, i64)> {
+        let depth = self.symbols[idx].fn_ptr_indirection;
+        (depth > 0).then(|| (self.symbol_fn_type(idx), depth))
+    }
+
+    /// The function type an element of array member `field` leads to, and
+    /// its depth.
+    pub(super) fn field_elem_fn_type(&self, field: &super::StructField) -> Option<(FnType, i64)> {
+        let depth = field.fn_ptr_indirection;
+        let (f, _) = self.field_fn_type(field)?;
+        (depth > 0).then_some((f, depth))
+    }
+
     /// The spelling of a value's type: the declarator of the function type
     /// it leads to, else its tag's.
     pub(super) fn typed_text(&self, ty: i64, f: &Option<(FnType, i64)>) -> alloc::string::String {

@@ -111,6 +111,32 @@ impl Compiler {
         Ok(found)
     }
 
+    /// A function designator initializing an object that leads to a
+    /// function compares the function types (C99 6.7.8p11, 6.5.16.1p1),
+    /// which the tags do not record. Returns whether it compared; the
+    /// cursor is left where it was.
+    pub(super) fn check_designator_initializer(
+        &mut self,
+        var_ty: i64,
+        target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
+        line: usize,
+    ) -> Result<bool, C5Error> {
+        if target_fn.is_none() {
+            return Ok(false);
+        }
+        let Some(sym) = self.initializer_designator()? else {
+            return Ok(false);
+        };
+        if self.symbols[sym].class != Token::Fun as i64 {
+            return Ok(false);
+        }
+        let init_ty = self.symbols[sym].type_ + Ty::Ptr as i64;
+        let init_fn = Some((self.symbol_fn_type(sym), 1));
+        let what = ("initializer", "declared", "init");
+        self.check_fn_pointer_conversion((var_ty, target_fn), (init_ty, &init_fn), line, what)?;
+        Ok(true)
+    }
+
     fn id_ends_initializer(&mut self) -> Result<bool, C5Error> {
         let snap = self.lex.snapshot();
         self.next()?;
@@ -311,19 +337,7 @@ impl Compiler {
             self.next()?; // consume `}`
             return Ok(());
         }
-        // A function designator converting to a function pointer compares
-        // the function types, which the tags below do not record.
-        let mut fn_checked = false;
-        if target_fn.is_some()
-            && let Some(sym) = self.initializer_designator()?
-            && self.symbols[sym].class == Token::Fun as i64
-        {
-            let init_ty = self.symbols[sym].type_ + Ty::Ptr as i64;
-            let init_fn = Some((self.symbol_fn_type(sym), 1));
-            let what = ("initializer", "declared", "init");
-            self.check_fn_pointer_conversion((var_ty, target_fn), (init_ty, &init_fn), line, what)?;
-            fn_checked = true;
-        }
+        let fn_checked = self.check_designator_initializer(var_ty, target_fn, line)?;
         // C99 6.6p9 address constant, decided by the shared
         // constant-initializer evaluator, which sees the initializer
         // whole because a leading cast sets the stride of a trailing

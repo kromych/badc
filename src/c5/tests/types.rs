@@ -2111,16 +2111,14 @@ fn layout_rows_hold(prelude: &str, rows: &[&str], targets: &[crate::Target]) {
     }
 }
 
-/// The enumeration types the target's C ABI gives. MSVC, which the PE targets
-/// follow, makes every enum and enumerator `int`: a value outside `int`
-/// converts to it, `packed` leaves the enum alone and its bit-field reads
-/// signed. GCC's rule, which the other targets keep, types a non-negative
-/// enum `unsigned int` and a wider one by its range. Either way a bit-field
-/// of an enum reads with the enum's own type, so one with a negative
-/// enumerator reads signed. The values are clang 21's for both windows-msvc
-/// triples and for x86_64-linux-gnu. A set bit names the failing check.
+/// The enumeration types gcc gives on every target, mingw-w64's included
+/// (C99 6.7.2.2p4 leaves them to the implementation): a non-negative enum is
+/// `unsigned int`, a wider one takes its range, `packed` narrows it, and a
+/// bit-field of an enum reads with the enum's own type, signed only when an
+/// enumerator is negative. The values are clang 21's for the two windows-gnu
+/// triples and x86_64-linux-gnu. A set bit names the failing check.
 #[test]
-fn enums_take_the_type_the_target_abi_gives() {
+fn enums_take_the_types_gcc_gives_on_every_target() {
     use super::Vm;
     use crate::{Compiler, Target};
     const SRC: &str = "enum id { ID0, ID1, ID2, ID3 };\n\
@@ -2134,17 +2132,10 @@ fn enums_take_the_type_the_target_abi_gives() {
           struct bf b; int r = 0;\n\
           b.e = ID3; b.s = NEG;\n\
           if (b.s != NEG || !(b.s < 0)) r |= 1;\n\
-        #ifdef _WIN32\n\
-          if (!IS_INT((enum id)0) || !IS_INT(TOP) || !IS_INT((enum big)0)) r |= 2;\n\
-          if (TOP != -2147483647 - 1 || BIG != 0 || sizeof(enum big) != 4) r |= 4;\n\
-          if (sizeof(enum pk) != 4 || !((enum id)-1 < (enum id)1)) r |= 8;\n\
-          if (b.e != -1) r |= 16;\n\
-        #else\n\
           if (IS_INT((enum id)0) || IS_INT(TOP) || sizeof(enum big) != 8) r |= 2;\n\
           if (TOP != 0x80000000u || BIG != 0x100000000LL) r |= 4;\n\
           if (sizeof(enum pk) != 1 || (enum id)-1 < (enum id)1) r |= 8;\n\
           if (b.e != ID3) r |= 16;\n\
-        #endif\n\
           return r; }\n";
     for t in [
         Target::WindowsX64,
@@ -2156,6 +2147,41 @@ fn enums_take_the_type_the_target_abi_gives() {
             .compile()
             .unwrap();
         assert_eq!(Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+}
+
+/// A bit-field of an enum with no negative enumerator reads unsigned on the PE
+/// targets, as mingw-w64's gcc and clang for the windows-gnu triples read it:
+/// the field is masked and nothing sign-extends it. `_Generic` selects
+/// `unsigned int` for the enum and its value 4 survives the 3-bit field.
+#[test]
+fn an_unsigned_enums_bit_field_reads_unsigned_on_the_pe_targets() {
+    use crate::{Compiler, Target};
+    const SRC: &str = "enum kind { K0, K1, K2, K3, K4, K5, K6 };\n\
+        struct s { enum kind k : 3; unsigned char flag : 1; };\n\
+        int read_k(struct s *p) { return p->k; }\n\
+        int main(void) {\n\
+          struct s v; v.k = K4; v.flag = 1;\n\
+          return _Generic((enum kind)0, unsigned int: 0, default: 1)\n\
+            + (read_k(&v) == K4 ? 0 : 2); }\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        for optimize in [false, true] {
+            let dump = super::perf_codegen::ssa_dump_for(SRC, "read_k", target, optimize);
+            assert!(
+                dump.contains("op=and") && dump.contains("rhs_imm=7"),
+                "{target:?}:\n{dump}"
+            );
+            assert!(
+                !["op=shl", "op=shr", "op=sar"]
+                    .iter()
+                    .any(|op| dump.contains(op)),
+                "{target:?}: the read extends the field's sign:\n{dump}"
+            );
+        }
+        let program = Compiler::with_target(SRC.to_string(), target)
+            .compile()
+            .unwrap();
+        assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{target:?}");
     }
 }
 
@@ -4639,12 +4665,12 @@ fn volatile_at_a_pointer_level_is_part_of_the_type() {
 #[test]
 fn an_enumerated_type_is_a_type_of_its_own() {
     // C99 6.7.2.2p4: each enumerated type is compatible with the integer
-    // type its definition chose -- `unsigned int` for non-negative values
-    // as gcc chooses, `int` under MSVC's rule on the PE targets -- and with
-    // no other enumerated type, an untagged one and one a block-scope tag
-    // declares included; arithmetic takes the integer type.
+    // type its definition chose -- `unsigned int` for non-negative values,
+    // as gcc chooses on every target -- and with no other enumerated type,
+    // an untagged one and one a block-scope tag declares included;
+    // arithmetic takes the integer type.
     use crate::{Compiler, Target};
-    const SRC: &str = "#ifdef _WIN32\ntypedef int a_int;\n#else\ntypedef unsigned int a_int;\n#endif\n\
+    const SRC: &str = "typedef unsigned int a_int;\n\
          enum A { A1, A2 };\nenum B { B1 };\n\
          typedef enum A OuterA;\ntypedef enum { U1 } U;\ntypedef enum { V1 } V;\n\
          struct S { enum A m; };\nenum A fa(void);\n\
@@ -4684,14 +4710,16 @@ fn an_enumerated_type_is_a_type_of_its_own() {
             .compile()
             .unwrap_or_else(|e| panic!("{t:?}: {e}"));
     }
-    // A packed enum takes the smallest integer type off the PE targets.
-    super::compile_str_bare_for(
-        "enum __attribute__((packed)) P { P1 };\nenum P p;\n\
-         _Static_assert(_Generic(p, enum P: 1, default: 0) && _Generic(p, unsigned char: 1, default: 0)\n\
-                        && sizeof p == 1, \"packed\");\n\
-         int main(void) { return p; }\n",
-        Target::LinuxX64,
-    );
+    // A packed enum takes the smallest integer type.
+    for t in [Target::LinuxX64, Target::WindowsX64, Target::WindowsAarch64] {
+        super::compile_str_bare_for(
+            "enum __attribute__((packed)) P { P1 };\nenum P p;\n\
+             _Static_assert(_Generic(p, enum P: 1, default: 0) && _Generic(p, unsigned char: 1, default: 0)\n\
+                            && sizeof p == 1, \"packed\");\n\
+             int main(void) { return p; }\n",
+            t,
+        );
+    }
     // A pointer conversion between two enumerated types is incompatible
     // (C99 6.5.16.1p1); one to the integer type is not.
     let msg = Compiler::with_target(

@@ -1266,8 +1266,12 @@ fn comparison_behind_a_join_branches_on_the_flags() {
 
 /// The SSA dump of `name`, at `-O` or at the default level.
 pub(super) fn ssa_dump(src: &str, name: &str, optimize: bool) -> String {
+    ssa_dump_for(src, name, Target::LinuxX64, optimize)
+}
+
+/// The SSA dump of `name` lowered for `target`.
+pub(super) fn ssa_dump_for(src: &str, name: &str, target: Target, optimize: bool) -> String {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind};
-    let target = Target::LinuxX64;
     let program = Compiler::with_options(
         src.to_string(),
         target,

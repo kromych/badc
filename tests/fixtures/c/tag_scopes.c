@@ -52,10 +52,8 @@ int main(void) {
     enum E e = E_OUT;
     enum K k = K_OUT;
     if (e + F_OUT != 90 || k != 1) return 5;
-#if !defined(_WIN32)
     /* gcc's rule gives an enum with no negative enumerator unsigned int;
        the blocks' signed K does not reach file scope. */
     if (!_Generic(k, unsigned int: 1, default: 0)) return 6;
-#endif
     return 0;
 }

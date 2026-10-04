@@ -4,8 +4,8 @@
 use super::{Compiler, Vm};
 use crate::c5::diag::Code;
 
-/// The rows spell GCC's enum types (C99 6.7.2.2p4), which the Linux targets
-/// take and the PE targets do not, so they compile for Linux.
+/// The rows compile for x86-64 Linux; the PE targets give enums the same
+/// types, which `an_enum_takes_the_type_gcc_gives_on_the_pe_targets` checks.
 fn expect_conflict(src: &str, needles: &[&str]) {
     let msg = match Compiler::with_target(src.to_string(), crate::Target::LinuxX64).compile() {
         Err(e) => e.to_string(),
@@ -24,30 +24,40 @@ fn run_without_warnings(src: &str) -> i64 {
     Vm::new(prog).run().unwrap()
 }
 
-/// MSVC's rule, which the PE targets take, makes every enum compatible with
-/// `int` (C99 6.7.2.2p4), whatever its values and attributes.
+/// gcc's rule, which mingw-w64's gcc and clang for the windows-gnu triples
+/// follow on the PE targets, makes an enum with no negative enumerator
+/// compatible with `unsigned int` (C99 6.7.2.2p4), and a `mode` attribute
+/// narrows that unsigned type.
 #[test]
-fn an_enum_is_compatible_with_int_on_the_pe_targets() {
-    let compile =
-        |src: &str| Compiler::with_target(src.to_string(), crate::Target::WindowsX64).compile();
-    let src = "enum E { A = 5 };\nint f(enum E);\nint f(int v) { return v; }\n\
-               int main(void) { return f(A); }\n";
-    assert_eq!(Vm::new(compile(src).unwrap()).run().unwrap(), 5);
-    for (src, needles) in [
-        (
-            "enum E { A = 5 };\nint f(enum E);\nint f(unsigned int v) { return (int)v; }\n",
-            ["previous: int (enum E)", "now:      int (unsigned int)"],
-        ),
-        (
-            "enum E;\nextern enum E x;\nenum E { A } __attribute__((__mode__(__byte__)));\n\
-             int x;\n",
-            ["previous: enum E", "now:      int"],
-        ),
-    ] {
-        let src = alloc::format!("{src}int main(void) {{ return 0; }}\n");
-        let msg = compile(&src).map(|_| ()).unwrap_err().to_string();
-        for needle in needles {
-            assert!(msg.contains(needle), "{src:?}: no {needle:?} in {msg:?}");
+fn an_enum_takes_the_type_gcc_gives_on_the_pe_targets() {
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        let compile = |src: &str| Compiler::with_target(src.to_string(), target).compile();
+        let src = "enum E { A = 5 };\nint f(enum E);\nint f(unsigned int v) { return (int)v; }\n\
+                   int main(void) { return f(A); }\n";
+        assert_eq!(
+            Vm::new(compile(src).unwrap()).run().unwrap(),
+            5,
+            "{target:?}"
+        );
+        for (src, needles) in [
+            (
+                "enum E { A = 5 };\nint f(enum E);\nint f(int v) { return v; }\n",
+                ["previous: int (enum E)", "now:      int (int)"],
+            ),
+            (
+                "enum E;\nextern enum E x;\nenum E { A } __attribute__((__mode__(__byte__)));\n\
+                 unsigned int x;\n",
+                ["previous: enum E", "now:      unsigned int"],
+            ),
+        ] {
+            let src = alloc::format!("{src}int main(void) {{ return 0; }}\n");
+            let msg = compile(&src).map(|_| ()).unwrap_err().to_string();
+            for needle in needles {
+                assert!(
+                    msg.contains(needle),
+                    "{target:?} {src:?}: no {needle:?} in {msg:?}"
+                );
+            }
         }
     }
 }

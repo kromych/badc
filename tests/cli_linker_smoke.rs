@@ -7377,6 +7377,9 @@ fn variadic_fp_aggregates_cross_the_system_compiler_boundary() {
 #[cfg(windows)]
 enum WindowsCc {
     Clang(std::ffi::OsString),
+    /// A clang driver building for the host architecture's windows-gnu
+    /// triple, whose C ABI mingw-w64's gcc shares.
+    ClangGnu(std::ffi::OsString),
     Msvc {
         cl: PathBuf,
         env: Vec<(String, String)>,
@@ -7840,6 +7843,26 @@ fn build_windows_module(cc: &WindowsCc, dir: &Path, module: &Path) -> PathBuf {
                 .arg(module);
             c
         }
+        WindowsCc::ClangGnu(cc) => {
+            // The windows-gnu object links through the same lld-link, without
+            // a C runtime.
+            let obj = dir.join("module.o");
+            let gnu = target.replace("pc-windows-msvc", "w64-windows-gnu");
+            run(
+                Command::new(cc)
+                    .args([gnu.as_str(), "-O2", "-c", "-o"])
+                    .arg(&obj)
+                    .arg(module)
+                    .current_dir(dir),
+                "compile the windows-gnu module",
+            );
+            let mut c = Command::new(cc);
+            c.args([target, "-shared", "-nostdlib", "-fuse-ld=lld"])
+                .args(["-Wl,-noentry", "-o"])
+                .arg(&dll)
+                .arg(&obj);
+            c
+        }
         WindowsCc::Msvc { cl, env } => {
             let mut c = Command::new(cl);
             c.envs(env.iter().map(|(k, v)| (k, v)))
@@ -8215,16 +8238,16 @@ fn aligned_members_cross_the_windows_compiler_boundary() {
     );
 }
 
-// The platform compiler makes every enum `int`, so a bit-field of one reads
-// signed. Structs of enum bit-fields cross the boundary by value and as
-// results, both ways.
+// mingw-w64's gcc and clang for the windows-gnu triples type an enum with no
+// negative enumerator `unsigned int`, so a bit-field of one reads unsigned, in
+// the MS record layout. Structs of enum bit-fields cross the boundary by value
+// and as results, both ways, against clang for the windows-gnu triple; MSVC
+// makes every enum `int` and is no peer here.
 #[cfg(windows)]
 #[test]
-fn enum_bitfields_cross_the_windows_compiler_boundary() {
-    let Some(cc) = windows_cc() else {
-        eprintln!(
-            "skipping enum_bitfields_cross_the_windows_compiler_boundary: no platform C compiler"
-        );
+fn enum_bitfields_cross_the_windows_gnu_compiler_boundary() {
+    let Some(WindowsCc::Clang(clang)) = windows_cc() else {
+        eprintln!("skipping enum_bitfields_cross_the_windows_gnu_compiler_boundary: no clang");
         return;
     };
     let common = "typedef long long ll;\n\
@@ -8239,11 +8262,16 @@ fn enum_bitfields_cross_the_windows_compiler_boundary() {
           int (*read_eb)(struct eb); };\n\
         static int drive(const struct fns *f, int base)\n\
         { struct eb x = f->make_eb(ID3, ID3, 7), y = { ID2, ID3, 5 };\n\
-          if (f->layout() != layout() || layout() != 10804) return base + 1;\n\
-          if (x.e != -1 || x.f != 3 || x.n != 7) return base + 2;\n\
-          if (f->read_eb(y) != -165) return base + 3;\n\
+          if (f->layout() != layout() || layout() != 804) return base + 1;\n\
+          if (x.e != 3 || x.f != 3 || x.n != 7) return base + 2;\n\
+          if (f->read_eb(y) != 235) return base + 3;\n\
           return 0; }\n";
-    drive_across_the_windows_compiler(&cc, "win-enum-interop", common, "layout, make_eb, read_eb");
+    drive_across_the_windows_compiler(
+        &WindowsCc::ClangGnu(clang),
+        "win-gnu-enum-interop",
+        common,
+        "layout, make_eb, read_eb",
+    );
 }
 
 // A variadic function returning an aggregate through the hidden result pointer

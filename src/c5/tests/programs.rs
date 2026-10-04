@@ -7043,11 +7043,10 @@ fn inner_scope_bindings_unbind_at_scope_exit() {
 }
 
 #[test]
-fn unused_binding_diagnostics_follow_symbol_table_order() {
-    // The per-function unused-binding report walks the function's
-    // bindings in symbol-table index order, not declaration order:
-    // `zz` interns at file scope and so precedes `aa` despite being
-    // declared second.
+fn unused_binding_diagnostics_follow_declaration_order() {
+    // The per-function unused-binding report follows declaration order:
+    // `zz` interns at file scope, ahead of `aa`, and is still reported
+    // second, as it is declared.
     let src = "
         int zz;
         int f(void)
@@ -7072,7 +7071,7 @@ fn unused_binding_diagnostics_follow_symbol_table_order() {
             }
         })
         .collect();
-    assert_eq!(unused, ["zz", "aa"], "warnings: {:?}", prog.warnings);
+    assert_eq!(unused, ["aa", "zz"], "warnings: {:?}", prog.warnings);
 }
 
 /// A file-scope brace list of `n` compound-literal elements shaped like a

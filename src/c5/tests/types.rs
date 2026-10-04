@@ -951,6 +951,36 @@ fn a_name_in_an_unevaluated_operand_is_used() {
     );
 }
 
+/// A scope's unused variables are reported in declaration order, whatever
+/// order their names first appeared in the unit.
+#[test]
+fn unused_variables_are_reported_in_declaration_order() {
+    let src = "int cba(void) { int c = 0, b = 1, a = 2; return a + b + c; }\n\
+               int xyz(void) { int x = 0, y = 1, z = 2; return x + y + z; }\n\
+               void f(void) { int a; int b; int c; { int z; int y; int x; } }\n\
+               int main(void) { return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all"]);
+    let unused: alloc::vec::Vec<&str> = p
+        .warnings
+        .iter()
+        .filter(|w| w.text.starts_with("unused variable"))
+        .map(|w| w.text.as_str())
+        .collect();
+    assert_eq!(
+        unused,
+        [
+            "unused variable `z`",
+            "unused variable `y`",
+            "unused variable `x`",
+            "unused variable `a`",
+            "unused variable `b`",
+            "unused variable `c`"
+        ],
+        "{:?}",
+        p.warnings
+    );
+}
+
 /// A leading `_` exempts no name from the unused or dead-store diagnostics.
 #[test]
 fn a_leading_underscore_exempts_no_unused_name() {

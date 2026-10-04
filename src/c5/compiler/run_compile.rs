@@ -1956,7 +1956,7 @@ impl Compiler {
             Parameter,
             ValueSet,
         }
-        let mut unused: Vec<(usize, String, UnusedKind)> = Vec::new();
+        let mut unused: Vec<(u32, usize, String, UnusedKind)> = Vec::new();
         for &bi in bound {
             let i = bi as usize;
             let sym = &self.symbols[i];
@@ -1988,9 +1988,11 @@ impl Compiler {
             } else {
                 UnusedKind::Variable
             };
-            unused.push((sym.binding.decl_line, sym.name.clone(), kind));
+            let b = &sym.binding;
+            unused.push((b.decl_seq, b.decl_line, sym.name.clone(), kind));
         }
-        for (line, name, kind) in unused {
+        unused.sort_by_key(|u| u.0);
+        for (_, line, name, kind) in unused {
             let (code, msg) = match kind {
                 UnusedKind::Variable => (
                     Code::UNUSED_VARIABLE,

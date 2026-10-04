@@ -664,8 +664,10 @@ impl Compiler {
             self.intern_source_file() as u32,
             self.in_user_source(),
         );
+        self.decl_count += 1;
         let b = &mut self.symbols[idx].binding;
         (b.decl_line, b.decl_file, b.decl_in_user_source) = (line, file, in_user);
+        b.decl_seq = self.decl_count;
     }
 
     /// Bind one block-scope declarator to storage: a block-scope `extern`

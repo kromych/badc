@@ -2595,6 +2595,8 @@ pub struct Compiler {
     sys_trampoline_sym: alloc::collections::BTreeMap<usize, usize>,
     /// [`Program::sys_trampolines`].
     sys_trampolines: Vec<(u64, i64)>,
+    /// Declarations recorded so far; see `BindingInfo::decl_seq`.
+    decl_count: u32,
 
     /// Per-TU counter for anonymous compound-literal backing
     /// symbols. C99 6.5.2.5 compound literals at file scope
@@ -3154,6 +3156,7 @@ impl Compiler {
             code_reloc_sym_idx: Vec::new(),
             sys_trampoline_sym: alloc::collections::BTreeMap::new(),
             sys_trampolines: Vec::new(),
+            decl_count: 0,
             glo_imm_refs: alloc::vec::Vec::new(),
             data_reloc_sym_idx: alloc::vec::Vec::new(),
             init_reloc_slots: alloc::collections::BTreeSet::new(),

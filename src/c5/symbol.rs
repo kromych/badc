@@ -668,6 +668,10 @@ pub(crate) struct BindingInfo {
     /// diagnostics do not report, as gcc and clang skip system headers.
     pub decl_in_user_source: bool,
 
+    /// The declaration's position among the unit's declarations, the order
+    /// a scope's unused-symbol diagnostics come in.
+    pub decl_seq: u32,
+
     /// True when the declaration carried a `maybe_unused` /
     /// `unused` attribute (C23 6.7.12.4 `[[maybe_unused]]` or GNU
     /// `__attribute__((unused))`). Suppresses the unused-variable

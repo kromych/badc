@@ -495,7 +495,6 @@ impl Compiler {
             || !self.symbols[idx].binding.decl_in_user_source
             || self.symbols[idx].binding.address_escaped
             || self.symbols[idx].name.is_empty()
-            || self.symbols[idx].name.starts_with('_')
         {
             return;
         }
@@ -568,7 +567,7 @@ impl Compiler {
 
     fn report_dead_stores(&mut self, idx: usize) {
         let sym = &self.symbols[idx];
-        if sym.binding.address_escaped || sym.name.is_empty() || sym.name.starts_with('_') {
+        if sym.binding.address_escaped || sym.name.is_empty() {
             self.symbols[idx].binding.pending_stores.clear();
             return;
         }

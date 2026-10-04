@@ -1950,8 +1950,7 @@ impl Compiler {
     ) {
         // The function's own bindings only: an inner block reports its locals at
         // its own exit. Runs before the scope unwind, which overwrites the class
-        // this test reads. A leading `_` suppresses the diagnostic, as under gcc
-        // and clang.
+        // this test reads.
         enum UnusedKind {
             Variable,
             Parameter,
@@ -1967,7 +1966,6 @@ impl Compiler {
                 || sym.binding.was_read
                 || sym.binding.maybe_unused
                 || sym.name.is_empty()
-                || sym.name.starts_with('_')
             {
                 continue;
             }
@@ -3099,7 +3097,6 @@ impl Compiler {
                 || sym.binding.was_referenced
                 || !sym.binding.decl_in_user_source
                 || sym.name.is_empty()
-                || sym.name.starts_with('_')
                 || sym.name == "main"
                 || sym.is_used
                 || sym.binding.maybe_unused

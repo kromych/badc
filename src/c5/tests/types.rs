@@ -726,8 +726,7 @@ fn pointer_to_array_of_unspecified_bound_keeps_the_bound_open() {
 /// and `static` file-scope functions that are never referenced
 /// are dead. The compiler emits a `<file>:<line>: warning:
 /// unused ...` line for each, in the same shape as the
-/// type-mismatch warnings above. Names whose first character is
-/// `_` are suppressed by convention.
+/// type-mismatch warnings above.
 #[test]
 fn warn_unused_variable_parameter_function() {
     // The unused-* rows sit under -Wall / -Wextra, as they do in gcc.
@@ -750,6 +749,8 @@ fn warn_unused_variable_parameter_function() {
         "inner_unused",
         "dead_assigned",
         "touched_then_overwritten",
+        "_underscored_local",
+        "_underscored",
     ];
     for name in expect {
         assert!(
@@ -762,8 +763,6 @@ fn warn_unused_variable_parameter_function() {
         "live_static",
         "x",
         "used_local",
-        "_silenced_local",
-        "_silenced",
         "used",
         "main",
         "inner_used",
@@ -950,6 +949,41 @@ fn a_name_in_an_unevaluated_operand_is_used() {
         "{:?}",
         p.warnings
     );
+}
+
+/// A leading `_` exempts no name from the unused or dead-store diagnostics.
+#[test]
+fn a_leading_underscore_exempts_no_unused_name() {
+    let src = "static void _f(void) {}\n\
+               void g(void) { int _x; int __y; { int _inner; } }\n\
+               static void __attribute__((unused)) _kept(void) {}\n\
+               void h(void) { int _a __attribute__((unused)); }\n\
+               int main(void) { return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["all"]);
+    let mut unused: alloc::vec::Vec<&str> = p
+        .warnings
+        .iter()
+        .filter(|w| w.text.starts_with("unused"))
+        .map(|w| w.text.as_str())
+        .collect();
+    unused.sort_unstable();
+    assert_eq!(
+        unused,
+        [
+            "unused function `_f`",
+            "unused variable `__y`",
+            "unused variable `_inner`",
+            "unused variable `_x`"
+        ],
+        "{:?}",
+        p.warnings
+    );
+    let src = "int main(void) { int _u = 1; _u = 2; return 0; }\n";
+    let p = super::compile_str_bare_with_diags(src, &["dead-store"]);
+    let dead = (p.warnings.iter())
+        .filter(|w| w.text == "dead store: value assigned to `_u` is never read")
+        .count();
+    assert_eq!(dead, 2, "{:?}", p.warnings);
 }
 
 /// A local named like a static function keeps its uses apart from the

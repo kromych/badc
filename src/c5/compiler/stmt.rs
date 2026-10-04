@@ -1213,8 +1213,7 @@ impl Compiler {
         // is overwritten the Token::Loc test no longer holds.
         // Parameter slots (val >= 2) cannot be declared inside a
         // `{ ... }` block; their diagnostic is emitted at function
-        // exit. Names starting with `_` are suppressed (gcc /
-        // clang `-Wunused` convention).
+        // exit.
         for b in &block_symbols {
             let sym = &self.symbols[b.idx];
             if sym.class != Token::Loc as i64
@@ -1223,7 +1222,6 @@ impl Compiler {
                 || sym.binding.address_escaped
                 || sym.binding.was_read
                 || sym.binding.maybe_unused
-                || sym.name.starts_with('_')
             {
                 continue;
             }

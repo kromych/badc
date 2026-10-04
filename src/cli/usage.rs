@@ -335,6 +335,11 @@ Compile knobs:
                            tree, never a jump table, so no switch takes
                            an indirect branch. -fjump-tables restores
                            the default.
+  -fno-optimize-sibling-calls
+                           Keep every call a call: a call whose result
+                           the function returns is not turned into a
+                           jump after the epilogue.
+                           -foptimize-sibling-calls restores the default.
   -fPIC, -fpic             Emit a position-independent `-c` object: a
   -fPIE, -fpie             switch table takes the label-difference form,
                            so no absolute relocation reaches the object.

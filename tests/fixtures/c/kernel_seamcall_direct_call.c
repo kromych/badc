@@ -6,7 +6,8 @@
 // so its address may appear only as a direct call's target: no
 // `mov $__seamcall, %reg` for an out-of-line retry loop, no
 // `call __x86_indirect_thunk_*` through a constant. Both callers
-// below end up with `call __seamcall_ret` / `call __seamcall_saved_ret`.
+// below branch directly to `__seamcall_ret` / `__seamcall_saved_ret`:
+// a call, or a jump where the caller returns the result unchanged.
 
 typedef unsigned long u64;
 struct tdx_module_args {

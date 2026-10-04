@@ -136,6 +136,7 @@ pub(crate) struct Codegen {
     pub(crate) no_fp_regs: bool,
     pub(crate) strict_align: bool,
     pub(crate) jump_tables: bool,
+    pub(crate) sibling_calls: bool,
     pub(crate) keep_local_labels: bool,
     pub(crate) min_function_alignment: u32,
     pub(crate) patchable_function_entry: badc::PatchableEntry,
@@ -167,6 +168,7 @@ impl Default for Codegen {
             no_fp_regs: false,
             strict_align: false,
             jump_tables: true,
+            sibling_calls: true,
             keep_local_labels: false,
             min_function_alignment: 1,
             patchable_function_entry: badc::PatchableEntry::NONE,
@@ -1299,6 +1301,11 @@ impl Parser {
             // configurations must not take.
             "-fjump-tables" => code.jump_tables = true,
             "-fno-jump-tables" => code.jump_tables = false,
+            // gcc / clang `-fno-optimize-sibling-calls`: every call returns
+            // into its caller's frame, so a frame-pointer unwinder sees each
+            // caller on the chain.
+            "-foptimize-sibling-calls" => code.sibling_calls = true,
+            "-fno-optimize-sibling-calls" => code.sibling_calls = false,
             // gcc `-fmin-function-alignment=N`: every function entry
             // lands on a multiple of N, which is how a kernel states
             // CONFIG_FUNCTION_ALIGNMENT. Unlike `-falign-functions` gcc
@@ -2347,6 +2354,7 @@ impl Codegen {
         opts.frame_larger_than = self.frame_larger_than;
         opts.strict_align = self.strict_align;
         opts.jump_tables = self.jump_tables;
+        opts.sibling_calls = self.sibling_calls;
         opts.min_function_alignment = self.min_function_alignment;
         opts.patchable_function_entry = self.patchable_function_entry;
         opts.profiling = self.profiling;
@@ -3039,6 +3047,7 @@ mod tests {
         let cli = parse(&[
             "-fPIC",
             "-fno-jump-tables",
+            "-fno-optimize-sibling-calls",
             "-fsigned-char",
             "-fshort-wchar",
             "-fstrict-flex-arrays=2",
@@ -3051,6 +3060,7 @@ mod tests {
         ]);
         assert!(cli.codegen.fpic && !cli.codegen.fno_pic);
         assert!(!cli.codegen.jump_tables);
+        assert!(!cli.codegen.sibling_calls);
         assert_eq!(cli.front.char_signed, Some(true));
         assert!(cli.front.short_wchar);
         assert_eq!(cli.front.strict_flex_arrays, 2);

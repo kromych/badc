@@ -61,8 +61,6 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movb	$0x1, (%rip)            # <addr>
 		R_X86_64_PC32	cache_state_incoherent-0x5
-               	callq	<addr>
-		R_X86_64_PLT32	__seamcall_saved_ret-0x4
                	popq	%rbp
                	jmp	<addr>
-		R_X86_64_PLT32	__x86_return_thunk-0x4
+		R_X86_64_PLT32	__seamcall_saved_ret-0x4

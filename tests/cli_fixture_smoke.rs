@@ -3531,9 +3531,10 @@ fn the_paravirt_interrupt_flag_accessors_inline() {
 /// direct call, for an external target as for one of the unit: the
 /// always_inline retry loop taking the SEAMCALL entry as an argument
 /// inlines past its stack-pointer asm operand, and the call through
-/// the substituted constant is `call __seamcall_ret` with a call
-/// relocation. No `mov $__seamcall_*` remains, which under IBT is a
-/// reference to a function without `endbr64` outside a direct call.
+/// the substituted constant is a direct branch to `__seamcall_ret`
+/// with a call relocation -- a `jmp` where the caller returns the result
+/// unchanged. No `mov $__seamcall_*` remains, which under IBT is a
+/// reference to a function without `endbr64` outside a direct branch.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn a_call_through_a_constant_function_address_is_direct() {
@@ -3565,9 +3566,11 @@ fn a_call_through_a_constant_function_address_is_direct() {
             "{func}: takes the entry's address\n{text}"
         );
         let direct = lines.windows(2).any(|w| {
-            w[0].contains("call") && w[1].contains("R_X86_64_PLT32") && w[1].contains(entry)
+            (w[0].contains("call") || w[0].contains("jmp"))
+                && w[1].contains("R_X86_64_PLT32")
+                && w[1].contains(entry)
         });
-        assert!(direct, "{func}: no direct call to {entry}\n{text}");
+        assert!(direct, "{func}: no direct branch to {entry}\n{text}");
     }
 }
 

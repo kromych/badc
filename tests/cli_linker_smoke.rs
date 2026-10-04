@@ -115,6 +115,47 @@ fn two_sources_compile_separately_then_link() {
     assert_eq!(out.status.code(), Some(42), "exit code mismatch");
 }
 
+/// A call to another unit's function whose result the caller returns is a
+/// sibling call at -O where the target takes one: the callee returns
+/// straight to the caller's caller, with the arguments the caller set.
+#[test]
+fn a_returned_call_to_another_unit_returns_its_result() {
+    let dir = tempdir("sibling-call");
+    let a = write_source(
+        &dir,
+        "a.c",
+        "long scale(long x, long k) { return x * k + 1; }\n",
+    );
+    let b = write_source(
+        &dir,
+        "b.c",
+        "extern long scale(long, long);\n\
+         __attribute__((noinline)) long via(long x) { return scale(x, 3); }\n\
+         int main(void) { return via(13) == 40 ? 0 : 1; }\n",
+    );
+    for src in [&a, &b] {
+        run(
+            Command::new(badc())
+                .args(["-O", "-c"])
+                .arg(src)
+                .current_dir(&dir),
+            "compile",
+        );
+    }
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("b.o"))
+            .arg(dir.join("a.o"))
+            .current_dir(&dir),
+        "link",
+    );
+    let out = Command::new(&exe).output().expect("run prog");
+    assert_eq!(out.status.code(), Some(0), "via(13) is 40");
+}
+
 #[test]
 fn weak_alias_strong_override_wins_at_link() {
     // A call through a weak alias keeps its relocation under -O, so a

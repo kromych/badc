@@ -201,9 +201,11 @@ pub(crate) fn emit_function(
     fixed_regs: super::FixedRegs,
     // `-O`: the block plan may repeat a small test in place of a jump to it.
     repeat_tests: bool,
+    sibling_calls: bool,
 ) -> Emit {
     let abi = {
         let mut a = target.abi_for(func.conv);
+        a.sibling_calls = sibling_calls;
         a.no_fp_regs = no_fp_regs;
         a.strict_align = strict_align;
         a.hardening = hardening;

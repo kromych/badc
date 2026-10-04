@@ -12091,6 +12091,56 @@ fn x64_indirect_branch_thunk_inline_embeds_the_retpoline() {
     );
 }
 
+/// A call to another unit's function whose result the caller returns
+/// unchanged is a sibling call, as gcc and clang emit at -O2: the epilogue
+/// runs and `jmp` (0xE9) reaches the callee by a PLT32 relocation. The
+/// declaration supplies the return contract a definition in the unit
+/// would. A declaration without a prototype or with a variadic one keeps
+/// the call, and `-fno-optimize-sibling-calls` keeps every call.
+#[test]
+fn x64_a_returned_call_to_another_unit_is_a_sibling_call() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "extern long ext(long, long);\n\
+        long tail(long x) { return ext(x + 1, 2); }\n\
+        extern long ext_unprototyped();\n\
+        long unprototyped(long x) { return ext_unprototyped(x); }\n\
+        extern int ext_variadic(const char *, ...);\n\
+        int variadic(const char *s) { return ext_variadic(s); }\n";
+    let emit = |sibling_calls: bool| {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(SRC),
+            crate::Target::LinuxX64,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile: {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            sibling_calls,
+            ..NativeOptions::new().with_optimize()
+        };
+        emit_native_with_options(&prog, crate::Target::LinuxX64, opts)
+            .unwrap_or_else(|e| panic!("emit: {e}"))
+    };
+    // The opcode ahead of the branch relocation naming `callee`.
+    let opcode = |obj: &[u8], callee: &str| {
+        let text = elf_text(obj);
+        let (off, _, _) = x64_branch_relocs(obj)
+            .into_iter()
+            .find(|(_, n, _)| n == callee)
+            .unwrap_or_else(|| panic!("no branch to {callee}"));
+        text[off as usize - 1]
+    };
+    let on = emit(true);
+    assert_eq!(opcode(&on, "ext"), 0xE9, "the returned call is a jump");
+    for callee in ["ext_unprototyped", "ext_variadic"] {
+        assert_eq!(opcode(&on, callee), 0xE8, "{callee} keeps its call");
+    }
+    assert_eq!(opcode(&emit(false), "ext"), 0xE8, "the flag keeps the call");
+}
+
 #[test]
 fn x64_direct_tail_call_is_not_routed_through_a_thunk() {
     // A call in tail position becomes a direct `jmp` to the callee: it is

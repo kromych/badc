@@ -3627,6 +3627,12 @@ pub struct NativeOptions {
     /// taken and no table reaches the image -- what retpoline and
     /// indirect-branch-tracking kernel configurations require.
     pub jump_tables: bool,
+    /// Whether a call whose result the function returns unchanged may
+    /// become a jump after the epilogue (gcc and clang
+    /// `-foptimize-sibling-calls`; `-fno-optimize-sibling-calls` clears
+    /// it). Cleared, every call returns into the frame that made it, which
+    /// a frame-pointer unwinder walking the call chain relies on.
+    pub sibling_calls: bool,
     /// Position-independent relocatable output (`-fPIC` / `-fpic`).
     /// A switch table then emits in the label-difference form the
     /// final images use -- no absolute relocation reaches the object,
@@ -4057,6 +4063,7 @@ impl NativeOptions {
             no_fp_regs: false,
             strict_align: false,
             jump_tables: true,
+            sibling_calls: true,
             pic: false,
             pic_link: false,
             code_model: CodeModel::Small,
@@ -4586,6 +4593,9 @@ pub(crate) struct Abi {
     /// A frame in every function, for `-pg`'s `mcount` form: the callee
     /// reads the return address through rbp.
     pub mcount_frame: bool,
+    /// A call whose result the function returns unchanged may become a
+    /// jump. Per-run (from [`NativeOptions::sibling_calls`]).
+    pub sibling_calls: bool,
     /// Registers the emitters may not pick as scratch or inline-asm
     /// operands. Per-run (from [`NativeOptions::fixed_regs`]).
     pub fixed_regs: FixedRegs,
@@ -4729,6 +4739,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
             Target::LinuxAarch64 => Abi {
@@ -4747,6 +4758,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
             Target::LinuxX64 => Abi {
@@ -4765,6 +4777,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
             Target::WindowsX64 => Abi {
@@ -4783,6 +4796,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
             Target::WindowsAarch64 => Abi {
@@ -4801,6 +4815,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
         }

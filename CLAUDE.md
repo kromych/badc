@@ -35,7 +35,10 @@ boxes using `./scripts/validate_local_boxes.py`:
     `tests/` are part of the gate)
   * the same run again under the register-pressure caps
     (`BADC_MAX_GPR=2 BADC_MAX_FPR=2`, `--features "codegen_test full"`), as CI's
-    pressure matrix does -- on the Linux lanes, the only ones CI's matrix covers
+    pressure matrix does -- on the Linux lanes, the only ones CI's matrix covers.
+    Each of these suites runs through `scripts/cargo_test.py`, which fails a test
+    binary that ends without reporting every test it announced: cargo judges a
+    binary by its exit status alone.
   * the gating demos, enumerated in `GATING_DEMOS` in the script -- sqlite3, lua,
     miniz, monocypher, stb, tweetnacl, quickjs, raylib, curl, libmill, libdill,
     coroutines, nasm, qemu, edk2, bearssl, bzip2, kissfft, gui_hello, nt_loader,

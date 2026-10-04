@@ -6,8 +6,9 @@
 //! decides that branch, so it is sent to the successor its own value
 //! selects; the merge and the test leave its path. Besides the compare,
 //! this removes the edge from the block past the side effect to the
-//! error return, which a checker following edges without values
-//! (objtool's UACCESS rule over `stac` / `clac`) otherwise reports.
+//! error return, which a checker following edges without values (one
+//! requiring each path from a `stac` to pass its `clac`) otherwise
+//! reports.
 //!
 //! The condition is the phi, its zero test, or a computation of the merge
 //! block's phis. The merge block and the straight line of jumps from it to

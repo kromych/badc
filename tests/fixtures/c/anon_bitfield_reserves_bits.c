@@ -2,8 +2,8 @@
 // that many bits of padding; only a width of zero is special, ending the
 // current storage unit without reserving anything. Both forms have to
 // survive a `packed` attribute that follows the closing brace, which
-// re-lays the members. The shapes below are the kernel's IOAM6 on-wire
-// headers and the nouveau CRC notifier register overlay. Values come
+// re-lays the members. The shapes below are an on-wire protocol header
+// and a device register overlay. Values come
 // from gcc 16 on linux/x86_64 and linux/aarch64 and Apple clang 21 on
 // macOS arm64, which agree on all of them but the zero-width break's
 // tail padding; unpacked members are typed so the aggregate's alignment
@@ -75,7 +75,7 @@ struct ioam6_trace_hdr {
     unsigned char remlen : 7;
 } __attribute__((packed));
 
-// `struct crc907d_notifier` -- a reserved register word before the array.
+// A notifier register block -- a reserved register word before the array.
 struct crc_notifier {
     unsigned int status;
     unsigned int : 32;

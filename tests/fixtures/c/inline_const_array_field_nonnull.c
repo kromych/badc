@@ -3,9 +3,9 @@
    so the initializer's stored address (a string literal, never null)
    holds. At -O the comparison folds and the guarded branch drops; at -O0
    the runtime check takes the same (false) path. Identical result at both.
-   This is the shape of qemu's device_class_set_props last-element guard,
-   including the `ARRAY_SIZE(a) - 1` index that const folding reduces to a
-   fixed member offset before the fold runs. */
+   A last-element guard has this shape, including the `ARRAY_SIZE(a) - 1`
+   index that const folding reduces to a fixed member offset before the
+   fold runs. */
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 typedef struct { const char *name; int v; } Prop;

@@ -1,12 +1,12 @@
-use super::dynamic_sections::encode_relr;
 use super::inputs::{RawReloc, strz};
-use super::synth::sha1;
 use super::*;
 use crate::c5::linker::default_script::default_script;
 use crate::c5::linker::lds::parse_linker_script;
 use crate::c5::linker::object::NativeMachine;
 use crate::c5::linker::object::{Elf32Shdr, Elf64Shdr, read_struct};
-use crate::c5::linker::{comdat, dynamic, eh_frame};
+use crate::c5::linker::zkeyword::{ZKeywords, parse_z_keyword};
+use crate::c5::linker::{comdat, dynamic};
+use crate::c5::object::eh_frame;
 use crate::c5::object::elf_reloc_types as rt;
 use crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL as GOT_SYMBOL;
 
@@ -644,8 +644,8 @@ fn script_link_places_sections_and_symbols() {
 
 /// `--emit-relocs`: every applied relocation reappears as a
 /// `.rela.<outsec>` entry whose `r_offset` is the final address and
-/// from which `S + A` reconstructs. This is what
-/// `arch/x86/tools/relocs` reads to build the KASLR table.
+/// from which `S + A` reconstructs, so a post-link tool can relocate the
+/// image again.
 #[test]
 fn emit_relocs_carries_applied_relocations_into_the_image() {
     let script = parse_linker_script(SCRIPT).expect("script parses");
@@ -813,8 +813,7 @@ fn an_object_definition_outranks_the_synthesized_bound() {
 }
 
 /// A script assignment outranks the synthesized bound, keeping the
-/// script symbol's own visibility. The kernel script bounds its
-/// tables this way.
+/// script symbol's own visibility: a script may bound a table itself.
 #[test]
 fn a_script_assignment_outranks_the_synthesized_bound() {
     let script_text = SCRIPT.replace(
@@ -989,8 +988,8 @@ fn movw_script(base: &str) -> crate::c5::linker::lds::LinkerScript {
     .expect("script parses")
 }
 
-/// The `tramp_alias` sequence linked through a script: each half takes
-/// its own 16-bit group of the target's final address. Words checked
+/// A `movz` / `movk` address load linked through a script: each instruction
+/// takes its own 16-bit group of the target's final address. Words checked
 /// against `ld -T` over the same script and object.
 #[test]
 fn aarch64_movw_groups_resolve_like_gnu_ld() {
@@ -1296,10 +1295,104 @@ fn a53_data_spans_are_not_scanned() {
     assert_eq!(a53_words(&res.image, 0xff8, 0, 4), insns.to_vec());
 }
 
+/// bfd's stack rule: `-z execstack` / `noexecstack` decide; without one,
+/// an input whose `.note.GNU-stack` is executable makes the stack
+/// executable, with a warning naming it that `--no-warn-execstack`
+/// withholds and `--warn-execstack` extends to `-z execstack`.
+#[test]
+fn an_executable_stack_note_makes_the_stack_executable() {
+    let script = parse_linker_script("SECTIONS { . = 0x400000; .text : { *(.text) } }").unwrap();
+    let obj = |name: &str, note_flags: u64| {
+        let o = TestObj::new()
+            .sec(".note.GNU-stack", SHT_PROGBITS, note_flags, 1, &[])
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sym(name, STB_GLOBAL, STT_FUNC, 1, 0, 1);
+        parse_lds_object(&format!("{name}.o"), o.build(EM_X86_64)).expect("parses")
+    };
+    let by_input = "x.o: requires executable stack";
+    let by_option = "because of -z execstack";
+    for (asked, exec_stack, warn_execstack, rwx, warning) in [
+        (false, None, None, false, None),
+        (true, None, None, true, Some(by_input)),
+        (true, None, Some(false), true, None),
+        (true, Some(false), None, false, None),
+        (false, Some(true), None, true, None),
+        (false, Some(true), Some(true), true, Some(by_option)),
+    ] {
+        let mut objs = alloc::vec![obj("_start", 0)];
+        if asked {
+            objs.push(obj("x", SHF_EXECINSTR));
+        }
+        let opts = LdsOptions {
+            exec_stack,
+            warn_execstack,
+            ..Default::default()
+        };
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let what = alloc::format!("{asked} {exec_stack:?} {warn_execstack:?}");
+        let stack = image_phdrs(&res.image)
+            .into_iter()
+            .find(|p| p.p_type == PT_GNU_STACK)
+            .expect("PT_GNU_STACK");
+        assert_eq!(stack.p_flags & PF_X != 0, rwx, "{what}");
+        let texts: Vec<&str> = res.warnings.iter().map(|w| w.text.as_str()).collect();
+        match warning {
+            Some(w) => assert!(texts.iter().any(|t| t.contains(w)), "{what}: {texts:?}"),
+            None => assert!(texts.is_empty(), "{what}: {texts:?}"),
+        }
+    }
+}
+
+/// GNU ld's warnings for a loaded segment that is readable, writable and
+/// executable and for an executable thread-local one, naming the output;
+/// `--no-warn-rwx-segments` withholds both, and a layout keeping code and
+/// data on pages of their own draws neither.
+#[test]
+fn a_read_write_execute_segment_draws_a_warning() {
+    let obj = || {
+        let o = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+            .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0u8; 8])
+            .sec(
+                ".tdata",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_WRITE | SHF_TLS,
+                8,
+                &[0u8; 8],
+            )
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1);
+        alloc::vec![parse_lds_object("a.o", o.build(EM_X86_64)).expect("parses")]
+    };
+    let shared_page = "SECTIONS { . = 0x400000; .text : { *(.text) } .data : { *(.data) } \
+                       .tdata : { *(.tdata) } }";
+    let own_pages = "SECTIONS { . = 0x400000; .text : { *(.text) } . = ALIGN(0x1000); \
+                     .data : { *(.data) } .tdata : { *(.tdata) } }";
+    let tls_x = "PHDRS { all PT_LOAD FLAGS(5); tls PT_TLS FLAGS(5); } SECTIONS { \
+                 . = 0x400000; .text : { *(.text) } :all .data : { *(.data) } :all \
+                 .tdata : { *(.tdata) } :all :tls }";
+    let rwx = "out has a LOAD segment with RWX permissions";
+    let tls = "out has a TLS segment with execute permission";
+    for (script, warn, want) in [
+        (shared_page, true, &[rwx][..]),
+        (shared_page, false, &[]),
+        (own_pages, true, &[]),
+        (tls_x, true, &[tls]),
+    ] {
+        let opts = LdsOptions {
+            warn_rwx_segments: warn,
+            output_name: String::from("out"),
+            ..Default::default()
+        };
+        let script = parse_linker_script(script).expect("parses");
+        let res = link_with_script(&script, obj(), &opts).expect("links");
+        let texts: Vec<&str> = res.warnings.iter().map(|w| w.text.as_str()).collect();
+        assert_eq!(texts, want, "warn={warn}");
+    }
+}
+
 /// The veneer symbol names its input section by the index the input
-/// file gives it, not by the position it holds in this link. The
-/// kernel links its kallsyms images with `--strip-debug` and the
-/// final one without, then requires the two symbol maps to agree.
+/// file gives it, not by the position it holds in this link, so a link
+/// with `--strip-debug` and one without produce the same symbol table.
 #[test]
 fn a53_veneer_name_is_independent_of_the_dropped_sections() {
     let insns = [A53_ADRP_FAR, A53_LDR, A53_DEP_LDR, A53_RET];
@@ -1333,50 +1426,6 @@ fn a53_veneer_name_is_independent_of_the_dropped_sections() {
     let kept = veneers(false);
     assert_eq!(kept.len(), 1, "{kept:?}");
     assert_eq!(kept, veneers(true), "veneer name moved with the strip set");
-}
-
-#[test]
-fn relr_encoding_round_trips() {
-    let addrs = [0x1000u64, 0x1008, 0x1010, 0x1400, 0x1408 + 63 * 8];
-    let words = encode_relr(&addrs, 8);
-    let mut got: Vec<u64> = Vec::new();
-    let mut base = 0u64;
-    for w in words {
-        if w & 1 == 0 {
-            got.push(w);
-            base = w + 8;
-        } else {
-            let mut r = w >> 1;
-            let mut i = 0u64;
-            while r != 0 {
-                if r & 1 != 0 {
-                    got.push(base + i * 8);
-                }
-                r >>= 1;
-                i += 1;
-            }
-            base += 63 * 8;
-        }
-    }
-    assert_eq!(got, addrs);
-}
-
-#[test]
-fn sha1_matches_known_vectors() {
-    assert_eq!(
-        sha1(b"abc"),
-        [
-            0xa9, 0x99, 0x3e, 0x36, 0x47, 0x06, 0x81, 0x6a, 0xba, 0x3e, 0x25, 0x71, 0x78, 0x50,
-            0xc2, 0x6c, 0x9c, 0xd0, 0xd8, 0x9d
-        ]
-    );
-    assert_eq!(
-        sha1(b""),
-        [
-            0xda, 0x39, 0xa3, 0xee, 0x5e, 0x6b, 0x4b, 0x0d, 0x32, 0x55, 0xbf, 0xef, 0x95, 0x60,
-            0x18, 0x90, 0xaf, 0xd8, 0x07, 0x09
-        ]
-    );
 }
 
 #[test]
@@ -1703,7 +1752,7 @@ fn property_notes_merge_into_one_note_under_a_gnu_property_segment() {
     // can put a non-note inside it.
     let opts = LdsOptions {
         max_page_size: 0x1000,
-        build_id_sha1: true,
+        build_id: crate::c5::codegen::BuildId::Sha1,
         ..Default::default()
     };
     let res = link_with_script(
@@ -1760,6 +1809,50 @@ fn property_notes_merge_into_one_note_under_a_gnu_property_segment() {
     assert_eq!(covered.len(), 2, "the merged note and the build id");
 }
 
+/// The build-id descriptor is the style's digest of the image with the
+/// descriptor zero: SHA-1, or lld's 8-byte `fast` id.
+#[test]
+fn the_build_id_is_the_digest_of_the_image() {
+    use crate::c5::codegen::BuildId;
+    let script = parse_linker_script(&super::super::default_script::default_script(false))
+        .expect("the built-in default script parses");
+    for (style, len) in [(BuildId::Sha1, 20), (BuildId::Fast, 8)] {
+        let a = TestObj::new()
+            .sec(
+                ".text",
+                SHT_PROGBITS,
+                SHF_ALLOC | SHF_EXECINSTR,
+                16,
+                &[0x90; 16],
+            )
+            .build(EM_X86_64);
+        let opts = LdsOptions {
+            build_id: style,
+            max_page_size: 0x1000,
+            ..Default::default()
+        };
+        let res = link_with_script(
+            &script,
+            alloc::vec![parse_lds_object("a.o", a).expect("parses")],
+            &opts,
+        )
+        .expect("the link succeeds");
+        let secs = readelf_sections(&res.image);
+        let note = (secs.iter())
+            .find(|s| s.0 == ".note.gnu.build-id")
+            .expect("the note");
+        assert_eq!(note.3, 16 + len as u64, "{style:?}");
+        let at = section_file_off(&res.image, note.2) + 16;
+        let mut zeroed = res.image.clone();
+        zeroed[at..at + len].fill(0);
+        assert_eq!(
+            res.image[at..at + len],
+            style.digest(&zeroed)[..],
+            "{style:?}"
+        );
+    }
+}
+
 /// A script can put something between two note sections. Each run
 /// gets its own PT_NOTE, the way ld emits them, so what a consumer
 /// reads end to end over a segment is notes only.
@@ -1786,7 +1879,7 @@ SECTIONS {
         .build(EM_X86_64);
     let script = parse_linker_script(SEP_SCRIPT).expect("parses");
     let opts = LdsOptions {
-        build_id_sha1: true,
+        build_id: crate::c5::codegen::BuildId::Sha1,
         max_page_size: 0x1000,
         ..Default::default()
     };
@@ -2275,9 +2368,9 @@ VERSION { LINUX_2.6 { global: __vdso_time; time; local: *; }; }
     assert_eq!(link_of(".dynamic"), section_index(&res.image, ".dynstr"));
 }
 
-/// A final link with no `-T` runs the built-in default script.
-/// This is the shape of kbuild's RELR probe: `void *p = &p;`
-/// linked `-shared -Bsymbolic -z pack-relative-relocs`.
+/// A final link with no `-T` runs the built-in default script, here
+/// over `void *p = &p;` linked `-shared -Bsymbolic -z
+/// pack-relative-relocs`.
 #[test]
 fn scriptless_shared_link_uses_the_default_script() {
     let script = parse_linker_script(&super::super::default_script::default_script(true))
@@ -2367,9 +2460,8 @@ fn scriptless_shared_link_uses_the_default_script() {
     assert!(phdrs.iter().any(|p| p.p_type == PT_DYNAMIC));
 }
 
-/// A script that discards the dynamic tables gets no dynamic
-/// sections, which is how the kernel's own `-shared` links stay
-/// unchanged.
+/// A `-shared` link whose script discards the dynamic tables gets no
+/// dynamic sections.
 #[test]
 fn shared_link_honours_discarding_the_dynamic_tables() {
     let script = parse_linker_script(
@@ -2549,6 +2641,7 @@ fn shared_input(soname: &str, funcs: &[&str], data: &[&str]) -> SharedInput {
             machine: NativeMachine::X86_64,
             exports: funcs.iter().chain(data).map(|s| s.to_string()).collect(),
             data_exports: data.iter().map(|s| s.to_string()).collect(),
+            tls_exports: Default::default(),
             object_sizes: Default::default(),
             export_symbols: Default::default(),
             export_versions: Default::default(),
@@ -2621,6 +2714,113 @@ fn only_a_pie_link_carries_df_1_pie() {
             .map(|(_, v)| v);
         assert_eq!(flags_1, want, "shared={shared}");
     }
+}
+
+/// The `-z` keywords that record a loader policy reach `.dynamic` as GNU
+/// ld writes them: `now` as `DF_BIND_NOW` and `DF_1_NOW`, `origin` in
+/// both words, the rest in `DT_FLAGS_1`, and an executable keeps none
+/// of the bits only a shared object can carry.
+#[test]
+fn loader_keywords_record_their_dynamic_flags() {
+    let script = parse_linker_script(&default_script(true)).expect("parses");
+    let mut z = ZKeywords::default();
+    for kw in ["now", "origin", "nodelete", "nodefaultlib", "initfirst"] {
+        z.push(parse_z_keyword(kw).unwrap());
+    }
+    for (shared, flags_1) in [
+        (
+            true,
+            dynamic::DF_1_NOW
+                | dynamic::DF_1_ORIGIN
+                | dynamic::DF_1_NODELETE
+                | dynamic::DF_1_NODEFLIB
+                | dynamic::DF_1_INITFIRST,
+        ),
+        (
+            false,
+            dynamic::DF_1_NOW | dynamic::DF_1_ORIGIN | dynamic::DF_1_NODEFLIB | dynamic::DF_1_PIE,
+        ),
+    ] {
+        let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
+        let mut opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])]);
+        opts.shared = shared;
+        opts.take_z_keywords(&z).expect("the engine takes them");
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let tag = |want: u64| {
+            dyn_tags(&res.image)
+                .into_iter()
+                .find(|&(t, _)| t == want)
+                .map(|(_, v)| v)
+        };
+        let flags = dynamic::DF_BIND_NOW | dynamic::DF_ORIGIN;
+        assert_eq!(tag(dynamic::DT_FLAGS), Some(flags), "shared={shared}");
+        assert_eq!(tag(dynamic::DT_FLAGS_1), Some(flags_1), "shared={shared}");
+    }
+}
+
+/// An executable's `.dynamic` carries `DT_DEBUG`, the slot the loader
+/// writes its `r_debug` into for a debugger; a shared object's does not,
+/// as under GNU ld.
+#[test]
+fn an_executable_takes_dt_debug_and_a_shared_object_does_not() {
+    let script = parse_linker_script(&default_script(true)).expect("parses");
+    for shared in [false, true] {
+        let objs = alloc::vec![parse_lds_object("a.o", import_user()).expect("parses")];
+        let mut opts = dynamic_opts(alloc::vec![shared_input("libc.so.6", &["foo"], &["bar"])]);
+        opts.shared = shared;
+        let res = link_with_script(&script, objs, &opts).expect("links");
+        let tags = dyn_tags(&res.image);
+        let debug = tags.iter().find(|&&(t, _)| t == dynamic::DT_DEBUG);
+        assert_eq!(
+            debug,
+            (!shared).then_some(&(dynamic::DT_DEBUG, 0)),
+            "shared={shared}"
+        );
+    }
+}
+
+/// `-z common-page-size=` is what `CONSTANT (COMMONPAGESIZE)` reads, and
+/// `-z muldefs` lets the first of two definitions stand.
+#[test]
+fn common_page_size_and_muldefs_reach_the_link() {
+    let script = parse_linker_script(
+        "SECTIONS { . = 0x400000; .text : { *(.text) } __common = CONSTANT (COMMONPAGESIZE); }",
+    )
+    .unwrap();
+    let obj = |name: &str, byte: u8| {
+        let o = TestObj::new()
+            .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[byte])
+            .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1);
+        parse_lds_object(name, o.build(EM_X86_64)).expect("parses")
+    };
+    let link = |z: &[&str]| {
+        let mut keywords = ZKeywords::default();
+        for kw in z {
+            keywords.push(parse_z_keyword(kw).unwrap());
+        }
+        let mut opts = LdsOptions::default();
+        opts.take_z_keywords(&keywords)
+            .expect("the engine takes them");
+        link_with_script(
+            &script,
+            alloc::vec![obj("a.o", 0xc3), obj("b.o", 0x90)],
+            &opts,
+        )
+    };
+    let err = link(&[]).expect_err("two definitions of _start");
+    assert!(
+        format!("{err}").contains("multiple definition of `_start`"),
+        "{err}"
+    );
+    let res = link(&["muldefs", "common-page-size=0x400"]).expect("muldefs links");
+    let syms = image_symbols(&res.image);
+    assert_eq!(find_sym(&syms, "__common"), 0x400);
+    let start = find_sym(&syms, "_start");
+    assert_eq!(
+        res.image[section_file_off(&res.image, start)],
+        0xc3,
+        "the first definition stands"
+    );
 }
 
 /// A shared library input takes a `DT_NEEDED` naming its soname,

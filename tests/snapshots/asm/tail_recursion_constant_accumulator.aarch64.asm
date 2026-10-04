@@ -25,8 +25,8 @@ Disassembly of section .text:
                	ret
 
 <down>:
+               	mov	x0, #0xa                // =10
                	mov	x1, #0x0                // =0
-               	cbz	x0, <addr>
                	sub	x0, x0, #0x1
                	sub	x1, x1, #0x3
                	cbnz	x0, <addr>
@@ -34,17 +34,16 @@ Disassembly of section .text:
                	ret
 
 <twice>:
-               	mov	x1, #0x1                // =1
-               	cbz	x0, <addr>
-               	sub	x0, x0, #0x1
-               	lsl	x1, x1, #1
-               	cbnz	x0, <addr>
-               	mov	x0, x1
+               	mov	x1, #0x14               // =20
+               	mov	x0, #0x1                // =1
+               	sub	x1, x1, #0x1
+               	lsl	x0, x0, #1
+               	cbnz	x1, <addr>
                	ret
 
 <wrap>:
+               	mov	x0, #0xa                // =10
                	mov	x1, #0x0                // =0
-               	cbz	x0, <addr>
                	sub	x0, x0, #0x1
                	sub	x1, x1, #0x7
                	cbnz	x0, <addr>

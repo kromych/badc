@@ -1,9 +1,9 @@
 /* A member-level `__attribute__((packed))` clamps that field's alignment to 1
    (GCC semantics): it removes the field's leading padding and does not raise
    the aggregate's alignment. This is independent of a struct-level `packed`.
-   The zero-length packed pointer-array member is the qemu COMPAT_HANDLE idiom:
-   it must contribute neither storage nor alignment. Sizes use fixed-width
-   types so the layout is data-model portable. Returns 0 on success. */
+   A zero-length packed pointer-array member must contribute neither
+   storage nor alignment. Sizes use fixed-width types so the layout is
+   data-model portable. Returns 0 on success. */
 #include <stdint.h>
 
 struct pm {

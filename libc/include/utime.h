@@ -21,7 +21,22 @@ struct utimbuf {
 #endif
 
 #ifdef _WIN32
+#pragma dylib(msvcrt, "msvcrt.dll")
 #pragma binding(msvcrt::utime, "_utime")
+// The CRT's underscored spellings, which mingw-w64's <utime.h> declares
+// beside the POSIX one: `struct _utimbuf` has `struct utimbuf`'s layout.
+struct _utimbuf {
+    time_t actime;
+    time_t modtime;
+};
+
+#pragma binding(msvcrt::_utime, "_utime")
+#pragma binding(msvcrt::_futime, "_futime")
+#pragma binding(msvcrt::_wutime, "_wutime")
+
+int _utime(const char *path, struct _utimbuf *times);
+int _futime(int fd, struct _utimbuf *times);
+int _wutime(const unsigned short *path, struct _utimbuf *times);
 #endif
 
 // POSIX: set the access and modification times of `path` to the values in

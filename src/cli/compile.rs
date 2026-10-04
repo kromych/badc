@@ -18,9 +18,9 @@ use super::options::SourceKind;
 pub(crate) const DRIVER_STACK_SIZE: usize = 64 * 1024 * 1024;
 
 /// The `-D` list one translation unit preprocesses under. gcc predefines
-/// `__ASSEMBLER__` for a `.S`, and kernel headers gate their C-only content
-/// on it. It goes ahead of the command-line list so `-U__ASSEMBLER__` and an
-/// explicit `-D__ASSEMBLER__=<v>` both still win.
+/// `__ASSEMBLER__` for a `.S`, and a header shared with assembly gates its
+/// C-only content on it. It goes ahead of the command-line list so
+/// `-U__ASSEMBLER__` and an explicit `-D__ASSEMBLER__=<v>` both still win.
 pub(crate) fn tu_defines(src_path: &str, defines: &[(String, String)]) -> Vec<(String, String)> {
     if !SourceKind::of(src_path).is_asm() {
         return defines.to_vec();

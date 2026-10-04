@@ -1,6 +1,6 @@
 // The x86_64 `%P` operand modifier on a memory (`m`) operand prints the
-// memory reference, as gcc and clang print it. Linux 6.1 and 6.6 spell
-// `prefetchw %P1`, `clflush %P0` and `xchgl %0, %P1` over `m` operands
+// memory reference, as gcc and clang print it: `prefetchw %P1`,
+// `clflush %P0` and `xchgl %0, %P1` over `m` operands
 // whose address is in a register; a member at an offset and a file-scope
 // object are the other two shapes. The file-scope one is RIP-relative, as
 // clang prints it; gcc prints the bare address, which a PIE cannot link.

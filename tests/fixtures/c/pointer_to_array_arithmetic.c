@@ -4,7 +4,7 @@
 // size has to come from the declared dimension. Covers `a + i`, `p++`
 // / `p--`, a chained `p + i - j`, the deref `(*p)[k]` after an offset,
 // the pointer difference `p - a`, and the post-increment deref form
-// `(*p++)[k]` (the SmallerC `rev()` shape that exposed the bug).
+// `(*p++)[k]`.
 int a[5][2] = {{0, 1}, {2, 3}, {4, 5}, {6, 7}, {8, 9}};
 
 int main(void) {

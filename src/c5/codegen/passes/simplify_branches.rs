@@ -81,9 +81,19 @@ pub(crate) fn run_with_const_data(
     program: &Program,
     param_ranges: &BTreeMap<usize, Vec<Range>>,
 ) {
+    run_with_const_data_on(funcs, program, param_ranges, |_| true);
+}
+
+/// [`run_with_const_data`] over the functions `pick` selects.
+pub(crate) fn run_with_const_data_on(
+    funcs: &mut [FunctionSsa],
+    program: &Program,
+    param_ranges: &BTreeMap<usize, Vec<Range>>,
+    pick: impl Fn(&FunctionSsa) -> bool,
+) {
     let cd = super::const_global_fold::ConstData::build(program);
     let facts = super::constfold::addr_facts(program);
-    for func in funcs {
+    for func in funcs.iter_mut().filter(|f| pick(f)) {
         let ranges = param_ranges
             .get(&func.ent_pc)
             .map_or(&[][..], |r| r.as_slice());

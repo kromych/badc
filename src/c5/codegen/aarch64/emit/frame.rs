@@ -488,7 +488,7 @@ pub(super) fn win_arm64_variadic_callee(func: &FunctionSsa, abi: super::Abi) -> 
         !abi.variadic_int_only || matches!(abi.arch, super::Arch::Aarch64 | super::Arch::X86_64),
         "variadic_int_only is a Windows (aarch64 or x86_64) property"
     );
-    func.is_variadic && abi.variadic_int_only && matches!(abi.arch, super::Arch::Aarch64)
+    func.is_variadic && abi.win_arm64_variadic()
 }
 
 /// The AAPCS64 register save area (Appendix B): x0..x7 at 8 bytes each,

@@ -122,6 +122,7 @@ pub(crate) const R_AARCH64_GLOB_DAT: u32 = 1025;
 pub(crate) const R_AARCH64_JUMP_SLOT: u32 = 1026;
 pub(crate) const R_AARCH64_RELATIVE: u32 = 1027;
 pub(crate) const R_AARCH64_TLS_DTPREL64: u32 = 1029;
+pub(crate) const R_AARCH64_TLS_TPREL64: u32 = 1030;
 
 /// Access size in bytes that an `R_AARCH64_LDST<n>_ABS_LO12_NC`
 /// relocation scales its immediate by, or `None` for any other type.

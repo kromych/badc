@@ -2,8 +2,8 @@
    declarator, so the prototype's parse must drain the fn-pointer base
    carriers. A leak contaminates the next struct definition's first
    field record with a phantom prototype, and typeof() of that member
-   then fails __builtin_types_compatible_p (the kernel container_of
-   static assert). */
+   then fails __builtin_types_compatible_p (the static assert of a
+   `container_of` macro). */
 typedef unsigned long long u64;
 typedef unsigned int u32;
 

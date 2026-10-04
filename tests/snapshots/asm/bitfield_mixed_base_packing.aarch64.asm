@@ -78,28 +78,6 @@ Disassembly of section .text:
                	str	w2, [x0]
                	and	x1, x1, #0xffffffffffffff3f
                	strb	w1, [x0, #0x7]
-               	sub	x0, x29, #0x8
-               	ldrh	w1, [x0]
-               	and	x1, x1, #0xfffffffffffffe00
-               	orr	x1, x1, #0x1ff
-               	strh	w1, [x0]
-               	ldrh	w2, [x0, #0x2]
-               	and	x2, x2, #0xfffffffffffffe00
-               	mov	x17, #0x123             // =291
-               	orr	x2, x2, x17
-               	strh	w2, [x0, #0x2]
-               	and	x0, x1, #0xffff
-               	and	x0, x0, #0x1ff
-               	cmp	w0, #0x1ff
-               	b.ne	<addr>
-               	and	x0, x2, #0xffff
-               	and	x0, x0, #0x1ff
-               	cmp	w0, #0x123
-               	b.eq	<addr>
-               	mov	x0, #0xa                // =10
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

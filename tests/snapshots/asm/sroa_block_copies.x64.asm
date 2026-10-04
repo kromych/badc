@@ -267,11 +267,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	callq	<addr>
-               	movq	$-0x1, %rax
-               	popq	%rbx
-               	popq	%r12
-               	popq	%rbp
-               	retq
+               	ud2
 
 <vla_copy>:
                	pushq	%rbp

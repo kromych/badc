@@ -102,12 +102,12 @@ fn ent_pc=4 n_params=1 variadic=false locals=1
     v92  Imm(0)                                           -> x1
     v93  LifetimeEnd(0)                                   -> -
     v94  LifetimeEnd(0)                                   -> -
-    v95  LifetimeEnd(0)                                   -> -
-    v96  Imm(0)                                           -> x1
-    v97  BinopI { op=and, lhs=v91, rhs_imm=4294967295 }   -> x1
-    v98  BinopI { op=and, lhs=v64, rhs_imm=4294967295 }   -> x1
+    v95  Imm(0)                                           -> x1
+    v96  BinopI { op=and, lhs=v91, rhs_imm=4294967295 }   -> x1
+    v97  BinopI { op=and, lhs=v64, rhs_imm=4294967295 }   -> x1
+    v98  Imm(0)                                           -> x1
     v99  Imm(0)                                           -> x1
-    v100 Imm(0)                                           -> x1
+    v100 LifetimeEnd(0)                                   -> -
     v101 Imm(0)                                           -> x1
     v102 LifetimeEnd(-1)                                  -> -
     v103 BinopI { op=and, lhs=v91, rhs_imm=4294967295 }   -> x0
@@ -222,12 +222,12 @@ fn ent_pc=5 n_params=1 variadic=false locals=1
     v92  Imm(0)                                           -> x1
     v93  LifetimeEnd(0)                                   -> -
     v94  LifetimeEnd(0)                                   -> -
-    v95  LifetimeEnd(0)                                   -> -
-    v96  Imm(0)                                           -> x1
-    v97  BinopI { op=and, lhs=v91, rhs_imm=4294967295 }   -> x1
-    v98  BinopI { op=and, lhs=v64, rhs_imm=4294967295 }   -> x1
+    v95  Imm(0)                                           -> x1
+    v96  BinopI { op=and, lhs=v91, rhs_imm=4294967295 }   -> x1
+    v97  BinopI { op=and, lhs=v64, rhs_imm=4294967295 }   -> x1
+    v98  Imm(0)                                           -> x1
     v99  Imm(0)                                           -> x1
-    v100 Imm(0)                                           -> x1
+    v100 LifetimeEnd(0)                                   -> -
     v101 Imm(0)                                           -> x1
     v102 LifetimeEnd(-1)                                  -> -
     v103 BinopI { op=and, lhs=v91, rhs_imm=4294967295 }   -> x0

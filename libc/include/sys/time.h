@@ -6,6 +6,13 @@
 
 #include <time.h>
 
+// The obsolete zone argument of gettimeofday, which glibc, libSystem and
+// mingw-w64 all define here.
+struct timezone {
+    int tz_minuteswest;
+    int tz_dsttime;
+};
+
 #if defined(__APPLE__) || defined(__linux__)
 // Interval timer (POSIX setitimer/getitimer). Two `struct timeval`s: the
 // time until the next expiration and the reload value. The struct is

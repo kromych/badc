@@ -156,7 +156,11 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
         fail("error: no input objects".to_string());
     }
     let machine = inputs[0].machine;
-    let opts = badc::LdsOptions {
+    let out = cli
+        .output_path
+        .clone()
+        .unwrap_or_else(|| std::path::PathBuf::from("a.out"));
+    let mut opts = badc::LdsOptions {
         emit: if shared || cli.link.pie == Some(true) {
             badc::LdsEmit::Dyn
         } else {
@@ -165,27 +169,36 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
         shared,
         entry_override: cli.link.entry.clone(),
         // GNU ld defaults: 2 MiB on x86-64, 64 KiB on aarch64, 4 KiB
-        // on i386.
-        max_page_size: cli.link.max_page_size.unwrap_or(match machine {
+        // on i386; `-z max-page-size=` replaces it below.
+        max_page_size: match machine {
             183 => 0x10000,
             3 => 0x1000,
             _ => 0x200000,
-        }),
+        },
         orphan_handling: cli.link.orphan_handling,
-        build_id_sha1: cli.link.build_id_sha1,
+        build_id: cli.link.build_id,
         strip_debug: cli.link.strip_debug,
         discard_locals: cli.link.discard_locals,
         discard_none: cli.link.discard_none,
-        pack_relative_relocs: cli.link.pack_relative_relocs,
         apply_dynamic_relocs: cli.link.apply_dynamic_relocs,
         emit_relocs: cli.link.emit_relocs,
-        emit_warnings: !cli.quiet,
-        // The `-W` family the command line left. A link diagnostic has
-        // no position in a translation unit, so no pragma applies.
+        // The `-W` family the command line left, `-w` among them. A link
+        // diagnostic has no position in a translation unit, so no pragma
+        // applies.
         diag: cli.front.diag.clone(),
         fix_cortex_a53_843419: cli.link.fix_cortex_a53_843419,
+        symbolic: cli.link.symbolic,
+        warn_execstack: cli.link.warn_execstack,
+        warn_rwx_segments: cli.link.warn_rwx_segments,
+        output_name: (out.file_name())
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default(),
         ..Default::default()
     };
+    // `refuse_link_options` asked the same table before the link began.
+    if let Err((kw, why)) = opts.take_z_keywords(&cli.link.z) {
+        fail(format!("error: -z {} is not supported: {why}", kw.name()));
+    }
     let res = match badc::link_with_script(&script, inputs, &opts) {
         Ok(r) => r,
         Err(e) => {
@@ -196,10 +209,9 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
     for w in &res.warnings {
         eprintln!("badc: {w}");
     }
-    let out = cli
-        .output_path
-        .clone()
-        .unwrap_or_else(|| std::path::PathBuf::from("a.out"));
+    if cli.link.fatal_warnings && !res.warnings.is_empty() {
+        fail("error: warnings treated as errors (--fatal-warnings)".to_string());
+    }
     if let Err(e) = badc::write_output_file(&out, &res.image, true) {
         fail(format!("error: failed to write {}: {e}", out.display()));
     }

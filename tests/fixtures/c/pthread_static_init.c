@@ -2,9 +2,10 @@
 // and condition variable. A statically initialised object must carry
 // the magic the system headers seed (PTHREAD_MUTEX_INITIALIZER /
 // PTHREAD_COND_INITIALIZER); an all-zero object is rejected by
-// pthread_mutex_lock / pthread_cond_wait with EINVAL. glibc and the
-// Windows shim take an all-zero object. A wrong initializer silently
-// breaks every static lock, including the threaded event-loop notifier.
+// pthread_mutex_lock / pthread_cond_wait with EINVAL. glibc takes an
+// all-zero object, as does Windows, whose zero lock and condition variable
+// are SRWLOCK_INIT and CONDITION_VARIABLE_INIT. A wrong initializer silently
+// breaks every static lock.
 #include <pthread.h>
 
 static pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;

@@ -12,7 +12,7 @@
 // returns.
 
 #include <stdio.h>
-#include <time.h>
+#include "bench_clock.h"
 
 #define N 38
 
@@ -22,14 +22,11 @@ static long fib(int n) {
 }
 
 int main(void) {
-    struct timespec t0, t1;
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    double t0 = bench_ms();
     long r = fib(N);
-    clock_gettime(CLOCK_MONOTONIC, &t1);
+    double t1 = bench_ms();
 
-    long secs = t1.tv_sec - t0.tv_sec;
-    long nsecs = t1.tv_nsec - t0.tv_nsec;
-    double ms = (double)secs * 1000.0 + (double)nsecs / 1000000.0;
+    double ms = t1 - t0;
     printf("fib(%d) = %ld in %.2f ms\n", N, r, ms);
 
     // Sanity-check against the known value so a miscompilation

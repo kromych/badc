@@ -245,6 +245,11 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("fib.c", 0),
     ("tailrec_narrow_param.c", 0),
     ("tailrec_void_accumulate.c", 0),
+    ("tailrec_narrow_tail_wide_base.c", 0),
+    ("tailrec_narrow_result_accumulates.c", 0),
+    ("always_inline_returns_an_aggregate_from_any_address.c", 0),
+    ("noreturn_calls_end_their_block.c", 0),
+    ("read_before_store_promotes.c", 0),
     ("queens.c", 0),
     ("inline_keyword_uncaps.c", 0),
     ("inline_transitive_body_cap.c", 0),
@@ -375,6 +380,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("local_aggregate_runtime_init.c", 0),
     ("aggregate_init_struct_member_copy.c", 0),
     ("member_name_space_keeps_object_shape.c", 0),
+    ("prototype_param_keeps_object_shape.c", 0),
     ("inner_binding_keeps_outer_array_shape.c", 0),
     ("array_alias_param_outer_bracket.c", 0),
     ("attr_arg_keeps_declared_type.c", 0),
@@ -468,6 +474,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("variadic_callee_frame.c", 0),
     ("variadic_hidden_result_pointer.c", 0),
     ("aggregate_argument_bounds.c", 0),
+    ("packed_bitfield_bounds.c", 0),
     ("variadic_fp_argument_registers.c", 0),
     ("sysv_x87_unions.c", 0),
     ("sysv_single_fp_vectors.c", 0),
@@ -639,7 +646,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_comments.c", 42),
     ("inline_asm_pushsection.c", 42),
     ("inline_asm_quoted_symbol_data.c", 42),
-    ("inline_asm_alternative_replacement.c", 42),
+    ("inline_asm_pushed_replacement.c", 42),
     ("file_scope_asm_decls.c", 0),
     ("file_scope_asm_label_binding.c", 42),
     ("file_scope_asm_section_placement.c", 42),
@@ -892,6 +899,15 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("address_constant_array_strides.c", 0),
     ("const_object_address_read.c", 0),
     ("const_bit_field_read.c", 0),
+    ("dlfcn_errors.c", 0),
+    ("dirent_stream.c", 0),
+    ("utime_sets_times.c", 0),
+    ("posix_clocks.c", 0),
+    ("exit_from_nested_call.c", 3),
+    ("popen_reads_command_output.c", 0),
+    ("pthread_lifecycle.c", 0),
+    ("pthread_mutex_cond.c", 0),
+    ("pthread_once_keys.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
     ("setenv_overwrite.c", 0),
     // Runtime dynamic linking. Opens the global symbol table,
@@ -1277,6 +1293,11 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("typeof_function_types.c", 0),
     ("comma_operator_decay.c", 0),
     ("typeof_row_bounds.c", 0),
+    ("paren_array_declarator.c", 0),
+    ("multidim_array_value.c", 0),
+    ("enum_type_identity.c", 0),
+    ("compound_assign_once.c", 0),
+    ("int128_scalar_contexts.c", 0),
     ("variably_modified_type_names.c", 0),
     ("enum_used_before_definition.c", 0),
     ("tag_scopes.c", 0),
@@ -1289,7 +1310,8 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_fmov_top_half.c", 42),
     ("inline_asm_a64_fmov_forms.c", 42),
     ("inline_asm_a64_sve_counts.c", 0),
-    ("inline_asm_a64_chained_alternatives.c", 0),
+    ("inline_asm_a64_sve_state.c", 0),
+    ("inline_asm_a64_chained_replacements.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
     ("plain_char_distinct_type.c", 0),
@@ -1301,6 +1323,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("packed_member_declaration.c", 0),
     ("bitfield_attribute_after_width.c", 0),
     ("bitfield_typedef_alignment.c", 0),
+    ("inlined_struct_return_lifetime.c", 0),
 ];
 
 /// Same shape as `super::native::NATIVE_FIXTURES`. The two tables
@@ -1483,6 +1506,11 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("fib.c", 0),
     ("tailrec_narrow_param.c", 0),
     ("tailrec_void_accumulate.c", 0),
+    ("tailrec_narrow_tail_wide_base.c", 0),
+    ("tailrec_narrow_result_accumulates.c", 0),
+    ("always_inline_returns_an_aggregate_from_any_address.c", 0),
+    ("noreturn_calls_end_their_block.c", 0),
+    ("read_before_store_promotes.c", 0),
     ("queens.c", 0),
     ("inline_keyword_uncaps.c", 0),
     ("inline_transitive_body_cap.c", 0),
@@ -1646,6 +1674,15 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("address_constant_array_strides.c", 0),
     ("const_object_address_read.c", 0),
     ("const_bit_field_read.c", 0),
+    ("dlfcn_errors.c", 0),
+    ("dirent_stream.c", 0),
+    ("utime_sets_times.c", 0),
+    ("posix_clocks.c", 0),
+    ("exit_from_nested_call.c", 3),
+    ("popen_reads_command_output.c", 0),
+    ("pthread_lifecycle.c", 0),
+    ("pthread_mutex_cond.c", 0),
+    ("pthread_once_keys.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
     ("setenv_overwrite.c", 0),
     // Runtime dynamic linking through libdl (libdl.so.2 +
@@ -1710,6 +1747,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("local_aggregate_runtime_init.c", 0),
     ("aggregate_init_struct_member_copy.c", 0),
     ("member_name_space_keeps_object_shape.c", 0),
+    ("prototype_param_keeps_object_shape.c", 0),
     ("inner_binding_keeps_outer_array_shape.c", 0),
     ("array_alias_param_outer_bracket.c", 0),
     ("attr_arg_keeps_declared_type.c", 0),
@@ -1796,6 +1834,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("variadic_callee_frame.c", 0),
     ("variadic_hidden_result_pointer.c", 0),
     ("aggregate_argument_bounds.c", 0),
+    ("packed_bitfield_bounds.c", 0),
     ("variadic_fp_argument_registers.c", 0),
     ("sysv_x87_unions.c", 0),
     ("sysv_single_fp_vectors.c", 0),
@@ -1950,7 +1989,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_comments.c", 42),
     ("inline_asm_pushsection.c", 42),
     ("inline_asm_quoted_symbol_data.c", 42),
-    ("inline_asm_alternative_replacement.c", 42),
+    ("inline_asm_pushed_replacement.c", 42),
     ("file_scope_asm_decls.c", 0),
     ("file_scope_asm_label_binding.c", 42),
     ("file_scope_asm_section_placement.c", 42),
@@ -2218,6 +2257,11 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("typeof_function_types.c", 0),
     ("comma_operator_decay.c", 0),
     ("typeof_row_bounds.c", 0),
+    ("paren_array_declarator.c", 0),
+    ("multidim_array_value.c", 0),
+    ("enum_type_identity.c", 0),
+    ("compound_assign_once.c", 0),
+    ("int128_scalar_contexts.c", 0),
     ("variably_modified_type_names.c", 0),
     ("enum_used_before_definition.c", 0),
     ("tag_scopes.c", 0),
@@ -2230,7 +2274,8 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_fmov_top_half.c", 42),
     ("inline_asm_a64_fmov_forms.c", 42),
     ("inline_asm_a64_sve_counts.c", 0),
-    ("inline_asm_a64_chained_alternatives.c", 0),
+    ("inline_asm_a64_sve_state.c", 0),
+    ("inline_asm_a64_chained_replacements.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
     ("plain_char_distinct_type.c", 0),
@@ -2242,6 +2287,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("packed_member_declaration.c", 0),
     ("bitfield_attribute_after_width.c", 0),
     ("bitfield_typedef_alignment.c", 0),
+    ("inlined_struct_return_lifetime.c", 0),
 ];
 
 pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
@@ -2400,7 +2446,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("file_scope_asm_local_label_branch.c", 42),
     ("inline_asm_pushsection.c", 42),
     ("inline_asm_quoted_symbol_data.c", 42),
-    ("inline_asm_alternative_replacement.c", 42),
+    ("inline_asm_pushed_replacement.c", 42),
     ("file_scope_asm_decls.c", 0),
     ("file_scope_asm_label_binding.c", 42),
     ("file_scope_asm_section_placement.c", 42),
@@ -2496,6 +2542,11 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("fib.c", 0),
     ("tailrec_narrow_param.c", 0),
     ("tailrec_void_accumulate.c", 0),
+    ("tailrec_narrow_tail_wide_base.c", 0),
+    ("tailrec_narrow_result_accumulates.c", 0),
+    ("always_inline_returns_an_aggregate_from_any_address.c", 0),
+    ("noreturn_calls_end_their_block.c", 0),
+    ("read_before_store_promotes.c", 0),
     ("queens.c", 0),
     ("inline_keyword_uncaps.c", 0),
     ("inline_transitive_body_cap.c", 0),
@@ -2652,6 +2703,15 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("address_constant_array_strides.c", 0),
     ("const_object_address_read.c", 0),
     ("const_bit_field_read.c", 0),
+    ("dlfcn_errors.c", 0),
+    ("dirent_stream.c", 0),
+    ("utime_sets_times.c", 0),
+    ("posix_clocks.c", 0),
+    ("exit_from_nested_call.c", 3),
+    ("popen_reads_command_output.c", 0),
+    ("pthread_lifecycle.c", 0),
+    ("pthread_mutex_cond.c", 0),
+    ("pthread_once_keys.c", 0),
     ("setenv_then_get.c", 'Z' as i32),
     ("setenv_overwrite.c", 0),
     ("dlopen_atoi.c", 123),
@@ -2716,6 +2776,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("local_aggregate_runtime_init.c", 0),
     ("aggregate_init_struct_member_copy.c", 0),
     ("member_name_space_keeps_object_shape.c", 0),
+    ("prototype_param_keeps_object_shape.c", 0),
     ("inner_binding_keeps_outer_array_shape.c", 0),
     ("array_alias_param_outer_bracket.c", 0),
     ("attr_arg_keeps_declared_type.c", 0),
@@ -2802,6 +2863,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("variadic_callee_frame.c", 0),
     ("variadic_hidden_result_pointer.c", 0),
     ("aggregate_argument_bounds.c", 0),
+    ("packed_bitfield_bounds.c", 0),
     ("variadic_fp_argument_registers.c", 0),
     ("sysv_x87_unions.c", 0),
     ("sysv_single_fp_vectors.c", 0),
@@ -3135,6 +3197,11 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("typeof_function_types.c", 0),
     ("comma_operator_decay.c", 0),
     ("typeof_row_bounds.c", 0),
+    ("paren_array_declarator.c", 0),
+    ("multidim_array_value.c", 0),
+    ("enum_type_identity.c", 0),
+    ("compound_assign_once.c", 0),
+    ("int128_scalar_contexts.c", 0),
     ("variably_modified_type_names.c", 0),
     ("enum_used_before_definition.c", 0),
     ("tag_scopes.c", 0),
@@ -3147,7 +3214,8 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_fmov_top_half.c", 42),
     ("inline_asm_a64_fmov_forms.c", 42),
     ("inline_asm_a64_sve_counts.c", 0),
-    ("inline_asm_a64_chained_alternatives.c", 0),
+    ("inline_asm_a64_sve_state.c", 0),
+    ("inline_asm_a64_chained_replacements.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
     ("plain_char_distinct_type.c", 0),
@@ -3160,6 +3228,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("packed_member_declaration.c", 0),
     ("bitfield_attribute_after_width.c", 0),
     ("bitfield_typedef_alignment.c", 0),
+    ("inlined_struct_return_lifetime.c", 0),
 ];
 
 /// Subset of the cross-arch fixture corpus that doesn't lean on
@@ -3204,8 +3273,8 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("compound_literal_struct_field.c", 0),
     ("strtof_parses_float.c", 0),
     ("snprintf_truncation_c99.c", 0),
-    // Runtime CRT shim: POSIX setenv overwrite semantics over msvcrt's
-    // 2-parameter _putenv_s.
+    // POSIX setenv overwrite semantics, from the program's own setenv over
+    // msvcrt's 2-parameter _putenv_s: the headers declare none.
     ("setenv_overwrite.c", 0),
     // fnmatch and the regex quartet: msvcrt has neither, so this lane
     // runs badc's own engine (`libc/lib/pattern.c`) rather than a
@@ -3269,6 +3338,11 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("fib.c", 0),
     ("tailrec_narrow_param.c", 0),
     ("tailrec_void_accumulate.c", 0),
+    ("tailrec_narrow_tail_wide_base.c", 0),
+    ("tailrec_narrow_result_accumulates.c", 0),
+    ("always_inline_returns_an_aggregate_from_any_address.c", 0),
+    ("noreturn_calls_end_their_block.c", 0),
+    ("read_before_store_promotes.c", 0),
     ("queens.c", 0),
     ("inline_keyword_uncaps.c", 0),
     ("inline_transitive_body_cap.c", 0),
@@ -3413,6 +3487,19 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("address_constant_array_strides.c", 0),
     ("const_object_address_read.c", 0),
     ("const_bit_field_read.c", 0),
+    ("dlfcn_errors.c", 0),
+    ("dirent_stream.c", 0),
+    ("utime_sets_times.c", 0),
+    ("posix_clocks.c", 0),
+    ("exit_from_nested_call.c", 3),
+    ("popen_reads_command_output.c", 0),
+    ("pthread_lifecycle.c", 0),
+    ("pthread_mutex_cond.c", 0),
+    ("pthread_once_keys.c", 0),
+    ("pthread_cond_timedwait.c", 0),
+    ("pthread_static_init.c", 0),
+    ("pthread_key_once_width.c", 0),
+    ("clock_monotonic_advances.c", 0),
     // c5-side vprintf -- the variadic walk happens in c5 source,
     // so the call into msvcrt is just `_write`. No libc va_list
     // bridge involved, which is why this fixture is in even when
@@ -3450,6 +3537,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("local_aggregate_runtime_init.c", 0),
     ("aggregate_init_struct_member_copy.c", 0),
     ("member_name_space_keeps_object_shape.c", 0),
+    ("prototype_param_keeps_object_shape.c", 0),
     ("inner_binding_keeps_outer_array_shape.c", 0),
     ("array_alias_param_outer_bracket.c", 0),
     ("attr_arg_keeps_declared_type.c", 0),
@@ -3533,6 +3621,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("variadic_callee_frame.c", 0),
     ("variadic_hidden_result_pointer.c", 0),
     ("aggregate_argument_bounds.c", 0),
+    ("packed_bitfield_bounds.c", 0),
     ("variadic_fp_argument_registers.c", 0),
     ("sysv_x87_unions.c", 0),
     ("sysv_single_fp_vectors.c", 0),
@@ -3739,9 +3828,9 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("computed_goto_label_only_target.c", 0),
     ("zero_length_array_member_marker.c", 0),
     // Registered from the compile-only sweep; see the module comment.
-    // `clock_monotonic_advances.c`, `getopt_unistd_globals.c` and
-    // `syscall_ptr_table.c` have no Win32 binding for the entry
-    // point they call; `sizeof_pointer_to_array_subscript.c` and
+    // `getopt_unistd_globals.c` and `syscall_ptr_table.c` have no
+    // Win32 binding for the entry point they call;
+    // `sizeof_pointer_to_array_subscript.c` and
     // `zero_sign_extension_32bit.c` assert 64-bit `long`, which
     // LLP64 does not provide.
     ("alloca_basic.c", 0),
@@ -3828,6 +3917,11 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("typeof_function_types.c", 0),
     ("comma_operator_decay.c", 0),
     ("typeof_row_bounds.c", 0),
+    ("paren_array_declarator.c", 0),
+    ("multidim_array_value.c", 0),
+    ("enum_type_identity.c", 0),
+    ("compound_assign_once.c", 0),
+    ("int128_scalar_contexts.c", 0),
     ("variably_modified_type_names.c", 0),
     ("enum_used_before_definition.c", 0),
     ("tag_scopes.c", 0),
@@ -3840,7 +3934,8 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_fmov_top_half.c", 42),
     ("inline_asm_a64_fmov_forms.c", 42),
     ("inline_asm_a64_sve_counts.c", 0),
-    ("inline_asm_a64_chained_alternatives.c", 0),
+    ("inline_asm_a64_sve_state.c", 0),
+    ("inline_asm_a64_chained_replacements.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
     ("plain_char_distinct_type.c", 0),
@@ -3853,6 +3948,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("packed_member_declaration.c", 0),
     ("bitfield_attribute_after_width.c", 0),
     ("bitfield_typedef_alignment.c", 0),
+    ("inlined_struct_return_lifetime.c", 0),
 ];
 
 /// Same fixture set as `native_pe_x64`, since the Windows-flavored
@@ -3898,8 +3994,8 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("compound_literal_struct_field.c", 0),
     ("strtof_parses_float.c", 0),
     ("snprintf_truncation_c99.c", 0),
-    // Runtime CRT shim: POSIX setenv overwrite semantics over msvcrt's
-    // 2-parameter _putenv_s.
+    // POSIX setenv overwrite semantics, from the program's own setenv over
+    // msvcrt's 2-parameter _putenv_s: the headers declare none.
     ("setenv_overwrite.c", 0),
     // strchrnul / memrchr / explicit_bzero / strndup: msvcrt exports
     // none of them, so this lane runs `libc/lib/string_ext.c`.
@@ -3966,6 +4062,11 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("fib.c", 0),
     ("tailrec_narrow_param.c", 0),
     ("tailrec_void_accumulate.c", 0),
+    ("tailrec_narrow_tail_wide_base.c", 0),
+    ("tailrec_narrow_result_accumulates.c", 0),
+    ("always_inline_returns_an_aggregate_from_any_address.c", 0),
+    ("noreturn_calls_end_their_block.c", 0),
+    ("read_before_store_promotes.c", 0),
     ("queens.c", 0),
     ("inline_keyword_uncaps.c", 0),
     ("inline_transitive_body_cap.c", 0),
@@ -4110,6 +4211,19 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("address_constant_array_strides.c", 0),
     ("const_object_address_read.c", 0),
     ("const_bit_field_read.c", 0),
+    ("dlfcn_errors.c", 0),
+    ("dirent_stream.c", 0),
+    ("utime_sets_times.c", 0),
+    ("posix_clocks.c", 0),
+    ("exit_from_nested_call.c", 3),
+    ("popen_reads_command_output.c", 0),
+    ("pthread_lifecycle.c", 0),
+    ("pthread_mutex_cond.c", 0),
+    ("pthread_once_keys.c", 0),
+    ("pthread_cond_timedwait.c", 0),
+    ("pthread_static_init.c", 0),
+    ("pthread_key_once_width.c", 0),
+    ("clock_monotonic_advances.c", 0),
     // c5-side vprintf -- variadic walking happens in c5 source
     // and the only Win32 call is `_write`, so this fixture stays
     // in even when the libc-shape variadic-sprintf path doesn't.
@@ -4145,6 +4259,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("local_aggregate_runtime_init.c", 0),
     ("aggregate_init_struct_member_copy.c", 0),
     ("member_name_space_keeps_object_shape.c", 0),
+    ("prototype_param_keeps_object_shape.c", 0),
     ("inner_binding_keeps_outer_array_shape.c", 0),
     ("array_alias_param_outer_bracket.c", 0),
     ("attr_arg_keeps_declared_type.c", 0),
@@ -4229,6 +4344,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("variadic_callee_frame.c", 0),
     ("variadic_hidden_result_pointer.c", 0),
     ("aggregate_argument_bounds.c", 0),
+    ("packed_bitfield_bounds.c", 0),
     ("variadic_fp_argument_registers.c", 0),
     ("sysv_x87_unions.c", 0),
     ("sysv_single_fp_vectors.c", 0),
@@ -4466,6 +4582,11 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("typeof_function_types.c", 0),
     ("comma_operator_decay.c", 0),
     ("typeof_row_bounds.c", 0),
+    ("paren_array_declarator.c", 0),
+    ("multidim_array_value.c", 0),
+    ("enum_type_identity.c", 0),
+    ("compound_assign_once.c", 0),
+    ("int128_scalar_contexts.c", 0),
     ("variably_modified_type_names.c", 0),
     ("enum_used_before_definition.c", 0),
     ("tag_scopes.c", 0),
@@ -4478,7 +4599,8 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_fmov_top_half.c", 42),
     ("inline_asm_a64_fmov_forms.c", 42),
     ("inline_asm_a64_sve_counts.c", 0),
-    ("inline_asm_a64_chained_alternatives.c", 0),
+    ("inline_asm_a64_sve_state.c", 0),
+    ("inline_asm_a64_chained_replacements.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
     ("plain_char_distinct_type.c", 0),
@@ -4490,6 +4612,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("packed_member_declaration.c", 0),
     ("bitfield_attribute_after_width.c", 0),
     ("bitfield_typedef_alignment.c", 0),
+    ("inlined_struct_return_lifetime.c", 0),
 ];
 
 pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
@@ -4697,6 +4820,11 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("fib.c", 0),
     ("tailrec_narrow_param.c", 0),
     ("tailrec_void_accumulate.c", 0),
+    ("tailrec_narrow_tail_wide_base.c", 0),
+    ("tailrec_narrow_result_accumulates.c", 0),
+    ("always_inline_returns_an_aggregate_from_any_address.c", 0),
+    ("noreturn_calls_end_their_block.c", 0),
+    ("read_before_store_promotes.c", 0),
     ("queens.c", 0),
     ("inline_keyword_uncaps.c", 0),
     ("inline_transitive_body_cap.c", 0),
@@ -4859,6 +4987,17 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("address_constant_array_strides.c", 0),
     ("const_object_address_read.c", 0),
     ("const_bit_field_read.c", 0),
+    ("dlfcn_errors.c", 0),
+    ("dirent_stream.c", 0),
+    ("utime_sets_times.c", 0),
+    ("posix_clocks.c", 0),
+    ("exit_from_nested_call.c", 3),
+    ("popen_reads_command_output.c", 0),
+    // pthread_lifecycle.c and pthread_once_keys.c run only as executables:
+    // the JIT unmaps a program once its main returns, while a detached
+    // thread may still run the program's code, and runs main on a thread
+    // whose exit runs the destructors main's keys leave set.
+    ("pthread_mutex_cond.c", 0),
     // dlopen+dlsym+blr finds libc atoi and the indirect call passes
     // "123" in the System V argument register.
     ("dlopen_atoi.c", 123),
@@ -4924,6 +5063,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("local_aggregate_runtime_init.c", 0),
     ("aggregate_init_struct_member_copy.c", 0),
     ("member_name_space_keeps_object_shape.c", 0),
+    ("prototype_param_keeps_object_shape.c", 0),
     ("inner_binding_keeps_outer_array_shape.c", 0),
     ("array_alias_param_outer_bracket.c", 0),
     ("attr_arg_keeps_declared_type.c", 0),
@@ -5025,6 +5165,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("variadic_callee_frame.c", 0),
     ("variadic_hidden_result_pointer.c", 0),
     ("aggregate_argument_bounds.c", 0),
+    ("packed_bitfield_bounds.c", 0),
     ("variadic_fp_argument_registers.c", 0),
     ("sysv_x87_unions.c", 0),
     ("sysv_single_fp_vectors.c", 0),
@@ -5408,6 +5549,11 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("typeof_function_types.c", 0),
     ("comma_operator_decay.c", 0),
     ("typeof_row_bounds.c", 0),
+    ("paren_array_declarator.c", 0),
+    ("multidim_array_value.c", 0),
+    ("enum_type_identity.c", 0),
+    ("compound_assign_once.c", 0),
+    ("int128_scalar_contexts.c", 0),
     ("variably_modified_type_names.c", 0),
     ("enum_used_before_definition.c", 0),
     ("tag_scopes.c", 0),
@@ -5420,7 +5566,8 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_a64_fmov_top_half.c", 42),
     ("inline_asm_a64_fmov_forms.c", 42),
     ("inline_asm_a64_sve_counts.c", 0),
-    ("inline_asm_a64_chained_alternatives.c", 0),
+    ("inline_asm_a64_sve_state.c", 0),
+    ("inline_asm_a64_chained_replacements.c", 0),
     // Plain `char` is a type distinct from `signed char` and `unsigned
     // char` (C99 6.2.5p15) at the target's signedness.
     ("plain_char_distinct_type.c", 0),
@@ -5435,6 +5582,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     // Every thread-local read folds at compile time; nothing reaches a
     // thread-local block at run time.
     ("thread_local_const_fold.c", 0),
+    ("inlined_struct_return_lifetime.c", 0),
 ];
 
 /// Fixtures the JIT declines rather than runs, so the exit-code tables

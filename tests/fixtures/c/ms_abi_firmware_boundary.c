@@ -1,10 +1,9 @@
-/* `__attribute__((ms_abi))` -- the Linux kernel's `__efiapi` -- only
- * shows up where this code meets code built for the Microsoft x64
- * calling convention: UEFI firmware enters the x86_64 EFI stub through
- * it, with the image handle in rcx and the system table in rdx. A
- * program compiled end to end by one compiler agrees with itself
- * whatever convention it picks, so the boundary is what has to be
- * checked. The asm below is the foreign caller: it loads the argument
+/* `__attribute__((ms_abi))` only shows up where this code meets code
+ * built for the Microsoft x64 calling convention: UEFI firmware calls an
+ * x86_64 image's entry point on it, with the image handle in rcx and the
+ * system table in rdx. A program compiled end to end by one compiler
+ * agrees with itself whatever convention it picks, so the boundary is
+ * what has to be checked. The asm below is the foreign caller: it loads the argument
  * registers the way firmware does, reserves the 32 bytes of shadow
  * space the convention requires, and reads back the registers the
  * callee owes it.

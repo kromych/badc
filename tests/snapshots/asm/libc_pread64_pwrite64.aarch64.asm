@@ -133,37 +133,3 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x50]
                	ldp	x20, x21, [sp], #0x60
                	ret
-
-<__c5_sys_pread64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x40
-               	stur	x0, [x29, #-0x40]
-               	stur	x1, [x29, #-0x30]
-               	stur	x2, [x29, #-0x20]
-               	stur	x3, [x29, #-0x10]
-               	ldur	x0, [x29, #-0x40]
-               	ldur	x1, [x29, #-0x30]
-               	ldur	x2, [x29, #-0x20]
-               	ldur	x3, [x29, #-0x10]
-               	bl	<addr>
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<__c5_sys_pwrite64>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x40
-               	stur	x0, [x29, #-0x40]
-               	stur	x1, [x29, #-0x30]
-               	stur	x2, [x29, #-0x20]
-               	stur	x3, [x29, #-0x10]
-               	ldur	x0, [x29, #-0x40]
-               	ldur	x1, [x29, #-0x30]
-               	ldur	x2, [x29, #-0x20]
-               	ldur	x3, [x29, #-0x10]
-               	bl	<addr>
-               	add	sp, sp, #0x40
-               	ldp	x29, x30, [sp], #0x10
-               	ret

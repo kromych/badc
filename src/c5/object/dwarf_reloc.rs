@@ -1434,8 +1434,8 @@ struct Spelled<'a> {
 
 impl<'a> Spelled<'a> {
     /// `volatile` rides the type tag rather than [`DeclSpelling`], and its
-    /// inner marker answers the same base-vs-object question the two
-    /// `const` carriers do (C99 6.7.5.1p1).
+    /// level at the object's depth answers the same base-vs-object
+    /// question the two `const` carriers do (C99 6.7.5.1p1).
     fn of(tag: i64, spelling: DeclSpelling, typedef: Option<&'a str>) -> Self {
         use crate::c5::compiler::types::{is_volatile_object_ty, is_volatile_ty};
         let volatile_object = is_volatile_object_ty(tag);

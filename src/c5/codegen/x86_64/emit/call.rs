@@ -1015,12 +1015,14 @@ fn emit_va_arg_eightbytes(
 
 /// `Some((call_pc, target_pc, args))` when `block` returns the value of
 /// its last instruction, a direct `Inst::Call` the epilogue can replace by
-/// a jump: the arguments fit the host argument-register window, this
-/// function is not variadic, the callee is on the same convention with a
-/// known return extension, no aggregate rides the call, and no
-/// `LocalAddr` (user local or c5 cdecl cell) exists that could dangle once
-/// the frame is gone. The marshalled arguments ride caller-saved
-/// registers, disjoint from the callee-saved ones the epilogue restores.
+/// a jump (a sibling call, which `-fno-optimize-sibling-calls` turns off):
+/// the arguments fit the host argument-register window, this function is
+/// not variadic, the callee -- defined in this unit or declared with a
+/// prototype -- is on the same convention with a known return extension,
+/// no aggregate rides the call, and no `LocalAddr` (user local or c5 cdecl
+/// cell) exists that could dangle once the frame is gone. The marshalled
+/// arguments ride caller-saved registers, disjoint from the callee-saved
+/// ones the epilogue restores.
 pub(super) fn detect_tail_call<'a>(
     func: &'a FunctionSsa,
     block: &super::super::ir::Block,
@@ -1033,7 +1035,7 @@ pub(super) fn detect_tail_call<'a>(
     let Terminator::Return(v) = block.terminator else {
         return None;
     };
-    if v == super::super::ir::NO_VALUE {
+    if v == super::super::ir::NO_VALUE || !abi.sibling_calls {
         return None;
     }
     // The call ends the block but for lifetime markers, which the frame

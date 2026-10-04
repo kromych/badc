@@ -27,11 +27,10 @@
 // IAT (kernel32.dll already exports them by name) so the
 // __stdcall / __declspec(dllimport) tagging the headers carry on
 // MSVC is irrelevant to the codegen -- empty expansions let
-// sqlite's prototypes parse without c5 having to model the
-// extension keywords. WINBASEAPI / WINAPI / WINAPI_INLINE / VOID
-// / FAR / NEAR are the spellings sqlite's `os_win.c` reaches for.
-// MSVC decoration spellings used by sqlite + the bundled C runtime
-// headers. None of them affect codegen on c5 -- the IAT routes
+// Win32 prototypes parse without c5 having to model the
+// extension keywords: WINBASEAPI / WINAPI / WINAPI_INLINE / VOID
+// / FAR / NEAR, and the MSVC decoration spellings of the bundled
+// C runtime headers. None of them affect codegen on c5 -- the IAT routes
 // the call regardless of inline / dllimport tagging -- so they
 // expand to nothing. `__declspec(...)` swallows its argument
 // list; `__forceinline` / `__inline` collapse to nothing.
@@ -326,6 +325,8 @@ typedef enum {
 #pragma binding(kernel32::CloseHandle,             "CloseHandle")
 #pragma binding(kernel32::GetExitCodeThread,       "GetExitCodeThread")
 #pragma binding(kernel32::SetThreadPriority,       "SetThreadPriority")
+#pragma binding(kernel32::GetThreadPriority,       "GetThreadPriority")
+#pragma binding(kernel32::ExitThread,              "ExitThread")
 #pragma binding(kernel32::GetCurrentThreadId,      "GetCurrentThreadId")
 #pragma binding(kernel32::InitializeCriticalSection, "InitializeCriticalSection")
 #pragma binding(kernel32::InitializeCriticalSectionEx, "InitializeCriticalSectionEx")
@@ -339,6 +340,13 @@ typedef enum {
 #pragma binding(kernel32::TlsGetValue,             "TlsGetValue")
 #pragma binding(kernel32::TlsSetValue,             "TlsSetValue")
 #pragma binding(kernel32::TlsFree,                 "TlsFree")
+// Fiber-local storage: slots like TlsAlloc's, each with a callback the system
+// runs on a slot's non-null value when its thread exits, when the process
+// ends, and, for every thread's value, when FlsFree releases the index.
+#pragma binding(kernel32::FlsAlloc,                "FlsAlloc")
+#pragma binding(kernel32::FlsGetValue,             "FlsGetValue")
+#pragma binding(kernel32::FlsSetValue,             "FlsSetValue")
+#pragma binding(kernel32::FlsFree,                 "FlsFree")
 // Slim reader/writer locks and condition variables (Vista+).
 #pragma binding(kernel32::InitializeSRWLock,           "InitializeSRWLock")
 #pragma binding(kernel32::AcquireSRWLockExclusive,     "AcquireSRWLockExclusive")
@@ -600,8 +608,8 @@ typedef IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY RUNTIME_FUNCTION, *PRUNTIME_FUNCTION;
 typedef IMAGE_RUNTIME_FUNCTION_ENTRY RUNTIME_FUNCTION, *PRUNTIME_FUNCTION;
 #endif
 
-// FILETIME / SYSTEMTIME -- the two structs sqlite's Windows VFS
-// uses (file timestamps + broken-down localtime fallback). Layout
+// FILETIME / SYSTEMTIME -- file timestamps and broken-down local
+// time. Layout
 // matches the Win64 ABI byte-for-byte so kernel32 calls writing
 // these can hand back results c5 can read.
 struct _FILETIME {
@@ -806,7 +814,7 @@ typedef struct _OSVERSIONINFOEXW {
 typedef struct _OSVERSIONINFOEXW *LPOSVERSIONINFOEXW;
 typedef struct _OSVERSIONINFOEXW *POSVERSIONINFOEXW;
 
-// OSVERSIONINFOA / OSVERSIONINFOW -- sqlite reads `dwPlatformId`
+// OSVERSIONINFOA / OSVERSIONINFOW -- a program reads `dwPlatformId`
 // out of the struct after a `GetVersionEx*` call. The other fields
 // are present for layout fidelity (so the kernel32 callee writes
 // the platform id at the offset c5 reads from). The W variant
@@ -887,8 +895,7 @@ typedef enum _COMPUTER_NAME_FORMAT {
     ComputerNameMax
 } COMPUTER_NAME_FORMAT;
 
-// Codepage / API constants the Win32 VFS reaches for. Values
-// pinned by the platform; sqlite consumes them as plain integer
+// Codepage / API constants, pinned by the platform: plain integer
 // arguments to `MultiByteToWideChar` / `WideCharToMultiByte` and
 // the file/lock APIs.
 #define CP_ACP              0
@@ -1036,6 +1043,7 @@ typedef enum _COMPUTER_NAME_FORMAT {
 #define LOAD_LIBRARY_SEARCH_DEFAULT_DIRS   0x00001000
 #define BCRYPT_SUCCESS(status) (((NTSTATUS)(status)) >= 0)
 #define TLS_OUT_OF_INDEXES             0xFFFFFFFF
+#define FLS_OUT_OF_INDEXES             0xFFFFFFFF
 #define TIMER_ALL_ACCESS               0x1F0003
 #define VOLUME_NAME_DOS                0x0
 #define VOLUME_NAME_GUID               0x1
@@ -1322,6 +1330,7 @@ typedef enum _FILE_INFO_BY_HANDLE_CLASS {
 #define DEBUG_PROCESS                  0x00000001
 #define DEBUG_ONLY_THIS_PROCESS        0x00000002
 #define CREATE_SUSPENDED               0x00000004
+#define STACK_SIZE_PARAM_IS_A_RESERVATION 0x00010000
 #define DETACHED_PROCESS               0x00000008
 #define CREATE_NEW_CONSOLE             0x00000010
 #define NORMAL_PRIORITY_CLASS          0x00000020
@@ -1783,8 +1792,8 @@ typedef struct _TIME_ZONE_INFORMATION {
 } TIME_ZONE_INFORMATION, *PTIME_ZONE_INFORMATION, *LPTIME_ZONE_INFORMATION;
 
 // WIN32_FILE_ATTRIBUTE_DATA -- output buffer for
-// GetFileAttributesEx. sqlite reads the attribute / size pair to
-// pre-size buffers; the high/low DWORD halves of the 64-bit size
+// GetFileAttributesEx: the attribute / size pair; the high/low
+// DWORD halves of the 64-bit size
 // match the Win64 layout. Has to come after FILETIME above
 // because c5 needs the inner-struct definition before the
 // outer-struct field.
@@ -1836,7 +1845,7 @@ typedef struct _WIN32_FIND_DATAW WIN32_FIND_DATAW;
 typedef struct _WIN32_FIND_DATAW *LPWIN32_FIND_DATAW;
 typedef struct _WIN32_FIND_DATAW *PWIN32_FIND_DATAW;
 
-// Console-info structs shell.c reads when sniffing whether stdout
+// Console-info structs a program reads when sniffing whether stdout
 // is a terminal vs a redirected pipe. Layouts pinned to the Win64
 // SDK so the kernel-emitted records align with c5's reads.
 struct _COORD {
@@ -1957,7 +1966,7 @@ typedef struct _CONSOLE_READCONSOLE_CONTROL {
 #define COMMON_LVB_UNDERSCORE           0x8000
 
 // Console control-event codes the SetConsoleCtrlHandler callback
-// distinguishes between -- shell.c uses these for ^C handling.
+// distinguishes between, as a ^C handler does.
 #define CTRL_C_EVENT        0
 #define CTRL_BREAK_EVENT    1
 #define CTRL_CLOSE_EVENT    2
@@ -1997,6 +2006,17 @@ DWORD WaitForSingleObject(HANDLE hHandle, DWORD dwMilliseconds);
 BOOL CloseHandle(HANDLE hObject);
 BOOL GetExitCodeThread(HANDLE hThread, LPDWORD lpExitCode);
 BOOL SetThreadPriority(HANDLE hThread, int nPriority);
+int GetThreadPriority(HANDLE hThread);
+// The levels SetThreadPriority takes (winbase.h).
+#define THREAD_PRIORITY_IDLE          (-15)
+#define THREAD_PRIORITY_LOWEST        (-2)
+#define THREAD_PRIORITY_BELOW_NORMAL  (-1)
+#define THREAD_PRIORITY_NORMAL        0
+#define THREAD_PRIORITY_ABOVE_NORMAL  1
+#define THREAD_PRIORITY_HIGHEST       2
+#define THREAD_PRIORITY_TIME_CRITICAL 15
+#define THREAD_PRIORITY_ERROR_RETURN  0x7FFFFFFF
+__attribute__((noreturn)) VOID ExitThread(DWORD dwExitCode);
 DWORD GetCurrentThreadId(VOID);
 VOID InitializeCriticalSection(LPCRITICAL_SECTION lpCriticalSection);
 // InitializeCriticalSectionEx(cs, spin, flags): the flag word selects debug
@@ -2010,6 +2030,11 @@ DWORD TlsAlloc(VOID);
 LPVOID TlsGetValue(DWORD dwTlsIndex);
 BOOL TlsSetValue(DWORD dwTlsIndex, LPVOID lpTlsValue);
 BOOL TlsFree(DWORD dwTlsIndex);
+typedef VOID (WINAPI *PFLS_CALLBACK_FUNCTION)(PVOID lpFlsData);
+DWORD FlsAlloc(PFLS_CALLBACK_FUNCTION lpCallback);
+PVOID FlsGetValue(DWORD dwFlsIndex);
+BOOL FlsSetValue(DWORD dwFlsIndex, PVOID lpFlsData);
+BOOL FlsFree(DWORD dwFlsIndex);
 VOID InitializeSRWLock(PSRWLOCK SRWLock);
 VOID AcquireSRWLockExclusive(PSRWLOCK SRWLock);
 VOID ReleaseSRWLockExclusive(PSRWLOCK SRWLock);
@@ -2178,8 +2203,9 @@ LSTATUS RegSaveKeyW(HKEY hKey, LPCWSTR lpFile,
 LSTATUS RegSetValueExW(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved, DWORD dwType,
                        const BYTE *lpData, DWORD cbData);
 
-// kernel32 surface sqlite's Windows VFS dispatch table takes the address
-// of; each binding puts the import in scope for the static initializer.
+// kernel32 surface a static table of function pointers may take the
+// address of; each binding puts the import in scope for the static
+// initializer.
 #pragma binding(kernel32::AreFileApisANSI,         "AreFileApisANSI")
 #pragma binding(kernel32::CancelIo,                "CancelIo")
 #pragma binding(kernel32::CreateEventA,            "CreateEventA")
@@ -2355,6 +2381,8 @@ LSTATUS RegSetValueExW(HKEY hKey, LPCWSTR lpValueName, DWORD Reserved, DWORD dwT
 #pragma binding(kernel32::GetConsoleWindow,        "GetConsoleWindow")
 #pragma binding(kernel32::GetSystemTimePreciseAsFileTime, "GetSystemTimePreciseAsFileTime")
 #pragma binding(kernel32::QueryPerformanceFrequency, "QueryPerformanceFrequency")
+#pragma binding(kernel32::GetSystemTimeAdjustment, "GetSystemTimeAdjustment")
+#pragma binding(kernel32::SetSystemTime,           "SetSystemTime")
 #pragma binding(kernel32::GetTickCount64,          "GetTickCount64")
 #pragma binding(kernel32::SwitchToThread,          "SwitchToThread")
 #pragma binding(kernel32::SleepEx,                 "SleepEx")
@@ -2670,6 +2698,9 @@ DWORD GetConsoleProcessList(LPDWORD lpdwProcessList, DWORD dwProcessCount);
 HWND GetConsoleWindow(VOID);
 VOID GetSystemTimePreciseAsFileTime(LPFILETIME lpSystemTimeAsFileTime);
 BOOL QueryPerformanceFrequency(LARGE_INTEGER *lpFrequency);
+BOOL GetSystemTimeAdjustment(PDWORD lpTimeAdjustment, PDWORD lpTimeIncrement,
+                             PBOOL lpTimeAdjustmentDisabled);
+BOOL SetSystemTime(const SYSTEMTIME *lpSystemTime);
 ULONGLONG GetTickCount64(VOID);
 BOOL SwitchToThread(VOID);
 DWORD SleepEx(DWORD dwMilliseconds, BOOL bAlertable);

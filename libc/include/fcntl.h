@@ -130,11 +130,9 @@
 // `F_SETLKW`) is the one that diverges:
 //   * Linux:        F_GETLK=5,  F_SETLK=6,  F_SETLKW=7
 //   * macOS Darwin: F_GETLK=7,  F_SETLK=8,  F_SETLKW=9
-// sqlite's unix VFS calls `fcntl(fd, F_SETLK, &flock)` to grab
-// shared/exclusive byte-range locks; using the Linux numbers on
-// macOS lands on `F_GETPATH` etc., which fcntl rejects with EBADF
-// and sqlite surfaces as "disk I/O error (10)" on every prepared
-// statement.
+// A `fcntl(fd, F_SETLK, &flock)` byte-range lock with the Linux
+// numbers on macOS lands on `F_GETPATH` etc., which fcntl rejects
+// with EBADF.
 #define F_GETFD  1
 #define F_SETFD  2
 #define F_GETFL  3

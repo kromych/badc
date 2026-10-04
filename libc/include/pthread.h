@@ -1,4 +1,4 @@
-// pthread.h -- POSIX threads on Linux + macOS.
+// pthread.h -- POSIX threads.
 //
 // On recent Linux C libraries pthread_create / pthread_join have been
 // folded into libc; older ones still ship a separate libpthread
@@ -15,14 +15,20 @@
 // shape works as you'd expect; just declare the parameter and
 // read it.
 //
-// Windows doesn't have pthreads natively. <windows.h> has the
-// CreateThread / WaitForSingleObject equivalents -- portable code
-// `#ifdef _WIN32` over the choice of which API to call.
+// Windows: a subset of mingw-w64's (winpthreads') surface, with its
+// numbering and its thread, key, once and attribute types: threads,
+// mutexes, condition variables, once controls, thread-specific data and
+// creation attributes, which libc/lib/pthread_ext.c defines over kernel32.
+// Cancellation, pthread_kill and the scheduling setters of a running
+// thread are not declared there.
 
 #pragma once
 
-// `struct sched_param` for the scheduling-parameter setters.
+// `struct sched_param` for the scheduling-parameter setters,
+// `struct timespec` for the timed waits and `clockid_t` for the clocks.
 #include <sched.h>
+#include <sys/types.h>
+#include <time.h>
 
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
@@ -162,20 +168,19 @@
 #endif
 
 #ifdef _WIN32
-// Stub the constants on Windows so `sizeof(struct ...)` consumers
-// don't trip a missing-symbol error. The actual primitives there
-// come from <windows.h>.
-#define PTHREAD_MUTEX_SIZE 64
-#define PTHREAD_T_SIZE     8
-#define PTHREAD_CREATE_DETACHED 1
 #define PTHREAD_CREATE_JOINABLE 0
+#define PTHREAD_CREATE_DETACHED 0x04
+#define PTHREAD_EXPLICIT_SCHED  0
+#define PTHREAD_INHERIT_SCHED   0x08
+#define PTHREAD_SCOPE_PROCESS   0
+#define PTHREAD_SCOPE_SYSTEM    0x10
 #endif
 
 // Opaque storage for the POSIX thread types. The libc reads the real
 // platform layout through a passed pointer; c5 only needs each object to
 // occupy the exact platform size and alignment, because these types are
-// embedded in larger structs (CPython's `_PyRuntime`) whose field
-// offsets a separately-compiled module reads back. An over-wide object
+// embedded in larger structs whose field offsets a separately-compiled
+// module reads back. An over-wide object
 // shifts every later field. The leading word carries 8-byte alignment;
 // macOS additionally uses it for the signature the static initialisers
 // seed (its libpthread rejects a zero-signature statically-allocated
@@ -194,6 +199,16 @@ struct __c5_pthread_cond { long __align; char __size[40]; };      // 48
 struct __c5_pthread_mutexattr { long __size; };                   // 8
 struct __c5_pthread_condattr { long __size; };                    // 8
 struct __c5_pthread_attr { long __align; char __size[56]; };      // 64
+#elif defined(_WIN32)
+// A slim reader/writer lock with the owner and depth a recursive or
+// error-checking mutex keeps, and a condition variable with its clock. The
+// sizes are not winpthreads' pointer-sized handles, which it allocates on
+// first use.
+struct __c5_pthread_mutex { void *__lock; unsigned long __owner; unsigned __count; int __type; };
+struct __c5_pthread_cond { void *__cv; int __clock; };
+struct __c5_pthread_attr {
+    unsigned __state; void *__stack; size_t __stacksize; struct sched_param __param;
+};
 #else // Linux x86_64
 struct __c5_pthread_mutex { long __align; char __size[32]; };     // 40
 struct __c5_pthread_cond { long __align; char __size[40]; };      // 48
@@ -203,8 +218,13 @@ struct __c5_pthread_attr { long __align; char __size[48]; };      // 56
 #endif
 typedef struct __c5_pthread_mutex pthread_mutex_t;
 typedef struct __c5_pthread_cond pthread_cond_t;
+#ifdef _WIN32
+typedef unsigned pthread_mutexattr_t;
+typedef int pthread_condattr_t;
+#else
 typedef struct __c5_pthread_mutexattr pthread_mutexattr_t;
 typedef struct __c5_pthread_condattr pthread_condattr_t;
+#endif
 typedef struct __c5_pthread_attr pthread_attr_t;
 
 // Static-storage initialisers. macOS seeds the signature word; Linux
@@ -214,47 +234,62 @@ typedef struct __c5_pthread_attr pthread_attr_t;
 #define PTHREAD_MUTEX_INITIALIZER { 0x32AAABA7, {0} }
 #define PTHREAD_COND_INITIALIZER  { 0x3CB0B1BB, {0} }
 #define PTHREAD_ONCE_INIT         { 0x30B1BCBA, {0} }
+#elif defined(_WIN32)
+// The all-zero lock and condition variable are SRWLOCK_INIT and
+// CONDITION_VARIABLE_INIT.
+#define PTHREAD_MUTEX_INITIALIZER            { 0, 0, 0, PTHREAD_MUTEX_NORMAL }
+#define PTHREAD_RECURSIVE_MUTEX_INITIALIZER  { 0, 0, 0, PTHREAD_MUTEX_RECURSIVE }
+#define PTHREAD_ERRORCHECK_MUTEX_INITIALIZER { 0, 0, 0, PTHREAD_MUTEX_ERRORCHECK }
+#define PTHREAD_COND_INITIALIZER             { 0, CLOCK_REALTIME }
+#define PTHREAD_ONCE_INIT                    0
 #else
 #define PTHREAD_MUTEX_INITIALIZER { 0, {0} }
 #define PTHREAD_COND_INITIALIZER  { 0, {0} }
 #define PTHREAD_ONCE_INIT          0
 #endif
 
-// `pthread_t` is pointer-sized on every supported POSIX target
-// (an opaque struct pointer on macOS, `unsigned long` on
-// Linux); we need 8 bytes of storage per handle so the libc
-// can write a real ID and the c5-side join can pass it back
-// unbroken. Plain `int` was 8 bytes pre-M31 but has been 4 since
-// real i32 storage landed -- the gap is what made
-// `demos/threads.c` print all zeroes (each pthread_create wrote
-// 8 bytes into a 4-byte slot, smashing the next handle).
+// The thread handle is the platform's type, which POSIX leaves open:
+// glibc's `unsigned long`, Darwin's pointer to an opaque structure.
 //
 // `pthread_key_t` and `pthread_once_t` must match the platform
 // layout exactly, not a wider catch-all: they appear inside
-// structs whose layout a program reads back (CPython's `Py_tss_t`
-// wraps `pthread_key_t` in `_PyRuntime`, and a dlopen'd extension
+// structs whose layout a program reads back (a dlopen'd extension
 // computes field offsets against the host's struct). macOS uses
 // `unsigned long` for the key and the 16-byte signature-carrying
 // struct for the once control; Linux uses `unsigned int` / `int`.
+#if defined(__APPLE__)
+typedef struct _opaque_pthread_t *pthread_t;
+#elif defined(__linux__)
+typedef unsigned long pthread_t;
+#elif defined(_WIN32)
+typedef unsigned long long pthread_t; // uintptr_t
+#else
 typedef long long pthread_t;
+#endif
 #ifdef __APPLE__
 typedef unsigned long pthread_key_t;
 typedef struct __c5_pthread_once pthread_once_t;
+#elif defined(_WIN32)
+typedef unsigned pthread_key_t;
+typedef long pthread_once_t;
 #else
 typedef unsigned int pthread_key_t;
 typedef int pthread_once_t;
 #endif
 
-int pthread_create(pthread_t *thread, char *attr, int *start, char *arg);
-int pthread_join(pthread_t thread, int **retval);
+int pthread_create(pthread_t *thread, const pthread_attr_t *attr, void *(*start)(void *),
+                   void *arg);
+int pthread_join(pthread_t thread, void **retval);
 void pthread_exit(void *retval);
 int pthread_detach(pthread_t thread);
 pthread_t pthread_self(void);
 int pthread_equal(pthread_t t1, pthread_t t2);
+#ifndef _WIN32
 // Deliver a signal to a specific thread (POSIX).
 int pthread_kill(pthread_t thread, int sig);
 // Cancel a thread; query / set a running thread's scheduling parameters.
 int pthread_cancel(pthread_t thread);
+#endif
 
 // Cancellation cleanup handlers (POSIX). pthread_cleanup_push registers a
 // routine that runs when the enclosing scope exits with __do_it set;
@@ -277,10 +312,12 @@ static inline void __pthread_cleanup_routine(struct __pthread_cleanup_frame *f) 
 #define pthread_cleanup_pop(execute) \
         __clframe.__do_it = (execute); \
     } while (0)
+#ifndef _WIN32
 int pthread_setschedparam(pthread_t thread, int policy,
                           const struct sched_param *param);
 int pthread_getschedparam(pthread_t thread, int *policy,
                           struct sched_param *param);
+#endif
 #ifdef __APPLE__
 // macOS has no pthread_setschedprio; POSIX defines it as setting only the
 // priority, which a getschedparam / setschedparam pair expresses.
@@ -291,14 +328,14 @@ static inline int pthread_setschedprio(pthread_t thread, int prio) {
     param.sched_priority = prio;
     return pthread_setschedparam(thread, policy, &param);
 }
-#else
+#elif !defined(_WIN32)
 int pthread_setschedprio(pthread_t thread, int prio);
 #endif
 #ifdef __linux__
 // Thread CPU affinity (Linux). cpu_set_t comes from <sched.h>; it is passed by
 // address as an opaque buffer whose byte length is cpusetsize.
-int pthread_setaffinity_np(pthread_t thread, unsigned long cpusetsize, char *cpuset);
-int pthread_getaffinity_np(pthread_t thread, unsigned long cpusetsize, char *cpuset);
+int pthread_setaffinity_np(pthread_t thread, size_t cpusetsize, const cpu_set_t *cpuset);
+int pthread_getaffinity_np(pthread_t thread, size_t cpusetsize, cpu_set_t *cpuset);
 #endif
 #ifdef __APPLE__
 // Darwin sets only the calling thread's name (no pthread_t parameter).
@@ -326,41 +363,50 @@ void pthread_jit_write_protect_np(int enabled);
 // condition variable's absolute timed waits run against.
 int pthread_setname_np(pthread_t thread, const char *name);
 int pthread_getname_np(pthread_t thread, char *name, unsigned long len);
-int pthread_getcpuclockid(pthread_t thread, int *clock_id);
+int pthread_getcpuclockid(pthread_t thread, clockid_t *clock_id);
 int pthread_condattr_init(pthread_condattr_t *attr);
 int pthread_condattr_destroy(pthread_condattr_t *attr);
-int pthread_condattr_setclock(pthread_condattr_t *attr, int clock_id);
+int pthread_condattr_setclock(pthread_condattr_t *attr, clockid_t clock_id);
 #endif
-int pthread_mutex_init(char *mutex, char *attr);
-int pthread_mutex_lock(char *mutex);
-int pthread_mutex_trylock(char *mutex);
-int pthread_mutex_unlock(char *mutex);
-int pthread_mutex_destroy(char *mutex);
-int pthread_mutexattr_init(char *attr);
-int pthread_mutexattr_settype(char *attr, int kind);
-int pthread_mutexattr_destroy(char *attr);
-int pthread_cond_init(char *cond, char *attr);
-int pthread_cond_destroy(char *cond);
-int pthread_cond_wait(char *cond, char *mutex);
-int pthread_cond_timedwait(char *cond, char *mutex, char *abstime);
-int pthread_cond_signal(char *cond);
-int pthread_cond_broadcast(char *cond);
-int pthread_attr_init(char *attr);
-int pthread_attr_destroy(char *attr);
-int pthread_attr_setdetachstate(char *attr, int detachstate);
-int pthread_attr_setstacksize(char *attr, unsigned long stacksize);
-int pthread_attr_setscope(char *attr, int scope);
-int pthread_attr_setschedpolicy(char *attr, int policy);
-int pthread_attr_setschedparam(char *attr, const struct sched_param *param);
-int pthread_attr_getschedparam(const char *attr, struct sched_param *param);
-int pthread_attr_getguardsize(const char *attr, unsigned long *guardsize);
-int pthread_attr_getstack(const char *attr, void **stackaddr, unsigned long *stacksize);
+#ifdef _WIN32
+int pthread_condattr_init(pthread_condattr_t *attr);
+int pthread_condattr_destroy(pthread_condattr_t *attr);
+int pthread_condattr_setclock(pthread_condattr_t *attr, clockid_t clock_id);
+#endif
+int pthread_mutex_init(pthread_mutex_t *restrict mutex, const pthread_mutexattr_t *restrict attr);
+int pthread_mutex_lock(pthread_mutex_t *mutex);
+int pthread_mutex_trylock(pthread_mutex_t *mutex);
+int pthread_mutex_unlock(pthread_mutex_t *mutex);
+int pthread_mutex_destroy(pthread_mutex_t *mutex);
+int pthread_mutexattr_init(pthread_mutexattr_t *attr);
+int pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type);
+int pthread_mutexattr_destroy(pthread_mutexattr_t *attr);
+int pthread_cond_init(pthread_cond_t *restrict cond, const pthread_condattr_t *restrict attr);
+int pthread_cond_destroy(pthread_cond_t *cond);
+int pthread_cond_wait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex);
+int pthread_cond_timedwait(pthread_cond_t *restrict cond, pthread_mutex_t *restrict mutex,
+                           const struct timespec *restrict abstime);
+int pthread_cond_signal(pthread_cond_t *cond);
+int pthread_cond_broadcast(pthread_cond_t *cond);
+int pthread_attr_init(pthread_attr_t *attr);
+int pthread_attr_destroy(pthread_attr_t *attr);
+int pthread_attr_setdetachstate(pthread_attr_t *attr, int detachstate);
+int pthread_attr_setstacksize(pthread_attr_t *attr, size_t stacksize);
+int pthread_attr_setscope(pthread_attr_t *attr, int contentionscope);
+int pthread_attr_setschedpolicy(pthread_attr_t *attr, int policy);
+int pthread_attr_setschedparam(pthread_attr_t *restrict attr,
+                               const struct sched_param *restrict param);
+int pthread_attr_getschedparam(const pthread_attr_t *restrict attr,
+                               struct sched_param *restrict param);
+int pthread_attr_getguardsize(const pthread_attr_t *restrict attr, size_t *restrict guardsize);
+int pthread_attr_getstack(const pthread_attr_t *restrict attr, void **restrict stackaddr,
+                          size_t *restrict stacksize);
 #if defined(__linux__)
 // GNU extension: the running thread's attributes, including the real
 // stack bounds (the portable route is pthread_attr_getstack on these).
-int pthread_getattr_np(unsigned long thread, char *attr);
+int pthread_getattr_np(pthread_t thread, pthread_attr_t *attr);
 #endif
-int pthread_attr_setinheritsched(char *attr, int inheritsched);
+int pthread_attr_setinheritsched(pthread_attr_t *attr, int inheritsched);
 #ifdef __linux__
 // Linux names the calling-convention pair (pthread_t, name).
 int pthread_setname_np(pthread_t thread, const char *name);
@@ -373,20 +419,31 @@ static inline int pthread_atfork(void (*prepare)(void), void (*parent)(void),
                                  void (*child)(void)) {
     return __register_atfork(prepare, parent, child, 0);
 }
+#elif defined(_WIN32)
+// Windows has no fork, so no handler ever runs; winpthreads' pthread_atfork
+// is a macro for 0.
+static inline int pthread_atfork(void (*prepare)(void), void (*parent)(void),
+                                 void (*child)(void)) {
+    return 0;
+}
 #else
 int pthread_atfork(void (*prepare)(void), void (*parent)(void), void (*child)(void));
 #endif
-int pthread_key_create(pthread_key_t *key, int *destructor);
+int pthread_key_create(pthread_key_t *key, void (*destructor)(void *));
 int pthread_key_delete(pthread_key_t key);
-int pthread_setspecific(pthread_key_t key, char *val);
-char *pthread_getspecific(pthread_key_t key);
-int pthread_once(pthread_once_t *once_control, int *init_routine);
+int pthread_setspecific(pthread_key_t key, const void *val);
+void *pthread_getspecific(pthread_key_t key);
+int pthread_once(pthread_once_t *once_control, void (*init_routine)(void));
 
-// Mutex-type constants used by pthread_mutexattr_settype. Values
-// match the POSIX defaults; the bound libc reads them by integer
-// comparison so the exact platform mapping isn't c5's concern as
-// long as `RECURSIVE` is non-zero (sqlite uses recursive mutexes).
+// Mutex-type constants for pthread_mutexattr_settype, which the C
+// library compares against its own numbering: glibc gives RECURSIVE 1
+// and ERRORCHECK 2, Darwin and winpthreads the reverse.
 #define PTHREAD_MUTEX_NORMAL        0
-#define PTHREAD_MUTEX_RECURSIVE     2
+#if defined(__APPLE__) || defined(_WIN32)
 #define PTHREAD_MUTEX_ERRORCHECK    1
+#define PTHREAD_MUTEX_RECURSIVE     2
+#else
+#define PTHREAD_MUTEX_RECURSIVE     1
+#define PTHREAD_MUTEX_ERRORCHECK    2
+#endif
 #define PTHREAD_MUTEX_DEFAULT       0

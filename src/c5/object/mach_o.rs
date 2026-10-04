@@ -3,14 +3,21 @@
 //! segments and the `__LINKEDIT` tables dyld binds from. The CLI shim
 //! signs the result; macOS refuses to exec an unsigned image.
 
+use crate::c5::codegen::{EhFrameTarget, PointerSlot};
 use crate::c5::diag::Code;
+use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
 use super::super::program::Program;
-use super::dwarf;
+use super::dwarf::{self, LoweredFrame};
+use super::unwind_info::{
+    self, UNWIND_ARM64_DWARF_SECTION_OFFSET, UNWIND_ARM64_MODE_DWARF, UNWIND_ARM64_MODE_FRAME,
+    UNWIND_ARM64_MODE_FRAMELESS, UNWIND_ARM64_MODE_MASK, UNWIND_HAS_LSDA, UNWIND_PERSONALITY_MASK,
+    UnwindEntry,
+};
 use super::{AddrPart, Build, DataRegion, data_region_addr, image};
 use crate::c5::layout::{pad_to_align as pad_to, round_up, write_struct};
 
@@ -62,6 +69,7 @@ const BIND_OPCODE_SET_DYLIB_SPECIAL_IMM: u8 = 0x30;
 const BIND_SPECIAL_DYLIB_FLAT_LOOKUP_IMM: u8 = 0x0E;
 const BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM: u8 = 0x40;
 const BIND_OPCODE_SET_TYPE_IMM: u8 = 0x50;
+const BIND_OPCODE_SET_ADDEND_SLEB: u8 = 0x60;
 const BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB: u8 = 0x70;
 const BIND_OPCODE_DO_BIND: u8 = 0x90;
 
@@ -122,6 +130,8 @@ fn seg_index_data(data_const: bool) -> u8 {
 const SG_READ_ONLY: u32 = 0x10;
 
 const S_ATTR_DEBUG: u32 = 0x0200_0000;
+/// ld64's `__eh_frame` type: `S_COALESCED` and three attributes.
+const S_EH_FRAME_FLAGS: u32 = 0x6800_000B;
 
 /// Mach-O section type bits used by the TLV layout.
 #[allow(dead_code)]
@@ -350,6 +360,19 @@ fn put_uleb128(out: &mut Vec<u8>, mut v: u64) {
         let byte = (v & 0x7F) as u8;
         v >>= 7;
         if v == 0 {
+            out.push(byte);
+            return;
+        }
+        out.push(byte | 0x80);
+    }
+}
+
+/// Signed LEB128: 7-bit groups until the rest is the last group's sign.
+fn put_sleb128(out: &mut Vec<u8>, mut v: i64) {
+    loop {
+        let byte = (v & 0x7F) as u8;
+        v >>= 7;
+        if (v == 0 && byte & 0x40 == 0) || (v == -1 && byte & 0x40 != 0) {
             out.push(byte);
             return;
         }
@@ -594,13 +617,16 @@ fn segment(
 /// `__TEXT`: `__text`, then `__const` (the read-only data prefix, the
 /// producer fingerprint and the switch tables; no relocated slot, so the
 /// segment's R+X mapping serves it, and no instruction attribute so tools
-/// do not decode it), then the read-only named sections.
+/// do not decode it), then the read-only named sections, then the unwind
+/// tables dyld finds by name, `__unwind_info` and `__eh_frame`.
 fn segment_text(
     place: SegmentPlacement,
     text: SectionPlacement,
     konst: SectionPlacement,
     const_align: u32,
     named: &[&NamedOut<'_>],
+    unwind: Option<SectionPlacement>,
+    eh_frame: Option<SectionPlacement>,
 ) -> Vec<u8> {
     let mut sections = alloc::vec![
         section64(
@@ -623,6 +649,28 @@ fn segment_text(
         ),
     ];
     sections.extend(named.iter().map(|n| named_section64(n, "__TEXT", false)));
+    if let Some(u) = unwind {
+        sections.push(section64(
+            "__unwind_info",
+            "__TEXT",
+            u.addr,
+            u.size,
+            u.offset,
+            2,
+            0,
+        ));
+    }
+    if let Some(e) = eh_frame {
+        sections.push(section64(
+            "__eh_frame",
+            "__TEXT",
+            e.addr,
+            e.size,
+            e.offset,
+            3,
+            S_EH_FRAME_FLAGS,
+        ));
+    }
     segment(
         "__TEXT",
         place,
@@ -1201,9 +1249,19 @@ fn push_bind_source(out: &mut Vec<u8>, source: BindSource) {
     }
 }
 
+/// A data slot bound to `import + addend`, at `(segment, offset)`.
+struct DataBind {
+    import: usize,
+    slot: (u8, u64),
+    addend: i64,
+}
+
+/// The bind stream: each import's `__got` slot at the head of `segment` and
+/// the data slots naming it, then the TLV descriptors' bootstrap slots.
 fn build_bind_opcodes(
     imports: &super::ResolvedImports,
     segment: u8,
+    data_binds: &[DataBind],
     tlv_ctx: Option<TlvBindContext>,
 ) -> Vec<u8> {
     let mut out = Vec::new();
@@ -1222,9 +1280,23 @@ fn build_bind_opcodes(
         out.push(BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM); // flags = 0
         out.extend_from_slice(imp.real_symbol.as_bytes());
         out.push(0); // NUL terminator
-        out.push(BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB | (segment & 0x0F));
-        put_uleb128(&mut out, (i * 8) as u64);
-        out.push(BIND_OPCODE_DO_BIND);
+        let slots = (data_binds.iter())
+            .filter(|b| b.import == i)
+            .map(|b| (b.slot, b.addend));
+        for ((seg, offset), addend) in core::iter::once(((segment, (i * 8) as u64), 0)).chain(slots)
+        {
+            out.push(BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB | (seg & 0x0F));
+            put_uleb128(&mut out, offset);
+            if addend != 0 {
+                out.push(BIND_OPCODE_SET_ADDEND_SLEB);
+                put_sleb128(&mut out, addend);
+            }
+            out.push(BIND_OPCODE_DO_BIND);
+            if addend != 0 {
+                out.push(BIND_OPCODE_SET_ADDEND_SLEB);
+                put_sleb128(&mut out, 0);
+            }
+        }
     }
     if let Some(ctx) = tlv_ctx {
         let bootstrap_source = BindSource::Dylib(ctx.bootstrap_ordinal);
@@ -1371,6 +1443,11 @@ struct Layout {
     named_ro_shift: u64,
     named_ro_size: u64,
     const_region_size: u64,
+    /// The unwind tables past the read-only run; no table, no size.
+    unwind_fileoff: u64,
+    unwind_size: u64,
+    eh_frame_fileoff: u64,
+    eh_frame_size: u64,
     counts: NamedCounts,
     has_bss_section: bool,
     header_plus_lcs: u64,
@@ -1413,6 +1490,11 @@ struct Layout {
 impl Layout {
     fn const_vmaddr(&self) -> u64 {
         TEXT_VMADDR_BASE + self.const_fileoff
+    }
+
+    /// The unwind tables' sections, shifting every section index past them.
+    fn unwind_sections(&self) -> u8 {
+        u8::from(self.unwind_size > 0) + u8::from(self.eh_frame_size > 0)
     }
 
     fn data_const_vmaddr(&self) -> u64 {
@@ -1511,6 +1593,207 @@ struct LinkEdit {
     linkedit_vmsize: u64,
 }
 
+/// A function start's encoding, less the personality and LSDA bits the
+/// table sets from the routine's slot and the LSDA's data offset.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct UnwindFunction {
+    encoding: u32,
+    personality: Option<PointerSlot>,
+    lsda: Option<u64>,
+}
+
+/// The image's unwind tables. `__eh_frame` holds the inputs' tables back to
+/// back, each padded to 4 bytes inside its last record. `__unwind_info`
+/// gives each function start an input's own entry, else the FDE an input
+/// gives it, else the frame or frameless form of its lowered rules, the
+/// stubs frameless, and 0 -- where an unwinder stops -- to the rest.
+struct UnwindTables {
+    functions: Vec<(u64, UnwindFunction)>,
+    personalities: Vec<PointerSlot>,
+    eh_frame: Vec<u8>,
+    eh_frame_blocks: Vec<u32>,
+}
+
+impl UnwindTables {
+    fn of(build: &Build) -> Result<Self, C5Error> {
+        let mut eh_frame = Vec::new();
+        let mut eh_frame_blocks = Vec::with_capacity(build.eh_frame.len());
+        let mut fdes: BTreeMap<u64, u32> = BTreeMap::new();
+        for block in &build.eh_frame {
+            let start = eh_frame.len();
+            eh_frame_blocks.push(start as u32);
+            for &(fde, text) in &block.fdes {
+                fdes.entry(text).or_insert(start as u32 + fde);
+            }
+            eh_frame.extend_from_slice(&block.bytes);
+            let end = eh_frame.len();
+            let pad = end.next_multiple_of(4) - end;
+            eh_frame.resize(end + pad, 0);
+            super::eh_frame::absorb_padding(&mut eh_frame, start, end, pad);
+        }
+        let dwarf = |fde: u32| {
+            if fde > UNWIND_ARM64_DWARF_SECTION_OFFSET {
+                return Err(MachOWriter::internal(format!(
+                    "Mach-O writer: an FDE at `__eh_frame` offset {fde:#x} is past the 24 bits \
+                     a compact encoding holds"
+                )));
+            }
+            Ok(UnwindFunction {
+                encoding: UNWIND_ARM64_MODE_DWARF | fde,
+                ..UnwindFunction::default()
+            })
+        };
+        let mut at: BTreeMap<u64, UnwindFunction> = (build.func_ent_pcs.iter())
+            .filter_map(|&pc| build.pc_to_native.get(pc).filter(|&&n| n != usize::MAX))
+            .map(|&n| (n as u64, UnwindFunction::default()))
+            .collect();
+        for (offset, frame) in dwarf::lowered_frames(build, super::Target::MacOSAarch64) {
+            let encoding = match frame {
+                LoweredFrame::Record => UNWIND_ARM64_MODE_FRAME,
+                LoweredFrame::Leaf => UNWIND_ARM64_MODE_FRAMELESS,
+                LoweredFrame::UndescribedSaves => 0,
+            };
+            at.insert(
+                offset as u64,
+                UnwindFunction {
+                    encoding,
+                    ..UnwindFunction::default()
+                },
+            );
+        }
+        for (&text, &fde) in &fdes {
+            at.insert(text, dwarf(fde)?);
+        }
+        for e in &build.compact_unwind {
+            let function = if e.encoding & UNWIND_ARM64_MODE_MASK == UNWIND_ARM64_MODE_DWARF {
+                let fde = fdes.get(&e.text_offset).ok_or_else(|| {
+                    MachOWriter::internal(format!(
+                        "Mach-O writer: the compact unwind entry at text offset {:#x} defers \
+                         to an FDE no input `__eh_frame` holds",
+                        e.text_offset
+                    ))
+                })?;
+                dwarf(*fde)?
+            } else {
+                UnwindFunction {
+                    encoding: e.encoding & !(UNWIND_HAS_LSDA | UNWIND_PERSONALITY_MASK),
+                    personality: e.personality,
+                    lsda: e.lsda,
+                }
+            };
+            at.insert(e.text_offset, function);
+        }
+        if let Some(&stubs) = build.plt_trampoline_offsets.iter().flatten().min() {
+            at.insert(
+                stubs as u64,
+                UnwindFunction {
+                    encoding: UNWIND_ARM64_MODE_FRAMELESS,
+                    ..UnwindFunction::default()
+                },
+            );
+        }
+        let mut personalities: Vec<PointerSlot> = Vec::new();
+        for slot in at.values().filter_map(|f| f.personality) {
+            if !personalities.contains(&slot) {
+                personalities.push(slot);
+            }
+        }
+        if personalities.len() > unwind_info::MAX_PERSONALITIES {
+            return Err(C5Error::hard(
+                Code::UNSUPPORTED,
+                format!(
+                    "the image's functions name {} personality routines; a compact unwind \
+                     encoding indexes {}",
+                    personalities.len(),
+                    unwind_info::MAX_PERSONALITIES
+                ),
+            ));
+        }
+        Ok(UnwindTables {
+            functions: at.into_iter().collect(),
+            personalities,
+            eh_frame,
+            eh_frame_blocks,
+        })
+    }
+
+    /// `__unwind_info`'s size; 0 for an image with no function.
+    fn unwind_info_size(&self) -> u64 {
+        if self.functions.is_empty() {
+            return 0;
+        }
+        let lsdas = self.functions.iter().filter(|f| f.1.lsda.is_some()).count();
+        unwind_info::size(self.functions.len(), self.personalities.len(), lsdas) as u64
+    }
+
+    /// `__unwind_info`, its offsets from the Mach header at `__TEXT`'s start.
+    fn unwind_info(&self, l: &Layout, text_len: u64) -> Vec<u8> {
+        let image = |vmaddr: u64| (vmaddr - TEXT_VMADDR_BASE) as u32;
+        let entries: Vec<UnwindEntry> = (self.functions.iter())
+            .map(|&(text, f)| {
+                let index = f.personality.and_then(|p| {
+                    let i = self.personalities.iter().position(|&q| q == p)?;
+                    Some(i as u32 + 1)
+                });
+                UnwindEntry {
+                    offset: (l.entry_file_offset + text) as u32,
+                    encoding: f.encoding
+                        | index.map_or(0, |i| i << 28)
+                        | f.lsda.map_or(0, |_| UNWIND_HAS_LSDA),
+                    lsda: f.lsda.map(|d| image(l.data_off_to_vaddr(d))),
+                }
+            })
+            .collect();
+        let personalities: Vec<u32> = (self.personalities.iter())
+            .map(|&p| image(slot_vmaddr(l, p)))
+            .collect();
+        unwind_info::build(
+            &entries,
+            &personalities,
+            (l.entry_file_offset + text_len) as u32,
+        )
+    }
+
+    /// `__eh_frame`, each field holding its distance to its target.
+    fn eh_frame_at(&self, l: &Layout, build: &Build) -> Result<Vec<u8>, C5Error> {
+        let mut bytes = self.eh_frame.clone();
+        let section = TEXT_VMADDR_BASE + l.eh_frame_fileoff;
+        for (block, &start) in build.eh_frame.iter().zip(&self.eh_frame_blocks) {
+            for f in &block.fields {
+                let at = start as usize + f.offset as usize;
+                let target = match f.target {
+                    EhFrameTarget::Text(t) => l.code_vmaddr_base() + t,
+                    EhFrameTarget::Data { offset, anchor } => l
+                        .data_off_to_vaddr(anchor)
+                        .wrapping_add(offset.wrapping_sub(anchor)),
+                    EhFrameTarget::Slot(s) => slot_vmaddr(l, s),
+                };
+                let value = target.wrapping_sub(section + at as u64) as i64;
+                if f.width == 8 {
+                    bytes[at..at + 8].copy_from_slice(&value.to_le_bytes());
+                    continue;
+                }
+                let value = i32::try_from(value).map_err(|_| {
+                    MachOWriter::internal(format!(
+                        "Mach-O writer: the `__eh_frame` field at {at:#x} is {value:#x} from its \
+                         target, past 32 bits"
+                    ))
+                })?;
+                bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
+            }
+        }
+        Ok(bytes)
+    }
+}
+
+/// An import's slot in `__got`, which opens `__DATA`, or a data slot.
+fn slot_vmaddr(l: &Layout, slot: PointerSlot) -> u64 {
+    match slot {
+        PointerSlot::Import(i) => l.data_vmaddr() + 8 * i as u64,
+        PointerSlot::Data(off) => l.data_off_to_vaddr(off),
+    }
+}
+
 /// One Mach-O image's writer. [`write`] runs the phases in order: the
 /// load-command sizes, the segment layout, the `__LINKEDIT` tables, the
 /// `__DWARF` and `__LINKEDIT` placement, the load commands, then the
@@ -1524,6 +1807,7 @@ struct MachOWriter<'a> {
     emit_dwarf: bool,
     named: Vec<&'a crate::c5::codegen::NamedSection>,
     named_out: Vec<NamedOut<'a>>,
+    unwind: UnwindTables,
     commands: Commands,
     layout: Layout,
     linkedit: LinkEdit,
@@ -1572,6 +1856,7 @@ impl<'a> MachOWriter<'a> {
             emit_dwarf: build.debug_info,
             named: build.named_sections.iter().collect(),
             named_out: Vec::new(),
+            unwind: UnwindTables::of(build)?,
             commands: Commands::default(),
             layout: Layout::default(),
             linkedit: LinkEdit::default(),
@@ -1668,9 +1953,11 @@ impl<'a> MachOWriter<'a> {
             l.const_size
         };
         l.counts = counts;
+        l.unwind_size = self.unwind.unwind_info_size();
+        l.eh_frame_size = self.unwind.eh_frame.len() as u64;
+        let text_sections = 2 + l.counts.konst as usize + l.unwind_sections() as usize;
         let c = &mut self.commands;
-        c.text_seg_size =
-            (SEGMENT_COMMAND_64_SIZE + (2 + l.counts.konst as usize) * SECTION_64_SIZE) as u64;
+        c.text_seg_size = (SEGMENT_COMMAND_64_SIZE + text_sections * SECTION_64_SIZE) as u64;
         c.data_const_seg_size = if l.data_const_present {
             (SEGMENT_COMMAND_64_SIZE + (1 + l.counts.data_const as usize) * SECTION_64_SIZE) as u64
         } else {
@@ -1739,7 +2026,9 @@ impl<'a> MachOWriter<'a> {
         l.ro_align =
             (crate::c5::layout::data_image_align(build.data_align) as u64).max(l.named_ro_align);
         l.const_fileoff = round_up(l.entry_file_offset + code_size, l.ro_align);
-        l.text_filesize = round_up(l.const_fileoff + l.const_region_size, PAGE_SIZE);
+        l.unwind_fileoff = round_up(l.const_fileoff + l.const_region_size, 4);
+        l.eh_frame_fileoff = round_up(l.unwind_fileoff + l.unwind_size, 8);
+        l.text_filesize = round_up(l.eh_frame_fileoff + l.eh_frame_size, PAGE_SIZE);
         l.data_const_fileoff = l.text_filesize;
         l.data_const_size = if l.data_const_present {
             round_up(l.relro_size, PAGE_SIZE)
@@ -1830,7 +2119,7 @@ impl<'a> MachOWriter<'a> {
         self.named_out = named_out;
         let l = &mut self.layout;
         l.idx_named_const = SECT_INDEX_CONST + 1;
-        l.idx_data_const = l.idx_named_const + l.counts.konst;
+        l.idx_data_const = l.idx_named_const + l.counts.konst + l.unwind_sections();
         l.idx_named_data_const = l.idx_data_const + 1;
         l.idx_got = if l.data_const_present {
             l.idx_named_data_const + l.counts.data_const
@@ -1900,19 +2189,6 @@ impl<'a> MachOWriter<'a> {
         let build = self.build;
         let l = &self.layout;
         let seg_data = seg_index_data(l.data_const_present);
-        self.linkedit.bind_ops = build_bind_opcodes(
-            &build.imports,
-            seg_data,
-            if self.tls_present {
-                Some(TlvBindContext {
-                    segment_offset: l.thread_vars_offset_in_segment,
-                    tlv_count: self.n_tlv,
-                    bootstrap_ordinal: tlv_bootstrap_ordinal(&build.imports.dylibs)?,
-                })
-            } else {
-                None
-            },
-        );
         let data_slot = |off: u64| -> (u8, u64) {
             if off < l.relro_total {
                 (SEG_INDEX_DATA_CONST, off.saturating_sub(l.ro_len))
@@ -1923,6 +2199,27 @@ impl<'a> MachOWriter<'a> {
                 )
             }
         };
+        let data_binds: Vec<DataBind> = (build.data_import_binds.iter())
+            .map(|b| DataBind {
+                import: b.import,
+                slot: data_slot(b.data_offset),
+                addend: b.addend,
+            })
+            .collect();
+        self.linkedit.bind_ops = build_bind_opcodes(
+            &build.imports,
+            seg_data,
+            &data_binds,
+            if self.tls_present {
+                Some(TlvBindContext {
+                    segment_offset: l.thread_vars_offset_in_segment,
+                    tlv_count: self.n_tlv,
+                    bootstrap_ordinal: tlv_bootstrap_ordinal(&build.imports.dylibs)?,
+                })
+            } else {
+                None
+            },
+        );
         self.linkedit.rebase_ops = build_rebase_opcodes(
             &build.data_relocs,
             &build.code_relocs,
@@ -2138,6 +2435,20 @@ impl<'a> MachOWriter<'a> {
             section(l.const_vmaddr(), l.const_size, l.const_fileoff),
             l.ro_align.trailing_zeros(),
             &named_const_out,
+            (l.unwind_size > 0).then(|| {
+                section(
+                    TEXT_VMADDR_BASE + l.unwind_fileoff,
+                    l.unwind_size,
+                    l.unwind_fileoff,
+                )
+            }),
+            (l.eh_frame_size > 0).then(|| {
+                section(
+                    TEXT_VMADDR_BASE + l.eh_frame_fileoff,
+                    l.eh_frame_size,
+                    l.eh_frame_fileoff,
+                )
+            }),
         );
         debug_assert_eq!(text_segment.len() as u64, c.text_seg_size);
         lcs.push(text_segment);
@@ -2392,6 +2703,14 @@ impl<'a> MachOWriter<'a> {
             out.resize((l.const_fileoff + l.ro_head + l.named_ro_shift) as usize, 0);
             out.extend_from_slice(&build.data[l.ro_head as usize..l.ro_len as usize]);
         }
+        if l.unwind_size > 0 {
+            out.resize(l.unwind_fileoff as usize, 0);
+            out.extend_from_slice(&self.unwind.unwind_info(l, build.text.len() as u64));
+        }
+        if l.eh_frame_size > 0 {
+            out.resize(l.eh_frame_fileoff as usize, 0);
+            out.extend_from_slice(&self.unwind.eh_frame_at(l, build)?);
+        }
         out.resize(l.text_filesize as usize, 0);
         Ok(())
     }
@@ -2503,7 +2822,7 @@ mod tests {
                 real_symbol: "_write".into(),
                 dylib_index: 0,
                 flat_lookup: false,
-                is_object: false,
+                kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: false,
                 fixed_args: 3,
                 return_type_tag: 0,
@@ -2522,6 +2841,261 @@ mod tests {
 
     fn read_u32(buf: &[u8], off: usize) -> u32 {
         u32::from_le_bytes(buf[off..off + 4].try_into().unwrap())
+    }
+
+    /// Every function start takes an encoding: the frame form for a lowered
+    /// frame, an input's own entry, 0 where nothing describes the function
+    /// or its rules leave out a saved x19, frameless for the stubs.
+    #[test]
+    fn the_unwind_table_covers_every_function() {
+        let mut b = tiny_build();
+        b.text = insns(&[0xa9bf_7bfd, 0x9100_03fd, 0xd65f_03c0, 0xd503_201f]);
+        b.text.extend(insns(&[0xd65f_03c0; 8]));
+        b.text
+            .extend(insns(&[0xa9be_53f3, 0xa901_7bfd, 0x9100_43fd, 0xd65f_03c0]));
+        b.text.extend(insns(&[0xd65f_03c0; 4]));
+        b.func_ent_pcs = alloc::vec![0, 0x10, 0x20, 0x30];
+        b.func_names = ["a", "b", "c", "d"].map(String::from).to_vec();
+        b.pc_to_native = (0..=0x40).collect();
+        b.func_prologue_native.insert(0, 8);
+        b.func_prologue_native.insert(0x30, 0x3c);
+        b.compact_unwind = alloc::vec![crate::c5::codegen::CompactUnwind {
+            text_offset: 0x10,
+            encoding: UNWIND_ARM64_MODE_FRAME | 0x10,
+            personality: None,
+            lsda: None,
+        }];
+        b.plt_trampoline_offsets = alloc::vec![Some(0x40)];
+        let bytes = write(&tiny_program(), &b).unwrap();
+        let (_, sect_off, _) = section_header(&bytes, "__TEXT", "__unwind_info");
+        let (_, code_off, _) = section_header(&bytes, "__TEXT", "__text");
+        let section = &bytes[sect_off..];
+        let encoding =
+            |text: u32| unwind_info::lookup(section, code_off as u32 + text).map(|e| e.encoding);
+        assert_eq!(encoding(0x4), Some(UNWIND_ARM64_MODE_FRAME));
+        assert_eq!(encoding(0x14), Some(UNWIND_ARM64_MODE_FRAME | 0x10));
+        assert_eq!(encoding(0x24), Some(0));
+        assert_eq!(encoding(0x34), Some(0), "x19 and x20 are saved");
+        assert_eq!(encoding(0x44), Some(UNWIND_ARM64_MODE_FRAMELESS));
+        assert_eq!(encoding(0x50), None, "the table ends with the text");
+    }
+
+    /// An entry's encoding indexes its personality routine's slot, in
+    /// `__got` or the data, and the LSDA index names its LSDA.
+    #[test]
+    fn an_input_entry_names_its_personality_and_lsda() {
+        use crate::c5::codegen::CompactUnwind;
+        let mut b = tiny_build();
+        b.text = insns(&[0xd65f_03c0; 8]);
+        b.data = alloc::vec![0; 64];
+        b.compact_unwind = alloc::vec![
+            CompactUnwind {
+                text_offset: 0,
+                encoding: UNWIND_ARM64_MODE_FRAME | UNWIND_HAS_LSDA,
+                personality: Some(PointerSlot::Import(0)),
+                lsda: Some(16),
+            },
+            CompactUnwind {
+                text_offset: 0x10,
+                encoding: UNWIND_ARM64_MODE_FRAME,
+                personality: Some(PointerSlot::Data(32)),
+                lsda: None,
+            },
+        ];
+        let bytes = write(&tiny_program(), &b).unwrap();
+        let (_, sect_off, _) = section_header(&bytes, "__TEXT", "__unwind_info");
+        let (_, code_off, _) = section_header(&bytes, "__TEXT", "__text");
+        let (got, _, _) = section_header(&bytes, "__DATA", "__got");
+        let (data, _, _) = section_header(&bytes, "__DATA", "__data");
+        let image = |vmaddr: u64| (vmaddr - TEXT_VMADDR_BASE) as u32;
+        let section = &bytes[sect_off..];
+        let f = unwind_info::lookup(section, code_off as u32 + 4).unwrap();
+        assert_eq!(f.encoding & UNWIND_ARM64_MODE_MASK, UNWIND_ARM64_MODE_FRAME);
+        assert_eq!(f.lsda, Some(image(data + 16)));
+        assert_eq!(
+            unwind_info::personality(section, f.encoding),
+            Some(image(got))
+        );
+        let g = unwind_info::lookup(section, code_off as u32 + 0x14).unwrap();
+        assert_eq!(g.lsda, None);
+        assert_eq!(g.encoding & UNWIND_HAS_LSDA, 0);
+        assert_eq!(
+            unwind_info::personality(section, g.encoding),
+            Some(image(data + 32))
+        );
+    }
+
+    /// An input's FDEs reach `__TEXT,__eh_frame` pointing at their
+    /// functions, which take the DWARF mode naming them.
+    #[test]
+    fn an_input_eh_frame_describes_its_functions() {
+        use crate::c5::codegen::{CompactUnwind, EhFrameBlock, EhFrameField};
+        let mut b = tiny_build();
+        b.text = insns(&[0xd65f_03c0; 12]);
+        b.func_ent_pcs = alloc::vec![0];
+        b.func_names = alloc::vec!["a".into()];
+        b.pc_to_native = (0..=0x30).collect();
+        let cie: [u8; 20] = [
+            0x10, 0, 0, 0, 0, 0, 0, 0, 1, b'z', b'R', 0, 1, 0x78, 30, 1, 0x10, 0x0c, 31, 0,
+        ];
+        let fde = |cie_distance: u8| {
+            let mut fde = alloc::vec![0x18, 0, 0, 0, cie_distance, 0, 0, 0];
+            fde.extend([0; 8]);
+            fde.extend(0x10u64.to_le_bytes());
+            fde.extend([0, 0, 0, 0]);
+            fde
+        };
+        let mut bytes = cie.to_vec();
+        bytes.extend(fde(24));
+        bytes.extend(fde(52));
+        let field = |offset, text| EhFrameField {
+            offset,
+            width: 8,
+            target: EhFrameTarget::Text(text),
+        };
+        b.eh_frame = alloc::vec![EhFrameBlock {
+            bytes,
+            fields: alloc::vec![field(28, 0x10), field(56, 0x20)],
+            fdes: alloc::vec![(20, 0x10), (48, 0x20)],
+        }];
+        b.compact_unwind = alloc::vec![CompactUnwind {
+            text_offset: 0x20,
+            encoding: UNWIND_ARM64_MODE_DWARF,
+            personality: None,
+            lsda: None,
+        }];
+        let image = write(&tiny_program(), &b).unwrap();
+        let (eh_addr, eh_off, eh_size) = section_header(&image, "__TEXT", "__eh_frame");
+        let (code_addr, code_off, _) = section_header(&image, "__TEXT", "__text");
+        let (_, sect_off, _) = section_header(&image, "__TEXT", "__unwind_info");
+        let table = &image[eh_off..eh_off + eh_size as usize];
+        let fdes = super::super::eh_frame::scan(table, eh_addr).unwrap();
+        assert_eq!(
+            fdes.iter().map(|e| (e.pc, e.fde)).collect::<Vec<_>>(),
+            [
+                (code_addr + 0x10, eh_addr + 20),
+                (code_addr + 0x20, eh_addr + 48)
+            ]
+        );
+        let encoding = |text: u32| {
+            unwind_info::lookup(&image[sect_off..], code_off as u32 + text).map(|e| e.encoding)
+        };
+        assert_eq!(encoding(0x4), Some(0));
+        assert_eq!(encoding(0x14), Some(UNWIND_ARM64_MODE_DWARF | 20));
+        assert_eq!(encoding(0x24), Some(UNWIND_ARM64_MODE_DWARF | 48));
+    }
+
+    fn insns(words: &[u32]) -> Vec<u8> {
+        words.iter().flat_map(|w| w.to_le_bytes()).collect()
+    }
+
+    /// `(address, file offset, size)` of section `seg,name`.
+    fn section_header(bytes: &[u8], seg: &str, name: &str) -> (u64, usize, u64) {
+        let field = |at: usize| {
+            let end = bytes[at..at + 16]
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(16);
+            &bytes[at..at + end]
+        };
+        let u64_at = |at: usize| u64::from_le_bytes(bytes[at..at + 8].try_into().unwrap());
+        let mut lc = 32usize;
+        for _ in 0..read_u32(bytes, 16) {
+            if read_u32(bytes, lc) == LC_SEGMENT_64 && field(lc + 8) == seg.as_bytes() {
+                for s in 0..read_u32(bytes, lc + 64) as usize {
+                    let sh = lc + 72 + s * 80;
+                    if field(sh) == name.as_bytes() {
+                        let offset = read_u32(bytes, sh + 48) as usize;
+                        return (u64_at(sh + 32), offset, u64_at(sh + 40));
+                    }
+                }
+            }
+            lc += read_u32(bytes, lc + 4) as usize;
+        }
+        panic!("no {seg},{name}");
+    }
+
+    /// A data slot naming an import binds to the symbol plus its addend
+    /// beside the import's `__got` slot, and takes no rebase.
+    #[test]
+    fn a_data_slot_naming_an_import_binds_to_its_symbol() {
+        use crate::c5::codegen::DataImportBind;
+        let mut b = tiny_build();
+        b.data = alloc::vec![0; 32];
+        b.data_import_binds = [(16, 0), (24, -40)]
+            .map(|(data_offset, addend)| DataImportBind {
+                data_offset,
+                import: 0,
+                addend,
+            })
+            .to_vec();
+        let bytes = write(&tiny_program(), &b).unwrap();
+        let (got, _, _) = section_header(&bytes, "__DATA", "__got");
+        let (data, _, _) = section_header(&bytes, "__DATA", "__data");
+        let (binds, rebases) = dyld_info(&bytes);
+        let write = |offset, addend| (String::from("_write"), offset, addend);
+        assert_eq!(
+            binds,
+            [
+                write(0, 0),
+                write(data + 16 - got, 0),
+                write(data + 24 - got, -40)
+            ]
+        );
+        assert!(rebases.is_empty(), "{rebases:?}");
+    }
+
+    /// The `(symbol, segment offset, addend)` of each bind, all in one
+    /// segment, and the rebase opcode bytes, from `LC_DYLD_INFO_ONLY`.
+    fn dyld_info(bytes: &[u8]) -> (Vec<(String, u64, i64)>, Vec<u8>) {
+        let mut lc = 32usize;
+        for _ in 0..read_u32(bytes, 16) {
+            if read_u32(bytes, lc) == LC_DYLD_INFO_ONLY {
+                let at = |o: usize| read_u32(bytes, lc + o) as usize;
+                let rebase = bytes[at(8)..at(8) + at(12)].to_vec();
+                let stream = &bytes[at(16)..at(16) + at(20)];
+                let leb = |i: &mut usize, signed: bool| {
+                    let (mut v, mut shift) = (0i64, 0);
+                    loop {
+                        let byte = stream[*i];
+                        *i += 1;
+                        v |= i64::from(byte & 0x7f) << shift;
+                        shift += 7;
+                        if byte & 0x80 == 0 {
+                            if signed && byte & 0x40 != 0 {
+                                v |= -1 << shift;
+                            }
+                            return v;
+                        }
+                    }
+                };
+                let mut binds = Vec::new();
+                let (mut symbol, mut offset, mut addend, mut i) = (String::new(), 0, 0, 0);
+                while i < stream.len() && stream[i] != BIND_OPCODE_DONE {
+                    let op = stream[i] & 0xF0;
+                    i += 1;
+                    match op {
+                        BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM => {
+                            let end = i + stream[i..].iter().position(|&c| c == 0).unwrap();
+                            symbol = String::from_utf8_lossy(&stream[i..end]).into_owned();
+                            i = end + 1;
+                        }
+                        BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB => {
+                            offset = leb(&mut i, false) as u64;
+                        }
+                        BIND_OPCODE_SET_ADDEND_SLEB => addend = leb(&mut i, true),
+                        BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB => {
+                            leb(&mut i, false);
+                        }
+                        BIND_OPCODE_DO_BIND => binds.push((symbol.clone(), offset, addend)),
+                        _ => {}
+                    }
+                }
+                return (binds, rebase.into_iter().filter(|&op| op != 0).collect());
+            }
+            lc += read_u32(bytes, lc + 4) as usize;
+        }
+        panic!("no LC_DYLD_INFO_ONLY");
     }
 
     #[test]
@@ -2646,7 +3220,7 @@ mod tests {
             real_symbol: format!("_s{dylib_index}"),
             dylib_index,
             flat_lookup,
-            is_object: false,
+            kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: false,
             fixed_args: 0,
             return_type_tag: 0,
@@ -2673,7 +3247,7 @@ mod tests {
             imports: (0..20).map(|i| sample_import(i, false)).collect(),
             dylibs,
         };
-        let out = build_bind_opcodes(&imports, 1, None);
+        let out = build_bind_opcodes(&imports, 1, &[], None);
         assert!(
             out.windows(2)
                 .any(|w| w == [BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB, 0x10]),

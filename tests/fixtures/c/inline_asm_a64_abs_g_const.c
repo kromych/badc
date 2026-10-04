@@ -1,5 +1,5 @@
-/* AArch64 inline asm: `:abs_gN:` group specifiers over a constant, the shape
- * the kernel's `mov_q` macro expands to inside a function body. A function
+/* AArch64 inline asm: `:abs_gN:` group specifiers over a constant, a 64-bit
+ * immediate materialized group by group inside a function body. A function
  * body has no layout pass, so only an expression that folds resolves; each
  * `movz` / `movk` takes its own 16-bit group of the value. The `_s` groups
  * encode a negative value as `movn` over the complement, so the groups the
@@ -37,8 +37,7 @@ static long build_negative(void) {
 }
 
 /* A 32-bit destination clears the operand size bit and takes the two groups
- * that fit its width; this is the SHA-1 round constant the kernel's
- * `sha1-ce-core.S` materializes the same way. */
+ * that fit its width, as a 32-bit round constant is materialized. */
 static unsigned int build_u32(void) {
     unsigned int v;
 #if defined(__aarch64__)

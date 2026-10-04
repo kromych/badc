@@ -1,13 +1,13 @@
 # `--interp`: the safety-net VM
 
 `--interp` runs the program through the SSA interpreter instead of compiling
-to native:
+to native, and exits with the program's status, as the native image would:
 
 ```sh
-$ badc --interp hello.c
+$ badc --interp hello.c; echo "status $?"
 
 Hello 123
-exit(0)
+status 0
 ```
 
 The VM keeps code, stack, and data in three distinct address ranges and refuses

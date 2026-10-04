@@ -31,6 +31,7 @@ mod block_plan;
 mod branch_reach;
 #[cfg(feature = "full")]
 mod codegen;
+mod compound_assign;
 #[cfg(feature = "full")]
 mod computed_goto;
 mod deferred;
@@ -668,9 +669,8 @@ pub fn link_executable_with_runtime(
     opts: crate::NativeOptions,
 ) -> Result<Vec<u8>, String> {
     use crate::{
-        CompileOptions, NativeMachine, OutputKind, embedded_runtime, emit_aarch64_plt,
-        emit_native_with_options, emit_x86_64_plt, link_native_objects, parse_native_elf,
-        write_native_image_from_merged,
+        CompileOptions, OutputKind, embedded_runtime, emit_native_with_options,
+        link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
     let mut reloc = opts;
     reloc.output_kind = OutputKind::Relocatable;
@@ -720,11 +720,7 @@ pub fn link_executable_with_runtime(
     append_on_demand_objects(&mut objs, target, reloc)?;
 
     let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
-    let plt = match merged.machine {
-        NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
-        NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
-    }
-    .map_err(|e| format!("plt: {e}"))?;
+    let plt = crate::emit_plt_for(&mut merged, target, false).map_err(|e| format!("plt: {e}"))?;
     let entry_name = program.entry_name.as_deref().unwrap_or("main");
     write_native_image_from_merged(
         &merged,
@@ -820,8 +816,8 @@ pub fn link_shared_library(
     opts: crate::NativeOptions,
 ) -> Result<Vec<u8>, String> {
     use crate::{
-        NativeMachine, OutputKind, emit_aarch64_plt, emit_native_with_options, emit_x86_64_plt,
-        link_native_objects_with_options, parse_native_elf, write_native_image_from_merged,
+        OutputKind, emit_native_with_options, link_native_objects_with_options, parse_native_elf,
+        write_native_image_from_merged,
     };
     let mut reloc = opts;
     reloc.output_kind = OutputKind::Relocatable;
@@ -830,11 +826,7 @@ pub fn link_shared_library(
     let obj = parse_native_elf(&bytes).map_err(|e| format!("parse program object: {e}"))?;
     let mut merged =
         link_native_objects_with_options(&[obj], true).map_err(|e| format!("link: {e}"))?;
-    let plt = match merged.machine {
-        NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
-        NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
-    }
-    .map_err(|e| format!("plt: {e}"))?;
+    let plt = crate::emit_plt_for(&mut merged, target, false).map_err(|e| format!("plt: {e}"))?;
     write_native_image_from_merged(
         &merged,
         &plt,
@@ -860,9 +852,8 @@ pub fn link_executable_with_runtime_multi(
     opts: crate::NativeOptions,
 ) -> Result<Vec<u8>, String> {
     use crate::{
-        CompileOptions, NativeMachine, OutputKind, embedded_runtime, emit_aarch64_plt,
-        emit_native_with_options, emit_x86_64_plt, link_native_objects, parse_native_elf,
-        write_native_image_from_merged,
+        CompileOptions, OutputKind, embedded_runtime, emit_native_with_options,
+        link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
     let entry = programs[0];
     let mut reloc = opts;
@@ -908,11 +899,7 @@ pub fn link_executable_with_runtime_multi(
     }
 
     let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
-    let plt = match merged.machine {
-        NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
-        NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
-    }
-    .map_err(|e| format!("plt: {e}"))?;
+    let plt = crate::emit_plt_for(&mut merged, target, false).map_err(|e| format!("plt: {e}"))?;
     let entry_name = entry.entry_name.as_deref().unwrap_or("main");
     write_native_image_from_merged(
         &merged,
@@ -937,8 +924,8 @@ pub fn link_freestanding(
     opts: crate::NativeOptions,
 ) -> Result<Vec<u8>, String> {
     use crate::{
-        NativeMachine, OutputKind, emit_aarch64_plt, emit_native_with_options, emit_x86_64_plt,
-        link_native_objects, parse_native_elf, write_native_image_from_merged,
+        OutputKind, emit_native_with_options, link_native_objects, parse_native_elf,
+        write_native_image_from_merged,
     };
     let mut reloc = opts;
     reloc.output_kind = OutputKind::Relocatable;
@@ -946,11 +933,7 @@ pub fn link_freestanding(
         .map_err(|e| format!("emit program object: {e}"))?;
     let objs = vec![parse_native_elf(&prog_bytes).map_err(|e| format!("parse: {e}"))?];
     let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
-    let plt = match merged.machine {
-        NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
-        NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
-    }
-    .map_err(|e| format!("plt: {e}"))?;
+    let plt = crate::emit_plt_for(&mut merged, target, false).map_err(|e| format!("plt: {e}"))?;
     write_native_image_from_merged(
         &merged,
         &plt,
@@ -976,8 +959,10 @@ pub fn diag_config(selectors: &[&str]) -> crate::diag::Config {
     for sel in selectors {
         match crate::diag::Selector::parse(sel).expect("a catalogue selector") {
             crate::diag::Selector::Group(g) => config.enable_group(g),
-            crate::diag::Selector::Diagnostic(c) => {
-                config.set_level(c, crate::diag::Level::Warning)
+            sel => {
+                for c in sel.codes() {
+                    config.set_level(c, crate::diag::Level::Warning);
+                }
             }
         }
     }

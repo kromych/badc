@@ -45,10 +45,10 @@ pub use object::{
 };
 pub use {
     codegen::{
-        BinaryFormat, CodeModel, DEFAULT_SSP_BUFFER_SIZE, ExecForm, FixedReg, FixedRegs, GuardSeg,
-        GuardSymbol, Hardening, IndirectBranch, NativeOptions, OutputKind, PatchableEntry,
-        Profiling, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect, StackProtector, Target,
-        fixed_register, jit_run, jit_run_with_options, stack_guard_sysreg,
+        BinaryFormat, BuildId, CodeModel, DEFAULT_SSP_BUFFER_SIZE, ElfImageOptions, ExecForm,
+        FixedReg, FixedRegs, GuardSeg, GuardSymbol, Hardening, IndirectBranch, NativeOptions,
+        OutputKind, PatchableEntry, Profiling, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect,
+        StackProtector, Target, fixed_register, jit_run, jit_run_with_options, stack_guard_sysreg,
     },
     compiler::{
         AUTO_VAR_INIT_PATTERN_BYTE, AutoVarInit, CompileOptions, Compiler, StructDef, StructField,
@@ -74,17 +74,18 @@ pub use linker::read_archive_at;
 #[cfg(all(feature = "full", feature = "std"))]
 #[allow(unused_imports)]
 pub use linker::{
-    ArchiveInclusion, LdsEmit, LdsObject, LdsOptions, LdsResult, LinkerScript, MergedNative,
-    MergedSymbol, NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol,
-    OrphanHandling, PendingImportReloc, PltTrampoline, SectionContribution, SectionMap,
-    SharedLibrary, TargetCLibrary, copy_candidates, detect_binary_format, emit_aarch64_plt,
+    ArchiveInclusion, DataImportSlots, ImageOptions, LdsEmit, LdsObject, LdsOptions, LdsResult,
+    LinkOptions, LinkerScript, MergedNative, MergedSymbol, NativeMachine, NativeObject,
+    NativeReloc, NativeSymSection, NativeSymbol, OrphanHandling, PendingImportReloc, PltTrampoline,
+    Preemption, SectionContribution, SectionMap, SharedLibrary, TargetCLibrary, ZKeyword,
+    ZKeywords, ZSupport, copy_candidates, detect_binary_format, emit_aarch64_plt, emit_plt_for,
     emit_x86_64_plt, is_elf_object, is_mach_o_dylib, is_mach_o_fat, is_mach_o_object,
-    is_native_object, is_tbd, library_bindings, link_native_objects,
+    is_native_object, is_tbd, library_bindings, link_native_objects, link_native_objects_with,
     link_native_objects_with_options, link_native_objects_with_shared_libs, link_resolves_symbol,
     link_with_script, mach_o_fat_slice, parse_lds_object, parse_linker_script, parse_mach_o_dylib,
     parse_native_elf, parse_native_mach_o, parse_native_object, parse_shared_library, parse_tbd,
-    render_link_map, write_executable_elf64, write_native_image_from_merged,
-    write_native_image_from_merged_ex,
+    parse_z_keyword, render_link_map, resolve_exec_stack, write_executable_elf64,
+    write_native_image_from_merged, write_native_image_from_merged_ex,
 };
 #[cfg(feature = "full")]
 #[allow(unused_imports)]

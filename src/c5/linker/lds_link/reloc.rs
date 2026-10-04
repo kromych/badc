@@ -305,7 +305,7 @@ impl<'a> LdsLinker<'a> {
                         w(buf, site, &(v as i32).to_le_bytes());
                         return;
                     }
-                    // The kernel scripts assert an empty GOT: relax
+                    // A script may assert that `.got` is empty: relax
                     // the load to a direct reference.
                     if site >= 2 && buf[site - 2] == 0x8b {
                         buf[site - 2] = 0x8d; // mov -> lea

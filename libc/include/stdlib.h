@@ -185,9 +185,8 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(msvcrt::system,  "system")
 #pragma binding(msvcrt::getenv,  "getenv")
 // POSIX putenv is msvcrt's underscored `_putenv` (a `(string) -> int`
-// shape). msvcrt's `_putenv_s(name, value)` has no overwrite flag and
-// always replaces; setenv honors POSIX overwrite via the inline wrapper
-// below (declared here, defined after getenv/_putenv_s are in scope).
+// shape). There is no setenv: mingw-w64 declares none, and programs
+// supply their own over `_putenv_s(name, value)`.
 #pragma binding(msvcrt::putenv,    "_putenv")
 #pragma binding(msvcrt::_putenv,   "_putenv")
 #pragma binding(msvcrt::_putenv_s, "_putenv_s")
@@ -367,15 +366,6 @@ char *getenv(const char *name);
 // calls that name directly.
 int _putenv(const char *string);
 int _putenv_s(const char *name, const char *value);
-// POSIX setenv (IEEE Std 1003.1): overwrite == 0 leaves an existing
-// binding untouched and returns 0. Inline so the compiled, JIT, and
-// interpreter paths share one definition without a runtime import.
-static inline int setenv(const char *name, const char *value, int overwrite) {
-    if (overwrite == 0 && getenv(name) != 0) {
-        return 0;
-    }
-    return _putenv_s(name, value);
-}
 #else
 int setenv(const char *name, const char *value, int overwrite);
 #endif

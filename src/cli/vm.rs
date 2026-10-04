@@ -9,7 +9,8 @@ use super::options::Mode;
 
 /// `--jit` / `--interp` run one translation unit in-process. There
 /// is no link step: the first `.c` is the unit and must define
-/// `main` and resolve every symbol it references on its own.
+/// `main` and resolve every symbol it references on its own. Either
+/// exits with the program's status.
 pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) -> ! {
     let Inputs {
         sources,
@@ -107,8 +108,12 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
     }
     match vm.run() {
         Ok(res) => {
-            println!("exit({res})");
-            std::process::exit(0);
+            // The program's status is the process's, as a native image's
+            // is; its output is what it wrote, flushed before the exit.
+            use std::io::Write;
+            let _ = std::io::stdout().flush();
+            let _ = std::io::stderr().flush();
+            std::process::exit(res as i32);
         }
         Err(e) => {
             eprint_diagnostic(e);

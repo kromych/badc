@@ -4,8 +4,8 @@
 use super::{Compiler, Vm};
 use crate::c5::diag::Code;
 
-/// The rows spell GCC's enum types (C99 6.7.2.2p4), which the Linux targets
-/// take and the PE targets do not, so they compile for Linux.
+/// The rows compile for x86-64 Linux; the PE targets give enums the same
+/// types, which `an_enum_takes_the_type_gcc_gives_on_the_pe_targets` checks.
 fn expect_conflict(src: &str, needles: &[&str]) {
     let msg = match Compiler::with_target(src.to_string(), crate::Target::LinuxX64).compile() {
         Err(e) => e.to_string(),
@@ -24,30 +24,40 @@ fn run_without_warnings(src: &str) -> i64 {
     Vm::new(prog).run().unwrap()
 }
 
-/// MSVC's rule, which the PE targets take, makes every enum compatible with
-/// `int` (C99 6.7.2.2p4), whatever its values and attributes.
+/// gcc's rule, which mingw-w64's gcc and clang for the windows-gnu triples
+/// follow on the PE targets, makes an enum with no negative enumerator
+/// compatible with `unsigned int` (C99 6.7.2.2p4), and a `mode` attribute
+/// narrows that unsigned type.
 #[test]
-fn an_enum_is_compatible_with_int_on_the_pe_targets() {
-    let compile =
-        |src: &str| Compiler::with_target(src.to_string(), crate::Target::WindowsX64).compile();
-    let src = "enum E { A = 5 };\nint f(enum E);\nint f(int v) { return v; }\n\
-               int main(void) { return f(A); }\n";
-    assert_eq!(Vm::new(compile(src).unwrap()).run().unwrap(), 5);
-    for (src, needles) in [
-        (
-            "enum E { A = 5 };\nint f(enum E);\nint f(unsigned int v) { return (int)v; }\n",
-            ["previous: int (int)", "now:      int (unsigned int)"],
-        ),
-        (
-            "enum E;\nextern enum E x;\nenum E { A } __attribute__((__mode__(__byte__)));\n\
-             int x;\n",
-            ["previous: signed char", "now:      int"],
-        ),
-    ] {
-        let src = alloc::format!("{src}int main(void) {{ return 0; }}\n");
-        let msg = compile(&src).map(|_| ()).unwrap_err().to_string();
-        for needle in needles {
-            assert!(msg.contains(needle), "{src:?}: no {needle:?} in {msg:?}");
+fn an_enum_takes_the_type_gcc_gives_on_the_pe_targets() {
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        let compile = |src: &str| Compiler::with_target(src.to_string(), target).compile();
+        let src = "enum E { A = 5 };\nint f(enum E);\nint f(unsigned int v) { return (int)v; }\n\
+                   int main(void) { return f(A); }\n";
+        assert_eq!(
+            Vm::new(compile(src).unwrap()).run().unwrap(),
+            5,
+            "{target:?}"
+        );
+        for (src, needles) in [
+            (
+                "enum E { A = 5 };\nint f(enum E);\nint f(int v) { return v; }\n",
+                ["previous: int (enum E)", "now:      int (int)"],
+            ),
+            (
+                "enum E;\nextern enum E x;\nenum E { A } __attribute__((__mode__(__byte__)));\n\
+                 unsigned int x;\n",
+                ["previous: enum E", "now:      unsigned int"],
+            ),
+        ] {
+            let src = alloc::format!("{src}int main(void) {{ return 0; }}\n");
+            let msg = compile(&src).map(|_| ()).unwrap_err().to_string();
+            for needle in needles {
+                assert!(
+                    msg.contains(needle),
+                    "{target:?} {src:?}: no {needle:?} in {msg:?}"
+                );
+            }
         }
     }
 }
@@ -74,6 +84,12 @@ fn function_redeclarations_of_another_type_are_rejected() {
         (
             "int f(int x) { return x; }\nlong f(int x);\n",
             "now:      long (int)",
+        ),
+        // C99 6.7.5.3p7: an array parameter is a pointer to its element,
+        // the row for two bounds, which a pointer to the scalar is not.
+        (
+            "int f(int a[2][3]);\nint f(int *a) { return *a; }\n",
+            "previous: int (int (*)[3])",
         ),
         (
             "int f(int x);\nint f(int x, int y) { return x + y; }\n",
@@ -130,16 +146,26 @@ fn function_redeclarations_of_another_type_are_rejected() {
             "int f();\nextern __typeof__(f) f;\nint f(char c) { return c; }\n",
             "now:      int (char)",
         ),
+        // C99 6.7.2.2p4: two enumerated types of one integer type differ.
+        (
+            "enum A { A1 };\nenum B { B1 };\nint f(enum A);\nint f(enum B b) { return b; }\n",
+            "now:      int (enum B)",
+        ),
+        // C99 6.7.3: `volatile` below a parameter's own level takes part.
+        (
+            "int f(volatile int **);\nint f(int *volatile *p) { return p != 0; }\n",
+            "now:      int (int* volatile *)",
+        ),
         // The tag's definition fixes the type the earlier use names.
         (
             "enum E;\nint f(enum E);\nenum E { A } __attribute__((__mode__(__byte__)));\n\
              int f(int x) { return x; }\n",
-            "previous: int (unsigned char)",
+            "previous: int (enum E)",
         ),
         (
             "typedef enum E T;\nint f(T);\nenum E { A = 3 } __attribute__((packed));\n\
              int f(int v) { return v; }\n",
-            "previous: int (unsigned char)",
+            "previous: int (enum E)",
         ),
     ] {
         let src = alloc::format!("{decls}int main(void) {{ return 0; }}\n");
@@ -167,8 +193,18 @@ fn object_redeclarations_of_another_type_are_rejected() {
         ),
         (
             "enum E;\nextern enum E x;\nenum E { A } __attribute__((__mode__(__byte__)));\nint x;\n",
-            "previous: unsigned char",
+            "previous: enum E",
         ),
+        (
+            "enum A { A1 };\nenum B { B1 };\nextern enum A x;\nenum B x;\n",
+            "now:      enum B",
+        ),
+        // C99 6.7.3: `volatile` takes part at the level it qualifies.
+        (
+            "extern volatile int **x;\nint *volatile *x;\n",
+            "now:      int* volatile *",
+        ),
+        ("int x;\nvolatile int x;\n", "now:      volatile int"),
     ] {
         let src = alloc::format!("{decls}int main(void) {{ return 0; }}\n");
         expect_conflict(&src, &["conflicting types for `x`", needle]);
@@ -211,6 +247,14 @@ fn a_second_body_is_rejected() {
 #[test]
 fn compatible_redeclarations_compose() {
     for (src, want) in [
+        // C17 6.7.6.3p5: a function returns the unqualified version of its
+        // declared type, so the return type's own qualifiers do not count.
+        (
+            "const int f(void);\nint f(void) { return 8; }\nvolatile int f(void);\n\
+          const char *const k(void);\nconst char *k(void) { return \"\"; }\n\
+          int main(void) { return f() + *k(); }\n",
+            8,
+        ),
         // C99 6.7.5.3p15: no parameter information beside a prototype or an
         // old-style definition that agrees with it.
         (
@@ -343,6 +387,11 @@ fn compatible_redeclarations_compose() {
             "extern volatile int v;\nvolatile int v = 3;\nint main(void) { return v; }\n",
             3,
         ),
+        // C99 6.7.5.3p15: a parameter's own qualifier takes no part.
+        (
+            "int h(volatile int);\nint h(int a) { return a; }\nint main(void) { return h(4); }\n",
+            4,
+        ),
         (
             "typedef const int CI;\nextern CI c;\nconst int c = 2;\nint main(void) { return c; }\n",
             2,
@@ -374,14 +423,10 @@ fn compatible_redeclarations_compose() {
 fn gnu_redeclarations_warn() {
     for (src, now) in [
         // GCC keeps `void` for an implicit `int` definition of a function
-        // declared `void`.
+        // declared `void`, once the implicit `int` is lowered to a warning.
         (
-            "void f(void);\nf(void) { }\nint main(void) { f(); return 0; }\n",
-            "now:      int (void)",
-        ),
-        // C11 6.7.6.3p5 drops a return type's qualifiers; C99 6.7.3p9 does not.
-        (
-            "const int f(void);\nint f(void) { return 0; }\nint main(void) { return f(); }\n",
+            "#pragma GCC diagnostic warning \"-Wimplicit-int\"\n\
+             void f(void);\nf(void) { }\nint main(void) { f(); return 0; }\n",
             "now:      int (void)",
         ),
         // GCC lets the prototype's `char` stand for the promoted `int` of an

@@ -187,6 +187,8 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
   block 8  start_pc=0
     v92  Imm(0)                                           -> x0
     terminator Return(v92)   (exit_acc=v92)
+kr_old_style_def.c:10: warning: type of `a` defaults to `int` [B2011] [-Wimplicit-int]
+int mix(a, b, c) char b; long c; { return a - c + b; }
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

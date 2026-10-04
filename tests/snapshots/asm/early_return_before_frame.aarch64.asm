@@ -108,23 +108,21 @@ Disassembly of section .text:
                	ret
 
 <narrow>:
-               	sxtb	x9, w0
-               	cmp	w9, #0x0
-               	b.le	<addr>
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	sxtb	x0, w0
                	sxth	x1, w1
-               	sub	x2, x0, #0x1
-               	sub	x1, x1, x0
-               	mov	x0, x2
-               	bl	<addr>
+               	mov	x2, #0x0                // =0
+               	cmp	w0, #0x0
+               	b.le	<addr>
+               	sub	x3, x0, #0x1
+               	sub	x0, x1, x0
+               	sxth	x1, w0
+               	add	x0, x2, #0x1
+               	sxth	x2, w0
+               	mov	x0, x3
+               	cmp	w0, #0x0
+               	b.gt	<addr>
+               	add	x0, x2, x1
                	sxth	x0, w0
-               	add	x0, x0, #0x1
-               	sxth	x0, w0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sxth	x0, w1
                	ret
 
 <ucount>:

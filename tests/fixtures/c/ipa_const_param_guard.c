@@ -11,21 +11,21 @@
 // substitution at a splice. gcc 16 links this at -O2 and, like badc,
 // fails to at -O0.
 
-#define BUILD_BUG_ON(cond, tag)                                                                    \
+#define FAIL_IF(cond, tag)                                                                         \
     do {                                                                                           \
         extern void compiletime_assert_##tag(void);                                                \
         if (!(!(cond)))                                                                            \
             compiletime_assert_##tag();                                                            \
     } while (0)
 
-#define END_OF_FIXED_ADDRESSES 974
-#define FIX_TEXT_POKE0 3
+#define SLOT_COUNT 974
+#define FIRST_SLOT 3
 
 static long table[180];
 
-static long patch_map(long addr, int fixmap) {
+static long patch_map(long addr, int slot) {
     long acc = 0;
-    BUILD_BUG_ON(fixmap >= END_OF_FIXED_ADDRESSES, 331);
+    FAIL_IF(slot >= SLOT_COUNT, 331);
     acc += table[0] * 1;
     acc += table[1] * 2;
     acc += table[2] * 3;
@@ -206,16 +206,16 @@ static long patch_map(long addr, int fixmap) {
     acc += table[177] * 178;
     acc += table[178] * 179;
     acc += table[179] * 180;
-    return acc + addr + fixmap;
+    return acc + addr + slot;
 }
 
 long map_a(long p);
 long map_b(long p);
 long map_a(long p) {
-    return patch_map(p, FIX_TEXT_POKE0);
+    return patch_map(p, FIRST_SLOT);
 }
 long map_b(long p) {
-    return patch_map(p, FIX_TEXT_POKE0);
+    return patch_map(p, FIRST_SLOT);
 }
 
 // A second static whose sites disagree on the argument: its parameter
@@ -231,7 +231,7 @@ int main(void) {
         table[i] = i;
     for (i = 0; i < 180; i++)
         want += table[i] * (i + 1);
-    want += 7 + FIX_TEXT_POKE0;
+    want += 7 + FIRST_SLOT;
     if (map_a(7) != want)
         return 1;
     if (map_b(7) != want)

@@ -419,9 +419,9 @@ fn materialize_one_section(text: &str) -> Result<AsmSectionSink, alloc::string::
 
 /// A bare section name is that section's start, so a `.set` over a
 /// section-local difference folds and the `:abs_g` halves resolve at
-/// assembly with no relocation -- which is what GNU as does with the
-/// kernel's `tramp_alias`. Words from `as`; the value is negative, so
-/// the signed group's `movz` becomes a `movn` over the complement.
+/// assembly with no relocation, as GNU as resolves them. Words from
+/// `as`; the value is negative, so the signed group's `movz` becomes a
+/// `movn` over the complement.
 #[test]
 fn file_scope_a64_abs_g_over_section_symbol_matches_gnu_as() {
     let text = ".pushsection .entry.tramp.text,\"ax\"\n\
@@ -673,8 +673,7 @@ fn file_scope_a64_abs_g_rejects_what_gnu_as_rejects() {
 /// selects the encoding: `prfm` takes the scaled form only for a
 /// multiple of the access size and `prfum` otherwise, `ldr` likewise
 /// becomes `ldur`, and `mov` of a negative value becomes `movn`. Words
-/// from `as`, which emits no relocation for any of them. This is the
-/// kernel's vector-entry sequence in `arch/arm64/kernel/entry.S`.
+/// from `as`, which emits no relocation for any of them.
 #[test]
 fn file_scope_a64_label_difference_operand_matches_gnu_as() {
     let text = ".pushsection .t,\"ax\"\n\
@@ -958,7 +957,7 @@ fn file_scope_a64_mops_match_gnu_as() {
     assert_eq!(sec.bytes, bytes);
 }
 
-/// The flow-form ALTERNATIVE at file scope: `.subsection 1` holds the
+/// A replacement sequence at file scope: `.subsection 1` holds the
 /// replacement, `.previous` returns, the `.org` pair equalizes the
 /// lengths, and a `.rept` count over labels of the main subsection
 /// resolves at layout. Bytes match GNU as for the same input: the main
@@ -1039,9 +1038,9 @@ fn a64_file_asm_sink(text: &str) -> AsmSectionSink {
 /// A `.if` over a label difference guarding a `.error` is valued after
 /// layout: the branches emit no bytes, so the layout cannot depend on the
 /// outcome. Bytes are GNU as's for the same input, which reads the same
-/// difference at the `.if`. Covers both spellings the kernel vector
-/// tables use -- numeric labels through macro parameters, and `\@`-unique
-/// labels -- and an `.else` arm.
+/// difference at the `.if`. Covers both label spellings an exception
+/// vector table can use -- numeric labels through macro parameters, and
+/// `\@`-unique labels -- and an `.else` arm.
 #[test]
 fn file_scope_a64_deferred_if_matches_gnu_as() {
     let text = ".macro check_preamble_length start, end\n\
@@ -1104,19 +1103,18 @@ fn file_scope_a64_deferred_if_reports_a_failed_guard() {
 /// A branch, `adr`, `adrp` or `:lo12:` operand is an expression over
 /// symbols, not only a symbol with a constant addend: a label difference
 /// in the addend folds against the layout and the symbol keeps the
-/// relocation. The KVM hypervisor entry branches to a vector slot that
-/// way. Words and relocations measured with GNU as 2.46.1 for the same
-/// source.
+/// relocation, as a branch to one slot of a vector table is written.
+/// Words and relocations measured with GNU as 2.46.1 for the same source.
 #[test]
 fn file_scope_a64_operand_symbol_expressions_match_gnu_as() {
-    let text = ".text\n1:\nnop\nnop\n2:\nb __kvm_hyp_vector + (2b - 1b + (2 * 4))\n\
+    let text = ".text\n1:\nnop\nnop\n2:\nb vector_base + (2b - 1b + (2 * 4))\n\
                 adr x0, sym + (2b - 1b)\nadrp x1, sym + (2b - 1b)\n\
                 add x1, x1, :lo12:(sym + (2b - 1b))\ncbz x2, sym + (2b - 1b)\n";
     let sec = a64_file_asm_section(text, ".text");
     let want: Vec<u8> = [
         0xd503201fu32, // nop
         0xd503201f,    // nop
-        0x14000000,    // b __kvm_hyp_vector + 16
+        0x14000000,    // b vector_base + 16
         0x10000000,    // adr x0, sym + 8
         0x90000001,    // adrp x1, sym + 8
         0x91000021,    // add x1, x1, :lo12:sym + 8
@@ -1135,7 +1133,7 @@ fn file_scope_a64_operand_symbol_expressions_match_gnu_as() {
     assert_eq!(
         relocs,
         [
-            (8, at("__kvm_hyp_vector"), 16),
+            (8, at("vector_base"), 16),
             (12, at("sym"), 8),
             (16, at("sym"), 8),
             (20, at("sym"), 8),

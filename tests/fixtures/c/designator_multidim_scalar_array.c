@@ -2,8 +2,8 @@
 // { a, b }` names a row of the innermost dimension, so the brace list
 // spans that row, not the outer one. Measuring it against the outer row
 // advances the cursor by a whole row per entry and overruns the object.
-// drivers/media/platform/rockchip/rkvdec/rkvdec-cabac.c builds its
-// `[4][464][2]` table from a macro that writes four such entries.
+// A `[4][464][2]` table built from a macro that writes four such entries
+// takes this shape.
 typedef signed char s8;
 
 #define ENTRY(i, a, b, c, d) \

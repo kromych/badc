@@ -14,6 +14,8 @@
 mod catalog;
 mod code;
 mod control;
+mod foreign;
+mod foreign_names;
 mod message;
 mod print;
 mod sink;
@@ -24,6 +26,7 @@ mod tests;
 pub use catalog::{Row, rows};
 pub use code::{Class, Code, Groups, Level, Status};
 pub use control::{Config, Control, Selector};
+pub use foreign::defined_elsewhere;
 pub use message::{Diagnostic, Loc};
 pub use print::{RESET, Severity, explain, list_catalog};
 pub use sink::Sink;

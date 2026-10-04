@@ -63,6 +63,8 @@ struct LocalDeclarator {
     ty: i64,
     enum_tag: Option<u32>,
     array_size: i64,
+    /// `array_size` is -1 for a GNU zero-length `[0]`, not for `[]`.
+    zero_len: bool,
     is_static: bool,
     is_extern: bool,
     is_thread_local: bool,
@@ -378,7 +380,11 @@ impl Compiler {
     /// function-body scope (shared with the parameters, C99 6.2.1p4)
     /// otherwise -- receives the bindings and the saved outer state its
     /// exit restores.
-    pub(super) fn parse_local_decl(&mut self, maybe_unused: bool) -> Result<(), C5Error> {
+    pub(super) fn parse_local_decl(
+        &mut self,
+        maybe_unused: bool,
+        leading_noreturn: bool,
+    ) -> Result<(), C5Error> {
         let mut is_static = false;
         let mut is_extern = false;
         let mut is_thread_local = false;
@@ -386,6 +392,8 @@ impl Compiler {
         let mut qual_bits: i64 = 0;
         // Reset the per-declaration carriers; a stale one from the
         // enclosing function would bleed onto a static's emission record.
+        self.pending_noreturn = leading_noreturn;
+        self.pending.attr_maybe_unused = false;
         self.pending.base_is_const = false;
         let _ = self.take_base_spelling();
         self.pending.saw_register_storage = false;
@@ -410,12 +418,13 @@ impl Compiler {
         if is_thread_local && !is_extern {
             is_static = true;
         }
-        // K&R implicit int (`register n = ...;`). Gated on an explicit
-        // specifier so a mistyped type name still surfaces as an error.
-        let base = if !self.lex_is_type_start() && saw_specifier {
-            Ty::Int as i64
+        // Implicit int (`register n = ...;`), gated on an explicit specifier
+        // so a mistyped type name still surfaces as an error.
+        let (base, implicit_int) = if !self.lex_is_type_start() && saw_specifier {
+            (Ty::Int as i64, true)
         } else {
-            self.parse_decl_base_type()?
+            let base = self.parse_decl_base_type()?;
+            (base, core::mem::take(&mut self.pending.base_implicit_int))
         };
         // C99 6.7.1: specifiers may also trail the type (`int const y;`).
         self.consume_local_decl_specifiers(
@@ -446,7 +455,13 @@ impl Compiler {
         // declarator; one written after a declarator applies to it alone.
         let leading_cleanup = self.pending.attr_cleanup.take();
         let leading_uninitialized = core::mem::take(&mut self.pending.attr_uninitialized);
+        // `noreturn` and `unused` among the specifiers apply to every
+        // declarator; after one, to that declarator alone.
+        let base_noreturn = self.pending_noreturn;
+        let base_maybe_unused = maybe_unused || self.pending.attr_maybe_unused;
         while self.lex.tk != ';' {
+            self.pending_noreturn = base_noreturn;
+            self.pending.attr_maybe_unused = base_maybe_unused;
             self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
             self.pending.fn_ptr_ret_indirection = base_fn_ptr_ret_indirection;
             self.pending.base_is_function_type = base_is_function_type;
@@ -457,7 +472,12 @@ impl Compiler {
                 ty: lbt,
                 enum_tag: base_enum_tag,
             };
-            if self.try_parse_block_fn_prototype(base, is_static)? {
+            let declarator_line = self.lex.line;
+            if let Some(fn_idx) = self.try_parse_block_fn_prototype(base, is_static)? {
+                if implicit_int {
+                    let what = super::decl_base::ImplicitInt::Declarator(fn_idx);
+                    self.report_implicit_int(what, declarator_line)?;
+                }
                 self.accept_declarator_separator()?;
                 continue;
             }
@@ -469,8 +489,12 @@ impl Compiler {
             let saved_vla = core::mem::replace(&mut self.pending.vla_allowed, true);
             // Filled by a declarator group holding its entity's own list.
             self.pending.fn_params = None;
-            let (loc_idx, ty, mut array_size) = self.parse_declarator(lbt)?;
+            let (loc_idx, ty, mut array_size, mut zero_len) = self.parse_declarator(lbt)?;
             self.pending.vla_allowed = saved_vla;
+            if implicit_int {
+                let what = super::decl_base::ImplicitInt::Declarator(loc_idx);
+                self.report_implicit_int(what, declarator_line)?;
+            }
             self.pending.attr_transparent_union = false;
             // C99 6.7.1p5 + 6.9.1: a declarator of bare function type (a
             // function-TYPE typedef with no pointer level) declares a
@@ -501,11 +525,13 @@ impl Compiler {
             // C99 6.7.7p3: an array typedef contributes its dimension only
             // when no derivation of the declarator applied to it; `A *p`
             // points to the array. Peek without clearing so the rest of the
-            // comma list keeps it.
+            // comma list keeps it. An alias of unknown size (`-1`) leaves
+            // the size to the initializer, and a zero-length one is empty.
             let typedef_dim = self.pending.typedef_base_array_size;
             self.check_array_elem_align(array_size, ty, typedef_dim, base_type_align)?;
-            if typedef_dim > 0 && array_size == 0 && !self.pending.base_array_taken {
+            if typedef_dim != 0 && array_size == 0 && !self.pending.base_array_taken {
                 array_size = typedef_dim;
+                zero_len = self.pending.typedef_base_zero_len;
                 self.apply_typedef_array_dims(loc_idx);
             }
             self.ty = ty;
@@ -540,7 +566,7 @@ impl Compiler {
             if !is_extern || extern_shadows_binding {
                 self.save_scope_binding(loc_idx);
             }
-            if maybe_unused {
+            if self.pending.attr_maybe_unused {
                 self.symbols[loc_idx].binding.maybe_unused = true;
             }
 
@@ -557,7 +583,6 @@ impl Compiler {
             }
 
             if is_extern {
-                let zero_len = array_size < 0 && self.pending.declarator_zero_len_array;
                 let bounds = self.declared_bounds(loc_idx, array_size, zero_len);
                 let spelled = super::redeclaration::Spelled {
                     ty,
@@ -590,6 +615,7 @@ impl Compiler {
                 ty,
                 enum_tag: base_enum_tag,
                 array_size,
+                zero_len,
                 is_static,
                 is_extern,
                 is_thread_local,
@@ -627,6 +653,8 @@ impl Compiler {
         }
         self.next()?;
         self.pending.auto_type_single_declarator = false;
+        self.pending_noreturn = false;
+        self.pending.attr_maybe_unused = false;
         Ok(())
     }
 
@@ -636,8 +664,10 @@ impl Compiler {
             self.intern_source_file() as u32,
             self.in_user_source(),
         );
+        self.decl_count += 1;
         let b = &mut self.symbols[idx].binding;
         (b.decl_line, b.decl_file, b.decl_in_user_source) = (line, file, in_user);
+        b.decl_seq = self.decl_count;
     }
 
     /// Bind one block-scope declarator to storage: a block-scope `extern`
@@ -770,7 +800,7 @@ impl Compiler {
             // element initializer (an element that is a statement
             // expression), so keep the carriers reentrant.
             let saved = self.take_pending_local_carriers();
-            let r = self.allocate_local_with_init(d.loc_idx, d.ty, d.array_size, fill);
+            let r = self.allocate_local_with_init(d.loc_idx, d.ty, d.array_size, d.zero_len, fill);
             if r.is_ok() {
                 self.finalize_local_init(d.loc_idx);
             }
@@ -888,8 +918,10 @@ impl Compiler {
         }
         // The declaration names the file-scope entity unless it
         // shadows a local; attributes (`weak`, visibility) attach
-        // to that entity, as on the extern-object path.
+        // to that entity, as on the extern-object path, and so does
+        // `noreturn` (C11 6.7.4).
         if c != Token::Loc as i64 {
+            self.symbols[loc_idx].is_noreturn |= self.pending_noreturn;
             self.apply_symbol_attributes(loc_idx);
         }
         self.accept_declarator_separator()?;
@@ -913,8 +945,12 @@ impl Compiler {
             || self.lex.tk == Token::Static
             || self.lex.tk == Token::ThreadLocal
             || self.lex.tk == Token::FuncSpec
+            || self.lex.tk == Token::Noreturn
             || self.lex.tk == Token::TypeQual
         {
+            if self.lex.tk == Token::Noreturn {
+                self.pending_noreturn = true;
+            }
             if self.lex.tk == Token::Static {
                 *is_static = true;
             }
@@ -1124,7 +1160,7 @@ impl Compiler {
                 if self.lex.tk != '{' {
                     return Err(self.compile_err(
                         Code::INVALID_INITIALIZER,
-                        "array initializer must start with `{{`",
+                        "array initializer must start with `{`",
                     ));
                 }
                 let sid = struct_id_of(ty);
@@ -1223,7 +1259,7 @@ impl Compiler {
                 return Ok(());
             }
             self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
-            let elements = self.collect_array_initializer(ty)?;
+            let elements = self.collect_array_initializer(ty, self.elem_fn_type(loc_idx))?;
             let final_size = elements.len() as i64;
             let total_bytes = (self.size_of_type(ty) as i64) * final_size;
             let aligned = ((total_bytes + 7) / 8) * 8;
@@ -1247,7 +1283,7 @@ impl Compiler {
             if self.lex.tk != '{' {
                 return Err(self.compile_err(
                     Code::INVALID_INITIALIZER,
-                    "array initializer must start with `{{`",
+                    "array initializer must start with `{`",
                 ));
             }
             self.next()?;
@@ -1258,7 +1294,7 @@ impl Compiler {
         } else if array_size > 0 {
             self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
             self.pending.init_target_array_size = array_size;
-            let elements = self.collect_array_initializer(ty)?;
+            let elements = self.collect_array_initializer(ty, self.elem_fn_type(loc_idx))?;
             // C99 6.7.8p2: the initializer may not provide a value for an
             // object outside the entity being initialized. The storage
             // reserved above holds `array_size` elements, so a longer list
@@ -1412,7 +1448,7 @@ impl Compiler {
             }
             let line = self.lex.line;
             self.expr(Token::Assign as i64)?;
-            self.check_initializer_expr(ty, line)?;
+            self.check_initializer_expr(ty, 0, line)?;
             if let Some(rhs) = self.ast_acc.take() {
                 // Fill `[i, range_end]`. A range reuses the value node;
                 // the walker re-walks it per store, which is safe for the
@@ -1806,6 +1842,7 @@ impl Compiler {
         loc_idx: usize,
         ty: i64,
         declared_array_size: i64,
+        zero_len: bool,
         fill: Option<u8>,
     ) -> Result<(), C5Error> {
         if declared_array_size == super::VLA_ARRAY_SIZE {
@@ -1822,7 +1859,7 @@ impl Compiler {
             self.record_local_store(loc_idx, self.lex.line);
         }
         if declared_array_size == -1 {
-            return self.allocate_deferred_size_local(loc_idx, ty, fill);
+            return self.allocate_deferred_size_local(loc_idx, ty, zero_len, fill);
         }
 
         self.symbols[loc_idx].array_size = declared_array_size;
@@ -1875,7 +1912,7 @@ impl Compiler {
                     self.emit_local_array_init_runtime(
                         local_val,
                         0,
-                        ty,
+                        (ty, self.elem_fn_type(loc_idx)),
                         declared_array_size,
                         &inner,
                         &var_name,
@@ -1884,7 +1921,7 @@ impl Compiler {
                 }
                 self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
                 self.pending.init_target_array_size = declared_array_size;
-                let elements = self.collect_array_initializer(ty)?;
+                let elements = self.collect_array_initializer(ty, self.elem_fn_type(loc_idx))?;
                 let init_count = elements.len();
                 let max = declared_array_size as usize;
                 if init_count > max {
@@ -1945,11 +1982,13 @@ impl Compiler {
     /// A deferred-size automatic array (`T x[] = ...`): the element count
     /// comes from the initializer, so the frame slot is reserved after it is
     /// parsed (C99 6.7.8p22). Also covers the GNU `T x[0]` and the
-    /// initializer-less `T x[]` a declarator completes to one element.
+    /// initializer-less `T x[]` a declarator completes to one element;
+    /// `zero_len` tells the first from the second.
     fn allocate_deferred_size_local(
         &mut self,
         loc_idx: usize,
         ty: i64,
+        zero_len: bool,
         fill: Option<u8>,
     ) -> Result<(), C5Error> {
         if self.lex.tk != Token::Assign {
@@ -1964,7 +2003,6 @@ impl Compiler {
             // TODO: empty brackets with no initializer leave the type
             // incomplete (C99 6.7.5.2p4); the bound is completed to one
             // element rather than diagnosed.
-            let zero_len = self.pending.declarator_zero_len_array;
             self.symbols[loc_idx].array_size = if zero_len { 0 } else { 1 };
             self.symbols[loc_idx].is_zero_len_array = zero_len;
             self.symbols[loc_idx].val = self.reserve_slots(self.local_storage_slots(ty, 1));
@@ -2015,7 +2053,7 @@ impl Compiler {
                 self.emit_local_array_init_runtime(
                     local_val,
                     0,
-                    ty,
+                    (ty, None),
                     total,
                     &inner_dims,
                     &var_name,
@@ -2079,7 +2117,12 @@ impl Compiler {
                 let zero_off = self.stage_template_bytes(full_bytes);
                 self.emit_local_array_init(local_val, zero_off, full_bytes);
                 self.emit_local_array_init_runtime(
-                    local_val, 0, ty, final_size, &inner, &var_name,
+                    local_val,
+                    0,
+                    (ty, self.elem_fn_type(loc_idx)),
+                    final_size,
+                    &inner,
+                    &var_name,
                 )?;
                 return Ok(());
             }
@@ -2091,7 +2134,7 @@ impl Compiler {
             // expressions are present.
         }
         self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
-        let elements = self.collect_array_initializer(ty)?;
+        let elements = self.collect_array_initializer(ty, self.elem_fn_type(loc_idx))?;
         let final_size = elements.len() as i64;
         self.symbols[loc_idx].array_size = final_size;
         self.symbols[loc_idx].val = self.reserve_slots(self.local_storage_slots(ty, final_size));
@@ -2144,7 +2187,7 @@ impl Compiler {
             self.emit_local_array_init_runtime(
                 local_val,
                 0,
-                ty,
+                (ty, None),
                 declared_array_size,
                 &inner,
                 var_name,
@@ -2373,7 +2416,7 @@ impl Compiler {
     #[allow(clippy::needless_late_init)]
     pub(super) fn parse_block_compound_literal(
         &mut self,
-        t: i64,
+        (t, elem_fn): (i64, Option<(crate::c5::symbol::FnType, i64)>),
         array_dims: &[i64],
     ) -> Result<(), C5Error> {
         // A compound literal reuses the three pending-init carriers as
@@ -2445,7 +2488,7 @@ impl Compiler {
                     self.emit_local_array_init_runtime(
                         slot,
                         0,
-                        elem_ty,
+                        (elem_ty, elem_fn.clone()),
                         count,
                         inner_dims,
                         "<compound literal>",
@@ -2454,7 +2497,7 @@ impl Compiler {
                     self.stage_struct_array_literal(slot, elem_ty, rows, inner_dims, full)?;
                 } else {
                     self.pending.init_inner_dims = inner_dims.to_vec();
-                    let elements = self.collect_array_initializer(elem_ty)?;
+                    let elements = self.collect_array_initializer(elem_ty, elem_fn.clone())?;
                     let (start, packed) = self.pack_initializer_into_data(elem_ty, &elements)?;
                     // C99 6.7.8p21: positions the list leaves out are
                     // zero; pad so the single Mcpy covers the object.
@@ -2486,7 +2529,7 @@ impl Compiler {
                     self.emit_local_array_init_runtime(
                         slot,
                         0,
-                        elem_ty,
+                        (elem_ty, elem_fn.clone()),
                         count,
                         inner_dims,
                         "<compound literal>",
@@ -2506,7 +2549,7 @@ impl Compiler {
                 } else {
                     self.pending.init_target_array_size = count;
                     self.pending.init_inner_dims = inner_dims.to_vec();
-                    let elements = self.collect_array_initializer(elem_ty)?;
+                    let elements = self.collect_array_initializer(elem_ty, elem_fn.clone())?;
                     if elements.len() as i64 > count {
                         return Err(self.compile_err(
                             Code::INVALID_INITIALIZER,
@@ -2565,7 +2608,7 @@ impl Compiler {
             self.next()?;
             let line = self.lex.line;
             self.expr(Token::Assign as i64)?;
-            self.check_initializer_expr(t, line)?;
+            self.check_initializer_expr(t, 0, line)?;
             self.convert_assign_rhs(t);
             self.pending_local_init_ast = self.ast_acc;
             self.accept(',')?;
@@ -2838,15 +2881,18 @@ impl Compiler {
     /// `ty` the element type; `max` the declared dimension. On
     /// entry the current token is `{`; on return it's the token
     /// after the matching `}`.
+    /// `elem` is the element type and the function type an element leads
+    /// to, if any.
     pub(super) fn emit_local_array_init_runtime(
         &mut self,
         local_val: i64,
         base: i64,
-        ty: i64,
+        elem: (i64, Option<(crate::c5::symbol::FnType, i64)>),
         total_count: i64,
         inner_dims: &[i64],
         var_name: &str,
     ) -> Result<(), C5Error> {
+        let (ty, elem_fn) = elem;
         let elem_size = self.size_of_type(ty) as i64;
         // Build the full dimension list, outermost first. `inner_dims`
         // are the fixed inner dimensions (`array_dims[1..]`); the outer
@@ -2861,7 +2907,10 @@ impl Compiler {
         let mut dims = alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
         dims.push(outer.max(0));
         dims.extend_from_slice(inner_dims);
-        self.fill_array_init_runtime(local_val, base, &dims, ty, elem_size, var_name)
+        let outer = core::mem::replace(&mut self.array_elem_fn, elem_fn);
+        let r = self.fill_array_init_runtime(local_val, base, &dims, ty, elem_size, var_name);
+        self.array_elem_fn = outer;
+        r
     }
 
     /// Parse one brace level of a runtime array initializer at byte

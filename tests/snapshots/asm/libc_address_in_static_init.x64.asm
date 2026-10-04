@@ -37,30 +37,3 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	retq
-
-<__c5_sys_read>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	movq	%rdi, -0x30(%rbp)
-               	movq	%rsi, -0x20(%rbp)
-               	movq	%rdx, -0x10(%rbp)
-               	movq	-0x30(%rbp), %rdi
-               	movq	-0x20(%rbp), %rsi
-               	movq	-0x10(%rbp), %rdx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leave
-               	retq
-
-<__c5_sys_close>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rdi
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	leave
-               	retq

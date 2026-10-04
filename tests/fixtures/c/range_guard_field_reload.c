@@ -1,9 +1,8 @@
 // A dominating unsigned guard on a struct field bounds what every later
 // reload of the field produces while nothing writes memory in between.
-// The build-time assert's operand -- the kernel's min(unsigned, signed)
-// type check spelled the way fs/fuse/dev.c reaches it -- has a
-// translation-time answer only through that bound: the record is filled
-// through a call the compiler cannot see through, so no constant ever
+// The build-time assert's operand -- a type-checking min(unsigned,
+// signed) -- has a translation-time answer only through that bound: the
+// record is filled through a call the compiler cannot see through, so no constant ever
 // reaches the guard. `compiletime_assert_675` is declared and never
 // defined, so linking is the assertion. gcc 16 links this at -O2
 // (value-range propagation) and fails to at -O0.
@@ -34,7 +33,7 @@ static void fill(struct notify_out *o) {
 }
 
 // Reached only through a volatile pointer, so the store side stays out
-// of sight of the caller the way a copy_from_user-style filler does.
+// of sight of the caller the way an out-of-line copy-in filler does.
 static void (*volatile fill_p)(struct notify_out *) = fill;
 
 static int notify_store(void) {
@@ -47,7 +46,7 @@ static int notify_store(void) {
         return -22;
     pos = outarg.offset;
     {
-        // min(u32, s64) as the kernel's minmax.h checks it: the mixed
+        // min(u32, s64) under a type-checking min(): the mixed
         // signedness is accepted only when the signed side is provably
         // non-negative at translation time.
         u32 ux = outarg.size;

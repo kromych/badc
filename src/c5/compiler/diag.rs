@@ -93,6 +93,71 @@ fn binary_operands_fit(op: &str, compound: bool, l: Operand, r: Operand) -> bool
     }
 }
 
+/// Whether the pointer keys `a` and `b` (`types::pointer_conversion_key`)
+/// point to compatible types (C99 6.2.7): equal ones, an enumerated type
+/// and its integer type (6.7.2.2p4), or arrays of compatible elements whose
+/// bounds agree where both are known (6.7.5.2p6). An array's qualifiers are
+/// its elements' (6.7.3p8), so one directly pointed to compares without them.
+fn pointees_compatible(structs: &[super::StructDef], a: i64, b: i64) -> bool {
+    use super::types::{VOLATILE_BIT, enum_compatible, struct_id_of, unqualified_version_ty};
+    if enum_compatible(a & !VOLATILE_BIT, b & !VOLATILE_BIT) {
+        return true;
+    }
+    let array = |t: i64| {
+        (is_struct_ty(t) && struct_ptr_depth(t) > 0)
+            .then(|| structs.get(struct_id_of(t)))
+            .flatten()
+            .filter(|s| s.is_array)
+    };
+    let (Some(x), Some(y)) = (array(a), array(b)) else {
+        return false;
+    };
+    let depth = struct_ptr_depth(a);
+    if depth != struct_ptr_depth(b) || a ^ strip_unsigned(a) != b ^ strip_unsigned(b) {
+        return false;
+    }
+    let (fx, fy) = (&x.fields[0], &y.fields[0]);
+    let elem = |t: i64| {
+        let t = if depth == 1 {
+            unqualified_version_ty(t)
+        } else {
+            t
+        };
+        t & !VOLATILE_BIT
+    };
+    let dims = |f: &super::StructField| {
+        if f.array_dims.len() >= 2 {
+            f.array_dims.clone()
+        } else {
+            alloc::vec![f.array_size]
+        }
+    };
+    let (dx, dy) = (dims(fx), dims(fy));
+    enum_compatible(elem(fx.ty), elem(fy.ty))
+        && dx.len() == dy.len()
+        && dx.iter().zip(&dy).all(|(m, n)| *m < 0 || *n < 0 || m == n)
+}
+
+/// Whether the pointer keys `a` and `b` point directly to integer types,
+/// neither enumerated nor `_Bool`, that differ only in signedness, plain
+/// `char` being a type of its own (C99 6.2.5p15).
+fn sign_only_difference(structs: &[super::StructDef], a: i64, b: i64) -> bool {
+    use super::types::{ENUM_BIT, PLAIN_CHAR_BIT, ptr_depth_of, struct_id_of};
+    if (a ^ b) & !(UNSIGNED_BIT | PLAIN_CHAR_BIT) != 0 || a & ENUM_BIT != 0 || ptr_depth_of(a) != 1
+    {
+        return false;
+    }
+    let pointee = strip_unsigned(a) - Ty::Ptr as i64;
+    let int128 = is_struct_ty(pointee)
+        && structs
+            .get(struct_id_of(pointee))
+            .is_some_and(|s| s.name == "__int128");
+    int128
+        || [Ty::Char, Ty::Short, Ty::Int, Ty::Long, Ty::LongLong]
+            .iter()
+            .any(|&t| pointee == t as i64)
+}
+
 impl Compiler {
     /// C99 6.9.1p12: reaching the closing brace of a value-returning
     /// function without executing a `return value;` leaves the value
@@ -164,12 +229,19 @@ impl Compiler {
                 }
                 reachable
             }
-            Stmt::If { then_s, else_s, .. } => {
-                let then_ft = self.stmt_may_fall_through(*then_s);
-                match else_s {
-                    Some(e) => then_ft || self.stmt_may_fall_through(*e),
-                    // No else: the false branch reaches the continuation.
-                    None => true,
+            Stmt::If {
+                cond,
+                then_s,
+                else_s,
+            } => {
+                let then_ft = || self.stmt_may_fall_through(*then_s);
+                // No else: the false branch reaches the continuation.
+                let else_ft = || else_s.is_none_or(|e| self.stmt_may_fall_through(e));
+                // A constant condition leaves the other branch dead.
+                match self.expr_const_int(*cond) {
+                    Some(0) => else_ft(),
+                    Some(_) => then_ft(),
+                    None => then_ft() || else_ft(),
                 }
             }
             // A `while` checks its condition first, so it falls through
@@ -305,9 +377,22 @@ impl Compiler {
                 BlockItem::Stmt(s) => self.stmt_has_loop_break(*s),
                 BlockItem::Decl(_) => false,
             }),
-            Stmt::If { then_s, else_s, .. } => {
-                self.stmt_has_loop_break(*then_s)
-                    || else_s.is_some_and(|e| self.stmt_has_loop_break(e))
+            // A constant condition's dead branch is entered only by a `goto`,
+            // which this walk does not follow, so its `break` does not count:
+            // `for (;; ({ goto l; })) if (0) { l: break; } else return v;`
+            // never reaches the jump, since the body returns.
+            Stmt::If {
+                cond,
+                then_s,
+                else_s,
+            } => {
+                let then_b = || self.stmt_has_loop_break(*then_s);
+                let else_b = || else_s.is_some_and(|e| self.stmt_has_loop_break(e));
+                match self.expr_const_int(*cond) {
+                    Some(0) => else_b(),
+                    Some(_) => then_b(),
+                    None => then_b() || else_b(),
+                }
             }
             Stmt::Labeled { body, .. } | Stmt::Case { body, .. } | Stmt::Default { body, .. } => {
                 self.stmt_has_loop_break(*body)
@@ -386,12 +471,31 @@ impl Compiler {
     /// stores, the prior values were overwritten without an
     /// intervening read and each line is emitted as a dead-store
     /// diagnostic before the new entry is pushed.
+    /// The value of `e` is discarded -- an expression statement, a `for`
+    /// clause, a comma's operand: the assignment it ends in reads no left
+    /// operand after all.
+    pub(super) fn discard_value(&mut self, e: Option<ExprId>) {
+        let mut e = e;
+        while let Some(id) = e {
+            if let Some((assign, idx, prior)) = self.pending.value_assignment
+                && assign == id
+            {
+                self.symbols[idx].binding.was_read = prior;
+                self.pending.value_assignment = None;
+                return;
+            }
+            e = match self.ast.expr(id) {
+                Expr::Comma { rhs, .. } => Some(*rhs),
+                _ => None,
+            };
+        }
+    }
+
     pub(super) fn record_local_store(&mut self, idx: usize, line: usize) {
         if !self.warn_dead_store
             || !self.symbols[idx].binding.decl_in_user_source
             || self.symbols[idx].binding.address_escaped
             || self.symbols[idx].name.is_empty()
-            || self.symbols[idx].name.starts_with('_')
         {
             return;
         }
@@ -464,7 +568,7 @@ impl Compiler {
 
     fn report_dead_stores(&mut self, idx: usize) {
         let sym = &self.symbols[idx];
-        if sym.binding.address_escaped || sym.name.is_empty() || sym.name.starts_with('_') {
+        if sym.binding.address_escaped || sym.name.is_empty() {
             self.symbols[idx].binding.pending_stores.clear();
             return;
         }
@@ -607,6 +711,47 @@ impl Compiler {
         ))
     }
 
+    /// C99 6.5.16p2, 6.5.2.4p1, 6.5.3.1p1: the left operand of an
+    /// assignment operator, and the operand of `++` or `--`, is a
+    /// modifiable lvalue, which an object of const-qualified type is not,
+    /// nor a structure or union with a const member at any depth
+    /// (6.3.2.1p1). `what` names the operation.
+    pub(super) fn require_modifiable(&self, ty: i64, what: &str) -> Result<(), C5Error> {
+        let t = super::types::format_type(ty, &self.structs);
+        let text = if super::types::is_const_object_ty(ty) {
+            alloc::format!("{what} of a read-only object of type `{t}`")
+        } else if let Some(member) = self.const_member_of(ty) {
+            alloc::format!("{what} of a `{t}` object, whose member `{member}` is read-only")
+        } else {
+            return Ok(());
+        };
+        Err(self.compile_err(Code::MODIFIABLE_LVALUE, text))
+    }
+
+    /// The name of a const-qualified member of the structure or union `ty`,
+    /// at any depth of its members' aggregates.
+    fn const_member_of(&self, ty: i64) -> Option<alloc::string::String> {
+        if !is_struct_value_ty(ty) {
+            return None;
+        }
+        let def = self.structs.get(super::types::struct_id_of(ty))?;
+        if def.is_array || def.is_vector || def.name == "__int128" {
+            return None;
+        }
+        def.fields.iter().find_map(|f| {
+            if super::types::is_const_object_ty(f.ty) {
+                Some(f.name.clone())
+            } else {
+                let inner = self.const_member_of(f.ty)?;
+                Some(if f.name.is_empty() {
+                    inner
+                } else {
+                    alloc::format!("{}.{inner}", f.name)
+                })
+            }
+        })
+    }
+
     /// Reject binary `op`, or `op=` when `compound`, on these operand types.
     pub(super) fn require_operands(
         &self,
@@ -653,6 +798,39 @@ impl Compiler {
         actual_is_zero_literal: bool,
         actual_is_untyped_call: bool,
     ) -> Option<TypeMismatch> {
+        let zero = actual_is_zero_literal;
+        Self::type_mismatch(structs, declared, actual, zero, actual_is_untyped_call)
+            .or_else(|| Self::discarded_qualifiers(structs, declared, actual))
+    }
+
+    /// C99 6.5.16.1p1: the type a converted pointer points to keeps the
+    /// qualifiers of the type the original points to.
+    pub(super) fn discarded_qualifiers(
+        structs: &[super::StructDef],
+        declared: i64,
+        actual: i64,
+    ) -> Option<TypeMismatch> {
+        let reason = match super::types::discarded_pointee_quals(declared, actual, structs) {
+            (true, true) => "discards `const volatile` qualifiers from pointer target type",
+            (true, false) => "discards `const` qualifier from pointer target type",
+            (false, true) => "discards `volatile` qualifier from pointer target type",
+            (false, false) => return None,
+        };
+        TypeMismatch::warn(Code::DISCARDED_QUALIFIERS, reason)
+    }
+
+    /// The mismatch [`Self::type_warning_with_flags`] reports other than a
+    /// discarded qualifier of the pointed-to type.
+    fn type_mismatch(
+        structs: &[super::StructDef],
+        declared: i64,
+        actual: i64,
+        actual_is_zero_literal: bool,
+        actual_is_untyped_call: bool,
+    ) -> Option<TypeMismatch> {
+        if is_pointer_ty(declared) && is_pointer_ty(actual) {
+            return Self::pointer_mismatch(structs, declared, actual);
+        }
         // C99 6.5.16.1p1: the target may add qualifiers, and a
         // qualifier on either object is not part of the comparison.
         let declared = unqualified_object_ty(declared);
@@ -674,48 +852,6 @@ impl Compiler {
         // C99 6.5.16.1p1 admits a pointer as the right operand when the
         // left has type `_Bool`; 6.3.1.2 converts it to 0 or 1.
         if is_bool_ty(declared) && bool_ptr_depth(declared) == 0 && act_is_ptr {
-            return None;
-        }
-
-        // C's `void *` rule: a pointer to `char` (which c5 uses as
-        // its `void *`) is freely interconvertible with any other
-        // pointer type. The dialect's headers declare libc functions
-        // like `memset(char *, int, int)` and `malloc -> char *`;
-        // real-world C routinely passes struct pointers to memset
-        // and assigns malloc's result to struct* variables. Without
-        // this rule every such site fires "incompatible struct
-        // types" / "pointer assigned to integer" noise.
-        let char_ptr = (Ty::Char as i64) + (Ty::Ptr as i64);
-        // Strip UNSIGNED_BIT before comparing: `char *` (which c5
-        // treats as unsigned), `signed char *`, and `unsigned char *`
-        // are all interchangeable here -- the compatibility rule
-        // is "is this any kind of byte pointer?", not "do the
-        // signedness tags line up".
-        let decl_is_char_ptr = decl_is_ptr && strip_unsigned(declared) == char_ptr;
-        let act_is_char_ptr = act_is_ptr && strip_unsigned(actual) == char_ptr;
-        if decl_is_char_ptr && act_is_ptr {
-            return None;
-        }
-        if act_is_char_ptr && decl_is_ptr {
-            return None;
-        }
-
-        // A pointer-to-array (aggregate-backed) accepts the flat pointer
-        // spellings of the same shape -- `&arr` and a decayed row carry
-        // the element-pointer tag -- so any pointer on the other side is
-        // quiet, mirroring the byte-pointer rule above. Real
-        // pointer-vs-integer mismatches still warn below.
-        let is_array_agg_ptr = |ty: i64| {
-            is_struct_ty(ty)
-                && struct_ptr_depth(ty) > 0
-                && structs
-                    .get(super::types::struct_id_of(ty))
-                    .is_some_and(|s| s.is_array)
-        };
-        if is_array_agg_ptr(declared) && act_is_ptr {
-            return None;
-        }
-        if is_array_agg_ptr(actual) && decl_is_ptr {
             return None;
         }
 
@@ -767,8 +903,7 @@ impl Compiler {
                 return None;
             }
             // C99 6.5.16.1p1 offers no conversion involving a structure or
-            // union *object*: that is a constraint violation, while the
-            // pointer-shaped mismatches do convert and stay warnings. Two
+            // union *object*: that is a constraint violation. Two
             // aggregate spellings are excluded because the mismatch would
             // not be the source's fault: a value-form array reflects a
             // missed 6.3.2.1p3 decay, and a union target keeps warning
@@ -780,16 +915,78 @@ impl Compiler {
                 && !is_array_agg(declared)
                 && !is_array_agg(actual)
                 && !def_of(declared).is_some_and(|s| s.is_union);
+            let is_vector = |ty: i64| def_of(ty).is_some_and(|s| s.is_vector);
+            let reason = if is_vector(declared) || is_vector(actual) {
+                "incompatible types"
+            } else {
+                "incompatible struct types"
+            };
             return Some(TypeMismatch {
                 code: Code::INCOMPATIBLE_STRUCT_TYPES,
-                reason: "incompatible struct types",
+                reason,
                 no_conversion: object_mismatch,
             });
         }
 
-        // Two pointers with scalar pointees, or two arithmetic scalars:
-        // the conversion is silent.
+        // Two arithmetic scalars: the conversion is silent.
         None
+    }
+
+    /// C99 6.5.16.1p1 between two pointers: the types they point to are
+    /// compatible, or one side points to `void`. Pointers to integer types
+    /// that differ only in signedness convert with a `pointer-sign`
+    /// warning; any other pair is an incompatible conversion, an error by
+    /// default as in gcc 14. The pointed-to types' own qualifiers are
+    /// [`Self::discarded_qualifiers`]' to check.
+    fn pointer_mismatch(
+        structs: &[super::StructDef],
+        declared: i64,
+        actual: i64,
+    ) -> Option<TypeMismatch> {
+        use super::types::{is_void_ptr_ty, pointer_conversion_key};
+        if is_void_ptr_ty(declared) || is_void_ptr_ty(actual) {
+            return None;
+        }
+        let (d, a) = (
+            pointer_conversion_key(declared),
+            pointer_conversion_key(actual),
+        );
+        if pointees_compatible(structs, d, a) {
+            return None;
+        }
+        // The key drops the qualifiers of the pointer and of what it points
+        // to; ones further down are part of the pointed-to type's identity
+        // (C99 6.7.3p9), and a difference there alone warns, as in clang.
+        let nested = super::types::CONST_LVL_MASK | super::types::VOL_LVL_MASK;
+        if pointees_compatible(structs, d & !nested, a & !nested) {
+            return TypeMismatch::warn(
+                Code::NESTED_QUALIFIERS,
+                "pointer targets differ in nested qualifiers",
+            );
+        }
+        if sign_only_difference(structs, d, a) {
+            return TypeMismatch::warn(Code::POINTER_SIGN, "pointer targets differ in signedness");
+        }
+        TypeMismatch::warn(
+            Code::INCOMPATIBLE_POINTER_TYPES,
+            "incompatible pointer types",
+        )
+    }
+
+    /// Report the conversion mismatch `m` at `line`: a row whose default
+    /// is `Error` through [`Self::report_at`], stopping here unless the
+    /// user lowered it, any other as a warning.
+    pub(super) fn report_mismatch(
+        &mut self,
+        m: &TypeMismatch,
+        line: usize,
+        text: alloc::string::String,
+    ) -> Result<(), C5Error> {
+        if m.code.default_level() == super::super::diag::Level::Error {
+            return self.report_at(m.code, line, text);
+        }
+        self.warn_at(m.code, line, text);
+        Ok(())
     }
 
     /// C99 6.7.8p11: an initializer converts to its object's type as if by
@@ -799,34 +996,220 @@ impl Compiler {
     /// indirect call returned (see [`Self::type_warning_with_flags`]).
     pub(super) fn check_initializer_conversion(
         &mut self,
-        declared: i64,
-        actual: i64,
+        declared: (i64, &Option<(crate::c5::symbol::FnType, i64)>),
+        actual: (i64, &Option<(crate::c5::symbol::FnType, i64)>),
         (zero, untyped): (bool, bool),
         line: usize,
     ) -> Result<(), C5Error> {
         let structs = &self.structs;
-        let Some(m) = Self::type_warning_with_flags(structs, declared, actual, zero, untyped)
+        let Some(m) = Self::type_warning_with_flags(structs, declared.0, actual.0, zero, untyped)
         else {
             return Ok(());
         };
-        let want = super::types::format_type(declared, structs);
-        let got = super::types::format_type(actual, structs);
+        let want = self.typed_text(declared.0, declared.1);
+        let got = self.typed_text(actual.0, actual.1);
         let text = alloc::format!("{} in initializer (declared={want}, init={got})", m.reason);
         if m.no_conversion {
             return Err(self.compile_err_at(Code::INVALID_INITIALIZER, line, text));
         }
-        self.warn_at(m.code, line, text);
-        Ok(())
+        self.report_mismatch(&m, line, text)
     }
 
-    /// [`Self::check_initializer_conversion`] for the expression just parsed.
+    /// [`Self::check_initializer_conversion`] for the expression just parsed,
+    /// into an object of type `declared`, or a bit-field of `bits` bits.
     pub(super) fn check_initializer_expr(
         &mut self,
         declared: i64,
+        bits: u32,
         line: usize,
     ) -> Result<(), C5Error> {
         let flags = (self.last_emit_is_zero(), self.last_emit_was_indirect_call());
-        self.check_initializer_conversion(declared, self.ty, flags, line)
+        let actual_fn = self.value_fn_type(self.ast_acc);
+        self.check_initializer_conversion((declared, &None), (self.ty, &actual_fn), flags, line)?;
+        self.check_constant_conversion_of(self.ast_acc, declared, bits, line);
+        Ok(())
+    }
+
+    /// [`Self::check_initializer_expr`] into an object whose declaration
+    /// records the function type it leads to, `declared.1`, which the
+    /// value's is compared with first.
+    pub(super) fn check_initializer_expr_to(
+        &mut self,
+        declared: (i64, &Option<(crate::c5::symbol::FnType, i64)>),
+        bits: u32,
+        line: usize,
+    ) -> Result<(), C5Error> {
+        let actual_fn = self.value_fn_type(self.ast_acc);
+        let actual = (self.ty, &actual_fn);
+        let what = ("initializer", "declared", "init");
+        if self.check_function_conversion(declared, actual, true, line, what)? {
+            return Ok(());
+        }
+        let flags = (self.last_emit_is_zero(), self.last_emit_was_indirect_call());
+        self.check_initializer_conversion(declared, actual, flags, line)?;
+        self.check_constant_conversion_of(self.ast_acc, declared.0, bits, line);
+        Ok(())
+    }
+
+    /// The value and type of `e` when the AST spells an integer constant
+    /// expression: literals, `sizeof`, casts, and the arithmetic, bitwise
+    /// and shift operators over them, each computed in the type its node
+    /// carries (C99 6.6, 6.3.1.3). `None` for anything else, a division by
+    /// zero and a shift by more than the width.
+    fn ast_const_value(&self, e: ExprId) -> Option<(i128, i64)> {
+        // TODO: constants of the 128-bit integer types, whose arithmetic the
+        // AST carries as aggregate operations.
+        let norm = |v: i128, ty: i64| {
+            let integer = super::types::is_integer_scalar_ty(ty) && !is_void_ty(ty);
+            let bytes = self.size_of_type(ty);
+            integer.then(|| {
+                super::types::narrow_const_int(
+                    bytes,
+                    super::types::is_unsigned_ty(ty),
+                    is_bool_ty(ty),
+                    v,
+                )
+            })
+        };
+        match self.ast.expr(e) {
+            Expr::IntLit { .. } if self.folded_builtin_lits.contains(&e) => None,
+            Expr::IntLit { val, ty } => Some((norm(*val as i128, *ty)?, *ty)),
+            Expr::Sizeof(s) => Some((s.size_bytes as i128, s.result_ty)),
+            Expr::Cast { child, to_ty } => {
+                let (v, _) = self.ast_const_value(*child)?;
+                Some((norm(v, *to_ty)?, *to_ty))
+            }
+            Expr::Unary { op, child, ty } => {
+                let v = norm(self.ast_const_value(*child)?.0, *ty)?;
+                let r = match op {
+                    UnOp::Neg => v.checked_neg()?,
+                    UnOp::BitNot => !v,
+                    UnOp::Renormalize { .. } => v,
+                    _ => return None,
+                };
+                Some((norm(r, *ty)?, *ty))
+            }
+            Expr::Binary { op, lhs, rhs, ty } => {
+                let l = norm(self.ast_const_value(*lhs)?.0, *ty)?;
+                let (r, _) = self.ast_const_value(*rhs)?;
+                let width = (self.size_of_type(*ty) * 8) as i128;
+                let shift_ok = (0..width).contains(&r);
+                let v = match op {
+                    BinOp::Shl if shift_ok => l << r,
+                    BinOp::Shr | BinOp::Shru if shift_ok => l >> r,
+                    _ => {
+                        let r = norm(r, *ty)?;
+                        match op {
+                            BinOp::Add => l + r,
+                            BinOp::Sub => l - r,
+                            BinOp::Mul => l.checked_mul(r)?,
+                            BinOp::Div | BinOp::Divu if r != 0 => l / r,
+                            BinOp::Mod | BinOp::Modu if r != 0 => l % r,
+                            BinOp::And => l & r,
+                            BinOp::Or => l | r,
+                            BinOp::Xor => l ^ r,
+                            _ => return None,
+                        }
+                    }
+                };
+                Some((norm(v, *ty)?, *ty))
+            }
+            _ => None,
+        }
+    }
+
+    /// Run `f` over an operand that is not evaluated (C99 6.5.3.4p2,
+    /// 6.5.13p4, 6.5.14p4, 6.5.15p4).
+    pub(super) fn unevaluated<T>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> Result<T, C5Error>,
+    ) -> Result<T, C5Error> {
+        self.unevaluated += 1;
+        let r = f(self);
+        self.unevaluated -= 1;
+        r
+    }
+
+    /// A reference to `idx` that no evaluation follows (C99 6.5.3.4p2, 6.6p3):
+    /// used and read, as gcc counts a reference it parses without evaluating.
+    pub(super) fn mark_unevaluated_use(&mut self, idx: usize) {
+        let binding = &mut self.symbols[idx].binding;
+        binding.was_referenced = true;
+        binding.was_read = true;
+    }
+
+    /// Run `f` over an operand that is evaluated only when `taken`.
+    pub(super) fn evaluated_if<T>(
+        &mut self,
+        taken: bool,
+        f: impl FnOnce(&mut Self) -> Result<T, C5Error>,
+    ) -> Result<T, C5Error> {
+        if taken { f(self) } else { self.unevaluated(f) }
+    }
+
+    /// The constant-conversion check for the expression `e` about to be
+    /// converted to `to`. An explicit cast is part of the value: one to the
+    /// target type leaves a value that fits it.
+    pub(super) fn check_constant_conversion_of(
+        &mut self,
+        e: Option<ExprId>,
+        to: i64,
+        bits: u32,
+        line: usize,
+    ) {
+        if let Some((value, from)) = e.and_then(|e| self.ast_const_value(e)) {
+            self.check_constant_conversion(value, from, to, bits, line);
+        }
+    }
+
+    /// Warns when the integer constant `value` of type `from` changes value
+    /// in its implicit conversion to the integer type `to`, a bit-field of
+    /// `bits` bits when that is not zero. As in gcc, a value that fits the
+    /// width at the other signedness keeps its bits and is no change
+    /// (`unsigned u = -1;`, `char c = 255;`); `_Bool` takes any value.
+    pub(super) fn check_constant_conversion(
+        &mut self,
+        value: i128,
+        from: i64,
+        to: i64,
+        bits: u32,
+        line: usize,
+    ) {
+        if self.unevaluated > 0
+            || !super::types::is_integer_scalar_ty(to)
+            || is_void_ty(to)
+            || is_bool_ty(to)
+        {
+            return;
+        }
+        let width = if bits > 0 {
+            bits
+        } else {
+            (self.size_of_type(to) * 8) as u32
+        };
+        if width >= 128 || (-(1i128 << (width - 1))..1i128 << width).contains(&value) {
+            return;
+        }
+        let low = value & ((1i128 << width) - 1);
+        let now = if !super::types::is_unsigned_ty(to) && low >> (width - 1) != 0 {
+            low - (1i128 << width)
+        } else {
+            low
+        };
+        let from_s = super::types::format_type(from, &self.structs);
+        let to_s = super::types::format_type(unqualified_object_ty(to), &self.structs);
+        let target = if bits > 0 {
+            alloc::format!("a {bits}-bit `{to_s}` bit-field")
+        } else {
+            alloc::format!("`{to_s}`")
+        };
+        self.warn_at(
+            Code::CONSTANT_CONVERSION,
+            line,
+            alloc::format!(
+                "implicit conversion from `{from_s}` to {target} changes value from {value} to {now}"
+            ),
+        );
     }
 
     /// GNU `transparent_union`: a parameter whose type is a union
@@ -855,7 +1238,8 @@ impl Compiler {
             .find(|f| {
                 f.array_size == 0
                     && f.bit_width == 0
-                    && Self::type_warning(structs, f.ty, actual, actual_is_zero_literal).is_none()
+                    && Self::type_mismatch(structs, f.ty, actual, actual_is_zero_literal, false)
+                        .is_none()
             })
             .map(|f| f.ty)
     }

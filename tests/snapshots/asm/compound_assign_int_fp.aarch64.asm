@@ -47,12 +47,11 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	ret
                	mov	x1, #0x7                // =7
-               	scvtf	d2, x1
+               	scvtf	s2, x1
                	adrp	x16, <page>
                	ldr	s3, [x16, #0x18]
-               	fcvt	d3, s3
-               	fadd	d2, d2, d3
-               	fcvtzs	x2, d2
+               	fadd	s2, s2, s3
+               	fcvtzs	x2, s2
                	cmp	w2, #0x9
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
@@ -68,10 +67,10 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	ret
                	mov	x2, #0x5                // =5
-               	scvtf	d2, x2
+               	ucvtf	d2, x2
                	fmov	d3, #3.50000000
                	fmul	d2, d2, d3
-               	fcvtzs	x2, d2
+               	fcvtzu	x2, d2
                	cmp	x2, #0x11
                	b.eq	<addr>
                	mov	x0, x1

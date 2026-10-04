@@ -27,12 +27,12 @@ int main() {
     b += 415;
     if (b != 1415) { printf("FAIL: u64 += 415 -> %lu\n", b); return 1; }
 
-    // Mirror of the LEMON shape: u32 += (constA - constB).
-    unsigned int yyNewState = rtu(1052);
-    int delta = (int)rtu(1282) - 867;     // YY_MIN_REDUCE - YY_MIN_SHIFTREDUCE
-    yyNewState += delta;
-    if (yyNewState != 1467) {
-        printf("FAIL: yyNewState=1052+415 -> %u\n", yyNewState);
+    // A parser-table state update: u32 += (constA - constB).
+    unsigned int next_state = rtu(1052);
+    int delta = (int)rtu(1282) - 867;     // reduce base - shift-reduce base
+    next_state += delta;
+    if (next_state != 1467) {
+        printf("FAIL: next_state=1052+415 -> %u\n", next_state);
         return 1;
     }
 

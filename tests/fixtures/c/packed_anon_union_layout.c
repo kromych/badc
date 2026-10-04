@@ -1,8 +1,8 @@
 // A trailing `__attribute__((packed))` re-runs the field layout (repack).
 // When the struct contains an ANONYMOUS union, the union's promoted members
 // must keep overlapping (and a nested anonymous struct keeps its in-arm
-// offsets); repack must not lay them out sequentially. This mirrors the
-// ACPI bios-linker-loader command entry: a 4-byte tag then an anonymous
+// offsets); repack must not lay them out sequentially. This mirrors a
+// fixed-size firmware command record: a 4-byte tag then an anonymous
 // union whose widest arm is a 124-byte pad, so each entry is exactly 128
 // bytes and every arm begins right after the tag. Laying the arms
 // sequentially inflated the entry (to 188 bytes) and moved every field,

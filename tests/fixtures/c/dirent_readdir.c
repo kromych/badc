@@ -1,7 +1,7 @@
 // readdir fills a struct dirent whose d_name must be read at the platform's
 // real offset (macOS places it at 21, glibc at 19). Reading "/" returns the
 // "." entry every directory has; finding it by name confirms the layout.
-// Windows uses a different directory API.
+// A Windows drive root lists no "."; dirent_stream.c covers Windows.
 
 #ifdef _WIN32
 int main(void) { return 0; }

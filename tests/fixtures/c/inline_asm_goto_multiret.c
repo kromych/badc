@@ -10,7 +10,7 @@
  * the callee's returns carry. */
 
 /* Two returns: fall-through (dead, template jumps) and label. */
-static inline __attribute__((always_inline)) int jump_label(void) {
+static inline __attribute__((always_inline)) int patched_branch(void) {
 #if defined(__x86_64__)
     __asm__ goto("jmp %l[yes]\n"
                  ".pushsection .discard.jl,\"a\"\n"
@@ -87,7 +87,7 @@ yes:
 static struct pair gpair = { 10, 20 };
 
 int main(void) {
-    if (jump_label() != 4)
+    if (patched_branch() != 4)
         return 1;
     if (fall_label() != 5)
         return 2;

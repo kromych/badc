@@ -1041,6 +1041,11 @@ fn run_inst<H: Host>(
             };
             return Ok(());
         }
+        // Any value is the indeterminate one; zero, as the native lowering.
+        Inst::Undef => {
+            frame.regs[v as usize] = 0;
+            return Ok(());
+        }
         Inst::ImmData(off) => {
             // Data-segment offset lands directly in the
             // byte-addressed memory; `ImmData(off)` returns the

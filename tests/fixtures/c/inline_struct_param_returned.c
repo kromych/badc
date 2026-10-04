@@ -4,9 +4,8 @@
    the relocating splice instead, which binds the slot to the argument
    address and copies from there into the caller's return slot.
 
-   The kernel's userfaultfd-write-protect accessors are this shape:
-   `static __always_inline pte_t pte_mkuffd_wp(pte_t pte) { return pte; }`
-   where the architecture has no such bit.
+   An accessor stubbed out where the architecture has no such bit has this
+   shape: `static __always_inline pte_t mark(pte_t pte) { return pte; }`.
 
    Three layouts, so both ABIs reach every class: `word` is one integer
    register, `pair` two, `big` is System V AMD64 MEMORY class and AAPCS64

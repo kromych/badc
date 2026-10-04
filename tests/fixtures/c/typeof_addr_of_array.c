@@ -1,8 +1,8 @@
 // C99 6.5.3.2p3: `&arr` has type "pointer to array", not the decayed
 // element pointer -- so `sizeof(&arr)` is a pointer's width and
-// `typeof(&arr)` / `typeof(*(&arr))` round-trip. The Linux per-CPU
-// `SHIFT_PERCPU_PTR` shape -- `(typeof(*(ptr)) *)((addr)(ptr) + off)` over
-// `&array` -- relies on all of these. Returns 0 on success.
+// `typeof(&arr)` / `typeof(*(&arr))` round-trip. A per-CPU pointer shift
+// -- `(typeof(*(ptr)) *)((addr)(ptr) + off)` over `&array` -- relies on
+// all of these. Returns 0 on success.
 
 int arr[4] = { 10, 20, 30, 40 };
 

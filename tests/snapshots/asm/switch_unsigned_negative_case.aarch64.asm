@@ -33,25 +33,23 @@ Disassembly of section .text:
 
 <u16>:
                	and	x0, x0, #0xffff
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
-               	b.lo	<addr>
+               	cmp	w0, #0x7
+               	b.lt	<addr>
+               	cmp	w0, #0x7
+               	b.eq	<addr>
                	mov	x0, #0x3e7              // =999
                	ret
-               	cmp	w0, #0x7
-               	b.ne	<addr>
                	mov	x0, #0x7                // =7
                	ret
 
 <u8>:
                	and	x0, x0, #0xff
-               	mov	x17, #-0x1              // =-1
-               	cmp	x0, x17
-               	b.lo	<addr>
+               	cmp	w0, #0x3
+               	b.lt	<addr>
+               	cmp	w0, #0x3
+               	b.eq	<addr>
                	mov	x0, #0x3e7              // =999
                	ret
-               	cmp	w0, #0x3
-               	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	ret
 

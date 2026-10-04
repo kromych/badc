@@ -1,8 +1,7 @@
 // C99 6.4.5p6 gives a string literal static storage, so a constant
 // subscript on one is a constant value (the staged byte), and C99 6.6
 // admits it in a static initializer -- also as the condition of an
-// address-valued conditional, parenthesized or not. The shape comes
-// from kunit's executor: `static char *p = ("" [0] ? "" : 0);`.
+// address-valued conditional, parenthesized or not.
 static char *p = ("" [0] ? "" : 0);
 static char *q = "x"[0] ? "yes" : 0;
 static char *r = ("x"[0] ? "yes" : 0);

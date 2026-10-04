@@ -4,8 +4,8 @@
 // (6.5.6p8), so `(uint8_t*)&g + offsetof(T, f)` is a byte offset; an
 // integer target strides by bytes (6.3.2.3p6), so `(uptr)&arr +
 // sizeof(arr)` is the end of the array, not `sizeof(arr)` elements past
-// it. mimalloc's per-heap tables use the first shape; the Linux x86
-// `TOP_OF_INIT_STACK` uses the second. The integer holding an address is
+// it: a table entry pointing into a struct takes the first shape, the top
+// of a stack array the second. The integer holding an address is
 // pointer-wide, which `long` is not on the Windows targets.
 
 #include <stddef.h>

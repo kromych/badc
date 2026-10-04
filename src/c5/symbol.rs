@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 /// (DWARF 4 5.2, 5.3), so the debug-info writers read this to name a
 /// type the way the source did instead of naming the type it resolves
 /// to. `volatile` is absent because the tag already records it
-/// (`types::VOLATILE_BIT`), and nothing outside debug info reads any
+/// (`types::VOL_LVL_MASK`), and nothing outside debug info reads any
 /// of it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct DeclSpelling {
@@ -76,9 +76,11 @@ pub(crate) struct Symbol {
     pub prototyped: bool,
     /// `FnParams::enum_tags` of the function type `params` belongs to.
     pub param_enum_tags: Vec<(usize, u32)>,
+    /// `FnParams::fn_types` of the function type `params` belongs to.
+    pub param_fn_types: Vec<(usize, FnType, i64)>,
 
     /// Shadow slots for `params` / `is_variadic` / `prototyped` /
-    /// `param_enum_tags`. See `h_array_size`:
+    /// `param_enum_tags` / `param_fn_types`. See `h_array_size`:
     /// a function-pointer parameter, block-scope local, or block-scope
     /// typedef that reuses an outer function name writes its own
     /// prototype onto the shared symbol slot; without the save the
@@ -89,6 +91,7 @@ pub(crate) struct Symbol {
     pub h_is_variadic: bool,
     pub h_prototyped: bool,
     pub h_param_enum_tags: Vec<(usize, u32)>,
+    pub h_param_fn_types: Vec<(usize, FnType, i64)>,
     /// Calling convention of the function this symbol names, or of the
     /// function a function-pointer object points to
     /// (`__attribute__((ms_abi))` / `((sysv_abi))`). Already normalised
@@ -665,6 +668,10 @@ pub(crate) struct BindingInfo {
     /// diagnostics do not report, as gcc and clang skip system headers.
     pub decl_in_user_source: bool,
 
+    /// The declaration's position among the unit's declarations, the order
+    /// a scope's unused-symbol diagnostics come in.
+    pub decl_seq: u32,
+
     /// True when the declaration carried a `maybe_unused` /
     /// `unused` attribute (C23 6.7.12.4 `[[maybe_unused]]` or GNU
     /// `__attribute__((unused))`). Suppresses the unused-variable
@@ -695,6 +702,17 @@ pub(crate) struct FnParams {
     /// Positions an enum tag with no definition yet spelled: their types
     /// hold the `int` placeholder, which the definition rewrites.
     pub enum_tags: Vec<(usize, u32)>,
+    /// Positions of the parameters that lead to a function, with its type
+    /// and the pointer levels above it, which the tag does not spell.
+    pub fn_types: Vec<(usize, FnType, i64)>,
+}
+
+impl FnParams {
+    /// The function type parameter `pos` leads to and its depth.
+    pub(crate) fn fn_type(&self, pos: usize) -> Option<(&FnType, i64)> {
+        let (_, f, depth) = self.fn_types.iter().find(|(p, ..)| *p == pos)?;
+        Some((f, *depth))
+    }
 }
 
 /// The part of a function type its `i64` tag, the return type's, leaves
@@ -811,6 +829,7 @@ impl Symbol {
             variadic: self.is_variadic,
             prototyped: self.prototyped,
             enum_tags: self.param_enum_tags.clone(),
+            fn_types: self.param_fn_types.clone(),
         }
     }
 
@@ -819,6 +838,7 @@ impl Symbol {
         self.is_variadic = p.variadic;
         self.prototyped = p.prototyped;
         self.param_enum_tags = p.enum_tags;
+        self.param_fn_types = p.fn_types;
     }
 
     /// Assembler symbol name: the GNU asm label when the declaration
@@ -879,10 +899,12 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_variadic: _,
             prototyped: _,
             param_enum_tags: _,
+            param_fn_types: _,
             h_params: _,
             h_is_variadic: _,
             h_prototyped: _,
             h_param_enum_tags: _,
+            h_param_fn_types: _,
             conv: _,
             h_conv: _,
             implicit_return_int: _,

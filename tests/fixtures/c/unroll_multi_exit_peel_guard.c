@@ -6,42 +6,42 @@
 // Each guard below is a block-scope declaration of an undefined
 // function called when its condition holds, so linking is the
 // assertion. The first two resolve once the copies pass literals; the
-// third is the shape the kernel's `min()` carries, and resolves only
+// third is the shape a type-checking `min()` carries, and resolves only
 // once those literals bound the callee's parameter across every call
 // site this unit holds. `main` checks the peeled results against the
 // same bodies run with a bound the translation unit cannot fold, which
 // keeps them rolled: the peel has to preserve the values crossing
 // every exit edge, not just fold the guards.
 
-#define BUILD_BUG_ON(cond, tag)                                                                    \
+#define FAIL_IF(cond, tag)                                                                         \
     do {                                                                                           \
         extern void compiletime_assert_##tag(void);                                                \
         if (!(!(cond)))                                                                            \
             compiletime_assert_##tag();                                                            \
     } while (0)
 
-#define MAX_NR_TIERS 4
+#define MAX_TIERS 4
 
-static long refaulted[MAX_NR_TIERS];
-static long total[MAX_NR_TIERS];
-static const long weight[MAX_NR_TIERS] = {1, 10, 100, 1000};
+static long refaulted[MAX_TIERS];
+static long total[MAX_TIERS];
+static const long weight[MAX_TIERS] = {1, 10, 100, 1000};
 
-// The signedness guard the kernel's `min(tier, MAX_NR_TIERS - 1)`
+// The signedness guard a type-checking `min(tier, MAX_TIERS - 1)`
 // carries: answerable only for a translation-time constant, and
 // reached only from the loops below. A guard written into the loop
 // body itself would make the body a diamond, which stays rolled for
 // reasons that have nothing to do with the mid-body exit.
 static long ctrl_pos(int tier) {
-    BUILD_BUG_ON(!__builtin_constant_p(tier), 9320);
-    return weight[tier < MAX_NR_TIERS - 1 ? tier : MAX_NR_TIERS - 1];
+    FAIL_IF(!__builtin_constant_p(tier), 9320);
+    return weight[tier < MAX_TIERS - 1 ? tier : MAX_TIERS - 1];
 }
 
 static long ctrl_err(int tier) {
-    BUILD_BUG_ON(!__builtin_constant_p(tier), 9321);
+    FAIL_IF(!__builtin_constant_p(tier), 9321);
     return weight[tier] * refaulted[tier];
 }
 
-// The kernel's `min()` signedness check: an unsigned bound admits the
+// A `min()` signedness check: an unsigned bound admits the
 // comparison only for an operand that is provably non-negative, which
 // is a fact about the parameter's range over every call site rather
 // than about any one call. The body keeps a loop of its own, so it
@@ -51,12 +51,12 @@ static long ctrl_err(int tier) {
 #define types_ok(x, y) (sign_use(x) & sign_use(y))
 
 static long read_pos(int tier, long gain) {
-    unsigned int bound = MAX_NR_TIERS - 1U;
+    unsigned int bound = MAX_TIERS - 1U;
     long acc = 0;
     int i;
 
-    BUILD_BUG_ON(!types_ok(tier, bound), 9322);
-    for (i = tier % MAX_NR_TIERS; i <= (tier < (int)bound ? tier : (int)bound); i++)
+    FAIL_IF(!types_ok(tier, bound), 9322);
+    for (i = tier % MAX_TIERS; i <= (tier < (int)bound ? tier : (int)bound); i++)
         acc += weight[i];
     return acc * gain;
 }
@@ -66,7 +66,7 @@ long tier_idx(void) {
     long sp = read_pos(0, 2);
     int tier;
 
-    for (tier = 1; tier < MAX_NR_TIERS; tier++)
+    for (tier = 1; tier < MAX_TIERS; tier++)
         if (read_pos(tier, 3) <= sp)
             break;
     return tier - 1;
@@ -74,7 +74,7 @@ long tier_idx(void) {
 
 long tier_span(long gain);
 long tier_span(long gain) {
-    return read_pos(MAX_NR_TIERS, gain);
+    return read_pos(MAX_TIERS, gain);
 }
 
 // One exit out of the body, landing where the loop's own exit lands:
@@ -84,7 +84,7 @@ long walk(long gain) {
     long acc = 0;
     int tier;
 
-    for (tier = 0; tier < MAX_NR_TIERS; tier++) {
+    for (tier = 0; tier < MAX_TIERS; tier++) {
         acc += refaulted[tier] * ctrl_pos(tier) * gain;
         if (total[tier] < 0)
             break;
@@ -99,7 +99,7 @@ long scan(long floor) {
     long acc = 0;
     int i;
 
-    for (i = 0; i < MAX_NR_TIERS; i++) {
+    for (i = 0; i < MAX_TIERS; i++) {
         if (refaulted[i] < 0)
             goto bail;
         acc += ctrl_err(i);
@@ -112,14 +112,14 @@ bail:
 }
 
 // The same bodies against a bound this translation unit cannot fold.
-static int bound = MAX_NR_TIERS;
+static int bound = MAX_TIERS;
 
 static long walk_rolled(long gain) {
     long acc = 0;
     int tier;
 
     for (tier = 0; tier < bound; tier++) {
-        acc += refaulted[tier] * weight[tier < MAX_NR_TIERS - 1 ? tier : MAX_NR_TIERS - 1] * gain;
+        acc += refaulted[tier] * weight[tier < MAX_TIERS - 1 ? tier : MAX_TIERS - 1] * gain;
         if (total[tier] < 0)
             break;
     }

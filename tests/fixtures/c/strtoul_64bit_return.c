@@ -5,9 +5,8 @@
 // any value >= 2^32 (strtoul / atol) or 2^31 (strtol). The header
 // prototypes carry the standard's return widths to avoid that.
 //
-// Surfaced by Tcl binary.test binary-37.12 (GetFormatSpec count
-// overflow): strtoul("4294967296") returned 0 instead of 2^32, so a
-// count-overflow guard never tripped.
+// strtoul("4294967296") returned 0 instead of 2^32, so a count-overflow
+// guard never tripped.
 #include <stdlib.h>
 
 int main(void) {

@@ -166,7 +166,7 @@ int main(void) {
     CHECK_BC(i8x16, signed char, 16, sa, 2, <<, 55);
 
     // Scalar broadcast, right operand and left operand. `a - 0x40` is the
-    // shape the kernel's aegis128 round steps its table index with.
+    // shape an AEGIS-128 round steps its table index with.
     CHECK_BC(u8x16, unsigned char, 16, a, 0x40, -, 56);
     CHECK_BC(u8x16, unsigned char, 16, a, 100, +, 57);
     CHECK_BC(u8x16, unsigned char, 16, a, 7, *, 58);
@@ -283,7 +283,7 @@ int main(void) {
         if (!same(&r, ref, 16)) return 93;
     }
 
-    // The mix-columns step of the kernel's aegis128 round: a shift by a
+    // The mix-columns step of an AEGIS-128 round: a shift by a
     // scalar, a signed lane shift, and a mask, all element-wise.
     {
         u8x16 v = a;

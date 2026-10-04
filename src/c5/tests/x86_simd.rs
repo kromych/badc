@@ -486,7 +486,10 @@ fn results_carry_the_prototypes_vector_types() {
     let msg =
         compile_x64_err("__v4si f(__v8hi a, __v8hi b) { return __builtin_ia32_paddw128(a, b); }");
     assert!(
-        msg.contains("incompatible struct types in return"),
+        msg.contains(
+            "incompatible types in return (declared=int __attribute__((vector_size(16))), \
+             returned=short __attribute__((vector_size(16))))"
+        ),
         "a different typedef is still diagnosed: {msg}"
     );
 }

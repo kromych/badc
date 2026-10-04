@@ -4,9 +4,9 @@ int main() {
     int *fp;
     int res1;
     int res2;
-    fp = add;
+    fp = (int *)add;
     res1 = fp(10, 20);
-    fp = sub;
+    fp = (int *)sub;
     res2 = fp(10, 5);
     return res1 * res2;
 }

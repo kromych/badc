@@ -23,10 +23,10 @@
 #define is_constexpr(x) \
     (sizeof(int) == sizeof(*(8 ? ((void *)((long)(x) * 0l)) : (int *)8)))
 
-#define BUILD_BUG_ON_ZERO(e) ((int)(sizeof(struct { int : (-!!(e)); })))
+#define ZERO_OR_FAIL(e) ((int)(sizeof(struct { int : (-!!(e)); })))
 
 #define MASK_INPUT_CHECK(h, l) \
-    (BUILD_BUG_ON_ZERO(__builtin_choose_expr(is_constexpr((l) > (h)), (l) > (h), 0)))
+    (ZERO_OR_FAIL(__builtin_choose_expr(is_constexpr((l) > (h)), (l) > (h), 0)))
 #define __MASK(h, l) \
     (((~0ULL) - (1ULL << (l)) + 1) & (~0ULL >> (64 - 1 - (h))))
 #define MASK(h, l) (MASK_INPUT_CHECK(h, l) + __MASK(h, l))
@@ -71,7 +71,7 @@ int main(void) {
         return 8;
     if (sizeof(struct { int : 0; }) != NO_STORAGE)
         return 9;
-    if (BUILD_BUG_ON_ZERO(0) != NO_STORAGE)
+    if (ZERO_OR_FAIL(0) != NO_STORAGE)
         return 10;
 
     /* The constant-expression detector: 1 for constants, 0 otherwise. */

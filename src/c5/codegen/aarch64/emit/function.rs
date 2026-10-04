@@ -142,7 +142,8 @@ struct FunctionEmitter<'a, 'b> {
     jump_table_fixups: Vec<(usize, u32)>,
     /// `(site, bits, single)` per floating literal load.
     fp_literals: Vec<(usize, u64, bool)>,
-    /// ALTERNATIVE `.subsection` replacements, appended after the body.
+    /// Inline-asm `.subsection` replacement sequences, appended after the
+    /// body.
     deferred_regions: Vec<DeferredAsmRegion>,
 }
 
@@ -1217,10 +1218,10 @@ impl FunctionEmitter<'_, '_> {
         Ok(())
     }
 
-    /// Append each ALTERNATIVE replacement after the body, out of the main
-    /// sequence's fall-through path (GNU as puts it at the end of the
-    /// section); resolve the `.altinstructions` fields, symbol branches
-    /// and `%l[...]` branches that point into or out of it.
+    /// Append each `.subsection` replacement after the body, out of the
+    /// main sequence's fall-through path (GNU as puts it at the end of the
+    /// section); resolve the pushed-section fields, symbol branches and
+    /// `%l[...]` branches that point into or out of it.
     fn append_deferred_regions(&mut self) -> Emit {
         let name2entpc = self.fcx.name2entpc;
         let regions = core::mem::take(&mut self.deferred_regions);
@@ -1589,7 +1590,7 @@ fn emit_struct_param_scatter(
                 // 8-byte HFA member, s for a 4-byte one. x16 is never an
                 // argument register.
                 let desc = &func.agg_descs[*agg_idx as usize];
-                let members = super::abi_classify::fp_member_layout(desc);
+                let members = super::abi_classify::fp_member_layout(desc, false);
                 let member = |k: usize| {
                     members
                         .as_ref()
@@ -2161,7 +2162,7 @@ fn emit_aggregate_return(
         emit_mov_reg(code, scratch.primary, saddr);
     }
     let base = scratch.primary;
-    if let Some(members) = super::abi_classify::fp_member_layout(desc) {
+    if let Some(members) = super::abi_classify::fp_member_layout(desc, true) {
         for (k, (off, msize)) in members.iter().enumerate() {
             emit_agg_load_fp(
                 code,
@@ -2173,6 +2174,13 @@ fn emit_aggregate_return(
                 abi.strict_align,
                 scratch.secondary,
             );
+        }
+        if let Some((elem, lane)) = super::abi_classify::narrow_vector_lanes(desc) {
+            let mut w = elem;
+            while w < lane {
+                emit(code, super::encode::enc_uxtl(0, 0, w));
+                w *= 2;
+            }
         }
         return Ok(());
     }

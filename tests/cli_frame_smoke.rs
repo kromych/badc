@@ -705,38 +705,38 @@ fn aarch64_frameless_leaf_keeps_the_entry_rule() {
     }
 }
 
-/// Kernel-shaped inline asm: paravirt call sites binding the stack pointer
-/// (`ASM_CALL_CONSTRAINT`), a feature test through a link-time memory
-/// operand beside an immediate, register outputs into locals, and the
-/// self-initialised output locals of `PVOP_CALL_ARGS`.
-const KERNEL_ASM: &str = r#"
-struct pv_ops_t { void *pad[7]; unsigned long long (*read_msr)(unsigned int); };
-extern struct pv_ops_t pv_ops;
+/// Privileged-mode inline asm: indirect call sites through a table member
+/// binding the stack pointer (`"+r"` on a register variable), a feature
+/// test through a link-time memory operand beside an immediate, register
+/// outputs into locals, and self-initialised output locals.
+const PRIVILEGED_ASM: &str = r#"
+struct ops_t { void *pad[7]; unsigned long long (*read_msr)(unsigned int); };
+extern struct ops_t ops;
 struct cpuinfo { int pad[11]; unsigned int cap[24]; };
-extern struct cpuinfo boot_cpu_data;
-register unsigned long current_stack_pointer asm("rsp");
-static inline unsigned long long pv_read_msr(unsigned int msr)
+extern struct cpuinfo cpu0;
+register unsigned long stack_pointer asm("rsp");
+static inline unsigned long long read_msr_op(unsigned int msr)
 {
     unsigned long eax = eax, edx = edx, ecx = ecx, edi = edi, esi = esi;
     asm volatile("call *%[opptr]"
                  : "=a" (eax), "=d" (edx), "=c" (ecx), "=D" (edi), "=S" (esi),
-                   "+r" (current_stack_pointer)
-                 : [type] "i" (7), [opptr] "m" (pv_ops.read_msr), "D" ((unsigned long)msr)
+                   "+r" (stack_pointer)
+                 : [type] "i" (7), [opptr] "m" (ops.read_msr), "D" ((unsigned long)msr)
                  : "memory", "cc", "r8", "r9", "r10", "r11");
     return ((unsigned long long)edx << 32) | (unsigned int)eax;
 }
-unsigned long long one(unsigned int a) { return pv_read_msr(a); }
+unsigned long long one(unsigned int a) { return read_msr_op(a); }
 unsigned long long eight(unsigned int a)
 {
-    unsigned long long v = pv_read_msr(a);
-    v += pv_read_msr(a + 1); v += pv_read_msr(a + 2); v += pv_read_msr(a + 3);
-    v += pv_read_msr(a + 4); v += pv_read_msr(a + 5); v += pv_read_msr(a + 6);
-    return v + pv_read_msr(a + 7);
+    unsigned long long v = read_msr_op(a);
+    v += read_msr_op(a + 1); v += read_msr_op(a + 2); v += read_msr_op(a + 3);
+    v += read_msr_op(a + 4); v += read_msr_op(a + 5); v += read_msr_op(a + 6);
+    return v + read_msr_op(a + 7);
 }
 int has(void)
 {
     asm goto("testb $1, %[cap]\n jnz %l[yes]\n jmp %l[no]\n"
-             : : [cap] "m" (((const char *)boot_cpu_data.cap)[25]) : : yes, no);
+             : : [cap] "m" (((const char *)cpu0.cap)[25]) : : yes, no);
 yes:
     return 1;
 no:
@@ -781,12 +781,13 @@ __attribute__((no_stack_protector)) unsigned long unguarded(void)
 }
 "#;
 
-/// The frame reports of `KERNEL_ASM` under the kernel's flags, by function.
-fn kernel_asm_frames(dir: &Path) -> std::collections::BTreeMap<String, (u64, String)> {
+/// The frame reports of `PRIVILEGED_ASM` under kernel-code-model flags, by
+/// function.
+fn privileged_asm_frames(dir: &Path) -> std::collections::BTreeMap<String, (u64, String)> {
     frame_reports(
         dir,
         "kasm",
-        KERNEL_ASM,
+        PRIVILEGED_ASM,
         &[
             "--target=linux-x64",
             "-mcmodel=kernel",
@@ -851,7 +852,7 @@ fn frame_reports(
 #[test]
 fn x86_64_inline_asm_operands_take_no_frame_scratch() {
     let dir = tempdir("kasm");
-    let frames = kernel_asm_frames(&dir);
+    let frames = privileged_asm_frames(&dir);
     for (name, (bytes, parts)) in &frames {
         assert!(
             !parts.contains("inline-asm scratch"),
@@ -882,8 +883,8 @@ fn x86_64_inline_asm_operands_take_no_frame_scratch() {
     // callee-saved registers.
     assert!(one.0 <= 48 + 8 + 16, "{frames:?}");
     // A register output into a scalar local is the statement's value, so
-    // the local takes no slot: the gsbase switch, in the shape the kernel
-    // compiles it under its flags, keeps no frame at all.
+    // the local takes no slot: the gsbase switch, under these flags, keeps
+    // no frame at all.
     for leaf in ["has", "wrgs", "rdgs", "rdgs_inactive"] {
         assert!(
             !frames.contains_key(leaf),
@@ -893,8 +894,8 @@ fn x86_64_inline_asm_operands_take_no_frame_scratch() {
 }
 
 /// An automatic object aligned above the 8-byte slot is reserved once, in
-/// the over-aligned region: a 528-byte object aligned 16 -- the kernel's
-/// `struct user_fpsimd_state` shape -- takes the frame a same-size 8-aligned
+/// the over-aligned region: a 528-byte object aligned 16 -- an AArch64
+/// FP/SIMD register save area -- takes the frame a same-size 8-aligned
 /// one does, and two in disjoint blocks share one region block.
 #[test]
 fn an_over_aligned_object_is_reserved_once() {
@@ -930,8 +931,8 @@ void two16(int c) { if (c) { struct st16 a; use16(&a); } else { struct st16 b; u
 /// declared (C99 6.2.4p2), so two 512-byte arrays in disjoint blocks share
 /// one 512-byte cell whether the blocks fall through, return, break,
 /// continue or any goto out, and when a path never enters the first block. A
-/// `for` statement is a block (C99 6.8.5p5): the kernel's `scoped_ksimd()`
-/// declares its 528-byte state in one, left by `return` or by `break`, and
+/// `for` statement is a block (C99 6.8.5p5): a scoped-guard macro may
+/// declare its 528-byte state in one, left by `return` or by `break`, and
 /// the two states take one over-aligned region block.
 #[test]
 fn an_object_left_by_any_edge_shares_its_storage() {
@@ -1000,7 +1001,7 @@ int ksimd(int c) {
 /// instruction over a pair of by-value vector parameters and a vector
 /// return. At -O each splices into its caller on the flat path: the
 /// caller holds the instruction and no call, and no wrapper body is
-/// emitted, so the frame report names the kernel's functions only.
+/// emitted, so the frame report names the unit's own functions only.
 #[test]
 fn simd_wrappers_inline_at_opt() {
     let dir = tempdir("simd-inline");
@@ -1024,7 +1025,7 @@ fn simd_wrappers_inline_at_opt() {
             .arg("-o")
             .arg(dir.join("k.o"))
             .arg(&src),
-        "compile the kernel at -O",
+        "compile the unit at -O",
     );
     let stderr = String::from_utf8_lossy(&out.stderr);
     let chain = stderr

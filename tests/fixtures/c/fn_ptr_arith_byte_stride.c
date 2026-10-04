@@ -1,11 +1,10 @@
 // Arithmetic on a pointer to function. C99 6.5.6p2 admits additive
 // operands only for pointers to object types; GCC and Clang define it
 // as an extension with a one-byte stride and a result of the operand's
-// type, and the kernel relies on that: kernel/bpf/fixups.c derives a BPF helper's
-// call immediate as `fn->func - __bpf_call_base` and the JIT recovers
-// the helper with `(u8 *)__bpf_call_base + imm`. Scaling the difference
-// by the pointee size instead makes every JIT-compiled helper call jump
-// to an address inside an unrelated function.
+// type. A call immediate derived as `fn->func - call_base`, with the
+// target recovered as `(u8 *)call_base + imm`, relies on that: scaling the
+// difference by the pointee size instead makes every such call jump to an
+// address inside an unrelated function.
 
 typedef unsigned long long u64;
 
@@ -26,8 +25,7 @@ int main(void) {
     long bytes = (char *)b - (char *)a;
 
     p.func = f2;
-    // The kernel's shape: a function-pointer struct member minus a
-    // function designator.
+    // A function-pointer struct member minus a function designator.
     if (imm_of(&p) != bytes) return 1;
     // Both operands as values.
     if (b - a != bytes) return 2;

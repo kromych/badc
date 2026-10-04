@@ -205,18 +205,26 @@ def seed_plan(boots: int, requested: list[str] | None,
     return fixed + [random.getrandbits(64) for _ in range(boots - len(fixed))]
 
 
-def displacement_failures(configured: bool, plan: list[int | None],
+def displacement_failures(configured: bool, booted: bool,
+                          plan: list[int | None],
                           offsets: dict[int | None, int | None]) -> list[str]:
     """Check that the boots ran at the displacements the gate asked for.
 
     Without these the gate can quietly stop covering relocated output: a
     configuration change, a machine that ignores the seed, or a kernel that
     turns randomization off leaves every boot at the link address, and the
-    boots still pass.
+    boots still pass. `booted` says whether any boot reached the marker;
+    when none did, that is the run's failure, and the probes, which boot the
+    same image, have reported nothing to judge coverage by.
     """
-    if not configured:
+    if not configured or not booted:
         return []
-    if not [o for o in offsets.values() if o]:
+    reported = [o for o in offsets.values() if o is not None]
+    if not reported:
+        return ["the configuration randomizes the kernel base but no probe "
+                "reported its displacement: the gate cannot tell whether it "
+                "covers relocated output"]
+    if not any(reported):
         return ["the configuration randomizes the kernel base but no boot ran "
                 "displaced: the gate is not covering relocated output"]
     pinned = [s for s in plan if s is not None]
@@ -335,12 +343,19 @@ def _self_test() -> int:
     # The gate's own checks: a randomizing configuration whose boots did not
     # move, and seeds that all landed on one displacement, both mean the gate
     # stopped covering relocated output.
-    assert displacement_failures(False, [1, 2], {1: 0, 2: 0}) == []
-    assert len(displacement_failures(True, [1, 2], {1: 0, 2: 0})) == 1
-    assert len(displacement_failures(True, [1, 2], {1: 4096, 2: 4096})) == 1
-    assert displacement_failures(True, [1, 2], {1: 4096, 2: 8192}) == []
-    assert displacement_failures(True, [1, 1], {1: 4096}) == []
-    assert displacement_failures(True, [None], {None: 4096}) == []
+    assert displacement_failures(False, True, [1, 2], {1: 0, 2: 0}) == []
+    assert "no boot ran displaced" in \
+        displacement_failures(True, True, [1, 2], {1: 0, 2: None})[0]
+    assert len(displacement_failures(True, True, [1, 2], {1: 4096, 2: 4096})) == 1
+    assert displacement_failures(True, True, [1, 2], {1: 4096, 2: 8192}) == []
+    assert displacement_failures(True, True, [1, 1], {1: 4096}) == []
+    assert displacement_failures(True, True, [None], {None: 4096}) == []
+    # Probes that reported nothing say nothing about displacement: a run
+    # whose boots reached the marker cannot tell, and one whose boots all
+    # failed before it has failed on that alone.
+    assert "no probe reported" in \
+        displacement_failures(True, True, [1, 2], {1: None, 2: None})[0]
+    assert displacement_failures(True, False, [1, 2], {1: None, 2: None}) == []
     print("linux kaslr: self-test ok", flush=True)
     return 0
 

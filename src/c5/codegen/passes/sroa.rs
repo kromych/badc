@@ -1902,6 +1902,17 @@ mod tests {
             align: 0,
         }
     }
+    /// A float load of the bytes at `disp`: read where an integer store
+    /// writes, the type pun keeps its field in the frame.
+    fn pun(addr: ValueId, disp: i32, kind: LoadKind) -> Inst {
+        Inst::Load {
+            addr,
+            disp,
+            kind,
+            volatile: false,
+            align: 0,
+        }
+    }
     fn store32(addr: ValueId, disp: i32, value: ValueId) -> Inst {
         Inst::Store {
             addr,
@@ -1914,18 +1925,18 @@ mod tests {
     }
 
     /// Two 4-byte fields share one cell, so they take fresh slots. Both are
-    /// read before any store and stay in the frame after the mem2reg
-    /// re-run, two cells for an object of one: the retry leaves both in the
-    /// object, which has nothing left to give up, and the round's other
-    /// object promotes.
+    /// read as floats and stay in the frame after the mem2reg re-run, two
+    /// cells for an object of one: the retry leaves both in the object,
+    /// which has nothing left to give up, and the round's other object
+    /// promotes.
     #[test]
     fn fields_stranded_past_the_object_size_stay_in_it() {
         let mut insts = two_elem_array().insts;
         let k = insts.len() as ValueId;
         insts.push(Inst::LocalAddr(-3)); // k
         insts.push(Inst::Imm(9)); //         k+1
-        insts.push(load32(k, 0)); //         k+2 read before any store
-        insts.push(load32(k, 4)); //         k+3 read before any store
+        insts.push(pun(k, 0, LoadKind::F32)); // k+2
+        insts.push(pun(k, 4, LoadKind::F32)); // k+3
         insts.push(store32(k, 0, k + 1)); // k+4
         insts.push(store32(k, 4, k + 1)); // k+5
         insts.push(Inst::Binop {
@@ -1960,12 +1971,12 @@ mod tests {
     #[test]
     fn a_stranded_field_stays_in_its_object() {
         let insts = alloc::vec![
-            Inst::LocalAddr(-2), // v0
-            Inst::Imm(9),        // v1
-            load32(0, 0),        // v2 read before any store
-            store32(0, 4, 1),    // v3
-            load32(0, 4),        // v4
-            store32(0, 0, 1),    // v5
+            Inst::LocalAddr(-2),      // v0
+            Inst::Imm(9),             // v1
+            pun(0, 0, LoadKind::F32), // v2
+            store32(0, 4, 1),         // v3
+            load32(0, 4),             // v4
+            store32(0, 0, 1),         // v5
             Inst::Binop {
                 op: BinOp::Add,
                 lhs: 2,
@@ -1984,20 +1995,47 @@ mod tests {
         );
     }
 
+    /// A field read before any store holds an indeterminate value there,
+    /// which mem2reg supplies: both fields lift and the object goes.
+    #[test]
+    fn a_field_read_before_any_store_lifts_with_its_object() {
+        let insts = alloc::vec![
+            Inst::LocalAddr(-2), // v0
+            Inst::Imm(9),        // v1
+            load32(0, 0),        // v2
+            store32(0, 4, 1),    // v3
+            load32(0, 4),        // v4
+            store32(0, 0, 1),    // v5
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 2,
+                rhs: 4,
+            }, // v6
+        ];
+        let mut f = func(insts, Terminator::Return(6), alloc::vec![(-2, 1)]);
+        assert_eq!(run(&mut f, 64), alloc::vec![-2]);
+        assert!(
+            matches!(f.insts[2], Inst::Undef)
+                && matches!(f.insts[6], Inst::Binop { lhs: 2, rhs: 1, .. }),
+            "{:?}",
+            f.insts
+        );
+    }
+
     /// A two-cell object with one field left in a fresh slot and two lifted
     /// frees more cells than it keeps: the split stands.
     #[test]
     fn a_stranded_field_within_the_object_size_keeps_the_split() {
         let insts = alloc::vec![
-            Inst::LocalAddr(-2), // v0
-            Inst::Imm(9),        // v1
-            load32(0, 0),        // v2 read before any store
-            store32(0, 4, 1),    // v3
-            add_imm(0, 8),       // v4
-            store(4, 1),         // v5
-            load32(0, 4),        // v6
-            load(4),             // v7
-            store32(0, 0, 1),    // v8
+            Inst::LocalAddr(-2),      // v0
+            Inst::Imm(9),             // v1
+            pun(0, 0, LoadKind::F32), // v2
+            store32(0, 4, 1),         // v3
+            add_imm(0, 8),            // v4
+            store(4, 1),              // v5
+            load32(0, 4),             // v6
+            load(4),                  // v7
+            store32(0, 0, 1),         // v8
             Inst::Binop {
                 op: BinOp::Add,
                 lhs: 2,
@@ -2025,10 +2063,10 @@ mod tests {
     #[test]
     fn own_cell_left_in_the_frame_keeps_its_split() {
         let insts = alloc::vec![
-            Inst::LocalAddr(-2), // v0
-            load(0),             // v1 read before any store
-            Inst::Imm(3),        // v2
-            store(0, 2),         // v3
+            Inst::LocalAddr(-2),      // v0
+            pun(0, 0, LoadKind::F64), // v1
+            Inst::Imm(3),             // v2
+            store(0, 2),              // v3
         ];
         let mut f = func(insts, Terminator::Return(1), alloc::vec![(-2, 1)]);
         let promoted = run(&mut f, 64);

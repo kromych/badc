@@ -20,7 +20,7 @@ use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, NO_VALUE, Terminator, 
 use super::Target;
 use super::mem2reg::{SuccGraph, predecessors};
 use super::reg_alloc::{
-    block_weights, compute_use_counts, drop_rebuilt_incomes, for_each_operand, is_call_site,
+    block_weights, compute_use_counts, drop_unread_incomes, for_each_operand, is_call_site,
     operands_read, tls_addr_is_call,
 };
 use super::tape::{At, Insertion};
@@ -255,7 +255,8 @@ fn collect_uses(func: &FunctionSsa, layout: &Layout, cand: &[bool], reads: &[boo
             let inst = &func.insts[idx as usize];
             if let Inst::Phi { incoming, kind } = inst {
                 for &(pred, v) in incoming {
-                    if is_cand(v) && !super::emit_common::phi_rebuilds_income(func, *kind, v) {
+                    if is_cand(v) && !super::emit_common::phi_income_reads_no_place(func, *kind, v)
+                    {
                         uses.push(Use {
                             value: v,
                             block: pred,
@@ -381,7 +382,7 @@ pub(crate) fn split_across_calls(func: &mut FunctionSsa, target: Target) {
     }
     let tls_call = tls_addr_is_call(target);
     let mut use_counts = compute_use_counts(func);
-    drop_rebuilt_incomes(func, &mut use_counts);
+    drop_unread_incomes(func, &mut use_counts);
     let cand: Vec<bool> = (0..n)
         .map(|v| use_counts[v] > 0 && chain(func, target, tls_call, v as ValueId).is_some())
         .collect();

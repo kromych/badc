@@ -17,13 +17,24 @@ fn codes_are_unique() {
     }
 }
 
+/// Canonical names are unique, and a spelling more than one row carries is
+/// one of the deliberate shared spellings: clang's group spanning a
+/// top-level and a nested qualifier discard.
 #[test]
 fn names_and_aliases_are_unique() {
+    const SHARED: [&str; 1] = ["incompatible-pointer-types-discards-qualifiers"];
+    let mut names = BTreeSet::new();
+    for row in rows() {
+        assert!(names.insert(row.name), "duplicate name `{}`", row.name);
+    }
     let mut seen = BTreeSet::new();
     for row in rows() {
-        assert!(seen.insert(row.name), "duplicate name `{}`", row.name);
-        for alias in row.aliases {
-            assert!(seen.insert(alias), "duplicate alias `{alias}`");
+        for spelling in core::iter::once(&row.name).chain(row.aliases) {
+            let fresh = seen.insert(*spelling);
+            assert!(
+                fresh || SHARED.contains(spelling),
+                "duplicate spelling `{spelling}`"
+            );
         }
     }
 }
@@ -63,6 +74,30 @@ fn selectors_resolve_by_name_alias_and_code() {
         );
         assert_eq!(Code::from_selector(row.name), Some(row.code));
     }
+}
+
+/// clang's `incompatible-pointer-types-discards-qualifiers` spans a qualifier
+/// the pointed-to type loses (B3031, gcc's `discarded-qualifiers`) and a
+/// nested qualifier mismatch (B3011): the spelling selects both rows, gcc's
+/// name only its own, and a `B` code its row alone.
+#[test]
+fn a_shared_spelling_selects_every_row_that_carries_it() {
+    let (nested, discarded) = (code("B3011"), code("B3031"));
+    let shared = Selector::parse("incompatible-pointer-types-discards-qualifiers");
+    assert!(matches!(shared, Some(Selector::Shared(_))), "{shared:?}");
+    assert_eq!(
+        shared.map(Selector::codes),
+        Some(alloc::vec![nested, discarded])
+    );
+    assert_eq!(
+        Selector::parse("discarded-qualifiers").map(Selector::codes),
+        Some(alloc::vec![discarded])
+    );
+    assert_eq!(Selector::parse("B3011"), Some(Selector::Diagnostic(nested)));
+    assert_eq!(
+        Code::from_selector("incompatible-pointer-types-discards-qualifiers"),
+        Some(nested)
+    );
 }
 
 #[test]
@@ -504,4 +539,28 @@ fn explain_prints_one_row() {
     let lines: Vec<&str> = out.lines().collect();
     assert_eq!(lines[0], "B7001 unknown-argument");
     assert!(lines.iter().any(|l| l.contains("aliases      D9002")));
+}
+
+/// The table of other compilers' warning names is sorted, which its binary
+/// search needs, and resolves each form a pragma spells: a gcc name, a gcc
+/// name taking a value, a clang group, and none for a misspelling.
+#[test]
+fn other_compilers_warning_names_resolve() {
+    use super::foreign_names::NAMES;
+    assert!(NAMES.windows(2).all(|w| w[0].0 < w[1].0));
+    for name in [
+        "missing-prototypes",
+        "override-init",
+        "suggest-attribute=format",
+        "format-overflow=2",
+        "alloc-size-larger-than=100",
+        "format-overflow",
+        "shorten-64-to-32",
+        "format=2",
+    ] {
+        assert!(super::defined_elsewhere(name), "{name}");
+    }
+    for name in ["bogus-name", "suggest-attribute=bogus", "no-unused"] {
+        assert!(!super::defined_elsewhere(name), "{name}");
+    }
 }

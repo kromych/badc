@@ -1,13 +1,13 @@
 //! Synthetic sections: their creation and their contents.
 
+use crate::c5::codegen::BuildId;
 use crate::c5::linker::dynamic::{self};
-use crate::c5::linker::eh_frame;
+use crate::c5::object::eh_frame;
 use crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL as GOT_SYMBOL;
 use alloc::format;
 use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
-use super::dynamic_sections::encode_relr;
 use super::got::PLT_ENTRY_SIZE;
 use super::inputs::RawSection;
 use super::{
@@ -16,74 +16,7 @@ use super::{
     SYNTH_EH_FRAME_HDR, SYNTH_GNU_HASH, SYNTH_GNU_PROPERTY, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_HASH,
     SYNTH_INTERP, SYNTH_PLT, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM, SecFate, machine_uses_rela,
 };
-
-/// SHA-1 (FIPS 180-4), for `--build-id=sha1`.
-pub(super) fn sha1(data: &[u8]) -> [u8; 20] {
-    let mut h: [u32; 5] = [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0];
-    let ml = (data.len() as u64).wrapping_mul(8);
-    let mut block = [0u8; 64];
-    let process = |h: &mut [u32; 5], chunk: &[u8]| {
-        let mut w = [0u32; 80];
-        for i in 0..16 {
-            w[i] = u32::from_be_bytes([
-                chunk[i * 4],
-                chunk[i * 4 + 1],
-                chunk[i * 4 + 2],
-                chunk[i * 4 + 3],
-            ]);
-        }
-        for i in 16..80 {
-            w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1);
-        }
-        let (mut a, mut b, mut c, mut d, mut e) = (h[0], h[1], h[2], h[3], h[4]);
-        for (i, &wi) in w.iter().enumerate() {
-            let (f, k) = match i {
-                0..=19 => ((b & c) | ((!b) & d), 0x5A827999u32),
-                20..=39 => (b ^ c ^ d, 0x6ED9EBA1),
-                40..=59 => ((b & c) | (b & d) | (c & d), 0x8F1BBCDC),
-                _ => (b ^ c ^ d, 0xCA62C1D6),
-            };
-            let tmp = a
-                .rotate_left(5)
-                .wrapping_add(f)
-                .wrapping_add(e)
-                .wrapping_add(k)
-                .wrapping_add(wi);
-            e = d;
-            d = c;
-            c = b.rotate_left(30);
-            b = a;
-            a = tmp;
-        }
-        h[0] = h[0].wrapping_add(a);
-        h[1] = h[1].wrapping_add(b);
-        h[2] = h[2].wrapping_add(c);
-        h[3] = h[3].wrapping_add(d);
-        h[4] = h[4].wrapping_add(e);
-    };
-    let mut i = 0;
-    while i + 64 <= data.len() {
-        process(&mut h, &data[i..i + 64]);
-        i += 64;
-    }
-    let rest = data.len() - i;
-    block[..rest].copy_from_slice(&data[i..]);
-    block[rest] = 0x80;
-    if rest + 1 > 56 {
-        for b in block[rest + 1..].iter_mut() {
-            *b = 0;
-        }
-        process(&mut h, &block.clone());
-        block = [0u8; 64];
-    }
-    block[56..64].copy_from_slice(&ml.to_be_bytes());
-    process(&mut h, &block.clone());
-    let mut out = [0u8; 20];
-    for (k, hv) in h.iter().enumerate() {
-        out[k * 4..k * 4 + 4].copy_from_slice(&hv.to_be_bytes());
-    }
-    out
-}
+use crate::c5::object::relr::encode_relr;
 
 impl<'a> LdsLinker<'a> {
     pub(super) fn push_synth_section(&mut self, name: &str, shtype: u32, flags: u64) -> usize {
@@ -128,12 +61,12 @@ impl<'a> LdsLinker<'a> {
             let synth = self.synth_obj;
             self.objects[synth].sections[idx].addralign = 4;
         }
-        if self.opts.build_id_sha1 {
+        if self.opts.build_id != BuildId::None {
             let idx = self.push_synth_section(SYNTH_BUILD_ID, SHT_NOTE, SHF_ALLOC);
             let synth = self.synth_obj;
             let sec = &mut self.objects[synth].sections[idx];
             sec.addralign = 4;
-            sec.size = 36; // 12-byte header + "GNU\0" + 20-byte sha1
+            sec.size = self.opts.build_id.note_len() as u64;
         }
         if !self.opts.shared_libs.is_empty() {
             let idx = self.push_synth_section(SYNTH_PLT, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR);
@@ -180,8 +113,7 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// The dynamic-linking tables. bfd builds these for every ET_DYN
-    /// image; a script that does not want them discards them, which is
-    /// what the kernel's own scripts do.
+    /// image; a script that does not want them discards them.
     fn synthesize_dynamic_sections(&mut self) {
         self.verdefs = self.script_verdefs();
         let mut secs: Vec<(&str, u32, u64, u64)> = Vec::new();
@@ -345,13 +277,7 @@ impl<'a> LdsLinker<'a> {
                             );
                         }
                     }
-                    SYNTH_BUILD_ID => {
-                        bytes.extend_from_slice(&4u32.to_le_bytes()); // namesz
-                        bytes.extend_from_slice(&20u32.to_le_bytes()); // descsz
-                        bytes.extend_from_slice(&3u32.to_le_bytes()); // NT_GNU_BUILD_ID
-                        bytes.extend_from_slice(b"GNU\0");
-                        bytes.extend_from_slice(&[0u8; 20]);
-                    }
+                    SYNTH_BUILD_ID => bytes = self.opts.build_id.note(),
                     SYNTH_GNU_PROPERTY => bytes = self.gnu_property.clone(),
                     SYNTH_INTERP => {
                         bytes = self.opts.interp.clone().unwrap_or_default().into_bytes();

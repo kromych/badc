@@ -1357,9 +1357,8 @@ mod code_mode_tests {
     /// A branch through a `.set` alias takes the location of the name the
     /// chain ends at and the binding of the name written: a local alias of a
     /// global resolves in place, a global or weak one keeps its relocation at
-    /// the long form's width. A data field keeps the name written, which is
-    /// what the kernel's `SYM_FUNC_ALIAS` + `EXPORT_SYMBOL` shape reads. Bytes
-    /// from GNU as 2.46.1.
+    /// the long form's width. A data field keeps the name written. Bytes from
+    /// GNU as 2.46.1.
     #[test]
     fn file_scope_x86_branch_binds_as_the_alias_name_does() {
         let (bytes, relocs) = assemble_relocs(
@@ -1989,8 +1988,8 @@ mod code_mode_tests {
         }
     }
 
-    /// Undefined-opcode and descriptor-table forms the kernel entry code
-    /// writes. A 64-bit `lsl` / `lar` destination takes the SDM's
+    /// Undefined-opcode and descriptor-table forms. A 64-bit `lsl` / `lar`
+    /// destination takes the SDM's
     /// `REX.W + 0F 02 /r` / `REX.W + 0F 03 /r` row, as clang emits; GNU as
     /// encodes it as the 32-bit form instead (`0f 03 c0`, `45 0f 03 ec`,
     /// `0f 03 03`, `0f 02 c0` for the four below), which zero-extends to the
@@ -2221,8 +2220,8 @@ mod code_mode_tests {
         assert!(names(".long wk - .\n").is_empty());
     }
 
-    /// `. = expr` moves the location counter, as `.org` does; the kernel's
-    /// kexec exception-vector table places its 6-byte entries that way.
+    /// `. = expr` moves the location counter, as `.org` does, so a table of
+    /// fixed-stride entries can place each entry by it.
     #[test]
     fn location_counter_assignment_places_like_org() {
         assert_eq!(
@@ -2572,15 +2571,15 @@ mod code_mode_tests {
         // as leaves it for a difference it cannot value while encoding.
         assert_eq!(
             assemble_relocs(
-                "relocate_kernel:\naddq $(identity_mapped - relocate_kernel), %r8\nnop\n\
-                 identity_mapped:\nnop\n"
+                "start:\naddq $(target - start), %r8\nnop\n\
+                 target:\nnop\n"
             ),
             (
                 alloc::vec![0x49, 0x81, 0xc0, 0x08, 0, 0, 0, 0x90, 0x90],
                 alloc::vec![]
             )
         );
-        // A far branch's offset is such a difference (`la57toggle.S`).
+        // A far branch's offset is such a difference.
         assert_eq!(
             assemble_relocs(
                 ".code32\ntrampoline_32bit_src:\nljmpl $(2*8), $(.Lret - trampoline_32bit_src)\n\
@@ -2591,8 +2590,8 @@ mod code_mode_tests {
                 alloc::vec![]
             )
         );
-        // A symbol displacement and a symbol immediate in one instruction
-        // (`wakeup_64.S`): x86 relocates the two fields independently.
+        // A symbol displacement and a symbol immediate in one instruction:
+        // x86 relocates the two fields independently.
         assert_eq!(
             assemble_relocs("movq $.Lresume_point, saved_rip(%rip)\n.Lresume_point:\nnop\n"),
             (
@@ -2603,9 +2602,9 @@ mod code_mode_tests {
                 ]
             )
         );
-        // A memory displacement over a symbol less a label of this section
-        // (`efi-mixed.S`): the label folds into the addend and the symbol
-        // keeps the relocation.
+        // A memory displacement over a symbol less a label of this section:
+        // the label folds into the addend and the symbol keeps the
+        // relocation.
         assert_eq!(
             assemble_relocs(".code32\n1:\nleal (efi32_boot_args - 1b)(%ecx), %ebx\n"),
             (
@@ -2636,11 +2635,12 @@ mod code_mode_tests {
                 &[0xff, 0x25, 0, 0, 0, 0][..],
                 (2, 4, false, "tr_start", -4),
             ),
-            // `_ASM_RIP(x)` expands with whitespace inside the reference.
+            // A macro pasting `(% rip)` after a symbol leaves whitespace inside
+            // the reference.
             (
-                "movl x86_pred_cmd (% rip), %eax\n",
+                "movl pred_cmd (% rip), %eax\n",
                 &[0x8b, 0x05, 0, 0, 0, 0][..],
-                (2, 4, false, "x86_pred_cmd", -4),
+                (2, 4, false, "pred_cmd", -4),
             ),
         ] {
             let (got, relocs) = assemble_relocs(src);
@@ -2657,8 +2657,8 @@ mod code_mode_tests {
     }
 
     /// A `.fill` count is an expression over the layout, the location counter
-    /// included (`head_64.S` pads each early IDT entry to a fixed stride).
-    /// Bytes measured with GNU as 2.46.1 for the same source.
+    /// included, so a table entry pads itself to a fixed stride. Bytes
+    /// measured with GNU as 2.46.1 for the same source.
     #[test]
     fn fill_count_over_location_counter_matches_gnu_as() {
         assert_eq!(
@@ -2815,10 +2815,9 @@ mod code_mode_tests {
     /// `66` prefix; a 64-bit register operand takes the REX.W row the SDM
     /// gives both directions, and a memory operand is `m16` in either row and
     /// takes neither prefix. Neither row has a byte operand, and an AT&T size
-    /// suffix names the operand as written. The GDT reload in
-    /// `arch/x86/kernel/relocate_kernel_64.S` writes the 64-bit pair. Bytes
-    /// measured with GNU as 2.46.1 and clang 22 for the same source, the
-    /// REX.W ones being clang's, which GNU as drops.
+    /// suffix names the operand as written. Bytes measured with GNU as 2.46.1
+    /// and clang 22 for the same source, the REX.W ones being clang's, which
+    /// GNU as drops.
     #[test]
     fn segment_register_move_operand_widths() {
         #[rustfmt::skip]
@@ -2892,10 +2891,8 @@ mod code_mode_tests {
     /// one, `0F 22` / `0F 23` write one, over a single register row per mode
     /// -- `r64` in 64-bit mode, `r32` in the other two -- and no memory row.
     /// The width is the row's rather than the mode's, so `.code16` takes no
-    /// `66`. The CR4 and CR0 writes in `arch/x86/boot/compressed/head_64.S`
-    /// spell the 32-bit pair under `.code32`, the CR3 switch in
-    /// `arch/x86/entry/calling.h` the 64-bit one. Bytes measured with GNU as
-    /// 2.46.1 and clang 22, which agree here in all three modes.
+    /// `66`. Bytes measured with GNU as 2.46.1 and clang 22, which agree here
+    /// in all three modes.
     #[test]
     fn control_debug_register_move_operand_widths() {
         #[rustfmt::skip]

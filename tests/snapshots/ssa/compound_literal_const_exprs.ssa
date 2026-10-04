@@ -92,6 +92,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=5
   block 14  start_pc=0
     v62  Imm(0)                                           -> x0
     terminator Return(v62)   (exit_acc=v62)
+compound_literal_const_exprs.c:18: warning: implicit conversion from `int` to `unsigned char` changes value from 511 to 255 [B3010] [-Wconstant-conversion]
+static unsigned char s5 = (unsigned char){ 0x1ff };
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

@@ -1,7 +1,7 @@
 //! Unary operators and casts (C99 6.5.3, 6.5.4).
 
 use super::super::access::{load_kind_for, load_place};
-use super::super::types::{is_float_ty, is_floating_scalar};
+use super::super::types::{is_bool_scalar, is_float_ty, is_floating_scalar};
 use super::super::*;
 use crate::c5::ast::expr_ty;
 impl<'a> Walker<'a> {
@@ -95,13 +95,18 @@ impl<'a> Walker<'a> {
         // A 128-bit rvalue is carried as its address, so a cast to an
         // integer or pointer loads the low 8 bytes -- the value mod
         // 2^64 -- and the convert narrows that to `to_ty`. A floating
-        // target converts the whole 128-bit value (C99 6.3.1.4).
+        // target converts the whole 128-bit value (C99 6.3.1.4), and
+        // `_Bool` tests it (6.3.1.2).
         if self.is_int128_value_ty(src_ty) && !is_struct_ty(to_ty) {
             let v = self.flatten_copy_operand(b, child, v)?;
             if is_floating_scalar(to_ty) {
                 let pair = self.int128_load(b, v);
                 let signed = (src_ty & UNSIGNED_BIT) == 0;
                 return Ok(self.int128_to_fp(b, pair, signed, is_float_ty(to_ty)));
+            }
+            if is_bool_scalar(to_ty) {
+                let pair = self.int128_load(b, v);
+                return Ok(Self::int128_to_bool(b, pair));
             }
             let low_ty = Ty::LongLong as i64 | UNSIGNED_BIT;
             let low = b.load(v, load_kind_for(low_ty, self.target));

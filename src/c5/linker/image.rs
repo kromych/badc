@@ -1364,6 +1364,9 @@ mod tests {
             macho_tlv_fixups: alloc::vec![],
             copy_relocs: alloc::vec![],
             object_imports: alloc::collections::BTreeSet::new(),
+            stub_address_imports: alloc::collections::BTreeSet::new(),
+            preemptible_imports: alloc::collections::BTreeSet::new(),
+            tls_imports: alloc::collections::BTreeSet::new(),
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],
             debug_line: alloc::vec![],
@@ -1389,6 +1392,9 @@ mod tests {
             tls_align: 8,
             init_fini_arrays: Default::default(),
             section_map: Default::default(),
+            exec_stack_input: None,
+            compact_unwind: Vec::new(),
+            eh_frame: Vec::new(),
         }
     }
 

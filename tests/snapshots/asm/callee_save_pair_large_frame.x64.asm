@@ -26,20 +26,15 @@ Disassembly of section .text:
                	int3
 
 <sink>:
+               	xorl	%eax, %eax
                	testl	%edi, %edi
                	jle	<addr>
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	movq	%rdi, %rbx
-               	leaq	-0x1(%rbx), %rdi
-               	callq	<addr>
-               	addq	%rbx, %rax
-               	popq	%rbx
-               	leave
-               	retq
-               	movl	$0x1, %eax
+               	leaq	-0x1(%rdi), %rcx
+               	addq	%rdi, %rax
+               	movq	%rcx, %rdi
+               	testl	%edi, %edi
+               	jg	<addr>
+               	incq	%rax
                	retq
 
 <bigframe>:

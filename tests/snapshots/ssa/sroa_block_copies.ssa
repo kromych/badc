@@ -711,9 +711,7 @@ fn ent_pc=24 n_params=2 variadic=false locals=0
     terminator Return(v30)   (exit_acc=v30)
   block 2  start_pc=0
     v32  Call { target_pc=23, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v33  Imm(-1)                                          -> x0
-    v34  LifetimeEnd(0)                                   -> -
-    terminator Return(v33)   (exit_acc=v33)
+    terminator Unreachable
 ; --- SSA dump (ok=true) ent_pc=25 ---
 ; name=vla_copy
 fn ent_pc=25 n_params=2 variadic=false locals=1

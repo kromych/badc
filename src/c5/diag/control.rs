@@ -8,11 +8,13 @@ use alloc::vec::Vec;
 use super::catalog::rows;
 use super::code::{Class, Code, Groups, Level, Status};
 
-/// What a `-W<selector>` names: a group, or one diagnostic.
+/// What a `-W<selector>` names: a group, one diagnostic, or the several
+/// diagnostics a shared spelling names.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Selector {
     Group(Groups),
     Diagnostic(Code),
+    Shared(&'static str),
 }
 
 impl Selector {
@@ -20,7 +22,23 @@ impl Selector {
         if let Some(group) = Groups::from_selector(sel) {
             return Some(Selector::Group(group));
         }
+        if let Some(spelling) = Code::shared_spelling(sel) {
+            return Some(Selector::Shared(spelling));
+        }
         Code::from_selector(sel).map(Selector::Diagnostic)
+    }
+
+    /// The rows a `Diagnostic` or `Shared` selector names; a group's rows
+    /// are taken with its own rule.
+    pub fn codes(self) -> Vec<Code> {
+        match self {
+            Selector::Group(_) => Vec::new(),
+            Selector::Diagnostic(code) => alloc::vec![code],
+            Selector::Shared(s) => rows()
+                .filter(|r| r.name == s || r.aliases.contains(&s))
+                .map(|r| r.code)
+                .collect(),
+        }
     }
 }
 

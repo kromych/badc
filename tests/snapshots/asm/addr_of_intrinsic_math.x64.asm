@@ -88,9 +88,10 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
-               	movabsq	$-0x3fde000000000000, %rax # imm = 0xC022000000000000
-               	movq	%rax, %xmm0
-               	callq	<addr>
+               	movq	<rip>, %rax       # <addr>
+               	movabsq	$-0x3fde000000000000, %rcx # imm = 0xC022000000000000
+               	movq	%rcx, %xmm0
+               	callq	*%rax
                	movabsq	$0x4022000000000000, %rax # imm = 0x4022000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -100,8 +101,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movabsq	$0x4054400000000000, %rax # imm = 0x4054400000000000
+               	movq	<rip>, %rcx       # <addr>
                	movq	%rax, %xmm0
-               	callq	<addr>
+               	callq	*%rcx
                	movabsq	$0x4022000000000000, %rax # imm = 0x4022000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -111,8 +113,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movabsq	$0x401799999999999a, %rax # imm = 0x401799999999999A
+               	movq	<rip>, %rcx       # <addr>
                	movq	%rax, %xmm0
-               	callq	<addr>
+               	callq	*%rcx
                	movabsq	$0x4014000000000000, %rax # imm = 0x4014000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -148,12 +151,3 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
-
-<__c5_sys_sqrt>:
-               	jmp	<addr>
-
-<__c5_sys_fabs>:
-               	jmp	<addr>
-
-<__c5_sys_floor>:
-               	jmp	<addr>

@@ -176,7 +176,7 @@ fn plt32_call_at(rel: &EtRel, f: &EtSym, off: u64, callee: &str) {
     assert_eq!(rel.symbols[r.sym as usize].sec, EtSymRef::Undef);
 }
 
-fn kernel_x86_64_options() -> NativeOptions {
+fn fentry_area_x86_64_options() -> NativeOptions {
     NativeOptions {
         patchable_function_entry: PatchableEntry {
             nops: 16,
@@ -202,7 +202,7 @@ fn x86_64_call_padding_form_matches_gcc() {
     // the record, no call and no entry; `five` (2,1) sits at an aligned
     // address plus one with the call at +1; `eight` (0) has no record;
     // `three` records against `.noinstr.text`.
-    let rel = compile(SRC, Target::LinuxX64, kernel_x86_64_options());
+    let rel = compile(SRC, Target::LinuxX64, fentry_area_x86_64_options());
     let text = section(&rel, ".text");
     assert_eq!(text.addralign, 16);
     let records = patchable_records(&rel, R_X86_64_64);
@@ -372,11 +372,10 @@ fn aarch64_protected(patchable: PatchableEntry, bti: bool, pac_ret: bool) -> EtR
 #[test]
 fn aarch64_signing_follows_the_nops() {
     // gcc -mbranch-protection=pac-ret -fpatchable-function-entry=4,2:
-    // the two NOPs open the entry and `PACIASP` follows them. The
-    // kernel's `ftrace_init_nop` rewrites the first of the two to
-    // `MOV X9, X30` and the second to a call, so it requires a NOP at
-    // the symbol; a signature taken ahead of the pair would be taken
-    // on a link register the call then overwrites.
+    // the two NOPs open the entry and `PACIASP` follows them. A patcher
+    // that rewrites the first of the two to `MOV X9, X30` and the second
+    // to a call requires a NOP at the symbol; a signature taken ahead of
+    // the pair would be taken on a link register the call then overwrites.
     let rel = aarch64_protected(PatchableEntry { nops: 4, before: 2 }, false, true);
     assert_eq!(
         entry_words(&rel, "framed", 3),
@@ -390,9 +389,9 @@ fn aarch64_signing_follows_the_nops() {
     assert_eq!(opens[..2], [A64_NOP, A64_NOP]);
     assert_ne!(opens[2], A64_PACIASP);
 
-    // The record names the area's first byte, `arch/arm64/kernel/ftrace.c`
-    // reads the ops literal from the two words there and patches at
-    // `record + 8` and `record + 12`. Both must be NOPs at rest.
+    // The record names the area's first byte; a patcher reads a literal
+    // from the two words there and patches at `record + 8` and
+    // `record + 12`. Both must be NOPs at rest.
     let records = patchable_records(&rel, R_AARCH64_ABS64);
     let area = area_of(&rel, &records, "framed").expect("framed");
     let f = func(&rel, "framed");
@@ -408,8 +407,8 @@ fn aarch64_a_signed_entry_with_a_nop_area_takes_its_own_landing_pad() {
     // gcc -mbranch-protection=pac-ret+bti -fpatchable-function-entry=4,2:
     // `BTI C`, the NOPs, then `PACIASP`. `PACIASP` stands in for the pad
     // only where it is the entry's first instruction; the NOP area moves
-    // it, and the kernel tolerates nothing but a `BTI C` ahead of the
-    // patch site (`ftrace_call_adjust`).
+    // it, and a patcher that finds the site from the symbol tolerates
+    // nothing but a `BTI C` ahead of it.
     let rel = aarch64_protected(PatchableEntry { nops: 4, before: 2 }, true, true);
     assert_eq!(
         entry_words(&rel, "framed", 4),
@@ -633,14 +632,14 @@ fn an_early_return_follows_the_patch_site() {
 
 #[test]
 fn the_records_survive_a_relocatable_merge() {
-    // The kernel's module link is `ld -r`, and its loader reads the
-    // records from the one section of the name: both units' records
-    // land there and the `__mcount_loc` entries in one table.
-    let a = compile(SRC, Target::LinuxX64, kernel_x86_64_options());
+    // A relocatable merge (`ld -r`) keeps one section of the name: both
+    // units' records land there and the `__mcount_loc` entries in one
+    // table.
+    let a = compile(SRC, Target::LinuxX64, fentry_area_x86_64_options());
     let b = compile(
         "int nine(void) { return 9; }\n",
         Target::LinuxX64,
-        kernel_x86_64_options(),
+        fentry_area_x86_64_options(),
     );
     let bytes = link_relocatable(&[a, b], &RelinkOptions::default()).expect("merge");
     let rel = parse_et_rel(&bytes, "merged").expect("parse");

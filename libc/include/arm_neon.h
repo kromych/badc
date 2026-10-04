@@ -28,34 +28,34 @@
 typedef signed char int8_t;
 typedef short int16_t;
 typedef int int32_t;
-typedef long long int64_t;
+typedef __INT64_TYPE__ int64_t;
 typedef unsigned char uint8_t;
 typedef unsigned short uint16_t;
 typedef unsigned int uint32_t;
-typedef unsigned long long uint64_t;
+typedef __UINT64_TYPE__ uint64_t;
 
-typedef unsigned long long poly64_t;
+typedef __UINT64_TYPE__ poly64_t;
 
 typedef signed char int8x8_t __attribute__((vector_size(8)));
 typedef short int16x4_t __attribute__((vector_size(8)));
 typedef int int32x2_t __attribute__((vector_size(8)));
-typedef long long int64x1_t __attribute__((vector_size(8)));
+typedef int64_t int64x1_t __attribute__((vector_size(8)));
 typedef unsigned char uint8x8_t __attribute__((vector_size(8)));
 typedef unsigned short uint16x4_t __attribute__((vector_size(8)));
 typedef unsigned int uint32x2_t __attribute__((vector_size(8)));
-typedef unsigned long long uint64x1_t __attribute__((vector_size(8)));
+typedef uint64_t uint64x1_t __attribute__((vector_size(8)));
 
 typedef signed char int8x16_t __attribute__((vector_size(16)));
 typedef short int16x8_t __attribute__((vector_size(16)));
 typedef int int32x4_t __attribute__((vector_size(16)));
-typedef long long int64x2_t __attribute__((vector_size(16)));
+typedef int64_t int64x2_t __attribute__((vector_size(16)));
 typedef unsigned char uint8x16_t __attribute__((vector_size(16)));
 typedef unsigned short uint16x8_t __attribute__((vector_size(16)));
 typedef unsigned int uint32x4_t __attribute__((vector_size(16)));
-typedef unsigned long long uint64x2_t __attribute__((vector_size(16)));
+typedef uint64_t uint64x2_t __attribute__((vector_size(16)));
 typedef unsigned char poly8x16_t __attribute__((vector_size(16)));
-typedef unsigned long long poly64x2_t __attribute__((vector_size(16)));
-typedef unsigned long long poly128_t __attribute__((vector_size(16)));
+typedef poly64_t poly64x2_t __attribute__((vector_size(16)));
+typedef poly64_t poly128_t __attribute__((vector_size(16)));
 
 static inline uint8x16_t vld1q_u8(const uint8_t *__p) {
     uint8x16_t __r;

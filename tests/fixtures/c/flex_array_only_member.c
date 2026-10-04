@@ -1,10 +1,9 @@
 // A struct whose only member is an anonymous struct holding an empty
 // struct and a flexible array has size 0, and keeps it when `packed`
-// follows the body and re-lays the members. This is what the kernel's
-// `__DECLARE_FLEX_ARRAY` macro expands to; btrfs uses it for the on-disk
-// stripe extent header, whose item size is computed as
-// `sizeof(header) + n * sizeof(entry)`. Values come from gcc 16 on
-// linux/x86_64 and linux/aarch64. The MS layout of the PE targets (MSVC,
+// follows the body and re-lays the members: a flexible array declared
+// alone through an anonymous struct, whose enclosing record's size is
+// computed as `sizeof(header) + n * sizeof(entry)`. Values come from gcc
+// 16 on linux/x86_64 and linux/aarch64. The MS layout of the PE targets (MSVC,
 // clang's windows-msvc triples) gives an aggregate without storage 4
 // bytes, so a flexible array after one starts on its own alignment.
 
@@ -74,8 +73,8 @@ union flex_union_packed {
 // `packed` removes the padding between a struct's own members, not the
 // padding inside a member's type: the anonymous union below keeps the
 // 4-byte alignment its widest arm gives it and stays 12 bytes wide, so
-// the enclosing struct is 13. The shape is the ChromeOS EC host-command
-// parameter block, whose arms mix packed and unpacked structs.
+// the enclosing struct is 13. The shape is a command parameter block
+// whose arms mix packed and unpacked structs.
 struct arm_packed {
     unsigned char sensor_num;
     unsigned short flags;

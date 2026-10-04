@@ -141,7 +141,7 @@ fn riprel_field(
 }
 
 /// Encode the replacement instructions of an executable inline-asm section
-/// (`.pushsection .altinstr_replacement,"ax"`) to bytes and relocations,
+/// (`.pushsection <name>,"ax"`) to bytes and relocations,
 /// each `Code` item becoming `CodeBytes`. Only a direct `call` / `jmp` to a
 /// symbol, a `jmp` / `jcc` to an `asm goto` label (via `goto_block`) and
 /// self-contained instructions assemble; a replacement referencing a
@@ -592,10 +592,10 @@ impl SectionInsn<'_> {
         alloc::format!("inline asm: replacement `{}` {what}", self.text)
     }
 
-    /// A jmp / jcc to an `asm goto` label (`%lK`), as `jmp %l[t_no]` in
-    /// `_static_cpu_has`: the rel32 form with a `PC32` relocation deferred as
-    /// `TextBlock` and rewritten to the block's text offset after layout, the
-    /// GNU as cross-section branch (addend -4).
+    /// A jmp / jcc to an `asm goto` label (`%lK`), as `jmp %l[t_no]` in a
+    /// pushed executable section: the rel32 form with a `PC32` relocation
+    /// deferred as `TextBlock` and rewritten to the block's text offset after
+    /// layout, the GNU as cross-section branch (addend -4).
     fn goto_branch(
         &self,
         goto_block: &dyn Fn(u8) -> Option<u32>,
@@ -2723,9 +2723,9 @@ impl AsmPass<'_> {
             return Some(Ok(()));
         }
         // `.skip count, fill`: `count` resolves against the section
-        // replacement length and the template labels already emitted (the
-        // ALTERNATIVE old site is padded to the longer of the two so a
-        // boot-time patch fits).
+        // replacement length and the template labels already emitted (a
+        // patch site's original is padded to the longer of the two so the
+        // replacement fits over it).
         if insn.mnemonic == Mnemonic::Skip {
             let expr = insn.sym_exprs.first().map_or("0", |e| e.as_str());
             let Some(count) = self.expr_value(expr, code.len(), layout) else {
@@ -2971,7 +2971,7 @@ impl AsmPass<'_> {
             && matches!(insn.mnemonic, Mnemonic::Table("call" | "jmp"))
         {
             let is_call = matches!(insn.mnemonic, Mnemonic::Table(n) if n.starts_with("call"));
-            // The name may embed operand references (`__get_user_%c0`).
+            // The name may embed operand references (`helper_%c0`).
             let name = match crate::c5::asm::resolve_asm_symbol_target(
                 name,
                 &crate::c5::asm::X64_SYMBOL_SUBST,

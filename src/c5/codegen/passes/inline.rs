@@ -131,8 +131,8 @@ const FRAME_GROWTH_FACTOR: i64 = 4;
 /// The `CALLER_FRAME_SLOTS` / `FRAME_GROWTH_FACTOR` pair is relative, so a
 /// caller that already declares a large frame may still multiply it, and
 /// neither bounds the frame itself; a frame that spans a page costs a
-/// noticeable fraction of the smallest stacks a target runs on (a 16 KiB
-/// kernel task stack), which is worth paying for a mandatory
+/// noticeable fraction of the smallest stacks a target runs on (16 KiB
+/// for a kernel-mode thread), which is worth paying for a mandatory
 /// (`always_inline`) request and not for a size-driven candidate.
 ///
 /// Checked per splice rather than per round: a splice exposes the callee's
@@ -1044,19 +1044,13 @@ fn is_inline_candidate(
     // the flat path and keeps its strict gates.
     let reloc = func.blocks.len() > 1 || needs_reloc_splice(func, &used);
     // On the flat path an aggregate return rides the one slot
-    // `flat_result_slot` names, redirected to the caller's return slot.
-    // A Return naming anything else -- a global address, an
-    // indirect-result pointer -- has nothing to redirect. The reloc path
-    // has no result slot: it copies from whatever address each `Return`
-    // carries, so it only rejects a value-less aggregate Return.
+    // `flat_result_slot` names, redirected to the caller's return slot; a
+    // body returning anything else takes the reloc path
+    // (`needs_reloc_splice`). That path has no result slot: it copies from
+    // whatever address each `Return` carries, so it only rejects a
+    // value-less aggregate Return.
     let result_slot: Option<i64> = if func.ret_agg.is_some() && !reloc {
-        let Some(s) = flat_result_slot(func) else {
-            say(format_args!(
-                "aggregate return not via a redirectable local slot"
-            ));
-            return false;
-        };
-        Some(s)
+        flat_result_slot(func)
     } else {
         None
     };
@@ -1135,6 +1129,7 @@ fn is_inline_candidate(
         }
         match inst {
             Inst::Imm(_)
+            | Inst::Undef
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
@@ -1678,13 +1673,13 @@ impl<'a> CandidatePool<'a> {
 /// One caller's view of a pool. The caller's own entry is excluded:
 /// splicing a self-recursive call would expand without bound. A
 /// size-driven callee with an explicit section is visible only to
-/// callers placed in the same section: its placement is a contract (the
-/// kernel's section whitelists) that the splice moves the body out of.
-/// A mandatory (`always_inline`) request overrides it, as gcc and clang
-/// do -- both splice such a body into a caller in any section and emit
-/// no out-of-line copy at all -- and as the kernel needs: a call left
-/// out of line from `.text` into an `__init` helper outlives the
-/// section it targets.
+/// callers placed in the same section: its placement is a contract (a
+/// linker script places by it, a reference check keys on it) that the
+/// splice moves the body out of. A mandatory (`always_inline`) request
+/// overrides it, as gcc and clang do -- both splice such a body into a
+/// caller in any section and emit no out-of-line copy at all -- so a
+/// call from `.text` never targets a helper in a section the image
+/// discards after startup.
 struct CandidateSet<'p, 'a> {
     pool: &'p CandidatePool<'a>,
     exclude: usize,
@@ -2108,6 +2103,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
             .stores()
             .any(|(i, _)| !args.get(i).is_some_and(|&a| own(a))),
         Inst::Imm(_)
+        | Inst::Undef
         | Inst::ImmData(_)
         | Inst::ImmCode(_)
         | Inst::ImmExtCode(_)
@@ -2359,6 +2355,53 @@ fn piece_kinds(size: u32) -> (LoadKind, StoreKind) {
     }
 }
 
+/// The callee's own objects (`off < 0`) with a lifetime marker that an
+/// aggregate `Return` may hand out, each returned address traced through
+/// phis, copies and constant offsets to the `LocalAddr` it derives from.
+/// An address of any other origin may name every marked object.
+fn returned_marked_slots(callee: &FunctionSsa) -> BTreeSet<i64> {
+    let marked: BTreeSet<i64> = callee
+        .insts
+        .iter()
+        .filter_map(|i| match i {
+            Inst::LifetimeEnd(off) if *off < 0 => Some(*off),
+            _ => None,
+        })
+        .collect();
+    let mut work: Vec<ValueId> = callee
+        .blocks
+        .iter()
+        .filter_map(|b| match b.terminator {
+            Terminator::Return(v) if v != NO_VALUE => Some(v),
+            _ => None,
+        })
+        .collect();
+    let mut seen = BTreeSet::new();
+    let mut out = BTreeSet::new();
+    while let Some(v) = work.pop() {
+        if !seen.insert(v) {
+            continue;
+        }
+        match callee.insts.get(v as usize) {
+            Some(Inst::LocalAddr(s)) => {
+                if marked.contains(s) {
+                    out.insert(*s);
+                }
+            }
+            Some(Inst::Phi { incoming, .. }) => work.extend(incoming.iter().map(|&(_, x)| x)),
+            Some(Inst::Copy { value, .. }) => work.push(*value),
+            Some(Inst::BinopI {
+                op: BinOp::Add | BinOp::Sub,
+                lhs,
+                ..
+            }) => work.push(*lhs),
+            Some(Inst::ParamRef { .. } | Inst::ImmData(_)) => {}
+            _ => return marked,
+        }
+    }
+    out
+}
+
 fn splice_multi_block(
     caller: &mut FunctionSsa,
     callee: Callee<'_>,
@@ -2396,6 +2439,14 @@ fn splice_multi_block(
     let ret_align: u32 = callee
         .ret_agg
         .map_or(0, |i| callee.agg_descs[i as usize].align);
+    // The callee ends a returned object's lifetime ahead of its `Return`,
+    // which reads it out of line; spliced, the postfix copy reads it, so
+    // its markers move to follow the copy.
+    let held_ends: BTreeSet<i64> = if ret_pieces.is_some() {
+        returned_marked_slots(callee)
+    } else {
+        BTreeSet::new()
+    };
     // Frame slots holding a register-passed struct parameter's bytes,
     // mapped to (parameter index, layout). The cell relocates into the
     // caller frame with the callee's other own locals; the prefix copies
@@ -2633,7 +2684,7 @@ fn splice_multi_block(
         // stores reference them.
         if let Some(pieces) = &ret_pieces {
             pieces_base = at;
-            at += 1 + 2 * pieces.len() as u32;
+            at += 1 + 2 * pieces.len() as u32 + held_ends.len() as u32;
         }
         for pc in (call_pc + 1)..splice_block.inst_range.end {
             count(pc, &mut remap, &mut at);
@@ -2697,7 +2748,8 @@ fn splice_multi_block(
                     // region's other occupants are the objects of splices
                     // that ran before this one or run after it, never
                     // during it, so the end it states holds for them too.
-                    Inst::LifetimeEnd(off) if *off < 0 => {
+                    // A returned object's marker follows the postfix copy.
+                    Inst::LifetimeEnd(off) if *off < 0 && !held_ends.contains(off) => {
                         callee_remap[ce_pc as usize] = at;
                         at += 1;
                     }
@@ -2897,6 +2949,11 @@ fn splice_multi_block(
                     volatile: false,
                     align: 0,
                 });
+                new_inst_src.push((0, 0));
+                new_f32.push(false);
+            }
+            for &s in &held_ends {
+                new_insts.push(Inst::LifetimeEnd(s - region_base));
                 new_inst_src.push((0, 0));
                 new_f32.push(false);
             }
@@ -3108,7 +3165,7 @@ fn splice_multi_block(
                         new_f32.push(false);
                         continue;
                     }
-                    Inst::LifetimeEnd(off) if *off < 0 => {
+                    Inst::LifetimeEnd(off) if *off < 0 && !held_ends.contains(off) => {
                         callee_remap[ce_pc as usize] = new_insts.len() as u32;
                         new_insts.push(Inst::LifetimeEnd(off - region_base));
                         new_inst_src.push((0, 0));
@@ -3506,10 +3563,11 @@ fn param_read_insts(kind: LoadKind) -> u32 {
 ///
 /// A by-value aggregate parameter's slot is not one: it already redirects
 /// to the caller's argument, and one slot cannot take both redirects. A
-/// body returning such a parameter (`pte_t f(pte_t p) { return p; }`) has
-/// no flat result slot, so `needs_reloc_splice` sends it to the reloc
-/// path, which binds the parameter slot to the argument address and
-/// copies from there into the caller's return slot.
+/// body returning such a parameter (`struct s f(struct s p) { return p; }`),
+/// an object at a global's or a pointer's address has no flat result slot,
+/// so `needs_reloc_splice` sends it to the reloc path, which copies from
+/// the returned address -- the argument's, for a parameter -- into the
+/// caller's return slot.
 fn flat_result_slot(c: &FunctionSsa) -> Option<i64> {
     if c.blocks.len() != 1 {
         return None;
@@ -3554,6 +3612,11 @@ fn needs_reloc_splice(c: &FunctionSsa, used: &[bool]) -> bool {
         return true;
     }
     if c.insts.iter().any(|i| matches!(i, Inst::InlineAsm { .. })) {
+        return true;
+    }
+    // An aggregate returned from anywhere but the one slot the flat path
+    // redirects is copied from its address, which the relocating path does.
+    if c.ret_agg.is_some() && flat_result_slot(c).is_none() {
         return true;
     }
     // A by-value aggregate parameter's cell that needs the argument copy

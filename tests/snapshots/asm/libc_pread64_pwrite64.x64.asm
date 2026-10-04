@@ -171,37 +171,3 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-
-<__c5_sys_pread64>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movq	%rdi, -0x40(%rbp)
-               	movq	%rsi, -0x30(%rbp)
-               	movq	%rdx, -0x20(%rbp)
-               	movq	%rcx, -0x10(%rbp)
-               	movq	-0x40(%rbp), %rdi
-               	movq	-0x30(%rbp), %rsi
-               	movq	-0x20(%rbp), %rdx
-               	movq	-0x10(%rbp), %rcx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leave
-               	retq
-
-<__c5_sys_pwrite64>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
-               	movq	%rdi, -0x40(%rbp)
-               	movq	%rsi, -0x30(%rbp)
-               	movq	%rdx, -0x20(%rbp)
-               	movq	%rcx, -0x10(%rbp)
-               	movq	-0x40(%rbp), %rdi
-               	movq	-0x30(%rbp), %rsi
-               	movq	-0x20(%rbp), %rdx
-               	movq	-0x10(%rbp), %rcx
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	leave
-               	retq

@@ -368,7 +368,7 @@ struct FnCtx<'a> {
     extern_data_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
     /// `Inst::ImmCode` value-id -> cross-TU function symbol name, for a `%c`
     /// function operand a replacement `call` / `jmp` in a section relocates
-    /// against (`call %c[new]` in `.altinstr_replacement`).
+    /// against (`call %c[new]` in a pushed `"ax"` section).
     extern_code_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
     tls_total_size: usize,
     param_from_home: &'a [bool],

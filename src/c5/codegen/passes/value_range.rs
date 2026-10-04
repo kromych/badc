@@ -2117,9 +2117,9 @@ mod tests {
     }
 
     /// A dominating unsigned guard on a loaded field bounds what a
-    /// re-materialised load of the same field produces (the kernel's
-    /// min() type check reads the field once for the guard and once for
-    /// the value), and a store in between ends the fact.
+    /// re-materialised load of the same field produces (a macro that
+    /// expands its argument twice reads the field once for the guard and
+    /// once for the value), and a store in between ends the fact.
     #[test]
     fn guarded_field_reload_carries_the_bound_until_a_store() {
         use crate::c5::ir::StoreKind;

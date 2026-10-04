@@ -85,28 +85,6 @@ Disassembly of section .text:
                	movl	%edx, (%rax)
                	andq	$-0xc1, %rcx
                	movb	%cl, 0x7(%rax)
-               	leaq	-0x8(%rbp), %rax
-               	movzwq	(%rax), %rcx
-               	andq	$-0x200, %rcx           # imm = 0xFE00
-               	orq	$0x1ff, %rcx            # imm = 0x1FF
-               	movw	%cx, (%rax)
-               	movzwq	0x2(%rax), %rdx
-               	andq	$-0x200, %rdx           # imm = 0xFE00
-               	orq	$0x123, %rdx            # imm = 0x123
-               	movw	%dx, 0x2(%rax)
-               	movq	%rcx, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	andq	$0x1ff, %rax            # imm = 0x1FF
-               	cmpl	$0x1ff, %eax            # imm = 0x1FF
-               	jne	<addr>
-               	movq	%rdx, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	andq	$0x1ff, %rax            # imm = 0x1FF
-               	cmpl	$0x123, %eax            # imm = 0x123
-               	je	<addr>
-               	movl	$0xa, %eax
-               	leave
-               	retq
                	xorl	%eax, %eax
                	leave
                	retq

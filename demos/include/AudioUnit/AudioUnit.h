@@ -29,10 +29,10 @@ struct AURenderCallbackStruct {
 };
 typedef struct AURenderCallbackStruct AURenderCallbackStruct;
 
-typedef OSStatus (*AudioUnitPropertyListenerProc)(void *inRefCon, AudioUnit inUnit,
-                                                  AudioUnitPropertyID inID,
-                                                  AudioUnitScope inScope,
-                                                  AudioUnitElement inElement);
+typedef void (*AudioUnitPropertyListenerProc)(void *inRefCon, AudioUnit inUnit,
+                                              AudioUnitPropertyID inID,
+                                              AudioUnitScope inScope,
+                                              AudioUnitElement inElement);
 
 /* Component identification (FourCharCode) */
 #define kAudioUnitType_Output           0x61756F75u  /* 'auou' */

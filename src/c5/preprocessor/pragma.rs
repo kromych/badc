@@ -1,4 +1,5 @@
 use super::builtins;
+use super::directive::format_line_marker;
 use super::text::skip_literal;
 use super::{
     Binding, DylibSpec, IGNORED_PRAGMA_INTRINSIC, PRAGMA_POP_WITHOUT_PUSH, PRAGMA_SYNTAX,
@@ -31,11 +32,13 @@ impl Preprocessor {
     /// character literals in the surrounding text are copied through
     /// unchanged so a `_Pragma` substring inside one is not mistaken for
     /// the operator. A malformed operator is left in place for the lexer
-    /// to diagnose.
+    /// to diagnose. `presumed_file` names the line's file as its line
+    /// markers do.
     pub(super) fn apply_pragma_operators<'t>(
         &mut self,
         text: &'t str,
         site: Site<'_>,
+        presumed_file: &str,
     ) -> Result<Cow<'t, str>, C5Error> {
         if !text.contains("_Pragma") && !text.contains("__pragma") {
             return Ok(Cow::Borrowed(text));
@@ -59,7 +62,7 @@ impl Preprocessor {
                 .flatten()
             {
                 out.push_str(&text[copied..i]);
-                self.dispatch_pragma_operator(&args, site, &mut out)?;
+                self.dispatch_pragma_operator(&args, site, presumed_file, &mut out)?;
                 i = next;
                 copied = next;
                 continue;
@@ -75,7 +78,7 @@ impl Preprocessor {
                 .flatten()
             {
                 out.push_str(&text[copied..i]);
-                self.dispatch_pragma_operator(&args, site, &mut out)?;
+                self.dispatch_pragma_operator(&args, site, presumed_file, &mut out)?;
                 i = next;
                 copied = next;
                 continue;
@@ -88,13 +91,15 @@ impl Preprocessor {
 
     /// Apply a single destringized `_Pragma` operand through the same
     /// dispatch as the `#pragma` directive (see the `Directive::Pragma`
-    /// arm in `process_named`). The position-sensitive pragmas are
-    /// re-emitted as inline `#pragma` directives on their own line so the
-    /// lexer folds them in at this source position.
+    /// arm in `process_named`). The position-sensitive pragmas, and under
+    /// [`Self::keep_pragmas`] every consumed one, are re-emitted as a
+    /// `#pragma` directive on its own line, followed by a line marker so
+    /// the rest of the source line keeps its number.
     pub(super) fn dispatch_pragma_operator(
         &mut self,
         args: &str,
         site: Site<'_>,
+        presumed_file: &str,
         out: &mut String,
     ) -> Result<(), C5Error> {
         match parse_pragma_directive(args) {
@@ -102,12 +107,15 @@ impl Preprocessor {
                 self.pragma_once_files.insert(site.file.to_string());
             }
             PragmaDirective::Other => {
-                if pragma_is_pack(args) || pragma_is_visibility(args) {
+                let lexer_reads = pragma_is_pack(args) || pragma_is_visibility(args);
+                if !lexer_reads {
+                    self.parse_pragma(args, site)?;
+                }
+                if lexer_reads || self.keep_pragmas {
                     out.push_str("\n#pragma ");
                     out.push_str(args.trim());
                     out.push('\n');
-                } else {
-                    self.parse_pragma(args, site)?;
+                    out.push_str(&format_line_marker(site.line, presumed_file));
                 }
             }
         }
@@ -297,14 +305,30 @@ impl Preprocessor {
             return None;
         };
         let selector = Selector::parse(name);
-        if selector.is_none() {
-            self.warn(
-                UNKNOWN_WARNING_OPTION,
-                site,
-                format!("unknown option `-W{name}` in `#pragma {vendor} diagnostic {action}`"),
-            );
+        if selector.is_some() {
+            return selector;
         }
-        selector
+        // A warning another compiler defines and badc does not implement is
+        // never reported, so ignoring it already holds.
+        if crate::c5::diag::defined_elsewhere(name) {
+            if action != "ignored" {
+                self.warn(
+                    Code::UNIMPLEMENTED_WARNING_OPTION,
+                    site,
+                    format!(
+                        "`-W{name}` is a gcc or clang warning badc does not implement; \
+                         `#pragma {vendor} diagnostic {action}` has no effect"
+                    ),
+                );
+            }
+            return None;
+        }
+        self.warn(
+            UNKNOWN_WARNING_OPTION,
+            site,
+            format!("unknown option `-W{name}` in `#pragma {vendor} diagnostic {action}`"),
+        );
+        None
     }
 
     /// Record what a selector asks for at `offset`. `None` restores
@@ -319,10 +343,14 @@ impl Preprocessor {
             None => control.reset(offset, code),
         };
         match selector {
-            Selector::Diagnostic(code) => apply(code),
             Selector::Group(group) => {
                 for row in rows().filter(|r| r.groups.contains(group)) {
                     apply(row.code);
+                }
+            }
+            sel => {
+                for code in sel.codes() {
+                    apply(code);
                 }
             }
         }

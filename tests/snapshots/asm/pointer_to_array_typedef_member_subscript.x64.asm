@@ -26,46 +26,29 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	leaq	<rip>, %rax      # <addr>
-               	movl	-0x8(%rbp), %ecx
+               	movl	0x808(%rax), %ecx
                	movabsq	$-0xffffffc1, %r11      # imm = 0xFFFFFFFF0000003F
                	andq	%r11, %rcx
-               	orq	$0x40, %rcx
-               	movl	%ecx, -0x8(%rbp)
-               	andq	$-0x40, %rcx
-               	orq	$0x1, %rcx
-               	movl	%ecx, -0x8(%rbp)
-               	movl	0x808(%rax), %edx
+               	orq	$0x240, %rcx            # imm = 0x240
+               	movl	%ecx, 0x808(%rax)
+               	movl	0x80c(%rax), %ecx
                	movabsq	$-0xffffffc1, %r11      # imm = 0xFFFFFFFF0000003F
-               	andq	%r11, %rdx
-               	orq	$0x240, %rdx            # imm = 0x240
-               	movl	%edx, 0x808(%rax)
-               	movl	0x80c(%rax), %edx
-               	movabsq	$-0xffffffc1, %r11      # imm = 0xFFFFFFFF0000003F
-               	andq	%r11, %rdx
-               	orq	$0x140, %rdx            # imm = 0x140
-               	movl	%edx, 0x80c(%rax)
-               	movl	%ecx, %ecx
-               	sarq	$0x6, %rcx
-               	shlq	$0xb, %rcx
-               	addq	%rax, %rcx
+               	andq	%r11, %rcx
+               	orq	$0x140, %rcx            # imm = 0x140
+               	movl	%ecx, 0x80c(%rax)
+               	leaq	0x800(%rax), %rcx
                	movl	0x8(%rcx), %ecx
                	sarq	$0x6, %rcx
                	cmpl	$0x9, %ecx
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
                	retq
                	movl	0x80c(%rax), %eax
                	sarq	$0x6, %rax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
                	retq
                	xorl	%eax, %eax
-               	leave
                	retq

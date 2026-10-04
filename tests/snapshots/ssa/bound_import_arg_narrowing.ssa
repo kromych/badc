@@ -64,6 +64,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
     v48  Imm(0)                                           -> x0
     v49  LifetimeEnd(-1)                                  -> -
     terminator Return(v48)   (exit_acc=v48)
+bound_import_arg_narrowing.c:14: warning: implicit conversion from `unsigned long long` to `int` changes value from 4294967299 to 3 [B3010] [-Wconstant-conversion]
+    if (user_count((unsigned long long)0x100000003ULL) != 3) return 2;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

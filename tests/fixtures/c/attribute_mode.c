@@ -1,7 +1,7 @@
 // GCC `__attribute__((mode(M)))` replaces the declared type with the
 // integer or floating type of machine mode `M`. On an enumerated type it
 // fixes the underlying width, which moves every member declared after it
-// inside a struct; the kernel's `__mode(byte)` macro expands to the
+// inside a struct; a `__mode(byte)` macro expands to the
 // `__mode__(__byte__)` spelling. Values below come from gcc 16 on
 // linux/x86_64 and linux/aarch64, which agree on all of them.
 
@@ -14,8 +14,8 @@ struct after_enum {
     int z;
 };
 
-// The spelling the kernel's `__mode()` macro produces.
-enum kernel_spelling { KS_A } __attribute__((__mode__(__byte__)));
+// The spelling a `__mode()` macro produces.
+enum macro_spelling { MS_A } __attribute__((__mode__(__byte__)));
 
 // The attribute also binds between `enum` and the tag, and through a
 // typedef alias of the enum.
@@ -29,8 +29,7 @@ enum ptr_enum { PE_A } __attribute__((mode(pointer)));
 
 // An all-non-negative enum keeps the unsigned underlying type, so the
 // full 8-bit range round-trips; one with a negative enumerator stays
-// signed. The PE targets make every enum `int` (MSVC's rule), so there the
-// mode narrows a signed type.
+// signed.
 enum u8_enum { U8_MAX = 255 } __attribute__((mode(byte)));
 enum s8_enum { S8_MIN = -128, S8_MAX = 127 } __attribute__((mode(byte)));
 
@@ -39,7 +38,7 @@ typedef int qi_t __attribute__((mode(QI)));
 typedef int hi_t __attribute__((mode(HI)));
 typedef int si_t __attribute__((mode(SI)));
 typedef int di_t __attribute__((mode(DI)));
-// The mode the kernel's soft-float and libgcc shims name.
+// The mode soft-float and libgcc shims name.
 typedef int ti_t __attribute__((mode(TI)));
 typedef float sf_t __attribute__((mode(SF)));
 typedef float df_t __attribute__((mode(DF)));
@@ -62,7 +61,7 @@ int main(void) {
     if (offsetof(struct after_enum, y) != 1) return 5;
     if (offsetof(struct after_enum, z) != 4) return 6;
 
-    if (sizeof(enum kernel_spelling) != 1) return 7;
+    if (sizeof(enum macro_spelling) != 1) return 7;
     if (sizeof(enum before_tag) != 1) return 8;
     if (sizeof(tagless_alias) != 1) return 9;
 
@@ -78,11 +77,7 @@ int main(void) {
 
     {
         enum u8_enum u = U8_MAX;
-#if defined(_WIN32)
-        if ((long) u != -1) return 16;
-#else
         if ((long) u != 255) return 16;
-#endif
         if (sizeof(enum u8_enum) != 1) return 17;
     }
     {

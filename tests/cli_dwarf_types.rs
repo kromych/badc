@@ -1500,10 +1500,9 @@ fn a_qualified_typedef_wraps_the_alias() {
     );
 }
 
-/// DWARF 4/5 3.3.4: formal-parameter DIEs appear in declaration order.
-/// pahole builds each function's BTF prototype from that child order,
-/// and the kernel's BTF encoding tags arena kfunc arguments by
-/// position, so a scrambled order miscompiles vmlinux BTF. The capture
+/// DWARF 4/5 3.3.4: formal-parameter DIEs appear in declaration order,
+/// and a consumer that rebuilds a function's prototype from the DIEs
+/// reads its parameters in that child order. The capture
 /// walk used to follow symbol-table order -- name-interning order
 /// across the unit -- so `first` below plants low symbol ids on the
 /// names `second` reuses.
@@ -1546,8 +1545,8 @@ fn formal_parameters_keep_declaration_order() {
 
 /// A type whose only mention is a cast in a discarded expression keeps
 /// its DIE. C99 6.5.4 makes the cast a use of the named type whatever
-/// becomes of the value; the kernel's `BTF_TYPE_EMIT(type)` is exactly
-/// `((void)(type *)0)`, and pahole converts the DIE into vmlinux BTF.
+/// becomes of the value, so `((void)(type *)0)` is how a unit emits a
+/// type's description without an object of the type.
 #[test]
 fn cast_only_type_keeps_its_die() {
     let u = compile_unit(
@@ -1565,9 +1564,9 @@ fn cast_only_type_keeps_its_die() {
     u.named(DW_TAG_STRUCTURE_TYPE, "also_used");
 }
 
-/// The kernel's `register_bpf_struct_ops` shape: the aggregate is
-/// defined at block scope inside a statement expression and emitted by
-/// the cast alone. A union in the same position behaves the same way.
+/// An aggregate defined at block scope inside a statement expression is
+/// emitted by the cast alone. A union in the same position behaves the
+/// same way.
 #[test]
 fn cast_only_type_declared_in_a_statement_expression_keeps_its_die() {
     let u = compile_unit(

@@ -860,8 +860,8 @@ fn computed_goto_whose_cleanups_depend_on_its_target() {
 
 #[test]
 fn jumps_that_enter_no_protected_scope() {
-    // The fifth is the kernel's `scoped_guard()`: from a statement
-    // expression into the loop.
+    // The fifth jumps from a statement expression in a `for` clause into
+    // the loop body.
     let cases = [
         "void t(int c, int n) { { char v[n]; v[0] = 0; if (c) goto out; } out: ; }",
         "void t(void) { int k = 0; { again: ; int a CL = 0; (void)a; if (k++ < 2) goto again; } }",
@@ -1298,6 +1298,327 @@ fn duplicate_case_value_is_rejected() {
     expect_compile_error(
         "int main(){ switch(1){ case 1: return 1; case 1: return 2; } return 0; }",
         "duplicate case value",
+    );
+}
+
+/// C99 6.8.4.2p5 converts each case label to the promoted type of the
+/// controlling expression, and p3 requires the converted values to be
+/// distinct: `-1` and `0xffffffffu` collide for an `unsigned` controlling
+/// expression and stay apart for an `__int128` one, and a GNU range is
+/// ordered in that type.
+#[test]
+fn case_labels_compare_in_the_promoted_controlling_type() {
+    expect_compile_error(
+        "int f(unsigned u){ switch(u){ case -1: return 1; case 0xffffffffu: return 2; } \
+         return 0; } int main(void){ return 0; }",
+        "duplicate case value 4294967295",
+    );
+    expect_compile_error(
+        "int f(unsigned __int128 x){ switch(x){ case -1: return 1; \
+         case ~(unsigned __int128)0: return 2; } return 0; } int main(void){ return 0; }",
+        "duplicate case value 340282366920938463463374607431768211455",
+    );
+    for src in [
+        "int f(__int128 x){ switch(x){ case -1: return 1; case 0xffffffffffffffffULL: \
+         return 2; } return 0; } int main(void){ return 0; }",
+        "int f(unsigned u){ switch(u){ case 1 ... -1: return 1; } return 0; } \
+         int main(void){ return 0; }",
+        "int f(unsigned char c){ switch(c){ case 1: return 1; case 257: return 2; } \
+         return 0; } int main(void){ return 0; }",
+    ] {
+        Compiler::new(src.to_string())
+            .compile()
+            .unwrap_or_else(|e| panic!("{src}: {e}"));
+    }
+}
+
+/// A GNU case range takes part in the distinctness C99 6.8.4.2p3 requires
+/// with every value it covers. A range whose bounds are out of order in the
+/// promoted type is empty: B3009 warns and the label is dropped, as gcc and
+/// clang drop it. A label value outside the range of the controlling
+/// expression's own type warns, B3008, as gcc's -Wswitch-outside-range does:
+/// it never matches, or its conversion to the promoted type discarded value
+/// bits. A sign reinterpretation at the same width does not warn.
+#[test]
+fn case_labels_check_ranges_against_each_other_and_the_controlling_type() {
+    use crate::Target;
+    use crate::diag::Code;
+    let unit = |body: &str| {
+        format!(
+            "int f(int x, unsigned char c, signed char s, _Bool b, char pc, unsigned u) \
+             {{ {body} return 0; }}\nint main(void) {{ return 0; }}\n"
+        )
+    };
+    for (body, text) in [
+        (
+            "switch (x) { case 1 ... 5: return 1; case 3: return 2; }",
+            "duplicate case value 3 in switch",
+        ),
+        (
+            "switch (x) { case 3: return 1; case 1 ... 5: return 2; }",
+            "duplicate case value 3 in switch",
+        ),
+        (
+            "switch (x) { case 1 ... 5: return 1; case 4 ... 8: return 2; }",
+            "duplicate case value 4 in switch",
+        ),
+        (
+            "switch (u) { case 4294967290u ... -1: return 1; case 4294967295u: return 2; }",
+            "duplicate case value 4294967295 in switch",
+        ),
+    ] {
+        expect_compile_error(&unit(body), text);
+    }
+    let warnings = |target: Target, body: &str| -> Vec<(Code, String)> {
+        let program = Compiler::with_target(unit(body), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("`{body}`: {e}"));
+        program
+            .warnings
+            .iter()
+            .map(|w| (w.code, w.text.clone()))
+            .collect()
+    };
+    let outside = |label: &str, ty: &str| {
+        (
+            Code::SWITCH_OUTSIDE_RANGE,
+            format!(
+                "{label} is not within the range of `{ty}`, the type of the controlling expression"
+            ),
+        )
+    };
+    let empty = |bounds: &str| {
+        (
+            Code::EMPTY_CASE_RANGE,
+            format!("case range `{bounds}` is empty; the label is dropped"),
+        )
+    };
+    for (target, body, want) in [
+        (
+            Target::LinuxX64,
+            "switch (x) { case 5 ... 1: return 1; case 1: return 2; }",
+            vec![empty("5 ... 1")],
+        ),
+        (
+            Target::LinuxX64,
+            "switch (u) { case -1 ... 5: return 1; }",
+            vec![empty("4294967295 ... 5")],
+        ),
+        (
+            Target::LinuxX64,
+            "switch (c) { case 257: return 1; case -1: return 2; case 255: return 3; }",
+            vec![
+                outside("case value 257", "unsigned char"),
+                outside("case value -1", "unsigned char"),
+            ],
+        ),
+        (
+            Target::LinuxX64,
+            "switch (c) { case -5 ... 3: return 1; case 4 ... 255: return 2; }",
+            vec![outside("case range `-5 ... 3`", "unsigned char")],
+        ),
+        (
+            Target::LinuxX64,
+            "switch (s) { case 200: return 1; case -129: return 2; case -128 ... 127: return 3; }",
+            vec![
+                outside("case value 200", "signed char"),
+                outside("case value -129", "signed char"),
+            ],
+        ),
+        (
+            Target::LinuxX64,
+            "switch (b) { case 0: case 1: return 1; case 2: return 2; }",
+            vec![
+                outside("case value 2", "_Bool"),
+                (
+                    Code::SWITCH_BOOL,
+                    "switch condition has boolean value".to_string(),
+                ),
+            ],
+        ),
+        (
+            Target::LinuxX64,
+            "switch (u) { case -1: return 1; case 0x100000000LL: return 2; case 0xfffffffeu: return 3; }",
+            vec![outside("case value 4294967296", "unsigned int")],
+        ),
+        (
+            Target::LinuxX64,
+            "switch (x) { case 0xffffffffu: return 1; case 0x7fffffff: return 2; }",
+            vec![],
+        ),
+        (
+            Target::LinuxX64,
+            "switch (pc) { case -1: return 1; case 255: return 2; }",
+            vec![outside("case value 255", "char")],
+        ),
+        (
+            Target::LinuxAarch64,
+            "switch (pc) { case -1: return 1; case 255: return 2; }",
+            vec![outside("case value -1", "char")],
+        ),
+    ] {
+        assert_eq!(warnings(target, body), want, "`{body}`");
+    }
+    // The dropped range matches nothing; the labels around it still do.
+    let src = "int f(int x) { switch (x) { case 5 ... 1: return 1; case 3: return 2; \
+               case 6 ... 9: return 3; } return 0; }\n\
+               int main(void) { return f(3) * 100 + f(5) * 10 + f(7); }\n";
+    let program = Compiler::new(src.to_string())
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(crate::c5::Vm::new(program).run().unwrap(), 203);
+}
+
+/// C99 6.7.5 and 6.7.6: a declarator, abstract or not, begins with `*`,
+/// `(`, `[` or an identifier, so a type qualifier cannot lead one: not
+/// inside a parenthesized declarator, not in a later declarator of a list,
+/// and not in a type name's group. gcc and clang reject each form; a
+/// calling-convention keyword and an attribute may still lead a group.
+#[test]
+fn a_type_qualifier_cannot_begin_a_declarator() {
+    for (unit, qual) in [
+        ("int *(volatile *c) = 0;", "volatile"),
+        ("int *(const *c) = 0;", "const"),
+        ("int *(restrict *c) = 0;", "restrict"),
+        ("int (volatile x)[2];", "volatile"),
+        ("void (const *fp)(void);", "const"),
+        ("int x, const y;", "const"),
+        ("int x, volatile *p;", "volatile"),
+        ("typedef int T, const U;", "const"),
+        ("struct S { int a, const b; };", "const"),
+        ("void f(void) { int x, const y = 0; }", "const"),
+        (
+            "void f(void) { for (int i = 0, const j = 0; i < j; i++) {} }",
+            "const",
+        ),
+        ("void f(int *(const *x));", "const"),
+        ("void *v = (int (const *))0;", "const"),
+    ] {
+        expect_compile_error(
+            &format!("{unit}\nint main(void) {{ return 0; }}\n"),
+            &format!("expected identifier or `(` before `{qual}`"),
+        );
+    }
+    for unit in [
+        "int (__stdcall *sp)(void);",
+        "void *cv = (int (__cdecl *)(void))0;",
+        "int (__attribute__((unused)) *ap) = 0;",
+        "int x __attribute__((unused)), __attribute__((unused)) y;",
+        "struct T { int a; } const t = {0};",
+        "typedef int I; I const i = 0;",
+        "int const *pc, *const cp = 0, *volatile vp;",
+        "void *g = (int (*const)(void))0;",
+    ] {
+        Compiler::new(format!("{unit}\nint main(void) {{ return 0; }}\n"))
+            .compile()
+            .unwrap_or_else(|e| panic!("`{unit}`: {e}"));
+    }
+}
+
+/// C99 6.9.1p10: on entry to a function, the size expressions of its
+/// parameters are evaluated, in order, although each such parameter is
+/// adjusted to a pointer (6.7.5.3p7): once per call, through a prototype
+/// list and an old-style declaration list, at -O0 and -O. A declaration
+/// that is no definition evaluates none, nor does a parameter's own
+/// parameter list.
+#[test]
+fn a_parameter_array_size_is_evaluated_on_entry() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, Target};
+    let fns = "void g(int n, int a[next()]) { (void)n; (void)a; }\n\
+               void o(int a[first()], int b[second()]) { (void)a; (void)b; }\n\
+               int kr(n, a) int n; int a[n + next()]; { return n + a[0]; }\n\
+               void cb(void (*f)(int x[next()])) { (void)f; }\n\
+               void proto(int n, int a[next()]);\n";
+    let src = format!(
+        "static int calls, order;\n\
+         static int next(void) {{ return ++calls; }}\n\
+         static int first(void) {{ order = order * 10 + 1; return 2; }}\n\
+         static int second(void) {{ order = order * 10 + 2; return 3; }}\n\
+         {fns}\
+         int main(void) {{\n\
+         \tint buf[4] = {{ 7 }};\n\
+         \tg(1, buf);\n\
+         \tg(2, buf);\n\
+         \to(buf, buf);\n\
+         \tcb(0);\n\
+         \treturn kr(3, buf) == 10 && calls == 3 && order == 12;\n\
+         }}\n"
+    );
+    let program = Compiler::new(src.clone())
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(crate::c5::Vm::new(program).run().unwrap(), 1, "{src}");
+    // Helpers defined elsewhere stay calls under -O.
+    let src = format!("int next(void);\nint first(void);\nint second(void);\n{fns}");
+    let opts = CompileOptions::default()
+        .with_no_entry_point(true)
+        .with_optimize(true);
+    let program = Compiler::with_options(src, Target::LinuxX64, opts)
+        .compile()
+        .expect("compile");
+    let nopts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        ..NativeOptions::new().with_optimize().with_dump_ssa()
+    };
+    let text = crate::c5::codegen::lower_for(&program, Target::LinuxX64, nopts)
+        .expect("lower")
+        .ssa_dump;
+    for name in ["g", "o", "kr"] {
+        let body = text
+            .split("; name=")
+            .find(|f| f.starts_with(&format!("{name}\n")))
+            .unwrap_or_else(|| panic!("no `{name}` in the dump:\n{text}"));
+        let body = body.split("\n; ").next().unwrap_or(body);
+        let calls = body.matches("Call {").count();
+        assert_eq!(calls, if name == "o" { 2 } else { 1 }, "{name}:\n{body}");
+    }
+}
+
+/// gcc's -Wswitch-bool: B3012 warns on a `switch` whose controlling
+/// expression has a boolean value -- `_Bool`, or a comparison, `!`, `&&` or
+/// `||`, seen through a comma -- when a case label lies outside 0 and 1, or
+/// a `default` stands beside labels that cover both. A cast to another
+/// integer type marks a deliberate integer. The lines are the ones gcc
+/// 16.2.1 reports.
+#[test]
+fn a_switch_on_a_boolean_value_warns_for_a_label_it_cannot_take() {
+    use crate::Target;
+    use crate::diag::Code;
+    let src = "int f(int a, int b, _Bool c) {\n\
+               \tswitch (a < b) { case 2: return 1; }\n\
+               \tswitch (c) { case 0: return 2; case 1: return 3; case 2: return 4; }\n\
+               \tswitch (c) { case 0: return 5; case 1: return 6; }\n\
+               \tswitch (a < b) { case 0: return 7; case 1: return 8; }\n\
+               \tswitch ((int)(a < b)) { case 2: return 9; }\n\
+               \tswitch (!a) { case -1: return 10; }\n\
+               \tswitch (a && b) { default: return 11; }\n\
+               \tswitch ((a, a < b)) { case 3: return 12; }\n\
+               \tswitch (a || b) { case 0 ... 2: return 13; }\n\
+               \tswitch ((_Bool)a) { case 5: return 14; }\n\
+               \tswitch (a) { case 5: return 15; }\n\
+               \tswitch (a == b) { case 1: return 16; case 0: return 17; default: return 18; }\n\
+               \tswitch ((unsigned char)(a < b)) { case 7: return 19; }\n\
+               \treturn 0;\n\
+               }\n\
+               int main(void) { return 0; }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let lines: Vec<u32> = program
+        .warnings
+        .iter()
+        .filter(|w| w.code == Code::SWITCH_BOOL)
+        .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [2, 3, 7, 9, 10, 11, 13], "{:?}", program.warnings);
+    assert!(
+        program
+            .warnings
+            .iter()
+            .filter(|w| w.code == Code::SWITCH_BOOL)
+            .all(|w| w.text == "switch condition has boolean value"),
+        "{:?}",
+        program.warnings
     );
 }
 
@@ -2398,15 +2719,15 @@ fn aggregate_with_no_named_member_is_zero_sized() {
 
 #[test]
 fn member_of_incomplete_aggregate_type_rejected() {
-    // C99 6.7.2.1: a member must have complete type, and an array of an
-    // incomplete type is itself incomplete. gcc and clang reject both.
+    // C99 6.7.2.1p2: a member has complete type; 6.7.5.2p1: so has the
+    // element of an array. gcc and clang reject both.
     expect_compile_error(
         "struct fwd; struct s { struct fwd f; }; int main(void) { return 0; }",
         "incomplete type",
     );
     expect_compile_error(
         "struct fwd; struct s { struct fwd f[2]; }; int main(void) { return 0; }",
-        "incomplete type",
+        "array has incomplete element type `struct fwd`",
     );
     // A complete but zero-sized member stays accepted.
     expect_compiles(
@@ -2694,12 +3015,13 @@ fn object_of_incomplete_type_is_diagnosed() {
          int main(void) { return (int)(long)&file_scope_obj; }",
         "object `file_scope_obj` has incomplete type",
     );
-    // An array of an incomplete element type is incomplete too.
+    // C99 6.7.5.2p1: the element type is complete where the array is
+    // declared.
     expect_compile_error(
         "struct never_defined;\n\
          struct never_defined arr[4];\n\
          int main(void) { return (int)(long)&arr; }",
-        "object `arr` has incomplete type",
+        "array has incomplete element type `struct never_defined`",
     );
     // C99 6.7.2.3p2: an enum used before its definition is incomplete, for
     // an automatic and a block-scope `static` object alike.
@@ -2839,7 +3161,7 @@ fn incomplete_enum_is_rejected_where_an_incomplete_struct_is() {
         ),
         (
             "enum E; struct S { enum E m[2]; };",
-            "field `m` has incomplete type",
+            "array has incomplete element type `enum E`",
         ),
         (
             "enum E; int n = sizeof(enum E);",
@@ -2857,7 +3179,10 @@ fn incomplete_enum_is_rejected_where_an_incomplete_struct_is() {
             "enum E; enum E *f(enum E *p) { return p + 1; }",
             "a pointer to an incomplete type",
         ),
-        ("enum E; enum E a[3];", "object `a` has incomplete type"),
+        (
+            "enum E; enum E a[3];",
+            "array has incomplete element type `enum E`",
+        ),
         ("enum E; static enum E x;", "object `x` has incomplete type"),
         ("enum E; enum E x;", "object `x` has incomplete type"),
     ] {
@@ -3063,12 +3388,12 @@ fn multi_dim_compound_literal_dimension_constraints() {
     // block-scope and the static-initializer literal paths reject it.
     expect_compile_error(
         "int main(void) { int (*p)[3] = (int[2][]){ { 1, 2, 3 } }; return p[0][0]; }",
-        "array type has an incomplete inner dimension",
+        "array has incomplete element type: an array of unknown size",
     );
     expect_compile_error(
         "static int (*p)[3] = (int[2][]){ { 1, 2, 3 } };\n\
          int main(void) { return p[0][0]; }",
-        "array type has an incomplete inner dimension",
+        "array has incomplete element type: an array of unknown size",
     );
     // A const-qualified object is not an integer constant expression
     // (C99 6.6p6), so the dimension makes the literal variably sized,
@@ -3081,6 +3406,16 @@ fn multi_dim_compound_literal_dimension_constraints() {
     expect_compile_error(
         "int main(void) { const int h = 2; static int *p = (int[h]){ 1, 2 }; return p[0]; }",
         "constant integer expected",
+    );
+}
+
+#[test]
+fn bounds_after_a_parenthesized_variable_length_array_are_rejected() {
+    // The bounds would be the rows of the variable-length array, whose
+    // element the group has already formed.
+    expect_compile_error(
+        "int main(int c, char **v) { (void)v; int (a[c])[2]; return (int)sizeof a; }",
+        "bounds after a parenthesized variable-length array are not supported",
     );
 }
 
@@ -3609,21 +3944,20 @@ fn type_name_abstract_declarators_parse_in_every_consumer() {
 #[test]
 fn type_name_array_bound_constraints() {
     // C99 6.7.5.2p1: a bound in a type name is a constant expression
-    // greater than zero, and only the outermost bound may be omitted;
-    // 6.5.3.4p1: `_Alignof` does not apply to an incomplete type, an
-    // array of an incomplete struct included.
+    // greater than zero, only the outermost bound may be omitted, and the
+    // element type is complete.
     expect_compile_error(
         "int main(void) { return (int)sizeof(int[-1]); }",
         "must not be negative",
     );
     expect_compile_error(
         "int main(void) { return (int)sizeof(int[3][]); }",
-        "incomplete inner dimension",
+        "array has incomplete element type: an array of unknown size",
     );
     expect_compile_error(
         "struct t;\n\
          int main(void) { return (int)_Alignof(struct t[2]); }",
-        "applied to an incomplete type",
+        "array has incomplete element type `struct t`",
     );
     // A bound inside a group derives the same array, of pointers here
     // (C99 6.7.6); 6.7.5.2p1 and 6.7.5.3p1 rule out an array of functions
@@ -3631,7 +3965,7 @@ fn type_name_array_bound_constraints() {
     for (type_name, needle) in [
         ("int *[]", "`sizeof` applied to an incomplete type"),
         ("int (*[])(int)", "`sizeof` applied to an incomplete type"),
-        ("int (*[3][])(int)", "incomplete inner dimension"),
+        ("int (*[3][])(int)", "an array of unknown size"),
         ("int (*[-1])(int)", "must not be negative"),
         ("int (*([3])(int))", "array of functions"),
         (
@@ -3651,6 +3985,156 @@ fn type_name_array_bound_constraints() {
             &alloc::format!("{base}\nint main(void) {{ return (int)sizeof(t (void)); }}"),
             "function returning an array or a function",
         );
+    }
+}
+
+/// C99 6.7.5.2p1: the element type of an array is complete and no function
+/// type wherever the array is formed: an object, a member, a parameter
+/// before its adjustment, a typedef composition, a type name, a compound
+/// literal and a variable-length array. Only the outermost bound may be
+/// omitted, and a pointer to an incomplete type is complete.
+#[test]
+fn an_array_of_an_incomplete_element_type_is_rejected() {
+    const UNKNOWN_SIZE: &str = "array has incomplete element type: an array of unknown size";
+    const STRUCT_S: &str = "array has incomplete element type `struct S`";
+    const VOID: &str = "array has incomplete element type `void`";
+    let compile = |src: &str| {
+        Compiler::new(alloc::format!(
+            "struct S; enum E; typedef int T[]; typedef int Z[0]; typedef int F(void);\n\
+             typedef void V;\n{src}\nint main(void) {{ return 0; }}\n"
+        ))
+        .compile()
+    };
+    for (src, needle) in [
+        ("int a[2][];", UNKNOWN_SIZE),
+        ("extern int a[][2][];", UNKNOWN_SIZE),
+        ("void f(void) { int a[2][]; }", UNKNOWN_SIZE),
+        ("extern struct S s[2];", STRUCT_S),
+        ("extern struct S s[];", STRUCT_S),
+        ("void f(void) { struct S a[2]; }", STRUCT_S),
+        ("extern void v[2];", VOID),
+        ("V v[2];", VOID),
+        (
+            "extern enum E e[2];",
+            "array has incomplete element type `enum E`",
+        ),
+        ("struct M { int m[2][]; };", UNKNOWN_SIZE),
+        ("struct M { struct S s[2]; };", STRUCT_S),
+        ("struct M { int n; struct S fam[]; };", STRUCT_S),
+        ("struct L { struct L self[2]; };", "`struct L`"),
+        ("void f(int a[][]);", UNKNOWN_SIZE),
+        ("void f(int [][]);", UNKNOWN_SIZE),
+        ("void f(struct S a[]);", STRUCT_S),
+        ("void f(struct S []);", STRUCT_S),
+        ("int f(a) int a[][]; { return 0; }", UNKNOWN_SIZE),
+        ("T x[2];", UNKNOWN_SIZE),
+        ("typedef int TT[2][];", UNKNOWN_SIZE),
+        ("typedef struct S SA[];", STRUCT_S),
+        ("T (*p)[2];", UNKNOWN_SIZE),
+        ("void f(T a[2]);", UNKNOWN_SIZE),
+        ("void f(T [2]);", UNKNOWN_SIZE),
+        ("__typeof__(int[]) x[2];", UNKNOWN_SIZE),
+        ("struct M { int n; T m[2]; };", UNKNOWN_SIZE),
+        (
+            "int f(void) { return (int)sizeof(int[2][]); }",
+            UNKNOWN_SIZE,
+        ),
+        (
+            "int f(void) { return (int)sizeof(int (*)[3][]); }",
+            UNKNOWN_SIZE,
+        ),
+        (
+            "int f(void) { return (int)sizeof(struct S (*)[2]); }",
+            STRUCT_S,
+        ),
+        ("int f(void) { return (int)sizeof(void[2]); }", VOID),
+        ("int f(void) { return (int)sizeof(T[2]); }", UNKNOWN_SIZE),
+        ("void *p = (struct S[2]){ 0 };", STRUCT_S),
+        (
+            "int f(void) { void *p = (struct S[2]){ 0 }; return p != 0; }",
+            STRUCT_S,
+        ),
+        ("void f(int n) { int a[n][]; }", UNKNOWN_SIZE),
+        ("void f(int n) { struct S a[n]; }", STRUCT_S),
+        ("void f(int n) { T a[n]; }", UNKNOWN_SIZE),
+        (
+            "int f(int n) { return (int)sizeof(int[n][]); }",
+            UNKNOWN_SIZE,
+        ),
+        (
+            "int f(int n) { return (int)sizeof(struct S[n]); }",
+            STRUCT_S,
+        ),
+    ] {
+        let msg = compile(src)
+            .err()
+            .unwrap_or_else(|| panic!("`{src}` compiled"))
+            .to_string();
+        assert!(
+            msg.contains(needle) && msg.contains("[incomplete-element-type]"),
+            "`{src}`: {msg}"
+        );
+    }
+    let Err(e) = compile("extern F fa[2];") else {
+        panic!("an array of functions compiled");
+    };
+    assert!(e.to_string().contains("array of functions"), "{e}");
+    for src in [
+        "extern int ok[][3];",
+        "struct M { int n; int fam[]; };",
+        "int (*p)[];",
+        "int (*pp)[][3];",
+        "struct S *ps[2];",
+        "struct S *(*q)[2];",
+        "T *tp[2];",
+        "void f(T); void g(T a);",
+        "void f(int (*a)[][2]);",
+        "extern int (*fa[])(int);",
+        "Z zz[2];",
+        "struct D; struct D *dp; struct D { int x; }; struct D d[2];",
+        "int f(void) { return (int)sizeof(T *[2]); }",
+    ] {
+        compile(src).unwrap_or_else(|e| panic!("`{src}`: {e}"));
+    }
+}
+
+/// A diagnostic that names the brace an initializer or a member's aggregate
+/// type expects spells it once.
+#[test]
+fn a_diagnostic_spells_an_expected_brace_once() {
+    for (src, needle) in [
+        (
+            "struct S { int x; }; struct S b = 1;",
+            "struct initializer must start with `{`",
+        ),
+        (
+            "int a[2] = 1;",
+            "array initializer must be a string literal or `{ ... }`",
+        ),
+        (
+            "struct S { int x; }; struct S s[2] = 1;",
+            "array initializer must start with `{`",
+        ),
+        (
+            "struct S { int x; }; struct S s[] = 1;",
+            "array initializer must start with `{`",
+        ),
+        (
+            "struct S { int x; }; void f(void) { static struct S s[] = 1; }",
+            "array initializer must start with `{`",
+        ),
+        (
+            "struct T { struct 5 x; };",
+            "aggregate name or `{` expected in field type",
+        ),
+    ] {
+        let src = alloc::format!("{src}\nint main(void) {{ return 0; }}\n");
+        let msg = Compiler::new(src.clone())
+            .compile()
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        assert!(msg.contains(needle) && !msg.contains("{{"), "{src}: {msg}");
     }
 }
 
@@ -3887,6 +4371,49 @@ fn a_trailing_noreturn_specifier_is_recorded() {
             "{src}: {:?}",
             prog.warnings,
         );
+    }
+}
+
+/// A block-scope declaration marks a function noreturn as a file-scope one
+/// does, through `_Noreturn` among its specifiers or a leading or trailing
+/// attribute, and the mark reaches no other declarator. A constant
+/// condition's dead branch neither falls through nor ends a loop: a call
+/// through a block-scope noreturn declaration, and a `for` whose only
+/// `break` sits in a constant-false branch reached by a `goto` from its
+/// third clause, do not warn, as gcc and clang do not. The warnings
+/// match clang's.
+#[test]
+fn fall_off_end_sees_block_scope_noreturn_and_constant_conditions() {
+    let quiet = [
+        "int f(void) { _Noreturn extern void d(void); d(); }",
+        "int f(void) { extern _Noreturn void d(void); d(); }",
+        "int f(void) { extern void d(void) __attribute__((noreturn)); d(); }",
+        "int f(void) { do { __attribute__((__noreturn__)) extern void d(void) \
+         __attribute__((__error__(\"x\"))); if (!(!(1))) d(); } while (0); }",
+        "int f(int x) { for (int g = x; ; ({ goto out; })) if (0) { out: break; } \
+         else return g; }",
+        "int f(int x) { if (1) return x; }",
+    ];
+    let warned = [
+        "int f(void) { __attribute__((noreturn)) extern void a(void); \
+         extern void b(void); b(); }",
+        "int f(void) { extern void a(void) __attribute__((noreturn)), b(void); b(); }",
+        "_Noreturn void g(void) { extern void h(void); h(); for (;;); }\n\
+         int f(void) { extern void h(void); h(); }",
+        "int f(int x) { if (0) return x; }",
+    ];
+    for (src, warns) in quiet
+        .iter()
+        .map(|s| (s, false))
+        .chain(warned.iter().map(|s| (s, true)))
+    {
+        let src = alloc::format!("{src}\nint main(void) {{ return 0; }}");
+        let prog = super::compile_str_bare_with_diags(&src, &["all"]);
+        let fell = prog.warnings.iter().any(|w| {
+            w.to_string()
+                .contains("control reaches end of non-void function `f`")
+        });
+        assert_eq!(fell, warns, "{src}: {:?}", prog.warnings);
     }
 }
 

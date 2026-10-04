@@ -6,8 +6,10 @@
 //! ignored "-W..."` in real source applies. Aliases accept the other
 //! compilers' identifiers as selectors: gcc and clang names where they
 //! differ, and MSVC numbers spelled with their letter prefix (`C4101`,
-//! `D9002`), which `#pragma warning(...)` spells bare. Only the
-//! canonical name and the `B` code are ever printed.
+//! `D9002`), which `#pragma warning(...)` spells bare. A spelling several
+//! rows carry selects all of them, as a clang diagnostic group spans
+//! several diagnostics. Only the canonical name and the `B` code are ever
+//! printed.
 
 use alloc::format;
 
@@ -74,7 +76,7 @@ catalog! {
         "a `#pragma intrinsic` naming a function badc has no intrinsic for; the name stays an ordinary call";
     1010, "directive", [], Error, Hard,
         [], Live,
-        "a directive whose operand the preprocessor cannot process, or a conditional directive with no `#if` to match";
+        "a directive whose operand the preprocessor cannot process, a directive preprocessed input does not take, or a conditional directive with no `#if` to match";
     1011, "invalid-pragma", [], Error, Hard,
         [], Live,
         "a pragma badc implements whose operand cannot be applied";
@@ -107,7 +109,7 @@ catalog! {
         "an initializer names a `static` function this unit declares and never defines";
     2007, "redeclaration-mismatch", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a function redeclaration incompatible under C99 that GNU C accepts: a qualified return type, an implicit `int` body for a `void` declaration, an old-style definition matching its prototype only before promotion";
+        "a function redeclaration incompatible under C99 that GNU C accepts: an implicit `int` body for a `void` declaration, an old-style definition matching its prototype only before promotion";
     2008, "attributes", ["ignored-attributes"], Warning, Controllable,
         [DEFAULT], Live,
         "an attribute the declaration cannot carry, so it is ignored";
@@ -117,6 +119,9 @@ catalog! {
     2010, "shadowed-binding", [], Warning, Controllable,
         [DEFAULT], Live,
         "a `#pragma binding` for a name an earlier binding already claimed";
+    2011, "implicit-int", ["C4431"], Error, Controllable,
+        [DEFAULT], Live,
+        "a declaration or type name with no type specifier, whose type defaults to `int`";
     2020, "syntax", [], Error, Hard,
         [], Live,
         "a token the grammar does not admit at its position; the parser has no resynchronisation point";
@@ -129,12 +134,15 @@ catalog! {
     2023, "static-assert", [], Error, Hard,
         [], Live,
         "a static assertion whose controlling expression is zero";
+    2024, "incomplete-element-type", [], Error, Hard,
+        [], Live,
+        "an array whose element type is incomplete: an array of unknown size, `void`, or a tag declared without its body";
     3001, "int-conversion", [], Warning, Controllable,
         [DEFAULT], Live,
         "an integer and a pointer exchanged with no cast";
     3002, "incompatible-struct-types", [], Warning, Controllable,
         [DEFAULT], Live,
-        "an aggregate used where a different aggregate type is expected";
+        "an aggregate or enumerated type used where a different one is expected";
     3003, "return-type", ["C4715"], Ignore, Controllable,
         [ALL], Live,
         "control reaches the end of a value-returning function";
@@ -150,6 +158,21 @@ catalog! {
     3007, "dead-store", [], Ignore, Controllable,
         [], Live,
         "a value assigned to a local and replaced before any read";
+    3008, "switch-outside-range", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a `case` label whose value lies outside the range of the controlling expression's type before promotion";
+    3009, "empty-case-range", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a GNU case range `lo ... hi` whose low bound exceeds its high bound in the promoted type of the controlling expression; the label is dropped";
+    3010, "constant-conversion", ["overflow"], Warning, Controllable,
+        [DEFAULT], Live,
+        "an integer constant converted implicitly to an integer type or a bit-field whose width holds the value at neither signedness";
+    3011, "incompatible-pointer-types-discards-qualifiers", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a pointer assigned, initialized, passed or returned as a pointer to a type that differs from the one it points to only in the qualifiers of a type further down: `T **` as `const T **`";
+    3012, "switch-bool", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a `switch` on a boolean value with a case label outside 0 and 1, or with a `default` beside labels covering both";
     3020, "invalid-operands", [], Error, Hard,
         [], Live,
         "an operator applied to operands its constraints reject, or a non-lvalue where an lvalue is required";
@@ -179,7 +202,19 @@ catalog! {
         "a controlling expression of a type its statement does not take: a non-scalar `if`, `while`, `do` or `for` condition, a non-integer `switch` expression";
     3029, "incompatible-pointer-types", ["incompatible-function-pointer-types"], Error, Controllable,
         [DEFAULT], Live,
-        "a pointer to a function assigned, initialized or returned as a pointer to an incompatible function type";
+        "a pointer assigned, initialized, passed or returned as a pointer to a type incompatible with the type it points to, neither side a pointer to `void`";
+    3030, "pointer-difference", [], Error, Hard,
+        [], Live,
+        "a subtraction of two pointers that do not point to qualified or unqualified versions of compatible types";
+    3031, "discarded-qualifiers", ["incompatible-pointer-types-discards-qualifiers"], Warning, Controllable,
+        [DEFAULT], Live,
+        "a pointer assigned, initialized, passed or returned as a pointer to a type without a `const` or `volatile` the original pointed-to type has";
+    3032, "pointer-sign", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a pointer assigned, initialized, passed or returned as a pointer to an integer type that differs from the one it points to only in signedness";
+    3033, "modifiable-lvalue", [], Error, Hard,
+        [], Live,
+        "an assignment, compound assignment, `++` or `--` whose operand is const-qualified, or is a structure or union with a const member";
     4001, "unsupported", [], Error, Hard,
         [], Live,
         "a well-formed construct badc does not implement";
@@ -210,6 +245,12 @@ catalog! {
     6003, "merged-section-access", [], Warning, Controllable,
         [DEFAULT], Live,
         "a relocation reaches past the end of the merged section it names";
+    6004, "execstack", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "the image's stack is executable because an input's `.note.GNU-stack` asks for it, or because `-z execstack` does under `--warn-execstack`";
+    6005, "rwx-segment", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a segment the image loads is readable, writable and executable, or its thread-local segment executable";
     6010, "undefined-symbol", [], Error, Hard,
         [], Live,
         "a reference no input object, archive or shared library defines";
@@ -236,7 +277,7 @@ catalog! {
         "command-line option or operand the driver does not implement";
     7002, "unknown-warning-option", ["pragmas"], Warning, Controllable,
         [DEFAULT], Live,
-        "a diagnostic pragma names a selector that is not in the catalogue";
+        "a diagnostic pragma names a selector that is neither in the catalogue nor a gcc or clang warning";
     7003, "unused-command-line-argument", [], Ignore, Controllable,
         [ALL, EXTRA], Live,
         "an accepted option that selects nothing in the mode the command line picked";
@@ -264,6 +305,9 @@ catalog! {
     7011, "dwarf-output", [], Warning, Controllable,
         [DEFAULT], Live,
         "a `-gdwarf` option asks for a DWARF version or format the emitter does not produce";
+    7012, "unimplemented-warning-option", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a diagnostic pragma turns on a gcc or clang warning that badc does not implement, so it has no effect";
 
     9001, "internal-error", [], Error, Hard,
         [], Live,
@@ -277,6 +321,8 @@ impl Code {
     pub const ORPHAN_SECTION: Code = Code::new(6001);
     pub const MISSING_ENTRY: Code = Code::new(6002);
     pub const MERGED_SECTION_ACCESS: Code = Code::new(6003);
+    pub const EXEC_STACK: Code = Code::new(6004);
+    pub const RWX_SEGMENT: Code = Code::new(6005);
     pub const UNDEFINED_SYMBOL: Code = Code::new(6010);
     pub const DUPLICATE_SYMBOL: Code = Code::new(6011);
     pub const RELOCATION: Code = Code::new(6012);
@@ -328,6 +374,18 @@ impl Code {
         self.status() == Status::Retired
     }
 
+    /// The spelling `sel` as the catalogue holds it, when more than one row
+    /// answers to it by name or alias.
+    pub fn shared_spelling(sel: &str) -> Option<&'static str> {
+        let mut carriers = ROWS.iter().filter_map(|r| {
+            (r.name == sel)
+                .then_some(r.name)
+                .or_else(|| r.aliases.iter().copied().find(|a| *a == sel))
+        });
+        let first = carriers.next()?;
+        carriers.next().map(|_| first)
+    }
+
     /// Resolve a selector: the canonical name, an alias, or the `B`
     /// code as printed. The `-W` / `-Wno-` prefix and the `error=`
     /// head belong to the option grammar and the caller strips them.
@@ -339,7 +397,8 @@ impl Code {
             return Code::new(value).row().map(|r| r.code);
         }
         ROWS.iter()
-            .find(|r| r.name == sel || r.aliases.contains(&sel))
+            .find(|r| r.name == sel)
+            .or_else(|| ROWS.iter().find(|r| r.aliases.contains(&sel)))
             .map(|r| r.code)
     }
 
@@ -364,6 +423,7 @@ impl Code {
     pub const ATTRIBUTES: Code = Code::new(2008);
     pub const IGNORED_ASM_LABEL: Code = Code::new(2009);
     pub const SHADOWED_BINDING: Code = Code::new(2010);
+    pub const IMPLICIT_INT: Code = Code::new(2011);
     pub const INT_CONVERSION: Code = Code::new(3001);
     pub const INCOMPATIBLE_STRUCT_TYPES: Code = Code::new(3002);
     pub const RETURN_TYPE: Code = Code::new(3003);
@@ -371,9 +431,15 @@ impl Code {
     pub const TOO_MANY_ARGUMENTS: Code = Code::new(3005);
     pub const LONG_DOUBLE_ABI: Code = Code::new(3006);
     pub const DEAD_STORE: Code = Code::new(3007);
+    pub const SWITCH_OUTSIDE_RANGE: Code = Code::new(3008);
+    pub const EMPTY_CASE_RANGE: Code = Code::new(3009);
+    pub const CONSTANT_CONVERSION: Code = Code::new(3010);
+    pub const NESTED_QUALIFIERS: Code = Code::new(3011);
+    pub const SWITCH_BOOL: Code = Code::new(3012);
     pub const LINK_PRAGMA_IGNORED: Code = Code::new(7008);
     pub const FREESTANDING_IMPORT: Code = Code::new(7010);
     pub const DWARF_OUTPUT: Code = Code::new(7011);
+    pub const UNIMPLEMENTED_WARNING_OPTION: Code = Code::new(7012);
 
     pub const DIRECTIVE: Code = Code::new(1010);
     pub const INVALID_PRAGMA: Code = Code::new(1011);
@@ -384,6 +450,7 @@ impl Code {
     pub const INVALID_DECLARATION: Code = Code::new(2021);
     pub const UNDECLARED_IDENTIFIER: Code = Code::new(2022);
     pub const STATIC_ASSERT: Code = Code::new(2023);
+    pub const INCOMPLETE_ELEMENT_TYPE: Code = Code::new(2024);
     pub const INVALID_OPERANDS: Code = Code::new(3020);
     pub const CONSTANT_EXPRESSION: Code = Code::new(3021);
     pub const INVALID_INITIALIZER: Code = Code::new(3022);
@@ -394,6 +461,10 @@ impl Code {
     pub const VOID_VALUE: Code = Code::new(3027);
     pub const CONTROLLING_EXPRESSION: Code = Code::new(3028);
     pub const INCOMPATIBLE_POINTER_TYPES: Code = Code::new(3029);
+    pub const POINTER_DIFFERENCE: Code = Code::new(3030);
+    pub const DISCARDED_QUALIFIERS: Code = Code::new(3031);
+    pub const POINTER_SIGN: Code = Code::new(3032);
+    pub const MODIFIABLE_LVALUE: Code = Code::new(3033);
     pub const UNSUPPORTED: Code = Code::new(4001);
     pub const LIMIT: Code = Code::new(4002);
     pub const INLINE: Code = Code::new(4003);

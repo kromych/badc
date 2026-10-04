@@ -57,6 +57,3 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	leave
                	retq
-
-<__c5_sys_snprintf>:
-               	jmp	<addr>

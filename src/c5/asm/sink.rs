@@ -10,8 +10,8 @@ use crate::c5::codegen::ssa::cfi;
 /// The accumulated inline-asm sections and the indexes that make a lookup
 /// against them independent of how much the sink already holds. A unit's
 /// file-scope asm can push a uniquely named section and a label per
-/// exported symbol -- modpost's `.vmlinux.export.c` pushes tens of
-/// thousands of both -- and every [`materialize_asm_sections`] call has to
+/// exported symbol -- a generated export table pushes tens of thousands
+/// of both -- and every [`materialize_asm_sections`] call has to
 /// resolve a section identity and the labels earlier calls defined, so
 /// scanning the sink for either makes a unit quadratic in its own asm.
 #[derive(Debug, Default)]
@@ -581,7 +581,7 @@ pub(crate) fn resolve_asm_goto_relocs(
 }
 
 /// Rewrite the `AsmSectionTarget::DeferredText` relocations a function's
-/// ALTERNATIVE `.subsection` fields left behind (relative to `snap`, its
+/// `.subsection` replacement fields left behind (relative to `snap`, its
 /// entry snapshot) to concrete text offsets, now that each deferred region
 /// is placed. `region_base` maps a region index to its byte offset in the
 /// text; the label's within-region offset is already in the target.

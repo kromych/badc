@@ -1526,7 +1526,7 @@ impl JoinScan {
 /// object-like macro whose replacement list *ends* in one. C99 6.10.3.4p1
 /// rescans the replacement list together with the tokens that follow, so
 /// it is the name ending the list that meets the `(` -- which may be on a
-/// later line (`#define dprintk if (debug) printk`).
+/// later line (`#define dprint if (debug) print`).
 fn join_head(name: &str, pp: &Preprocessor) -> bool {
     let mut name = key(name);
     for _ in 0..MAX_MACRO_DEPTH {

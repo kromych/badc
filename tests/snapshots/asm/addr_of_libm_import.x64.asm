@@ -65,9 +65,10 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	xorl	%eax, %eax
-               	movq	%rax, %xmm0
-               	callq	<addr>
+               	movq	<rip>, %rax       # <addr>
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %xmm0
+               	callq	*%rax
                	xorl	%eax, %eax
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -76,8 +77,9 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	popq	%rbp
                	retq
+               	movq	<rip>, %rcx       # <addr>
                	movq	%rax, %xmm0
-               	callq	<addr>
+               	callq	*%rcx
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -101,9 +103,3 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
-
-<__c5_sys_sin>:
-               	jmp	<addr>
-
-<__c5_sys_cos>:
-               	jmp	<addr>

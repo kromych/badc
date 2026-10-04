@@ -8,16 +8,24 @@ Inputs are positional and may mix `.c` sources, `.s` / `.S`
 assembly sources, c5 `.o` objects, and `.a` archives. A single
 `.c` input compiles and emits a binary directly; two or more
 inputs (or any `-l` / `-L` / `-c` flag) run through the cross-TU
-linker. `.S` (and `.sx`) run through the preprocessor with
-`__ASSEMBLER__` predefined before being assembled; `.s` is
-assembled verbatim, as in gcc's suffix table.
+linker. `.i` is C that is preprocessed already: its line markers
+and pragmas apply and nothing in it is expanded again. `.S` (and
+`.sx`) run through the preprocessor with `__ASSEMBLER__`
+predefined before being assembled; `.s` is assembled verbatim, as
+in gcc's suffix table.
 
 Output mode -- pick at most one (defaults to a native binary):
   --interp                 Run under the SSA interpreter.
   --jit                    Lower in-process and call main() directly.
   --shared                 Produce a shared library (.dylib / .so /
                            .dll) exporting every #pragma export(name)
-                           function.
+                           function. An ELF library reaches what it
+                           exports through its PLT and GOT, so a
+                           definition the loader finds first takes its
+                           place; -Bsymbolic binds the library's
+                           references to its own definitions,
+                           -Bsymbolic-functions only those to its
+                           functions.
   --list-symbols           Print built-in keywords / library calls /
                            constants and exit.
   --list-diagnostics       Print the diagnostic catalogue -- code,
@@ -107,6 +115,31 @@ Multi-TU knobs:
                            `-fno-pic` code. The last one wins; `-c` and
                            `--shared` ignore both. A Mach-O or PE
                            executable is always position-independent.
+  --build-id[=sha1|tree|fast|none], -z <keyword>, -S, -X, ...
+                           GNU ld's image options. Every link takes
+                           --build-id (bare, sha1 and tree: a 20-byte
+                           SHA-1; fast: lld's 8-byte XXH3), -z
+                           max-page-size=, -z
+                           [no]pack-relative-relocs, -z [no]execstack,
+                           --[no-]warn-execstack,
+                           --[no-]warn-rwx-segments, -z now, -z [no]text,
+                           --no-apply-dynamic-relocs, -S /
+                           --strip-debug, -X, --discard-none,
+                           --emit-relocs, --no-undefined / -z defs,
+                           -Bsymbolic, -Bsymbolic-functions and
+                           --fatal-warnings; one without
+                           -T also -z relro and, for --shared, -z
+                           undefs; one with -T --orphan-handling=, -z
+                           norelro, -z muldefs, -z common-page-size=,
+                           -z noseparate-code, the DT_FLAGS_1 keywords
+                           (-z nodelete, -z origin, ...) and, for
+                           AArch64, --fix-cortex-a53-843419, as the
+                           --ld persona's final link does. Without -z
+                           [no]execstack an input whose
+                           .note.GNU-stack is executable makes the
+                           stack executable, as in GNU ld. --build-id
+                           and -z apply to ELF images. Any other is
+                           refused by name.
   --subsystem=<kind>       Stamp the PE subsystem: console, windows,
                            native, efi_application,
                            efi_boot_service_driver,
@@ -215,8 +248,7 @@ Compile knobs:
                            usual. The file is -MF, else the -o
                            object with its suffix replaced by `.d`,
                            else the source's base name + `.d`.
-  -MMD                     As -MD with -MM's header filter. This is
-                           the form kbuild uses.
+  -MMD                     As -MD with -MM's header filter.
   -MF file                 Write the dependency rule to `file`.
   -MT target               Name the rule's target, used verbatim.
                            Repeatable; replaces the default name.
@@ -258,8 +290,7 @@ Compile knobs:
                            source under either is refused unless -E.
   -Wp,-MD,file             The preprocessor spellings of -MD / -MMD,
   -Wp,-MMD,file            which take the output path as an operand.
-                           kbuild passes dependency generation this
-                           way. As in gcc, the rule keeps the
+                           As in gcc, the rule keeps the
                            source-derived name; -o does not name it.
   -q, --quiet              Suppress `info:` chatter on stderr (the
                            per-source `info: compiling <path>`
@@ -273,9 +304,10 @@ Compile knobs:
                            #pragma export. Applies to --shared and
                            executable output.
   --export-data            Export every non-static data global from an
-                           ELF executable into .dynsym (STT_OBJECT) so a
-                           dlopen'd module resolves it, the data half of
-                           the toolchain's -rdynamic. Pair with
+                           ELF executable or --shared library into
+                           .dynsym (STT_OBJECT) so another module
+                           resolves it, the data half of the
+                           toolchain's -rdynamic. Pair with
                            --export-all for full coverage.
   --gnu                    Define the GCC identity macros (__GNUC__,
                            __VERSION__, __extension__, ...). Off by
@@ -309,6 +341,11 @@ Compile knobs:
                            tree, never a jump table, so no switch takes
                            an indirect branch. -fjump-tables restores
                            the default.
+  -fno-optimize-sibling-calls
+                           Keep every call a call: a call whose result
+                           the function returns is not turned into a
+                           jump after the epilogue.
+                           -foptimize-sibling-calls restores the default.
   -fPIC, -fpic             Emit a position-independent `-c` object: a
   -fPIE, -fpie             switch table takes the label-difference form,
                            so no absolute relocation reaches the object.
@@ -388,19 +425,24 @@ Compile knobs:
   -mstack-protector-guard=global|tls|sysreg
                            Where the guard value is read from. The
                            default follows the target: %fs:0x28 on
-                           Linux/x86-64, the __stack_chk_guard object
-                           elsewhere. `tls` is x86-64 only, `sysreg`
-                           aarch64 only.
+                           Linux/x86-64 (%gs:0x28 under
+                           -mcmodel=kernel), the __stack_chk_guard
+                           object elsewhere. `tls` is x86-64 only,
+                           `sysreg` aarch64 only.
   -mstack-protector-guard-reg=R
-                           Segment register (fs, gs) under =tls, or the
-                           AArch64 system register name under =sysreg.
+                           Segment register (fs, gs) under =tls, by
+                           default gs under -mcmodel=kernel and fs
+                           otherwise, or the AArch64 system register
+                           name under =sysreg.
   -mstack-protector-guard-offset=N
                            Byte offset of the guard within the thread
                            block (=tls) or above the system register's
                            value (=sysreg).
   -mstack-protector-guard-symbol=NAME
                            Read the guard from NAME instead of
-                           __stack_chk_guard. Not combinable with
+                           __stack_chk_guard. On x86-64 a symbol named
+                           without the form selects =tls, as a
+                           register does. Not combinable with
                            -mstack-protector-guard-offset=.
   -ftrivial-auto-var-init=uninitialized|zero|pattern
                            Initialize every automatic object declared

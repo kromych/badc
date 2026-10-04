@@ -7,7 +7,6 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use hashbrown::HashMap;
 
-use super::synth::sha1;
 use super::{
     ChunkSrc, ET_DYN, ET_EXEC, Elf64Phdr, FinalSym, LdsEmit, LdsLinker, PT_LOAD, PT_PHDR, Piece,
     SHF_LINK_ORDER, SHT_NOBITS, SHT_REL, SHT_RELA, SHT_STRTAB, SHT_SYMTAB, STB_LOCAL,
@@ -630,15 +629,14 @@ impl<'a> LdsLinker<'a> {
     /// Build-id digest over the whole image with the digest field
     /// zeroed (it already is), then patched in place.
     fn patch_build_id(&self, image: &mut [u8], file_off: &HashMap<usize, u64>) {
-        if self.opts.build_id_sha1
-            && let Some((out, off)) = self.build_id_location()
+        if let Some((out, off)) = self.build_id_location()
             && !self.outs[out].removed
             && self.outs[out].shtype != SHT_NOBITS
         {
             let at = (file_off[&out] + off + 16) as usize;
-            let digest = sha1(image);
-            if at + 20 <= image.len() {
-                image[at..at + 20].copy_from_slice(&digest);
+            let digest = self.opts.build_id.digest(image);
+            if let Some(field) = image.get_mut(at..at + digest.len()) {
+                field.copy_from_slice(&digest);
             }
         }
     }

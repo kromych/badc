@@ -29,7 +29,7 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	cmpl	$0xff00, %eax           # imm = 0xFF00
-               	jb	<addr>
+               	jl	<addr>
                	cmpl	$0xff00, %eax           # imm = 0xFF00
                	je	<addr>
                	xorl	%eax, %eax

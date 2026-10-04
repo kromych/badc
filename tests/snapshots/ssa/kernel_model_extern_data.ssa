@@ -1,5 +1,5 @@
 ; --- SSA dump (ok=true) ent_pc=0 ---
-; name=read_jiffies
+; name=read_ticks
 fn ent_pc=0 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
@@ -8,7 +8,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v2   Load { addr=v1, disp=0, kind=I64 }               -> x0
     terminator Return(v2)   (exit_acc=v2)
 ; --- SSA dump (ok=true) ent_pc=1 ---
-; name=jiffies_addr
+; name=ticks_addr
 fn ent_pc=1 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
@@ -35,7 +35,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v2   Load { addr=v1, disp=0, kind=U8 }                -> x0
     terminator Return(v2)   (exit_acc=v2)
 ; --- SSA dump (ok=true) ent_pc=4 ---
-; name=pcpu_base
+; name=cpu_base
 fn ent_pc=4 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
@@ -49,7 +49,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v7   LoadIndexed { base=v3 abs, index=v1, scale=8, kind=I64 } -> x0
     terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=5 ---
-; name=ctype_class
+; name=char_class
 fn ent_pc=5 n_params=1 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0

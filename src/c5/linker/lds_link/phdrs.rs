@@ -10,9 +10,9 @@ use hashbrown::{HashMap, HashSet};
 
 use super::{
     EM_AARCH64, Elf64Phdr, LdsLinker, MODULE, PF_R, PF_W, PF_X, PT_DYNAMIC, PT_GNU_EH_FRAME,
-    PT_GNU_PROPERTY, PT_GNU_STACK, PT_INTERP, PT_LOAD, PT_NOTE, PT_PHDR, SHF_EXECINSTR, SHF_TLS,
-    SHF_WRITE, SHT_NOBITS, SHT_NOTE, SYNTH_DYNAMIC, SYNTH_EH_FRAME_HDR, SYNTH_GNU_PROPERTY,
-    SYNTH_INTERP, Stmt, align_up,
+    PT_GNU_PROPERTY, PT_GNU_STACK, PT_INTERP, PT_LOAD, PT_NOTE, PT_PHDR, PT_TLS, SHF_EXECINSTR,
+    SHF_TLS, SHF_WRITE, SHT_NOBITS, SHT_NOTE, SYNTH_DYNAMIC, SYNTH_EH_FRAME_HDR,
+    SYNTH_GNU_PROPERTY, SYNTH_INTERP, Stmt, align_up,
 };
 
 impl<'a> LdsLinker<'a> {
@@ -24,7 +24,9 @@ impl<'a> LdsLinker<'a> {
         } else {
             0x1000
         };
-        common.min(self.opts.max_page_size)
+        (self.opts.common_page_size)
+            .unwrap_or(common)
+            .min(self.opts.max_page_size)
     }
 
     /// Output sections the writer will emit, in statement order. The
@@ -46,6 +48,32 @@ impl<'a> LdsLinker<'a> {
     /// and a count short of the truth leaves that section below them.
     pub(super) fn phdr_count_estimate(&self) -> usize {
         self.script.phdrs().map(|p| p.len()).unwrap_or(self.phdrs)
+    }
+
+    /// GNU ld's warnings for a non-empty loaded segment that is readable,
+    /// writable and executable and for an executable thread-local one,
+    /// each given once.
+    pub(super) fn report_rwx_segments(&mut self, segs: &[(Elf64Phdr, Vec<usize>)]) {
+        let name = match self.opts.output_name.as_str() {
+            "" => "the image",
+            name => name,
+        };
+        let rwx = PF_R | PF_W | PF_X;
+        let sized = |secs: &[usize]| secs.iter().any(|&oi| self.outs[oi].size > 0);
+        let mut found = Vec::new();
+        if (segs.iter())
+            .any(|(ph, secs)| ph.p_type == PT_LOAD && ph.p_flags & rwx == rwx && sized(secs))
+        {
+            found.push(format!("{name} has a LOAD segment with RWX permissions"));
+        }
+        if (segs.iter())
+            .any(|(ph, secs)| ph.p_type == PT_TLS && ph.p_flags & PF_X != 0 && sized(secs))
+        {
+            found.push(format!("{name} has a TLS segment with execute permission"));
+        }
+        for warning in found {
+            self.sink.emit(Code::RWX_SEGMENT, None, warning);
+        }
     }
 
     pub(super) fn build_phdrs(
@@ -95,8 +123,8 @@ impl<'a> LdsLinker<'a> {
         // `:phdr` carries to following sections that name none.
         // The carry runs over the script's section list, not the
         // kept one, so an empty section still passes its
-        // assignment on -- an empty `.hash` ahead of `.gnu.hash`
-        // is how the vDSO scripts rely on it.
+        // assignment on -- a script may rely on an empty `.hash`
+        // ahead of `.gnu.hash` for it.
         let kept: HashSet<usize> = emit_order.iter().copied().collect();
         let mut inherit: Vec<usize> = Vec::new();
         for st in &self.stmts {
@@ -181,7 +209,7 @@ impl<'a> LdsLinker<'a> {
         segs.push((
             Elf64Phdr {
                 p_type: PT_GNU_STACK,
-                p_flags: PF_R | PF_W,
+                p_flags: PF_R | PF_W | if self.exec_stack { PF_X } else { 0 },
                 p_align: 0x10,
                 ..Default::default()
             },

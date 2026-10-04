@@ -2,8 +2,8 @@
    splice moves the body out of the section its placement names -- but it
    does not hold a mandatory request out of line. gcc and clang both
    splice such a body into a caller in any section and emit no
-   out-of-line copy; the kernel needs that, since a call left out of line
-   from `.text` into an `__init` helper outlives the section it targets.
+   out-of-line copy, so no call from `.text` targets a helper in a section
+   the image discards after startup.
 
    The plain `inline` specifier keeps the contract, so the two forms are
    checked side by side. */

@@ -1,9 +1,9 @@
 // A jump out of the scope of `__attribute__((cleanup(fn)))` variables runs
 // `fn(&var)` for each once, innermost scope first and latest declaration
 // first, whether by `goto`, computed `goto`, `break`, `continue` or
-// `return`; a backward `goto` past a declaration runs its cleanup too. The
-// kernel's `guard()`, `scoped_guard()` and `__free()` below follow
-// include/linux/cleanup.h. Exits 0, or the number of the first failed check.
+// `return`; a backward `goto` past a declaration runs its cleanup too, as
+// through the scope-guard macro layer below (`guard()`, `scoped_guard()`,
+// `__free()`). Exits 0, or the number of the first failed check.
 
 #include <stdlib.h>
 
@@ -220,7 +220,7 @@ op_end:
     rec('|');
 }
 
-// include/linux/cleanup.h, as the kernel spells it.
+// A scope-guard macro layer over `__attribute__((cleanup))`.
 #define __cleanup(func) __attribute__((__cleanup__(func)))
 #define __PASTE2(a, b) a##b
 #define __PASTE(a, b) __PASTE2(a, b)
@@ -289,7 +289,7 @@ static void mutex_unlock(struct mutex *m) {
 DEFINE_GUARD(mutex, struct mutex *, mutex_lock(_T), mutex_unlock(_T))
 
 static int frees;
-DEFINE_FREE(kfree, char *, if (_T) { free(_T); frees++; })
+DEFINE_FREE(heap, char *, if (_T) { free(_T); frees++; })
 
 static struct mutex m;
 
@@ -304,17 +304,17 @@ static int guarded(int which) {
     }
     {
         guard(mutex)(&m);
-        char *p __free(kfree) = malloc(16);
+        char *p __free(heap) = malloc(16);
         if (which == 1)
             goto out;
-        char *q __free(kfree) = malloc(16);
+        char *q __free(heap) = malloc(16);
         if (which == 2)
             goto out;
         r = 2;
         (void)p, (void)q;
     }
     {
-        char *keep __free(kfree) = malloc(8);
+        char *keep __free(heap) = malloc(8);
         char *mine = no_free_ptr(keep);
         free(mine);
         if (which == 3)

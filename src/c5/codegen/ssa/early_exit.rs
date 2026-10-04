@@ -88,6 +88,7 @@ fn pure(inst: &Inst) -> bool {
         Inst::ParamRef { .. }
         | Inst::ParamPart { .. }
         | Inst::Imm(_)
+        | Inst::Undef
         | Inst::Extend { .. }
         | Inst::Phi { .. }
         | Inst::LifetimeEnd(_) => true,

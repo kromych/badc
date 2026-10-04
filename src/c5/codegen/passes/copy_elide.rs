@@ -351,6 +351,7 @@ fn call_writer(
             f.insts.get(i),
             Some(
                 Inst::Imm(_)
+                    | Inst::Undef
                     | Inst::ImmData(_)
                     | Inst::ImmCode(_)
                     | Inst::ImmExtCode(_)
@@ -668,6 +669,7 @@ fn plan_one(
         match f.insts.get(i) {
             Some(
                 Inst::Imm(_)
+                | Inst::Undef
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
                 | Inst::ImmExtCode(_)

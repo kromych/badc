@@ -1,43 +1,30 @@
 // stdint.h -- fixed-width integer types and constant macros.
 //
-// c5 now exposes real per-width integer storage (M31 split out
-// signed char / short / int / long / long long), so the
-// fixed-width typedefs alias the underlying type with the
-// matching byte width on every supported target:
-//
-//   * `int8_t`  / `uint8_t`  -> 1 byte (signed / unsigned char)
-//   * `int16_t` / `uint16_t` -> 2 bytes (short / unsigned short)
-//   * `int32_t` / `uint32_t` -> 4 bytes (int / unsigned int)
-//   * `int64_t` / `uint64_t` -> 8 bytes (long long / unsigned long long)
-//
-// `intptr_t` and `intmax_t` are 8 bytes on every supported
-// target -- pointer-wide on LP64 (Linux / macOS) and LLP64
-// (Windows) alike. We use `long long` rather than `long` so the
-// width is independent of the LP64-vs-LLP64 split (`long` is 4
-// bytes on Windows).
-//
-// The constant macros (`INT8_C(c)` ... `UINTMAX_C(c)`) are
-// identity wrappers; c5's lexer ignores integer-literal
-// suffixes, and the receiving slot's typedef pins the width.
+// The 8-, 16- and 32-bit types are `signed char`, `short` and `int`
+// on every target. The 64-bit, pointer-width and greatest-width types
+// are the ones the platform's own headers give, which the compiler
+// predefines per target: `long` for all three under glibc on LP64;
+// `long long`, `long` and `long` under Apple's headers; `long long`
+// for all three on Windows.
 #pragma once
 
 typedef signed char         int8_t;
 typedef short               int16_t;
 typedef int                 int32_t;
-typedef long long           int64_t;
-typedef long long           intptr_t;
-typedef long long           intmax_t;
+typedef __INT64_TYPE__      int64_t;
+typedef __INTPTR_TYPE__     intptr_t;
+typedef __INTMAX_TYPE__     intmax_t;
 
 typedef unsigned char       uint8_t;
 typedef unsigned short      uint16_t;
 typedef unsigned int        uint32_t;
-typedef unsigned long long  uint64_t;
-typedef unsigned long long  uintptr_t;
-typedef unsigned long long  uintmax_t;
+typedef __UINT64_TYPE__     uint64_t;
+typedef __UINTPTR_TYPE__    uintptr_t;
+typedef __UINTMAX_TYPE__    uintmax_t;
 
-// Minimum-width (7.18.1.2) and fastest minimum-width (7.18.1.3) types.
-// Both alias the exact-width type of the requested size, matching the
-// macOS choice and satisfying the "at least N bits" requirement.
+// Minimum-width (7.18.1.2) types alias the exact-width type of their size.
+// Fastest minimum-width (7.18.1.3) ones do too, but for the 16- and 32-bit
+// types, which take the platform's choice predefined with the others.
 typedef int8_t              int_least8_t;
 typedef int16_t             int_least16_t;
 typedef int32_t             int_least32_t;
@@ -48,32 +35,31 @@ typedef uint32_t            uint_least32_t;
 typedef uint64_t            uint_least64_t;
 
 typedef int8_t              int_fast8_t;
-typedef int16_t             int_fast16_t;
-typedef int32_t             int_fast32_t;
+typedef __INT_FAST16_TYPE__ int_fast16_t;
+typedef __INT_FAST32_TYPE__ int_fast32_t;
 typedef int64_t             int_fast64_t;
 typedef uint8_t             uint_fast8_t;
-typedef uint16_t            uint_fast16_t;
-typedef uint32_t            uint_fast32_t;
+typedef __UINT_FAST16_TYPE__ uint_fast16_t;
+typedef __UINT_FAST32_TYPE__ uint_fast32_t;
 typedef uint64_t            uint_fast64_t;
 
 // C99 7.18.4.1: `INTN_C`/`UINTN_C` expand to an integer constant of type
-// `int_leastN_t`/`uint_leastN_t`. The width suffix is required so the value
-// carries the wide type -- without it `UINT64_C(1) << 35` would evaluate in
-// `int` and lose bits above 31. `LL`/`ULL` are used for the 64-bit and max
-// forms because `long` is 32 bits under LLP64 (Windows); `long long` is at
-// least 64 bits on every target. The 8/16-bit forms promote to `int`, so a
-// bare token is conforming for those.
+// `int_leastN_t`/`uint_leastN_t`, so the 64-bit and greatest-width forms take
+// their type's suffix. The 8/16-bit forms promote to `int`, so a bare token
+// is conforming for those.
+#define __badc_int_c_join(c, suffix) c##suffix
+#define __badc_int_c(c, suffix) __badc_int_c_join(c, suffix)
 #define INT8_C(c)   c
 #define INT16_C(c)  c
 #define INT32_C(c)  c
-#define INT64_C(c)  c##LL
-#define INTMAX_C(c) c##LL
+#define INT64_C(c)  __badc_int_c(c, __INT64_C_SUFFIX__)
+#define INTMAX_C(c) __badc_int_c(c, __INTMAX_C_SUFFIX__)
 
 #define UINT8_C(c)   c
 #define UINT16_C(c)  c
 #define UINT32_C(c)  c##U
-#define UINT64_C(c)  c##ULL
-#define UINTMAX_C(c) c##ULL
+#define UINT64_C(c)  __badc_int_c(c, __UINT64_C_SUFFIX__)
+#define UINTMAX_C(c) __badc_int_c(c, __UINTMAX_C_SUFFIX__)
 
 #define INT8_MIN  (-128)
 #define INT16_MIN (-32768)
@@ -82,31 +68,31 @@ typedef uint64_t            uint_fast64_t;
    limits.h idiom). `2147483648` exceeds INT_MAX and `9223372036854775808`
    is unrepresentable in any signed type. */
 #define INT32_MIN (-2147483647-1)
-#define INT64_MIN (-9223372036854775807LL-1)
+#define INT64_MIN (-INT64_MAX-1)
 
 #define INT8_MAX  127
 #define INT16_MAX 32767
 #define INT32_MAX 2147483647
-#define INT64_MAX 9223372036854775807
+#define INT64_MAX INT64_C(9223372036854775807)
 
 #define UINT8_MAX  255
 #define UINT16_MAX 65535
-#define UINT32_MAX 4294967295
-#define UINT64_MAX 18446744073709551615
+#define UINT32_MAX 4294967295U
+#define UINT64_MAX UINT64_C(18446744073709551615)
 
-#define SIZE_MAX     UINT64_MAX
-#define INTPTR_MIN   INT64_MIN
-#define INTPTR_MAX   INT64_MAX
-#define UINTPTR_MAX  UINT64_MAX
-#define INTMAX_MIN   INT64_MIN
-#define INTMAX_MAX   INT64_MAX
-#define UINTMAX_MAX  UINT64_MAX
+#define SIZE_MAX     __SIZE_MAX__
+#define INTPTR_MIN   (-INTPTR_MAX-1)
+#define INTPTR_MAX   __INTPTR_MAX__
+#define UINTPTR_MAX  __UINTPTR_MAX__
+#define INTMAX_MIN   (-INTMAX_MAX-1)
+#define INTMAX_MAX   INTMAX_C(9223372036854775807)
+#define UINTMAX_MAX  UINTMAX_C(18446744073709551615)
 
-#define PTRDIFF_MIN  INT64_MIN
-#define PTRDIFF_MAX  INT64_MAX
+#define PTRDIFF_MIN  (-PTRDIFF_MAX-1)
+#define PTRDIFF_MAX  __PTRDIFF_MAX__
 
 // Limits of the minimum-width and fastest minimum-width types
-// (7.18.2.2 / 7.18.2.3); each aliases its exact-width limit.
+// (7.18.2.2 / 7.18.2.3), each its type's.
 #define INT_LEAST8_MIN   INT8_MIN
 #define INT_LEAST16_MIN  INT16_MIN
 #define INT_LEAST32_MIN  INT32_MIN
@@ -121,14 +107,14 @@ typedef uint64_t            uint_fast64_t;
 #define UINT_LEAST64_MAX UINT64_MAX
 
 #define INT_FAST8_MIN    INT8_MIN
-#define INT_FAST16_MIN   INT16_MIN
-#define INT_FAST32_MIN   INT32_MIN
+#define INT_FAST16_MIN   (-INT_FAST16_MAX-1)
+#define INT_FAST32_MIN   (-INT_FAST32_MAX-1)
 #define INT_FAST64_MIN   INT64_MIN
 #define INT_FAST8_MAX    INT8_MAX
-#define INT_FAST16_MAX   INT16_MAX
-#define INT_FAST32_MAX   INT32_MAX
+#define INT_FAST16_MAX   __INT_FAST16_MAX__
+#define INT_FAST32_MAX   __INT_FAST32_MAX__
 #define INT_FAST64_MAX   INT64_MAX
 #define UINT_FAST8_MAX   UINT8_MAX
-#define UINT_FAST16_MAX  UINT16_MAX
-#define UINT_FAST32_MAX  UINT32_MAX
+#define UINT_FAST16_MAX  __UINT_FAST16_MAX__
+#define UINT_FAST32_MAX  __UINT_FAST32_MAX__
 #define UINT_FAST64_MAX  UINT64_MAX

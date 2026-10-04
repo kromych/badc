@@ -10,7 +10,7 @@
 #include <stdint.h>
 
 #if defined(__aarch64__)
-/* The kernel's spelling (Linux 7.2 arch/arm64/include/asm/fpsimd.h). */
+/* The vector length through `rdvl`, under `.arch_extension sve`. */
 unsigned sve_get_vl(void) {
     unsigned vl;
     __asm__ volatile(".arch_extension sve\n\trdvl %x[vl], #1\n" : [vl] "=r"(vl));

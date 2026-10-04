@@ -78,6 +78,7 @@ impl TargetCLibrary {
                 machine: target_machine(target),
                 exports: BTreeSet::new(),
                 data_exports: BTreeSet::new(),
+                tls_exports: BTreeSet::new(),
                 object_sizes: Default::default(),
                 export_symbols: BTreeMap::new(),
                 export_versions: BTreeMap::new(),

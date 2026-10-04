@@ -532,7 +532,7 @@ mod tests {
         );
     }
 
-    /// The `tramp_alias` sequence -- `movz :abs_g2_s:` then `movk`
+    /// A signed 48-bit absolute address load -- `movz :abs_g2_s:` then `movk`
     /// `:abs_g1_nc:` / `:abs_g0_nc:` over `x5` -- as GNU ld resolves it.
     /// Words taken from `ld --defsym` over each value; the negative ones
     /// come out `movn` over the complement, which is what sets the groups

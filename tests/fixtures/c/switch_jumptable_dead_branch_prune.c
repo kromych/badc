@@ -2,8 +2,8 @@
    compile-time-false guard (`sizeof(int) == 0`), whose taken block calls a
    helper; constfold_branch proves the guard false and orphans that block.
    prune_unreachable must delete the orphan even though the function has a
-   jump table -- otherwise the dead helper calls reach the object (the qemu
-   `qemu_build_assert` canary shape). The guard is never true, so the helper
+   jump table -- otherwise the dead helper calls reach the object (a
+   build-time assertion's canary). The guard is never true, so the helper
    is never called and the per-case value is returned unchanged at -O and
    -O0 alike. */
 

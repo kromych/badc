@@ -2,9 +2,9 @@
 // convention for a definition, and for the function a pointer points
 // to, on an x86_64 target whose own convention is System V: arguments
 // in rcx/rdx/r8/r9 by position with 32 bytes of caller-reserved shadow
-// space, the rest on the stack. The Linux kernel spells it `__efiapi`
-// and UEFI firmware enters the kernel's EFI stub through it, calling
-// back into it through the boot- and runtime-services tables.
+// space, the rest on the stack. UEFI firmware calls an x86-64 image's
+// entry point on this convention and is called back on it through the
+// boot- and runtime-services tables.
 //
 // The attribute is x86-only: gcc ignores it elsewhere, and it names the
 // target's own convention on Windows. So every result below is the same

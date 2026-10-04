@@ -251,9 +251,9 @@ fn gnu_identity_macros_are_opt_in() {
 
     // `-std=gnu*` keeps `__GNUC__` and drops `__STRICT_ANSI__`, the
     // combination gcc and clang produce for a GNU dialect. A header that
-    // gates a GNU declaration on the pair -- `<asm/xen/interface_64.h>`
-    // gates the anonymous union naming both `rip` and `eip` on it --
-    // then reaches the same declarations it gives gcc.
+    // gates a GNU declaration on the pair -- an anonymous union naming
+    // both `rip` and `eip` -- then reaches the same declarations it gives
+    // gcc.
     let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
     pp.enable_gnu(false, false);
     let out = pp.process(probe).expect("preprocessor failed");
@@ -867,14 +867,14 @@ fn pragma_operator_once_marks_file() {
 fn variadic_stringize_keeps_the_source_spacing() {
     // C99 6.10.3.2p2: the stringized spelling keeps the argument tokens
     // as written -- a space only where the source had one. gcc 16:
-    // S(kvm-amd,kvm-intel) is "kvm-amd,kvm-intel", S1(one, two ,three)
+    // S(left-a,right-b) is "left-a,right-b", S1(one, two ,three)
     // is "one, two ,three".
     let out = process(
         "#define S1(x...) #x\n#define S(x...) S1(x)\n\
-         const char *a = S(kvm-amd,kvm-intel);\n\
+         const char *a = S(left-a,right-b);\n\
          const char *b = S1(one, two ,three);\n",
     );
-    assert!(out.contains("\"kvm-amd,kvm-intel\""), "{out}");
+    assert!(out.contains("\"left-a,right-b\""), "{out}");
     assert!(out.contains("\"one, two ,three\""), "{out}");
 }
 
@@ -893,6 +893,81 @@ fn pragma_operator_pack_emits_inline_directive() {
     // inline `#pragma pack` for the lexer to fold at this point.
     let out = process("_Pragma(\"pack(1)\")\nstruct S { char a; };\n");
     assert!(out.contains("#pragma pack(1)"), "no inline pack: {out:?}");
+}
+
+#[test]
+fn a_pragma_operator_leaves_its_line_numbered() {
+    // The re-emitted directive takes a line of its own; a marker after it
+    // gives the rest of the source line its number back.
+    let out = process("int a;\n_Pragma(\"pack(1)\") struct S { char a; };\nint b;\n");
+    assert!(
+        out.contains("\n#pragma pack(1)\n# 2 \"<source>\"\n struct S { char a; };\nint b;"),
+        "{out:?}"
+    );
+}
+
+#[test]
+fn preprocessed_output_keeps_the_pragmas_the_pass_consumes() {
+    // `-E` output is compiled again, so a pragma the pass acted on is
+    // written where it stood, directive or operator. A compile keeps
+    // its output free of them; both register the intrinsics.
+    let src = "#pragma intrinsic(\"alloca\")\n\
+               #define FABS _Pragma(\"intrinsic(\\\"fabs\\\")\")\n\
+               FABS int x;\n";
+    for keep in [true, false] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.set_keep_pragmas(keep);
+        let out = pp.process(src).expect("preprocessor failed");
+        assert!(pp.intrinsics.contains_key("alloca") && pp.intrinsics.contains_key("fabs"));
+        assert_eq!(
+            out.contains("\n#pragma intrinsic(\"alloca\")\n"),
+            keep,
+            "{out:?}"
+        );
+        assert_eq!(
+            out.contains("\n#pragma intrinsic(\"fabs\")\n# 3 \"<source>\"\n int x;"),
+            keep,
+            "{out:?}"
+        );
+        assert_eq!(out.matches("intrinsic").count(), if keep { 2 } else { 0 });
+    }
+}
+
+#[test]
+fn preprocessed_input_is_not_preprocessed_again() {
+    // A `.i` unit, as gcc reads one: no text is expanded, `#define`
+    // has no effect, line markers and pragmas act, and nothing is
+    // force-included.
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    pp.set_preprocessed(true);
+    pp.force_includes.push("never_opened.h".to_string());
+    let src = "# 7 \"orig.c\"\n\
+               #define A 1\n\
+               int a = A + __LINE__;\n\
+               #pragma intrinsic(\"alloca\")\n\
+               #\n\
+               _Pragma(\"pack(1)\") int b;\n";
+    let out = pp.process(src).expect("preprocessed input passes");
+    assert!(
+        out.contains("# 7 \"orig.c\"\n\nint a = A + __LINE__;\n"),
+        "{out:?}"
+    );
+    assert!(out.contains("_Pragma(\"pack(1)\") int b;"), "{out:?}");
+    assert!(!out.contains("never_opened"), "{out:?}");
+    assert!(pp.intrinsics.contains_key("alloca"));
+
+    for directive in ["#include \"x.h\"", "#if 0", "#error no"] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.set_preprocessed(true);
+        let err = pp
+            .process(&format!("int x;\n{directive}\n"))
+            .expect_err(directive);
+        let d = &err.diagnostics()[0];
+        assert_eq!(
+            (d.code, d.loc.as_ref().map(|l| l.line)),
+            (Code::DIRECTIVE, Some(2))
+        );
+    }
 }
 
 #[test]
@@ -1298,16 +1373,16 @@ fn if_string_comparison_keeps_slashes_inside_literal() {
 #[test]
 fn unterminated_quote_stops_at_end_of_line() {
     let src = "# Don't do it\n\
-               #define XLF_KERNEL_64 (1<<0)\n\
-               # define XLF0 XLF_KERNEL_64\t/* 64-bit kernel */\n\
-               \t.word XLF0\n";
+               #define FLAG_64 (1<<0)\n\
+               # define F0 FLAG_64\t/* 64-bit image */\n\
+               \t.word F0\n";
     let out = process(src);
     let last = out
         .lines()
         .rfind(|l| !l.trim().is_empty())
         .expect("output has a content line");
     assert_eq!(last, "\t.word (1<<0)", "{out}");
-    assert!(!out.contains("64-bit kernel"), "comment leaked: {out}");
+    assert!(!out.contains("64-bit image"), "comment leaked: {out}");
 }
 
 /// The bound applies to the primitive: text after an unterminated quote
@@ -1370,27 +1445,26 @@ fn process_asm(source: &str) -> String {
 
 /// Assembler-with-cpp: a `#` line naming no directive is text, passed
 /// through with the surrounding phase-3 rules intact, as GNU cpp emits
-/// it for assembler input. The kernel's `arch/x86/boot/header.S`
-/// reduces to this shape: an apostrophe in such a line, then a comment
+/// it for assembler input: an apostrophe in such a line, then a comment
 /// in a `# define` body.
 #[test]
 fn asm_hash_comment_line_passes_through() {
-    let src = "#define CONFIG_X86_64 1\n\
-               #define XLF_KERNEL_64 (1<<0)\n\
-               \t\t\t\t\t# with loadlin-1.5 (header v1.5). Don't\n\
-               #ifdef CONFIG_X86_64\n\
-               # define XLF0 XLF_KERNEL_64\t\t\t/* 64-bit kernel */\n\
+    let src = "#define HAVE_64 1\n\
+               #define FLAG_64 (1<<0)\n\
+               \t\t\t\t\t# set by the loader (header v1.5). Don't\n\
+               #ifdef HAVE_64\n\
+               # define F0 FLAG_64\t\t\t/* 64-bit image */\n\
                #else\n\
-               # define XLF0 0\n\
+               # define F0 0\n\
                #endif\n\
-               \t\t\t.word XLF0 | XLF1\n";
+               \t\t\t.word F0 | F1\n";
     let out = process_asm(src);
     assert!(
-        out.contains("# with loadlin-1.5 (header v1.5). Don't"),
+        out.contains("# set by the loader (header v1.5). Don't"),
         "{out}"
     );
-    assert!(out.contains("\t\t\t.word (1<<0) | XLF1"), "{out}");
-    assert!(!out.contains("64-bit kernel"), "comment leaked: {out}");
+    assert!(out.contains("\t\t\t.word (1<<0) | F1"), "{out}");
+    assert!(!out.contains("64-bit image"), "comment leaked: {out}");
 }
 
 /// The passed-through line's tail is macro-expanded and its comments
@@ -2497,8 +2571,8 @@ fn asm_unistd_on_a_search_path_shadows_the_bundled_copy() {
 
 #[test]
 fn nostdinc_takes_the_unistd_headers_from_the_uapi_paths_alone() {
-    // `-nostdinc` with a tree's uapi directories on `-I`, as the kernel builds:
-    // the unistd headers resolve there, and a name they lack is not found.
+    // `-nostdinc` with a source tree's uapi directories on `-I`: the unistd
+    // headers resolve there, and a name they lack is not found.
     let base = std::env::temp_dir().join(format!("badc-uapi-{}", std::process::id()));
     let arch = base.join("arch/x86/include/uapi");
     let generic = base.join("include/uapi");
@@ -4497,6 +4571,8 @@ fn target_predefines_are_locked() {
         ("_POSIX_SOURCE", "1"),
         ("_POSIX_C_SOURCE", "200809L"),
     ];
+    // The object format's, not the OS's: the Linux targets are the ELF ones.
+    const ELF: &[(&str, &str)] = &[("__ELF__", "1")];
     const WINDOWS: &[(&str, &str)] = &[
         ("_WIN32", "1"),
         ("_WIN64", "1"),
@@ -4511,13 +4587,14 @@ fn target_predefines_are_locked() {
         .chain(X86_64)
         .chain(MACOS)
         .chain(LINUX)
+        .chain(ELF)
         .chain(WINDOWS)
         .copied()
         .collect();
     for (spec, target) in PREDEFINE_TARGETS {
         let want: Vec<(&str, &str)> = match target {
-            Target::LinuxX64 => X86_64.iter().chain(LINUX).copied().collect(),
-            Target::LinuxAarch64 => AARCH64.iter().chain(LINUX).copied().collect(),
+            Target::LinuxX64 => X86_64.iter().chain(LINUX).chain(ELF).copied().collect(),
+            Target::LinuxAarch64 => AARCH64.iter().chain(LINUX).chain(ELF).copied().collect(),
             Target::MacOSAarch64 => AARCH64.iter().chain(MACOS).copied().collect(),
             Target::WindowsX64 => X86_64.iter().chain(WINDOWS).copied().collect(),
             Target::WindowsAarch64 => AARCH64.iter().chain(WINDOWS).copied().collect(),
@@ -4554,6 +4631,7 @@ fn preprocessor_codes_are_live_catalogue_rows() {
         PRAGMA_POP_WITHOUT_PUSH,
         IGNORED_PRAGMA_INTRINSIC,
         UNKNOWN_WARNING_OPTION,
+        crate::c5::diag::Code::UNIMPLEMENTED_WARNING_OPTION,
     ] {
         let row = code.row().unwrap_or_else(|| panic!("{code} has no row"));
         assert_eq!(row.status, crate::c5::diag::Status::Live, "{code}");
@@ -4672,6 +4750,45 @@ fn an_unknown_pragma_selector_is_reported_and_covers_nothing() {
     let src = format!("#pragma GCC diagnostic ignored \"-Wno-such-option\"\n{UNKNOWN_PRAGMA_LINE}");
     let _ = pp.process(&src).expect("preprocessor failed");
     assert_eq!(codes(&pp), vec![UNKNOWN_WARNING_OPTION, UNKNOWN_PRAGMA]);
+}
+
+/// A diagnostic pragma naming a warning gcc or clang defines and badc does
+/// not implement asks for nothing badc reports: `ignored` holds already,
+/// and `warning` or `error` has no effect, which B7012 says. A name
+/// neither compiler defines is B7002 under every kind; one badc implements
+/// applies.
+#[test]
+fn a_pragma_naming_another_compilers_warning_is_not_unknown() {
+    use crate::c5::diag::Code;
+    let unimplemented = Code::UNIMPLEMENTED_WARNING_OPTION;
+    // gcc only, gcc with a value, clang only, neither, badc.
+    let names = [
+        ("-Wsuggest-attribute=format", Some(unimplemented)),
+        ("-Wformat-overflow=2", Some(unimplemented)),
+        ("-Wshorten-64-to-32", Some(unimplemented)),
+        ("-Wsuggest-attribute=bogus", None),
+        ("-Wunused-variable", Some(Code::UNUSED_VARIABLE)),
+    ];
+    for (name, raised) in names {
+        for (vendor, kind) in [("GCC", "ignored"), ("clang", "warning"), ("GCC", "error")] {
+            let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+            let src = format!("#pragma {vendor} diagnostic {kind} \"{name}\"\n");
+            let _ = pp.process(&src).expect("preprocessor failed");
+            let want = match raised {
+                None => vec![UNKNOWN_WARNING_OPTION],
+                Some(code) if code == unimplemented && kind != "ignored" => vec![code],
+                Some(_) => vec![],
+            };
+            assert_eq!(codes(&pp), want, "{src}");
+        }
+    }
+    let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+    let src = "#pragma GCC diagnostic push\n\
+               #pragma GCC diagnostic ignored \"-Wmissing-prototypes\"\n\
+               #pragma GCC diagnostic ignored \"-Woverride-init\"\n\
+               #pragma GCC diagnostic pop\n";
+    let _ = pp.process(src).expect("preprocessor failed");
+    assert!(codes(&pp).is_empty(), "{:?}", codes(&pp));
 }
 
 #[test]

@@ -48,7 +48,10 @@ equivalent and the object differs without it, so each unit that passes
 one says so down the diagnostic channel -- or listed in ``IGNORE_*``
 with the measured reason badc's object is the same without it. A flag on
 no list fails the unit: a shim that cannot account for a flag must not
-decide that the compiler does not need it.
+decide that the compiler does not need it. A ``-W`` diagnostic option
+badc takes is forwarded, so its warnings are the ones the kernel's own
+configuration selects; one it does not take names no diagnostic badc
+has and is dropped.
 
 A warning comes with `rc == 0`, so the success path decides whether it is
 observable. With ``$BADC_WARN_LOG`` set, what badc wrote on a successful
@@ -66,8 +69,11 @@ BADC_TIMEOUT (seconds per badc run, default 300).
 
 from __future__ import annotations
 
+import hashlib
 import io
+import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -367,13 +373,46 @@ def unsupported(a: str) -> bool:
     return a in UNSUPPORTED_EXACT or a.startswith(UNSUPPORTED_PREFIX)
 
 
+def warning_option(a: str) -> bool:
+    """True for a `-W` diagnostic option: not `-Wa,`, `-Wl,` or `-Wp,`,
+    which hand an option to another tool."""
+    return a.startswith("-W") and not a.startswith(("-Wa,", "-Wl,", "-Wp,"))
+
+
+def badc_accepts(badc: str, flag: str, cache_dir: str | None = None) -> bool:
+    """Whether badc takes the diagnostic option `flag`, which it refuses
+    when no diagnostic, alias or group answers the selector. `badc <flag>
+    --version` checks it without compiling; the answers are kept in a file
+    per badc binary, so a build asks once per spelling."""
+    path = shutil.which(badc) or badc
+    st = os.stat(path)
+    key = f"{os.path.realpath(path)}:{st.st_mtime_ns}:{st.st_size}"
+    cache = os.path.join(cache_dir or tempfile.gettempdir(),
+                         f"badc-wflags-{hashlib.sha1(key.encode()).hexdigest()[:16]}.json")
+    try:
+        with open(cache) as f:
+            known = json.load(f)
+    except (OSError, ValueError):
+        known = {}
+    if flag not in known:
+        r = subprocess.run([path, flag, "--version"], capture_output=True)
+        known[flag] = r.returncode == 0
+        # Another unit may write the file meanwhile; each answer is
+        # recomputed at worst, and a reader never sees a partial file.
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(cache))
+        with os.fdopen(fd, "w") as f:
+            json.dump(known, f)
+        os.replace(tmp, cache)
+    return bool(known[flag])
+
+
 def ignorable(a: str) -> bool:
     """True when the flag is deliberately not forwarded.
 
-    `-W` is the diagnostic namespace, dropped apart from the pass-throughs
-    the forward lists name (`-Wa,`, the frame-size bound), `-Wl,`, which
-    cannot reach a `-c` compile, and `-Wp,`, whose option reaches the
-    preprocessor, so an unlisted one is answered rather than assumed inert."""
+    A `-W` diagnostic option badc does not take is dropped: badc has no
+    such diagnostic, so the object is the same without it. `-Wl,` cannot
+    reach a `-c` compile; `-Wp,` hands its option to the preprocessor, so
+    an unlisted one is answered rather than assumed inert."""
     if a.startswith("-Wp,"):
         return False
     if a.startswith("-W") and not a.startswith("-Wa,"):
@@ -389,7 +428,9 @@ class Rewritten(NamedTuple):
     unknown: list[str]
 
 
-def rewrite(argv: list[str]) -> Rewritten:
+def rewrite(argv: list[str], accepts=lambda _flag: False) -> Rewritten:
+    """`accepts` answers whether badc takes a `-W` diagnostic option
+    ([`badc_accepts`]); one it takes is forwarded in the kernel's order."""
     out: list[str] = []
     dropped: list[str] = []
     unknown: list[str] = []
@@ -424,7 +465,7 @@ def rewrite(argv: list[str]) -> Rewritten:
             # configurations that ask for none are unaffected.
             debug = True
             i += 1
-        elif forwarded(a):
+        elif forwarded(a) or (warning_option(a) and accepts(a)):
             out.append(a)
             i += 1
         elif not a.startswith("-"):
@@ -579,7 +620,7 @@ def main(argv: list[str]) -> int:
     target = os.environ.get("BADC_TARGET", "linux-x64")
     timeout = float(os.environ.get("BADC_TIMEOUT", "300"))
 
-    flags = rewrite(argv)
+    flags = rewrite(argv, lambda flag: badc_accepts(badc, flag))
     if flags.unknown:
         # An unclassified flag is a shim gap, not a compiler one, so no
         # fallback runs: falling back would build the unit under the flag's
@@ -713,6 +754,25 @@ def _self_test() -> int:
     for flag in ("-Wframe-larger-than=2048", "-Wno-frame-larger-than"):
         assert rewrite([flag]) == Rewritten([flag], [], []), flag
     assert rewrite(["-Wframe-larger-than"]) == Rewritten([], [], [])
+    # A diagnostic option badc takes reaches it in the kernel's order; one it
+    # does not take is dropped, and none is taken unasked.
+    takes = {"-Wall", "-Wno-pointer-sign", "-Werror=return-type"}.__contains__
+    r = rewrite(["-Wall", "-Wundef", "-Wno-pointer-sign", "-Wa,-x",
+                 "-Werror=return-type", "-Wl,-r"], takes)
+    assert r == Rewritten(["-Wall", "-Wno-pointer-sign", "-Wa,-x",
+                           "-Werror=return-type"], [], []), r
+    # badc answers once per spelling, through a file a build's units share.
+    if os.name == "posix":
+        with tempfile.TemporaryDirectory() as d:
+            fake, calls = os.path.join(d, "badc"), os.path.join(d, "calls")
+            with open(fake, "w") as f:
+                f.write(f"#!/bin/sh\necho \"$1\" >> '{calls}'\n[ \"$1\" = -Wall ]\n")
+            os.chmod(fake, 0o755)
+            for _ in range(2):
+                assert badc_accepts(fake, "-Wall", d) is True
+                assert badc_accepts(fake, "-Wbogus", d) is False
+            with open(calls) as f:
+                assert f.read() == "-Wall\n-Wbogus\n"
 
     # Success-path diagnostics: tagged with the unit when a log is
     # configured, left to the caller to forward when none is.

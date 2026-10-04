@@ -33,9 +33,9 @@ union scalar_or_array { int a; char b[8]; };
 struct holds_union { int n; union scalar_or_array u; int tail; };
 /* A trailing array with space after it: the union's other member makes
  * the object larger than the member's own struct, so the bytes from the
- * member to the end of the object are not zero. This is the shape the
- * kernel's fortified writes take. Repeated for each bound, which the
- * subobject forms tell apart. */
+ * member to the end of the object are not zero; a fortified write is
+ * bounded by them. Repeated for each bound, which the subobject forms
+ * tell apart. */
 #define TRAILING(name, bound)                                               \
     struct name {                                                           \
         int id;                                                             \

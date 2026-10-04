@@ -55,9 +55,10 @@ pub(crate) enum AsmSectionValue {
     LocExpr(alloc::string::String),
     /// A relocation whose base is an `i`-class operand naming a link-time
     /// address (`%cN`) or an `asm goto` label (`%lN`), optionally with a
-    /// constant addend and minus a location. `%c0 + %c1 - .` (a static-key
-    /// jump entry) folds `%c1` into the addend; `.long %c0 - .` and `.long
-    /// %c0 - 2b` (the bug table's file pointer, 7.x and 5.15) have none.
+    /// constant addend and minus a location. `%c0 + %c1 - .` (a patch-site
+    /// entry's key) folds `%c1` into the addend; `.long %c0 - .` and `.long
+    /// %c0 - 2b` (a trap-table entry's file name, relative to the field or
+    /// to the entry's label) have none.
     OperandReloc {
         idx: u8,
         /// `%l` (an `asm goto` label) rather than `%c` (an operand address).
@@ -96,7 +97,8 @@ pub(crate) enum AsmSectionItem {
     /// default.
     Org(u32, u8),
     /// `.org label + expr[, fill]`: pad to a section-local label's offset plus
-    /// a constant expression (`.org 2b + %c3`, the `__bug_table` entry size).
+    /// a constant expression (`.org 2b + %c3`, a table entry padded to its
+    /// size).
     /// The label and expression resolve at materialize time.
     OrgLabel {
         label: alloc::string::String,
@@ -104,8 +106,9 @@ pub(crate) enum AsmSectionItem {
         fill: u8,
     },
     /// `.org expr[, fill]` over locations (`.org . - (664b-663b) +
-    /// (662b-661b)`, the alternatives length equalizer): the target offset is
-    /// the expression's value, an absolute or a location of this section.
+    /// (662b-661b)`, which pads a sequence to its replacement's length): the
+    /// target offset is the expression's value, an absolute or a location of
+    /// this section.
     OrgExpr(alloc::string::String, u8),
     /// `.rept count` whose count reads section labels, deferred past macro
     /// expansion; the body repeats `count` times at layout.
@@ -163,8 +166,8 @@ pub(crate) enum AsmSectionItem {
         expr: alloc::string::String,
     },
     /// A single instruction line inside an executable (`"ax"`) section, as
-    /// source text -- the x86 ALTERNATIVE replacement (`call %c[new]`) that
-    /// lands in `.altinstr_replacement`. The arch backend encodes it to
+    /// source text -- an x86 replacement sequence (`call %c[new]`) pushed
+    /// into a section of its own. The arch backend encodes it to
     /// `CodeBytes` before layout (`encode_x86_asm_section_code`); one still
     /// text at layout is a target that does not assemble replacement code.
     Code(alloc::string::String),
@@ -440,14 +443,14 @@ pub(crate) enum AsmSectionTarget {
     /// naming a link-time address, `.long %c0 - .`). Resolved against the
     /// `.data` / `.bss` section symbol like a `DataFixup`.
     Data(u64),
-    /// An `asm goto` label's block (`.long %l0 - .`, a static-key jump
-    /// entry). The block's text offset is not known when the section
+    /// An `asm goto` label's block (`.long %l0 - .`, a patch-site entry's
+    /// branch target). The block's text offset is not known when the section
     /// materializes -- the walker leaves `start_pc` at 0 and the block is
     /// laid out later -- so the block index is carried here and rewritten to
     /// [`Self::Text`] once the function's `block_offsets` are final. It never
     /// reaches the object writer.
     TextBlock(u32),
-    /// A label in a deferred replacement region (the AArch64 ALTERNATIVE
+    /// A label in a deferred replacement region (an AArch64 inline-asm
     /// `.subsection`), appended to `.text` after the enclosing function body.
     /// The region's final text base is not known when the section
     /// materializes, so the region index and the label's byte offset within
@@ -466,9 +469,9 @@ pub(crate) enum AsmSectionTarget {
 }
 
 /// Where a template label a section field references is defined. `label_off`
-/// returns this so a `.word 663f - .` in the AArch64 ALTERNATIVE
-/// `.altinstructions` entry relocates against the replacement's eventual
-/// text offset rather than an emitted-stream offset.
+/// returns this so a `.word 663f - .` in a pushed section's entry for an
+/// AArch64 `.subsection` replacement relocates against the replacement's
+/// eventual text offset rather than an emitted-stream offset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LabelLoc {
     /// Final byte offset in the emitted text (the main instruction stream).

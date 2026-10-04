@@ -431,7 +431,7 @@ pub(crate) enum Mnemonic {
     Data(u8),
     /// `.skip count, fill`: emit `count` bytes of `fill`. `count` is a
     /// constant expression over template and section labels, resolved at emit
-    /// time (an ALTERNATIVE pads its old site to the replacement length). The
+    /// time (a patch site pads its original to the replacement length). The
     /// expression text is carried in [`AsmInsn::sym_exprs`] and the fill byte
     /// in [`AsmInsn::bytes`].
     Skip,
@@ -525,11 +525,12 @@ pub(crate) enum AsmOpnd {
     /// compile-time constant to the disp32 literal and a link-time address to
     /// a RIP-relative relocation.
     RipRelRef { idx: u8, symbolic: bool },
-    /// `disp(%%rip)` with a literal numeric displacement (`lea 0(%%rip), %0`
-    /// in `_THIS_IP_`): the effective address is `rip + disp`, a self-relative
-    /// computation the CPU performs at run time with no relocation. Distinct
-    /// from [`AsmOpnd::LabelAddr`] (a template label) and from a `%a` / `%c`
-    /// symbolic RIP-relative reference (which carries a relocation).
+    /// `disp(%%rip)` with a literal numeric displacement (`lea 0(%%rip), %0`,
+    /// the current instruction address): the effective address is
+    /// `rip + disp`, a self-relative computation the CPU performs at run time
+    /// with no relocation. Distinct from [`AsmOpnd::LabelAddr`] (a template
+    /// label) and from a `%a` / `%c` symbolic RIP-relative reference (which
+    /// carries a relocation).
     RipRel { disp: i32 },
     /// `Nf` / `Nb`: a local-label reference (label number plus direction --
     /// `f` forward, `b` backward), the target of a `jmp` / `jcc` within the
@@ -905,7 +906,7 @@ const SEG_BASE: u8 = 48;
 /// The number of an opmask register `kN`. Opmasks are deliberately absent from
 /// [`reg_by_name`]: under a single `%` their spelling collides with GCC's
 /// `%k<N>` operand modifier, which selects the 32-bit form of operand N and is
-/// what kernel inline asm means by it. In extended asm they reach the encoder
+/// what the spelling means in extended asm. There they reach the encoder
 /// as `%%kN` operands and through the `{%kN}` write-mask decorator; only the
 /// file-scope parse, where basic asm makes a single `%` a register sigil,
 /// reads `%kN` as a register.
@@ -2521,8 +2522,7 @@ fn split_seg_prefix(tok: &str) -> Option<(u8, &str)> {
 
 /// Strip the register sigil from a memory-operand register token: the
 /// extended-asm `%%` or the basic-asm `%`, with the whitespace GNU as allows
-/// between the sigil and the name (the kernel's `_ASM_RIP(x)` expands to
-/// `x (% rip)`) removed.
+/// between the sigil and the name (`x (% rip)`) removed.
 fn strip_reg_sigil(tok: &str) -> Option<&str> {
     let t = tok.trim();
     Some(
@@ -2980,7 +2980,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
         }
         // The space-and-fill family (`.skip` / `.space` / `.zero` / `.fill`)
         // repeats a unit of bytes. The count is a constant expression over
-        // labels resolved at emit time (an ALTERNATIVE pads its old site to the
+        // labels resolved at emit time (a patch site pads its original to the
         // replacement length); `bytes` carries the unit to repeat.
         if let Some((dir, rest)) = piece
             .split_once(char::is_whitespace)
@@ -3069,7 +3069,7 @@ fn parse_template_in(tmpl: &[u8], file_scope: bool) -> Result<Vec<AsmInsn>, Stri
         // reference; the target is resolved to a rel32 by a relocation, not
         // parsed as a register / immediate / memory operand. A name the
         // template defines as a label resolves locally instead. The name may
-        // embed operand references (`call __get_user_%c0`), which are
+        // embed operand references (`call helper_%c0`), which are
         // substituted at emit time, so the text is kept verbatim here.
         let is_symbol_target = !rest.is_empty()
             && (crate::c5::asm::is_asm_symbol_template(rest)
@@ -3305,12 +3305,12 @@ fn resolve_evex(
     // immediate-led shape takes its immediate there. This is what tells apart
     // the rows of a name the ISA gives both an immediate-controlled and an
     // index-vector-controlled member.
-    let lead_vec_or_mem = operands.first().is_some_and(&is_mem)
+    let lead_vec_or_mem = operands.first().is_some_and(is_mem)
         || matches!(operands.first(), Some(&AsmOpnd::Reg { reg, .. }) if reg >= XMM_BASE);
     let lead_imm = !lead_vec_or_mem;
     let evex_only_operand = match mnemonic {
         Mnemonic::VexShiftImm { var_opcode, .. } => {
-            let count_mem = operands.first().is_some_and(&is_mem);
+            let count_mem = operands.first().is_some_and(is_mem);
             operands.iter().any(is_mem) && !(var_opcode.is_some() && count_mem)
         }
         // The element broadcasts read a general register under EVEX only.
@@ -6237,9 +6237,10 @@ mod tests {
     #[test]
     fn rip_relative_numeric_displacement() {
         // `disp(%%rip)` with a literal displacement is a self-relative address
-        // (`_THIS_IP_`'s `lea 0(%%rip), %0`), distinct from the `LABEL(%%rip)`
-        // label-address form. Zero, decimal, and hex displacements parse; a
-        // bare `Nb`/`Nf` before `(%%rip)` stays a numeric-label address.
+        // (`lea 0(%%rip), %0`, the current address), distinct from the
+        // `LABEL(%%rip)` label-address form. Zero, decimal, and hex
+        // displacements parse; a bare `Nb`/`Nf` before `(%%rip)` stays a
+        // numeric-label address.
         let insns = parse_template(b"lea 0(%%rip), %0").unwrap();
         assert_eq!(insns[0].operands[0], AsmOpnd::RipRel { disp: 0 });
         let insns = parse_template(b"movl 16(%%rip), %%eax").unwrap();
@@ -8232,15 +8233,11 @@ mod tests {
         }
     }
 
-    /// The SSE / AVX rows the distribution-configuration kernel names:
-    /// `lib/raid6/{sse2,avx2,avx512}.c`, `arch/x86/crypto/camellia-aesni-avx*`,
-    /// `arch/x86/crypto/aes-gcm-{aesni,vaes-avx2}-x86_64.S`,
-    /// `lib/crypto/x86/{nh-avx2,poly1305-x86_64-cryptogams}.S`,
-    /// `lib/crc/x86/crc16-msb-pclmul.S` and
-    /// `net/netfilter/nft_set_pipapo_avx2.c`. Bytes measured with GNU as
-    /// 2.46.1.
+    /// SSE and AVX integer rows: the packed compares, `ptest`, the widening
+    /// and high multiplies, the non-temporal load and the word element pair.
+    /// Bytes measured with GNU as 2.46.1.
     #[test]
-    fn kernel_simd_rows() {
+    fn sse_and_avx_integer_rows() {
         #[rustfmt::skip]
         let cases: &[(&[u8], &[u8])] = &[
             (b"pcmpgtb %%xmm1, %%xmm0", &[0x66, 0x0F, 0x64, 0xC1]),
@@ -8408,9 +8405,8 @@ mod tests {
     }
 
     /// The rows the instruction-set database omits or spells with an explicit
-    /// ModRM byte: SGX's leaf dispatch (`arch/x86/kernel/cpu/sgx/*.c`,
-    /// `arch/x86/entry/vdso/vdso64/vsgx.S`) and the shadow-stack stores
-    /// (`arch/x86/kernel/shstk.c`). Bytes measured with GNU as 2.46.1.
+    /// ModRM byte: SGX's leaf dispatch (`encls`, `enclu`, `enclv`) and the
+    /// shadow-stack stores. Bytes measured with GNU as 2.46.1.
     #[test]
     fn sgx_and_shadow_stack_rows() {
         #[rustfmt::skip]
@@ -8435,9 +8431,8 @@ mod tests {
         }
     }
 
-    /// GNU as matches mnemonics without regard to case;
-    /// `arch/x86/kernel/ftrace_64.S` writes `CALL`. A token that is not a
-    /// mnemonic in either case stays unresolved.
+    /// GNU as matches mnemonics without regard to case. A token that is not
+    /// a mnemonic in either case stays unresolved.
     #[test]
     fn mnemonic_case_is_folded() {
         assert_eq!(asm_bytes(b"NOP"), [0x90]);

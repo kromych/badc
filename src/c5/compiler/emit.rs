@@ -677,79 +677,9 @@ impl Compiler {
             self.ast_assign(); // pops field_addr, stores a (=combined).
             self.ty = value_ty;
             Ok(())
-        } else if self.lex.tk == Token::AssignOp {
-            // Bitfield compound assignment: `s.f OP= expr` per C99
-            // 6.5.16.2 ("E1 = E1 OP E2 with E1 evaluated once").
-            // The math needs old_value twice -- once to extract the
-            // current bitfield value as the binop's left operand,
-            // once to clear the slot for the final merge. A
-            // dedicated scratch local carries the spill / reload
-            // pair since the address-of-local instruction sequence
-            // would otherwise clobber the accumulator.
-            let binop = self.lex.ival;
-            self.next()?; // consume the assign-op
-            let _ov_temp = self.reserve_slots(1);
-            // a = field_addr; stack: [...]
-            self.ast_psh(); // stack: [..., field_addr]
-            self.mark_emit_other(); // a = old_value
-            // Spill old_value into the scratch local without
-            // disturbing `a` or the c5 stack.
-            self.mark_emit_other();
-            // Extract current = (old_value >> bit_offset) & mask.
-            if bit_offset > 0 {
-                self.emit_binop_with_imm(crate::c5::ir::BinOp::Shr, bit_offset as i64);
-            }
-            self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
-            // Evaluate the RHS with `current` on the c5 stack so
-            // the binop pops it as the left operand. Right-hand-
-            // side parsing follows the same precedence as a bare
-            // assignment.
-            self.ast_psh(); // stack: [..., field_addr, current]
-            self.expr(Token::Assign as i64)?;
-            // Stash the parsed rhs AST id + the binop here, before
-            // the trailing store clears `ast_acc`. The Member
-            // handler reads this to build the dual-emit equivalent
-            // `BitfieldAssign { rhs: Binop(read, op, rhs) }` per
-            // C99 6.5.16.2.
-            let rhs_ast = self.ast_acc;
-            use super::super::ir::BinOp as B;
-            let ir_op = match binop {
-                x if x == Token::AddOp as i64 => B::Add,
-                x if x == Token::SubOp as i64 => B::Sub,
-                x if x == Token::MulOp as i64 => B::Mul,
-                x if x == Token::DivOp as i64 => B::Div,
-                x if x == Token::ModOp as i64 => B::Mod,
-                x if x == Token::AndOp as i64 => B::And,
-                x if x == Token::OrOp as i64 => B::Or,
-                x if x == Token::XorOp as i64 => B::Xor,
-                x if x == Token::ShlOp as i64 => B::Shl,
-                x if x == Token::ShrOp as i64 => B::Shr,
-                _ => {
-                    return Err(
-                        self.compile_err(Code::UNSUPPORTED, "unsupported compound op on bitfield")
-                    );
-                }
-            };
-            if let Some(r) = rhs_ast {
-                self.pending.bf_compound_assign = Some((r, ir_op));
-            }
-            self.ast_binop(ir_op);
-            // Mask + shift the combined value back into the slot.
-            self.emit_binop_with_imm(crate::c5::ir::BinOp::And, mask);
-            if bit_offset > 0 {
-                self.emit_binop_with_imm(crate::c5::ir::BinOp::Shl, bit_offset as i64);
-            }
-            // shifted_new in `a`. Push it so the next ops can
-            // reload the cleared old_value into `a`.
-            self.ast_psh(); // stack: [..., field_addr, shifted_new]
-            self.mark_emit_other();
-            self.emit_binop_with_imm(crate::c5::ir::BinOp::And, !placed);
-            self.ast_binop(crate::c5::ir::BinOp::Or); // pops shifted_new; a = cleared | shifted_new
-            self.ast_assign(); // pops field_addr, stores a
-            self.ty = value_ty;
-            Ok(())
         } else {
-            // Bitfield read: `s.f` in any non-assignment context.
+            // Bitfield read: `s.f` in any context but `=`; a compound
+            // assignment takes the read as its lvalue.
             // C99 6.7.2.1p10: a bitfield's signedness follows its
             // declared base type. For a signed bitfield narrower than
             // the c5 accumulator width, the post-mask value is in
@@ -812,6 +742,7 @@ impl Compiler {
         s.h_is_variadic = s.is_variadic;
         s.h_prototyped = s.prototyped;
         s.h_param_enum_tags = s.param_enum_tags.clone();
+        s.h_param_fn_types = s.param_fn_types.clone();
         // The inner binding's type records its own enum tag.
         s.h_incomplete_enum_tag = s.incomplete_enum_tag.take();
         s.h_conv = s.conv;
@@ -892,6 +823,7 @@ impl Compiler {
         sym.is_variadic = sym.h_is_variadic;
         sym.prototyped = sym.h_prototyped;
         sym.param_enum_tags = core::mem::take(&mut sym.h_param_enum_tags);
+        sym.param_fn_types = core::mem::take(&mut sym.h_param_fn_types);
         sym.incomplete_enum_tag = sym.h_incomplete_enum_tag.take();
         sym.conv = sym.h_conv;
         sym.array_size = sym.h_array_size;
@@ -954,6 +886,7 @@ impl Compiler {
             && sym.is_variadic == sym.h_is_variadic
             && sym.prototyped == sym.h_prototyped
             && sym.param_enum_tags == sym.h_param_enum_tags
+            && sym.param_fn_types == sym.h_param_fn_types
             && sym.incomplete_enum_tag == sym.h_incomplete_enum_tag
             && sym.conv == sym.h_conv
             && sym.array_size == sym.h_array_size
@@ -1101,6 +1034,7 @@ impl Compiler {
     /// entry.
     pub(super) fn ast_reset(&mut self) {
         self.ast = super::super::ast::Ast::new();
+        self.folded_builtin_lits.clear();
         self.expr_fns.clear();
         self.ast_acc = None;
         self.ast_vstack.clear();
@@ -1451,13 +1385,15 @@ impl Compiler {
 
     /// Push `Expr::CompoundAssign`. C99 6.5.16.2p3: `E1 op= E2` is
     /// `E1 = E1 op E2` with E1 evaluated once; the walker spills the lhs
-    /// address, loads it, applies the binop with rhs, and stores back.
+    /// address, loads it, applies the binop with rhs in `op_ty`, and
+    /// stores back.
     pub(super) fn ast_emit_compound_assign(
         &mut self,
         op: super::super::ir::BinOp,
         lhs: ExprId,
         rhs: ExprId,
         ty: i64,
+        op_ty: i64,
         nsw: bool,
     ) {
         let pos = self.ast_src_pos();
@@ -1467,6 +1403,7 @@ impl Compiler {
                 lhs,
                 rhs,
                 ty,
+                op_ty,
                 nsw,
             },
             pos,
@@ -1838,8 +1775,8 @@ impl Compiler {
     /// Push a `Stmt::Case { val, body }`.
     pub(super) fn ast_emit_case(
         &mut self,
-        val: i64,
-        hi: i64,
+        val: i128,
+        hi: i128,
         body: super::super::ast::StmtId,
     ) -> super::super::ast::StmtId {
         let pos = self.ast_src_pos();

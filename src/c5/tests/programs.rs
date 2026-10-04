@@ -1,4 +1,6 @@
-//! End-to-end tests: load a C source from `tests/fixtures/c/`, compile, run, and
+// expression, so an array bound of the shape
+// `__builtin_constant_p(n) ? const : nonconst`, or of the `||` / `&&`
+// short-circuit forms, is a constant, not a C99 6.7.6.2 VLA.//! End-to-end tests: load a C source from `tests/fixtures/c/`, compile, run, and
 //! check the exit code. These exercise the whole pipeline.
 
 use super::compile_str;
@@ -252,9 +254,9 @@ fn wide_string_struct_member() {
 #[test]
 fn inline_asm_memory_operand() {
     // An inline-asm `"m"` / `"+m"` operand is a memory reference: the
-    // interlocked `lock cmpxchg` / `lock xadd` (edk2 BaseSynchronizationLib)
-    // read and write the memory object, not a register (a `lock` on a
-    // register destination is an invalid encoding that faults at runtime).
+    // interlocked `lock cmpxchg` / `lock xadd` read and write the memory
+    // object, not a register (a `lock` on a register destination is an
+    // invalid encoding that faults at runtime).
     assert_eq!(
         run_fixture_for("inline_asm_memory_operand.c", crate::Target::LinuxX64),
         0
@@ -281,8 +283,8 @@ fn inline_asm_x64_callee_saved_operands() {
 #[test]
 fn init_2d_struct_array() {
     // A 2D array of structs with an inferred outer dimension
-    // (`struct T xs[][M] = { { {...}, ... }, ... }`, OpenSSL's OSSL_PARAM
-    // tables) descends the rows instead of misreading a row as one struct.
+    // (`struct T xs[][M] = { { {...}, ... }, ... }`) descends the rows
+    // instead of misreading a row as one struct.
     // Covers file-scope and static-local; 1D and fixed-size regress.
     assert_eq!(run_fixture("init_2d_struct_array.c"), 0);
 }
@@ -291,16 +293,15 @@ fn init_2d_struct_array() {
 fn init_paren_conditional_arith() {
     // A parenthesized constant conditional followed by arithmetic
     // (`(cond ? a : b) * N`) in an aggregate initializer folds correctly
-    // instead of misreading the trailing operators as extra elements
-    // (OpenSSL cipher tables use this form).
+    // instead of misreading the trailing operators as extra elements.
     assert_eq!(run_fixture("init_paren_conditional_arith.c"), 0);
 }
 
 #[test]
 fn offsetof_runtime_subscript() {
     // GCC extension: `__builtin_offsetof(T, m[i])` with a non-constant `i`
-    // yields the runtime offset `offsetof(T, m) + i * stride` (edk2 firmware
-    // uses it). A constant subscript still folds.
+    // yields the runtime offset `offsetof(T, m) + i * stride`. A constant
+    // subscript still folds.
     assert_eq!(run_fixture("offsetof_runtime_subscript.c"), 0);
 }
 
@@ -316,9 +317,8 @@ fn offsetof_multi_runtime_subscript() {
 #[test]
 fn decl_specifier_order() {
     // C99 6.7.1: declaration specifiers may appear in any order. A
-    // storage-class specifier after the type (`INTN STATIC f()`, the edk2
-    // firmware form) is accepted at file and block scope; internal linkage
-    // still applies.
+    // storage-class specifier after the type (`int static f()`) is accepted
+    // at file and block scope; internal linkage still applies.
     assert_eq!(run_fixture("decl_specifier_order.c"), 0);
 }
 
@@ -327,7 +327,7 @@ fn wide_string_pointer_array() {
     // C99 6.7.8: `wchar_t *names[] = { L"a", L"b" }` is a brace list of
     // pointer initializers, not a brace-wrapped string. The wide brace-wrap
     // now requires a wchar_t-width scalar element, so a pointer array stays a
-    // brace list (the edk2 `CHAR16 *mDeviceTypeStr[]` form).
+    // brace list.
     assert_eq!(run_fixture("wide_string_pointer_array.c"), 0);
 }
 
@@ -1137,9 +1137,9 @@ fn builtin_bitcount_zero_const_fold() {
 fn const_cond_dead_arm_not_vla() {
     // C99 6.6p3: in a constant expression the operand not selected by a
     // constant condition is not evaluated and need not be a constant
-    // expression, so an array bound of the kernel `ilog2` shape --
-    // `__builtin_constant_p(n) ? const : nonconst` and the `||` / `&&`
-    // short-circuit forms -- is a constant, not a C99 6.7.6.2 VLA. Sizes
+    // expression, so an array bound of the shape
+    // `__builtin_constant_p(n) ? const : nonconst`, or of the `||` / `&&`
+    // short-circuit forms, is a constant, not a C99 6.7.6.2 VLA. Sizes
     // match gcc and clang; the fixture also links with the unselected-arm
     // callee undefined, proving the dead arm is never referenced.
     assert_eq!(run_fixture("const_cond_array_bound.c"), 0);
@@ -1421,7 +1421,7 @@ fn typeof_array_row() {
 fn typeof_addr_of_array() {
     // C99 6.5.3.2p3: `&arr` is a pointer-to-array, so `sizeof(&arr)` is a
     // pointer's width and `typeof(&arr)` / `typeof(*(&arr))` round-trip. Drives
-    // the per-CPU `SHIFT_PERCPU_PTR` shape `(typeof(*(ptr)) *)(addr + off)`.
+    // the per-CPU pointer shape `(typeof(*(ptr)) *)(addr + off)`.
     assert_eq!(run_fixture("typeof_addr_of_array.c"), 0);
 }
 
@@ -1560,10 +1560,17 @@ fn member_name_space_keeps_object_shape() {
 }
 
 #[test]
+fn prototype_param_keeps_object_shape() {
+    // C99 6.2.1p4: a parameter of a function pointer's prototype leaves the
+    // array dimensions of the object of its name intact.
+    assert_eq!(run_fixture("prototype_param_keeps_object_shape.c"), 0);
+}
+
+#[test]
 fn array_alias_param_outer_bracket() {
     // C99 6.7.7p3 + 6.7.5.3p7: `rows_t rows[]` over `typedef T rows_t[1]`
     // is pointer-to-row; one subscript strides a whole row and decays to
-    // the element pointer (the kernel's cpumask_var_t parameter shape).
+    // the element pointer.
     assert_eq!(run_fixture("array_alias_param_outer_bracket.c"), 0);
 }
 
@@ -2276,7 +2283,7 @@ fn address_of_parenthesized_compound_literal_static_init() {
 fn array_compound_literal_address_const() {
     // C99 6.5.2.5 / 6.6: `&(T[]){ ... }[i].member` as an address constant in a
     // static initializer -- an anonymous static array whose designated member
-    // address is stored (a sysfs attribute-table shape).
+    // address is stored (an attribute-table shape).
     assert_eq!(run_fixture("array_compound_literal_address_const.c"), 0);
 }
 
@@ -2836,6 +2843,43 @@ fn typeof_row_bounds() {
     // C23 6.7.2.5: `typeof` of a row of a multi-dimensional array keeps the
     // row's inner bounds.
     assert_eq!(run_fixture("typeof_row_bounds.c"), 0);
+}
+
+#[test]
+fn paren_array_declarator() {
+    // C99 6.7.5p6: bounds after a parenthesized declarator are the declared
+    // name's own, whatever the declaration declares.
+    assert_eq!(run_fixture("paren_array_declarator.c"), 0);
+}
+
+#[test]
+fn multidim_array_value() {
+    // C99 6.3.2.1p3, 6.7.5.3p7: an array of arrays converts to a pointer to
+    // its first row, and an array parameter is adjusted to the same type.
+    assert_eq!(run_fixture("multidim_array_value.c"), 0);
+}
+
+#[test]
+fn enum_type_identity() {
+    // C99 6.7.2.2p4: an enumerated type is a type of its own, compatible
+    // with its integer type, and its values behave as that type's.
+    assert_eq!(run_fixture("enum_type_identity.c"), 0);
+}
+
+#[test]
+fn compound_assign_once() {
+    // C99 6.5.16.2p3: `E1 op= E2` evaluates `E1` once and computes in the
+    // type of `E1 op E2`, for a bit-field and an `__int128` object as for
+    // any other lvalue.
+    assert_eq!(run_fixture("compound_assign_once.c"), 0);
+}
+
+#[test]
+fn int128_scalar_contexts() {
+    // An `__int128` operand takes part through its value as a subscript,
+    // a pointer offset, a shift count, a compound-assignment operand, a
+    // `_Bool` source, an array dimension and a `switch` value.
+    assert_eq!(run_fixture("int128_scalar_contexts.c"), 0);
 }
 
 #[test]
@@ -3401,7 +3445,7 @@ fn the_pty_headers_complete_struct_termios() {
     use crate::{CompileOptions, Compiler, Target};
     // glibc's <pty.h> and the BSD <util.h> include <termios.h>, so a unit
     // that reaches the pty helpers through either header alone still sees
-    // the struct definition. QEMU's chardev/char-pty.c is such a unit.
+    // the struct definition.
     let compiles = |header: &str, target: Target| -> bool {
         let src = alloc::format!(
             "#include <{header}>\nint f(void) {{ struct termios t; t.c_iflag = 0; \
@@ -3592,7 +3636,7 @@ fn linux_block_device_and_file_headers() {
     use crate::{CompileOptions, Compiler, Target};
     // The bundled linux/cdrom.h, dm-ioctl.h, hdreg.h, fd.h, the FS_IOC_* /
     // FS_*_FL additions to linux/fs.h, the POSIX_FADV_* advice, and the
-    // mincore binding -- everything block/file drivers pull in. Constant
+    // mincore binding -- the block-device and file-control interfaces. Constant
     // values are arch independent; a successful compile is the check.
     let compiles = |src: &str| -> bool {
         let opts = CompileOptions::default().with_no_entry_point(true);
@@ -4013,7 +4057,7 @@ fn packed_anon_union_layout() {
     // A trailing `__attribute__((packed))` repacks the fields; the promoted
     // members of an anonymous union must keep overlapping (and a nested
     // anonymous struct keeps its in-arm offsets) instead of being laid out
-    // sequentially. Mirrors the ACPI bios-linker-loader command entry.
+    // sequentially. Mirrors a fixed-size firmware command record.
     assert_eq!(run_fixture("packed_anon_union_layout.c"), 0);
 }
 
@@ -5580,9 +5624,9 @@ fn inttypes_header_supplies_types_and_format_macros() {
     // C99 7.8: `<inttypes.h>` layers on top of `<stdint.h>` and adds
     // the PRI / SCN conversion-specifier macros. The fixture
     // includes only `<inttypes.h>` and asserts the fixed-width
-    // typedefs still resolve transitively, plus the macro
-    // expansions match the LP64 / LLP64 contract c5 ships
-    // (int64_t aliases `long long`, so PRId64 is "lld" uniformly).
+    // typedefs still resolve transitively, and that each 64-bit,
+    // greatest-width and pointer-width macro agrees with the type the
+    // target gives its typedef.
     assert_eq!(run_fixture("inttypes_header.c"), 0);
 }
 
@@ -6412,9 +6456,7 @@ fn bool_bitfield_assign_normalizes() {
     // C99 6.5.16.1p2 + 6.3.1.2: a value assigned to a `_Bool` bitfield
     // converts to `_Bool` (zero / nonzero) before the store, not by
     // truncation to the field's width. Masking alone folded
-    // `flag = x & 4` to a constant 0 for a field at bit 0 or 1, which
-    // is the kernel's `data->allow_reinit = flags &
-    // PERCPU_REF_ALLOW_REINIT`.
+    // `flag = x & 4` to a constant 0 for a field at bit 0 or 1.
     assert_eq!(run_fixture("bool_bitfield_assign_normalizes.c"), 0);
 }
 
@@ -6537,9 +6579,10 @@ fn builtin_constant_p_value_kinds() {
 
 #[test]
 fn builtin_constant_p_selects_choose_expr_arm_in_initializer() {
-    // The kernel's PIN_GROUP shape: an array operand selects the address
-    // arm, whose value carries a relocation; an integer operand selects
-    // the constant arm; a floating arm keeps its value.
+    // An initializer that selects with `__builtin_choose_expr` on
+    // `__builtin_constant_p`: an array operand selects the address arm,
+    // whose value carries a relocation; an integer operand selects the
+    // constant arm; a floating arm keeps its value.
     assert_eq!(run_fixture("builtin_constant_p_choose_expr_init.c"), 0);
 }
 
@@ -6949,8 +6992,8 @@ fn address_of_deref_null_folds_to_null() {
 #[test]
 fn struct_member_two_dimensional_scalar_array_init() {
     // A struct's scalar 2D-array member takes a fully-braced initializer
-    // with a brace per row (C99 6.7.8p20), the `DEFINE_PER_CPU(... ) =
-    // {{{0}}}` shape reduced to non-zero values.
+    // with a brace per row (C99 6.7.8p20), the `= {{{0}}}` shape of a
+    // per-CPU definition with non-zero values.
     let src = "
         struct s { long long a[2][3]; };
         static struct s x = { .a = { {1, 2, 3}, {4, 5, 6} } };
@@ -6961,7 +7004,7 @@ fn struct_member_two_dimensional_scalar_array_init() {
 
 #[test]
 fn typeof_multidimensional_array_redeclaration_keeps_inner_dim() {
-    // `extern typeof(a) a;` (the EXPORT_SYMBOL shape) on a multi-dim array
+    // `extern typeof(a) a;` on a multi-dim array
     // must keep every dimension so a later `a[i][j]` strides by the inner
     // dimension, not drop to a single dimension.
     let src = "
@@ -6975,9 +7018,10 @@ fn typeof_multidimensional_array_redeclaration_keeps_inner_dim() {
 #[test]
 fn const_expr_dead_ternary_arm_keeps_function_call() {
     // The address-constant folding must not intercept a function
-    // designator in an unevaluated `?:` arm: `ilog2`'s dead arm holds a
-    // non-constant call the constant evaluator skips. A constant condition
-    // selects the live arm, so the array dimension folds.
+    // designator in an unevaluated `?:` arm: a `__builtin_constant_p`
+    // selection's dead arm holds a non-constant call the constant evaluator
+    // skips. A constant condition selects the live arm, so the array
+    // dimension folds.
     let src = "
         extern int probe_u32(unsigned);
         extern int probe_u64(unsigned long long);
@@ -6999,11 +7043,10 @@ fn inner_scope_bindings_unbind_at_scope_exit() {
 }
 
 #[test]
-fn unused_binding_diagnostics_follow_symbol_table_order() {
-    // The per-function unused-binding report walks the function's
-    // bindings in symbol-table index order, not declaration order:
-    // `zz` interns at file scope and so precedes `aa` despite being
-    // declared second.
+fn unused_binding_diagnostics_follow_declaration_order() {
+    // The per-function unused-binding report follows declaration order:
+    // `zz` interns at file scope, ahead of `aa`, and is still reported
+    // second, as it is declared.
     let src = "
         int zz;
         int f(void)
@@ -7028,7 +7071,7 @@ fn unused_binding_diagnostics_follow_symbol_table_order() {
             }
         })
         .collect();
-    assert_eq!(unused, ["zz", "aa"], "warnings: {:?}", prog.warnings);
+    assert_eq!(unused, ["aa", "zz"], "warnings: {:?}", prog.warnings);
 }
 
 /// A file-scope brace list of `n` compound-literal elements shaped like a
@@ -7447,7 +7490,7 @@ fn mach_vm_statistics_carries_the_user_memory_tags() {
              && VM_FLAGS_ALIAS_MASK==0xFF000000 \
              && VM_FLAGS_SUPERPAGE_SIZE_2MB==(2<<16))?1:-1];\n";
     assert!(header_snippet_compiles(src, Target::MacOSAarch64));
-    // A Mach tag has no meaning off Darwin; mimalloc's own probe is
+    // A Mach tag has no meaning off Darwin; a program may probe for it with
     // `#if defined(VM_MAKE_TAG)`, so defining it elsewhere would select a
     // tagged mmap on a kernel that reads the fd argument as a descriptor.
     for target in [
@@ -7542,7 +7585,7 @@ fn vm_region_basic_info_keeps_the_kernel_packing() {
 #[test]
 fn commoncrypto_random_is_bound_to_libsystem() {
     use crate::Target;
-    // mimalloc's Unix layer reaches for both headers to draw entropy:
+    // A unit drawing entropy may reach for both headers:
     // <AvailabilityMacros.h> puts MAC_OS_X_VERSION_MAX_ALLOWED past
     // 10.15, which selects CCRandomGenerateBytes over arc4random_buf.
     let src = "#include <AvailabilityMacros.h>\n\
@@ -7722,12 +7765,42 @@ fn cpu_time_clocks_follow_each_platform_libc() {
         assert!(header_snippet_compiles(gnu, target), "{target:?}");
         assert!(!header_snippet_compiles(apple, target), "{target:?}");
     }
-    // The three ids that were already defined keep their values.
+    // The three ids that were already defined keep their values. Id 4 is
+    // the raw monotonic clock on macOS and Linux, and on Windows the coarse
+    // realtime clock, as mingw-w64 numbers it.
     let common = "#include <time.h>\n\
-        int ck[(CLOCK_REALTIME==0 && CLOCK_MONOTONIC_RAW==4 \
+        int ck[(CLOCK_REALTIME==0 \
              && CLOCK_PROCESS_CPUTIME_ID!=CLOCK_THREAD_CPUTIME_ID)?1:-1];\n";
+    let raw = "#include <time.h>\nint ck[CLOCK_MONOTONIC_RAW==4?1:-1];\n";
+    let coarse = "#include <time.h>\nint ck[CLOCK_REALTIME_COARSE==4?1:-1];\n";
     for target in ALL_TARGETS {
         assert!(header_snippet_compiles(common, target), "{target:?}");
+        let windows = matches!(target, Target::WindowsX64 | Target::WindowsAarch64);
+        assert_eq!(header_snippet_compiles(raw, target), !windows, "{target:?}");
+        assert_eq!(
+            header_snippet_compiles(coarse, target),
+            windows,
+            "{target:?}"
+        );
+    }
+}
+
+#[test]
+fn reentrant_time_conversions_follow_posix_c_source_on_windows() {
+    use crate::Target;
+    // mingw-w64's <time.h> declares localtime_r, gmtime_r and ctime_r only
+    // when _POSIX_C_SOURCE precedes it, so without it the names are the
+    // program's: a definition of another type is no redeclaration there.
+    let posix = "#define _POSIX_C_SOURCE 200809L\n#include <time.h>\n\
+        void f(time_t t) { struct tm a; char s[26]; gmtime_r(&t, &a);\n\
+          localtime_r(&t, &a); ctime_r(&t, s); }\n";
+    let own = "#include <time.h>\n\
+        static int localtime_r(void) { return 0; }\n\
+        int f(void) { return localtime_r(); }\n";
+    for target in ALL_TARGETS {
+        assert!(header_snippet_compiles(posix, target), "{target:?}");
+        let windows = matches!(target, Target::WindowsX64 | Target::WindowsAarch64);
+        assert_eq!(header_snippet_compiles(own, target), windows, "{target:?}");
     }
 }
 
@@ -7903,4 +7976,47 @@ fn integer_constant_added_to_an_address_constant() {
     for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
         assert_eq!(super::run_str_for(src, target), 42, "{target:?}");
     }
+}
+
+#[test]
+fn preprocessed_output_compiles_to_the_same_program() {
+    use crate::{CompileOptions, Compiler, Target, Vm};
+    // `-E` output is a translation unit of its own: <stdatomic.h>'s
+    // generic functions exist only through the `#pragma intrinsic` lines
+    // the preprocessor consumes, so the output has to carry them for its
+    // compile to reach the same program.
+    let src = "#include <stdatomic.h>\n\
+               int f(atomic_int *p) { return atomic_fetch_add(p, 1); }\n\
+               int main(void) { atomic_int x = 41; f(&x); return atomic_load(&x); }\n";
+    let target = Target::host();
+    let text = Compiler::preprocess(
+        src.to_string(),
+        target,
+        CompileOptions::default().with_keep_pragmas(true),
+    )
+    .expect("the unit preprocesses");
+    let program = Compiler::with_options(text, target, CompileOptions::default())
+        .compile()
+        .expect("the preprocessed unit compiles");
+    assert_eq!(Vm::new(program).run().unwrap(), 42);
+}
+
+#[test]
+fn a_pragma_operator_keeps_the_lines_after_it_numbered() {
+    use crate::{CompileOptions, Compiler, Target};
+    // The `#pragma pack` an operator re-emits takes a line of its own; the
+    // diagnostic two lines further down still names its source line.
+    let src = "#define PACK _Pragma(\"pack(1)\")\n\
+               PACK\n\
+               struct s { char c; int i; };\n\
+               int main(void) { return undeclared_x; }\n";
+    let err = Compiler::with_options(src.to_string(), Target::host(), CompileOptions::default())
+        .compile()
+        .expect_err("an undeclared identifier is an error");
+    let lines: alloc::vec::Vec<u32> = err
+        .diagnostics()
+        .iter()
+        .filter_map(|d| d.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [4], "{err}");
 }

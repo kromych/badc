@@ -3,9 +3,9 @@
 // pressure. The ParamRef materialization must not clobber a not-yet-read
 // incoming argument register (System V AMD64 3.2.3 / AAPCS64 6.4.1).
 //
-// `swap_or_copy` mirrors the Lua string.pack `copywithendian` shape: a
-// branch keyed on the fourth parameter selects a forward copy or a
-// reversing copy. When the fourth parameter (`reverse`) was clobbered by
+// `swap_or_copy` is an endian-aware copy: a branch keyed on the fourth
+// parameter selects a forward copy or a reversing copy. When the fourth
+// parameter (`reverse`) was clobbered by
 // the placement of an earlier pointer parameter, the wrong branch ran.
 // Reproduced under BADC_MAX_GPR=5 at -O; correct at lower pressure and
 // without the fix.

@@ -1904,11 +1904,16 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
         self.ret_tags = funcs.iter().map(|f| (f.ent_pc, f.ret_type_tag)).collect();
     }
 
-    /// A cross-TU callee's convention comes off its declaration in this
-    /// unit, the same place the definition's would.
+    /// A cross-TU callee's convention and return type come off its
+    /// declaration in this unit, the same place the definition's would. A
+    /// declaration without a prototype states no return contract a tail
+    /// call could rely on.
     fn note_extern_callee(&mut self, sym: &crate::c5::symbol::Symbol) {
         if sym.conv != super::CallConv::Target {
             self.conv_targets.insert(sym.val as usize, sym.conv);
+        }
+        if sym.prototyped {
+            self.ret_tags.insert(sym.val as usize, sym.type_);
         }
     }
 
@@ -1997,10 +2002,11 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
             native.output_kind == super::OutputKind::Relocatable && !native.pic,
             native.abs32_addrs(target),
             native.hardening,
-            native.stack_protect.resolved_for(target),
+            native.stack_protect.resolved_for(target, native.code_model),
             entry,
             native.fixed_regs,
             native.optimize,
+            native.sibling_calls,
         )
     }
 

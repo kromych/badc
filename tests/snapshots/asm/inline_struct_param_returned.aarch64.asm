@@ -13,35 +13,18 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<id_word>:
-               	ret
-
-<id_pair>:
-               	ret
-
-<id_pair_hint>:
-               	ret
-
 <use_word>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	ldr	x0, [x0]
-               	bl	<addr>
-               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <use_pair>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x1, [x0, #0x8]
-               	ldr	x0, [x0]
-               	bl	<addr>
+               	ldr	x1, [x0]
+               	ldr	x0, [x0, #0x8]
                	mov	x17, #0xa               // =10
-               	mul	x0, x0, x17
-               	add	x0, x0, x1
-               	ldp	x29, x30, [sp], #0x10
+               	mul	x1, x1, x17
+               	add	x0, x1, x0
                	ret
 
 <use_big>:
@@ -67,43 +50,19 @@ Disassembly of section .text:
                	ret
 
 <use_hint>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	ldr	x1, [x0, #0x8]
-               	ldr	x0, [x0]
-               	bl	<addr>
+               	ldr	x1, [x0]
+               	ldr	x0, [x0, #0x8]
                	mov	x17, #0xa               // =10
-               	mul	x0, x0, x17
-               	add	x0, x0, x1
-               	ldp	x29, x30, [sp], #0x10
+               	mul	x1, x1, x17
+               	add	x0, x1, x0
                	ret
 
 <use_twice>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x1, x0
-               	sub	x0, x29, #0x10
-               	ldp	x16, x17, [x1]
-               	stp	x16, x17, [x0]
-               	ldr	x1, [x0, #0x8]
-               	ldr	x0, [x0]
-               	bl	<addr>
-               	stur	x0, [x29, #-0x10]
-               	sub	x0, x29, #0x10
-               	str	x1, [x0, #0x8]
-               	ldr	x1, [x0, #0x8]
-               	ldr	x0, [x0]
-               	bl	<addr>
-               	stur	x0, [x29, #-0x10]
-               	sub	x0, x29, #0x10
-               	str	x1, [x0, #0x8]
-               	ldr	x0, [x0]
+               	ldr	x1, [x0]
+               	ldr	x0, [x0, #0x8]
                	mov	x17, #0xa               // =10
-               	mul	x0, x0, x17
-               	add	x0, x0, x1
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
+               	mul	x1, x1, x17
+               	add	x0, x1, x0
                	ret
 
 <use_pick>:
@@ -236,17 +195,6 @@ Disassembly of section .text:
                	cmp	x0, #0x62
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
-               	add	sp, sp, #0x10
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	sub	x0, x29, #0x10
-               	ldr	x1, [x0]
-               	cmp	x1, #0x8
-               	b.ne	<addr>
-               	ldr	x0, [x0, #0x8]
-               	cmp	x0, #0x9
-               	b.eq	<addr>
-               	mov	x0, #0xa                // =10
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

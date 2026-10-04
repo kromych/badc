@@ -94,6 +94,22 @@ impl Compiler {
         }
     }
 
+    /// [`Self::convert_assign_rhs`] over an operand already parsed into
+    /// `arg`: the conversion to `to_ty` an argument for a parameter of that
+    /// type takes (C99 6.5.2.2p7).
+    pub(super) fn convert_operand(
+        &mut self,
+        arg: crate::c5::ast::ExprId,
+        to_ty: i64,
+    ) -> crate::c5::ast::ExprId {
+        let saved = (self.ast_acc.replace(arg), self.ty);
+        self.ty = crate::c5::ast::expr_ty(self.ast.expr(arg)).unwrap_or(to_ty);
+        self.convert_assign_rhs(to_ty);
+        let converted = self.ast_acc.unwrap_or(arg);
+        (self.ast_acc, self.ty) = saved;
+        converted
+    }
+
     /// Pre-divide / pre-modulo C99 6.3.1.3 conversion to the unsigned
     /// common type. When one operand is signed and the common type is
     /// unsigned narrower than 8 bytes, the signed operand carries

@@ -495,7 +495,10 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	w0, [x0]
+               	ldrh	w1, [x0]
+               	ldrb	w0, [x0, #0x2]
+               	lsl	x0, x0, #16
+               	orr	x0, x1, x0
                	and	x0, x0, #0x3fffff
                	lsl	x0, x0, #42
                	asr	x0, x0, #42
@@ -507,48 +510,16 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x78
-               	adrp	x1, <addr>
-               	add	x1, x1, <lo12>
-               	ldrh	w16, [x1]
-               	strh	w16, [x0]
-               	ldrb	w16, [x1, #0x2]
-               	strb	w16, [x0, #0x2]
-               	ldr	w1, [x0]
-               	and	x1, x1, #0x3fffff
-               	lsl	x1, x1, #42
-               	asr	x1, x1, #42
-               	mov	x17, #-0x4240           // =-16960
-               	movk	x17, #0xfff0, lsl #16
-               	cmp	w1, w17
-               	b.ne	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrh	w1, [x1]
-               	and	x1, x1, #0x7fff
-               	lsl	x1, x1, #49
-               	asr	x1, x1, #49
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrh	w0, [x0]
+               	and	x0, x0, #0x7fff
+               	lsl	x0, x0, #49
+               	asr	x0, x0, #49
                	mov	x17, #-0x3              // =-3
-               	cmp	w1, w17
-               	b.eq	<addr>
-               	mov	x0, #0x14               // =20
-               	add	sp, sp, #0x90
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	ldr	w1, [x0]
-               	and	x1, x1, #0xffffffffffc00000
-               	mov	x17, #0x4240            // =16960
-               	movk	x17, #0xf, lsl #16
-               	orr	x1, x1, x17
-               	str	w1, [x0]
-               	and	x0, x1, #0x3fffff
-               	lsl	x0, x0, #42
-               	asr	x0, x0, #42
-               	mov	x17, #0x4240            // =16960
-               	movk	x17, #0xf, lsl #16
                	cmp	w0, w17
                	b.eq	<addr>
-               	mov	x0, #0x15               // =21
+               	mov	x0, #0x14               // =20
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret

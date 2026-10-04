@@ -976,10 +976,9 @@ fn parse_gas_irp_header(
 }
 
 /// Substitute a macro / `.irp` body's parameters and re-split the result into
-/// statements. An argument may itself hold `;`-separated statements (the
-/// kernel's ALTERNATIVE macros pass a whole instruction sequence as one
-/// argument), and GNU as re-scans the expansion, so a separator that arrives
-/// through a parameter separates.
+/// statements. An argument may itself hold `;`-separated statements (a
+/// whole instruction sequence passed as one argument), and GNU as re-scans
+/// the expansion, so a separator that arrives through a parameter separates.
 fn subst_gas_body(
     body: &[alloc::string::String],
     map: &alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>,
@@ -1179,8 +1178,8 @@ fn split_macro_args(s: &str) -> alloc::vec::Vec<&str> {
 }
 
 /// Split a directive argument list on top-level commas, ignoring commas
-/// nested in `()` / `[]` / `{}` or inside a double-quoted run (an
-/// ALTERNATIVE macro argument quotes a whole instruction, commas included).
+/// nested in `()` / `[]` / `{}` or inside a double-quoted run (a macro
+/// argument may quote a whole instruction, commas included).
 /// Empty pieces are dropped.
 pub(crate) fn split_top_commas(s: &str) -> alloc::vec::Vec<&str> {
     let mut parts = alloc::vec::Vec::new();
@@ -1211,11 +1210,11 @@ pub(crate) fn split_top_commas(s: &str) -> alloc::vec::Vec<&str> {
     parts
 }
 
-/// Split an AArch64 ALTERNATIVE template into its main stream and the
+/// Split an AArch64 inline-asm template into its main stream and the
 /// `.subsection` replacement code GNU as appends to the section after the
-/// main content. The kernel `ALTERNATIVE` macro places the replacement in
-/// `.subsection 1` bracketed by `.previous`, out of the main sequence's
-/// fall-through path, and a template may chain several. Returns `(main,
+/// main content. A replacement sequence in `.subsection 1` bracketed by
+/// `.previous` stays out of the main sequence's fall-through path, and a
+/// template may chain several. Returns `(main,
 /// deferred)`: `deferred` holds every region, ordered by subsection number
 /// and then by position, as GNU as lays a section's subsections out. It is
 /// empty (and `main` is `text` unchanged) when there is no `.subsection` or

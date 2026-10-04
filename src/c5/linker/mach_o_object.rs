@@ -13,6 +13,7 @@
 //! the Mach-O leading underscore, which the writer re-applies, so the
 //! reader strips one.
 
+use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -25,11 +26,13 @@ use crate::c5::object::elf_reloc_types::{
     R_AARCH64_LDST64_ABS_LO12_NC, R_AARCH64_LDST128_ABS_LO12_NC, R_AARCH64_PREL32,
     R_AARCH64_PREL64,
 };
+use crate::c5::object::unwind_info::{UNWIND_ARM64_MODE_DWARF, UNWIND_ARM64_MODE_MASK};
 
 use super::link_err;
 use super::object::{
-    InputSection, NativeInitFunc, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
-    NativeSymbol, STT_FUNC, STT_NOTYPE, STT_OBJECT, SectionFamily,
+    CompactUnwindEntry, EhFrameInput, EhFrameInputField, InputSection, NativeInitFunc,
+    NativeMachine, NativeObject, NativeReloc, NativeSymSection, NativeSymbol, STT_FUNC, STT_NOTYPE,
+    STT_OBJECT, SectionFamily, SymRef,
 };
 use crate::c5::diag::Code;
 
@@ -307,9 +310,9 @@ impl Sect {
 fn classify(sect: &Sect, has_relocs: bool) -> Result<SectionFamily, C5Error> {
     let kind = sect.kind();
     // `S_ATTR_DEBUG` covers `__LD,__compact_unwind` and the `__DWARF`
-    // sections; none carries merged-image payload. `__eh_frame` joins
-    // them because the Mach-O image writer emits no unwind section for
-    // a reader to feed.
+    // sections; none carries merged-image payload. The compact entries and
+    // `__eh_frame` are read on their own for the image's unwind tables
+    // (`compact_unwind_entries`, `eh_frame_input`).
     if sect.flags & S_ATTR_DEBUG != 0
         || sect.seg == "__DWARF"
         || sect.seg == "__LD"
@@ -491,6 +494,8 @@ pub fn parse_native_mach_o(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let blobs = concat_families(bytes, &mut sects)?;
     let (symbols, sect_sym_base) = decode_symbols(bytes, &sects, symtab)?;
     let mut relocs = translate_relocs(bytes, &sects, &symbols, sect_sym_base)?;
+    let compact_unwind = compact_unwind_entries(bytes, &sects, &symbols, sect_sym_base)?;
+    let eh_frame = eh_frame_input(bytes, &sects, symtab, sect_sym_base)?;
     // Every family blob is patched in place, so relocations must be
     // sorted the way the ELF reader delivers them.
     relocs.text.sort_by_key(|r: &NativeReloc| r.offset);
@@ -501,6 +506,7 @@ pub fn parse_native_mach_o(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         source: String::new(),
         sections: blobs.sections,
         discarded: blobs.discarded,
+        exec_stack: false,
         machine,
         text: blobs.text,
         text_align: blobs.text_align,
@@ -542,7 +548,235 @@ pub fn parse_native_mach_o(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         debug_info_relocs: Vec::new(),
         debug_line_relocs: Vec::new(),
         debug_other: Vec::new(),
+        compact_unwind,
+        eh_frame,
     })
+}
+
+const ARM64_RELOC_POINTER_TO_GOT: u8 = 7;
+
+/// `__LD,__compact_unwind`: 32-byte entries, each the relocated addresses
+/// of a function, its personality routine and its LSDA around its length
+/// and encoding. An entry deferring to a DWARF FDE takes neither address.
+fn compact_unwind_entries(
+    bytes: &[u8],
+    sects: &[Sect],
+    symbols: &[NativeSymbol],
+    sect_sym_base: usize,
+) -> Result<Vec<CompactUnwindEntry>, C5Error> {
+    const ENTRY: usize = 32;
+    let Some(sect) = sects
+        .iter()
+        .find(|s| s.seg == "__LD" && s.name == "__compact_unwind")
+    else {
+        return Ok(Vec::new());
+    };
+    let content = sect.content(bytes)?;
+    let bad = |what: String| link_err(Code::MALFORMED_INPUT, MODULE, &what);
+    if !content.len().is_multiple_of(ENTRY) {
+        return Err(bad(format!(
+            "section `{}` is {} bytes, not a whole number of {ENTRY}-byte entries",
+            sect.label(),
+            content.len()
+        )));
+    }
+    let mut walk = RelocWalk {
+        sect,
+        content,
+        pending_addend: None,
+        pending_sub: None,
+    };
+    let mut targets: BTreeMap<u32, SymRef> = BTreeMap::new();
+    for r in &read_relocs(bytes, sect)? {
+        if let Some((sym_idx, _, addend)) =
+            translate_reloc(r, &mut walk, sects, symbols, sect_sym_base)?
+        {
+            targets.insert(r.address, (sym_idx, addend));
+        }
+    }
+    let mut out = Vec::with_capacity(content.len() / ENTRY);
+    for (i, entry) in content.as_chunks::<ENTRY>().0.iter().enumerate() {
+        let at = (i * ENTRY) as u32;
+        let site = format!("section `{}` entry {i}", sect.label());
+        let &(sym_idx, addend) = targets.get(&at).ok_or_else(|| {
+            bad(format!(
+                "{site}: no relocation gives the function's address"
+            ))
+        })?;
+        let sym = &symbols[sym_idx];
+        if sym.section != NativeSymSection::Text {
+            return Err(bad(format!(
+                "{site}: the function `{}` is not code",
+                sym.name
+            )));
+        }
+        // A word no relocation names would hold an absolute address.
+        let reference = |o: usize| match targets.get(&(at + o as u32)) {
+            Some(&r) => Ok(Some(r)),
+            None if entry[o..o + 8] == [0; 8] => Ok(None),
+            None => Err(bad(format!(
+                "{site}: word {o} holds an address no relocation names"
+            ))),
+        };
+        let encoding = u32::from_le_bytes(entry[12..16].try_into().unwrap());
+        let dwarf = encoding & UNWIND_ARM64_MODE_MASK == UNWIND_ARM64_MODE_DWARF;
+        let (personality, lsda) = (reference(16)?, reference(24)?);
+        out.push(CompactUnwindEntry {
+            text_offset: (sym.value as i64 + addend) as u64,
+            encoding,
+            personality: personality.filter(|_| !dwarf),
+            lsda: lsda.filter(|_| !dwarf),
+        });
+    }
+    Ok(out)
+}
+
+/// `__TEXT,__eh_frame`: the bytes and each relocated field, a label
+/// difference ending at the field (`ARM64_RELOC_SUBTRACTOR` naming a label
+/// of this section, then `ARM64_RELOC_UNSIGNED`) or the distance to the
+/// symbol's slot (`ARM64_RELOC_POINTER_TO_GOT`). No load-time fixup
+/// reaches `__TEXT`, where the table sits.
+fn eh_frame_input(
+    bytes: &[u8],
+    sects: &[Sect],
+    symtab: SymtabCommand,
+    sect_sym_base: usize,
+) -> Result<Option<EhFrameInput>, C5Error> {
+    let Some(sect) = sects
+        .iter()
+        .find(|s| s.seg == "__TEXT" && s.name == "__eh_frame")
+    else {
+        return Ok(None);
+    };
+    let content = sect.content(bytes)?;
+    let mut fields = Vec::new();
+    let mut sub: Option<Reloc> = None;
+    for r in read_relocs(bytes, sect)? {
+        let site = format!("section `{}` offset {:#x}", sect.label(), r.address);
+        let bad = |what: &str| link_err(Code::MALFORMED_INPUT, MODULE, &format!("{site}: {what}"));
+        if r.rtype == ARM64_RELOC_SUBTRACTOR {
+            sub = Some(r);
+            continue;
+        }
+        let symbol = |num: u32| {
+            let idx = num as usize + 1;
+            (idx < sect_sym_base)
+                .then_some(idx)
+                .ok_or_else(|| bad("relocation names a symbol past the symbol table"))
+        };
+        let field = match (r.rtype, sub.take()) {
+            (ARM64_RELOC_UNSIGNED, Some(b)) if b.extern_ && b.address == r.address => {
+                let stored = stored_addend(content, r.address as usize, r.length, &site)?;
+                let (sym_idx, addend) = if r.extern_ {
+                    (symbol(r.symbolnum)?, stored)
+                } else {
+                    let tgt = sects
+                        .get((r.symbolnum as usize).wrapping_sub(1))
+                        .ok_or_else(|| bad("relocation names a section that does not exist"))?;
+                    (
+                        sect_sym_base + r.symbolnum as usize - 1,
+                        stored - tgt.addr as i64,
+                    )
+                };
+                let label = nlist_value(bytes, symtab, b.symbolnum)?;
+                if !(sect.addr..=sect.addr + sect.size).contains(&label) {
+                    return Err(bad(
+                        "ARM64_RELOC_SUBTRACTOR subtracts a label outside the section",
+                    ));
+                }
+                EhFrameInputField {
+                    offset: r.address,
+                    width: 1 << r.length.min(3),
+                    target: (
+                        sym_idx,
+                        addend + r.address as i64 - (label - sect.addr) as i64,
+                    ),
+                    got: false,
+                }
+            }
+            (ARM64_RELOC_POINTER_TO_GOT, None) if r.pcrel && r.length == 2 && r.extern_ => {
+                EhFrameInputField {
+                    offset: r.address,
+                    width: 4,
+                    target: (symbol(r.symbolnum)?, 0),
+                    got: true,
+                }
+            }
+            (rtype, _) => {
+                return Err(link_err(
+                    Code::UNSUPPORTED,
+                    MODULE,
+                    &format!(
+                        "{site}: relocation type {rtype} (pcrel={}, length={}) is not a \
+                         pc-relative field, which `__eh_frame` in `__TEXT` needs",
+                        u8::from(r.pcrel),
+                        r.length,
+                    ),
+                ));
+            }
+        };
+        if !matches!(field.width, 4 | 8)
+            || field.offset as usize + field.width as usize > content.len()
+        {
+            return Err(bad("relocation field lies outside section content"));
+        }
+        fields.push(field);
+    }
+    if sub.is_some() {
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            &format!(
+                "section `{}` ends with an ARM64_RELOC_SUBTRACTOR that modifies nothing",
+                sect.label()
+            ),
+        ));
+    }
+    fields.sort_by_key(|f| f.offset);
+    let bad = |what: String| {
+        link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            &format!("section `{}`: {what}", sect.label()),
+        )
+    };
+    let records = crate::c5::object::eh_frame::entries(content).map_err(bad)?;
+    let mut fdes = Vec::new();
+    for fde in records.iter().filter(|r| r.cie.is_some()) {
+        let initial = (fde.off + 8) as u32;
+        if !fields.iter().any(|f| f.offset == initial && !f.got) {
+            return Err(bad(format!(
+                "the FDE at offset {:#x} names its function through no relocation",
+                fde.off
+            )));
+        }
+        fdes.push(fde.off as u32);
+    }
+    Ok(Some(EhFrameInput {
+        bytes: content.to_vec(),
+        fields,
+        fdes,
+    }))
+}
+
+/// The address `n_value` of Mach-O symbol `num`.
+fn nlist_value(
+    bytes: &[u8],
+    (symoff, nsyms, _, _): SymtabCommand,
+    num: u32,
+) -> Result<u64, C5Error> {
+    if num >= nsyms {
+        return Err(link_err(
+            Code::MALFORMED_INPUT,
+            MODULE,
+            &format!("relocation names symbol {num} past the symbol table"),
+        ));
+    }
+    need_u64(
+        bytes,
+        symoff as usize + num as usize * NLIST_64_SIZE + 8,
+        "symbol",
+    )
 }
 
 /// `LC_SYMTAB`: (symoff, nsyms, stroff, strsize).
@@ -1691,7 +1925,8 @@ mod tests {
             "__compact_unwind",
             S_ATTR_DEBUG,
             alloc::vec![0u8; 32],
-        );
+        )
+        .reloc(0, ARM64_RELOC_UNSIGNED, false, 3, false, 1);
         let eh = Sec::new("__TEXT", "__eh_frame", 0xB, alloc::vec![0u8; 24]);
         let o = parse_native_mach_o(&build(CPU_TYPE_ARM64, MH_OBJECT, &[text, cu, eh], &[]))
             .expect("parse");
@@ -1702,6 +1937,145 @@ mod tests {
             dropped,
             alloc::vec!["__LD,__compact_unwind", "__TEXT,__eh_frame"],
         );
+        assert_eq!(o.compact_unwind.len(), 1, "read on its own");
+        assert!(o.eh_frame.is_some(), "read on its own");
+    }
+
+    /// Each `__compact_unwind` entry places its function, relocated against
+    /// the section or a symbol, with the personality routine and LSDA its
+    /// relocations name; an entry deferring to a DWARF FDE takes neither.
+    #[test]
+    fn compact_unwind_entries_place_each_function() {
+        let text = Sec::new(
+            "__TEXT",
+            "__text",
+            PURE_INSTRUCTIONS,
+            insns(&[0xd503_201f; 16]),
+        );
+        let entry = |addr: u64, enc: u32, lsda: u64| -> Vec<u8> {
+            [
+                &addr.to_le_bytes()[..],
+                &0x10u32.to_le_bytes(),
+                &enc.to_le_bytes(),
+                &[0; 8],
+                &lsda.to_le_bytes(),
+            ]
+            .concat()
+        };
+        let content = [
+            entry(0x10, 0x0400_0000, 0),
+            entry(0, 0x0200_0000, 0),
+            entry(0x20, 0x0300_0040, 0),
+            entry(0x30, 0x4400_0000, 8),
+        ]
+        .concat();
+        // Descending addresses, as Mach-O stores them.
+        let cu = Sec::new("__LD", "__compact_unwind", S_ATTR_DEBUG, content)
+            .reloc(120, ARM64_RELOC_UNSIGNED, false, 3, false, 1)
+            .reloc(112, ARM64_RELOC_UNSIGNED, false, 3, true, 1)
+            .reloc(96, ARM64_RELOC_UNSIGNED, false, 3, false, 1)
+            .reloc(64, ARM64_RELOC_UNSIGNED, false, 3, false, 1)
+            .reloc(32, ARM64_RELOC_UNSIGNED, false, 3, true, 0)
+            .reloc(0, ARM64_RELOC_UNSIGNED, false, 3, false, 1);
+        let syms: [Sym; 2] = [
+            ("_g", N_SECT | N_EXT, 1, 0, 0),
+            ("___gxx_personality_v0", N_UNDF | N_EXT, 0, 0, 0),
+        ];
+        let o = parse_native_mach_o(&build(CPU_TYPE_ARM64, MH_OBJECT, &[text, cu], &syms))
+            .expect("parse");
+        let got: Vec<(u64, u32, Option<&str>, Option<i64>)> = (o.compact_unwind.iter())
+            .map(|e| {
+                let personality = e.personality.map(|(s, _)| o.symbols[s].name.as_str());
+                (e.text_offset, e.encoding, personality, e.lsda.map(|l| l.1))
+            })
+            .collect();
+        assert_eq!(
+            got,
+            [
+                (0x10, 0x0400_0000, None, None),
+                (0, 0x0200_0000, None, None),
+                (0x20, 0x0300_0040, None, None),
+                (0x30, 0x4400_0000, Some("__gxx_personality_v0"), Some(8)),
+            ]
+        );
+    }
+
+    /// `__eh_frame` is read with the fields its relocations fill and the
+    /// FDEs, each naming its function through the field 8 bytes in.
+    #[test]
+    fn eh_frame_reads_its_fields_and_fdes() {
+        let text = || {
+            Sec::new(
+                "__TEXT",
+                "__text",
+                PURE_INSTRUCTIONS,
+                insns(&[0xd65f_03c0; 4]),
+            )
+        };
+        let mut table = alloc::vec![24, 0, 0, 0, 0, 0, 0, 0, 1, b'z', b'P', b'R', 0, 1, 0x78, 30];
+        table.extend([6, 0x9b, 0, 0, 0, 0, 0x10, 0x0c, 31, 0, 0, 0]);
+        table.extend([0x18, 0, 0, 0, 32, 0, 0, 0]);
+        table.extend((-36i64).to_le_bytes());
+        table.extend(16u64.to_le_bytes());
+        table.extend([0; 4]);
+        let eh = |table: &[u8]| Sec::new("__TEXT", "__eh_frame", 0x6800_000B, table.to_vec());
+        let syms: [Sym; 3] = [
+            ("_f", N_SECT | N_EXT, 1, 0, 0),
+            ("ltmp1", N_SECT, 2, 0, 16),
+            ("___gxx_personality_v0", N_UNDF | N_EXT, 0, 0, 0),
+        ];
+        let relocated = eh(&table)
+            .reloc(36, ARM64_RELOC_SUBTRACTOR, false, 3, true, 1)
+            .reloc(36, ARM64_RELOC_UNSIGNED, false, 3, true, 0)
+            .reloc(18, ARM64_RELOC_POINTER_TO_GOT, true, 2, true, 2);
+        let o = parse_native_mach_o(&build(
+            CPU_TYPE_ARM64,
+            MH_OBJECT,
+            &[text(), relocated],
+            &syms,
+        ))
+        .expect("parse");
+        let input = o.eh_frame.expect("the table");
+        assert_eq!(input.bytes, table);
+        assert_eq!(
+            input.fields,
+            [
+                EhFrameInputField {
+                    offset: 18,
+                    width: 4,
+                    target: (3, 0),
+                    got: true,
+                },
+                EhFrameInputField {
+                    offset: 36,
+                    width: 8,
+                    target: (1, 0),
+                    got: false,
+                },
+            ]
+        );
+        assert_eq!(input.fdes, [28]);
+
+        // An absolute address would need a load-time fixup in `__TEXT`.
+        let absolute = eh(&table).reloc(36, ARM64_RELOC_UNSIGNED, false, 3, true, 0);
+        let m = alloc::format!(
+            "{}",
+            parse_native_mach_o(&build(
+                CPU_TYPE_ARM64,
+                MH_OBJECT,
+                &[text(), absolute],
+                &syms
+            ))
+            .expect_err("absolute")
+        );
+        assert!(m.contains("not a pc-relative field"), "{m}");
+        let unnamed = eh(&table);
+        let m = alloc::format!(
+            "{}",
+            parse_native_mach_o(&build(CPU_TYPE_ARM64, MH_OBJECT, &[text(), unnamed], &syms))
+                .expect_err("FDE without its function")
+        );
+        assert!(m.contains("through no relocation"), "{m}");
     }
 
     #[test]

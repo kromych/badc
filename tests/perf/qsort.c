@@ -19,7 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
+#include "bench_clock.h"
 
 #define N 2000000
 
@@ -52,14 +52,11 @@ int main(void) {
         a[i] = (int)(seed & 0x7fffffff);
     }
 
-    struct timespec t0, t1;
-    clock_gettime(CLOCK_MONOTONIC, &t0);
+    double t0 = bench_ms();
     qs(a, 0, N - 1);
-    clock_gettime(CLOCK_MONOTONIC, &t1);
+    double t1 = bench_ms();
 
-    long secs = t1.tv_sec - t0.tv_sec;
-    long nsecs = t1.tv_nsec - t0.tv_nsec;
-    double ms = (double)secs * 1000.0 + (double)nsecs / 1000000.0;
+    double ms = t1 - t0;
     printf("sorted N=%d in %.2f ms; first=%d last=%d\n", N, ms, a[0], a[N-1]);
 
     // Sanity check.

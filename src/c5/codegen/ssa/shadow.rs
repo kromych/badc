@@ -225,6 +225,7 @@ pub(crate) fn walk_program(
     // and relocations against symbols the program never references.
     // The fixed point also resolves a merge phi that a pruned branch
     // collapses to one incoming. The -O pipeline reruns this post-inline.
+    crate::c5::codegen::passes::noreturn::run(&mut out, program, false);
     crate::c5::codegen::passes::simplify_branches::run(&mut out);
     Ok(out)
 }
@@ -570,7 +571,11 @@ pub(crate) fn compute_live_sets(
     let mut code_edges: Vec<Vec<usize>> = alloc::vec![Vec::new(); n];
     let mut data_edges: Vec<Vec<usize>> = alloc::vec![Vec::new(); n];
     if n > 0 {
-        for r in &program.code_relocs {
+        // A slot the loader binds to a binding holds no trampoline.
+        let bound = |r: &&crate::c5::program::CodeReloc| {
+            program.bound_trampoline(r.target_ent_pc).is_some()
+        };
+        for r in program.code_relocs.iter().filter(|r| !bound(r)) {
             let off = r.data_offset as i64;
             if (0..data_len).contains(&off) {
                 code_edges[interval_of(off)].push(r.target_ent_pc as usize);
@@ -684,9 +689,9 @@ pub(crate) fn compute_live_sets(
     // alive -- `used` asks for that. An included header's `static
     // inline` would otherwise become an out-of-line definition of this
     // unit, and a reference the program means for another unit's
-    // definition would bind to it: the kernel's generated export table
-    // names `migrate_disable`, whose exported body one unit compiles
-    // out of line while every other unit sees a header's inline copy.
+    // definition would bind to it: a file-scope `asm()` naming a function
+    // that one unit defines out of line while every other unit sees a
+    // header's inline copy.
     if assume_data_live {
         for i in 0..n {
             work.push(Node::Data(i));

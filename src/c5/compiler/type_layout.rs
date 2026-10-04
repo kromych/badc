@@ -18,7 +18,7 @@ use super::super::ir::AggDesc;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    CONST_PTR_LVL_MASK, UNSIGNED_BIT, VOLATILE_MASK, is_floating_scalar, is_long_double_scalar,
+    QUAL_PTR_LVL_MASK, UNSIGNED_BIT, VOLATILE_BIT, is_floating_scalar, is_long_double_scalar,
     is_pointer_ty, is_struct_ty, is_struct_value_ty, is_type_start_token, pointee_size_no_struct,
     strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for, usual_arith_common_ty,
 };
@@ -52,18 +52,18 @@ impl Compiler {
     }
 
     /// True if pointer arithmetic on `ptr_ty` scales the offset by
-    /// the pointee's byte size. False only for `char*` (one byte
-    /// per element, no scaling). Replaces the old fixed-8 check
-    /// which got struct-pointer scaling wrong.
+    /// the pointee's byte size: any size but one, zero included -- an
+    /// element of a zero-length array or an empty structure occupies no
+    /// bytes, so the pointer does not move, as in gcc and clang.
     pub(super) fn is_ptr_scaling_nontrivial(&self, ptr_ty: i64) -> bool {
-        is_pointer_ty(ptr_ty) && self.pointee_size(ptr_ty) > 1
+        is_pointer_ty(ptr_ty) && self.pointee_size(ptr_ty) != 1
     }
 
     /// True when the value the parser just produced is a function
     /// designator or a pointer to a function: its expression's function
     /// type, or the lineage an identifier load seeds. The additive
-    /// operators step it by one byte, as GNU C does and the Linux kernel
-    /// relies on; C99 6.5.6p2 admits pointers to object types only.
+    /// operators step it by one byte, as GNU C does by giving a function
+    /// type size 1; C99 6.5.6p2 admits pointers to object types only.
     pub(super) fn value_is_function_pointer(&self) -> bool {
         (self.pending.fn_ptr_chain_depth == 0 && !self.pending.fn_ptr_depth_is_array_elem)
             || self
@@ -80,27 +80,6 @@ impl Compiler {
             self.pointee_size(ty)
         } else {
             1
-        }
-    }
-
-    /// Pointer-arithmetic stride for `ty`. A pointer-to-array
-    /// `T (*p)[N]` carries the flat type of a `T*`, so `fallback`
-    /// (`pointee_size` / `pointee_step`) scales by `sizeof(T)` rather
-    /// than `sizeof(T[N])`. The array's per-element size is seeded
-    /// into the multi-dim stride snapshot when the operand is loaded
-    /// or an array decays; `seeded_stride` is that value (0 when the
-    /// operand is a plain pointer). When it is set, it is the correct
-    /// stride; otherwise fall back.
-    pub(super) fn pointer_to_array_arith_stride(
-        &self,
-        seeded_stride: i64,
-        ty: i64,
-        fallback: i64,
-    ) -> i64 {
-        if is_pointer_ty(ty) && seeded_stride > 1 {
-            seeded_stride
-        } else {
-            fallback
         }
     }
 
@@ -259,6 +238,7 @@ impl Compiler {
             is_variadic: false,
             prototyped: false,
             param_enum_tags: alloc::vec::Vec::new(),
+            param_fn_types: alloc::vec::Vec::new(),
             enum_tag: None,
             conv: crate::c5::codegen::CallConv::Target,
             anon_union_group: 0,
@@ -366,6 +346,7 @@ impl Compiler {
             is_variadic: false,
             prototyped: false,
             param_enum_tags: alloc::vec::Vec::new(),
+            param_fn_types: alloc::vec::Vec::new(),
             enum_tag: None,
             conv: crate::c5::codegen::CallConv::Target,
             anon_union_group: 0,
@@ -442,6 +423,84 @@ impl Compiler {
         }
     }
 
+    /// The type a pending `vector_size(N)` attribute makes of `ty`, or `ty`
+    /// when none is pending. As in GNU C, a vector of `N` bytes replaces the
+    /// innermost element type through the pointer, array and function
+    /// derivations; the element is an integer type other than `_Bool`, or a
+    /// floating type.
+    pub(super) fn apply_pending_vector_size(&mut self, ty: i64) -> Result<i64, C5Error> {
+        let n = core::mem::take(&mut self.pending.attr_vector_size);
+        if n <= 0 {
+            return Ok(ty);
+        }
+        self.vectorize_innermost(ty, n)
+    }
+
+    /// `ty` with its innermost element type made a vector of `n` bytes, each
+    /// derivation keeping its qualifiers.
+    fn vectorize_innermost(&mut self, ty: i64, n: i64) -> Result<i64, C5Error> {
+        use super::types::{DERIVATION_QUAL_MASK, ptr_depth_of};
+        let levels = ptr_depth_of(ty) * Ty::Ptr as i64;
+        let base = ty - levels;
+        let array = is_struct_ty(base)
+            .then(|| struct_id_of(base))
+            .filter(|&id| self.structs[id].is_array);
+        if let Some(id) = array {
+            if self.structs[id].vla_size_slot.is_some() {
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    "`vector_size` on a variable-length array",
+                ));
+            }
+            let field = &self.structs[id].fields[0];
+            let dims = if field.array_dims.len() >= 2 {
+                field.array_dims.clone()
+            } else {
+                alloc::vec![field.array_size]
+            };
+            let elem = self.vectorize_innermost(field.ty, n)?;
+            let agg = self.array_agg_type(elem, &dims);
+            return Ok((agg + levels) | (ty & (VOLATILE_BIT | QUAL_PTR_LVL_MASK)));
+        }
+        let elem = base & !DERIVATION_QUAL_MASK;
+        use super::diag::Operand;
+        let arithmetic = matches!(self.operand(elem), Operand::Integer | Operand::Floating);
+        if !arithmetic || super::types::is_bool_ty(elem) {
+            let t = super::types::format_type(elem, &self.structs);
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                alloc::format!("invalid vector element type `{t}`"),
+            ));
+        }
+        Ok((self.make_vector_type(elem, n) + levels) | (ty & DERIVATION_QUAL_MASK))
+    }
+
+    /// `ty` with the pending `vector_size` and then `mode` attribute applied.
+    pub(super) fn apply_pending_type_attributes(&mut self, ty: i64) -> Result<i64, C5Error> {
+        let ty = self.apply_pending_vector_size(ty)?;
+        match self.pending.attr_mode.take() {
+            Some(m) => self.apply_mode_to_type(ty, m),
+            None => Ok(ty),
+        }
+    }
+
+    /// The return type `ret` of a function declarator under the type
+    /// attributes its trailing list carries, as gcc applies them:
+    /// `vector_size` reaches the innermost element of the return type, and
+    /// `mode` finds no type it can apply to in a function type.
+    pub(super) fn apply_function_declarator_attributes(
+        &mut self,
+        ret: i64,
+    ) -> Result<i64, C5Error> {
+        if self.pending.attr_mode.take().is_some() {
+            return Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "`mode` applied to an inappropriate type",
+            ));
+        }
+        self.apply_pending_vector_size(ret)
+    }
+
     /// Synthesize the aggregate that models a GCC `vector_size(n_bytes)` vector
     /// of `elem_ty`: a single array field of `n_bytes / sizeof(elem)` lanes,
     /// flagged `is_vector`. sizeof / initialization / by-value pass reuse the
@@ -479,6 +538,7 @@ impl Compiler {
             is_variadic: false,
             prototyped: false,
             param_enum_tags: alloc::vec::Vec::new(),
+            param_fn_types: alloc::vec::Vec::new(),
             enum_tag: None,
             conv: crate::c5::codegen::CallConv::Target,
             anon_union_group: 0,
@@ -526,12 +586,19 @@ impl Compiler {
         // kept on the field so 6.7.5.2p6 compatibility and `typeof`
         // recovery see the unspecified bound.
         let unspecified = dims.iter().any(|&d| d < 0);
+        if !unspecified && let Some((inner_elem, inner_dims)) = self.array_agg_parts(elem_ty) {
+            // An array of arrays is one array of the innermost element, so
+            // each shape has one tag however it was spelled (`Z a[4]` over
+            // `typedef int Z[0]`, `int (*)[4][0]`).
+            let all: Vec<i64> = dims.iter().copied().chain(inner_dims).collect();
+            return self.array_agg_type(inner_elem, &all);
+        }
         let count: i64 = if unspecified {
             -1
         } else {
             dims.iter().product()
         };
-        let elem_size = (self.size_of_type(elem_ty) as i64).max(1);
+        let elem_size = self.size_of_type(elem_ty) as i64;
         let mut name = alloc::format!("__array_{}", elem_ty);
         for d in dims {
             name.push_str(&alloc::format!("_{d}"));
@@ -561,6 +628,7 @@ impl Compiler {
             is_variadic: false,
             prototyped: false,
             param_enum_tags: alloc::vec::Vec::new(),
+            param_fn_types: alloc::vec::Vec::new(),
             enum_tag: None,
             conv: crate::c5::codegen::CallConv::Target,
             anon_union_group: 0,
@@ -596,6 +664,39 @@ impl Compiler {
             enum_underlying: None,
         });
         struct_ty_for(self.structs.len() - 1)
+    }
+
+    /// The element and the bounds of `ty` when it is an unqualified array
+    /// aggregate of known size.
+    fn array_agg_parts(&self, ty: i64) -> Option<(i64, Vec<i64>)> {
+        let id = struct_id_of(ty);
+        let s = self.structs.get(id)?;
+        if !is_struct_value_ty(ty)
+            || ty != struct_ty_for(id)
+            || !s.is_array
+            || s.vla_size_slot.is_some()
+        {
+            return None;
+        }
+        let f = s.fields.first()?;
+        let dims = if f.array_dims.is_empty() {
+            alloc::vec![f.array_size]
+        } else {
+            f.array_dims.clone()
+        };
+        dims.iter().all(|&d| d >= 0).then_some((f.ty, dims))
+    }
+
+    /// The type an array of `elem_ty` with bounds `dims` (outermost first)
+    /// converts to as a value (C99 6.3.2.1p3): a pointer to its first
+    /// element, which for more than one bound is the row of the inner
+    /// ones, with the tag a declared `T (*)[N]` has.
+    pub(super) fn array_value_ty(&mut self, elem_ty: i64, dims: &[i64]) -> i64 {
+        if dims.len() < 2 {
+            return elem_ty + Ty::Ptr as i64;
+        }
+        let row = self.array_agg_type(elem_ty, &dims[1..]);
+        super::types::add_ptr_level(row | (elem_ty & super::types::VOLATILE_BIT))
     }
 
     /// The type of a variable-length array of `elem_ty` whose byte count the
@@ -639,36 +740,34 @@ impl Compiler {
             .flatten()
     }
 
-    /// True when `a` and `b` may form a C99 6.5.6p9 pointer
-    /// difference: identical tags once each operand's own `const` is
-    /// dropped (a value's type, C99 6.3.2.1p2), or a single-level
-    /// pointer-to-array on one side with the flat element-pointer
-    /// spelling (a decayed outer array row) on the other.
+    /// True when `a` and `b` may form a C99 6.5.6p9 pointer difference:
+    /// pointers to qualified or unqualified versions of compatible types
+    /// (6.5.6p3), so the qualifiers of the operands and of what they
+    /// point to take no part and every other level's do.
     pub(super) fn ptr_diff_compatible(&self, a: i64, b: i64) -> bool {
-        // C99 6.5.6p3: pointers to qualified or unqualified versions of
-        // compatible types, so no level's qualifier takes part.
-        let (a, b) = (
-            super::types::unqualified_object_ty(a),
-            super::types::unqualified_object_ty(b),
-        );
-        if a == b {
-            return true;
-        }
-        let flat_matches = |pa: i64, flat: i64| {
-            self.ptr_array_id_depth1(pa).is_some_and(|id| {
-                let elem = strip_unsigned(super::types::unqualified_object_ty(
-                    self.structs[id].fields[0].ty,
-                ));
-                strip_unsigned(flat) == elem + Ty::Ptr as i64
-            })
-        };
-        flat_matches(a, b) || flat_matches(b, a)
+        use super::types::unqualified_pointee_ty;
+        self.tags_compatible_as(unqualified_pointee_ty(a), unqualified_pointee_ty(b), true)
     }
 
-    /// The bounds of the array-typedef base, outermost first.
+    /// Whether the array-typedef base has unknown size (`typedef int T[];`),
+    /// an incomplete type (C99 6.2.5p22); a zero-length alias is complete.
+    pub(super) fn typedef_base_incomplete(&self) -> bool {
+        self.pending.typedef_base_array_size < 0 && !self.pending.typedef_base_zero_len
+    }
+
+    /// Whether the base is an array typedef of known size, a zero-length
+    /// one included.
+    pub(super) fn typedef_base_sized(&self) -> bool {
+        self.pending.typedef_base_array_size > 0 || self.pending.typedef_base_zero_len
+    }
+
+    /// The bounds of the array-typedef base, outermost first; `[0]` for a
+    /// zero-length alias, which the carrier records as unsized.
     pub(super) fn typedef_base_dims(&self) -> Vec<i64> {
         if self.pending.typedef_base_array_dims.len() >= 2 {
             self.pending.typedef_base_array_dims.clone()
+        } else if self.pending.typedef_base_zero_len {
+            alloc::vec![0]
         } else {
             alloc::vec![self.pending.typedef_base_array_size]
         }
@@ -689,7 +788,7 @@ impl Compiler {
     ) -> i64 {
         let dims = self.typedef_base_dims();
         let agg = self.array_agg_type(elem_ty, &dims);
-        (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & (VOLATILE_MASK | CONST_PTR_LVL_MASK))
+        (agg + ptr_levels * (Ty::Ptr as i64)) | (ty & (VOLATILE_BIT | QUAL_PTR_LVL_MASK))
     }
 
     /// True when the current lexer position starts a type. The free
@@ -735,21 +834,59 @@ impl Compiler {
         (is_struct_value_ty(ty) && !self.structs[sid].is_complete).then_some(sid)
     }
 
-    /// Whether `ptr_ty` points to an incomplete type, which a subscript and
-    /// the additive operators cannot step over (C99 6.5.2.1p1, 6.5.6p2): a
-    /// struct or union without its body, or an array of unknown bound.
-    /// GNU C steps a pointer to `void` or to a function by one byte.
-    pub(super) fn points_to_incomplete(&self, ptr_ty: i64) -> bool {
-        if !is_struct_ty(ptr_ty) || struct_ptr_depth(ptr_ty) != 1 {
-            return false;
-        }
-        let s = &self.structs[struct_id_of(ptr_ty)];
+    /// Whether the aggregate tag `ty` names, at any pointer depth, is
+    /// incomplete: a struct or union without its body, or an array of
+    /// unknown bound.
+    fn is_incomplete_aggregate(&self, ty: i64) -> bool {
+        let s = &self.structs[struct_id_of(ty)];
         match s.fields.first().filter(|_| s.is_array) {
             _ if s.vla_size_slot.is_some() => false,
             Some(f) if f.array_dims.len() >= 2 => f.array_dims[0] < 0,
             Some(f) => f.array_size < 0,
             None => !s.is_complete,
         }
+    }
+
+    /// Whether `ptr_ty` points to an incomplete type, which a subscript and
+    /// the additive operators cannot step over (C99 6.5.2.1p1, 6.5.6p2).
+    /// GNU C steps a pointer to `void` or to a function by one byte.
+    pub(super) fn points_to_incomplete(&self, ptr_ty: i64) -> bool {
+        is_struct_ty(ptr_ty)
+            && struct_ptr_depth(ptr_ty) == 1
+            && self.is_incomplete_aggregate(ptr_ty)
+    }
+
+    /// C99 6.7.5.2p1: the element type of an array is complete. `dims` are
+    /// the array's bounds over `elem_ty`, outermost first; only the first
+    /// may be unspecified (negative).
+    pub(super) fn require_complete_elements(
+        &self,
+        elem_ty: i64,
+        dims: &[i64],
+    ) -> Result<(), C5Error> {
+        if dims.iter().skip(1).any(|&d| d < 0) {
+            return Err(self.unknown_size_element_err());
+        }
+        let incomplete_tag = is_struct_value_ty(elem_ty) && self.is_incomplete_aggregate(elem_ty);
+        if dims.is_empty() || !(incomplete_tag || super::types::is_void_ty(elem_ty)) {
+            return Ok(());
+        }
+        if incomplete_tag && self.structs[struct_id_of(elem_ty)].is_array {
+            return Err(self.unknown_size_element_err());
+        }
+        let t = super::types::format_type(elem_ty, &self.structs);
+        Err(self.compile_err(
+            Code::INCOMPLETE_ELEMENT_TYPE,
+            alloc::format!("array has incomplete element type `{t}`"),
+        ))
+    }
+
+    /// The error for an array whose element is an array of unknown size.
+    pub(super) fn unknown_size_element_err(&self) -> C5Error {
+        self.compile_err(
+            Code::INCOMPLETE_ELEMENT_TYPE,
+            "array has incomplete element type: an array of unknown size",
+        )
     }
 
     /// Reject an operand of `op` that [`Self::points_to_incomplete`].
@@ -1234,6 +1371,7 @@ pub(crate) fn long_double_agg_desc(
             single_fp_vector: false,
         }],
         homogeneous: HomogeneousAggregate::new(kind, 16, 1),
+        vector: false,
     })
 }
 
@@ -1342,6 +1480,7 @@ pub(crate) fn host_abi_agg_desc_conv(
         member_align,
         fields,
         homogeneous,
+        vector: structs[id].is_vector,
     })
 }
 
@@ -1449,6 +1588,7 @@ pub(crate) fn struct_return_abi_conv(
         member_align,
         fields,
         homogeneous,
+        vector: structs[id].is_vector,
     };
     if homogeneous.is_some() {
         return StructReturnAbi::Regs(desc);

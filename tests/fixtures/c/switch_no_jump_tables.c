@@ -1,9 +1,9 @@
 // snapshot-flags: -fno-jump-tables
 // `-fno-jump-tables`: case sets dense enough to table-dispatch stay on
 // the compare tree, so the dispatch takes no indirect branch and no
-// table reaches the image. Kernels built with retpoline or
-// indirect-branch tracking pass the flag because a table dispatch is
-// the indirect branch those configurations exist to avoid. The routing
+// table reaches the image. A build under retpolines or indirect-branch
+// tracking passes the flag because a table dispatch is the indirect
+// branch such a build exists to avoid. The routing
 // must be identical to the table form: every case to its block, a hole
 // and every out-of-range value to default.
 

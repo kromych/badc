@@ -152,7 +152,6 @@
 #pragma binding(libc::getentropy, "_getentropy")
 #pragma binding(libc::getrusage, "_getrusage")
 #pragma binding(libc::flock,     "_flock")
-#pragma binding(libc::nanosleep, "_nanosleep")
 #pragma binding(libc::getenv,    "_getenv")
 #pragma binding(libc::setenv,    "_setenv")
 #pragma binding(libc::unsetenv,  "_unsetenv")
@@ -309,7 +308,6 @@ extern char **environ;
 #pragma binding(libc::getentropy, "getentropy")
 #pragma binding(libc::getrusage, "getrusage")
 #pragma binding(libc::flock,     "flock")
-#pragma binding(libc::nanosleep, "nanosleep")
 #pragma binding(libc::getenv,    "getenv")
 #pragma binding(libc::setenv,    "setenv")
 #pragma binding(libc::unsetenv,  "unsetenv")
@@ -384,8 +382,7 @@ ssize_t write(int fd, const void *buf, size_t n);
 ssize_t pwrite(int fd, const void *buf, size_t n, off_t offset);
 #ifdef __linux__
 // Linux large-file variants (`_LARGEFILE64_SOURCE`). The offset and
-// result are 64-bit; programs configured with `USE_PREAD64` (e.g.
-// sqlite) reach for these names directly.
+// result are 64-bit; a program may reach for these names directly.
 long pread64(int fd, void *buf, unsigned long n, long offset);
 long pwrite64(int fd, const void *buf, unsigned long n, long offset);
 #endif
@@ -437,7 +434,9 @@ int usleep(useconds_t microseconds);
 int pause(void);
 int isatty(int fd);
 ssize_t readlink(const char *path, char *buf, size_t n);
+#ifndef _WIN32
 int mkdir(const char *path, mode_t mode);
+#endif
 // POSIX: create a filesystem node. The device argument is unused for
 // regular / FIFO nodes; callers pass 0.
 int mknod(const char *path, mode_t mode, dev_t dev);
@@ -577,16 +576,18 @@ int getdtablesize(void);
 char *crypt(char *key, char *salt);
 int getrusage(int who, char *usage);
 int flock(int fd, int operation);
-int nanosleep(const struct timespec *req, struct timespec *rem);
 char *getenv(const char *name);
 #ifdef __APPLE__
 // libSystem accessor for the per-process environ slot. Returns a
 // `char ***` whose deref yields the SysV-style `char **environ`.
 char ***_NSGetEnviron(void);
 #endif
+#ifndef _WIN32
+// mingw-w64 declares none of these; Windows programs supply their own.
 int setenv(const char *name, const char *value, int overwrite);
 int unsetenv(const char *name);
 char *realpath(const char *path, char *resolved);
+#endif
 int fchdir(int fd);
 int getopt(int argc, char *const argv[], const char *opts);
 // POSIX.1 requires <unistd.h> to declare the getopt parser state
@@ -872,8 +873,8 @@ struct rusage {
 #endif
 
 // confstr(3) selectors. As with the sysconf table, the numeric value is
-// the one the bound libc reads -- different on Darwin and Linux. CPython
-// builds os.confstr_names from a table gated on `#ifdef _CS_*`.
+// the one the bound libc reads -- different on Darwin and Linux. A
+// program may build a name table gated on `#ifdef _CS_*`.
 #ifdef __APPLE__
 #define _CS_PATH                     1
 #define _CS_XBS5_ILP32_OFF32_CFLAGS  20
@@ -922,8 +923,8 @@ struct rusage {
 #define _CS_XBS5_LPBIG_OFFBIG_LINTFLAGS 1115
 #endif
 
-// pathconf(3)/fpathconf(3) selectors. CPython builds os.pathconf_names
-// from a table gated on `#ifdef _PC_*`.
+// pathconf(3)/fpathconf(3) selectors. A program may build a name table
+// gated on `#ifdef _PC_*`.
 #ifdef __APPLE__
 #define _PC_LINK_MAX                 1
 #define _PC_MAX_CANON                2

@@ -362,6 +362,12 @@ fn ent_pc=24 n_params=0 variadic=false locals=2
   block 14  start_pc=0
     v365 Imm(0)                                           -> x0
     terminator Return(v365)   (exit_acc=v365)
+constfold_post_inline.c:77: warning: implicit conversion from `int` to `signed char` changes value from 511 to -1 [B3010] [-Wconstant-conversion]
+    if (sext8(511) != -1) return 31;
+constfold_post_inline.c:79: warning: implicit conversion from `int` to `short` changes value from 98304 to -32768 [B3010] [-Wconstant-conversion]
+    if (sext16(0x18000) != -32768) return 33;
+constfold_post_inline.c:81: warning: implicit conversion from `long long` to `int` changes value from 66571993088 to -2147483648 [B3010] [-Wconstant-conversion]
+    if (sext32(0xf80000000LL) != -2147483648LL) return 35;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

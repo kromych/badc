@@ -39,10 +39,7 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x20
                	ret
                	bl	<addr>
-               	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
+               	brk	#0x1
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!

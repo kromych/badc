@@ -577,7 +577,7 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
     let mut v = arg;
     for _ in 0..FOLD_DEPTH {
         let form = match func.insts.get(v as usize) {
-            None => "an undefined value",
+            None | Some(Inst::Undef) => "an undefined value",
             Some(Inst::Copy { value, .. } | Inst::Extend { value, .. }) => {
                 v = *value;
                 continue;
@@ -735,7 +735,7 @@ mod tests {
     /// materialization into a dominating block whose instruction range sits
     /// later in the tape. A walk that stops at a rising id reports a
     /// link-time address as naming none, and the section field referencing it
-    /// (`.quad %c0 + %c1 - .`, the static-key jump entry) is rejected.
+    /// (`.quad %c0 + %c1 - .`, a patch-site entry's key) is rejected.
     #[test]
     fn address_operand_resolves_through_a_forward_reference() {
         let fwd = one_block(alloc::vec![add(1, 8), Inst::ImmData(64)]);

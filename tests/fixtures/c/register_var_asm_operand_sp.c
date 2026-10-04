@@ -29,7 +29,7 @@ void bump(void) {
 /* The read-write stack-pointer marker around a call: the callee runs
    and the stack pointer is unchanged on return. The compiler does not
    read the template, so the block names the System V caller-saved set
-   the callee may write, as the kernel's `call_on_stack` does; an
+   the callee may write, as a call on another stack does; an
    undeclared register is one a caller value live across the block may
    sit in. */
 static void call_with_sp_marker(void) {

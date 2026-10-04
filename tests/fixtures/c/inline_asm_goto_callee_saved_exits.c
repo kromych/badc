@@ -2,9 +2,9 @@
  * prologue, not by a store at the site. A save at the site is not run
  * back on the edges that leave the block without reaching its restore:
  * an `asm goto` label a branch the template did not plant reaches, the
- * shape a jump-label patch and an exception-table fixup take. The
- * prologue's save is also the only form DWARF CFI and the kernel's ORC
- * express, since it holds on every path out of the function.
+ * shape a patch-site branch and an exception-table fixup take. The
+ * prologue's save is also the only form a per-address unwind table such
+ * as DWARF CFI expresses, since it holds on every path out of the function.
  *
  * `leaves_by_patched_branch` clobbers a callee-saved register and leaves
  * through the label's own address held in a register, so no restore

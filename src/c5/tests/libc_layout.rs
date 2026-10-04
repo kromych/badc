@@ -1,7 +1,7 @@
 //! Record layouts of the bundled headers against the declarations each target
-//! uses: the kernel uapi of the release `demos/linux/setup.py` pins, glibc on
-//! Linux and the SDK on macOS. Each check is a `_Static_assert` compiled for
-//! its target, so a clean compile is the pass.
+//! uses: the Linux uapi headers, glibc on Linux and the SDK on macOS. Each
+//! check is a `_Static_assert` compiled for its target, so a clean compile
+//! is the pass.
 
 use crate::{CompileOptions, Compiler, Target};
 
@@ -1053,6 +1053,229 @@ fn windows_h_leaves_the_dpi_enums_to_shellscalingapi_h() {
                int dpi(MONITOR_DPI_TYPE t) { return t == MDT_EFFECTIVE_DPI; }\n";
     for target in [Target::WindowsX64, Target::WindowsAarch64] {
         if let Err(err) = compile(src, target) {
+            panic!("{}: {err}", target.id_str());
+        }
+    }
+}
+
+/// `<stdint.h>` gives each target its platform's types: glibc's `long` for
+/// `int64_t`, `intptr_t`, `intmax_t` and the fastest 16- and 32-bit types on
+/// LP64 Linux; Apple's `long long`, `long`, `long`, `short` and `int`; and
+/// Windows' `long long` for the first three and `int` for the last two. The
+/// least- and fastest-width 64-bit types, the constant macros and the limits
+/// take the same types, and the `<inttypes.h>` conversions the same length
+/// modifier: `PRId64` is "ld" under glibc and "lld" elsewhere.
+#[test]
+fn stdint_types_are_the_platforms() {
+    const LINUX: [&str; 5] = ["long", "long", "long", "long", "long"];
+    const APPLE: [&str; 5] = ["long long", "long", "long", "short", "int"];
+    const WINDOWS: [&str; 5] = ["long long", "long long", "long long", "int", "int"];
+    for (target, [i64_ty, ptr_ty, max_ty, f16_ty, f32_ty]) in [
+        (Target::LinuxX64, LINUX),
+        (Target::LinuxAarch64, LINUX),
+        (Target::MacOSAarch64, APPLE),
+        (Target::WindowsX64, WINDOWS),
+        (Target::WindowsAarch64, WINDOWS),
+    ] {
+        // A conversion string's size: length modifier, conversion, terminator.
+        let len = |ty: &str| match ty {
+            "int" => 2,
+            "long long" => 4,
+            _ => 3,
+        };
+        let (n64, nptr, nmax, n16, n32) = (
+            len(i64_ty),
+            len(ptr_ty),
+            len(max_ty),
+            len(f16_ty),
+            len(f32_ty),
+        );
+        let src = format!(
+            "#include <inttypes.h>\n\
+             #include <stddef.h>\n\
+             #define IS(e, T) _Generic((e), T: 1, default: 0)\n\
+             #define BOTH(t, T) (IS((t)0, T) && IS((u##t)0, unsigned T))\n\
+             _Static_assert(BOTH(int64_t, {i64_ty}) && BOTH(int_least64_t, {i64_ty}), \"int64_t\");\n\
+             _Static_assert(BOTH(int_fast64_t, {i64_ty}), \"int_fast64_t\");\n\
+             _Static_assert(BOTH(intptr_t, {ptr_ty}) && BOTH(intmax_t, {max_ty}), \"intptr_t\");\n\
+             _Static_assert(BOTH(int_fast16_t, {f16_ty}) && BOTH(int_fast32_t, {f32_ty}), \"fast\");\n\
+             _Static_assert(IS(INT64_C(1), {i64_ty}) && IS(UINT64_C(1), unsigned {i64_ty}), \"INT64_C\");\n\
+             _Static_assert(IS(INTMAX_C(1), {max_ty}) && IS(UINTMAX_C(1), unsigned {max_ty}), \"INTMAX_C\");\n\
+             _Static_assert(IS(INT64_MIN, {i64_ty}) && IS(UINT64_MAX, unsigned {i64_ty}), \"INT64 limits\");\n\
+             _Static_assert(IS(INTPTR_MAX, {ptr_ty}) && IS(UINTPTR_MAX, unsigned {ptr_ty}), \"INTPTR limits\");\n\
+             _Static_assert(IS(INTMAX_MIN, {max_ty}) && IS(UINTMAX_MAX, unsigned {max_ty}), \"INTMAX limits\");\n\
+             _Static_assert(IS(SIZE_MAX, size_t) && IS(PTRDIFF_MIN, ptrdiff_t), \"size limits\");\n\
+             _Static_assert(IS(UINT32_MAX, unsigned), \"UINT32_MAX\");\n\
+             _Static_assert(INT64_MAX == 0x7fffffffffffffff && UINT64_MAX + 1 == 0, \"values\");\n\
+             _Static_assert(INT64_MIN < 0 && INTMAX_MIN < 0 && PTRDIFF_MIN < 0, \"minima\");\n\
+             _Static_assert(INT_FAST16_MAX == (int_fast16_t)(UINT_FAST16_MAX >> 1), \"fast16 max\");\n\
+             _Static_assert(INT_FAST32_MAX == (int_fast32_t)(UINT_FAST32_MAX >> 1), \"fast32 max\");\n\
+             _Static_assert(INT_FAST16_MIN == -INT_FAST16_MAX - 1, \"fast16 min\");\n\
+             _Static_assert((uint_fast16_t)-1 == UINT_FAST16_MAX, \"fast16 umax\");\n\
+             _Static_assert((uint_fast32_t)-1 == UINT_FAST32_MAX, \"fast32 umax\");\n\
+             static const char d64[] = PRId64, x64[] = PRIx64, s64[] = SCNu64;\n\
+             static const char dmax[] = PRIdMAX, smax[] = SCNxMAX, uptr[] = PRIuPTR;\n\
+             static const char df16[] = PRIdFAST16, sf16[] = SCNuFAST16;\n\
+             static const char xf32[] = PRIxFAST32, sf32[] = SCNdFAST32;\n\
+             _Static_assert(sizeof d64 == {n64} && sizeof x64 == {n64} && sizeof s64 == {n64}, \"64\");\n\
+             _Static_assert(sizeof dmax == {nmax} && sizeof smax == {nmax}, \"MAX\");\n\
+             _Static_assert(sizeof uptr == {nptr}, \"PTR\");\n\
+             _Static_assert(sizeof df16 == {n16} && sizeof sf16 == {n16}, \"FAST16\");\n\
+             _Static_assert(sizeof xf32 == {n32} && sizeof sf32 == {n32}, \"FAST32\");\n"
+        );
+        if let Err(err) = compile(&src, target) {
+            panic!("{}: {err}", target.id_str());
+        }
+    }
+}
+
+/// The mutex types pthread_mutexattr_settype takes are the platform C
+/// library's numbers: glibc's RECURSIVE is 1 and ERRORCHECK 2, Darwin's
+/// the reverse. Darwin's values on Linux made a recursive mutex an
+/// error-checking one there.
+#[test]
+fn mutex_types_take_the_platform_values() {
+    for (target, recursive, errorcheck) in [
+        (Target::LinuxX64, 1, 2),
+        (Target::LinuxAarch64, 1, 2),
+        (Target::MacOSAarch64, 2, 1),
+    ] {
+        let src = format!(
+            "#include <pthread.h>\n\
+             _Static_assert(PTHREAD_MUTEX_RECURSIVE == {recursive}, \"recursive\");\n\
+             _Static_assert(PTHREAD_MUTEX_ERRORCHECK == {errorcheck}, \"errorcheck\");\n\
+             _Static_assert(PTHREAD_MUTEX_NORMAL == 0 && PTHREAD_MUTEX_DEFAULT == 0, \"normal\");\n\
+             int main(void) {{ return 0; }}\n"
+        );
+        if let Err(err) = compile(&src, target) {
+            panic!("{}: {err}", target.id_str());
+        }
+    }
+}
+
+/// POSIX leaves the type of `pthread_t` open, and each platform's C
+/// library fixes it: glibc's is `unsigned long`, Darwin's a pointer to
+/// `struct _opaque_pthread_t`.
+#[test]
+fn pthread_t_is_the_platforms() {
+    for (target, ty) in [
+        (Target::LinuxX64, "unsigned long"),
+        (Target::LinuxAarch64, "unsigned long"),
+        (Target::MacOSAarch64, "struct _opaque_pthread_t *"),
+    ] {
+        let src = format!(
+            "#include <pthread.h>\n\
+             _Static_assert(_Generic((pthread_t)0, {ty}: 1, default: 0), \"pthread_t\");\n\
+             _Static_assert(_Generic(pthread_self(), {ty}: 1, default: 0), \"pthread_self\");\n\
+             int main(void) {{ return 0; }}\n"
+        );
+        if let Err(err) = compile(&src, target) {
+            panic!("{}: {err}", target.id_str());
+        }
+    }
+}
+
+/// POSIX gives the mutex, condition-variable and attribute functions of
+/// `<pthread.h>` pointers to their own object types, and `bind`, `connect`
+/// and `accept` a `struct sockaddr` and a `socklen_t` length. A program
+/// may repeat each POSIX prototype after the bundled headers on every
+/// POSIX target with no diagnostic (C99 6.7p4); a declaration of another
+/// type is a conflicting-types error.
+#[test]
+fn thread_and_socket_interfaces_take_the_posix_types() {
+    use crate::c5::Compiler;
+    let src = "#include <pthread.h>\n\
+               #include <sys/socket.h>\n\
+               int pthread_mutex_init(pthread_mutex_t *restrict, const pthread_mutexattr_t *restrict);\n\
+               int pthread_mutex_lock(pthread_mutex_t *);\n\
+               int pthread_mutex_trylock(pthread_mutex_t *);\n\
+               int pthread_mutex_unlock(pthread_mutex_t *);\n\
+               int pthread_mutex_destroy(pthread_mutex_t *);\n\
+               int pthread_mutexattr_init(pthread_mutexattr_t *);\n\
+               int pthread_mutexattr_settype(pthread_mutexattr_t *, int);\n\
+               int pthread_mutexattr_destroy(pthread_mutexattr_t *);\n\
+               int pthread_cond_init(pthread_cond_t *restrict, const pthread_condattr_t *restrict);\n\
+               int pthread_cond_destroy(pthread_cond_t *);\n\
+               int pthread_cond_wait(pthread_cond_t *restrict, pthread_mutex_t *restrict);\n\
+               int pthread_cond_timedwait(pthread_cond_t *restrict, pthread_mutex_t *restrict,\n\
+                                          const struct timespec *restrict);\n\
+               int pthread_cond_signal(pthread_cond_t *);\n\
+               int pthread_cond_broadcast(pthread_cond_t *);\n\
+               int pthread_attr_init(pthread_attr_t *);\n\
+               int pthread_attr_destroy(pthread_attr_t *);\n\
+               int pthread_attr_setdetachstate(pthread_attr_t *, int);\n\
+               int pthread_attr_setstacksize(pthread_attr_t *, size_t);\n\
+               int pthread_attr_setscope(pthread_attr_t *, int);\n\
+               int pthread_attr_setschedpolicy(pthread_attr_t *, int);\n\
+               int pthread_attr_setschedparam(pthread_attr_t *restrict, const struct sched_param *restrict);\n\
+               int pthread_attr_getschedparam(const pthread_attr_t *restrict, struct sched_param *restrict);\n\
+               int pthread_attr_getguardsize(const pthread_attr_t *restrict, size_t *restrict);\n\
+               int pthread_attr_getstack(const pthread_attr_t *restrict, void **restrict, size_t *restrict);\n\
+               int pthread_attr_setinheritsched(pthread_attr_t *, int);\n\
+               int bind(int, const struct sockaddr *, socklen_t);\n\
+               int connect(int, const struct sockaddr *, socklen_t);\n\
+               int accept(int, struct sockaddr *restrict, socklen_t *restrict);\n\
+               int setsockopt(int, int, int, const void *, socklen_t);\n\
+               int getsockopt(int, int, int, void *restrict, socklen_t *restrict);\n\
+               ssize_t recv(int, void *, size_t, int);\n\
+               ssize_t send(int, const void *, size_t, int);\n\
+               ssize_t recvfrom(int, void *restrict, size_t, int, struct sockaddr *restrict,\n\
+                                socklen_t *restrict);\n\
+               ssize_t sendto(int, const void *, size_t, int, const struct sockaddr *, socklen_t);\n\
+               #ifdef __linux__\n\
+               int pthread_getattr_np(pthread_t, pthread_attr_t *);\n\
+               int pthread_getcpuclockid(pthread_t, clockid_t *);\n\
+               int pthread_condattr_setclock(pthread_condattr_t *, clockid_t);\n\
+               int pthread_setaffinity_np(pthread_t, size_t, const cpu_set_t *);\n\
+               int pthread_getaffinity_np(pthread_t, size_t, cpu_set_t *);\n\
+               #endif\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{}: {e}", target.id_str()));
+        assert!(
+            program.warnings.is_empty(),
+            "{}: {:?}",
+            target.id_str(),
+            program.warnings
+        );
+    }
+}
+
+/// POSIX's memory-mapping and thread-specific interfaces traffic in
+/// `void *`: `mmap` and `mremap` return one, `pthread_getspecific` too, and
+/// the address, value and start-routine parameters take one, so their
+/// results convert to any object pointer without a cast.
+#[test]
+fn memory_and_thread_interfaces_use_void_pointers() {
+    for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+        let mremap = if target == Target::MacOSAarch64 {
+            ""
+        } else {
+            "_Static_assert(IS(mremap(0, 0, 0, 0), void *), \"mremap\");\n"
+        };
+        let src = format!(
+            "#include <sys/mman.h>\n\
+             #include <pthread.h>\n\
+             #define IS(e, T) _Generic((e), T: 1, default: 0)\n\
+             struct page {{ char b[64]; }};\n\
+             static void *worker(void *arg) {{ return arg; }}\n\
+             int f(pthread_key_t k, struct page *pg) {{\n\
+             _Static_assert(IS(mmap(0, 0, 0, 0, -1, 0), void *), \"mmap\");\n\
+             {mremap}\
+             _Static_assert(IS(pthread_getspecific(k), void *), \"pthread_getspecific\");\n\
+             struct page *p = mmap(0, sizeof *p, PROT_READ, MAP_PRIVATE | MAP_ANON, -1, 0);\n\
+             struct page *q = pthread_getspecific(k);\n\
+             pthread_t t;\n\
+             void *ret;\n\
+             pthread_setspecific(k, pg);\n\
+             pthread_create(&t, 0, worker, pg);\n\
+             pthread_join(t, &ret);\n\
+             return munmap(p, sizeof *p) + (q == ret);\n\
+             }}\n"
+        );
+        if let Err(err) = compile(&src, target) {
             panic!("{}: {err}", target.id_str());
         }
     }

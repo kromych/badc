@@ -3,13 +3,12 @@
    from the number of rows; each row is M fully-braced struct elements.
    The deferred struct-array initializer filled one struct per top-level
    brace, ignoring the inner dimension, so a row was misread as a single
-   struct ("scalar initializer wrapped in { ... }"). OpenSSL's provider
-   capability tables use this form (`static const OSSL_PARAM x[][11]`).
-   File-scope and static-local declarations now descend the rows.
+   struct ("scalar initializer wrapped in { ... }"), as in a parameter
+   table `static const struct Param x[][11]`. File-scope and static-local
+   declarations now descend the rows.
 
    Known remaining limitation: an *automatic* (non-static) local of this
-   shape still goes through the runtime-store path and is unsupported;
-   edk2 / OpenSSL only use the file-scope static form. */
+   shape still goes through the runtime-store path and is unsupported. */
 
 struct Param {
     const char   *key;
@@ -19,7 +18,7 @@ struct Param {
     unsigned long ret;
 };
 
-/* File-scope, OpenSSL-shaped (strings + pointers + ints), 2 rows of 2. */
+/* File-scope, strings + pointers + ints, 2 rows of 2. */
 static const struct Param table[][2] = {
     { { "a", 1, 0, 2, 3 }, { "b", 4, 0, 5, 6 } },
     { { "c", 1, 0, 2, 3 }, { "d", 4, 0, 5, 6 } },

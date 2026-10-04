@@ -2,7 +2,7 @@
 //! `++` / `--` / `op=` lvalue resolves to.
 
 use super::access::{load_kind_for, load_place, store_kind_for, store_kind_width, store_place};
-use super::bitfield::{bitfield_load_kind, bitfield_mask_halves, merge_into_bitfield};
+use super::bitfield::{extract_bitfield, merge_into_bitfield};
 use super::types::{is_float_ty, is_floating_scalar, type_size_bytes};
 use super::*;
 use crate::c5::ast::expr_ty;
@@ -520,22 +520,9 @@ impl RmwPlace {
                 seg,
                 align,
             } => {
-                // C99 6.7.2.1: load the unit, shift the slice to bit 0,
-                // mask, and sign-extend when the field type is signed.
-                // A 128-bit field never reaches here: its operators route
+                // A 128-bit value never reaches here: its operators route
                 // through the walker's 128-bit read-modify-write.
-                debug_assert!(bf.unit_size <= 8);
-                let mut v = load_place(b, addr, bitfield_load_kind(bf), seg, vol, align);
-                if bf.bit_offset > 0 {
-                    v = b.binop_imm(BinOp::Shr, v, bf.bit_offset as i64);
-                }
-                v = b.binop_imm(BinOp::And, v, bitfield_mask_halves(bf.bit_width, 0).0);
-                if bf.signed && bf.bit_width < 64 {
-                    let shift = 64i64 - (bf.bit_width as i64);
-                    v = b.binop_imm(BinOp::Shl, v, shift);
-                    v = b.binop_imm(BinOp::Shr, v, shift);
-                }
-                v
+                extract_bitfield(b, addr, bf, seg, vol, align)
             }
         }
     }
@@ -567,7 +554,6 @@ impl RmwPlace {
                 seg,
                 align,
             } => {
-                debug_assert!(bf.unit_size <= 8);
                 merge_into_bitfield(b, addr, bf, value, seg, vol, align);
             }
         }

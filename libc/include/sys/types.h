@@ -51,8 +51,8 @@ typedef unsigned int gid_t;
 #endif
 // The UCRT spells `mode_t` as `_mode_t`, an `unsigned short`, and the
 // Windows `struct stat` carries `st_mode` at that width. Source that
-// declares its own `mode_t` on Windows -- as CPython's `_stat.c` does,
-// because MSVC's headers leave it to the program -- then redefines the
+// declares its own `mode_t` on Windows -- MSVC's headers leave it to
+// the program -- then redefines the
 // name to the same type, which C11 6.7p3 permits. glibc's is `unsigned
 // int`, Darwin's `__uint16_t`.
 #if defined(__BADC_WINDOWS__) || defined(__APPLE__)
@@ -81,7 +81,7 @@ typedef unsigned long dev_t;
 typedef unsigned char u_int8_t;
 typedef unsigned short u_int16_t;
 typedef unsigned int u_int32_t;
-typedef unsigned long long u_int64_t;
+typedef __UINT64_TYPE__ u_int64_t;
 // Classic BSD unsigned aliases (glibc exposes these under _DEFAULT_SOURCE,
 // which _GNU_SOURCE enables). Used by network headers (net/eth.h's tcp/udp
 // header structs spell fields `u_short`, `u_char`).
@@ -89,8 +89,8 @@ typedef unsigned char u_char;
 typedef unsigned short u_short;
 typedef unsigned int u_int;
 typedef unsigned long u_long;
-typedef long long quad_t;
-typedef unsigned long long u_quad_t;
+typedef __INT64_TYPE__ quad_t;
+typedef __UINT64_TYPE__ u_quad_t;
 #ifdef __BADC_WINDOWS__
 typedef long long ino_t;
 typedef long long ino64_t;
@@ -116,7 +116,10 @@ typedef unsigned int id_t;
 typedef unsigned int useconds_t;
 #endif
 typedef int suseconds_t;
+#ifndef __BADC_CLOCKID_T
+#define __BADC_CLOCKID_T
 typedef int clockid_t;
+#endif
 typedef int timer_id_t;
 #ifdef __BADC_WINDOWS__
 typedef long long fsblkcnt_t;

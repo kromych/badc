@@ -2,11 +2,10 @@
  * splices each callee through the reloc path, relocating the callee's
  * own output locals into the caller frame and remapping the asm operand
  * args (an output's destination address among them). The bodies also
- * encode out of line, so the -O0 and -O runs must agree. Mirrors the
- * kernel get_current (one "=r" output), __rdmsr (two outputs combined),
- * and __wrmsr (input-only, void) helper shapes. */
+ * encode out of line, so the -O0 and -O runs must agree. Three helper
+ * shapes: one "=r" output, two outputs combined, and input-only, void. */
 
-/* One register output written to an own local (get_current shape). */
+/* One register output written to an own local (a current-task read). */
 static inline __attribute__((always_inline)) unsigned long rd(unsigned long x) {
     unsigned long out;
 #if defined(__x86_64__)
@@ -19,7 +18,7 @@ static inline __attribute__((always_inline)) unsigned long rd(unsigned long x) {
     return out;
 }
 
-/* Two register outputs to own locals, then combined (rdmsr shape). */
+/* Two register outputs to own locals, then combined (an MSR read). */
 static inline __attribute__((always_inline)) unsigned long two(unsigned long x) {
     unsigned long a, b;
 #if defined(__x86_64__)
@@ -33,7 +32,7 @@ static inline __attribute__((always_inline)) unsigned long two(unsigned long x) 
     return a + b;
 }
 
-/* Input-only asm, void (wrmsr shape): store x through the pointer. */
+/* Input-only asm, void (an MSR write): store x through the pointer. */
 static inline __attribute__((always_inline)) void st(unsigned long *p, unsigned long x) {
 #if defined(__x86_64__)
     __asm__ volatile("movq %1, (%0)" : : "r"(p), "r"(x) : "memory");

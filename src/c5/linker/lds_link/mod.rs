@@ -51,10 +51,12 @@ use super::link_err;
 
 /// The tag this module's diagnostics carry.
 pub(super) const MODULE: &str = "";
-use super::dynamic::{DynTables, HashStyle, VerDef};
+use super::dynamic::{self, DynTables, HashStyle, VerDef};
 use super::gnu_property;
 use super::lds::{Assignment, DataWidth, Expr, LinkerScript, OutputSectionType};
 use super::object::{ElfClass, SharedLibrary};
+use super::zkeyword::{ZKeyword, ZKeywords};
+use crate::c5::codegen::BuildId;
 use crate::c5::diag::{Code, Config, Control, Diagnostic, Sink};
 use crate::c5::error::C5Error;
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -168,6 +170,7 @@ const PT_INTERP: u32 = 3;
 const PT_PHDR: u32 = 6;
 
 const PT_NOTE: u32 = 4;
+const PT_TLS: u32 = 7;
 
 const PT_GNU_EH_FRAME: u32 = 0x6474e550;
 
@@ -277,10 +280,12 @@ pub struct LdsOptions {
     pub entry_override: Option<String>,
     pub max_page_size: u64,
     pub orphan_handling: OrphanHandling,
-    pub build_id_sha1: bool,
+    pub build_id: BuildId,
     pub strip_debug: bool,
     /// `-X`: drop compiler-temporary local symbols (`.L*`).
     pub discard_locals: bool,
+    /// `-x`: drop every local symbol of the inputs.
+    pub discard_all: bool,
     /// `--discard-none`: keep every local symbol.
     pub discard_none: bool,
     /// `-z pack-relative-relocs`: RELR-pack aligned relative entries.
@@ -292,6 +297,26 @@ pub struct LdsOptions {
     /// `--emit-relocs`: carry every applied input relocation into the
     /// output as `.rela.<outsec>` entries against the output symtab.
     pub emit_relocs: bool,
+    /// `-z execstack` (`Some(true)`) / `noexecstack` (`Some(false)`);
+    /// without either, an input's executable `.note.GNU-stack` makes the
+    /// stack executable, see [`crate::c5::linker::resolve_exec_stack`].
+    pub exec_stack: Option<bool>,
+    /// `--warn-execstack` (`Some(true)`) / `--no-warn-execstack`.
+    pub warn_execstack: Option<bool>,
+    /// Cleared by `--no-warn-rwx-segments`: a segment the image loads
+    /// readable, writable and executable draws a warning.
+    pub warn_rwx_segments: bool,
+    /// `-z text`: a dynamic relocation against read-only memory is an
+    /// error rather than a `DT_TEXTREL`.
+    pub text: bool,
+    /// `-z common-page-size=`: `CONSTANT (COMMONPAGESIZE)`; `None` keeps
+    /// the machine's.
+    pub common_page_size: Option<u64>,
+    /// `-z muldefs`: the first of two definitions of a symbol stands.
+    pub allow_multiple_definition: bool,
+    /// `DT_FLAGS` / `DT_FLAGS_1` bits the `-z` keywords record.
+    pub dynamic_flags: u64,
+    pub dynamic_flags_1: u64,
     /// Cleared to report no warning at all, as `-w` does. A row a
     /// selector raised to an error keeps its level.
     pub emit_warnings: bool,
@@ -340,13 +365,22 @@ impl Default for LdsOptions {
             entry_override: None,
             max_page_size: 0x1000,
             orphan_handling: OrphanHandling::Place,
-            build_id_sha1: false,
+            build_id: BuildId::None,
             strip_debug: false,
             discard_locals: false,
+            discard_all: false,
             discard_none: false,
             pack_relative_relocs: false,
             apply_dynamic_relocs: true,
             emit_relocs: false,
+            exec_stack: None,
+            warn_execstack: None,
+            warn_rwx_segments: true,
+            text: false,
+            common_page_size: None,
+            allow_multiple_definition: false,
+            dynamic_flags: 0,
+            dynamic_flags_1: 0,
             emit_warnings: true,
             diag: Config::new(),
             soname: None,
@@ -363,6 +397,30 @@ impl Default for LdsOptions {
             new_dtags: false,
             fix_cortex_a53_843419: false,
         }
+    }
+}
+
+impl LdsOptions {
+    /// Take the `-z` keywords `z` as the engine answers each
+    /// ([`ZKeyword::in_script_link`]); the first one it refuses comes
+    /// back with the reason.
+    pub fn take_z_keywords(&mut self, z: &ZKeywords) -> Result<(), (ZKeyword, &'static str)> {
+        if let Some(refused) = z.refusal(ZKeyword::in_script_link) {
+            return Err(refused);
+        }
+        for kw in z.iter() {
+            match kw {
+                ZKeyword::ExecStack(on) => self.exec_stack = Some(on),
+                ZKeyword::PackRelativeRelocs(on) => self.pack_relative_relocs = on,
+                ZKeyword::MaxPageSize(n) => self.max_page_size = n,
+                ZKeyword::CommonPageSize(n) => self.common_page_size = Some(n),
+                ZKeyword::Text(on) => self.text = on,
+                ZKeyword::Muldefs => self.allow_multiple_definition = true,
+                _ => {}
+            }
+        }
+        (self.dynamic_flags, self.dynamic_flags_1) = dynamic::z_keyword_flags(z);
+        Ok(())
     }
 }
 
@@ -675,6 +733,8 @@ pub struct LdsLinker<'a> {
     /// Merged `.note.gnu.property` body, empty when no input carries a
     /// property that survives the merge.
     gnu_property: Vec<u8>,
+    /// `PT_GNU_STACK` is executable.
+    exec_stack: bool,
     /// Per output section, bytes reserved after its last input piece
     /// for erratum veneers; multiples of the page size so the insertion
     /// preserves every following page offset and the site set with it.
@@ -845,6 +905,14 @@ impl<'a> LdsLinker<'a> {
         // else; bfd consumes it and never places it. Keeping it would
         // put a PROGBITS input in whatever `*(.note*)` rule claims it,
         // which then stops being a note section.
+        let asked_by = objects.iter().find(|o| {
+            (o.sections.iter()).any(|s| s.name == ".note.GNU-stack" && s.flags & SHF_EXECINSTR != 0)
+        });
+        let (exec_stack, stack_warning) = super::zkeyword::resolve_exec_stack(
+            opts.exec_stack,
+            asked_by.map(|o| o.source.as_str()),
+            opts.warn_execstack,
+        );
         let drop_input = |s: &RawSection| {
             s.name == ".note.GNU-stack"
                 || (s.name == SYNTH_GNU_PROPERTY && s.shtype == SHT_NOTE)
@@ -888,8 +956,13 @@ impl<'a> LdsLinker<'a> {
 
         let class = class_for_machine(machine);
         let mut config = opts.diag.clone();
-        config.inhibit_warnings(!opts.emit_warnings);
-        let sink = Sink::new(config, Control::default());
+        if !opts.emit_warnings {
+            config.inhibit_warnings(true);
+        }
+        let mut sink = Sink::new(config, Control::default());
+        if let Some(warning) = stack_warning {
+            sink.emit(Code::EXEC_STACK, None, warning);
+        }
         let mut linker = LdsLinker {
             script,
             objects,
@@ -942,6 +1015,7 @@ impl<'a> LdsLinker<'a> {
             emitted: Vec::new(),
             sym_index: SymIndex::default(),
             gnu_property,
+            exec_stack,
             veneer_reserve: BTreeMap::new(),
             veneer_syms: Vec::new(),
             code_spans: HashMap::new(),
@@ -1017,6 +1091,13 @@ impl<'a> LdsLinker<'a> {
         self.layout_pass(true)?;
         if !self.errors.is_empty() {
             return Err(self.script_errors());
+        }
+        if self.opts.text && self.has_readonly_dynamic_reloc() {
+            return Err(link_err(
+                Code::RELOCATION,
+                MODULE,
+                "read-only segment has dynamic relocations (-z text)",
+            ));
         }
         if !self.undefined.is_empty() {
             let list: Vec<String> = self
@@ -1180,6 +1261,9 @@ impl<'a> LdsLinker<'a> {
 
         // Program headers.
         let phdrs = self.build_phdrs(&emit_order)?;
+        if self.opts.warn_rwx_segments {
+            self.report_rwx_segments(&phdrs);
+        }
 
         // Symbol table.
         let mut sym_index = SymIndex::default();

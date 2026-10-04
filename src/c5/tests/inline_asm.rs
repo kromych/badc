@@ -113,7 +113,8 @@ fn sp_block(template: &str) -> crate::c5::ir::AsmBlock {
 
 /// A statement references the stack pointer through its text or through
 /// a `%N` naming a bound operand; a bound operand the template never names
-/// (the kernel's `ASM_CALL_CONSTRAINT`) is out of the template's reach.
+/// (a `"+r"` stack-pointer variable that only orders the statement) is out
+/// of the template's reach.
 #[test]
 fn a_bound_operand_names_the_stack_pointer_only_when_the_template_names_it() {
     for (template, names, sp) in [
@@ -652,8 +653,8 @@ fn x86_unencodable_c_memory_operand_is_diagnosed() {
 fn x86_p_names_a_memory_operand_reference_and_c_is_refused() {
     use crate::{NativeOptions, Target};
     // `%P` on an `m` operand prints its reference, as gcc and clang do, in
-    // the function body and in a pushed section, where Linux's ALTERNATIVE
-    // replacements put `prefetchw %P1`; `%c` there is refused by both.
+    // the function body and in a pushed section, where a replacement
+    // sequence may put `prefetchw %P1`; `%c` there is refused by both.
     // A relocatable object keeps the pushed section's bytes.
     let emit = |body: &str| {
         let src = alloc::format!(
@@ -925,9 +926,8 @@ fn x86_size_suffix_modifier_prints_the_operand_width() {
             "`{ty}`: `{body}` did not encode as {want:02x?}"
         );
     }
-    // The kernel's carry-chain shape: a byte object in memory, a pointer
-    // in rdx, and a 64-bit register operand -- `shrb (%r)`, `inc %rdx`,
-    // `rcrq %r`.
+    // A carry chain: a byte object in memory, a pointer in rdx, and a
+    // 64-bit register operand -- `shrb (%r)`, `inc %rdx`, `rcrq %r`.
     let src = "unsigned long f(unsigned char *acks, unsigned long extracted) { \
          __asm__(\" shr%z1 %1\\n inc %0\\n rcr%z2 %2\\n\" \
          : \"+d\"(acks), \"+m\"(*(acks)), \"+rm\"(extracted)); \
@@ -1267,9 +1267,9 @@ fn aarch64_brk_immediate_operand_encodes_as_an_immediate() {
 #[test]
 fn aarch64_bare_immediate_operand_encodes_like_gcc() {
     use crate::{NativeOptions, Target};
-    // GAS makes the `#` optional on an immediate: `BUG()` expands to
-    // `brk 0x800` and the semihosting sites to `hlt 0xf000`, both written
-    // without a `#`. They must encode identically to the `#`-prefixed form
+    // GAS makes the `#` optional on an immediate: a trap written
+    // `brk 0x800` and a semihosting call written `hlt 0xf000` carry no
+    // `#`. They must encode identically to the `#`-prefixed form
     // gcc emits: brk #0x800 -> 0xD4210000, hlt #0xf000 -> 0xD45E0000.
     let src = "void f(void){ __asm__ volatile(\"brk 0x800\"); \
         __asm__ volatile(\"hlt 0xf000\"); } int main(void){ return 0; }";
@@ -1397,9 +1397,8 @@ fn inline_asm_global_directive_declares_an_undefined_symbol() {
     use crate::c5::linker::relocatable::EtSymRef;
     const STB_GLOBAL: u8 = 1;
     const STT_NOTYPE: u8 = 0;
-    // `arch/x86/include/asm/xen/hypercall.h` puts `.global` in the
-    // instruction stream of an ordinary extended asm, naming a symbol the
-    // unit does not define. GNU as 2.46.1 for
+    // A `.global` in the instruction stream of an ordinary extended asm,
+    // naming a symbol the unit does not define. GNU as 2.46.1 for
     //     .global __SCK__xen_hypercall
     // emits one undefined STB_GLOBAL STT_NOTYPE entry, value 0, size 0.
     let src = "int f(int x) { __asm__ volatile(\".global __SCK__xen_hypercall\\n\\t\" \
@@ -1511,8 +1510,8 @@ fn aarch64_function_body_symbol_operands_relocate() {
 fn x86_64_riprel_const_operand_takes_any_address_constant() {
     use crate::c5::linker::relocatable::EtSymRef;
     use crate::c5::object::elf_reloc_types::R_X86_64_PC32;
-    // `arch/x86/include/asm/asm.h`'s `rip_rel_ptr` names its `i`-class
-    // operand under `%c`. The operand is a C99 6.6p9 address constant --
+    // `leaq %c[p](%%rip), %reg` names its `i`-class operand under `%c`.
+    // The operand is a C99 6.6p9 address constant --
     // the address of a function or of a static-storage object, reached
     // through casts between object-pointer and integer types of the same
     // width. GNU as 2.46.1 assembles each site as
@@ -1827,10 +1826,10 @@ fn file_scope_size_reaches_a_label_of_an_earlier_statement() {
     use crate::c5::linker::relocatable::EtSymRef;
     const STB_LOCAL: u8 = 0;
     const STT_OBJECT: u8 = 1;
-    // `include/linux/btf_ids.h` defines the set label in one `asm()` and
-    // sizes it with `. - name` in another. GNU as 2.46.1 for the same three
-    // statements emits `.BTF_ids` = 00 00 00 00 00 00 00 00 d2 04 00 00 and
-    // one STB_LOCAL STT_OBJECT symbol of size 12 at offset 0 of it.
+    // A set label defined in one `asm()` and sized with `. - name` in
+    // another, after a third has appended to it. GNU as 2.46.1 for the same
+    // three statements emits `.BTF_ids` = 00 00 00 00 00 00 00 00 d2 04 00 00
+    // and one STB_LOCAL STT_OBJECT symbol of size 12 at offset 0 of it.
     let src = "asm(\".pushsection .BTF_ids,\\\"a\\\"\\n\"\
                    \".local __BTF_ID__set8__my_ids\\n\"\
                    \".type  __BTF_ID__set8__my_ids, @object\\n\"\
@@ -2235,8 +2234,8 @@ fn aarch64_template_symbol_branches_type_bl_call26_and_b_jump26() {
 #[test]
 fn aarch64_goto_branch_in_a_pushed_section_reaches_the_label_block() {
     use crate::c5::object::elf_reloc_types::{R_AARCH64_CONDBR19, R_AARCH64_JUMP26};
-    // The `_static_cpu_has` shape on A64: a pushed executable section
-    // branches to an `asm goto` label (`b %l[out]`). The section holds one
+    // A pushed executable section on A64 that branches to an `asm goto`
+    // label (`b %l[out]`). The section holds one
     // `b` word with a zero displacement and a JUMP26 into `.text`; the main
     // stream reaches the section through its own conditional.
     let src = "int probe(int x)\n\
@@ -2614,15 +2613,15 @@ fn alignment_over_a_forward_label_difference_is_rejected() {
 #[cfg(feature = "native-emit")]
 #[test]
 fn i_operand_constant_local_folds_across_a_call() {
-    // The kernel's `WARN` evaluates its format arguments, a call among them,
-    // between the definition of a constant `int __flags` and the asm that
-    // lays `%c[fl]` into `__bug_table`. The parser hands `__flags` the slot
+    // A macro evaluates its format arguments, a call among them, between
+    // the definition of a constant `int __flags` and the asm that lays
+    // `%c[fl]` into a table section. The parser hands `__flags` the slot
     // of a variable whose scope has closed; where that one was an asm output
-    // (the per-cpu accessor's `__ptr`), the slot is address-taken, mem2reg
+    // (an accessor's `__ptr`), the slot is address-taken, mem2reg
     // leaves `__flags` in memory, and the operand reaches the asm as a load
     // with the call between it and its store. gcc folds the field to 0x913.
     let src = r#"
-struct bug_entry { int addr; int fmt; short line; short flags; };
+struct trap_entry { int addr; int fmt; short line; short flags; };
 int probe(unsigned long long *);
 void report(const char *, ...);
 unsigned long long phys(unsigned long);
@@ -2639,7 +2638,7 @@ int f(void)
 			"2:\t.long 1b - .\n\t.long %c[fmt] - .\n\t.short %c[line]\n\t.short %c[fl]\n"
 			"\t.org 2b + %c[size]\n.popsection\n"
 			: : [fmt] "i" ("f.c"), [line] "i" (87), [fl] "i" (flags),
-			    [size] "i" (sizeof(struct bug_entry)));
+			    [size] "i" (sizeof(struct trap_entry)));
 	}
 	return (int)base;
 }
@@ -2736,8 +2735,7 @@ fn x64_memory_operand_of_a_global_needs_no_register_and_no_frame() {
 #[test]
 fn x86_inlined_parameter_feeds_immediate_and_address_operands() {
     use crate::c5::object::elf_reloc_types::R_X86_64_PC32;
-    // `arch/x86/include/asm/cpufeature.h`'s `_static_cpu_has` is an
-    // always-inline function whose parameter feeds every `i` operand: an
+    // An always-inline function whose parameter feeds every `i` operand: an
     // immediate (`%[bitnum]`) and, under `%a`, the address of a byte of a
     // global (`%a[cap_byte]`). gcc 16 and GNU as 2.46 spell the site
     //     testb $8, boot_cpu_data+17(%rip)
@@ -2748,8 +2746,8 @@ fn x86_inlined_parameter_feeds_immediate_and_address_operands() {
     // in the statement's own stream encodes the same way.
     let src = r#"
 typedef unsigned short u16;
-struct cpuinfo_x86 { int x86_capability[24]; };
-extern struct cpuinfo_x86 boot_cpu_data;
+struct cpu_caps { int words[24]; };
+extern struct cpu_caps boot_cpu_data;
 static __inline__ __attribute__((__always_inline__)) _Bool has(u16 bit)
 {
 	__asm__ goto("testb %[bitnum], %a[cap_byte]\n"
@@ -2762,7 +2760,7 @@ static __inline__ __attribute__((__always_inline__)) _Bool has(u16 bit)
 		" jmp %l[t_no]\n"
 		".popsection\n"
 		: : [bitnum] "i" (1 << (bit & 7)),
-		    [cap_byte] "i" (&((const char *)boot_cpu_data.x86_capability)[bit >> 3]),
+		    [cap_byte] "i" (&((const char *)boot_cpu_data.words)[bit >> 3]),
 		    [abs] "i" (0x1234)
 		: : t_yes, t_no);
 t_yes:
@@ -2885,13 +2883,13 @@ fn i_operand_that_is_not_constant_names_its_form() {
 #[cfg(feature = "native-emit")]
 #[test]
 fn x64_asm_goto_section_field_reaches_the_statement_s_exit() {
-    // `_ASM_EXTABLE(1b, %l[fault])`: the exception table publishes the
+    // An exception-table entry for `1b` naming `%l[fault]` publishes the
     // label's address in a data field the template never branches to. The
     // published address has to be the statement's exit trampoline, or a
     // fault at `1b` resumes at the label with the statement's exit work
     // undone -- rbp holding what the template left there for a statement
-    // that preserves it, the output's home holding its old value for the
-    // `__get_user` shape.
+    // that preserves it, the output's home holding its old value for a
+    // read whose fault skips the output.
     use crate::c5::object::elf_reloc_types::{R_X86_64_PC32, R_X86_64_PLT32};
     let src = |body: &str, ops: &str| {
         alloc::format!(
@@ -3303,7 +3301,7 @@ fn x64_constant_immediate_operand_takes_no_capture_slot() {
 #[cfg(feature = "native-emit")]
 #[test]
 fn x64_framed_asm_goto_branch_and_section_field_share_the_trampoline() {
-    // The jump-label patching contract with exit work pending: a runtime
+    // The patch-site contract with exit work pending: a runtime
     // patcher reads the label address from the pushed section and rewrites
     // the template's own branch to it, so the two must name one address --
     // the trampoline the output's store-back sits on, not the label block.

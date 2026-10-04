@@ -100,7 +100,8 @@ pub(crate) const STACK_PROBE_PAGE: u32 = 4096;
 /// end is protected by a guard region reports an overflow only when the
 /// access that oversteps the end lands inside that region; the smallest
 /// such region in practice is one page (a Windows thread's guard page, a
-/// pthread stack's default guard, a kernel vmap stack's unmapped page).
+/// pthread stack's default guard, the unmapped page below a kernel-mode
+/// stack).
 /// Decrementing by at most `STACK_PROBE_PAGE - 16` from an address the
 /// stack still covers leaves the pointer at least 16 bytes above the
 /// guard region's base, so both the frame's own stores at non-negative
@@ -1089,18 +1090,23 @@ impl EdgeMoves {
     }
 }
 
-/// Whether the edge move of a phi of `kind` builds its income `v` from `v`'s
-/// bits, which reads no place: a constant feeding a floating phi.
-pub(crate) fn phi_rebuilds_income(
+/// Whether the edge move of a phi of `kind` reads no place for its income
+/// `v`: an indeterminate value takes no move, and a constant feeding a
+/// floating phi is built from its bits.
+pub(crate) fn phi_income_reads_no_place(
     func: &super::super::ir::FunctionSsa,
     kind: super::super::ir::LoadKind,
     v: super::super::ir::ValueId,
 ) -> bool {
     use super::super::ir::{Inst, LoadKind};
-    matches!(
-        kind,
-        LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
-    ) && matches!(func.insts.get(v as usize), Some(Inst::Imm(_)))
+    match func.insts.get(v as usize) {
+        Some(Inst::Undef) => true,
+        Some(Inst::Imm(_)) => matches!(
+            kind,
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128
+        ),
+        _ => false,
+    }
 }
 
 /// Collect every phi of `succ` that names `pred`. A register reg-to-reg move
@@ -1131,7 +1137,9 @@ pub(crate) fn edge_moves(
             continue;
         };
         let (src_place, dst_place) = (place(*src_v), place(id));
-        if matches!(dst_place, Place::None) {
+        if matches!(dst_place, Place::None)
+            || matches!(func.insts.get(*src_v as usize), Some(Inst::Undef))
+        {
             continue;
         }
         let wide = matches!(kind, LoadKind::V128);
@@ -1142,9 +1150,7 @@ pub(crate) fn edge_moves(
         if phi_is_fp {
             // `phi_class` never coalesces a constant into an FP phi's class,
             // wherever the constant is placed; the move rebuilds it.
-            if phi_rebuilds_income(func, *kind, *src_v)
-                && let Inst::Imm(bits) = func.insts[*src_v as usize]
-            {
+            if let Inst::Imm(bits) = func.insts[*src_v as usize] {
                 let is_f64 = matches!(kind, LoadKind::F64 | LoadKind::V128);
                 m.fp_const.push((bits, dst_place, is_f64, wide));
                 continue;
@@ -2255,6 +2261,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pipeline.run("passes::tailrec::run", &mut ssa_funcs, |funcs| {
             super::super::passes::tailrec::run(funcs);
         });
+        // A function no path of which returns ends the blocks of the calls
+        // to it, once the inliner has taken the small callees whole.
+        pipeline.run("passes::noreturn::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::noreturn::run(funcs, program, true);
+        });
         // Forward an inlined one-word struct return out of its frame slot:
         // a single full-width store + slot reads collapse to the stored
         // register value. Runs after the inliner produces the slot and
@@ -2372,6 +2383,36 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 &param_ranges,
             );
         });
+        // The interprocedural constants again, over the folded bodies: an
+        // argument that only an inlined helper or a collapsed loop made
+        // constant reaches its out-of-line callee now, and that callee's
+        // branches fold on it, to a fixed point. Each round seeds a
+        // parameter no earlier round did, so the rounds are finite.
+        pipeline.run(
+            "passes::ipa_const_param::run post-fold",
+            &mut ssa_funcs,
+            |funcs| {
+                use super::super::passes::{ipa_const_param, simplify_branches};
+                loop {
+                    let escaping = ipa_const_param::escaping_functions(funcs, program);
+                    let before: alloc::vec::Vec<u64> =
+                        funcs.iter().map(|f| f.const_params).collect();
+                    ipa_const_param::run(funcs, &escaping);
+                    let seeded: alloc::collections::BTreeSet<usize> = funcs
+                        .iter()
+                        .zip(&before)
+                        .filter(|(f, b)| f.const_params != **b)
+                        .map(|(f, _)| f.ent_pc)
+                        .collect();
+                    if seeded.is_empty() {
+                        break;
+                    }
+                    simplify_branches::run_with_const_data_on(funcs, program, &param_ranges, |f| {
+                        seeded.contains(&f.ent_pc)
+                    });
+                }
+            },
+        );
     }
     // Re-run static DCE: inlining a static callee into its last caller,
     // and the branch fold dropping calls in unreachable arms, can leave
@@ -2549,6 +2590,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             funcs
                 .iter_mut()
                 .map(|f| {
+                    super::mem2reg::zero_read_undefs(f);
                     if native.optimize {
                         super::remat::split_across_calls(f, target);
                         super::licm::allocate_hoisted(f, target, native.fixed_regs)
@@ -2818,6 +2860,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         diagnostics: reported(&mut sink)?,
         emitted_relocs: alloc::vec::Vec::new(),
         named_sections: alloc::vec::Vec::new(),
+        compact_unwind: alloc::vec::Vec::new(),
+        eh_frame: alloc::vec::Vec::new(),
+        data_import_binds: alloc::vec::Vec::new(),
+        canonical_imports: alloc::vec::Vec::new(),
+        preemptible_imports: alloc::vec::Vec::new(),
         // The GOT base is a cross-unit link fact; the single-TU emit
         // has no table to name.
         got_base_fixups: alloc::vec::Vec::new(),
@@ -2893,6 +2940,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         output_kind: super::OutputKind::Executable,
         pic_link: native.pic || native.pic_link,
         exec_form: Default::default(),
+        elf: Default::default(),
 
         code_model: native.code_model,
         elf_class: native.elf_class,

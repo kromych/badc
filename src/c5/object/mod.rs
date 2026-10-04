@@ -21,6 +21,8 @@ pub(crate) mod dwarf;
 #[cfg(feature = "native-emit")]
 pub(crate) mod dwarf_reloc;
 #[cfg(feature = "native-emit")]
+pub(crate) mod eh_frame;
+#[cfg(feature = "native-emit")]
 pub(crate) mod elf;
 pub(crate) mod elf_class;
 #[cfg(feature = "native-emit")]
@@ -33,12 +35,20 @@ pub(crate) mod image;
 pub(crate) mod mach_o;
 #[cfg(feature = "native-emit")]
 pub(crate) mod pe;
+#[cfg(feature = "native-emit")]
+pub(crate) mod relr;
 pub(crate) mod section_table;
+#[cfg(feature = "native-emit")]
+pub(crate) mod sha1;
 #[cfg(feature = "std")]
 pub(crate) mod so_versions;
 #[cfg(feature = "std")]
 pub(crate) mod strtab;
+#[cfg(feature = "native-emit")]
+pub(crate) mod unwind_info;
 pub(crate) mod weak_undef;
+#[cfg(feature = "native-emit")]
+pub(crate) mod xxh3;
 
 #[cfg(feature = "native-emit")]
 use crate::c5::diag::Code;
@@ -210,7 +220,7 @@ fn route_single_tu_data_imports(build: &mut Build, target: Target) {
                 real_symbol: host.clone(),
                 dylib_index: 0,
                 flat_lookup: true,
-                is_object: false,
+                kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: false,
                 fixed_args: 0,
                 return_type_tag: 0,
@@ -931,12 +941,14 @@ pub(crate) fn data_region_addr(regions: &[DataRegion], off: u64) -> u64 {
 /// values, AST data offsets, relocation slots), then lower the result.
 #[cfg(feature = "native-emit")]
 fn compact_and_lower(
-    program: Program,
+    mut program: Program,
     target: Target,
     options: NativeOptions,
 ) -> Result<(Program, i64, Build), C5Error> {
     use crate::c5::codegen::LowerMode;
     use crate::c5::codegen::ssa::shadow;
+    program.bind_trampoline_slots =
+        target.binds_data_imports() || options.output_kind == OutputKind::Relocatable;
     let segregate = options.bss_segregate && !bss_segregation_disabled();
     let first =
         crate::c5::codegen::ssa::emit_common::time_pass("object::compact_program_data", || {
@@ -1121,6 +1133,8 @@ pub(crate) mod test_support {
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
+            sys_trampolines: Vec::new(),
+            bind_trampoline_slots: false,
             tls_data_relocs: Vec::new(),
             tls_extern_data_relocs: Vec::new(),
             tls_code_relocs: Vec::new(),
@@ -1149,10 +1163,16 @@ pub(crate) mod test_support {
 
     pub(crate) fn empty_build() -> Build {
         Build {
+            elf: Default::default(),
             diagnostics: Vec::new(),
             text_data_ranges: Vec::new(),
             emitted_relocs: Vec::new(),
             named_sections: Vec::new(),
+            compact_unwind: Vec::new(),
+            eh_frame: Vec::new(),
+            data_import_binds: Vec::new(),
+            canonical_imports: Vec::new(),
+            preemptible_imports: Vec::new(),
             got_base_fixups: Vec::new(),
             got_rel_fields: Vec::new(),
             got_pcrel_fixups: Vec::new(),

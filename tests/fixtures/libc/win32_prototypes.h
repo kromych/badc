@@ -1,7 +1,7 @@
 /* The Win32 prototypes a program may repeat after the bundled <windows.h>,
 ** each with the types the Windows SDK 10.0.26100.0 gives the function
 ** (C99 6.7p4). Compiled for the Windows targets. The last block spells
-** the types out as raylib's rcore.c does. */
+** the types out in full. */
 
 #include <windows.h>
 
@@ -29,6 +29,8 @@ DWORD WaitForSingleObject(HANDLE hHandle, DWORD dwMilliseconds);
 BOOL CloseHandle(HANDLE hObject);
 BOOL GetExitCodeThread(HANDLE hThread, LPDWORD lpExitCode);
 BOOL SetThreadPriority(HANDLE hThread, int nPriority);
+int GetThreadPriority(HANDLE hThread);
+VOID ExitThread(DWORD dwExitCode);
 DWORD GetCurrentThreadId(VOID);
 VOID InitializeCriticalSection(LPCRITICAL_SECTION lpCriticalSection);
 BOOL InitializeCriticalSectionEx(LPCRITICAL_SECTION lpCriticalSection,
@@ -40,6 +42,10 @@ DWORD TlsAlloc(VOID);
 LPVOID TlsGetValue(DWORD dwTlsIndex);
 BOOL TlsSetValue(DWORD dwTlsIndex, LPVOID lpTlsValue);
 BOOL TlsFree(DWORD dwTlsIndex);
+DWORD FlsAlloc(PFLS_CALLBACK_FUNCTION lpCallback);
+PVOID FlsGetValue(DWORD dwFlsIndex);
+BOOL FlsSetValue(DWORD dwFlsIndex, PVOID lpFlsData);
+BOOL FlsFree(DWORD dwFlsIndex);
 VOID InitializeSRWLock(PSRWLOCK SRWLock);
 VOID AcquireSRWLockExclusive(PSRWLOCK SRWLock);
 VOID ReleaseSRWLockExclusive(PSRWLOCK SRWLock);
@@ -508,6 +514,9 @@ DWORD GetConsoleProcessList(LPDWORD lpdwProcessList, DWORD dwProcessCount);
 HWND GetConsoleWindow(VOID);
 VOID GetSystemTimePreciseAsFileTime(LPFILETIME lpSystemTimeAsFileTime);
 BOOL QueryPerformanceFrequency(LARGE_INTEGER *lpFrequency);
+BOOL GetSystemTimeAdjustment(PDWORD lpTimeAdjustment, PDWORD lpTimeIncrement,
+                             PBOOL lpTimeAdjustmentDisabled);
+BOOL SetSystemTime(const SYSTEMTIME *lpSystemTime);
 ULONGLONG GetTickCount64(VOID);
 BOOL SwitchToThread(VOID);
 DWORD SleepEx(DWORD dwMilliseconds, BOOL bAlertable);
@@ -716,7 +725,7 @@ HDC wglGetCurrentDC(VOID);
 HGLRC wglGetCurrentContext(VOID);
 BOOL wglShareLists(HGLRC hglrc1, HGLRC hglrc2);
 
-/* rcore.c (raylib 6.0), lines 159-166: the SDK's types spelled out. */
+/* The SDK's types spelled out in full. */
 struct HINSTANCE__;
 __declspec(dllimport) unsigned long __stdcall GetModuleFileNameA(struct HINSTANCE__ *hModule,
                                                                  char *lpFilename,

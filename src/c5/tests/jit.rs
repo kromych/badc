@@ -68,6 +68,61 @@ fn return_42() {
     assert_eq!(jit_exit("int main() { return 42; }", &["jit-ret42"]), 42);
 }
 
+/// A program ends with its status and the runner goes on, however it
+/// ends: `exit` from a nested call, `_exit` past a handler, a handler's
+/// `_exit` after `main` returns, `exit` in a constructor (C99 7.20.4.3,
+/// 5.1.2.2.3; POSIX `_exit`).
+#[test]
+fn exit_returns_to_the_runner() {
+    let nested = "#include <stdlib.h>\n\
+        int f(int n) { if (!n) exit(7); return f(n - 1) + 1; }\n\
+        int main(void) { return f(5); }";
+    assert_eq!(jit_exit(nested, &["jit-exit-nested"]), 7);
+    let immediate = "#include <stdlib.h>\n#include <unistd.h>\n\
+        static void h(void) { _exit(9); }\n\
+        int main(void) { atexit(h); _exit(8); }";
+    assert_eq!(jit_exit(immediate, &["jit-exit-immediate"]), 8);
+    let handler = "#include <stdlib.h>\n#include <unistd.h>\n\
+        static void h(void) { _exit(9); }\n\
+        int main(void) { atexit(h); return 4; }";
+    assert_eq!(jit_exit(handler, &["jit-exit-handler"]), 9);
+    let ctor = "#include <stdlib.h>\n\
+        __attribute__((constructor)) static void c(void) { exit(6); }\n\
+        int main(void) { return 1; }";
+    assert_eq!(jit_exit(ctor, &["jit-exit-ctor"]), 6);
+}
+
+/// A program's end leaves the C library's streams alone: they belong to the
+/// process, which every program it runs shares. One program blocked reading
+/// a stream holds that stream's lock while another one ends.
+#[test]
+fn a_program_ends_while_another_holds_a_stream() {
+    use std::io::Write;
+    use std::os::fd::{IntoRawFd, OwnedFd};
+    let (reader, mut writer) = std::io::pipe().expect("pipe");
+    let fd = OwnedFd::from(reader).into_raw_fd();
+    let blocked = std::thread::spawn(move || {
+        let reads = "#include <stdio.h>\n#include <stdlib.h>\n\
+            int main(int argc, char **argv) {\n\
+              char line[16]; FILE *f = fdopen(atoi(argv[1]), \"r\");\n\
+              if (!f || !fgets(line, sizeof line, f)) return 1;\n\
+              fclose(f); return line[0] == 'g' ? 0 : 2; }";
+        jit_exit(reads, &["jit-reads", &fd.to_string()])
+    });
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    let (done, ended) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = done.send(jit_exit("int main(void) { return 7; }", &["jit-ends"]));
+    });
+    let status = ended.recv_timeout(std::time::Duration::from_secs(20));
+    writer.write_all(b"go\n").expect("write the line");
+    assert_eq!(
+        status.expect("the program's end waited on a stream another program holds"),
+        7
+    );
+    assert_eq!(blocked.join().expect("reader thread"), 0);
+}
+
 /// Raw-byte inline asm executes natively: the literal bytes `B8 25 00 00 00`
 /// are `mov eax, 0x25`, and the `"=a"` output ties the result to the return
 /// value. x86_64 host only -- the bytes are x86 machine code, and the VM
@@ -375,10 +430,10 @@ fn select_of_two_constants_folds_its_guard() {
     // The undefined `bug` would fail the JIT load if any survived.
     let src = "
         extern void bug(void);
-        #define BUILD_BUG_ON(c) do { if (!(!(c))) bug(); } while (0)
+        #define FAIL_IF(c) do { if (!(!(c))) bug(); } while (0)
         static __attribute__((always_inline)) unsigned long
         encode(unsigned long page, unsigned long flags) {
-            BUILD_BUG_ON(flags > 3ul);
+            FAIL_IF(flags > 3ul);
             return flags | page;
         }
         static int delay_rmap;
@@ -391,14 +446,14 @@ fn select_of_two_constants_folds_its_guard() {
                             | 0x10ul | 0x20ul | 0x40ul)
         #define STACK_FLAGS (0x100ul | DATA_FLAGS | 0x100000ul)
         static unsigned long stack_flags(void) {
-            BUILD_BUG_ON(STACK_FLAGS & (0x10000ul | 0x8000ul));
+            FAIL_IF(STACK_FLAGS & (0x10000ul | 0x8000ul));
             return STACK_FLAGS;
         }
         static int tier;
         static unsigned long tier_bits(void) {
             unsigned long v = tier ? (delay_rmap ? 1ul : 2ul) : 3ul;
-            BUILD_BUG_ON(v > 3ul);
-            BUILD_BUG_ON(v == 0ul);
+            FAIL_IF(v > 3ul);
+            FAIL_IF(v == 0ul);
             return v;
         }
         int main(void) {
@@ -436,7 +491,7 @@ fn const_trip_loop_unrolls_so_its_index_folds_a_guard() {
     // rolled loop's over a runtime bound.
     let src = "
         extern void bug(void);
-        #define BUILD_BUG_ON(c) do { if (!(!(c))) bug(); } while (0)
+        #define FAIL_IF(c) do { if (!(!(c))) bug(); } while (0)
         #define NR_FIXED 3
         #define BASE_IDX 32
         struct counter {
@@ -447,11 +502,11 @@ fn const_trip_loop_unrolls_so_its_index_folds_a_guard() {
         struct bank { struct counter fixed[NR_FIXED]; };
         static const int event_ids[NR_FIXED] = { 11, 22, 33 };
         static __attribute__((always_inline)) unsigned long long sel_of(unsigned int i) {
-            BUILD_BUG_ON(i >= NR_FIXED);
+            FAIL_IF(i >= NR_FIXED);
             return (unsigned long long)event_ids[i] << 8;
         }
         static __attribute__((always_inline)) unsigned int slot_of(unsigned int i) {
-            BUILD_BUG_ON(BASE_IDX + i >= 64u);
+            FAIL_IF(BASE_IDX + i >= 64u);
             return i + BASE_IDX;
         }
         static void bank_init(struct bank *b, void *owner) {
@@ -499,24 +554,24 @@ fn const_scalar_load_folds_to_its_initializer() {
     // the JIT load if any guard survived.
     let src = "
         extern void bug(void);
-        #define BUILD_BUG_ON(c) do { if (!(!(c))) bug(); } while (0)
+        #define FAIL_IF(c) do { if (!(!(c))) bug(); } while (0)
         static const _Bool is_conditional = 1;
         static const _Bool is_unconditional = 0;
         static const int depth = 3;
         static const unsigned char kind = 200;
         static const long mask = -4;
         static int guard(void) {
-            BUILD_BUG_ON(!is_conditional);
-            BUILD_BUG_ON(is_unconditional);
-            BUILD_BUG_ON(depth != 3);
-            BUILD_BUG_ON(kind != 200);
-            BUILD_BUG_ON(mask >= 0);
+            FAIL_IF(!is_conditional);
+            FAIL_IF(is_unconditional);
+            FAIL_IF(depth != 3);
+            FAIL_IF(kind != 200);
+            FAIL_IF(mask >= 0);
             return depth;
         }
         static int block_guard(void) {
             static const _Bool outer = 1;
-            { static const int inner = 5; BUILD_BUG_ON(inner != 5); }
-            BUILD_BUG_ON(!outer);
+            { static const int inner = 5; FAIL_IF(inner != 5); }
+            FAIL_IF(!outer);
             return 5;
         }
         static const char *names[2] = {(const char *)1, (const char *)2};
@@ -2117,44 +2172,28 @@ fn undefined_extern_object_is_a_link_error() {
     );
 }
 
-/// C99 7.20.4.3p2: `exit` runs the registered atexit handlers. The
-/// JIT intercepts both `atexit` and `exit`, so the handler chain must
-/// drain before the process terminates with the passed status. `exit`
-/// ends the whole process, so the assertion drives a re-executed copy
-/// of this test binary gated by the marker env var.
+/// C99 7.20.4.3p2: `exit` runs the registered atexit handlers, and the
+/// program ends with the status `exit` was given. The JIT intercepts both
+/// `atexit` and `exit`, so the handler chain drains before the run returns
+/// the status to the runner.
 #[test]
 fn atexit_handlers_run_on_libc_exit() {
-    if let Ok(marker) = std::env::var("BADC_JIT_EXIT_MARKER") {
-        let src = format!(
-            "#include <stdio.h>\n\
-             #include <stdlib.h>\n\
-             static void h(void) {{\n\
-                 FILE *f = fopen(\"{marker}\", \"w\");\n\
-                 if (f) {{ fputs(\"ran\", f); fclose(f); }}\n\
-             }}\n\
-             int main(void) {{ atexit(h); exit(42); }}\n",
-        );
-        let program = Compiler::new(src).compile().expect("compile");
-        let _ = jit_run(&program, &["jit-exit".to_string()]);
-        unreachable!("exit(42) must terminate the process");
-    }
     let marker = std::env::temp_dir().join(format!("badc_jit_exit_{}", std::process::id()));
     let _ = std::fs::remove_file(&marker);
-    // libtest names tests without the crate segment of module_path!.
-    let module = module_path!();
-    let module = module.split_once("::").map_or(module, |(_, rest)| rest);
-    let test_name = format!("{module}::atexit_handlers_run_on_libc_exit");
-    let out = super::image_command(std::env::current_exe().expect("current_exe"))
-        .args(["--exact", &test_name, "--test-threads=1"])
-        .env("BADC_JIT_EXIT_MARKER", &marker)
-        .output()
-        .expect("re-exec the test binary");
+    let src = format!(
+        "#include <stdio.h>\n\
+         #include <stdlib.h>\n\
+         static void h(void) {{\n\
+             FILE *f = fopen(\"{}\", \"w\");\n\
+             if (f) {{ fputs(\"ran\", f); fclose(f); }}\n\
+         }}\n\
+         int main(void) {{ atexit(h); exit(42); }}\n",
+        marker.display()
+    );
+    let program = Compiler::new(src).compile().expect("compile");
     assert_eq!(
-        out.status.code(),
-        Some(42),
-        "stdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr),
+        jit_run(&program, &["jit-exit".to_string()]).expect("jit_run"),
+        42
     );
     let contents = std::fs::read_to_string(&marker).expect("atexit handler must write the marker");
     let _ = std::fs::remove_file(&marker);

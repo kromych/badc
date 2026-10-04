@@ -27,6 +27,17 @@ struct sched_param {
 #endif
 #endif
 
+#ifdef _WIN32
+// winpthreads' <sched.h>: Windows schedules threads by priority alone, under
+// SCHED_OTHER, and libc/lib/pthread_ext.c defines the functions.
+struct sched_param {
+    int sched_priority;
+};
+#define SCHED_OTHER 0
+#define SCHED_FIFO  1
+#define SCHED_RR    2
+#endif
+
 #ifdef __APPLE__
 #pragma dylib(libc, "/usr/lib/libSystem.B.dylib")
 #pragma binding(libc::sched_yield, "_sched_yield")
@@ -55,9 +66,9 @@ struct sched_param {
 #endif
 
 int sched_yield(void);
-#if defined(__APPLE__) || defined(__linux__)
 int sched_get_priority_max(int policy);
 int sched_get_priority_min(int policy);
+#if defined(__APPLE__) || defined(__linux__)
 int sched_setscheduler(int pid, int policy, const struct sched_param *param);
 int sched_getscheduler(int pid);
 int sched_setparam(int pid, const struct sched_param *param);

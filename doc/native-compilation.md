@@ -94,7 +94,10 @@ The linker also takes GNU-ld-shaped work directly: linker scripts
 symbol-export control (`--export-all`, `--export-data`). Invoked as `ld`,
 `ld.badc`, or with `--ld`, badc presents a GNU ld persona with its own flag
 table, which is what lets it stand in for `LD=` in an existing build --
-including [the Linux kernel's](linux-kernel.md).
+including [the Linux kernel's](linux-kernel.md). A link option a link does not
+implement is refused by name. As in GNU ld, an input whose `.note.GNU-stack`
+is executable makes the image's stack executable, with a warning, unless
+`-z noexecstack` is given.
 
 Inputs enter the link in command-line order, after the startup runtime (where
 gcc puts `crt1.o`), so constructors of one priority run in that order and the
@@ -125,6 +128,7 @@ gcc / clang / msvc convention so it does not collide with user identifiers:
     __BADC_WINDOWS__                     // Windows targets only
     __APPLE__                            // macOS target only
     __linux__                            // Linux targets only
+    __ELF__                              // ELF targets (the Linux ones)
 ```
 
 alongside the C99 / C11 set (`__STDC__`, `__STDC_VERSION__`, `__SIZEOF_*__`,
@@ -172,6 +176,16 @@ in your own source is a load-time dependency and is recorded whether or not a
 symbol binds through it: it is how a program names a library it reaches only by
 runtime lookup, such as a framework whose initializer has to run before
 `dlsym` or `objc_getClass` resolves a name.
+
+On the Windows targets, whose C runtime is `msvcrt.dll` as in mingw-w64's
+default configuration, a bundled header declares the names mingw-w64's header
+of the same name declares. A declaration resolves either through a binding to
+a system DLL or to a definition in `libc/lib/`, which the link joins as it
+would an archive member. A name mingw-w64 leaves undeclared stays undeclared,
+so a program's own Windows fallback for it compiles under badc as under
+mingw-w64. `setenv` is one such name.
+TODO(#1441): `<unistd.h>`, `<stdlib.h>` and other POSIX headers still
+declare names on Windows that have no definition there.
 
 ### Source-driven build flags via `#pragma`
 
@@ -338,10 +352,14 @@ compares, and calls `__stack_chk_fail` on a mismatch.
 from, with `-mstack-protector-guard-reg=`, `-mstack-protector-guard-offset=` and
 `-mstack-protector-guard-symbol=` as its operands. The default follows the
 target: `%fs:0x28` on Linux/x86-64, the C library's `__stack_chk_guard` object
-elsewhere. `tls` is the x86-64 segment-relative form the kernel selects
+elsewhere. Under `-mcmodel=kernel` the segment defaults to `%gs`, as gcc and
+clang choose, for this form and for a `tls` guard that names no register; a
+Linux x86-64 build that names no guard register keeps its per-CPU canary at
+`%gs:0x28`. `tls` is the x86-64 segment-relative form the kernel selects
 (`-mstack-protector-guard=tls`, `-mstack-protector-guard-reg=gs`,
-`-mstack-protector-guard-symbol=__ref_stack_chk_guard`); `sysreg` is the
-aarch64 form that reads a per-task offset above a system register
+`-mstack-protector-guard-symbol=__ref_stack_chk_guard`); as in gcc, a
+register, an offset or a symbol named without the form selects it. `sysreg` is
+the aarch64 form that reads a per-task offset above a system register
 (`-mstack-protector-guard-reg=sp_el0`, `-mstack-protector-guard-offset=N`). The
 family needs relocatable output -- the failure branch is a relocation against
 `__stack_chk_fail` -- so `--jit` and `--interp` reject it, as do the Windows

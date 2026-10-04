@@ -1,9 +1,8 @@
 // A state machine whose state lives in an address-taken automatic
 // struct, advanced by an always_inline callee at the loop latch. The
 // loop condition excludes one state, so the callee's arm for that state
-// is unreachable -- the shape include/linux/seqlock.h's
-// __scoped_seqlock_next has, whose dead arm calls a symbol the kernel
-// declares and never defines as a check on the compiler.
+// is unreachable -- its dead arm calls a symbol declared and never
+// defined, so the link checks that the arm is gone.
 //
 // Two capabilities are needed together. The object's initializer writes
 // it a cell at a time, spanning the 4-byte state member, so the split

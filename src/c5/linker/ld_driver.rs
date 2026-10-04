@@ -28,6 +28,8 @@ use super::relocatable::{
     DiscardLocals, EM_386, EM_AARCH64, EM_X86_64, EtRel, LdScript, RelinkOptions, link_relocatable,
     link_relocatable_with_map, parse_et_rel, parse_module_script,
 };
+use super::zkeyword::{ZKeyword, ZKeywords, parse_z_keyword};
+use crate::c5::codegen::BuildId;
 
 /// How positional inputs and archive state were ordered on the
 /// command line.
@@ -41,25 +43,22 @@ enum InputItem {
     GroupEnd,
     /// `-Bstatic` / `-Bdynamic`: what `-l` may find from here on.
     SearchShared(bool),
-    /// A linker script's `AS_NEEDED` span: a library inside one takes a
-    /// dependency record only where the link binds to it.
+    /// `--as-needed` / `--no-as-needed`: whether a library from here on
+    /// takes a dependency record only where the link binds to it.
     AsNeeded(bool),
-}
-
-#[derive(PartialEq, Eq, Clone, Copy)]
-enum BuildId {
-    None,
-    Sha1,
+    /// A linker script's `AS_NEEDED` span opening (`true`) or closing:
+    /// every library inside it is as needed, and its close restores the
+    /// state before it.
+    AsNeededSpan(bool),
 }
 
 /// Binutils compatibility level reported by `--version`. Raise it only
 /// alongside the behaviour a consumer gates on that version.
 ///
-/// 2.33.1 is where `arch/arm64/Kconfig` enables
-/// `ARM64_PTR_AUTH_KERNEL`, which compiles the kernel with
-/// `-mbranch-protection=pac-ret`. Both halves that gate names are in
-/// place: the compiler emits the signing pair and the
-/// `.note.gnu.property` PAC note, and the linker merges those notes.
+/// 2.33.1 is the first GNU ld that reads the AArch64 `.note.gnu.property`
+/// PAC note, so a build gates `-mbranch-protection=pac-ret` on it. Both
+/// halves of that are in place: the compiler emits the signing pair and
+/// the PAC note, and the linker merges those notes.
 const LD_COMPAT_VERSION: &str = "2.33.1";
 
 struct LdArgs {
@@ -72,14 +71,18 @@ struct LdArgs {
     build_id: BuildId,
     fatal_warnings: bool,
     emit_relocs: bool,
-    no_undefined: bool,
     discard_locals: DiscardLocals,
     /// `--discard-none`: keep every local symbol.
     discard_none: bool,
     strip_debug: bool,
     orphan_handling: Option<String>,
-    /// `-z noexecstack` / `-z execstack`.
-    gnu_stack: Option<bool>,
+    /// The `-z` keywords, with `--no-undefined` as `-z defs` and
+    /// `--pack-dyn-relocs=` as `-z [no]pack-relative-relocs`.
+    z: ZKeywords,
+    /// `--warn-execstack` / `--no-warn-execstack`.
+    warn_execstack: Option<bool>,
+    /// Cleared by `--no-warn-rwx-segments`.
+    warn_rwx_segments: bool,
     print_version: bool,
     // Final-link options; ignored under `-r`, which has no layout.
     /// `-shared` / `-pie`: ET_DYN output. The last of those two and
@@ -91,8 +94,6 @@ struct LdArgs {
     entry: Option<String>,
     map_path: Option<PathBuf>,
     print_map: bool,
-    max_page_size: Option<u64>,
-    pack_relative_relocs: bool,
     apply_dynamic_relocs: bool,
     /// `-u SYM`: symbols forced undefined before the archive scan.
     undefined: Vec<String>,
@@ -290,20 +291,19 @@ impl LdArgs {
             build_id: BuildId::None,
             fatal_warnings: false,
             emit_relocs: false,
-            no_undefined: false,
             discard_locals: DiscardLocals::None,
             discard_none: false,
             strip_debug: false,
             orphan_handling: None,
-            gnu_stack: None,
+            z: ZKeywords::default(),
+            warn_execstack: None,
+            warn_rwx_segments: true,
             print_version: false,
             shared: false,
             shared_object: false,
             entry: None,
             map_path: None,
             print_map: false,
-            max_page_size: None,
-            pack_relative_relocs: false,
             apply_dynamic_relocs: true,
             undefined: Vec::new(),
             gc_sections: false,
@@ -377,19 +377,23 @@ impl LdArgs {
                 s if s.starts_with("-Map=") => {
                     a.map_path = Some(PathBuf::from(&s["-Map=".len()..]))
                 }
-                "--pack-dyn-relocs=relr" => a.pack_relative_relocs = true,
-                "--pack-dyn-relocs=none" => a.pack_relative_relocs = false,
+                "--pack-dyn-relocs=relr" => a.z.push(ZKeyword::PackRelativeRelocs(true)),
+                "--pack-dyn-relocs=none" => a.z.push(ZKeyword::PackRelativeRelocs(false)),
                 "--apply-dynamic-relocs" => a.apply_dynamic_relocs = true,
                 "--no-apply-dynamic-relocs" => a.apply_dynamic_relocs = false,
-                // Accepted with no effect on the emitted image: badc emits
-                // no interpreter, no ld-generated unwind tables, and
-                // resolves every branch in range without veneers.
-                "--no-dynamic-linker" | "--pic-veneer" | "--no-ld-generated-unwind-info" => {}
+                "--no-dynamic-linker" => a.interp = None,
+                // The image has these by construction: no unwind table of
+                // the linker's own, and the only veneers, the AArch64
+                // erratum ones, address their targets PC-relative.
+                "--pic-veneer" | "--no-ld-generated-unwind-info" => {}
                 "--eh-frame-hdr" => a.eh_frame_hdr = true,
                 "--no-eh-frame-hdr" => a.eh_frame_hdr = false,
                 // `-n`: a segment aligns to its sections, not to a page.
                 "-n" | "--nmagic" => a.nmagic = true,
-                "-Bsymbolic" | "-Bsymbolic-functions" => a.symbolic = true,
+                "-Bsymbolic" => a.symbolic = true,
+                // A shared library binds every reference to its own
+                // definitions, which records nothing for functions alone.
+                "-Bsymbolic-functions" => {}
                 "-soname" | "-h" => a.soname = Some(next_of(&mut it, arg)?),
                 s if s.starts_with("-soname=") || s.starts_with("--soname=") => {
                     a.soname = Some(s.split_once('=').map(|(_, v)| v).unwrap_or("").to_string());
@@ -445,16 +449,12 @@ impl LdArgs {
                 }
                 "--build-id" => a.build_id = BuildId::Sha1,
                 s if s.starts_with("--build-id=") => {
-                    a.build_id = match &s["--build-id=".len()..] {
-                        "sha1" | "fast" | "tree" => BuildId::Sha1,
-                        "none" => BuildId::None,
-                        other => {
-                            return Err(ld_err(format!("unsupported --build-id style `{other}`")));
-                        }
-                    };
+                    let style = &s["--build-id=".len()..];
+                    a.build_id = BuildId::parse(style)
+                        .ok_or_else(|| ld_err(format!("unsupported --build-id style `{style}`")))?;
                 }
                 "--emit-relocs" | "-q" => a.emit_relocs = true,
-                "--no-undefined" => a.no_undefined = true,
+                "--no-undefined" => a.z.push(ZKeyword::Defs(true)),
                 "-X" | "--discard-locals" => {
                     a.discard_locals = DiscardLocals::Temporaries;
                     a.discard_none = false;
@@ -470,10 +470,21 @@ impl LdArgs {
                 "--strip-debug" | "-S" => a.strip_debug = true,
                 "-EL" => {} // little-endian, the only byte order supported
                 "-EB" => return Err(ld_err("big-endian output is not supported")),
-                "--no-warn-rwx-segments" | "--warn-rwx-segments" => {}
-                // badc records a DT_NEEDED for every shared library named
-                // on the command line, so neither keyword changes the tags.
-                "--as-needed" | "--no-as-needed" | "--add-needed" | "--no-add-needed" => {}
+                "--warn-rwx-segments" => a.warn_rwx_segments = true,
+                "--no-warn-rwx-segments" => a.warn_rwx_segments = false,
+                "--warn-execstack" => a.warn_execstack = Some(true),
+                "--no-warn-execstack" => a.warn_execstack = Some(false),
+                "--as-needed" => a.inputs.push(InputItem::AsNeeded(true)),
+                "--no-as-needed" => a.inputs.push(InputItem::AsNeeded(false)),
+                // A shared library's own dependencies are not read, so
+                // none of their names can be recorded.
+                "--no-add-needed" | "--no-copy-dt-needed-entries" => {}
+                "--add-needed" | "--copy-dt-needed-entries" => {
+                    return Err(ld_err(format!(
+                        "{arg} is not supported: the link reads no shared library's own \
+                         dependencies"
+                    )));
+                }
                 "--gc-sections" => a.gc_sections = true,
                 "--no-gc-sections" => a.gc_sections = false,
                 s if s.starts_with("--orphan-handling=") => {
@@ -490,7 +501,7 @@ impl LdArgs {
                          GNU-ld-compatible driver; see ld(1) for option semantics.\n\
                          Supported: -r, -o, -m EMU, -T SCRIPT, -shared, -pie, \
                          -no-pie, --whole-archive, \
-                         --start-group, -L/-l, -z KEYWORD, --build-id[=sha1|none], \
+                         --start-group, -L/-l, -z KEYWORD, --build-id[=sha1|tree|fast|none], \
                          --emit-relocs, --fatal-warnings, -X, --strip-debug, -EL, \
                          --orphan-handling=KIND, --no-undefined, --gc-sections"
                     );
@@ -505,26 +516,16 @@ impl LdArgs {
         Ok(a)
     }
 
-    /// One `-z` keyword, with GNU semantics for ET_REL output: these
-    /// keywords shape final images only and change nothing about a
-    /// relocatable link. Returns the exit code of a rejected one.
+    /// One `-z` keyword. A final link takes it as the engine answers it
+    /// ([`LdsOptions::take_z_keywords`]); a relocatable one, as GNU ld
+    /// does, only the stack note and the duplicate-definition rule.
+    /// Returns the exit code of a keyword GNU ld does not have.
     fn apply_z_keyword(&mut self, kw: &str) -> Option<i32> {
-        match kw {
-            "noexecstack" => self.gnu_stack = Some(false),
-            "execstack" => self.gnu_stack = Some(true),
-            "pack-relative-relocs" => self.pack_relative_relocs = true,
-            "nopack-relative-relocs" => self.pack_relative_relocs = false,
-            s if s.starts_with("max-page-size=") => {
-                match parse_page_size(&s["max-page-size=".len()..]) {
-                    Some(n) => self.max_page_size = Some(n),
-                    None => {
-                        return Some(ld_err("-z max-page-size requires a power of two"));
-                    }
-                }
-            }
-            _ => {}
+        match parse_z_keyword(kw) {
+            Ok(kw) => self.z.push(kw),
+            Err(e) => return Some(ld_err(e)),
         }
-        check_z_keyword(kw)
+        None
     }
 }
 
@@ -575,12 +576,13 @@ fn run_relocatable_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         script,
         discard_locals: a.discard_locals,
         strip_debug: a.strip_debug,
-        build_id_sha1: a.build_id == BuildId::Sha1,
-        gnu_stack: a.gnu_stack,
+        build_id: a.build_id,
+        gnu_stack: a.z.exec_stack(),
+        allow_multiple_definition: a.z.muldefs(),
         expect_machine: machine,
     };
-    // ld writes a map for a relocatable link too, and kbuild's
-    // `modules.builtin.ranges` step reads `vmlinux.o.map`.
+    // ld writes a map for a relocatable link too, which attributes each
+    // merged section's bytes to its inputs.
     let want_map = a.map_path.is_some() || a.print_map;
     let (bytes, map) = if want_map {
         match link_relocatable_with_map(&objs, &opts, &a.output.display().to_string()) {
@@ -605,47 +607,6 @@ fn run_relocatable_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         print!("{map}");
     }
     0
-}
-
-/// `-z` keywords ld accepts. Unknown ones are errors, matching GNU
-/// ld's `-z <kw> ignored` warning turned strict.
-fn check_z_keyword(kw: &str) -> Option<i32> {
-    let known = matches!(
-        kw,
-        "noexecstack"
-            | "execstack"
-            | "relro"
-            | "norelro"
-            | "now"
-            | "lazy"
-            | "text"
-            | "notext"
-            | "defs"
-            | "undefs"
-            | "muldefs"
-            | "pack-relative-relocs"
-            | "nopack-relative-relocs"
-            | "noseparate-code"
-            | "separate-code"
-            // Dynamic-loader policy recorded in DT_FLAGS_1. The kernel
-            // passes them on links that produce no dynamic segment, so
-            // there is nothing to record and nothing to warn about.
-            | "nodefaultlib"
-            | "nodelete"
-            | "nodlopen"
-            | "nodump"
-            | "origin"
-            | "global"
-            | "initfirst"
-            | "interpose"
-            | "loadfltr"
-    ) || kw.starts_with("max-page-size=")
-        || kw.starts_with("common-page-size=");
-    if known {
-        None
-    } else {
-        Some(ld_err(format!("unsupported -z keyword `{kw}`")))
-    }
 }
 
 /// What the input resolver needs from a parsed object. Archive member
@@ -722,6 +683,7 @@ fn collect_inputs<T: InputObject>(
     let mut libs: Vec<SharedInput> = Vec::new();
     let mut search_shared = true;
     let mut as_needed = false;
+    let mut as_needed_before: Vec<bool> = Vec::new();
     // `-u SYM` forces a reference before any input is read, so a
     // member defining it is pulled even though nothing else names it.
     let mut undef: HashSet<String> = a.undefined.iter().cloned().collect();
@@ -825,6 +787,15 @@ fn collect_inputs<T: InputObject>(
             }
             InputItem::AsNeeded(on) => {
                 as_needed = *on;
+                continue;
+            }
+            InputItem::AsNeededSpan(true) => {
+                as_needed_before.push(as_needed);
+                as_needed = true;
+                continue;
+            }
+            InputItem::AsNeededSpan(false) => {
+                as_needed = as_needed_before.pop().unwrap_or(false);
                 continue;
             }
             InputItem::Lib(name) => {
@@ -981,14 +952,14 @@ fn ld_script_inputs(text: &str) -> Vec<InputItem> {
                     Some("AS_NEEDED") if !listing.is_empty() => {
                         listing.push(depth);
                         as_needed_at = Some(depth);
-                        out.push(InputItem::AsNeeded(true));
+                        out.push(InputItem::AsNeededSpan(true));
                     }
                     _ => {}
                 }
             }
             ")" => {
                 if as_needed_at == Some(depth) {
-                    out.push(InputItem::AsNeeded(false));
+                    out.push(InputItem::AsNeededSpan(false));
                     as_needed_at = None;
                 }
                 if group_at == Some(depth) {
@@ -1033,16 +1004,6 @@ fn is_shared_object(bytes: &[u8]) -> bool {
         && u16::from_le_bytes([bytes[16], bytes[17]]) == ET_DYN
 }
 
-/// `-z max-page-size=` / GNU ld's size syntax: decimal or `0x` hex,
-/// power of two.
-fn parse_page_size(body: &str) -> Option<u64> {
-    let n = match body.strip_prefix("0x").or_else(|| body.strip_prefix("0X")) {
-        Some(hex) => u64::from_str_radix(hex, 16).ok()?,
-        None => body.parse::<u64>().ok()?,
-    };
-    n.is_power_of_two().then_some(n)
-}
-
 /// Final (non-`-r`) link: lay the inputs out under the script and
 /// write the image. With no `-T`/`--script` the built-in default
 /// script runs, as GNU ld's does.
@@ -1066,7 +1027,10 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         return ld_err("no input files");
     }
     let m = machine.unwrap_or(objs[0].machine);
-    let opts = LdsOptions {
+    if a.fix_cortex_a53_843419 && m != EM_AARCH64 {
+        return ld_err("--fix-cortex-a53-843419 is not supported: it applies to AArch64 code");
+    }
+    let mut opts = LdsOptions {
         emit: if a.shared {
             LdsEmit::Dyn
         } else {
@@ -1077,25 +1041,27 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         gc_sections: a.gc_sections,
         undefined: a.undefined.clone(),
         // GNU ld defaults: 2 MiB on x86-64, 64 KiB on aarch64, 4 KiB
-        // on i386.
-        max_page_size: a.max_page_size.unwrap_or(match m {
+        // on i386; `-z max-page-size=` replaces it below.
+        max_page_size: match m {
             EM_AARCH64 => 0x10000,
             EM_386 => 0x1000,
             _ => 0x200000,
-        }),
+        },
         orphan_handling: match a.orphan_handling.as_deref() {
             Some("warn") => OrphanHandling::Warn,
             Some("error") => OrphanHandling::Error,
             Some("discard") => OrphanHandling::Discard,
             _ => OrphanHandling::Place,
         },
-        build_id_sha1: a.build_id == BuildId::Sha1,
+        build_id: a.build_id,
         strip_debug: a.strip_debug,
-        discard_locals: a.discard_locals != DiscardLocals::None,
+        discard_locals: a.discard_locals == DiscardLocals::Temporaries,
+        discard_all: a.discard_locals == DiscardLocals::All,
         discard_none: a.discard_none,
-        pack_relative_relocs: a.pack_relative_relocs,
         apply_dynamic_relocs: a.apply_dynamic_relocs,
         emit_relocs: a.emit_relocs,
+        warn_execstack: a.warn_execstack,
+        warn_rwx_segments: a.warn_rwx_segments,
         emit_warnings: true,
         diag: crate::c5::diag::Config::new(),
         soname: a.soname.clone(),
@@ -1114,7 +1080,11 @@ fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
         rpath: a.rpath.clone(),
         new_dtags: a.new_dtags,
         fix_cortex_a53_843419: a.fix_cortex_a53_843419,
+        ..Default::default()
     };
+    if let Err((kw, why)) = opts.take_z_keywords(&a.z) {
+        return ld_err(format!("-z {} is not supported: {why}", kw.name()));
+    }
     let res = match super::lds_link::link_with_script(&script, objs, &opts) {
         Ok(r) => r,
         Err(e) => return ld_err(format!("{e}")),
@@ -1197,10 +1167,10 @@ fn report_orphans(
 
 #[cfg(test)]
 mod tests {
-    /// The kernel links its kexec purgatory with dynamic-loader policy
-    /// keywords that a relocatable link cannot act on. Accepting them is
-    /// not the same as accepting anything: a keyword ld does not define
-    /// still has to be refused.
+    /// A relocatable link may be given dynamic-loader policy keywords it
+    /// cannot act on, which ld accepts. Accepting them is not the same as
+    /// accepting anything: a keyword ld does not define still has to be
+    /// refused.
     #[test]
     fn loader_policy_z_keywords_are_accepted_and_unknown_ones_are_not() {
         for kw in [
@@ -1214,13 +1184,13 @@ mod tests {
             "interpose",
             "loadfltr",
         ] {
-            assert!(check_z_keyword(kw).is_none(), "{kw} must link");
+            assert!(parse_z_keyword(kw).is_ok(), "{kw} must link");
         }
         for kw in ["noexecstack", "relro", "now", "max-page-size=4096"] {
-            assert!(check_z_keyword(kw).is_none(), "{kw} regressed");
+            assert!(parse_z_keyword(kw).is_ok(), "{kw} regressed");
         }
         for kw in ["bogus-keyword", "nodefaultlibs", ""] {
-            assert!(check_z_keyword(kw).is_some(), "{kw} must be refused");
+            assert!(parse_z_keyword(kw).is_err(), "{kw} must be refused");
         }
     }
 
@@ -1241,7 +1211,7 @@ mod tests {
             .map(|i| match i {
                 InputItem::GroupStart => String::from("{"),
                 InputItem::GroupEnd => String::from("}"),
-                InputItem::AsNeeded(on) => alloc::format!("as-needed={on}"),
+                InputItem::AsNeededSpan(on) => alloc::format!("as-needed={on}"),
                 InputItem::File(p) => p.display().to_string(),
                 InputItem::Lib(n) => alloc::format!("-l{n}"),
                 _ => String::from("?"),
@@ -1284,7 +1254,7 @@ mod tests {
         assert_eq!(kind(&["-pie", "--no-pie", "a.o"]), (false, false));
     }
 
-    /// `scripts/ld-version.sh`: `10000*major + 100*minor + patch`, with a
+    /// A version as one number, `10000*major + 100*minor + patch`, with a
     /// missing field zero and anything past the third ignored.
     fn ld_canonical_version(v: &str) -> u32 {
         let mut it = v.split('.');
@@ -1293,12 +1263,11 @@ mod tests {
     }
 
     #[test]
-    fn reported_version_covers_the_ptr_auth_kernel_gate() {
-        // `arch/arm64/Kconfig` enables `ARM64_PTR_AUTH_KERNEL` at
-        // `LD_VERSION >= 23301`, and compiles the kernel with
-        // `-mbranch-protection=pac-ret` on the strength of it. Both the
-        // signing pair and the property note it names are emitted, so
-        // the claim is honest; dropping either has to drop this too.
+    fn reported_version_is_at_least_the_pac_note_release() {
+        // A build enables `-mbranch-protection=pac-ret` on an ld of at least
+        // 2.33.1, the first to read the PAC property note. Both the signing
+        // pair and that note are emitted, so the claim is honest; dropping
+        // either has to drop this too.
         assert!(ld_canonical_version(LD_COMPAT_VERSION) >= 23301);
         assert_eq!(ld_canonical_version("2.33.1"), 23301);
         assert_eq!(ld_canonical_version("2.30"), 23000);

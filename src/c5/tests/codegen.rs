@@ -181,10 +181,9 @@ fn output_marker_is_version_only_and_present_in_every_target() {
 }
 
 /// The first line of `--version` (`BUILD_INFO`) is the complete
-/// identification consumers record: the Linux kernel captures
-/// `$(CC) --version | head -n1` as `CONFIG_CC_VERSION_TEXT`,
-/// which reaches the boot banner and `/proc/version`. It must
-/// name the compiler, its release version, and the
+/// identification consumers record: a build keeps
+/// `$(CC) --version | head -n1` as its compiler's name in what it
+/// produces. It must name the compiler, its release version, and the
 /// gcc-compatibility claim, and, where the source named one, the
 /// commit the compiler was built from -- so an image records which
 /// compiler build produced it, not merely which release. On a
@@ -483,12 +482,9 @@ fn string_literals_land_read_only_in_every_target() {
 fn relocated_const_lands_in_relro_region_in_every_target() {
     use crate::c5::compiler::CompileOptions;
     use crate::c5::linker::{
-        NativeMachine, link_native_objects, parse_native_elf, write_native_image_from_merged,
+        link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
-    use crate::c5::{
-        Compiler, NativeOptions, OutputKind, Target, emit_aarch64_plt, emit_native_with_options,
-        emit_x86_64_plt,
-    };
+    use crate::c5::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
     const PT_GNU_RELRO: u32 = 0x6474_E552;
     const MEM_READ: u32 = 0x4000_0000;
     const MEM_WRITE: u32 = 0x8000_0000;
@@ -532,11 +528,7 @@ fn relocated_const_lands_in_relro_region_in_every_target() {
             merged.data_ro_len < merged.data_relro_len,
             "{target:?}: the link must produce a non-empty relro region"
         );
-        let plt = match merged.machine {
-            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
-            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
-        }
-        .expect("plt");
+        let plt = crate::emit_plt_for(&mut merged, target, false).expect("plt");
         let image = write_native_image_from_merged(
             &merged,
             &plt,
@@ -613,12 +605,9 @@ fn relocated_const_lands_in_relro_region_in_every_target() {
 fn relro_const_leaves_the_rodata_prefix_intact_in_every_target() {
     use crate::c5::compiler::CompileOptions;
     use crate::c5::linker::{
-        NativeMachine, link_native_objects, parse_native_elf, write_native_image_from_merged,
+        link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
-    use crate::c5::{
-        Compiler, NativeOptions, OutputKind, Target, emit_aarch64_plt, emit_native_with_options,
-        emit_x86_64_plt,
-    };
+    use crate::c5::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
     const PT_GNU_RELRO: u32 = 0x6474_E552;
     const MEM_WRITE: u32 = 0x8000_0000;
     // One unit mixing a pure `const` with a relocation-carrying one.
@@ -678,11 +667,7 @@ fn relro_const_leaves_the_rodata_prefix_intact_in_every_target() {
             merged.data_ro_len > 0 && merged.data_relro_len > merged.data_ro_len,
             "{target:?}: the link must keep a read-only prefix and a relro region"
         );
-        let plt = match merged.machine {
-            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
-            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
-        }
-        .expect("plt");
+        let plt = crate::emit_plt_for(&mut merged, target, false).expect("plt");
         let image = write_native_image_from_merged(
             &merged,
             &plt,
@@ -764,12 +749,9 @@ fn relro_const_leaves_the_rodata_prefix_intact_in_every_target() {
 fn statically_relocated_object_keeps_const_storage_read_only_when_linked() {
     use crate::c5::compiler::CompileOptions;
     use crate::c5::linker::{
-        NativeMachine, link_native_objects, parse_native_elf, write_native_image_from_merged,
+        link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
-    use crate::c5::{
-        Compiler, NativeOptions, OutputKind, Target, emit_aarch64_plt, emit_native_with_options,
-        emit_x86_64_plt,
-    };
+    use crate::c5::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
     const PT_GNU_RELRO: u32 = 0x6474_E552;
     let src = "\
         const char pure_tab[16] = \"PURETABPURETAB\";\n\
@@ -807,11 +789,7 @@ fn statically_relocated_object_keeps_const_storage_read_only_when_linked() {
             merged.data_relro_len > 0,
             "{target:?}: the demoted section must reach the relro region"
         );
-        let plt = match merged.machine {
-            NativeMachine::Aarch64 => emit_aarch64_plt(&mut merged),
-            NativeMachine::X86_64 => emit_x86_64_plt(&mut merged),
-        }
-        .expect("plt");
+        let plt = crate::emit_plt_for(&mut merged, target, false).expect("plt");
         let image = write_native_image_from_merged(
             &merged,
             &plt,
@@ -1195,31 +1173,80 @@ fn environ_data_binding_records_copy_relocation() {
     );
 }
 
-/// POSIX `setenv` carries a third `overwrite` argument that msvcrt's
-/// 2-parameter `_putenv_s` lacks, so `<stdlib.h>` defines `setenv` as
-/// an inline wrapper that probes `getenv` before calling `_putenv_s`,
-/// honoring the flag. The wrapper compiles in place -- the object
-/// imports `_putenv_s` and carries no undefined `setenv` symbol -- and
-/// the same definition serves the interpreter and JIT paths.
+/// The Windows headers declare `setenv`, `unsetenv` and `realpath` no more
+/// than mingw-w64's do, and declare its one-argument `mkdir`, so a program's
+/// own Windows fallbacks -- a `static void setenv`, a `static char *realpath`
+/// over `_fullpath` -- compile there and a `mkdir(path)` calls the CRT's. The
+/// same fallback is a conflicting redeclaration where the headers declare
+/// POSIX's.
 #[test]
-fn setenv_inline_wrapper_imports_putenv_s_on_windows() {
-    use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
-    let program = Compiler::with_target(
-        "#include <stdlib.h>\nint main(void){ setenv(\"K\", \"V\", 0); return 0; }".to_string(),
-        Target::WindowsX64,
-    )
-    .compile()
-    .expect("compile setenv TU for WindowsX64");
-    let opts = NativeOptions {
-        output_kind: OutputKind::Relocatable,
-        ..NativeOptions::default()
-    };
-    let obj = emit_native_with_options(&program, Target::WindowsX64, opts).expect("emit");
-    let contains = |needle: &[u8]| obj.windows(needle.len()).any(|w| w == needle);
+fn windows_headers_leave_posix_fallbacks_to_the_program() {
+    use crate::{Compiler, Target};
+    const SRC: &str = "#include <limits.h>\n#include <stdlib.h>\n#include <unistd.h>\n\
+        static void setenv(const char *name, const char *value, int overwrite)\n\
+        { if (overwrite || !getenv(name)) _putenv_s(name, value); }\n\
+        static int unsetenv(const char *name) { return _putenv_s(name, \"\"); }\n\
+        static char *realpath(const char *path, char *buf)\n\
+        { return _fullpath(buf, path, PATH_MAX); }\n\
+        int main(void) { char b[PATH_MAX]; setenv(\"K\", \"V\", 0);\n\
+          return unsetenv(\"K\") + mkdir(realpath(\".\", b)); }\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        if let Err(e) = Compiler::with_target(SRC.to_string(), target).compile() {
+            panic!("{target:?}: {e}");
+        }
+    }
+    let posix = "#include <stdlib.h>\n\
+        static void setenv(const char *name, const char *value, int overwrite) {}\n\
+        int main(void) { return 0; }\n";
+    let err = Compiler::with_target(posix.to_string(), Target::LinuxX64)
+        .compile()
+        .expect_err("POSIX <stdlib.h> declares setenv");
     assert!(
-        contains(b"_putenv_s"),
-        "the inline setenv wrapper must import _putenv_s"
+        alloc::format!("{err}").contains("conflicting types for `setenv`"),
+        "{err}"
     );
+}
+
+/// Every function the Windows `<pthread.h>` and `<sched.h>` declare has a
+/// definition the link finds, in the C-library sources it offers like
+/// archive members. The PE fixtures run them on a Windows host; this links
+/// them on any host.
+#[test]
+fn windows_pthread_declarations_link() {
+    use crate::{Compiler, NativeOptions, Target};
+    const SRC: &str = "#include <pthread.h>\n#include <sched.h>\n\
+        typedef void (*fn)(void);\n\
+        static const fn used[] = {\n\
+          (fn)pthread_create, (fn)pthread_join, (fn)pthread_exit, (fn)pthread_detach,\n\
+          (fn)pthread_self, (fn)pthread_equal, (fn)pthread_once,\n\
+          (fn)pthread_key_create, (fn)pthread_key_delete,\n\
+          (fn)pthread_setspecific, (fn)pthread_getspecific,\n\
+          (fn)pthread_mutex_init, (fn)pthread_mutex_lock, (fn)pthread_mutex_trylock,\n\
+          (fn)pthread_mutex_unlock, (fn)pthread_mutex_destroy,\n\
+          (fn)pthread_mutexattr_init, (fn)pthread_mutexattr_settype,\n\
+          (fn)pthread_mutexattr_destroy,\n\
+          (fn)pthread_cond_init, (fn)pthread_cond_destroy, (fn)pthread_cond_wait,\n\
+          (fn)pthread_cond_timedwait, (fn)pthread_cond_signal, (fn)pthread_cond_broadcast,\n\
+          (fn)pthread_condattr_init, (fn)pthread_condattr_destroy,\n\
+          (fn)pthread_condattr_setclock,\n\
+          (fn)pthread_attr_init, (fn)pthread_attr_destroy, (fn)pthread_attr_setdetachstate,\n\
+          (fn)pthread_attr_setstacksize, (fn)pthread_attr_setscope,\n\
+          (fn)pthread_attr_setschedpolicy, (fn)pthread_attr_setschedparam,\n\
+          (fn)pthread_attr_getschedparam, (fn)pthread_attr_getguardsize,\n\
+          (fn)pthread_attr_getstack, (fn)pthread_attr_setinheritsched,\n\
+          (fn)sched_yield, (fn)sched_get_priority_min, (fn)sched_get_priority_max,\n\
+        };\n\
+        int main(void) { return used[0] == 0 || pthread_atfork(0, 0, 0); }\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let program = Compiler::with_target(SRC.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        if let Err(e) =
+            super::link_executable_with_runtime(&program, target, NativeOptions::default())
+        {
+            panic!("{target:?}: {e}");
+        }
+    }
 }
 
 /// A `#pragma binding(data lib::sym, ...)` import on the Windows
@@ -2857,6 +2884,179 @@ fn int128_scalar_conversions_run_correctly() {
     );
 }
 
+/// C99 6.3.1.2: an `__int128` converted to `_Bool` is 0 only when the
+/// whole value is: the conversion ORs both loaded halves ahead of the
+/// test, in a cast, a `return`, an argument and a bit-field store.
+#[test]
+fn an_int128_converts_to_bool_by_testing_both_halves() {
+    use crate::c5::ir::{BinOp, Inst};
+    use crate::{CompileOptions, Compiler, Target};
+    const SRC: &str = "struct S { _Bool f : 1; };\n\
+        _Bool cast(__int128 *p) { return (_Bool)*p; }\n\
+        _Bool ret(__int128 *p) { return *p; }\n\
+        static int take(_Bool b) { return b; }\n\
+        int arg(__int128 *p) { return take(*p); }\n\
+        void field(struct S *s, __int128 *p) { s->f = *p; }\n";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(SRC.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        for name in ["cast", "ret", "arg", "field"] {
+            let f = funcs.iter().find(|f| f.name == name).expect(name);
+            let is_load = |v: u32| matches!(f.insts[v as usize], Inst::Load { .. });
+            let halves = f.insts.iter().any(
+                |i| matches!(i, Inst::Binop { op: BinOp::Or, lhs, rhs } if is_load(*lhs) && is_load(*rhs)),
+            );
+            assert!(halves, "{target:?} {name}: {:?}", f.insts);
+        }
+    }
+}
+
+/// C99 6.5.2.1, 6.5.6p8, 6.5.7p3 and 6.7.5.2p5: an `__int128` subscript,
+/// pointer offset, shift count of a narrower operand and array dimension
+/// take the operand's value, its low half: no 128-bit product or shift is
+/// formed in a temporary whose address would stand in for the value.
+#[test]
+fn an_int128_offset_count_or_dimension_takes_its_low_half() {
+    use crate::c5::ir::{BinOp, Inst};
+    use crate::{CompileOptions, Compiler, Target};
+    const SRC: &str = "int sub(int *p, __int128 i) { return p[i]; }\n\
+        int rsub(int *p, __int128 i) { return i[p]; }\n\
+        int add(int *p, __int128 i) { return *(i + p); }\n\
+        int *step(int *p, __int128 i) { p -= i; return p; }\n\
+        int shl(int v, __int128 n) { return v << n; }\n\
+        int shl_assign(int v, __int128 n) { v <<= n; return v; }\n\
+        int vla(__int128 n) { int a[n]; a[0] = 1; return a[0] + (int)sizeof a; }\n";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(SRC.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let find = |name: &str| funcs.iter().find(|f| f.name == name).expect(name);
+        for name in ["sub", "rsub", "add", "step", "shl", "shl_assign"] {
+            let f = find(name);
+            let stores = f.insts.iter().any(|i| matches!(i, Inst::Store { .. }));
+            assert!(!stores, "{target:?} {name}: {:?}", f.insts);
+        }
+        let f = find("vla");
+        let scaled_low_half = f.insts.iter().any(|i| {
+            matches!(i, Inst::BinopI { op: BinOp::Mul | BinOp::Shl, lhs, .. }
+                if matches!(f.insts[*lhs as usize], Inst::Load { .. }))
+        });
+        assert!(scaled_low_half, "{target:?} vla: {:?}", f.insts);
+    }
+}
+
+/// C99 6.8.4.2p5: a `switch` on an `__int128` compares the labels with
+/// all 128 bits. The dispatcher tests the loaded high half of the value
+/// against each label's -- 0 for 3, -1 for -2, 1 for 2^64 -- before it
+/// searches the low half.
+#[test]
+fn a_switch_on_an_int128_tests_the_high_half() {
+    use crate::c5::ir::{BinOp, Inst};
+    use crate::{CompileOptions, Compiler, Target};
+    const SRC: &str = "int sw(__int128 x) { switch (x) { case 3: return 30; \
+        case -2: return -20; case (__int128)1 << 64: return 64; default: return 99; } }\n";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(SRC.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let f = funcs.iter().find(|f| f.name == "sw").expect("sw");
+        for high in [0i64, -1, 1] {
+            let tested = f.insts.iter().any(|i| {
+                matches!(i, Inst::BinopI { op: BinOp::Eq, lhs, rhs_imm }
+                    if *rhs_imm == high && matches!(f.insts[*lhs as usize], Inst::Load { .. }))
+            });
+            assert!(tested, "{target:?} high half {high}: {:?}", f.insts);
+        }
+    }
+}
+
+/// C11 7.17.7: an atomic builtin's value operand converts to the object's
+/// type, and an intrinsic's integer operand -- `__builtin_alloca`'s size --
+/// takes a floating or `__int128` value converted to an integer: the
+/// operation sees the `__int128`'s loaded low half and the double's
+/// truncation, not the temporary's address or the floating bits.
+#[test]
+fn a_builtin_operand_converts_to_the_type_the_builtin_takes() {
+    use crate::c5::ir::{FpCastKind, Inst};
+    use crate::{CompileOptions, Compiler, Target};
+    const SRC: &str = "int add(int *p, __int128 v) { return __atomic_fetch_add(p, v, 5); }\n\
+        void store(int *p, double d) { __atomic_store_n(p, d, 5); }\n\
+        char *wide(__int128 n) { char *m = __builtin_alloca(n); m[0] = 0; return 0; }\n\
+        char *fp(double d) { char *m = __builtin_alloca(d); m[0] = 0; return 0; }\n";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(SRC.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let find = |name: &str| funcs.iter().find(|f| f.name == name).expect(name);
+        let f = find("add");
+        let low_half = f.insts.iter().any(|i| {
+            matches!(i, Inst::AtomicRmw { value, .. }
+                if matches!(f.insts[*value as usize], Inst::Load { .. } | Inst::Extend { .. }))
+        });
+        assert!(low_half, "{target:?} add: {:?}", f.insts);
+        for name in ["store", "fp"] {
+            let f = find(name);
+            let truncated = f.insts.iter().any(|i| {
+                matches!(
+                    i,
+                    Inst::FpCast {
+                        kind: FpCastKind::FpToInt,
+                        ..
+                    }
+                )
+            });
+            assert!(truncated, "{target:?} {name}: {:?}", f.insts);
+        }
+        let f = find("wide");
+        let sized_by_value = f.insts.iter().any(|i| {
+            matches!(i, Inst::Intrinsic { args, .. }
+                if args.len() == 1 && matches!(f.insts[args[0] as usize], Inst::Load { .. }))
+        });
+        assert!(sized_by_value, "{target:?} wide: {:?}", f.insts);
+    }
+}
+
 /// ARM ARM C6.2: the aarch64 atomic read-modify-write lowering is one LSE
 /// instruction, for a seq_cst fetch-add the acquire-release `LDADDAL`.
 /// Match it by the bits that do not depend on the registers:
@@ -3053,8 +3253,8 @@ fn atomic128_store_insert_aarch64() {
     assert!(any_bic, "store-insert must emit a BIC (mask clear)");
 }
 
-/// 128-bit compare-and-swap through the pre-LSE `ldxp`/`stxp` exclusive pair,
-/// the kernel `__ll_sc__cmpxchg128` shape. Unlike the recognized load/store
+/// 128-bit compare-and-swap through the pre-LSE `ldxp`/`stxp` exclusive pair
+/// in inline asm. Unlike the recognized load/store
 /// idioms this is not lowered to an intrinsic: `prfm`, `ldxp`, `cmp`, `ccmp`,
 /// `b.ne`, `stxp`/`stlxp` and `cbnz` each go through the per-instruction
 /// inline-asm encoder. Before `ldxp` gained a catalogue row this failed to
@@ -3495,7 +3695,8 @@ fn two_escaped_objects_of_one_block_keep_distinct_cells() {
 /// An object no instruction reads or writes is observable only through a
 /// comparison of its address, which needs both objects alive; the pair in
 /// one scope therefore keeps distinct cells while successive scopes share
-/// them. This is the kernel's `typecheck()` shape.
+/// them. A macro that checks two types by comparing the addresses of a
+/// dummy of each has this shape.
 #[test]
 fn address_compared_dummies_share_across_scopes_only() {
     let checks = |scopes: &str| {
@@ -4039,6 +4240,42 @@ fn a_record_after_a_zero_length_array_member_keeps_its_storage() {
     }
 }
 
+/// A declarator's zero-length bound is its own (C99 6.9.2p2): a file-scope
+/// array of unknown size with no initializer gets one element after a
+/// `[0]` declaration, both through an array typedef (`T t;`) and when a
+/// parameter of its element type is declared `[0]` (`int (*fa[])(int
+/// b[0])`). The `[0]` object itself stays empty.
+#[test]
+fn a_zero_length_bound_does_not_carry_to_another_declarator() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
+    let src = "typedef int T[];\n\
+               int z[0];\n\
+               T t;\n\
+               int (*fa[])(int b[0]);\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let program = Compiler::with_options(
+            src.to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::new()
+        };
+        let obj = crate::emit_native_with_options(&program, target, opts)
+            .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"));
+        let syms = elf64_symbol_records(&obj);
+        let size = |name: &str| syms.iter().find(|s| s.0 == name).map(|s| s.4);
+        assert_eq!(
+            (size("z"), size("t"), size("fa")),
+            (Some(0), Some(4), Some(8)),
+            "{target:?}: {syms:?}"
+        );
+    }
+}
+
 /// Windows arm64 passes every argument to a variadic callee in the integer
 /// bank, a named `float` as its own 32 bits and a variadic one widened to
 /// `double`: the call carries no FP mask, the named value stays single
@@ -4105,6 +4342,92 @@ fn windows_arm64_variadic_calls_pass_a_named_float_as_its_own_bits() {
         )
     });
     assert!(f32_cell, "vf reads its named float's cell at 32 bits");
+}
+
+/// A variadic import takes the Microsoft ARM64 convention a variadic callee
+/// the unit defines takes: every argument in x0..x7 then the stack, a named
+/// `float` as its 32 bits, a named homogeneous aggregate as its bytes. The
+/// call carries no FP mask there, and only there.
+#[test]
+fn windows_arm64_variadic_imports_pass_named_arguments_in_the_integer_bank() {
+    use crate::Target;
+    use crate::c5::codegen::aarch64::encode::{
+        Reg, enc_fmov_d_to_x, enc_movz, enc_str_d_imm, enc_str_imm,
+    };
+    use crate::c5::ir::Inst;
+    const SRC: &str = "#pragma dylib(vlib, \"vlib.dll\")\n\
+        #pragma binding(vlib::vf, \"vf\")\n\
+        #pragma binding(vlib::vh, \"vh\")\n\
+        #pragma binding(vlib::vs, \"vs\")\n\
+        struct hf { float a, b; };\n\
+        void vf(float x, ...);\n\
+        void vh(struct hf h, float y, ...);\n\
+        void vs(int a, int b, int c, int d, int e, int f, int g, int h, float x, ...);\n\
+        void call_f(float x, double d) { vf(x, 1, d); }\n\
+        void call_k(void) { vf(1.5f, 2.5); }\n\
+        void call_h(struct hf h, float y) { vh(h, y, 7); }\n\
+        void call_s(float x) { vs(1, 2, 3, 4, 5, 6, 7, 8, x, 9); }\n";
+    for (target, masked) in [
+        (Target::WindowsAarch64, false),
+        (Target::LinuxAarch64, true),
+    ] {
+        let program = crate::Compiler::with_options(
+            SRC.into(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let f = funcs.iter().find(|f| f.name == "call_f").expect("call_f");
+        let mask = f
+            .insts
+            .iter()
+            .find_map(|i| match i {
+                Inst::CallExt { fp_arg_mask, .. } => Some(fp_arg_mask.clone()),
+                _ => None,
+            })
+            .expect("CallExt");
+        assert_eq!(
+            mask.has(0) && mask.has(2),
+            masked,
+            "{target:?}: FP mask {mask:x}"
+        );
+    }
+    let obj = relocatable_object(SRC, Target::WindowsAarch64);
+    let x = Reg;
+    expect_words(
+        &function_words(&obj, "call_f"),
+        &[
+            enc_fmov_d_to_x(x(0), 0),
+            enc_movz(x(1), 1, 0),
+            enc_fmov_d_to_x(x(2), 1),
+        ],
+        "call_f",
+    );
+    // 1.5f and 2.5 as their bit patterns.
+    expect_words(
+        &function_words(&obj, "call_k"),
+        &[enc_movz(x(0), 0x3fc0, 1), enc_movz(x(1), 0x4004, 3)],
+        "call_k",
+    );
+    expect_words(
+        &function_words(&obj, "call_h"),
+        &[enc_fmov_d_to_x(x(1), 2)],
+        "call_h",
+    );
+    // `x` in the first stack slot, 9 in the second.
+    let ws = function_words(&obj, "call_s");
+    assert!(
+        ws.contains(&enc_str_d_imm(0, x(31), 0)),
+        "call_s: x is not at [sp]"
+    );
+    assert!(
+        (0..31).any(|r| ws.contains(&enc_str_imm(x(r), x(31), 8))),
+        "call_s: 9 is not at [sp, #8]"
+    );
 }
 
 /// A call's aggregate result aligned above the 8-byte frame slot is a member
@@ -4297,7 +4620,7 @@ fn pe_export_name_table_is_lexically_sorted() {
     let bytes = emit_native_with_options(&program, Target::WindowsX64, opts).expect("emit");
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     let mut merged = link_native_objects(&[obj]).expect("link");
-    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let dll = write_native_image_from_merged(
         &merged,
         &plt,
@@ -4528,7 +4851,7 @@ fn foreign_cst16_section_lands_sixteen_aligned_in_image() {
         .expect("foreign data symbol must survive the merge")
         .value;
     assert_eq!(sym_value % 16, 0, "merged .data offset must stay aligned");
-    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let exe = write_native_image_from_merged(
         &merged,
         &plt,
@@ -4966,16 +5289,21 @@ fn x64_int_to_float_breaks_dep_and_avoids_double_hop() {
 
 /// A relocatable Linux unit surfaces its `_Thread_local` layout to an
 /// external linker: STT_TLS symbols for the defined globals (UNDEF for
-/// the externs) and standard local-exec relocations at each access
-/// site, so several units' TLS blocks merge with per-symbol offsets.
-/// Without them every unit's baked single-unit offsets alias onto the
-/// merged block's first slots and the units clobber each other.
+/// the externs) and standard relocations at each access site, so several
+/// units' TLS blocks merge with per-symbol offsets. Without them every
+/// unit's baked single-unit offsets alias onto the merged block's first
+/// slots and the units clobber each other. The unit's own thread-locals
+/// take the local-exec relocations against its TLS sections; an extern
+/// one, which a shared library may define, the initial-exec ones against
+/// its symbol, as gcc's code for an executable reads it.
 #[test]
-fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
+fn relocatable_elf_reads_own_thread_locals_local_exec_and_others_initial_exec() {
     use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
-    for (target, want_types) in [
-        (Target::LinuxAarch64, &[549u32, 551][..]),
-        (Target::LinuxX64, &[23u32][..]),
+    // R_AARCH64_TLSLE_ADD_TPREL_HI12 / _LO12_NC, R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21 /
+    // _LD64_GOTTPREL_LO12_NC; R_X86_64_TPOFF32, R_X86_64_GOTTPOFF.
+    for (target, local_exec, initial_exec) in [
+        (Target::LinuxAarch64, &[549u32, 551][..], &[541u32, 542][..]),
+        (Target::LinuxX64, &[23u32][..], &[22u32][..]),
     ] {
         let src = "_Thread_local long counter = 7;\n\
                    static _Thread_local long private_counter = 9;\n\
@@ -4994,24 +5322,36 @@ fn relocatable_elf_carries_tls_symbols_and_le_relocs() {
             },
         )
         .expect("emit relocatable");
-        let rela = elf64_section(&obj, ".rela.text").expect(".rela.text");
-        let mut types = std::collections::BTreeSet::new();
-        for e in rela.as_chunks::<24>().0.iter() {
-            let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
-            types.insert((r_info & 0xffff_ffff) as u32);
-        }
-        for want in want_types {
-            assert!(
-                types.contains(want),
-                "{target:?}: expected TLS reloc type {want} in .rela.text, got {types:?}"
-            );
-        }
         let symtab = elf64_section(&obj, ".symtab").expect(".symtab");
         let strtab = elf64_section(&obj, ".strtab").expect(".strtab");
         let name_at = |off: usize| {
             let end = strtab[off..].iter().position(|b| *b == 0).unwrap() + off;
             core::str::from_utf8(&strtab[off..end]).unwrap()
         };
+        // Each TLS relocation's type, by the name of the symbol it names:
+        // `other`, or a section symbol's empty name.
+        let rela = elf64_section(&obj, ".rela.text").expect(".rela.text");
+        let mut types: std::collections::BTreeMap<&str, std::collections::BTreeSet<u32>> =
+            Default::default();
+        for e in rela.as_chunks::<24>().0.iter() {
+            let r_info = u64::from_le_bytes(e[8..16].try_into().unwrap());
+            let rtype = (r_info & 0xffff_ffff) as u32;
+            let sym = &symtab[(r_info >> 32) as usize * 24..][..24];
+            let name = name_at(u32::from_le_bytes(sym[0..4].try_into().unwrap()) as usize);
+            if local_exec.contains(&rtype) || initial_exec.contains(&rtype) {
+                types.entry(name).or_default().insert(rtype);
+            }
+        }
+        assert_eq!(
+            types,
+            [
+                ("", local_exec.iter().copied().collect()),
+                ("other", initial_exec.iter().copied().collect())
+            ]
+            .into_iter()
+            .collect(),
+            "{target:?}"
+        );
         let (mut saw_counter, mut saw_other_undef, mut saw_private) = (false, false, false);
         for e in symtab.as_chunks::<24>().0.iter() {
             let st_name = u32::from_le_bytes(e[0..4].try_into().unwrap()) as usize;
@@ -5189,8 +5529,7 @@ fn internal_linkage_data_objects_are_named_by_local_symbols() {
 /// (`STT_TLS`). A linker adopts a typed UNDEF onto an untyped
 /// definition, so `STT_OBJECT` on a reference to an assembly code
 /// label retypes it in the linked image and objdump renders the
-/// label's range as data; the kernel's x86 decoder posttest rejects
-/// an image linked so. The distinction rides the vendor note.
+/// label's range as data. The distinction rides the vendor note.
 #[test]
 fn undefined_references_stay_untyped() {
     use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
@@ -5427,9 +5766,9 @@ fn in_out_port_forms_inline_asm_x64() {
 #[test]
 fn fxsave_fxrstor_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
-    // edk2's BaseLib reaches x87/SSE state save/restore through
-    // `asm("fxsave %0")` / `asm("fxrstor %0")`; the x86_64 emit lowers
-    // them to `fxsave m` (0F AE /0) and `fxrstor m` (0F AE /1).
+    // x87/SSE state is saved and restored through `asm("fxsave %0")` /
+    // `asm("fxrstor %0")`; the x86_64 emit lowers them to `fxsave m`
+    // (0F AE /0) and `fxrstor m` (0F AE /1).
     let program = super::compile_str_bare(
         "typedef struct { unsigned char b[512]; } FXBUF;\n\
          void save(FXBUF *p){ __asm__ __volatile__(\"fxsave %0\":\"=m\"(*p)); }\n\
@@ -5451,7 +5790,7 @@ fn fxsave_fxrstor_inline_asm_x64() {
 #[test]
 fn movd_mmx_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
-    // edk2's BaseLib reads/writes the MMX registers through
+    // The MMX registers are read and written through
     // `asm("movd %%mm0, %0")` / `asm("movd %0, %%mm3")`; the x86_64 emit
     // lowers them to `movd r/m32, mm` (0F 7E /r) and `movd mm, r/m32`
     // (0F 6E /r) with the mm index in ModRM.reg and no 0x66 prefix.
@@ -5476,7 +5815,7 @@ fn movd_mmx_inline_asm_x64() {
 #[test]
 fn operandless_privileged_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
-    // edk2's BaseLib reaches the operandless privileged instructions through
+    // The operandless privileged instructions are reached through
     // bare `asm("sti")` / `asm("cli")` / etc. The general x86_64 asm path
     // encodes each from its mnemonic with no operands.
     let program = super::compile_str_bare(
@@ -5517,8 +5856,8 @@ fn operandless_privileged_inline_asm_x64() {
 #[test]
 fn descriptor_table_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
-    // edk2's BaseLib reads/writes the descriptor-table registers and flushes
-    // cache lines through single-memory-operand asm. The x86_64 emit forces
+    // The descriptor-table registers are read and written, and cache lines
+    // flushed, through single-memory-operand asm. The x86_64 emit forces
     // the operand address into r10 and selects the form by opcode + ModRM.reg:
     //   sgdt/sidt = 0F 01 /0,/1 ; lgdt/lidt = 0F 01 /2,/3 ;
     //   sldt/str  = 0F 00 /0,/1 ; clflush   = 0F AE /7.
@@ -5559,8 +5898,8 @@ fn descriptor_table_inline_asm_x64() {
 #[test]
 fn control_debug_segment_mov_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
-    // edk2's BaseLib reads/writes the control (cr0..cr4) and debug (dr0..dr7)
-    // registers and reads the segment registers through `mov` with a special
+    // The control (cr0..cr4) and debug (dr0..dr7) registers are read and
+    // written, and the segment registers read, through `mov` with a special
     // register named in the template. The x86_64 emit selects:
     //   read  cr/dr -> gpr : 0F 20 / 0F 21 ; write gpr -> cr/dr : 0F 22 / 0F 23
     //   read  seg   -> gpr : 8C.
@@ -5605,9 +5944,9 @@ fn control_debug_segment_mov_inline_asm_x64() {
 #[test]
 fn interlocked_and_halt_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
-    // edk2's BaseSynchronizationLib / BaseCpuLib reach the atomic primitives
-    // and the halt through `lock`-prefixed multi-line asm blocks. The general
-    // asm path encodes each line: lock = F0, xadd = 0F C1, cmpxchg = 0F B1,
+    // The atomic primitives and the halt are reached through `lock`-prefixed
+    // multi-line asm blocks. The general asm path encodes each line:
+    // lock = F0, xadd = 0F C1, cmpxchg = 0F B1,
     // inc/dec = FF /0,/1, hlt = F4. The `"+m"` destinations are memory
     // references (`(%reg)`, ModRM mod != 11); a `lock` prefix on a register
     // destination is an invalid encoding that faults at runtime (#UD).
@@ -5790,11 +6129,11 @@ fn asm_goto_emits_for_both_targets() {
     }
 }
 
-/// Kernel jump-label source: a `1: nop` patch site whose `%l[l_yes]` is
-/// published to `__jump_table` and never branched by the template.
+/// An `asm goto` patch site: a `1: nop` whose `%l[l_yes]` is published to
+/// a table section and never branched by the template.
 /// `out_op` is the output list; `extra_op` adds inputs after the `"i"`
 /// key reference.
-fn a64_jump_label_object(out_op: &str, extra_op: &str) -> crate::c5::linker::object::NativeObject {
+fn a64_patch_site_object(out_op: &str, extra_op: &str) -> crate::c5::linker::object::NativeObject {
     use crate::c5::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
     let decl = if out_op.is_empty() { "" } else { "int o = 0;" };
     let ret = if out_op.is_empty() { "0" } else { "o" };
@@ -5821,7 +6160,7 @@ int main(void) {{ return probe(); }}
     );
     let program = Compiler::with_target(src, Target::LinuxAarch64)
         .compile()
-        .expect("jump-label shape compiles");
+        .expect("patch-site shape compiles");
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
         ..Default::default()
@@ -5854,7 +6193,7 @@ fn a64_jump_table_entry(obj: &crate::c5::linker::object::NativeObject) -> (usize
 
 /// The aarch64 inline-asm operand region (captures + store-backs) is
 /// static frame storage, not an sp carve around the template: a published
-/// `%l` (jump-label site) is reached by a branch patched in at run time,
+/// `%l` (a patch site) is reached by a branch patched in at run time,
 /// which bypasses every template exit path, so sp must already be balanced
 /// there. Locks, for the mixed shape (an output the label edge must store
 /// back + published label, no template branch): sp moves only in the
@@ -5864,7 +6203,7 @@ fn a64_jump_table_entry(obj: &crate::c5::linker::object::NativeObject) -> (usize
 #[test]
 fn a64_asm_goto_published_label_static_frame_region() {
     use crate::c5::linker::object::NativeSymSection;
-    let obj = a64_jump_label_object("\"=r\"(o)", ", \"r\"(g)");
+    let obj = a64_patch_site_object("\"=r\"(o)", ", \"r\"(g)");
     let probe = obj
         .symbols
         .iter()
@@ -5915,13 +6254,13 @@ fn a64_asm_goto_published_label_static_frame_region() {
     );
 }
 
-/// The kernel jump-label macro's own shape -- every operand an immediate --
-/// takes no operand region: the function stays frameless (no sp adjustment,
-/// no frame record) and the published `%l` names the label's block itself.
+/// A patch site whose every operand is an immediate takes no operand
+/// region: the function stays frameless (no sp adjustment, no frame
+/// record) and the published `%l` names the label's block itself.
 #[test]
-fn a64_asm_goto_immediate_jump_label_frameless() {
+fn a64_asm_goto_immediate_patch_site_frameless() {
     use crate::c5::linker::object::NativeSymSection;
-    let obj = a64_jump_label_object("", "");
+    let obj = a64_patch_site_object("", "");
     let probe = obj
         .symbols
         .iter()
@@ -6192,7 +6531,7 @@ fn homogeneous_aggregate_elements_follow_the_members() {
             let make = func(&alloc::format!("make{i}"));
             let desc = &make.agg_descs[make.ret_agg.expect("an aggregate return") as usize];
             assert_eq!(
-                fp_member_layout(desc).map_or(0, |m| m.len()),
+                fp_member_layout(desc, true).map_or(0, |m| m.len()),
                 usize::from(n),
                 "{target:?} `{ty}`: the result's SIMD registers"
             );
@@ -6601,10 +6940,9 @@ fn elf64_section_flags(obj: &[u8], name: &str) -> Option<u64> {
 
 /// C99 6.4.5p6 leaves modifying a string literal undefined, and the
 /// placement is what enforces it. Consumers also classify a pointer by
-/// where it landed rather than by its declared type: the Linux kernel's
-/// `kfree_const` frees anything outside `[__start_rodata, __end_rodata)`,
-/// so a literal left in the writable image reaches `kfree` as though it
-/// were heap and corrupts the allocator.
+/// where it landed rather than by its declared type: a release routine
+/// that skips pointers into the read-only data range would free a literal
+/// left in the writable image as though it were heap.
 ///
 /// Locks both directions: anonymous literals -- including the template a
 /// local aggregate is copied from -- land in a `.rodata` carrying no
@@ -6862,10 +7200,10 @@ fn elf64_symbol_records(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u8,
 
 /// For a RELA relocation the addend lives in `r_addend`; the target
 /// field in the section image carries no information and gas leaves it
-/// zero. The x86_64 kernel module loader enforces exactly that before
-/// applying a module's relocations. Pointer slots in static data used
-/// to leak the VM's baked values (the target's data offset for data
-/// pointers, the function's `ent_pc` for function pointers).
+/// zero, and a loader may require it zero before applying the
+/// relocation. Pointer slots in static data used to leak the VM's baked
+/// values (the target's data offset for data pointers, the function's
+/// `ent_pc` for function pointers).
 #[test]
 fn relocated_slots_are_zero_in_relocatable_objects() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
@@ -7105,16 +7443,17 @@ fn an_assembly_time_assignment_defines_an_absolute_symbol() {
     }
 }
 
-/// The Linux kernel's `__EXPORT_SYMBOL` emits one `.export_symbol`
-/// record per export through file-scope asm: a `__export_symbol_<name>`
+/// An export table built through file-scope asm holds one
+/// `.export_symbol` record per export: a `__export_symbol_<name>`
 /// label, the license as `.asciz`, the namespace as adjacent `.ascii`
 /// literals with an explicit NUL, then `.balign 8` and a `.quad <name>`.
-/// modpost pairs each relocation with the nearest label at or below its
-/// offset and requires the relocation's target to be the GLOBAL symbol
-/// named by the label suffix, so the byte layout, the label placement,
-/// and the relocation targets must all match what GNU as produces.
+/// A post-link reader pairs each relocation with the nearest label at or
+/// below its offset and requires the relocation's target to be the GLOBAL
+/// symbol named by the label suffix, so the byte layout, the label
+/// placement, and the relocation targets must all match what GNU as
+/// produces.
 #[test]
-fn kernel_export_symbol_records_take_the_gas_shape() {
+fn file_scope_export_records_take_the_gas_shape() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
     const SRC: &str = "\
         int plain_sym; \
@@ -8401,9 +8740,9 @@ fn elf_text_align_and_funcs(bytes: &[u8]) -> (u64, alloc::vec::Vec<(String, u64,
 fn min_function_alignment_places_entries_without_growing_symbol_sizes() {
     // `-fmin-function-alignment=N` starts every function at a multiple of
     // N and raises `.text`'s own alignment to match, so the placement
-    // holds once the section is placed -- what CONFIG_FUNCTION_ALIGNMENT
-    // states. The fill belongs to no function: each `st_size` stays the
-    // size the packed object gave it, as gcc's does.
+    // holds once the section is placed. The fill belongs to no function:
+    // each `st_size` stays the size the packed object gave it, as gcc's
+    // does.
     use crate::{
         CompileOptions, Compiler, NativeOptions, OutputKind, Target, emit_native_with_options,
     };
@@ -8554,9 +8893,9 @@ fn elf_undefined_names(bytes: &[u8]) -> alloc::vec::Vec<String> {
 
 #[test]
 fn a_freestanding_unit_takes_the_isdigit_builtin_it_probes() {
-    // The shape of Linux's <linux/ctype.h>: `__builtin_isdigit` stands in
-    // for `isdigit` when `__has_builtin` reports it, in a unit with no
-    // library headers, so it folds from its operand as gcc folds it.
+    // `__builtin_isdigit` stands in for `isdigit` when `__has_builtin`
+    // reports it, in a unit with no library headers, so it folds from its
+    // operand as gcc folds it.
     use crate::{CompileOptions, Compiler, Target};
     let src = "#if __has_builtin(__builtin_isdigit)\n\
                #define isdigit(c) __builtin_isdigit(c)\n\
@@ -8651,7 +8990,7 @@ fn freestanding_builtin_mem_transfer_binds_its_own_fallback() {
     // transfer whose count is no small constant falls back to a call of
     // the library function, and the builtin supplies that binding
     // itself, so a freestanding unit compiles with the name left
-    // undefined for the link to resolve (the kernel builds this way).
+    // undefined for the link to resolve.
     use crate::{CompileOptions, Compiler, Target};
     let src = "void f(void *d, const void *s, unsigned long n)\n\
                { __builtin_memcpy(d, s, n); __builtin_memset(d, 0, n); }\n";
@@ -9101,9 +9440,8 @@ fn indexes_by_address(text: &[u8], at: usize) -> bool {
 /// `-fno-pic`, the kernel code model) takes an absolute field, so the
 /// dispatch loads its entry through the table's address, `mov
 /// table(,%idx,8), %r10`: one `R_X86_64_32S` at that load's displacement
-/// against the table section's STT_SECTION symbol and no `lea`. objtool
-/// reads a PC32 table reference as a compiler quirk and stops reporting
-/// unreachable instructions for the whole object.
+/// against the table section's STT_SECTION symbol and no `lea`, as gcc
+/// relocates a `-fno-pic` switch table.
 #[test]
 fn static_link_switch_dispatch_indexes_the_table_by_its_address() {
     use crate::c5::object::elf_reloc_types::R_X86_64_32S;
@@ -9438,9 +9776,8 @@ fn switch_slots_land_on_pads_where_their_cases_reach() {
 
 /// `-fno-jump-tables`: a dense set that would otherwise table-dispatch
 /// stays on the compare tree, so no table section reaches the object
-/// and the dispatch takes no indirect branch. Kernel configurations
-/// building under retpoline or indirect-branch tracking pass the flag
-/// for exactly that reason.
+/// and the dispatch takes no indirect branch. A build under retpolines
+/// or indirect-branch tracking passes the flag for exactly that reason.
 #[test]
 fn no_jump_tables_keeps_a_dense_switch_on_the_compare_tree() {
     use crate::Target;
@@ -9905,6 +10242,72 @@ fn a_call_to_a_function_that_never_returns_survives_at_opt() {
     }
 }
 
+/// A call to a function that does not return ends its block whatever
+/// expression holds it, at every level: the `return` of a call to a
+/// `_Noreturn` function, here one another unit defines. At -O a function of
+/// this unit no path of which returns ends the blocks of the calls to it
+/// too, in a chain: `die` never returns, so neither does `wrap`, spliced
+/// into `via_return`. Each call is followed by the trap, not by a return.
+#[test]
+fn a_call_to_a_function_that_does_not_return_ends_its_block() {
+    const SRC: &str = "extern _Noreturn long stop(int);\n\
+        static int die(int x) { stop(x); return 1; }\n\
+        static long wrap(int x) { long r = die(x); return r + 2; }\n\
+        long via_return(int x) { return wrap(x); }\n\
+        long declared(int x) { return stop(x) + 3; }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for name in ["via_return", "declared"] {
+            let (body, insts) = optimized_function(SRC, name, target);
+            assert!(
+                body.contains("terminator Unreachable") && !body.contains("terminator Return"),
+                "{target:?}: {name} ends after its call: {body}"
+            );
+            assert!(
+                insts.iter().any(|(_, i)| i.starts_with("Call {")),
+                "{target:?}: {name} keeps its call: {body}"
+            );
+        }
+    }
+}
+
+/// An always_inline function returning an aggregate it did not build in a
+/// local of its own -- its by-value parameter, a global, a pointer's
+/// target, a member reached through one -- is inlined: the splice copies
+/// the result from the returned address, as for a multi-block body, where
+/// it once refused with B4004. A result stored through a pointer takes the
+/// same path.
+#[test]
+fn an_always_inline_aggregate_return_from_any_address_is_inlined() {
+    const SRC: &str = "#define AI static inline __attribute__((always_inline))\n\
+        typedef struct { unsigned long v; } word_t;\n\
+        struct holder { int pad; word_t p; };\n\
+        word_t global_word;\n\
+        AI word_t same(word_t p) { return p; }\n\
+        AI word_t global(void) { return global_word; }\n\
+        AI word_t through(const word_t *q) { return *q; }\n\
+        AI word_t member(struct holder *q) { return q->p; }\n\
+        unsigned long via_param(word_t p) { return same(p).v; }\n\
+        unsigned long via_global(void) { return global().v; }\n\
+        unsigned long via_pointer(const word_t *q) { return through(q).v; }\n\
+        unsigned long via_member(struct holder *q) { return member(q).v; }\n\
+        void store_through(word_t *d, word_t p) { *d = same(p); }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for name in [
+            "via_param",
+            "via_global",
+            "via_pointer",
+            "via_member",
+            "store_through",
+        ] {
+            let (body, insts) = optimized_function(SRC, name, target);
+            assert!(
+                !insts.iter().any(|(_, i)| i.starts_with("Call {")),
+                "{target:?}: {name} keeps a call: {body}"
+            );
+        }
+    }
+}
+
 /// A `long double` conditional merges its arms' binary64 values as a
 /// double. Given the object's F80 / F128 kinds, the merge slot fell back to
 /// I64: it stayed in memory and the result reached the return through a
@@ -10255,6 +10658,183 @@ fn copied_bitfields_and_padding_carry_the_bytes_their_initializer_wrote() {
             "{target:?}: {body}"
         );
     }
+}
+
+/// A bit-field of a packed aggregate no 1-, 2-, 4-, 8- or 16-byte window fits
+/// is reached in power-of-two pieces inside the object, as gcc and clang
+/// split it: a read, a store and an update of a field spanning most of a 3-,
+/// 5-, 6- or 7-byte aggregate, or reaching the 9th or 17th byte from bit 1,
+/// load and store only the aggregate's bytes. The MS layout of the PE
+/// targets gives each field a whole unit of its type, which its accesses
+/// stay inside as well.
+#[test]
+fn packed_bitfield_accesses_stay_inside_the_object() {
+    use crate::Target;
+    use crate::c5::ir::{BinOp, Inst, LoadKind, StoreKind};
+    // (tag, members, size in the GNU layout, size in the MS one)
+    const SHAPES: &[(&str, &str, u32, u32)] = &[
+        ("t3", "int f : 22;", 3, 4),
+        ("t5", "long long f : 36;", 5, 8),
+        ("t6", "long long f : 44;", 6, 8),
+        ("t7", "long long f : 52;", 7, 8),
+        ("u3", "unsigned char c : 4; int f : 20;", 3, 5),
+        ("p7", "unsigned char c; unsigned long long f : 48;", 7, 9),
+        (
+            "n9",
+            "unsigned char c : 1; unsigned long long f : 64; unsigned char d : 7;",
+            9,
+            10,
+        ),
+        (
+            "w17",
+            "unsigned char c : 1; unsigned __int128 f : 128; unsigned char d : 7;",
+            17,
+            18,
+        ),
+    ];
+    let mut src = alloc::string::String::from("#pragma pack(push, 1)\n");
+    for (name, members, ..) in SHAPES {
+        src += &alloc::format!(
+            "struct {name} {{ {members} }};\n\
+             long long get_{name}(struct {name} *p) {{ return p->f; }}\n\
+             void set_{name}(struct {name} *p, long long v) {{ p->f = v; }}\n\
+             void inc_{name}(struct {name} *p) {{ p->f += 3; }}\n"
+        );
+    }
+    src += "#pragma pack(pop)\n";
+    let load_bytes = |k: LoadKind| match k {
+        LoadKind::I8 | LoadKind::U8 => 1,
+        LoadKind::I16 | LoadKind::U16 => 2,
+        LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
+        _ => 8,
+    };
+    let store_bytes = |k: StoreKind| match k {
+        StoreKind::I8 => 1,
+        StoreKind::I16 => 2,
+        StoreKind::I32 | StoreKind::F32 => 4,
+        _ => 8,
+    };
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let program = crate::Compiler::with_options(
+            src.clone(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        for &(name, _, gnu, ms) in SHAPES {
+            let size = if target.ms_layout() { ms } else { gnu };
+            for f in ["get", "set", "inc"].map(|op| alloc::format!("{op}_{name}")) {
+                let func = funcs.iter().find(|g| g.name == f).expect("function");
+                // The byte offset an address adds to the struct pointer.
+                let offset = |mut v: u32| {
+                    let mut off = 0i64;
+                    while let Inst::BinopI {
+                        op: BinOp::Add,
+                        lhs,
+                        rhs_imm,
+                    } = func.insts[v as usize]
+                    {
+                        off += rhs_imm;
+                        v = lhs;
+                    }
+                    off
+                };
+                let accesses = func.insts.iter().filter_map(|i| match *i {
+                    Inst::Load {
+                        addr, disp, kind, ..
+                    } => Some((offset(addr) + i64::from(disp), load_bytes(kind))),
+                    Inst::Store {
+                        addr, disp, kind, ..
+                    } => Some((offset(addr) + i64::from(disp), store_bytes(kind))),
+                    _ => None,
+                });
+                let mut seen = 0;
+                for (at, bytes) in accesses {
+                    seen += 1;
+                    assert!(
+                        at >= 0 && at + bytes <= i64::from(size),
+                        "{target:?} {f}: {bytes} bytes at {at} in a {size}-byte object"
+                    );
+                }
+                assert!(seen > 0, "{target:?} {f}: no access");
+            }
+        }
+    }
+}
+
+/// A bit-field in a unit wider than 8 bytes is read, written and updated
+/// through its named address space, every piece of the unit riding the
+/// segment. A 128-bit value read there is rejected, as any 128-bit access
+/// in a named address space is.
+#[test]
+fn wide_bitfield_unit_rides_its_named_address_space() {
+    use crate::c5::ir::{AsmSeg, Inst};
+    const SRC: &str = "struct v { __int128 f : 100; __int128 g : 20; };\n\
+        int get(struct v __seg_gs *p) { return p->g; }\n\
+        void set(struct v __seg_gs *p, int x) { p->g = x; }\n\
+        void inc(struct v __seg_gs *p) { p->g += 3; }\n";
+    let compile = |src: &str| {
+        let program = crate::Compiler::with_options(
+            src.into(),
+            crate::Target::LinuxX64,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            crate::Target::LinuxX64,
+            true,
+            true,
+        )
+    };
+    let funcs = compile(SRC).expect("ssa");
+    for (name, writes) in [("get", false), ("set", true), ("inc", true)] {
+        let func = funcs.iter().find(|g| g.name == name).expect("function");
+        let count = |want: fn(&Inst) -> bool| func.insts.iter().filter(|i| want(i)).count();
+        let seg_loads = count(|i| {
+            matches!(
+                i,
+                Inst::SegLoad {
+                    seg: AsmSeg::Gs,
+                    ..
+                }
+            )
+        });
+        let seg_stores = count(|i| {
+            matches!(
+                i,
+                Inst::SegStore {
+                    seg: AsmSeg::Gs,
+                    ..
+                }
+            )
+        });
+        let plain = count(|i| matches!(i, Inst::Load { .. } | Inst::Store { .. }));
+        assert!(
+            seg_loads > 0 && (seg_stores > 0) == writes && plain == 0,
+            "{name}: {seg_loads} segment loads, {seg_stores} segment stores, {plain} plain"
+        );
+    }
+    let err = compile(
+        "struct v { __int128 f : 100; };\n\
+         __int128 get(struct v __seg_gs *p) { return p->f; }\n",
+    )
+    .expect_err("a 128-bit read in a named address space is rejected");
+    assert!(
+        alloc::format!("{err}").contains("128-bit access in a named address space"),
+        "{err}"
+    );
 }
 
 /// The flexible array member is ignored by an assignment (C99 6.7.2.1p16):
@@ -11062,8 +11642,9 @@ fn typeof_literal_member_with_sizeof_aligned_attr_stores_in_place() {
 /// string literal must fold away at `-O`: the load folds to the
 /// literal's byte (C99 6.4.5p6 makes the storage immutable), the guard
 /// becomes constant, and no reference to the assert helper survives.
-/// The kernel's newline check (`fmt[sizeof(fmt) - 2] != '\n'`) is this
-/// shape. A guard that holds must keep its call.
+/// A check that a format string ends in a newline
+/// (`fmt[sizeof(fmt) - 2] != '\n'`) is this shape. A guard that holds
+/// must keep its call.
 #[test]
 fn literal_index_guarded_assert_call_folds_away() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
@@ -11112,8 +11693,8 @@ fn literal_index_guarded_assert_call_folds_away() {
 /// A shift whose count is outside `0 ..= 63` has no result C99 6.5.7p3
 /// defines, so it must not fold to one: folding makes
 /// `__builtin_constant_p` over the result true and decides the guard of
-/// a branch the source only reaches when the count is in range. The
-/// kernel's `FIELD_PREP` range check is this shape -- an arm the
+/// a branch the source only reaches when the count is in range. A
+/// bit-field packing macro's range check is this shape -- an arm the
 /// compiler cannot prove dead computes `1 << (12 - 12 - 1)`, and a
 /// folded count leaves an unconditional call to a build-time assertion
 /// that has no definition. An in-range count still folds, and the same
@@ -11171,12 +11752,12 @@ fn out_of_range_shift_count_does_not_feed_a_constant_p_guard() {
 /// A build-time assertion written on a member the function has just
 /// assigned must fold at `-O`: the store's constant answers the read
 /// back of the same location, the guard becomes constant, and the
-/// unreachable assert call goes with its block. The kernel's
-/// `BUILD_BUG_ON(!is_power_of_2(virtvdev->bar0_virtual_buf_size))` is
-/// this shape -- a `u8` member, so the read back is an unsigned narrow
-/// one, and the guard's second half sits past a branch the first half
-/// decides. A member whose value is not a power of two keeps its call,
-/// and without `-O` both calls stay, as they do under gcc.
+/// unreachable assert call goes with its block. A power-of-two
+/// assertion on such a member is this shape -- a `u8` member, so the
+/// read back is an unsigned narrow one, and the guard's second half sits
+/// past a branch the first half decides. A member whose value is not a
+/// power of two keeps its call, and without `-O` both calls stay, as they
+/// do under gcc.
 #[test]
 fn member_store_constant_guarded_assert_call_folds_away() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
@@ -11239,11 +11820,11 @@ fn member_store_constant_guarded_assert_call_folds_away() {
 }
 
 /// `__builtin_constant_p` over a marker pointer must answer 1 once the
-/// splices that carry the marker have happened. The kernel's
-/// `BUILD_BUG_ON(!__builtin_constant_p(tmo == libeth_xsktmo))` reaches
-/// its query through an `always_inline` body that holds a call of its
-/// own returning a struct by value, and through a function-pointer
-/// parameter the splice turns into a direct call. A site whose marker
+/// splices that carry the marker have happened. A build-time assertion
+/// `!__builtin_constant_p(p == &marker)` reaches its query through an
+/// `always_inline` body that holds a call of its own returning a struct
+/// by value, and through a function-pointer parameter the splice turns
+/// into a direct call. A site whose marker
 /// is a runtime argument keeps its call, and without `-O` both stay,
 /// as they do under gcc.
 #[test]
@@ -11323,37 +11904,36 @@ fn constant_p_marker_folds_through_an_aggregate_returning_splice() {
 
 /// A local whose address escapes keeps its frame slot, so every read of
 /// it is a reload. What the body last stored into that slot still bounds
-/// the reload, which is what decides the signedness tag `clamp()` and
-/// `min()` assert on. `drivers/iio/adc/ad7768-1.c` is this shape:
-/// `regmap_read(&val)` takes the address, `val &= GENMASK(2, 0)` bounds
-/// it, and `clamp(val, 1, rdev->desc->n_voltages)` compares it against
-/// an `unsigned`. Without the mask the tag really is open and the call
-/// stays, and without `-O` both stay, as they do under gcc.
+/// the reload, which is what decides the signedness tag a type-checked
+/// `clamp` asserts on: a call fills `val` through its address, `val &= 7`
+/// bounds it, and the clamp compares it against an `unsigned` field.
+/// Without the mask the tag really is open and the call stays, and
+/// without `-O` both stay, as they do under gcc.
 #[test]
 fn stored_bound_decides_a_clamp_signedness_assert() {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
     const SRC: &str = "\
         extern void __compiletime_assert_612(void) __attribute__((__error__(\"clamp() signedness error\")));\n\
         extern void __compiletime_assert_613(void) __attribute__((__error__(\"held\")));\n\
-        extern int regmap_read(void *m, unsigned reg, int *val);\n\
-        struct desc { unsigned int n_voltages; };\n\
-        struct rdev { struct desc *desc; };\n\
+        extern int read_reg(void *m, unsigned reg, int *val);\n\
+        struct desc { unsigned int count; };\n\
+        struct dev { struct desc *desc; };\n\
         #define TAG(v) ((((typeof(v))(-1)) < (typeof(v))1) \\\n\
                 ? (2 + (__builtin_constant_p((long long)(v) >= 0) && ((long long)(v) >= 0))) \\\n\
                 : (1 + 2 * (sizeof(v) < 4)))\n\
         #define CLAMP(a, b, c, fail) ({ __auto_type __v = (a); __auto_type __l = (b); __auto_type __h = (c); \\\n\
                 do { if (!(!(!(TAG(__v) & TAG(__l) & TAG(__h))))) fail(); } while (0); \\\n\
                 ((__v) >= (__h) ? (__h) : ((__v) <= (__l) ? (__l) : (__v))); })\n\
-        int bounded(void *m, struct rdev *rdev) {\n\
+        int bounded(void *m, struct dev *dev) {\n\
             int val;\n\
-            if (regmap_read(m, 0x2c, &val)) return -1;\n\
+            if (read_reg(m, 0x2c, &val)) return -1;\n\
             val = val & 0x7;\n\
-            return CLAMP(val, 1, rdev->desc->n_voltages, __compiletime_assert_612) - 1;\n\
+            return CLAMP(val, 1, dev->desc->count, __compiletime_assert_612) - 1;\n\
         }\n\
-        int open_range(void *m, struct rdev *rdev) {\n\
+        int open_range(void *m, struct dev *dev) {\n\
             int val;\n\
-            if (regmap_read(m, 0x2c, &val)) return -1;\n\
-            return CLAMP(val, 1, rdev->desc->n_voltages, __compiletime_assert_613) - 1;\n\
+            if (read_reg(m, 0x2c, &val)) return -1;\n\
+            return CLAMP(val, 1, dev->desc->count, __compiletime_assert_613) - 1;\n\
         }\n";
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
         let prog = crate::Compiler::with_options(
@@ -11603,6 +12183,56 @@ fn x64_indirect_branch_thunk_inline_embeds_the_retpoline() {
         0,
         "no register-indirect transfer survives"
     );
+}
+
+/// A call to another unit's function whose result the caller returns
+/// unchanged is a sibling call, as gcc and clang emit at -O2: the epilogue
+/// runs and `jmp` (0xE9) reaches the callee by a PLT32 relocation. The
+/// declaration supplies the return contract a definition in the unit
+/// would. A declaration without a prototype or with a variadic one keeps
+/// the call, and `-fno-optimize-sibling-calls` keeps every call.
+#[test]
+fn x64_a_returned_call_to_another_unit_is_a_sibling_call() {
+    use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
+    const SRC: &str = "extern long ext(long, long);\n\
+        long tail(long x) { return ext(x + 1, 2); }\n\
+        extern long ext_unprototyped();\n\
+        long unprototyped(long x) { return ext_unprototyped(x); }\n\
+        extern int ext_variadic(const char *, ...);\n\
+        int variadic(const char *s) { return ext_variadic(s); }\n";
+    let emit = |sibling_calls: bool| {
+        let prog = crate::Compiler::with_options(
+            alloc::string::String::from(SRC),
+            crate::Target::LinuxX64,
+            CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile: {e}"));
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            sibling_calls,
+            ..NativeOptions::new().with_optimize()
+        };
+        emit_native_with_options(&prog, crate::Target::LinuxX64, opts)
+            .unwrap_or_else(|e| panic!("emit: {e}"))
+    };
+    // The opcode ahead of the branch relocation naming `callee`.
+    let opcode = |obj: &[u8], callee: &str| {
+        let text = elf_text(obj);
+        let (off, _, _) = x64_branch_relocs(obj)
+            .into_iter()
+            .find(|(_, n, _)| n == callee)
+            .unwrap_or_else(|| panic!("no branch to {callee}"));
+        text[off as usize - 1]
+    };
+    let on = emit(true);
+    assert_eq!(opcode(&on, "ext"), 0xE9, "the returned call is a jump");
+    for callee in ["ext_unprototyped", "ext_variadic"] {
+        assert_eq!(opcode(&on, callee), 0xE8, "{callee} keeps its call");
+    }
+    assert_eq!(opcode(&emit(false), "ext"), 0xE8, "the flag keeps the call");
 }
 
 #[test]
@@ -12414,6 +13044,16 @@ const SSP_SHAPES_SRC: &str = "\
 
 /// Compile `src` to a relocatable object under `ssp`.
 fn emit_ssp(src: &str, target: crate::Target, ssp: crate::StackProtect) -> alloc::vec::Vec<u8> {
+    emit_ssp_model(src, target, ssp, crate::CodeModel::Small)
+}
+
+/// [`emit_ssp`] under `code_model`.
+fn emit_ssp_model(
+    src: &str,
+    target: crate::Target,
+    ssp: crate::StackProtect,
+    code_model: crate::CodeModel,
+) -> alloc::vec::Vec<u8> {
     use crate::{CompileOptions, NativeOptions, OutputKind, emit_native_with_options};
     let prog = crate::Compiler::with_options(
         alloc::string::String::from(src),
@@ -12425,6 +13065,7 @@ fn emit_ssp(src: &str, target: crate::Target, ssp: crate::StackProtect) -> alloc
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
         stack_protect: ssp,
+        code_model,
         ..NativeOptions::default()
     };
     emit_native_with_options(&prog, target, opts).unwrap_or_else(|e| panic!("emit: {e}"))
@@ -12779,7 +13420,7 @@ fn stack_guard_forms_reach_the_object() {
             .any(|(_, n, _)| n == "__stack_chk_guard"),
         "the thread-block form names no guard object"
     );
-    // The kernel's x86-64 form: a %gs-relative reference to a named
+    // The x86-64 named-guard form: a %gs-relative reference to a named
     // object, relocated PC-relative like any other RIP-relative access.
     let tls_sym = emit_ssp(
         src,
@@ -12821,8 +13462,8 @@ fn stack_guard_forms_reach_the_object() {
         4,
         "an adrp + add pair per guard read"
     );
-    // The kernel's aarch64 form: `mrs xN, <sysreg>` then a load at the
-    // per-task offset, naming no symbol.
+    // The aarch64 system-register form: `mrs xN, <sysreg>` then a load at
+    // the given offset, naming no symbol.
     let sysreg = emit_ssp(
         src,
         Target::LinuxAarch64,
@@ -12851,6 +13492,52 @@ fn stack_guard_forms_reach_the_object() {
             .any(|(_, n, _)| n == "__stack_chk_guard"),
         "the system-register form names no guard object"
     );
+}
+
+/// The kernel code model reads the default guard through `%gs`, as gcc
+/// and clang do: a unit that names no guard register reads its canary
+/// at `%gs:0x28`. A named segment is kept under either model.
+#[test]
+#[cfg(feature = "full")]
+fn the_kernel_code_model_reads_the_default_guard_through_gs() {
+    use crate::{CodeModel, GuardSeg, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect};
+    let src = "void snk(void *); void f(void) { char b[32]; snk(b); }\n";
+    let all = StackProtect {
+        mode: crate::StackProtector::All,
+        ..StackProtect::OFF
+    };
+    let fs = StackProtect {
+        guard: StackGuard::Tls {
+            seg: GuardSeg::Fs,
+            offset: SYSV_TLS_GUARD_OFFSET,
+        },
+        ..all
+    };
+    // `mov %fs:0x28, %r11` / `mov %gs:0x28, %r11`.
+    let reads = |obj: &[u8], prefix: u8| {
+        elf_text(obj)
+            .windows(9)
+            .filter(|w| *w == [prefix, 0x4C, 0x8B, 0x1C, 0x25, 0x28, 0x00, 0x00, 0x00])
+            .count()
+    };
+    for (model, ssp, prefix, other) in [
+        (CodeModel::Kernel, all, 0x65, 0x64),
+        (CodeModel::Kernel, fs, 0x64, 0x65),
+        (CodeModel::Small, all, 0x64, 0x65),
+    ] {
+        let obj = emit_ssp_model(src, crate::Target::LinuxX64, ssp, model);
+        let what = alloc::format!("{model:?}, {:?}", ssp.guard);
+        assert_eq!(
+            reads(&obj, prefix),
+            2,
+            "{what}: the prologue and the return read"
+        );
+        assert_eq!(
+            reads(&obj, other),
+            0,
+            "{what}: no read through the other segment"
+        );
+    }
 }
 
 #[test]
@@ -12970,10 +13657,10 @@ fn address_of_compound_literal_argument_stays_a_scalar_pointer() {
 /// pointer whose declared type carries it, on the Microsoft x64 calling
 /// convention while the rest of the unit stays on System V: arguments in
 /// rcx/rdx/r8/r9 by position, 32 bytes of caller-reserved shadow space,
-/// rsi/rdi callee-saved. The Linux kernel spells it `__efiapi` and UEFI
-/// firmware enters the x86_64 EFI stub through it; compiling the
-/// attribute away leaves the stub reading its system-table argument out
-/// of the wrong register.
+/// rsi/rdi callee-saved. UEFI firmware calls an x86-64 image's entry
+/// point on this convention, as the UEFI specification states; compiling
+/// the attribute away leaves the entry reading its system-table argument
+/// out of the wrong register.
 ///
 /// The attribute is x86-only, as in gcc: on the aarch64 targets and on
 /// Windows -- where it names the target's own convention -- it changes
@@ -13585,7 +14272,7 @@ fn a_pointer_difference_ignores_the_pointees_qualifiers() {
     let src = "long const_left(const unsigned *p, unsigned *q) { return p - q; }\n\
                long const_right(unsigned *p, const unsigned *q) { return p - q; }\n\
                long volatile_left(volatile unsigned *p, unsigned *q) { return p - q; }\n\
-               long both(const unsigned *const *p, unsigned **q) { return p - q; }\n\
+               long both(unsigned *const *p, unsigned **q) { return p - q; }\n\
                long scaled(const unsigned *p, long n) { return (long)(p - n); }\n";
     let program = Compiler::with_options(
         alloc::string::String::from(src),
@@ -13621,6 +14308,58 @@ fn a_pointer_difference_ignores_the_pointees_qualifiers() {
             Inst::BinopI { op: BinOp::Mul | BinOp::Shl, lhs, .. } if param_load(body, *lhs, 3))),
         "a pointer minus an integer scales the integer: {body:?}"
     );
+}
+
+/// C99 6.5.6p3: the operands of a pointer difference point to qualified or
+/// unqualified versions of compatible types. Two pointers to other types --
+/// `int` and `long`, a row and its element, `char` and `unsigned char`, or
+/// pointees whose qualifiers differ below their own level -- are an error
+/// naming both types; the pointee's own qualifiers, an array pointee's
+/// element qualifiers and an enumerated type against its integer type are
+/// not.
+#[test]
+fn a_difference_of_pointers_to_incompatible_types_is_rejected() {
+    use crate::{Compiler, Target};
+    let decls = "int a[4]; long b[4]; int two[2][3]; int (*rp)[3]; const int (*crp)[3];\n\
+                 const int *cp; int *ip; volatile int *vp; const int **cpp; int **ipp;\n\
+                 int *const *icpp; char *c1; unsigned char *uc1; enum E { E1 = 1 } *ep;\n\
+                 unsigned *up; void *v1, *v2;\n";
+    let compile = |body: &str| {
+        let src = alloc::format!(
+            "{decls}long f(void) {{ return {body}; }}\nint main(void) {{ return 0; }}\n"
+        );
+        Compiler::with_target(src, Target::LinuxX64).compile()
+    };
+    for (body, types) in [
+        ("(a + 3) - b", "`int*` and `long*`"),
+        ("rp - ip", "`int (*)[3]` and `int*`"),
+        ("cpp - ipp", "`const int**` and `int**`"),
+        ("c1 - uc1", "`char*` and `unsigned char*`"),
+        ("v1 - ip", "`void*` and `int*`"),
+    ] {
+        let err = compile(body)
+            .err()
+            .unwrap_or_else(|| panic!("`{body}` compiled"));
+        let msg = err.to_string();
+        assert!(
+            msg.contains(&alloc::format!(
+                "{types} are not pointers to compatible types"
+            )) && msg.contains("[pointer-difference]"),
+            "`{body}`: {msg}"
+        );
+    }
+    for body in [
+        "cp - ip",
+        "vp - ip",
+        "icpp - ipp",
+        "crp - rp",
+        "ep - up",
+        "two[1] - two[0]",
+        "&two[1] - rp",
+        "v1 - v2",
+    ] {
+        compile(body).unwrap_or_else(|e| panic!("`{body}`: {e}"));
+    }
 }
 
 /// A `void` function's returns name no value -- its end, a bare `return`
@@ -14170,6 +14909,178 @@ fn apple_arm64_packs_narrow_stack_arguments() {
             from_fp,
             "{target:?} take: {take:08x?}"
         );
+    }
+}
+
+/// A `float` vector of 4 bytes, narrower than AAPCS64's Short Vectors
+/// (6.4.2), crosses a call as clang places it on every AArch64 target: as a
+/// 32-bit integer argument, in the next general register or an `int`'s stack
+/// slot (4 bytes on Apple arm64), and returned in s0. A struct holding it
+/// stays in the general registers.
+#[test]
+fn aarch64_narrow_float_vector_crosses_as_clang_places_it() {
+    use crate::Target;
+    use crate::c5::codegen::ArgPlacement;
+    use crate::c5::codegen::aarch64::encode::{
+        Reg, enc_ldr_s_imm, enc_ldr32_imm, enc_str_imm, enc_str_s_imm, enc_str32_imm,
+    };
+    use crate::c5::codegen::ssa::emit_common::param_placements_common;
+    const SRC: &str = "typedef float v1f __attribute__((vector_size(4)));\n\
+        struct sf { v1f v; };\n\
+        v1f ext_r(void);\n\
+        void ext_take(int k, v1f v, int j);\n\
+        void ext_s(long a0, long a1, long a2, long a3, long a4, long a5, long a6, long a7,\n\
+            v1f v, int j);\n\
+        v1f give(v1f *p) { return *p; }\n\
+        struct sf give_s(struct sf *p) { return *p; }\n\
+        void keep(v1f *out) { *out = ext_r(); }\n\
+        void pass(v1f *p) { ext_take(1, *p, 2); }\n\
+        void pass_s(v1f *p) { ext_s(0, 1, 2, 3, 4, 5, 6, 7, *p, 9); }\n\
+        int take_s(long a0, long a1, long a2, long a3, long a4, long a5, long a6, long a7,\n\
+            v1f v, int j) { return j; }\n";
+    let x = Reg;
+    // `enc` with some register as the base.
+    let any_base = |ws: &[u32], enc: &dyn Fn(Reg) -> u32| (0..31).any(|n| ws.contains(&enc(x(n))));
+    for (target, slot) in [
+        (Target::MacOSAarch64, 4),
+        (Target::LinuxAarch64, 8),
+        (Target::WindowsAarch64, 8),
+    ] {
+        let program = crate::Compiler::with_options(
+            SRC.into(),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let take = funcs.iter().find(|f| f.name == "take_s").expect("take_s");
+        let placed = param_placements_common(take, target.abi());
+        assert!(
+            matches!(
+                placed[8],
+                ArgPlacement::StructStack {
+                    off: 0,
+                    size: 4,
+                    ..
+                }
+            ),
+            "{target:?} take_s v: {:?}",
+            placed[8]
+        );
+        assert_eq!(placed[9], ArgPlacement::Stack(slot), "{target:?} take_s j");
+        let obj = relocatable_object(SRC, target);
+        let ws = |name: &str| function_words(&obj, name);
+        assert!(
+            ws("give").contains(&enc_ldr_s_imm(0, x(0), 0)),
+            "{target:?} give: the vector is not returned in s0"
+        );
+        assert!(
+            any_base(&ws("give_s"), &|b| enc_ldr32_imm(x(0), b, 0)),
+            "{target:?} give_s: the struct is not returned in w0"
+        );
+        assert!(
+            any_base(&ws("keep"), &|b| enc_str_s_imm(0, b, 0)),
+            "{target:?} keep: the result is not read from s0"
+        );
+        assert!(
+            any_base(&ws("pass"), &|b| enc_ldr32_imm(x(1), b, 0)),
+            "{target:?} pass: the vector is not passed in w1"
+        );
+        // `j` stored at [sp, #slot] as a word, or as a doubleword in an 8-byte slot.
+        let pass_s = ws("pass_s");
+        assert!(
+            (0..31).any(|r| {
+                pass_s.contains(&enc_str32_imm(x(r), x(31), slot))
+                    || (slot == 8 && pass_s.contains(&enc_str_imm(x(r), x(31), slot)))
+            }),
+            "{target:?} pass_s: j is not at [sp, #{slot}]"
+        );
+    }
+}
+
+/// An integer vector narrower than 8 bytes returns as clang returns it on
+/// every AArch64 target: a single element as its bytes in the low bytes of
+/// v0 (`ldr s0`, `ldr h0`, `ldr b0`), several widened to equal lanes of d0
+/// (`ushll` from the bytes), which the caller narrows back (`xtn`) before it
+/// stores them.
+#[test]
+fn aarch64_narrow_integer_vectors_return_as_clang_places_them() {
+    use crate::Target;
+    use crate::c5::codegen::aarch64::encode::{
+        Reg, enc_ldr_bh_imm, enc_ldr_s_imm, enc_uxtl, enc_xtn,
+    };
+    // (type, element bytes, element count)
+    const SHAPES: &[(&str, u32, u32)] = &[
+        ("int", 4, 1),
+        ("short", 2, 1),
+        ("char", 1, 1),
+        ("short", 2, 2),
+        ("char", 1, 4),
+        ("char", 1, 2),
+    ];
+    let mut src = alloc::string::String::new();
+    for (i, &(ty, elem, count)) in SHAPES.iter().enumerate() {
+        src += &alloc::format!(
+            "typedef {ty} v{i} __attribute__((vector_size({})));\n\
+             v{i} give{i}(v{i} *p) {{ return *p; }}\n\
+             v{i} ext{i}(void);\n\
+             int first{i}(void) {{ return ext{i}()[0]; }}\n",
+            elem * count
+        );
+    }
+    let x = Reg;
+    for target in [
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsAarch64,
+    ] {
+        let obj = relocatable_object(&src, target);
+        for (i, &(_, elem, count)) in SHAPES.iter().enumerate() {
+            let size = elem * count;
+            let give = function_words(&obj, &alloc::format!("give{i}"));
+            let load_v0 = |b: Reg| {
+                if size == 4 {
+                    enc_ldr_s_imm(0, b, 0)
+                } else {
+                    enc_ldr_bh_imm(size, 0, b, 0)
+                }
+            };
+            assert!(
+                (0..31).any(|r| give.contains(&load_v0(x(r)))),
+                "{target:?} give{i}: the vector's bytes are not loaded into v0"
+            );
+            // The widening steps from the element width to 8 / count bytes.
+            let lane = if count > 1 { 8 / count } else { elem };
+            let mut w = elem;
+            while w < lane {
+                assert!(
+                    give.contains(&enc_uxtl(0, 0, w)),
+                    "{target:?} give{i}: no widening from {w}-byte lanes"
+                );
+                w *= 2;
+            }
+            let first = function_words(&obj, &alloc::format!("first{i}"));
+            let mut w = lane;
+            while w > elem {
+                w /= 2;
+                assert!(
+                    first.contains(&enc_xtn(0, 0, w)),
+                    "{target:?} first{i}: no narrowing to {w}-byte lanes"
+                );
+            }
+            if count == 1 {
+                assert!(
+                    !give
+                        .iter()
+                        .chain(&first)
+                        .any(|&w| w & 0xBF00_FC00 == 0x0F00_A400 || w & 0xBF3F_FC00 == 0x0E21_2800),
+                    "{target:?} {i}: a single element is widened or narrowed"
+                );
+            }
+        }
     }
 }
 

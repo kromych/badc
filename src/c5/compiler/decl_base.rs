@@ -23,8 +23,8 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::types::{
-    self, CONST_BIT, SEG_FS_BIT, SEG_GS_BIT, UNSIGNED_BIT, VOLATILE_BIT, VOLATILE_INNER_BIT,
-    apply_qual_bits, is_decl_modifier, struct_ty_for,
+    self, CONST_BIT, SEG_FS_BIT, SEG_GS_BIT, UNSIGNED_BIT, VOLATILE_BIT, apply_qual_bits,
+    is_decl_modifier, struct_ty_for,
 };
 
 /// The declaration decorators a `__attribute__` / `__declspec` / `[[ ]]`
@@ -160,8 +160,17 @@ pub(super) struct DeclStorage {
     pub is_static: bool,
     pub is_extern: bool,
     pub is_thread_local: bool,
-    /// No type specifier was given, so the base type is the implicit `int`.
-    pub implicit_int: bool,
+}
+
+/// What takes the implicit `int`, as the diagnostic words it.
+#[derive(Clone, Copy)]
+pub(super) enum ImplicitInt {
+    /// Symbol `idx`'s declarator; `usize::MAX` reads as a type name.
+    Declarator(usize),
+    /// A function definition's return type.
+    Return,
+    /// A parameter of an identifier list that no declaration types.
+    UndeclaredParameter(usize),
 }
 
 /// The pointer part of an abstract declarator (C99 6.7.6): the type it
@@ -307,7 +316,7 @@ impl Compiler {
         }
         self.next()?; // _Atomic
         self.next()?; // (
-        let inner = self.parse_decl_base_type()?;
+        let inner = self.parse_type_name_base()?;
         let inner = self.consume_abstract_pointer(inner)?.ty;
         if self.lex.tk != ')' {
             return Err(self.compile_err(Code::SYNTAX, "`)` expected after `_Atomic(type-name)`"));
@@ -402,9 +411,9 @@ impl Compiler {
             // specifier is the array's full type (C99 6.7.6.2, no decay). The
             // expression path recovers only the outer dimension from the
             // decay markers, so read every dimension from the symbol -- a
-            // redeclaration through the specifier (`extern typeof(a) a;`, the
-            // EXPORT_SYMBOL shape) then keeps the complete type and its
-            // inner-dimension stride instead of losing the inner dimensions.
+            // redeclaration through the specifier (`extern typeof(a) a;`)
+            // then keeps the complete type and its inner-dimension stride
+            // instead of losing the inner dimensions.
             if class == Token::Glo as i64 && self.symbols[idx].inner_array_size != 0 {
                 let ty = self.symbols[idx].type_;
                 let s = &self.symbols[idx];
@@ -423,15 +432,9 @@ impl Compiler {
             self.seed_type_name_carriers(&name)?;
             name.ty
         } else {
-            // Pointer peels leave the inner-only marker describing a
-            // derivation the operand no longer has; drop it so a
-            // declaration through the specifier reads the whole tag. The
-            // unqualified form keeps it: the marker tells a pointee's
-            // `volatile`, which stays, from the object's, which goes.
-            let mut inner = self.parse_unevaluated_expr_ty(true)?;
-            if !unqual {
-                inner &= !VOLATILE_INNER_BIT;
-            }
+            // The conservative volatile marker a dereference leaves on the
+            // operand describes its accesses, not its type.
+            let mut inner = types::exact_volatile_ty(self.parse_unevaluated_expr_ty(true)?);
             // C99 6.5.3.2p4: `*` on a pointer to a function designates the
             // function, so `typeof(*p)` names a function type. Route it
             // through the function-TYPE carrier a `typedef RET F(args)`
@@ -444,13 +447,11 @@ impl Compiler {
                     self.pending.fn_ptr_ret_indirection = 0;
                 }
             }
-            // A 1D array expression operand decayed to a pointer to its
-            // element; recover the element type and put the element count
-            // on the carrier like an array typedef base, so a declarator
-            // through the specifier is an array, whose element's function
-            // type lies that many levels closer. TODO: multi-dim
-            // expression operands (the dims chain is not recoverable from
-            // the decay markers).
+            // An array expression operand decayed to a pointer to its first
+            // element; recover the element type and put the bounds on the
+            // carrier like an array typedef base, so a declarator through
+            // the specifier is an array, whose element's function type lies
+            // that many levels closer.
             let n = core::mem::take(&mut self.pending.typeof_operand_array_size);
             let bytes = core::mem::take(&mut self.pending.typeof_operand_array_bytes);
             let dims = core::mem::take(&mut self.pending.typeof_operand_array_dims);
@@ -471,13 +472,12 @@ impl Compiler {
                 *fpi -= levels;
             }
             if !dims.is_empty() && inner >= Ty::Ptr as i64 {
-                // The decay recorded the row's exact dimensions (a
-                // pointer-to-array deref / row select): the operand is
-                // that array type. -1 marks an unspecified bound and 0
-                // a zero-length one; either makes the size carrier the
-                // incomplete/-zero sentinel, and the dims list carries
-                // the exact bounds to a type-name reader.
-                inner -= Ty::Ptr as i64;
+                // The decay recorded the array's exact dimensions: the
+                // operand is that array type. -1 marks an unspecified bound
+                // and 0 a zero-length one; either makes the size carrier the
+                // incomplete/-zero sentinel, and the dims list carries the
+                // exact bounds to a type-name reader.
+                inner = self.decayed_elem_ty(inner, &dims);
                 let size = if dims.iter().all(|&d| d > 0) {
                     dims.iter().product::<i64>()
                 } else {
@@ -544,11 +544,11 @@ impl Compiler {
         let saved_vstack = self.ast_vstack.len();
         // Array-decay hints record that the operand's value came
         // from an array: `last_array_decay_size` (element count) for
-        // a 1D bare array, `last_array_decay_bytes` (byte width) for
-        // a multi-dim subscript row, a `*p` pointer-to-array row
-        // deref, or a string literal. Capture both so an array
-        // operand types distinctly from a pointer, then restore them
-        // so they do not leak into a surrounding `sizeof`.
+        // a bare array, `last_array_decay_bytes` (byte width) for a
+        // row a subscript or `*` selects, or a string literal, and
+        // `last_array_decay_dims` for the exact bounds. Capture them so
+        // an array operand types distinctly from a pointer, then
+        // restore them so they do not leak into a surrounding `sizeof`.
         let saved_decay = self.pending.last_array_decay_size;
         let saved_decay_bytes = self.pending.last_array_decay_bytes;
         let saved_decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
@@ -561,10 +561,13 @@ impl Compiler {
         let saved_callee_ret = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         // Parse at assignment precedence so binary, conditional, and
         // assignment operators are consumed.
-        self.expr_or_void(Token::Assign as i64)?;
-        if comma_operands {
-            self.parse_comma_operators()?;
-        }
+        self.unevaluated(|c| {
+            c.expr_or_void(Token::Assign as i64)?;
+            if comma_operands {
+                c.parse_comma_operators()?;
+            }
+            Ok(())
+        })?;
         // `&f` where `f` names a function: the operand is a pointer to
         // `f`'s function type. Route the same pending carriers the
         // function-typedef and `typeof(f)` bases use, so the prototype
@@ -594,12 +597,10 @@ impl Compiler {
                 self.ty
             }
         };
-        // Either marker firing means the operand decayed from an
-        // array, so `typeof(x)` is an array type and
+        // Any marker firing means the operand decayed from an array, so
+        // `typeof(x)` is an array type and
         // `__builtin_types_compatible_p(typeof(x), typeof(&(x)[0]))`
-        // must report it as distinct from a pointer -- including a
-        // subscripted row of a multi-dim array (`arr2d[i]`), which
-        // sets only the byte marker.
+        // must report it as distinct from a pointer.
         let vla = core::mem::replace(&mut self.pending.last_array_decay_vla, saved_decay_vla);
         self.pending.typeof_operand_was_array = self.pending.last_array_decay_size != 0
             || self.pending.last_array_decay_bytes > 0
@@ -610,37 +611,9 @@ impl Compiler {
         } else {
             self.pending.last_array_decay_size
         };
-        // Capture the byte-width marker only for a 1D-reducible row: a
-        // pending multi-dim stride means the row is itself multi-dim and
-        // not expressible as a single element count.
-        let p = &self.pending;
-        let (head, tail) = if p.index_stride > 0 {
-            (p.index_stride, &p.index_strides_tail)
-        } else {
-            (p.end_of_expr_stride, &p.end_of_expr_strides_tail)
-        };
-        let row_strides: alloc::vec::Vec<i64> = if head > 0 {
-            core::iter::once(head).chain(tail.iter().copied()).collect()
-        } else {
-            alloc::vec::Vec::new()
-        };
-        self.pending.typeof_operand_array_bytes = if row_strides.is_empty() {
-            self.pending.last_array_decay_bytes
-        } else {
-            0
-        };
-        // The bounds the operand decayed from; a multi-dimensional row's come
-        // from the strides it left unconsumed, as `&` rebuilds them.
-        let row = self.pending.last_array_decay_bytes > 0 && !row_strides.is_empty();
-        let dims = if row && self.pending.last_array_decay_dims.is_empty() {
-            let elem = self.ty - Ty::Ptr as i64;
-            self.decayed_array_dims(elem, &row_strides)
-                .unwrap_or_default()
-        } else {
-            core::mem::take(&mut self.pending.last_array_decay_dims)
-        };
-        self.pending.last_array_decay_dims = saved_decay_dims;
-        self.pending.typeof_operand_array_dims = dims;
+        self.pending.typeof_operand_array_bytes = self.pending.last_array_decay_bytes;
+        self.pending.typeof_operand_array_dims =
+            core::mem::replace(&mut self.pending.last_array_decay_dims, saved_decay_dims);
         self.pending.last_array_decay_size = saved_decay;
         self.pending.last_array_decay_bytes = saved_decay_bytes;
         self.pending.indirect_callee_ret_fn_ptr = saved_callee_ret;
@@ -1146,7 +1119,7 @@ impl Compiler {
                 if is_alignas {
                     self.next()?; // (
                     if self.lex_is_type_start() {
-                        let ty = self.parse_decl_base_type()?;
+                        let ty = self.parse_type_name_base()?;
                         let ty = self.consume_abstract_pointer(ty)?.ty;
                         alignas_align = alignas_align.max(self.align_of_type(ty) as i64);
                         align = align.max(alignas_align);
@@ -1738,6 +1711,23 @@ impl Compiler {
         }
     }
 
+    /// True when the current token is an MSVC calling-convention keyword,
+    /// which lexes as a qualifier with no effect on the type.
+    pub(super) fn lex_is_calling_convention(&self) -> bool {
+        self.lex.tk == Token::TypeQual
+            && matches!(
+                self.symbols[self.lex.curr_id_idx].name.as_str(),
+                "__cdecl"
+                    | "__stdcall"
+                    | "__fastcall"
+                    | "__thiscall"
+                    | "__vectorcall"
+                    | "_cdecl"
+                    | "_stdcall"
+                    | "_fastcall"
+            )
+    }
+
     /// True when the current token is the `restrict` type qualifier
     /// (C99 6.7.3). It constrains aliasing, which badc does not act
     /// on; the spelling is recorded for debug info.
@@ -1786,10 +1776,11 @@ impl Compiler {
     /// specifiers, in any order (6.7.1p1, 6.7.2p2). Returns the base type.
     ///
     /// `storage` collects the storage-class and linkage keywords for the
-    /// contexts that own them, and selects the implicit-int rule for a
-    /// declaration with no type specifier. A type-name context passes none:
-    /// there a storage-class keyword ends the specifier run and a missing
-    /// type specifier is an error.
+    /// contexts that own them. A type-name context passes none: there a
+    /// storage-class keyword ends the specifier run. Specifiers that name
+    /// no type give the implicit `int` (C99 6.7.2p2), recorded in
+    /// `pending.base_implicit_int` for the declaration to report; with no
+    /// specifier at all outside a declaration, a type is expected.
     pub(super) fn parse_decl_specifiers(
         &mut self,
         mut storage: Option<&mut DeclStorage>,
@@ -1798,6 +1789,7 @@ impl Compiler {
         let mut m = IntModifiers::default();
         let mut qual_bits: i64 = 0;
         let mut atomic_base: Option<i64> = None;
+        let mut saw_specifier = false;
         loop {
             // C23 6.7.13 `[[...]]` and the GNU / MSVC attribute keywords may
             // lead the declaration specifiers.
@@ -1812,6 +1804,7 @@ impl Compiler {
             if !is_decl_modifier(self.lex.tk) {
                 break;
             }
+            saw_specifier = true;
             // C11 6.7.2.4 `_Atomic ( type-name )` names the type; the
             // `_Atomic` qualifier below does not. c5 does not model
             // atomicity, so the declared type is the unqualified inner
@@ -1829,6 +1822,7 @@ impl Compiler {
 
         let base_tok = self.lex.tk;
         let mut enum_tag = None;
+        let mut implicit_int = false;
         let mut bt = if let Some(inner) = atomic_base {
             inner
         } else if self.lex.tk == Token::Typeof {
@@ -1874,8 +1868,8 @@ impl Compiler {
             // Bare `unsigned x;` / `long x;` / `long long x;` / `short x;`
             // -- the implicit-int rule for int-modifier-only declarations.
             m.int_base()
-        } else if let Some(s) = storage.as_deref_mut() {
-            s.implicit_int = true;
+        } else if storage.is_some() || saw_specifier {
+            implicit_int = true;
             self.implicit_int_base_type()?
         } else {
             return Err(self.compile_err(Code::SYNTAX, "type expected"));
@@ -1904,16 +1898,11 @@ impl Compiler {
 
         // `__attribute__((vector_size(N)))` rebuilds the base type into a GCC
         // vector of N bytes before qualifiers apply.
-        if self.pending.attr_vector_size > 0 {
-            let n = core::mem::take(&mut self.pending.attr_vector_size);
-            bt = self.make_vector_type(bt, n);
-        }
-        if let Some(m) = self.pending.attr_mode.take() {
-            bt = self.apply_mode_to_type(bt, m)?;
-        }
+        bt = self.apply_pending_type_attributes(bt)?;
         // Written after the base type is complete, so a nested parse inside
         // it (a parameter list in an aggregate body) leaves nothing behind.
         self.pending.base_enum_tag = enum_tag;
+        self.pending.base_implicit_int = implicit_int;
 
         Ok(apply_qual_bits(bt, qual_bits))
     }
@@ -2002,13 +1991,13 @@ impl Compiler {
     /// `int`. An identifier in type-specifier position is the declarator
     /// only when a declarator punctuator follows it; any other shape is a
     /// type name that does not resolve, and is reported as one rather than
-    /// silently accepted as `int`.
-    fn implicit_int_base_type(&mut self) -> Result<i64, C5Error> {
+    /// silently accepted as `int`. TODO: a name followed by an `asm` label
+    /// or an attribute reads as an unknown type name.
+    pub(super) fn implicit_int_base_type(&mut self) -> Result<i64, C5Error> {
         if self.lex.tk == Token::Id
-            && !self.lex.peek_after_whitespace(b'(')
-            && !self.lex.peek_after_whitespace(b';')
-            && !self.lex.peek_after_whitespace(b',')
-            && !self.lex.peek_after_whitespace(b'=')
+            && !b"(;,=)[:"
+                .iter()
+                .any(|&c| self.lex.peek_after_whitespace(c))
         {
             let name = self.symbols[self.lex.curr_id_idx].name.clone();
             return Err(self.compile_err(
@@ -2017,6 +2006,40 @@ impl Compiler {
             ));
         }
         Ok(Ty::Int as i64)
+    }
+
+    /// C99 6.7.2p2: a declaration or type name without a type specifier
+    /// takes `int`, an error by default as in gcc 14, in gcc's words.
+    pub(super) fn report_implicit_int(
+        &mut self,
+        what: ImplicitInt,
+        line: usize,
+    ) -> Result<(), C5Error> {
+        let name = |c: &Self, idx: usize| c.symbols[idx].name.clone();
+        let text = match what {
+            ImplicitInt::Declarator(usize::MAX) => "type defaults to `int` in type name".into(),
+            ImplicitInt::Declarator(idx) => {
+                format!(
+                    "type defaults to `int` in declaration of `{}`",
+                    name(self, idx)
+                )
+            }
+            ImplicitInt::Return => "return type defaults to `int`".into(),
+            ImplicitInt::UndeclaredParameter(idx) => {
+                format!("type of `{}` defaults to `int`", name(self, idx))
+            }
+        };
+        self.report_at(Code::IMPLICIT_INT, line, text)
+    }
+
+    /// The base type of a type name (C99 6.7.6), reporting an implicit `int`.
+    pub(super) fn parse_type_name_base(&mut self) -> Result<i64, C5Error> {
+        let line = self.lex.line;
+        let ty = self.parse_decl_base_type()?;
+        if core::mem::take(&mut self.pending.base_implicit_int) {
+            self.report_implicit_int(ImplicitInt::Declarator(usize::MAX), line)?;
+        }
+        Ok(ty)
     }
 
     /// Resolve the typedef-name at the cursor to its aliased type and seed

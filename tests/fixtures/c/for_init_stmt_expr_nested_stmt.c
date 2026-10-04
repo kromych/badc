@@ -4,7 +4,8 @@
    sibling of the for-init. Regression: the for-init wrapped its
    statement-expression's sub-statements into a Compound as siblings, so
    the walker ran a nested while's body unconditionally (which, for a
-   qatomic_read build-assert, emitted an undefined-symbol canary call).
+   build-assert in an atomic-read macro, emitted an undefined-symbol
+   canary call).
    Identical result at -O and -O0. */
 
 int main(void) {

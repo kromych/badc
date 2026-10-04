@@ -3,8 +3,8 @@
    displacements, sub-quad access widths, the r12/r13 encoding corners
    (SIB byte; rbp/r13 have no mod=00 form), and the multi-alternative
    `"rax"` constraint (r|a|x: the sole operand takes the first pool
-   register, rax, so a template reading %rax observes it -- the libdill
-   stack-switch idiom). */
+   register, rax, so a template reading %rax observes it, as a stack switch
+   does). */
 
 typedef unsigned long long u64;
 

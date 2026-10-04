@@ -38,6 +38,12 @@ pub(crate) enum Inst {
     /// Plain integer immediate with no data / code segment
     /// provenance. Lowering uses `load_imm64`.
     Imm(i64),
+    /// An indeterminate value (C99 6.2.4p5, 6.7.8p10): what a read of an
+    /// automatic object yields where no store reaches it. It emits
+    /// nothing, and a phi income of it emits no move and keeps no value
+    /// live; before allocation one any other instruction reads becomes
+    /// `Imm(0)`.
+    Undef,
     /// Integer immediate whose operand is a data-segment byte
     /// offset. The per-arch lowering emits an `adrp + add`
     /// placeholder pair and records a `DataFixup` so the writer
@@ -632,6 +638,7 @@ impl Inst {
         matches!(
             self,
             Inst::Imm(_)
+                | Inst::Undef
                 | Inst::ImmData(_)
                 | Inst::ImmCode(_)
                 | Inst::ImmExtCode(_)
@@ -680,6 +687,7 @@ impl Inst {
     pub(crate) fn variant_name(&self) -> &'static str {
         match self {
             Inst::Imm(_) => "Imm",
+            Inst::Undef => "Undef",
             Inst::ImmData(_) => "ImmData",
             Inst::ImmCode(_) => "ImmCode",
             Inst::ImmExtCode(_) => "ImmExtCode",
@@ -740,6 +748,7 @@ impl Inst {
     pub(crate) fn for_each_operand(&self, mut f: impl FnMut(ValueId)) {
         match self {
             Inst::Imm(_)
+            | Inst::Undef
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
@@ -853,6 +862,7 @@ impl Inst {
     pub(crate) fn for_each_operand_mut(&mut self, mut f: impl FnMut(&mut ValueId)) {
         match self {
             Inst::Imm(_)
+            | Inst::Undef
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
@@ -988,6 +998,20 @@ pub(crate) enum LoadKind {
     F128,
     /// 16 bytes read whole into a SIMD register: a 128-bit vector value.
     V128,
+}
+
+impl LoadKind {
+    /// Bytes an integer kind reads; `None` for the floating and vector
+    /// kinds.
+    pub(crate) fn int_bytes(self) -> Option<u8> {
+        match self {
+            LoadKind::I64 => Some(8),
+            LoadKind::I32 | LoadKind::U32 => Some(4),
+            LoadKind::I16 | LoadKind::U16 => Some(2),
+            LoadKind::I8 | LoadKind::U8 => Some(1),
+            LoadKind::F32 | LoadKind::F64 | LoadKind::F80 | LoadKind::F128 | LoadKind::V128 => None,
+        }
+    }
 }
 
 /// How much of an indexed access's `index` forms the address: all 64
@@ -1547,8 +1571,8 @@ impl AsmBlock {
     /// An operand binding a storage-less register variable, an output one
     /// when `output`: the parser admits only the stack- and frame-pointer
     /// ones. A `%N` naming it reads or writes the register itself. One the
-    /// template never names (`ASM_CALL_CONSTRAINT`, which declares a call
-    /// inside the body) gives the template no way to reach it.
+    /// template never names (a `"+r"` stack-pointer operand that only orders
+    /// a call inside the body) gives the template no way to reach it.
     fn names_bound_operand(&self, output: bool) -> bool {
         self.operands.iter().enumerate().any(|(i, o)| {
             matches!(o.constraint, AsmConstraint::Bound(_))
@@ -1885,6 +1909,8 @@ pub(crate) struct AggDesc {
     /// The AAPCS64 homogeneous aggregate the members form; `None` on the
     /// other ABIs.
     pub homogeneous: Option<crate::c5::codegen::abi_classify::HomogeneousAggregate>,
+    /// The value is a GNU vector itself, not a composite holding one.
+    pub vector: bool,
 }
 
 /// A static-initializer data slot holding the address of a labelled
@@ -1976,9 +2002,9 @@ pub(crate) struct FunctionSsa {
     pub is_internal: bool,
     /// Explicit placement from `__attribute__((section(...)))`, `None`
     /// for the default text section. Placement is a contract consumers
-    /// read (the kernel whitelists init references by section), so a
-    /// body with one is only spliced into a caller placed identically,
-    /// as gcc does.
+    /// read (a linker script places by it, a reference check keys on it),
+    /// so a body with one is only spliced into a caller placed
+    /// identically, as gcc does.
     pub section: Option<alloc::string::String>,
     /// `__attribute__((patchable_function_entry(N, M)))`: the NOP area
     /// this function takes in place of the option's.
@@ -2384,6 +2410,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             // separate add, so the payload is always an object base.
             Inst::ImmData(off) => crate::c5::layout::remap_self(off, r),
             Inst::Imm { .. }
+            | Inst::Undef
             | Inst::ImmCode { .. }
             | Inst::ImmExtCode { .. }
             | Inst::BlockAddr { .. }

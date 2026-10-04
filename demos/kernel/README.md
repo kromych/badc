@@ -101,6 +101,15 @@ and lands on the demo's unhandled-fault gate. Building with
 period, which turns that race into a certainty; the smoke boots it and
 requires the normal markers.
 
+On AArch64 the mask follows the `AllocatePages` call for the vector page:
+the boot service returns with IRQ unmasked, so a mask taken before it does
+not hold. The firmware's tick is the virtual timer's own interrupt, every
+10 ms under QEMU's edk2, and one taken between the `VBAR_EL1` and
+`TPIDR_EL1` writes enters the ISR before the scheduler pointer it loads is
+set; the ISR faults with IRQ masked and the guest prints nothing after its
+first line. `-DPREEMPT_VBAR_WINDOW_STRESS` holds that window open for 40 ms,
+and the smoke boots it the same way.
+
 All addresses and saved stack pointers use the pointer-width `UINTN`
 (`unsigned long long`), not `unsigned long`, because the EFI targets are LLP64
 (`long` is 32-bit); a 32-bit IDT base or saved SP would fault on the first

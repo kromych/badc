@@ -839,54 +839,136 @@ pub(crate) fn insert_phis(
         }
     }
 
-    let n_phis: usize = per_block.iter().map(|v| v.len()).sum();
-    if n_phis == 0 {
+    if per_block.iter().all(Vec::is_empty) {
         return BTreeMap::new();
     }
-
-    let n_old = func.insts.len();
-    let mut new_insts: Vec<Inst> = Vec::with_capacity(n_old + n_phis);
-    let mut new_src: Vec<(u32, u32)> = Vec::with_capacity(n_old + n_phis);
-    let mut new_f32: Vec<bool> = Vec::with_capacity(n_old + n_phis);
-    let mut value_remap: Vec<ValueId> = alloc::vec![NO_VALUE; n_old];
+    // A phi merging a `float` slot carries the F32 LoadKind; its result is
+    // single-precision (C99 6.3.1.8).
+    let heads = per_block
+        .iter()
+        .map(|phis| {
+            phis.iter()
+                .map(|&(_, kind)| {
+                    let phi = Inst::Phi {
+                        incoming: Vec::new(),
+                        kind,
+                    };
+                    (phi, matches!(kind, LoadKind::F32))
+                })
+                .collect()
+        })
+        .collect();
+    let ids = rebuild_tape(func, heads, None);
     let mut phi_id_at: BTreeMap<(BlockId, i64), ValueId> = BTreeMap::new();
-
-    let old_ranges: Vec<core::ops::Range<u32>> =
-        func.blocks.iter().map(|b| b.inst_range.clone()).collect();
-
-    for (b_idx, range) in old_ranges.iter().enumerate() {
-        let new_start = new_insts.len() as u32;
-        for &(slot, kind) in &per_block[b_idx] {
-            let new_id = new_insts.len() as ValueId;
-            new_insts.push(Inst::Phi {
-                incoming: Vec::new(),
-                kind,
-            });
-            new_src.push((0, 0));
-            // A phi merging a `float` slot carries the F32 LoadKind; its
-            // result is single-precision (C99 6.3.1.8).
-            new_f32.push(matches!(kind, LoadKind::F32));
-            phi_id_at.insert((b_idx as BlockId, slot), new_id);
+    for (b, phis) in per_block.iter().enumerate() {
+        for (&(slot, _), &id) in phis.iter().zip(&ids[b]) {
+            phi_id_at.insert((b as BlockId, slot), id);
         }
-        for old_id in range.start..range.end {
-            let new_id = new_insts.len() as ValueId;
-            new_insts.push(func.insts[old_id as usize].clone());
-            new_src.push(
-                func.inst_src
-                    .get(old_id as usize)
-                    .copied()
-                    .unwrap_or((0, 0)),
-            );
-            new_f32.push(
-                func.f32_values
-                    .get(old_id as usize)
-                    .copied()
-                    .unwrap_or(false),
-            );
-            value_remap[old_id as usize] = new_id;
+    }
+    phi_id_at
+}
+
+/// The local slots holding a value no `StoreLocal` writes: the
+/// indirect-result address and a by-value aggregate parameter's copy,
+/// which the prologue stores, and a call's aggregate result temporary.
+fn filled_locals(func: &FunctionSsa) -> BTreeSet<i64> {
+    let calls = func.insts.iter().filter_map(|inst| match inst {
+        Inst::Call { ret_slot_local, .. }
+        | Inst::CallIndirect { ret_slot_local, .. }
+        | Inst::CallExt { ret_slot_local, .. } => Some(*ret_slot_local),
+        _ => None,
+    });
+    calls
+        .chain(func.param_local_slots.iter().copied())
+        .chain([func.indirect_result_slot])
+        .filter(|&s| s < 0)
+        .collect()
+}
+
+/// Make each `Inst::Undef` an instruction or a terminator reads the
+/// constant zero, which suits every kind and register file, ahead of
+/// allocation. One only phis read stays: its edges move nothing and keep
+/// it unplaced.
+pub(crate) fn zero_read_undefs(func: &mut FunctionSsa) {
+    if !func.insts.iter().any(|i| matches!(i, Inst::Undef)) {
+        return;
+    }
+    let counts = super::reg_alloc::compute_use_counts(func);
+    let reads = super::reg_alloc::operands_read(func, &counts);
+    let mut read = alloc::vec![false; func.insts.len()];
+    let mut mark = |v: ValueId| {
+        if let Some(r) = read.get_mut(v as usize) {
+            *r = true;
         }
-        let new_end = new_insts.len() as u32;
-        func.blocks[b_idx].inst_range = new_start..new_end;
+    };
+    for (inst, &live) in func.insts.iter().zip(&reads) {
+        if live && !matches!(inst, Inst::Phi { .. }) {
+            inst.for_each_operand(&mut mark);
+        }
+    }
+    for block in &func.blocks {
+        block.terminator.for_each_operand(&mut mark);
+    }
+    for (inst, read) in func.insts.iter_mut().zip(read) {
+        if read && matches!(inst, Inst::Undef) {
+            *inst = Inst::Imm(0);
+        }
+    }
+}
+
+/// Place the blockless instruction `v` at the end of the entry block, past
+/// the parameter reads that open it.
+fn move_into_entry(func: &mut FunctionSsa, v: ValueId) {
+    let heads = alloc::vec![Vec::new(); func.blocks.len()];
+    rebuild_tape(func, heads, Some(v));
+}
+
+/// Rebuild the tape in block order with `heads[b]`, each instruction with
+/// its f32 flag, at the head of block `b`, and the blockless `entry` at the
+/// end of block 0. Every operand, terminator, accumulator and relocation
+/// key follows its instruction; an instruction no block holds is dropped.
+/// Returns the ids of the head instructions by block.
+fn rebuild_tape(
+    func: &mut FunctionSsa,
+    heads: Vec<Vec<(Inst, bool)>>,
+    entry: Option<ValueId>,
+) -> Vec<Vec<ValueId>> {
+    enum Item {
+        Old(ValueId),
+        Head(Inst, bool),
+    }
+    let mut order: Vec<Item> = Vec::with_capacity(func.insts.len());
+    let mut head_ids: Vec<Vec<ValueId>> = alloc::vec![Vec::new(); heads.len()];
+    for (b_idx, block_heads) in heads.into_iter().enumerate() {
+        let range = func.blocks[b_idx].inst_range.clone();
+        let new_start = order.len() as u32;
+        for (inst, f32) in block_heads {
+            head_ids[b_idx].push(order.len() as ValueId);
+            order.push(Item::Head(inst, f32));
+        }
+        order.extend(range.map(Item::Old));
+        order.extend(entry.filter(|_| b_idx == 0).map(Item::Old));
+        func.blocks[b_idx].inst_range = new_start..order.len() as u32;
+    }
+    let mut value_remap: Vec<ValueId> = alloc::vec![NO_VALUE; func.insts.len()];
+    let mut new_insts: Vec<Inst> = Vec::with_capacity(order.len());
+    let mut new_src: Vec<(u32, u32)> = Vec::with_capacity(order.len());
+    let mut new_f32: Vec<bool> = Vec::with_capacity(order.len());
+    for item in order {
+        match item {
+            Item::Old(old_id) => {
+                let o = old_id as usize;
+                value_remap[o] = new_insts.len() as ValueId;
+                new_insts.push(func.insts[o].clone());
+                new_src.push(func.inst_src.get(o).copied().unwrap_or((0, 0)));
+                new_f32.push(func.f32_values.get(o).copied().unwrap_or(false));
+            }
+            Item::Head(inst, f32) => {
+                new_insts.push(inst);
+                new_src.push((0, 0));
+                new_f32.push(f32);
+            }
+        }
     }
 
     let remap = |op: &mut ValueId| {
@@ -910,7 +992,7 @@ pub(crate) fn insert_phis(
     func.insts = new_insts;
     func.inst_src = new_src;
     func.f32_values = new_f32;
-    phi_id_at
+    head_ids
 }
 
 /// True when every `LoadLocal` / `StoreLocal` against `slot` uses the
@@ -1218,10 +1300,9 @@ enum SlotClass {
 /// A slot that mixes integer and FP stores is a union / type-pun
 /// (C99 6.5.2.3) and also returns `None`.
 ///
-/// A slot with no stores (write-free) is treated as integer-classed;
-/// such a slot is read before any definition and the rename pass
-/// records it in `failed`, leaving it in memory. A constant stored at an
-/// FP kind is an FP store, so `double d = 0.0;` promotes.
+/// A slot with no stores (write-free) is treated as integer-classed; each
+/// of its loads reads no store and becomes `Inst::Undef`. A constant
+/// stored at an FP kind is an FP store, so `double d = 0.0;` promotes.
 fn slot_class(a: &SlotAccess) -> Option<SlotClass> {
     // A slot written at two FP widths would need a width-changing phi,
     // and one read at two FP widths is a type-pun; keep both in memory.
@@ -1329,21 +1410,19 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
         .into_iter()
         .filter(|s| access[s].has_load || !escape.escapes(*s))
         .collect();
-    // A slot live-in to the entry block (block 0) is read on some path
-    // before any store defines it (C99 6.2.4: an indeterminate value).
-    // It has no reaching definition on that path, so promoting it would
-    // inject a join phi with an undefined predecessor edge -- a dead phi
-    // that still holds a register and drives a predecessor-exit move.
-    // Exclude such slots so they stay entirely in memory; this is the
-    // up-front form of the rename's `failed` detection.
-    // One live-in analysis serves both the entry filter and the phi
-    // placement below: the dataflow decomposes per slot, so the sets
-    // computed over the unfiltered slot set answer the filtered set's
-    // queries unchanged.
+    if promotable.is_empty() {
+        return Vec::new();
+    }
+    // A slot live into the entry block is read on some path no store
+    // reaches. An automatic object's read there yields an indeterminate
+    // value (C99 6.2.4p5, 6.7.8p10), which the rename supplies; a
+    // parameter cell, or storage the prologue or a call fills, holds a
+    // value no instruction stores and stays in memory.
     let live = slot_live_in_sets(func, &promotable, &escape);
+    let filled = filled_locals(func);
     let promotable: BTreeSet<i64> = promotable
         .into_iter()
-        .filter(|s| !live.contains(0, *s))
+        .filter(|&s| !(live.contains(0, s) && (s >= 0 || filled.contains(&s))))
         .collect();
     if promotable.is_empty() {
         return Vec::new();
@@ -1523,10 +1602,16 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
         }
     }
 
+    // A load no store reaches reads an indeterminate value (C99 6.2.4p5,
+    // 6.7.8p10) and becomes `Inst::Undef` in place. A phi takes one over an
+    // edge no store reaches: `undef`, which stays past the tape's end until
+    // the rename shows it is read, and then ends the entry block.
+    let undef = func.insts.len() as ValueId;
+    func.insts.push(Inst::Undef);
+    let mut undef_read = false;
+    let mut undef_loads: Vec<(u32, i64)> = Vec::new();
     // Reaching-definition rename over the dom tree. `redirect[id]`
     // maps a promoted load / store id to the value that replaces it.
-    // A slot whose load is reached by no definition (read before
-    // write) is recorded in `failed` and left entirely in memory.
     let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; func.insts.len()];
     let mut store_ids: Vec<u32> = Vec::new();
     let mut marked_stores: Vec<u32> = Vec::new();
@@ -1646,9 +1731,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                                     redirect[id as usize] = Some(r);
                                     load_slot.insert(id, *off);
                                 }
-                                None => {
-                                    failed.insert(*off);
-                                }
+                                None => undef_loads.push((id, *off)),
                             }
                         }
                         _ => {}
@@ -1663,12 +1746,10 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                 let term = func.blocks[b as usize].terminator;
                 for succ in successors(&term, &func.computed_goto_targets, &func.jump_tables) {
                     for (slot, phi_id) in &phis_at[succ as usize].clone() {
-                        if let Some(&(val, _)) = current.get(slot) {
-                            if let Inst::Phi { incoming, .. } = &mut func.insts[*phi_id as usize] {
-                                incoming.push((b as BlockId, val));
-                            }
-                        } else {
-                            failed.insert(*slot);
+                        let val = current.get(slot).map_or(undef, |&(v, _)| v);
+                        undef_read |= val == undef;
+                        if let Inst::Phi { incoming, .. } = &mut func.insts[*phi_id as usize] {
+                            incoming.push((b as BlockId, val));
                         }
                     }
                 }
@@ -1681,8 +1762,8 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
     }
 
     // Drop every record for a slot that could not be fully promoted
-    // (a load reached by no definition): leave its loads and stores in
-    // memory untouched.
+    // (a mixed-width load wider than its store): leave its loads and
+    // stores in memory untouched.
     if !failed.is_empty() {
         for (id, slot) in load_slot.iter().chain(store_slot.iter()) {
             if failed.contains(slot) {
@@ -1690,9 +1771,11 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
             }
         }
         store_ids.retain(|id| !failed.contains(&store_slot[id]));
+        undef_loads.retain(|(_, slot)| !failed.contains(slot));
     }
     marked_stores.retain(|id| !failed.contains(&store_slot[id]));
-    if redirect.iter().all(|r| r.is_none()) && marked_stores.is_empty() {
+    if redirect.iter().all(|r| r.is_none()) && marked_stores.is_empty() && undef_loads.is_empty() {
+        func.insts.truncate(undef as usize);
         return Vec::new();
     }
     for &id in &marked_stores {
@@ -1812,13 +1895,21 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
             func.insts[id as usize] = Inst::Imm(0);
         }
     }
-    //
+    for &(id, _) in &undef_loads {
+        func.insts[id as usize] = Inst::Undef;
+    }
+    if undef_read {
+        move_into_entry(func, undef);
+    } else {
+        func.insts.truncate(undef as usize);
+    }
     // The promoted slots no longer hold a live value; report them so
     // the debug-info emitter drops their frame location.
     store_ids
         .iter()
         .chain(&marked_stores)
         .filter_map(|id| store_slot.get(id).copied())
+        .chain(undef_loads.iter().map(|&(_, slot)| slot))
         .collect::<BTreeSet<i64>>()
         .into_iter()
         .collect()
@@ -2998,25 +3089,21 @@ mod tests {
         );
     }
 
-    #[test]
-    #[cfg(feature = "std")]
-    fn read_before_write_slot_is_left_in_memory_without_orphan_phi() {
-        // `int f(int c){ int x; if(c) x=7; return x+1; }`: slot -1 is
-        // stored only on the taken arm but read unconditionally, so it
-        // is live-in to the entry block. It must not be promoted; no
-        // Inst::Phi may be injected, and its load/store stay resident.
+    /// `int f(int c){ int x; if(c) x=7; return x; }` with `x` at `slot`,
+    /// stored on the taken arm only.
+    fn stored_on_one_arm(slot: i64) -> FunctionSsa {
         let insts = alloc::vec![
             Inst::Imm(0), // block 0: cond
             Inst::Imm(7), // block 1
             Inst::StoreLocal {
-                off: -1,
+                off: slot,
                 value: 1,
                 kind: StoreKind::I64,
                 volatile: false,
                 nsw: false,
             },
             Inst::LoadLocal {
-                off: -1,
+                off: slot,
                 kind: LoadKind::I64,
                 volatile: false,
             }, // block 2
@@ -3045,28 +3132,118 @@ mod tests {
                 exit_acc: 3,
             },
         ];
-        let mut f = func_with(insts, blocks);
+        func_with(insts, blocks)
+    }
+
+    #[test]
+    #[cfg(feature = "std")]
+    fn a_local_stored_on_one_arm_merges_an_undefined_value() {
+        // The edge from block 0 carries no store: the phi takes an
+        // `Inst::Undef` the entry block defines, and the slot leaves memory.
+        let mut f = stored_on_one_arm(-1);
         let promoted = with_phi_promote_override(true, || run(&mut f));
+        assert_eq!(promoted, alloc::vec![-1]);
+        let Terminator::Return(r) = f.blocks[2].terminator else {
+            panic!("block 2 returns");
+        };
+        let Inst::Phi { incoming, .. } = &f.insts[r as usize] else {
+            panic!("the return reads the phi: {:?}", f.insts[r as usize]);
+        };
+        let from = |b: BlockId| incoming.iter().find(|(p, _)| *p == b).unwrap().1;
+        assert!(matches!(f.insts[from(1) as usize], Inst::Imm(7)));
+        assert!(matches!(f.insts[from(0) as usize], Inst::Undef));
+        assert!(f.blocks[0].inst_range.contains(&from(0)));
         assert!(
-            !promoted.contains(&-1),
-            "read-before-write slot must not be promoted"
-        );
-        assert!(
-            !f.insts.iter().any(|i| matches!(i, Inst::Phi { .. })),
-            "no orphan phi may remain for the failed slot"
-        );
-        assert!(
-            f.insts
+            !f.insts
                 .iter()
-                .any(|i| matches!(i, Inst::StoreLocal { off: -1, .. })),
-            "the store must stay resident in memory"
-        );
-        assert!(
+                .any(|i| matches!(i, Inst::LoadLocal { .. } | Inst::StoreLocal { .. })),
+            "{:?}",
             f.insts
-                .iter()
-                .any(|i| matches!(i, Inst::LoadLocal { off: -1, .. })),
-            "the load must stay resident in memory"
         );
+        assert!(super::super::verify::check(&f).is_ok());
+    }
+
+    #[test]
+    fn a_parameter_cell_or_a_filled_local_read_on_an_unstored_path_stays_in_memory() {
+        // A parameter cell holds its argument at the entry, and a call's
+        // result temporary the call's result: neither is undefined there.
+        let mut param = stored_on_one_arm(2);
+        assert!(run(&mut param).is_empty());
+        let mut result = stored_on_one_arm(-1);
+        result.insts.push(Inst::CallExt {
+            binding_idx: 0,
+            args: Vec::new(),
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
+            fp_return: false,
+            arg_aggs: Vec::new(),
+            ret_agg: None,
+            ret_slot_local: -1,
+        });
+        result.inst_src.push((0, 0));
+        result.f32_values.push(false);
+        result.blocks[2].inst_range = 3..5;
+        assert!(run(&mut result).is_empty());
+        for f in [&param, &result] {
+            assert!(f.insts.iter().any(|i| matches!(i, Inst::LoadLocal { .. })));
+            assert!(
+                !f.insts
+                    .iter()
+                    .any(|i| matches!(i, Inst::Undef | Inst::Phi { .. }))
+            );
+        }
+    }
+
+    #[test]
+    fn a_load_no_store_reaches_becomes_undefined_and_zero_where_read() {
+        // `int x = x;`: the load reads nothing stored, so it becomes the
+        // indeterminate value in place; the store forwards it to the
+        // return, which reads it as the zero the allocation places.
+        let insts = alloc::vec![
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+            Inst::StoreLocal {
+                off: -1,
+                value: 0,
+                kind: StoreKind::I64,
+                volatile: false,
+                nsw: false,
+            },
+            Inst::LoadLocal {
+                off: -1,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+        ];
+        let blocks = alloc::vec![Block {
+            start_pc: 0,
+            inst_range: 0..3,
+            terminator: Terminator::Return(2),
+            exit_acc: NO_VALUE,
+        }];
+        let mut f = func_with(insts, blocks);
+        assert_eq!(run(&mut f), alloc::vec![-1]);
+        assert!(matches!(f.insts[0], Inst::Undef));
+        assert!(matches!(f.blocks[0].terminator, Terminator::Return(0)));
+        zero_read_undefs(&mut f);
+        assert!(matches!(f.insts[0], Inst::Imm(0)));
+    }
+
+    #[test]
+    #[cfg(feature = "std")]
+    fn an_undefined_phi_income_stays_undefined() {
+        // Only the phi reads the entry's `Undef`: no instruction needs a
+        // value for it.
+        let mut f = stored_on_one_arm(-1);
+        with_phi_promote_override(true, || run(&mut f));
+        let undefs = |f: &FunctionSsa| f.insts.iter().filter(|i| matches!(i, Inst::Undef)).count();
+        assert_eq!(undefs(&f), 1);
+        zero_read_undefs(&mut f);
+        assert_eq!(undefs(&f), 1);
     }
 
     #[test]
@@ -3234,11 +3411,11 @@ mod tests {
                 "slot -1 must be live in at block {b}"
             );
         }
-        // A slot live in at the entry is read before any definition, so
-        // `run` leaves it in memory rather than injecting a phi with an
-        // undefined predecessor edge.
+        // A slot live in at the entry is read before any definition: the
+        // load becomes the indeterminate value.
         let mut f = f;
-        assert!(run(&mut f).is_empty());
+        assert_eq!(run(&mut f), alloc::vec![-1]);
+        assert!(matches!(f.insts[0], Inst::Undef));
     }
     #[test]
     fn run_promotes_the_loads_before_the_address_is_taken() {

@@ -328,22 +328,25 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::setvbuf,   "setvbuf")
 #pragma binding(msvcrt::remove,    "remove")
 #pragma binding(msvcrt::rename,    "rename")
-// Wide-string companion shell.c reaches for to open paths that
-// contain non-ASCII characters: it converts the UTF-8 input to
-// UTF-16 via MultiByteToWideChar and then calls _wfopen. The
-// Windows CRT spells the entry point with the leading underscore.
+// Wide-string companion a program uses to open paths that contain
+// non-ASCII characters: it converts the UTF-8 input to UTF-16 via
+// MultiByteToWideChar and then calls _wfopen. The Windows CRT
+// spells the entry point with the leading underscore.
 #pragma binding(msvcrt::_wfopen,   "_wfopen")
-// shell.c also reaches for `_wpopen` / `_pclose` to drive the
-// `.system` and pager pipes when the path needs UTF-16. The Windows
-// CRT spells the popen entry point with a leading underscore on
-// both the byte-string and wide-string flavours.
+// `_wpopen` / `_pclose` drive a command pipe whose command line
+// needs UTF-16. The Windows CRT spells the popen entry point with a
+// leading underscore on both the byte-string and wide-string
+// flavours.
 #pragma binding(msvcrt::_wpopen,   "_wpopen")
 #pragma binding(msvcrt::_popen,    "_popen")
 #pragma binding(msvcrt::_pclose,   "_pclose")
-// shell.c reaches for the wide-string fs APIs to walk archives /
-// snapshots whose paths contain non-ASCII characters, plus a few
-// Win32-spelled fileno / setmode / isatty / access helpers that
-// every Windows console interaction routes through.
+// The POSIX names, which mingw-w64 declares and its oldnames library
+// forwards to the CRT's underscored entry points.
+#pragma binding(msvcrt::popen,     "_popen")
+#pragma binding(msvcrt::pclose,    "_pclose")
+// The wide-string fs APIs, for paths that contain non-ASCII
+// characters, plus the Win32-spelled fileno / setmode / isatty /
+// access helpers every Windows console interaction routes through.
 #pragma binding(msvcrt::_fileno,        "_fileno")
 #pragma binding(msvcrt::_isatty,        "_isatty")
 #pragma binding(msvcrt::_setmode,       "_setmode")
@@ -362,9 +365,9 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::_wfindnext,     "_wfindnext")
 #pragma binding(msvcrt::_findclose,     "_findclose")
 // Wide-string IO companions to fgets / fputs / putc, plus the
-// process-environment helpers shell.c uses for `.system` / `--`
-// argv passing on Windows. Names spelled with the leading
-// underscore where the MSVC CRT does so.
+// process-environment helpers for passing argv to a child process
+// on Windows. Names spelled with the leading underscore where the
+// MSVC CRT does so.
 #pragma binding(msvcrt::fgetws,         "fgetws")
 #pragma binding(msvcrt::fputws,         "fputws")
 #pragma binding(msvcrt::_getws,         "_getws")
@@ -603,10 +606,9 @@ int   _fileno(FILE *stream);
 int   _isatty(int fd);
 int   _setmode(int fd, int mode);
 int   _access(char *path, int mode);
-// MSVC CRT stat-result shapes. shell.c reads `st_size`, `st_mode`,
-// `st_mtime`, and `st_ctime` so those fields live at the offsets
-// the runtime expects. The 64-bit-time variant (`_stat64`) is the
-// one shell.c reaches for to handle files past 2038.
+// MSVC CRT stat-result shapes: `st_size`, `st_mode`, `st_mtime` and
+// `st_ctime` live at the offsets the runtime writes. The 64-bit-time
+// variant (`_stat64`) handles files past 2038.
 struct _stat {
     unsigned int  st_dev;
     unsigned short st_ino;
@@ -633,10 +635,9 @@ struct _stat64 {
     long long     st_mtime;
     long long     st_ctime;
 };
-// `__stat64` is an internal MSVC alias for `_stat64`; some
-// shell.c paths reach for the double-underscore spelling. Same
-// layout, same use; declared as its own struct because c5's
-// struct-tag namespace doesn't track aliases.
+// `__stat64` is an internal MSVC alias for `_stat64`, and some
+// sources spell it so. Same layout, same use; declared as its own
+// struct because c5's struct-tag namespace doesn't track aliases.
 struct __stat64 {
     unsigned int  st_dev;
     unsigned short st_ino;
@@ -749,7 +750,7 @@ FILE *__iob_func(void);
 
 // MSVC's `_findfirst`/`_findnext` companion structs. Layout
 // pinned to the Win64 SDK so the kernel-emitted records match
-// what shell.c reads. Per MSVC: `time_t` is 64-bit on the 64-bit
+// what a program reads. Per MSVC: `time_t` is 64-bit on the 64-bit
 // CRT; `_fsize_t` is `unsigned long` (32-bit on LLP64). Wide
 // names are 260 wchars; ANSI variant is 260 chars.
 struct _finddata_t {
@@ -791,10 +792,10 @@ struct _wfinddata64_t {
 #define _A_SUBDIR     0x10
 #define _A_ARCH       0x20
 
-// `_setmode` flag values from <fcntl.h> on the MSVC CRT. Modes
-// shell.c uses are O_BINARY (raw bytes through stdin/stdout for
-// the shell pipeline) and O_TEXT / O_WTEXT (auto CRLF + locale-
-// aware translation). Values pinned by the platform.
+// `_setmode` flag values from <fcntl.h> on the MSVC CRT: O_BINARY
+// (raw bytes through stdin/stdout for a pipeline) and O_TEXT /
+// O_WTEXT (auto CRLF + locale-aware translation). Values pinned by
+// the platform.
 #define _O_TEXT       0x4000
 #define _O_BINARY     0x8000
 #define _O_WTEXT      0x10000

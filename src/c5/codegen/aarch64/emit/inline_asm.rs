@@ -21,10 +21,10 @@ pub(super) struct AsmGotoDirectBranch {
     pub(super) target: u32,
 }
 
-/// A deferred ALTERNATIVE replacement (`.subsection 1`): its encoded
+/// A deferred replacement sequence (`.subsection 1`): its encoded
 /// bytes, appended to `.text` after the function body so the main
 /// sequence does not fall into it, and each local label's offset within
-/// them for the `.altinstructions` fields (`.word 663f - .`).
+/// them for the pushed-section fields that name it (`.word 663f - .`).
 pub(super) struct DeferredAsmRegion {
     pub(super) bytes: alloc::vec::Vec<u8>,
     pub(super) labels: alloc::vec::Vec<(u32, usize)>,
@@ -231,7 +231,7 @@ fn build_label_branch(
     })
 }
 
-/// Encode an ALTERNATIVE `.subsection` replacement into a deferred
+/// Encode a `.subsection` replacement sequence into a deferred
 /// region. A branch to a local label or `.` resolves within the region
 /// (the displacement is placement-invariant); a `%l[...]` branch is
 /// returned as `(region offset, kind, label index)` for the caller to
@@ -278,7 +278,7 @@ fn encode_deferred_asm_region(
             continue;
         }
         // `.org <expr>`: pad forward to the target; a backward move is the
-        // ALTERNATIVE length-mismatch assertion firing, an error as in GNU as.
+        // replacement-length assertion firing, an error as in GNU as.
         if let Some(rest) = stmt.strip_prefix(".org")
             && (rest.is_empty() || rest.starts_with(char::is_whitespace))
         {
@@ -305,7 +305,7 @@ fn encode_deferred_asm_region(
                 })?;
             if target < cur {
                 return Err(String::from(
-                    "inline asm: ALTERNATIVE replacement and original differ in length",
+                    "inline asm: `.subsection` replacement and original differ in length",
                 ));
             }
             bytes.resize(target as usize, 0);
@@ -689,6 +689,29 @@ impl AsmOperands<'_> {
                 };
                 Opnd::Mem { base, off, pre }
             }
+            // The register-concrete forms are converted above.
+            AsmOpndA64::MemVl {
+                base: super::asm::MemBase::Ref(idx),
+                off,
+            } => match self.resolve_ref(idx) {
+                Some(base) => Opnd::MemVl { base, off },
+                None => {
+                    return Err(String::from(
+                        "aarch64 inline asm: memory base is not a register",
+                    ));
+                }
+            },
+            AsmOpndA64::ZaVec {
+                select: super::asm::MemBase::Ref(idx),
+                off,
+            } => match self.resolve_ref(idx) {
+                Some(select) => Opnd::ZaVec { select, off },
+                None => {
+                    return Err(String::from(
+                        "aarch64 inline asm: ZA vector select is not a register",
+                    ));
+                }
+            },
             AsmOpndA64::MemReg {
                 base,
                 index,
@@ -748,7 +771,7 @@ impl AsmOperands<'_> {
     }
 
     /// A symbol name with its operand references substituted, which is what
-    /// makes `__get_user_%c0` name `__get_user_4`.
+    /// makes `helper_%c0` name `helper_4`.
     fn symbol_name(&self, name: &str) -> Result<alloc::string::String, alloc::string::String> {
         crate::c5::asm::resolve_asm_symbol_target(name, &crate::c5::asm::A64_SYMBOL_SUBST, &|i| {
             self.const_of(i)
@@ -2231,11 +2254,11 @@ fn lower_inline_asm(
     let gas = crate::c5::asm::expand_asm_gas_macros(&text, 4, &|tok| ops.gas_subst(tok))?;
     let text = gas.as_deref().unwrap_or(&text);
     // The section blocks and the deferred region look a numeric label up by
-    // number, so a label defined twice (two chained ALTERNATIVEs) is numbered
-    // apart by position first.
+    // number, so a label defined twice (two chained replacement sequences)
+    // is numbered apart by position first.
     let apart = crate::c5::asm::number_local_labels_apart(text);
     let text = apart.as_deref().unwrap_or(text);
-    // Every ALTERNATIVE `.subsection` replacement joins the deferred region
+    // Every `.subsection` replacement sequence joins the deferred region
     // appended after the function body.
     let (main_text, deferred_text) = crate::c5::asm::split_asm_subsections(text);
     let extracted = crate::c5::asm::extract_asm_sections(&main_text, true)?;
@@ -2402,6 +2425,16 @@ fn concrete_opnd(o: &super::asm::AsmOpndA64) -> Option<super::table::Opnd> {
             size,
             index,
         },
+        AsmOpndA64::ZReg { num, size } => Opnd::ZReg { num, size },
+        AsmOpndA64::PReg { num, size } => Opnd::PReg { num, size },
+        AsmOpndA64::MemVl {
+            base: super::asm::MemBase::Reg(base),
+            off,
+        } => Opnd::MemVl { base, off },
+        AsmOpndA64::ZaVec {
+            select: super::asm::MemBase::Reg(select),
+            off,
+        } => Opnd::ZaVec { select, off },
         _ => return None,
     })
 }

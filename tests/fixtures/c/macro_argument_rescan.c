@@ -5,12 +5,11 @@
 // (the source token following the parameter is `(`, supplied
 // inside the body), the rescan must fire it.
 //
-// Lua's `op_arithI(L, l_addi, luai_numadd)` and similar shapes
-// rely on this: `op_arithI`'s body has `iop(L, iv1, imm)`, and
-// `iop` gets substituted with `l_addi`, which is itself a
-// function-like macro `intop(+, a, b)`. Without the rescan the
-// emitted source still reads `l_addi(L, iv1, imm)` and the
-// compiler reports an unknown function.
+// A dispatch macro `op_arith(L, add_int, num_add)` whose body has
+// `iop(L, iv1, imm)` relies on this: `iop` gets substituted with
+// `add_int`, which is itself a function-like macro
+// `intop(+, a, b)`. Without the rescan the emitted source still reads
+// `add_int(L, iv1, imm)` and the compiler reports an unknown function.
 
 #define ADD(a, b) ((a) + (b))
 #define SUB(a, b) ((a) - (b))

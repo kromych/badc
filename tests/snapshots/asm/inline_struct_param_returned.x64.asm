@@ -25,38 +25,16 @@ Disassembly of section .text:
                	int3
                	int3
 
-<id_word>:
-               	movq	%rdi, %rax
-               	retq
-
-<id_pair>:
-               	movq	%rdi, %rax
-               	movq	%rsi, %rdx
-               	retq
-
-<id_pair_hint>:
-               	movq	%rdi, %rax
-               	movq	%rsi, %rdx
-               	retq
-
 <use_word>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movq	(%rdi), %rdi
-               	callq	<addr>
-               	popq	%rbp
+               	movq	(%rdi), %rax
                	retq
 
 <use_pair>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	leaq	<rip>, %rdi      # <addr>
-               	movq	0x8(%rdi), %rsi
-               	movq	(%rdi), %rdi
-               	callq	<addr>
-               	imulq	$0xa, %rax, %rax
-               	addq	%rdx, %rax
-               	popq	%rbp
+               	leaq	<rip>, %rax      # <addr>
+               	movq	(%rax), %rcx
+               	movq	0x8(%rax), %rax
+               	imulq	$0xa, %rcx, %rcx
+               	addq	%rcx, %rax
                	retq
 
 <use_big>:
@@ -77,40 +55,17 @@ Disassembly of section .text:
                	retq
 
 <use_hint>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movq	0x8(%rdi), %rsi
-               	movq	(%rdi), %rdi
-               	callq	<addr>
+               	movq	(%rdi), %rax
+               	movq	0x8(%rdi), %rcx
                	imulq	$0xa, %rax, %rax
-               	addq	%rdx, %rax
-               	popq	%rbp
+               	addq	%rcx, %rax
                	retq
 
 <use_twice>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, %rax
-               	leaq	-0x10(%rbp), %rdi
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rdi)
-               	movq	0x8(%rdi), %rsi
-               	movq	(%rdi), %rdi
-               	callq	<addr>
-               	movq	%rax, -0x10(%rbp)
-               	leaq	-0x10(%rbp), %rdi
-               	movq	%rdx, 0x8(%rdi)
-               	movq	0x8(%rdi), %rsi
-               	movq	(%rdi), %rdi
-               	callq	<addr>
-               	movq	%rax, -0x10(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rdx, 0x8(%rax)
-               	movq	(%rax), %rax
+               	movq	(%rdi), %rax
+               	movq	0x8(%rdi), %rcx
                	imulq	$0xa, %rax, %rax
-               	addq	%rdx, %rax
-               	leave
+               	addq	%rcx, %rax
                	retq
 
 <use_pick>:
@@ -220,16 +175,6 @@ Disassembly of section .text:
                	cmpq	$0x62, %rax
                	je	<addr>
                	movl	$0x9, %eax
-               	leave
-               	retq
-               	leaq	-0x10(%rbp), %rax
-               	movq	(%rax), %rcx
-               	cmpq	$0x8, %rcx
-               	jne	<addr>
-               	movq	0x8(%rax), %rax
-               	cmpq	$0x9, %rax
-               	je	<addr>
-               	movl	$0xa, %eax
                	leave
                	retq
                	xorl	%eax, %eax

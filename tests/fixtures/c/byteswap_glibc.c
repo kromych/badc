@@ -3,8 +3,8 @@
 //
 // The operand width is the macro's, not the argument's -- glibc's
 // `__bswap_N` take `uintN_t`, so a wider value is truncated before the
-// reversal. The kernel's TO_NATIVE expands all three macros at every
-// swap site and selects on `sizeof`, so a macro that reversed the
+// reversal. A generic swap macro that expands all three at every site
+// and selects on `sizeof` relies on it: a macro that reversed the
 // argument's width instead would not even compile there.
 //
 // Returns 0 on success, otherwise the number of the failing check.

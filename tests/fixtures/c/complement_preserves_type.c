@@ -3,9 +3,9 @@
 // and signedness, so `~(unsigned long)0` is `unsigned long`
 // (0xFFFFFFFFFFFFFFFF) and a following `>>` is a logical shift. Forcing
 // the result to a signed 32-bit `int` made `(~(unsigned long)0) >> 1`
-// an arithmetic shift yielding 0xFFFFFFFFFFFFFFFF -- this broke TCL's
-// bignum-to-wide narrowing bound `((~(unsigned long)0) >> 1) + sign`,
-// shrinking 2**63 to INT64_MIN instead of keeping it a big integer.
+// an arithmetic shift yielding 0xFFFFFFFFFFFFFFFF, which breaks a
+// bignum-to-wide narrowing bound `((~(unsigned long)0) >> 1) + sign`:
+// 2**63 shrinks to INT64_MIN instead of staying a big integer.
 
 int main(void) {
     // 64-bit unsigned: ~0 is all ones, logical >> 1 clears the top bit.

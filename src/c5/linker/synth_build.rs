@@ -36,24 +36,27 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use crate::c5::codegen::{
-    AddrPart, Build, CopyRelocReq, DataFixup, DynamicExport, DynamicExportSection, EmitStream,
-    EmitTarget, EmittedFinalReloc, ExecForm, FuncFixup, GotFixup, OutputKind, ResolvedDylib,
-    ResolvedImport, ResolvedImports, Target,
+    AddrPart, Build, CopyRelocReq, DataFixup, DynamicExport, DynamicExportSection, ElfImageOptions,
+    EmitStream, EmitTarget, EmittedFinalReloc, ExecForm, FuncFixup, GotFixup, ImportKind,
+    OutputKind, ResolvedDylib, ResolvedImport, ResolvedImports, Target,
 };
 use crate::c5::error::C5Error;
 use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE, R_AARCH64_ADR_PREL_PG_HI21,
-    R_AARCH64_CALL26, R_AARCH64_JUMP26, R_AARCH64_LD64_GOT_LO12_NC, R_X86_64_GOT64,
-    R_X86_64_GOTOFF64, R_X86_64_GOTPC32, R_X86_64_GOTPC64, R_X86_64_GOTPCREL, R_X86_64_PC32,
-    R_X86_64_PLT32, R_X86_64_PLTOFF64, R_X86_64_REX_GOTPCRELX, aarch64_ldst_lo12_scale,
-    aarch64_movw_field,
+    R_AARCH64_CALL26, R_AARCH64_JUMP26, R_AARCH64_LD64_GOT_LO12_NC,
+    R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21, R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, R_X86_64_GOT64,
+    R_X86_64_GOTOFF64, R_X86_64_GOTPC32, R_X86_64_GOTPC64, R_X86_64_GOTPCREL, R_X86_64_GOTTPOFF,
+    R_X86_64_PC32, R_X86_64_PLT32, R_X86_64_PLTOFF64, R_X86_64_REX_GOTPCRELX,
+    aarch64_ldst_lo12_scale, aarch64_movw_field,
 };
 use crate::c5::object::write_native_image;
 use crate::c5::program::{CodeReloc, DataReloc, ExportedFunction, Program};
 
 use super::internal_err;
-use super::link::{DataAbsReloc, DebugTextReloc, MergedNative, MergedTarget, PltTrampoline};
-use super::object::{NativeMachine, NativeSymSection, STT_FUNC, STT_OBJECT, STV_DEFAULT};
+use super::link::{
+    DataAbsReloc, DebugTextReloc, MergedNative, MergedTarget, PltTrampoline, exports_definition,
+};
+use super::object::{NativeMachine, NativeSymSection, STT_FUNC, STT_OBJECT};
 
 /// The tag this module's diagnostics carry.
 const MODULE: &str = "";
@@ -80,18 +83,31 @@ pub fn write_native_image_from_merged(
         output_kind,
         target,
         shared_lib_name,
-        false,
-        false,
-        false,
-        ExecForm::Pie,
+        &ImageOptions::default(),
     )
 }
 
-/// As [`write_native_image_from_merged`], plus `--export-all` /
-/// `--export-data`: for an ELF executable, add every defined non-static
-/// function (`export_all`) and/or data global (`export_data`) to
-/// `.dynsym` for `dlopen` resolution. `exec_form` is an executable's
-/// form, see [`ExecForm`].
+/// How [`write_native_image_from_merged_ex`] shapes an image beyond what
+/// the merge decided.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ImageOptions {
+    /// `--export-all`: every defined non-static function joins an ELF
+    /// executable's `.dynsym`, for `dlopen` resolution.
+    pub export_all: bool,
+    /// `--export-data`: every defined non-static data global does.
+    pub export_data: bool,
+    /// `--emit-relocs`: the resolved relocations stay in the image.
+    pub emit_relocs: bool,
+    /// An executable's form, see [`ExecForm`].
+    pub exec_form: ExecForm,
+    /// `-S`: no debug sections.
+    pub strip_debug: bool,
+    /// `-X`: no assembler temporary (`.L*`) among the local symbols.
+    pub discard_temporaries: bool,
+    pub elf: ElfImageOptions,
+}
+
+/// As [`write_native_image_from_merged`], shaped by `opts`.
 #[allow(clippy::too_many_arguments)]
 pub fn write_native_image_from_merged_ex(
     merged: &MergedNative,
@@ -101,10 +117,7 @@ pub fn write_native_image_from_merged_ex(
     output_kind: OutputKind,
     target: Target,
     shared_lib_name: Option<&str>,
-    export_all: bool,
-    export_data: bool,
-    emit_relocs: bool,
-    exec_form: ExecForm,
+    opts: &ImageOptions,
 ) -> Result<Vec<u8>, C5Error> {
     let (program, build) = synth_program_and_build(
         merged,
@@ -114,10 +127,7 @@ pub fn write_native_image_from_merged_ex(
         output_kind,
         target,
         shared_lib_name,
-        export_all,
-        export_data,
-        emit_relocs,
-        exec_form,
+        opts,
     )?;
     write_native_image(&program, &build, target)
 }
@@ -131,10 +141,7 @@ fn synth_program_and_build(
     output_kind: OutputKind,
     target: Target,
     shared_lib_name: Option<&str>,
-    export_all: bool,
-    export_data: bool,
-    emit_relocs: bool,
-    exec_form: ExecForm,
+    opts: &ImageOptions,
 ) -> Result<(Program, Build), C5Error> {
     check_target_machine(target, merged.machine)?;
     // A shared library has no process entry point (ELF ET_DYN sets
@@ -146,6 +153,38 @@ fn synth_program_and_build(
         resolve_entry_offset(merged, entry_name)?
     };
     let imports = synth_imports(merged, target)?;
+    // Slots the PLT pass left unresolved for the loader to bind.
+    let data_import_binds = merged.data_import_refs.clone();
+    let placed = output_kind != OutputKind::SharedLibrary && opts.exec_form.placed();
+    if !data_import_binds.is_empty()
+        && super::DataImportSlots::of(target, placed) != super::DataImportSlots::Bind
+    {
+        return Err(internal_err(
+            MODULE,
+            &alloc::format!(
+                "{} data slot(s) naming an import reached a {target:?} image unresolved; it \
+                 binds none",
+                data_import_binds.len()
+            ),
+        ));
+    }
+    // A stub code takes as a value is the import's address in an ELF executable.
+    let elf = target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
+    let canonical_imports = if elf && output_kind != OutputKind::SharedLibrary {
+        merged.stub_address_imports.iter().copied().collect()
+    } else {
+        Vec::new()
+    };
+    if !merged.preemptible_imports.is_empty() && !(elf && output_kind == OutputKind::SharedLibrary)
+    {
+        return Err(internal_err(
+            MODULE,
+            &alloc::format!(
+                "preemptible definitions reached a {target:?} {output_kind:?}; only an ELF shared \
+                 library binds its own definitions through `.dynsym`"
+            ),
+        ));
+    }
     let SynthFixups {
         got: got_fixups,
         got_base: got_base_fixups,
@@ -158,13 +197,13 @@ fn synth_program_and_build(
     } = synth_fixups(
         merged,
         plt,
-        TextAbsolute::for_output(target, output_kind, exec_form),
+        TextAbsolute::for_output(target, output_kind, opts.exec_form),
     )?;
 
     let (data_relocs, code_relocs) = synth_relocs(merged);
     let (tls_data_relocs, tls_code_relocs) = synth_abs_relocs(&merged.tls_abs_relocs);
     let plt_trampoline_offsets = synth_plt_offsets(merged, plt)?;
-    let exports = synth_exports(merged, export_all, output_kind);
+    let exports = synth_exports(merged, opts.export_all, output_kind);
     // A TLS template slot may hold the only reference to a function, so
     // its target must be in the PC map the writers index.
     let mut code_reloc_pcs = code_relocs.clone();
@@ -193,9 +232,14 @@ fn synth_program_and_build(
         .collect();
     early_returns.sort_unstable_by_key(|e| e.begin);
     let copy_relocs = synth_copy_relocs(merged, target)?;
-    let dynamic_exports =
-        synth_dynamic_exports(merged, target, output_kind, export_all, export_data);
-    let emitted_relocs = if emit_relocs {
+    let dynamic_exports = synth_dynamic_exports(
+        merged,
+        target,
+        output_kind,
+        opts.export_all,
+        opts.export_data,
+    );
+    let emitted_relocs = if opts.emit_relocs {
         synth_emitted_relocs(merged)
     } else {
         Vec::new()
@@ -204,6 +248,11 @@ fn synth_program_and_build(
         diagnostics: Vec::new(),
         emitted_relocs,
         named_sections: merged.named_sections.clone(),
+        compact_unwind: merged.compact_unwind.clone(),
+        eh_frame: merged.eh_frame.clone(),
+        data_import_binds,
+        canonical_imports,
+        preemptible_imports: merged.preemptible_imports.iter().copied().collect(),
         orphaned_data: None,
         stopped_at_data_liveness: false,
         ssa_dump: alloc::string::String::new(),
@@ -217,14 +266,22 @@ fn synth_program_and_build(
         text_data_ranges: Vec::new(),
         copy_relocs,
         dynamic_exports,
-        image_symbols: merged.symbols.clone(),
+        image_symbols: (merged.symbols.iter())
+            .filter(|s| {
+                !(opts.discard_temporaries
+                    && s.info >> 4 == 0
+                    && crate::c5::asm::is_local_label(&s.name))
+            })
+            .cloned()
+            .collect(),
         text: merged.text.clone(),
         text_align: merged.text_align,
         data: merged.data.clone(),
         data_ro_len: merged.data_ro_len,
         data_relro_len: merged.data_relro_len,
         pic_link: false,
-        exec_form,
+        exec_form: opts.exec_form,
+        elf: opts.elf,
         code_model: Default::default(),
 
         elf_class: Default::default(),
@@ -322,8 +379,8 @@ fn synth_program_and_build(
         // Empty merged blobs mean no input unit carried DWARF; the
         // writers then skip the section emit entirely instead of
         // dumping zero-length placeholders.
-        debug_info: !merged.debug_info.is_empty(),
-        merged_dwarf: synth_merged_dwarf(merged),
+        debug_info: !opts.strip_debug && !merged.debug_info.is_empty(),
+        merged_dwarf: synth_merged_dwarf(merged).filter(|_| !opts.strip_debug),
         plt_trampoline_offsets,
     };
 
@@ -367,6 +424,8 @@ fn synth_program(
         data_relocs: data_relocs.to_vec(),
         extern_data_relocs: Vec::new(),
         code_relocs: code_relocs.to_vec(),
+        sys_trampolines: Vec::new(),
+        bind_trampoline_slots: false,
         tls_data_relocs: Vec::new(),
         tls_extern_data_relocs: Vec::new(),
         tls_code_relocs: Vec::new(),
@@ -528,14 +587,14 @@ fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRe
 }
 
 /// An executable's default-visibility globals, exported so a
-/// dynamically loaded module resolves them (a Python C extension
-/// binding `PyFloat_Type` and the rest of the C-API against the
-/// interpreter executable). macOS publishes every global of every
+/// dynamically loaded module resolves them (an extension module binding
+/// the host program's objects and functions against its executable).
+/// macOS publishes every global of every
 /// executable through the Mach-O symtab. ELF and PE split the same
 /// coverage across two flags matching the toolchain's `-rdynamic`:
 /// `--export-all` adds functions, `--export-data` adds data globals.
 /// Both gate the export because it widens the global symbol scope.
-/// Shared libraries use `exports` instead.
+/// A shared library exports functions through `exports`; an ELF one data here.
 fn synth_dynamic_exports(
     merged: &MergedNative,
     target: Target,
@@ -549,8 +608,10 @@ fn synth_dynamic_exports(
         target,
         Target::LinuxX64 | Target::LinuxAarch64 | Target::WindowsX64 | Target::WindowsAarch64
     ) && is_exec;
+    let elf_library = output_kind == OutputKind::SharedLibrary
+        && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
     let export_funcs = macos_exec || (flagged_exec && export_all);
-    let export_data_globals = macos_exec || (flagged_exec && export_data);
+    let export_data_globals = macos_exec || ((flagged_exec || elf_library) && export_data);
     if !export_funcs && !export_data_globals {
         return Vec::new();
     }
@@ -558,21 +619,19 @@ fn synth_dynamic_exports(
         .defined
         .iter()
         .filter_map(|(name, sym)| {
-            if name.is_empty() || sym.visibility != STV_DEFAULT {
+            if name.is_empty() || !exports_definition(sym, false, export_funcs, export_data_globals)
+            {
                 return None;
             }
             // A `.bss` definition rides the same data-byte offset
             // space as `.data`, biased past the file image.
             let (section, offset) = match sym.section {
-                NativeSymSection::Text if export_funcs => (DynamicExportSection::Text, sym.value),
-                NativeSymSection::Data if export_data_globals => {
-                    (DynamicExportSection::Data, sym.value)
-                }
-                NativeSymSection::Bss if export_data_globals => (
+                NativeSymSection::Text => (DynamicExportSection::Text, sym.value),
+                NativeSymSection::Bss => (
                     DynamicExportSection::Data,
                     merged.data.len() as u64 + sym.value,
                 ),
-                _ => return None,
+                _ => (DynamicExportSection::Data, sym.value),
             };
             Some(DynamicExport {
                 name: name.clone(),
@@ -707,6 +766,14 @@ fn synth_merged_dwarf(merged: &MergedNative) -> Option<crate::c5::codegen::Merge
         merged_data_offset: r.merged_data_offset,
         width: r.width,
     };
+    let section = |s: &super::link::MergedDebugSection| crate::c5::codegen::MergedDwarfSection {
+        name: s.name.clone(),
+        bytes: s.bytes.clone(),
+        text_relocs: s.text_relocs.iter().map(text_reloc).collect(),
+        data_relocs: s.data_relocs.iter().map(data_reloc).collect(),
+    };
+    let (frames, other): (Vec<_>, Vec<_>) =
+        (merged.debug_other.iter()).partition(|s| s.name == ".debug_frame");
     Some(crate::c5::codegen::MergedDwarf {
         debug_info: merged.debug_info.clone(),
         debug_abbrev: merged.debug_abbrev.clone(),
@@ -727,14 +794,8 @@ fn synth_merged_dwarf(merged: &MergedNative) -> Option<crate::c5::codegen::Merge
             .iter()
             .map(data_reloc)
             .collect(),
-        other: (merged.debug_other.iter())
-            .map(|s| crate::c5::codegen::MergedDwarfSection {
-                name: s.name.clone(),
-                bytes: s.bytes.clone(),
-                text_relocs: s.text_relocs.iter().map(text_reloc).collect(),
-                data_relocs: s.data_relocs.iter().map(data_reloc).collect(),
-            })
-            .collect(),
+        debug_frame: frames.first().map(|s| section(s)).unwrap_or_default(),
+        other: other.into_iter().map(section).collect(),
     })
 }
 
@@ -781,9 +842,9 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
     // `.badc.dylibs` section landed surfaces none, so an import with
     // nowhere to bind falls back to the per-target default and the
     // legacy single-libc link path stays runnable; with no import at
-    // all there is nothing to resolve and the image names no library.
+    // all, or only the image's own definitions, the image names no library.
     let dylibs: Vec<ResolvedDylib> = if merged.dylibs.is_empty() {
-        if merged.imports.is_empty() {
+        if merged.imports.len() == merged.preemptible_imports.len() {
             Vec::new()
         } else {
             alloc::vec![ResolvedDylib::runtime_default(target)]
@@ -860,7 +921,13 @@ fn synth_imports(merged: &MergedNative, target: Target) -> Result<ResolvedImport
             },
             dylib_index,
             flat_lookup,
-            is_object: merged.object_imports.contains(&i),
+            kind: if merged.tls_imports.contains(&i) {
+                ImportKind::ThreadLocal
+            } else if merged.object_imports.contains(&i) {
+                ImportKind::Object
+            } else {
+                ImportKind::Function
+            },
             is_variadic: false,
             fixed_args: 0,
             return_type_tag: 0,
@@ -987,11 +1054,13 @@ fn synth_fixups(
         }
         // An x86-64 slot read the object's code already addresses through
         // the GOT: its instruction is final, so the field takes the
-        // import's slot whatever the instruction is.
+        // import's slot whatever the instruction is. A thread-local's
+        // initial-exec slot holds its offset from the thread pointer.
         if reloc.slot_load
             && reloc.target_section == NativeSymSection::Undef
             && merged.machine == NativeMachine::X86_64
-            && super::got_relax::is_x86_64_got_pcrel(reloc.rtype)
+            && (super::got_relax::is_x86_64_got_pcrel(reloc.rtype)
+                || reloc.rtype == R_X86_64_GOTTPOFF)
         {
             got_pcrel.push(crate::c5::codegen::GotPcRelFixup {
                 site_text_offset: reloc.text_offset,
@@ -1051,9 +1120,11 @@ fn project_aarch64_pending(
     // addresses the GOT slot rather than the symbol itself.
     let (part, got_slot) = match reloc.rtype {
         R_AARCH64_ADR_PREL_PG_HI21 => (AddrPart::Page, false),
-        R_AARCH64_ADR_GOT_PAGE => (AddrPart::Page, true),
+        R_AARCH64_ADR_GOT_PAGE | R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21 => (AddrPart::Page, true),
         R_AARCH64_ADD_ABS_LO12_NC => (AddrPart::InPage, false),
-        R_AARCH64_LD64_GOT_LO12_NC => (AddrPart::InPage, true),
+        R_AARCH64_LD64_GOT_LO12_NC | R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC => {
+            (AddrPart::InPage, true)
+        }
         // The PLT pass drains every import call; one still here is a
         // broken invariant. A parked *section* reference is not: it
         // reached a target whose runtime address only the writer
@@ -1450,8 +1521,7 @@ fn synth_exports(
     let mut seen: alloc::collections::BTreeSet<String> = alloc::collections::BTreeSet::new();
     for name in &merged.exports {
         if let Some(sym) = merged.defined.get(name)
-            && matches!(sym.section, NativeSymSection::Text)
-            && sym.visibility == STV_DEFAULT
+            && exports_definition(sym, true, false, false)
             && seen.insert(name.clone())
         {
             exports.push(ExportedFunction {
@@ -1466,8 +1536,7 @@ fn synth_exports(
     if export_all && output_kind == OutputKind::SharedLibrary {
         for (name, sym) in &merged.defined {
             if !name.is_empty()
-                && matches!(sym.section, NativeSymSection::Text)
-                && sym.visibility == STV_DEFAULT
+                && exports_definition(sym, false, true, false)
                 && seen.insert(name.clone())
             {
                 exports.push(ExportedFunction {
@@ -1551,6 +1620,9 @@ mod tests {
             macho_tlv_fixups: alloc::vec![],
             copy_relocs: alloc::vec![],
             object_imports: alloc::collections::BTreeSet::new(),
+            stub_address_imports: alloc::collections::BTreeSet::new(),
+            preemptible_imports: alloc::collections::BTreeSet::new(),
+            tls_imports: alloc::collections::BTreeSet::new(),
             dylibs: alloc::vec![],
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],
@@ -1577,6 +1649,9 @@ mod tests {
             tls_abs_relocs: Vec::new(),
             init_fini_arrays: Default::default(),
             section_map: Default::default(),
+            exec_stack_input: None,
+            compact_unwind: Vec::new(),
+            eh_frame: Vec::new(),
         }
     }
 

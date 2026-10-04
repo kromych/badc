@@ -450,7 +450,7 @@ fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bo
         }
         Inst::Phi { incoming, kind } => {
             for &(_, v) in incoming {
-                if !super::emit_common::phi_rebuilds_income(func, *kind, v) {
+                if !super::emit_common::phi_income_reads_no_place(func, *kind, v) {
                     f(v, produces_fp_result(inst));
                 }
             }
@@ -464,14 +464,14 @@ fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bo
     }
 }
 
-/// Take the phi incomes an edge rebuilds from their bits off the use counts.
-pub(crate) fn drop_rebuilt_incomes(func: &FunctionSsa, use_counts: &mut [u32]) {
+/// Take the phi incomes whose edge move reads no place off the use counts.
+pub(crate) fn drop_unread_incomes(func: &FunctionSsa, use_counts: &mut [u32]) {
     for inst in &func.insts {
         let Inst::Phi { incoming, kind } = inst else {
             continue;
         };
         for &(_, v) in incoming {
-            if super::emit_common::phi_rebuilds_income(func, *kind, v) {
+            if super::emit_common::phi_income_reads_no_place(func, *kind, v) {
                 let c = &mut use_counts[v as usize];
                 *c = c.saturating_sub(1);
             }
@@ -1082,7 +1082,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // An instruction the emitters skip reads nothing, so it keeps no
     // operand live and weighs on no spill decision.
     let mut use_counts = compute_use_counts(func);
-    drop_rebuilt_incomes(func, &mut use_counts);
+    drop_unread_incomes(func, &mut use_counts);
     let reads = operands_read(func, &use_counts);
     let fp_const = fp_constants(func, target, &reads);
     populate_return_hints(func, conv_target, &fp_const, &mut hints);
@@ -1307,6 +1307,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let clobber_free = |inst: &Inst| -> bool {
         match inst {
             Inst::Imm(_)
+            | Inst::Undef
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
@@ -1473,7 +1474,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let flags_survive = |inst: &Inst| -> bool {
         match inst {
             Inst::Imm(k) => !(is_x86 && *k == 0),
-            Inst::ImmData(_)
+            Inst::Undef
+            | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)
             | Inst::BlockAddr(_)
@@ -1923,10 +1925,10 @@ fn abi_reserved_gprs(target: Target) -> u32 {
 /// label the exception table branches to, and any other reference to a
 /// label that is not a branch of the template -- then carry the register
 /// saved where the rest carry it live, so its location differs between
-/// the paths that join, which neither DWARF CFI nor the kernel's ORC has
-/// a form for, and the value the site saved is never read back. The
-/// prologue's save is the form both express and it costs the function
-/// one pair rather than one per site.
+/// the paths that join, which a per-address unwind table such as DWARF
+/// CFI has no form for, and the value the site saved is never read back.
+/// The prologue's save is the form such a table expresses and it costs
+/// the function one pair rather than one per site.
 ///
 /// The registers [`abi_reserved_gprs`] names are excluded: the frame
 /// owns them, and a naked function has no prologue at all, so their
@@ -1981,14 +1983,29 @@ fn asm_preserve_masks(func: &FunctionSsa, target: Target) -> (u32, u32) {
     (abi_reserved_gprs(target), 0)
 }
 
+/// [`check_allocation`], under the `codegen_test` feature and only when
+/// `BADC_VERIFY_ALLOC` is set, so it never runs in a production or
+/// normal test build.
+#[cfg(feature = "codegen_test")]
+fn verify_allocation(
+    func: &FunctionSsa,
+    places: &[Place],
+    target: Target,
+    banks: &RegBanks,
+    liveness: &super::liveness::Liveness,
+    fp_const: &[bool],
+    use_counts: &[u32],
+) {
+    if std::env::var("BADC_VERIFY_ALLOC").is_ok() {
+        check_allocation(func, places, target, banks, liveness, fp_const, use_counts);
+    }
+}
+
 /// Check the register-allocation correctness invariants against the
-/// CFG liveness and report any violation. Enabled only under the
-/// `codegen_test` feature and only when `BADC_VERIFY_ALLOC` is set, so
-/// it never runs in a production or normal test build. The check is a
-/// diagnostic: it prints each violating value, the invariant it broke,
-/// and the function's entry pc, then returns. It is intentionally
-/// O(n^2) within a physical location -- correctness, not speed, is the
-/// goal here.
+/// CFG liveness. Prints each violating value, the invariant it broke,
+/// and the function's entry pc, then stops the compile naming the
+/// first, as the SSA checks do. It is intentionally O(n^2) within a
+/// physical location -- correctness, not speed, is the goal here.
 ///
 /// Invariants checked:
 ///
@@ -2012,7 +2029,7 @@ fn asm_preserve_masks(func: &FunctionSsa, target: Target) -> (u32, u32) {
 /// their place names no register any code writes. The coverage check is
 /// what establishes that per function rather than assuming it.
 #[cfg(feature = "codegen_test")]
-fn verify_allocation(
+fn check_allocation(
     func: &FunctionSsa,
     places: &[Place],
     target: Target,
@@ -2021,14 +2038,13 @@ fn verify_allocation(
     fp_const: &[bool],
     use_counts: &[u32],
 ) {
-    if std::env::var("BADC_VERIFY_ALLOC").is_err() {
-        return;
-    }
+    let first = core::cell::RefCell::new(None::<alloc::string::String>);
     let report = |msg: alloc::string::String| {
         eprintln!(
             "VERIFY-VIOLATION fn={} ent_pc={}: {msg}",
             func.name, func.ent_pc
         );
+        first.borrow_mut().get_or_insert(msg);
     };
     let covered = |v: usize| liveness.in_cfg(v as ValueId);
 
@@ -2103,7 +2119,7 @@ fn verify_allocation(
     // register file, so a class-crossing operand would emit a bit-
     // reinterpreting move into the wrong file.
     for (v, inst) in func.insts.iter().enumerate() {
-        let Inst::Phi { incoming, .. } = inst else {
+        let Inst::Phi { incoming, kind } = inst else {
             continue;
         };
         if !covered(v) {
@@ -2117,8 +2133,9 @@ fn verify_allocation(
             // `result_kind` classes every `Imm` in the integer file, so a
             // float constant reaches an FP phi integer-classed;
             // `emit_phi_predecessor_moves` re-materialises it into the FP
-            // destination rather than copying within a file.
-            if matches!(func.insts[src as usize], Inst::Imm(_)) && phi_fp {
+            // destination rather than copying within a file. An
+            // indeterminate income takes no move.
+            if super::emit_common::phi_income_reads_no_place(func, *kind, src) {
                 continue;
             }
             let op_fp = produces_fp_result(&func.insts[src as usize]);
@@ -2299,6 +2316,9 @@ fn verify_allocation(
                 ));
             }
         }
+    }
+    if let Some(msg) = first.into_inner() {
+        panic!("ICE: allocation check: `{}`: {msg}", func.name);
     }
 }
 
@@ -2897,7 +2917,7 @@ pub(crate) fn wide_values(func: &FunctionSsa) -> Vec<bool> {
 fn result_kind(inst: &Inst) -> ResultKind {
     use Inst::*;
     match inst {
-        Imm(_) | ImmData(_) | ImmCode(_) | ImmExtCode(_) | BlockAddr(_) | LocalAddr(_)
+        Imm(_) | Undef | ImmData(_) | ImmCode(_) | ImmExtCode(_) | BlockAddr(_) | LocalAddr(_)
         | TlsAddr(_) => ResultKind::Int,
         // A parameter seeded with an FP load kind arrives in an FP
         // argument register; classify it accordingly so the seed and
@@ -4032,6 +4052,61 @@ mod tests {
                 "{target:?}: no site's registers came out free of a save",
             );
         }
+    }
+
+    /// The allocation check passes what the allocator places and stops
+    /// the compile on a placement that breaks an invariant: here an
+    /// integer value moved to an FP register.
+    #[cfg(feature = "codegen_test")]
+    #[test]
+    fn the_allocation_check_stops_a_broken_placement() {
+        let target = Target::LinuxX64;
+        let src = "long f(long a, long b) { return a * b + a; }\n\
+                   int main(void) { return (int)f(2, 3); }\n";
+        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &Compiler::with_target(src.into(), target)
+                .compile()
+                .expect("compile"),
+            target,
+            false,
+            true,
+        )
+        .expect("produce_ssa_funcs");
+        let func = funcs.iter().find(|f| f.name == "f").expect("f");
+        let alloc = super::allocate(func, target, FixedRegs::NONE);
+        let reads = operands_read(func, &alloc.use_counts);
+        let fp_const = fp_constants(func, target, &reads);
+        let liveness = super::super::liveness::Liveness::compute_reading(func, reads);
+        let banks = RegBanks::new(target, FixedRegs::NONE);
+        let check = |places: &[Place]| {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                check_allocation(
+                    func,
+                    places,
+                    target,
+                    &banks,
+                    &liveness,
+                    &fp_const,
+                    &alloc.use_counts,
+                )
+            }))
+        };
+        assert!(
+            check(&alloc.places).is_ok(),
+            "the allocator's own placement is reported"
+        );
+        let mut broken = alloc.places.clone();
+        let v = broken
+            .iter()
+            .position(|p| matches!(p, Place::IntReg(_)))
+            .expect("an integer register value");
+        broken[v] = Place::FpReg(0);
+        let message = check(&broken).expect_err("a broken placement passes");
+        let text = message
+            .downcast_ref::<alloc::string::String>()
+            .map(|s| s.as_str())
+            .unwrap_or_default();
+        assert!(text.starts_with("ICE: allocation check: `f`:"), "{text}");
     }
 
     /// A callee-saved register an inline-asm block writes rides the

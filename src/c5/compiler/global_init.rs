@@ -111,6 +111,32 @@ impl Compiler {
         Ok(found)
     }
 
+    /// A function designator initializing an object that leads to a
+    /// function compares the function types (C99 6.7.8p11, 6.5.16.1p1),
+    /// which the tags do not record. Returns whether it compared; the
+    /// cursor is left where it was.
+    pub(super) fn check_designator_initializer(
+        &mut self,
+        var_ty: i64,
+        target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
+        line: usize,
+    ) -> Result<bool, C5Error> {
+        if target_fn.is_none() {
+            return Ok(false);
+        }
+        let Some(sym) = self.initializer_designator()? else {
+            return Ok(false);
+        };
+        if self.symbols[sym].class != Token::Fun as i64 {
+            return Ok(false);
+        }
+        let init_ty = self.symbols[sym].type_ + Ty::Ptr as i64;
+        let init_fn = Some((self.symbol_fn_type(sym), 1));
+        let what = ("initializer", "declared", "init");
+        self.check_fn_pointer_conversion((var_ty, target_fn), (init_ty, &init_fn), line, what)?;
+        Ok(true)
+    }
+
     fn id_ends_initializer(&mut self) -> Result<bool, C5Error> {
         let snap = self.lex.snapshot();
         self.next()?;
@@ -311,15 +337,7 @@ impl Compiler {
             self.next()?; // consume `}`
             return Ok(());
         }
-        if target_fn.is_some()
-            && let Some(sym) = self.initializer_designator()?
-            && self.symbols[sym].class == Token::Fun as i64
-        {
-            let init_ty = self.symbols[sym].type_ + Ty::Ptr as i64;
-            let init_fn = Some((self.symbol_fn_type(sym), 1));
-            let what = ("initializer", "declared", "init");
-            self.check_fn_pointer_conversion((var_ty, target_fn), (init_ty, &init_fn), line, what)?;
-        }
+        let fn_checked = self.check_designator_initializer(var_ty, target_fn, line)?;
         // C99 6.6p9 address constant, decided by the shared
         // constant-initializer evaluator, which sees the initializer
         // whole because a leading cast sets the stride of a trailing
@@ -333,7 +351,15 @@ impl Compiler {
                     if !matches!(reloc, InitElemReloc::None | InitElemReloc::Float64Bits)
                         && self.at_initializer_end() =>
                 {
-                    self.check_initializer_conversion(var_ty, ty, (false, false), line)?;
+                    if !fn_checked {
+                        self.check_constant_init_conversion(
+                            var_ty,
+                            target_fn,
+                            ty,
+                            (false, false),
+                            line,
+                        )?;
+                    }
                     if is_thread_local {
                         self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
                     } else {
@@ -442,7 +468,7 @@ impl Compiler {
                 && a.is_array
                 && (self.lex.tk == ';' || self.lex.tk == ',')
             {
-                self.check_initializer_conversion(var_ty, a.ty, (false, false), line)?;
+                self.check_constant_init_conversion(var_ty, target_fn, a.ty, (false, false), line)?;
                 if is_thread_local {
                     self.note_tls_init(var_offset);
                 }
@@ -503,7 +529,7 @@ impl Compiler {
                 Ok(leaf) if self.at_initializer_end() => {
                     let InitLeaf { value, reloc, ty } = leaf;
                     let flags = (leaf.is_zero_int(), false);
-                    self.check_initializer_conversion(var_ty, ty, flags, line)?;
+                    self.check_constant_init_conversion(var_ty, target_fn, ty, flags, line)?;
                     if is_thread_local {
                         self.write_tls_init_value(line, var_offset, value, reloc, var_ty)?;
                     } else {
@@ -515,7 +541,28 @@ impl Compiler {
             }
         }
 
-        self.write_global_scalar_initializer(var_ty, var_offset, is_thread_local, line)
+        self.write_global_scalar_initializer(var_ty, var_offset, is_thread_local, target_fn, line)
+    }
+
+    /// The conversion check of a constant initializer of type `init_ty`
+    /// into an object of type `var_ty`, a pointer to the function
+    /// `target_fn` names when it is one. The constant records no function
+    /// type, so beside `void *` the tags decide. TODO: a designator or an
+    /// address constant carries the function type it leads to.
+    pub(super) fn check_constant_init_conversion(
+        &mut self,
+        var_ty: i64,
+        target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
+        init_ty: i64,
+        flags: (bool, bool),
+        line: usize,
+    ) -> Result<(), C5Error> {
+        let what = ("initializer", "declared", "init");
+        let (declared, init) = ((var_ty, target_fn), (init_ty, &None));
+        if !self.check_function_conversion(declared, init, true, line, what)? {
+            self.check_initializer_conversion(declared, init, flags, line)?;
+        }
+        Ok(())
     }
 
     /// A parenthesized scalar initializer: a `(T)expr` cast, an array or
@@ -577,6 +624,7 @@ impl Compiler {
         var_ty: i64,
         var_offset: i64,
         is_thread_local: bool,
+        target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
         line: usize,
     ) -> Result<(), C5Error> {
         // A floating destination takes the f64 folder: the integer
@@ -590,7 +638,10 @@ impl Compiler {
         // as if by assignment (6.7.8p11).
         let cv = self.parse_const_expr_cond_val()?;
         let zero = matches!(cv, ConstVal::Int { val: 0, .. });
-        self.check_initializer_conversion(var_ty, cv.expr_ty(), (zero, false), line)?;
+        self.check_constant_init_conversion(var_ty, target_fn, cv.expr_ty(), (zero, false), line)?;
+        if let ConstVal::Int { val, ty } = cv {
+            self.check_constant_conversion(val, ty, var_ty, 0, line);
+        }
         // C99 6.6 / 6.3.2.3: an address constant in a pointer-width
         // integer slot is a link-time relocation, and takes the one a
         // pointer-typed slot would; gcc and clang accept it. Restricted

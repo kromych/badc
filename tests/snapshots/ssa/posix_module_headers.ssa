@@ -206,10 +206,10 @@ fn ent_pc=11 n_params=0 variadic=false locals=82
     v175 Imm(0)                                           -> x0
     v176 Imm(0)                                           -> x0
     v177 Imm(0)                                           -> x0
-    v178 CallExt { binding_idx=103, args=[], fp_arg_mask=0x0 } -> x0
+    v178 CallExt { binding_idx=104, args=[], fp_arg_mask=0x0 } -> x0
     v179 Imm(0)                                           -> x1
     v180 Store { addr=v178, disp=0, value=v179, kind=I32 } -> -
-    v181 CallExt { binding_idx=103, args=[], fp_arg_mask=0x0 } -> x0
+    v181 CallExt { binding_idx=104, args=[], fp_arg_mask=0x0 } -> x0
     v182 Load { addr=v181, disp=0, kind=I32 }             -> x0
     v183 BinopI { op=ne, lhs=v182, rhs_imm=0 }            -> x1
     v184 Imm(0)                                           -> x1

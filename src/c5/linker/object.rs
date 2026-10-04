@@ -52,6 +52,7 @@ const SHT_RELA: u32 = 4;
 const SHT_NOBITS: u32 = 8;
 const SHT_NOTE: u32 = 7;
 const SHT_X86_64_UNWIND: u32 = 0x7000_0001;
+const SHF_EXECINSTR: u64 = 0x4;
 const SHN_UNDEF: u16 = 0;
 const SHN_ABS: u16 = 0xfff1;
 const SHN_COMMON: u16 = 0xfff2;
@@ -217,6 +218,10 @@ pub struct SharedLibrary {
     /// bytes are code, so reading the "object" through it returns
     /// instructions.
     pub data_exports: alloc::collections::BTreeSet<String>,
+    /// The subset of `exports` that are thread-locals (`STT_TLS`). The
+    /// loader places the library's block, so an executable reaches one
+    /// through a GOT slot holding its offset from the thread pointer.
+    pub tls_exports: alloc::collections::BTreeSet<String>,
     /// Size and alignment of each data export whose library states
     /// them, which a copy of the object in the image takes.
     pub object_sizes: alloc::collections::BTreeMap<String, (u64, u64)>,
@@ -263,6 +268,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
     let mut soname = String::new();
     let mut exports = alloc::collections::BTreeSet::new();
     let mut data_exports = alloc::collections::BTreeSet::new();
+    let mut tls_exports = alloc::collections::BTreeSet::new();
     let mut object_sizes = alloc::collections::BTreeMap::new();
     for i in 0..ehdr.e_shnum as usize {
         let sh = shdr(i)?;
@@ -289,10 +295,16 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
                 // reach the object's address, not a PLT stub.
                 // Its alignment is the largest the library's placement
                 // shows, capped at the targets' `max_align_t`.
-                if (sym.st_info & 0xf) == 1 {
-                    let align = (1u64 << sym.st_value.trailing_zeros().min(4)).max(1);
-                    object_sizes.insert(name.clone(), (sym.st_size, align));
-                    data_exports.insert(name.clone());
+                match sym.st_info & 0xf {
+                    STT_OBJECT => {
+                        let align = (1u64 << sym.st_value.trailing_zeros().min(4)).max(1);
+                        object_sizes.insert(name.clone(), (sym.st_size, align));
+                        data_exports.insert(name.clone());
+                    }
+                    STT_TLS => {
+                        tls_exports.insert(name.clone());
+                    }
+                    _ => {}
                 }
                 exports.insert(name);
             }
@@ -319,6 +331,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         machine,
         exports,
         data_exports,
+        tls_exports,
         object_sizes,
         export_symbols: alloc::collections::BTreeMap::new(),
         export_versions: crate::c5::object::so_versions::parse_export_versions(bytes),
@@ -570,11 +583,21 @@ impl RelocSite<'_> {
         ))
     }
 
-    /// A thread-local access the link rewrites whose bytes are not the
-    /// sequence its ABI states; `expected` names what they had to be.
-    pub(crate) fn tls_sequence(&self, expected: &str) -> C5Error {
+    /// A thread-local access the link rewrites to `model` whose bytes are
+    /// not the sequence its ABI states; `expected` names what they had to be.
+    pub(crate) fn tls_sequence(&self, model: &str, expected: &str) -> C5Error {
         self.located(&format!(
-            "cannot rewrite {} against symbol `{}` to local-exec: the site is not {expected}",
+            "cannot rewrite {} against symbol `{}` to {model}: the site is not {expected}",
+            reloc_desc(self.machine, self.rtype),
+            self.symbol,
+        ))
+    }
+
+    /// A thread-local of shared library `soname` reached by an access the
+    /// link cannot direct to where the loader places that library's block.
+    pub(crate) fn library_thread_local(&self, soname: &str, why: &str) -> C5Error {
+        self.located(&format!(
+            "{} against symbol `{}`, a thread-local of shared library `{soname}`: {why}",
             reloc_desc(self.machine, self.rtype),
             self.symbol,
         ))
@@ -726,11 +749,13 @@ pub const STT_OBJECT: u8 = 1;
 pub const STT_FUNC: u8 = 2;
 pub const STT_SECTION: u8 = 3;
 pub const STT_FILE: u8 = 4;
+pub const STT_TLS: u8 = 6;
 /// `st_other & 0x3` -- the only visibility that reaches the dynamic
 /// symbol table.
 pub const STV_DEFAULT: u8 = 0;
 pub const STV_INTERNAL: u8 = 1;
 pub const STV_HIDDEN: u8 = 2;
+pub const STV_PROTECTED: u8 = 3;
 
 /// One entry from the unit's `.symtab`. Section symbols (the
 /// `STT_SECTION` LOCAL entries the writer emits) are dropped
@@ -840,6 +865,9 @@ pub struct NativeObject {
     /// `(name, sh_size)`. Symbol / string / relocation tables are
     /// metadata consumed by the parse, not dropped content.
     pub discarded: Vec<(String, u64)>,
+    /// The object's `.note.GNU-stack` is executable: it asks for an
+    /// executable stack.
+    pub exec_stack: bool,
     pub machine: NativeMachine,
     pub text: Vec<u8>,
     /// Largest sh_addralign among the text-family sections, at least 16.
@@ -999,6 +1027,40 @@ pub struct NativeObject {
     /// `.debug_rnglists`, `.debug_loclists`, `.debug_str_offsets`,
     /// `.debug_addr` and the rest -- with its relocations.
     pub debug_other: Vec<DebugInput>,
+    /// A Mach-O object's `__LD,__compact_unwind` and `__TEXT,__eh_frame`.
+    pub compact_unwind: Vec<CompactUnwindEntry>,
+    pub eh_frame: Option<EhFrameInput>,
+}
+
+/// A symbol of the unit, by index, and an addend.
+pub type SymRef = (usize, i64);
+
+/// One `__LD,__compact_unwind` entry: a function by its offset in the
+/// unit's text, its arm64 encoding, its personality routine and its LSDA.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CompactUnwindEntry {
+    pub text_offset: u64,
+    pub encoding: u32,
+    pub personality: Option<SymRef>,
+    pub lsda: Option<SymRef>,
+}
+
+/// A Mach-O input's `__eh_frame`: the bytes, each field holding its
+/// distance to `target` (with `got`, to a slot holding its address), and
+/// each FDE's offset; the field 8 bytes in names its function.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EhFrameInput {
+    pub bytes: Vec<u8>,
+    pub fields: Vec<EhFrameInputField>,
+    pub fdes: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EhFrameInputField {
+    pub offset: u32,
+    pub width: u8,
+    pub target: SymRef,
+    pub got: bool,
 }
 
 /// One `.debug_*` section outside the four `NativeObject` names.
@@ -1091,6 +1153,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         source: String::new(),
         sections,
         discarded: roles.discarded,
+        exec_stack: roles.exec_stack,
         machine,
         text: blobs.text.0,
         text_align: blobs.text.1,
@@ -1131,6 +1194,8 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         debug_info_relocs: debug.info_relocs,
         debug_line_relocs: debug.line_relocs,
         debug_other: debug.other,
+        compact_unwind: Vec::new(),
+        eh_frame: None,
     })
 }
 
@@ -1239,9 +1304,9 @@ fn read_elf_headers(bytes: &[u8]) -> Result<(NativeMachine, Vec<Elf64Shdr>, &[u8
 
 /// What each section header contributes, decided by name and flags.
 /// The family lists hold section indices in placement order: a section
-/// whose name is a C identifier sorts to the end of its family, so the
-/// blob splits into a prefix the linker appends whole and a suffix it
-/// regroups by name across units.
+/// [`grouped_by_name`] sorts to the end of its family, so the blob splits
+/// into a prefix the linker appends whole and a suffix it regroups by name
+/// across units.
 struct SectionRoles {
     text: Vec<usize>,
     rodata: Vec<usize>,
@@ -1267,6 +1332,8 @@ struct SectionRoles {
     /// Dropped content, for the link map's "Discarded input sections"
     /// report.
     discarded: Vec<(String, u64)>,
+    /// `.note.GNU-stack` is executable.
+    exec_stack: bool,
 }
 
 fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<SectionRoles, C5Error> {
@@ -1290,6 +1357,7 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
         debug_other: Vec::new(),
         init_array_sections: Vec::new(),
         discarded: Vec::new(),
+        exec_stack: false,
     };
     // Sections an `SHT_RELA` targets. `classify_section` needs this to
     // keep a relocated read-only section out of the read-only stream.
@@ -1305,6 +1373,9 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
     let mut section_family: Vec<SectionFamily> = alloc::vec![SectionFamily::Discard; shdrs.len()];
     for (i, sh) in shdrs.iter().enumerate() {
         let name = strtab_str(shstrtab_bytes, sh.sh_name as usize)?;
+        if name == ".note.GNU-stack" && sh.sh_flags & SHF_EXECINSTR != 0 {
+            roles.exec_stack = true;
+        }
         let channel = match name {
             ".symtab" => Some(&mut roles.symtab),
             ".note.badc" => Some(&mut roles.badc_note),
@@ -1320,11 +1391,7 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
             *slot = Some(i);
             continue;
         }
-        // `.debug_frame` is the image writer's own, built from the CFI.
-        if name.starts_with(".debug_")
-            && name != ".debug_frame"
-            && !matches!(sh.sh_type, SHT_RELA | SHT_NOBITS)
-        {
+        if name.starts_with(".debug_") && !matches!(sh.sh_type, SHT_RELA | SHT_NOBITS) {
             roles.debug_other.push(i);
             continue;
         }
@@ -1375,7 +1442,7 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
             )
         )
     });
-    // Stable, so anything not named as a C identifier keeps its order.
+    // Stable, so every section the merge leaves in place keeps its order.
     for list in [
         &mut roles.rodata,
         &mut roles.relro,
@@ -1384,7 +1451,7 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
     ] {
         list.sort_by_key(|&i| {
             strtab_str(shstrtab_bytes, shdrs[i].sh_name as usize)
-                .map(is_c_identifier)
+                .map(grouped_by_name)
                 .unwrap_or(false)
         });
     }
@@ -2333,6 +2400,15 @@ pub fn is_c_identifier(name: &str) -> bool {
     !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
+pub(crate) use crate::c5::object::eh_frame::EH_FRAME;
+
+/// Whether the merge gathers every unit's contribution to `name` into one
+/// output section: a C-identifier name, which `__start_` / `__stop_` bound,
+/// and the unwind table.
+pub fn grouped_by_name(name: &str) -> bool {
+    is_c_identifier(name) || name == EH_FRAME
+}
+
 /// Standard family for a section name, `None` when the name carries
 /// no convention and the header has to decide.
 fn family_by_name(name: &str) -> Option<SectionFamily> {
@@ -2357,12 +2433,14 @@ fn family_by_name(name: &str) -> Option<SectionFamily> {
 
 /// The single authority on which merged stream a section joins.
 ///
-/// The name table names the standard families; every other
-/// allocatable section (an `__attribute__((section("name")))`
-/// placement, an assembler `.pushsection` payload, `.eh_frame`)
-/// classifies from its header flags. `has_relocs` reports whether an
-/// `SHT_RELA` section targets it: a slot a relocation patches cannot
-/// sit in the stream the image maps `PF_R` from the file, so a
+/// The name table names the standard families; `.eh_frame` joins the
+/// relro stream whether or not a unit's copy is relocated, so every
+/// unit's table can form one section; every other allocatable section
+/// (an `__attribute__((section("name")))` placement, an assembler
+/// `.pushsection` payload) classifies from its header flags.
+/// `has_relocs` reports whether an `SHT_RELA` section targets it: a
+/// slot a relocation patches cannot sit in the stream the image maps
+/// `PF_R` from the file, so a
 /// relocated read-only section joins the relro stream -- writable for
 /// the loader's fixups, then re-protected read-only under
 /// `PT_GNU_RELRO`, the way a toolchain treats `.data.rel.ro`.
@@ -2378,7 +2456,6 @@ fn classify_section(
 ) -> Result<SectionFamily, C5Error> {
     const SHF_WRITE: u64 = 0x1;
     const SHF_ALLOC: u64 = 0x2;
-    const SHF_EXECINSTR: u64 = 0x4;
     const SHF_TLS: u64 = 0x400;
     let demote = |f: SectionFamily| {
         if f == SectionFamily::RoData && has_relocs {
@@ -2406,6 +2483,9 @@ fn classify_section(
             MODULE,
             &format!("section `{name}` is SHF_TLS but not a `.tdata` / `.tbss` family name"),
         ));
+    }
+    if name == EH_FRAME && sh_type == SHT_PROGBITS {
+        return Ok(SectionFamily::RelRo);
     }
     match sh_type {
         SHT_PROGBITS if sh_flags & SHF_EXECINSTR != 0 => Ok(SectionFamily::Text),
@@ -2958,8 +3038,8 @@ mod tests {
 
     /// clang types `.eh_frame` SHT_X86_64_UNWIND, the x86-64 psABI's
     /// unwind-table type; it reads as SHT_PROGBITS there and joins the
-    /// read-only stream. The value is processor-specific, and on AArch64
-    /// it names nothing the merge models.
+    /// relro stream with every other unit's table. The value is
+    /// processor-specific, and on AArch64 it names nothing the merge models.
     #[test]
     fn an_x86_64_unwind_section_reads_as_progbits() {
         const SHF_ALLOC: u64 = 0x2;
@@ -2975,7 +3055,7 @@ mod tests {
         let obj = parse_native_elf(&build_test_elf(EM_X86_64, &plans)).expect("x86-64 object");
         let eh = obj.sections.iter().find(|s| s.name == ".eh_frame");
         assert!(
-            eh.is_some_and(|s| s.family == SectionFamily::RoData && s.size == 8),
+            eh.is_some_and(|s| s.family == SectionFamily::RelRo && s.size == 8),
             "{:?}",
             obj.sections
         );
@@ -3046,8 +3126,9 @@ mod tests {
                 SectionFamily::RelRo,
             ),
             (".bss", SHT_NOBITS, A | W, SectionFamily::Bss),
+            // The unwind table, relocated or not, is one relro section.
+            (".eh_frame", SHT_PROGBITS, A, SectionFamily::RelRo),
             // Flag-classified strangers.
-            (".eh_frame", SHT_PROGBITS, A, SectionFamily::RoData),
             (".my.rw", SHT_PROGBITS, A | W, SectionFamily::Data),
             (".my.ro", SHT_PROGBITS, A, SectionFamily::RoData),
             (".my.code", SHT_PROGBITS, A | X, SectionFamily::Text),
@@ -3347,6 +3428,8 @@ mod tests {
         dynstr.extend_from_slice(b"bar\0");
         let ext = dynstr.len() as u32;
         dynstr.extend_from_slice(b"ext\0");
+        let tv = dynstr.len() as u32;
+        dynstr.extend_from_slice(b"tv\0");
         let soname_off = dynstr.len() as u64;
         dynstr.extend_from_slice(b"libtest.so.1\0");
 
@@ -3355,6 +3438,7 @@ mod tests {
         push_test_sym(&mut dynsym, foo, 0x12, 1, 0, 0); // GLOBAL FUNC, defined -> export
         push_test_sym(&mut dynsym, bar, 0x21, 1, 0, 0); // WEAK OBJECT, defined -> export
         push_test_sym(&mut dynsym, ext, 0x12, 0, 0, 0); // GLOBAL FUNC, SHN_UNDEF -> import, excluded
+        push_test_sym(&mut dynsym, tv, 0x16, 1, 0, 0); // GLOBAL TLS, defined -> export
 
         let mut dynamic = Vec::new();
         write_struct(
@@ -3397,11 +3481,12 @@ mod tests {
         assert!(lib.exports.contains("foo"));
         assert!(lib.exports.contains("bar"));
         assert!(!lib.exports.contains("ext")); // SHN_UNDEF is an import, not an export
-        assert_eq!(lib.exports.len(), 2);
-        // `foo` is STT_FUNC, `bar` is STT_OBJECT: only the object is a
-        // data export.
+        assert_eq!(lib.exports.len(), 3);
+        // `foo` is STT_FUNC, `bar` is STT_OBJECT, `tv` is STT_TLS: only the
+        // object is a data export, and only `tv` a thread-local one.
         assert!(lib.data_exports.contains("bar"));
         assert!(!lib.data_exports.contains("foo"));
         assert_eq!(lib.data_exports.len(), 1);
+        assert_eq!(lib.tls_exports.iter().collect::<Vec<_>>(), ["tv"]);
     }
 }

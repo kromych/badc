@@ -134,23 +134,22 @@ Disassembly of section .text:
                	retq
 
 <narrow>:
-               	movsbq	%dil, %rax
-               	testl	%eax, %eax
-               	jle	<addr>
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	movsbq	%dil, %rdi
                	movswq	%si, %rsi
-               	leaq	-0x1(%rdi), %rax
-               	subq	%rdi, %rsi
-               	movq	%rax, %rdi
-               	callq	<addr>
-               	movswq	%ax, %rax
+               	xorl	%eax, %eax
+               	testl	%edi, %edi
+               	jle	<addr>
+               	leaq	-0x1(%rdi), %rcx
+               	movq	%rsi, %rdx
+               	subq	%rdi, %rdx
+               	movswq	%dx, %rsi
                	incq	%rax
                	movswq	%ax, %rax
-               	popq	%rbp
-               	retq
-               	movswq	%si, %rax
+               	movq	%rcx, %rdi
+               	testl	%edi, %edi
+               	jg	<addr>
+               	addq	%rsi, %rax
+               	movswq	%ax, %rax
                	retq
 
 <ucount>:

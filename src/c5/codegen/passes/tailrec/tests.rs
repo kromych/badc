@@ -278,6 +278,106 @@ fn narrow_return_reextends_the_accumulator() {
     );
 }
 
+/// `int f(int n){ if(n<2) return n; return n + f(n-1); }` as the front end
+/// lowers a narrow result: the call is narrowed by `call` where the sum
+/// reads it, and the sum re-narrowed by `sum` on return. The base return
+/// is the parameter.
+fn accum_narrowed_call(param: LoadKind, call: Narrow, sum: Narrow) -> FunctionSsa {
+    let mut f = accum_add_long();
+    f.insts[0] = Inst::ParamRef {
+        idx: 0,
+        kind: param,
+    };
+    // rec block: v2 sub; v3 Call; v4 call(v3); v5 add(v0, v4); v6 sum(v5)
+    f.insts[4] = call.inst(3);
+    f.insts.push(Inst::Binop {
+        op: BinOp::Add,
+        lhs: 0,
+        rhs: 4,
+    });
+    f.insts.push(sum.inst(5));
+    f.inst_src = vec![(0, 0); f.insts.len()];
+    f.f32_values = vec![false; f.insts.len()];
+    f.blocks[2].inst_range = 2..7;
+    f.blocks[2].terminator = Terminator::Return(6);
+    f
+}
+
+#[test]
+fn a_call_narrowed_at_its_use_still_accumulates() {
+    // The use narrows the call to at least the returned width, so the low
+    // bits the return keeps are the call's own: the recursion becomes a
+    // loop, for a signed result's extension and an unsigned one's mask.
+    for (param, call, sum) in [
+        (
+            LoadKind::I32,
+            Narrow::Sign(LoadKind::I32),
+            Narrow::Sign(LoadKind::I32),
+        ),
+        (
+            LoadKind::I16,
+            Narrow::Sign(LoadKind::I32),
+            Narrow::Sign(LoadKind::I16),
+        ),
+        (
+            LoadKind::U32,
+            Narrow::Zero(0xffff_ffff),
+            Narrow::Zero(0xffff_ffff),
+        ),
+        (LoadKind::U16, Narrow::Zero(0xffff), Narrow::Zero(0xffff)),
+    ] {
+        let mut f = accum_narrowed_call(param, call, sum);
+        run(core::slice::from_mut(&mut f));
+        assert_well_formed(&f);
+        assert!(
+            !f.insts
+                .iter()
+                .any(|i| matches!(i, Inst::Call { target_pc: 0, .. })),
+            "{param:?} {call:?}: the self-call must be eliminated"
+        );
+        assert_single_backedge(&f, (f.blocks.len() - 1) as BlockId);
+    }
+}
+
+#[test]
+fn a_call_narrowed_below_the_result_keeps_the_recursion() {
+    // An 8-bit view of the call drops bits the wider result keeps.
+    for (param, call, sum) in [
+        (
+            LoadKind::I32,
+            Narrow::Sign(LoadKind::I8),
+            Narrow::Sign(LoadKind::I32),
+        ),
+        (LoadKind::U32, Narrow::Zero(0xff), Narrow::Zero(0xffff_ffff)),
+    ] {
+        assert!(
+            unchanged(&accum_narrowed_call(param, call, sum)),
+            "{call:?}"
+        );
+    }
+}
+
+#[test]
+fn a_base_return_the_narrowing_would_change_keeps_the_recursion() {
+    // `long f(long n){ if(n<2) return 1L << 40; return (int)(n + f(n-1)); }`:
+    // only the recursive return narrows. The loop would narrow the base
+    // return too, so the function keeps its recursion.
+    let mut f = accum_add_long();
+    f.insts.push(Inst::Extend {
+        value: 4,
+        kind: LoadKind::I32,
+        nsw: false,
+    });
+    f.insts.push(Inst::Imm(1 << 40));
+    f.inst_src = vec![(0, 0); f.insts.len()];
+    f.f32_values = vec![false; f.insts.len()];
+    f.blocks[1].inst_range = 6..7;
+    f.blocks[1].terminator = Terminator::Return(6);
+    f.blocks[2].inst_range = 2..6;
+    f.blocks[2].terminator = Terminator::Return(5);
+    assert!(unchanged(&f));
+}
+
 /// `void f(long n){ if(!n) return; g(); f(n-1); }` modelled as a void
 /// helper whose returns are Imm(0): the last effectful op is the
 /// self-call and the return is a constant.

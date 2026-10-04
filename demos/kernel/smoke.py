@@ -18,7 +18,9 @@ timer + an EL1 vector table, reaching the scheduler through TPIDR_EL1 and a
 requires the unhandled-vector diagnostic on the serial line. A fourth holds
 the 8259's ICW1..ICW2 window open past a firmware timer period, where an
 IRQ0 taken with interrupts still enabled arrives as vector 0, and requires
-the normal boot.
+the normal boot. A fifth holds AArch64's window between the VBAR_EL1 and
+TPIDR_EL1 writes open the same way, where a tick reaches the ISR before the
+scheduler pointer it loads.
 
 Override the badc binary via `$BADC` (default: `target/release/badc[.exe]`).
 The boot check is skipped (build-only) when QEMU or the firmware is missing.
@@ -110,6 +112,21 @@ KERNELS = [
         {"x64": ["BADC-PREEMPT: start", "[thread 0]", "[thread 1]",
                  "[thread 2]", "BADC-PREEMPT: scheduler done",
                  "BADC-PREEMPT-OK"]},
+    ),
+    (
+        # The vector-table hand-over. AllocatePages returns with IRQ unmasked,
+        # and a firmware tick taken between the VBAR_EL1 and TPIDR_EL1 writes
+        # enters the ISR before the scheduler pointer it loads is set: a fault
+        # with IRQ masked, and no output after the first line. The window is
+        # three instructions wide and the failure was seen once in a gate run;
+        # this build holds it open past a tick, so a setup that does not mask
+        # fails every boot. AArch64 only.
+        "preempt-vbar",
+        "preempt.c",
+        ["-DPREEMPT_VBAR_WINDOW_STRESS"],
+        {"aarch64": ["BADC-PREEMPT: start", "[thread 0]", "[thread 1]",
+                     "[thread 2]", "BADC-PREEMPT: scheduler done",
+                     "BADC-PREEMPT-OK"]},
     ),
 ]
 
@@ -288,7 +305,7 @@ def self_test() -> int:
     assert all(c.boots for c in full)
     # The boot count is the gate's budget: a kernel added here costs every
     # Linux lane another emulator start.
-    assert (len(full), sum(c.arch == "x64" for c in full)) == (12, 8), full
+    assert (len(full), sum(c.arch == "x64" for c in full)) == (14, 8), full
     for arch in ("x64", "aarch64"):
         kept = plan(arch)
         assert [c[:-1] for c in kept] == [c[:-1] for c in full]

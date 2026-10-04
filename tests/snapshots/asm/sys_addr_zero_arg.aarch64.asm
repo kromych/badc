@@ -32,19 +32,3 @@ Disassembly of section .text:
                	mov	x0, #0x2a               // =42
                	ldp	x29, x30, [sp], #0x10
                	ret
-
-<__c5_sys_geteuid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	bl	<addr>
-               	mov	w0, w0
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-
-<__c5_sys_getpid>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	bl	<addr>
-               	sxtw	x0, w0
-               	ldp	x29, x30, [sp], #0x10
-               	ret

@@ -39,10 +39,12 @@ use super::elf_reloc_types::{
     R_AARCH64_MOVW_SABS_G2, R_AARCH64_MOVW_UABS_G0, R_AARCH64_MOVW_UABS_G0_NC,
     R_AARCH64_MOVW_UABS_G1, R_AARCH64_MOVW_UABS_G1_NC, R_AARCH64_MOVW_UABS_G2,
     R_AARCH64_MOVW_UABS_G2_NC, R_AARCH64_MOVW_UABS_G3, R_AARCH64_PREL32, R_AARCH64_PREL64,
-    R_AARCH64_TLS_DTPREL64, R_AARCH64_TLSLE_ADD_TPREL_HI12, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC,
-    R_AARCH64_TSTBR14, R_X86_64_8, R_X86_64_16, R_X86_64_32, R_X86_64_32S, R_X86_64_64,
-    R_X86_64_DTPOFF64, R_X86_64_PC8, R_X86_64_PC16, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32,
-    R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32, i386_field_width, i386_reloc_desc,
+    R_AARCH64_TLS_DTPREL64, R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21,
+    R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, R_AARCH64_TLSLE_ADD_TPREL_HI12,
+    R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_AARCH64_TSTBR14, R_X86_64_8, R_X86_64_16, R_X86_64_32,
+    R_X86_64_32S, R_X86_64_64, R_X86_64_DTPOFF64, R_X86_64_GOTTPOFF, R_X86_64_PC8, R_X86_64_PC16,
+    R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32,
+    i386_field_width, i386_reloc_desc,
 };
 
 const ELF_DATA_LSB: u8 = 1;
@@ -2071,7 +2073,8 @@ impl<'a> RelocWriter<'a> {
         let build = self.build;
         if self.elf_tls_interop {
             for f in &build.elf_tpoff_fixups {
-                if let super::ElfTpoffTarget::Extern(name) = &f.target
+                if let super::ElfTpoffTarget::Extern(name)
+                | super::ElfTpoffTarget::InitialExec(name) = &f.target
                     && !self.names.extern_tls_names.contains(&name.as_str())
                 {
                     self.names.extern_tls_names.push(name.as_str());
@@ -3057,47 +3060,40 @@ impl<'a> RelocWriter<'a> {
         }
         if self.elf_tls_interop {
             let tls_init_len = self.tls_init_len();
+            let extern_sym = |name: &str| {
+                let pos = (self.names.extern_tls_names.iter())
+                    .position(|n| *n == name)
+                    .expect("extern_tls_names contains every fixup's symbol name");
+                self.syms.extern_tls_sym_idx[pos] as u64
+            };
             for f in &build.elf_tpoff_fixups {
-                let (sym_idx, r_addend) = match &f.target {
-                    super::ElfTpoffTarget::Extern(name) => {
-                        let pos = self
-                            .names
-                            .extern_tls_names
-                            .iter()
-                            .position(|n| *n == name.as_str())
-                            .expect("extern_tls_names contains every fixup's symbol name");
-                        (self.syms.extern_tls_sym_idx[pos] as u64, 0i64)
-                    }
+                let (sym_idx, r_addend, initial_exec) = match &f.target {
+                    super::ElfTpoffTarget::Extern(name) => (extern_sym(name), 0i64, false),
+                    super::ElfTpoffTarget::InitialExec(name) => (extern_sym(name), 0i64, true),
                     super::ElfTpoffTarget::Local(off) => {
                         let off = *off as i64;
                         if off >= tls_init_len {
-                            (self.syms.tbss_sec_sym, off - tls_init_len)
+                            (self.syms.tbss_sec_sym, off - tls_init_len, false)
                         } else {
-                            (self.syms.tdata_sec_sym, off)
+                            (self.syms.tdata_sec_sym, off, false)
                         }
                     }
                 };
                 let at = f.imm_offset as u64;
-                match machine {
-                    Machine::X86_64 => {
-                        Self::push_rela(&mut table, at, sym_idx, R_X86_64_TPOFF32, r_addend);
-                    }
-                    Machine::Aarch64 => {
-                        Self::push_rela(
-                            &mut table,
-                            at,
-                            sym_idx,
-                            R_AARCH64_TLSLE_ADD_TPREL_HI12,
-                            r_addend,
-                        );
-                        Self::push_rela(
-                            &mut table,
-                            at + 4,
-                            sym_idx,
-                            R_AARCH64_TLSLE_ADD_TPREL_LO12_NC,
-                            r_addend,
-                        );
-                    }
+                let relocs: &[(u64, u32, i64)] = match (machine, initial_exec) {
+                    (Machine::X86_64, false) => &[(at, R_X86_64_TPOFF32, r_addend)],
+                    (Machine::X86_64, true) => &[(at, R_X86_64_GOTTPOFF, -4)],
+                    (Machine::Aarch64, false) => &[
+                        (at, R_AARCH64_TLSLE_ADD_TPREL_HI12, r_addend),
+                        (at + 4, R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, r_addend),
+                    ],
+                    (Machine::Aarch64, true) => &[
+                        (at, R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21, 0),
+                        (at + 4, R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, 0),
+                    ],
+                };
+                for &(r_offset, rtype, addend) in relocs {
+                    Self::push_rela(&mut table, r_offset, sym_idx, rtype, addend);
                 }
             }
         }
@@ -3572,6 +3568,7 @@ impl<'a> RelocWriter<'a> {
     /// addend; label-address and function-pointer initializers against
     /// `.text` (or the named section the carve moved the function to), the
     /// addend being the target's offset within the section.
+    /// A slot the loader binds names the import's own symbol.
     fn emit_data_relocs(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         self.relocs.data = Vec::with_capacity(
@@ -3594,6 +3591,10 @@ impl<'a> RelocWriter<'a> {
         for r in &build.code_relocs {
             let (sym, addend) = self.code_reloc_ref(r.target_ent_pc as usize)?;
             self.push_data_row(r.data_offset, sym, addend);
+        }
+        for b in &build.data_import_binds {
+            let sym = self.syms.import_sym_indices[b.import] as u64;
+            self.push_data_row(b.data_offset, sym, b.addend);
         }
         Ok(())
     }
@@ -4734,22 +4735,19 @@ fn build_badc_note(
         push_note_record(&mut out, NT_BADC_MACHO_TLV_DESC_SYM, &desc);
     }
 
-    if !elf_tpoff_fixups.is_empty() {
-        let mut desc: Vec<u8> = Vec::new();
-        for f in elf_tpoff_fixups {
-            desc.extend_from_slice(&(f.imm_offset as u64).to_le_bytes());
-            match &f.target {
-                super::ElfTpoffTarget::Local(off) => {
-                    desc.push(0);
-                    desc.extend_from_slice(&off.to_le_bytes());
-                }
-                super::ElfTpoffTarget::Extern(sym_name) => {
-                    desc.push(1);
-                    desc.extend_from_slice(sym_name.as_bytes());
-                    desc.push(0);
-                }
-            }
-        }
+    // An initial-exec site is stated by its relocations alone.
+    let mut desc: Vec<u8> = Vec::new();
+    for f in elf_tpoff_fixups {
+        let (kind, payload) = match &f.target {
+            super::ElfTpoffTarget::Local(off) => (0u8, off.to_le_bytes().to_vec()),
+            super::ElfTpoffTarget::Extern(sym_name) => (1, [sym_name.as_bytes(), &[0]].concat()),
+            super::ElfTpoffTarget::InitialExec(_) => continue,
+        };
+        desc.extend_from_slice(&(f.imm_offset as u64).to_le_bytes());
+        desc.push(kind);
+        desc.extend_from_slice(&payload);
+    }
+    if !desc.is_empty() {
         push_note_record(&mut out, NT_BADC_ELF_TPOFF, &desc);
     }
 

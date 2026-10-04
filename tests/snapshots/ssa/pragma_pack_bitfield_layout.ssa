@@ -81,7 +81,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=18
   block 3  start_pc=0
     v51  Imm(7)                                           -> x0
     v52  LifetimeEnd(-15)                                 -> -
-    v53  LifetimeEnd(-15)                                 -> -
+    v53  LifetimeEnd(0)                                   -> -
     v54  LifetimeEnd(0)                                   -> -
     v55  LifetimeEnd(-2)                                  -> -
     v56  LifetimeEnd(-4)                                  -> -
@@ -161,7 +161,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=18
   block 8  start_pc=0
     v121 Imm(8)                                           -> x0
     v122 LifetimeEnd(-15)                                 -> -
-    v123 LifetimeEnd(-15)                                 -> -
+    v123 LifetimeEnd(0)                                   -> -
     v124 LifetimeEnd(0)                                   -> -
     v125 LifetimeEnd(-2)                                  -> -
     v126 LifetimeEnd(-4)                                  -> -
@@ -229,7 +229,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=18
   block 12  start_pc=0
     v181 Imm(9)                                           -> x0
     v182 LifetimeEnd(-15)                                 -> -
-    v183 LifetimeEnd(-15)                                 -> -
+    v183 LifetimeEnd(0)                                   -> -
     v184 LifetimeEnd(0)                                   -> -
     v185 LifetimeEnd(-2)                                  -> -
     v186 LifetimeEnd(-4)                                  -> -
@@ -253,7 +253,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=18
   block 14  start_pc=0
     v201 Imm(10)                                          -> x0
     v202 LifetimeEnd(-15)                                 -> -
-    v203 LifetimeEnd(-15)                                 -> -
+    v203 LifetimeEnd(0)                                   -> -
     v204 LifetimeEnd(0)                                   -> -
     v205 LifetimeEnd(-2)                                  -> -
     v206 LifetimeEnd(-4)                                  -> -
@@ -349,7 +349,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=18
   block 21  start_pc=0
     v283 Imm(11)                                          -> x0
     v284 LifetimeEnd(-15)                                 -> -
-    v285 LifetimeEnd(-15)                                 -> -
+    v285 LifetimeEnd(0)                                   -> -
     v286 LifetimeEnd(0)                                   -> -
     v287 LifetimeEnd(-2)                                  -> -
     v288 LifetimeEnd(-4)                                  -> -
@@ -427,7 +427,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=18
   block 23  start_pc=0
     v357 Imm(12)                                          -> x0
     v358 LifetimeEnd(-15)                                 -> -
-    v359 LifetimeEnd(-15)                                 -> -
+    v359 LifetimeEnd(0)                                   -> -
     v360 LifetimeEnd(0)                                   -> -
     v361 LifetimeEnd(-2)                                  -> -
     v362 LifetimeEnd(-4)                                  -> -
@@ -520,7 +520,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=18
   block 28  start_pc=0
     v440 Imm(13)                                          -> x0
     v441 LifetimeEnd(-15)                                 -> -
-    v442 LifetimeEnd(-15)                                 -> -
+    v442 LifetimeEnd(0)                                   -> -
     v443 LifetimeEnd(0)                                   -> -
     v444 LifetimeEnd(-2)                                  -> -
     v445 LifetimeEnd(-4)                                  -> -
@@ -589,7 +589,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=18
   block 32  start_pc=0
     v501 Imm(14)                                          -> x0
     v502 LifetimeEnd(-15)                                 -> -
-    v503 LifetimeEnd(-15)                                 -> -
+    v503 LifetimeEnd(0)                                   -> -
     v504 LifetimeEnd(0)                                   -> -
     v505 LifetimeEnd(-2)                                  -> -
     v506 LifetimeEnd(-4)                                  -> -
@@ -657,7 +657,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=18
   block 36  start_pc=0
     v561 Imm(15)                                          -> x0
     v562 LifetimeEnd(-15)                                 -> -
-    v563 LifetimeEnd(-15)                                 -> -
+    v563 LifetimeEnd(0)                                   -> -
     v564 LifetimeEnd(0)                                   -> -
     v565 LifetimeEnd(-2)                                  -> -
     v566 LifetimeEnd(-4)                                  -> -
@@ -769,7 +769,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=18
   block 40  start_pc=0
     v665 Imm(16)                                          -> x0
     v666 LifetimeEnd(-15)                                 -> -
-    v667 LifetimeEnd(-15)                                 -> -
+    v667 LifetimeEnd(0)                                   -> -
     v668 LifetimeEnd(0)                                   -> -
     v669 LifetimeEnd(-2)                                  -> -
     v670 LifetimeEnd(-4)                                  -> -
@@ -838,7 +838,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=18
   block 45  start_pc=0
     v724 Imm(17)                                          -> x0
     v725 LifetimeEnd(-15)                                 -> -
-    v726 LifetimeEnd(-15)                                 -> -
+    v726 LifetimeEnd(0)                                   -> -
     v727 LifetimeEnd(0)                                   -> -
     v728 LifetimeEnd(-2)                                  -> -
     v729 LifetimeEnd(-4)                                  -> -
@@ -891,7 +891,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=18
   block 49  start_pc=0
     v769 Imm(18)                                          -> x0
     v770 LifetimeEnd(-15)                                 -> -
-    v771 LifetimeEnd(-15)                                 -> -
+    v771 LifetimeEnd(0)                                   -> -
     v772 LifetimeEnd(0)                                   -> -
     v773 LifetimeEnd(-2)                                  -> -
     v774 LifetimeEnd(-4)                                  -> -
@@ -906,245 +906,246 @@ fn ent_pc=5 n_params=0 variadic=false locals=18
     terminator Return(v769)   (exit_acc=v769)
   block 50  start_pc=0
     v783 ImmData(176)                                     -> x0
-    v784 Load { addr=v783, disp=0, kind=U32, align=1 }    -> x0
-    v785 BinopI { op=and, lhs=v784, rhs_imm=4194303 }     -> x0
-    v786 BinopI { op=shl, lhs=v785, rhs_imm=42 }          -> x0
-    v787 BinopI { op=shr, lhs=v786, rhs_imm=42 }          -> x0
-    v788 BinopI { op=ne, lhs=v787, rhs_imm=-1000000 }     -> x0
-    terminator Bz { cond=v788, target=b52, fall=b51 }   (exit_acc=v788)
+    v784 Load { addr=v783, disp=0, kind=U16, align=1 }    -> x1
+    v785 BinopI { op=add, lhs=v783, rhs_imm=2 }           -> x2
+    v786 Load { addr=v783, disp=2, kind=U8 }              -> x0
+    v787 BinopI { op=shl, lhs=v786, rhs_imm=16 }          -> x0
+    v788 Binop { op=or, lhs=v784, rhs=v787 }              -> x0
+    v789 BinopI { op=and, lhs=v788, rhs_imm=4194303 }     -> x0
+    v790 BinopI { op=shl, lhs=v789, rhs_imm=42 }          -> x0
+    v791 BinopI { op=shr, lhs=v790, rhs_imm=42 }          -> x0
+    v792 BinopI { op=ne, lhs=v791, rhs_imm=-1000000 }     -> x0
+    terminator Bz { cond=v792, target=b52, fall=b51 }   (exit_acc=v792)
   block 51  start_pc=0
-    v789 Imm(19)                                          -> x0
-    v790 LifetimeEnd(-15)                                 -> -
-    v791 LifetimeEnd(-15)                                 -> -
-    v792 LifetimeEnd(0)                                   -> -
-    v793 LifetimeEnd(-2)                                  -> -
-    v794 LifetimeEnd(-4)                                  -> -
-    v795 LifetimeEnd(-6)                                  -> -
-    v796 LifetimeEnd(-8)                                  -> -
-    v797 LifetimeEnd(-16)                                 -> -
-    v798 LifetimeEnd(-10)                                 -> -
-    v799 LifetimeEnd(-12)                                 -> -
-    v800 LifetimeEnd(-14)                                 -> -
-    v801 LifetimeEnd(-17)                                 -> -
-    v802 LifetimeEnd(-18)                                 -> -
-    terminator Return(v789)   (exit_acc=v789)
+    v793 Imm(19)                                          -> x0
+    v794 LifetimeEnd(-15)                                 -> -
+    v795 LifetimeEnd(0)                                   -> -
+    v796 LifetimeEnd(0)                                   -> -
+    v797 LifetimeEnd(-2)                                  -> -
+    v798 LifetimeEnd(-4)                                  -> -
+    v799 LifetimeEnd(-6)                                  -> -
+    v800 LifetimeEnd(-8)                                  -> -
+    v801 LifetimeEnd(-16)                                 -> -
+    v802 LifetimeEnd(-10)                                 -> -
+    v803 LifetimeEnd(-12)                                 -> -
+    v804 LifetimeEnd(-14)                                 -> -
+    v805 LifetimeEnd(-17)                                 -> -
+    v806 LifetimeEnd(-18)                                 -> -
+    terminator Return(v793)   (exit_acc=v793)
   block 52  start_pc=0
-    v803 Imm(0)                                           -> x0
-    v804 Imm(0)                                           -> x0
-    v805 Imm(106)                                         -> x0
-    v806 Imm(0)                                           -> x0
-    v807 LocalAddr(-15)                                   -> x0
-    v808 ImmData(128)                                     -> x1
-    v809 Mcpy { dst=v807, src=v808, size=3, align=8 }     -> -
-    v810 Imm(0)                                           -> x1
-    v811 Imm(106)                                         -> x1
-    v812 Imm(106)                                         -> x1
-    v813 Imm(59672695062659072)                           -> x1
-    v814 Imm(106)                                         -> x1
-    v815 Imm(0)                                           -> x1
-    v816 Imm(1)                                           -> x1
-    v817 Imm(0)                                           -> x1
-    v818 LocalAddr(-15)                                   -> x1
-    v819 Load { addr=v807, disp=0, kind=U32, align=1 }    -> x1
-    v820 BinopI { op=and, lhs=v819, rhs_imm=4194303 }     -> x1
-    v821 BinopI { op=shl, lhs=v820, rhs_imm=42 }          -> x1
-    v822 BinopI { op=shr, lhs=v821, rhs_imm=42 }          -> x1
-    v823 BinopI { op=ne, lhs=v822, rhs_imm=-1000000 }     -> x1
-    v824 BinopI { op=ne, lhs=v823, rhs_imm=0 }            -> x2
-    v825 Imm(0)                                           -> x2
-    v826 Imm(0)                                           -> x2
-    v827 Imm(0)                                           -> x2
-    v828 Imm(0)                                           -> x2
-    terminator Bnz { cond=v823, target=b54, fall=b53 }   (exit_acc=v823)
+    v807 Imm(0)                                           -> x0
+    v808 Imm(0)                                           -> x0
+    v809 Imm(106)                                         -> x0
+    v810 Imm(0)                                           -> x0
+    v811 Imm(0)                                           -> x0
+    v812 Imm(0)                                           -> x0
+    v813 Imm(48576)                                       -> x0
+    v814 Imm(0)                                           -> x0
+    v815 Imm(48)                                          -> x0
+    v816 Imm(0)                                           -> x0
+    v817 Imm(0)                                           -> x0
+    v818 Imm(106)                                         -> x0
+    v819 Imm(106)                                         -> x0
+    v820 Imm(59672695062659072)                           -> x0
+    v821 Imm(106)                                         -> x0
+    v822 Imm(0)                                           -> x0
+    v823 Imm(1)                                           -> x0
+    v824 Imm(0)                                           -> x0
+    v825 Imm(0)                                           -> x0
+    v826 Imm(48576)                                       -> x0
+    v827 Imm(0)                                           -> x0
+    v828 Imm(48)                                          -> x0
+    v829 Imm(3145728)                                     -> x0
+    v830 Imm(3194304)                                     -> x0
+    v831 Imm(3194304)                                     -> x0
+    v832 Imm(-4398046511104000000)                        -> x0
+    v833 Imm(-1000000)                                    -> x0
+    v834 Imm(0)                                           -> x0
+    v835 Imm(0)                                           -> x0
+    v836 Imm(0)                                           -> x0
+    v837 Imm(0)                                           -> x0
+    v838 Imm(0)                                           -> x0
+    v839 Imm(0)                                           -> x0
+    v840 ImmData(208)                                     -> x0
+    v841 Load { addr=v840, disp=0, kind=U16, align=1 }    -> x0
+    v842 BinopI { op=and, lhs=v841, rhs_imm=32767 }       -> x0
+    v843 BinopI { op=shl, lhs=v842, rhs_imm=49 }          -> x0
+    v844 BinopI { op=shr, lhs=v843, rhs_imm=49 }          -> x0
+    v845 BinopI { op=ne, lhs=v844, rhs_imm=-3 }           -> x0
+    v846 Imm(0)                                           -> x1
+    v847 Imm(0)                                           -> x1
+    v848 Imm(0)                                           -> x1
+    terminator Bz { cond=v845, target=b54, fall=b53 }   (exit_acc=v845)
   block 53  start_pc=0
-    v829 ImmData(208)                                     -> x1
-    v830 Load { addr=v829, disp=0, kind=U16, align=1 }    -> x1
-    v831 BinopI { op=and, lhs=v830, rhs_imm=32767 }       -> x1
-    v832 BinopI { op=shl, lhs=v831, rhs_imm=49 }          -> x1
-    v833 BinopI { op=shr, lhs=v832, rhs_imm=49 }          -> x1
-    v834 BinopI { op=ne, lhs=v833, rhs_imm=-3 }           -> x1
-    v835 Imm(0)                                           -> x2
-    v836 Imm(0)                                           -> x2
-    v837 Imm(0)                                           -> x2
-    terminator Bz { cond=v834, target=b55, fall=b54 }   (exit_acc=v834)
+    v849 Imm(20)                                          -> x0
+    v850 LifetimeEnd(-15)                                 -> -
+    v851 LifetimeEnd(0)                                   -> -
+    v852 LifetimeEnd(0)                                   -> -
+    v853 LifetimeEnd(-2)                                  -> -
+    v854 LifetimeEnd(-4)                                  -> -
+    v855 LifetimeEnd(-6)                                  -> -
+    v856 LifetimeEnd(-8)                                  -> -
+    v857 LifetimeEnd(-16)                                 -> -
+    v858 LifetimeEnd(-10)                                 -> -
+    v859 LifetimeEnd(-12)                                 -> -
+    v860 LifetimeEnd(-14)                                 -> -
+    v861 LifetimeEnd(-17)                                 -> -
+    v862 LifetimeEnd(-18)                                 -> -
+    terminator Return(v849)   (exit_acc=v849)
   block 54  start_pc=0
-    v838 Imm(20)                                          -> x0
-    v839 LifetimeEnd(-15)                                 -> -
-    v840 LifetimeEnd(-15)                                 -> -
-    v841 LifetimeEnd(0)                                   -> -
-    v842 LifetimeEnd(-2)                                  -> -
-    v843 LifetimeEnd(-4)                                  -> -
-    v844 LifetimeEnd(-6)                                  -> -
-    v845 LifetimeEnd(-8)                                  -> -
-    v846 LifetimeEnd(-16)                                 -> -
-    v847 LifetimeEnd(-10)                                 -> -
-    v848 LifetimeEnd(-12)                                 -> -
-    v849 LifetimeEnd(-14)                                 -> -
-    v850 LifetimeEnd(-17)                                 -> -
-    v851 LifetimeEnd(-18)                                 -> -
-    terminator Return(v838)   (exit_acc=v838)
-  block 55  start_pc=0
-    v852 Imm(0)                                           -> x1
-    v853 Imm(-7)                                          -> x1
-    v854 Imm(32761)                                       -> x1
-    v855 Imm(106)                                         -> x1
-    v856 Imm(0)                                           -> x1
-    v857 Imm(32761)                                       -> x1
-    v858 Imm(0)                                           -> x1
-    v859 Imm(-3940649673949184)                           -> x1
-    v860 LocalAddr(-15)                                   -> x1
-    v861 Imm(1000000)                                     -> x1
-    v862 Load { addr=v807, disp=0, kind=U32, align=1 }    -> x1
-    v863 BinopI { op=and, lhs=v862, rhs_imm=-4194304 }    -> x1
-    v864 BinopI { op=or, lhs=v863, rhs_imm=1000000 }      -> x1
-    v865 Store { addr=v807, disp=0, value=v864, kind=I32, align=1 } -> -
-    v866 Imm(4398046511104000000)                         -> x0
+    v863 Imm(0)                                           -> x0
+    v864 Imm(-7)                                          -> x0
+    v865 Imm(32761)                                       -> x0
+    v866 Imm(106)                                         -> x0
     v867 Imm(0)                                           -> x0
     v868 Imm(32761)                                       -> x0
-    v869 Imm(32761)                                       -> x0
+    v869 Imm(0)                                           -> x0
     v870 Imm(-3940649673949184)                           -> x0
-    v871 Imm(-7)                                          -> x0
-    v872 Imm(0)                                           -> x0
-    v873 Imm(0)                                           -> x0
-    v874 LocalAddr(-15)                                   -> x0
-    v875 BinopI { op=and, lhs=v864, rhs_imm=4294967295 }  -> x0
-    v876 BinopI { op=and, lhs=v864, rhs_imm=4194303 }     -> x0
-    v877 BinopI { op=shl, lhs=v876, rhs_imm=42 }          -> x0
-    v878 BinopI { op=shr, lhs=v877, rhs_imm=42 }          -> x0
-    v879 BinopI { op=ne, lhs=v878, rhs_imm=1000000 }      -> x0
-    v880 Imm(0)                                           -> x1
-    v881 Imm(0)                                           -> x1
-    v882 Imm(0)                                           -> x1
-    terminator Bz { cond=v879, target=b57, fall=b56 }   (exit_acc=v879)
-  block 56  start_pc=0
-    v883 Imm(21)                                          -> x0
-    v884 LifetimeEnd(-15)                                 -> -
-    v885 LifetimeEnd(-15)                                 -> -
-    v886 LifetimeEnd(0)                                   -> -
-    v887 LifetimeEnd(-2)                                  -> -
-    v888 LifetimeEnd(-4)                                  -> -
-    v889 LifetimeEnd(-6)                                  -> -
-    v890 LifetimeEnd(-8)                                  -> -
-    v891 LifetimeEnd(-16)                                 -> -
-    v892 LifetimeEnd(-10)                                 -> -
-    v893 LifetimeEnd(-12)                                 -> -
-    v894 LifetimeEnd(-14)                                 -> -
-    v895 LifetimeEnd(-17)                                 -> -
-    v896 LifetimeEnd(-18)                                 -> -
-    terminator Return(v883)   (exit_acc=v883)
-  block 57  start_pc=0
-    v897 ImmData(184)                                     -> x7
-    v898 ImmData(136)                                     -> x6
-    v899 Imm(2)                                           -> x2
-    v900 Call { target_pc=4, args=[v897, v898, v899], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v901 Extend { value=v900, kind=I32 }                  -> x1
-    v902 BinopI { op=eq, lhs=v900, rhs_imm=0 }            -> x1
-    v903 Imm(0)                                           -> x1
-    terminator Bz { cond=v900, target=b59, fall=b58 }   (low word)   (exit_acc=v902)
-  block 58  start_pc=0
-    v904 ImmData(184)                                     -> x0
-    v905 Load { addr=v904, disp=0, kind=U16, align=1 }    -> x0
-    v906 BinopI { op=and, lhs=v905, rhs_imm=32767 }       -> x0
-    v907 BinopI { op=shl, lhs=v906, rhs_imm=49 }          -> x0
-    v908 BinopI { op=shr, lhs=v907, rhs_imm=49 }          -> x0
-    v909 BinopI { op=ne, lhs=v908, rhs_imm=-3 }           -> x0
+    v871 Imm(0)                                           -> x0
+    v872 Imm(1000000)                                     -> x0
+    v873 Imm(48576)                                       -> x0
+    v874 Imm(0)                                           -> x0
+    v875 Imm(48)                                          -> x0
+    v876 Imm(3145728)                                     -> x0
+    v877 Imm(3194304)                                     -> x0
+    v878 Imm(0)                                           -> x0
+    v879 Imm(1000000)                                     -> x0
+    v880 Imm(0)                                           -> x0
+    v881 Imm(15)                                          -> x0
+    v882 Imm(0)                                           -> x0
+    v883 Imm(4398046511104000000)                         -> x0
+    v884 Imm(0)                                           -> x0
+    v885 Imm(32761)                                       -> x0
+    v886 Imm(32761)                                       -> x0
+    v887 Imm(-3940649673949184)                           -> x0
+    v888 Imm(-7)                                          -> x0
+    v889 Imm(0)                                           -> x0
+    v890 Imm(0)                                           -> x0
+    v891 Imm(0)                                           -> x0
+    v892 Imm(16960)                                       -> x0
+    v893 Imm(0)                                           -> x0
+    v894 Imm(15)                                          -> x0
+    v895 Imm(983040)                                      -> x0
+    v896 Imm(1000000)                                     -> x0
+    v897 Imm(1000000)                                     -> x0
+    v898 Imm(4398046511104000000)                         -> x0
+    v899 Imm(1000000)                                     -> x0
+    v900 Imm(0)                                           -> x0
+    v901 Imm(0)                                           -> x0
+    v902 Imm(0)                                           -> x0
+    v903 Imm(0)                                           -> x0
+    v904 ImmData(184)                                     -> x7
+    v905 ImmData(128)                                     -> x6
+    v906 Imm(2)                                           -> x2
+    v907 Call { target_pc=4, args=[v904, v905, v906], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v908 Extend { value=v907, kind=I32 }                  -> x1
+    v909 BinopI { op=eq, lhs=v907, rhs_imm=0 }            -> x1
     v910 Imm(0)                                           -> x1
-    v911 Imm(0)                                           -> x1
-    v912 Imm(0)                                           -> x1
-    terminator Bz { cond=v909, target=b60, fall=b59 }   (exit_acc=v909)
+    terminator Bz { cond=v907, target=b56, fall=b55 }   (low word)   (exit_acc=v909)
+  block 55  start_pc=0
+    v925 ImmData(184)                                     -> x0
+    v926 Load { addr=v925, disp=0, kind=U16, align=1 }    -> x0
+    v927 BinopI { op=and, lhs=v926, rhs_imm=32767 }       -> x0
+    v928 BinopI { op=shl, lhs=v927, rhs_imm=49 }          -> x0
+    v929 BinopI { op=shr, lhs=v928, rhs_imm=49 }          -> x0
+    v930 BinopI { op=ne, lhs=v929, rhs_imm=-3 }           -> x0
+    v931 Imm(0)                                           -> x1
+    v932 Imm(0)                                           -> x1
+    v933 Imm(0)                                           -> x1
+    terminator Bz { cond=v930, target=b57, fall=b56 }   (exit_acc=v930)
+  block 56  start_pc=0
+    v934 Imm(22)                                          -> x0
+    v935 LifetimeEnd(-15)                                 -> -
+    v936 LifetimeEnd(0)                                   -> -
+    v937 LifetimeEnd(0)                                   -> -
+    v938 LifetimeEnd(-2)                                  -> -
+    v939 LifetimeEnd(-4)                                  -> -
+    v940 LifetimeEnd(-6)                                  -> -
+    v941 LifetimeEnd(-8)                                  -> -
+    v942 LifetimeEnd(-16)                                 -> -
+    v943 LifetimeEnd(-10)                                 -> -
+    v944 LifetimeEnd(-12)                                 -> -
+    v945 LifetimeEnd(-14)                                 -> -
+    v946 LifetimeEnd(-17)                                 -> -
+    v947 LifetimeEnd(-18)                                 -> -
+    terminator Return(v934)   (exit_acc=v934)
+  block 57  start_pc=0
+    v948 LocalAddr(-15)                                   -> x7
+    v949 Imm(0)                                           -> x6
+    v950 Imm(2)                                           -> x2
+    v951 CallExt { binding_idx=7, args=[v948, v949, v950], fp_arg_mask=0x0 } -> x0
+    v952 LocalAddr(-15)                                   -> x7
+    v953 Imm(-3)                                          -> x0
+    v954 Imm(32765)                                       -> x0
+    v955 Load { addr=v952, disp=0, kind=U16 }             -> x0
+    v956 BinopI { op=and, lhs=v955, rhs_imm=-32768 }      -> x0
+    v957 BinopI { op=or, lhs=v956, rhs_imm=32765 }        -> x0
+    v958 Store { addr=v952, disp=0, value=v957, kind=I16 } -> -
+    v959 Imm(-1688849860263936)                           -> x0
+    v960 LocalAddr(-15)                                   -> x0
+    v961 ImmData(128)                                     -> x6
+    v962 Imm(2)                                           -> x2
+    v963 Call { target_pc=4, args=[v952, v961, v962], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
+    v964 Extend { value=v963, kind=I32 }                  -> x1
+    v965 BinopI { op=eq, lhs=v963, rhs_imm=0 }            -> x1
+    v966 Imm(1)                                           -> x1
+    v967 Imm(0)                                           -> x1
+    terminator Bz { cond=v963, target=b60, fall=b58 }   (low word)   (exit_acc=v965)
+  block 58  start_pc=0
+    v968 LocalAddr(-15)                                   -> x0
+    v969 Load { addr=v968, disp=0, kind=U16 }             -> x1
+    v970 BinopI { op=and, lhs=v969, rhs_imm=32767 }       -> x1
+    v971 BinopI { op=shl, lhs=v970, rhs_imm=49 }          -> x1
+    v972 BinopI { op=shr, lhs=v971, rhs_imm=49 }          -> x1
+    v973 BinopI { op=ne, lhs=v972, rhs_imm=-3 }           -> x1
+    v974 BinopI { op=ne, lhs=v973, rhs_imm=0 }            -> x2
+    v975 Imm(0)                                           -> x2
+    v976 Imm(0)                                           -> x2
+    v977 Imm(0)                                           -> x2
+    v978 Imm(0)                                           -> x2
+    terminator Bnz { cond=v973, target=b60, fall=b59 }   (exit_acc=v973)
   block 59  start_pc=0
-    v913 Imm(22)                                          -> x0
-    v914 LifetimeEnd(-15)                                 -> -
-    v915 LifetimeEnd(-15)                                 -> -
-    v916 LifetimeEnd(0)                                   -> -
-    v917 LifetimeEnd(-2)                                  -> -
-    v918 LifetimeEnd(-4)                                  -> -
-    v919 LifetimeEnd(-6)                                  -> -
-    v920 LifetimeEnd(-8)                                  -> -
-    v921 LifetimeEnd(-16)                                 -> -
-    v922 LifetimeEnd(-10)                                 -> -
-    v923 LifetimeEnd(-12)                                 -> -
-    v924 LifetimeEnd(-14)                                 -> -
-    v925 LifetimeEnd(-17)                                 -> -
-    v926 LifetimeEnd(-18)                                 -> -
-    terminator Return(v913)   (exit_acc=v913)
+    v979 LocalAddr(-15)                                   -> x1
+    v980 Load { addr=v968, disp=0, kind=I8 }              -> x0
+    v981 Imm(253)                                         -> x1
+    v982 Imm(-3)                                          -> x1
+    v983 BinopI { op=ne, lhs=v980, rhs_imm=-3 }           -> x0
+    v984 Imm(0)                                           -> x1
+    v985 Imm(0)                                           -> x1
+    v986 Imm(0)                                           -> x1
+    terminator Bz { cond=v983, target=b61, fall=b60 }   (exit_acc=v983)
   block 60  start_pc=0
-    v927 LocalAddr(-15)                                   -> x7
-    v928 Imm(0)                                           -> x6
-    v929 Imm(2)                                           -> x2
-    v930 CallExt { binding_idx=7, args=[v927, v928, v929], fp_arg_mask=0x0 } -> x0
-    v931 LocalAddr(-15)                                   -> x7
-    v932 Imm(-3)                                          -> x0
-    v933 Imm(32765)                                       -> x0
-    v934 Load { addr=v931, disp=0, kind=U16 }             -> x0
-    v935 BinopI { op=and, lhs=v934, rhs_imm=-32768 }      -> x0
-    v936 BinopI { op=or, lhs=v935, rhs_imm=32765 }        -> x0
-    v937 Store { addr=v931, disp=0, value=v936, kind=I16 } -> -
-    v938 Imm(-1688849860263936)                           -> x0
-    v939 LocalAddr(-15)                                   -> x0
-    v940 ImmData(136)                                     -> x6
-    v941 Imm(2)                                           -> x2
-    v942 Call { target_pc=4, args=[v931, v940, v941], fixed_args=3, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v943 Extend { value=v942, kind=I32 }                  -> x1
-    v944 BinopI { op=eq, lhs=v942, rhs_imm=0 }            -> x1
-    v945 Imm(1)                                           -> x1
-    v946 Imm(0)                                           -> x1
-    terminator Bz { cond=v942, target=b63, fall=b61 }   (low word)   (exit_acc=v944)
+    v987 Imm(23)                                          -> x0
+    v988 LifetimeEnd(-15)                                 -> -
+    v989 LifetimeEnd(0)                                   -> -
+    v990 LifetimeEnd(0)                                   -> -
+    v991 LifetimeEnd(-2)                                  -> -
+    v992 LifetimeEnd(-4)                                  -> -
+    v993 LifetimeEnd(-6)                                  -> -
+    v994 LifetimeEnd(-8)                                  -> -
+    v995 LifetimeEnd(-16)                                 -> -
+    v996 LifetimeEnd(-10)                                 -> -
+    v997 LifetimeEnd(-12)                                 -> -
+    v998 LifetimeEnd(-14)                                 -> -
+    v999 LifetimeEnd(-17)                                 -> -
+    v1000 LifetimeEnd(-18)                                 -> -
+    terminator Return(v987)   (exit_acc=v987)
   block 61  start_pc=0
-    v947 LocalAddr(-15)                                   -> x0
-    v948 Load { addr=v947, disp=0, kind=U16 }             -> x1
-    v949 BinopI { op=and, lhs=v948, rhs_imm=32767 }       -> x1
-    v950 BinopI { op=shl, lhs=v949, rhs_imm=49 }          -> x1
-    v951 BinopI { op=shr, lhs=v950, rhs_imm=49 }          -> x1
-    v952 BinopI { op=ne, lhs=v951, rhs_imm=-3 }           -> x1
-    v953 BinopI { op=ne, lhs=v952, rhs_imm=0 }            -> x2
-    v954 Imm(0)                                           -> x2
-    v955 Imm(0)                                           -> x2
-    v956 Imm(0)                                           -> x2
-    v957 Imm(0)                                           -> x2
-    terminator Bnz { cond=v952, target=b63, fall=b62 }   (exit_acc=v952)
-  block 62  start_pc=0
-    v958 LocalAddr(-15)                                   -> x1
-    v959 Load { addr=v947, disp=0, kind=I8 }              -> x0
-    v960 Imm(253)                                         -> x1
-    v961 Imm(-3)                                          -> x1
-    v962 BinopI { op=ne, lhs=v959, rhs_imm=-3 }           -> x0
-    v963 Imm(0)                                           -> x1
-    v964 Imm(0)                                           -> x1
-    v965 Imm(0)                                           -> x1
-    terminator Bz { cond=v962, target=b64, fall=b63 }   (exit_acc=v962)
-  block 63  start_pc=0
-    v966 Imm(23)                                          -> x0
-    v967 LifetimeEnd(-15)                                 -> -
-    v968 LifetimeEnd(-15)                                 -> -
-    v969 LifetimeEnd(0)                                   -> -
-    v970 LifetimeEnd(-2)                                  -> -
-    v971 LifetimeEnd(-4)                                  -> -
-    v972 LifetimeEnd(-6)                                  -> -
-    v973 LifetimeEnd(-8)                                  -> -
-    v974 LifetimeEnd(-16)                                 -> -
-    v975 LifetimeEnd(-10)                                 -> -
-    v976 LifetimeEnd(-12)                                 -> -
-    v977 LifetimeEnd(-14)                                 -> -
-    v978 LifetimeEnd(-17)                                 -> -
-    v979 LifetimeEnd(-18)                                 -> -
-    terminator Return(v966)   (exit_acc=v966)
-  block 64  start_pc=0
-    v980 Imm(0)                                           -> x0
-    v981 LifetimeEnd(-15)                                 -> -
-    v982 LifetimeEnd(-15)                                 -> -
-    v983 LifetimeEnd(0)                                   -> -
-    v984 LifetimeEnd(-2)                                  -> -
-    v985 LifetimeEnd(-4)                                  -> -
-    v986 LifetimeEnd(-6)                                  -> -
-    v987 LifetimeEnd(-8)                                  -> -
-    v988 LifetimeEnd(-16)                                 -> -
-    v989 LifetimeEnd(-10)                                 -> -
-    v990 LifetimeEnd(-12)                                 -> -
-    v991 LifetimeEnd(-14)                                 -> -
-    v992 LifetimeEnd(-17)                                 -> -
-    v993 LifetimeEnd(-18)                                 -> -
-    terminator Return(v980)   (exit_acc=v980)
+    v1001 Imm(0)                                           -> x0
+    v1002 LifetimeEnd(-15)                                 -> -
+    v1003 LifetimeEnd(0)                                   -> -
+    v1004 LifetimeEnd(0)                                   -> -
+    v1005 LifetimeEnd(-2)                                  -> -
+    v1006 LifetimeEnd(-4)                                  -> -
+    v1007 LifetimeEnd(-6)                                  -> -
+    v1008 LifetimeEnd(-8)                                  -> -
+    v1009 LifetimeEnd(-16)                                 -> -
+    v1010 LifetimeEnd(-10)                                 -> -
+    v1011 LifetimeEnd(-12)                                 -> -
+    v1012 LifetimeEnd(-14)                                 -> -
+    v1013 LifetimeEnd(-17)                                 -> -
+    v1014 LifetimeEnd(-18)                                 -> -
+    terminator Return(v1001)   (exit_acc=v1001)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

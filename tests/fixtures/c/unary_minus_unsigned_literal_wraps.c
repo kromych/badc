@@ -3,8 +3,8 @@
 // folds `-<literal>` at parse time, so the folded value has to be
 // reduced to that type: `-1U` is UINT_MAX, not a 64-bit -1. An
 // unreduced fold compares unequal to every `unsigned int` and widens to
-// the wrong `unsigned long long`, which is how a kernel's
-// `port != (unsigned)-1` collapsed to a constant. Returns 0 on success.
+// the wrong `unsigned long long`, which collapses a check such as
+// `port != (unsigned)-1` to a constant. Returns 0 on success.
 
 struct addr {
     unsigned short family;

@@ -138,6 +138,7 @@ fn compute_high_observed_through(
                     if crate::c5::ir::is_comparison_op(*op));
         match inst {
             Inst::Imm(_)
+            | Inst::Undef
             | Inst::ImmData(_)
             | Inst::ImmCode(_)
             | Inst::ImmExtCode(_)

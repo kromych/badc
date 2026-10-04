@@ -97,6 +97,7 @@ impl Compiler {
             // its whole size; a postfix form or an undeclared name (C99 6.5.1p2)
             // takes the expression path and its diagnostics.
             let idx = self.lex.curr_id_idx;
+            self.mark_unevaluated_use(idx);
             let var_ty = self.symbols[idx].type_;
             let arr = self.symbols[idx].array_size;
             let class = self.symbols[idx].class;
@@ -145,7 +146,7 @@ impl Compiler {
             }
             let lev = Token::Inc as i64;
             self.drop_operand_array_decay();
-            self.expr_or_void(lev)?;
+            self.unevaluated(|c| c.expr_or_void(lev))?;
             // C99 6.5.3.4p2: an operand of variable-length array type is
             // evaluated -- a cast in it stores the size -- and the size read
             // at run time.
@@ -222,7 +223,7 @@ impl Compiler {
         let vstack_depth = self.ast_vstack.len();
         self.drop_operand_array_decay();
         self.pending.object_size_operands += 1;
-        let parsed = self.expr(Token::Assign as i64);
+        let parsed = self.unevaluated(|c| c.expr(Token::Assign as i64));
         self.pending.object_size_operands -= 1;
         let designated = self.pending.object_ref.take();
         parsed?;
@@ -264,6 +265,7 @@ impl Compiler {
         self.emit_imm(v);
         self.ty = self.size_t_ty();
         self.ast_emit_int_lit(v, self.ty);
+        self.folded_builtin_lits.extend(self.ast_acc);
         Ok(())
     }
 
@@ -545,14 +547,14 @@ impl Compiler {
     pub(super) fn parse_constant_p_builtin(&mut self) -> Result<(), C5Error> {
         // The call dispatch consumed `__builtin_constant_p (`.
         let snap = self.lex.snapshot();
-        if self.eval_constant_p_operand()? == 1 {
+        if self.unevaluated(Self::eval_constant_p_operand)? == 1 {
             self.emit_imm(1);
             self.ty = Ty::Int as i64;
             self.ast_emit_int_lit(1, self.ty);
             return Ok(());
         }
         self.restore_lex(snap);
-        self.expr_or_void(Token::Assign as i64)?;
+        self.unevaluated(|c| c.expr_or_void(Token::Assign as i64))?;
         if self.lex.tk != ')' {
             return Err(
                 self.compile_err(Code::SYNTAX, "`)` expected to close `__builtin_constant_p`")
@@ -660,7 +662,7 @@ impl Compiler {
             let saved_ty = self.ty;
             let saved_text_len = self.next_ent_pc;
             let saved_reloc = self.code_reloc_sym_idx.len();
-            self.expr_or_void(Token::Inc as i64)?;
+            self.unevaluated(|c| c.expr_or_void(Token::Inc as i64))?;
             let expr_ty = self.ty;
             let function = self.operand_is_function();
             self.next_ent_pc = saved_text_len;
@@ -683,7 +685,7 @@ impl Compiler {
             let saved_ty = self.ty;
             let saved_text_len = self.next_ent_pc;
             let saved_reloc = self.code_reloc_sym_idx.len();
-            self.expr_or_void(Token::Assign as i64)?;
+            self.unevaluated(|c| c.expr_or_void(Token::Assign as i64))?;
             let expr_ty = self.ty;
             let function = self.operand_is_function();
             self.next_ent_pc = saved_text_len;
@@ -851,6 +853,7 @@ impl Compiler {
             self.restore_lex(snap);
             return Ok(None);
         }
+        self.mark_unevaluated_use(idx);
         Ok(Some(align))
     }
 }

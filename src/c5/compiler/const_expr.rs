@@ -122,6 +122,8 @@ pub(super) struct ConstTypeName {
     /// `const` among the specifiers of a non-pointer type, or one after
     /// the outermost `*`.
     pub object_is_const: bool,
+    /// The function type the named type leads to, and its depth.
+    pub fn_ty: Option<(crate::c5::symbol::FnType, i64)>,
 }
 
 impl ConstRoot {
@@ -546,10 +548,16 @@ impl Compiler {
     /// case labels (including GNU ranges), `static_assert`, and
     /// initializer designator indices.
     pub(super) fn parse_constant_int_folding_const_objects(&mut self) -> Result<i64, C5Error> {
+        Ok(self.parse_constant_folding_const_objects()?.as_int())
+    }
+
+    /// [`Self::parse_constant_int_folding_const_objects`] keeping the
+    /// value's type, for a case label converted to the controlling type.
+    pub(super) fn parse_constant_folding_const_objects(&mut self) -> Result<ConstVal, C5Error> {
         self.const_object_fold += 1;
-        let r = self.parse_constant_int();
+        let r = self.parse_const_expr_cond_val();
         self.const_object_fold -= 1;
-        r
+        self.require_integer_const(r?)
     }
 
     /// Run `rule` with the const-object fold masked: a type dimension
@@ -629,7 +637,11 @@ impl Compiler {
         match self.parse_const_expr_cond_val() {
             // Folded to a constant; the caller validates the trailing `]`.
             // A bare symbol address is a genuine error, not a VLA.
-            Ok(v) => Ok(Some(self.require_integer_const(v)?.as_int())),
+            Ok(v) => {
+                let v = self.require_integer_const(v)?;
+                self.require_integer_size(v.expr_ty())?;
+                Ok(Some(v.as_int()))
+            }
             // Non-constant operand -> a VLA dimension: rewind for the
             // caller's runtime-expression parse.
             Err(_) if self.pending.const_expr_nonconst => {
@@ -642,17 +654,49 @@ impl Compiler {
         }
     }
 
-    /// Consume an array-declarator dimension up to (not including) the
-    /// matching `]`. Used for a variable-length array parameter, whose
-    /// size is discarded when the array is adjusted to a pointer (C99
-    /// 6.7.6.3p7); also absorbs the `[*]` unspecified-size form.
-    pub(super) fn skip_array_dimension_expr(&mut self) -> Result<(), C5Error> {
+    /// C99 6.7.5.2p1: the size expression of an array declarator has
+    /// integer type.
+    pub(super) fn require_integer_size(&self, ty: i64) -> Result<(), C5Error> {
+        self.require_category(
+            ty,
+            Category::Integer,
+            Code::INVALID_DECLARATION,
+            "array size",
+        )
+    }
+
+    /// Consume the bound of a parameter's array declarator up to (not
+    /// including) its `]`: `static` and qualifiers, then `*` or a size,
+    /// which the adjustment to a pointer discards (C99 6.7.5.3p7) and
+    /// which has integer type all the same.
+    pub(super) fn skip_param_array_size(&mut self) -> Result<(), C5Error> {
+        while self.lex.tk == Token::Static || self.lex.tk == Token::TypeQual {
+            self.next()?;
+        }
+        let star = self.lex.tk == Token::MulOp && self.lex.peek_after_whitespace(b']');
+        let mut size = None;
+        if self.lex.tk != ']' && !star {
+            let at = self.lex.snapshot();
+            let ty = self.peek_expr_type()?;
+            self.require_integer_size(ty)?;
+            size = Some(super::function::ParamSize {
+                at,
+                outer_names: alloc::vec::Vec::new(),
+            });
+        }
         let mut depth: i64 = 0;
         loop {
+            if self.lex.tk == Token::Id
+                && self.symbols[self.lex.curr_id_idx].class != Token::Loc as i64
+                && let Some(size) = &mut size
+            {
+                size.outer_names.push(self.lex.curr_id_idx);
+            }
             if self.lex.tk == Token::Brak {
                 depth += 1;
             } else if self.lex.tk == ']' {
                 if depth == 0 {
+                    self.param_sizes.extend(size);
                     return Ok(());
                 }
                 depth -= 1;
@@ -725,6 +769,7 @@ impl Compiler {
     /// operand -- where C99 6.6p3 does not require it to be a constant
     /// expression; the value is discarded by the enclosing operator.
     fn skip_unevaluated_operand(&mut self) -> Result<(), C5Error> {
+        self.mark_unevaluated_use(self.lex.curr_id_idx);
         self.next()?; // the non-constant primary token
         loop {
             if self.lex.tk == '(' || self.lex.tk == Token::Brak {
@@ -745,12 +790,18 @@ impl Compiler {
     /// matching close.
     fn skip_balanced_group(&mut self) -> Result<(), C5Error> {
         let mut depth: i64 = 0;
+        let mut member = false;
         loop {
             if self.lex.tk == 0 {
                 return Err(
                     self.compile_err(Code::SYNTAX, "unterminated operand in constant expression")
                 );
             }
+            if self.lex.tk == Token::Id && !member && self.symbols[self.lex.curr_id_idx].class != 0
+            {
+                self.mark_unevaluated_use(self.lex.curr_id_idx);
+            }
+            member = self.lex.tk == Token::Dot || self.lex.tk == Token::Arrow;
             depth += self.bracket_depth_delta();
             self.next()?;
             if depth == 0 {
@@ -2043,14 +2094,23 @@ impl Compiler {
     }
 
     fn parse_const_type_name_inner(&mut self) -> Result<ConstTypeName, C5Error> {
-        let ty = self.parse_decl_base_type()?;
+        let ty = self.parse_type_name_base()?;
+        let base_fn = self.carriers_fn_type();
         self.note_cast_type_name(ty);
         // Consumed as a type name, not bound through a declarator.
         self.pending.bare_function_type_declarator = false;
         let base_is_const = self.pending.base_is_const;
         let ptr = self.consume_abstract_pointer(ty)?;
-        let ty = ptr.ty;
         let ptr_levels = ptr.levels;
+        // The first `*` on a function-type typedef forms the pointer to the
+        // function, as in a declarator.
+        let absorbed = core::mem::take(&mut self.pending.base_is_function_type) && ptr_levels > 0;
+        let ty = if absorbed {
+            super::types::absorb_function_level(ptr.ty, super::types::ptr_depth_of(ty))
+        } else {
+            ptr.ty
+        };
+        let fn_ty = base_fn.map(|(f, d)| (f, d + ptr_levels - i64::from(absorbed)));
         // A `const` after the outermost `*` qualifies the object itself.
         let outer_const = ptr.outer_const;
         while self.lex.tk == Token::TypeQual {
@@ -2061,6 +2121,7 @@ impl Compiler {
             ty,
             base_dims,
             object_is_const: outer_const || (base_is_const && ptr_levels == 0),
+            fn_ty,
         })
     }
 
@@ -2142,8 +2203,9 @@ impl Compiler {
                 // element for one dimension, by the array-aggregate tag for
                 // more so each subscript strides by its row.
                 if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
+                    let elem = (ty, name.fn_ty.clone());
                     let (off, sym, dims) =
-                        self.emit_array_compound_literal_body(ty, &name.base_dims)?;
+                        self.emit_array_compound_literal_body(elem, &name.base_dims)?;
                     self.symbols[sym].storage_is_const = name.object_is_const;
                     let count = dims.first().copied().unwrap_or(0);
                     let desig_ty = self.array_desig_ty(ty, &dims, count);
@@ -2341,7 +2403,7 @@ impl Compiler {
     /// designates (C99 6.4.5p5), its parts joined (6.4.5p4) and terminated,
     /// and return its data offset, element type and size in bytes. The
     /// element type follows the encoding prefix, plain `char` without one.
-    fn stage_const_string(&mut self) -> Result<(i64, i64, i64), C5Error> {
+    pub(super) fn stage_const_string(&mut self) -> Result<(i64, i64, i64), C5Error> {
         let off = self.lex.ival;
         let wide = self.lex.str_is_wide;
         let elem_ty = self.string_literal_elem_ty();
@@ -2575,7 +2637,7 @@ impl Compiler {
         ty: i64,
     ) -> Option<ConstVal> {
         let image = self.object_image(tls);
-        if !(1..=8).contains(&size)
+        if width > 64
             || at + size > image.len()
             || bit + width > (size * 8) as u32
             || (tls && self.tls_range_relocated(at, size))
@@ -2583,8 +2645,12 @@ impl Compiler {
         {
             return None;
         }
-        let unit = read_image_int(image, at, size, ty | UNSIGNED_BIT) as u64;
-        let field = (unit >> bit) & (u64::MAX >> (64 - width));
+        // The at most 9 bytes the field's bits reach; a packed unit may be
+        // wider than 8 bytes.
+        let first = at + bit as usize / 8;
+        let span = (bit as usize % 8 + width as usize).div_ceil(8);
+        let bytes = (0..span).fold(0u128, |v, k| v | u128::from(image[first + k]) << (8 * k));
+        let field = (bytes >> (bit % 8)) as u64 & (u64::MAX >> (64 - width));
         let v = if is_unsigned_ty(ty) || strip_unsigned(ty) == Ty::Bool as i64 {
             field as i128
         } else {
@@ -2683,8 +2749,9 @@ impl Compiler {
                 // per leading index; the final index reads the staged
                 // element back as the constant value.
                 if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
+                    let elem = (target_ty, name.fn_ty.clone());
                     let (off, sym, dims) =
-                        self.emit_array_compound_literal_body(target_ty, &name.base_dims)?;
+                        self.emit_array_compound_literal_body(elem, &name.base_dims)?;
                     self.pending.const_expr_compound_literal = true;
                     self.symbols[sym].storage_is_const = name.object_is_const;
                     let elem_size = (self.size_of_type(target_ty) as i64).max(1);
@@ -2732,10 +2799,16 @@ impl Compiler {
                 let mut array_pointee = None;
                 if self.lex.tk == '(' {
                     let abs = self.parse_abstract_ptr_declarator(false)?;
-                    if let Some(dims) = abs.pointee_dims().filter(|d| d.iter().all(|&d| d > 0)) {
-                        array_pointee = Some(self.array_agg_type(target_ty, &dims));
+                    let levels = abs.pointer_levels() * Ty::Ptr as i64;
+                    match abs.pointee_dims().filter(|d| d.iter().all(|&d| d > 0)) {
+                        // The pointer to the array, which arithmetic strides
+                        // by (C99 6.5.6p8) and the value keeps as its type.
+                        Some(dims) => {
+                            target_ty = self.array_agg_type(target_ty, &dims) + levels;
+                            array_pointee = Some(pointee_ty(target_ty));
+                        }
+                        None => target_ty += levels,
                     }
-                    target_ty += abs.pointer_levels() * Ty::Ptr as i64;
                     while self.lex.tk == Token::TypeQual {
                         self.next()?;
                     }

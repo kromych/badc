@@ -78,13 +78,8 @@
 #pragma binding(libdl::dladdr1, "dladdr1")
 #endif
 
-#ifdef _WIN32
-#pragma dylib(kernel32, "kernel32.dll")
-#pragma binding(kernel32::dlopen,  "LoadLibraryA")
-#pragma binding(kernel32::dlsym,   "GetProcAddress")
-#pragma binding(kernel32::dlclose, "FreeLibrary")
-#pragma binding(kernel32::dlerror, "GetLastError")
-#endif
+// Windows has no <dlfcn.h>: libc/lib/dlfcn_ext.c defines the four calls
+// over kernel32 with POSIX's results and dlerror reporting.
 
 void *dlopen(const char *path, int flags);
 void *dlsym(void *__restrict handle, const char *__restrict name);

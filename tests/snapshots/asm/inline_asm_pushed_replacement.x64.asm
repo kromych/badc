@@ -1,0 +1,56 @@
+
+inline_asm_pushed_replacement.x64:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+<.text>:
+               	xorl	%ebp, %ebp
+               	movq	%rsp, %rdi
+               	movl	$<entry_off>, %esi
+               	callq	<addr>
+               	ud2
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+               	int3
+
+<cs_inner>:
+               	leaq	0x5(%rdi), %rax
+               	retq
+
+<main>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	movl	$0x25, %edi
+               	callq	<addr>
+               	cmpl	$0x2a, %eax
+               	je	<addr>
+               	movl	$0x1, %eax
+               	popq	%rbp
+               	retq
+               	movl	$0x2a, %eax
+               	popq	%rbp
+               	retq
+               	addb	%al, (%rax)
+
+<cs_wrapper>:
+               	pushq	%rcx
+               	pushq	%rdx
+               	pushq	%rsi
+               	callq	<addr>
+               	popq	%rsi
+               	popq	%rdx
+               	popq	%rcx
+               	retq
+               	leaq	<rip>, %rdi      # <addr>

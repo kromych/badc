@@ -421,7 +421,7 @@ impl Inputs {
                     named.push(Named::Input(LinkInput::Source(sources.len())));
                     sources.push(a.clone());
                 }
-                "c" | "" | "s" | "S" | "sx" => {
+                "c" | "i" | "" | "s" | "S" | "sx" => {
                     named.push(Named::Input(LinkInput::Source(sources.len())));
                     sources.push(a.clone());
                 }
@@ -455,8 +455,8 @@ impl Inputs {
                     }
                     eprint_diagnostic(format!(
                         "badc: error: unrecognized input file extension: `{a}` \
-                         (expected a `.c` / `.s` / `.S` source, `.o` object, or \
-                         `.a` archive)"
+                         (expected a `.c` / `.i` / `.s` / `.S` source, `.o` object, \
+                         or `.a` archive)"
                     ));
                     std::process::exit(1);
                 }

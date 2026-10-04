@@ -20,8 +20,8 @@ int main(void) {
     if (((a & ~z) + 1) != 0x14006f001ULL) return 2;
     if (((a ^ z) + 1)  != 0x14006f001ULL) return 3;
 
-    // The exact tccpe.c:1272 shape: page-aligned section base
-    // computed via `((addr - 1) | (16 - 1)) + 1`.
+    // An aligned section base computed via
+    // `((addr - 1) | (16 - 1)) + 1`.
     uint64_t addr = 0x14006f001ULL;
     uint64_t aligned = ((addr - 1) | (16 - 1)) + 1;
     if (aligned != 0x14006f010ULL) return 4;

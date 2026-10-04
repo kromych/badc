@@ -2,8 +2,8 @@
 // element (`[N].member = value`). An array whose element values are not
 // all compile-time constants is filled by stores rather than staged
 // bytes, and the chain has to resolve the same way on that path.
-// drivers/cxl/acpi.c builds its `union acpi_object in_array[4]` this way,
-// from members of a runtime struct.
+// An argument array built from the members of a runtime struct takes
+// this path.
 struct integer {
 	int type;
 	long long value;

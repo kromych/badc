@@ -407,8 +407,8 @@ pub struct StructField {
     pub inner_array_size: i64,
     /// Full dimension list for an N-dim array field, outermost
     /// first. Mirrors `Symbol::array_dims`. Empty for non-array
-    /// or 1D-array fields. The field-access decay path reads
-    /// this to compute the per-level strides for `s.xs[i][j][k]`.
+    /// or 1D-array fields. The field-access decay path forms the
+    /// row the member's value points to from it.
     pub array_dims: Vec<i64>,
     /// The bound was spelled `[0]` (a GNU zero-length array, complete
     /// with size zero) rather than `[]`; both store `array_size = -1`.
@@ -425,7 +425,9 @@ pub struct StructField {
     /// Storage-unit size in bytes (1, 2, 4, or 8). Picks the
     /// matching `Lc/Lh/Lw/Li` and `Sc/Sh/Sw/Si` opcodes for the
     /// bitfield read / write so a 32-bit-base bitfield does not
-    /// load eight bytes (which would mix in adjacent fields).
+    /// load eight bytes (which would mix in adjacent fields). A packed
+    /// field no such window fits inside its aggregate has the 3, 5, 6
+    /// or 7 bytes it spans, accessed in pieces.
     /// Meaningful only when `bit_width > 0`; 0 otherwise.
     pub bit_unit_size: u8,
     /// Function-pointer lineage tag (mirrors
@@ -467,6 +469,8 @@ pub struct StructField {
     pub prototyped: bool,
     /// Mirrors `Symbol::param_enum_tags`.
     pub param_enum_tags: Vec<(usize, u32)>,
+    /// Mirrors `Symbol::param_fn_types`.
+    pub(crate) param_fn_types: Vec<(usize, crate::c5::symbol::FnType, i64)>,
     /// Calling convention of the function a function-pointer field
     /// points to (`__attribute__((ms_abi))` / `((sysv_abi))`). Mirrors
     /// `Symbol::conv`; `CallConv::Target` for every other field. The
@@ -578,6 +582,14 @@ pub struct CompileOptions {
     /// family's prerequisite source). Set by `-H` and by any
     /// dependency-output flag.
     pub track_includes: bool,
+    /// When true the preprocessor writes every pragma it consumes into
+    /// its output, so `-E` output compiles to the program its source
+    /// does. Set by the `-E` path only.
+    pub keep_pragmas: bool,
+    /// The source is preprocessed already (a `.i` unit): the
+    /// preprocessor reads its line markers and pragmas, expands nothing
+    /// and includes nothing. See [`Preprocessor::set_preprocessed`].
+    pub preprocessed: bool,
     /// The level each diagnostic reports at, as the `-W` family left
     /// it. The pragmas in the unit apply on top of this.
     pub diag: crate::c5::diag::Config,
@@ -750,9 +762,13 @@ impl CompileOptions {
     /// declaration is a hosted one, so `-fno-builtin` / `-ffreestanding`
     /// withdraw it and `-fno-builtin-<name>` withdraws it for that name;
     /// under `-nostdinc` the header the retry would splice in is off the
-    /// search. The undeclared-function error stands instead.
+    /// search, and a preprocessed unit includes nothing. The
+    /// undeclared-function error stands instead.
     pub fn declines_auto_include(&self, name: &str) -> bool {
-        self.nostdinc || self.no_builtin || self.no_builtin_fns.iter().any(|n| n == name)
+        self.nostdinc
+            || self.no_builtin
+            || self.preprocessed
+            || self.no_builtin_fns.iter().any(|n| n == name)
     }
 
     /// Define signed overflow to wrap (`-fwrapv`). See [`Self::wrapv`].
@@ -861,6 +877,16 @@ impl CompileOptions {
         self.track_includes = on;
         self
     }
+    /// See [`Self::keep_pragmas`].
+    pub fn with_keep_pragmas(mut self, on: bool) -> Self {
+        self.keep_pragmas = on;
+        self
+    }
+    /// See [`Self::preprocessed`].
+    pub fn with_preprocessed(mut self, on: bool) -> Self {
+        self.preprocessed = on;
+        self
+    }
     /// Install the levels the `-W` family selected. See
     /// [`Self::diag`].
     pub fn with_diag(mut self, config: crate::c5::diag::Config) -> Self {
@@ -893,9 +919,9 @@ impl CompileOptions {
 /// Ephemeral side-channel state passed between parser layers --
 /// the "stuff a deeper parse needs to relay back to its caller
 /// without bloating its return type." Groups the
-/// declarator-handoff flags, the multi-dim subscript stride
-/// queue, the array-decay sizeof recovery channel, and the
-/// function-pointer chain-depth tracker into one carrier so the
+/// declarator-handoff flags, the array-decay sizeof recovery
+/// channel, and the function-pointer chain-depth tracker into
+/// one carrier so the
 /// `Compiler` field list reads as "lexer + symbols + codegen
 /// output + transient state" instead of eleven loose fields.
 /// Sentinel `array_size` for a C99 6.7.6.2 variable-length array
@@ -922,6 +948,10 @@ pub(in crate::c5::compiler) struct Pending {
     /// function's symbol is set when the flag is true *and* the
     /// declarator added no leading `*`s.
     pub base_was_void: bool,
+
+    /// The last base-type parse read specifiers naming no type and took
+    /// `int` (C99 6.7.2p2); the declaration or type name reports it.
+    pub base_implicit_int: bool,
 
     /// Side channel from `parse_decl_base_type`: the base specifiers
     /// included a `const` qualifier. The declaration path reads it to mark
@@ -1020,36 +1050,6 @@ pub(in crate::c5::compiler) struct Pending {
     /// Read once by the file-scope declaration path.
     pub bare_function_type_declarator: bool,
 
-    /// Override stride for the next `[i]` postfix index. When we
-    /// load the address of a 2D-array variable (`T xs[N][M]`),
-    /// the first subscript should scale the index by
-    /// `M * sizeof(T)`, not `sizeof(T)`. The expr() identifier
-    /// branch sets this to `inner_array_size * sizeof(elem)` on a
-    /// 2D-array decay; the Brak postfix handler reads-and-clears
-    /// it before falling back to the regular pointer-arithmetic
-    /// stride. Zero means "use the regular stride."
-    pub index_stride: i64,
-
-    /// Strides for the *remaining* subscript levels of an N-dim
-    /// array (N >= 3), beyond the first one held in
-    /// `index_stride`. For `T xs[A][B][C]` after the
-    /// `xs` decay the levels are: first = `B*C*sizeof(T)`
-    /// (in `index_stride`), then `C*sizeof(T)` (in this
-    /// vec), then the regular `sizeof(T)` fall-through. Each
-    /// Brak postfix consumes one stride and shifts the rest
-    /// down. Empty means "no further multi-dim strides queued."
-    pub index_strides_tail: Vec<i64>,
-
-    /// Snapshot of the multi-dim stride queue taken at the bottom
-    /// of every `expr()` -- just before the defensive clear
-    /// runs. Lets an outer operator that ran a recursive `expr()`
-    /// (notably unary `*` on a pointer-to-array operand)
-    /// recover what the inner parse seeded but nothing
-    /// consumed. Reset to zero on the next `expr()` exit, so
-    /// the inspector window is one operator deep.
-    pub end_of_expr_stride: i64,
-    pub end_of_expr_strides_tail: Vec<i64>,
-
     /// Inner dimensions (below the outermost) for the next
     /// `collect_array_initializer` call, outermost first. Set by
     /// callers from the declarator's `array_dims[1..]` so a nested
@@ -1127,8 +1127,9 @@ pub(in crate::c5::compiler) struct Pending {
     /// `array_size == -1`, but they declare different objects: `[0]` is
     /// a complete GNU zero-length array (`sizeof` 0, no elements), while
     /// empty brackets leave the type incomplete until an initializer or
-    /// C99 6.9.2p2 completion supplies a count. Written by the array
-    /// declarator, read by the object allocators.
+    /// C99 6.9.2p2 completion supplies a count. Written while a declarator
+    /// is parsed; `parse_declarator` scopes it to that declarator and
+    /// returns it.
     pub declarator_zero_len_array: bool,
     /// Set by `sizeof_operand_bytes` to the VLA's runtime-byte-count
     /// slot when the operand is a variable-length array (C99
@@ -1194,13 +1195,16 @@ pub(in crate::c5::compiler) struct Pending {
     /// `RET (name)(args)` decays to a pointer to function (C99 6.7.5.3p8),
     /// the same as `RET (*name)(args)`.
     pub param_decl_context: bool,
+    /// The element count of the array the value just parsed decayed from
+    /// (C99 6.3.2.1p3), its elements of the type the value points to: the
+    /// outermost bound, -1 for a zero-length array, 0 for no array.
     pub last_array_decay_size: i64,
 
-    /// Full dimension list of the array expression that most recently
-    /// decayed to a pointer at an identifier load. `&arr` reads it to
-    /// rebuild the pointer-to-array aggregate for a multi-dimensional
-    /// array (C99 6.5.3.2p3), where `last_array_decay_size` holds only
-    /// the outermost dimension. Cleared the same way so it doesn't leak.
+    /// Full dimension list, outermost first, of the array expression that
+    /// most recently decayed to a pointer. `&arr` reads it to rebuild the
+    /// pointer-to-array aggregate (C99 6.5.3.2p3), where
+    /// `last_array_decay_size` holds only the outermost dimension. Cleared
+    /// the same way so it doesn't leak.
     pub last_array_decay_dims: alloc::vec::Vec<i64>,
     /// The array type (struct id) of the variable-length array the value
     /// just parsed decayed from, for `&`, `sizeof` and `typeof`.
@@ -1221,12 +1225,10 @@ pub(in crate::c5::compiler) struct Pending {
     /// gets the dimension, mirroring an array typedef base.
     pub typeof_operand_array_size: i64,
 
-    /// Byte width of a `typeof` operand that decayed to the element
-    /// pointer with only the row size recorded (a pointer-to-array
-    /// deref `*p`, a string literal, or a 1D row of a multi-dim
-    /// subscript). Captured only when the row is 1D-reducible (no
-    /// pending multi-dim stride); `parse_typeof_specifier` recovers the
-    /// element count as `bytes / sizeof(elem)` so `typeof(*p)` is the
+    /// Byte width of a `typeof` operand that decayed with its byte count
+    /// recorded (a string literal, a row a subscript or `*` selects).
+    /// Without recorded bounds `parse_typeof_specifier` recovers the
+    /// element count as `bytes / sizeof(elem)`, so the specifier is the
     /// array type rather than the decayed element pointer.
     pub typeof_operand_array_bytes: i64,
 
@@ -1238,14 +1240,11 @@ pub(in crate::c5::compiler) struct Pending {
     /// cannot express those bounds or a multi-dimensional row.
     pub typeof_operand_array_dims: alloc::vec::Vec<i64>,
 
-    /// Companion to `last_array_decay_size` for cases where the
-    /// row's byte size is known directly but its shape can't be
-    /// reduced to a single `count * sizeof(elem_ty)` pair --
-    /// concretely, multi-dim subscripts of a pointer-to-array
-    /// like `T (*p)[A][B]; sizeof(p[0])`. The Brak postfix
-    /// handler stashes the consumed `multi_dim_stride` here so
-    /// `sizeof` can return the whole row size. Cleared the same
-    /// way as `last_array_decay_size` so it doesn't leak.
+    /// Companion to `last_array_decay_size` where the decay knows the
+    /// array's byte size directly: a row a subscript or unary `*` selects
+    /// through a pointer to an array, a string literal, a
+    /// multi-dimensional compound literal. `sizeof` prefers it. Cleared
+    /// the same way as `last_array_decay_size` so it doesn't leak.
     pub last_array_decay_bytes: i64,
 
     /// The object the running expression designates, for
@@ -1333,6 +1332,12 @@ pub(in crate::c5::compiler) struct Pending {
     /// alongside `was_read`.
     pub last_loaded_local_prior_pending: Vec<usize>,
 
+    /// The latest scalar assignment to a local, with the local and the
+    /// `was_read` it marked: an assignment whose value is used reads its
+    /// left operand, as gcc's -Wunused-but-set-variable counts it, and a
+    /// context discarding that value restores the flag.
+    pub value_assignment: Option<(crate::c5::ast::ExprId, usize, bool)>,
+
     /// AST id of the rhs expression that the bitfield write path
     /// (`emit_bitfield_access`'s Assign branch) just parsed. The
     /// storage emit the same routine produces afterwards triggers
@@ -1342,12 +1347,6 @@ pub(in crate::c5::compiler) struct Pending {
     /// in `expr.rs` to build `Expr::BitfieldAssign`. `None`
     /// outside the bitfield-assign window.
     pub bf_assign_rhs: Option<crate::c5::ast::ExprId>,
-    /// Compound-assignment counterpart of `bf_assign_rhs`. Holds
-    /// `(rhs_ast_id, op)` where `op` is the binary operator the
-    /// assignment expanded to. The Member handler reads this and
-    /// builds `Expr::BitfieldAssign { rhs: Binop(read, op, rhs) }`
-    /// per C99 6.5.16.2 (`E1 OP= E2` == `E1 = E1 OP E2`).
-    pub bf_compound_assign: Option<(crate::c5::ast::ExprId, crate::c5::ir::BinOp)>,
 
     /// True while the trailing emit is an indirect-call shape
     /// (the indirect-call tag, optionally followed by a
@@ -1658,6 +1657,7 @@ impl Default for Pending {
     fn default() -> Self {
         Self {
             base_was_void: false,
+            base_implicit_int: false,
             base_is_const: false,
             spell_base_const: false,
             spell_base_restrict: false,
@@ -1677,10 +1677,6 @@ impl Default for Pending {
             fn_decl_base: None,
             base_is_function_type: false,
             bare_function_type_declarator: false,
-            index_stride: 0,
-            index_strides_tail: Vec::new(),
-            end_of_expr_stride: 0,
-            end_of_expr_strides_tail: Vec::new(),
             init_inner_dims: alloc::vec::Vec::new(),
             init_target_array_size: 0,
             typedef_base_array_size: 0,
@@ -1722,8 +1718,8 @@ impl Default for Pending {
             last_loaded_local: None,
             last_loaded_local_prior_was_read: false,
             last_loaded_local_prior_pending: Vec::new(),
+            value_assignment: None,
             bf_assign_rhs: None,
-            bf_compound_assign: None,
             last_emit_was_indirect_call: false,
             last_imm_was_zero: false,
             compound_lit_close_parens: 0,
@@ -2029,6 +2025,17 @@ pub struct Compiler {
     /// scopes to the immediately following declarator only.
     pending_noreturn: bool,
 
+    /// Nesting depth of operands that are not evaluated: the operands of
+    /// `sizeof`, `_Alignof` and `typeof`, of `__builtin_object_size` and
+    /// `__builtin_constant_p`, `_Generic`'s controlling expression, the
+    /// `?:` arm a constant condition skips and the `&&` / `||` operand a
+    /// constant short-circuits, and a speculative parse. A diagnostic about
+    /// the value the operand would compute stays quiet there, as in gcc.
+    unevaluated: u32,
+    /// The integer literals that stand for a folded `__builtin_object_size`,
+    /// which C does not count as integer constant expressions.
+    folded_builtin_lits: Vec<super::ast::ExprId>,
+
     /// Nesting depth of unevaluated constant-expression operands
     /// (short-circuited `&&` / `||` right sides and not-taken `?:`
     /// arms). C99 6.6p4 forbids a zero divisor in a constant
@@ -2151,11 +2158,12 @@ pub struct Compiler {
     /// declaring the same name get distinct keys. Cleared at every
     /// function start.
     local_label_scopes: LocalLabelScopes,
-    /// Per nested `switch` body: drained at switch close. The
-    /// AST emitter records each case's constant on its `Stmt::Case`
-    /// node; this stack is the parser-side depth tracker that
-    /// gates `case` / `default` legality.
-    switch_cases: Vec<Vec<i64>>,
+    /// Per nested `switch` body, the labels seen so far. The AST emitter
+    /// records each case's value on its `Stmt::Case` node; this stack also
+    /// gates `case` legality.
+    switch_cases: Vec<stmt::SwitchLabels>,
+    /// The array size expressions of the parameter list being parsed.
+    param_sizes: Vec<function::ParamSize>,
     /// Per nested `switch` body: `true` once a `default:` label
     /// was seen.
     switch_defaults: Vec<bool>,
@@ -2381,6 +2389,12 @@ pub struct Compiler {
     /// return-type prototype (implicit int). Dedupes the diagnostic to
     /// one per callee.
     warned_implicit_ret: alloc::collections::BTreeSet<usize>,
+    /// Where the operand the precedence loop is extending begins, so a
+    /// diagnostic about a call can spell the callee expression.
+    operand_start: usize,
+    /// The function type the elements of the array being initialized lead
+    /// to and their depth, for the conversion check of each element.
+    array_elem_fn: Option<(crate::c5::symbol::FnType, i64)>,
     /// The composite type and the function body of each identifier with
     /// linkage, by symbol index.
     linked_entities: hashbrown::HashMap<usize, redeclaration::LinkedEntity>,
@@ -2394,7 +2408,7 @@ pub struct Compiler {
     target: Target,
 
     /// Side-channel state shared between parser layers -- the
-    /// 11 transient flags / stride queues / chain-depth counters
+    /// transient flags / decay records / chain-depth counters
     /// the recursive descent reaches for. Grouped into one
     /// carrier so `Compiler` doesn't grow per parser-feature.
     /// Reset to `Pending::default()` at compiler construction.
@@ -2579,6 +2593,10 @@ pub struct Compiler {
     /// real function body lands so they never split a caller
     /// mid-emission.
     sys_trampoline_sym: alloc::collections::BTreeMap<usize, usize>,
+    /// [`Program::sys_trampolines`].
+    sys_trampolines: Vec<(u64, i64)>,
+    /// Declarations recorded so far; see `BindingInfo::decl_seq`.
+    decl_count: u32,
 
     /// Per-TU counter for anonymous compound-literal backing
     /// symbols. C99 6.5.2.5 compound literals at file scope
@@ -2764,6 +2782,8 @@ impl Compiler {
         }
         pp.set_source_label(&opts.source_label);
         pp.set_track_includes(opts.track_includes);
+        pp.set_keep_pragmas(opts.keep_pragmas);
+        pp.set_preprocessed(opts.preprocessed);
         pp.set_asm_source(opts.asm_source);
         if let Some(secs) = opts.translation_time {
             pp.set_translation_time(secs);
@@ -2844,7 +2864,7 @@ impl Compiler {
         // with a force-include, need a copy. Recording for pass reuse is
         // skipped when the retry is off for every name.
         let retry_opts = opts.clone();
-        let record = !(opts.nostdinc || opts.no_builtin);
+        let record = !(opts.nostdinc || opts.no_builtin || opts.preprocessed);
         let mut this = Self::build_recording(&source, target, opts, record);
         this.retry_state = Some((source, retry_opts));
         this
@@ -3006,6 +3026,8 @@ impl Compiler {
             deferred_error,
             dylibs,
             warned_implicit_ret: alloc::collections::BTreeSet::new(),
+            operand_start: 0,
+            array_elem_fn: None,
             linked_entities: hashbrown::HashMap::new(),
             target,
             next_ent_pc: 0,
@@ -3034,6 +3056,8 @@ impl Compiler {
             pending_is_naked: false,
             pending_noreturn: false,
             const_unevaluated: 0,
+            unevaluated: 0,
+            folded_builtin_lits: Vec::new(),
             const_object_fold: 0,
             static_duration_init: 0,
             ast: super::ast::Ast::new(),
@@ -3052,6 +3076,7 @@ impl Compiler {
             unresolved_gotos: Vec::new(),
             local_label_scopes: LocalLabelScopes::default(),
             switch_cases: Vec::new(),
+            param_sizes: Vec::new(),
             switch_defaults: Vec::new(),
             structs: Vec::new(),
             tag_scopes: alloc::vec![alloc::vec::Vec::new()],
@@ -3130,6 +3155,8 @@ impl Compiler {
             current_function_name: String::new(),
             code_reloc_sym_idx: Vec::new(),
             sys_trampoline_sym: alloc::collections::BTreeMap::new(),
+            sys_trampolines: Vec::new(),
+            decl_count: 0,
             glo_imm_refs: alloc::vec::Vec::new(),
             data_reloc_sym_idx: alloc::vec::Vec::new(),
             init_reloc_slots: alloc::collections::BTreeSet::new(),
@@ -3600,8 +3627,7 @@ impl Compiler {
                 };
             }
             // An object alias keeps its declared type; its symbol takes
-            // the aliased object's size, as GNU as gives a `.set` alias,
-            // which Linux's modpost reads a `MODULE_DEVICE_TABLE` by.
+            // the aliased object's size, as GNU as gives a `.set` alias.
             for &(alias, target) in &self.object_aliases {
                 self.symbols[alias].data_byte_size = self.symbols[target].data_byte_size;
             }
@@ -3701,6 +3727,8 @@ impl Compiler {
             data_relocs: self.data_relocs,
             extern_data_relocs: self.extern_data_relocs,
             code_relocs: self.code_relocs,
+            sys_trampolines: self.sys_trampolines,
+            bind_trampoline_slots: false,
             tls_data_relocs: self.tls_data_relocs,
             tls_extern_data_relocs: self.tls_extern_data_relocs,
             tls_code_relocs: self.tls_code_relocs,

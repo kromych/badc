@@ -1,6 +1,6 @@
 // C99 6.4.5p6: string-literal storage is immutable, so a load from a
-// literal at a constant index may fold to the initializer's byte. The
-// kernel guards compile-time assertions with such reads
+// literal at a constant index may fold to the initializer's byte. A
+// compile-time assertion may guard on such a read
 // (fmt[sizeof(fmt) - 2] != '\n'). The folded value must equal what the
 // unoptimized load reads: every position (interior, terminator),
 // concatenated parts, escapes, and `__func__`.

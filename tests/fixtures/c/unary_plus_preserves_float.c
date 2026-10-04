@@ -4,8 +4,7 @@
 // and a subsequent `r + (+0.5)` lowers as integer addition on the
 // double's bit pattern, producing garbage.
 //
-// Surfaced via the SQL `round()` built-in: the rounding kernel
-// reads
+// A rounding routine reads
 //
 //     r = (double)((long)(r + (r<0 ? -0.5 : +0.5)));
 //

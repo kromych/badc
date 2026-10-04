@@ -4,8 +4,8 @@
 // the table drops, the static functions only its initializer named drop
 // with it, and the declared-never-defined symbol they called leaves no
 // undefined reference behind -- this unit links only because it does.
-// A kernel earlycon table takes this shape in a module build, keeping
-// the section and losing `used`. `used` pins what it names.
+// A table declared with a section and without `used` takes this shape.
+// `used` pins what it names.
 
 struct entry {
     const char *name;

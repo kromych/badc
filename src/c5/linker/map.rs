@@ -348,8 +348,7 @@ pub struct RelocRow {
 ///
 /// `-r` resolves no addresses, so the output section headers carry the
 /// image's own `sh_addr` (zero) and `sh_size`, and each row sits at its
-/// offset within the section. That is what `generate_builtin_ranges.awk`
-/// reads out of `vmlinux.o.map` to attribute a section's bytes to the
+/// offset within the section, which attributes a section's bytes to the
 /// object that contributed them.
 pub fn render_relocatable_map(
     image: &[u8],

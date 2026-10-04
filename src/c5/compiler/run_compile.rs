@@ -372,6 +372,7 @@ impl Compiler {
         self.pending.attr_weak = false;
         self.pending.attr_call_conv = crate::c5::codegen::CallConv::Target;
         self.pending.attr_used = false;
+        self.pending.attr_maybe_unused = false;
         self.pending.attr_visibility = None;
         self.pending.attr_section = None;
         self.pending.attr_patchable_entry = None;
@@ -431,7 +432,7 @@ impl Compiler {
             static_seen: storage.is_static,
             extern_seen: storage.is_extern,
             thread_local: storage.is_thread_local,
-            implicit_int: storage.implicit_int,
+            implicit_int: core::mem::take(&mut self.pending.base_implicit_int),
             base_spelling: self.take_base_spelling(),
             base_enum_tag: self.pending.base_enum_tag.take(),
             // A typedef-carried type alignment applies to every declarator;
@@ -487,7 +488,14 @@ impl Compiler {
         // list -- for diagnostics that would otherwise point at the
         // function body's opening brace parsed further below.
         let signature_line = self.lex.line;
-        let (id_idx, mut ty, mut array_size) = self.parse_declarator(bt)?;
+        let (id_idx, mut ty, mut array_size, mut zero_len_array) = self.parse_declarator(bt)?;
+        // A function declarator reports in `define_file_scope_function`.
+        if decl.implicit_int
+            && (is_typedef || (self.lex.tk != '(' && self.pending.fn_params.is_none()))
+        {
+            let what = decl_base::ImplicitInt::Declarator(id_idx);
+            self.report_implicit_int(what, signature_line)?;
+        }
         // `register T name asm("reg")` at file scope is a GNU global
         // register variable; any other `asm(...)` suffix is the
         // assembler name and the object declaration continues
@@ -511,19 +519,10 @@ impl Compiler {
         }
         // A declarator may carry a trailing attribute before the
         // terminator (`name(args) __attribute__((...));`, an
-        // initializer, a comma, or a function body's `{`).
+        // initializer, a comma, or a function body's `{`), and after an
+        // asm label, where it types the declarator as well.
         self.skip_attribute_specifiers()?;
-        // `typedef T name __attribute__((vector_size(N)))` (and the
-        // object form) binds the attribute to the declarator, not the
-        // base type, so it lands here rather than at the base-type
-        // sites. The leading form already consumed it, leaving 0.
-        if self.pending.attr_vector_size > 0 {
-            let n = core::mem::take(&mut self.pending.attr_vector_size);
-            ty = self.make_vector_type(ty, n);
-        }
-        if let Some(m) = self.pending.attr_mode.take() {
-            ty = self.apply_mode_to_type(ty, m)?;
-        }
+        ty = self.apply_pending_type_attributes(ty)?;
         let declarator_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
         // Captured per declarator, before a nested parse (a later parameter
         // of function type) can overwrite it.
@@ -551,7 +550,6 @@ impl Compiler {
         // A fixed dimension (`> 0`) sizes the object; a deferred array
         // typedef (`typedef T X[]`, carried as `-1`) makes the object
         // a deferred array whose size the initializer fixes.
-        let mut zero_len_array = self.pending.declarator_zero_len_array;
         if typedef_dim != 0 && array_size == 0 && !self.pending.base_array_taken {
             array_size = typedef_dim;
             zero_len_array = self.pending.typedef_base_zero_len;
@@ -910,11 +908,27 @@ impl Compiler {
             self.parse_declarator_asm_label(id_idx)?;
             self.skip_attribute_specifiers()?;
         }
+        // A type attribute among them applies to the return type, as in gcc
+        // (`float *f(void) __attribute__((vector_size(16)))` returns a pointer
+        // to a vector); the name's type was recorded before they were read.
+        let declarator_ty = ty;
+        let ty = self.apply_function_declarator_attributes(ty)?;
+        if ty != declarator_ty {
+            self.symbols[id_idx].type_ = ty;
+        }
 
         // C99 6.7.5.3p14: an empty list outside a definition supplies no parameter
         // information, so the composite type keeps the prior list (6.2.7p4); in a
         // definition the same spelling does specify "no parameters".
         let is_defining_declarator = self.lex.tk != ';' && self.lex.tk != ',';
+        if implicit_int {
+            let what = if is_defining_declarator {
+                decl_base::ImplicitInt::Return
+            } else {
+                decl_base::ImplicitInt::Declarator(id_idx)
+            };
+            self.report_implicit_int(what, b.signature_line)?;
+        }
         let keeps_prior_list = params.form == super::function::ParamForm::Empty
             && !is_defining_declarator
             && !prior_params.types.is_empty();
@@ -1154,7 +1168,7 @@ impl Compiler {
                 "parameter name omitted in a function definition",
             ));
         }
-        self.parse_kr_parameter_declarations(&mut params)?;
+        self.parse_kr_parameter_declarations(&mut params, def.line)?;
         self.check_complete_parameters(&params, def.line)?;
         // C99 6.9.1p3: a definition returns void or a complete object type.
         let ret = self.symbols[id_idx].type_;
@@ -1179,6 +1193,7 @@ impl Compiler {
         self.define_linked_function(id_idx, def, Params::of(&params, true))?;
         self.symbols[id_idx].params = arrival.clone();
         self.symbols[id_idx].param_enum_tags = params.enum_tags.clone();
+        self.symbols[id_idx].param_fn_types = params.fn_types.clone();
 
         if self.lex.tk != '{' {
             return Err(self.compile_err(Code::SYNTAX, "bad function definition"));
@@ -1187,7 +1202,7 @@ impl Compiler {
 
         let ent_pc = self.open_function_body(id_idx, &params);
         self.copy_by_value_parameters(&params)?;
-        self.parse_function_body_items()?;
+        self.parse_function_body_items(&params)?;
         self.finish_function_body(ent_pc, &params, arrival)?;
         // The capture runs before the scope unwind restores the outer bindings.
         // DWARF 5 3.3.4 groups the DIEs by the subprogram's entry pc and locates
@@ -1227,7 +1242,9 @@ impl Compiler {
     fn parse_kr_parameter_declarations(
         &mut self,
         params: &mut super::function::ParsedParams,
+        line: usize,
     ) -> Result<(), C5Error> {
+        let mut declared = alloc::vec![false; params.indices.len()];
         // C99 6.9.1: an old-style (K&R) definition lists the
         // parameter names in the declarator and gives their
         // types in declarations between the `)` and the
@@ -1253,25 +1270,68 @@ impl Compiler {
                 self.next()?;
                 saw_specifier = true;
             }
-            let base = if self.lex_is_type_start() {
-                self.parse_decl_base_type()?
+            let (base, implicit_int) = if self.lex_is_type_start() {
+                let base = self.parse_decl_base_type()?;
+                (base, core::mem::take(&mut self.pending.base_implicit_int))
             } else if saw_specifier || self.lex.tk == Token::Id {
-                Ty::Int as i64
+                (Ty::Int as i64, true)
             } else {
                 break;
-            } | qual_bits;
+            };
+            let base = base | qual_bits;
             let base_enum_tag = self.pending.base_enum_tag.take();
             while self.lex.tk != ';' && self.lex.tk != 0 {
-                let (decl_idx, mut decl_ty, decl_arr) = self.parse_declarator(base)?;
+                // C99 6.9.1p6: the list declares the parameters, so a bound
+                // and a function type adjust as a prototype's (6.7.5.3p7-8).
+                self.pending.param_decl_context = true;
+                let decl_line = self.lex.line;
+                let (decl_idx, mut decl_ty, decl_arr, _) = self.parse_declarator(base)?;
+                if implicit_int {
+                    let what = decl_base::ImplicitInt::Declarator(decl_idx);
+                    self.report_implicit_int(what, decl_line)?;
+                }
+                let (fn_ptr_indirection, fn_ptr_ret_indirection, fn_params, ret_fn) =
+                    self.take_param_fn_ptr_carriers();
                 if decl_idx != usize::MAX {
-                    // An array parameter is adjusted to a
-                    // pointer to the element type (6.7.5.3p7).
+                    // An array parameter is adjusted to a pointer to its
+                    // element type (6.7.5.3p7), a row for more than one
+                    // bound; the bounds leave the symbol with it. An array
+                    // typedef no derivation took is the parameter's type.
+                    let typedef_array =
+                        self.pending.typedef_base_array_size != 0 && !self.pending.base_array_taken;
                     if decl_arr != 0 {
-                        decl_ty += Ty::Ptr as i64;
+                        let dims = core::mem::take(&mut self.symbols[decl_idx].array_dims);
+                        self.symbols[decl_idx].inner_array_size = 0;
+                        decl_ty = self.array_value_ty(decl_ty, &dims);
+                    } else if typedef_array {
+                        let dims = self.typedef_base_dims();
+                        decl_ty = self.array_value_ty(decl_ty, &dims);
                     }
                     if let Some(pos) = params.indices.iter().position(|&pi| pi == decl_idx) {
+                        declared[pos] = true;
                         self.symbols[decl_idx].type_ = decl_ty;
                         self.symbols[decl_idx].incomplete_enum_tag = base_enum_tag;
+                        // The adjusted pointer is one more level above a
+                        // function-pointer element.
+                        let adjusted = decl_arr != 0 || typedef_array;
+                        let carriers = (
+                            fn_ptr_indirection,
+                            fn_ptr_ret_indirection,
+                            fn_params.clone(),
+                            ret_fn.clone(),
+                        );
+                        let conv = crate::c5::codegen::CallConv::Target;
+                        let fn_type = super::function::param_fn_type(carriers, conv, adjusted);
+                        params.note_fn_type(pos, fn_type);
+                        self.symbols[decl_idx].fn_ptr_indirection =
+                            fn_ptr_indirection + i64::from(adjusted && fn_ptr_indirection > 0);
+                        self.symbols[decl_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
+                        self.symbols[decl_idx].ret_fn = ret_fn;
+                        if fn_ptr_indirection > 0
+                            && let Some(pp) = fn_params
+                        {
+                            self.symbols[decl_idx].set_fn_params(pp);
+                        }
                         params.types[pos] = decl_ty;
                         params.note_enum_tag(pos, base_enum_tag);
                     } else {
@@ -1285,7 +1345,51 @@ impl Compiler {
             }
             self.accept(';')?;
         }
+        params.sizes.append(&mut self.param_sizes);
+        // C99 6.9.1p6: an identifier the list leaves undeclared takes `int`.
+        if params.form == super::function::ParamForm::IdentifierList {
+            for (pos, &idx) in params.indices.iter().enumerate() {
+                if !declared[pos] {
+                    let what = decl_base::ImplicitInt::UndeclaredParameter(idx);
+                    self.report_implicit_int(what, line)?;
+                }
+            }
+        }
         Ok(())
+    }
+
+    /// C99 6.9.1p10: on entry the size expressions of the parameters are
+    /// evaluated, in order. Each parameter is adjusted to a pointer
+    /// (6.7.5.3p7), so only the side effects remain. Each expression is
+    /// parsed again where the body begins, where a name a later parameter
+    /// declares would bind to that parameter.
+    fn evaluate_parameter_sizes(
+        &mut self,
+        params: &super::function::ParsedParams,
+    ) -> Result<Vec<super::super::ast::StmtId>, C5Error> {
+        let mut items = Vec::new();
+        if params.sizes.is_empty() {
+            return Ok(items);
+        }
+        let resume = self.lex.snapshot();
+        for size in &params.sizes {
+            // TODO: evaluate such a size in the scope it was written in.
+            if let Some(&idx) = size.outer_names.iter().find(|i| params.indices.contains(i)) {
+                let name = self.symbols[idx].name.clone();
+                return Err(self.compile_err(
+                    Code::UNSUPPORTED,
+                    format!(
+                        "a parameter's array size naming `{name}`, which a later parameter \
+                         declares, is not supported"
+                    ),
+                ));
+            }
+            self.restore_lex(size.at);
+            self.expr(Token::Assign as i64)?;
+            items.extend(self.ast_emit_expr_stmt());
+        }
+        self.restore_lex(resume);
+        Ok(items)
     }
 
     /// Open the frame the body emits into: the return-type state the
@@ -1461,13 +1565,16 @@ impl Compiler {
         Ok(())
     }
 
-    fn parse_function_body_items(&mut self) -> Result<(), C5Error> {
+    fn parse_function_body_items(
+        &mut self,
+        params: &super::function::ParsedParams,
+    ) -> Result<(), C5Error> {
         // C99 block-scope: declarations may appear
         // anywhere a statement may. Each iteration
         // either parses a local decl (with optional
         // initializer) into the function's symbol
         // frame, or parses a statement.
-        let mut top_level_ids: alloc::vec::Vec<super::super::ast::StmtId> = alloc::vec::Vec::new();
+        let mut top_level_ids = self.evaluate_parameter_sizes(params)?;
         self.stmt_expr_arena_ranges.clear();
         // C99 6.2.1: a tag declared in a function body has
         // block scope. Push a tag scope so a struct / union /
@@ -1502,15 +1609,17 @@ impl Compiler {
             // statement at the function-body top level.
             // Consume it, then dispatch on the following
             // token.
-            let mut leading_maybe_unused = false;
+            let (mut leading_maybe_unused, mut leading_noreturn) = (false, false);
             if self.lex.tk == Token::Attribute
                 || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
             {
                 self.pending.attr_maybe_unused = false;
                 self.pending.attr_cleanup = None;
                 self.pending.attr_uninitialized = false;
+                self.pending_noreturn = false;
                 self.skip_attribute_specifiers()?;
                 leading_maybe_unused = self.pending.attr_maybe_unused;
+                leading_noreturn = core::mem::take(&mut self.pending_noreturn);
                 if self.lex.tk == '}' {
                     break;
                 }
@@ -1532,7 +1641,7 @@ impl Compiler {
                 self.parse_block_typedef()?;
             } else if self.lex_is_block_decl_start() {
                 let item_before = self.ast_stmts_snapshot();
-                self.parse_local_decl(leading_maybe_unused)?;
+                self.parse_local_decl(leading_maybe_unused, leading_noreturn)?;
                 let item_after = self.ast.stmts.len();
                 // Skip any statement-expression sub-statements
                 // interleaved by an initializer; they are
@@ -1841,14 +1950,13 @@ impl Compiler {
     ) {
         // The function's own bindings only: an inner block reports its locals at
         // its own exit. Runs before the scope unwind, which overwrites the class
-        // this test reads. A leading `_` suppresses the diagnostic, as under gcc
-        // and clang.
+        // this test reads.
         enum UnusedKind {
             Variable,
             Parameter,
             ValueSet,
         }
-        let mut unused: Vec<(usize, String, UnusedKind)> = Vec::new();
+        let mut unused: Vec<(u32, usize, String, UnusedKind)> = Vec::new();
         for &bi in bound {
             let i = bi as usize;
             let sym = &self.symbols[i];
@@ -1858,7 +1966,6 @@ impl Compiler {
                 || sym.binding.was_read
                 || sym.binding.maybe_unused
                 || sym.name.is_empty()
-                || sym.name.starts_with('_')
             {
                 continue;
             }
@@ -1881,9 +1988,11 @@ impl Compiler {
             } else {
                 UnusedKind::Variable
             };
-            unused.push((sym.binding.decl_line, sym.name.clone(), kind));
+            let b = &sym.binding;
+            unused.push((b.decl_seq, b.decl_line, sym.name.clone(), kind));
         }
-        for (line, name, kind) in unused {
+        unused.sort_by_key(|u| u.0);
+        for (_, line, name, kind) in unused {
             let (code, msg) = match kind {
                 UnusedKind::Variable => (
                     Code::UNUSED_VARIABLE,
@@ -2277,7 +2386,7 @@ impl Compiler {
         was_tentative_glo: bool,
     ) -> Result<(), C5Error> {
         self.pending.init_inner_dims = self.inner_dims_of(id_idx);
-        let elements = self.collect_array_initializer(ty)?;
+        let elements = self.collect_array_initializer(ty, self.elem_fn_type(id_idx))?;
         let final_size = elements.len() as i64;
         self.symbols[id_idx].array_size = final_size;
         // `T xs[] = {}` resolves to zero elements; keep the
@@ -2366,7 +2475,7 @@ impl Compiler {
         // at the end of the unit is completed to one
         // element. A GNU `T x[0]` is complete already and
         // holds no elements, so it keeps the zero count.
-        let zero_len = self.pending.declarator_zero_len_array;
+        let zero_len = self.symbols[id_idx].is_zero_len_array;
         let count = if zero_len { 0 } else { 1 };
         self.symbols[id_idx].array_size = count;
         self.symbols[id_idx].is_zero_len_array = zero_len;
@@ -2409,7 +2518,7 @@ impl Compiler {
         if self.lex.tk != '{' {
             return Err(self.compile_err(
                 Code::INVALID_INITIALIZER,
-                "array initializer must start with `{{`",
+                "array initializer must start with `{`",
             ));
         }
         let sid = struct_id_of(ty);
@@ -2697,7 +2806,7 @@ impl Compiler {
             if self.lex.tk != '{' {
                 return Err(self.compile_err(
                     Code::INVALID_INITIALIZER,
-                    "array initializer must start with `{{`",
+                    "array initializer must start with `{`",
                 ));
             }
             self.next()?;
@@ -2711,7 +2820,7 @@ impl Compiler {
         } else if array_size > 0 {
             self.pending.init_inner_dims = self.inner_dims_of(id_idx);
             self.pending.init_target_array_size = array_size;
-            let elements = self.collect_array_initializer(ty)?;
+            let elements = self.collect_array_initializer(ty, self.elem_fn_type(id_idx))?;
             if elements.len() > array_size as usize {
                 return Err(self.compile_err(
                     Code::INVALID_INITIALIZER,
@@ -2990,9 +3099,9 @@ impl Compiler {
                 || sym.binding.was_referenced
                 || !sym.binding.decl_in_user_source
                 || sym.name.is_empty()
-                || sym.name.starts_with('_')
                 || sym.name == "main"
                 || sym.is_used
+                || sym.binding.maybe_unused
                 || init_names.contains(sym.name.as_str())
             {
                 continue;
@@ -3020,6 +3129,9 @@ impl Compiler {
         }
         if self.pending.attr_used {
             self.symbols[id_idx].is_used = true;
+        }
+        if self.pending.attr_maybe_unused {
+            self.symbols[id_idx].binding.maybe_unused = true;
         }
         // `ms_abi` / `sysv_abi`: the convention of the function this
         // symbol names, or of the function a function-pointer object

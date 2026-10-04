@@ -8,7 +8,7 @@ use badc::Target;
 use super::compile::tu_defines;
 use super::deps::{DepKind, DepOptions};
 use super::diag::eprint_diagnostic;
-use super::options::{AssemblerOption, Mode, accept_assembler_option, parse_c_integer};
+use super::options::{AssemblerOption, Mode, SourceKind, accept_assembler_option, parse_c_integer};
 use super::usage::USAGE;
 
 /// A rejected command line. `styled` routes the text through the
@@ -136,6 +136,7 @@ pub(crate) struct Codegen {
     pub(crate) no_fp_regs: bool,
     pub(crate) strict_align: bool,
     pub(crate) jump_tables: bool,
+    pub(crate) sibling_calls: bool,
     pub(crate) keep_local_labels: bool,
     pub(crate) min_function_alignment: u32,
     pub(crate) patchable_function_entry: badc::PatchableEntry,
@@ -167,6 +168,7 @@ impl Default for Codegen {
             no_fp_regs: false,
             strict_align: false,
             jump_tables: true,
+            sibling_calls: true,
             keep_local_labels: false,
             min_function_alignment: 1,
             patchable_function_entry: badc::PatchableEntry::NONE,
@@ -204,14 +206,25 @@ pub(crate) struct Link {
     /// `-T` / `--script`: switches to the per-input-section engine.
     pub(crate) script_path: Option<PathBuf>,
     pub(crate) orphan_handling: badc::OrphanHandling,
-    pub(crate) build_id_sha1: bool,
-    pub(crate) max_page_size: Option<u64>,
-    pub(crate) pack_relative_relocs: bool,
+    pub(crate) build_id: badc::BuildId,
     pub(crate) apply_dynamic_relocs: bool,
     pub(crate) strip_debug: bool,
     pub(crate) discard_locals: bool,
     pub(crate) discard_none: bool,
     pub(crate) fix_cortex_a53_843419: bool,
+    /// The `-z` keywords, `--no-undefined` as `-z defs`.
+    pub(crate) z: badc::ZKeywords,
+    /// The last of `--warn-execstack` / `--no-warn-execstack`.
+    pub(crate) warn_execstack: Option<bool>,
+    /// Cleared by `--no-warn-rwx-segments`.
+    pub(crate) warn_rwx_segments: bool,
+    /// `--fatal-warnings`: a link warning fails the link.
+    pub(crate) fatal_warnings: bool,
+    /// `-Bsymbolic`: a shared library binds its references to its own
+    /// definitions.
+    pub(crate) symbolic: bool,
+    /// `-Bsymbolic-functions`; the later of it and `-Bsymbolic` holds, as in GNU ld.
+    pub(crate) symbolic_functions: bool,
     /// `--emit-relocs`: keep the resolved relocations in the image.
     pub(crate) emit_relocs: bool,
     /// `--export-all`: every non-static function joins the dynamic
@@ -273,14 +286,18 @@ impl Default for Link {
             library_paths: Vec::new(),
             script_path: None,
             orphan_handling: badc::OrphanHandling::Place,
-            build_id_sha1: false,
-            max_page_size: None,
-            pack_relative_relocs: false,
+            build_id: badc::BuildId::None,
             apply_dynamic_relocs: true,
             strip_debug: false,
             discard_locals: false,
             discard_none: false,
             fix_cortex_a53_843419: false,
+            z: badc::ZKeywords::default(),
+            warn_execstack: None,
+            warn_rwx_segments: true,
+            fatal_warnings: false,
+            symbolic: false,
+            symbolic_functions: false,
             emit_relocs: false,
             export_all: false,
             export_data: false,
@@ -354,6 +371,99 @@ impl Cli {
         } else {
             badc::ExecForm::Pie
         }
+    }
+
+    /// How the hosted link shapes the image it writes; `exec_stack` is
+    /// what [`badc::resolve_exec_stack`] decided from the options and the
+    /// inputs.
+    pub(crate) fn image_options(&self, exec_stack: bool) -> badc::ImageOptions {
+        let link = &self.link;
+        badc::ImageOptions {
+            export_all: link.export_all,
+            export_data: link.export_data,
+            emit_relocs: link.emit_relocs,
+            exec_form: self.exec_form(),
+            strip_debug: link.strip_debug,
+            discard_temporaries: link.discard_locals,
+            elf: badc::ElfImageOptions {
+                build_id: link.build_id,
+                max_page_size: link.z.max_page_size(),
+                pack_relative_relocs: link.z.pack_relative_relocs(),
+                no_apply_dynamic_relocs: !link.apply_dynamic_relocs,
+                exec_stack,
+                symbolic: link.symbolic && self.mode == Mode::SharedLibrary,
+            },
+        }
+    }
+
+    /// Which of its own definitions the image binds through `.dynsym`.
+    pub(crate) fn preemption(&self) -> badc::Preemption {
+        let elf_library = self.mode == Mode::SharedLibrary
+            && self.target.binary_format() == badc::BinaryFormat::Elf;
+        if !elf_library || self.link.symbolic {
+            badc::Preemption::None
+        } else if self.link.symbolic_functions {
+            badc::Preemption::Objects
+        } else {
+            badc::Preemption::All
+        }
+    }
+
+    /// The first link option the link does not implement, by name, with
+    /// what stands in its way: a `-T` link's engine or the image writer
+    /// of the link without one. The `-z` keywords take the answers of the
+    /// table the `--ld` persona shares ([`badc::ZKeyword::in_script_link`],
+    /// [`badc::ZKeyword::in_hosted_link`]). The image without -T keeps
+    /// every local symbol of its inputs (`--discard-none`).
+    pub(crate) fn link_refusal(&self, script: bool) -> Option<(String, &'static str)> {
+        let link = &self.link;
+        let elf = self.target.binary_format() == badc::BinaryFormat::Elf;
+        let shared = self.mode == Mode::SharedLibrary;
+        let elf_only = link.build_id != badc::BuildId::None
+            || !link.apply_dynamic_relocs
+            || link.z.iter().next().is_some();
+        let z_refusal = link.z.refusal(|kw| {
+            if script {
+                kw.in_script_link()
+            } else {
+                kw.in_hosted_link(shared)
+            }
+        });
+        let refusal = if !elf && elf_only {
+            (String::from("-z / --build-id"), "it shapes an ELF image")
+        } else if let Some((kw, why)) = z_refusal {
+            (format!("-z {}", kw.name()), why)
+        } else if script {
+            if link.export_all || link.export_data {
+                (
+                    String::from("--export-all / --export-data"),
+                    "it is not implemented under -T",
+                )
+            } else if link.lib_names().next().is_some() {
+                (String::from("-l"), "a -T link takes its archives by path")
+            } else if link.fix_cortex_a53_843419 && !matches!(self.target, Target::LinuxAarch64) {
+                (
+                    String::from("--fix-cortex-a53-843419"),
+                    "it applies to AArch64 code",
+                )
+            } else {
+                return None;
+            }
+        } else if link.orphan_handling != badc::OrphanHandling::Place {
+            (
+                String::from("--orphan-handling"),
+                "without -T every input section is placed by its name",
+            )
+        } else if link.fix_cortex_a53_843419 {
+            // TODO: the erratum scan on the link without -T.
+            (
+                String::from("--fix-cortex-a53-843419"),
+                "the erratum veneers are generated under -T",
+            )
+        } else {
+            return None;
+        };
+        Some(refusal)
     }
 }
 
@@ -717,7 +827,11 @@ impl Parser {
                     self.front.diag.set_level(row.code, level);
                 }
             }
-            badc::diag::Selector::Diagnostic(code) => self.front.diag.set_level(code, level),
+            sel => {
+                for code in sel.codes() {
+                    self.front.diag.set_level(code, level);
+                }
+            }
         }
         Ok(())
     }
@@ -730,7 +844,11 @@ impl Parser {
                     self.front.diag.error_for(row.code, on);
                 }
             }
-            badc::diag::Selector::Diagnostic(code) => self.front.diag.error_for(code, on),
+            sel => {
+                for code in sel.codes() {
+                    self.front.diag.error_for(code, on);
+                }
+            }
         }
         Ok(())
     }
@@ -951,10 +1069,9 @@ impl Parser {
             }
             // gcc hands a `-Wp,` payload's comma-separated pieces to the
             // preprocessor. There `-MD` / `-MMD` take the output path as
-            // an operand, which is how kbuild requests dependency files.
-            // Reaching the preprocessor directly means no `-o`-derived
-            // rule name applies, so the rule keeps the source-derived
-            // default -- gcc behaves the same.
+            // an operand. Reaching the preprocessor directly means no
+            // `-o`-derived rule name applies, so the rule keeps the
+            // source-derived default -- gcc behaves the same.
             s if s.starts_with("-Wp,") => {
                 let mut parts = s["-Wp,".len()..].split(',');
                 while let Some(part) = parts.next() {
@@ -1193,15 +1310,19 @@ impl Parser {
                 code.fno_pic = true;
             }
             // gcc / clang `-fno-jump-tables`: a switch never dispatches
-            // through a table, only through the compare tree. Kernels
-            // built with retpoline or indirect-branch tracking pass it
-            // because a table dispatch is an indirect branch those
-            // configurations must not take.
+            // through a table, only through the compare tree. A build
+            // under retpolines or indirect-branch tracking passes it,
+            // because a table dispatch is an indirect branch such a build
+            // must not take.
             "-fjump-tables" => code.jump_tables = true,
             "-fno-jump-tables" => code.jump_tables = false,
+            // gcc / clang `-fno-optimize-sibling-calls`: every call returns
+            // into its caller's frame, so a frame-pointer unwinder sees each
+            // caller on the chain.
+            "-foptimize-sibling-calls" => code.sibling_calls = true,
+            "-fno-optimize-sibling-calls" => code.sibling_calls = false,
             // gcc `-fmin-function-alignment=N`: every function entry
-            // lands on a multiple of N, which is how a kernel states
-            // CONFIG_FUNCTION_ALIGNMENT. Unlike `-falign-functions` gcc
+            // lands on a multiple of N. Unlike `-falign-functions` gcc
             // never skips a large gap under it, and badc never does
             // either.
             s if s.starts_with("-fmin-function-alignment=") => {
@@ -1589,8 +1710,8 @@ impl Parser {
                 link.subsystem = Some(parsed);
             }
             // GNU ld surface for script-driven links. `-T FILE` /
-            // `--script=FILE` select the script; the rest mirror the
-            // options the Linux kernel build passes to `ld`.
+            // `--script=FILE` select the script; the rest mirror GNU ld's
+            // options of the same names.
             "-T" | "--script" => {
                 link.script_path = Some(PathBuf::from(operand(
                     iter,
@@ -1617,67 +1738,45 @@ impl Parser {
                     }
                 };
             }
-            "--build-id" => link.build_id_sha1 = true,
+            "--build-id" => link.build_id = badc::BuildId::Sha1,
             s if s.starts_with("--build-id=") => {
-                link.build_id_sha1 = match &s["--build-id=".len()..] {
-                    "sha1" => true,
-                    "none" => false,
-                    other => {
-                        return Err(ParseError::diag(format!(
-                            "badc: error: --build-id=`{other}` is not supported (sha1, none)"
-                        )));
-                    }
-                };
+                let style = &s["--build-id=".len()..];
+                link.build_id = badc::BuildId::parse(style).ok_or_else(|| {
+                    ParseError::diag(format!(
+                        "badc: error: --build-id=`{style}` is not supported \
+                         (sha1, tree, fast, none)"
+                    ))
+                })?;
             }
-            // `-z keyword`: page-size and packing keywords take effect;
-            // the hardening keywords the kernel passes describe states
-            // this linker already emits.
             "-z" => {
                 let kw = operand(iter, "badc: error: -z requires a keyword")?;
-                match kw.as_str() {
-                    s if s.starts_with("max-page-size=") => {
-                        let body = &s["max-page-size=".len()..];
-                        let parsed = if let Some(hex) = body.strip_prefix("0x") {
-                            u64::from_str_radix(hex, 16).ok()
-                        } else {
-                            body.parse::<u64>().ok()
-                        };
-                        match parsed {
-                            Some(n) if n.is_power_of_two() => link.max_page_size = Some(n),
-                            _ => {
-                                return Err(ParseError::diag(
-                                    "badc: error: -z max-page-size requires a power of two",
-                                ));
-                            }
-                        }
-                    }
-                    "pack-relative-relocs" => link.pack_relative_relocs = true,
-                    "nopack-relative-relocs" => link.pack_relative_relocs = false,
-                    "noexecstack" | "execstack" | "norelro" | "relro" | "notext" | "text"
-                    | "now" | "lazy" | "defs" | "nodefault" | "muldefs" => {}
-                    other => {
-                        return Err(ParseError::diag(format!(
-                            "badc: error: unknown -z keyword `{other}`"
-                        )));
-                    }
-                }
+                link.z.push(
+                    badc::parse_z_keyword(&kw)
+                        .map_err(|e| ParseError::diag(format!("badc: error: {e}")))?,
+                );
             }
             "--emit-relocs" => link.emit_relocs = true,
             "--export-all" => link.export_all = true,
             "--export-data" => link.export_data = true,
             "--strip-debug" | "-S" => link.strip_debug = true,
-            "-X" | "--discard-locals" => link.discard_locals = true,
-            "--discard-none" => link.discard_none = true,
+            // The last of `-X` and `--discard-none` holds, as in GNU ld.
+            "-X" | "--discard-locals" => (link.discard_locals, link.discard_none) = (true, false),
+            "--discard-none" => (link.discard_locals, link.discard_none) = (false, true),
+            "--warn-execstack" => link.warn_execstack = Some(true),
+            "--no-warn-execstack" => link.warn_execstack = Some(false),
             "--no-apply-dynamic-relocs" => link.apply_dynamic_relocs = false,
-            // Accepted with no effect on output: diagnostics-shaping and
-            // emulation flags from ld command lines.
-            "--fatal-warnings"
-            | "--no-warn-rwx-segments"
-            | "--no-undefined"
-            | "-EL"
-            | "--pic-veneer"
-            | "-Bsymbolic"
-            | "--no-ld-generated-unwind-info" => {}
+            "--no-undefined" => link.z.push(badc::ZKeyword::Defs(true)),
+            "--fatal-warnings" => link.fatal_warnings = true,
+            "-Bsymbolic" => (link.symbolic, link.symbolic_functions) = (true, false),
+            "-Bsymbolic-functions" => (link.symbolic, link.symbolic_functions) = (false, true),
+            // A -T link warns of a read-write-execute segment, which the
+            // image without -T never has.
+            "--warn-rwx-segments" => link.warn_rwx_segments = true,
+            "--no-warn-rwx-segments" => link.warn_rwx_segments = false,
+            // Properties every badc image has: little-endian, no
+            // generated unwind tables, and no veneer that is not
+            // position-independent.
+            "-EL" | "--pic-veneer" | "--no-ld-generated-unwind-info" => {}
             "--fix-cortex-a53-843419" => link.fix_cortex_a53_843419 = true,
             // ld accepts the emulation joined (`-maarch64linux`) or
             // separate (`-m aarch64linux`).
@@ -1993,11 +2092,13 @@ impl Parser {
     /// wrong place would leave the image claiming a protection it does
     /// not have.
     fn resolve_stack_guard(&mut self, target: Target) -> Result<(), ParseError> {
-        // gcc's x86 default for `-mstack-protector-guard=` is `tls`, so
-        // the kernel names only the register and the symbol on SMP
-        // builds.
+        // gcc's x86 default for `-mstack-protector-guard=` is `tls`, so a
+        // register, an offset or a symbol named alone selects it, as when
+        // a build names only the register and the symbol.
         let kind = self.ssp_guard_kind.or_else(|| {
-            let named = self.ssp_guard_reg.is_some() || self.ssp_guard_offset.is_some();
+            let named = self.ssp_guard_reg.is_some()
+                || self.ssp_guard_offset.is_some()
+                || !self.codegen.stack_protect.guard_symbol.is_empty();
             (named && target.is_x86_64()).then_some("tls")
         });
         if let Some(kind) = kind {
@@ -2011,7 +2112,8 @@ impl Parser {
                         ));
                     }
                     let seg = match self.ssp_guard_reg.as_deref() {
-                        None | Some("fs") => badc::GuardSeg::Fs,
+                        None => badc::GuardSeg::for_code_model(self.codegen.code_model),
+                        Some("fs") => badc::GuardSeg::Fs,
                         Some("gs") => badc::GuardSeg::Gs,
                         Some(other) => {
                             return Err(ParseError::diag(format!(
@@ -2245,6 +2347,7 @@ impl FrontEnd {
             .with_translation_time(self.translation_time)
             .with_source_label(label.to_string())
             .with_diag(self.diag.clone())
+            .with_preprocessed(SourceKind::of(label).is_preprocessed())
     }
 }
 
@@ -2266,6 +2369,7 @@ impl Codegen {
         opts.frame_larger_than = self.frame_larger_than;
         opts.strict_align = self.strict_align;
         opts.jump_tables = self.jump_tables;
+        opts.sibling_calls = self.sibling_calls;
         opts.min_function_alignment = self.min_function_alignment;
         opts.patchable_function_entry = self.patchable_function_entry;
         opts.profiling = self.profiling;
@@ -2958,6 +3062,7 @@ mod tests {
         let cli = parse(&[
             "-fPIC",
             "-fno-jump-tables",
+            "-fno-optimize-sibling-calls",
             "-fsigned-char",
             "-fshort-wchar",
             "-fstrict-flex-arrays=2",
@@ -2970,6 +3075,7 @@ mod tests {
         ]);
         assert!(cli.codegen.fpic && !cli.codegen.fno_pic);
         assert!(!cli.codegen.jump_tables);
+        assert!(!cli.codegen.sibling_calls);
         assert_eq!(cli.front.char_signed, Some(true));
         assert!(cli.front.short_wchar);
         assert_eq!(cli.front.strict_flex_arrays, 2);
@@ -3093,9 +3199,9 @@ mod tests {
         );
     }
 
-    /// `leaf` modifies the `pac-ret` before it, as in gcc's grammar and in
-    /// Linux 5.10-6.1's `-mbranch-protection=pac-ret+leaf+bti`; alone or
-    /// after another feature it is refused, as `b-key` is.
+    /// `leaf` modifies the `pac-ret` before it, as in gcc's grammar
+    /// (`-mbranch-protection=pac-ret+leaf+bti`); alone or after another
+    /// feature it is refused, as `b-key` is.
     #[test]
     fn branch_protection_leaf_modifies_pac_ret() {
         let h = |flag: &str| parse(&[A64, flag, "-c", "a.c"]).codegen.hardening;
@@ -3165,6 +3271,47 @@ mod tests {
         );
     }
 
+    /// A `tls` guard that names no segment takes the code model's, as gcc
+    /// does, wherever `-mcmodel=` stands on the line; a named one is kept.
+    #[test]
+    fn an_unnamed_guard_segment_follows_the_code_model() {
+        let guard = |flags: &[&str]| {
+            let mut args = vec![X64, "-fstack-protector-all", "-c", "a.c"];
+            args.extend_from_slice(flags);
+            parse(&args).codegen.stack_protect.guard
+        };
+        let tls = |seg| badc::StackGuard::Tls {
+            seg,
+            offset: badc::SYSV_TLS_GUARD_OFFSET,
+        };
+        let (fs, gs) = (badc::GuardSeg::Fs, badc::GuardSeg::Gs);
+        for (flags, want) in [
+            (
+                &["-mcmodel=kernel", "-mstack-protector-guard=tls"][..],
+                tls(gs),
+            ),
+            (&["-mstack-protector-guard=tls", "-mcmodel=kernel"], tls(gs)),
+            (
+                &["-mcmodel=kernel", "-mstack-protector-guard-reg=fs"],
+                tls(fs),
+            ),
+            (&["-mstack-protector-guard=tls"], tls(fs)),
+            (&["-mstack-protector-guard-reg=gs"], tls(gs)),
+            // A symbol alone selects `tls` as a register does, as in gcc.
+            (&["-mstack-protector-guard-symbol=g"], tls(fs)),
+            (
+                &["-mcmodel=kernel", "-mstack-protector-guard-symbol=g"],
+                tls(gs),
+            ),
+            // No form named: the ABI's, which emission resolves per model.
+            (&["-mcmodel=kernel"], badc::StackGuard::Abi),
+        ] {
+            assert_eq!(guard(flags), want, "{flags:?}");
+        }
+        let cli = parse(&[X64, "-mstack-protector-guard-symbol=g", "-c", "a.c"]);
+        assert_eq!(cli.codegen.stack_protect.guard_symbol.as_str(), "g");
+    }
+
     #[test]
     fn freestanding_and_shared_pick_the_image_shape() {
         assert!(parse(&["--freestanding", "a.c"]).freestanding);
@@ -3181,7 +3328,7 @@ mod tests {
     #[test]
     fn linker_arguments_reach_the_link_options() {
         let cli = parse(&[X64, "-Wl,-z,max-page-size=65536,-Map=out.map", "a.c"]);
-        assert_eq!(cli.link.max_page_size, Some(65536));
+        assert_eq!(cli.link.z.max_page_size(), Some(65536));
         assert_eq!(cli.link.map_path, Some(PathBuf::from("out.map")));
         let cli = parse(&[
             X64,
@@ -3191,9 +3338,9 @@ mod tests {
             "max-page-size=4096",
             "a.c",
         ]);
-        assert_eq!(cli.link.max_page_size, Some(4096));
+        assert_eq!(cli.link.z.max_page_size(), Some(4096));
         let cli = parse(&[X64, "-Wl,-z", "-Wl,max-page-size=8192", "a.c"]);
-        assert_eq!(cli.link.max_page_size, Some(8192));
+        assert_eq!(cli.link.z.max_page_size(), Some(8192));
         let cli = parse(&[X64, "-Wl,-O1,--as-needed,-no-pie", "a.c"]);
         assert!(
             !cli.front.optimize,
@@ -3389,11 +3536,14 @@ mod tests {
         ]);
         assert_eq!(cli.link.script_path.unwrap(), PathBuf::from("link.ld"));
         assert_eq!(cli.link.orphan_handling, badc::OrphanHandling::Warn);
-        assert!(cli.link.build_id_sha1);
-        assert_eq!(cli.link.max_page_size, Some(0x1000));
-        assert!(cli.link.pack_relative_relocs);
+        assert_eq!(cli.link.build_id, badc::BuildId::Sha1);
+        assert_eq!(cli.link.z.max_page_size(), Some(0x1000));
+        assert!(cli.link.z.pack_relative_relocs());
         assert!(cli.link.emit_relocs && cli.link.export_all && cli.link.export_data);
-        assert!(cli.link.discard_locals && cli.link.discard_none);
+        assert!(
+            !cli.link.discard_locals && cli.link.discard_none,
+            "the last of -X and --discard-none holds"
+        );
         assert!(!cli.link.apply_dynamic_relocs);
         assert!(cli.link.strip_debug && cli.link.fix_cortex_a53_843419);
         assert_eq!(
@@ -3406,7 +3556,7 @@ mod tests {
         );
         assert_eq!(
             reject(&["-z", "nope", "a.o"]),
-            ("badc: error: unknown -z keyword `nope`".to_string(), 1)
+            ("badc: error: unsupported -z keyword `nope`".to_string(), 1)
         );
         assert_eq!(
             reject(&["-z", "max-page-size=3", "a.o"]),

@@ -1,7 +1,11 @@
 // Old-style (K&R) function definition: the parameter names appear in
 // the declarator and their types are given in declarations between the
-// `)` and the body; an unlisted parameter keeps the default int (C99
-// 6.9.1). An array parameter is adjusted to a pointer.
+// `)` and the body. An unlisted parameter takes `int` as in C89, which
+// C99 6.9.1p6 rejects; gcc and clang accept it once -Wimplicit-int is a
+// warning, as the pragma below makes it. An array parameter is adjusted
+// to a pointer.
+
+#pragma GCC diagnostic warning "-Wimplicit-int"
 
 int mix(a, b, c) char b; long c; { return a - c + b; }
 

@@ -205,9 +205,11 @@ pub(crate) struct BitfieldDesc {
     pub bit_offset: u8,
     /// Bit width of the field. Range `[1, 128]`.
     pub bit_width: u8,
-    /// Storage-unit width in bytes (1, 2, 4, 8, or 16). Drives the
-    /// load / store opcode pair per C99 6.7.2.1p11; a 16-byte unit is
-    /// accessed as the two halves of a 128-bit value.
+    /// Storage-unit width in bytes: 1, 2, 4, 8 or 16, or the 3 to 17
+    /// bytes a packed field spans where no such window fits. Drives the
+    /// load / store opcode pair per C99 6.7.2.1p11: a split unit is
+    /// reached in its power-of-two pieces, and one wider than 8 bytes as
+    /// the two halves of a 128-bit value plus a 17th byte.
     pub unit_size: u8,
     /// True when the declared field type is signed -- C99
     /// 6.7.2.1p10 says the read sign-extends through the top of
@@ -222,11 +224,10 @@ pub(crate) struct BitfieldDesc {
 }
 
 impl BitfieldDesc {
-    /// True when the access yields a 128-bit value: the field is stored
-    /// in a 16-byte unit and is too wide for the integer promotions to
-    /// narrow it (see [`bitfield_keeps_declared_ty`]).
-    pub(crate) fn is_wide_value(&self) -> bool {
-        self.unit_size == 16 && bitfield_keeps_declared_ty(self.bit_width as u32)
+    /// True when the storage unit is wider than 8 bytes, accessed as the
+    /// two halves of a 128-bit value.
+    pub(crate) fn is_wide_unit(&self) -> bool {
+        self.unit_size > 8
     }
 }
 
@@ -380,13 +381,17 @@ pub(crate) enum Expr {
         ty: i64,
     },
     /// `lhs op= rhs`. C99 6.5.16.2p3: `lhs` is evaluated exactly
-    /// once; the walker spills the address and reloads. `nsw`: its
-    /// overflow is undefined (C99 6.5p5).
+    /// once, and `op` is performed in `op_ty`, the type of `lhs op rhs`:
+    /// the usual arithmetic conversions of both operands, the promoted
+    /// `lhs` for a shift, the pointer for `+=` / `-=` on one. The result
+    /// converts to `ty`, the type of `lhs`. `nsw`: its overflow is
+    /// undefined (C99 6.5p5).
     CompoundAssign {
         op: BinOp,
         lhs: ExprId,
         rhs: ExprId,
         ty: i64,
+        op_ty: i64,
         nsw: bool,
     },
     /// Prefix `++` / `--`. `by` is the post-pointer-scaling step
@@ -580,11 +585,12 @@ pub(crate) enum Stmt {
     /// `switch (disc) body` (C99 6.8.4.2). `body` is the
     /// statement that contains the case labels.
     Switch { disc: ExprId, body: StmtId },
-    /// `case val: body` (C99 6.8.1).
-    /// `case val: body`, or the GNU range `case val ... hi: body`
-    /// (`hi == val` for a single label). The walker maps every value in
-    /// `[val, hi]` to this case's block.
-    Case { val: i64, hi: i64, body: StmtId },
+    /// `case val: body` (C99 6.8.1), or the GNU range `case val ... hi:
+    /// body` (`hi == val` for a single label). The bounds hold the labels
+    /// converted to the promoted type of the controlling expression
+    /// (6.8.4.2p5); the walker maps every value in `[val, hi]` to this
+    /// case's block.
+    Case { val: i128, hi: i128, body: StmtId },
     /// `default: body` (C99 6.8.1).
     Default { body: StmtId },
     /// `break;` (C99 6.8.6.3).
@@ -1214,10 +1220,8 @@ pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
         // `sizeof <vla>` is a runtime `size_t`; c5 types it as `int`.
         Expr::VlaSizeof { .. } => Some(crate::c5::token::Ty::Int as i64),
         Expr::CompoundLiteral { ty, .. } => Some(*ty),
-        // `&&label` is a `void *` (char-pointer encoding).
-        Expr::LabelAddr(_) => {
-            Some(crate::c5::token::Ty::Char as i64 + crate::c5::token::Ty::Ptr as i64)
-        }
+        // GNU C types `&&label` as `void *`.
+        Expr::LabelAddr(_) => Some(crate::c5::compiler::types::void_ptr_ty()),
         // An asm statement carries no value type.
         Expr::InlineAsm(_) => None,
     }

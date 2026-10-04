@@ -435,7 +435,7 @@ fn extract_asm_sections_impl(
             // `.subsection N` switches to the numbered subsection of the
             // current section: same identity and address space, laid out
             // after every lower-numbered block. The function-body path
-            // handles its ALTERNATIVE `.subsection` in the deferred-region
+            // handles its replacement `.subsection` in the deferred-region
             // splitter before extraction; one reaching here is rejected
             // rather than emitted inline (both sequences would execute).
             ".subsection" => {
@@ -474,8 +474,8 @@ fn extract_asm_sections_impl(
                 code.push_str(stmt);
                 code.push('\n');
             }
-            // GNU as assembles instructions in any section (the x86 ALTERNATIVE
-            // replacement in an `"ax"` section, a trampoline body in
+            // GNU as assembles instructions in any section (an x86 replacement
+            // sequence in an `"ax"` section, a trampoline body in
             // `.rodata`); the section flags set the object section's
             // attributes, not whether code is admitted.
             Some(idx) => {
@@ -526,7 +526,7 @@ fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::Stri
         p.strip_prefix('"').and_then(|p| p.strip_suffix('"'))
     }
     let mut parts = split_top_commas(rest).into_iter().peekable();
-    // The name may be quoted (`.section ".export_symbol","a"`); the quotes
+    // The name may be quoted (`.section ".table","a"`); the quotes
     // are syntax, not part of the section name.
     let name = parts
         .next()
@@ -790,8 +790,7 @@ pub(crate) fn parse_section_item(
         // locations (`.set .Lsz, . - f`). `.equiv` assigns the same way and
         // adds a redefinition error. TODO diagnose a redefinition.
         ".set" | ".equ" | ".equiv" => {
-            // `.set ., expr` moves the location counter, as `.org` does; the
-            // kernel's exception-vector table places its entries that way.
+            // `.set ., expr` moves the location counter, as `.org` does.
             if let Some(v) = rest.trim_start().strip_prefix('.')
                 && let Some(v) = v.trim_start().strip_prefix(',')
             {
@@ -822,7 +821,7 @@ pub(crate) fn parse_section_item(
         ".type" => parse_type_directive(rest),
         ".size" => parse_size_directive(rest),
         // `name = expr` in a section is the assignment spelling of `.set`
-        // (the piggyback length constants). The expander folds the constant
+        // (a payload's length constants). The expander folds the constant
         // form it sees; one reaching here carries an expression or a symbol.
         _ if !tok.starts_with('.')
             && (rest.starts_with('=') && !rest.starts_with("==")
@@ -852,8 +851,8 @@ pub(crate) fn parse_section_item(
                 expr,
             })
         }
-        // A non-directive token is an instruction: the ALTERNATIVE replacement
-        // in `.altinstr_replacement,"ax"`, or a trampoline body assembled into
+        // A non-directive token is an instruction: a replacement sequence in
+        // a pushed `"ax"` section, or a trampoline body assembled into
         // `.rodata`. Keep it as text; the arch backend encodes it to bytes and
         // relocations. A token spelled as a directive (`.`-prefixed) that is
         // not recognized is rejected below.
@@ -1217,8 +1216,8 @@ fn enclosed_by_parens(s: &str) -> Option<&str> {
     (depth == 0).then(|| s[1..s.len() - 1].trim())
 }
 
-/// Strip fully-enclosing parentheses from a label operand. `_ASM_EXTABLE`
-/// wraps its label in parentheses (`.long (1b) - .`); the parentheses are
+/// Strip fully-enclosing parentheses from a label operand. A macro may
+/// wrap its label in parentheses (`.long (1b) - .`); the parentheses are
 /// grouping, so `(1b)` names the same label as `1b`.
 fn strip_label_parens(s: &str) -> &str {
     let mut s = s.trim();

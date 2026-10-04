@@ -7,9 +7,9 @@
 //
 // This pins both halves against the one source of truth, so the
 // fixture's expectation is correct on every target. A widened
-// negative byte that comes back as 227 instead of -29 is the
-// regression that broke TCL's bytecode source-offset decode
-// (`(int) *((char *) p)` with a -29 delta).
+// negative byte that comes back as 227 instead of -29 breaks a
+// bytecode source-offset decode (`(int) *((char *) p)` with a -29
+// delta).
 
 #ifdef __CHAR_UNSIGNED__
 #define EXPECT_NEG_BYTE 227
@@ -42,8 +42,8 @@ int main(void) {
         return 3;
     }
 
-    // Load through a `char *` of a byte with the high bit set, the
-    // exact shape of TclGetInt1AtPtr's `(int) *((char *) p)`.
+    // Load through a `char *` of a byte with the high bit set:
+    // `(int) *((char *) p)`.
     unsigned char raw = 0xE3;
     char *p = (char *)&raw;
     if ((int)*p != EXPECT_NEG_BYTE) {

@@ -1852,6 +1852,97 @@ fn sve_vector_length_and_element_count() {
 }
 
 #[test]
+fn sve_and_sme_register_state_moves() {
+    // llvm-mc 21.1 (-mattr=+sve,+sme) words: LDR/STR of a vector and of a
+    // predicate register at a vector-length-scaled offset, the FFR moves,
+    // pfalse, rdsvl, and LDR/STR of a ZA array vector, whose address repeats
+    // the vector offset. Register 31 as a base is sp.
+    let z = |num| Opnd::ZReg { num, size: None };
+    let p = |num| Opnd::PReg { num, size: None };
+    let pb = |num| Opnd::PReg { num, size: Some(0) };
+    let vl = |base, off| Opnd::MemVl { base, off };
+    let at = |base| Opnd::Mem {
+        base,
+        off: 0,
+        pre: false,
+    };
+    let za = |select, off| Opnd::ZaVec { select, off };
+    let imm = Opnd::Imm;
+    assert_eq!(enc("ldr", &[z(0), at(0)]), 0x85804000);
+    assert_eq!(enc("ldr", &[z(31), vl(1, 31)]), 0x85835C3F);
+    assert_eq!(enc("ldr", &[z(5), vl(31, -256)]), 0x85A043E5);
+    assert_eq!(enc("str", &[z(1), vl(2, 255)]), 0xE59F5C41);
+    assert_eq!(enc("str", &[z(0), at(0)]), 0xE5804000);
+    assert_eq!(enc("ldr", &[p(0), at(0)]), 0x85800000);
+    assert_eq!(enc("ldr", &[p(15), vl(1, 15)]), 0x85811C2F);
+    assert_eq!(enc("str", &[p(3), vl(2, -256)]), 0xE5A00043);
+    assert_eq!(enc("str", &[p(0), at(0)]), 0xE5800000);
+    assert_eq!(enc("rdffr", &[pb(0)]), 0x2519F000);
+    assert_eq!(enc("rdffr", &[pb(15)]), 0x2519F00F);
+    assert_eq!(enc("wrffr", &[pb(0)]), 0x25289000);
+    assert_eq!(enc("wrffr", &[pb(15)]), 0x252891E0);
+    assert_eq!(enc("pfalse", &[pb(0)]), 0x2518E400);
+    assert_eq!(enc("pfalse", &[pb(15)]), 0x2518E40F);
+    assert_eq!(enc("rdsvl", &[x(0), imm(1)]), 0x04BF5820);
+    assert_eq!(enc("rdsvl", &[x(30), imm(-32)]), 0x04BF5C1E);
+    assert_eq!(enc("rdsvl", &[x(5), imm(31)]), 0x04BF5BE5);
+    assert_eq!(enc("ldr", &[za(12, 0), at(0)]), 0xE1000000);
+    assert_eq!(enc("ldr", &[za(15, 15), vl(1, 15)]), 0xE100602F);
+    assert_eq!(enc("str", &[za(13, 3), vl(31, 3)]), 0xE12023E3);
+    assert_eq!(enc("str", &[za(12, 0), at(5)]), 0xE12000A0);
+    // What llvm-mc rejects: an offset outside -256..255 or a byte offset, an
+    // element-size suffix on the moved register and none on the FFR operand,
+    // a select register outside w12..w15, a ZA offset outside 0..15 or not
+    // repeated in the address, rdsvl #32 and rdsvl sp.
+    assert!(encode("ldr", &[z(0), vl(0, 256)]).is_err());
+    assert!(encode("ldr", &[p(0), vl(0, -257)]).is_err());
+    assert!(
+        encode(
+            "ldr",
+            &[
+                z(0),
+                Opnd::Mem {
+                    base: 0,
+                    off: 1,
+                    pre: false
+                }
+            ]
+        )
+        .is_err()
+    );
+    assert!(
+        encode(
+            "ldr",
+            &[
+                Opnd::ZReg {
+                    num: 0,
+                    size: Some(0)
+                },
+                at(0)
+            ]
+        )
+        .is_err()
+    );
+    assert!(encode("rdffr", &[p(0)]).is_err());
+    assert!(
+        encode(
+            "pfalse",
+            &[Opnd::PReg {
+                num: 0,
+                size: Some(1)
+            }]
+        )
+        .is_err()
+    );
+    assert!(encode("ldr", &[za(11, 0), at(0)]).is_err());
+    assert!(encode("ldr", &[za(12, 16), vl(0, 16)]).is_err());
+    assert!(encode("ldr", &[za(12, 1), at(0)]).is_err());
+    assert!(encode("ldr", &[za(12, 1), vl(0, 2)]).is_err());
+    assert!(encode("rdsvl", &[x(0), imm(32)]).is_err());
+    assert!(encode("rdsvl", &[sp(true), imm(1)]).is_err());
+}
+
+#[test]
 fn ror_immediate_is_the_extr_alias() {
     // ror Rd, Rn, #n is extr Rd, Rn, Rn, #n; the register form stays rorv.
     assert_eq!(enc("ror", &[x(0), x(0), Opnd::Imm(1)]), 0x93C00400);

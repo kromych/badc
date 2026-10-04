@@ -42,21 +42,3 @@ Disassembly of section .text:
                	movl	$0x2a, %eax
                	popq	%rbp
                	retq
-
-<__c5_sys_geteuid>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movl	%eax, %eax
-               	popq	%rbp
-               	retq
-
-<__c5_sys_getpid>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	xorl	%eax, %eax
-               	callq	<addr>
-               	movslq	%eax, %rax
-               	popq	%rbp
-               	retq

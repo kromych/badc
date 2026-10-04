@@ -2,24 +2,23 @@
 // array type takes the literal's brace list, as if the list had been
 // written directly. It applies to static and automatic storage alike, and
 // the literal is commonly wrapped in grouping parentheses by the macro
-// that produces it -- drivers/scsi/fcoe defines its FIP MAC constants as
-// `((__u8[6]) { 1, 0x10, 0x18, 1, 0, 2 })` and initializes `u8 x[ETH_ALEN]`
-// from them.
+// that produces it, as a MAC-address constant
+// `((u8[6]) { 1, 0x10, 0x18, 1, 0, 2 })` that initializes a `u8 x[6]`.
 typedef unsigned char u8;
 
-#define FIP_ALL_FCF_MACS ((u8[6]) { 1, 0x10, 0x18, 1, 0, 2 })
+#define MAC_ADDR ((u8[6]) { 1, 0x10, 0x18, 1, 0, 2 })
 #define TRIPLE           (int[]) { 4, 5, 6 }
 
-static u8 file_sized[6] = FIP_ALL_FCF_MACS;
+static u8 file_sized[6] = MAC_ADDR;
 static int file_unsized[] = TRIPLE;
 
 static int block_static(void) {
-	static u8 s[6] = FIP_ALL_FCF_MACS;
+	static u8 s[6] = MAC_ADDR;
 	return s[1] + s[5];
 }
 
 static int block_auto(void) {
-	u8 a[6] = FIP_ALL_FCF_MACS;
+	u8 a[6] = MAC_ADDR;
 	int t[3] = TRIPLE;
 	return a[2] + t[2];
 }

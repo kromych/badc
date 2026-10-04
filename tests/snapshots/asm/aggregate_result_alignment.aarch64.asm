@@ -131,21 +131,12 @@ Disassembly of section .text:
                	sub	sp, sp, #0x40
                	mov	x16, sp
                	and	sp, x16, #0xffffffffffffffe0
-               	mov	x3, sp
-               	and	x0, x0, #0xff
-               	add	x0, x0, #0x1
-               	add	x0, x0, #0x2
-               	add	x0, x0, #0x3
-               	add	x0, x0, #0x4
-               	add	x0, x0, #0x5
-               	add	x0, x0, #0x6
-               	add	x0, x0, #0x7
+               	mov	x0, sp
                	ldr	x1, [x29, #0x10]
-               	add	x0, x0, x1
-               	sub	x0, x0, #0x24
-               	and	x1, x0, #0xff
+               	add	x1, x1, #0x1f
+               	sub	x1, x1, #0x24
+               	and	x1, x1, #0xff
                	mov	x2, #0x40               // =64
-               	mov	x0, x3
                	bl	<addr>
                	mov	x0, sp
                	mov	x16, x0

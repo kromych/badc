@@ -136,14 +136,9 @@ Disassembly of section .text:
                	subq	$0x40, %rsp
                	andq	$-0x20, %rsp
                	movq	%rdi, -0x60(%rbp)
-               	movsbq	%sil, %rsi
                	leaq	(%rsp), %rdi
-               	leaq	0x1(%rsi), %rax
-               	addq	$0x2, %rax
-               	addq	$0x3, %rax
-               	addq	$0x4, %rax
-               	movq	0x10(%rbp), %rcx
-               	addq	%rcx, %rax
+               	movq	0x10(%rbp), %rax
+               	addq	$0xd, %rax
                	movq	0x18(%rbp), %rcx
                	addq	%rcx, %rax
                	movq	0x20(%rbp), %rcx

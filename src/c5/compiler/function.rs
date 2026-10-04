@@ -25,6 +25,7 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
+use super::decl_base::ImplicitInt;
 use super::types::{add_ptr_level, apply_qual_bits};
 
 /// Bundle returned from `parse_function_params` -- keeps the per-param
@@ -39,6 +40,28 @@ pub(super) struct ParsedParams {
     pub(super) form: ParamForm,
     /// Positions declared through an enum tag that had no definition yet.
     pub(super) enum_tags: Vec<(usize, u32)>,
+    /// `FnParams::fn_types`: the parameters that lead to a function.
+    pub(super) fn_types: Vec<(usize, crate::c5::symbol::FnType, i64)>,
+    /// The array size expressions of the parameters, in declaration order.
+    pub(super) sizes: Vec<ParamSize>,
+}
+
+/// A parameter's array size expression, which a definition evaluates on
+/// entry (C99 6.9.1p10) although the adjusted parameter is a pointer
+/// (6.7.5.3p7): where it is written, and the identifiers it names that
+/// were not parameters there.
+#[derive(Clone)]
+pub(super) struct ParamSize {
+    pub(super) at: crate::c5::lexer::LexerSnapshot,
+    pub(super) outer_names: Vec<usize>,
+}
+
+impl core::fmt::Debug for ParamSize {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ParamSize")
+            .field("outer_names", &self.outer_names)
+            .finish_non_exhaustive()
+    }
 }
 
 impl ParsedParams {
@@ -64,6 +87,7 @@ impl ParsedParams {
             variadic: self.is_variadic,
             prototyped: self.form == ParamForm::Prototype,
             enum_tags: self.enum_tags.clone(),
+            fn_types: self.fn_types.clone(),
         }
     }
 
@@ -80,6 +104,8 @@ impl ParsedParams {
             types: p.types,
             is_variadic: p.variadic,
             enum_tags: p.enum_tags,
+            fn_types: p.fn_types,
+            sizes: Vec::new(),
         }
     }
 
@@ -87,6 +113,12 @@ impl ParsedParams {
     pub(super) fn note_enum_tag(&mut self, pos: usize, tag: Option<u32>) {
         self.enum_tags.retain(|(p, _)| *p != pos);
         self.enum_tags.extend(tag.map(|t| (pos, t)));
+    }
+
+    /// Record the function type parameter `pos` leads to, if any.
+    pub(super) fn note_fn_type(&mut self, pos: usize, f: Option<(crate::c5::symbol::FnType, i64)>) {
+        self.fn_types.retain(|(p, ..)| *p != pos);
+        self.fn_types.extend(f.map(|(f, d)| (pos, f, d)));
     }
 }
 
@@ -98,6 +130,20 @@ type ParamFnCarriers = (
     Option<crate::c5::symbol::FnParams>,
     Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
 );
+
+/// The function type a parameter with `carriers` leads to and the pointer
+/// levels above it; an adjusted array adds one (C99 6.7.5.3p7).
+pub(super) fn param_fn_type(
+    (depth, _, params, ret): ParamFnCarriers,
+    conv: crate::c5::codegen::CallConv,
+    adjusted: bool,
+) -> Option<(crate::c5::symbol::FnType, i64)> {
+    (depth > 0).then(|| {
+        let params = params.unwrap_or_default();
+        let f = crate::c5::symbol::FnType { params, conv, ret };
+        (f, depth + i64::from(adjusted))
+    })
+}
 
 /// How a function declarator specified its parameters (C99 6.7.5.3p14).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -117,7 +163,7 @@ impl Compiler {
     /// declarator to bind it) leaks into the next declaration -- e.g. the
     /// first field of a following struct definition would record a phantom
     /// function-pointer prototype.
-    fn take_param_fn_ptr_carriers(&mut self) -> ParamFnCarriers {
+    pub(super) fn take_param_fn_ptr_carriers(&mut self) -> ParamFnCarriers {
         let ret_fn = self.take_decl_ret_fn(false);
         let indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
         let ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
@@ -127,11 +173,12 @@ impl Compiler {
     }
 
     /// A parameter's own `ms_abi` / `sysv_abi` describes that
-    /// parameter's pointed-to function, not the declarator the list
-    /// belongs to, so the enclosing convention is detached across the
-    /// list the way the other declarator carriers are.
+    /// parameter's pointed-to function, and its `unused` that parameter,
+    /// not the declarator the list belongs to, so the enclosing ones are
+    /// detached across the list the way the other declarator carriers are.
     pub(super) fn parse_function_params(&mut self) -> Result<ParsedParams, C5Error> {
         let outer_conv = core::mem::take(&mut self.pending.attr_call_conv);
+        let outer_unused = core::mem::take(&mut self.pending.attr_maybe_unused);
         // The enclosing declarator's function-pointer carriers and function
         // types, which each parameter's own declarator starts afresh.
         let p = &mut self.pending;
@@ -149,9 +196,19 @@ impl Compiler {
         let outer_taken = p.base_array_taken;
         let outer_own = core::mem::take(&mut p.fn_own_sig);
         let outer_base = p.fn_decl_base.take();
-        let r = self.parse_function_params_inner();
+        // The shape the enclosing declarator's name had before it, which
+        // that name's binding restores; the parameters record their own.
+        let outer_prior = p.declarator_prior_shape.take();
+        let outer_sizes = core::mem::take(&mut self.param_sizes);
+        let mut r = self.parse_function_params_inner();
+        let sizes = core::mem::replace(&mut self.param_sizes, outer_sizes);
+        if let Ok(params) = &mut r {
+            params.sizes = sizes;
+        }
         let p = &mut self.pending;
+        p.declarator_prior_shape = outer_prior;
         p.attr_call_conv = outer_conv;
+        p.attr_maybe_unused = outer_unused;
         (
             p.fn_ptr_indirection,
             p.fn_ptr_ret_indirection,
@@ -173,6 +230,7 @@ impl Compiler {
         let mut args = Vec::new();
         let mut types = Vec::new();
         let mut enum_tags = Vec::new();
+        let mut fn_types = Vec::new();
         let mut is_variadic = false;
         // An empty list declares no prototype; `(void)` declares one with
         // no parameters. A list is an identifier list until a parameter
@@ -225,11 +283,13 @@ impl Compiler {
             // leading form, the post-declarator skip for the trailing.
             self.pending.attr_maybe_unused = false;
             let _ = self.take_base_spelling();
-            let base = if self.lex_is_type_start() {
+            let param_line = self.lex.line;
+            let (base, implicit_int) = if self.lex_is_type_start() {
                 form = ParamForm::Prototype;
-                self.parse_decl_base_type()?
+                let base = self.parse_decl_base_type()?;
+                (base, core::mem::take(&mut self.pending.base_implicit_int))
             } else {
-                Ty::Int as i64
+                (Ty::Int as i64, false)
             };
             let base_spelling = self.take_base_spelling();
             let base_enum_tag = self.pending.base_enum_tag.take();
@@ -280,10 +340,10 @@ impl Compiler {
             let absorb_fn_type_ptr = self.pending.base_is_function_type && leading_ptr_count > 0;
             if absorb_fn_type_ptr {
                 self.pending.base_is_function_type = false;
-                ty -= Ty::Ptr as i64;
+                ty = super::types::absorb_function_level(ty, super::types::ptr_depth_of(base));
             }
             // A parameter that is a pointer to a function-pointer typedef
-            // base (`curl_write_callback *p`) gains one fn-pointer
+            // base (`write_fn *p`) gains one fn-pointer
             // indirection level per leading `*`, matching the general
             // declarator path. Without it the fn-pointer decay no-op
             // (`*fp == fp`) misfires on `*p`, landing the load/store one
@@ -298,36 +358,36 @@ impl Compiler {
                 };
                 self.pending.fn_ptr_indirection = Some(fpi + added);
             }
-            // Optional `[N]` / `[]` after an unnamed parameter
-            // type ('int []' / 'char [16]'). Per C99 6.7.5.3p7,
-            // a parameter declared with an array type is
-            // adjusted to a pointer to the element type; we
-            // bump the pointer level once and discard the size.
-            // The same adjustment applies when the base type is
-            // a typedef whose alias is an array (`typedef i64
-            // gf[16]; void f(gf x);` -- `x` is `i64 *`).
+            // An unnamed parameter, possibly of array type (`int [][3]`,
+            // `char [16]`). Per C99 6.7.5.3p7 a parameter declared with an
+            // array type is adjusted to a pointer to its element type, which
+            // a typedef whose alias is an array spells as well (`typedef i64
+            // gf[16]; void f(gf);` -- the parameter is `i64 *`). The alias's
+            // bounds are the inner ones (C99 6.7.7p3); a pointer-to-array
+            // (`gf *`) absorbed them above.
             if self.lex.tk == ',' || self.lex.tk == ')' || self.lex.tk == Token::Brak {
-                if self.lex.tk == Token::Brak {
-                    self.next()?;
-                    if self.lex.tk == ']' {
-                        self.next()?;
-                    } else {
-                        // Eat the constant int + `]`.
-                        let _ = self.parse_constant_int()?;
-                        self.accept(']')?;
-                    }
-                    ty += Ty::Ptr as i64;
-                }
-                // Bare array-typedef parameter (`Node`): adjust to a
-                // pointer per 6.7.5.3p7. A pointer-to-array (`Node *`)
-                // already has its pointer level from the leading `*`, so
-                // it must not gain a second one.
+                let mut dims = self.parse_unnamed_param_bounds()?;
+                self.require_complete_elements(ty, &dims)?;
                 if self.pending.typedef_base_array_size != 0 && leading_ptr_count == 0 {
-                    ty += Ty::Ptr as i64;
+                    if !dims.is_empty() && self.typedef_base_incomplete() {
+                        return Err(self.unknown_size_element_err());
+                    }
+                    dims.extend(self.typedef_base_dims());
+                }
+                if !dims.is_empty() {
+                    ty = self.array_value_ty(ty, &dims);
                 }
                 // An unnamed parameter binds no symbol to receive the
                 // fn-pointer carriers its base (a fn-pointer typedef) seeded.
-                let _ = self.take_param_fn_ptr_carriers();
+                let carriers = self.take_param_fn_ptr_carriers();
+                let conv = core::mem::take(&mut self.pending.attr_call_conv);
+                let adjusted = !dims.is_empty();
+                if let Some((f, depth)) = param_fn_type(carriers, conv, adjusted) {
+                    fn_types.push((types.len(), f, depth));
+                }
+                if implicit_int {
+                    self.report_implicit_int(ImplicitInt::Declarator(usize::MAX), param_line)?;
+                }
                 self.ty = ty;
                 enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));
                 types.push(ty);
@@ -347,38 +407,39 @@ impl Compiler {
             // callback-registering prototypes); we record the
             // type but don't bind any symbol.
             self.pending.param_decl_context = true;
-            let (param_idx, mut full_ty, array_size) = self.parse_declarator(ty)?;
+            let (param_idx, mut full_ty, array_size, _) = self.parse_declarator(ty)?;
+            if implicit_int {
+                self.report_implicit_int(ImplicitInt::Declarator(param_idx), param_line)?;
+            }
             // A parameter may carry a trailing attribute
-            // (`PyObject *op __attribute__((unused))`).
+            // (`T *op __attribute__((unused))`).
             self.skip_attribute_specifiers()?;
             let param_maybe_unused = self.pending.attr_maybe_unused;
-            if array_size != 0 {
-                full_ty += Ty::Ptr as i64;
-            }
-            let adjusted = array_size != 0
-                || (self.pending.typedef_base_array_size != 0 && leading_ptr_count == 0);
-            // Per C99 6.7.5.3p7, a named array parameter is
-            // adjusted to a pointer to the element type. The
-            // same rule applies when the base type is a typedef
-            // whose alias is an array. Only consult the carrier
-            // when parse_declarator did not already absorb it
-            // into `array_size` (i.e., the declarator carried no
-            // explicit brackets). A pointer-to-array parameter
-            // (`Node *p`, leading `*` consumed above) already has
-            // the aggregate-backed tag and needs no adjustment.
-            if array_size == 0
+            // Per C99 6.7.5.3p7, a named array parameter is adjusted to a
+            // pointer to its element type, the row of the inner bounds for
+            // more than one. The same rule applies when the base type is a
+            // typedef whose alias is an array; its carrier is consulted only
+            // when parse_declarator did not already absorb it into
+            // `array_size` (the declarator carried no brackets). A
+            // pointer-to-array parameter (`Node *p`, leading `*` consumed
+            // above) already has the aggregate-backed tag.
+            let typedef_array = array_size == 0
                 && self.pending.typedef_base_array_size != 0
-                && leading_ptr_count == 0
-            {
-                full_ty += Ty::Ptr as i64;
-                // A multi-dim alias (`typedef T G[A][B]; void f(G g)`)
-                // decays to a row pointer; record the dims on the
-                // parameter like a bracket-declared `T g[A][B]` so the
-                // subscript path strides each level by its row width.
-                if param_idx != usize::MAX && self.pending.typedef_base_array_dims.len() >= 2 {
-                    let dims = self.pending.typedef_base_array_dims.clone();
-                    self.symbols[param_idx].inner_array_size = dims[1];
-                    self.symbols[param_idx].array_dims = dims;
+                && leading_ptr_count == 0;
+            let adjusted = array_size != 0 || typedef_array;
+            if adjusted {
+                let dims = if typedef_array {
+                    self.typedef_base_dims()
+                } else if param_idx != usize::MAX {
+                    self.symbols[param_idx].array_dims.clone()
+                } else {
+                    Vec::new()
+                };
+                full_ty = self.array_value_ty(full_ty, &dims);
+                // The parameter is the pointer: no bounds stay on its symbol.
+                if param_idx != usize::MAX {
+                    self.symbols[param_idx].inner_array_size = 0;
+                    self.symbols[param_idx].array_dims = Vec::new();
                 }
             }
             // Fn-pointer lineage: pick up the side-channels that
@@ -386,15 +447,18 @@ impl Compiler {
             // populated. Drained even if the declarator didn't
             // set anything so they don't leak into the next
             // parameter or expression.
-            let (fn_ptr_indirection, fn_ptr_ret_indirection, fnptr_pp, ret_fn) =
-                self.take_param_fn_ptr_carriers();
+            let carriers = self.take_param_fn_ptr_carriers();
+            // Drained per parameter so one parameter's convention cannot
+            // leak into the next.
+            let param_conv = core::mem::take(&mut self.pending.attr_call_conv);
+            if let Some((f, depth)) = param_fn_type(carriers.clone(), param_conv, adjusted) {
+                fn_types.push((types.len(), f, depth));
+            }
+            let (fn_ptr_indirection, fn_ptr_ret_indirection, fnptr_pp, ret_fn) = carriers;
             // The adjusted pointer is one more level above a function-pointer
             // element, as `fn_t *p` counts it.
             let fn_ptr_indirection =
                 fn_ptr_indirection + i64::from(adjusted && fn_ptr_indirection > 0);
-            // Drained per parameter so one parameter's convention cannot
-            // leak into the next.
-            let param_conv = core::mem::take(&mut self.pending.attr_call_conv);
             self.ty = full_ty;
             // An unnamed parameter, or any parameter of a function-pointer
             // declarator's prototype, records its type without binding a
@@ -402,6 +466,12 @@ impl Compiler {
             // name that shadows an enclosing prototype's parameter must not
             // trip the duplicate-parameter check.
             if param_idx == usize::MAX || self.pending.parsing_fn_ptr_proto {
+                // The name's slot keeps the array shape of what it denotes
+                // outside the prototype (C99 6.2.1p4).
+                if let Some((inner, dims)) = self.take_prior_shape(param_idx) {
+                    self.symbols[param_idx].inner_array_size = inner;
+                    self.symbols[param_idx].array_dims = dims;
+                }
                 enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));
                 types.push(full_ty);
                 if !self.parameter_separator()? {
@@ -479,7 +549,46 @@ impl Compiler {
             is_variadic,
             form,
             enum_tags,
+            fn_types,
+            sizes: Vec::new(),
         })
+    }
+
+    /// The bounds of an unnamed parameter's array declarator (`int [][3]`),
+    /// outermost first. The outermost is adjusted away (C99 6.7.5.3p7), so
+    /// its contents -- `static`, qualifiers, `*` or a size of integer type
+    /// -- are discarded and it reads as unspecified; an inner one is a
+    /// constant.
+    fn parse_unnamed_param_bounds(&mut self) -> Result<Vec<i64>, C5Error> {
+        let mut dims = Vec::new();
+        while self.lex.tk == Token::Brak {
+            self.next()?;
+            if dims.is_empty() {
+                self.skip_param_array_size()?;
+                dims.push(-1);
+            } else if self.lex.tk == ']' {
+                return Err(self.unknown_size_element_err());
+            } else {
+                let Some(n) = self.with_const_object_fold_masked(|c| c.try_parse_constant_dim())?
+                else {
+                    let ty = self.peek_expr_type()?;
+                    self.require_integer_size(ty)?;
+                    return Err(self.compile_err(
+                        Code::UNSUPPORTED,
+                        "a non-constant inner array dimension is not supported",
+                    ));
+                };
+                if n < 0 {
+                    return Err(self.compile_err(
+                        Code::INVALID_DECLARATION,
+                        alloc::format!("array dimension must be positive (got {n})"),
+                    ));
+                }
+                dims.push(n);
+            }
+            self.consume(b']', "close bracket expected in array declarator")?;
+        }
+        Ok(dims)
     }
 
     /// The `,` after a parameter declaration: `true` past it, `false` at

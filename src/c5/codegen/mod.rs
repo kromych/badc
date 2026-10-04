@@ -324,13 +324,6 @@ impl Target {
         self.is_windows()
     }
 
-    /// Whether every enumeration and enumerator has type `int`, as MSVC
-    /// gives them on the PE targets: a value converts to `int` and
-    /// `packed` leaves the type alone.
-    pub fn ms_enums(self) -> bool {
-        self.is_windows()
-    }
-
     /// Container format the target's toolchain uses for objects,
     /// shared libraries and images. Drives the `-l` search spellings
     /// and the format reported when an input object does not match.
@@ -404,6 +397,12 @@ impl Target {
     /// will fail at exec time, but the compiler still builds.
     pub fn default_target() -> Self {
         Target::host()
+    }
+
+    /// Whether the image's loader binds any data slot to an imported
+    /// symbol, not only a GOT's (dyld's bind stream, ELF dynamic relocations).
+    pub fn binds_data_imports(self) -> bool {
+        self.binary_format() != BinaryFormat::Pe
     }
 
     /// Target matching the host this build of badc is running on.
@@ -698,7 +697,7 @@ pub(crate) fn plan_mirrored_call(
 pub(crate) fn named_args(abi: Abi, callee_variadic: bool, fixed_args: usize, args: usize) -> usize {
     if !callee_variadic {
         args
-    } else if abi.variadic_int_only && abi.arch == Arch::Aarch64 {
+    } else if abi.win_arm64_variadic() {
         0
     } else {
         fixed_args
@@ -750,6 +749,9 @@ pub(crate) struct ArgAgg {
     pub align: u32,
     /// `abi_classify::arg_align`; `align` still bounds the transfer width.
     pub arg_align: u32,
+    /// A narrow vector on AArch64, passed as a 32-bit integer
+    /// ([`abi_classify::is_narrow_vector`]).
+    pub int32: bool,
 }
 
 impl ArgAgg {
@@ -760,6 +762,7 @@ impl ArgAgg {
             size: desc.size,
             align: desc.align,
             arg_align: abi_classify::arg_align(desc.align, desc.member_align, abi),
+            int32: abi.arch == Arch::Aarch64 && abi_classify::is_narrow_vector(desc),
         }
     }
 }
@@ -892,7 +895,7 @@ pub(super) fn plan_call_args_aggs(
             // copy's address an integer argument. The callee's va_arg walks
             // one 8-byte-stride region, so an FP bank placement would read
             // garbage on both sides.
-            if i >= fixed_args && abi.variadic_int_only && matches!(abi.arch, Arch::Aarch64) {
+            if i >= fixed_args && abi.win_arm64_variadic() {
                 let placement = if agg.size > 16 {
                     if int_idx < int_max {
                         let r = abi.int_arg_regs[int_idx];
@@ -1008,9 +1011,20 @@ pub(super) fn plan_call_args_aggs(
                                 int_idx = int_max;
                             }
                         }
-                        let off = if abi.packed_stack_args && need_int == 0 && i < fixed_args {
-                            let off = stack_used.next_multiple_of(agg.arg_align.max(1));
-                            stack_used = off + agg.size;
+                        // Apple packs a named argument at its own size and
+                        // alignment, a narrow vector as the 32-bit integer
+                        // it crosses as.
+                        let packed = match (need_int, agg.int32) {
+                            (_, true) => Some((4, 4)),
+                            (0, false) => Some((agg.arg_align.max(1), agg.size)),
+                            _ => None,
+                        };
+                        let off = if let Some((align, bytes)) = packed
+                            && abi.packed_stack_args
+                            && i < fixed_args
+                        {
+                            let off = stack_used.next_multiple_of(align);
+                            stack_used = off + bytes;
                             off
                         } else {
                             let off = agg_stack_off(stack_used, agg.arg_align);
@@ -1283,11 +1297,9 @@ pub(crate) struct ResolvedImport {
     /// `dlopen`. The Mach-O writer emits a flat-lookup bind; the ELF
     /// writer an undefined `.dynsym` entry with no `DT_NEEDED`.
     pub flat_lookup: bool,
-    /// `true` when an input symbol table typed the symbol `STT_OBJECT`.
-    /// The ELF writer republishes the type on the undefined `.dynsym`
-    /// entry; `false` publishes `STT_FUNC`, which is what a reference
-    /// with no type information carries.
-    pub is_object: bool,
+    /// What the symbol is; the ELF writer republishes it on the
+    /// undefined `.dynsym` entry.
+    pub kind: ImportKind,
     /// `true` if the binding's prototype ended with `, ...)`. The
     /// lowering reads this to decide whether the call site needs
     /// the platform's variadic ABI (macOS arm64 stack-packing,
@@ -1322,6 +1334,19 @@ pub(crate) struct ResolvedImport {
     pub param_types: Vec<i64>,
 }
 
+/// What an import names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ImportKind {
+    /// A function, or a reference with no type information (`STT_FUNC`).
+    Function,
+    /// A data object an input symbol table typed `STT_OBJECT`.
+    Object,
+    /// A shared library's thread-local (`STT_TLS`): its slot holds the
+    /// variable's offset from the thread pointer, which the loader writes
+    /// (`R_X86_64_TPOFF64`, `R_AARCH64_TLS_TPREL64`).
+    ThreadLocal,
+}
+
 /// Pre-baked DWARF byte streams from the multi-TU link.
 /// `synth_build` populates this from `MergedNative`; the
 /// final-image writer drops it into the output's `.debug_*`
@@ -1349,6 +1374,9 @@ pub(crate) struct MergedDwarf {
     /// offset follows the linker's data convention, with the zero-fill
     /// tail continuing past the image length.
     pub debug_info_data_relocs: Vec<DwarfDataReloc>,
+    /// The inputs' `.debug_frame` records; the writer appends its own
+    /// table, for the functions the lowering emitted, behind them.
+    pub debug_frame: MergedDwarfSection,
     /// Every other `.debug_*` section the link merged.
     pub other: Vec<MergedDwarfSection>,
 }
@@ -1513,7 +1541,7 @@ impl ResolvedImports {
             real_symbol: b.real_symbol.clone(),
             dylib_index,
             flat_lookup: false,
-            is_object: false,
+            kind: crate::c5::codegen::ImportKind::Function,
             is_variadic: b.is_variadic,
             fixed_args: b.fixed_args,
             return_type_tag: b.return_type_tag,
@@ -1650,7 +1678,7 @@ impl ResolvedImports {
                 real_symbol: b.real_symbol.clone(),
                 dylib_index,
                 flat_lookup: false,
-                is_object: false,
+                kind: crate::c5::codegen::ImportKind::Function,
                 is_variadic: b.is_variadic,
                 fixed_args: b.fixed_args,
                 return_type_tag: b.return_type_tag,
@@ -1873,9 +1901,62 @@ pub(crate) struct EmittedFinalReloc {
     pub addend: i64,
 }
 
-/// A C-identifier-named input section the merge grouped across units,
-/// for a writer that gives it an output section of its own. `offset`
-/// is into `Build::data`, or into the zero-fill region when `bss`.
+/// A data slot the loader binds to `import + addend`; `import` indexes the resolved imports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DataImportBind {
+    pub data_offset: u64,
+    pub import: usize,
+    pub addend: i64,
+}
+
+/// A slot an unwinder reads a routine's address from: an import's, which
+/// the loader binds, or one in the data-byte space.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PointerSlot {
+    Import(usize),
+    Data(u64),
+}
+
+/// A linked Mach-O input's compact unwind entry at its `Build::text`
+/// offset, with its personality routine's slot and its LSDA's data offset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CompactUnwind {
+    pub text_offset: u64,
+    pub encoding: u32,
+    pub personality: Option<PointerSlot>,
+    pub lsda: Option<u64>,
+}
+
+/// A linked Mach-O input's `__eh_frame`: the bytes, the fields the writer
+/// fills, and each FDE's offset with its function's `Build::text` offset.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EhFrameBlock {
+    pub bytes: Vec<u8>,
+    pub fields: Vec<EhFrameField>,
+    pub fdes: Vec<(u32, u64)>,
+}
+
+/// `width` (4 or 8) bytes at `offset` holding `target - field`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EhFrameField {
+    pub offset: u32,
+    pub width: u8,
+    pub target: EhFrameTarget,
+}
+
+/// A text offset, a data offset attributed to the region of `anchor` (as
+/// [`DataPcRelReloc`] does), or a slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EhFrameTarget {
+    Text(u64),
+    Data { offset: u64, anchor: u64 },
+    Slot(PointerSlot),
+}
+
+/// An input section the merge grouped by name across units (a C-identifier
+/// name, or `.eh_frame`), for a writer that gives it an output section of
+/// its own. `offset` is into `Build::data`, or into the zero-fill region
+/// when `bss`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NamedSection {
     pub name: String,
@@ -1901,6 +1982,17 @@ pub(crate) struct Build {
     /// the Mach-O and PE writers still fold the bytes into the family
     /// segment they belong to.
     pub named_sections: Vec<NamedSection>,
+    /// The linked Mach-O inputs' unwind tables; only the merged link path
+    /// fills them.
+    pub compact_unwind: Vec<CompactUnwind>,
+    pub eh_frame: Vec<EhFrameBlock>,
+    /// Data slots naming an import, which the loader binds (Mach-O, ELF).
+    pub data_import_binds: Vec<DataImportBind>,
+    /// Imports, ascending, whose call stub code takes as a value: an ELF
+    /// executable publishes it as the import's address (a canonical PLT entry).
+    pub canonical_imports: Vec<usize>,
+    /// Imports, ascending, that name the image's own definitions.
+    pub preemptible_imports: Vec<usize>,
     /// `--emit-relocs` records; empty unless the link requested them.
     pub emitted_relocs: Vec<EmittedFinalReloc>,
     /// Data-import copy relocations resolved against the merged symbol
@@ -2159,8 +2251,8 @@ pub(crate) struct Build {
     /// executable image. macOS links an executable so its
     /// default-visibility globals are exported, which lets a
     /// dynamically loaded module (`dlopen`) bind against the
-    /// executable's symbols (a Python C extension `.so` resolving
-    /// `PyBool_Type` and the C-API). Populated only for executable
+    /// executable's symbols (an extension module resolving the host
+    /// program's objects and functions). Populated only for executable
     /// Mach-O output; empty for shared libraries (which use
     /// `exports`) and on other targets, whose writers ignore it.
     pub dynamic_exports: Vec<DynamicExport>,
@@ -2186,6 +2278,8 @@ pub(crate) struct Build {
     /// placed form at its link address and adds the loader tables when
     /// it binds a shared-library symbol.
     pub exec_form: ExecForm,
+    /// The container options a link asked for.
+    pub elf: ElfImageOptions,
     /// Mirror of [`NativeOptions::code_model`]. The relocatable writer
 
     /// reads it to pick the external-address form; see [`CodeModel`].
@@ -2913,45 +3007,50 @@ pub(crate) struct MachoTlvFixup {
     pub descriptor_index: usize,
 }
 
-/// TLS access relocation whose immediate the linker resolves against
-/// the merged TLS block once every unit's `.tdata` / `.tbss` is
-/// concatenated. Three access shapes record it, distinguished by the
-/// linker (see `link_native_objects` Pass 4.1):
-///   * Linux/x86_64 -- `mov rd, fs:[0]; sub rd, imm32`: variant-2
+/// A thread-local access whose operand the link supplies. The local-exec
+/// shapes carry an immediate the linker resolves against the merged TLS
+/// block once every unit's `.tdata` / `.tbss` is concatenated:
+///   * Linux/x86_64 -- `mov rd, fs:[0]; add rd, imm32`: variant-2
 ///     places the block below the thread pointer, so `imm32 =
-///     merged_size - merged_offset` and the access computes `TP -
-///     imm32`.
-///   * Linux/aarch64 -- `mrs rd, tpidr_el0; add rd, rd, #imm12`:
-///     variant-1 places the block above the thread pointer after a
-///     16-byte TCB reserve, so `imm12 = 16 + merged_offset`.
-///   * Windows/aarch64 -- the TEB sequence (`ldr x16, [x18, #0x58]`,
-///     index by `_tls_index`, `add rd, x16, #imm12`): x16 already
-///     holds the module's TLS block base, so `imm12 = merged_offset`
-///     with no thread-pointer bias. This shape also records a
-///     `TlsIndexFixup`, which is how the linker tells it apart from
-///     the variant-1 ELF shape on the same machine.
-/// The codegen leaves the immediate at a single-unit default (or 0 for
-/// an extern access); `target` selects how the linker finds
-/// `merged_offset`.
+///     merged_offset - roundup(merged_size, align)`.
+///   * Linux/aarch64 -- `mrs rd, tpidr_el0; add rd, rd, #hi12, lsl 12;
+///     add rd, rd, #lo12`: variant-1 places the block above the thread
+///     pointer after a 16-byte TCB reserve, so the pair adds
+///     `roundup(16, align) + merged_offset`.
+///   * Windows -- the TEB sequence ending in `lea rd, [r10 + disp32]` /
+///     `add rd, x16, #imm12`: the register already holds the module's
+///     TLS block base, so the field is `merged_offset`. This shape also
+///     records a `TlsIndexFixup`, which is how the linker tells it apart
+///     from the ELF shape on the same machine.
+/// The codegen leaves the immediate at a single-unit default (or 0 for an
+/// extern access); `target` selects how the linker finds `merged_offset`.
+/// [`ElfTpoffTarget::InitialExec`] marks the initial-exec shape instead,
+/// whose operand is a GOT slot.
 #[derive(Debug, Clone)]
 pub(crate) struct ElfTpoffFixup {
-    /// Byte offset within `Build::text` of the immediate field the
-    /// linker rewrites (the `sub` imm32 / the `add` imm12 word).
+    /// Byte offset within `Build::text` of the field the linker rewrites:
+    /// the x86_64 imm32 or disp32, the first aarch64 `add`, or the
+    /// initial-exec `adrp`.
     pub imm_offset: usize,
     pub target: ElfTpoffTarget,
 }
 
-/// How the linker resolves an [`ElfTpoffFixup`] to a byte offset in
-/// the merged TLS block.
+/// How the link resolves an [`ElfTpoffFixup`].
 #[derive(Debug, Clone)]
 pub(crate) enum ElfTpoffTarget {
-    /// Cross-unit `extern _Thread_local`: the merged offset is the
-    /// named symbol's entry in the merged TLS symbol table.
+    /// Cross-unit `extern _Thread_local` in the Windows TEB shape: the
+    /// merged offset is the named symbol's entry in the merged TLS symbol
+    /// table.
     Extern(String),
     /// Same-unit `_Thread_local`: the merged offset is this unit's
     /// base in the merged TLS block plus this byte offset within the
     /// unit's own block.
     Local(u64),
+    /// A thread-local another ELF unit or a shared library defines, read
+    /// initial-exec through the GOT slot holding its offset from the
+    /// thread pointer (R_X86_64_GOTTPOFF, R_AARCH64_TLSIE_*); an executable
+    /// link rewrites it to local-exec where it defines the variable.
+    InitialExec(String),
 }
 
 /// Relocatable-object call site: the byte offset of the BL / B
@@ -3122,8 +3221,7 @@ pub enum IndirectBranch {
     /// `thunk-extern`: transfer through `__x86_indirect_thunk_<reg>`.
     ThunkExtern,
     /// `thunk-inline`: the retpoline sequence embedded at the site,
-    /// for objects that may not reference external symbols (the
-    /// kernel's vDSO).
+    /// for objects that may not reference external symbols (a vDSO).
     ThunkInline,
 }
 
@@ -3151,8 +3249,9 @@ pub enum StackProtector {
 /// `-mstack-protector-guard=`: where the canary value is read from.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum StackGuard {
-    /// The target's C-library ABI: `%fs:0x28` on Linux/x86-64, the
-    /// `__stack_chk_guard` object on every other target.
+    /// The target's ABI: `%fs:0x28` on Linux/x86-64 (`%gs:0x28` under
+    /// the kernel code model), the `__stack_chk_guard` object on every
+    /// other target.
     #[default]
     Abi,
     /// `global`: the `__stack_chk_guard` object, or the
@@ -3170,13 +3269,24 @@ pub enum StackGuard {
 
 /// Segment register a `tls` stack guard is read through
 /// (`-mstack-protector-guard-reg=`).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GuardSeg {
     /// `%fs`, the System V x86-64 thread pointer.
-    #[default]
     Fs,
-    /// `%gs`, which the Linux kernel uses for its per-CPU base.
+    /// `%gs`, the per-CPU base `swapgs` installs in kernel mode.
     Gs,
+}
+
+impl GuardSeg {
+    /// The segment a guard is read through when none is named: `%gs`
+    /// under the kernel code model, `%fs` otherwise, as gcc and clang
+    /// choose.
+    pub fn for_code_model(code_model: CodeModel) -> Self {
+        match code_model {
+            CodeModel::Kernel => GuardSeg::Gs,
+            CodeModel::Small => GuardSeg::Fs,
+        }
+    }
 }
 
 /// Guard object name for `-mstack-protector-guard-symbol=`. Held inline
@@ -3267,16 +3377,17 @@ impl StackProtect {
     };
 
     /// Replace [`StackGuard::Abi`] with the target's own form, so the
-    /// emitters see a concrete one. Linux/x86-64 keeps the canary in the
-    /// thread control block at [`SYSV_TLS_GUARD_OFFSET`]; every other
-    /// target reads the C library's `__stack_chk_guard` object.
-    pub(crate) fn resolved_for(self, target: Target) -> Self {
+    /// emitters see a concrete one. Linux/x86-64 keeps the canary at
+    /// [`SYSV_TLS_GUARD_OFFSET`] from the base of the segment
+    /// [`GuardSeg::for_code_model`] names; every other target reads the
+    /// C library's `__stack_chk_guard` object.
+    pub(crate) fn resolved_for(self, target: Target, code_model: CodeModel) -> Self {
         if self.guard != StackGuard::Abi {
             return self;
         }
         let guard = match target {
             Target::LinuxX64 => StackGuard::Tls {
-                seg: GuardSeg::Fs,
+                seg: GuardSeg::for_code_model(code_model),
                 offset: SYSV_TLS_GUARD_OFFSET,
             },
             _ => StackGuard::Global,
@@ -3425,8 +3536,9 @@ pub fn fixed_register(target: Target, name: &str) -> Result<FixedReg, String> {
 /// gcc's `--param ssp-buffer-size=` default.
 pub const DEFAULT_SSP_BUFFER_SIZE: u32 = 8;
 
-/// Byte offset of the canary within the System V x86-64 thread control
-/// block, which glibc and musl both honour.
+/// Byte offset of the canary from the guard segment's base: its slot in
+/// the System V x86-64 thread control block, which glibc and musl both
+/// honour, and in the per-CPU area Linux reaches through `%gs`.
 pub const SYSV_TLS_GUARD_OFFSET: i32 = 0x28;
 
 /// The object a `global` stack guard is read from, and the name
@@ -3525,9 +3637,15 @@ pub struct NativeOptions {
     /// Whether a switch may dispatch through a jump table
     /// (`-fno-jump-tables` clears it). Cleared, a dense switch lowers
     /// to the compare tree a sparse one gets, so no indirect branch is
-    /// taken and no table reaches the image -- what retpoline and
-    /// indirect-branch-tracking kernel configurations require.
+    /// taken and no table reaches the image -- what a build under
+    /// retpolines or indirect-branch tracking requires.
     pub jump_tables: bool,
+    /// Whether a call whose result the function returns unchanged may
+    /// become a jump after the epilogue (gcc and clang
+    /// `-foptimize-sibling-calls`; `-fno-optimize-sibling-calls` clears
+    /// it). Cleared, every call returns into the frame that made it, which
+    /// a frame-pointer unwinder walking the call chain relies on.
+    pub sibling_calls: bool,
     /// Position-independent relocatable output (`-fPIC` / `-fpic`).
     /// A switch table then emits in the label-difference form the
     /// final images use -- no absolute relocation reaches the object,
@@ -3579,8 +3697,8 @@ pub struct NativeOptions {
     /// default and pads nothing, which is what a function packed against
     /// its predecessor gets. A larger value fills the gap with the
     /// target's NOP encoding and raises [`Build::text_align`] to match,
-    /// so the alignment holds absolutely once the section is placed --
-    /// what `CONFIG_FUNCTION_ALIGNMENT` states. A symbol's `st_size`
+    /// so the alignment holds absolutely once the section is placed.
+    /// A symbol's `st_size`
     /// covers its code only; the fill belongs to no function.
     pub min_function_alignment: u32,
     /// `-fpatchable-function-entry=N,M`: the NOP area at every function
@@ -3845,6 +3963,85 @@ impl ExecForm {
     }
 }
 
+/// `--build-id` styles: GNU ld's SHA-1, which lld also writes for `tree`,
+/// and lld's `fast`, an XXH3-64. Each hashes the image with its
+/// descriptor zero.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum BuildId {
+    #[default]
+    None,
+    Sha1,
+    Fast,
+}
+
+impl BuildId {
+    /// The style a `--build-id=` value names; `None` when none does.
+    pub fn parse(style: &str) -> Option<BuildId> {
+        match style {
+            "none" => Some(Self::None),
+            "sha1" | "tree" => Some(Self::Sha1),
+            "fast" => Some(Self::Fast),
+            _ => None,
+        }
+    }
+
+    /// The descriptor's size in bytes.
+    pub fn digest_len(self) -> usize {
+        match self {
+            Self::None => 0,
+            Self::Sha1 => 20,
+            Self::Fast => 8,
+        }
+    }
+
+    /// The note's size: its 16-byte header and name, then the descriptor;
+    /// nothing when no id is asked for.
+    pub fn note_len(self) -> usize {
+        match self {
+            Self::None => 0,
+            _ => 16 + self.digest_len(),
+        }
+    }
+
+    /// `.note.gnu.build-id` with a zero descriptor.
+    pub fn note(self) -> Vec<u8> {
+        const NT_GNU_BUILD_ID: u32 = 3;
+        let mut note = Vec::with_capacity(self.note_len());
+        if self != Self::None {
+            note.extend_from_slice(&4u32.to_le_bytes());
+            note.extend_from_slice(&(self.digest_len() as u32).to_le_bytes());
+            note.extend_from_slice(&NT_GNU_BUILD_ID.to_le_bytes());
+            note.extend_from_slice(b"GNU\0");
+            note.resize(self.note_len(), 0);
+        }
+        note
+    }
+
+    /// The id of `image`, whose descriptor bytes are still zero.
+    #[cfg(feature = "native-emit")]
+    pub(crate) fn digest(self, image: &[u8]) -> Vec<u8> {
+        match self {
+            Self::None => Vec::new(),
+            Self::Sha1 => crate::c5::object::sha1::sha1(image).to_vec(),
+            Self::Fast => crate::c5::object::xxh3::build_id_fast(image).to_vec(),
+        }
+    }
+}
+
+/// The link options an ELF image's container takes: `--build-id`, `-z
+/// max-page-size=` (`None` keeps the target's), `-z
+/// pack-relative-relocs`, `--no-apply-dynamic-relocs`, `-z execstack`,
+/// `-Bsymbolic` (`DT_SYMBOLIC` and `DF_SYMBOLIC`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ElfImageOptions {
+    pub build_id: BuildId,
+    pub max_page_size: Option<u64>,
+    pub pack_relative_relocs: bool,
+    pub no_apply_dynamic_relocs: bool,
+    pub exec_stack: bool,
+    pub symbolic: bool,
+}
+
 impl Default for NativeOptions {
     /// Defaults: executable output, DWARF off, optimizations off.
     fn default() -> Self {
@@ -3881,6 +4078,7 @@ impl NativeOptions {
             no_fp_regs: false,
             strict_align: false,
             jump_tables: true,
+            sibling_calls: true,
             pic: false,
             pic_link: false,
             code_model: CodeModel::Small,
@@ -4050,8 +4248,8 @@ pub(crate) fn lower_for_with_prebuilt(
             return Err(C5Error::hard(
                 Code::UNSUPPORTED,
                 alloc::string::String::from(
-                    "`-pg` is not implemented for aarch64; the kernel's \
-                 `-fpatchable-function-entry=` form is",
+                    "`-pg` is not implemented for aarch64; \
+                 `-fpatchable-function-entry=` is",
                 ),
             ));
         }
@@ -4122,7 +4320,25 @@ pub(crate) fn lower_for_with_prebuilt(
     build.abi.stack_protect = options.stack_protect;
     build.data_relocs = program.data_relocs.clone();
     build.extern_data_relocs = program.extern_data_relocs.clone();
-    build.code_relocs = program.code_relocs.clone();
+    build.code_relocs = Vec::with_capacity(program.code_relocs.len());
+    for r in &program.code_relocs {
+        let Some(binding) = program.bound_trampoline(r.target_ent_pc) else {
+            build.code_relocs.push(*r);
+            continue;
+        };
+        let import = (build.imports.imports.iter())
+            .position(|i| i.binding_idx == binding)
+            .ok_or_else(|| {
+                C5Error::internal(alloc::format!(
+                    "a data slot names libc binding {binding}, which no import resolves"
+                ))
+            })?;
+        build.data_import_binds.push(DataImportBind {
+            data_offset: r.data_offset,
+            import,
+            addend: 0,
+        });
+    }
     build.tls_data_relocs = program.tls_data_relocs.clone();
     build.tls_extern_data_relocs = program.tls_extern_data_relocs.clone();
     build.tls_code_relocs = program.tls_code_relocs.clone();
@@ -4392,6 +4608,9 @@ pub(crate) struct Abi {
     /// A frame in every function, for `-pg`'s `mcount` form: the callee
     /// reads the return address through rbp.
     pub mcount_frame: bool,
+    /// A call whose result the function returns unchanged may become a
+    /// jump. Per-run (from [`NativeOptions::sibling_calls`]).
+    pub sibling_calls: bool,
     /// Registers the emitters may not pick as scratch or inline-asm
     /// operands. Per-run (from [`NativeOptions::fixed_regs`]).
     pub fixed_regs: FixedRegs,
@@ -4428,6 +4647,14 @@ impl Abi {
     pub(crate) fn aarch64_host_variadic(self) -> bool {
         matches!(self.arch, Arch::Aarch64) && !self.variadic_on_stack && !self.variadic_int_only
     }
+
+    /// True when a variadic callee follows the Microsoft ARM64 convention:
+    /// named and variadic arguments alike ride x0..x7 then the stack, a
+    /// floating-point one as its bits, a composite as if no SIMD and
+    /// floating-point register existed.
+    pub(crate) fn win_arm64_variadic(self) -> bool {
+        matches!(self.arch, Arch::Aarch64) && self.variadic_int_only
+    }
 }
 
 impl Default for Abi {
@@ -4446,8 +4673,7 @@ impl Default for Abi {
 /// when it is not the target's own. GCC spells the two x86_64
 /// conventions `__attribute__((ms_abi))` and
 /// `__attribute__((sysv_abi))`; both are x86-only and inert on other
-/// architectures, which is what `__efiapi` relies on (it expands to
-/// `ms_abi` under `CONFIG_X86_64` and to nothing elsewhere).
+/// architectures.
 ///
 /// A convention names an existing ABI row rather than a new one:
 /// `Ms` is what [`Target::WindowsX64`] already describes (arguments in
@@ -4527,6 +4753,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
             Target::LinuxAarch64 => Abi {
@@ -4545,6 +4772,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
             Target::LinuxX64 => Abi {
@@ -4563,6 +4791,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
             Target::WindowsX64 => Abi {
@@ -4581,6 +4810,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
             Target::WindowsAarch64 => Abi {
@@ -4599,6 +4829,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
         }
@@ -4677,6 +4908,7 @@ mod abi_plan_tests {
             size: 16,
             align: 8,
             arg_align: 8,
+            int32: false,
         };
         // five int scalars, a 2-eightbyte GP aggregate that can't fit the
         // one remaining int reg, then one int scalar.
@@ -4708,6 +4940,7 @@ mod abi_plan_tests {
             size: 16,
             align: 4,
             arg_align: 4,
+            int32: false,
         };
         // five FP scalars, a 4-float HFA that can't fit the remaining FP
         // regs, then one int scalar that the integer file must still hold.
@@ -4737,6 +4970,7 @@ mod abi_plan_tests {
             size: 16,
             align: 16,
             arg_align: 16,
+            int32: false,
         }
     }
 
@@ -4896,6 +5130,7 @@ mod abi_plan_tests {
             size: 8,
             align: 4,
             arg_align: 4,
+            int32: false,
         };
         let mut fp = FpMask::EMPTY;
         for i in 0..11 {
@@ -4929,6 +5164,7 @@ mod abi_plan_tests {
             size: 16,
             align: 8,
             arg_align: 8,
+            int32: false,
         });
         let plan = plan_call_args_aggs(
             9,
@@ -4980,6 +5216,7 @@ mod abi_plan_tests {
             member_align: 8,
             fields: alloc::vec![half(0), half(8)],
             homogeneous: None,
+            vector: false,
         };
         for (target, pair, slot) in [
             (Target::LinuxAarch64, [1, 2], 8),

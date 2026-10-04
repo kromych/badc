@@ -1,8 +1,8 @@
 //! GNU ld linker-script front end: lexer, parser, and AST.
 //!
-//! Covers the grammar the Linux kernel's generated scripts use
-//! (`vmlinux.lds`, `module.lds`): `SECTIONS` with output sections,
-//! input-section specs with glob patterns and SORT variants, symbol
+//! Covers the script language a full image layout and a relocatable
+//! module layout use: `SECTIONS` with output sections, input-section
+//! specs with glob patterns and SORT variants, symbol
 //! assignment (plain / PROVIDE / HIDDEN), location-counter arithmetic,
 //! `ASSERT`, `PHDRS`, `ENTRY`, `OUTPUT_FORMAT` / `OUTPUT_ARCH`, and
 //! data commands (`BYTE` .. `QUAD`, `FILL`, `CONSTRUCTORS`).
@@ -246,8 +246,8 @@ impl LinkerScript {
         })
     }
     /// Every `SECTIONS` block in order. A script may hold more than
-    /// one -- the kernel appends an arch block to `scripts/module.lds`
-    /// -- and ld accumulates them.
+    /// one -- a generic block and an architecture's appended to it --
+    /// and ld accumulates them.
     pub fn all_sections(&self) -> impl Iterator<Item = &SectionsItem> {
         self.commands
             .iter()
@@ -1454,7 +1454,7 @@ impl<'a> Parser<'a> {
     }
 
     /// A section name argument, lexed in pattern state so names like
-    /// `.data..percpu` or `runtime_ptr_USER_PTR_MAX` read whole.
+    /// `.bss..L0` or `ptr_MAX_VALUE` read whole.
     fn parse_section_arg(&mut self) -> Result<String, C5Error> {
         self.lex.expect_punct("(", LexState::Pattern)?;
         let name = match self.lex.next(LexState::Pattern)? {
@@ -1720,7 +1720,7 @@ mod tests {
     #[test]
     fn parses_assignments_and_entry() {
         let s = parse(
-            "ENTRY(_start)\n jiffies = jiffies_64;\n x = 1 + 2 * 3;\n \
+            "ENTRY(_start)\n ticks = ticks_64;\n x = 1 + 2 * 3;\n \
              PROVIDE(a = b);\n PROVIDE_HIDDEN(c = d);\n . = ASSERT(1, \"ok\");",
         );
         assert_eq!(s.entry(), Some("_start"));
@@ -1880,11 +1880,11 @@ mod tests {
         assert_eq!(s.commands.len(), 2);
     }
 
-    // The three real kernel scripts, vendored under tests/lds. The
-    // whole grammar above exists to hold these; a parse failure on any
-    // construct they use is a front-end defect.
+    // Three generated real-world scripts, vendored under tests/lds: two
+    // full image layouts and a relocatable module layout. A parse failure
+    // on any construct they use is a front-end defect.
     #[test]
-    fn parses_vmlinux_x86_64_lds() {
+    fn parses_an_x86_64_image_script() {
         let text = include_str!("../../../tests/lds/vmlinux_x86_64.lds");
         let s = parse(text);
         assert_eq!(s.entry(), Some("phys_startup_64"));
@@ -1968,7 +1968,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_vmlinux_aarch64_lds() {
+    fn parses_an_aarch64_image_script() {
         let text = include_str!("../../../tests/lds/vmlinux_aarch64.lds");
         let s = parse(text);
         assert_eq!(s.entry(), Some("_text"));
@@ -1996,7 +1996,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_module_lds() {
+    fn parses_a_relocatable_module_script() {
         let text = include_str!("../../../tests/lds/module.lds");
         let s = parse(text);
         let items = s.sections().unwrap();

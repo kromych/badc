@@ -74,10 +74,10 @@ static const struct fnm_case FNM_CASES[] = {
     {"a*b*c", "axxbyy", 0, 0},
     {"*.[ch]", "foo.c", 0, 1},
     {"*.[ch]", "foo.o", 0, 0},
-    {"__ksymtab_*", "__ksymtab_foo", 0, 1},
-    {"*.mod.c", "drivers/net/e1000.mod.c", 0, 1},
+    {"__exports_*", "__exports_foo", 0, 1},
+    {"*.gen.c", "sources/dev/x1000.gen.c", 0, 1},
     {".text.*", ".text.unlikely", 0, 1},
-    {"__*init", "__meminit", 0, 1},
+    {"__*init", "__preinit", 0, 1},
 };
 
 struct rx_case {
@@ -137,11 +137,11 @@ static const struct rx_case RX_CASES[] = {
     {"*a", 0, "*a", 0, 0, 0, 2, -1, -1},
     {"a$b", 0, "a$b", 0, 0, 0, 3, -1, -1},
     {"[[:upper:]]\\{2\\}", 0, "aABc", 0, 0, 1, 3, -1, -1},
-    {"USB", RX_E | RX_I, "CONFIG_USB_STORAGE", 0, 0, 7, 10, -1, -1},
-    {"^CONFIG_", RX_E | RX_I, "CONFIG_X86", 0, 0, 0, 7, -1, -1},
+    {"USB", RX_E | RX_I, "OPTION_USB_STORAGE", 0, 0, 7, 10, -1, -1},
+    {"^OPTION_", RX_E | RX_I, "OPTION_X86", 0, 0, 0, 7, -1, -1},
     {"net.*driver", RX_E | RX_I, "NET_VENDOR_DRIVER", 0, 0, 0, 17, -1, -1},
     {"(usb|scsi)", RX_E | RX_I, "SCSI_MOD", 0, 0, 0, 4, 0, 4},
-    {"e1000e?", RX_E | RX_I, "E1000E", 0, 0, 0, 6, -1, -1},
+    {"x1000x?", RX_E | RX_I, "X1000X", 0, 0, 0, 6, -1, -1},
 };
 
 int main(void) {

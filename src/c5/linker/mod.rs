@@ -40,8 +40,6 @@ pub(crate) mod comdat;
 pub(crate) mod default_script;
 #[cfg(feature = "std")]
 pub(crate) mod dynamic;
-#[cfg(feature = "std")]
-pub(crate) mod eh_frame;
 pub(crate) mod erratum;
 #[cfg(feature = "std")]
 pub(crate) mod gnu_property;
@@ -72,6 +70,7 @@ mod synth_build;
 pub(crate) mod target_libc;
 #[cfg(feature = "std")]
 mod tls_relax;
+pub(crate) mod zkeyword;
 
 /// A link failure that is badc's own: an invariant the linker relies on
 /// did not hold. `module` prefixes the message with the module's name.
@@ -118,8 +117,9 @@ pub use lds_link::{
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use link::{
-    MergedNative, MergedSymbol, PendingImportReloc, PltTrampoline, SectionContribution, SectionMap,
-    copy_candidates, emit_aarch64_plt, emit_x86_64_plt, link_native_objects,
+    DataImportSlots, LinkOptions, MergedNative, MergedSymbol, PendingImportReloc, PltTrampoline,
+    Preemption, SectionContribution, SectionMap, copy_candidates, emit_aarch64_plt, emit_plt_for,
+    emit_x86_64_plt, link_native_objects, link_native_objects_with,
     link_native_objects_with_options, link_native_objects_with_shared_libs, link_resolves_symbol,
 };
 #[cfg(feature = "std")]
@@ -145,7 +145,10 @@ pub use relocatable::{
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
-pub use synth_build::{write_native_image_from_merged, write_native_image_from_merged_ex};
+pub use synth_build::{
+    ImageOptions, write_native_image_from_merged, write_native_image_from_merged_ex,
+};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use target_libc::{TargetCLibrary, library_bindings};
+pub use zkeyword::{ZKeyword, ZKeywords, ZSupport, parse_z_keyword, resolve_exec_stack};

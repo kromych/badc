@@ -28,8 +28,12 @@ use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::{Tok, Token, Ty};
 use super::Compiler;
+use super::const_expr::ConstVal;
 use super::diag::Category;
-use super::types::{is_struct_ty, is_struct_value_ty, is_void_ty, struct_ptr_depth};
+use super::types::{
+    format_type, integer_promote, is_struct_ty, is_struct_value_ty, is_unsigned_ty, is_void_ty,
+    narrow_const_int, strip_unsigned, struct_ptr_depth, unqualified_version_ty,
+};
 
 /// The outer binding a nested block saved before rebinding a name, restored
 /// at the block's exit. A block nests arbitrarily, so unlike the single
@@ -49,6 +53,16 @@ pub(super) struct CleanupVar {
     is_thread_local: bool,
     array_size: i64,
     fn_ty: i64,
+}
+
+/// The case labels of one `switch` body.
+pub(super) struct SwitchLabels {
+    /// The type of the controlling expression, before promotion.
+    operand_ty: i64,
+    /// The promoted type each label converts to (C99 6.8.4.2p5).
+    promoted: i64,
+    /// The converted labels as closed ranges, disjoint per 6.8.4.2p3.
+    ranges: Vec<(i128, i128)>,
 }
 
 pub(super) struct BlockShadow {
@@ -351,7 +365,7 @@ impl Compiler {
             // and the declared counter never reaches the
             // SSA prologue.
             let init_before = self.ast_stmts_snapshot();
-            self.parse_local_decl(false)?;
+            self.parse_local_decl(false, false)?;
             let init_after = self.ast.stmts.len();
             // C99 6.7p1: a declaration's init-declarator-list may name
             // several declarators (`for (int i = 0, l = n; ...)`).
@@ -361,10 +375,10 @@ impl Compiler {
             // (correct for a single nested statement, not for sibling
             // decls), which drops every initializer but the last.
             // A statement-expression initializer interleaves its own
-            // sub-statements here (e.g. the `while` of a `qatomic_read`
-            // build-assert); skip them as `parse_block_stmt` does, else
-            // the wrapped for-init Compound lists a nested `while`'s body
-            // as a sibling and the walker runs it unconditionally.
+            // sub-statements here (e.g. the `while` of a build-assert in
+            // an atomic-read macro); skip them as `parse_block_stmt` does,
+            // else the wrapped for-init Compound lists a nested `while`'s
+            // body as a sibling and the walker runs it unconditionally.
             if init_after > init_before {
                 let ids: alloc::vec::Vec<super::super::ast::StmtId> = (init_before..init_after)
                     .filter(|&i| !self.in_stmt_expr_range(i))
@@ -381,6 +395,7 @@ impl Compiler {
             let init_before = self.ast_stmts_snapshot();
             self.parse_full_expr_or_void()?;
             let init_expr = self.ast_acc;
+            self.discard_value(init_expr);
             // Treat the init expression as an Expr statement.
             if let Some(e) = init_expr {
                 let pos = self.ast_src_pos();
@@ -418,6 +433,7 @@ impl Compiler {
         // Step (optional). Comma operator: `i++, k--`.
         let post_ast: Option<super::super::ast::ExprId> = if self.lex.tk != ')' {
             self.parse_full_expr_or_void()?;
+            self.discard_value(self.ast_acc);
             self.ast_acc
         } else {
             None
@@ -488,17 +504,25 @@ impl Compiler {
     /// Breaks inside the body decrement the break depth at switch
     /// exit through [`Self::close_loop_breaks`].
     pub(super) fn parse_switch_stmt(&mut self) -> Result<(), C5Error> {
+        let line = self.lex.line;
         self.next()?;
         self.consume(b'(', "open paren expected")?;
         self.parse_controlling_expr("switch", Category::Integer)?;
         let disc_ast = self.ast_acc;
+        let operand_ty = self.ty;
+        let promoted = integer_promote(operand_ty);
+        let boolean = self.has_boolean_value(disc_ast, operand_ty);
         self.consume(b')', "close paren expected")?;
 
         // Conservative drop of any pending dead-store entries at
         // the switch entry boundary, matching the flush a
         // control-flow op would have produced through emit_cf_op.
         self.flush_pending_stores();
-        self.switch_cases.push(Vec::new());
+        self.switch_cases.push(SwitchLabels {
+            operand_ty,
+            promoted,
+            ranges: Vec::new(),
+        });
         self.switch_defaults.push(false);
         self.enter_switch();
         self.enter_switch_body();
@@ -510,13 +534,153 @@ impl Compiler {
 
         // Same conservative drop at the body-exit boundary.
         self.flush_pending_stores();
-        self.switch_cases.pop();
-        self.switch_defaults.pop();
+        let labels = self.switch_cases.pop();
+        let has_default = self.switch_defaults.pop().unwrap_or(false);
+        // gcc's -Wswitch-bool: a label the boolean value never takes, or a
+        // `default` the labels 0 and 1 leave unreachable.
+        if boolean && let Some(labels) = labels {
+            let low = labels.ranges.iter().map(|&(a, _)| a).min();
+            let high = labels.ranges.iter().map(|&(_, b)| b).max();
+            let outside = low.is_some_and(|l| l < 0) || high.is_some_and(|h| h > 1);
+            if outside || (has_default && low == Some(0) && high == Some(1)) {
+                self.warn_at(
+                    Code::SWITCH_BOOL,
+                    line,
+                    "switch condition has boolean value".into(),
+                );
+            }
+        }
         self.close_loop_breaks();
         if let Some(disc) = disc_ast {
             self.ast_emit_switch(disc, body_s);
         }
         Ok(())
+    }
+
+    /// Whether a controlling expression has a boolean value, as gcc's
+    /// -Wswitch-bool reads one: of type `_Bool`, or a comparison, `!`, `&&`
+    /// or `||`, through a comma's right operand. A cast to another integer
+    /// type marks a deliberate integer.
+    fn has_boolean_value(&self, e: Option<super::super::ast::ExprId>, ty: i64) -> bool {
+        use super::super::ast::{Expr, UnOp};
+        if super::types::is_bool_ty(unqualified_version_ty(ty)) {
+            return true;
+        }
+        let mut e = e;
+        while let Some(id) = e {
+            match self.ast.expr(id) {
+                Expr::Comma { rhs, .. } => e = Some(*rhs),
+                Expr::Binary { op, .. } => return crate::c5::ir::is_comparison_op(*op),
+                Expr::ShortCircuit { .. }
+                | Expr::Unary {
+                    op: UnOp::LogNot, ..
+                } => return true,
+                _ => return false,
+            }
+        }
+        false
+    }
+
+    /// The values a `case` label covers, converted to the promoted type of
+    /// the controlling expression (C99 6.8.4.2p5) and recorded against the
+    /// switch's other labels, which 6.8.4.2p3 keeps distinct. `None` for an
+    /// empty GNU range, which is dropped with a warning as gcc and clang
+    /// drop it.
+    fn case_label_range(
+        &mut self,
+        line: usize,
+        lo: ConstVal,
+        hi: Option<ConstVal>,
+    ) -> Result<Option<(i128, i128)>, C5Error> {
+        let Some(&SwitchLabels {
+            operand_ty,
+            promoted,
+            ..
+        }) = self.switch_cases.last()
+        else {
+            return Err(self.compile_err(Code::INVALID_STATEMENT, "case outside switch"));
+        };
+        let raw = (lo.as_i128(), hi.unwrap_or(lo).as_i128());
+        let (a, b) = (
+            self.const_int_of(raw.0, promoted).as_i128(),
+            self.const_int_of(raw.1, promoted).as_i128(),
+        );
+        // The controlling expression takes only the values of its own type.
+        // A label outside them never matches, or its conversion to the
+        // promoted type discarded value bits; a conversion that reinterprets
+        // the sign at the same width is not diagnosed, as in gcc.
+        let own = unqualified_version_ty(operand_ty);
+        let (bytes, own_unsigned) = (self.size_of_type(own), is_unsigned_ty(own));
+        let is_bool = strip_unsigned(own) == Ty::Bool as i64;
+        let wide = self.size_of_type(promoted);
+        let fits = |raw: i128, v: i128| {
+            narrow_const_int(bytes, own_unsigned, is_bool, v) == v
+                && (narrow_const_int(wide, true, false, raw) == raw
+                    || narrow_const_int(wide, false, false, raw) == raw)
+        };
+        if !fits(raw.0, a) || !fits(raw.1, b) {
+            let written = |c: ConstVal| {
+                if is_unsigned_ty(c.expr_ty()) {
+                    format!("{}", c.as_i128() as u128)
+                } else {
+                    format!("{}", c.as_i128())
+                }
+            };
+            let label = match hi {
+                None => format!("case value {}", written(lo)),
+                Some(hi) => format!("case range `{} ... {}`", written(lo), written(hi)),
+            };
+            let t = format_type(own, &self.structs);
+            self.warn_at(
+                Code::SWITCH_OUTSIDE_RANGE,
+                line,
+                format!("{label} is not within the range of `{t}`, the type of the controlling expression"),
+            );
+        }
+        let unsigned = is_unsigned_ty(promoted);
+        let less = |x: i128, y: i128| {
+            if unsigned {
+                (x as u128) < (y as u128)
+            } else {
+                x < y
+            }
+        };
+        let spell = |v: i128| {
+            if unsigned {
+                format!("{}", v as u128)
+            } else {
+                format!("{v}")
+            }
+        };
+        if less(b, a) {
+            self.warn_at(
+                Code::EMPTY_CASE_RANGE,
+                line,
+                format!(
+                    "case range `{} ... {}` is empty; the label is dropped",
+                    spell(a),
+                    spell(b)
+                ),
+            );
+            return Ok(None);
+        }
+        let overlap = self.switch_cases.last().and_then(|labels| {
+            labels
+                .ranges
+                .iter()
+                .find(|&&(c, d)| !less(d, a) && !less(b, c))
+                .map(|&(c, _)| if less(a, c) { c } else { a })
+        });
+        if let Some(first) = overlap {
+            return Err(self.compile_err(
+                Code::INVALID_STATEMENT,
+                format!("duplicate case value {} in switch", spell(first)),
+            ));
+        }
+        if let Some(labels) = self.switch_cases.last_mut() {
+            labels.ranges.push((a, b));
+        }
+        Ok(Some((a, b)))
     }
 
     /// Parse a `typedef` declaration at function/block scope (C99
@@ -534,22 +698,17 @@ impl Compiler {
         self.pending.attr_align = 0;
         self.pending.attr_alignas = 0;
         let lbt = self.parse_decl_base_type()?;
+        let implicit_int = core::mem::take(&mut self.pending.base_implicit_int);
         let base_enum_tag = self.pending.base_enum_tag.take();
         while self.lex.tk != ';' {
-            let (id_idx, mut ty, mut td_array) = self.parse_declarator(lbt)?;
+            let declarator_line = self.lex.line;
+            let (id_idx, ty, mut td_array, mut td_zero_len) = self.parse_declarator(lbt)?;
             if id_idx == usize::MAX {
                 return Err(self.compile_err(Code::INVALID_DECLARATION, "typedef requires a name"));
             }
-            // `__attribute__((vector_size(N)))` on the typedef rebuilds its type
-            // into a GCC vector here, matching the file-scope path. Without it
-            // the attribute leaked to the first subsequent declaration and was
-            // then consumed, so a second use of the typedef resolved as a scalar.
-            if self.pending.attr_vector_size > 0 {
-                let n = core::mem::take(&mut self.pending.attr_vector_size);
-                ty = self.make_vector_type(ty, n);
-            }
-            if let Some(m) = self.pending.attr_mode.take() {
-                ty = self.apply_mode_to_type(ty, m)?;
+            if implicit_int {
+                let what = super::decl_base::ImplicitInt::Declarator(id_idx);
+                self.report_implicit_int(what, declarator_line)?;
             }
             let declarator_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
@@ -636,8 +795,11 @@ impl Compiler {
             )?;
             if typedef_dim != 0 && td_array == 0 && !self.pending.base_array_taken {
                 td_array = typedef_dim;
+                td_zero_len = self.pending.typedef_base_zero_len;
             }
             self.symbols[id_idx].array_size = td_array;
+            // A zero-length alias shares the `-1` count of one of unknown size.
+            self.symbols[id_idx].is_zero_len_array = td_array < 0 && td_zero_len;
             self.symbols[id_idx].is_function_type = typedef_is_fn_type;
             // A function-type typedef records the calling convention its
             // declaration named, so a declarator through the alias
@@ -927,7 +1089,7 @@ impl Compiler {
             // C23 6.7.13 / 6.8: an attribute-specifier-sequence may
             // lead either a declaration or a statement at block scope.
             // Consume it, then dispatch on the following token.
-            let mut leading_maybe_unused = false;
+            let (mut leading_maybe_unused, mut leading_noreturn) = (false, false);
             if self.at_attribute_specifier() {
                 self.pending.attr_maybe_unused = false;
                 // Clear per-item so a `cleanup` attribute leading a
@@ -935,8 +1097,10 @@ impl Compiler {
                 // declaration; the declaration path re-reads it after this.
                 self.pending.attr_cleanup = None;
                 self.pending.attr_uninitialized = false;
+                self.pending_noreturn = false;
                 self.skip_attribute_specifiers()?;
                 leading_maybe_unused = self.pending.attr_maybe_unused;
+                leading_noreturn = core::mem::take(&mut self.pending_noreturn);
                 if self.lex.tk == '}' {
                     break;
                 }
@@ -950,7 +1114,7 @@ impl Compiler {
             } else if self.lex_is_block_decl_start() {
                 let item_before = self.ast_stmts_snapshot();
                 let vla_before = self.func_vla_decls;
-                self.parse_local_decl(leading_maybe_unused)?;
+                self.parse_local_decl(leading_maybe_unused, leading_noreturn)?;
                 if self.func_vla_decls > vla_before && first_vla_item.is_none() {
                     first_vla_item = Some(top_level_ids.len());
                 }
@@ -1049,8 +1213,7 @@ impl Compiler {
         // is overwritten the Token::Loc test no longer holds.
         // Parameter slots (val >= 2) cannot be declared inside a
         // `{ ... }` block; their diagnostic is emitted at function
-        // exit. Names starting with `_` are suppressed (gcc /
-        // clang `-Wunused` convention).
+        // exit.
         for b in &block_symbols {
             let sym = &self.symbols[b.idx];
             if sym.class != Token::Loc as i64
@@ -1059,7 +1222,6 @@ impl Compiler {
                 || sym.binding.address_escaped
                 || sym.binding.was_read
                 || sym.binding.maybe_unused
-                || sym.name.starts_with('_')
             {
                 continue;
             }
@@ -3164,45 +3326,18 @@ impl Compiler {
             // expression chain (`a ? b : c`), so we go in at the top.
             // Block-scope `const` scalar objects fold to their recorded
             // initializer values here, as GCC (GNU mode, at -O) accepts.
-            let lo = self.parse_constant_int_folding_const_objects()?;
+            let lo = self.parse_constant_folding_const_objects()?;
             // GNU case range `case lo ... hi:` (C extension): the label
-            // covers every value in [lo, hi]. `hi == lo` for a single label.
+            // covers every value in [lo, hi].
             let hi = if self.lex.tk == Token::Ellipsis {
                 self.next()?;
-                self.parse_constant_int_folding_const_objects()?
+                Some(self.parse_constant_folding_const_objects()?)
             } else {
-                lo
+                None
             };
             self.consume(b':', "expected colon after case")?;
             self.check_switch_label(line)?;
-            if hi < lo {
-                return Err(self.compile_err(
-                    Code::INVALID_STATEMENT,
-                    format!("case range `{lo} ... {hi}` is empty (low bound exceeds high)"),
-                ));
-            }
-            // C99 6.8.4.2p3: the case constant expressions in one switch
-            // must be distinct (constraint). A single label is tracked for
-            // duplicate detection; a `lo ... hi` range is dispatched by a
-            // bounds comparison (walk.rs) with no per-value expansion, so it
-            // is not enumerated here and an overlap involving a range is not
-            // diagnosed (a permitted relaxation of the constraint check).
-            match self.switch_cases.last_mut() {
-                Some(cases) => {
-                    if lo == hi {
-                        if cases.contains(&lo) {
-                            return Err(self.compile_err(
-                                Code::INVALID_STATEMENT,
-                                format!("duplicate case value {lo} in switch"),
-                            ));
-                        }
-                        cases.push(lo);
-                    }
-                }
-                None => {
-                    return Err(self.compile_err(Code::INVALID_STATEMENT, "case outside switch"));
-                }
-            }
+            let range = self.case_label_range(line, lo, hi)?;
             let body_before = self.ast_stmts_snapshot();
             // C23 6.8.1: a label may precede a declaration. badc parses
             // block-local declarations in the enclosing block loop, where
@@ -3222,7 +3357,9 @@ impl Compiler {
                 self.stmt()?;
             }
             let body_s = self.ast_wrap_stmts_since(body_before);
-            self.ast_emit_case(lo, hi, body_s);
+            if let Some((lo, hi)) = range {
+                self.ast_emit_case(lo, hi, body_s);
+            }
         } else if self.lex.tk == Token::Default {
             let line = self.lex.line;
             self.next()?;
@@ -3397,7 +3534,7 @@ impl Compiler {
                         if m.no_conversion {
                             return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
                         }
-                        self.warn_at(m.code, line, text);
+                        self.report_mismatch(&m, line, text)?;
                     }
                     self.mark_emit_other();
                     // Mirror the rhs expression into the walker's
@@ -3419,26 +3556,27 @@ impl Compiler {
                     let rhs_is_untyped = self.last_emit_was_indirect_call();
                     let ret_fn = self.current_func_ret_fn.clone().map(|(f, d)| (*f, d));
                     let value_fn = self.value_fn_type(self.ast_acc);
-                    if ret_fn.is_some() && value_fn.is_some() {
-                        let what = ("return", "declared", "returned");
-                        let (from, to) = ((self.ty, &value_fn), (ret_ty, &ret_fn));
-                        self.check_fn_pointer_conversion(to, from, line, what)?;
-                    } else if let Some(m) = Self::type_warning_with_flags(
-                        &self.structs,
-                        ret_ty,
-                        self.ty,
-                        rhs_is_zero,
-                        rhs_is_untyped,
-                    ) {
-                        let want = super::types::format_type(ret_ty, &self.structs);
-                        let got = super::types::format_type(self.ty, &self.structs);
+                    let what = ("return", "declared", "returned");
+                    let (from, to) = ((self.ty, &value_fn), (ret_ty, &ret_fn));
+                    if !self.check_function_conversion(to, from, true, line, what)?
+                        && let Some(m) = Self::type_warning_with_flags(
+                            &self.structs,
+                            ret_ty,
+                            self.ty,
+                            rhs_is_zero,
+                            rhs_is_untyped,
+                        )
+                    {
+                        let want = self.typed_text(ret_ty, &ret_fn);
+                        let got = self.typed_text(self.ty, &value_fn);
                         let text =
                             format!("{} in return (declared={want}, returned={got})", m.reason);
                         if m.no_conversion {
                             return Err(self.compile_err_at(Code::INCOMPATIBLE_TYPES, line, text));
                         }
-                        self.warn_at(m.code, line, text);
+                        self.report_mismatch(&m, line, text)?;
                     }
+                    self.check_constant_conversion_of(self.ast_acc, ret_ty, 0, line);
                     // Reuse `convert_assign_rhs` so an `int`-typed
                     // `return` from a `double`-returning function lifts
                     // through the int-to-float cast rather than landing
@@ -3489,6 +3627,7 @@ impl Compiler {
         } else {
             self.parse_full_expr_or_void()?;
             self.reject_incomplete_value(self.ty)?;
+            self.discard_value(self.ast_acc);
             // C99 6.8.3 expression statement: bind the parsed
             // expression's id to a `Stmt::Expr` so the walker
             // descends through it. No-op when the expression

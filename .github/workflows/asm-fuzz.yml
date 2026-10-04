@@ -30,7 +30,7 @@ jobs:
         env:
           BADC_FUZZ_ASM: "1"
         run: |
-          cargo test --release --lib --features full -- \
+          python3 scripts/cargo_test.py --release --lib --features full -- \
             codegen::x86_64::table::tests::differential \
             codegen::aarch64::table::tests::differential \
             --nocapture

@@ -1,5 +1,5 @@
-// C99 6.7.2.2, GNU typeof: `extern typeof(x) x;`, the redeclaration Linux's
-// EXPORT_SYMBOL expands to, names x's own type. The typeof of an array of
+// C99 6.7.2.2, GNU typeof: `extern typeof(x) x;`, a redeclaration an
+// export macro expands to, names x's own type. The typeof of an array of
 // arrays -- an array of an array typedef, or a declared two-level array --
 // leaves no bounds to the next declaration: a one-dimensional array
 // redeclared or declared through typeof after it keeps its own bound.

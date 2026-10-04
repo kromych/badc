@@ -4,7 +4,7 @@
 // pointer exactly like `*name(args)` -- neither becomes a
 // function-pointer shape under C99's redundant-paren rule.
 //
-// The Lua headers use the `(name)` idiom on every public API
+// A library header may use the `(name)` idiom on every public API
 // function so the body can `#define name __badc_compat_name`
 // without breaking the prototype. Without this fix the second
 // declarator was flagged as a duplicate definition because the

@@ -38,20 +38,20 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   BinopI { op=and, lhs=v1, rhs_imm=65535 }         -> x0
-    v4   BinopI { op=ult, lhs=v3, rhs_imm=-1 }            -> x1
-    terminator Bnz { cond=v4, target=b3, fall=b1 }   (exit_acc=v4)
+    v4   BinopI { op=lt, lhs=v3, rhs_imm=7 }              -> x1
+    terminator Bnz { cond=v4, target=b4, fall=b1 }   (exit_acc=v4)
   block 1  start_pc=0
-    v6   Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v6)
+    v6   BinopI { op=eq, lhs=v3, rhs_imm=7 }              -> x0
+    terminator Bnz { cond=v6, target=b3, fall=b2 }   (exit_acc=v6)
   block 2  start_pc=0
     v9   Imm(999)                                         -> x0
     terminator Return(v9)   (exit_acc=v9)
   block 3  start_pc=0
-    v5   BinopI { op=eq, lhs=v3, rhs_imm=7 }              -> x0
-    terminator Bnz { cond=v5, target=b4, fall=b2 }   (exit_acc=v5)
-  block 4  start_pc=0
     v8   Imm(7)                                           -> x0
     terminator Return(v8)   (exit_acc=v8)
+  block 4  start_pc=0
+    v5   Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=2 ---
 ; name=u8
 fn ent_pc=2 n_params=1 variadic=false locals=0
@@ -61,20 +61,20 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x0
-    v4   BinopI { op=ult, lhs=v3, rhs_imm=-1 }            -> x1
-    terminator Bnz { cond=v4, target=b3, fall=b1 }   (exit_acc=v4)
+    v4   BinopI { op=lt, lhs=v3, rhs_imm=3 }              -> x1
+    terminator Bnz { cond=v4, target=b4, fall=b1 }   (exit_acc=v4)
   block 1  start_pc=0
-    v6   Imm(0)                                           -> x0
-    terminator Jmp(b2)   (exit_acc=v6)
+    v6   BinopI { op=eq, lhs=v3, rhs_imm=3 }              -> x0
+    terminator Bnz { cond=v6, target=b3, fall=b2 }   (exit_acc=v6)
   block 2  start_pc=0
     v9   Imm(999)                                         -> x0
     terminator Return(v9)   (exit_acc=v9)
   block 3  start_pc=0
-    v5   BinopI { op=eq, lhs=v3, rhs_imm=3 }              -> x0
-    terminator Bnz { cond=v5, target=b4, fall=b2 }   (exit_acc=v5)
-  block 4  start_pc=0
     v8   Imm(3)                                           -> x0
     terminator Return(v8)   (exit_acc=v8)
+  block 4  start_pc=0
+    v5   Imm(0)                                           -> x0
+    terminator Jmp(b2)   (exit_acc=v5)
 ; --- SSA dump (ok=true) ent_pc=3 ---
 ; name=s32
 fn ent_pc=3 n_params=1 variadic=false locals=0
@@ -234,6 +234,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
   block 22  start_pc=0
     v82  Imm(0)                                           -> x0
     terminator Return(v82)   (exit_acc=v82)
+switch_unsigned_negative_case.c:24: warning: case value -1 is not within the range of `unsigned short`, the type of the controlling expression [B3008] [-Wswitch-outside-range]
+    case -1: return 100;
+switch_unsigned_negative_case.c:32: warning: case value -1 is not within the range of `unsigned char`, the type of the controlling expression [B3008] [-Wswitch-outside-range]
+    case -1: return 100;
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

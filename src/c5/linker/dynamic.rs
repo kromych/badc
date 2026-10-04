@@ -3,8 +3,8 @@
 //! and `.dynamic`.
 //!
 //! An ET_DYN image carries these whether or not a loader will search
-//! them; bfd builds them for every `-shared` link and the kernel's own
-//! scripts discard the ones it does not want. Table shapes follow
+//! them; bfd builds them for every `-shared` link, and a script discards
+//! the ones it does not want. Table shapes follow
 //! bfd's: the bucket counts, the Bloom filter geometry and the
 //! symbol order are what a consumer reading `DT_GNU_HASH` expects.
 
@@ -40,6 +40,7 @@ pub const DT_STRSZ: u64 = 10;
 pub const DT_SYMENT: u64 = 11;
 pub const DT_SONAME: u64 = 14;
 pub const DT_SYMBOLIC: u64 = 16;
+pub const DT_DEBUG: u64 = 21;
 pub const DT_INIT_ARRAY: u64 = 25;
 pub const DT_FINI_ARRAY: u64 = 26;
 pub const DT_INIT_ARRAYSZ: u64 = 27;
@@ -57,9 +58,43 @@ pub const DT_VERDEF: u64 = 0x6fff_fffc;
 pub const DT_VERDEFNUM: u64 = 0x6fff_fffd;
 pub const DT_FLAGS_1: u64 = 0x6fff_fffb;
 
+pub const DF_ORIGIN: u64 = 0x01;
 pub const DF_SYMBOLIC: u64 = 0x02;
 pub const DF_TEXTREL: u64 = 0x04;
+pub const DF_BIND_NOW: u64 = 0x08;
+pub const DF_1_NOW: u64 = 0x01;
+pub const DF_1_GLOBAL: u64 = 0x02;
+pub const DF_1_NODELETE: u64 = 0x08;
+pub const DF_1_LOADFLTR: u64 = 0x10;
+pub const DF_1_INITFIRST: u64 = 0x20;
+pub const DF_1_NOOPEN: u64 = 0x40;
+pub const DF_1_ORIGIN: u64 = 0x80;
+pub const DF_1_INTERPOSE: u64 = 0x400;
+pub const DF_1_NODEFLIB: u64 = 0x800;
+pub const DF_1_NODUMP: u64 = 0x1000;
 pub const DF_1_PIE: u64 = 0x0800_0000;
+
+/// The `DT_FLAGS` and `DT_FLAGS_1` bits GNU ld records for the `-z`
+/// keywords `z`.
+pub fn z_keyword_flags(z: &super::zkeyword::ZKeywords) -> (u64, u64) {
+    use super::zkeyword::ZKeyword;
+    z.iter().fold((0, 0), |(flags, flags_1), kw| {
+        let (f, f1) = match kw {
+            ZKeyword::Now(true) => (DF_BIND_NOW, DF_1_NOW),
+            ZKeyword::LoaderFlag("origin") => (DF_ORIGIN, DF_1_ORIGIN),
+            ZKeyword::LoaderFlag("nodefaultlib") => (0, DF_1_NODEFLIB),
+            ZKeyword::LoaderFlag("nodelete") => (0, DF_1_NODELETE),
+            ZKeyword::LoaderFlag("nodlopen") => (0, DF_1_NOOPEN),
+            ZKeyword::LoaderFlag("nodump") => (0, DF_1_NODUMP),
+            ZKeyword::LoaderFlag("global") => (0, DF_1_GLOBAL),
+            ZKeyword::LoaderFlag("initfirst") => (0, DF_1_INITFIRST),
+            ZKeyword::LoaderFlag("interpose") => (0, DF_1_INTERPOSE),
+            ZKeyword::LoaderFlag("loadfltr") => (0, DF_1_LOADFLTR),
+            _ => (0, 0),
+        };
+        (flags | f, flags_1 | f1)
+    })
+}
 
 /// `VER_FLG_BASE`: the node naming the object itself.
 const VER_FLG_BASE: u16 = 1;
@@ -472,6 +507,12 @@ pub struct DynAddrs {
     pub textrel: bool,
     /// A position-independent executable: `DF_1_PIE`.
     pub pie: bool,
+    /// An executable rather than a shared object: `DT_DEBUG`, and none of
+    /// the `DT_FLAGS_1` bits only a shared object takes.
+    pub executable: bool,
+    /// `DT_FLAGS` and `DT_FLAGS_1` bits the `-z` keywords record.
+    pub flags: u64,
+    pub flags_1: u64,
     /// `(address, size)` of `.preinit_array`, `.init_array` and
     /// `.fini_array`, so a loader runs what they hold.
     pub preinit_array: Option<(u64, u64)>,
@@ -510,6 +551,11 @@ pub fn build_dynamic(a: &DynAddrs, class: ElfClass) -> Vec<u8> {
     }
     tags.push((DT_STRSZ, a.strsz));
     tags.push((DT_SYMENT, class.sym_size()));
+    // The loader publishes its `r_debug` here, where a debugger finds the
+    // link map; bfd writes the slot into every executable.
+    if a.executable {
+        tags.push((DT_DEBUG, 0));
+    }
     for (arr, tag, sz) in [
         (a.preinit_array, DT_PREINIT_ARRAY, DT_PREINIT_ARRAYSZ),
         (a.init_array, DT_INIT_ARRAY, DT_INIT_ARRAYSZ),
@@ -545,11 +591,21 @@ pub fn build_dynamic(a: &DynAddrs, class: ElfClass) -> Vec<u8> {
         tags.push((DT_TEXTREL, 0));
         flags |= DF_TEXTREL;
     }
+    flags |= a.flags;
     if flags != 0 {
         tags.push((DT_FLAGS, flags));
     }
+    // bfd drops the bits only a shared object can carry from an
+    // executable's set.
+    let mut flags_1 = a.flags_1;
+    if a.executable {
+        flags_1 &= !(DF_1_INITFIRST | DF_1_NODELETE | DF_1_NOOPEN);
+    }
     if a.pie {
-        tags.push((DT_FLAGS_1, DF_1_PIE));
+        flags_1 |= DF_1_PIE;
+    }
+    if flags_1 != 0 {
+        tags.push((DT_FLAGS_1, flags_1));
     }
     if let Some(v) = a.versym {
         tags.push((DT_VERSYM, v));
@@ -572,6 +628,41 @@ pub fn build_dynamic(a: &DynAddrs, class: ElfClass) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// GNU ld's bits for the keywords that record a loader policy: each
+    /// loader keyword a `DT_FLAGS_1` bit of its own, `now` and `origin` a
+    /// `DT_FLAGS` bit as well.
+    #[test]
+    fn every_loader_keyword_records_its_bit() {
+        use crate::c5::linker::zkeyword::{LOADER_FLAGS, ZKeywords, parse_z_keyword};
+        let bits = |spelling: &str| {
+            let mut z = ZKeywords::default();
+            z.push(parse_z_keyword(spelling).unwrap());
+            z_keyword_flags(&z)
+        };
+        for (spelling, want) in [
+            ("now", (DF_BIND_NOW, DF_1_NOW)),
+            ("origin", (DF_ORIGIN, DF_1_ORIGIN)),
+            ("nodefaultlib", (0, DF_1_NODEFLIB)),
+            ("nodelete", (0, DF_1_NODELETE)),
+            ("nodlopen", (0, DF_1_NOOPEN)),
+            ("nodump", (0, DF_1_NODUMP)),
+            ("global", (0, DF_1_GLOBAL)),
+            ("initfirst", (0, DF_1_INITFIRST)),
+            ("interpose", (0, DF_1_INTERPOSE)),
+            ("loadfltr", (0, DF_1_LOADFLTR)),
+            ("lazy", (0, 0)),
+        ] {
+            assert_eq!(bits(spelling), want, "-z {spelling}");
+        }
+        let all: Vec<u64> = LOADER_FLAGS.iter().map(|f| bits(f).1).collect();
+        assert!(all.iter().all(|&b| b.count_ones() == 1), "{all:#x?}");
+        assert_eq!(
+            all.iter().fold(0, |a, b| a | b).count_ones(),
+            9,
+            "distinct bits"
+        );
+    }
 
     #[test]
     fn bucket_count_matches_bfd_table() {

@@ -1,5 +1,5 @@
 // snapshot-flags(linux-aarch64): -mbranch-protection=pac-ret+leaf+bti
-// `-mbranch-protection=pac-ret+leaf`, as Linux 5.10 to 6.1 build arm64:
+// `-mbranch-protection=pac-ret+leaf`:
 // the frameless leaf signs the return address it keeps in x30 (`paciasp`,
 // which stands in for the `bti c` landing pad) and authenticates it ahead
 // of its `ret`, as the framed caller does. Returns 42.

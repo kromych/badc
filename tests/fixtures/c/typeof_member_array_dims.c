@@ -1,8 +1,8 @@
 // `typeof` of a multi-dimensional array member names the same array type
 // the member has, dimensions included: the type has to carry the row
 // shape, not just the total element count, or `t[i]` has no row to index.
-// The shape mm/kfence/kfence_test.c declares its expected-report buffer
-// with.
+// An expected-output buffer declared from the observed one takes this
+// shape.
 static struct {
 	int nlines;
 	char lines[2][8];

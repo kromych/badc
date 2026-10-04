@@ -12,8 +12,8 @@ use super::super::token::Ty;
 use super::Compiler;
 use super::function::{ParamForm, ParsedParams};
 use super::types::{
-    VOLATILE_BIT, VOLATILE_INNER_BIT, VOLATILE_MASK, format_signature, format_type,
-    is_const_object_ty, is_void_ty, rebase_enum_placeholder, strip_object_const, strip_unsigned,
+    VOL_LVL_MASK, VOLATILE_MASK, format_signature, format_type, is_void_ty,
+    rebase_enum_placeholder, strip_object_const, strip_unsigned, unqualified_version_ty,
 };
 
 /// A type as a declaration spelled it: the tag, and the enum tag it named
@@ -104,16 +104,6 @@ fn promoted(ty: i64) -> i64 {
     } else {
         ty
     }
-}
-
-/// A tag qualified `volatile` at its outermost derivation does not record
-/// whether an inner one is too, so only what both tags record is compared.
-fn volatile_agrees(a: i64, b: i64, own: bool) -> bool {
-    let outer = |t: i64| t & VOLATILE_BIT != 0 && t & VOLATILE_INNER_BIT == 0;
-    if own && outer(a) != outer(b) {
-        return false;
-    }
-    outer(a) || outer(b) || (a & VOLATILE_INNER_BIT) == (b & VOLATILE_INNER_BIT)
 }
 
 fn compose(prior: DeclaredType, new: DeclaredType) -> DeclaredType {
@@ -325,17 +315,13 @@ impl Compiler {
         (ra, pa): (Spelled, &Params),
         (rb, pb): (Spelled, &Params),
     ) -> Verdict {
-        let (ra, rb) = (self.spelled_ty(ra), self.spelled_ty(rb));
-        if !self.tags_agree(strip_object_const(ra), strip_object_const(rb), false) {
+        // C17 6.7.6.3p5: a function returns the unqualified version of its
+        // declared type, which gcc applies in every mode.
+        let ret = |s: Spelled| unqualified_version_ty(self.spelled_ty(s));
+        if !self.tags_agree(ret(ra), ret(rb), false) {
             return Verdict::Conflict;
         }
-        match self.params_verdict(pa, pb) {
-            // C17 6.7.6.3p5 drops a return type's qualifiers; C99 6.7.3p9 does not.
-            Verdict::Compatible if is_const_object_ty(ra) != is_const_object_ty(rb) => {
-                Verdict::Extension
-            }
-            v => v,
-        }
+        self.params_verdict(pa, pb)
     }
 
     /// C99 6.7.5.3p15.
@@ -380,23 +366,19 @@ impl Compiler {
         }
     }
 
-    /// C99 6.2.7p1 over two tags.
+    /// C99 6.2.7p1 over two tags; the type's own qualifiers take part when
+    /// `own`.
     fn tags_agree(&self, a: i64, b: i64, own: bool) -> bool {
-        if !volatile_agrees(a, b, own) {
+        let (a, b) = if own {
+            (a, b)
+        } else {
+            (unqualified_version_ty(a), unqualified_version_ty(b))
+        };
+        if a & VOL_LVL_MASK != b & VOL_LVL_MASK {
             return false;
         }
         let (a, b) = (a & !VOLATILE_MASK, b & !VOLATILE_MASK);
-        a == b
-            || self.tags_compatible(a, b)
-            || self.is_row_pointer(a, b)
-            || self.is_row_pointer(b, a)
-    }
-
-    /// `T a[][N]` as a parameter keeps only the element pointer in its tag.
-    fn is_row_pointer(&self, row: i64, flat: i64) -> bool {
-        self.ptr_array_id_depth1(row).is_some_and(|id| {
-            (self.structs[id].fields[0].ty & !VOLATILE_MASK) + Ty::Ptr as i64 == flat
-        })
+        a == b || self.tags_compatible(a, b)
     }
 
     fn describe(&self, ty: &DeclaredType) -> String {

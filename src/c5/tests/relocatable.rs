@@ -105,6 +105,30 @@ fn merge(objs: &[EtRel], opts: &RelinkOptions) -> EtRel {
     parse_et_rel(&bytes, "merged").expect("round-trip parse")
 }
 
+/// `-z muldefs` in a relocatable link: the first of two definitions
+/// stands, where without it the link fails.
+#[test]
+fn muldefs_keeps_the_first_definition_in_a_relocatable_link() {
+    let a = compile_obj("int f(void) { return 1; }\n", "a.o");
+    let b = compile_obj("int f(void) { return 2; }\n", "b.o");
+    let pair = [a, b];
+    let err = link_relocatable(&pair, &RelinkOptions::default()).expect_err("two definitions");
+    assert!(
+        format!("{err}").contains("multiple definition of `f'"),
+        "{err}"
+    );
+    let merged = merge(
+        &pair,
+        &RelinkOptions {
+            allow_multiple_definition: true,
+            ..Default::default()
+        },
+    );
+    let defs: Vec<_> = merged.symbols.iter().filter(|s| s.name == "f").collect();
+    assert_eq!(defs.len(), 1, "one global f");
+    assert_eq!(defs[0].value, 0, "a.o's body opens the merged .text");
+}
+
 #[test]
 fn merges_sections_symbols_and_relocs() {
     let a = compile_obj(
@@ -282,10 +306,8 @@ fn asm_label_renames_every_emitted_symbol() {
 #[test]
 fn an_internal_linkage_data_alias_names_its_target() {
     // `static T a __attribute__((alias("t")))` is an additional local name
-    // for `t`'s storage. Linux builds `MODULE_DEVICE_TABLE` out of exactly
-    // this form and modpost reads the device table through the alias
-    // symbol's section, value and size, so dropping it loses every
-    // modalias the module would have carried.
+    // for `t`'s storage: gcc emits the alias symbol with `t`'s section,
+    // value and size.
     const STB_LOCAL: u8 = 0;
     const STB_GLOBAL: u8 = 1;
     const STT_OBJECT: u8 = 1;
@@ -456,8 +478,7 @@ fn unreferenced_section_static_drops_its_whole_cascade() {
     // so an unreferenced section-attributed static drops and the sweep
     // cascades: the static function only its initializer named goes with
     // it, and with that function goes its reference to a symbol this unit
-    // never defines. The kernel earlycon table takes this shape in a
-    // module build, where the declaration keeps the section and loses
+    // never defines: a table entry declared with a section and without
     // `used`. `used`, an ordinary reference, and a name spelled in an asm
     // template each still pin their definition.
     let a = compile_obj(
@@ -550,9 +571,9 @@ fn an_asm_named_definition_gets_no_undefined_entry_beside_it() {
 #[test]
 fn block_static_shadowing_extern_keeps_per_instance_objects() {
     // Same-named block-scope statics across sibling scopes and functions,
-    // shadowing a file-scope `extern` of the name (the kernel's or51132.c
-    // against `sections.h`): each static is a defined local object and no
-    // reference resolves to the extern unless the extern itself is named.
+    // shadowing a file-scope `extern` of the name: each static is a defined
+    // local object and no reference resolves to the extern unless the
+    // extern itself is named.
     let base = "extern char _data[];\n\
                 extern int sink(const unsigned char *p, int n);\n\
                 int f(int k) {\n\
@@ -674,8 +695,7 @@ fn module_script_discard_and_gather() {
 /// A `.debug_info` reference to an object the script discarded
 /// resolves to null instead of failing the link: the section describes
 /// the image rather than taking part in it, which is how GNU ld treats
-/// the same reference. The kernel's `__ADDRESSABLE` objects live in
-/// `.discard.addressable` and every module link hits this.
+/// the same reference.
 #[test]
 fn debug_reference_to_a_discarded_object_resolves_to_null() {
     let script = parse_module_script("SECTIONS {\n /DISCARD/ : { *(.discard) *(.discard.*) }\n}\n")
@@ -796,7 +816,7 @@ fn glob_match_shapes() {
     assert!(glob_match("*", ".anything"));
     assert!(glob_match(".text", ".text"));
     assert!(!glob_match(".text", ".text.hot"));
-    // Character classes, as the kernel's module.lds spells them.
+    // Character classes, as a script spells a name's tail.
     assert!(glob_match(".text.[0-9a-zA-Z_]*", ".text.unlikely"));
     assert!(glob_match(".data.[0-9a-zA-Z_]*", ".data.once"));
     assert!(!glob_match(".bss.[0-9a-zA-Z_]*", ".bss..L0"));
@@ -808,8 +828,8 @@ fn glob_match_shapes() {
 
 #[test]
 fn module_script_arch_tail_and_byte() {
-    // The kernel appends an arch SECTIONS block; `.plt`-style
-    // placeholders carry one literal byte the module loader resizes.
+    // A second, architecture-specific SECTIONS block follows the first;
+    // `.plt`-style placeholders carry one literal byte a loader resizes.
     let text = "\
         SECTIONS {\n\
          .text 0 : { *(.text .text.[0-9a-zA-Z_]*) }\n\
@@ -1082,26 +1102,37 @@ fn a_hardened_object_carries_the_matching_property_note() {
     }
 }
 
+/// The note's descriptor is the style's digest of the output file, with
+/// the descriptor zero: 20 bytes of SHA-1, or lld's 8-byte `fast` id.
 #[test]
 fn build_id_note_is_emitted_and_stable() {
+    use crate::c5::codegen::BuildId;
     let a = compile_obj("int v(void) { return 2; }\n", "a.o");
-    let opts = RelinkOptions {
-        build_id_sha1: true,
-        ..Default::default()
-    };
-    let one = link_relocatable(std::slice::from_ref(&a), &opts).expect("merge");
-    let two = link_relocatable(&[a], &opts).expect("merge");
-    assert_eq!(one, two, "deterministic output");
-    let merged = parse_et_rel(&one, "merged").expect("parse");
-    let note = merged
-        .sections
-        .iter()
-        .find(|s| s.name == ".note.gnu.build-id")
-        .expect("build-id note");
-    // nhdr(12) + "GNU\0" + 20-byte SHA-1 digest.
-    assert_eq!(note.bytes.len(), 36);
-    assert_eq!(&note.bytes[12..16], b"GNU\0");
-    assert!(note.bytes[16..36].iter().any(|&b| b != 0));
+    for (style, len) in [(BuildId::Sha1, 20), (BuildId::Fast, 8)] {
+        let opts = RelinkOptions {
+            build_id: style,
+            ..Default::default()
+        };
+        let one = link_relocatable(std::slice::from_ref(&a), &opts).expect("merge");
+        let two = link_relocatable(std::slice::from_ref(&a), &opts).expect("merge");
+        assert_eq!(one, two, "{style:?}: deterministic output");
+        let merged = parse_et_rel(&one, "merged").expect("parse");
+        let note = merged
+            .sections
+            .iter()
+            .find(|s| s.name == ".note.gnu.build-id")
+            .expect("build-id note");
+        assert_eq!(note.bytes.len(), 16 + len, "{style:?}");
+        assert_eq!(&note.bytes[4..8], &(len as u32).to_le_bytes());
+        assert_eq!(&note.bytes[12..16], b"GNU\0");
+        let desc = &note.bytes[16..];
+        let at = (one.windows(desc.len()))
+            .position(|w| w == desc)
+            .expect("the descriptor in the file");
+        let mut zeroed = one.clone();
+        zeroed[at..at + len].fill(0);
+        assert_eq!(desc, &style.digest(&zeroed)[..], "{style:?}");
+    }
 }
 
 /// `.debug_str` is `SHF_MERGE | SHF_STRINGS`, so the link folds it:
@@ -1224,7 +1255,7 @@ fn emit_relocs_survive_into_final_elf() {
         !merged.applied_text_relocs.is_empty(),
         "merge records the applied text relocations"
     );
-    let plt = emit_x86_64_plt(&mut merged).expect("plt");
+    let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
     let image = |emit: bool| {
         write_native_image_from_merged_ex(
             &merged,
@@ -1234,10 +1265,10 @@ fn emit_relocs_survive_into_final_elf() {
             OutputKind::Executable,
             Target::LinuxX64,
             None,
-            false,
-            false,
-            emit,
-            crate::c5::ExecForm::Pie,
+            &crate::c5::ImageOptions {
+                emit_relocs: emit,
+                ..Default::default()
+            },
         )
         .expect("write")
     };
@@ -1274,8 +1305,7 @@ fn emit_relocs_survive_into_final_elf() {
 /// in `.comment`, shaped as gcc and clang shape theirs: one
 /// NUL-terminated line, SHF_MERGE | SHF_STRINGS with a byte entsize,
 /// so a linker folds the identical line from many badc objects into
-/// one copy in the linked image (a kernel keeps `.comment` in
-/// vmlinux and module objects).
+/// one copy in the linked image.
 #[test]
 fn comment_section_is_a_mergeable_single_line_identification() {
     use crate::c5::linker::object::{Elf64Ehdr, Elf64Shdr, read_struct};
@@ -1834,9 +1864,8 @@ fn compile_pie_optimized(src: &str, target: Target) -> EtRel {
 /// a load from it is the address constant itself and no pointer object,
 /// and no absolute relocation, reaches the object -- the form gcc's
 /// `-fpie` objects take, and the one a consumer that forbids absolute
-/// relocations outside the debug sections (the kernel's EFI stub)
-/// requires. An object whose address escapes stays, with its
-/// relocation.
+/// relocations outside the debug sections requires. An object whose
+/// address escapes stays, with its relocation.
 #[test]
 fn const_pointer_objects_fold_to_their_address_in_a_pie_object() {
     use crate::c5::object::elf_reloc_types as rt;
@@ -1934,14 +1963,12 @@ const char *const *through(void) { return &escaped; }\n";
     }
 }
 
-/// A relocatable link writes the map `-Map` asks for. GNU ld does, and
-/// kbuild's `modules.builtin.ranges` step reads `vmlinux.o.map` to
-/// attribute a section's bytes to the object that contributed them.
-/// Its reader (`scripts/generate_builtin_ranges.awk`) matches rows of
-/// exactly four fields that begin with one space and carry a non-zero
-/// size, so the row shape is what this pins.
+/// A relocatable link writes the map `-Map` asks for, as GNU ld does,
+/// attributing a section's bytes to the object that contributed them in
+/// rows of exactly four fields that begin with one space and carry a
+/// non-zero size. The row shape is what this pins.
 #[test]
-fn a_relocatable_link_renders_the_map_kbuild_reads() {
+fn a_relocatable_link_renders_gnu_ld_map_rows() {
     use crate::c5::linker::relocatable::link_relocatable_with_map;
 
     let a = compile_obj("int av;\nint af(void) { return av; }\n", "a.o");
@@ -1949,17 +1976,14 @@ fn a_relocatable_link_renders_the_map_kbuild_reads() {
     let (_, map) = link_relocatable_with_map(&[a, b], &RelinkOptions::default(), "out.o")
         .expect("link with map");
 
-    // Rows the kernel's awk rule accepts: ` <osect> <addr> <size> <obj>`.
+    // Input-section rows: ` <osect> <addr> <size> <obj>`.
     let rows: alloc::vec::Vec<alloc::vec::Vec<&str>> = map
         .lines()
         .filter(|l| l.starts_with(' ') && !l.starts_with("  "))
         .map(|l| l.split_whitespace().collect::<alloc::vec::Vec<_>>())
         .filter(|f| f.len() == 4 && f[2] != "0x0")
         .collect();
-    assert!(
-        !rows.is_empty(),
-        "no rows the ranges step could read:\n{map}"
-    );
+    assert!(!rows.is_empty(), "no input-section rows:\n{map}");
 
     let text: alloc::vec::Vec<_> = rows.iter().filter(|f| f[0] == ".text").collect();
     assert_eq!(text.len(), 2, "one .text row per input: {text:?}");

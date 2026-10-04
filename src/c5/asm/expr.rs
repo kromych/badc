@@ -316,8 +316,8 @@ pub(crate) fn eval_asm_count(s: &str, op: &dyn Fn(u8) -> Option<i64>) -> Option<
 }
 
 /// Evaluate a GNU as constant expression whose leaves may be label
-/// references, resolved through `resolve` (a label name to its value). The
-/// alternatives `.skip` count mixes template-label and section-label
+/// references, resolved through `resolve` (a label name to its value). A
+/// replacement-padding `.skip` count mixes template-label and section-label
 /// differences (`-(((775f-774f)-(772b-771b)) > 0) * (...)`). `None` when a
 /// leaf is unresolved or the result is not a constant.
 pub(crate) fn eval_asm_expr_with_labels(
@@ -438,7 +438,7 @@ fn val_relational(
         *i += len;
         let rhs = val_add(b, s, i, ctx)?;
         // GNU as yields -1 (all bits set) for a true comparison, 0 for false;
-        // the alternatives `.skip` padding `-((rlen-slen) > 0) * (rlen-slen)`
+        // the replacement `.skip` padding `-((rlen-slen) > 0) * (rlen-slen)`
         // relies on the -1 to recover a positive count. The comparison is of
         // the difference against zero, so same-space terms cancel first. An
         // equality between two undefined symbols compares the symbols, which

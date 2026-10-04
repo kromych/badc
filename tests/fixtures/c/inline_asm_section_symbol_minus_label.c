@@ -1,9 +1,9 @@
 // A data directive in a pushed section subtracting a label of that
 // section from a symbol, `.long sym - 2b`, is what GNU as makes it: a
 // PC-relative field whose addend is the field's distance from the label,
-// so the stored value is `sym - 2b` wherever the field sits. Linux 5.15's
-// bug table spells the file pointer `.long %c0 - 2b` four bytes past its
-// label, after `.long 1b - 2b`; the entry here sits in a read-only
+// so the stored value is `sym - 2b` wherever the field sits. A table entry
+// may spell a pointer field `.long %c0 - 2b` four bytes past its label,
+// after `.long 1b - 2b`; the entry here sits in a read-only
 // section. Each form is gated on the architecture with a portable
 // fallback. Returns 42 when every field reads back.
 

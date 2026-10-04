@@ -4622,6 +4622,102 @@ fn a_pe_image_takes_a_function_imports_address_from_its_stub() {
     }
 }
 
+/// A function a unit only takes the address of keeps the function type its
+/// library gives it in `.dynsym`, in a position-independent image and a
+/// placed one.
+#[cfg(feature = "native-emit")]
+#[test]
+fn an_import_only_addressed_keeps_its_function_type() {
+    use crate::c5::codegen::ExecForm;
+    use crate::c5::linker::{
+        ImageOptions, NativeMachine, SharedLibrary, emit_plt_for,
+        link_native_objects_with_shared_libs, parse_native_elf, write_native_image_from_merged_ex,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for (target, machine) in [
+        (Target::LinuxX64, NativeMachine::X86_64),
+        (Target::LinuxAarch64, NativeMachine::Aarch64),
+    ] {
+        let program = Compiler::with_target(
+            String::from(
+                "int lib_fn(void);\nint (*volatile p)(void);\n\
+                 int main(void) { p = lib_fn; return p == lib_fn; }\n",
+            ),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let lib = SharedLibrary {
+            soname: "libfns.so".to_string(),
+            machine,
+            exports: core::iter::once("lib_fn".to_string()).collect(),
+            data_exports: Default::default(),
+            object_sizes: Default::default(),
+            export_symbols: Default::default(),
+            export_versions: Default::default(),
+            from_image: true,
+        };
+        let merged = link_native_objects_with_shared_libs(&[obj], false, &[lib]).expect("link");
+        for exec_form in [ExecForm::Pie, ExecForm::Placed] {
+            let mut merged = merged.clone();
+            let stubs = emit_plt_for(&mut merged, target, exec_form.placed()).expect("plt");
+            let opts = ImageOptions {
+                exec_form,
+                ..Default::default()
+            };
+            let image = write_native_image_from_merged_ex(
+                &merged,
+                &stubs,
+                "main",
+                None,
+                OutputKind::Executable,
+                target,
+                None,
+                &opts,
+            )
+            .expect("image");
+            let st_info = elf_dynsym_entries(&image)["lib_fn"].3;
+            assert_eq!(st_info & 0xf, 2, "{target:?} {exec_form:?}: STT_FUNC");
+        }
+        // A data binding a shared library reads stays an object.
+        let program = Compiler::with_options(
+            String::from("#include <unistd.h>\nint *where(void) { return &optind; }\n"),
+            target,
+            crate::CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let mut merged = link_native_objects_with_shared_libs(&[obj], true, &[]).expect("link");
+        let stubs = emit_plt_for(&mut merged, target, false).expect("plt");
+        let image = write_native_image_from_merged_ex(
+            &merged,
+            &stubs,
+            "",
+            None,
+            OutputKind::SharedLibrary,
+            target,
+            Some("libw.so"),
+            &ImageOptions::default(),
+        )
+        .expect("image");
+        let entries = elf_dynsym_entries(&image);
+        let st_info = entries.get("optind").map(|e| e.3);
+        assert_eq!(st_info.map(|i| i & 0xf), Some(1), "{target:?}: {entries:?}");
+    }
+}
+
 /// Code taking an import's address as an absolute immediate reaches its stub,
 /// which a placed executable publishes as the import's `.dynsym` value; a
 /// position-independent image refuses the form.

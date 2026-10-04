@@ -4010,11 +4010,22 @@ impl<'a> Link<'a> {
         let tlv = self.merge_tlv_descriptors()?;
         let mut dbg = self.merge_debug_sections();
         self.resolve_debug_relocs(&mut dbg)?;
-        // A name the note lists and a branch also reaches is code: the
-        // note covers the slot-versus-stub choice at a site, not the
-        // symbol's type.
-        let branch_imports = &self.branch_imports;
-        self.object_imports.retain(|i| !branch_imports.contains(i));
+        // An import is an object where a data binding or its library says so;
+        // a library, a code binding or a branch makes it a function. The note
+        // lists every name whose address a unit takes, so it decides only
+        // what nothing else states.
+        let object_imports = (0..self.imports.len())
+            .filter(|&i| {
+                let name = self.imports[i].as_str();
+                self.data_binding_locals.contains(name)
+                    || self.shlib_data_exports.contains(name)
+                    || (self.object_imports.contains(&i)
+                        && !self.branch_imports.contains(&i)
+                        && !self.shlib_exports.contains(name)
+                        && !self.is_routed_import(name))
+            })
+            .collect();
+        self.object_imports = object_imports;
         let symbols = self.image_symbols();
         let exec_stack_input = (self.objs.iter().find(|o| o.exec_stack)).map(|o| o.source.clone());
         let defined: BTreeMap<String, MergedSymbol> = self

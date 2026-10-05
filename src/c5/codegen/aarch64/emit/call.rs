@@ -783,6 +783,38 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: boo
 /// caller-saved scratch the marshal does not touch (or a reserved stack
 /// cell when none is free), then `blr`.
 #[allow(clippy::too_many_arguments)]
+/// Whether the argument marshal writes neither x16 nor x17, so a call
+/// target staged there survives it: every argument already sits in its
+/// planned location, and no aggregate, stack or va_list path needs the
+/// pair.
+fn marshal_leaves_branch_scratch(
+    plan: &super::CallPlan,
+    args: &[u32],
+    alloc: &Allocation,
+    callee_variadic: bool,
+) -> bool {
+    if callee_variadic {
+        return false;
+    }
+    plan.placements.iter().zip(args).all(|(placement, &a)| {
+        let src = alloc.places.get(a as usize).copied().unwrap_or(Place::None);
+        match placement {
+            super::ArgPlacement::IntReg(r) => matches!(src, Place::IntReg(s) if s == *r),
+            super::ArgPlacement::FpReg(r) => matches!(src, Place::FpReg(s) if s == *r),
+            _ => false,
+        }
+    })
+}
+
+/// Whether the call's indirect result routes through x8, which the
+/// address computation may reach through the scratch pair.
+fn indirect_result_takes_x8(ret_agg: Option<u32>, agg_descs: &[super::super::ir::AggDesc]) -> bool {
+    ret_agg.is_some_and(|ai| {
+        agg_descs[ai as usize].size > 16
+            && super::abi_classify::fp_member_layout(&agg_descs[ai as usize], true).is_none()
+    })
+}
+
 pub(super) fn emit_call_indirect(
     code: &mut Vec<u8>,
     dst: Place,
@@ -832,11 +864,16 @@ pub(super) fn emit_call_indirect(
         }
         _ => None,
     };
+    // The branch registers x16 / x17 are preferred when the marshal
+    // leaves them alone; the allocator's caller-saved pool follows.
+    let branch_scratch_free = marshal_leaves_branch_scratch(&plan, args, alloc, callee_variadic)
+        && !indirect_result_takes_x8(ret_agg, agg_descs);
     const TARGET_SCRATCH_CANDIDATES: &[u8] = &[9, 10, 11, 12, 13, 14, 15];
     let free_target_reg = in_place.or_else(|| {
-        TARGET_SCRATCH_CANDIDATES
-            .iter()
-            .copied()
+        [16u8, 17]
+            .into_iter()
+            .filter(|_| branch_scratch_free)
+            .chain(TARGET_SCRATCH_CANDIDATES.iter().copied())
             .find(|&r| !arg_source_regs.contains(&r) && !abi.fixed_regs.has_gpr(r))
             .map(Reg)
     });
@@ -875,12 +912,12 @@ pub(super) fn emit_call_indirect(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     )?;
     setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, func, frame, &plan);
-    // The marshal consumed every argument source, so x9 is free
-    // to carry the staged pointer to the blr.
+    // The marshal consumed every argument source, so x16 is free to
+    // carry the staged pointer to the blr.
     let call_reg = match staged_off {
         Some(off) => {
-            emit_sp_ldr_x(code, Reg(9), off);
-            Reg(9)
+            emit_sp_ldr_x(code, Reg(16), off);
+            Reg(16)
         }
         None => target_reg,
     };

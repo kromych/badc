@@ -106,14 +106,13 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movq	0xa8(%rax), %rdi
+               	movq	0xa8(%rax), %r8
                	movq	0x88(%rax), %r12
                	leaq	-0x38(%rbp), %rsi
                	movl	$0x8, %edx
                	movl	$0x10, %ecx
-               	movq	%rdi, %rax
                	movq	%rbx, %rdi
-               	callq	*%rax
+               	callq	*%r8
                	cmpq	$0x8, %rax
                	je	<addr>
                	leaq	-0x18(%rbp), %rdi

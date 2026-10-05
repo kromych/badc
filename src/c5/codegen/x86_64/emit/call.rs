@@ -760,9 +760,22 @@ pub(super) fn emit_call_indirect(
     }
     // Otherwise the target pointer moves to a caller-saved scratch before
     // the marshal clobbers it; when every candidate is blocked it spills
-    // to the stack.
-    let target_scratch =
-        in_place.or_else(|| pick_caller_saved_scratch(Reg(0xff), &blocked, abi.fixed_regs));
+    // to the stack. r11 is the branch register when the marshal leaves it
+    // alone: its memory-argument, aggregate and va_list paths are the only
+    // writers.
+    let r11_free = !callee_variadic
+        && plan.placements.iter().all(|p| {
+            matches!(
+                p,
+                super::ArgPlacement::IntReg(_) | super::ArgPlacement::FpReg(_)
+            )
+        });
+    let target_scratch = in_place.or_else(|| {
+        let free = |r: Reg| !blocked.iter().any(|b| b.0 == r.0) && !abi.fixed_regs.has_gpr(r.0);
+        (r11_free && free(SCRATCH_R11))
+            .then_some(SCRATCH_R11)
+            .or_else(|| pick_caller_saved_scratch(Reg(0xff), &blocked, abi.fixed_regs))
+    });
     // System V AMD64 3.2.3: a variadic call passes the XMM-argument
     // count in `al`. Computed from the plan and emitted after the
     // marshal (which never writes rax, blocked above for the target).

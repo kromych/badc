@@ -1190,6 +1190,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         .map(|(v, inst)| produces_fp_result(inst) || fp_const[v])
         .collect();
     let param_incoming_forbid = compute_param_incoming_forbid(func, conv_target, &value_is_fp);
+    let call_target_forbid = compute_call_target_forbid(func, target);
     // Values live across an inline-asm block, and the registers each
     // block's lowering writes. A value kept out of that set survives the
     // block untouched, so the emit needs no save / restore pair for it.
@@ -1216,7 +1217,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         if entry.hint.is_none() {
             entry.hint = hints[v];
         }
-        entry.forbid |= param_incoming_forbid[v];
+        entry.forbid |= param_incoming_forbid[v] | call_target_forbid[v];
         entry.avoid |= avoid.get(v).copied().unwrap_or(0);
         if let Some(&(gpr, fpr)) = asm_forbid.get(root) {
             entry.forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
@@ -3597,6 +3598,76 @@ fn compute_param_incoming_forbid(
                 forbid[v] |= 1u64 << reg;
             }
         }
+    }
+    forbid
+}
+
+/// Keep each `CallIndirect` target off the registers the same call
+/// marshals its arguments into: the emit would otherwise move the
+/// target aside before the argument setup. The registers mirror the
+/// per-arch emit's blocked set -- the integer registers the call plan
+/// fills, the aarch64 indirect-result slot, and `al` for a System V
+/// variadic call, whose XMM count the marshal writes just before the
+/// branch.
+fn compute_call_target_forbid(func: &FunctionSsa, target: Target) -> Vec<u64> {
+    use crate::c5::codegen::{plan_call_args_aggs, plan_mirrored_call};
+    let mut forbid = alloc::vec![0u64; func.insts.len()];
+    let abi = target.abi_row(func.conv).abi();
+    for inst in &func.insts {
+        let Inst::CallIndirect {
+            target: t,
+            args,
+            callee_variadic,
+            fixed_args,
+            fp_arg_mask,
+            arg_widths,
+            arg_aggs,
+            ..
+        } = inst
+        else {
+            continue;
+        };
+        if (*t as usize) >= forbid.len() {
+            continue;
+        }
+        let aggs = super::emit_common::build_arg_aggs(arg_aggs, &func.agg_descs, abi);
+        let plan = if target.is_x86_64() && *callee_variadic && abi.position_indexed_args {
+            plan_mirrored_call(args.len(), fp_arg_mask, abi, &aggs)
+        } else if target.is_aarch64() {
+            let named =
+                crate::c5::codegen::named_args(abi, *callee_variadic, *fixed_args, args.len());
+            plan_call_args_aggs(
+                args.len(),
+                named,
+                fp_arg_mask,
+                abi,
+                &aggs,
+                false,
+                *arg_widths,
+            )
+        } else {
+            plan_call_args_aggs(
+                args.len(),
+                args.len(),
+                fp_arg_mask,
+                abi,
+                &aggs,
+                false,
+                crate::c5::ir::ArgWidths::default(),
+            )
+        };
+        let mut mask = 0u64;
+        for r in plan.int_regs() {
+            mask |= 1u64 << r;
+        }
+        if target.is_aarch64() {
+            // The indirect-result slot: the emit never calls through it.
+            mask |= 1u64 << 8;
+        } else if *callee_variadic && abi.sysv_host_variadic() {
+            // The marshal sets `al` to the XMM count just before the branch.
+            mask |= 1u64 << X86_RAX;
+        }
+        forbid[*t as usize] |= mask;
     }
     forbid
 }

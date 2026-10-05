@@ -36,8 +36,7 @@ Disassembly of section .text:
                	movl	$0x7, %ecx
                	leaq	<rip>, %r8
                	leaq	<rip>, %rax      # <addr>
-               	movq	(%rax), %rax
-               	movq	%rax, %r9
+               	movq	(%rax), %r9
                	movb	$0x0, %al
                	callq	*%r9
                	leaq	-0x40(%rbp), %rdi

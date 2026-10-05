@@ -61,11 +61,10 @@ Disassembly of section .text:
                	strh	w0, [x2]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
+               	ldr	x3, [x0]
                	mov	x1, #0x6                // =6
-               	mov	x9, x0
                	mov	x0, x20
-               	blr	x9
+               	blr	x3
                	mov	x23, x0
                	mov	x0, x20
                	bl	<addr>

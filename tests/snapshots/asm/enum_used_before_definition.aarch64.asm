@@ -120,10 +120,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	str	x1, [x0]
                	bl	<addr>
-               	mov	x1, #0x80000000         // =2147483648
-               	mov	x9, x0
-               	mov	x0, x1
-               	blr	x9
+               	mov	x1, x0
+               	mov	x0, #0x80000000         // =2147483648
+               	blr	x1
                	mov	x1, #0x80000000         // =2147483648
                	cmp	w0, w1
                	b.eq	<addr>

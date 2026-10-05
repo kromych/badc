@@ -79,7 +79,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=7
     v57  Imm(160)                                         -> x1
     v58  BinopI { op=add, lhs=v56, rhs_imm=160 }          -> x1
     v59  BinopI { op=add, lhs=v56, rhs_imm=168 }          -> x1
-    v60  Load { addr=v56, disp=168, kind=I64 }            -> x7
+    v60  Load { addr=v56, disp=168, kind=I64 }            -> x8
     v61  Imm(0)                                           -> x1
     v62  Imm(128)                                         -> x1
     v63  BinopI { op=add, lhs=v56, rhs_imm=128 }          -> x1

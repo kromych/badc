@@ -79,9 +79,8 @@ Disassembly of section .text:
                	leaq	-0x60(%rbp), %rdx
                	movw	$0x1, (%rdx)
                	leaq	<rip>, %rax      # <addr>
-               	movq	(%rax), %rax
+               	movq	(%rax), %rcx
                	movl	$0x6, %esi
-               	movq	%rax, %rcx
                	movq	%rbx, %rdi
                	movb	$0x0, %al
                	callq	*%rcx

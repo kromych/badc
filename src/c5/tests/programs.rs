@@ -6115,6 +6115,40 @@ fn diagnostic_echoes_the_source_line() {
 }
 
 #[test]
+fn a_disabled_warning_locates_no_source_line() {
+    // `unused-parameter` is off at the default level, yet its analysis
+    // still runs over every function's bindings; each report must stop
+    // at the level check and locate nothing. Counted in the lexer's
+    // line lookups, so the claim is exact rather than timed.
+    let src = "int cmd(int f, int n)\n{\n    return n;\n}\nint main(void) { return cmd(1, 2); }\n";
+    crate::c5::lexer::LINE_LOOKUP.with(|c| c.set(0));
+    let prog = super::compile_str_bare(src);
+    let lookups = crate::c5::lexer::LINE_LOOKUP.with(|c| c.get());
+    assert_eq!(
+        lookups, 0,
+        "a disabled warning paid {lookups} source-line lookups"
+    );
+    assert!(
+        prog.warnings.is_empty(),
+        "no row on by default fires here, got {:?}",
+        prog.warnings
+    );
+    // Control: the same unit with the group enabled locates the
+    // parameter's declaration line to report it.
+    crate::c5::lexer::LINE_LOOKUP.with(|c| c.set(0));
+    let prog2 = super::compile_str_bare_with_diags(src, &["extra"]);
+    let lookups2 = crate::c5::lexer::LINE_LOOKUP.with(|c| c.get());
+    assert!(lookups2 > 0, "the enabled warning located nothing");
+    let w2 = prog2
+        .warnings
+        .iter()
+        .map(|w| w.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(w2.contains("unused parameter `f`"), "warnings: {w2:?}");
+}
+
+#[test]
 fn atomic_ops_require_stdatomic_header() {
     // The C11 7.17 atomic operations are recognized only when declared
     // via `#pragma intrinsic` (which `<stdatomic.h>` does); a call with

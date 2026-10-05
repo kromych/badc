@@ -1329,6 +1329,29 @@ pub(crate) fn enc_cset(rd: Reg, cond: Cond) -> u32 {
         | (rd.0 as u32)
 }
 
+/// `CSEL <Xd>, <Xn>, <Xm>, <cond>`: Xn when the condition holds, Xm
+/// otherwise. The conditional select of [`super::ir::Inst::Select`].
+pub(crate) fn enc_csel(rd: Reg, rn: Reg, rm: Reg, cond: Cond) -> u32 {
+    0x9A80_0000 | ((rm.0 as u32) << 16) | ((cond as u32) << 12) | ((rn.0 as u32) << 5) | rd.0 as u32
+}
+
+/// 32-bit counterpart of [`enc_csel`].
+pub(crate) fn enc_csel32(rd: Reg, rn: Reg, rm: Reg, cond: Cond) -> u32 {
+    0x1A80_0000 | ((rm.0 as u32) << 16) | ((cond as u32) << 12) | ((rn.0 as u32) << 5) | rd.0 as u32
+}
+
+/// `CSINC <Xd>, <Xn>, <Xm>, <cond>`: Xn when the condition holds, Xm + 1
+/// otherwise. A select whose one arm is the other's increment folds into
+/// this form.
+pub(crate) fn enc_csinc(rd: Reg, rn: Reg, rm: Reg, cond: Cond) -> u32 {
+    0x9A80_0400 | ((rm.0 as u32) << 16) | ((cond as u32) << 12) | ((rn.0 as u32) << 5) | rd.0 as u32
+}
+
+/// 32-bit counterpart of [`enc_csinc`].
+pub(crate) fn enc_csinc32(rd: Reg, rn: Reg, rm: Reg, cond: Cond) -> u32 {
+    0x1A80_0400 | ((rm.0 as u32) << 16) | ((cond as u32) << 12) | ((rn.0 as u32) << 5) | rd.0 as u32
+}
+
 // ---- Branches. ----
 
 /// `B <label>` -- unconditional branch, PC-relative offset measured

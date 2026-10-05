@@ -286,6 +286,44 @@ mod tests {
     use super::super::build::SsaBuilder;
     use super::*;
 
+    /// `long max0(long a) { return a > 0 ? a : 0; }`: the select's
+    /// zero arm folds into the select and its definition drops, so
+    /// the x86-64 lowering must materialise the zero itself -- a
+    /// flag-preserving `mov $0x0, %r11d` (`41 bb 00 00 00 00`),
+    /// since a `xor` would clobber the fused comparison's flags and
+    /// the dead immediate's place holds a stale value.
+    #[test]
+    fn a_folded_zero_arm_materialises_flag_preserving() {
+        let mut b = SsaBuilder::new(0, 1, false);
+        let a = b.load_local(2, LoadKind::I64);
+        let zero = b.imm(0);
+        let cond = b.binop_imm(BinOp::Gt, a, 0);
+        let sel = b.select(cond, a, zero);
+        b.return_(sel);
+        let func = b.finish();
+        let alloc = super::super::reg_alloc::allocate(
+            &func,
+            Target::LinuxX64,
+            super::super::FixedRegs::NONE,
+        );
+        assert_eq!(
+            alloc.select_arms[sel as usize],
+            [
+                super::super::reg_alloc::SelectArm::Value,
+                super::super::reg_alloc::SelectArm::Zero
+            ],
+            "the zero arm folds into the select",
+        );
+        let bytes = compile_function_to_bytes(&func, Target::LinuxX64)
+            .unwrap_or_else(|e| panic!("max0 x86_64: {e}"));
+        assert!(
+            bytes
+                .windows(6)
+                .any(|w| w == [0x41, 0xbb, 0x00, 0x00, 0x00, 0x00]),
+            "the zero materialises flag-preserving: {bytes:02x?}",
+        );
+    }
+
     /// Hand-build `long sum3(int a, int b, int c) { return a + b + c; }`
     /// via [`SsaBuilder`], compile to bytes on aarch64, confirm the
     /// blob is non-empty and starts with a prologue. End-to-end JIT

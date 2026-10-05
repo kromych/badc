@@ -594,6 +594,15 @@ mod tests {
             sxtw_source: alloc::vec![NO_VALUE; n],
             sxtw_k: alloc::vec![0; n],
             branch_fused: alloc::vec![false; n],
+            select_arms: alloc::vec![
+                [
+                    super::super::reg_alloc::SelectArm::Value,
+                    super::super::reg_alloc::SelectArm::Value
+                ];
+                n
+            ],
+            cond_flags_ready: alloc::vec![false; n],
+            count_guard_redundant: alloc::vec![false; n],
             imm_store: alloc::vec![false; n],
             fp_const: alloc::vec![false; n],
             implicit_live: alloc::vec::Vec::new(),

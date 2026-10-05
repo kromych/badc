@@ -120,14 +120,12 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	movl	$0x20, %r11d
-               	bsfl	%ebx, %ecx
-               	cmovel	%r11d, %ecx
-               	leaq	0x1(%rcx), %rdx
-               	shrq	$0x5, %rcx
-               	decq	%rcx
-               	movq	%rdx, %r8
-               	andq	%rcx, %r8
+               	bsfl	%ebx, %edx
+               	cmovel	%r11d, %edx
                	xorl	%ecx, %ecx
+               	cmpl	$0x20, %edx
+               	leaq	0x1(%rdx), %r8
+               	cmovel	%ecx, %r8d
                	movq	%rax, %rdx
                	shrq	%cl, %rdx
                	testb	$0x1, %dl
@@ -451,12 +449,10 @@ Disassembly of section .text:
                	movl	$0x40, %r11d
                	bsfq	%r9, %rax
                	cmovel	%r11d, %eax
-               	leaq	0x1(%rax), %rcx
-               	shrq	$0x6, %rax
-               	decq	%rax
-               	movq	%rcx, %rsi
-               	andq	%rax, %rsi
                	xorl	%ecx, %ecx
+               	cmpl	$0x40, %eax
+               	leaq	0x1(%rax), %rsi
+               	cmovel	%ecx, %esi
                	movq	%rdi, %rax
                	shrq	%cl, %rax
                	testb	$0x1, %al
@@ -700,12 +696,10 @@ Disassembly of section .text:
                	movl	$0x40, %r11d
                	bsfq	%r9, %rax
                	cmovel	%r11d, %eax
-               	leaq	0x1(%rax), %rcx
-               	shrq	$0x6, %rax
-               	decq	%rax
-               	movq	%rcx, %rdx
-               	andq	%rax, %rdx
                	xorl	%ecx, %ecx
+               	cmpl	$0x40, %eax
+               	leaq	0x1(%rax), %rdx
+               	cmovel	%ecx, %edx
                	movq	%rdi, %rax
                	shrq	%cl, %rax
                	testb	$0x1, %al

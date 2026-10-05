@@ -381,6 +381,18 @@ pub(crate) fn emit_zero_r(code: &mut Vec<u8>, dst: Reg) {
     emit_rr(code, Mnem::Xor, 4, dst, dst);
 }
 
+/// `MOV r32, imm32` in the `B8+rd` form: leaves the flags untouched,
+/// unlike the `xor r32, r32` a plain zero materialisation would take.
+/// The 32-bit write clears the upper half, so the result is the
+/// zero-extended immediate.
+pub(crate) fn emit_mov_r32_imm(code: &mut Vec<u8>, dst: Reg, imm: u32) {
+    if dst.high() {
+        emit_byte(code, rex(false, false, false, true));
+    }
+    emit_byte(code, 0xB8 | dst.lo());
+    emit_u32(code, imm);
+}
+
 /// `PUSH r64`. Encoding: `50+rd`, plus REX.B if `dst` is R8..R15.
 pub(crate) fn emit_push_r(code: &mut Vec<u8>, r: Reg) {
     if r.high() {

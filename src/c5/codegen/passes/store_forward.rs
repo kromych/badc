@@ -501,6 +501,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::Binop { .. }
                 | Inst::BinopI { .. }
                 | Inst::Neg(_)
+                | Inst::Select { .. }
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
@@ -877,6 +878,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::Binop { .. }
                 | Inst::BinopI { .. }
                 | Inst::Neg(_)
+                | Inst::Select { .. }
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }

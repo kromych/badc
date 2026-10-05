@@ -462,12 +462,16 @@ impl<'a> Walker<'a> {
 }
 
 /// POSIX / GCC `ffs`: one plus the index of the least-significant set bit, 0
-/// for 0. ctz is the bit width `w` only for 0, the one count with bit
-/// `log2(w)` set, so `(ctz >> log2(w)) - 1` clears `ctz + 1` there alone.
+/// for 0. `ctz` reaches the bit width only for a zero operand, so the
+/// select folds that one count back to 0: `ctz == width*8 ? 0 : ctz + 1`,
+/// one `cmp` + `csinc` on AArch64 and one `cmovz` on x86-64, whose `bsf`
+/// sets ZF per the operand and needs no compare.
 fn lower_ffs(b: &mut SsaBuilder, x: ValueId, width: u8) -> ValueId {
     let ctz = b.bit_count(BitCountOp::Ctz, x, width);
-    let cp1 = b.binop_imm(BinOp::Add, ctz, 1);
-    let at_zero = b.binop_imm(BinOp::Shru, ctz, if width == 8 { 6 } else { 5 });
-    let keep = b.binop_imm(BinOp::Sub, at_zero, 1);
-    b.binop(BinOp::And, cp1, keep)
+    let plus_one = b.binop_imm(BinOp::Add, ctz, 1);
+    let zero = b.imm(0);
+    // The condition last: the select-fusion window between it and the
+    // select stays empty, and the arms' emissions precede the compare.
+    let at_zero = b.binop_imm(BinOp::Eq, ctz, i64::from(width) * 8);
+    b.select(at_zero, zero, plus_one)
 }

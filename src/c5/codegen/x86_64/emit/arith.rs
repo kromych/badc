@@ -312,6 +312,162 @@ pub(super) fn emit_bit_count(
     Ok(())
 }
 
+/// `Inst::Select`: stage one arm into the destination and `cmovcc` the
+/// other over it. A fused condition's compare was emitted at the
+/// condition's own position, or the producer's own flags already hold
+/// it (`cond_flags_ready`); an unfused one is tested against zero
+/// here. A folded `Inc` arm rides the staging `lea`; `lea` and `mov`
+/// leave the flags alone, which the fusion relies on.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_select(
+    code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
+    dst: Place,
+    cond: u32,
+    on_true: u32,
+    on_false: u32,
+    func: &super::super::ir::FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit {
+    let Some(rd) = int_or_spill_dst(dst) else {
+        return fail("Select: dst not int reg / spill");
+    };
+    let cc = if alloc
+        .cond_flags_ready
+        .get(cond as usize)
+        .copied()
+        .unwrap_or(false)
+    {
+        match func.insts.get(cond as usize) {
+            Some(Inst::BinopI { op: BinOp::Eq, .. }) => Cc::E,
+            Some(Inst::BinopI { op: BinOp::Ne, .. }) => Cc::Ne,
+            _ => return fail("Select: flags-ready cond is not eq / ne"),
+        }
+    } else if alloc
+        .branch_fused
+        .get(cond as usize)
+        .copied()
+        .unwrap_or(false)
+    {
+        let op = match func.insts.get(cond as usize) {
+            Some(Inst::Binop { op, .. } | Inst::BinopI { op, .. }) => *op,
+            _ => return fail("Select: fused cond is not a comparison"),
+        };
+        let Some(c) = int_cmp_cc(op) else {
+            return fail("Select: fused cond is not an integer comparison");
+        };
+        c
+    } else {
+        let cond_place = place_of(alloc, cond);
+        let Some(rt) = materialize_int(code, cond_place, SCRATCH_R11, frame) else {
+            return fail("Select: cond not int reg / spill");
+        };
+        emit_rr(code, Mnem::Test, 8, rt, rt);
+        Cc::Ne
+    };
+    let width = if alloc.high_dead(v) { 4 } else { 8 };
+    let arms = alloc
+        .select_arms
+        .get(v as usize)
+        .copied()
+        .unwrap_or([SelectArm::Value, SelectArm::Value]);
+    // The cmovcc source moves into a register first: the allocator may
+    // colour an arm to the select's own destination (the arm dies
+    // exactly here), which the staging below clobbers. A folded zero
+    // materialises flag-preserving (`mov r32, 0`; the plain zero
+    // path's `xor` would clobber the fused flags).
+    let arm_reg = |code: &mut Vec<u8>, arm: SelectArm, arm_v: u32| -> Emit<Reg> {
+        if arm == SelectArm::Zero {
+            super::encode::emit_mov_r32_imm(code, SCRATCH_R11, 0);
+            return Ok(SCRATCH_R11);
+        }
+        let Some(r) = materialize_int(code, place_of(alloc, arm_v), SCRATCH_R11, frame) else {
+            return fail("Select: arm not int reg / spill");
+        };
+        if r.0 == rd.0 {
+            emit_mov_rr(code, SCRATCH_R11, r);
+            Ok(SCRATCH_R11)
+        } else {
+            Ok(r)
+        }
+    };
+    let cmov = |code: &mut Vec<u8>, cc: Cc, src: Reg| -> Emit {
+        let Some(m) = cmov_mnem(cc) else {
+            return fail("Select: condition code has no cmovcc");
+        };
+        emit_rr(code, m, width, rd, src);
+        Ok(())
+    };
+    match (arms[0], arms[1]) {
+        // lea stages the incremented arm without touching the flags.
+        (_, SelectArm::Inc { base }) => {
+            let rt = arm_reg(code, arms[0], on_true)?;
+            let base_scratch = if rt.0 == SCRATCH_R11.0 {
+                SCRATCH_R10
+            } else {
+                SCRATCH_R11
+            };
+            let Some(rb) = materialize_int(code, place_of(alloc, base), base_scratch, frame) else {
+                return fail("Select: Inc base not int reg / spill");
+            };
+            super::encode::emit_lea_r_mem(code, rd, rb, 1);
+            cmov(code, cc, rt)?;
+        }
+        (SelectArm::Inc { base }, _) => {
+            let rf = arm_reg(code, arms[1], on_false)?;
+            let base_scratch = if rf.0 == SCRATCH_R11.0 {
+                SCRATCH_R10
+            } else {
+                SCRATCH_R11
+            };
+            let Some(rb) = materialize_int(code, place_of(alloc, base), base_scratch, frame) else {
+                return fail("Select: Inc base not int reg / spill");
+            };
+            super::encode::emit_lea_r_mem(code, rd, rb, 1);
+            cmov(code, cc.flip(), rf)?;
+        }
+        _ => {
+            // The cmovcc source may share the destination, so it moves
+            // through a scratch first; the staged arm reads its place
+            // (or materialises a folded zero, flag-preserving).
+            let rt = arm_reg(code, arms[0], on_true)?;
+            let rf = if arms[1] == SelectArm::Zero {
+                super::encode::emit_mov_r32_imm(code, SCRATCH_R11, 0);
+                SCRATCH_R11
+            } else {
+                let Some(r) = materialize_int(code, place_of(alloc, on_false), rd, frame) else {
+                    return fail("Select: on_false not int reg / spill");
+                };
+                r
+            };
+            if rf.0 != rd.0 {
+                emit_mov_rr(code, rd, rf);
+            }
+            cmov(code, cc, rt)?;
+        }
+    }
+    spill_dst_to_slot(code, dst, rd, frame);
+    Ok(())
+}
+
+/// The `cmovcc` mnemonic of an integer-comparison condition code.
+fn cmov_mnem(cc: Cc) -> Option<Mnem> {
+    Some(match cc {
+        Cc::E => Mnem::Cmove,
+        Cc::Ne => Mnem::Cmovne,
+        Cc::L => Mnem::Cmovl,
+        Cc::G => Mnem::Cmovg,
+        Cc::Le => Mnem::Cmovle,
+        Cc::Ge => Mnem::Cmovge,
+        Cc::B => Mnem::Cmovb,
+        Cc::A => Mnem::Cmova,
+        Cc::Be => Mnem::Cmovbe,
+        Cc::Ae => Mnem::Cmovae,
+        _ => return None,
+    })
+}
+
 /// `Inst::Fma`: `dst = (neg_product ? -(a*b) : a*b) + (neg_addend ? -c : c)`
 /// with one rounding (C99 6.5p8 / FP_CONTRACT), on the FMA3 baseline. The
 /// `231` form computes `dst = a*b OP dst`, so `c` is staged into `dst` and
@@ -1455,6 +1611,17 @@ pub(super) fn emit_binop_imm(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
+    // The comparison is already in the flags -- the select's producer
+    // (`bsf`) set them -- and the select's `cmovcc` reads them, so
+    // nothing emits here.
+    if alloc
+        .cond_flags_ready
+        .get(v as usize)
+        .copied()
+        .unwrap_or(false)
+    {
+        return Ok(());
+    }
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail("BinopI: dst not int reg / spill");
     };

@@ -222,6 +222,111 @@ pub(super) fn emit_bit_count(
     Ok(())
 }
 
+/// A conditional-select encoder in one register width.
+type SelEnc = fn(Reg, Reg, Reg, Cond) -> u32;
+
+/// `Inst::Select`: `csel` / `csinc` over the two arms. A fused
+/// condition's compare was emitted at the condition's own position and
+/// the allocator checked the flags survive to here; an unfused one is
+/// tested against zero here. A folded `Inc` arm rides the `csinc`
+/// form; the `Zero` arm rides the zero register.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_select(
+    code: &mut Vec<u8>,
+    v: super::super::ir::ValueId,
+    dst: Place,
+    cond: u32,
+    on_true: u32,
+    on_false: u32,
+    func: &super::super::ir::FunctionSsa,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    use super::encode::{enc_csel, enc_csel32, enc_csinc, enc_csinc32, enc_subs_imm};
+    let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+        return fail("Select: dst not int reg / spill");
+    };
+    let sel_cond = if alloc
+        .branch_fused
+        .get(cond as usize)
+        .copied()
+        .unwrap_or(false)
+    {
+        let op = match func.insts.get(cond as usize) {
+            Some(Inst::Binop { op, .. } | Inst::BinopI { op, .. }) => *op,
+            _ => return fail("Select: fused cond is not a comparison"),
+        };
+        let Some(c) = compare_cond(op) else {
+            return fail("Select: fused cond is not an integer comparison");
+        };
+        c
+    } else {
+        let cond_place = place_of(alloc, cond);
+        let Some(rt) = materialize_int(code, cond_place, scratch.primary, frame) else {
+            return fail("Select: cond not int reg / spill");
+        };
+        emit(code, enc_subs_imm(Reg::SP, rt, 0));
+        Cond::Ne
+    };
+    let narrow = alloc.high_dead(v);
+    let (csel, csinc) = if narrow {
+        (enc_csel32 as SelEnc, enc_csinc32 as SelEnc)
+    } else {
+        (enc_csel as SelEnc, enc_csinc as SelEnc)
+    };
+    let arms = alloc
+        .select_arms
+        .get(v as usize)
+        .copied()
+        .unwrap_or([SelectArm::Value, SelectArm::Value]);
+    // Each arm's reload gets its own scratch, so a spilled second arm
+    // cannot overwrite a spilled first.
+    let arm_reg = |code: &mut Vec<u8>, arm: SelectArm, arm_v: u32, scratch: Reg| -> Option<Reg> {
+        match arm {
+            SelectArm::Zero => Some(Reg::SP),
+            SelectArm::Value => materialize_int(code, place_of(alloc, arm_v), scratch, frame),
+            SelectArm::Inc { .. } => unreachable!("the Inc arm is the csinc base"),
+        }
+    };
+    match (arms[0], arms[1]) {
+        // csinc rd, rt, rb, cond: rt when the condition holds, rb + 1
+        // otherwise -- the select's shape with the incremented arm on
+        // the false side.
+        (_, SelectArm::Inc { base }) => {
+            let Some(rt) = arm_reg(code, arms[0], on_true, scratch.primary) else {
+                return fail("Select: on_true not int reg / spill");
+            };
+            let Some(rb) = materialize_int(code, place_of(alloc, base), scratch.secondary, frame)
+            else {
+                return fail("Select: Inc base not int reg / spill");
+            };
+            emit(code, csinc(rd, rt, rb, sel_cond));
+        }
+        (SelectArm::Inc { base }, _) => {
+            let Some(rf) = arm_reg(code, arms[1], on_false, scratch.secondary) else {
+                return fail("Select: on_false not int reg / spill");
+            };
+            let Some(rb) = materialize_int(code, place_of(alloc, base), scratch.primary, frame)
+            else {
+                return fail("Select: Inc base not int reg / spill");
+            };
+            emit(code, csinc(rd, rf, rb, sel_cond.flip()));
+        }
+        _ => {
+            let Some(rt) = arm_reg(code, arms[0], on_true, scratch.primary) else {
+                return fail("Select: on_true not int reg / spill");
+            };
+            let Some(rf) = arm_reg(code, arms[1], on_false, scratch.secondary) else {
+                return fail("Select: on_false not int reg / spill");
+            };
+            emit(code, csel(rd, rt, rf, sel_cond));
+        }
+    }
+    store_spilled_int(code, frame, dst, rd);
+    Ok(())
+}
+
 /// Set bits of `rn` into `rd` in the general registers: pair, nibble and
 /// byte counts (Hacker's Delight 5-1), summed into the top byte by a
 /// multiply. `t` is distinct from both; `rd` may be `rn`.

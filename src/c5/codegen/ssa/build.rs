@@ -1313,6 +1313,17 @@ impl SsaBuilder {
         id
     }
 
+    /// `Inst::Select` -- `cond != 0` picks `on_true`, else `on_false`.
+    /// Not CSE-eligible: the three operands do not pin the result the
+    /// way a pure arithmetic key does.
+    pub(crate) fn select(&mut self, cond: ValueId, on_true: ValueId, on_false: ValueId) -> ValueId {
+        self.push(Inst::Select {
+            cond,
+            on_true,
+            on_false,
+        })
+    }
+
     /// `Inst::FpCast`. Pure value; same input + same kind ->
     /// same output. CSE-eligible. The f32-ness of the result is set
     /// from `kind`: `F64ToF32` and `IntToFp`-to-float callers mark via

@@ -37,8 +37,8 @@ use alloc::vec::Vec;
 use core::cmp::Reverse;
 
 use super::super::ir::{
-    AtomicRmwOp, BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
-    ValueId,
+    AtomicRmwOp, BinOp, BitCountOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind,
+    Terminator, ValueId,
 };
 use super::{FixedRegs, Target};
 
@@ -89,6 +89,27 @@ impl Place {
     }
 }
 
+/// How one arm of an `Inst::Select` lowers, when the arm's own
+/// definition folds into the conditional-select instruction. The
+/// select's condition must be comparison-fused (the compare emitted at
+/// the condition's own position) and every instruction between the
+/// condition and the select dead-pure: the folded arm reads its base
+/// at the select, past the base's last tape reader, so nothing that
+/// runs after the condition may write a register.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SelectArm {
+    /// The arm's value is read from its own place.
+    Value,
+    /// The arm is `base + 1`, read through `base`: AArch64's `csinc`
+    /// computes the increment in place; x86-64 folds it into the
+    /// `lea` that stages the arm. The add's definition is dead.
+    Inc { base: ValueId },
+    /// The arm is the immediate 0, encoded as the zero register on
+    /// AArch64 (`csel` with `wzr` / `xzr`). The immediate's
+    /// definition is dead.
+    Zero,
+}
+
 /// Per-function allocation result. Indexed by `ValueId`.
 #[derive(Debug, Clone)]
 pub(crate) struct Allocation {
@@ -135,15 +156,34 @@ pub(crate) struct Allocation {
     /// True for `Binop` / `BinopI` comparison insts (integer and FP),
     /// and on x86-64 for integer loads ([`zero_testable_load`]),
     /// that the allocator recognised as the source of a `Bz` / `Bnz`
-    /// terminator's cond, with cond consumed only by that terminator
-    /// and every instruction between the compare and the block's end
-    /// leaving the host flags untouched. The emit pass skips the
-    /// `cset` / `setcc` materialisation and the terminator emits
-    /// `b.cond` (aarch64) or `j.cond` (x86_64) directly off the flags
-    /// the compare set. The compare's value keeps its place: on
-    /// x86_64 the destination register doubles as the operand-staging
-    /// scratch, so its color stays in the used sets.
+    /// terminator's cond or of an `Inst::Select`'s, with cond consumed
+    /// only by that consumer and every instruction between the compare
+    /// and the consumer leaving the host flags untouched. The emit pass
+    /// skips the `cset` / `setcc` materialisation and the terminator or
+    /// select emits `b.cond` / `csel` (aarch64) or `j.cond` / `cmovcc`
+    /// (x86_64) directly off the flags the compare set. The compare's
+    /// value keeps its place: on x86_64 the destination register doubles
+    /// as the operand-staging scratch, so its color stays in the used
+    /// sets.
     pub branch_fused: Vec<bool>,
+    /// Per-value, for the `Inst::Select` at `v`: how each arm lowers
+    /// when its own definition folds into the conditional-select
+    /// instruction and becomes dead (see [`SelectArm`]).
+    pub select_arms: Vec<[SelectArm; 2]>,
+    /// Per-value: the value's comparison is already in the host flags
+    /// when its lowering runs -- the producer's own encoding set them
+    /// -- so the compare is elided. x86-64 only: `bsf` sets ZF per its
+    /// operand, and a trailing count equals the width only for a zero
+    /// operand, so a select's `ctz == width*8` condition needs no
+    /// `cmp`.
+    pub cond_flags_ready: Vec<bool>,
+    /// Per-value: the trailing count's zero guard is dead although the
+    /// operand may be zero. The count's only readers are the select's
+    /// condition -- exactly that guard -- and the select's folded base,
+    /// taken only where `bsf` defines the count, so the guard's
+    /// `cmovz` of the width is overwritten on the zero side. x86-64
+    /// only; AArch64's counts need no guard.
+    pub count_guard_redundant: Vec<bool>,
     /// True for a store that writes its value, an `Imm`, from its own
     /// encoding ([`store_immediate`]). Every reader of that `Imm` is such
     /// a store, so its use count is zero and it is never materialized;
@@ -232,6 +272,16 @@ impl Allocation {
     /// be zero, so the lowering may drop its zero guard.
     pub(crate) fn count_nonzero(&self, v: ValueId) -> bool {
         self.count_nonzero.get(v as usize).copied().unwrap_or(false)
+    }
+
+    /// True when the `Inst::BitCount` at `v` may drop its zero guard
+    /// because the only reader of the count overwrites it on the zero
+    /// side (see `count_guard_redundant`).
+    pub(crate) fn count_guard_redundant(&self, v: ValueId) -> bool {
+        self.count_guard_redundant
+            .get(v as usize)
+            .copied()
+            .unwrap_or(false)
     }
 
     pub(crate) fn is_wide(&self, v: ValueId) -> bool {
@@ -1111,6 +1161,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             sxtw_source: Vec::new(),
             sxtw_k: Vec::new(),
             branch_fused: Vec::new(),
+            select_arms: Vec::new(),
+            cond_flags_ready: Vec::new(),
+            count_guard_redundant: Vec::new(),
             imm_store: Vec::new(),
             fp_const,
             implicit_live: Vec::new(),
@@ -1616,6 +1669,150 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
         branch_fused[cond as usize] = true;
     }
+    // A select's condition fuses like a branch's: the comparison
+    // value whose only reader is the select sets the flags at its own
+    // position and the select's `csel` / `cmovcc` consumes them, with
+    // the same clean window. On top of that the arms may fold into
+    // the select (see [`SelectArm`]); a folded arm reads its base at
+    // the select, past the base's last tape reader (the condition),
+    // so only dead-pure instructions may follow the condition in the
+    // block. x86-64's `bsf` sets ZF per its operand and a trailing
+    // count equals the width only for a zero operand, so the
+    // `ctz == width*8` condition needs no cmp of its own.
+    let mut select_arms: Vec<[SelectArm; 2]> = alloc::vec![[SelectArm::Value; 2]; func.insts.len()];
+    let mut cond_flags_ready: Vec<bool> = alloc::vec![false; func.insts.len()];
+    let mut count_guard_redundant: Vec<bool> = alloc::vec![false; func.insts.len()];
+    for block in func.blocks.iter() {
+        for v in block.inst_range.clone() {
+            let Some(Inst::Select {
+                cond,
+                on_true,
+                on_false,
+            }) = func.insts.get(v as usize)
+            else {
+                continue;
+            };
+            let cond = *cond;
+            if cond == NO_VALUE || !block.inst_range.contains(&cond) {
+                continue;
+            }
+            if use_counts.get(cond as usize).copied().unwrap_or(0) != 1 {
+                continue;
+            }
+            let Some(Inst::Binop { op, .. } | Inst::BinopI { op, .. }) =
+                func.insts.get(cond as usize)
+            else {
+                continue;
+            };
+            // Integer comparisons only: an FP compare's unordered
+            // state needs the parity fixup x86-64's cmovcc cannot
+            // carry, and no producer builds a select on one.
+            if !crate::c5::ir::is_int_comparison_op(*op) {
+                continue;
+            }
+            let window_ok = ((cond + 1)..v).all(|p| {
+                let inst = &func.insts[p as usize];
+                inst.is_lifetime_marker()
+                    || (inst.is_pure() && use_counts[p as usize] == 0)
+                    || flags_survive(inst)
+            });
+            if !window_ok {
+                continue;
+            }
+            branch_fused[cond as usize] = true;
+            let fold_ok = ((cond + 1)..v).all(|p| {
+                let inst = &func.insts[p as usize];
+                inst.is_lifetime_marker() || (inst.is_pure() && use_counts[p as usize] == 0)
+            });
+            if fold_ok {
+                for (slot, arm) in [0usize, 1].into_iter().zip([*on_true, *on_false]) {
+                    if use_counts.get(arm as usize).copied().unwrap_or(0) != 1 {
+                        continue;
+                    }
+                    let fold = match func.insts.get(arm as usize) {
+                        Some(Inst::BinopI {
+                            op: BinOp::Add,
+                            lhs,
+                            rhs_imm: 1,
+                        }) => Some(SelectArm::Inc { base: *lhs }),
+                        Some(Inst::Binop {
+                            op: BinOp::Add,
+                            lhs,
+                            rhs,
+                        }) => match func.insts.get(*rhs as usize) {
+                            Some(Inst::Imm(1)) => Some(SelectArm::Inc { base: *lhs }),
+                            _ => None,
+                        },
+                        Some(Inst::Imm(0))
+                            if !func.f32_values.get(arm as usize).copied().unwrap_or(false) =>
+                        {
+                            Some(SelectArm::Zero)
+                        }
+                        _ => None,
+                    };
+                    if let Some(kind) = fold {
+                        select_arms[v as usize][slot] = kind;
+                        use_counts[arm as usize] = 0;
+                        // The folded add's constant operand was read by
+                        // the add alone.
+                        if let Some(Inst::Binop { rhs, .. }) = func.insts.get(arm as usize) {
+                            let n = &mut use_counts[*rhs as usize];
+                            *n = n.saturating_sub(1);
+                        }
+                    }
+                }
+            }
+            // x86-64 only: `bsf` sets ZF per its operand, and a trailing
+            // count equals the width only for a zero operand, so the
+            // select's `ctz == width*8` condition needs no cmp of its
+            // own. Only then may the count's zero guard die with it: the
+            // fused `cmp` would read the count where `bsf` left it
+            // undefined, while `bsf`'s own ZF reads the operand. The
+            // folded base is the count's only other reader, taken only
+            // where `bsf` defines the count, so the guard's `cmovz` of
+            // the width is overwritten on the zero side.
+            if is_x86
+                && fold_ok
+                && let Some(Inst::BinopI {
+                    op: eqop @ (BinOp::Eq | BinOp::Ne),
+                    lhs,
+                    rhs_imm,
+                }) = func.insts.get(cond as usize)
+                && let Some(Inst::BitCount {
+                    op: BitCountOp::Ctz,
+                    width,
+                    ..
+                }) = func.insts.get(*lhs as usize)
+                && *rhs_imm == i64::from(*width) * 8
+            {
+                let base = *lhs;
+                let reads_defined_side = match eqop {
+                    BinOp::Eq => matches!(
+                        select_arms[v as usize][1],
+                        SelectArm::Inc { base: b } if b == base
+                    ),
+                    BinOp::Ne => matches!(
+                        select_arms[v as usize][0],
+                        SelectArm::Inc { base: b } if b == base
+                    ),
+                    _ => false,
+                };
+                if reads_defined_side && use_counts.get(base as usize).copied().unwrap_or(0) == 2 {
+                    let ready = ((base + 1)..v).all(|p| {
+                        let inst = &func.insts[p as usize];
+                        p == cond
+                            || inst.is_lifetime_marker()
+                            || (inst.is_pure() && use_counts[p as usize] == 0)
+                            || flags_survive(inst)
+                    });
+                    if ready {
+                        cond_flags_ready[cond as usize] = true;
+                        count_guard_redundant[base as usize] = true;
+                    }
+                }
+            }
+        }
+    }
     // Drop the "value-also-in-acc" propagate slot for stores and copies
     // whose defined value is unread. c5 store ops leave the stored value
     // in the accumulator and a copy yields its destination; if nothing
@@ -1779,6 +1976,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         sxtw_source,
         sxtw_k,
         branch_fused,
+        select_arms,
+        cond_flags_ready,
+        count_guard_redundant,
         imm_store,
         fp_const,
         implicit_live,
@@ -3071,6 +3271,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
         },
         Neg(_) => ResultKind::Int,
         Fneg(_) => ResultKind::Fp,
+        Select { .. } => ResultKind::Int,
         Fma { .. } => ResultKind::Fp,
         MulAdd { .. } | Udiv128 { .. } => ResultKind::Int,
         Extend { .. } => ResultKind::Int,

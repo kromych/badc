@@ -837,6 +837,21 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
                 },
             },
             Inst::Neg(value) => imm_of(func, *value).map(|k| Inst::Imm(k.wrapping_neg())),
+            // A decided condition picks one arm; equal arms make the
+            // condition moot. The arm's own definition replaces the
+            // select, so its value need not be an immediate.
+            Inst::Select {
+                cond,
+                on_true,
+                on_false,
+            } => match imm_of(func, *cond) {
+                Some(k) => func
+                    .insts
+                    .get(if k != 0 { *on_true } else { *on_false } as usize)
+                    .cloned(),
+                None if on_true == on_false => func.insts.get(*on_true as usize).cloned(),
+                _ => None,
+            },
             // `a + -b` is `a - b` and `a - -b` is `a + b`, exact modulo
             // 2^64 either way; the negate goes dead when this was its
             // only use.

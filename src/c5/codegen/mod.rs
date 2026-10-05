@@ -2343,18 +2343,18 @@ pub(crate) struct Build {
     pub plt_trampoline_offsets: Vec<Option<usize>>,
     /// Data objects nothing reaches once the -O pipeline has inlined and
     /// folded, reported by `ssa::shadow::drop_unreachable_statics`. `Some`
-    /// asks the caller to re-apply the set through
-    /// `ssa::shadow::recompact_after_inlining` and lower the reported
-    /// bodies; the build in hand stays self-consistent either way. `None`
-    /// at -O0, where the pipeline leaves the function set the compaction
-    /// saw untouched.
+    /// hands the caller the post-inline live set and the SSA bodies that
+    /// produced it, to compact `.data` against and lower; the build in
+    /// hand stays self-consistent either way. `None` where the lowering
+    /// ran to completion, or a compaction retry whose image is exactly
+    /// the reachable set.
     pub orphaned_data: Option<super::codegen::ssa::shadow::OrphanedData>,
     /// Set when [`LowerMode::DataLivenessProbe`] stopped the lowering at
     /// the report above. Every field but `orphaned_data` is then unset,
-    /// and only the recompaction retry's caller may read it.
+    /// and only the compaction retry's caller may read it.
     pub stopped_at_data_liveness: bool,
     /// `--dump-ssa` text for this lowering, buffered rather than written
-    /// straight to stderr: a build discarded by the recompaction retry
+    /// straight to stderr: a build discarded by the compaction retry
     /// must not leave its dump behind next to the final one.
     pub ssa_dump: alloc::string::String,
     /// Post-prologue native byte offset of each function, keyed by
@@ -4158,14 +4158,14 @@ pub(crate) fn lower_for(
 pub(crate) enum LowerMode {
     /// Run to completion and return the emitted image.
     Full,
-    /// Stop as soon as the post-inline data-liveness report exists and
-    /// says the compaction was too coarse. The caller recompacts and
-    /// lowers the reported bodies against the new `.data`, discarding
-    /// everything a backend run would have produced for the old layout,
-    /// so the probe does not produce it. A report of `None` means the
-    /// layout is final and the lowering runs to completion as in
-    /// [`LowerMode::Full`]. Only a caller that can act on the report may
-    /// ask for this mode; a stopped probe returns no image.
+    /// Stop at the post-inline data-liveness report. The caller compacts
+    /// `.data` to the reported set and lowers the reported bodies against
+    /// the new layout, discarding everything a backend run would have
+    /// produced for the old one, so the probe does not produce it. The
+    /// report is always `Some` in this mode: even a fully live program
+    /// needs the repack, and the all-live set says so. Only a caller
+    /// that can act on the report may ask for this mode; a stopped probe
+    /// returns no image.
     DataLivenessProbe,
 }
 
@@ -4185,7 +4185,7 @@ pub(crate) fn emit_ssa_dump(build: &mut Build) {
 }
 
 /// [`lower_for`] with the SSA bodies supplied instead of walked. Used by
-/// the recompaction retry, whose bodies are the post-inline ones the
+/// the compaction retry, whose bodies are the post-inline ones the
 /// dropped-data report was derived from; the ASTs still describe the
 /// pre-inline program and cannot be re-walked against the new `.data`.
 pub(crate) fn lower_for_with_prebuilt(

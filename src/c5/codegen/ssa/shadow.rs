@@ -250,31 +250,35 @@ pub(crate) struct PrebuiltSsa {
 pub(crate) type ParamRanges =
     alloc::collections::BTreeMap<usize, Vec<crate::c5::codegen::passes::value_range::Range>>;
 
-/// Data objects the post-inline bodies no longer reach, reported by
-/// [`drop_unreachable_statics`]: `.data` was compacted from the
-/// pre-inline call graph, so an object whose last reference the inliner
-/// removed is still in the image along with its relocations. The caller
-/// feeds this to [`recompact_after_inlining`] and lowers `ssa` against
-/// the result. It must lower `ssa` rather than re-walk: the ASTs describe
-/// the pre-inline program, which still materialises the address of the
-/// object the recompaction drops.
+/// The post-inline data-liveness report of a lowering's static DCE,
+/// made by [`drop_unreachable_statics`]. The function set was mutated
+/// (the -O pipeline's inliner and branch folds), so an object whose last
+/// reference the inliner removed is live per the pre-inline call graph;
+/// this names the reachable set the SSA bodies actually use. The caller
+/// compacts `.data` to it and lowers `ssa` against the result. It must
+/// lower `ssa` rather than re-walk: the ASTs describe the pre-inline
+/// program, which still materialises the address of the object the
+/// compaction drops.
 #[derive(Debug)]
 pub(crate) struct OrphanedData {
     pub sets: LiveSets,
     pub ssa: PrebuiltSsa,
 }
 
-/// Drop every `FunctionSsa` unreachable per [`compute_live_sets`].
-/// Runs after the function set was mutated (the -O pipeline's inliner
-/// and branch folds). The prune assumes every data object live: the
-/// `.data` image the caller lowers against is already fixed by
-/// compaction and its relocations must keep their targets. The second,
-/// joint pass reports the objects that assumption keeps alive, `None`
-/// when the compacted image is still exactly the reachable set.
+/// Drop every `FunctionSsa` unreachable per [`compute_live_sets`], then
+/// report the data objects the pruned bodies leave unreferenced. Runs
+/// after the function set was mutated (the -O pipeline's inliner and
+/// branch folds); at the default level the prune is the one
+/// [`produce_ssa_funcs`] applies. `force` keeps the report when nothing
+/// is dead: a probe caller compacts the program from this report alone,
+/// so it needs the all-live set and the pruned function list even when
+/// no object drops. A caller lowering an already-compacted image passes
+/// `false`, and `None` then means the image is exactly the reachable set.
 pub(crate) fn drop_unreachable_statics(
     funcs: &mut Vec<FunctionSsa>,
     program: &Program,
     reachable_owners: &alloc::collections::BTreeSet<usize>,
+    force: bool,
 ) -> Option<OrphanedData> {
     let live = compute_live_sets(funcs, program, true, Some(reachable_owners)).func_pcs;
     funcs.retain(|f| {
@@ -290,12 +294,11 @@ pub(crate) fn drop_unreachable_statics(
         keep
     });
     let sets = compute_live_sets(funcs, program, false, Some(reachable_owners));
-    if sets.data_live.iter().all(|&l| l) {
+    if sets.data_live.iter().all(|&l| l) && !force {
         return None;
     }
-    // `funcs` is left alone: this build's `.data` still holds the orphaned
-    // objects, so their relocation targets must stay lowered. The reported
-    // copy carries only the bodies the recompacted lowering emits.
+    // The reported copy carries only the bodies the compacted lowering
+    // emits.
     let kept: Vec<FunctionSsa> = funcs
         .iter()
         .filter(|f| sets.func_pcs.contains(&f.ent_pc))
@@ -907,24 +910,21 @@ fn remap_data_off(off: i64, starts: &[i64], new_base: &[i64], data_len: i64) -> 
     new_base[i] + (off - starts[i])
 }
 
-/// Where each object of the input image landed in the packed one.
-/// `new_base[i]` is the packed offset of the object at input offset
-/// `starts[i]`, `-1` when dropped; `kept` is the same relation sorted by
-/// packed base, for resolving a packed offset back.
+/// Where each object of the input image landed in the packed one:
+/// `(packed base, length, input offset)`, ascending by packed base, for
+/// resolving a packed offset back.
 pub(crate) struct DataMap {
-    new_base: Vec<i64>,
-    /// `(packed base, length, input offset)`, ascending by packed base.
     kept: Vec<(i64, i64, i64)>,
 }
 
 impl DataMap {
-    fn new(starts: &[i64], new_base: Vec<i64>, obj_len: &[i64]) -> DataMap {
+    fn new(starts: &[i64], new_base: &[i64], obj_len: &[i64]) -> DataMap {
         let mut kept: Vec<(i64, i64, i64)> = (0..starts.len())
             .filter(|&i| new_base[i] >= 0)
             .map(|i| (new_base[i], obj_len[i], starts[i]))
             .collect();
         kept.sort_unstable();
-        DataMap { new_base, kept }
+        DataMap { kept }
     }
 
     /// Input offset for a byte at packed offset `off`, `None` when no kept
@@ -940,31 +940,29 @@ impl DataMap {
         (off < base + len).then_some(start + (off - base))
     }
 
-    /// Packed base of the object at input offset `starts[i]`, `None` when
-    /// it was dropped.
-    fn packed_base(&self, i: usize) -> Option<i64> {
-        (self.new_base[i] >= 0).then_some(self.new_base[i])
+    /// The map of an image whose packed layout is its own: every input
+    /// offset is its packed offset. Pairs SSA built against an uncompacted
+    /// program with a compaction of that program, so
+    /// [`apply_data_liveness`] carries each body's `ImmData` offsets
+    /// straight onto the new layout.
+    pub(crate) fn identity(program: &Program) -> DataMap {
+        let starts = data_object_starts(program);
+        let data_len = program.data.len() as i64;
+        let obj_lens: Vec<i64> = (0..starts.len())
+            .map(|i| if i + 1 < starts.len() { starts[i + 1] } else { data_len } - starts[i])
+            .collect();
+        DataMap::new(&starts, &starts, &obj_lens)
     }
 }
 
-/// The liveness a compaction applied and the offset map it produced, for
-/// a caller that may need to redo it with a sharper live set.
-pub(crate) struct CompactionPlan {
-    pub live: LiveSets,
-    pub map: DataMap,
-    /// Functions the pass kept in `finished_functions`. A redo applies the
-    /// same set: the ASTs are not walked again, but everything else derived
-    /// from them -- the import table above all -- must still see every
-    /// function the first pass did.
-    pub func_pcs: alloc::collections::BTreeSet<usize>,
-}
-
-/// What [`compact_program_data`] produced. `plan` is absent when the
-/// compaction was a no-op and there is nothing to redo.
+/// What [`compact_program_data`] produced.
 pub(crate) struct Compaction {
     pub program: Program,
+    /// Size of the zero-fill region the packed layout moved past the
+    /// file image. Read by the Mach-O writer's bss test; the other
+    /// callers pack with `segregate` off, where it is 0.
+    #[cfg_attr(not(all(test, target_os = "macos")), allow(dead_code))]
     pub bss_size: i64,
-    pub plan: Option<CompactionPlan>,
 }
 
 /// C99 6.2.2 / 6.7.8: return a copy of `program` whose `.data` holds only
@@ -984,7 +982,6 @@ pub(crate) fn compact_program_data(
     let unchanged = || Compaction {
         program: program.clone(),
         bss_size: 0,
-        plan: None,
     };
     let data_len = program.data.len() as i64;
     if data_len == 0 || program.finished_functions.is_empty() {
@@ -1008,58 +1005,12 @@ pub(crate) fn compact_program_data(
     let live_func_pcs: alloc::collections::BTreeSet<usize> =
         funcs.iter().map(|f| f.ent_pc).collect();
     let sets = compute_live_sets(&funcs, program, false, None);
-    // The caller may redo the compaction from the original with a sharper
-    // live set, so the rewrite works on a copy.
-    let (out, bss_size, map) =
+    let (out, bss_size, _map) =
         apply_data_liveness(program.clone(), &sets, &live_func_pcs, segregate, None);
     Ok(Compaction {
         program: out,
         bss_size,
-        plan: Some(CompactionPlan {
-            live: sets,
-            map,
-            func_pcs: live_func_pcs,
-        }),
     })
-}
-
-/// Redo a compaction of `program` with the post-inline liveness the first
-/// pass reported. The report names objects of the packed image, so it is
-/// carried back onto `program`'s own objects through `plan`: compacting
-/// the packed image instead would lose its `.bss` region, whose objects
-/// sit past `data` and so outside the interval model. Those objects keep
-/// the liveness the first pass gave them, so this narrows `.data` only.
-/// Consumes `program`: this is the last use of the pre-compaction image.
-pub(crate) fn recompact_after_inlining(
-    program: Program,
-    plan: &CompactionPlan,
-    orphaned: &mut OrphanedData,
-    segregate: bool,
-) -> (Program, i64) {
-    let mut sets = LiveSets {
-        starts: plan.live.starts.clone(),
-        data_live: plan.live.data_live.clone(),
-        func_pcs: orphaned.sets.func_pcs.clone(),
-    };
-    let packed_starts = &orphaned.sets.starts;
-    for i in 0..sets.starts.len() {
-        let Some(base) = plan.map.packed_base(i) else {
-            continue;
-        };
-        // A base the packed image records no boundary for is a `.bss`
-        // object (its offset is past the file image).
-        if let Ok(j) = packed_starts.binary_search(&base) {
-            sets.data_live[i] = orphaned.sets.data_live[j];
-        }
-    }
-    let (out, bss_size, _) = apply_data_liveness(
-        program,
-        &sets,
-        &plan.func_pcs,
-        segregate,
-        Some((&mut orphaned.ssa.funcs, &plan.map)),
-    );
-    (out, bss_size)
 }
 
 /// Rewrite `out` in place to hold only the data objects `sets` marks live
@@ -1414,7 +1365,7 @@ pub(crate) fn apply_data_liveness(
                 });
         }
     }
-    (out, bss_size, DataMap::new(starts, new_base, &obj_lens))
+    (out, bss_size, DataMap::new(starts, &new_base, &obj_lens))
 }
 
 /// Read-only measurement of statically-dead data objects (no mutation,

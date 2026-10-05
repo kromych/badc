@@ -22,27 +22,18 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	mov	x2, #0x63               // =99
                	str	w2, [x1, #0x5c]
-               	mov	x1, #0x7                // =7
-               	str	w1, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
-               	ldrsw	x0, [x0]
-               	cmp	w0, #0x15
+               	mov	x2, #0x7                // =7
+               	str	w2, [x0]
+               	ldrsw	x2, [x0, #0x24]
+               	cmp	w2, #0x15
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
-               	ldrsw	x0, [x0]
-               	cmp	w0, #0x63
+               	ldrsw	x1, [x1, #0x5c]
+               	cmp	w1, #0x63
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x0, [x0]
                	ldrsw	x0, [x0]
                	cmp	w0, #0x7
                	b.eq	<addr>

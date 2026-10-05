@@ -4,7 +4,7 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(16)                                      -> x0
+    v1   Imm(0)                                           -> x0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0
@@ -14,30 +14,30 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
-    v11  ImmData(32)                                      -> x0
-    v12  ImmData(40)                                      -> x0
-    v13  ImmData(48)                                      -> x0
-    v14  ImmData(56)                                      -> x0
-    v15  ImmData(64)                                      -> x0
-    v16  ImmData(80)                                      -> x0
-    v17  ImmData(96)                                      -> x0
-    v18  ImmData(104)                                     -> x0
-    v19  ImmData(120)                                     -> x0
+    v11  Imm(0)                                           -> x0
+    v12  Imm(0)                                           -> x0
+    v13  Imm(0)                                           -> x0
+    v14  Imm(0)                                           -> x0
+    v15  Imm(0)                                           -> x0
+    v16  Imm(0)                                           -> x0
+    v17  Imm(0)                                           -> x0
+    v18  Imm(0)                                           -> x0
+    v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0
     v22  Imm(0)                                           -> x0
     v23  Imm(0)                                           -> x0
-    v24  ImmData(152)                                     -> x0
-    v25  ImmData(160)                                     -> x0
-    v26  ImmData(136)                                     -> x0
+    v24  Imm(0)                                           -> x0
+    v25  Imm(0)                                           -> x0
+    v26  Imm(0)                                           -> x0
     v27  Imm(0)                                           -> x0
     v28  Imm(0)                                           -> x0
     v29  Imm(0)                                           -> x0
     v30  Imm(0)                                           -> x0
-    v31  ImmData(176)                                     -> x0
-    v32  ImmData(320)                                     -> x0
-    v33  ImmData(464)                                     -> x0
-    v34  ImmData(608)                                     -> x0
+    v31  Imm(0)                                           -> x0
+    v32  Imm(0)                                           -> x0
+    v33  Imm(0)                                           -> x0
+    v34  Imm(0)                                           -> x0
     v35  Imm(0)                                           -> x0
     v36  Imm(0)                                           -> x0
     v37  Imm(0)                                           -> x0

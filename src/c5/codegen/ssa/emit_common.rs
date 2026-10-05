@@ -2151,8 +2151,10 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // these address-free slots to SSA values; this is the default-level
     // analog, shrinking frames built from many control-flow merges whose
     // phi-substitute slots never overlap. The pass runs regardless of debug
-    // info so the emitted code is identical with and without -g.
-    if !native.optimize && walked {
+    // info so the emitted code is identical with and without -g. A probe
+    // skips it: the stop discards the records it feeds the emitters, and
+    // the retry runs it on the reported bodies.
+    if !native.optimize && mode != super::LowerMode::DataLivenessProbe {
         let coalesce_dwarf = pipeline.run("ssa::slot_coalesce::run", &mut ssa_funcs, |funcs| {
             super::slot_coalesce::run(funcs, false, native.stack_protect)
         });
@@ -2162,8 +2164,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             &mut promoted_local_slots,
         );
     }
-    // Data the -O pipeline orphans after the pre-inline compaction
-    // packed `.data`; the caller recompacts and lowers again.
+    // Data the pipeline orphans: the static DCE's post-inline live set,
+    // which the caller compacts `.data` against and then lowers again.
     let mut orphaned_data: Option<super::shadow::OrphanedData> = None;
     // Written only under the `std` dump path; the Build field is
     // unconditional.
@@ -2425,19 +2427,29 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // (e.g. an unreachable build-time-assert canary the fold removed
     // from the caller) -- out of the object. It also reports the data the
     // pipeline orphaned; the passes below run on prebuilt bodies too, so a
-    // recompaction retry re-runs them and re-checks the report is empty.
-    if native.optimize {
+    // compaction retry re-runs them and re-checks the report is empty.
+    // A probe always reports: its caller compacts the program from this
+    // set alone, so it needs the all-live one too.
+    if native.optimize || mode == super::LowerMode::DataLivenessProbe {
         orphaned_data = pipeline.run(
             "ssa::shadow::drop_unreachable_statics",
             &mut ssa_funcs,
-            |funcs| super::shadow::drop_unreachable_statics(funcs, program, &reachable_owners),
+            |funcs| {
+                super::shadow::drop_unreachable_statics(
+                    funcs,
+                    program,
+                    &reachable_owners,
+                    mode == super::LowerMode::DataLivenessProbe,
+                )
+            },
         );
         if let Some(o) = &mut orphaned_data {
             o.ssa.promoted_local_slots = promoted_local_slots.clone();
             o.ssa.param_ranges = param_ranges.clone();
         }
-        // A probe caller relowers the reported bodies against a `.data`
-        // this run cannot know, so everything below would be discarded.
+        // A probe caller compacts `.data` to the report and relowers the
+        // reported bodies against it, so everything below would be
+        // discarded.
         if orphaned_data.is_some() && mode == super::LowerMode::DataLivenessProbe {
             return Ok(super::Build {
                 diagnostics: reported(&mut sink)?,

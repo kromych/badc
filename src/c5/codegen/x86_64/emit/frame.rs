@@ -369,9 +369,9 @@ pub(crate) fn asm_site_write_masks(
     if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
         return (0, 0);
     }
-    if let Some(shape) = bound_shape(func, asm, args, fixed, target) {
+    if bound_shape(func, asm, args, fixed, target).is_some() {
         return (
-            (asm.clobber_regs | shape.gp_scratch_mask(asm, fixed)) & !fixed.gpr,
+            (asm.clobber_regs | bound_scratch_floor(asm, fixed)) & !fixed.gpr,
             asm.clobber_fp_regs & !fixed.fpr,
         );
     }
@@ -387,6 +387,17 @@ pub(crate) fn asm_site_write_masks(
 /// A bound statement's operand scratch: r10 and r11, outside the banks,
 /// then registers volatile under both x86-64 conventions.
 const BOUND_SCRATCH: [u8; 7] = [10, 11, 9, 8, 2, 1, 0];
+
+/// The scratch a bound site always reserves: the first two of
+/// [`BOUND_SCRATCH`] the statement neither clobbers nor `fixed` names.
+/// A value live across a bound site is kept out of these, so the emit's
+/// first picks are free; the emit chooses any further scratch around the
+/// allocation it sees, so no other register needs reserving up front.
+fn bound_scratch_floor(asm: &super::super::ir::AsmBlock, fixed: super::FixedRegs) -> u32 {
+    bound_gp_scratch(asm, fixed, 2)
+        .iter()
+        .fold(0u32, |m, &r| m | 1 << r)
+}
 
 /// The register operands of a statement whose operands bind directly.
 pub(super) struct BoundShape {
@@ -521,9 +532,11 @@ pub(crate) fn asm_binds_directly(
 }
 
 /// A bound statement's operand values with the GP and FP registers each
-/// avoids: an input the clobbers and the scratch; an output, written once
-/// the inputs are read, the clobbers, and the scratch too when its input
-/// moves in ahead of the loads; that input, read by the move, the scratch.
+/// avoids: an input the clobbers and the floor scratch (r10 / r11, the
+/// only registers the site reserves before the allocation decides which
+/// operands need a scratch); an output, written once the inputs are
+/// read, the clobbers, and the floor too when its input moves in ahead
+/// of the loads; that input, read by the move, the floor.
 pub(crate) fn asm_site_bound_values(
     func: &FunctionSsa,
     asm: &super::super::ir::AsmBlock,
@@ -537,10 +550,10 @@ pub(crate) fn asm_site_bound_values(
     if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
         return out;
     }
-    let Some(shape) = bound_shape(func, asm, args, fixed, target) else {
+    if bound_shape(func, asm, args, fixed, target).is_none() {
         return out;
-    };
-    let scratch = shape.gp_scratch_mask(asm, fixed) & !fixed.gpr;
+    }
+    let scratch = bound_scratch_floor(asm, fixed) & !fixed.gpr;
     let (gpr, fpr) = (
         asm.clobber_regs & !fixed.gpr,
         asm.clobber_fp_regs & !fixed.fpr,

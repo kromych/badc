@@ -43,10 +43,9 @@ Disassembly of section .text:
                	retq
 
 <scratch_clobbered>:
-               	movq	%rdx, %rcx
                	movq	%rdi, %rax
                	addq	%rsi, %rax
-               	addq	%rcx, %rax
+               	addq	%rdx, %rax
                	xorq	%r10, %r10
                	xorq	%r11, %r11
                	retq

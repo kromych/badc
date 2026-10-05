@@ -178,16 +178,21 @@ mod asm_scratch_tests {
             (true, ((1 << 10) | (1 << 11), 0))
         );
         let three_in = alloc::vec![reg(true), reg(false), reg(false), reg(false)];
+        // The site reserves only its floor scratch (r10 and r11); the
+        // scratch a register-less operand would take is decided once the
+        // allocation is known, so nothing beyond the floor is reserved
+        // up front.
         assert_eq!(
             masks(&statement(three_in.clone(), 0)),
-            (true, ((1 << 10) | (1 << 11) | (1 << 9), 0))
+            (true, ((1 << 10) | (1 << 11), 0))
         );
-        // r10 and r11 clobbered: the three inputs take r9, r8 and rdx.
+        // r10 and r11 clobbered: the floor moves to the next two of
+        // BOUND_SCRATCH, r9 and r8.
         let r10_r11 = (1 << 10) | (1 << 11);
-        let scratch = (1 << 9) | (1 << 8) | (1 << 2);
+        let floor = (1 << 9) | (1 << 8);
         assert_eq!(
             masks(&statement(three_in.clone(), r10_r11)),
-            (true, (r10_r11 | scratch, 0))
+            (true, (r10_r11 | floor, 0))
         );
         let avoid = |func: &FunctionSsa| {
             let site = site(func);
@@ -196,7 +201,7 @@ mod asm_scratch_tests {
             };
             asm_site_bound_values(func, asm, args, site as u32, fixed, target)
         };
-        let all = r10_r11 | scratch;
+        let all = r10_r11 | floor;
         assert_eq!(
             avoid(&statement(three_in.clone(), r10_r11)),
             [(1, all, 0), (2, all, 0), (3, all, 0), (4, r10_r11, 0)]

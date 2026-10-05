@@ -1850,8 +1850,7 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
     use super::super::ir::AsmConstraint as C;
     let asm = stmt.asm;
     let fixed = stmt.frame.fixed_regs;
-    let Some(shape) = super::frame::bound_shape(stmt.func, asm, stmt.args, fixed, stmt.fcx.target)
-    else {
+    if super::frame::bound_shape(stmt.func, asm, stmt.args, fixed, stmt.fcx.target).is_none() {
         return fail("inline asm: the operands do not bind directly");
     };
     let short = "inline asm: no scratch register for a bound operand";
@@ -1859,17 +1858,6 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
     let xmm = |i: usize| vector(i).then_some(asm.operands[i].width);
     let bank = |i: usize| usize::from(vector(i));
     // Scratch by bank; `taken` loses what no other operand may share.
-    let pools = [
-        super::frame::bound_gp_scratch(asm, fixed, shape.gp_need()),
-        super::frame::bound_fp_scratch(asm, fixed, stmt.fcx.target),
-    ];
-    let mut taken = pools.clone();
-    let take = |pool: &mut alloc::vec::Vec<u8>| -> Emit<u8> {
-        if pool.is_empty() {
-            return fail(short);
-        }
-        Ok(pool.remove(0))
-    };
     let outs = stmt.alloc.asm_output_places(stmt.func, stmt.site);
     let own = |i: usize, place: Place| match (vector(i), place) {
         (true, Place::FpReg(x)) | (false, Place::IntReg(x)) => Some(x),
@@ -1880,6 +1868,77 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
     for &(i, place) in &outs {
         held[bank(i)].extend(own(i, place));
     }
+    // The GP registers the statement's operands bind to: an input in its
+    // value's register, an output in the register it was given. A scratch
+    // that aliases one would hold two operands at once; only a non-`&`
+    // output may share with an input, which the output pool below allows.
+    let mut operand_gp = 0u32;
+    for &(i, place) in &outs {
+        if let Some(r) = own(i, place) {
+            operand_gp |= 1 << r;
+        }
+    }
+    for (i, op) in asm.operands.iter().enumerate() {
+        if op.is_output || op.static_arg {
+            continue;
+        }
+        let imm = match op.constraint {
+            C::Imm => true,
+            C::RegOrImm { reg: None, imm } => stmt
+                .const_of(i as u8)
+                .is_some_and(|v| crate::Compiler::x86_imm_alternative_accepts(imm, v)),
+            _ => false,
+        };
+        if imm {
+            continue;
+        }
+        if let Some(&a) = stmt.args.get(i)
+            && let Some(Place::IntReg(r)) = stmt.alloc.places.get(a as usize)
+        {
+            operand_gp |= 1 << r;
+        }
+    }
+    // The GP registers holding values live across the statement: a
+    // scratch may not be one, or the moves around the template would
+    // destroy the value.
+    let mut live_gp = 0u32;
+    for (v, place) in stmt.alloc.places.iter().enumerate() {
+        if let Place::IntReg(r) = place
+            && (v as u32) < stmt.site
+            && stmt.site < stmt.alloc.last_use.get(v).copied().unwrap_or(0)
+        {
+            live_gp |= 1 << r;
+        }
+    }
+    // The scratch pools, decided here once the allocation is known: the
+    // BOUND_SCRATCH registers the statement neither clobbers nor `fixed`
+    // names, less those holding a live value or an operand. The FP file's
+    // two reload registers sit outside the allocator's banks, so the FP
+    // pool needs no such filter.
+    let gp_pool = || -> alloc::vec::Vec<u8> {
+        super::frame::bound_gp_scratch(asm, fixed, usize::MAX)
+            .into_iter()
+            .filter(|&r| (live_gp | operand_gp) & (1 << r) == 0)
+            .collect()
+    };
+    let pools = [
+        gp_pool(),
+        super::frame::bound_fp_scratch(asm, fixed, stmt.fcx.target),
+    ];
+    let out_pools = [
+        super::frame::bound_gp_scratch(asm, fixed, usize::MAX)
+            .into_iter()
+            .filter(|&r| live_gp & (1 << r) == 0)
+            .collect::<alloc::vec::Vec<u8>>(),
+        pools[1].clone(),
+    ];
+    let mut taken = pools.clone();
+    let take = |pool: &mut alloc::vec::Vec<u8>| -> Emit<u8> {
+        if pool.is_empty() {
+            return fail(short);
+        }
+        Ok(pool.remove(0))
+    };
     let mut op_reg: alloc::vec::Vec<Option<u8>> = alloc::vec![None; asm.operands.len()];
     let mut moves: alloc::vec::Vec<Transfer> = alloc::vec::Vec::new();
     let mut out_stores: alloc::vec::Vec<(u8, Place, Option<u8>)> = alloc::vec::Vec::new();
@@ -1971,7 +2030,7 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
             Some(x) => x,
             None => {
                 let b = bank(i);
-                let Some(s) = pools[b]
+                let Some(s) = out_pools[b]
                     .iter()
                     .copied()
                     .find(|&r| Some(r) != rw_scratch && !held[b].contains(&r))

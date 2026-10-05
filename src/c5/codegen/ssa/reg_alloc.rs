@@ -534,9 +534,16 @@ const X86_RAX: u8 = 0;
 const X86_RCX: u8 = 1;
 const X86_RDX: u8 = 2;
 
-/// A shift or rotate, whose variable count x86-64 reads in cl.
+/// A shift or rotate.
 fn is_shift_op(op: BinOp) -> bool {
     matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror)
+}
+
+/// A rotate, whose variable count x86-64 reads in cl: the shifts take
+/// the BMI2 `shlx` / `shrx` / `sarx` forms instead, which read the
+/// count in any register.
+fn is_cl_shift_op(op: BinOp) -> bool {
+    op == BinOp::Ror
 }
 
 /// A division, a remainder or a high multiply, which x86-64 computes in
@@ -549,12 +556,12 @@ fn is_rdx_rax_op(op: BinOp) -> bool {
 }
 
 /// The registers x86-64's lowering of `inst` writes besides its result, as
-/// a mask: rcx for a shift or rotate by a count no immediate form takes,
-/// rdx:rax for a division, a remainder, a high multiply and `Udiv128`, rax
-/// for the `CMPXCHG` of a compare-exchange and of a bitwise read-modify-write.
+/// a mask: rcx for a rotate or an out-of-range immediate shift, rdx:rax
+/// for a division, a remainder, a high multiply and `Udiv128`, rax for
+/// the `CMPXCHG` of a compare-exchange and of a bitwise read-modify-write.
 pub(crate) fn x86_implicit_writes(inst: &Inst) -> u16 {
     match *inst {
-        Inst::Binop { op, .. } if is_shift_op(op) => 1 << X86_RCX,
+        Inst::Binop { op, .. } if is_cl_shift_op(op) => 1 << X86_RCX,
         Inst::BinopI { op, rhs_imm, .. } if is_shift_op(op) && !(0..64).contains(&rhs_imm) => {
             1 << X86_RCX
         }
@@ -704,13 +711,14 @@ pub(crate) fn cmpxchg_rmw(op: AtomicRmwOp) -> bool {
 
 /// x86-64 register preferences the colorer honours among free caller-saved
 /// registers. `apart[root]` keeps the result of a non-commutative `op dst,
-/// rhs` (`sub`, `subsd`, `divsd`, a shift) off the register of `rhs`, which
-/// the emitter would copy aside first. A shift reads a register count in
-/// cl: the count is hinted to rcx, and `avoid[v]` holds rcx for the shift's
-/// result and operand. A division takes its dividend in rax and leaves the
-/// quotient there and the remainder in rdx, which the hints follow; its
-/// divisor avoids rdx:rax. The values live across an instruction avoid the
-/// registers it writes ([`x86_implicit_writes`]), a count excepted for rcx.
+/// rhs` (`sub`, `subsd`, `divsd`, a rotate) off the register of `rhs`, which
+/// the emitter would copy aside first. A rotate reads a register count in
+/// cl: the count is hinted to rcx, and `avoid[v]` holds rcx for the
+/// rotate's result and operand. A division takes its dividend in rax and
+/// leaves the quotient there and the remainder in rdx, which the hints
+/// follow; its divisor avoids rdx:rax. The values live across an
+/// instruction avoid the registers it writes
+/// ([`x86_implicit_writes`]), a count excepted for rcx.
 fn x86_preferences(
     func: &FunctionSsa,
     liveness: &super::liveness::Liveness,
@@ -748,7 +756,7 @@ fn x86_preferences(
         let Some((op, lhs, rhs)) = binop(inst) else {
             continue;
         };
-        if is_shift_op(op) {
+        if is_cl_shift_op(op) {
             is_count[rhs as usize] = true;
             hints[rhs as usize].get_or_insert(X86_RCX);
         } else if is_rdx_rax_op(op) {
@@ -781,7 +789,7 @@ fn x86_preferences(
         if is_rdx_rax_op(op) {
             keep_out(rhs, rdx_rax);
         }
-        if !is_shift_op(op) && !matches!(op, BinOp::Sub | BinOp::Fsub | BinOp::Fdiv) {
+        if !is_cl_shift_op(op) && !matches!(op, BinOp::Sub | BinOp::Fsub | BinOp::Fdiv) {
             continue;
         }
         let (a, b) = (node_of[v], node_of[rhs as usize]);
@@ -789,7 +797,7 @@ fn x86_preferences(
             apart[a as usize].push(b);
             apart[b as usize].push(a);
         }
-        if is_shift_op(op) {
+        if is_cl_shift_op(op) {
             keep_out(v as ValueId, rcx);
             keep_out(lhs, rcx);
         }
@@ -1310,9 +1318,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let is_site = |inst: &Inst| site_regs(inst) != 0;
     for (site, live) in liveness.values_live_after(func, &is_site) {
         let inst = &func.insts[site as usize];
-        // A shift reads its count in cl and leaves it there.
+        // A rotate reads its count in cl and leaves it there.
         let kept = match *inst {
-            Inst::Binop { op, rhs, .. } if is_shift_op(op) && target.is_x86_64() => rhs,
+            Inst::Binop { op, rhs, .. } if is_cl_shift_op(op) && target.is_x86_64() => rhs,
             _ => NO_VALUE,
         };
         let regs = site_regs(inst);
@@ -6461,27 +6469,24 @@ int main(void) { return 0; }
         );
     }
 
-    /// On x86-64 a shift's count takes rcx, its result and a value live
-    /// across it keep out, and no save is recorded; a difference keeps its
-    /// result apart from its subtrahend. AArch64 records nothing.
+    /// On x86-64 a rotate's count takes rcx, its result and a value live
+    /// across it keep out, and no save is recorded; a shift (SHLX) records
+    /// no implicit write and leaves the count wherever it is. A difference
+    /// keeps its result apart from its subtrahend. AArch64 records nothing.
     #[test]
-    fn variable_shift_leaves_rcx_to_its_count() {
+    fn variable_shift_leaves_rcx_to_the_rotate() {
         let local = |off| Inst::LoadLocal {
             off,
             kind: LoadKind::I64,
             volatile: false,
         };
-        let build = || {
+        let build = |op| {
             store_func(
                 vec![
                     local(2),
                     local(3),
                     local(4),
-                    Inst::Binop {
-                        op: BinOp::Shl,
-                        lhs: 0,
-                        rhs: 1,
-                    },
+                    Inst::Binop { op, lhs: 0, rhs: 1 },
                     Inst::Binop {
                         op: BinOp::Sub,
                         lhs: 2,
@@ -6491,9 +6496,10 @@ int main(void) { return 0; }
                 4,
             )
         };
-        let full =
-            |target| with_pool_size_override(usize::MAX, usize::MAX, || allocate(&build(), target));
-        let x64 = full(Target::LinuxX64);
+        let full = |target, op| {
+            with_pool_size_override(usize::MAX, usize::MAX, || allocate(&build(op), target))
+        };
+        let x64 = full(Target::LinuxX64, BinOp::Ror);
         let rcx = Place::IntReg(X86_RCX);
         assert_eq!(x64.places[1], rcx);
         for v in [0, 2, 3] {
@@ -6501,14 +6507,18 @@ int main(void) { return 0; }
         }
         assert_ne!(x64.places[4], x64.places[3]);
         assert!(!x64.holds_live_across(3, X86_RCX));
-        let a64 = full(Target::LinuxAarch64);
+        // A shift writes nothing besides its result: the count rides
+        // whatever register holds it and rcx stays unrecorded.
+        let shl = full(Target::LinuxX64, BinOp::Shl);
+        assert!(shl.implicit_live.iter().all(|&m| m == 0));
+        let a64 = full(Target::LinuxAarch64, BinOp::Shl);
         assert!(a64.implicit_live.iter().all(|&m| m == 0));
     }
 
-    /// With two caller-saved registers a value live across the shift ends
+    /// With two caller-saved registers a value live across a rotate ends
     /// in rcx, and the allocation records it for the emitter's save.
     #[test]
-    fn rcx_held_across_a_shift_is_recorded() {
+    fn rcx_held_across_a_rotate_is_recorded() {
         let local = |off| Inst::LoadLocal {
             off,
             kind: LoadKind::I64,
@@ -6526,7 +6536,7 @@ int main(void) { return 0; }
                 local(4),
                 local(5),
                 Inst::Binop {
-                    op: BinOp::Shl,
+                    op: BinOp::Ror,
                     lhs: 0,
                     rhs: 3,
                 },

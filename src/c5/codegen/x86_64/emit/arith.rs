@@ -1183,7 +1183,7 @@ fn emit_int_binop(
     frame: Frame,
 ) -> Emit {
     // The rhs scratch carries a spilled shift count, or preserves a register
-    // rhs that aliases rd. It must not be rcx for a shift: the shift arm
+    // rhs that aliases rd. It must not be rcx for a shift: a rotate
     // moves the count into cl while preserving a live rcx with a push / pop,
     // which a count materialised into rcx here would defeat; r11 is always
     // safe.
@@ -1262,9 +1262,11 @@ fn emit_int_binop(
         emit_rr(code, alu_mnem(op).unwrap(), 8, rd, other);
         return Ok(());
     }
-    // A compare reads both operands and writes dst only through setcc, so it
-    // needs neither the staging mov nor the scratch.
-    let stage_rhs_to_scratch = rhs_aliases_rd && !is_cmp;
+    // A compare reads both operands and writes dst only through setcc, and
+    // `shlx` / `shrx` / `sarx` read the count before writing rd, so neither
+    // needs the staging mov nor the scratch.
+    let reads_count_first = is_cmp || matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru);
+    let stage_rhs_to_scratch = rhs_aliases_rd && !reads_count_first;
     let Some(rm) = (if rhs_preserved_in_scratch {
         Some(rhs_scratch)
     } else if stage_rhs_to_scratch {
@@ -1515,7 +1517,7 @@ pub(super) fn emit_udiv128(
 
 /// Source of a variable shift count for `emit_shift_by_count_reg`.
 enum ShiftCount {
-    /// Count already resident in a register; moved into cl.
+    /// Count already resident in a register; a rotate moves it into cl.
     Reg(Reg),
     /// Count is a compile-time immediate; loaded into cl. Reached
     /// only for an out-of-range `BinopI` shift (C99 6.5.7p3 makes
@@ -1523,9 +1525,13 @@ enum ShiftCount {
     Imm(i64),
 }
 
-/// `rd = src OP count` for a variable count: the count moves into rcx (cl),
-/// a live rcx preserved with push / pop; when `rd` is rcx the value is
-/// shifted in a reserved scratch and copied back.
+/// `rd = src OP count` for a variable count. Shifts take `shlx` / `shrx`
+/// / `sarx`, which read the count in whatever register holds it and
+/// write no flags (BMI2, part of the x86-64-v3 baseline; a build
+/// targeting below v3 selects the base forms, which stage the count
+/// into cl and save a live rcx). Rotates have no BMI2 register-count
+/// form, so they keep the cl path below; an out-of-range immediate
+/// count (C99 6.5.7p3) does too.
 #[allow(clippy::too_many_arguments)]
 fn emit_shift_by_count_reg(
     code: &mut Vec<u8>,
@@ -1538,6 +1544,18 @@ fn emit_shift_by_count_reg(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
+    if let ShiftCount::Reg(r) = count
+        && matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru)
+    {
+        let pp = match op {
+            BinOp::Shl => 0b01,
+            BinOp::Shru => 0b11,
+            _ => 0b10,
+        };
+        super::encode::emit_vex_shift(code, pp, true, rd, src, r);
+        spill_dst_to_slot(code, dst, rd, frame);
+        return Ok(());
+    }
     let count_reg = match count {
         ShiftCount::Reg(r) => Some(r),
         ShiftCount::Imm(_) => None,

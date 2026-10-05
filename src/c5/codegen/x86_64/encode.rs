@@ -1137,6 +1137,30 @@ pub(crate) fn emit_vex_fp_arith_mem(
     emit_modrm_mem(code, dst, base, disp);
 }
 
+/// `SHLX` / `SHRX` / `SARX`: `dst = src OP count` with the count in any
+/// register and no flags written (BMI2, part of the x86-64-v3 baseline).
+/// VEX.NDD.LZ.<pp>.0F38.W0/1 F7 /r with `count` in vvvv and `src` in
+/// ModR/M.r/m; `pp` selects the row: 01 -> 66 (SHLX), 11 -> F2 (SHRX),
+/// 10 -> F3 (SARX).
+pub(crate) fn emit_vex_shift(
+    code: &mut Vec<u8>,
+    pp: u8,
+    w64: bool,
+    dst: Reg,
+    src: Reg,
+    count: Reg,
+) {
+    let r = if dst.high() { 0u8 } else { 1u8 };
+    let b_bit = if src.high() { 0u8 } else { 1u8 };
+    let count_num = ((count.high() as u8) << 3) | count.lo();
+    let vvvv = (!count_num) & 0xF;
+    emit_byte(code, 0xC4);
+    emit_byte(code, (r << 7) | (1 << 6) | (b_bit << 5) | 0b00010);
+    emit_byte(code, ((w64 as u8) << 7) | (vvvv << 3) | pp);
+    emit_byte(code, 0xF7);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
+}
+
 /// `CVTSI2SD xmm, r64` -- signed 64-bit int to double, with REX.W.
 /// Encoding: `F2 REX.W 0F 2A /r`.
 pub(crate) fn emit_cvtsi2sd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
@@ -2620,6 +2644,36 @@ mod tests {
         assert_eq!(
             assemble(|c| emit_vex_fp_arith_mem(c, 0x58, false, Reg(0), Reg(1), Reg::RSP, 8)),
             vec![0xC4, 0xE1, 0x73, 0x58, 0x44, 0x24, 0x08]
+        );
+    }
+
+    #[test]
+    fn vex_shift_encodings() {
+        // shlxq %rcx, %rsi, %rdi -> C4 E2 F1 F7 FE (count in vvvv, the
+        // shifted value in r/m); the shrx / sarx rows change only pp.
+        // Cross-checked against clang's assembler.
+        assert_eq!(
+            assemble(|c| emit_vex_shift(c, 0b01, true, Reg(7), Reg(6), Reg(1))),
+            vec![0xC4, 0xE2, 0xF1, 0xF7, 0xFE]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_shift(c, 0b11, true, Reg(7), Reg(6), Reg(1))),
+            vec![0xC4, 0xE2, 0xF3, 0xF7, 0xFE]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_shift(c, 0b10, true, Reg(7), Reg(6), Reg(1))),
+            vec![0xC4, 0xE2, 0xF2, 0xF7, 0xFE]
+        );
+        // The dword form clears VEX.W: shlxl %ecx, %esi, %edi.
+        assert_eq!(
+            assemble(|c| emit_vex_shift(c, 0b01, false, Reg(7), Reg(6), Reg(1))),
+            vec![0xC4, 0xE2, 0x71, 0xF7, 0xFE]
+        );
+        // Extended registers clear VEX.R / VEX.B: shlxq %r9, %r12, %r8
+        //   ->  C4 42 B1 F7 C4.
+        assert_eq!(
+            assemble(|c| emit_vex_shift(c, 0b01, true, Reg(8), Reg(12), Reg(9))),
+            vec![0xC4, 0x42, 0xB1, 0xF7, 0xC4]
         );
     }
 

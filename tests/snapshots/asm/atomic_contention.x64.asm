@@ -28,8 +28,7 @@ Disassembly of section .text:
 <worker>:
                	movl	$0x1, %eax
                	movl	%edi, %ecx
-               	movq	%rax, %r9
-               	shlq	%cl, %r9
+               	shlxq	%rcx, %rax, %r9
                	xorl	%r8d, %r8d
                	leaq	<rip>, %rdi      # <addr>
                	movq	(%rdi), %rcx

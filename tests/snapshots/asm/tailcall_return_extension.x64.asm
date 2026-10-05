@@ -37,8 +37,7 @@ Disassembly of section .text:
                	movq	%rsi, %rcx
                	shlq	$0x3, %rcx
                	movslq	%ecx, %rcx
-               	movq	%rax, %rbx
-               	shlq	%cl, %rbx
+               	shlxq	%rcx, %rax, %rbx
                	incq	%rsi
                	callq	<addr>
                	orq	%rbx, %rax

@@ -4784,8 +4784,8 @@ fn ent_pc=14 n_params=2 variadic=false locals=0
     v1316 Imm(0)                                           -> x0
     v1317 BinopI { op=add, lhs=v1006, rhs_imm=8 }          -> x0
     v1318 Imm(0)                                           -> x1
-    v1319 Load { addr=v1006, disp=0, kind=I64 }            -> x2
-    v1320 Imm(0)                                           -> x1
+    v1319 Load { addr=v1006, disp=0, kind=I64 }            -> x1
+    v1320 Imm(0)                                           -> x2
     v1321 Binop { op=shl, lhs=v1319, rhs=v1004 }           -> x12
     v1322 Imm(0)                                           -> x1
     terminator Jmp(b189)   (exit_acc=v1321)
@@ -4801,8 +4801,8 @@ fn ent_pc=14 n_params=2 variadic=false locals=0
     v1327 Imm(0)                                           -> x0
     v1328 BinopI { op=add, lhs=v1006, rhs_imm=8 }          -> x0
     v1329 Imm(0)                                           -> x1
-    v1330 Load { addr=v1006, disp=0, kind=I64 }            -> x2
-    v1331 Imm(0)                                           -> x1
+    v1330 Load { addr=v1006, disp=0, kind=I64 }            -> x1
+    v1331 Imm(0)                                           -> x2
     v1332 Binop { op=shr, lhs=v1330, rhs=v1004 }           -> x12
     v1333 Imm(0)                                           -> x1
     terminator Jmp(b192)   (exit_acc=v1332)

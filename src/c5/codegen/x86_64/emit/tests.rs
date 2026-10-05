@@ -725,12 +725,11 @@ mod two_address_tests {
         assert!(spilled.ends_with(&[0x4C, 0x29, 0xD0]), "{spilled:02x?}");
     }
 
-    /// A shift saves rcx around the count's move into cl exactly when the
-    /// allocation records a value other than the count live there; without
-    /// a record, any value allocated to rcx counts. A result in rcx is
-    /// shifted in r11 from the lhs's own register.
+    /// A shift by a register count reads the count where it sits: no move
+    /// into cl and no rcx save, whatever rcx holds, and no copy of a count
+    /// that shares the destination register.
     #[test]
-    fn shift_saves_rcx_as_the_allocation_records() {
+    fn shift_takes_the_vex_form_whatever_holds_rcx() {
         let target = Target::LinuxX64;
         let reg = |r: Reg| Place::IntReg(r.0);
         let (func, v, mut alloc) = binop_of("long f(long a, long c){ return a << c; }", BinOp::Shl);
@@ -751,27 +750,68 @@ mod two_address_tests {
                 .expect("emit_binop");
             code
         };
-        // mov rax, rdi; [push rcx;] mov rcx, rsi; shl rax, cl; [pop rcx]
-        let bare = [0x48, 0x89, 0xF8, 0x48, 0x89, 0xF1, 0x48, 0xD3, 0xE0];
-        let saved = [
-            0x48, 0x89, 0xF8, 0x51, 0x48, 0x89, 0xF1, 0x48, 0xD3, 0xE0, 0x59,
-        ];
+        // shlx rax, rdi, rsi: the count rides rsi, so nothing stages
+        // into cl or saves rcx whatever holds it.
+        let shifted = [0xC4, 0xE2, 0xC9, 0xF7, 0xC7];
         alloc.implicit_live = alloc::vec![0; func.insts.len()];
-        assert_eq!(emit(&alloc, Reg::RAX), bare);
+        assert_eq!(emit(&alloc, Reg::RAX), shifted);
         alloc.implicit_live[v as usize] = 1 << Reg::RCX.0;
-        assert_eq!(emit(&alloc, Reg::RAX), saved);
+        assert_eq!(emit(&alloc, Reg::RAX), shifted);
         alloc.implicit_live.clear();
-        assert_eq!(emit(&alloc, Reg::RAX), bare);
+        assert_eq!(emit(&alloc, Reg::RAX), shifted);
         let other = (0..func.insts.len() as u32).find(|&i| i != lhs && i != rhs && i != v);
         alloc.places[other.expect("another value") as usize] = reg(Reg::RCX);
-        assert_eq!(emit(&alloc, Reg::RAX), saved);
-        // mov r11, rdi; mov rcx, rsi; shl r11, cl; mov rcx, r11
-        assert_eq!(
-            emit(&alloc, Reg::RCX),
-            [
-                0x49, 0x89, 0xFB, 0x48, 0x89, 0xF1, 0x49, 0xD3, 0xE3, 0x4C, 0x89, 0xD9
-            ]
-        );
+        assert_eq!(emit(&alloc, Reg::RAX), shifted);
+        // The destination may be rcx itself: the VEX form reads both
+        // operands before writing.
+        assert_eq!(emit(&alloc, Reg::RCX), [0xC4, 0xE2, 0xC9, 0xF7, 0xCF]);
+        // shlx rax, rdi, rax: a count in the destination is read in place.
+        alloc.places[rhs as usize] = reg(Reg::RAX);
+        assert_eq!(emit(&alloc, Reg::RAX), [0xC4, 0xE2, 0xF9, 0xF7, 0xC7]);
+    }
+
+    #[test]
+    fn rotate_stages_its_count_into_cl() {
+        let target = Target::LinuxX64;
+        let reg = |r: Reg| Place::IntReg(r.0);
+        let (func, v, mut alloc) = binop_of("long f(long a, long c){ return a << c; }", BinOp::Shl);
+        // Reuse the shape: a rotate has no BMI2 register-count form, so
+        // the count moves into cl and a live rcx is saved.
+        let Inst::Binop { lhs, rhs, .. } = func.insts[v as usize] else {
+            panic!("{:?}", func.insts[v as usize])
+        };
+        for p in alloc.places.iter_mut() {
+            if *p == reg(Reg::RCX) {
+                *p = Place::None;
+            }
+        }
+        alloc.places[lhs as usize] = reg(Reg::RDI);
+        alloc.places[rhs as usize] = reg(Reg::RSI);
+        let emit = |alloc: &Allocation| {
+            let frame = compute_frame(&func, alloc, target.abi(), target);
+            let mut code = Vec::new();
+            emit_binop(
+                &mut code,
+                BinOp::Ror,
+                v,
+                reg(Reg::RAX),
+                lhs,
+                rhs,
+                alloc,
+                frame,
+            )
+            .expect("emit_binop");
+            code
+        };
+        // mov rax, rdi; [push rcx;] mov rcx, rsi; ror rax, cl; [pop rcx]
+        let bare = [0x48, 0x89, 0xF8, 0x48, 0x89, 0xF1, 0x48, 0xD3, 0xC8];
+        let saved = [
+            0x48, 0x89, 0xF8, 0x51, 0x48, 0x89, 0xF1, 0x48, 0xD3, 0xC8, 0x59,
+        ];
+        alloc.implicit_live = alloc::vec![0; func.insts.len()];
+        assert_eq!(emit(&alloc), bare);
+        alloc.implicit_live[v as usize] = 1 << Reg::RCX.0;
+        assert_eq!(emit(&alloc), saved);
     }
 
     /// The function of `src` holding a copy, the copy's id and the allocation.

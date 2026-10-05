@@ -1720,8 +1720,9 @@ fn saves_rcx(i: &X64Insn) -> bool {
     matches!(i.op, 0x51 | 0x59) && i.rex & 1 == 0
 }
 
-/// A variable shift in a loop takes its count in rcx and keeps the loop's
-/// values out of it, so rcx is not saved around the shift.
+/// A variable shift in a loop takes `shlx` / `shrx`, which read the
+/// count in whatever register holds it and write no flags (BMI2, the
+/// x86-64-v3 baseline), so rcx is neither saved nor reserved.
 #[test]
 fn x64_variable_shift_saves_no_rcx() {
     const SRC: &str = "unsigned long ones(unsigned long v, int n) {\n\
@@ -1730,16 +1731,19 @@ fn x64_variable_shift_saves_no_rcx() {
         return acc;\n}\n";
     let insns = x64(SRC, "ones");
     assert!(!insns.iter().any(saves_rcx), "{insns:x?}");
+    assert!(insns.iter().any(|i| i.op == 0x38F7), "no shrx: {insns:x?}");
 }
 
 /// A value that arrives in rcx and is read after a variable shift -- a
-/// fourth parameter -- leaves rcx to the count instead of being saved.
+/// fourth parameter -- stays in rcx: the shift's count rides its own
+/// register, so nothing is saved or moved.
 #[test]
-fn x64_variable_shift_moves_a_live_value_out_of_rcx() {
+fn x64_variable_shift_leaves_a_live_value_in_rcx() {
     const SRC: &str =
         "long past_fourth(long x, long c, long z, long k) { return (x << c) + k + z; }\n";
     let insns = x64(SRC, "past_fourth");
     assert!(!insns.iter().any(saves_rcx), "{insns:x?}");
+    assert!(insns.iter().any(|i| i.op == 0x38F7), "no shlx: {insns:x?}");
 }
 
 /// `push r` or `pop r` of a low register `r`.

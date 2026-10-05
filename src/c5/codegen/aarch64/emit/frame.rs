@@ -218,7 +218,7 @@ pub(crate) fn compute_frame(
 }
 
 /// Access instances the locals base turns into one instruction: a local
-/// or a spill slot whose fp form lies past the unscaled ±256 reach and
+/// or a spill slot whose fp form lies past the unscaled +/-256 reach and
 /// takes the address build, each reload of a far spill slot counting as
 /// one. The base itself costs its save, restore and capture.
 fn local_base_wins(

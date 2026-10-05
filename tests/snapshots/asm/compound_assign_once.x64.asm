@@ -431,10 +431,8 @@ Disassembly of section .text:
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, -0x8(%rbp)
                	movsd	-0x8(%rbp), %xmm1
-               	movapd	%xmm0, %xmm14
-               	movapd	%xmm1, %xmm15
-               	movq	%rsi, %xmm0
-               	vfmsub231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) - xmm0
+               	movq	%rsi, %xmm15
+               	vfmsub213sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) - xmm15
                	movsd	%xmm0, -0x8(%rbp)
                	movq	-0x8(%rbp), %rcx
                	movq	%rcx, %rax

@@ -249,10 +249,9 @@ Disassembly of section .text:
                	cvtsi2ss	%rbx, %xmm1
                	movl	$0x3f000000, %eax       # imm = 0x3F000000
                	movl	$0x3f800000, %ecx       # imm = 0x3F800000
-               	movapd	%xmm1, %xmm14
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm1
-               	vfmadd231ss	%xmm15, %xmm14, %xmm1 # xmm1 = (xmm14 * xmm15) + xmm1
+               	vfmadd132ss	%xmm15, %xmm14, %xmm1 # xmm1 = (xmm1 * xmm15) + xmm14
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
@@ -288,10 +287,9 @@ Disassembly of section .text:
                	movsd	-0x8(%rsp), %xmm1
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movabsq	$0x3fe0000000000000, %rcx # imm = 0x3FE0000000000000
-               	movapd	%xmm0, %xmm14
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm0
-               	vfmsub231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) - xmm0
+               	vfmsub132sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm0 * xmm15) - xmm14
                	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>

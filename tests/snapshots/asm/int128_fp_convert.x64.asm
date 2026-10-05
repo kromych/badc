@@ -2327,10 +2327,7 @@ Disassembly of section .text:
                	movsd	-0x8(%rbp), %xmm1
                	leaq	<rip>, %rax      # <addr>
                	movsd	(%rax), %xmm2
-               	movapd	%xmm0, %xmm14
-               	movapd	%xmm1, %xmm15
-               	movapd	%xmm2, %xmm0
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
                	movsd	%xmm0, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	movabsq	$0x4012000000000000, %r11 # imm = 0x4012000000000000

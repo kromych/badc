@@ -942,9 +942,7 @@ Disassembly of section .text:
                	subq	%rcx, %rax
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
-               	movapd	%xmm1, %xmm14
-               	movapd	%xmm3, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd231sd	%xmm3, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm3) + xmm0
                	leave
                	retq
 

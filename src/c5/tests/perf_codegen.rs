@@ -2433,6 +2433,33 @@ fn aarch64_frames_spill_only_past_the_callee_saved_bank() {
     m.finish();
 }
 
+/// The FMA form follows the operand that dies at the instruction: a
+/// multiplicand whose register holds the result becomes the
+/// overwritten operand of a 132/213 form (the addend then stays in
+/// place), and a dying addend keeps the 231 form. No operand is
+/// copied to a scratch register on the way.
+#[test]
+fn x64_fma_form_follows_the_dying_operand() {
+    const SRC: &str = "double f(double a, double b, double c) { return a * b + c; }\n\
+        double acc(double x, double y) { double s = x + y; s = x * y + s; return s; }\n";
+    let copies = |i: &X64Insn| matches!(i.op, 0x0F28 | 0x0F10 | 0x0F11 | 0x0F6E);
+    let f = x64(SRC, "f");
+    // a (xmm0) is the result register and dies at the FMA: the body is
+    // one `vfmadd213sd` (dst = a, vvvv = b, rm = c) and the return.
+    assert!(!f.iter().any(copies), "f copies an operand: {f:x?}");
+    assert_eq!(f[0].op, 0x38A9, "{f:x?}");
+    let acc = x64(SRC, "acc");
+    // The addend s rides the 213 form's r/m slot in place: the fused
+    // instruction directly follows the `addsd` that forms s, so no
+    // operand is copied on the way.
+    let fma_at = acc.iter().rposition(|i| i.op == 0x38A9).expect("the fma");
+    assert_eq!(
+        acc[fma_at - 1].op,
+        0x0F58,
+        "s forms ahead of the fma: {acc:x?}"
+    );
+}
+
 /// A register output of an inline asm statement into a scalar local is
 /// the statement's own value, so the local takes no frame slot: a gsbase
 /// read between two `swapgs` is `swapgs; rdgsbase %rax; swapgs; ret` and

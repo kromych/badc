@@ -99,10 +99,9 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	mulss	%xmm15, %xmm0
                	movl	$0x3fbb67a2, %edx       # imm = 0x3FBB67A2
-               	movapd	%xmm0, %xmm14
+               	movq	%rdx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rdx, %xmm0
-               	vfmsub231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) - xmm0
+               	vfmsub132ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm0 * xmm15) - xmm14
                	movq	%rcx, %xmm15
                	ucomiss	%xmm0, %xmm15
                	jbe	<addr>

@@ -57,9 +57,8 @@ Disassembly of section .text:
                	movsd	%xmm0, -0x8(%rbp)
                	movsd	-0x8(%rbp), %xmm0
                	xorl	%eax, %eax
-               	movapd	%xmm3, %xmm14
                	movq	%rax, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd231sd	%xmm15, %xmm3, %xmm0 # xmm0 = (xmm3 * xmm15) + xmm0
                	leave
                	retq
 

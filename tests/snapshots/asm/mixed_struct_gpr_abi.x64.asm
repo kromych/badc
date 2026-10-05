@@ -38,9 +38,8 @@ Disassembly of section .text:
                	cvtsi2sd	%rcx, %xmm0
                	movsd	0x8(%rax), %xmm1
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
-               	movapd	%xmm1, %xmm14
                	movq	%rcx, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd231sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm15) + xmm0
                	cvttsd2si	%xmm0, %rcx
                	addq	$0x2, %rcx
                	cmpq	$0xe, %rcx

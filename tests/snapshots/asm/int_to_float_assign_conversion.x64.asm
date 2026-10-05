@@ -81,12 +81,10 @@ Disassembly of section .text:
                	movq	%rcx, %xmm0
                	mulss	%xmm15, %xmm0
                	movq	%rax, %xmm14
-               	movapd	%xmm1, %xmm15
-               	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd231ss	%xmm1, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm1) + xmm0
                	movl	$0x3de978d5, %eax       # imm = 0x3DE978D5
                	movq	%rax, %xmm14
-               	movapd	%xmm2, %xmm15
-               	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd231ss	%xmm2, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm2) + xmm0
                	movl	$0x43000000, %eax       # imm = 0x43000000
                	movq	%rax, %xmm15
                	subss	%xmm15, %xmm0

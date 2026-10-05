@@ -39,10 +39,8 @@ Disassembly of section .text:
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rax, %xmm1
                	movabsq	$0x4024000000000000, %rax # imm = 0x4024000000000000
-               	movapd	%xmm0, %xmm14
                	movq	%rax, %xmm15
-               	movapd	%xmm1, %xmm0
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd132sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm1
                	cvttsd2si	%xmm0, %rax
                	addq	$0x2, %rax
                	retq
@@ -90,10 +88,8 @@ Disassembly of section .text:
                	movl	$0x41200000, %eax       # imm = 0x41200000
                	movq	%rax, %xmm15
                	mulss	%xmm15, %xmm2
-               	movapd	%xmm0, %xmm14
                	movq	%rcx, %xmm15
-               	movapd	%xmm2, %xmm0
-               	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd132ss	%xmm15, %xmm2, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm2
                	cvtss2sd	%xmm0, %xmm0
                	addsd	%xmm1, %xmm0
                	leave

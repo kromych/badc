@@ -126,10 +126,9 @@ Disassembly of section .text:
                	callq	<addr>
                	cvtsd2ss	%xmm0, %xmm0
                	movl	$0x40200000, %eax       # imm = 0x40200000
-               	movapd	%xmm0, %xmm14
+               	movq	%rax, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rax, %xmm0
-               	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd132ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm14
                	popq	%rbp
                	retq
 

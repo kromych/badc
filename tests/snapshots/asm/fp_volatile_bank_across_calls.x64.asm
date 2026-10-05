@@ -84,29 +84,14 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	mulsd	%xmm15, %xmm1
                	mulsd	%xmm5, %xmm4
-               	movapd	%xmm2, %xmm14
-               	movapd	%xmm3, %xmm15
-               	movapd	%xmm4, %xmm2
-               	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
-               	movapd	%xmm6, %xmm14
-               	movapd	%xmm7, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
-               	movapd	%xmm8, %xmm14
-               	movapd	%xmm9, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
-               	movapd	%xmm10, %xmm14
-               	movapd	%xmm11, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
-               	movapd	%xmm12, %xmm14
-               	movsd	0x18(%rsp), %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
+               	vfmadd213sd	%xmm4, %xmm3, %xmm2 # xmm2 = (xmm3 * xmm2) + xmm4
+               	vfmadd231sd	%xmm7, %xmm6, %xmm2 # xmm2 = (xmm6 * xmm7) + xmm2
+               	vfmadd231sd	%xmm9, %xmm8, %xmm2 # xmm2 = (xmm8 * xmm9) + xmm2
+               	vfmadd231sd	%xmm11, %xmm10, %xmm2 # xmm2 = (xmm10 * xmm11) + xmm2
+               	vfmadd231sd	0x18(%rsp), %xmm12, %xmm2 # xmm2 = (xmm12 * mem) + xmm2
                	movsd	0x10(%rsp), %xmm14
-               	movsd	0x8(%rsp), %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm2 # xmm2 = (xmm14 * xmm15) + xmm2
-               	movapd	%xmm0, %xmm14
-               	movapd	%xmm1, %xmm15
-               	movapd	%xmm2, %xmm0
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd231sd	0x8(%rsp), %xmm14, %xmm2 # xmm2 = (xmm14 * mem) + xmm2
+               	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
                	leave
                	retq
 

@@ -58,9 +58,8 @@ use super::encode::{
     emit_movsxd_r_mem, emit_movups_mem_xmm, emit_movups_xmm_mem, emit_movzx_r_mem16,
     emit_movzx_r_r8, emit_mulsd, emit_mulss, emit_pop_r, emit_push_r, emit_ret, emit_ri, emit_rm,
     emit_rr, emit_setcc_r8, emit_shift_cl, emit_shift_ri, emit_sub_rsp, emit_subsd, emit_subss,
-    emit_ucomisd, emit_ucomiss, emit_unary_r, emit_vfmadd231sd, emit_vfmadd231ss, emit_vfmsub231sd,
-    emit_vfmsub231ss, emit_vfnmadd231sd, emit_vfnmadd231ss, emit_vfnmsub231sd, emit_vfnmsub231ss,
-    emit_xchg_mem_r, emit_xchg_rr, emit_xorpd, emit_xorps,
+    emit_ucomisd, emit_ucomiss, emit_unary_r, emit_vex_fma, emit_vex_fma_mem, emit_xchg_mem_r,
+    emit_xchg_rr, emit_xorpd, emit_xorps,
 };
 use super::ssa::emit_common::{
     Emit, MAX_UNPROBED_STACK_STEP, PlaceMove, STACK_PROBE_PAGE, STACK_PROBE_UNROLL_MAX,

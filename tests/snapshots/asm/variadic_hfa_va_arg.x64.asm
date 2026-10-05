@@ -90,10 +90,8 @@ Disassembly of section .text:
                	movabsq	$0x4024000000000000, %rsi # imm = 0x4024000000000000
                	movq	%rsi, %xmm15
                	mulsd	%xmm15, %xmm1
-               	movapd	%xmm0, %xmm14
                	movq	%rdx, %xmm15
-               	movapd	%xmm1, %xmm0
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd132sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm1
                	movsd	0x8(%rcx), %xmm1
                	addsd	%xmm1, %xmm0
                	incq	%rax
@@ -170,10 +168,8 @@ Disassembly of section .text:
                	movq	%rsi, %xmm15
                	mulss	%xmm15, %xmm1
                	cvtss2sd	%xmm1, %xmm1
-               	movapd	%xmm0, %xmm14
                	movq	%rdx, %xmm15
-               	movapd	%xmm1, %xmm0
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd132sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm1
                	movss	0x4(%rcx), %xmm1
                	movl	$0x42c80000, %edx       # imm = 0x42C80000
                	movq	%rdx, %xmm15
@@ -256,15 +252,12 @@ Disassembly of section .text:
                	movabsq	$0x4059000000000000, %rsi # imm = 0x4059000000000000
                	movq	%rsi, %xmm15
                	mulsd	%xmm15, %xmm1
-               	movapd	%xmm0, %xmm14
                	movq	%rdx, %xmm15
-               	movapd	%xmm1, %xmm0
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd132sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm1
                	movsd	0x8(%rcx), %xmm1
                	movabsq	$0x4024000000000000, %rdx # imm = 0x4024000000000000
-               	movapd	%xmm1, %xmm14
                	movq	%rdx, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd231sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm15) + xmm0
                	movsd	0x10(%rcx), %xmm1
                	addsd	%xmm1, %xmm0
                	incq	%rax
@@ -284,10 +277,8 @@ Disassembly of section .text:
                	addq	$0x8, 0x8(%r11)
                	movq	%r10, %rcx
                	movsd	(%rcx), %xmm1
-               	movapd	%xmm0, %xmm14
                	movq	%rax, %xmm15
-               	movapd	%xmm1, %xmm0
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd132sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm1
                	leaq	-0x30(%rbp), %rax
                	leave
                	retq
@@ -420,10 +411,8 @@ Disassembly of section .text:
                	movslq	%edx, %rdx
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rdx, %xmm1
-               	movapd	%xmm0, %xmm14
                	movq	%rsi, %xmm15
-               	movapd	%xmm1, %xmm0
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd132sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm1
                	movsd	(%rcx), %xmm1
                	addsd	%xmm1, %xmm0
                	incq	%rax
@@ -509,10 +498,8 @@ Disassembly of section .text:
                	movabsq	$0x4024000000000000, %rsi # imm = 0x4024000000000000
                	movq	%rsi, %xmm15
                	mulsd	%xmm15, %xmm1
-               	movapd	%xmm0, %xmm14
                	movq	%rdx, %xmm15
-               	movapd	%xmm1, %xmm0
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd132sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm1
                	movsd	0x8(%rcx), %xmm1
                	addsd	%xmm1, %xmm0
                	incq	%rax
@@ -556,10 +543,8 @@ Disassembly of section .text:
                	movabsq	$0x4024000000000000, %rsi # imm = 0x4024000000000000
                	movq	%rsi, %xmm15
                	mulsd	%xmm15, %xmm2
-               	movapd	%xmm1, %xmm14
                	movq	%rdx, %xmm15
-               	movapd	%xmm2, %xmm1
-               	vfmadd231sd	%xmm15, %xmm14, %xmm1 # xmm1 = (xmm14 * xmm15) + xmm1
+               	vfmadd132sd	%xmm15, %xmm2, %xmm1 # xmm1 = (xmm1 * xmm15) + xmm2
                	movsd	0x8(%rcx), %xmm2
                	addsd	%xmm2, %xmm1
                	incq	%rax

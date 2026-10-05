@@ -29,28 +29,24 @@ Disassembly of section .text:
                	movsd	(%rdi), %xmm0
                	movsd	0x8(%rdi), %xmm1
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movapd	%xmm1, %xmm14
                	movq	%rax, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd231sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm15) + xmm0
                	retq
 
 <use_quad>:
                	movsd	(%rdi), %xmm0
                	movsd	0x8(%rdi), %xmm1
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movapd	%xmm1, %xmm14
                	movq	%rax, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd231sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm15) + xmm0
                	movsd	0x10(%rdi), %xmm1
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
-               	movapd	%xmm1, %xmm14
                	movq	%rax, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd231sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm15) + xmm0
                	movsd	0x18(%rdi), %xmm1
                	movabsq	$0x4020000000000000, %rax # imm = 0x4020000000000000
-               	movapd	%xmm1, %xmm14
                	movq	%rax, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd231sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm15) + xmm0
                	retq
 
 <use_mixed>:
@@ -78,10 +74,8 @@ Disassembly of section .text:
                	movsd	(%rcx), %xmm0
                	movabsq	$0x4024000000000000, %rax # imm = 0x4024000000000000
                	movsd	0x8(%rcx), %xmm1
-               	movapd	%xmm0, %xmm14
                	movq	%rax, %xmm15
-               	movapd	%xmm1, %xmm0
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd132sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm1
                	leave
                	retq
 

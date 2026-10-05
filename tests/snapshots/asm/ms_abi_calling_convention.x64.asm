@@ -153,14 +153,11 @@ Disassembly of section .text:
                	xorps	%xmm2, %xmm2
                	cvtsi2sd	%r12, %xmm2
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
-               	movapd	%xmm2, %xmm14
                	movq	%rax, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm1 # xmm1 = (xmm14 * xmm15) + xmm1
+               	vfmadd231sd	%xmm15, %xmm2, %xmm1 # xmm1 = (xmm2 * xmm15) + xmm1
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
-               	movapd	%xmm0, %xmm14
                	movq	%rax, %xmm15
-               	movapd	%xmm1, %xmm0
-               	vfmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd132sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm1
                	movabsq	$0x403e000000000000, %rax # imm = 0x403E000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

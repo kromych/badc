@@ -60,17 +60,11 @@ Disassembly of section .text:
                	retq
 
 <fsub_rev>:
-               	movapd	%xmm0, %xmm14
-               	movapd	%xmm0, %xmm15
-               	movapd	%xmm1, %xmm0
-               	vfnmadd231sd	%xmm15, %xmm14, %xmm0 # xmm0 = -(xmm14 * xmm15) + xmm0
+               	vfnmadd213sd	%xmm1, %xmm0, %xmm0 # xmm0 = -(xmm0 * xmm0) + xmm1
                	retq
 
 <fsub_rev_f>:
-               	movapd	%xmm0, %xmm14
-               	movapd	%xmm0, %xmm15
-               	movapd	%xmm1, %xmm0
-               	vfnmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = -(xmm14 * xmm15) + xmm0
+               	vfnmadd213ss	%xmm1, %xmm0, %xmm0 # xmm0 = -(xmm0 * xmm0) + xmm1
                	retq
 
 <ones>:

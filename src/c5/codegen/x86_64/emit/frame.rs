@@ -199,7 +199,7 @@ fn asm_stmt_bytes(
     {
         return None;
     }
-    let op_reg = asm_operand_regs(func, asm, args, fixed).ok()?;
+    let op_reg = asm_operand_regs(func, asm, args, fixed, target).ok()?;
     let preserve = alloc.asm_preserve;
     let (used, fp_used, _) = asm_save_masks_and_stage(asm, &op_reg, fixed, preserve).ok()?;
     Some(fp_used.count_ones() * 16 + used.count_ones() * 8)
@@ -273,6 +273,7 @@ pub(super) fn asm_operand_regs(
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
     fixed: super::FixedRegs,
+    target: Target,
 ) -> Result<alloc::vec::Vec<Option<u8>>, alloc::string::String> {
     use super::super::ir::{AsmConstraint, AsmSeg};
     super::asm::assign_operand_regs(
@@ -290,6 +291,7 @@ pub(super) fn asm_operand_regs(
                     )
                 })
         },
+        target,
     )
 }
 
@@ -373,7 +375,7 @@ pub(crate) fn asm_site_write_masks(
             asm.clobber_fp_regs & !fixed.fpr,
         );
     }
-    let Ok(op_reg) = asm_operand_regs(func, asm, args, fixed) else {
+    let Ok(op_reg) = asm_operand_regs(func, asm, args, fixed, target) else {
         return (0, 0);
     };
     match asm_save_masks_and_stage(asm, &op_reg, fixed, (u32::MAX, u32::MAX)) {
@@ -574,7 +576,7 @@ pub(crate) fn asm_staged_hints(
     {
         return alloc::vec::Vec::new();
     }
-    let Ok(op_reg) = asm_operand_regs(func, asm, args, fixed) else {
+    let Ok(op_reg) = asm_operand_regs(func, asm, args, fixed, target) else {
         return alloc::vec::Vec::new();
     };
     super::super::ssa::reg_alloc::asm_operand_hints(func, asm, args, site, &op_reg)

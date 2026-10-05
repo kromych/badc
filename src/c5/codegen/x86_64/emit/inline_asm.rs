@@ -1593,6 +1593,9 @@ pub(super) fn emit_inline_asm(
 struct AsmStmt<'a> {
     fcx: &'a FnCtx<'a>,
     asm: &'a super::super::ir::AsmBlock,
+    /// The compile target, which picks the operand-register pool's
+    /// calling convention.
+    target: Target,
     /// The statement's instruction index, which keys its allocation
     /// facts (`Allocation::asm_live_regs_at`).
     site: super::super::ir::ValueId,
@@ -1683,7 +1686,13 @@ fn prepare_template(
     let op_reg = match bound_regs {
         Some(r) => r.to_vec(),
         None => {
-            match super::frame::asm_operand_regs(stmt.func, asm, stmt.args, stmt.frame.fixed_regs) {
+            match super::frame::asm_operand_regs(
+                stmt.func,
+                asm,
+                stmt.args,
+                stmt.frame.fixed_regs,
+                stmt.target,
+            ) {
                 Ok(r) => r,
                 Err(m) => return fail(m),
             }
@@ -4038,6 +4047,7 @@ fn emit_inline_asm_once(
         asm,
         site,
         args,
+        target: fcx.target,
         func: fcx.func,
         alloc: fcx.alloc,
         frame: fcx.frame,

@@ -28,15 +28,13 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
-               	pushq	%rbx
+               	subq	$0x10, %rsp
                	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	movq	%rax, %rax
                	cmpq	$0x7, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
                	leave
                	retq
                	leaq	<rip>, %rax      # <addr>
@@ -46,13 +44,12 @@ Disassembly of section .text:
                	cmpq	$0x8, %rcx
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbx
                	leave
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movq	0x18(%rax), %rbx
-               	movl	%ebx, %eax
-               	movl	%ebx, %edx
+               	movq	0x18(%rax), %rcx
+               	movl	%ecx, %eax
+               	movl	%ecx, %edx
                	shrl	%edx
                	movl	%eax, %eax
                	movl	%edx, %ecx
@@ -60,7 +57,6 @@ Disassembly of section .text:
                	cmpq	$0x1b4e81a, %rax        # imm = 0x1B4E81A
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbx
                	leave
                	retq
                	leaq	<rip>, %rax      # <addr>
@@ -76,7 +72,6 @@ Disassembly of section .text:
                	cmpl	$0x8a56, %eax           # imm = 0x8A56
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbx
                	leave
                	retq
                	leaq	<rip>, %rax      # <addr>
@@ -89,7 +84,6 @@ Disassembly of section .text:
                	cmpq	$0x1093, %rax           # imm = 0x1093
                	je	<addr>
                	movl	$0x5, %eax
-               	popq	%rbx
                	leave
                	retq
                	leaq	<rip>, %rax      # <addr>
@@ -106,21 +100,18 @@ Disassembly of section .text:
                	cmpq	$0x16, %rax
                	je	<addr>
                	movl	$0x6, %eax
-               	popq	%rbx
                	leave
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movq	0x38(%rax), %rbx
-               	movq	%rbx, %rax
+               	movq	0x38(%rax), %rcx
+               	movq	%rcx, %rax
                	movq	%rax, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	cmpq	$0x9, %rax
                	je	<addr>
                	movl	$0x7, %eax
-               	popq	%rbx
                	leave
                	retq
                	xorl	%eax, %eax
-               	popq	%rbx
                	leave
                	retq

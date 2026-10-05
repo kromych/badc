@@ -40,35 +40,35 @@ Disassembly of section .text:
                	movq	$0x0, -0x30(%rbp)
                	movl	$0x0, -0x28(%rbp)
                	leaq	-0x10(%rbp), %rax
-               	xorl	%ebx, %ebx
-               	invpcid	(%rax), %rbx
+               	xorl	%ecx, %ecx
+               	invpcid	(%rax), %rcx
                	leaq	-0x10(%rbp), %rax
-               	xorl	%ebx, %ebx
-               	invvpid	(%rax), %rbx
+               	xorl	%ecx, %ecx
+               	invvpid	(%rax), %rcx
                	movl	$0x0, -0x20(%rbp)
                	leaq	-0x18(%rbp), %rax
                	leaq	<rip>, %rcx
                	movl	(%rcx), %r10d
                	movl	%r10d, (%rax)
                	leaq	-0x10(%rbp), %rax
-               	xorl	%ebx, %ebx
-               	invept	(%rax), %rbx
+               	xorl	%ecx, %ecx
+               	invept	(%rax), %rcx
                	leaq	-0x20(%rbp), %rax
-               	leaq	-0x30(%rbp), %rbx
+               	leaq	-0x30(%rbp), %rcx
                	fnclex
-               	fldl	(%rbx)
-               	fdivl	(%rbx)
-               	fmull	(%rbx)
-               	fldl	(%rbx)
+               	fldl	(%rcx)
+               	fdivl	(%rcx)
+               	fmull	(%rcx)
+               	fldl	(%rcx)
                	fsubp	%st, %st(1)
                	fistpl	(%rax)
                	wait
                	fninit
-               	leaq	-0x18(%rbp), %rbx
-               	movl	$0x1, %ecx
-               	movzbl	(%rbx,%rcx), %eax
-               	movsbq	(%rbx), %rax
-               	movzwl	0x2(%rbx), %eax
+               	leaq	-0x18(%rbp), %rcx
+               	movl	$0x1, %edx
+               	movzbl	(%rcx,%rdx), %eax
+               	movsbq	(%rcx), %rax
+               	movzwl	0x2(%rcx), %eax
                	movslq	%eax, %rax
                	xorl	%ecx, %ecx
                	xorl	%eax, %eax

@@ -55,17 +55,11 @@ Disassembly of section .text:
                	retq
 
 <dead>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	movq	%rdi, %rbx
-               	movq	%rbx, %rax
+               	movq	%rdi, %rcx
+               	movq	%rcx, %rax
                	movq	$0x1, %rdi
                	movq	$0x2, %rsi
                	addq	$0x5, %rax
-               	popq	%rbx
-               	leave
                	retq
 
 <dead_bound>:
@@ -74,23 +68,18 @@ Disassembly of section .text:
                	retq
 
 <cas>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	movq	(%rsi), %rax
-               	movq	%rdi, %rcx
+               	movq	%rsi, %r8
+               	movq	(%r8), %rax
+               	movq	%rdx, %rsi
+               	movq	%rdi, %rdx
                	lock
-               	cmpxchgq	%rdx, (%rcx)
-               	sete	%bl
-               	movzbq	%bl, %rbx
-               	movq	%rax, %rcx
-               	movq	%rbx, %rax
+               	cmpxchgq	%rsi, (%rdx)
+               	sete	%cl
+               	movzbq	%cl, %rcx
+               	xchgq	%rcx, %rax
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	%rcx, (%rsi)
-               	popq	%rbx
-               	leave
+               	movq	%rcx, (%r8)
                	retq
 
 <sumdiff>:

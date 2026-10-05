@@ -209,10 +209,9 @@ Disassembly of section .text:
 <x87_widths>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x78, %rsp
-               	pushq	%rbx
-               	movl	$0x40200000, %edx       # imm = 0x40200000
-               	movq	%rdx, %xmm14
+               	subq	$0x70, %rsp
+               	movl	$0x40200000, %esi       # imm = 0x40200000
+               	movq	%rsi, %xmm14
                	movss	%xmm14, -0x38(%rbp)
                	movl	$0x0, -0x30(%rbp)
                	movl	$0x0, -0x28(%rbp)
@@ -222,19 +221,19 @@ Disassembly of section .text:
                	movq	$0x0, -0x18(%rbp)
                	movq	$0x0, -0x10(%rbp)
                	leaq	-0x30(%rbp), %rax
-               	leaq	-0x10(%rbp), %rbx
-               	leaq	-0x38(%rbp), %rcx
-               	flds	(%rcx)
+               	leaq	-0x10(%rbp), %rcx
+               	leaq	-0x38(%rbp), %rdx
+               	flds	(%rdx)
                	fsts	(%rax)
-               	fstpl	(%rbx)
+               	fstpl	(%rcx)
                	leaq	-0x18(%rbp), %rax
-               	leaq	-0x28(%rbp), %rbx
-               	leaq	-0x20(%rbp), %rcx
-               	fldl	(%rcx)
+               	leaq	-0x28(%rbp), %rcx
+               	leaq	-0x20(%rbp), %rdx
+               	fldl	(%rdx)
                	fstl	(%rax)
-               	fstps	(%rbx)
+               	fstps	(%rcx)
                	movss	-0x30(%rbp), %xmm0
-               	movq	%rdx, %xmm15
+               	movq	%rsi, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
@@ -257,7 +256,6 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
-               	popq	%rbx
                	leave
                	retq
                	leaq	-0x68(%rbp), %rax
@@ -273,12 +271,12 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x58(%rbp), %rax
-               	leaq	-0x68(%rbp), %rbx
-               	fldt	(%rbx)
+               	leaq	-0x68(%rbp), %rcx
+               	fldt	(%rcx)
                	fstpt	(%rax)
                	leaq	-0x8(%rbp), %rax
-               	leaq	-0x68(%rbp), %rbx
-               	fldt	(%rbx)
+               	leaq	-0x68(%rbp), %rcx
+               	fldt	(%rcx)
                	fstpl	(%rax)
                	leaq	-0x48(%rbp), %rax
                	fld1
@@ -306,11 +304,9 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x6, %eax
-               	popq	%rbx
                	leave
                	retq
                	xorl	%eax, %eax
-               	popq	%rbx
                	leave
                	retq
 

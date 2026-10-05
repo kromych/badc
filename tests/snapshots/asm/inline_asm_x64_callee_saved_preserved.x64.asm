@@ -29,8 +29,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
-               	pushq	%r15
-               	pushq	%r14
                	pushq	%r13
                	pushq	%r12
                	pushq	%rbx
@@ -39,25 +37,25 @@ Disassembly of section .text:
                	movl	$0x1e, %edx
                	movl	$0x28, %esi
                	movl	$0x32, %edi
-               	movq	%rax, %rbx
-               	movq	%rcx, %r12
-               	movq	%rdx, %r13
-               	movq	%rsi, %r14
-               	movq	%rdi, %r15
-               	addq	$0x1, %rbx
-               	addq	$0x2, %r12
-               	addq	$0x3, %r13
-               	addq	$0x4, %r14
-               	addq	$0x5, %r15
-               	leaq	(%rbx,%r12), %rax
+               	movq	%rax, %r10
+               	movq	%rcx, %r11
+               	movq	%rdx, %rbx
+               	movq	%rsi, %r12
+               	movq	%rdi, %r13
+               	addq	$0x1, %r10
+               	addq	$0x2, %r11
+               	addq	$0x3, %rbx
+               	addq	$0x4, %r12
+               	addq	$0x5, %r13
+               	movq	%r10, %rax
+               	movq	%r11, %rcx
+               	addq	%rcx, %rax
+               	addq	%rbx, %rax
+               	addq	%r12, %rax
                	addq	%r13, %rax
-               	addq	%r14, %rax
-               	addq	%r15, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13
-               	popq	%r14
-               	popq	%r15
                	leave
                	retq
 
@@ -75,20 +73,22 @@ Disassembly of section .text:
                	movl	$0x1e, %edx
                	movl	$0x28, %esi
                	movl	$0x32, %edi
-               	movq	%rax, %rbx
-               	movq	%rcx, %r12
-               	movq	%rdx, %r13
-               	movq	%rsi, %r14
-               	movq	%rdi, %r15
-               	addq	$0x1, %rbx
-               	addq	$0x2, %r12
-               	addq	$0x3, %r13
-               	addq	$0x4, %r14
-               	addq	$0x5, %r15
-               	leaq	(%rbx,%r12), %rax
+               	movq	%rax, %r10
+               	movq	%rcx, %r11
+               	movq	%rdx, %rbx
+               	movq	%rsi, %r12
+               	movq	%rdi, %r13
+               	addq	$0x1, %r10
+               	addq	$0x2, %r11
+               	addq	$0x3, %rbx
+               	addq	$0x4, %r12
+               	addq	$0x5, %r13
+               	movq	%r10, %rax
+               	movq	%r11, %rcx
+               	addq	%rcx, %rax
+               	addq	%rbx, %rax
+               	addq	%r12, %rax
                	addq	%r13, %rax
-               	addq	%r14, %rax
-               	addq	%r15, %rax
                	cmpq	$0xa5, %rax
                	je	<addr>
                	movl	$0x1, %eax

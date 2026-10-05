@@ -2447,6 +2447,7 @@ fn run_inline_asm(
         },
         // The register model holds every memory operand's address.
         &|_| false,
+        crate::c5::codegen::Target::host(),
     )
     .map_err(C5Error::Runtime)?;
     // The interpreter models only the 16 GPRs; an `x` (xmm) operand carries a

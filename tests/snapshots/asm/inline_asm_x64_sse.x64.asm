@@ -42,8 +42,8 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	$0x17, %ebx
-               	movd	%ebx, %xmm0
+               	movl	$0x17, %ecx
+               	movd	%ecx, %xmm0
                	paddd	<rip>, %xmm0      # <addr>
                	movd	%xmm0, %eax
                	cmpl	$0x2a, %eax
@@ -60,8 +60,8 @@ Disassembly of section .text:
                	movl	$0x2a, 0x8(%rax)
                	movl	$0x2a, 0xc(%rax)
                	leaq	-0x10(%rbp), %rax
-               	leaq	-0x20(%rbp), %rbx
-               	movdqu	(%rbx), %xmm0
+               	leaq	-0x20(%rbp), %rcx
+               	movdqu	(%rcx), %xmm0
                	movdqu	%xmm0, (%rax)
                	movslq	-0x10(%rbp), %rax
                	cmpl	$0x2a, %eax

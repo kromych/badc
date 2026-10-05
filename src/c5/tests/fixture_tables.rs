@@ -2398,6 +2398,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("inline_asm_x64_string_ops.c", 42),
     ("inline_asm_x64_callee_saved_operands.c", 0),
     ("inline_asm_x64_callee_saved_preserved.c", 0),
+    ("inline_asm_x64_staged_operand_pool.c", 0),
     ("inline_asm_goto.c", 42),
     ("asm_goto_operand_region_paths.c", 42),
     ("asm_register_outputs.c", 0),

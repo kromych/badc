@@ -239,10 +239,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=7
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=x87_widths
 fn ent_pc=7 n_params=0 variadic=false locals=13
-  spill_count=0 gpr_used=[3] fp_used=[]
+  spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   Imm(1075838976)                                  -> x2 [f32]
+    v1   Imm(1075838976)                                  -> x6 [f32]
     v2   StoreLocal { off=-7, value=v1, kind=F32 }        -> -
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x1 [f32]

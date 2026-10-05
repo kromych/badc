@@ -44,12 +44,10 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sub	x2, x29, #0x10
+               	mov	x2, x0
+               	sub	x0, x29, #0x10
                	mov	x1, #0x0                // =0
                	mov	x3, x1
-               	mov	x16, x2
-               	mov	x2, x0
-               	mov	x0, x16
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>

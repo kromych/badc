@@ -16,16 +16,14 @@ Disassembly of section .text:
 <in_dir>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
+               	mov	x4, x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	mov	x1, #0x258              // =600
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x16, x4
-               	mov	x4, x0
-               	mov	x0, x16
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

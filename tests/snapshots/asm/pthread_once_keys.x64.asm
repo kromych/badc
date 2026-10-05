@@ -201,10 +201,9 @@ Disassembly of section .text:
 <set_again>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax      # <addr>
-               	movl	(%rax), %eax
                	movq	%rdi, %rsi
-               	movq	%rax, %rdi
+               	leaq	<rip>, %rax      # <addr>
+               	movl	(%rax), %edi
                	xorl	%eax, %eax
                	callq	<addr>
                	xorl	%eax, %eax
@@ -216,10 +215,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x8, %rsp
                	pushq	%rbx
-               	leaq	<rip>, %rax      # <addr>
-               	movl	(%rax), %eax
                	movq	%rdi, %rsi
-               	movq	%rax, %rdi
+               	leaq	<rip>, %rax      # <addr>
+               	movl	(%rax), %edi
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rdi      # <addr>

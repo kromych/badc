@@ -28,13 +28,12 @@ Disassembly of section .text:
 <die>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	movq	%rdi, %rsi
                	leaq	<rip>, %rax      # <addr>
                	movslq	(%rax), %rcx
                	incq	%rcx
                	movl	%ecx, (%rax)
-               	leaq	<rip>, %rax      # <addr>
-               	movq	%rdi, %rsi
-               	movq	%rax, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
                	ud2

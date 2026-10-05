@@ -3270,11 +3270,45 @@ fn populate_call_arg_hints(
             // and no other call may sit between its definition and this
             // call. Otherwise the caller-saved arg-register hint races
             // the intervening clobber.
-            if last_use[vu] != pc || calls_after_def[vu] || hints[vu].is_some() {
+            if last_use[vu] != pc || calls_after_def[vu] {
+                continue;
+            }
+            // An existing hint stands, except the param-ref pass's home
+            // hint for a parameter that is this call's argument: the
+            // marshal reads the home, so the marshal's own register
+            // governs, sparing the marshal the scratch swap a source
+            // parked in another argument's register forces. The
+            // later-parameter guard below keeps the entry hazard out.
+            // The override never applies when the register is another
+            // parameter's incoming register: that parameter's own home
+            // hint pins it there, so the override would not be honoured
+            // and would displace the parameter's home instead -- the
+            // marshal's cycle-breaking swap (`xchg` on x86-64, the
+            // scratch on aarch64) is the cheaper route.
+            let own_incoming = match &func.insts[vu] {
+                Inst::ParamRef { idx: pi, .. } | Inst::ParamPart { idx: pi, .. } => incoming
+                    .get(*pi as usize)
+                    .copied()
+                    .flatten()
+                    .filter(|(fp, _)| !fp)
+                    .map(|(_, reg)| reg),
+                _ => None,
+            };
+            if let Some(h) = hints[vu]
+                && !(matches!(
+                    &func.insts[vu],
+                    Inst::ParamRef { idx: pi, .. } | Inst::ParamPart { idx: pi, .. }
+                        if incoming.get(*pi as usize).copied().flatten()
+                            == Some((false, h))
+                ) && !incoming
+                    .iter()
+                    .flatten()
+                    .any(|&(fp, reg)| !fp && reg == r && Some(reg) != own_incoming))
+            {
                 continue;
             }
             // Never into a later parameter's still unread incoming register.
-            if let Inst::ParamRef { idx: pi, .. } = func.insts[vu]
+            if let Inst::ParamRef { idx: pi, .. } | Inst::ParamPart { idx: pi, .. } = func.insts[vu]
                 && incoming[(pi as usize + 1).min(incoming.len())..].contains(&Some((false, r)))
             {
                 continue;

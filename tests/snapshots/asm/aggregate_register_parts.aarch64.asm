@@ -497,8 +497,8 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	mov	x20, x0
-               	mov	x21, x1
                	mov	x0, x2
+               	mov	x21, x1
                	bl	<addr>
                	mov	x0, x20
                	mov	x1, x21

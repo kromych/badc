@@ -48,11 +48,9 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movsbq	%dil, %rdi
-               	leaq	-0x10(%rbp), %rax
+               	movsbq	%dil, %rsi
+               	leaq	-0x10(%rbp), %rdi
                	movl	$0x10, %edx
-               	movq	%rdi, %rsi
-               	movq	%rax, %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x10(%rbp), %rcx

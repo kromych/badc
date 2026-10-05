@@ -1,5 +1,5 @@
 
-noreturn_calls_end_their_block.aarch64:	file format elf64-littleaarch64
+call_arg_param_home.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
@@ -13,60 +13,58 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
 
-<die>:
+<take>:
+               	stp	x29, x30, [sp, #-0x10]!
+               	mov	x29, sp
+               	sub	sp, sp, #0x10
+               	stur	x1, [x29, #-0x8]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	str	w0, [x1]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	str	w2, [x0]
+               	add	sp, sp, #0x10
+               	ldp	x29, x30, [sp], #0x10
+               	ret
+
+<pass>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	mov	x1, x0
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x2, [x0]
-               	add	x2, x2, #0x1
-               	str	w2, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
+               	mov	x0, #0x1                // =1
+               	mov	x2, #0x2                // =2
+               	ldr	w1, [x1]
                	bl	<addr>
-               	brk	#0x1
-
-<via_return>:
-               	stp	x29, x30, [sp, #-0x10]!
-               	mov	x29, sp
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x0, [x0]
-               	add	x0, x0, #0x4
-               	bl	<addr>
-               	brk	#0x1
-
-<maybe_spin>:
-               	mov	x0, #0x2                // =2
+               	ldp	x29, x30, [sp], #0x10
                	ret
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x0, #0x1                // =1
-               	bl	<addr>
-               	cmp	w0, #0x2
-               	b.eq	<addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp], #0x10
-               	ret
+               	sub	sp, sp, #0x10
+               	sub	x1, x29, #0x8
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
+               	ldr	w16, [x0]
+               	str	w16, [x1]
+               	mov	x0, #0x1                // =1
+               	mov	x2, #0x2                // =2
+               	ldr	w1, [x1]
                	bl	<addr>
-               	cbnz	w0, <addr>
-               	mov	x0, #0x4                // =4
-               	bl	<addr>
-               	brk	#0x1
-               	cmp	w0, #0x4
-               	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrsw	x0, [x0]
                	cmp	w0, #0x1
                	b.ne	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldrsw	x0, [x0]
+               	cmp	w0, #0x2
+               	b.ne	<addr>
                	mov	x0, #0x0                // =0
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x2                // =2
+               	mov	x0, #0x1                // =1
                	b	<addr>

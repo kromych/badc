@@ -1112,7 +1112,7 @@ fn ent_pc=37 n_params=2 variadic=false locals=0
     v0   ParamPart(0, part=0, kind=I64)                   -> x3
     v1   ParamPart(0, part=1, kind=I64)                   -> x12
     v2   AllocaInit(0)                                    -> -
-    v3   ParamRef(1, kind=I64)                            -> x2
+    v3   ParamRef(1, kind=I64)                            -> x7
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0

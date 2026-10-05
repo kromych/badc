@@ -28,12 +28,11 @@ Disassembly of section .text:
 <in_dir>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	leaq	<rip>, %rax      # <addr>
+               	movq	%rdi, %r8
+               	leaq	<rip>, %rdi      # <addr>
                	movl	$0x258, %esi            # imm = 0x258
                	leaq	<rip>, %rdx
                	leaq	<rip>, %rcx      # <addr>
-               	movq	%rdi, %r8
-               	movq	%rax, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	leaq	<rip>, %rax      # <addr>

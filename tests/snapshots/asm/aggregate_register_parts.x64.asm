@@ -511,8 +511,8 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %rbx
-               	movq	%rsi, %r12
                	movq	%rdx, %rdi
+               	movq	%rsi, %r12
                	callq	<addr>
                	movq	%rbx, %rax
                	movq	%r12, %rdx

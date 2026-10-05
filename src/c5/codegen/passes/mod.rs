@@ -26,6 +26,7 @@ pub(crate) mod noreturn;
 pub(crate) mod prune_unreachable;
 pub(crate) mod remap_blocks;
 pub(crate) mod rotate;
+pub(crate) mod select;
 pub(crate) mod simplify_branches;
 pub(crate) mod split_crit_edges;
 pub(crate) mod sroa;

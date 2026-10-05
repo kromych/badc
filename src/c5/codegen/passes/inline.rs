@@ -1140,6 +1140,7 @@ fn is_inline_candidate(
             | Inst::LifetimeEnd(_)
             | Inst::Binop { .. }
             | Inst::BinopI { .. }
+            | Inst::Select { .. }
             | Inst::Extend { .. }
             | Inst::Bswap { .. }
             | Inst::BitCount { .. }
@@ -2070,8 +2071,9 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
     c.insts.iter().any(|i| match i {
         Inst::Store { addr, .. } | Inst::SegStore { addr, .. } => !own(*addr),
         Inst::Mcpy { dst, .. } | Inst::Mzero { dst, .. } => !own(*dst),
-        // A copy re-names an address without writing through it.
-        Inst::Copy { .. } => false,
+        // A copy re-names an address without writing through it, and a
+        // select of pure arms writes no memory.
+        Inst::Copy { .. } | Inst::Select { .. } => false,
         // A scaled index can leave the base object.
         Inst::StoreIndexed { .. } => true,
         Inst::StoreLocal { off, .. } | Inst::LoadLocal { off, .. } => agg_slots.contains(off),
@@ -4953,6 +4955,53 @@ mod tests {
         assert!(
             calls(100) > 0,
             "the optional sites must have exhausted the cap"
+        );
+    }
+
+    /// A mandatory splice admits an `Inst::Select`: it is a pure
+    /// register value whose operands the splice remaps like the other
+    /// arithmetic, so an always_inline accessor holding a converted
+    /// conditional expression still inlines.
+    #[test]
+    fn a_mandatory_splice_admits_a_select() {
+        let abi = Target::LinuxX64.abi();
+        let mut callee = FunctionSsa {
+            ent_pc: 100,
+            inst_src: alloc::vec![(0, 0); 4],
+            f32_values: alloc::vec![false; 4],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..4,
+                terminator: Terminator::Return(3),
+                exit_acc: 3,
+            }],
+            insts: alloc::vec![
+                Inst::Imm(1),
+                Inst::Imm(2),
+                Inst::Imm(3),
+                Inst::Select {
+                    cond: 0,
+                    on_true: 1,
+                    on_false: 2,
+                },
+            ],
+            ..Default::default()
+        };
+        callee.is_always_inline = true;
+        let mut funcs = alloc::vec![multi_call_caller(1, 2, 100, 1), callee];
+        run(&mut funcs, 32, abi, &BTreeMap::new());
+        let calls = funcs[0]
+            .insts
+            .iter()
+            .filter(|i| matches!(i, Inst::Call { target_pc, .. } if *target_pc == 100))
+            .count();
+        assert_eq!(calls, 0, "the mandatory splice left no call");
+        assert!(
+            funcs[0]
+                .insts
+                .iter()
+                .any(|i| matches!(i, Inst::Select { .. })),
+            "the select spliced into the caller",
         );
     }
 

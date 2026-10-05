@@ -120,6 +120,7 @@ pub(crate) fn walk_program(
     target: Target,
     optimize: bool,
     jump_tables: bool,
+    reachable: &alloc::collections::BTreeSet<usize>,
 ) -> Result<Vec<FunctionSsa>, C5Error> {
     // Walker entries from AST snapshots, keyed by ent_pc.
     let mut walker_pcs: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
@@ -135,6 +136,9 @@ pub(crate) fn walk_program(
     ordered.sort_by_key(|&i| program.finished_functions[i].ent_pc);
     for i in ordered {
         let f = &program.finished_functions[i];
+        if !reachable.contains(&f.ent_pc) {
+            continue;
+        }
         walker_pcs.insert(f.ent_pc);
         let mut func = crate::c5::irgen::walk_function(
             f,
@@ -338,12 +342,34 @@ pub(crate) fn produce_ssa_funcs(
     jump_tables: bool,
 ) -> Result<Vec<FunctionSsa>, C5Error> {
     if !program.finished_functions.is_empty() {
-        let mut funcs = walk_program(program, target, optimize, jump_tables)?;
+        // The AST-level pass mirrors compute_live_sets and drops the
+        // unit's dead functions before the walk, so the walk -- and the
+        // -O passes over its bodies -- never see them. The SSA pass
+        // below re-derives the set from the walked bodies; the assertion
+        // catches an AST pass that dropped a function the SSA pass
+        // keeps (a walked body still naming it).
+        let reachable = super::ast_reach::reachable_functions(program);
+        let mut funcs = walk_program(program, target, optimize, jump_tables, &reachable)?;
         // C99 6.2.2: a function with internal linkage that no reachable
         // code or data references is unobservable; drop it before codegen
         // so the unused `static inline` helpers headers pull into every
         // unit do not reach the image.
         let live = compute_live_sets(&funcs, program, false, None).func_pcs;
+        // An import placeholder pc rides the live set (a walked body calls
+        // it); the assertion is about the unit's own definitions.
+        let defined: alloc::collections::BTreeSet<usize> = program
+            .finished_functions
+            .iter()
+            .map(|f| f.ent_pc)
+            .collect();
+        debug_assert!(
+            live.iter()
+                .all(|pc| !defined.contains(pc) || reachable.contains(pc)),
+            "the AST reachability dropped a function the SSA liveness keeps: {:?}",
+            live.intersection(&defined)
+                .filter(|pc| !reachable.contains(pc))
+                .collect::<alloc::vec::Vec<_>>()
+        );
         funcs.retain(|f| live.contains(&f.ent_pc));
         #[cfg(feature = "codegen_test")]
         measure_dead_data(&funcs, program);
@@ -471,7 +497,7 @@ pub(crate) struct LiveSets {
 }
 
 #[derive(Clone, Copy)]
-enum Node {
+pub(crate) enum Node {
     Func(usize),
     Data(usize),
 }
@@ -479,7 +505,7 @@ enum Node {
 /// Sorted `.data` object boundaries: offset 0, every recorded object
 /// start, and every named-global offset. The single boundary model for
 /// both the liveness walk and the compaction that applies its result.
-fn data_object_starts(program: &Program) -> Vec<i64> {
+pub(crate) fn data_object_starts(program: &Program) -> Vec<i64> {
     use crate::c5::token::Token;
     let data_len = program.data.len() as i64;
     let mut start_set: alloc::collections::BTreeSet<i64> = alloc::collections::BTreeSet::new();
@@ -503,6 +529,126 @@ fn data_object_starts(program: &Program) -> Vec<i64> {
         }
     }
     start_set.into_iter().collect()
+}
+
+/// Seed the reachability worklist with the roots both liveness passes
+/// start from: external-linkage / `used` / alias definitions, the
+/// constructors / destructors, the exports, the entry, the targets the
+/// TLS and data relocation slots hold, and the NULL guard. `defined`
+/// names the functions this unit defines -- the SSA pass's walked set
+/// or the AST pass's finished set. A block-scope static belongs to its
+/// function, so its `used` intent keeps it only once the owner is
+/// reached: an edge from the owner, not a root; `owner_deps` collects
+/// those, and `reachable_owners` settles them for a caller whose call
+/// graph no longer decides.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn seed_reachability_roots(
+    program: &Program,
+    defined: &alloc::collections::BTreeSet<usize>,
+    data_len: i64,
+    n: usize,
+    interval_of: &impl Fn(i64) -> usize,
+    reachable_owners: Option<&alloc::collections::BTreeSet<usize>>,
+    assume_data_live: bool,
+    named: &alloc::collections::BTreeMap<&str, Node>,
+) -> (
+    alloc::vec::Vec<Node>,
+    alloc::collections::BTreeMap<usize, alloc::vec::Vec<usize>>,
+) {
+    use crate::c5::symbol::Linkage;
+    use crate::c5::token::Token;
+    use alloc::collections::BTreeMap;
+    let mut work: alloc::vec::Vec<Node> = alloc::vec::Vec::new();
+    let mut owner_deps: BTreeMap<usize, alloc::vec::Vec<usize>> = BTreeMap::new();
+    for s in &program.symbols {
+        // A named section retains neither a function nor an object (gcc
+        // parity: a section attribute selects placement, only `used`
+        // asks for the definition to be emitted unreferenced). A kept
+        // definition is still placed in its section. `used` and alias
+        // retain.
+        if s.class == Token::Fun as i64
+            && (matches!(s.linkage, Linkage::External) || s.is_used || s.is_alias)
+            && defined.contains(&(s.val as usize))
+        {
+            work.push(Node::Func(s.val as usize));
+        }
+        if s.class == Token::Glo as i64
+            && s.defined_here
+            && !s.is_thread_local
+            && (0..data_len).contains(&s.val)
+            && (matches!(s.linkage, Linkage::External) || s.is_used)
+        {
+            match s.owner_ent_pc {
+                Some(pc) if !reachable_owners.is_some_and(|o| o.contains(&(pc as usize))) => {
+                    owner_deps
+                        .entry(pc as usize)
+                        .or_default()
+                        .push(interval_of(s.val));
+                }
+                _ => work.push(Node::Data(interval_of(s.val))),
+            }
+        }
+    }
+    // A function alias exports its target under another name, so the
+    // chain's defined end stays live even when the alias symbol is the
+    // only reference (a weak alias's own `val` is an import placeholder,
+    // not the target's pc).
+    for a in &program.function_aliases {
+        let mut t = a.target.as_str();
+        for _ in 0..program.function_aliases.len() {
+            match program.function_aliases.iter().find(|x| x.name == t) {
+                Some(next) => t = next.target.as_str(),
+                None => break,
+            }
+        }
+        if let Some(&Node::Func(pc)) = named.get(t) {
+            work.push(Node::Func(pc));
+        }
+    }
+    // Constructors / destructors are referenced through `.init_array` /
+    // `.fini_array`, exports through the export table, the entry through
+    // the image header -- none has an in-image reference.
+    for f in &program.init_funcs {
+        work.push(Node::Func(f.ent_pc));
+    }
+    for e in &program.exports {
+        work.push(Node::Func(e.ent_pc));
+    }
+    if program.entry_name.is_some() {
+        work.push(Node::Func(program.entry_pc));
+    }
+    // The 8-byte NULL guard stays at offset 0 so a data pointer is never
+    // confused with NULL.
+    if n > 0 {
+        work.push(Node::Data(0));
+    }
+    // The TLS template is kept whole, so an object its initializer names is
+    // a root rather than an edge from a `data` interval.
+    for r in &program.tls_data_relocs {
+        let anchor = r.target_anchor as i64;
+        if (0..data_len).contains(&anchor) {
+            work.push(Node::Data(interval_of(anchor)));
+        }
+    }
+    for r in &program.tls_code_relocs {
+        work.push(Node::Func(r.target_ent_pc as usize));
+    }
+    // A file-scope `asm()` is not part of any function: its text reaches
+    // the object as written and the assembler and linker resolve the
+    // names in it, as they do for gcc, which parses no template. Naming
+    // a symbol there is therefore not a use that keeps a definition
+    // alive -- `used` asks for that. An included header's `static
+    // inline` would otherwise become an out-of-line definition of this
+    // unit, and a reference the program means for another unit's
+    // definition would bind to it: a file-scope `asm()` naming a function
+    // that one unit defines out of line while every other unit sees a
+    // header's inline copy.
+    if assume_data_live {
+        for i in 0..n {
+            work.push(Node::Data(i));
+        }
+    }
+    (work, owner_deps)
 }
 
 /// Joint function + data reachability for one translation unit (C99
@@ -536,7 +682,6 @@ pub(crate) fn compute_live_sets(
     reachable_owners: Option<&alloc::collections::BTreeSet<usize>>,
 ) -> LiveSets {
     use crate::c5::ir::Inst;
-    use crate::c5::symbol::Linkage;
     use crate::c5::token::Token;
     use alloc::collections::{BTreeMap, BTreeSet};
 
@@ -605,101 +750,16 @@ pub(crate) fn compute_live_sets(
 
     let mut func_pcs: BTreeSet<usize> = BTreeSet::new();
     let mut data_live = alloc::vec![false; n];
-    let mut work: alloc::vec::Vec<Node> = alloc::vec::Vec::new();
-    // A block-scope static belongs to its function, so its `used` intent
-    // keeps it only once the owner is reached: an edge from the owner,
-    // not a root. `reachable_owners` settles that for a caller whose
-    // call graph no longer decides it.
-    let mut owner_deps: BTreeMap<usize, alloc::vec::Vec<usize>> = BTreeMap::new();
-
-    for s in &program.symbols {
-        // A named section retains neither a function nor an object (gcc
-        // parity: a section attribute selects placement, only `used`
-        // asks for the definition to be emitted unreferenced). A kept
-        // definition is still placed in its section. `used` and alias
-        // retain.
-        if s.class == Token::Fun as i64
-            && (matches!(s.linkage, Linkage::External) || s.is_used || s.is_alias)
-            && by_ent.contains_key(&(s.val as usize))
-        {
-            work.push(Node::Func(s.val as usize));
-        }
-        if s.class == Token::Glo as i64
-            && s.defined_here
-            && !s.is_thread_local
-            && (0..data_len).contains(&s.val)
-            && (matches!(s.linkage, Linkage::External) || s.is_used)
-        {
-            match s.owner_ent_pc {
-                Some(pc) if !reachable_owners.is_some_and(|o| o.contains(&(pc as usize))) => {
-                    owner_deps
-                        .entry(pc as usize)
-                        .or_default()
-                        .push(interval_of(s.val))
-                }
-                _ => work.push(Node::Data(interval_of(s.val))),
-            }
-        }
-    }
-    // A function alias exports its target under another name, so the
-    // chain's defined end stays live even when the alias symbol is the
-    // only reference (a weak alias's own `val` is an import placeholder,
-    // not the target's pc).
-    for a in &program.function_aliases {
-        let mut t = a.target.as_str();
-        for _ in 0..program.function_aliases.len() {
-            match program.function_aliases.iter().find(|x| x.name == t) {
-                Some(next) => t = next.target.as_str(),
-                None => break,
-            }
-        }
-        if let Some(&Node::Func(pc)) = named.get(t) {
-            work.push(Node::Func(pc));
-        }
-    }
-    // Constructors / destructors are referenced through `.init_array` /
-    // `.fini_array`, exports through the export table, the entry through
-    // the image header -- none has an in-image reference.
-    for f in &program.init_funcs {
-        work.push(Node::Func(f.ent_pc));
-    }
-    for e in &program.exports {
-        work.push(Node::Func(e.ent_pc));
-    }
-    if program.entry_name.is_some() {
-        work.push(Node::Func(program.entry_pc));
-    }
-    // The 8-byte NULL guard stays at offset 0 so a data pointer is never
-    // confused with NULL.
-    if n > 0 {
-        work.push(Node::Data(0));
-    }
-    // The TLS template is kept whole, so an object its initializer names is
-    // a root rather than an edge from a `data` interval.
-    for r in &program.tls_data_relocs {
-        let anchor = r.target_anchor as i64;
-        if (0..data_len).contains(&anchor) {
-            work.push(Node::Data(interval_of(anchor)));
-        }
-    }
-    for r in &program.tls_code_relocs {
-        work.push(Node::Func(r.target_ent_pc as usize));
-    }
-    // A file-scope `asm()` is not part of any function: its text reaches
-    // the object as written and the assembler and linker resolve the
-    // names in it, as they do for gcc, which parses no template. Naming
-    // a symbol there is therefore not a use that keeps a definition
-    // alive -- `used` asks for that. An included header's `static
-    // inline` would otherwise become an out-of-line definition of this
-    // unit, and a reference the program means for another unit's
-    // definition would bind to it: a file-scope `asm()` naming a function
-    // that one unit defines out of line while every other unit sees a
-    // header's inline copy.
-    if assume_data_live {
-        for i in 0..n {
-            work.push(Node::Data(i));
-        }
-    }
+    let (mut work, owner_deps) = seed_reachability_roots(
+        program,
+        &by_ent.keys().copied().collect(),
+        data_len,
+        n,
+        &interval_of,
+        reachable_owners,
+        assume_data_live,
+        &named,
+    );
 
     while let Some(node) = work.pop() {
         match node {
@@ -787,7 +847,7 @@ pub(crate) fn compute_live_sets(
 /// in a statement's leading position: that is a label, mnemonic or
 /// directive, never an operand. Statements separate on newline and `;`;
 /// `/* */` is skipped so a newline inside one does not open a statement.
-fn push_asm_names(
+pub(crate) fn push_asm_names(
     text: &[u8],
     named: &alloc::collections::BTreeMap<&str, Node>,
     work: &mut alloc::vec::Vec<Node>,

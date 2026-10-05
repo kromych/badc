@@ -3,6 +3,7 @@
 //! the sibling x86_64/ and aarch64/ modules.
 
 pub(crate) mod asm_outputs;
+pub(crate) mod ast_reach;
 pub(crate) mod block_plan;
 pub(crate) mod build;
 pub(crate) mod cfi;

@@ -198,7 +198,8 @@ pub(crate) fn emit_function(
     if let Some(bytes) = super::ssa::emit_common::locals_bytes_over_limit(func) {
         return fail(super::ssa::emit_common::frame_too_large_msg(bytes));
     }
-    let frame = compute_frame(func, alloc, abi, target);
+    let max_call_scratch = outgoing_bytes(func, alloc, abi, variadic_targets, imports);
+    let frame = compute_frame(func, alloc, abi, target, max_call_scratch);
     if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch) {
         return fail(why);
     }
@@ -1663,16 +1664,30 @@ fn emit_struct_param_scatter(
     }
 }
 
-/// Save the allocator's callee-saved GPRs and FP registers at the bottom
-/// of the frame, adjacent slots as `stp` pairs, then x19 when the
-/// function clobbers it (its slot is reserved either way). The region
-/// sits just above sp, within reach of the pair imm7 and the scaled
-/// imm12. With `fold != 0` (see `frame_fold_bytes`) the first save
-/// pre-indexes the whole allocation, frame plus the fp/lr pair, in place
-/// of the prologue's `stp x29, x30, [sp, #-16]!` / `sub sp`; every other
-/// offset is unchanged.
+/// Save the allocator's callee-saved GPRs and FP registers above the
+/// outgoing area at the bottom of the frame, adjacent slots as `stp`
+/// pairs, then x19 when the function clobbers it (its slot is reserved
+/// either way). The region sits just above sp, within reach of the pair
+/// imm7 and the scaled imm12, until a wide outgoing area pushes the
+/// offsets past the pair forms; the saves then go through x16, which the
+/// allocation left free. With `fold != 0` (see `frame_fold_bytes`) the
+/// first save pre-indexes the whole allocation, frame plus the fp/lr
+/// pair, in place of the prologue's `stp x29, x30, [sp, #-16]!` /
+/// `sub sp`; every other offset is unchanged.
 fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, fold: u32) {
     let mut alloc_pending = fold != 0;
+    let out = frame.outgoing_bytes;
+    let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
+    let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
+    // The base register carries the bottom's `out` shift once a save's
+    // offset could leave the pair forms' reach (the fold caps the frame
+    // at 480, well inside it).
+    let (sbase, shift) = if fold == 0 && out + saved_fpr_bytes + saved_gpr_bytes > 512 {
+        emit_reg_disp(code, Reg(16), Reg(31), i64::from(out));
+        (Reg(16), 0u32)
+    } else {
+        (Reg(31), out)
+    };
     let fp = &alloc.fp_used;
     let mut i = 0usize;
     while i + 1 < fp.len() {
@@ -1684,7 +1699,7 @@ fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame
         } else {
             emit(
                 code,
-                enc_stp_d_off(fp[i], fp[i + 1], Reg(31), (i as i32) * 8),
+                enc_stp_d_off(fp[i], fp[i + 1], sbase, ((i as u32) * 8 + shift) as i32),
             );
         }
         i += 2;
@@ -1693,24 +1708,20 @@ fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame
         if core::mem::take(&mut alloc_pending) {
             emit(code, enc_str_d_pre(fp[i], Reg(31), -(fold as i32)));
         } else {
-            emit(code, enc_str_d_imm(fp[i], Reg(31), (i as u32) * 8));
+            emit(code, enc_str_d_imm(fp[i], sbase, (i as u32) * 8 + shift));
         }
     }
-    let saved_fpr_bytes = super::ssa::emit_common::slots16(fp.len() as u32);
     let gpr = &alloc.gpr_used;
     let mut i = 0usize;
     while i + 1 < gpr.len() {
-        let off = (saved_fpr_bytes + (i as u32) * 8) as i32;
+        let off = (saved_fpr_bytes + (i as u32) * 8 + shift) as i32;
         if core::mem::take(&mut alloc_pending) {
             emit(
                 code,
                 enc_stp_pre(Reg(gpr[i]), Reg(gpr[i + 1]), Reg(31), -(fold as i32)),
             );
         } else {
-            emit(
-                code,
-                enc_stp_off(Reg(gpr[i]), Reg(gpr[i + 1]), Reg(31), off),
-            );
+            emit(code, enc_stp_off(Reg(gpr[i]), Reg(gpr[i + 1]), sbase, off));
         }
         i += 2;
     }
@@ -1718,18 +1729,17 @@ fn emit_prologue_saved_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame
         if core::mem::take(&mut alloc_pending) {
             emit(code, enc_str_pre(Reg(gpr[i]), Reg(31), -(fold as i32)));
         } else {
-            let off = saved_fpr_bytes + (i as u32) * 8;
-            emit(code, enc_str_imm(Reg(gpr[i]), Reg(31), off));
+            let off = saved_fpr_bytes + (i as u32) * 8 + shift;
+            emit(code, enc_str_imm(Reg(gpr[i]), sbase, off));
         }
     }
     if frame.uses_x19 {
         if core::mem::take(&mut alloc_pending) {
             emit(code, enc_str_pre(Reg(19), Reg(31), -(fold as i32)));
         } else {
-            let saved_gpr_bytes = super::ssa::emit_common::slots16(gpr.len() as u32);
             emit(
                 code,
-                enc_str_imm(Reg(19), Reg(31), saved_fpr_bytes + saved_gpr_bytes),
+                enc_str_imm(Reg(19), sbase, saved_fpr_bytes + saved_gpr_bytes + shift),
             );
         }
     }
@@ -1871,39 +1881,45 @@ fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame) {
 /// whole frame plus the fp/lr pair back.
 fn emit_epilogue_restore_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, fold: u32) {
     let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
+    let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
+    let out = frame.outgoing_bytes;
+    // Mirror of the prologue's base selection; x16 is free here (the
+    // canary check clears it, the dynamic-sp restore last used it).
+    let (sbase, shift) = if fold == 0 && out + saved_fpr_bytes + saved_gpr_bytes > 512 {
+        emit_reg_disp(code, Reg(16), Reg(31), i64::from(out));
+        (Reg(16), 0u32)
+    } else {
+        (Reg(31), out)
+    };
     let gpr = &alloc.gpr_used;
     if frame.uses_x19 {
-        let saved_gpr_bytes = super::ssa::emit_common::slots16(gpr.len() as u32);
-        let off = saved_fpr_bytes + saved_gpr_bytes;
+        let off = saved_fpr_bytes + saved_gpr_bytes + shift;
         if off == 0 && fold != 0 {
             emit(code, enc_ldr_post(Reg(19), Reg(31), fold as i32));
         } else {
-            emit(code, enc_ldr_imm(Reg(19), Reg(31), off));
+            emit(code, enc_ldr_imm(Reg(19), sbase, off));
         }
     }
     let mut i = gpr.len();
     if i % 2 == 1 {
         i -= 1;
-        let off = saved_fpr_bytes + (i as u32) * 8;
+        let off = saved_fpr_bytes + (i as u32) * 8 + shift;
         if off == 0 && fold != 0 {
             emit(code, enc_ldr_post(Reg(gpr[i]), Reg(31), fold as i32));
         } else {
-            emit(code, enc_ldr_imm(Reg(gpr[i]), Reg(31), off));
+            emit(code, enc_ldr_imm(Reg(gpr[i]), sbase, off));
         }
     }
     while i >= 2 {
         i -= 2;
-        let off = (saved_fpr_bytes + (i as u32) * 8) as i32;
+        let off = (saved_fpr_bytes + (i as u32) * 8 + shift) as i32;
         if off == 0 && fold != 0 {
             emit(
                 code,
                 enc_ldp_post(Reg(gpr[i]), Reg(gpr[i + 1]), Reg(31), fold as i32),
             );
         } else {
-            emit(
-                code,
-                enc_ldp_off(Reg(gpr[i]), Reg(gpr[i + 1]), Reg(31), off),
-            );
+            emit(code, enc_ldp_off(Reg(gpr[i]), Reg(gpr[i + 1]), sbase, off));
         }
     }
     let fp = &alloc.fp_used;
@@ -1913,7 +1929,7 @@ fn emit_epilogue_restore_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Fra
         if i == 0 && fold != 0 {
             emit(code, enc_ldr_d_post(fp[i], Reg(31), fold as i32));
         } else {
-            emit(code, enc_ldr_d_imm(fp[i], Reg(31), (i as u32) * 8));
+            emit(code, enc_ldr_d_imm(fp[i], sbase, (i as u32) * 8 + shift));
         }
     }
     while i >= 2 {
@@ -1923,7 +1939,7 @@ fn emit_epilogue_restore_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Fra
         } else {
             emit(
                 code,
-                enc_ldp_d_off(fp[i], fp[i + 1], Reg(31), (i as i32) * 8),
+                enc_ldp_d_off(fp[i], fp[i + 1], sbase, ((i as u32) * 8 + shift) as i32),
             );
         }
     }
@@ -1939,7 +1955,9 @@ fn emit_epilogue_restore_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Fra
 fn frame_fold_bytes(alloc: &Allocation, frame: Frame) -> u32 {
     // A realigning function keeps the unfolded shape so
     // `restore_dynamic_sp` returns sp to the static frame bottom first.
-    if frame.realign_align != 0 {
+    // The folded shape's first save lands at sp + 0, the bytes the
+    // outgoing area claims, so a frame with one keeps the unfolded shape.
+    if frame.realign_align != 0 || frame.outgoing_bytes != 0 {
         return 0;
     }
     let n_bottom = if !alloc.fp_used.is_empty() {

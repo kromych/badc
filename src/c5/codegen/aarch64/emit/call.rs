@@ -1,5 +1,9 @@
 use super::*;
 
+/// Caller-saved registers an indirect call can stage its target in; see
+/// `emit_call_indirect`. The outgoing area holds it when none is free.
+pub(super) const TARGET_SCRATCH_CANDIDATES: &[u8] = &[9, 10, 11, 12, 13, 14, 15];
+
 /// AAPCS64 `va_start` (Appendix B): initialise the 32-byte `__va_list`
 /// at args[0] (args[1], `&last`, is unused; the named counts come from
 /// the prototype):
@@ -452,7 +456,7 @@ impl CallOperands<'_> {
     /// leading [`super::named_args`] of them as named, the rest by the
     /// callee convention's variadic rules. `fixed_args` is the prototype's
     /// named parameter count.
-    fn plan(
+    pub(super) fn plan(
         &self,
         agg_descs: &[super::super::ir::AggDesc],
         abi: super::Abi,
@@ -509,7 +513,12 @@ pub(super) fn emit_call_ext(
     };
     let imp = &imports.imports[import_index];
     let plan = ops.plan(agg_descs, abi, imp.is_variadic, imp.fixed_args);
-    emit_stack_alloc(code, plan.scratch_bytes, None);
+    // A dynamic-sp frame carves the area below the call-time sp; a static
+    // one uses the reserved area at the frame bottom.
+    let carve = frame.dynamic_sp.then_some(plan.scratch_bytes);
+    if let Some(bytes) = carve {
+        emit_stack_alloc(code, bytes, None);
+    }
     marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     )?;
@@ -522,7 +531,9 @@ pub(super) fn emit_call_ext(
     });
     // The patcher rewrites only imm26, so the placeholder must be `bl`.
     emit(code, enc_bl(0));
-    emit_add_sp_imm(code, plan.scratch_bytes);
+    if carve.is_some() {
+        emit_add_sp_imm(code, plan.scratch_bytes);
+    }
     if ret_agg.is_some() {
         finish_call_result(
             code,
@@ -622,7 +633,10 @@ pub(super) fn emit_call(
         return fail("Call: variadic callee not matched by a host-ABI branch");
     }
     let plan = ops.plan(agg_descs, abi, callee_is_variadic, fixed_args);
-    emit_stack_alloc(code, plan.scratch_bytes, None);
+    let carve = frame.dynamic_sp.then_some(plan.scratch_bytes);
+    if let Some(bytes) = carve {
+        emit_stack_alloc(code, bytes, None);
+    }
     marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     )?;
@@ -633,7 +647,9 @@ pub(super) fn emit_call(
         kind: BranchKind::Bl,
     });
     emit(code, enc_bl(0));
-    emit_add_sp_imm(code, plan.scratch_bytes);
+    if carve.is_some() {
+        emit_add_sp_imm(code, plan.scratch_bytes);
+    }
     finish_call_result(
         code,
         ret_agg,
@@ -651,7 +667,8 @@ pub(super) fn emit_call(
 
 /// Point x8 at the caller's result temp before a call returning an
 /// aggregate larger than 16 bytes (AAPCS64 6.9), after `marshal_args`
-/// has set the argument registers; sp stands below the argument area.
+/// has set the argument registers; sp stands below the argument area
+/// (a dynamic-sp frame's carve), which an sp-relative slot compensates.
 fn setup_indirect_result(
     code: &mut Vec<u8>,
     ret_agg: Option<u32>,
@@ -667,7 +684,10 @@ fn setup_indirect_result(
     {
         // A homogeneous aggregate over 16 bytes still returns in v-registers,
         // not through x8.
-        let slot = local_slot(ret_slot_off, func, frame).sp_lowered(plan.scratch_bytes);
+        let mut slot = local_slot(ret_slot_off, func, frame);
+        if frame.dynamic_sp {
+            slot = slot.sp_lowered(plan.scratch_bytes);
+        }
         let _ = emit_frame_addr(code, Place::IntReg(8), slot, frame);
     }
 }
@@ -787,7 +807,7 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: boo
 /// target staged there survives it: every argument already sits in its
 /// planned location, and no aggregate, stack or va_list path needs the
 /// pair.
-fn marshal_leaves_branch_scratch(
+pub(super) fn marshal_leaves_branch_scratch(
     plan: &super::CallPlan,
     args: &[u32],
     alloc: &Allocation,
@@ -808,7 +828,10 @@ fn marshal_leaves_branch_scratch(
 
 /// Whether the call's indirect result routes through x8, which the
 /// address computation may reach through the scratch pair.
-fn indirect_result_takes_x8(ret_agg: Option<u32>, agg_descs: &[super::super::ir::AggDesc]) -> bool {
+pub(super) fn indirect_result_takes_x8(
+    ret_agg: Option<u32>,
+    agg_descs: &[super::super::ir::AggDesc],
+) -> bool {
     ret_agg.is_some_and(|ai| {
         agg_descs[ai as usize].size > 16
             && super::abi_classify::fp_member_layout(&agg_descs[ai as usize], true).is_none()
@@ -868,7 +891,6 @@ pub(super) fn emit_call_indirect(
     // leaves them alone; the allocator's caller-saved pool follows.
     let branch_scratch_free = marshal_leaves_branch_scratch(&plan, args, alloc, callee_variadic)
         && !indirect_result_takes_x8(ret_agg, agg_descs);
-    const TARGET_SCRATCH_CANDIDATES: &[u8] = &[9, 10, 11, 12, 13, 14, 15];
     let free_target_reg = in_place.or_else(|| {
         [16u8, 17]
             .into_iter()
@@ -880,7 +902,7 @@ pub(super) fn emit_call_indirect(
     let staged_off = match free_target_reg {
         Some(_) => None,
         None => {
-            // One 16-byte cell keeps SP 16-aligned; the argument
+            // One 16-byte cell keeps the area 16-aligned; the argument
             // slots stay below the original scratch_bytes.
             plan.scratch_bytes += 16;
             Some(plan.scratch_bytes - 16)
@@ -904,7 +926,10 @@ pub(super) fn emit_call_indirect(
             scratch.primary
         }
     };
-    emit_stack_alloc(code, plan.scratch_bytes, None);
+    let carve = frame.dynamic_sp.then_some(plan.scratch_bytes);
+    if let Some(bytes) = carve {
+        emit_stack_alloc(code, bytes, None);
+    }
     if let Some(off) = staged_off {
         emit_sp_str_x_auto(code, target_reg, off);
     }
@@ -922,7 +947,9 @@ pub(super) fn emit_call_indirect(
         None => target_reg,
     };
     emit(code, enc_blr(call_reg));
-    emit_add_sp_imm(code, plan.scratch_bytes);
+    if carve.is_some() {
+        emit_add_sp_imm(code, plan.scratch_bytes);
+    }
     finish_call_result(
         code,
         ret_agg,
@@ -955,21 +982,27 @@ impl CallArgs<'_> {
         place_of(self.alloc, self.args[i])
     }
 
+    /// The sp shift a dynamic-sp frame's carve adds to a spill reload;
+    /// a static frame reserves the area in the prologue and reloads
+    /// unshifted.
+    fn sp_shift(&self) -> u32 {
+        if self.frame.dynamic_sp {
+            self.plan.scratch_bytes
+        } else {
+            0
+        }
+    }
+
     /// Argument `i`'s value in an integer register, reloaded into `into`
-    /// when spilled, with the outgoing-argument area's sp shift applied.
+    /// when spilled, with the outgoing-argument carve's sp shift applied.
     fn arg_int(&self, code: &mut Vec<u8>, i: usize, into: Reg) -> Option<Reg> {
-        materialize_int_shifted(
-            code,
-            self.arg_place(i),
-            into,
-            self.frame,
-            self.plan.scratch_bytes,
-        )
+        materialize_int_shifted(code, self.arg_place(i), into, self.frame, self.sp_shift())
     }
 
     /// Stack slots first: each source is read into a scratch and stored to
     /// the host-stack overflow region, preserving any source register that
-    /// a later pass touches.
+    /// a later pass touches. The region sits at `[sp + off]`, above the
+    /// reserved area of a static frame or the carve of a dynamic one.
     fn marshal_stack_args(&self, code: &mut Vec<u8>) -> Emit {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             let super::ArgPlacement::Stack(off) = placement else {
@@ -978,8 +1011,7 @@ impl CallArgs<'_> {
             let ap = self.arg_place(i);
             let bytes = self.plan.stack_widths.bytes(i);
             if let Place::FpReg(_) = ap {
-                let Some(dn) =
-                    materialize_fp_shifted(code, ap, 0u8, self.frame, self.plan.scratch_bytes)
+                let Some(dn) = materialize_fp_shifted(code, ap, 0u8, self.frame, self.sp_shift())
                 else {
                     return fail("Call: FP stack arg not fp reg / spill");
                 };
@@ -1081,9 +1113,7 @@ impl CallArgs<'_> {
             if let Place::FpReg(_) = ap {
                 continue;
             }
-            let Some(src) =
-                materialize_fp_shifted(code, ap, r, self.frame, self.plan.scratch_bytes)
-            else {
+            let Some(src) = materialize_fp_shifted(code, ap, r, self.frame, self.sp_shift()) else {
                 return fail("Call: FP arg not fp reg / spill");
             };
             if src != r {

@@ -18,7 +18,7 @@ pub(super) fn v128_spill_off(frame: Frame, slot: u32) -> u32 {
 type AddSubImm = fn(Reg, Reg, u32) -> u32;
 
 /// `dst = base + disp`; past 24 bits `dst` must differ from `base`.
-fn emit_reg_disp(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i64) {
+pub(crate) fn emit_reg_disp(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i64) {
     let (off, sub) = (disp.unsigned_abs(), disp < 0);
     if off >= 1 << 24 {
         assert_ne!(dst, base, "address scratch aliases its base");
@@ -144,7 +144,7 @@ pub(crate) fn bound_base(
     (t, low as u32)
 }
 
-fn other_ip(r: Reg) -> Reg {
+pub(super) fn other_ip(r: Reg) -> Reg {
     if r.0 == 16 { Reg(17) } else { Reg(16) }
 }
 
@@ -902,7 +902,8 @@ impl FrameLoc {
         Self { fp: Some(disp), sp }
     }
 
-    /// The same byte while sp stands `bytes` below the prologue's value.
+    /// The same byte while sp stands `bytes` below the prologue's value
+    /// (a dynamic-sp frame's per-call carve).
     pub(super) fn sp_lowered(self, bytes: u32) -> Self {
         Self {
             sp: self.sp.map(|d| d + i64::from(bytes)),
@@ -1201,7 +1202,7 @@ pub(super) fn emit_load(
             return fail("Load F128: dst not fp reg / spill");
         };
         let base = addr_outside_borrows(code, rn, scratch);
-        super::binary128::emit_narrow_load(code, dd, base, disp, bound);
+        super::binary128::emit_narrow_load(code, dd, base, disp, bound, frame);
         store_spilled_fp(code, frame, dst, dd);
         return Ok(());
     }
@@ -1284,7 +1285,7 @@ pub(super) fn emit_load_local(
             return fail("LoadLocal F128: dst not fp reg / spill");
         };
         let (base, disp) = binary128_base(code, loc, t);
-        super::binary128::emit_narrow_load(code, dd, base, disp, None);
+        super::binary128::emit_narrow_load(code, dd, base, disp, None, frame);
         store_spilled_fp(code, frame, dst, dd);
         return Ok(());
     }
@@ -1353,7 +1354,7 @@ pub(super) fn emit_store_local(
             emit_frame_mem(code, STR_D, dn, loc, t);
         } else {
             let (base, disp) = binary128_base(code, loc, t);
-            super::binary128::emit_widen_store(code, dn, base, disp, None);
+            super::binary128::emit_widen_store(code, dn, base, disp, None, frame);
         }
         propagate_fp(code, frame, dst, dn);
         return Ok(());
@@ -1729,7 +1730,7 @@ pub(super) fn emit_store(
             emit_fp_store(code, STR_D, dn, rn, disp, bound, scratch);
         } else {
             let base = addr_outside_borrows(code, rn, scratch);
-            super::binary128::emit_widen_store(code, dn, base, disp, bound);
+            super::binary128::emit_widen_store(code, dn, base, disp, bound, frame);
         }
         if let Some(rd) = fp_reg(dst) {
             if rd != dn {
@@ -1814,7 +1815,7 @@ fn emit_fp_store(
 
 /// A value's `Place` as a register operand: a spill reloads into
 /// `scratch`. `sp_shift` is an amount the caller has temporarily moved
-/// sp down by (an outgoing-argument area), added to the slot offset.
+/// sp down by (a borrowed register's push), added to the slot offset.
 pub(super) fn materialize_int(
     code: &mut Vec<u8>,
     place: Place,
@@ -1901,6 +1902,8 @@ fn reload_fp(
     match place {
         Place::FpReg(r) => Some(r),
         Place::Spill(slot) => {
+            // The shift compensates a temporary sp move; the fp-based
+            // dynamic-sp form is immune to it.
             let shift = if frame.dynamic_sp { 0 } else { sp_shift };
             let sp_off = spill_off(frame, slot) + shift;
             emit_spill_ldr_d(code, frame, scratch_d, sp_off, addr_scratch);

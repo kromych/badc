@@ -6,14 +6,16 @@
 //! narrowing rounds to nearest with ties to even.
 //!
 //! Each sequence borrows integer registers from the allocator's pool
-//! and restores them before it ends; `addr` must name a register
-//! outside that pool, and nothing between the save and the restore
-//! addresses `sp`.
+//! and restores them before it ends; the saves live in the outgoing
+//! argument area the prologue reserved (`frame.outgoing_bytes`), or in
+//! a carve below sp where sp moves at run time. `addr` must name a
+//! register outside the borrow pool, and nothing between the save and
+//! the restore addresses sp.
 
 use alloc::vec::Vec;
 
 use super::emit::{
-    NARROW_BORROW, bound_base, emit_agg_load_int, emit_mem, enc_store_unit, object_base,
+    Frame, NARROW_BORROW, bound_base, emit_agg_load_int, emit_mem, enc_store_unit, object_base,
 };
 use super::encode::{
     Cond, LDR_X, LogicalOp, Reg, STR_X, emit, enc_add_imm, enc_add_imm_lsl12, enc_add_reg,
@@ -27,6 +29,12 @@ use super::encode::{
 /// The exponent bias difference between binary128 and binary64, less
 /// the 1023 the rounding step adds back.
 const BIAS_DELTA: u32 = 15360;
+
+/// Outgoing-area bytes a narrowing sequence's seven borrows take.
+pub(super) const NARROW_BORROW_BYTES: u32 = 64;
+
+/// Outgoing-area bytes a widening sequence's five borrows take.
+pub(super) const WIDEN_BORROW_BYTES: u32 = 48;
 
 /// Registers each sequence borrows, in the order they are assigned.
 fn borrow<const N: usize>(addr: Reg) -> [Reg; N] {
@@ -45,10 +53,16 @@ fn borrow<const N: usize>(addr: Reg) -> [Reg; N] {
     out
 }
 
-/// Save `regs` in a fresh 16-aligned area below `sp`; returns its size.
-fn save(code: &mut Vec<u8>, regs: &[Reg]) -> u32 {
+/// Save `regs` in the outgoing area at `[sp + 0]`, or in a fresh
+/// carve below sp where sp moves at run time; returns the bytes carved.
+fn save(code: &mut Vec<u8>, regs: &[Reg], frame: Frame) -> u32 {
     let bytes = (regs.len().div_ceil(2) * 16) as u32;
-    emit(code, enc_sub_imm(Reg::SP, Reg::SP, bytes));
+    let carve = if frame.dynamic_sp {
+        emit(code, enc_sub_imm(Reg::SP, Reg::SP, bytes));
+        bytes
+    } else {
+        0
+    };
     let mut i = 0;
     while i + 1 < regs.len() {
         emit(
@@ -60,11 +74,11 @@ fn save(code: &mut Vec<u8>, regs: &[Reg]) -> u32 {
     if i < regs.len() {
         emit(code, enc_str_imm(regs[i], Reg::SP, (i * 8) as u32));
     }
-    bytes
+    carve
 }
 
-/// Mirror of [`save`].
-fn restore(code: &mut Vec<u8>, regs: &[Reg], bytes: u32) {
+/// Mirror of [`save`]; `carve` is the bytes it moved sp down by.
+fn restore(code: &mut Vec<u8>, regs: &[Reg], frame: Frame, carve: u32) {
     let mut i = 0;
     while i + 1 < regs.len() {
         emit(
@@ -76,7 +90,9 @@ fn restore(code: &mut Vec<u8>, regs: &[Reg], bytes: u32) {
     if i < regs.len() {
         emit(code, enc_ldr_imm(regs[i], Reg::SP, (i * 8) as u32));
     }
-    emit(code, enc_add_imm(Reg::SP, Reg::SP, bytes));
+    if frame.dynamic_sp {
+        emit(code, enc_add_imm(Reg::SP, Reg::SP, carve));
+    }
 }
 
 /// Retarget the placeholder branch at `at` to the end of `code`.
@@ -137,10 +153,11 @@ pub(super) fn emit_narrow_load(
     addr: Reg,
     disp: i64,
     bound: Option<u32>,
+    frame: Frame,
 ) {
     let r = borrow::<7>(addr);
     let (lo, hi, sgn, exp, tmp, acc, aux) = (r[0], r[1], r[2], r[3], r[4], r[5], r[6]);
-    let bytes = save(code, &r);
+    let carve = save(code, &r, frame);
     match bound {
         Some(a) => {
             let (base, off) = bound_base(code, addr, disp, 16, 8, a, aux);
@@ -233,7 +250,7 @@ pub(super) fn emit_narrow_load(
     patch(code, round_done);
     patch(code, inf_done);
     emit(code, enc_fmov_x_to_d(dd, acc));
-    restore(code, &r, bytes);
+    restore(code, &r, frame, carve);
 }
 
 /// Widen the f64 in `dn` into the binary128 object at `[addr + disp]`.
@@ -245,10 +262,11 @@ pub(super) fn emit_widen_store(
     addr: Reg,
     disp: i64,
     bound: Option<u32>,
+    frame: Frame,
 ) {
     let r = borrow::<5>(addr);
     let (lo, hi, exp, man, tmp) = (r[0], r[1], r[2], r[3], r[4]);
-    let bytes = save(code, &r);
+    let carve = save(code, &r, frame);
     emit(code, enc_fmov_d_to_x(lo, dn));
     emit(code, enc_lsr_imm(hi, lo, 63));
     emit(code, enc_lsl_imm(hi, hi, 63));
@@ -307,7 +325,7 @@ pub(super) fn emit_widen_store(
             emit_mem(code, STR_X, hi.0, base, disp + 8, exp);
         }
     }
-    restore(code, &r, bytes);
+    restore(code, &r, frame, carve);
 }
 
 /// Write the 8 bytes of `rs` to `[addr + off]` in `align`-wide pieces.

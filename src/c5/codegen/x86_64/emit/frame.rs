@@ -156,6 +156,7 @@ pub(crate) fn compute_frame(
             asm_scratch: asm_bytes,
             canary: canary_bytes,
             aligned: static_region_bytes,
+            outgoing: 0,
         },
         param_cells_bytes,
         param_cells_off: if param_cells_bytes > 0 {

@@ -5028,14 +5028,14 @@ fn aarch64_fp_access_folds_constant_displacement() {
     );
 }
 
-/// A call whose outgoing-argument area exceeds the 12-bit add/sub
-/// immediate must split the call-site SP adjustment into the
-/// shifted-12 + remainder pair, as the prologue path does. 261
-/// by-value 16-byte structs leave 257 on the AAPCS64 stack: 257 * 16 =
-/// 4112 = 4096 + 16 bytes. The raw encoder used to fold 4112 into the
+/// An outgoing-argument area wider than the 12-bit add/sub immediate
+/// joins the frame, so the prologue's allocation splits into the
+/// page-step + remainder pair its wide-frame path uses. 261 by-value
+/// 16-byte structs leave 257 on the AAPCS64 stack: 257 * 16 = 4112 =
+/// 4096 + 16 bytes. The raw encoder used to fold 4112 into the
 /// `lsl #12` bit and adjust SP by 65536 instead.
 #[test]
-fn aarch64_call_sp_adjust_covers_wide_outgoing_area() {
+fn aarch64_frame_reserves_wide_outgoing_area_once() {
     use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
     let mut src = String::from("struct pair { long a; long b; };\nstatic struct pair g[261];\n");
     src.push_str("long take(");
@@ -5075,20 +5075,24 @@ fn aarch64_call_sp_adjust_covers_wide_outgoing_area() {
         .iter()
         .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
         .collect();
-    // 4112 bytes split as `sub sp, sp, #1, lsl #12` + `sub sp, sp, #16`
-    // and restore with the matching adds. The caller's own frame stays
-    // below 4096, so only the call site produces the shifted forms.
-    for (word, what) in [
-        (0xD140_07FFu32, "sub sp, sp, #1, lsl #12"),
-        (0xD100_43FF, "sub sp, sp, #16"),
-        (0x9140_07FF, "add sp, sp, #1, lsl #12"),
-        (0x9100_43FF, "add sp, sp, #16"),
-    ] {
-        assert!(
-            words.contains(&word),
-            "caller must contain `{what}` ({word:#010x}) for the 4112-byte outgoing area"
-        );
-    }
+    // The 4112-byte outgoing area joins the frame, so the prologue's
+    // allocation takes the wide path: one `sub sp, sp, #N, lsl #12` page
+    // step and one plain residual `sub sp, sp, #imm`, each exactly once,
+    // and no call site adjusts SP on its own (`add sp, sp` never
+    // appears; the epilogue restores through a scratch).
+    let sub_sp = |w: u32| w & 0xFF80_0000 == 0xD100_0000 && (w >> 5) & 0x1F == 31 && w & 0x1F == 31;
+    let page_step = words
+        .iter()
+        .filter(|&&w| sub_sp(w) && w & 0x400000 != 0)
+        .count();
+    let residual = words
+        .iter()
+        .filter(|&&w| sub_sp(w) && w & 0x400000 == 0)
+        .count();
+    // The one call site reserves nothing of its own: apart from the
+    // page-step + residual pair of the prologue, no SP decrement occurs.
+    assert_eq!(page_step, 1, "caller must take one page-step SP decrement");
+    assert_eq!(residual, 1, "caller must take one residual SP decrement");
     // The raw-encoder overflow artifact: 4112 << 10 sets the shift bit
     // and leaves imm12 = 16, i.e. a 65536-byte adjustment.
     for word in [0xD140_43FFu32, 0x9140_43FF] {

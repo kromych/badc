@@ -138,6 +138,9 @@ pub(crate) struct FrameStack {
     pub canary: u32,
     /// An over-aligned region, the realignment slack included.
     pub aligned: u32,
+    /// The outgoing argument area (aarch64), shared by the call sites
+    /// and the binary128 conversion sequences.
+    pub outgoing: u32,
 }
 
 impl FrameStack {
@@ -160,7 +163,7 @@ impl FrameStack {
             .join(", ")
     }
 
-    fn parts(&self) -> [(u32, &'static str); 9] {
+    fn parts(&self) -> [(u32, &'static str); 10] {
         [
             (self.locals, "in locals"),
             (self.spills, "in spill slots"),
@@ -171,6 +174,7 @@ impl FrameStack {
             (self.param_cells, "in parameter cells"),
             (self.canary, "for the canary"),
             (self.record, "for the frame record"),
+            (self.outgoing, "in the outgoing argument area"),
         ]
     }
 }

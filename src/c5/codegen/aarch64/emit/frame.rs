@@ -70,6 +70,10 @@ pub(crate) struct Frame {
     /// there. Slot `off` lives at `[sp + frame_bytes + asm_scratch_off + off]`,
     /// fp-based when `dynamic_sp`.
     pub asm_scratch_off: i64,
+    /// The outgoing argument area at the frame bottom, shared by the call
+    /// sites and the binary128 conversion sequences; 0 where sp moves at
+    /// run time and each site carves its own slice below sp.
+    pub outgoing_bytes: u32,
 }
 
 pub(crate) fn compute_frame(
@@ -77,6 +81,7 @@ pub(crate) fn compute_frame(
     alloc: &Allocation,
     abi: super::Abi,
     target: Target,
+    max_call_scratch: u32,
 ) -> Frame {
     let base = super::ssa::emit_common::compute_frame_base(func, alloc);
     let (declared_locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
@@ -103,14 +108,27 @@ pub(crate) fn compute_frame(
     // alone; every region below them shifts by their size.
     let param_cells_bytes = param_cells_bytes(func, alloc, abi);
     let upper_bytes = locals_bytes + param_cells_bytes;
+    let dynamic_sp = super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 16;
+    // The outgoing area joins the static frame only while sp keeps its
+    // prologue value across the body: `alloca`/VLA and the sp realignment
+    // move sp at run time, and the callee reads its stack arguments at
+    // the call-time sp, so those frames carve the area per call below sp.
+    let outgoing_bytes = if dynamic_sp || func.has_sp_moving_asm() {
+        0
+    } else {
+        max_call_scratch
+    };
+    // The outgoing area sits at the very bottom, below the saved
+    // registers, so `[sp + off]` addresses it at the call sites while the
+    // other regions keep their fp-relative offsets.
     let frame_bytes = upper_bytes
         + alloc_spill_bytes
         + saved_gpr_bytes
         + saved_fpr_bytes
         + x19_save_bytes
         + asm_bytes
-        + static_region_bytes;
-    let dynamic_sp = super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 16;
+        + static_region_bytes
+        + outgoing_bytes;
     // A host variadic callee reserves its register save area above the
     // saved fp/lr, where its top edge meets the caller's stack arguments:
     // the Windows cursor `va_list` walks the two as one region. Windows on
@@ -144,6 +162,7 @@ pub(crate) fn compute_frame(
             asm_scratch: asm_bytes,
             canary: canary_bytes,
             aligned: static_region_bytes,
+            outgoing: outgoing_bytes,
         },
         param_cells_bytes,
         param_cells_off: if param_cells_bytes > 0 {
@@ -175,10 +194,170 @@ pub(crate) fn compute_frame(
         } else {
             0
         },
+        outgoing_bytes,
     };
     // A full leaf has nothing to address and no fp to restore sp from.
     frame.dynamic_sp |= func.has_sp_moving_asm() && !is_full_leaf(frame, alloc);
     frame
+}
+
+/// The largest outgoing area the function's body needs at once: the
+/// biggest call's argument area (an indirect call's staging cell
+/// included) and the binary128 conversion sequences' register borrows.
+/// The two never run concurrently, so the maximum covers both; a frame
+/// whose sp stays put reserves it once in the prologue
+/// ([`compute_frame`]) and every site addresses its slice at fixed
+/// offsets from sp.
+pub(super) fn outgoing_bytes(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+    variadic_targets: &alloc::collections::BTreeSet<usize>,
+    imports: &super::ResolvedImports,
+) -> u32 {
+    let mut max_out = 0u32;
+    let note = |m: &mut u32, n: u32| {
+        if n > *m {
+            *m = n;
+        }
+    };
+    let call_scratch = |ops: super::CallOperands, callee_variadic: bool, fixed_args: usize| {
+        ops.plan(&func.agg_descs, abi, callee_variadic, fixed_args)
+            .scratch_bytes
+    };
+    for block in &func.blocks {
+        for v in block.inst_range.clone() {
+            let inst = &func.insts[v as usize];
+            if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
+                continue;
+            }
+            match inst {
+                Inst::Call {
+                    target_pc,
+                    args,
+                    fixed_args,
+                    fp_arg_mask,
+                    arg_widths,
+                    arg_aggs,
+                    ..
+                } => note(
+                    &mut max_out,
+                    call_scratch(
+                        super::CallOperands {
+                            args,
+                            fp_arg_mask,
+                            arg_widths: *arg_widths,
+                            arg_aggs,
+                            ret_agg: None,
+                            ret_slot_off: 0,
+                        },
+                        variadic_targets.contains(target_pc),
+                        *fixed_args,
+                    ),
+                ),
+                Inst::CallExt {
+                    binding_idx,
+                    args,
+                    fp_arg_mask,
+                    arg_widths,
+                    arg_aggs,
+                    ..
+                } => {
+                    let Some(i) = imports.index_of_binding(*binding_idx) else {
+                        continue;
+                    };
+                    let imp = &imports.imports[i];
+                    note(
+                        &mut max_out,
+                        call_scratch(
+                            super::CallOperands {
+                                args,
+                                fp_arg_mask,
+                                arg_widths: *arg_widths,
+                                arg_aggs,
+                                ret_agg: None,
+                                ret_slot_off: 0,
+                            },
+                            imp.is_variadic,
+                            imp.fixed_args,
+                        ),
+                    );
+                }
+                Inst::CallIndirect {
+                    target,
+                    args,
+                    callee_variadic,
+                    fixed_args,
+                    fp_arg_mask,
+                    arg_widths,
+                    arg_aggs,
+                    ret_agg,
+                    ..
+                } => {
+                    let ops = super::CallOperands {
+                        args,
+                        fp_arg_mask,
+                        arg_widths: *arg_widths,
+                        arg_aggs,
+                        ret_agg: *ret_agg,
+                        ret_slot_off: 0,
+                    };
+                    let mut plan = ops.plan(&func.agg_descs, abi, *callee_variadic, *fixed_args);
+                    // Mirror `emit_call_indirect`'s register selection: a
+                    // target no register can hold is staged in a cell above
+                    // the argument slots.
+                    let target_place = place_of(alloc, *target);
+                    let in_place = matches!(
+                        target_place,
+                        Place::IntReg(r) if !matches!(r, 8 | 16 | 17 | 19)
+                            && !plan.int_regs().any(|p| p == r)
+                    );
+                    if !in_place {
+                        let arg_source_regs: alloc::vec::Vec<u8> = args
+                            .iter()
+                            .filter_map(|&a| {
+                                alloc.places.get(a as usize).and_then(|p| p.int_reg_u8())
+                            })
+                            .collect();
+                        let branch_scratch_free =
+                            super::marshal_leaves_branch_scratch(
+                                &plan,
+                                args,
+                                alloc,
+                                *callee_variadic,
+                            ) && !super::indirect_result_takes_x8(*ret_agg, &func.agg_descs);
+                        let free = [16u8, 17]
+                            .into_iter()
+                            .filter(|_| branch_scratch_free)
+                            .chain(super::TARGET_SCRATCH_CANDIDATES.iter().copied())
+                            .any(|r| !arg_source_regs.contains(&r) && !abi.fixed_regs.has_gpr(r));
+                        if !free {
+                            plan.scratch_bytes += 16;
+                        }
+                    }
+                    note(&mut max_out, plan.scratch_bytes);
+                }
+                Inst::Load {
+                    kind: LoadKind::F128,
+                    ..
+                }
+                | Inst::LoadLocal {
+                    kind: LoadKind::F128,
+                    ..
+                } => note(&mut max_out, super::binary128::NARROW_BORROW_BYTES),
+                Inst::Store {
+                    kind: StoreKind::F128,
+                    ..
+                }
+                | Inst::StoreLocal {
+                    kind: StoreKind::F128,
+                    ..
+                } => note(&mut max_out, super::binary128::WIDEN_BORROW_BYTES),
+                _ => {}
+            }
+        }
+    }
+    max_out
 }
 
 /// Frame scratch bytes of one inline-asm statement: 8 per operand

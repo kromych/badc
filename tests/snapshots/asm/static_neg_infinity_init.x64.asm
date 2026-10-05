@@ -32,8 +32,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	ucomisd	%xmm0, %xmm15
                	jbe	<addr>
-               	movapd	%xmm0, %xmm1
-               	addsd	%xmm0, %xmm1
+               	vaddsd	%xmm0, %xmm0, %xmm1
                	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
@@ -44,8 +43,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	ucomisd	%xmm0, %xmm15
                	jbe	<addr>
-               	movapd	%xmm0, %xmm1
-               	addsd	%xmm0, %xmm1
+               	vaddsd	%xmm0, %xmm0, %xmm1
                	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>
@@ -56,8 +54,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	ucomisd	%xmm0, %xmm15
                	jbe	<addr>
-               	movapd	%xmm0, %xmm1
-               	addsd	%xmm0, %xmm1
+               	vaddsd	%xmm0, %xmm0, %xmm1
                	ucomisd	%xmm0, %xmm1
                	jp	<addr>
                	je	<addr>

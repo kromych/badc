@@ -41,9 +41,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm0
-               	divsd	%xmm15, %xmm0
+               	vdivsd	%xmm15, %xmm14, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
@@ -66,9 +66,9 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm0
-               	divsd	%xmm15, %xmm0
+               	vdivsd	%xmm15, %xmm14, %xmm0
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>

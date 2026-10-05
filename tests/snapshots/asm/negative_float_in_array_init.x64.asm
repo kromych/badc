@@ -57,14 +57,14 @@ Disassembly of section .text:
                	movsd	0x10(%rax), %xmm1
                	addsd	%xmm1, %xmm0
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm1
-               	addsd	%xmm15, %xmm1
+               	vaddsd	%xmm15, %xmm14, %xmm1
                	ucomisd	%xmm1, %xmm0
                	ja	<addr>
+               	movq	%rcx, %xmm14
                	movq	%rdx, %xmm15
-               	movq	%rcx, %xmm1
-               	subsd	%xmm15, %xmm1
+               	vsubsd	%xmm15, %xmm14, %xmm1
                	ucomisd	%xmm0, %xmm1
                	jbe	<addr>
                	movl	$0x4, %eax

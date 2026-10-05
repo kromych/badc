@@ -125,16 +125,13 @@ Disassembly of section .text:
                	cvtsi2sd	%rax, %xmm0
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movq	%rax, %xmm15
-               	movapd	%xmm0, %xmm1
-               	divsd	%xmm15, %xmm1
-               	movapd	%xmm0, %xmm15
-               	movapd	%xmm1, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vdivsd	%xmm15, %xmm0, %xmm1
+               	vaddsd	%xmm0, %xmm1, %xmm0
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movabsq	$0x4018000000000000, %rcx # imm = 0x4018000000000000
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm1
-               	addsd	%xmm15, %xmm1
+               	vaddsd	%xmm15, %xmm14, %xmm1
                	ucomisd	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>

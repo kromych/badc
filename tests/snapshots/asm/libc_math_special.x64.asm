@@ -118,9 +118,8 @@ Disassembly of section .text:
                	movq	%rax, %xmm0
                	xorl	%eax, %eax
                	callq	<addr>
-               	movapd	%xmm0, %xmm15
-               	movsd	0x8(%rsp), %xmm0
-               	addsd	%xmm15, %xmm0
+               	movsd	0x8(%rsp), %xmm14
+               	vaddsd	%xmm0, %xmm14, %xmm0
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm15
                	subsd	%xmm15, %xmm0

@@ -28,9 +28,9 @@ Disassembly of section .text:
 <main>:
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movabsq	$0x4004000000000000, %rcx # imm = 0x4004000000000000
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm15, %xmm14, %xmm0
                	movabsq	$0x4010000000000000, %rdx # imm = 0x4010000000000000
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -38,9 +38,9 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm0
-               	subsd	%xmm15, %xmm0
+               	vsubsd	%xmm15, %xmm14, %xmm0
                	movabsq	$0x3ff0000000000000, %rdx # imm = 0x3FF0000000000000
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -48,9 +48,9 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm0
-               	mulsd	%xmm15, %xmm0
+               	vmulsd	%xmm15, %xmm14, %xmm0
                	movabsq	$0x400e000000000000, %rdx # imm = 0x400E000000000000
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -58,9 +58,9 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm0
-               	divsd	%xmm15, %xmm0
+               	vdivsd	%xmm15, %xmm14, %xmm0
                	movabsq	$0x3ff999999999999a, %rdx # imm = 0x3FF999999999999A
                	movq	%rdx, %xmm15
                	ucomisd	%xmm0, %xmm15

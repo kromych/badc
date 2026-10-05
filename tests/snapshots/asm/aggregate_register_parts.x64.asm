@@ -96,11 +96,8 @@ Disassembly of section .text:
                	retq
 
 <dsum>:
-               	movapd	%xmm0, %xmm2
-               	addsd	%xmm1, %xmm2
-               	movapd	%xmm1, %xmm15
-               	movapd	%xmm0, %xmm1
-               	subsd	%xmm15, %xmm1
+               	vaddsd	%xmm1, %xmm0, %xmm2
+               	vsubsd	%xmm1, %xmm0, %xmm1
                	movapd	%xmm2, %xmm0
                	retq
 

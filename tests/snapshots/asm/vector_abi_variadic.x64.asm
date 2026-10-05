@@ -217,9 +217,7 @@ Disassembly of section .text:
                	movzbq	0x3(%rdx), %rdx
                	xorps	%xmm2, %xmm2
                	cvtsi2sd	%rcx, %xmm2
-               	movapd	%xmm1, %xmm15
-               	movapd	%xmm2, %xmm1
-               	addsd	%xmm15, %xmm1
+               	vaddsd	%xmm1, %xmm2, %xmm1
                	xorps	%xmm2, %xmm2
                	cvtsi2sd	%rdx, %xmm2
                	addsd	%xmm2, %xmm1
@@ -556,9 +554,8 @@ Disassembly of section .text:
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rsi, %xmm1
                	addsd	%xmm1, %xmm0
-               	movapd	%xmm0, %xmm15
-               	movq	%rdx, %xmm0
-               	addsd	%xmm15, %xmm0
+               	movq	%rdx, %xmm14
+               	vaddsd	%xmm0, %xmm14, %xmm0
                	movl	$0x2, %edx
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rdx, %xmm1
@@ -608,8 +605,7 @@ Disassembly of section .text:
                	xorps	%xmm2, %xmm2
                	cvtsi2sd	%rax, %xmm2
                	addsd	%xmm2, %xmm1
-               	movapd	%xmm0, %xmm14
-               	addsd	%xmm1, %xmm14
+               	vaddsd	%xmm1, %xmm0, %xmm14
                	movsd	%xmm14, 0xe8(%rsp)
                	movabsq	$0x3fd0000000000000, %rsi # imm = 0x3FD0000000000000
                	leaq	-0x8(%rbp), %rax

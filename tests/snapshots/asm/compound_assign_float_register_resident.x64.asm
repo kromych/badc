@@ -29,12 +29,11 @@ Disassembly of section .text:
                	movl	$0x42c80000, %ecx       # imm = 0x42C80000
                	movl	$0x3f800000, %edx       # imm = 0x3F800000
                	movl	$0x40000000, %eax       # imm = 0x40000000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm0
-               	subss	%xmm15, %xmm0
+               	vsubss	%xmm15, %xmm14, %xmm0
                	movq	%rdx, %xmm15
-               	movapd	%xmm0, %xmm1
-               	addss	%xmm15, %xmm1
+               	vaddss	%xmm15, %xmm0, %xmm1
                	movabsq	$0x3ff0000000000000, %rcx # imm = 0x3FF0000000000000
                	movq	%rdx, %xmm14
                	cvtss2sd	%xmm14, %xmm0

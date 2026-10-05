@@ -28,9 +28,9 @@ Disassembly of section .text:
 <main>:
                	movl	$0x3fc00000, %ecx       # imm = 0x3FC00000
                	movl	$0x3e800000, %eax       # imm = 0x3E800000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm0
-               	mulss	%xmm15, %xmm0
+               	vmulss	%xmm15, %xmm14, %xmm0
                	movl	$0x3ec00000, %ecx       # imm = 0x3EC00000
                	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -40,9 +40,9 @@ Disassembly of section .text:
                	retq
                	movl	$0xc0200000, %ecx       # imm = 0xC0200000
                	movl	$0x40800000, %edx       # imm = 0x40800000
+               	movq	%rcx, %xmm14
                	movq	%rdx, %xmm15
-               	movq	%rcx, %xmm0
-               	mulss	%xmm15, %xmm0
+               	vmulss	%xmm15, %xmm14, %xmm0
                	movl	$0xc1200000, %ecx       # imm = 0xC1200000
                	movq	%rcx, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -52,9 +52,9 @@ Disassembly of section .text:
                	retq
                	movl	$0x3f000000, %ecx       # imm = 0x3F000000
                	movl	$0x3e000000, %edx       # imm = 0x3E000000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm0
-               	addss	%xmm15, %xmm0
+               	vaddss	%xmm15, %xmm14, %xmm0
                	movq	%rdx, %xmm15
                	addss	%xmm15, %xmm0
                	movl	$0x3f600000, %eax       # imm = 0x3F600000
@@ -66,9 +66,9 @@ Disassembly of section .text:
                	retq
                	movl	$0x3f800000, %eax       # imm = 0x3F800000
                	movl	$0x41000000, %ecx       # imm = 0x41000000
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm0
-               	divss	%xmm15, %xmm0
+               	vdivss	%xmm15, %xmm14, %xmm0
                	movl	$0x41800000, %eax       # imm = 0x41800000
                	movq	%rax, %xmm15
                	mulss	%xmm15, %xmm0

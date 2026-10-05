@@ -28,9 +28,9 @@ Disassembly of section .text:
 <main>:
                	movabsq	$0x3ff8000000000000, %rcx # imm = 0x3FF8000000000000
                	movabsq	$0x3fe0000000000000, %rax # imm = 0x3FE0000000000000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm15, %xmm14, %xmm0
                	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -51,9 +51,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movapd	%xmm0, %xmm15
-               	movq	%rcx, %xmm0
-               	addsd	%xmm15, %xmm0
+               	movq	%rcx, %xmm14
+               	vaddsd	%xmm0, %xmm14, %xmm0
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
@@ -66,9 +65,8 @@ Disassembly of section .text:
                	jbe	<addr>
                	movabsq	$-0x4020000000000000, %r11 # imm = 0xBFE0000000000000
                	movq	%r11, %xmm0
-               	movapd	%xmm0, %xmm15
-               	movq	%rcx, %xmm0
-               	addsd	%xmm15, %xmm0
+               	movq	%rcx, %xmm14
+               	vaddsd	%xmm0, %xmm14, %xmm0
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
@@ -82,9 +80,8 @@ Disassembly of section .text:
                	jbe	<addr>
                	movabsq	$-0x4020000000000000, %r11 # imm = 0xBFE0000000000000
                	movq	%r11, %xmm0
-               	movapd	%xmm0, %xmm15
-               	movq	%rcx, %xmm0
-               	addsd	%xmm15, %xmm0
+               	movq	%rcx, %xmm14
+               	vaddsd	%xmm0, %xmm14, %xmm0
                	cvttsd2si	%xmm0, %rdx
                	cmpq	$0x2, %rdx
                	je	<addr>
@@ -96,9 +93,8 @@ Disassembly of section .text:
                	jbe	<addr>
                	movabsq	$-0x4020000000000000, %r11 # imm = 0xBFE0000000000000
                	movq	%r11, %xmm0
-               	movapd	%xmm0, %xmm15
-               	movq	%rcx, %xmm0
-               	addsd	%xmm15, %xmm0
+               	movq	%rcx, %xmm14
+               	vaddsd	%xmm0, %xmm14, %xmm0
                	cvttsd2si	%xmm0, %rcx
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rcx, %xmm0
@@ -116,9 +112,8 @@ Disassembly of section .text:
                	jbe	<addr>
                	movabsq	$-0x4020000000000000, %r11 # imm = 0xBFE0000000000000
                	movq	%r11, %xmm0
-               	movapd	%xmm0, %xmm15
-               	movq	%rcx, %xmm0
-               	addsd	%xmm15, %xmm0
+               	movq	%rcx, %xmm14
+               	vaddsd	%xmm0, %xmm14, %xmm0
                	cvttsd2si	%xmm0, %rcx
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rcx, %xmm0

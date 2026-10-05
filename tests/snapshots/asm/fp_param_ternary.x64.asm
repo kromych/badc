@@ -92,9 +92,9 @@ Disassembly of section .text:
                	movl	$0xc0200000, %r11d      # imm = 0xC0200000
                	movq	%r11, %xmm1
                	addss	%xmm1, %xmm0
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm1
-               	addss	%xmm15, %xmm1
+               	vaddss	%xmm15, %xmm14, %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
@@ -107,9 +107,9 @@ Disassembly of section .text:
                	movl	$0x3e000000, %r11d      # imm = 0x3E000000
                	movq	%r11, %xmm1
                	addss	%xmm1, %xmm0
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm1
-               	addss	%xmm15, %xmm1
+               	vaddss	%xmm15, %xmm14, %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>
@@ -122,9 +122,9 @@ Disassembly of section .text:
                	movl	$0x40800000, %r11d      # imm = 0x40800000
                	movq	%r11, %xmm1
                	addss	%xmm1, %xmm0
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm1
-               	addss	%xmm15, %xmm1
+               	vaddss	%xmm15, %xmm14, %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	je	<addr>

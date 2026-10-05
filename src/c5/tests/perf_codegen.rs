@@ -2460,6 +2460,42 @@ fn x64_fma_form_follows_the_dying_operand() {
     );
 }
 
+/// Scalar FP arithmetic takes the VEX three-operand row when the result
+/// register holds neither operand -- both stay live across the op, so
+/// the two-operand row would stage a copy first -- and keeps the
+/// two-operand row when the destination is the dying lhs register, the
+/// copy-free case where it is a byte shorter.
+#[test]
+fn x64_scalar_fp_arith_picks_the_vex_three_operand_row() {
+    const SRC: &str = "double g, h;\n\
+        void spread(double a, double b) {\n\
+            double x = a + b; double y = a - b; double z = a * b;\n\
+            g = x; h = y; g = z;\n}\n\
+        double acc(double a, double b) { return a + b; }\n";
+    let copies = |i: &X64Insn| matches!(i.op, 0x0F28 | 0x0F10 | 0x0F6E);
+    let arith = |i: &X64Insn| matches!(i.op, 0x0F58 | 0x0F5C | 0x0F59);
+    let spread = x64(SRC, "spread");
+    // a and b are live across the first two ops, so their result
+    // registers are distinct from both operands: the VEX rows read
+    // them in place, where the two-operand rows would stage a copy.
+    // The third may reuse a dying operand's register.
+    assert!(
+        !spread.iter().any(copies),
+        "spread copies an operand: {spread:x?}"
+    );
+    let ops: Vec<&X64Insn> = spread.iter().filter(|i| arith(i)).collect();
+    assert_eq!(ops.len(), 3, "{spread:x?}");
+    assert!(
+        ops[0].len == 5 && ops[1].len == 5,
+        "not the VEX rows: {spread:x?}"
+    );
+    let acc = x64(SRC, "acc");
+    // a dies at the add and the result returns in a's register: the
+    // two-operand row writes in place.
+    let add = acc.iter().find(|i| i.op == 0x0F58).expect("the add");
+    assert_eq!(add.len, 4, "not the two-operand row: {acc:x?}");
+}
+
 /// A register output of an inline asm statement into a scalar local is
 /// the statement's own value, so the local takes no frame slot: a gsbase
 /// read between two `swapgs` is `swapgs; rdgsbase %rax; swapgs; ret` and

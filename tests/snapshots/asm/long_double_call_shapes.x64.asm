@@ -256,9 +256,7 @@ Disassembly of section .text:
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm2
                	addsd	%xmm2, %xmm1
-               	movapd	%xmm0, %xmm15
-               	movapd	%xmm1, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm0, %xmm1, %xmm0
                	fldt	-0x30(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm1
@@ -304,9 +302,7 @@ Disassembly of section .text:
                	fldt	-0x30(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm1
-               	movapd	%xmm1, %xmm15
-               	movapd	%xmm0, %xmm1
-               	addsd	%xmm15, %xmm1
+               	vaddsd	%xmm1, %xmm0, %xmm1
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	addsd	%xmm0, %xmm1
@@ -314,9 +310,7 @@ Disassembly of section .text:
                	addsd	%xmm0, %xmm1
                	addsd	%xmm0, %xmm1
                	addsd	%xmm0, %xmm1
-               	movapd	%xmm0, %xmm15
-               	movapd	%xmm1, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm0, %xmm1, %xmm0
                	movslq	0x30(%rbp), %rax
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rax, %xmm1
@@ -1365,8 +1359,7 @@ Disassembly of section .text:
                	fldt	-0x80(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movapd	%xmm0, %xmm15
-               	mulsd	%xmm15, %xmm0
+               	mulsd	%xmm0, %xmm0
                	leaq	-0x70(%rbp), %rax
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
@@ -1458,8 +1451,7 @@ Disassembly of section .text:
                	fldt	-0x80(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movapd	%xmm0, %xmm15
-               	mulsd	%xmm15, %xmm0
+               	mulsd	%xmm0, %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	(%rax)
@@ -1471,9 +1463,7 @@ Disassembly of section .text:
                	fldt	(%rcx)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movapd	%xmm0, %xmm15
-               	movapd	%xmm1, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm0, %xmm1, %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x120(%rbp)
@@ -1491,8 +1481,7 @@ Disassembly of section .text:
                	fldt	-0x80(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movapd	%xmm0, %xmm15
-               	mulsd	%xmm15, %xmm0
+               	mulsd	%xmm0, %xmm0
                	leaq	-0x70(%rbp), %rax
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
@@ -1504,9 +1493,7 @@ Disassembly of section .text:
                	fldt	(%rcx)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movapd	%xmm0, %xmm15
-               	movapd	%xmm1, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm0, %xmm1, %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x120(%rbp)
@@ -1525,8 +1512,7 @@ Disassembly of section .text:
                	fldt	-0x80(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movapd	%xmm0, %xmm15
-               	mulsd	%xmm15, %xmm0
+               	mulsd	%xmm0, %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	(%rax)
@@ -1538,9 +1524,7 @@ Disassembly of section .text:
                	fldt	(%rcx)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movapd	%xmm0, %xmm15
-               	movapd	%xmm1, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm0, %xmm1, %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x120(%rbp)
@@ -1558,8 +1542,7 @@ Disassembly of section .text:
                	fldt	-0x80(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movapd	%xmm0, %xmm15
-               	mulsd	%xmm15, %xmm0
+               	mulsd	%xmm0, %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	(%rax)
@@ -1570,9 +1553,7 @@ Disassembly of section .text:
                	fldt	-0x150(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movapd	%xmm0, %xmm15
-               	movapd	%xmm1, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm0, %xmm1, %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
                	fstpt	-0x120(%rbp)
@@ -1760,8 +1741,7 @@ Disassembly of section .text:
                	fldt	-0x80(%rbp)
                	fstpl	-0x8(%rsp)
                	movsd	-0x8(%rsp), %xmm0
-               	movapd	%xmm0, %xmm15
-               	mulsd	%xmm15, %xmm0
+               	mulsd	%xmm0, %xmm0
                	leaq	-0x70(%rbp), %rax
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)

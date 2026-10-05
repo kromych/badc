@@ -61,9 +61,8 @@ Disassembly of section .text:
                	movabsq	$0x4018000000000000, %rax # imm = 0x4018000000000000
                	movq	%rax, %xmm0
                	callq	<addr>
-               	movsd	0x10(%rsp), %xmm15
-               	movsd	0x18(%rsp), %xmm1
-               	mulsd	%xmm15, %xmm1
+               	movsd	0x18(%rsp), %xmm14
+               	vmulsd	0x10(%rsp), %xmm14, %xmm1
                	movsd	0x28(%rsp), %xmm14
                	vfmadd231sd	0x20(%rsp), %xmm14, %xmm1 # xmm1 = (xmm14 * mem) + xmm1
                	vfmadd132sd	0x8(%rsp), %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
@@ -106,9 +105,8 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rax, %xmm0
                	callq	<addr>
-               	movsd	0x10(%rsp), %xmm15
-               	movsd	0x18(%rsp), %xmm1
-               	mulsd	%xmm15, %xmm1
+               	movsd	0x18(%rsp), %xmm14
+               	vmulsd	0x10(%rsp), %xmm14, %xmm1
                	movsd	0x28(%rsp), %xmm14
                	vfmadd231sd	0x20(%rsp), %xmm14, %xmm1 # xmm1 = (xmm14 * mem) + xmm1
                	vfmadd132sd	0x8(%rsp), %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1

@@ -53,10 +53,8 @@ Disassembly of section .text:
 <fdiv_rev>:
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000
                	movq	%rax, %xmm15
-               	movapd	%xmm0, %xmm2
-               	mulsd	%xmm15, %xmm2
-               	movapd	%xmm1, %xmm0
-               	divsd	%xmm2, %xmm0
+               	vmulsd	%xmm15, %xmm0, %xmm2
+               	vdivsd	%xmm2, %xmm1, %xmm0
                	retq
 
 <fsub_rev>:

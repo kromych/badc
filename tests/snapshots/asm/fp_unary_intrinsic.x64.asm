@@ -158,9 +158,9 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xa, %eax
                	retq
+               	movq	%rax, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rax, %xmm0
-               	mulss	%xmm15, %xmm0
+               	vmulss	%xmm15, %xmm14, %xmm0
                	sqrtss	%xmm0, %xmm0
                	movl	$0x3f666666, %eax       # imm = 0x3F666666
                	movq	%rax, %xmm15

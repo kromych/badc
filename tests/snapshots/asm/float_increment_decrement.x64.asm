@@ -62,9 +62,9 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x400a000000000000, %rax # imm = 0x400A000000000000
                	movabsq	$-0x4010000000000000, %rdx # imm = 0xBFF0000000000000
+               	movq	%rax, %xmm14
                	movq	%rdx, %xmm15
-               	movq	%rax, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm15, %xmm14, %xmm0
                	movq	%rax, %xmm14
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm14

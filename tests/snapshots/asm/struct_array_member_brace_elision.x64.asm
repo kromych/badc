@@ -45,9 +45,9 @@ Disassembly of section .text:
                	movl	$0x40400000, %ecx       # imm = 0x40400000
                	movl	$0x40800000, %r9d       # imm = 0x40800000
                	movl	$0x40a00000, %r8d       # imm = 0x40A00000
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm0
-               	addss	%xmm15, %xmm0
+               	vaddss	%xmm15, %xmm14, %xmm0
                	xorl	%ebx, %ebx
                	xorl	%r12d, %r12d
                	xorl	%r13d, %r13d

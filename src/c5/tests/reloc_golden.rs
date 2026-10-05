@@ -147,10 +147,10 @@ const GOLDEN: &[(&str, &str, u64, usize)] = &[
     ("intarith", "macos-arm64", 0xae1f2f8b4773e0e4, 1336),
     ("intarith", "win-x64", 0xf088897f9212b3f6, 1160),
     ("intarith", "win-arm64", 0xd915217711a96955, 1344),
-    ("fparith", "linux-x64", 0x907cc69e15224f81, 1128),
+    ("fparith", "linux-x64", 0x14c458cd02e0883c, 1104),
     ("fparith", "linux-arm64", 0x64a91f538ce76acc, 1264),
     ("fparith", "macos-arm64", 0x64a91f538ce76acc, 1264),
-    ("fparith", "win-x64", 0xa6655247ac9ed372, 1144),
+    ("fparith", "win-x64", 0xec0f8ef7211e2fd9, 1120),
     ("fparith", "win-arm64", 0x64a91f538ce76acc, 1264),
     ("fpunary", "linux-x64", 0x8c728cf33ab15dcf, 1176),
     ("fpunary", "linux-arm64", 0x56c72e5e33e1725e, 1304),
@@ -185,8 +185,8 @@ const GOLDEN: &[(&str, &str, u64, usize)] = &[
     (
         "fp_across_struct_call",
         "linux-x64",
-        0x0c70b71d54be8144,
-        1192,
+        0x00c055b36ee8e1ed,
+        1184,
     ),
     (
         "fp_across_struct_call",

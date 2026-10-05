@@ -42,9 +42,7 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rax, %xmm1
-               	movapd	%xmm0, %xmm15
-               	movapd	%xmm1, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm0, %xmm1, %xmm0
                	popq	%rbp
                	retq
 

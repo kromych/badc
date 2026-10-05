@@ -49,9 +49,9 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
                	movabsq	$0x3ff0000000000000, %rdx # imm = 0x3FF0000000000000
+               	movq	%rcx, %xmm14
                	movq	%rdx, %xmm15
-               	movq	%rcx, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm15, %xmm14, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
                	movl	$0x40400000, %edx       # imm = 0x40400000
                	movq	%rdx, %xmm15

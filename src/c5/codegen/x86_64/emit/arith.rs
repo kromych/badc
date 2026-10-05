@@ -1,26 +1,15 @@
 use super::*;
 
-/// Map an FP arithmetic [`BinOp`] to its scalar SSE encoder. `is_f32`
-/// selects the single-precision (`addss` / ...) vs double-precision
-/// (`addsd` / ...) form per C99 6.3.1.8. Returns `None` for any
+/// The scalar SSE opcode of an FP arithmetic [`BinOp`]: 58 add, 5C sub,
+/// 59 mul, 5E div, shared by the legacy and VEX rows. `None` for any
 /// non-FP-arith op.
-fn fp_arith_enc_for(op: BinOp, is_f32: bool) -> Option<fn(&mut Vec<u8>, Reg, Reg)> {
-    Some(if is_f32 {
-        match op {
-            BinOp::Fadd => emit_addss,
-            BinOp::Fsub => emit_subss,
-            BinOp::Fmul => emit_mulss,
-            BinOp::Fdiv => emit_divss,
-            _ => return None,
-        }
-    } else {
-        match op {
-            BinOp::Fadd => emit_addsd,
-            BinOp::Fsub => emit_subsd,
-            BinOp::Fmul => emit_mulsd,
-            BinOp::Fdiv => emit_divsd,
-            _ => return None,
-        }
+fn fp_arith_opcode(op: BinOp) -> Option<u8> {
+    Some(match op {
+        BinOp::Fadd => 0x58,
+        BinOp::Fsub => 0x5C,
+        BinOp::Fmul => 0x59,
+        BinOp::Fdiv => 0x5E,
+        _ => return None,
     })
 }
 
@@ -804,8 +793,16 @@ pub(super) fn emit_binop(
 ) -> Emit {
     let lhs_place = place_of(alloc, lhs);
     let rhs_place = place_of(alloc, rhs);
-    if let Some(arith) = fp_arith_enc_for(op, alloc.is_f32(v)) {
-        return emit_fp_binop(code, arith, dst, lhs_place, rhs_place, frame);
+    if let Some(opcode) = fp_arith_opcode(op) {
+        return emit_fp_binop(
+            code,
+            opcode,
+            alloc.is_f32(v),
+            dst,
+            lhs_place,
+            rhs_place,
+            frame,
+        );
     }
     if let Some((cc, nan_fix)) = fp_compare_cc(op) {
         return emit_fp_compare(code, op, v, dst, lhs, rhs, cc, nan_fix, alloc, frame);
@@ -845,14 +842,19 @@ pub(super) fn emit_binop(
     emit_int_binop(code, op, v, dst, rd, lhs_place, rhs_place, alloc, frame)
 }
 
-/// Scalar FP arithmetic in xmm. `op dst, rhs` overwrites dst, so rhs is
-/// captured into a register distinct from dst before lhs is staged into
-/// dst: the allocator can color rhs to dst's xmm, and `materialize_fp`
-/// returns an `FpReg` source in place, so rhs is copied into the second FP
-/// scratch when it aliases dst.
+/// Scalar FP arithmetic in xmm. With the destination in the lhs
+/// register the two-operand SSE row (`addsd dst, rhs`) writes in place
+/// and is a byte shorter, so it stays; the lhs cannot be live past the
+/// op then, or the allocator could not hold both in `dd`. Otherwise the
+/// VEX three-operand row (`vaddsd dst, lhs, rhs`) reads both operands
+/// in place and writes a distinct destination, where the two-operand
+/// row would stage a copy first; the r/m slot reads a spill directly.
+/// 128-bit VEX mixes with legacy SSE freely on the x86-64-v3 baseline
+/// while no 256-bit instruction dirties the upper halves.
 fn emit_fp_binop(
     code: &mut Vec<u8>,
-    arith: fn(&mut Vec<u8>, Reg, Reg),
+    opcode: u8,
+    is_f32: bool,
     dst: Place,
     lhs_place: Place,
     rhs_place: Place,
@@ -861,23 +863,30 @@ fn emit_fp_binop(
     let Some(dd) = fp_or_spill_dst(dst, frame) else {
         return fail("Fbinop: dst not fp reg / spill");
     };
-    let dm = match rhs_place {
-        Place::FpReg(r) if r == dd.0 => {
-            emit_movapd_xmm_xmm(code, Reg(frame.fp_scratch[1]), dd);
-            Reg(frame.fp_scratch[1])
-        }
-        _ => match materialize_fp(code, rhs_place, Reg(frame.fp_scratch[1]), frame) {
-            Some(r) => r,
-            None => return fail("Fbinop: rhs not fp reg / spill / int reg"),
-        },
-    };
-    let Some(dn) = materialize_fp(code, lhs_place, dd, frame) else {
+    if lhs_place == Place::FpReg(dd.0) {
+        let Some(dm) = materialize_fp(code, rhs_place, Reg(frame.fp_scratch[1]), frame) else {
+            return fail("Fbinop: rhs not fp reg / spill / int reg");
+        };
+        emit_sse_fp_arith(code, opcode, is_f32, dd, dm);
+        fp_spill_dst_to_slot(code, dst, dd, frame);
+        return Ok(());
+    }
+    let Some(ra) = materialize_fp(code, lhs_place, Reg(frame.fp_scratch[0]), frame) else {
         return fail("Fbinop: lhs not fp reg / spill / int reg");
     };
-    if dn.0 != dd.0 {
-        emit_movapd_xmm_xmm(code, dd, dn);
+    match rhs_place {
+        Place::FpReg(r) => emit_vex_fp_arith(code, opcode, is_f32, dd, ra, Reg(r)),
+        Place::Spill(slot) => {
+            let (base, off) = spill_slot_addr(frame, slot);
+            emit_vex_fp_arith_mem(code, opcode, is_f32, dd, ra, base, off);
+        }
+        Place::IntReg(r) => {
+            let rb = Reg(frame.fp_scratch[1]);
+            emit_movq_xmm_r(code, rb, Reg(r));
+            emit_vex_fp_arith(code, opcode, is_f32, dd, ra, rb);
+        }
+        Place::None => return fail("Fbinop: rhs has no place"),
     }
-    arith(code, dd, dm);
     fp_spill_dst_to_slot(code, dst, dd, frame);
     Ok(())
 }

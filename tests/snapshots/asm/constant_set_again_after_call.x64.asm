@@ -55,9 +55,8 @@ Disassembly of section .text:
                	movsd	%xmm0, 0x8(%rsp)
                	movsd	0x10(%rsp), %xmm0
                	callq	<addr>
-               	movapd	%xmm0, %xmm15
-               	movsd	0x8(%rsp), %xmm0
-               	addsd	%xmm15, %xmm0
+               	movsd	0x8(%rsp), %xmm14
+               	vaddsd	%xmm0, %xmm14, %xmm0
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
                	movsd	0x18(%rsp), %xmm14
                	movq	%rax, %xmm15

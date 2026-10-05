@@ -148,9 +148,9 @@ Disassembly of section .text:
                	jmp	<addr>
                	movabsq	$0x7fe1ccf385ebc8a0, %rcx # imm = 0x7FE1CCF385EBC8A0
                	movabsq	$0x4024000000000000, %rdx # imm = 0x4024000000000000
+               	movq	%rcx, %xmm14
                	movq	%rdx, %xmm15
-               	movq	%rcx, %xmm0
-               	mulsd	%xmm15, %xmm0
+               	vmulsd	%xmm15, %xmm14, %xmm0
                	movsd	%xmm0, -0x10(%rbp)
                	movq	-0x10(%rbp), %rcx
                	movq	%rcx, %rdx
@@ -168,9 +168,9 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	leave
                	retq
+               	movq	%rax, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rax, %xmm0
-               	divsd	%xmm15, %xmm0
+               	vdivsd	%xmm15, %xmm14, %xmm0
                	movsd	%xmm0, -0x10(%rbp)
                	movq	-0x10(%rbp), %rcx
                	movq	%rcx, %rdx

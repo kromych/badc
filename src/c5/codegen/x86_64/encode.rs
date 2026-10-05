@@ -920,21 +920,6 @@ pub(crate) fn emit_addss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse_ss(code, 0x58, dst, src);
 }
 
-/// `SUBSS xmm, xmm` -- `dst = dst - src`.
-pub(crate) fn emit_subss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_sse_ss(code, 0x5C, dst, src);
-}
-
-/// `MULSS xmm, xmm`.
-pub(crate) fn emit_mulss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_sse_ss(code, 0x59, dst, src);
-}
-
-/// `DIVSS xmm, xmm` -- `dst = dst / src`.
-pub(crate) fn emit_divss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_sse_ss(code, 0x5E, dst, src);
-}
-
 /// `UCOMISS xmm, xmm` -- ordered scalar single-precision compare,
 /// sets EFLAGS. Encoding: `0F 2E /r` (no mandatory prefix).
 pub(crate) fn emit_ucomiss(code: &mut Vec<u8>, lhs: Reg, rhs: Reg) {
@@ -956,14 +941,15 @@ pub(crate) fn emit_subsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse2_sd(code, 0x5C, dst, src);
 }
 
-/// `MULSD xmm, xmm`.
-pub(crate) fn emit_mulsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_sse2_sd(code, 0x59, dst, src);
-}
-
-/// `DIVSD xmm, xmm` -- `dst = dst / src`.
-pub(crate) fn emit_divsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_sse2_sd(code, 0x5E, dst, src);
+/// The two-operand SSE scalar FP arithmetic row `dst <op>= src`
+/// (`addsd` / `addss` family): `is_f32` selects the single-precision
+/// (F3) vs double-precision (F2) form.
+pub(crate) fn emit_sse_fp_arith(code: &mut Vec<u8>, opcode: u8, is_f32: bool, dst: Reg, src: Reg) {
+    if is_f32 {
+        emit_sse_ss(code, opcode, dst, src);
+    } else {
+        emit_sse2_sd(code, opcode, dst, src);
+    }
 }
 
 /// `SQRTSD xmm, xmm` -- `dst = sqrt(src)`, scalar double. `F2 0F 51 /r`.
@@ -1084,6 +1070,57 @@ pub(crate) fn emit_vex_fma_mem(
     emit_byte(code, 0xC4);
     emit_byte(code, (r << 7) | (1 << 6) | (b_bit << 5) | 0b00010);
     emit_byte(code, ((w64 as u8) << 7) | (vvvv << 3) | 0b01);
+    emit_byte(code, opcode);
+    emit_modrm_mem(code, dst, base, disp);
+}
+
+/// Emit a VEX three-operand scalar FP arithmetic instruction:
+/// `dst = a <op> b`, `a` in VEX.vvvv and `b` in ModR/M.r/m, so neither
+/// source is overwritten. `opcode` is the scalar SSE opcode (58 add,
+/// 5C sub, 59 mul, 5E div); `is_f32` picks the single-precision row
+/// (pp = 10 -> F3) vs the double-precision one (pp = 11 -> F2). The
+/// scalar row ignores W; W0 matches the assemblers' choice.
+pub(crate) fn emit_vex_fp_arith(
+    code: &mut Vec<u8>,
+    opcode: u8,
+    is_f32: bool,
+    dst: Reg,
+    a: Reg,
+    b: Reg,
+) {
+    // 3-byte VEX (C4): byte1 R X B mmmmm (R/B inverted high bits;
+    // mmmmm = 00001 the 0F map), byte2 W vvvv L pp (vvvv inverted,
+    // L = 0 scalar).
+    let r = if dst.high() { 0u8 } else { 1u8 };
+    let b_bit = if b.high() { 0u8 } else { 1u8 };
+    let a_num = ((a.high() as u8) << 3) | a.lo();
+    let vvvv = (!a_num) & 0xF;
+    let pp = if is_f32 { 0b10 } else { 0b11 };
+    emit_byte(code, 0xC4);
+    emit_byte(code, (r << 7) | (1 << 6) | (b_bit << 5) | 0b00001);
+    emit_byte(code, (vvvv << 3) | pp);
+    emit_byte(code, opcode);
+    emit_byte(code, modrm(0b11, dst.lo(), b.lo()));
+}
+
+/// [`emit_vex_fp_arith`] with the `b` operand in memory (`m64` / `m32`).
+pub(crate) fn emit_vex_fp_arith_mem(
+    code: &mut Vec<u8>,
+    opcode: u8,
+    is_f32: bool,
+    dst: Reg,
+    a: Reg,
+    base: Reg,
+    disp: i32,
+) {
+    let r = if dst.high() { 0u8 } else { 1u8 };
+    let b_bit = if base.high() { 0u8 } else { 1u8 };
+    let a_num = ((a.high() as u8) << 3) | a.lo();
+    let vvvv = (!a_num) & 0xF;
+    let pp = if is_f32 { 0b10 } else { 0b11 };
+    emit_byte(code, 0xC4);
+    emit_byte(code, (r << 7) | (1 << 6) | (b_bit << 5) | 0b00001);
+    emit_byte(code, (vvvv << 3) | pp);
     emit_byte(code, opcode);
     emit_modrm_mem(code, dst, base, disp);
 }
@@ -2538,6 +2575,39 @@ mod tests {
         assert_eq!(
             assemble(|c| emit_vex_fma_mem(c, 0xB9, true, Reg(0), Reg(1), Reg::RSP, 8)),
             vec![0xC4, 0xE2, 0xF1, 0xB9, 0x44, 0x24, 0x08]
+        );
+    }
+
+    #[test]
+    fn vex_fp_arith_scalar_encodings() {
+        // The VEX.NDS.LIG rows of the 0F map read both sources in place:
+        // vaddsd xmm0, xmm1, xmm2 -> C4 E1 73 58 C2 (vvvv = xmm1,
+        // pp = 0xF2), the ss row takes pp = 0xF3. Cross-checked against
+        // clang's assembler.
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith(c, 0x58, false, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE1, 0x73, 0x58, 0xC2]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith(c, 0x5C, false, Reg(2), Reg(3), Reg(4))),
+            vec![0xC4, 0xE1, 0x63, 0x5C, 0xD4]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith(c, 0x58, true, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE1, 0x72, 0x58, 0xC2]
+        );
+        // Extended registers clear VEX.R / VEX.B: vaddsd xmm8, xmm9,
+        // xmm10 -> C4 41 33 58 C2.
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith(c, 0x58, false, Reg(8), Reg(9), Reg(10))),
+            vec![0xC4, 0x41, 0x33, 0x58, 0xC2]
+        );
+        // A memory r/m operand keeps the base in VEX.B and takes a
+        // ModR/M addressing byte: vaddsd xmm0, xmm1, 8(%rsp) ->
+        // C4 E1 73 58 44 24 08.
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith_mem(c, 0x58, false, Reg(0), Reg(1), Reg::RSP, 8)),
+            vec![0xC4, 0xE1, 0x73, 0x58, 0x44, 0x24, 0x08]
         );
     }
 

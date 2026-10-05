@@ -604,9 +604,9 @@ Disassembly of section .text:
                	addq	$0x10, %rsp
                	movabsq	$0x4022000000000000, %rax # imm = 0x4022000000000000
                	movabsq	$0x4197d78400000000, %rcx # imm = 0x4197D78400000000
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm1
-               	addsd	%xmm15, %xmm1
+               	vaddsd	%xmm15, %xmm14, %xmm1
                	movabsq	$0x417312d000000000, %rax # imm = 0x417312D000000000
                	movq	%rax, %xmm15
                	addsd	%xmm15, %xmm1

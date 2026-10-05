@@ -137,9 +137,9 @@ Disassembly of section .text:
                	movl	$0x3f800000, %eax       # imm = 0x3F800000
                	movl	$0x40000000, %ecx       # imm = 0x40000000
                	movl	$0x40600000, %edx       # imm = 0x40600000
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm0
-               	addss	%xmm15, %xmm0
+               	vaddss	%xmm15, %xmm14, %xmm0
                	movq	%rdx, %xmm15
                	addss	%xmm15, %xmm0
                	movl	$0x40d00000, %eax       # imm = 0x40D00000

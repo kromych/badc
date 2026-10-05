@@ -138,9 +138,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rbx
                	movups	(%rbx), %xmm14
                	movups	%xmm14, (%r9)
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm15, %xmm14, %xmm0
                	movabsq	$0x3fe8000000000000, %rax # imm = 0x3FE8000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -151,9 +151,9 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
+               	movq	%rdx, %xmm14
                	movq	%rsi, %xmm15
-               	movq	%rdx, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm15, %xmm14, %xmm0
                	movq	%rdi, %xmm15
                	addsd	%xmm15, %xmm0
                	movq	%r8, %xmm15

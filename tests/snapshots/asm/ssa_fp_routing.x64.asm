@@ -28,9 +28,9 @@ Disassembly of section .text:
 <main>:
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movabsq	$0x4002000000000000, %rcx # imm = 0x4002000000000000
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm15, %xmm14, %xmm0
                	movabsq	$0x400e000000000000, %rcx # imm = 0x400E000000000000
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -39,9 +39,9 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	movabsq	$0x4014000000000000, %rdx # imm = 0x4014000000000000
+               	movq	%rdx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rdx, %xmm0
-               	subsd	%xmm15, %xmm0
+               	vsubsd	%xmm15, %xmm14, %xmm0
                	movabsq	$0x400c000000000000, %rax # imm = 0x400C000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -51,9 +51,9 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x4004000000000000, %rdx # imm = 0x4004000000000000
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
+               	movq	%rdx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rdx, %xmm0
-               	mulsd	%xmm15, %xmm0
+               	vmulsd	%xmm15, %xmm14, %xmm0
                	movabsq	$0x4024000000000000, %rdx # imm = 0x4024000000000000
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -62,9 +62,9 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
                	movabsq	$0x402e000000000000, %rdx # imm = 0x402E000000000000
+               	movq	%rdx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rdx, %xmm0
-               	divsd	%xmm15, %xmm0
+               	vdivsd	%xmm15, %xmm14, %xmm0
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>

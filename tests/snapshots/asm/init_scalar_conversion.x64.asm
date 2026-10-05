@@ -145,9 +145,9 @@ Disassembly of section .text:
                	cmpl	$0x3, %ecx
                	jne	<addr>
                	xorl	%ecx, %ecx
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm15, %xmm14, %xmm0
                	cvtsd2ss	%xmm0, %xmm0
                	movl	$0x4078f5c3, %eax       # imm = 0x4078F5C3
                	movq	%rax, %xmm15

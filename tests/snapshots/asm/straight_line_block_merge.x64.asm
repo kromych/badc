@@ -270,17 +270,13 @@ Disassembly of section .text:
 <lift>:
                	movabsq	$0x3ff8000000000000, %r11 # imm = 0x3FF8000000000000
                	movq	%r11, %xmm1
-               	movapd	%xmm0, %xmm15
-               	movapd	%xmm1, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm0, %xmm1, %xmm0
                	retq
 
 <liftf>:
                	movl	$0x3f400000, %r11d      # imm = 0x3F400000
                	movq	%r11, %xmm1
-               	movapd	%xmm0, %xmm15
-               	movapd	%xmm1, %xmm0
-               	addss	%xmm15, %xmm0
+               	vaddss	%xmm0, %xmm1, %xmm0
                	retq
 
 <main>:

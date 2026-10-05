@@ -28,9 +28,9 @@ Disassembly of section .text:
 <main>:
                	movl	$0x40200000, %eax       # imm = 0x40200000
                	movl	$0x3f800000, %ecx       # imm = 0x3F800000
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm0
-               	subss	%xmm15, %xmm0
+               	vsubss	%xmm15, %xmm14, %xmm0
                	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
@@ -42,9 +42,9 @@ Disassembly of section .text:
                	movl	$0x41000000, %ecx       # imm = 0x41000000
                	movl	$0x3f000000, %edx       # imm = 0x3F000000
                	movl	$0x3e800000, %esi       # imm = 0x3E800000
+               	movq	%rcx, %xmm14
                	movq	%rsi, %xmm15
-               	movq	%rcx, %xmm0
-               	mulss	%xmm15, %xmm0
+               	vmulss	%xmm15, %xmm14, %xmm0
                	movq	%rax, %xmm14
                	movq	%rdx, %xmm15
                	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
@@ -57,9 +57,9 @@ Disassembly of section .text:
                	retq
                	xorl	%ecx, %ecx
                	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm0
-               	addss	%xmm15, %xmm0
+               	vaddss	%xmm15, %xmm14, %xmm0
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
                	movq	%rax, %xmm15

@@ -99,9 +99,8 @@ Disassembly of section .text:
                	addss	%xmm1, %xmm0
                	movss	0x8(%rax), %xmm1
                	addss	%xmm1, %xmm0
-               	movapd	%xmm0, %xmm15
-               	movq	%rcx, %xmm0
-               	addss	%xmm15, %xmm0
+               	movq	%rcx, %xmm14
+               	vaddss	%xmm0, %xmm14, %xmm0
                	leaq	0x10(%rax), %rcx
                	movss	(%rcx), %xmm1
                	movss	0x4(%rcx), %xmm2
@@ -179,8 +178,7 @@ Disassembly of section .text:
                	addss	%xmm2, %xmm1
                	movss	0x8(%rax), %xmm2
                	addss	%xmm2, %xmm1
-               	movapd	%xmm0, %xmm14
-               	addss	%xmm1, %xmm14
+               	vaddss	%xmm1, %xmm0, %xmm14
                	movsd	%xmm14, 0x18(%rsp)
                	xorl	%eax, %eax
                	movsd	0x18(%rsp), %xmm14

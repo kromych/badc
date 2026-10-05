@@ -72,9 +72,9 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm0
-               	subsd	%xmm15, %xmm0
+               	vsubsd	%xmm15, %xmm14, %xmm0
                	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -97,9 +97,9 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm0
-               	subsd	%xmm15, %xmm0
+               	vsubsd	%xmm15, %xmm14, %xmm0
                	xorl	%ecx, %ecx
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
@@ -122,9 +122,9 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
+               	movq	%rax, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rax, %xmm0
-               	subsd	%xmm15, %xmm0
+               	vsubsd	%xmm15, %xmm14, %xmm0
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>

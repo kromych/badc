@@ -308,7 +308,7 @@ pub(crate) fn emit_function(
     };
     em.emit_body()?;
     debug_assert_eq!(
-        scratch.third_taken(),
+        scratch.third_taken() || frame.local_base,
         frame.uses_x19,
         "x19 save and x19 writers disagree"
     );
@@ -1484,6 +1484,13 @@ fn emit_prologue(
         return;
     }
     emit_frame_and_saves(code, alloc, frame);
+    if frame.local_base {
+        // x19 = the frame bottom: far locals and spills address from it
+        // with a scaled offset, one instruction instead of the fp form's
+        // address build. sp moves at run time below the bottom, which the
+        // base does not depend on.
+        emit(code, enc_add_imm(Reg(19), Reg(31), 0));
+    }
     if func.indirect_result_slot != 0 {
         // AAPCS64 6.9: save the caller-supplied x8 indirect-result pointer
         // into its body local; `return s;` writes the aggregate through it.

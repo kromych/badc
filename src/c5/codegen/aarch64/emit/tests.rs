@@ -53,9 +53,9 @@ mod asm_scratch_tests {
             volatile: true,
         };
         let fixed = crate::c5::codegen::FixedRegs::NONE;
-        let free = asm_save_masks(&asm, &[], fixed, (0, 0)).unwrap();
+        let free = asm_save_masks(&asm, &[], fixed, (0, 0), false).unwrap();
         assert_eq!(free, (0, 0), "a free clobber set saves nothing");
-        let held = asm_save_masks(&asm, &[], fixed, (1 << 20, 1 << 8)).unwrap();
+        let held = asm_save_masks(&asm, &[], fixed, (1 << 20, 1 << 8), false).unwrap();
         assert_eq!(held, (1 << 20, 1 << 8), "the mask's registers are saved");
     }
 
@@ -72,7 +72,7 @@ mod asm_scratch_tests {
                 crate::c5::codegen::Target::LinuxAarch64,
                 crate::c5::codegen::FixedRegs::NONE,
             );
-            asm_scratch_bytes(&func, &alloc, crate::c5::codegen::FixedRegs::NONE)
+            asm_scratch_bytes(&func, &alloc, crate::c5::codegen::FixedRegs::NONE, false)
         };
         assert_eq!(bytes("", true), 0);
         assert_eq!(bytes("// note ;", true), 0);

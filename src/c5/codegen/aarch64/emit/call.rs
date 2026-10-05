@@ -165,7 +165,15 @@ pub(super) fn emit_va_arg_cursor(
         return va_arg_result(code, dst, ap_r, frame);
     }
     let (rd, adv) = va_arg_cursor_regs(ap_r, dst, scratch);
-    let adv = adv.unwrap_or_else(|| scratch.third(frame));
+    let (adv, borrowed) = match adv {
+        Some(a) => (a, false),
+        None if frame.local_base => {
+            // x19 holds the locals base; borrow it for the advance.
+            emit(code, enc_str_pre(Reg(19), Reg(31), -16));
+            (Reg(19), true)
+        }
+        None => (scratch.third(frame), false),
+    };
     emit(code, enc_ldr_imm(rd, ap_r, 0));
     // Both cursor areas start 16-aligned, so rounding aligns the slot too.
     if desc.align > 8 {
@@ -174,6 +182,9 @@ pub(super) fn emit_va_arg_cursor(
     }
     emit(code, enc_add_imm(adv, rd, va_stride));
     emit(code, enc_str_imm(adv, ap_r, 0));
+    if borrowed {
+        emit(code, enc_ldr_post(Reg(19), Reg(31), 16));
+    }
     if desc.by_ref {
         emit(code, enc_ldr_imm(rd, rd, 0));
     }

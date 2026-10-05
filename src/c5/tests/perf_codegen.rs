@@ -4002,8 +4002,9 @@ fn an_out_pointer_return_ending_in_a_marker_is_built_in_place() {
 }
 
 /// A local far below fp is one load or store off sp where sp stays where
-/// the prologue left it; with alloca or an asm sp move it stays on fp, one
-/// instruction building the 4 KiB multiple and the access holding the rest.
+/// the prologue left it; with alloca or an asm sp move the base register
+/// captured after the prologue (`mov x19, sp`) addresses it the same way,
+/// where the fp form would build the 4 KiB multiple first.
 #[test]
 fn a64_far_local_is_addressed_off_the_fixed_sp() {
     let mut m = Misses::default();
@@ -4018,9 +4019,13 @@ fn a64_far_local_is_addressed_off_the_fixed_sp() {
     });
     for name in ["moving", "switched"] {
         let ws = a64(FAR_SLOTS, name);
+        let off_x19 = ws
+            .iter()
+            .filter(|&&w| a64_mem_imm(w).is_some_and(|(rn, _, _)| rn == 19))
+            .count();
         let built = a64_built_accesses(&ws, 29);
-        m.expect(built.0 >= 12 && built.1 == 0, || {
-            format!("aarch64 {name}: built off fp {built:?}: {ws:08x?}")
+        m.expect(off_x19 >= 12 && built == (0, 0), || {
+            format!("aarch64 {name}: {off_x19} accesses off x19, built {built:?}: {ws:08x?}")
         });
     }
     m.finish();

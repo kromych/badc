@@ -160,7 +160,9 @@ pub(super) fn emit_sp_str_x_auto(code: &mut Vec<u8>, rt: Reg, off: u32) {
 
 /// Base and displacement of the spill byte `sp_off` bytes above the static sp.
 fn spill_base(frame: Frame, sp_off: u32) -> (Reg, i64) {
-    if frame.dynamic_sp {
+    if frame.local_base {
+        (Reg(19), sp_off.into())
+    } else if frame.dynamic_sp {
         (Reg(29), i64::from(sp_off) - i64::from(frame.frame_bytes))
     } else {
         (Reg(31), sp_off.into())
@@ -886,12 +888,14 @@ pub(super) fn emit_agg_store_fp_at(
     emit_agg_store_fp(code, src, base, off, width, align, strict_align, tmp);
 }
 
-/// A frame byte's displacements from fp in the static layout and from sp
-/// where sp keeps its prologue value (not `Frame::dynamic_sp`). An object in
-/// the realigned region (C11 6.7.5) has no fp form.
+/// A frame byte's displacements from fp in the static layout, from x19
+/// where it holds the frame bottom ([`Frame::local_base`]), and from sp
+/// where sp keeps its prologue value (not `Frame::dynamic_sp`). An
+/// object in the realigned region (C11 6.7.5) has no fp form.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct FrameLoc {
     fp: Option<i64>,
+    x19: Option<i64>,
     sp: Option<i64>,
 }
 
@@ -899,7 +903,14 @@ impl FrameLoc {
     /// The byte at `fp + disp` in the static layout.
     pub(super) fn at_fp(frame: Frame, disp: i64) -> Self {
         let sp = (!frame.dynamic_sp).then(|| disp + i64::from(frame.frame_bytes));
-        Self { fp: Some(disp), sp }
+        let x19 = frame
+            .local_base
+            .then(|| disp + i64::from(frame.frame_bytes));
+        Self {
+            fp: Some(disp),
+            x19,
+            sp,
+        }
     }
 
     /// The same byte while sp stands `bytes` below the prologue's value
@@ -913,7 +924,7 @@ impl FrameLoc {
 
     /// The form whose base costs the fewest instructions ([`base_len`]), fp on a tie.
     fn pick(self, fits: impl Fn(i64) -> bool) -> (Reg, i64) {
-        [(Reg(29), self.fp), (Reg(31), self.sp)]
+        [(Reg(29), self.fp), (Reg(19), self.x19), (Reg(31), self.sp)]
             .into_iter()
             .filter_map(|(base, disp)| Some((base, disp?)))
             .min_by_key(|&(_, disp)| base_len(disp, &fits))
@@ -952,6 +963,7 @@ pub(super) fn local_slot(off: i64, func: &FunctionSsa, frame: Frame) -> FrameLoc
         }
         Some(region_off) => FrameLoc {
             fp: None,
+            x19: None,
             sp: Some(region_off.max(0)),
         },
     }

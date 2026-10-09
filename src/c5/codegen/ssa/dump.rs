@@ -204,11 +204,6 @@ fn fmt_inst(inst: &Inst) -> String {
         ),
         Neg(v) => format!("Neg(v{v})"),
         Fneg(v) => format!("Fneg(v{v})"),
-        Select {
-            cond,
-            on_true,
-            on_false,
-        } => format!("Select {{ cond=v{cond}, on_true=v{on_true}, on_false=v{on_false} }}"),
         Fma {
             a,
             b,

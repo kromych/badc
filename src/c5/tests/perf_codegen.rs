@@ -3136,68 +3136,6 @@ fn a64_bit_counts_take_the_count_instructions() {
     m.finish();
 }
 
-/// `ffs` builds one `Inst::Select` over the trailing count:
-/// `ctz == width*8 ? 0 : ctz + 1`. The zero case rides the condition
-/// the count's own guard tests, so both targets emit the select as
-/// one `cmp` + `csinc` (AArch64) or one `cmovz` (x86-64, `bsf`'s own
-/// ZF) with no separate zero guard.
-#[test]
-fn ffs_lowers_to_a_select_over_the_trailing_count() {
-    use crate::c5::ir::{BinOp, BitCountOp, Inst};
-    const SRC: &str = "int i(int x) { return __builtin_ffs(x); }\n\
-long l(long x) { return __builtin_ffsll(x); }\n";
-    let target = Target::LinuxX64;
-    let program = crate::Compiler::with_options(
-        SRC.to_string(),
-        target,
-        crate::CompileOptions::default().with_no_entry_point(true),
-    )
-    .compile()
-    .expect("compile");
-    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
-        .expect("produce_ssa_funcs");
-    let mut m = Misses::default();
-    for (name, width) in [("i", 4), ("l", 8)] {
-        let f = funcs.iter().find(|f| f.name == name).expect(name);
-        let ctz = f
-            .insts
-            .iter()
-            .position(|i| {
-                matches!(i, Inst::BitCount { op: BitCountOp::Ctz, width: w, .. } if *w == width)
-            })
-            .unwrap_or_else(|| panic!("{name}: no ctz"));
-        let sel = f
-            .insts
-            .iter()
-            .position(|i| matches!(i, Inst::Select { .. }))
-            .unwrap_or_else(|| panic!("{name}: no select"));
-        let Inst::Select {
-            cond,
-            on_true,
-            on_false,
-        } = f.insts[sel]
-        else {
-            panic!("{name}: expected a select");
-        };
-        m.expect(
-            matches!(&f.insts[cond as usize],
-                Inst::BinopI { op: BinOp::Eq, lhs, rhs_imm }
-                    if *lhs == ctz as u32 && *rhs_imm == i64::from(width) * 8),
-            || format!("{name}: the condition is not ctz == {}", width * 8),
-        );
-        m.expect(matches!(&f.insts[on_true as usize], Inst::Imm(0)), || {
-            format!("{name}: the true arm is not 0")
-        });
-        m.expect(
-            matches!(&f.insts[on_false as usize],
-                Inst::BinopI { op: BinOp::Add, lhs, rhs_imm: 1 }
-                    if *lhs == ctz as u32),
-            || format!("{name}: the false arm is not ctz + 1"),
-        );
-    }
-    m.finish();
-}
-
 /// x86-64 counts with `bsr` / `bsf` and `popcnt` at the builtin's operand
 /// size, never `lzcnt` / `tzcnt`: a zero operand sets ZF, and `cmovz` then
 /// takes `2 * bits - 1` into the `xor bits - 1` for clz, `bits` for ctz.

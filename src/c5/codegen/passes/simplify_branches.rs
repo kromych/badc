@@ -42,9 +42,6 @@ struct Opts<'a> {
     resolve_constant_p: bool,
     fold_selects: bool,
     implied_ranges: bool,
-    /// Convert a diamond of pure values into an `Inst::Select`
-    /// ([`super::select`]); a `-O` transform.
-    build_selects: bool,
     /// Fold a load of a location this function stored a constant into
     /// ([`super::store_forward::fold_const_loads`]).
     const_stores: bool,
@@ -67,7 +64,6 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
                 resolve_constant_p: false,
                 fold_selects: false,
                 implied_ranges: false,
-                build_selects: false,
                 const_stores: false,
                 param_ranges: &[],
                 merge_blocks: false,
@@ -109,7 +105,6 @@ pub(crate) fn run_with_const_data_on(
                 resolve_constant_p: true,
                 fold_selects: true,
                 implied_ranges: true,
-                build_selects: true,
                 const_stores: true,
                 param_ranges: ranges,
                 merge_blocks: true,
@@ -150,13 +145,11 @@ fn run_one(func: &mut FunctionSsa, opts: &Opts<'_>) {
         let stored = opts.const_stores && super::store_forward::fold_const_loads(func);
         let folded = super::constfold_branch::run_one(func);
         let threaded = super::thread_phi_branches::run_one(func);
-        let built_select = opts.build_selects && super::select::run_one(func);
         let pruned = super::prune_unreachable::run_one(func);
         bound -= 1;
         if (!folded
             && !threaded
             && !pruned
-            && !built_select
             && !loaded
             && !forwarded
             && !selected

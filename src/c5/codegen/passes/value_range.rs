@@ -944,24 +944,6 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
         // Wrapping: the negation of the type minimum is itself, which
         // `arith` reports as unbounded rather than as a positive value.
         Inst::Neg(value) => arith(Range::exact(0), range_of(*value), true),
-        // The union of the two arms. A condition the range already
-        // decides picks one arm outright.
-        Inst::Select {
-            cond,
-            on_true,
-            on_false,
-        } => {
-            let c = range_of(*cond);
-            let t = range_of(*on_true);
-            let f = range_of(*on_false);
-            if c.lo > 0 {
-                t
-            } else if c.hi == 0 {
-                f
-            } else {
-                t.hull(f)
-            }
-        }
         Inst::BitCount { width, .. } => Range {
             lo: 0,
             hi: 8 * i128::from(*width),

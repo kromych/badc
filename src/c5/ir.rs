@@ -220,18 +220,6 @@ pub(crate) enum Inst {
     Neg(ValueId),
     /// Unary floating-point negation.
     Fneg(ValueId),
-    /// Value chosen by a condition: `cond != 0` yields `on_true`, else
-    /// `on_false`, both evaluated ahead of the select (C99 6.5.15
-    /// evaluates exactly one arm, so a producer builds one only from
-    /// arms whose evaluation is unobservable -- no side effects, no
-    /// traps -- and marks the select pure like its operands). `cond`
-    /// tests against zero as a `Terminator::Bz` tests it. Lowers to
-    /// `csel` / `csinc` on AArch64 and `cmovcc` on x86-64.
-    Select {
-        cond: ValueId,
-        on_true: ValueId,
-        on_false: ValueId,
-    },
     /// Fused multiply-add computed with a single rounding (C99 6.5p8,
     /// FP_CONTRACT). The value is
     /// `(neg_product ? -(a*b) : a*b) + (neg_addend ? -c : c)`. Produced
@@ -673,7 +661,6 @@ impl Inst {
                 | Inst::BinopI { .. }
                 | Inst::Neg(_)
                 | Inst::Fneg(_)
-                | Inst::Select { .. }
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
                 | Inst::Udiv128 { .. }
@@ -719,7 +706,6 @@ impl Inst {
             Inst::BinopI { .. } => "BinopI",
             Inst::Neg(_) => "Neg",
             Inst::Fneg(_) => "Fneg",
-            Inst::Select { .. } => "Select",
             Inst::Fma { .. } => "Fma",
             Inst::MulAdd { .. } => "MulAdd",
             Inst::Udiv128 { .. } => "Udiv128",
@@ -806,15 +792,6 @@ impl Inst {
             }
             Inst::BinopI { lhs, .. } => f(*lhs),
             Inst::Neg(v) | Inst::Fneg(v) => f(*v),
-            Inst::Select {
-                cond,
-                on_true,
-                on_false,
-            } => {
-                f(*cond);
-                f(*on_true);
-                f(*on_false);
-            }
             Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
                 f(*a);
                 f(*b);
@@ -929,15 +906,6 @@ impl Inst {
             }
             Inst::BinopI { lhs, .. } => f(lhs),
             Inst::Neg(v) | Inst::Fneg(v) => f(v),
-            Inst::Select {
-                cond,
-                on_true,
-                on_false,
-            } => {
-                f(cond);
-                f(on_true);
-                f(on_false);
-            }
             Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
                 f(a);
                 f(b);
@@ -2460,7 +2428,6 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::BinopI { .. }
             | Inst::Neg { .. }
             | Inst::Fneg { .. }
-            | Inst::Select { .. }
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }
             | Inst::Udiv128 { .. }

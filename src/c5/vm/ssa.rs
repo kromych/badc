@@ -1282,19 +1282,6 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = frame.regs[*src as usize].wrapping_neg();
             return Ok(());
         }
-        Inst::Select {
-            cond,
-            on_true,
-            on_false,
-        } => {
-            let pick = if frame.regs[*cond as usize] != 0 {
-                *on_true
-            } else {
-                *on_false
-            };
-            frame.regs[v as usize] = frame.regs[pick as usize];
-            return Ok(());
-        }
         Inst::Fneg(src) => {
             let raw = frame.regs[*src as usize];
             let neg = eval::eval_fneg(raw);

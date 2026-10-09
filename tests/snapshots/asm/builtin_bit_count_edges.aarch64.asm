@@ -78,11 +78,13 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	rbit	w3, w6
-               	clz	w3, w3
+               	rbit	w2, w6
+               	clz	w2, w2
+               	add	x3, x2, #0x1
+               	lsr	x2, x2, #5
+               	sub	x2, x2, #0x1
+               	and	x5, x3, x2
                	mov	x2, #0x0                // =0
-               	cmp	w3, #0x20
-               	csinc	w5, w2, w3, eq
                	lsr	x3, x1, x2
                	tbnz	w3, #0x0, <addr>
                	add	x2, x2, #0x1
@@ -331,11 +333,13 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0xe                // =14
                	ret
-               	rbit	x2, x5
-               	clz	x2, x2
+               	rbit	x1, x5
+               	clz	x1, x1
+               	add	x2, x1, #0x1
+               	lsr	x1, x1, #6
+               	sub	x1, x1, #0x1
+               	and	x4, x2, x1
                	mov	x1, #0x0                // =0
-               	cmp	w2, #0x40
-               	csinc	w4, w1, w2, eq
                	lsr	x2, x0, x1
                	tbnz	w2, #0x0, <addr>
                	add	x1, x1, #0x1
@@ -530,11 +534,13 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x15               // =21
                	ret
-               	rbit	x2, x5
-               	clz	x2, x2
+               	rbit	x1, x5
+               	clz	x1, x1
+               	add	x2, x1, #0x1
+               	lsr	x1, x1, #6
+               	sub	x1, x1, #0x1
+               	and	x3, x2, x1
                	mov	x1, #0x0                // =0
-               	cmp	w2, #0x40
-               	csinc	w3, w1, w2, eq
                	lsr	x2, x0, x1
                	tbnz	w2, #0x0, <addr>
                	add	x1, x1, #0x1

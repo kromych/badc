@@ -471,15 +471,10 @@ pub(super) fn emit_inst(
             *op,
             *value,
             *width,
-            alloc.count_nonzero(v) || alloc.count_guard_redundant(v),
+            alloc.count_nonzero(v),
             alloc,
             frame,
         ),
-        Inst::Select {
-            cond,
-            on_true,
-            on_false,
-        } => emit_select(code, v, dst, *cond, *on_true, *on_false, func, alloc, frame),
         Inst::Copy { value, is_fp } => emit_copy(code, dst, *value, *is_fp, alloc, frame),
         Inst::FpCast { kind, value } => emit_fp_cast(code, dst, v, *kind, *value, alloc, frame),
         Inst::TlsAddr(offset) => emit_tls_addr(

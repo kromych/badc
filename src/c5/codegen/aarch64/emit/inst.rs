@@ -407,13 +407,6 @@ pub(super) fn emit_inst(
         Inst::BitCount { op, value, width } => {
             emit_bit_count(code, dst, *op, *value, *width, alloc, frame, scratch)
         }
-        Inst::Select {
-            cond,
-            on_true,
-            on_false,
-        } => emit_select(
-            code, v, dst, *cond, *on_true, *on_false, func, alloc, frame, scratch,
-        ),
         Inst::Copy { value, is_fp } => emit_copy(code, dst, *value, *is_fp, alloc, frame, scratch),
         Inst::FpCast { kind, value } => {
             emit_fp_cast(code, *kind, *value, v, dst, alloc, frame, scratch)

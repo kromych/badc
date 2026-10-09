@@ -255,18 +255,6 @@ fn compute_high_observed_through(
             // need only the operand's, as `Sub` does.
             Inst::Neg(_) => {}
             Inst::Fneg(v) => observe(&mut hi, &mut work, *v),
-            // A select hands each arm's value through in the result's
-            // own width, so the arms' high bits are observed; the
-            // condition's too, as a tested value.
-            Inst::Select {
-                cond,
-                on_true,
-                on_false,
-            } => {
-                observe(&mut hi, &mut work, *cond);
-                observe(&mut hi, &mut work, *on_true);
-                observe(&mut hi, &mut work, *on_false);
-            }
             Inst::Fma { a, b, c, .. } => {
                 observe(&mut hi, &mut work, *a);
                 observe(&mut hi, &mut work, *b);

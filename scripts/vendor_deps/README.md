@@ -111,7 +111,8 @@ directory still loads them at run time: QEMU's `pc` / `q35`
 machines want the firmware (SeaBIOS) plus the option ROMs for the
 APIC helper, the `-kernel` loader and the VGA BIOS. The kernel
 lane boots a badc-built image under a self-linked emulator and
-passes `-L` at this set. It is packed straight from an upstream
+passes `-L` at this set, and the qemu demo's QMP shutdown check
+gives it to its q35 machine. It is packed straight from an upstream
 release tarball, so no build directory is involved:
 
 ```sh

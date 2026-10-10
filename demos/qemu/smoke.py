@@ -688,34 +688,43 @@ def aavmf_pflash(work: Path) -> list[str] | None:
     return args
 
 
+def qsetup():
+    """setup.py, the sibling module that fetches the run-time assets."""
+    if str(QEMU_DIR) not in sys.path:
+        sys.path.insert(0, str(QEMU_DIR))
+    import setup
+    return setup
+
+
 def _shutdown_check(binp: Path, arch: str) -> None:
     """Exercise the host-initiated shutdown path: start the machine with no
-    devices, issue a QMP `quit`, and require a clean exit. This runs the QMP
-    dispatcher teardown a dropped store in QEMU_LOCK_GUARD's compound literal
-    once left with a null unlock pointer, SIGSEGV'ing on quit. No kernel or
-    firmware is needed (`-nodefaults`), so it is cheap and always runs. A
-    signal death here is an unambiguous codegen regression and is fatal; an
-    ambiguous non-clean exit is reported best-effort, matching the run gate."""
+    devices, issue a QMP `quit`, and require QMP's SHUTDOWN event and a clean
+    exit; anything else fails the smoke. This runs the QMP dispatcher
+    teardown a dropped store in QEMU_LOCK_GUARD's compound literal once left
+    with a null unlock pointer, SIGSEGV'ing on quit. `-nodefaults` leaves no
+    device ROM to load, but q35 still loads its BIOS: it takes the release's
+    x86 ROM set, as the emulator has no data directory."""
     machine = "virt" if arch == "aarch64" else "q35"
     cmd = [str(binp), "-M", machine, "-display", "none", "-serial", "null",
            "-qmp", "stdio", "-nodefaults"]
+    if arch == "x86_64":
+        roms = qsetup().fetch_pc_bios(QEMU_DIR / ".cache", QEMU_DIR / ".cache" / "pc-bios")
+        cmd += ["-L", str(roms)]
     qmp = b'{"execute":"qmp_capabilities"}\n{"execute":"quit"}\n'
     try:
         p = subprocess.run(cmd, input=qmp, capture_output=True, timeout=40)
     except subprocess.TimeoutExpired:
-        log(f"shutdown check [{machine}]: no exit on QMP quit within 40s "
-            "(best-effort)")
-        return
+        fail(f"shutdown check [{machine}]: no exit within 40s of QMP quit")
     out = p.stdout.decode(errors="replace")
     if p.returncode < 0:
         fail(f"shutdown check [{machine}]: qemu died from signal "
              f"{-p.returncode} on QMP quit -- the host-initiated shutdown "
              f"path faulted\n{out[-800:]}")
-    if p.returncode == 0 and '"event": "SHUTDOWN"' in out:
-        log(f"shutdown OK [{machine}]: QMP quit reached SHUTDOWN, clean exit")
-    else:
-        log(f"shutdown check [{machine}]: QMP quit did not confirm cleanly "
-            f"(rc={p.returncode}); best-effort\n  {out[-300:]}")
+    if p.returncode != 0 or '"event": "SHUTDOWN"' not in out:
+        err = p.stderr.decode(errors="replace").strip()
+        fail(f"shutdown check [{machine}]: exited rc={p.returncode} without "
+             f"QMP's SHUTDOWN event\n  stdout: {out.strip()[-300:]}\n  stderr: {err[-300:]}")
+    log(f"shutdown OK [{machine}]: QMP quit reached SHUTDOWN, clean exit")
 
 
 def maybe_boot(binp: Path, arch: str) -> None:
@@ -749,9 +758,7 @@ def maybe_boot(binp: Path, arch: str) -> None:
             "boot the published kernel, or point $BADC_QEMU_KERNEL at an image)")
         return
     if not kernel:
-        sys.path.insert(0, str(QEMU_DIR))
-        import setup as qsetup  # sibling module; fetches the boot bundle
-        pair = qsetup.fetch_kernel(QEMU_DIR / ".cache", arch, log)
+        pair = qsetup().fetch_kernel(QEMU_DIR / ".cache", arch, log)
         if pair is None:
             msg = f"boot: no kernel bundle published for {arch}"
             if not best_effort:

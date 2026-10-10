@@ -75,9 +75,9 @@ pub(crate) struct Frame {
     /// run time and each site carves its own slice below sp.
     pub outgoing_bytes: u32,
     /// x19 holds the frame bottom (`mov x19, sp` after the prologue), so
-    /// far locals and spills address from it in one instruction. x19 is
-    /// outside the allocator's banks and free of the third-scratch
-    /// lowerings here ([`local_base`]).
+    /// far locals, spills and inline-asm slots address from it in one
+    /// instruction. The modulo and cursor `va_arg` lowerings that take x19
+    /// as a third scratch push and pop it around the use.
     pub local_base: bool,
 }
 
@@ -98,11 +98,11 @@ pub(crate) fn compute_frame(
     let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     let dynamic_sp = super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 16;
     // x19 becomes the locals base only where sp moves at run time, the
-    // prologue-end sp is a constant distance from fp (no realignment), no
-    // lowering takes x19 as the third scratch, and the one-instruction
-    // forms pay for the register's save, restore and capture.
+    // prologue-end sp is a constant distance from fp (no realignment),
+    // nothing in the body overwrites x19, and the one-instruction forms
+    // pay for the register's save, restore and capture.
     let writes_third_scratch = writes_x19(func, alloc, abi);
-    let local_base = !x19_jump_buffered(func)
+    let local_base = !x19_overwritten(func, abi.fixed_regs)
         && (super::ssa::emit_common::uses_dynamic_alloca(func) || func.has_sp_moving_asm())
         && func.frame_align <= 16
         && !abi.fixed_regs.has_gpr(19)
@@ -118,7 +118,7 @@ pub(crate) fn compute_frame(
     let asm_bytes = if func.is_naked {
         0
     } else {
-        asm_scratch_bytes(func, alloc, abi.fixed_regs, local_base)
+        asm_scratch_bytes(func, alloc, abi.fixed_regs)
     };
     // The parameter cells sit below the locals, whose offsets they leave
     // alone; every region below them shifts by their size.
@@ -259,21 +259,28 @@ fn local_base_wins(
     wins
 }
 
-/// Whether a setjmp / longjmp pair runs in the function: the helpers
-/// round-trip x19 through the jump buffer, so with the locals base in
-/// it a longjmp return would restore the env pointer in its place. The
-/// modulo and the cursor `va_arg` lowerings borrow x19 with a push and
-/// pop instead, so they do not exclude the base.
-fn x19_jump_buffered(func: &FunctionSsa) -> bool {
-    func.insts.iter().any(|i| {
-        matches!(
-            i,
-            Inst::Intrinsic { kind, .. }
-                if crate::c5::op::Intrinsic::from_i64(*kind).is_some_and(|k| matches!(
-                    k,
-                    crate::c5::op::Intrinsic::SetjmpAArch64 | crate::c5::op::Intrinsic::LongjmpAArch64
-                ))
-        )
+/// Whether the body writes x19 where the locals base must survive: the
+/// setjmp / longjmp helpers round-trip x19 through the jump buffer, and
+/// an inline asm statement that clobbers x19 or binds an operand to it
+/// runs its exits -- the fall-through and each `asm goto` trampoline --
+/// off a changed x19. The modulo and cursor `va_arg` lowerings push and
+/// pop x19 around their use instead.
+fn x19_overwritten(func: &FunctionSsa, fixed: super::FixedRegs) -> bool {
+    use crate::c5::op::Intrinsic as I;
+    func.insts.iter().any(|inst| match inst {
+        Inst::Intrinsic { kind, .. } => {
+            I::from_i64(*kind).is_some_and(|k| matches!(k, I::SetjmpAArch64 | I::LongjmpAArch64))
+        }
+        Inst::InlineAsm { asm, args } => {
+            asm.clobber_regs & (1 << 19) != 0
+                || asm_operand_regs(func, asm, args, fixed).map_or(true, |regs| {
+                    asm.operands.iter().zip(regs).any(|(op, r)| {
+                        r == Some(19)
+                            && !matches!(op.constraint, super::super::ir::AsmConstraint::Fp)
+                    })
+                })
+        }
+        _ => false,
     })
 }
 
@@ -446,7 +453,6 @@ pub(super) fn asm_stmt_bytes(
     fixed: super::FixedRegs,
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
-    save_x19: bool,
 ) -> Option<u32> {
     if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::A64)
         || asm_binds_directly(func, asm, args, fixed)
@@ -455,7 +461,7 @@ pub(super) fn asm_stmt_bytes(
     }
     let op_reg = asm_operand_regs(func, asm, args, fixed).ok()?;
     let preserve = alloc.asm_preserve;
-    let (used, fp_used) = asm_save_masks(asm, &op_reg, fixed, preserve, save_x19).ok()?;
+    let (used, fp_used) = asm_save_masks(asm, &op_reg, fixed, preserve).ok()?;
     let n_cap: u32 = asm
         .operands
         .iter()
@@ -492,7 +498,6 @@ pub(super) fn asm_scratch_bytes(
     func: &FunctionSsa,
     alloc: &Allocation,
     fixed: super::FixedRegs,
-    save_x19: bool,
 ) -> u32 {
     let private = asm_regions_are_private(func);
     let mut bytes = 0u32;
@@ -500,7 +505,7 @@ pub(super) fn asm_scratch_bytes(
         let Inst::InlineAsm { asm, args } = inst else {
             continue;
         };
-        let Some(n) = asm_stmt_bytes(func, alloc, fixed, asm, args, save_x19) else {
+        let Some(n) = asm_stmt_bytes(func, alloc, fixed, asm, args) else {
             continue;
         };
         bytes = if private { bytes + n } else { bytes.max(n) };
@@ -514,7 +519,6 @@ pub(super) fn asm_region_offset(
     func: &FunctionSsa,
     alloc: &Allocation,
     fixed: super::FixedRegs,
-    save_x19: bool,
     site: usize,
 ) -> u32 {
     if !asm_regions_are_private(func) {
@@ -525,7 +529,7 @@ pub(super) fn asm_region_offset(
         let Inst::InlineAsm { asm, args } = inst else {
             continue;
         };
-        off += asm_stmt_bytes(func, alloc, fixed, asm, args, save_x19).unwrap_or(0);
+        off += asm_stmt_bytes(func, alloc, fixed, asm, args).unwrap_or(0);
     }
     off
 }
@@ -560,7 +564,6 @@ pub(super) fn asm_save_masks(
     op_reg: &[Option<u8>],
     fixed: super::FixedRegs,
     preserve: (u32, u32),
-    save_x19: bool,
 ) -> Result<(u32, u32), alloc::string::String> {
     use super::super::ir::AsmConstraint;
     let mut used: u32 = asm.clobber_regs & 0x7FFF_FFFF & !0x0003_0000;
@@ -583,14 +586,6 @@ pub(super) fn asm_save_masks(
     // could destroy and lose their save / restore pair.
     used &= preserve.0;
     fp_used &= preserve.1;
-    // The locals base lives in x19; a template that writes it -- a
-    // clobber or a register-asm variable -- must leave it intact.
-    if save_x19
-        && (asm.clobber_regs | op_reg.iter().flatten().fold(0u32, |m, &r| m | (1 << r))) & (1 << 19)
-            != 0
-    {
-        used |= 1 << 19;
-    }
     Ok((used & !fixed.gpr, fp_used & !fixed.fpr))
 }
 
@@ -615,7 +610,7 @@ pub(crate) fn asm_site_write_masks(
     let Ok(op_reg) = asm_operand_regs(func, asm, args, fixed) else {
         return (0, 0);
     };
-    asm_save_masks(asm, &op_reg, fixed, (u32::MAX, u32::MAX), false).unwrap_or((0, 0))
+    asm_save_masks(asm, &op_reg, fixed, (u32::MAX, u32::MAX)).unwrap_or((0, 0))
 }
 
 /// Whether a statement's register operands bind to the registers their

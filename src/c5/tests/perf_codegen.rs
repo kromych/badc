@@ -4035,6 +4035,133 @@ fn a64_far_local_is_addressed_off_the_fixed_sp() {
     m.finish();
 }
 
+/// `mov x19, sp`: the locals base capture.
+const A64_MOV_X19_SP: u32 = 0x9100_03F3;
+
+/// The `moving` shape of [`FAR_SLOTS`] around an inline asm statement that
+/// writes x19: a clobber, a register variable bound to it, an `asm goto`
+/// clobber.
+const FAR_SLOTS_X19_ASM: &str = "void use(void *);\n\
+    long clobbered(long n) {\n\
+        volatile char pad[4096];\n\
+        pad[0] = 1;\n\
+        volatile long v = n; volatile int w = (int)n; volatile double d = (double)n;\n\
+        use((void *)pad); use(__builtin_alloca(n));\n\
+        __asm__ volatile(\"mov x19, #0\" ::: \"x19\");\n\
+        v += 3; w += 5; d *= 2.0;\n\
+        return v + w + (long)d;\n\
+    }\n\
+    long bound(long n, long k) {\n\
+        volatile char pad[4096];\n\
+        pad[0] = 1;\n\
+        volatile long v = n; volatile int w = (int)n; volatile double d = (double)n;\n\
+        use((void *)pad); use(__builtin_alloca(n));\n\
+        register long r __asm__(\"x19\") = k;\n\
+        __asm__ volatile(\"add %0, %0, #1\" : \"+r\"(r));\n\
+        v += r; w += 5; d *= 2.0;\n\
+        return v + w + (long)d;\n\
+    }\n\
+    long jumped(long n, int take) {\n\
+        volatile char pad[4096];\n\
+        pad[0] = 1;\n\
+        volatile long v = n; volatile int w = (int)n; volatile double d = (double)n;\n\
+        use((void *)pad); use(__builtin_alloca(n));\n\
+        __asm__ goto(\"mov x19, #0\\n\\tcbnz %w0, %l[out]\" : : \"r\"(take) : \"x19\" : out);\n\
+        v += 1;\n\
+    out:\n\
+        v += 3; w += 5; d *= 2.0;\n\
+        return v + w + (long)d;\n\
+    }\n";
+
+/// A statement that writes x19 runs its exits -- the store-backs and the
+/// register restores, on the fall-through and on each `asm goto` label --
+/// after x19 has changed, so a frame holding one takes no locals base:
+/// nothing captures sp in x19 and the far locals keep the fp form.
+#[test]
+fn a64_asm_writing_x19_leaves_the_locals_base_unselected() {
+    let mut m = Misses::default();
+    for name in ["clobbered", "bound", "jumped"] {
+        let ws = a64(FAR_SLOTS_X19_ASM, name);
+        let built = a64_built_accesses(&ws, 29);
+        m.expect(!ws.contains(&A64_MOV_X19_SP) && built.0 >= 12, || {
+            format!("aarch64 {name}: built off fp {built:?}: {ws:08x?}")
+        });
+    }
+    m.finish();
+}
+
+/// The lowerings that take x19 as a third scratch -- a modulo whose
+/// operands and result all spill, and a cursor `va_arg` whose list
+/// pointer and result do -- borrow it where it holds the locals base:
+/// `str x19, [sp, #-16]!` before the write, `ldr x19, [sp], #16` after,
+/// with no access off x19 in between.
+#[test]
+fn a64_third_scratch_lowerings_borrow_the_locals_base() {
+    const SRC: &str = "#include <stdarg.h>\n\
+        long rem(long a, long b, long c, long d, long n) {\n\
+            volatile char pad[4096];\n\
+            volatile long v = a, w = b;\n\
+            pad[0] = 1;\n\
+            char *q = __builtin_alloca(n);\n\
+            q[0] = 2;\n\
+            long r = a % b, s = c % d, t = (a + c) % (b + d);\n\
+            v += r; w += s;\n\
+            return v + w + t + q[0] + pad[0] - a - b - c - d;\n\
+        }\n\
+        long walk(long n, ...) {\n\
+            volatile char pad[4096];\n\
+            volatile long v = n, w = n;\n\
+            pad[0] = 1;\n\
+            char *q = __builtin_alloca(n);\n\
+            q[0] = 2;\n\
+            va_list ap;\n\
+            va_start(ap, n);\n\
+            long s = 0;\n\
+            for (long i = 0; i < n; i++) s += va_arg(ap, long);\n\
+            va_end(ap);\n\
+            v += s; w += v;\n\
+            return v + w + q[0] + pad[0];\n\
+        }\n";
+    const PUSH_X19: u32 = 0xF81F_0FF3;
+    const POP_X19: u32 = 0xF841_07F3;
+    let mut m = Misses::default();
+    // The cursor `va_arg` is the macOS and Windows model.
+    for (target, name) in [
+        (Target::LinuxAarch64, "rem"),
+        (Target::MacOSAarch64, "walk"),
+    ] {
+        let ws = function_words(&object_with_pool(SRC, target, (1, 1)), name);
+        let mut spans = 0;
+        let mut at = 0;
+        while let Some(push) = ws[at..].iter().position(|&w| w == PUSH_X19).map(|i| at + i) {
+            let Some(pop) = ws[push..]
+                .iter()
+                .position(|&w| w == POP_X19)
+                .map(|i| push + i)
+            else {
+                break;
+            };
+            let inner = &ws[push + 1..pop];
+            // The borrowed value is defined in x19 (`sdiv x19` / `add x19`).
+            let writes = inner
+                .iter()
+                .any(|&w| w & 31 == 19 && a64_mem_imm(w).is_none());
+            let reads_off = inner
+                .iter()
+                .any(|&w| a64_mem_imm(w).is_some_and(|(rn, _, _)| rn == 19));
+            m.expect(writes && !reads_off, || {
+                format!("{target:?} {name}: borrow at {push}..{pop}: {ws:08x?}")
+            });
+            spans += 1;
+            at = pop + 1;
+        }
+        m.expect(ws.contains(&A64_MOV_X19_SP) && spans > 0, || {
+            format!("{target:?} {name}: {spans} borrows of the base: {ws:08x?}")
+        });
+    }
+    m.finish();
+}
+
 /// Four values live across a call made after an asm statement moves sp; with
 /// the integer bank capped to two registers they spill. `set_sp`, whose asm
 /// takes no operand to stage, is a full leaf: it has no frame and keeps sp

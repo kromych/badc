@@ -809,13 +809,8 @@ impl AsmRegion {
     ) -> Result<Self, alloc::string::String> {
         // The operand registers plus the clobber list; x16 / x17 are this
         // lowering's scratch and are reloaded after the template.
-        let (used_mask, fp_used_mask) = asm_save_masks(
-            ops.asm,
-            &ops.op_reg,
-            frame.fixed_regs,
-            preserve,
-            frame.local_base,
-        )?;
+        let (used_mask, fp_used_mask) =
+            asm_save_masks(ops.asm, &ops.op_reg, frame.fixed_regs, preserve)?;
         let save_list: Vec<u8> = (0u8..31).filter(|r| used_mask & (1 << r) != 0).collect();
         let fp_save_list: Vec<u8> = (0u8..32).filter(|r| fp_used_mask & (1 << r) != 0).collect();
         let n = ops.asm.operands.len();
@@ -2283,13 +2278,7 @@ fn lower_inline_asm(
             &ops,
             frame,
             alloc.asm_preserve,
-            super::frame::asm_region_offset(
-                func,
-                alloc,
-                frame.fixed_regs,
-                frame.local_base,
-                site as usize,
-            ),
+            super::frame::asm_region_offset(func, alloc, frame.fixed_regs, site as usize),
         )?,
     };
     // An empty region means no entry or exit work but a bound operand's.

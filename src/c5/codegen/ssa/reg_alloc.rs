@@ -1534,7 +1534,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         let Some((shr_op, shr_lhs, shr_k, shr_imm_v)) = shift_shape(inst) else {
             continue;
         };
-        if shr_op != BinOp::Shr || !matches!(shr_k, 32 | 48 | 56) {
+        // An unread `Shr` is not emitted; the one reader the `Shl`'s count
+        // then holds is another instruction.
+        if shr_op != BinOp::Shr || !matches!(shr_k, 32 | 48 | 56) || use_counts[i] == 0 {
             continue;
         }
         let Some(shl_inst) = func.insts.get(shr_lhs as usize) else {
@@ -5186,6 +5188,59 @@ int main(void) { return 0; }
             alloc.use_counts[0], 0,
             "the dead segment read stops counting its address operand"
         );
+    }
+
+    /// `t = x << 32; (void)(t >> 32); return a + t;`: the sign-narrowing
+    /// pair folds into one extension only for a read `Shr`. Folding the
+    /// unread one dropped the `Shl` as unread, and the add read a
+    /// register nothing wrote.
+    #[test]
+    fn an_unread_narrowing_shift_leaves_its_shl_to_the_other_reader() {
+        use crate::c5::ir::Block;
+        let n = 5;
+        let f = FunctionSsa {
+            n_params: 2,
+            inst_src: vec![(0, 0); n],
+            f32_values: vec![false; n],
+            insts: vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64,
+                },
+                Inst::BinopI {
+                    op: BinOp::Shl,
+                    lhs: 0,
+                    rhs_imm: 32,
+                },
+                Inst::BinopI {
+                    op: BinOp::Shr,
+                    lhs: 2,
+                    rhs_imm: 32,
+                },
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 1,
+                    rhs: 2,
+                },
+            ],
+            blocks: vec![Block {
+                start_pc: 0,
+                inst_range: 0..n as u32,
+                terminator: Terminator::Return(4),
+                exit_acc: 4,
+            }],
+            ..Default::default()
+        };
+        for target in [Target::LinuxAarch64, Target::LinuxX64] {
+            let alloc = allocate(&f, target);
+            assert_eq!(alloc.use_counts[3], 0, "{target:?}: the Shr is unread");
+            assert_eq!(alloc.sxtw_source[3], NO_VALUE, "{target:?}: no fold");
+            assert_eq!(alloc.use_counts[2], 1, "{target:?}: the add reads the Shl");
+        }
     }
 
     /// A value the emit skips writes no register, so its color must not

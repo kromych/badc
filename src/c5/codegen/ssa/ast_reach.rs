@@ -12,8 +12,8 @@ use crate::c5::irgen::{
 use crate::c5::symbol::Symbol;
 use crate::c5::token::Token;
 
-/// The functions a root of `program` reaches: the set the walk lowers.
-pub(crate) fn reachable_functions(graph: &ReachGraph) -> BTreeSet<usize> {
+/// The functions a root reaches, every object live under `all_data`: the walk's set.
+pub(crate) fn reachable_functions(graph: &ReachGraph, all_data: bool) -> BTreeSet<usize> {
     let program = graph.program;
     let by_ent: BTreeMap<usize, &FinishedFunction> = program
         .finished_functions
@@ -21,7 +21,7 @@ pub(crate) fn reachable_functions(graph: &ReachGraph) -> BTreeSet<usize> {
         .map(|f| (f.ent_pc, f))
         .collect();
     let defined = by_ent.keys().copied().collect();
-    let (funcs, _) = graph.solve(&defined, None, false, |pc, work| {
+    let (funcs, _) = graph.solve(&defined, None, all_data, |pc, work| {
         if let Some(f) = by_ent.get(&pc) {
             body_edges(graph, &program.symbols, f, work);
         }
@@ -130,6 +130,25 @@ mod tests {
         }
     }
 
+    #[test]
+    fn data_counted_live_keeps_the_functions_it_names() {
+        let src = "static int f(void) { return 1; }\n\
+                   static int (*const unused[])(void) = { f };\n\
+                   int main(void) { return 0; }\n";
+        let program = Compiler::with_target(src.into(), Target::LinuxX64)
+            .compile()
+            .expect("compile");
+        let graph = ReachGraph::new(&program);
+        let f = program
+            .finished_functions
+            .iter()
+            .find(|f| f.name == "f")
+            .expect("f")
+            .ent_pc;
+        assert!(!reachable_functions(&graph, false).contains(&f));
+        assert!(reachable_functions(&graph, true).contains(&f));
+    }
+
     /// A walk error fails the compile only for a live function: a root or a callee.
     #[test]
     fn a_walk_error_fails_the_compile_only_for_a_live_function() {
@@ -168,7 +187,7 @@ mod tests {
             // A fixture this host rejects has no walk to compare.
             let program = Compiler::with_target(src, target).compile().ok()?;
             let graph = ReachGraph::new(&program);
-            let reachable = reachable_functions(&graph);
+            let reachable = reachable_functions(&graph, false);
             let every = program
                 .finished_functions
                 .iter()

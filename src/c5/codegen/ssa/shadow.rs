@@ -360,14 +360,16 @@ pub(crate) fn produce_ssa_funcs_on(
         // below re-derives the set from the walked bodies; the assertion
         // catches an AST pass that dropped a function the SSA pass
         // keeps (a walked body still naming it).
-        let reachable = super::ast_reach::reachable_functions(graph);
+        // Every object stays under the knob, and so must what one names.
+        let all_data = data_dce_disabled();
+        let reachable = super::ast_reach::reachable_functions(graph, all_data);
         let (mut funcs, failed) = walk_program(program, target, optimize, jump_tables, &reachable);
         // C99 6.2.2: a function with internal linkage that no reachable
         // code or data references is unobservable; drop it before codegen
         // so the unused `static inline` helpers headers pull into every
         // unit do not reach the image.
         let unwalked = failed.iter().map(|&(pc, _)| pc).collect();
-        let live = compute_live_sets(&funcs, &unwalked, graph, false, None).func_pcs;
+        let live = compute_live_sets(&funcs, &unwalked, graph, all_data, None).func_pcs;
         // The AST set also holds functions only an unevaluated operand or a
         // folded arm names, so a failed walk is an error only once live.
         if let Some((_, e)) = failed.into_iter().find(|(pc, _)| live.contains(pc)) {

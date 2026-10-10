@@ -1658,7 +1658,7 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Fun as i64;
             self.symbols[id_idx].scoped_fn_decl = true;
             self.symbols[id_idx].type_ = Ty::Int as i64;
-            self.symbols[id_idx].prototyped = false;
+            self.symbols[id_idx].fn_type.params.prototyped = false;
             self.symbols[id_idx].implicit_return_int = true;
             self.symbols[id_idx].linkage = crate::c5::symbol::Linkage::External;
             self.symbols[id_idx].defined_here = false;
@@ -2269,16 +2269,16 @@ impl Compiler {
         let is_sys_call = s.class == Token::Sys as i64;
         let old_style_def = s.class == Token::Fun as i64 && s.unprototyped_def;
         let callee = DirectCallee {
-            params: s.params.clone(),
-            param_fns: s.param_fn_types.clone(),
-            is_variadic: s.is_variadic,
+            params: s.params().to_vec(),
+            param_fns: s.fn_type.params.fn_types.clone(),
+            is_variadic: s.is_variadic(),
             name: s.name.clone(),
             is_sys_call,
             narrows_to_params: is_sys_call,
             ret_ty: s.type_,
             returns_struct: s.class == Token::Fun as i64 && is_struct_value_ty(s.type_),
-            count_known: s.prototyped || old_style_def,
-            count_is_constraint: s.prototyped && !is_sys_call,
+            count_known: s.prototyped() || old_style_def,
+            count_is_constraint: s.prototyped() && !is_sys_call,
         };
         // A callee left at the implicit `int` (a `#pragma binding` with no
         // prototype, or a C89 implicit declaration) truncates a wider return
@@ -5068,7 +5068,8 @@ impl Compiler {
 
         // A function-pointer member's return lineage reaches a following
         // call; any other member clears it.
-        let field_is_fn_ptr = field.fn_ptr_indirection > 0 || !field.params.is_empty();
+        let field_is_fn_ptr =
+            field.fn_ptr_indirection > 0 || !field.fn_type.params.types.is_empty();
         self.pending.indirect_callee_ret_fn_ptr = if field_is_fn_ptr {
             field.fn_ptr_ret_indirection
         } else {

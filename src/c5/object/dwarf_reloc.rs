@@ -950,7 +950,7 @@ impl RelocInfoUnit<'_> {
                         && s.link_name() == subprogram_name(build, i)
                 });
                 FnFacts {
-                    is_variadic: sym.is_some_and(|s| s.is_variadic),
+                    is_variadic: sym.is_some_and(|s| s.is_variadic()),
                     external: sym.is_none_or(|s| s.linkage != crate::c5::symbol::Linkage::Internal),
                     prototyped: sym.is_none_or(|s| !s.unprototyped_def),
                     ret: match sym {
@@ -1683,9 +1683,9 @@ impl<'a> TypeCatalog<'a> {
             self.of_function_pointer(
                 f.ty,
                 f.fn_ptr_indirection,
-                &f.params,
-                f.is_variadic,
-                f.prototyped,
+                &f.fn_type.params.types,
+                f.fn_type.params.variadic,
+                f.fn_type.params.prototyped,
                 f.decl_spelling,
             )
         } else {
@@ -1705,9 +1705,9 @@ impl<'a> TypeCatalog<'a> {
             self.of_function_pointer(
                 sym.type_,
                 sym.fn_ptr_indirection,
-                &sym.params,
-                sym.is_variadic,
-                sym.prototyped,
+                sym.params(),
+                sym.is_variadic(),
+                sym.prototyped(),
                 sym.binding.decl_spelling,
             )
         } else {

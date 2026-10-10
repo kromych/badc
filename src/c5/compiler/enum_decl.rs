@@ -56,11 +56,16 @@ impl EnumCompletion {
         self.list(&mut p.types, &mut p.enum_tags);
     }
 
+    /// A function type and the ones a returned pointer leads to.
+    pub(super) fn fn_type(&self, f: &mut FnType) {
+        self.params(&mut f.params);
+        self.chain(&mut f.ret);
+    }
+
     /// The function types a returned pointer leads to.
     pub(super) fn chain(&self, ret: &mut Option<(alloc::boxed::Box<FnType>, i64)>) {
         if let Some((f, _)) = ret {
-            self.params(&mut f.params);
-            self.chain(&mut f.ret);
+            self.fn_type(f);
         }
     }
 }
@@ -239,18 +244,15 @@ impl Compiler {
         for s in &mut self.symbols {
             c.ty(&mut s.type_, &mut s.incomplete_enum_tag);
             c.ty(&mut s.h_type, &mut s.h_incomplete_enum_tag);
-            c.list(&mut s.params, &mut s.param_enum_tags);
-            c.list(&mut s.h_params, &mut s.h_param_enum_tags);
-            c.chain(&mut s.ret_fn);
-            c.chain(&mut s.h_ret_fn);
+            c.fn_type(&mut s.fn_type);
+            c.fn_type(&mut s.h_fn_type);
         }
         for b in self.block_scopes.iter_mut().flatten() {
             b.complete_enum(&c);
         }
         for f in self.structs.iter_mut().flat_map(|s| s.fields.iter_mut()) {
             c.ty(&mut f.ty, &mut f.enum_tag);
-            c.list(&mut f.params, &mut f.param_enum_tags);
-            c.chain(&mut f.ret_fn);
+            c.fn_type(&mut f.fn_type);
         }
     }
 

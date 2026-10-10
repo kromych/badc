@@ -447,36 +447,13 @@ pub struct StructField {
     /// from it so `(*s.cb(x))(y)`-style chains decay instead of
     /// loading through the returned function pointer.
     pub fn_ptr_ret_indirection: i64,
-    /// `FnType::ret` of the function a function-pointer field points to
-    /// (mirrors `Symbol::ret_fn`).
-    pub(crate) ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
-    /// Parameter type tags of a function-pointer field, captured from
-    /// the field declarator's prototype (mirrors `Symbol::params`).
-    /// Empty for a non-function-pointer field or one declared without a
-    /// prototype. A `s.fp(args)` / `s->fp(args)` call reads this to
-    /// narrow each argument to its declared parameter type (C99
-    /// 6.5.2.2p7), matching the direct-identifier and array-element
-    /// call paths.
-    pub params: Vec<i64>,
-    /// True when the function-pointer field's prototype is variadic
-    /// (`int (*fp)(int, ...)`). Mirrors `Symbol::is_variadic`. A
-    /// `s.fp(args)` / `s->fp(args)` call reads this with `params` to
-    /// split the argument list at the fixed-parameter count for the host
-    /// variadic ABI. False for a non-function-pointer field or a
-    /// non-variadic prototype.
-    pub is_variadic: bool,
-    /// Mirrors `Symbol::prototyped`.
-    pub prototyped: bool,
-    /// Mirrors `Symbol::param_enum_tags`.
-    pub param_enum_tags: Vec<(usize, u32)>,
-    /// Mirrors `Symbol::param_fn_types`.
-    pub(crate) param_fn_types: Vec<(usize, crate::c5::symbol::FnType, i64)>,
-    /// Calling convention of the function a function-pointer field
-    /// points to (`__attribute__((ms_abi))` / `((sysv_abi))`). Mirrors
-    /// `Symbol::conv`; `CallConv::Target` for every other field. The
-    /// EFI boot- and runtime-services tables declare their members this
-    /// way, so a call through one has to marshal to that convention.
-    pub(crate) conv: crate::c5::codegen::CallConv,
+    /// The function type a function-pointer field points to, as
+    /// `Symbol::fn_type` holds one; the default for every other field. A
+    /// `s.fp(args)` / `s->fp(args)` call converts each argument to its
+    /// parameter type (C99 6.5.2.2p7), splits the list at the fixed count
+    /// for the host variadic ABI, and marshals by the convention, which
+    /// the EFI boot- and runtime-services tables declare on their members.
+    pub(crate) fn_type: crate::c5::symbol::FnType,
     /// Non-zero for a field promoted from an anonymous union (C11
     /// 6.7.2.1p13). All members of one anonymous union share the same
     /// value; the same id groups them so a brace-list initializer
@@ -2363,7 +2340,7 @@ pub struct Compiler {
     /// its symbol at the opening brace. Propagated onto
     /// `FinishedFunction::conv`.
     current_func_conv: crate::c5::codegen::CallConv,
-    /// `Symbol::ret_fn` of the function body being parsed: the function
+    /// `FnType::ret` of the function body being parsed: the function
     /// type a returned pointer to a function points to.
     current_func_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
     /// `_Noreturn` (C11 6.7.4) on any declaration of the function whose

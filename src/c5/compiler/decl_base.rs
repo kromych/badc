@@ -402,7 +402,7 @@ impl Compiler {
                 self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.base_is_function_type = true;
                 self.pending.fn_ptr_params = Some(self.symbols[idx].fn_params());
-                self.pending.fn_ptr_ret_fn = self.symbols[idx].ret_fn.clone();
+                self.pending.fn_ptr_ret_fn = self.symbols[idx].fn_type.ret.clone();
                 self.next()?; // identifier
                 self.next()?; // )
                 return Ok(finish(fty));
@@ -579,7 +579,7 @@ impl Compiler {
                 self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.base_is_function_type = false;
                 self.pending.fn_ptr_params = Some(self.symbols[idx].fn_params());
-                self.pending.fn_ptr_ret_fn = self.symbols[idx].ret_fn.clone();
+                self.pending.fn_ptr_ret_fn = self.symbols[idx].fn_type.ret.clone();
                 self.symbols[idx].type_ + Ty::Ptr as i64
             }
             None => {
@@ -2060,10 +2060,10 @@ impl Compiler {
         // A function / function-pointer typedef carries the pointed-to
         // function's calling convention; a declarator through the alias
         // inherits it unless the declaration names one of its own.
-        if self.symbols[idx].conv != crate::c5::codegen::CallConv::Target
+        if self.symbols[idx].fn_type.conv != crate::c5::codegen::CallConv::Target
             && self.pending.attr_call_conv == crate::c5::codegen::CallConv::Target
         {
-            self.pending.attr_call_conv = self.symbols[idx].conv;
+            self.pending.attr_call_conv = self.symbols[idx].fn_type.conv;
         }
         let typedef_fpi = self.symbols[idx].fn_ptr_indirection;
         if typedef_fpi > 0 {
@@ -2075,7 +2075,7 @@ impl Compiler {
             // each argument to its declared parameter type and splits fixed
             // from variadic arguments per the host variadic ABI.
             self.pending.fn_ptr_params = Some(self.symbols[idx].fn_params());
-            self.pending.fn_ptr_ret_fn = self.symbols[idx].ret_fn.clone();
+            self.pending.fn_ptr_ret_fn = self.symbols[idx].fn_type.ret.clone();
         }
         // `(VOID)` in parameter position is the no-parameter idiom.
         if self.symbols[idx].is_void_typedef {

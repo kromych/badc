@@ -607,7 +607,7 @@ pub struct VariableInfo {
     pub params: Vec<i64>,
     /// True when the prototype ends in `, ...`.
     pub is_variadic: bool,
-    /// Mirrors `Symbol::prototyped`.
+    /// Mirrors `FnParams::prototyped`.
     pub prototyped: bool,
     /// Dimension list of a multidimensional local array, outermost
     /// first (mirrors `Symbol::array_dims`). Empty for a scalar or a

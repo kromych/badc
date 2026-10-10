@@ -1606,8 +1606,8 @@ pub(crate) fn extern_fn_targets(
             } else {
                 None
             };
-            t.is_variadic = sym.is_variadic;
-            t.conv = sym.conv;
+            t.is_variadic = sym.is_variadic();
+            t.conv = sym.fn_type.conv;
         }
     }
     out
@@ -2538,7 +2538,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     let pc_extent = super::pc_extent_for_lowering(program, &ssa_funcs);
     st.pc_to_native = alloc::vec![usize::MAX; pc_extent + 1];
     // Per-callee variadic flag, derived from `FunctionSsa::is_variadic` for
-    // locally-defined callees and from `Symbol::is_variadic` for cross-TU
+    // locally-defined callees and from `Symbol::fn_type` for cross-TU
     // extern-declared callees. Each call site reads it to pick the host-ABI
     // vs c5-stack arg passing shape for the callee. Without the extern
     // entries here, a cross-TU call to a variadic function emits a
@@ -2562,7 +2562,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             {
                 continue;
             }
-            if sym.linkage == Linkage::External && sym.is_variadic {
+            if sym.linkage == Linkage::External && sym.is_variadic() {
                 variadic_targets.insert(sym.val as usize);
             }
             b.note_extern_callee(sym);

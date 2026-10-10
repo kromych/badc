@@ -605,7 +605,7 @@ impl Compiler {
             if rebinds_slot {
                 self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
                 self.symbols[loc_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
-                self.symbols[loc_idx].ret_fn = ret_fn;
+                self.symbols[loc_idx].fn_type.ret = ret_fn;
                 if let Some(p) = fnptr_params {
                     self.symbols[loc_idx].set_fn_params(p);
                 }
@@ -907,7 +907,7 @@ impl Compiler {
             sym.type_ = f.ret.ty;
             sym.incomplete_enum_tag = f.ret.enum_tag;
             sym.set_fn_params(f.params.fn_params());
-            sym.ret_fn = f.ret_fn;
+            sym.fn_type.ret = f.ret_fn;
             (sym.fn_ptr_indirection, sym.fn_ptr_ret_indirection) = f.lineage;
             sym.is_extern_decl = true;
             sym.linkage = if is_static {
@@ -1024,8 +1024,14 @@ impl Compiler {
             storage_is_const: src.storage_is_const,
             // Declaration shape and debug facts, so an `Expr::Ident`
             // routed to the record reads what the binding declared.
-            params: src.params.clone(),
-            is_variadic: src.is_variadic,
+            fn_type: crate::c5::symbol::FnType {
+                params: crate::c5::symbol::FnParams {
+                    types: src.params().to_vec(),
+                    variadic: src.is_variadic(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
             fn_ptr_indirection: src.fn_ptr_indirection,
             fn_ptr_ret_indirection: src.fn_ptr_ret_indirection,
             inner_array_size: src.inner_array_size,

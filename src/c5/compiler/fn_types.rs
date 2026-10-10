@@ -45,12 +45,7 @@ impl Compiler {
     /// The function type symbol `idx` names, or a function pointer
     /// object's pointee has.
     pub(super) fn symbol_fn_type(&self, idx: usize) -> FnType {
-        let s = &self.symbols[idx];
-        FnType {
-            params: s.fn_params(),
-            conv: s.conv,
-            ret: s.ret_fn.clone(),
-        }
+        self.symbols[idx].fn_type.clone()
     }
 
     /// The function type object `idx` leads to and its depth, when it is a
@@ -203,21 +198,10 @@ impl Compiler {
     /// The function type a member leads to and its depth, each array
     /// dimension a level its value decays through.
     pub(super) fn field_fn_type(&self, field: &super::StructField) -> Option<(FnType, i64)> {
-        if field.fn_ptr_indirection <= 0 && field.params.is_empty() {
+        if field.fn_ptr_indirection <= 0 && field.fn_type.params.types.is_empty() {
             return None;
         }
-        let params = FnParams {
-            types: field.params.clone(),
-            variadic: field.is_variadic,
-            prototyped: field.prototyped,
-            enum_tags: field.param_enum_tags.clone(),
-            fn_types: field.param_fn_types.clone(),
-        };
-        let f = FnType {
-            params,
-            conv: field.conv,
-            ret: field.ret_fn.clone(),
-        };
+        let f = field.fn_type.clone();
         let dims = if field.array_size == 0 {
             0
         } else {

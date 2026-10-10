@@ -1940,7 +1940,7 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
     /// unit, the same place the definition's would. A declaration without
     /// a prototype states no return contract a tail call could rely on.
     fn note_extern_callee(&mut self, sym: &crate::c5::symbol::Symbol) {
-        if sym.prototyped {
+        if sym.prototyped() {
             self.ret_tags.insert(sym.val as usize, sym.type_);
         }
     }

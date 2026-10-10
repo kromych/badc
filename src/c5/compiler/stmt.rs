@@ -73,8 +73,7 @@ pub(super) struct BlockShadow {
     val: i64,
     fn_ptr_indirection: i64,
     fn_ptr_ret_indirection: i64,
-    ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
-    params: crate::c5::symbol::FnParams,
+    fn_type: crate::c5::symbol::FnType,
     array_size: i64,
     type_align: i64,
     inner_array_size: i64,
@@ -102,8 +101,7 @@ impl BlockShadow {
     /// Rewrite the saved binding's types an enum definition completes.
     pub(super) fn complete_enum(&mut self, c: &super::enum_decl::EnumCompletion) {
         c.ty(&mut self.type_, &mut self.incomplete_enum_tag);
-        c.params(&mut self.params);
-        c.chain(&mut self.ret_fn);
+        c.fn_type(&mut self.fn_type);
     }
 }
 
@@ -127,8 +125,7 @@ impl Compiler {
             val: s.val,
             fn_ptr_indirection: s.fn_ptr_indirection,
             fn_ptr_ret_indirection: s.fn_ptr_ret_indirection,
-            ret_fn: s.ret_fn.clone(),
-            params: s.fn_params(),
+            fn_type: s.fn_type.clone(),
             array_size: s.array_size,
             type_align: s.type_align,
             inner_array_size,
@@ -180,8 +177,7 @@ impl Compiler {
         s.val = b.val;
         s.fn_ptr_indirection = b.fn_ptr_indirection;
         s.fn_ptr_ret_indirection = b.fn_ptr_ret_indirection;
-        s.ret_fn = b.ret_fn;
-        s.set_fn_params(b.params);
+        s.fn_type = b.fn_type;
         s.array_size = b.array_size;
         s.type_align = b.type_align;
         s.inner_array_size = b.inner_array_size;
@@ -233,9 +229,9 @@ impl Compiler {
                         array_size: sym.array_size.max(0) as u32,
                         decl_file: sym.binding.decl_file,
                         fn_ptr_indirection: sym.fn_ptr_indirection,
-                        params: sym.params.clone(),
-                        is_variadic: sym.is_variadic,
-                        prototyped: sym.prototyped,
+                        params: sym.params().to_vec(),
+                        is_variadic: sym.is_variadic(),
+                        prototyped: sym.prototyped(),
                         array_dims: sym.array_dims.clone(),
                         decl_spelling: sym.binding.decl_spelling,
                     });
@@ -760,7 +756,7 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Typedef as i64;
             self.symbols[id_idx].type_ = typedef_ty;
             self.symbols[id_idx].val = 0;
-            self.symbols[id_idx].ret_fn = ret_fn;
+            self.symbols[id_idx].fn_type.ret = ret_fn;
             self.symbols[id_idx].incomplete_enum_tag = base_enum_tag;
             // A declarator-position `transparent_union` binds to the
             // aliased union, as at file scope.
@@ -805,7 +801,7 @@ impl Compiler {
             // declaration named, so a declarator through the alias
             // inherits it (`typedef efi_status_t __efiapi f_t(void);`).
             if self.pending.attr_call_conv != crate::c5::codegen::CallConv::Target {
-                self.symbols[id_idx].conv = self.pending.attr_call_conv;
+                self.symbols[id_idx].fn_type.conv = self.pending.attr_call_conv;
             }
             if typedef_fpi > 0 {
                 self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;

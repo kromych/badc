@@ -325,15 +325,15 @@ impl<'a> Walker<'a> {
     /// shape, so its floating-point arguments ride the integer
     /// register class as widened doubles rather than the FP bank.
     fn fun_is_variadic(&self, sym: u32) -> bool {
-        live_fun_sym(self.symbols, sym).is_some_and(|s| s.is_variadic)
+        live_fun_sym(self.symbols, sym).is_some_and(|s| s.is_variadic())
     }
 
     /// Count of named (pre-ellipsis) parameters the symbol declares,
-    /// from `Symbol::params`. A variadic callee's arguments past this
+    /// from `Symbol::fn_type`. A variadic callee's arguments past this
     /// count are the variadic tail, which the macOS arm64 ABI places on
     /// the host stack rather than in the register banks.
     fn fun_fixed_args(&self, sym: u32) -> usize {
-        live_fun_sym(self.symbols, sym).map_or(0, |s| s.params.len())
+        live_fun_sym(self.symbols, sym).map_or(0, |s| s.params().len())
     }
 
     /// An indirect call's `(is_variadic, fixed_arg_count)`, from the
@@ -353,9 +353,9 @@ impl<'a> Walker<'a> {
         if let Expr::Ident { sym, class, .. } = self.ast.expr(callee)
             && (*class == Token::Fun as i64 || binding_defined_here(self.symbols, *sym, *class))
             && let Some(s) = self.symbols.get(*sym as usize)
-            && s.conv != crate::c5::codegen::CallConv::Target
+            && s.fn_type.conv != crate::c5::codegen::CallConv::Target
         {
-            return s.conv;
+            return s.fn_type.conv;
         }
         self.indirect_callee_conv(callee)
     }

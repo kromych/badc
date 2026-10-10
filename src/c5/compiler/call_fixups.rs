@@ -123,8 +123,14 @@ impl Compiler {
             token: Token::Id as i64,
             class: Token::Fun as i64,
             type_: self.symbols[sys_sym_idx].type_,
-            params: self.symbols[sys_sym_idx].params.clone(),
-            is_variadic: self.symbols[sys_sym_idx].is_variadic,
+            fn_type: crate::c5::symbol::FnType {
+                params: crate::c5::symbol::FnParams {
+                    types: self.symbols[sys_sym_idx].params().to_vec(),
+                    variadic: self.symbols[sys_sym_idx].is_variadic(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
             val: 0,
             ..Default::default()
         };
@@ -200,8 +206,8 @@ impl Compiler {
             // body at the post-link ent_pc.
             self.symbols[tr_idx].defined_here = true;
 
-            let fixed_nargs = self.symbols[sys_idx].params.len();
-            let is_variadic = self.symbols[sys_idx].is_variadic;
+            let fixed_nargs = self.symbols[sys_idx].params().len();
+            let is_variadic = self.symbols[sys_idx].is_variadic();
             let binding_idx = self.symbols[sys_idx].val;
 
             // A trampoline whose libc callee takes or returns a
@@ -230,7 +236,7 @@ impl Compiler {
             let touches_fp = is_float_ty(ret_ty)
                 || is_double_ty(ret_ty)
                 || self.symbols[sys_idx]
-                    .params
+                    .params()
                     .iter()
                     .any(|&p| is_float_ty(p) || is_double_ty(p));
             if is_variadic || touches_fp {

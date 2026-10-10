@@ -518,7 +518,7 @@ impl Compiler {
             // decay no-op to the unary `*` handler.
             self.symbols[param_idx].fn_ptr_indirection = fn_ptr_indirection;
             self.symbols[param_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
-            self.symbols[param_idx].ret_fn = ret_fn;
+            self.symbols[param_idx].fn_type.ret = ret_fn;
             // A function-pointer parameter records its pointee signature's
             // parameter types so an indirect call through it narrows each
             // argument to its declared type (the common callback shape).
@@ -527,7 +527,7 @@ impl Compiler {
             {
                 self.symbols[param_idx].set_fn_params(pp);
             }
-            self.symbols[param_idx].conv = param_conv;
+            self.symbols[param_idx].fn_type.conv = param_conv;
 
             args.push(param_idx);
             enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));

@@ -534,7 +534,7 @@ impl Compiler {
         // identifier load can seed the chain-depth tracker.
         let own_signature = self.lex.tk == '(' || self.pending.fn_params.is_some();
         if let Some(ret) = self.take_decl_ret_fn(own_signature) {
-            self.symbols[id_idx].ret_fn = Some(ret);
+            self.symbols[id_idx].fn_type.ret = Some(ret);
         }
         let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
         let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
@@ -753,7 +753,7 @@ impl Compiler {
         // through the alias inherits it
         // (`typedef efi_status_t __efiapi f_t(void);`).
         if self.pending.attr_call_conv != crate::c5::codegen::CallConv::Target {
-            self.symbols[id_idx].conv = self.pending.attr_call_conv;
+            self.symbols[id_idx].fn_type.conv = self.pending.attr_call_conv;
         }
         // A GNU `aligned(N)` type attribute on the typedef
         // (its own declaration's attribute, else propagated
@@ -1189,11 +1189,11 @@ impl Compiler {
         };
         let prototyped = self.has_prototype(id_idx, &params);
         self.symbols[id_idx].unprototyped_def = !prototyped;
-        self.symbols[id_idx].prototyped = prototyped;
+        self.symbols[id_idx].fn_type.params.prototyped = prototyped;
         self.define_linked_function(id_idx, def, Params::of(&params, true))?;
-        self.symbols[id_idx].params = arrival.clone();
-        self.symbols[id_idx].param_enum_tags = params.enum_tags.clone();
-        self.symbols[id_idx].param_fn_types = params.fn_types.clone();
+        self.symbols[id_idx].fn_type.params.types = arrival.clone();
+        self.symbols[id_idx].fn_type.params.enum_tags = params.enum_tags.clone();
+        self.symbols[id_idx].fn_type.params.fn_types = params.fn_types.clone();
 
         if self.lex.tk != '{' {
             return Err(self.compile_err(Code::SYNTAX, "bad function definition"));
@@ -1326,7 +1326,7 @@ impl Compiler {
                         self.symbols[decl_idx].fn_ptr_indirection =
                             fn_ptr_indirection + i64::from(adjusted && fn_ptr_indirection > 0);
                         self.symbols[decl_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
-                        self.symbols[decl_idx].ret_fn = ret_fn;
+                        self.symbols[decl_idx].fn_type.ret = ret_fn;
                         if fn_ptr_indirection > 0
                             && let Some(pp) = fn_params
                         {
@@ -1409,9 +1409,9 @@ impl Compiler {
         self.current_func_return_ty = return_ty;
         self.current_func_returns_void = self.symbols[id_idx].returns_void;
         self.current_function_name = self.symbols[id_idx].name.clone();
-        self.current_func_conv = self.symbols[id_idx].conv;
+        self.current_func_conv = self.symbols[id_idx].fn_type.conv;
         self.current_func_is_noreturn = self.symbols[id_idx].is_noreturn;
-        self.current_func_ret_fn = self.symbols[id_idx].ret_fn.clone();
+        self.current_func_ret_fn = self.symbols[id_idx].fn_type.ret.clone();
 
         // Callers push right to left, so the i'th declared parameter sits at slot
         // i + 2 and the variadic tail follows it. A struct return through the
@@ -1844,9 +1844,9 @@ impl Compiler {
                     array_size,
                     decl_file: sym.binding.decl_file,
                     fn_ptr_indirection: sym.fn_ptr_indirection,
-                    params: sym.params.clone(),
-                    is_variadic: sym.is_variadic,
-                    prototyped: sym.prototyped,
+                    params: sym.params().to_vec(),
+                    is_variadic: sym.is_variadic(),
+                    prototyped: sym.prototyped(),
                     array_dims: if is_parameter {
                         Vec::new()
                     } else {
@@ -3139,7 +3139,7 @@ impl Compiler {
         // prototype carrying it and a later definition without it agree
         // on one convention.
         if self.pending.attr_call_conv != crate::c5::codegen::CallConv::Target {
-            self.symbols[id_idx].conv = self.pending.attr_call_conv;
+            self.symbols[id_idx].fn_type.conv = self.pending.attr_call_conv;
         }
         if self.pending.attr_constructor {
             self.symbols[id_idx].is_constructor = true;

@@ -66,40 +66,19 @@ pub(crate) struct Symbol {
     pub h_val: i64,
 
     // ---- Function-only metadata ----
-    /// For `Token::Fun` and `Token::Sys` symbols, the declared parameter
-    /// types in source order. Empty for non-functions.
-    pub params: Vec<i64>,
-    /// True if the function accepts trailing varargs (e.g. `printf`).
-    /// Type-checking only verifies the fixed parameters.
-    pub is_variadic: bool,
-    /// `FnParams::prototyped` of the function type `params` belongs to.
-    pub prototyped: bool,
-    /// `FnParams::enum_tags` of the function type `params` belongs to.
-    pub param_enum_tags: Vec<(usize, u32)>,
-    /// `FnParams::fn_types` of the function type `params` belongs to.
-    pub param_fn_types: Vec<(usize, FnType, i64)>,
-
-    /// Shadow slots for `params` / `is_variadic` / `prototyped` /
-    /// `param_enum_tags` / `param_fn_types`. See `h_array_size`:
-    /// a function-pointer parameter, block-scope local, or block-scope
-    /// typedef that reuses an outer function name writes its own
-    /// prototype onto the shared symbol slot; without the save the
-    /// outer signature is permanently replaced (C99 6.2.1p4), which
-    /// breaks later call type-checks and can flip a variadic call's
-    /// ABI.
-    pub h_params: Vec<i64>,
-    pub h_is_variadic: bool,
-    pub h_prototyped: bool,
-    pub h_param_enum_tags: Vec<(usize, u32)>,
-    pub h_param_fn_types: Vec<(usize, FnType, i64)>,
-    /// Calling convention of the function this symbol names, or of the
-    /// function a function-pointer object points to
-    /// (`__attribute__((ms_abi))` / `((sysv_abi))`). Already normalised
-    /// against the target, so `CallConv::Target` covers both "no
-    /// attribute" and "the attribute is inert here".
-    pub conv: crate::c5::codegen::CallConv,
-    /// Shadow slot for `conv` (see `h_is_variadic`).
-    pub h_conv: crate::c5::codegen::CallConv,
+    /// The function type this symbol names, or the one a function-pointer
+    /// object or typedef leads to: the parameters (for `Token::Fun` and
+    /// `Token::Sys` symbols the declared ones in source order), the calling
+    /// convention and the function type a call's result points to. The
+    /// `i64` tag holds only the return type.
+    pub fn_type: FnType,
+    /// Shadow slot for `fn_type`. See `h_array_size`: a function-pointer
+    /// parameter, block-scope local, or block-scope typedef that reuses an
+    /// outer function name writes its own type onto the shared symbol slot;
+    /// without the save the outer one is permanently replaced (C99
+    /// 6.2.1p4), which breaks later call type-checks and can flip a
+    /// variadic call's ABI.
+    pub h_fn_type: FnType,
 
     /// True while the function's return type is the implicit `int`
     /// default rather than a declared type: a `#pragma binding` seen
@@ -398,11 +377,6 @@ pub(crate) struct Symbol {
     pub fn_ptr_ret_indirection: i64,
     /// Scope-restore shadow for `fn_ptr_ret_indirection`.
     pub h_fn_ptr_ret_indirection: i64,
-    /// `FnType::ret` of the function this symbol names or points to: the
-    /// function type a call's result points to.
-    pub ret_fn: Option<(alloc::boxed::Box<FnType>, i64)>,
-    /// Scope-restore shadow for `ret_fn`.
-    pub h_ret_fn: Option<(alloc::boxed::Box<FnType>, i64)>,
     /// True for a typedef of a function TYPE (`typedef RET F(args)`),
     /// as opposed to a function POINTER (`typedef RET (*F)(args)`). The
     /// type encoding pre-decays both to a function pointer (`RET` plus
@@ -821,24 +795,28 @@ pub fn inline_definition(sym: &Symbol, model: InlineModel) -> bool {
 }
 
 impl Symbol {
+    /// The declared parameter types of the function type this symbol names
+    /// or points to.
+    pub(crate) fn params(&self) -> &[i64] {
+        &self.fn_type.params.types
+    }
+
+    pub(crate) fn is_variadic(&self) -> bool {
+        self.fn_type.params.variadic
+    }
+
+    pub(crate) fn prototyped(&self) -> bool {
+        self.fn_type.params.prototyped
+    }
+
     /// The parameter information of the function type this symbol names or
     /// points to.
     pub(crate) fn fn_params(&self) -> FnParams {
-        FnParams {
-            types: self.params.clone(),
-            variadic: self.is_variadic,
-            prototyped: self.prototyped,
-            enum_tags: self.param_enum_tags.clone(),
-            fn_types: self.param_fn_types.clone(),
-        }
+        self.fn_type.params.clone()
     }
 
     pub(crate) fn set_fn_params(&mut self, p: FnParams) {
-        self.params = p.types;
-        self.is_variadic = p.variadic;
-        self.prototyped = p.prototyped;
-        self.param_enum_tags = p.enum_tags;
-        self.param_fn_types = p.fn_types;
+        self.fn_type.params = p;
     }
 
     /// Assembler symbol name: the GNU asm label when the declaration
@@ -895,18 +873,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_class: _,
             h_type: _,
             h_val: _, // scope-restore shadow; every scope is unwound before a `Program` exists
-            params: _,
-            is_variadic: _,
-            prototyped: _,
-            param_enum_tags: _,
-            param_fn_types: _,
-            h_params: _,
-            h_is_variadic: _,
-            h_prototyped: _,
-            h_param_enum_tags: _,
-            h_param_fn_types: _,
-            conv: _,
-            h_conv: _,
+            fn_type: _,
+            h_fn_type: _,
             implicit_return_int: _,
             is_noreturn: _,
             is_thread_local,
@@ -958,8 +926,6 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_fn_ptr_indirection: _,
             fn_ptr_ret_indirection: _,
             h_fn_ptr_ret_indirection: _,
-            ret_fn: _,
-            h_ret_fn: _,
             is_function_type: _,
             returns_void: _,
             unprototyped_def: _,

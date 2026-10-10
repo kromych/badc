@@ -13075,7 +13075,7 @@ fn scoped_fn_declaration_keeps_its_entity_for_the_link() {
         .expect("symbol");
     assert_eq!(sym.class, 0, "the name must unbind at scope exit");
     assert!(
-        sym.is_fun_entity() && sym.is_variadic,
+        sym.is_fun_entity() && sym.is_variadic(),
         "the entity and its prototype must survive the unbind"
     );
     assert!(
@@ -16293,4 +16293,35 @@ fn loop_conditions_and_steps_take_their_own_lines() {
         )
     };
     assert_eq!(lines_of("g", &step), [15], "for step");
+}
+
+/// A block-scope typedef binds its type within its block only (C99
+/// 6.2.1p4): after the block the outer typedef's function type holds again,
+/// its calling convention included.
+#[test]
+fn a_block_typedef_leaves_the_outer_convention_after_its_block() {
+    use crate::c5::codegen::CallConv;
+    use crate::c5::ir::Inst;
+    let src = "typedef long long ll;\n\
+               typedef ll (*T)(ll, ll);\n\
+               void shadow(void) {\n\
+                   { typedef ll (__attribute__((sysv_abi)) *T)(ll, ll); }\n\
+               }\n\
+               T g;\n\
+               ll call(void) { return g(4, 3); }\n\
+               int main(void) { return 0; }\n";
+    let target = crate::Target::WindowsX64;
+    let program = crate::Compiler::with_target(src.to_string(), target)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    let call = funcs.iter().find(|f| f.name == "call").expect("call");
+    let convs: alloc::vec::Vec<CallConv> = call
+        .insts
+        .iter()
+        .filter(|i| matches!(i, Inst::CallIndirect { .. }))
+        .filter_map(Inst::call_conv)
+        .collect();
+    assert_eq!(convs, [CallConv::Target]);
 }

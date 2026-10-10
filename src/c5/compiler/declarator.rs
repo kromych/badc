@@ -152,7 +152,8 @@ impl Compiler {
                 sym.incomplete_enum_tag = base.enum_tag;
                 sym.set_fn_params(params.fn_params());
                 // A function-pointer base is the result's function type.
-                sym.ret_fn = base_fn.map(|(f, d)| (alloc::boxed::Box::new(f), d + ret_ptr_levels));
+                sym.fn_type.ret =
+                    base_fn.map(|(f, d)| (alloc::boxed::Box::new(f), d + ret_ptr_levels));
                 sym.is_extern_decl = true;
                 sym.linkage = if is_static {
                     crate::c5::symbol::Linkage::Internal

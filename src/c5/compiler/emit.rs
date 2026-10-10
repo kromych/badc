@@ -737,15 +737,9 @@ impl Compiler {
         s.h_val = s.val;
         s.h_fn_ptr_indirection = s.fn_ptr_indirection;
         s.h_fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
-        s.h_ret_fn = s.ret_fn.clone();
-        s.h_params = s.params.clone();
-        s.h_is_variadic = s.is_variadic;
-        s.h_prototyped = s.prototyped;
-        s.h_param_enum_tags = s.param_enum_tags.clone();
-        s.h_param_fn_types = s.param_fn_types.clone();
+        s.h_fn_type = s.fn_type.clone();
         // The inner binding's type records its own enum tag.
         s.h_incomplete_enum_tag = s.incomplete_enum_tag.take();
-        s.h_conv = s.conv;
         s.h_array_size = s.array_size;
         s.h_type_align = s.type_align;
         // Clone rather than `mem::take`: the inner-scope binding
@@ -818,14 +812,8 @@ impl Compiler {
         sym.val = sym.h_val;
         sym.fn_ptr_indirection = sym.h_fn_ptr_indirection;
         sym.fn_ptr_ret_indirection = sym.h_fn_ptr_ret_indirection;
-        sym.ret_fn = sym.h_ret_fn.take();
-        sym.params = core::mem::take(&mut sym.h_params);
-        sym.is_variadic = sym.h_is_variadic;
-        sym.prototyped = sym.h_prototyped;
-        sym.param_enum_tags = core::mem::take(&mut sym.h_param_enum_tags);
-        sym.param_fn_types = core::mem::take(&mut sym.h_param_fn_types);
+        sym.fn_type = core::mem::take(&mut sym.h_fn_type);
         sym.incomplete_enum_tag = sym.h_incomplete_enum_tag.take();
-        sym.conv = sym.h_conv;
         sym.array_size = sym.h_array_size;
         sym.type_align = sym.h_type_align;
         sym.inner_array_size = sym.h_inner_array_size;
@@ -881,14 +869,8 @@ impl Compiler {
             && sym.val == sym.h_val
             && sym.fn_ptr_indirection == sym.h_fn_ptr_indirection
             && sym.fn_ptr_ret_indirection == sym.h_fn_ptr_ret_indirection
-            && sym.ret_fn == sym.h_ret_fn
-            && sym.params == sym.h_params
-            && sym.is_variadic == sym.h_is_variadic
-            && sym.prototyped == sym.h_prototyped
-            && sym.param_enum_tags == sym.h_param_enum_tags
-            && sym.param_fn_types == sym.h_param_fn_types
+            && sym.fn_type == sym.h_fn_type
             && sym.incomplete_enum_tag == sym.h_incomplete_enum_tag
-            && sym.conv == sym.h_conv
             && sym.array_size == sym.h_array_size
             && sym.type_align == sym.h_type_align
             && sym.inner_array_size == sym.h_inner_array_size

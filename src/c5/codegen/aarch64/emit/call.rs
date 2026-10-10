@@ -800,10 +800,6 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: boo
     }
 }
 
-/// A call through a function pointer: the target is captured in a
-/// caller-saved scratch the marshal does not touch (or a reserved stack
-/// cell when none is free), then `blr`.
-#[allow(clippy::too_many_arguments)]
 /// Whether the argument marshal writes neither x16 nor x17, so a call
 /// target staged there survives it: every argument already sits in its
 /// planned location, and no aggregate, stack or va_list path needs the
@@ -839,6 +835,10 @@ pub(super) fn indirect_result_takes_x8(
     })
 }
 
+/// A call through a function pointer: `blr` where the target sits when the
+/// marshal fills that register with nothing else, else from x16 / x17, a
+/// caller-saved scratch the marshal leaves, or a reserved stack cell.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn emit_call_indirect(
     code: &mut Vec<u8>,
     dst: Place,
@@ -879,11 +879,14 @@ pub(super) fn emit_call_indirect(
     // prototype the walker could not recover.
     let mut plan = ops.plan(agg_descs, abi, callee_variadic, fixed_args);
     // A target in a register the marshal does not write is called where it
-    // is: no argument lands in it, and it is neither the scratch pair, x19,
-    // which a lowering may take as a third scratch, nor x8, which carries an
-    // indirect result's address.
+    // is: no other argument lands in it, and it is neither the scratch
+    // pair, x19, which a lowering may take as a third scratch, nor x8,
+    // which carries an indirect result's address.
     let in_place = match target_place {
-        Place::IntReg(r) if !matches!(r, 8 | 16 | 17 | 19) && !plan.int_regs().any(|p| p == r) => {
+        Place::IntReg(r)
+            if !matches!(r, 8 | 16 | 17 | 19)
+                && !plan.int_regs_besides(args, target).any(|p| p == r) =>
+        {
             Some(Reg(r))
         }
         _ => None,

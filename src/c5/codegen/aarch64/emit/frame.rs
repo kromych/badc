@@ -418,7 +418,7 @@ pub(super) fn outgoing_bytes(
                     let in_place = matches!(
                         target_place,
                         Place::IntReg(r) if !matches!(r, 8 | 16 | 17 | 19)
-                            && !plan.int_regs().any(|p| p == r)
+                            && !plan.int_regs_besides(args, *target).any(|p| p == r)
                     );
                     if !in_place {
                         let arg_source_regs: alloc::vec::Vec<u8> = args

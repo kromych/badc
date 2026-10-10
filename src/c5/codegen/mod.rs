@@ -657,6 +657,21 @@ impl CallPlan {
             })
             .chain(self.fp_mirrors.iter().map(|&(_, r)| r))
     }
+
+    /// [`Self::int_regs`] less those an argument that is `value` itself fills.
+    pub(crate) fn int_regs_besides<'a>(
+        &'a self,
+        args: &'a [u32],
+        value: u32,
+    ) -> impl Iterator<Item = u8> + 'a {
+        self.int_regs().filter(move |&r| {
+            !self
+                .placements
+                .iter()
+                .zip(args)
+                .any(|(p, &a)| a == value && matches!(*p, ArgPlacement::IntReg(x) if x == r))
+        })
+    }
 }
 
 /// The Microsoft x64 placement of a call to a variadic or unprototyped

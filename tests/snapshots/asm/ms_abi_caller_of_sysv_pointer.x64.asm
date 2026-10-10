@@ -36,16 +36,15 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
-               	movq	%rdi, %rax
+               	movq	%rdi, %rdx
                	leaq	-0x10(%rbp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
                	movq	%rsi, (%rdi)
                	movq	$0x7, 0x8(%rdi)
-               	movq	%rax, %rdx
                	movq	0x8(%rdi), %rsi
                	movq	(%rdi), %rdi
-               	callq	*%rax
+               	callq	*%rdx
                	leave
                	retq
 

@@ -2236,6 +2236,46 @@ int driver(void) { g_x = 7; g_y = 35; g_adder(&g_out, g_x, g_y); return g_out; }
     );
 }
 
+/// A call target that is also its first argument branches through that
+/// register; one reloaded while every argument sits in its register, x16.
+#[test]
+fn indirect_call_targets_need_no_move() {
+    const SRC: &str = "typedef long (*fself)(void *, long);\n\
+long self_arg(fself f, long x) { return f((void *)f, x) + 1; }\n\
+long other(long x);\n\
+long spilled(long (*fp)(long, long), long a, long b) {\n\
+long v0 = other(a), v1 = other(v0), v2 = other(v1), v3 = other(v2);\n\
+long v4 = other(v3), v5 = other(v4), v6 = other(v5), v7 = other(v6);\n\
+long v8 = other(v7), v9 = other(v8), v10 = other(v9), v11 = other(v10);\n\
+long r = fp(a + v0, b - v1);\n\
+return r + v0 + v1 * 2 + v2 * 3 + v3 * 4 + v4 * 5 + v5 * 6 + v6 * 7 + v7 * 8 + v8 * 9 +\n\
+v9 * 10 + v10 * 11 + v11 * 12 + a + b;\n}\n";
+    let blr = |ws: &[u32]| {
+        ws.iter()
+            .find(|&&w| w & 0xFFFF_FC1F == 0xD63F_0000)
+            .map(|&w| (w >> 5) & 31)
+    };
+    // `mov xd, xm` (`orr xd, xzr, xm`).
+    let moves = |ws: &[u32]| ws.iter().any(|&w| w & 0xFFE0_FFE0 == 0xAA00_03E0);
+    let ws = a64(SRC, "self_arg");
+    assert!(blr(&ws) == Some(0) && !moves(&ws), "self_arg: {ws:08x?}");
+    let ws = a64(SRC, "spilled");
+    assert_eq!(blr(&ws), Some(16), "spilled: {ws:08x?}");
+    let call_through = |insns: &[X64Insn]| {
+        insns
+            .iter()
+            .find(|i| i.op == 0xFF && i.reg_form() && i.modrm.is_some_and(|m| (m >> 3) & 7 == 2))
+            .map(|i| i.regs().1)
+    };
+    // A register move other than the frame setup's `movq %rsp, %rbp`.
+    let reg_move = |i: &X64Insn| matches!(i.op, 0x89 | 0x8B) && i.reg_form() && i.regs() != (4, 5);
+    let insns = x64(SRC, "self_arg");
+    assert!(
+        call_through(&insns) == Some(7) && !insns.iter().any(reg_move),
+        "x86-64 self_arg: {insns:x?}"
+    );
+}
+
 /// A value whose own register hint is taken leaves the hints of the
 /// values still to be colored alone, so the arguments of a call land in
 /// their registers: no rotation through x16 ahead of the call.

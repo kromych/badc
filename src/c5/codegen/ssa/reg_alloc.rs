@@ -3799,10 +3799,10 @@ fn compute_param_incoming_forbid(
 /// Keep each `CallIndirect` target off the registers the same call
 /// marshals its arguments into: the emit would otherwise move the
 /// target aside before the argument setup. The registers mirror the
-/// per-arch emit's blocked set -- the integer registers the call plan
-/// fills, the aarch64 indirect-result slot, and `al` for a System V
-/// variadic call, whose XMM count the marshal writes just before the
-/// branch.
+/// per-arch emit's blocked set -- the integer registers the callee's
+/// convention fills with another value, the aarch64 indirect-result slot,
+/// and `al` for a System V variadic call, whose XMM count the marshal
+/// writes just before the branch.
 fn compute_call_target_forbid(func: &FunctionSsa, target: Target) -> Vec<u64> {
     use crate::c5::codegen::{plan_call_args_aggs, plan_mirrored_call};
     let mut forbid = alloc::vec![0u64; func.insts.len()];
@@ -3852,7 +3852,7 @@ fn compute_call_target_forbid(func: &FunctionSsa, target: Target) -> Vec<u64> {
             )
         };
         let mut mask = 0u64;
-        for r in plan.int_regs() {
+        for r in plan.int_regs_besides(args, *t) {
             mask |= 1u64 << r;
         }
         if target.is_aarch64() {

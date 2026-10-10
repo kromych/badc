@@ -757,11 +757,11 @@ pub(super) fn emit_call_indirect(
         )
     };
     // The staged target must avoid every register the marshal reads (the
-    // argument sources) or writes (every integer register the plan fills,
-    // and the r10 staging scratch).
+    // argument sources) or writes (every integer register the plan fills
+    // with another value, and the r10 staging scratch).
     let mut blocked: alloc::vec::Vec<Reg> =
         alloc::vec::Vec::with_capacity(args.len() + abi.int_arg_regs.len() + 2);
-    blocked.extend(plan.int_regs().map(Reg));
+    blocked.extend(plan.int_regs_besides(args, target).map(Reg));
     blocked.push(SCRATCH_R10);
     // A System V variadic call sets `al` just before the `call`, so the
     // target must not sit in rax.

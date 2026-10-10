@@ -3,8 +3,8 @@
    its "r" operands into the callee-saved bank (rbx, r12..r15). The operand
    allocator must draw from every usable GP register, not just the
    caller-saved half, or such asm reports a spurious register exhaustion.
-   heavy_clobber names seven of the caller-saved pool registers, leaving
-   only the callee-saved bank for its five operands; many_operands needs
+   heavy_clobber names all nine caller-saved pool registers, leaving only
+   the callee-saved bank for its five operands; many_operands needs
    more than half the GP file at once. Both round-trip each operand through
    its assigned register, so a wrong save/restore surfaces as a wrong sum. */
 static long heavy_clobber(void) {
@@ -17,7 +17,7 @@ static long heavy_clobber(void) {
                      : "+r"(a), "+r"(b), "+r"(c), "+r"(d), "+r"(e)
                      :
                      : "cc", "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9",
-                       "memory");
+                       "r10", "r11", "memory");
     return a + b + c + d + e; /* 11 + 22 + 33 + 44 + 55 */
 }
 

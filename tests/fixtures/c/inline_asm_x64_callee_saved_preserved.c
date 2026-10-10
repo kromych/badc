@@ -18,7 +18,7 @@ long clobber_heavy(void) {
                      : "+r"(a), "+r"(b), "+r"(c), "+r"(d), "+r"(e)
                      :
                      : "cc", "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9",
-                       "memory");
+                       "r10", "r11", "memory");
     return a + b + c + d + e; /* 165 */
 }
 

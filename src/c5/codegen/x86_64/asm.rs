@@ -937,15 +937,14 @@ fn mask_reg_operand(name: &str) -> Option<AsmOpnd> {
     })
 }
 
-/// The GP pools `r` operands draw from: the caller-saved registers
-/// first -- an operand there costs no save / restore and no frame --
-/// with rax at the head, matching the reference compilers' allocation
-/// order for x86-64, which a template spelling an operand `rax` (the
-/// r|a|x alternatives) relies on when it reads the accumulator by name.
-/// The callee-saved bank comes last. r10 / r11 are usable: the stage
-/// picker excludes operand registers, so it moves on when an operand
-/// sits in one. rsp / rbp stay out (stack pointer, frame pointer the
-/// scratch region hangs off).
+/// The GP pools `r` operands draw from: the caller-saved registers in
+/// register-number order, then the callee-saved bank. An operand in a
+/// caller-saved register costs no save / restore and no frame; rax heads
+/// the order so that an operand constrained `rax` -- the r|a|x
+/// alternatives -- sits in the accumulator a template may read by name.
+/// r10 / r11 are usable: the stage picker excludes operand registers, so
+/// it moves on when an operand sits in one. rsp / rbp stay out (stack
+/// pointer, frame pointer the scratch region hangs off).
 const SYSV_POOL: [u8; 14] = [0, 1, 2, 6, 7, 8, 9, 10, 11, 3, 12, 13, 14, 15];
 /// Win64: rsi and rdi are callee-saved, so the caller-saved set is
 /// rax rcx rdx r8..r11, and rsi / rdi join the callee-saved bank.

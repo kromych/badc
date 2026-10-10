@@ -82,15 +82,39 @@ impl Compiler {
         // declaration with multiple declarators (`int *p, *q;`) keeps
         // its leading `*` for the caller's declarator loop.
         let proto_snap = self.lex.snapshot();
+        let attrs_snap = self.pending.attrs.clone();
         let base_fn = self.carriers_fn_type();
         let mut ret_ptr_levels: i64 = 0;
         while self.lex.tk == Token::MulOp {
             ret_ptr_levels += 1;
             self.next()?;
         }
-        if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b'(') {
+        // C99 6.7.5p6: `(name)` declares `name`; a group's attributes name
+        // the convention of the signature after it, as at file scope.
+        let (mut groups, mut group_conv) = (0, None);
+        while self.lex.tk == '(' && !self.paren_opens_param_type_list() {
+            self.next()?;
+            groups += 1;
+            let named = self.skip_attributes_for_conv()?;
+            group_conv = self.add_conv(group_conv, named)?;
+        }
+        let named_here = self.lex.tk == Token::Id
+            && self
+                .lex
+                .peek_after_whitespace(if groups == 0 { b'(' } else { b')' });
+        if named_here {
             let id_idx = self.lex.curr_id_idx;
             self.next()?; // consume name
+            let mut closed = 0;
+            while closed < groups && self.lex.tk == ')' {
+                self.next()?;
+                closed += 1;
+            }
+            if closed < groups || self.lex.tk != '(' {
+                self.restore_lex(proto_snap);
+                self.pending.attrs = attrs_snap;
+                return Ok(None);
+            }
             self.next()?; // consume `(`
             // C99 6.7.6.3: a prototype's parameter names have no linkage
             // and no scope past the declaration. Parse them in no-bind
@@ -121,13 +145,14 @@ impl Compiler {
                 params,
                 // A function-pointer base is the result's function type.
                 ret_fn: base_fn.map(|(f, d)| (alloc::boxed::Box::new(f), d + ret_ptr_levels)),
-                conv: self.pending.attrs.call_conv,
+                conv: self.add_conv(group_conv, self.pending.attrs.call_conv)?,
                 lineage: (0, 0),
             };
             self.bind_block_function_decl(id_idx, f, is_static, label)?;
             return Ok(Some(id_idx));
         }
         self.restore_lex(proto_snap);
+        self.pending.attrs = attrs_snap;
         Ok(None)
     }
 

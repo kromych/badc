@@ -357,9 +357,6 @@ struct FnCtx<'a> {
     bulk_xmm: Option<u8>,
     imports: &'a super::ResolvedImports,
     variadic_targets: &'a alloc::collections::BTreeSet<usize>,
-    /// Callee ent_pc -> the convention that callee declares, for the
-    /// callees that declare one at all. Absent means the target's own.
-    conv_targets: &'a alloc::collections::BTreeMap<usize, super::CallConv>,
     extern_tls_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
     /// `Inst::ImmData` value-id -> cross-TU data symbol name, for an `i`-class
     /// inline-asm operand that names an external address, whether in a section

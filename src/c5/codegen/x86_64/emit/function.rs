@@ -181,7 +181,6 @@ pub(crate) fn emit_function(
     extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
-    conv_targets: &alloc::collections::BTreeMap<usize, super::CallConv>,
     ret_tags: &alloc::collections::BTreeMap<usize, i64>,
     tls_total_size: usize,
     fn_unwind: &mut Vec<super::FnUnwind>,
@@ -261,7 +260,6 @@ pub(crate) fn emit_function(
         bulk_xmm,
         imports,
         variadic_targets,
-        conv_targets,
         extern_tls_names,
         extern_data_names,
         extern_code_names,
@@ -650,7 +648,6 @@ impl FnEmit<'_, '_> {
             abi,
             target,
             variadic_targets,
-            conv_targets,
             ..
         } = self.fcx;
         let block = &func.blocks[block_idx];
@@ -669,15 +666,7 @@ impl FnEmit<'_, '_> {
         }
         // A direct call whose result the block returns lowers as `marshal;
         // epilogue; jmp` in the terminator; see `detect_tail_call`.
-        let tail_call = detect_tail_call(
-            func,
-            block,
-            abi,
-            variadic_targets,
-            conv_targets,
-            self.ret_tags,
-            target,
-        );
+        let tail_call = detect_tail_call(func, block, abi, variadic_targets, self.ret_tags, target);
         for v in block.inst_range.clone() {
             if self.plan.lowers(block_idx, v) {
                 self.emit_block_inst(block, v, tail_call)?;

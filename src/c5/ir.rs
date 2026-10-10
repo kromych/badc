@@ -345,6 +345,8 @@ pub(crate) enum Inst {
         /// The width of each argument narrower than 8 bytes: a named
         /// parameter's type, past the prototype the promoted argument's.
         arg_widths: ArgWidths,
+        /// The calling convention the callee's declaration names.
+        callee_conv: crate::c5::codegen::CallConv,
         /// Host-ABI aggregate metadata. Parallel to `args`:
         /// `arg_aggs[k] = Some(i)` marks `args[k]` as the address of
         /// an aggregate laid out by the function's `agg_descs[i]`,
@@ -680,6 +682,18 @@ impl Inst {
     /// emitted instructions leaves it out.
     pub(crate) fn is_lifetime_marker(&self) -> bool {
         matches!(self, Inst::LifetimeEnd(_))
+    }
+
+    /// The convention a call's callee follows, the target's own for a
+    /// library import.
+    pub(crate) fn call_conv(&self) -> Option<crate::c5::codegen::CallConv> {
+        match self {
+            Inst::Call { callee_conv, .. } | Inst::CallIndirect { callee_conv, .. } => {
+                Some(*callee_conv)
+            }
+            Inst::CallExt { .. } => Some(crate::c5::codegen::CallConv::Target),
+            _ => None,
+        }
     }
 
     /// Variant name for diagnostics. Exhaustive so a new variant is

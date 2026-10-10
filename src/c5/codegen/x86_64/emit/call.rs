@@ -1041,7 +1041,6 @@ pub(super) fn detect_tail_call<'a>(
     block: &super::super::ir::Block,
     abi: super::Abi,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
-    conv_targets: &alloc::collections::BTreeMap<usize, super::CallConv>,
     ret_tags: &alloc::collections::BTreeMap<usize, i64>,
     target: Target,
 ) -> Option<(usize, usize, &'a [u32])> {
@@ -1058,23 +1057,26 @@ pub(super) fn detect_tail_call<'a>(
     {
         return None;
     }
-    let (target_pc, args, arg_aggs, fp_arg_mask, fixed_args) = match &func.insts[v as usize] {
-        Inst::Call {
-            target_pc,
-            args,
-            arg_aggs,
-            fp_arg_mask,
-            fixed_args,
-            ..
-        } => (
-            *target_pc,
-            args.as_slice(),
-            arg_aggs.as_slice(),
-            fp_arg_mask,
-            *fixed_args,
-        ),
-        _ => return None,
-    };
+    let (target_pc, args, arg_aggs, fp_arg_mask, fixed_args, callee_conv) =
+        match &func.insts[v as usize] {
+            Inst::Call {
+                target_pc,
+                args,
+                arg_aggs,
+                fp_arg_mask,
+                fixed_args,
+                callee_conv,
+                ..
+            } => (
+                *target_pc,
+                args.as_slice(),
+                arg_aggs.as_slice(),
+                fp_arg_mask,
+                *fixed_args,
+                *callee_conv,
+            ),
+            _ => return None,
+        };
     // A stack argument would land in this function's incoming argument area.
     let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
     if plan
@@ -1099,7 +1101,7 @@ pub(super) fn detect_tail_call<'a>(
     }
     // A callee on another convention wants a different argument window,
     // shadow space and preserved-register set.
-    if conv_targets.get(&target_pc).copied().unwrap_or_default() != func.conv {
+    if callee_conv != func.conv {
         return None;
     }
     // The callee's return extension replaces this function's, so the two

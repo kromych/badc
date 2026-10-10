@@ -398,6 +398,7 @@ mod tests {
                         fp_arg_mask: FpMask::EMPTY,
                         low_word_args,
                         arg_widths: crate::c5::ir::ArgWidths::default(),
+                        callee_conv: crate::c5::codegen::CallConv::Target,
                         arg_aggs: Vec::new(),
                         ret_agg: None,
                         ret_slot_local: 0,

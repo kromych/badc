@@ -3159,7 +3159,7 @@ fn populate_call_arg_hints(
     calls_after_def: &[bool],
     hints: &mut [Option<u8>],
 ) {
-    use crate::c5::codegen::{ArgPlacement, CallConv};
+    use crate::c5::codegen::ArgPlacement;
     let incoming: Vec<Option<(bool, u8)>> = param_incoming_plan(func, target)
         .iter()
         .map(|p| match *p {
@@ -3170,7 +3170,7 @@ fn populate_call_arg_hints(
         .collect();
     for (pc, inst) in func.insts.iter().enumerate() {
         // An import's variadic count is unknown here; its arguments plan as fixed.
-        let (args, fixed, fp_arg_mask, arg_aggs, widths, conv) = match inst {
+        let (args, fixed, fp_arg_mask, arg_aggs, widths) = match inst {
             Inst::Call {
                 args,
                 fixed_args,
@@ -3178,14 +3178,7 @@ fn populate_call_arg_hints(
                 arg_aggs,
                 arg_widths,
                 ..
-            } => (
-                args,
-                *fixed_args,
-                fp_arg_mask,
-                arg_aggs,
-                *arg_widths,
-                CallConv::Target,
-            ),
+            } => (args, *fixed_args, fp_arg_mask, arg_aggs, *arg_widths),
             Inst::CallIndirect {
                 args,
                 callee_variadic,
@@ -3193,7 +3186,6 @@ fn populate_call_arg_hints(
                 fp_arg_mask,
                 arg_aggs,
                 arg_widths,
-                callee_conv,
                 ..
             } => {
                 let fixed = if *callee_variadic {
@@ -3201,14 +3193,7 @@ fn populate_call_arg_hints(
                 } else {
                     args.len()
                 };
-                (
-                    args,
-                    fixed,
-                    fp_arg_mask,
-                    arg_aggs,
-                    *arg_widths,
-                    *callee_conv,
-                )
+                (args, fixed, fp_arg_mask, arg_aggs, *arg_widths)
             }
             Inst::CallExt {
                 args,
@@ -3216,15 +3201,11 @@ fn populate_call_arg_hints(
                 arg_aggs,
                 arg_widths,
                 ..
-            } => (
-                args,
-                args.len(),
-                fp_arg_mask,
-                arg_aggs,
-                *arg_widths,
-                CallConv::Target,
-            ),
+            } => (args, args.len(), fp_arg_mask, arg_aggs, *arg_widths),
             _ => continue,
+        };
+        let Some(conv) = inst.call_conv() else {
+            continue;
         };
         let abi = target.abi_for(conv);
         let aggs = super::emit_common::build_arg_aggs(arg_aggs, &func.agg_descs, abi);
@@ -5351,6 +5332,7 @@ int main(void) { return 0; }
             0,
             false,
             crate::c5::ir::FpMask::EMPTY,
+            crate::c5::codegen::CallConv::Target,
         );
         b.jmp(exit);
         // mid: v = 7; jmp body. Laid out after body, so def(v) pc is
@@ -6391,6 +6373,7 @@ int main(void) { return 0; }
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                     low_word_args: 0,
                     arg_widths: crate::c5::ir::ArgWidths::default(),
+                    callee_conv: crate::c5::codegen::CallConv::Target,
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
@@ -6554,6 +6537,7 @@ int main(void) { return 0; }
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 low_word_args: 0,
                 arg_widths: crate::c5::ir::ArgWidths::default(),
+                callee_conv: crate::c5::codegen::CallConv::Target,
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -6638,11 +6622,7 @@ int main(void) { return 0; }
             let mut funcs =
                 crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, true, true)
                     .expect("ssa");
-            super::super::super::passes::agg_parts::run(
-                &mut funcs,
-                target,
-                &alloc::collections::BTreeMap::new(),
-            );
+            super::super::super::passes::agg_parts::run(&mut funcs, target);
             let ints = agg_return_regs(target).0;
             let args = target.abi().int_arg_regs;
             for (name, straight) in [("id", true), ("swap", false)] {

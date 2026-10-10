@@ -1890,10 +1890,6 @@ struct X64Lower<'p> {
     fn_unwind: Vec<super::FnUnwind>,
     asm_text_abs_refs: Vec<super::AsmTextAbsRef>,
     abs_addr_refs: Vec<super::AbsAddrRef>,
-    /// Per-callee calling convention, for the callees that declare one
-    /// (`__attribute__((ms_abi))` / `((sysv_abi))`). A direct call site
-    /// reads it to marshal into that convention's argument window.
-    conv_targets: alloc::collections::BTreeMap<usize, super::CallConv>,
     /// Per-callee declared return type, read by the tail-call conversion to
     /// compare extension contracts.
     ret_tags: alloc::collections::BTreeMap<usize, i64>,
@@ -1911,7 +1907,6 @@ impl<'p> X64Lower<'p> {
             fn_unwind: Vec::new(),
             asm_text_abs_refs: Vec::new(),
             abs_addr_refs: Vec::new(),
-            conv_targets: alloc::collections::BTreeMap::new(),
             ret_tags: alloc::collections::BTreeMap::new(),
             fn_name_by_pc: program
                 .symbols
@@ -1941,22 +1936,13 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
     }
 
     fn note_callees(&mut self, funcs: &[crate::c5::ir::FunctionSsa]) {
-        self.conv_targets = funcs
-            .iter()
-            .filter(|f| f.conv != super::CallConv::Target)
-            .map(|f| (f.ent_pc, f.conv))
-            .collect();
         self.ret_tags = funcs.iter().map(|f| (f.ent_pc, f.ret_type_tag)).collect();
     }
 
-    /// A cross-TU callee's convention and return type come off its
-    /// declaration in this unit, the same place the definition's would. A
-    /// declaration without a prototype states no return contract a tail
-    /// call could rely on.
+    /// A cross-TU callee's return type comes off its declaration in this
+    /// unit, the same place the definition's would. A declaration without
+    /// a prototype states no return contract a tail call could rely on.
     fn note_extern_callee(&mut self, sym: &crate::c5::symbol::Symbol) {
-        if sym.conv != super::CallConv::Target {
-            self.conv_targets.insert(sym.val as usize, sym.conv);
-        }
         if sym.prototyped {
             self.ret_tags.insert(sym.val as usize, sym.type_);
         }
@@ -2027,7 +2013,6 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
             inputs.extern_tls_names,
             imports,
             inputs.variadic_targets,
-            &self.conv_targets,
             &self.ret_tags,
             // Variant II places the block at `tp - roundup(memsz, align)`.
             inputs

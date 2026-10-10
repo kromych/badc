@@ -659,7 +659,6 @@ fn emit_call_inst(
         target,
         imports,
         variadic_targets,
-        conv_targets,
         ..
     } = *fcx;
     let cx = &mut *out.cx;
@@ -674,6 +673,7 @@ fn emit_call_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            callee_conv,
             arg_aggs,
             ret_agg,
             ret_slot_local,
@@ -686,11 +686,7 @@ fn emit_call_inst(
             *fixed_args,
             alloc,
             frame,
-            callee_abi(
-                abi,
-                target,
-                conv_targets.get(target_pc).copied().unwrap_or_default(),
-            ),
+            callee_abi(abi, target, *callee_conv),
             fixups,
             variadic_targets.contains(target_pc),
             *fp_return,

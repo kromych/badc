@@ -1380,6 +1380,7 @@ impl SsaBuilder {
         fixed_args: usize,
         fp_return: bool,
         fp_arg_mask: crate::c5::ir::FpMask,
+        callee_conv: crate::c5::codegen::CallConv,
     ) -> ValueId {
         self.cross_call();
         self.push(Inst::Call {
@@ -1390,6 +1391,7 @@ impl SsaBuilder {
             fp_arg_mask,
             low_word_args: 0,
             arg_widths: crate::c5::ir::ArgWidths::default(),
+            callee_conv,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -1407,6 +1409,7 @@ impl SsaBuilder {
         fixed_args: usize,
         fp_return: bool,
         fp_arg_mask: crate::c5::ir::FpMask,
+        callee_conv: crate::c5::codegen::CallConv,
     ) -> ValueId {
         self.cross_call();
         let v = self.push(Inst::Call {
@@ -1417,6 +1420,7 @@ impl SsaBuilder {
             fp_arg_mask,
             low_word_args: 0,
             arg_widths: crate::c5::ir::ArgWidths::default(),
+            callee_conv,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -1907,6 +1911,7 @@ mod tests {
             1,
             false,
             crate::c5::ir::FpMask::EMPTY,
+            crate::c5::codegen::CallConv::Target,
         );
         let v_n2 = b.load_local(2, LoadKind::I32);
         let v_n_minus_2 = b.binop_imm(BinOp::Sub, v_n2, 2);
@@ -1916,6 +1921,7 @@ mod tests {
             1,
             false,
             crate::c5::ir::FpMask::EMPTY,
+            crate::c5::codegen::CallConv::Target,
         );
         let v_sum = b.binop(BinOp::Add, v_call1, v_call2);
         b.return_(v_sum);
@@ -2162,7 +2168,14 @@ mod tests {
     fn call_invalidates_cse() {
         let mut b = SsaBuilder::new(0, 1, false);
         let v_pre = b.load_local(2, LoadKind::I32);
-        let _ = b.call(0, alloc::vec![], 0, false, crate::c5::ir::FpMask::EMPTY);
+        let _ = b.call(
+            0,
+            alloc::vec![],
+            0,
+            false,
+            crate::c5::ir::FpMask::EMPTY,
+            crate::c5::codegen::CallConv::Target,
+        );
         let v_post = b.load_local(2, LoadKind::I32);
         assert_ne!(
             v_pre, v_post,

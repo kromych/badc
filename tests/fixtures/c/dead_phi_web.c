@@ -6,7 +6,8 @@
 // only, leaving the other half's phis dead (C99 6.5.5p5: the quotient
 // truncates toward zero). The last leaves a cycle of phis reading only
 // one another dead. The inputs are volatile so no division folds at
-// compile time, and the checks compare against reference arithmetic.
+// compile time; the expected results are the exact quotients and
+// remainders, truncated to 64 bits (C99 6.3.1.3p2).
 
 typedef unsigned long long u64;
 
@@ -32,16 +33,6 @@ NOINLINE static int rotate_dead(int n) {
     return 0;
 }
 
-static u64 ref_quot(u64 hi, u64 lo, u64 d) {
-    unsigned __int128 hl = ((unsigned __int128)hi << 64) + lo;
-    return (u64)(hl / d);
-}
-
-static u64 ref_rem(u64 hi, u64 lo, u64 d) {
-    unsigned __int128 hl = ((unsigned __int128)hi << 64) + lo;
-    return (u64)(hl % d);
-}
-
 static volatile u64 vhi = 0x123456789abcdef0ull;
 static volatile u64 vlo = 0xfedcba9876543210ull;
 static volatile u64 vd = 7;
@@ -49,11 +40,11 @@ static volatile int vn = 100;
 
 int main(void) {
     u64 hi = vhi, lo = vlo, d = vd;
-    if (quot128(hi, lo, d) != ref_quot(hi, lo, d)) return 1;
-    if (rem128(hi, lo, d) != ref_rem(hi, lo, d)) return 2;
-    if (quot128(0, lo, 3) != ref_quot(0, lo, 3)) return 3;
-    if (rem128(hi, 0, 1) != ref_rem(hi, 0, 1)) return 4;
-    if (quot128(hi, lo, hi) != ref_quot(hi, lo, hi)) return 5;
-    if (rem128(hi, lo, lo) != ref_rem(hi, lo, lo)) return 6;
+    if (quot128(hi, lo, d) != 0xdb441aa810e774ddull) return 1;
+    if (rem128(hi, lo, d) != 5) return 2;
+    if (quot128(0, lo, 3) != 0x54f43e32d21c10b0ull) return 3;
+    if (rem128(hi, 0, 1) != 0) return 4;
+    if (quot128(hi, lo, hi) != 14) return 5;
+    if (rem128(hi, lo, lo) != 0xeb5b8284f51c1e90ull) return 6;
     return rotate_dead(vn) != 0;
 }

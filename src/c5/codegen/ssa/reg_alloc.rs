@@ -2933,16 +2933,9 @@ pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
         for_each_operand(inst, |op| bump_into(&mut counts, op));
     }
     for block in &func.blocks {
-        match block.terminator {
-            super::super::ir::Terminator::Bz { cond, .. } => bump_into(&mut counts, cond),
-            super::super::ir::Terminator::Bnz { cond, .. } => bump_into(&mut counts, cond),
-            super::super::ir::Terminator::Return(v) => bump_into(&mut counts, v),
-            super::super::ir::Terminator::GotoIndirect { target }
-            | super::super::ir::Terminator::JumpTable { idx: target, .. } => {
-                bump_into(&mut counts, target)
-            }
-            _ => {}
-        }
+        block
+            .terminator
+            .for_each_operand(|v| bump_into(&mut counts, v));
     }
     // Iterate to fixed point: a pure inst with zero uses is dead, and
     // so is a phi nothing reads. Worst case O(n^2) but n is typically
@@ -2993,18 +2986,9 @@ pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
             for_each_operand(inst, |op| seed(&mut live, &mut work, op));
         }
         for block in &func.blocks {
-            match block.terminator {
-                super::super::ir::Terminator::Bz { cond, .. }
-                | super::super::ir::Terminator::Bnz { cond, .. } => {
-                    seed(&mut live, &mut work, cond)
-                }
-                super::super::ir::Terminator::Return(v) => seed(&mut live, &mut work, v),
-                super::super::ir::Terminator::GotoIndirect { target }
-                | super::super::ir::Terminator::JumpTable { idx: target, .. } => {
-                    seed(&mut live, &mut work, target)
-                }
-                _ => {}
-            }
+            block
+                .terminator
+                .for_each_operand(|v| seed(&mut live, &mut work, v));
         }
         while let Some(p) = work.pop() {
             let Inst::Phi { incoming, .. } = &func.insts[p] else {

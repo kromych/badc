@@ -252,6 +252,9 @@ fn collect_uses(func: &FunctionSsa, layout: &Layout, cand: &[bool], reads: &[boo
     for (b, block) in func.blocks.iter().enumerate() {
         let b = b as BlockId;
         for idx in block.inst_range.clone() {
+            if !reads[idx as usize] {
+                continue;
+            }
             let inst = &func.insts[idx as usize];
             if let Inst::Phi { incoming, kind } = inst {
                 for &(pred, v) in incoming {
@@ -265,9 +268,6 @@ fn collect_uses(func: &FunctionSsa, layout: &Layout, cand: &[bool], reads: &[boo
                         });
                     }
                 }
-                continue;
-            }
-            if !reads[idx as usize] {
                 continue;
             }
             for_each_operand(inst, |v| {

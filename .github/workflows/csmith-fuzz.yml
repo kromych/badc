@@ -134,7 +134,6 @@ jobs:
               --reduce-minutes "$REDUCE_MINUTES" \
               --badc "$badc" \
               "${generator[@]}" \
-              --require-csmith \
               --out-dir "fuzz-cases/$leg" \
               --report "fuzz-report-$leg.json" \
               $publish || status=1

@@ -48,12 +48,18 @@ comment naming both is appended to the issue `compiler fuzzing,
 exist. Without `--publish` nothing is written: the plan, the issue body and
 every comment are printed instead.
 
+Without csmith or its runtime headers the run exits 2, and 0 only under
+`--skip-without-csmith`. Headers found loose in a system include directory
+(Fedora's `csmith-devel` installs `csmith.h` in /usr/include) are copied into
+the scratch tree and taken from there: `-I` on the system directory would put
+its libc headers ahead of badc's bundled ones.
+
 `--self-test` checks the pure parts (signatures, dedup, week arithmetic,
 rendering, the `gh` argument vectors) and needs neither csmith nor badc. On
 POSIX it also runs the rendered test's children: a timeout stops a child's
 descendants, and a child left behind by a killed test stops at its CPU-time
 limit. With csmith present it also asserts that a generation leaves the
-repository untouched: csmith writes `platform.info` into its working
+repository untouched: csmith 2.3.0 writes `platform.info` into its working
 directory, not beside its `-o` output, so every case runs in its own scratch
 directory.
 """
@@ -66,6 +72,7 @@ import contextlib
 import dataclasses
 import datetime as dt
 import hashlib
+import io
 import json
 import os
 import platform
@@ -205,6 +212,10 @@ class Csmith:
     binary: Path
     version: str
     include: Path
+    # Set when `include` is a private copy of the headers found loose in a
+    # system include directory: the directory and the files copied out of it.
+    copied_from: Path | None = None
+    headers: tuple[str, ...] = ()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -240,30 +251,42 @@ def csmith_version(binary: Path) -> str:
         return first_line_of_version(binary, "csmith (version unknown)", scratch)
 
 
-def include_candidates(binary: Path, version: str) -> list[Path]:
+# The system include directories. csmith's headers can sit loose in one
+# (Fedora's csmith-devel puts csmith.h in /usr/include), and naming one with
+# -I would put the system libc headers ahead of badc's bundled ones.
+SYSTEM_INCLUDE_ROOTS = (Path("/usr/include"), Path("/usr/local/include"))
+
+
+def include_candidates(
+    binary: Path, version: str, roots: tuple[Path, ...] = SYSTEM_INCLUDE_ROOTS
+) -> list[Path]:
     """Where csmith's runtime headers sit, in probe order.
 
     Homebrew puts them under the cellar's `include/csmith-<v>`, Debian and
-    Ubuntu in `libcsmith-dev` at `/usr/include/csmith`, a source build under
-    the prefix given to `configure`.
+    Ubuntu in `libcsmith-dev` at `/usr/include/csmith`, Fedora loose in
+    `/usr/include`, a source build under the prefix given to `configure`.
     """
     stamp = version.split()[-1] if version.split() else ""
     prefix = binary.resolve().parent.parent
     names = [f"csmith-{stamp}", "csmith"] if stamp else ["csmith"]
-    roots = [prefix / "include", Path("/usr/include"), Path("/usr/local/include")]
-    out = [root / name for root in roots for name in names]
+    shared = [prefix / "include", *roots]
+    out = [root / name for root in shared for name in names]
     out.extend([prefix / "share" / n / "runtime" for n in names])
-    return out
+    return out + shared
 
 
-def find_csmith(binary: str | None, include: str | None) -> Csmith | None:
+def find_csmith(
+    binary: str | None,
+    include: str | None,
+    roots: tuple[Path, ...] = SYSTEM_INCLUDE_ROOTS,
+) -> Csmith | None:
     found = binary or shutil.which("csmith")
     if not found or not Path(found).exists():
         return None
     path = Path(found).resolve()
     version = csmith_version(path)
     named = include or os.environ.get("CSMITH_INCLUDE")
-    probe = [Path(named)] if named else include_candidates(path, version)
+    probe = [Path(named)] if named else include_candidates(path, version, roots)
     for candidate in probe:
         if (candidate / "csmith.h").is_file():
             return Csmith(path, version, candidate)
@@ -274,7 +297,7 @@ def missing_csmith(explicit: str | None, include: str | None = None) -> str:
     """Say which half is missing: the generator or its runtime headers."""
     found = explicit or shutil.which("csmith")
     if not found or not Path(found).exists():
-        return "csmith not found (Debian and Ubuntu: the `csmith` package)"
+        return "csmith not found (Debian, Ubuntu and Fedora: the `csmith` package)"
     path = Path(found).resolve()
     named = include or os.environ.get("CSMITH_INCLUDE")
     probe = (
@@ -283,8 +306,46 @@ def missing_csmith(explicit: str | None, include: str | None = None) -> str:
     looked = ", ".join(str(p) for p in probe)
     return (
         f"{path} has no csmith.h beside it (Debian and Ubuntu: the "
-        f"`libcsmith-dev` package; --csmith-include or $CSMITH_INCLUDE names "
-        f"the directory). Looked in: {looked}"
+        f"`libcsmith-dev` package, Fedora: `csmith-devel`; --csmith-include or "
+        f"$CSMITH_INCLUDE names the directory). Looked in: {looked}"
+    )
+
+
+def runtime_headers(directory: Path) -> list[str]:
+    """csmith.h and every header it reaches through quoted includes, as paths
+    relative to `directory`. Includes under any condition count; one the
+    directory lacks is left out."""
+    todo = [n for n in ("csmith.h", "csmith_minimal.h") if (directory / n).is_file()]
+    seen: list[str] = []
+    while todo:
+        name = todo.pop()
+        if name in seen:
+            continue
+        seen.append(name)
+        text = (directory / name).read_text(encoding="utf-8", errors="replace")
+        for target in re.findall(r'^\s*#\s*include\s*"([^"]+)"', text, re.MULTILINE):
+            for rel in (os.path.join(os.path.dirname(name), target), target):
+                rel = os.path.normpath(rel)
+                if (directory / rel).is_file():
+                    todo.append(rel)
+                    break
+    return sorted(seen)
+
+
+def private_headers(
+    csmith: Csmith, work: Path, roots: tuple[Path, ...] = SYSTEM_INCLUDE_ROOTS
+) -> Csmith:
+    """`csmith` with headers found in a system include directory copied into
+    `work`, which no other header shares; anywhere else, `csmith` itself."""
+    if csmith.include.resolve() not in {root.resolve() for root in roots}:
+        return csmith
+    names = runtime_headers(csmith.include)
+    for name in names:
+        target = work / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(csmith.include / name, target)
+    return dataclasses.replace(
+        csmith, include=work, copied_from=csmith.include, headers=tuple(names)
     )
 
 
@@ -1359,6 +1420,14 @@ def repro_commands(run: Run, finding: Finding, csmith: Csmith | None) -> str:
     include = str(csmith.include) if csmith else "$CSMITH_INCLUDE"
     runtime = not finding.verdict.startswith("compile-")
     lines = [f"# badc: {leg.build}"] if leg.build else []
+    if csmith and csmith.copied_from:
+        # The run's copy is gone with its scratch tree; the system directory
+        # itself would put its libc headers ahead of badc's.
+        include = "csmith-include"
+        lines.append(
+            f"mkdir -p {include} && (cd {csmith.copied_from} &&"
+            f" tar cf - {' '.join(csmith.headers)}) | tar xf - -C {include}"
+        )
     lines.append(f"csmith --seed {finding.seed} {bounds} -o case.c")
     if runtime and run.reference_name:
         lines.append(
@@ -2045,6 +2114,67 @@ def self_test() -> int:
         found = find_csmith(str(binary), None)
         check("csmith is taken with its headers", found.include if found else None, headers)
 
+        # Fedora: csmith-devel installs the runtime loose in /usr/include,
+        # beside libc, including a header csmith.h reaches from nothing.
+        system = root / "usr" / "include"
+        (system / "windows").mkdir(parents=True)
+        (system / "csmith.h").write_text('#include <stdio.h>\n#include "random_inc.h"\n')
+        (system / "random_inc.h").write_text(
+            '#if defined(_MSC_VER)\n#include "windows/stdint.h"\n#endif\n'
+            '#include "wrapper.h"\n#include "safe_math.h"\n'
+        )
+        for name in ("safe_math.h", "windows/stdint.h", "stdio.h", "safe_abbrev.h"):
+            (system / name).write_text("")
+        loose = find_csmith(str(binary), str(system), (system,))
+        check(
+            "a system directory named on the command line is copied too",
+            loose and private_headers(loose, root / "work3", (system,)).copied_from,
+            system,
+        )
+        probed = find_csmith(str(binary), None, (system,))
+        check("a csmith directory comes ahead of a loose csmith.h", probed and probed.include, headers)
+        (headers / "csmith.h").unlink()
+        probed = find_csmith(str(binary), None, (system,))
+        check("with no versioned directory it falls back to the loose one", probed and probed.include, system)
+        if probed:
+            private = private_headers(probed, root / "work" / "csmith-include", (system,))
+            check("-I names the private copy", private.include, root / "work" / "csmith-include")
+            check(
+                "the copy holds csmith.h and what it reaches",
+                sorted(p.relative_to(private.include).as_posix() for p in private.include.rglob("*.h")),
+                ["csmith.h", "random_inc.h", "safe_math.h", "windows/stdint.h"],
+            )
+            check("the copy names its source", private.copied_from, system)
+            repro = repro_commands(run, runtime, private)
+            check("the reproduction copies the headers out", f"(cd {system} && tar cf -" in repro, True)
+            check("the reproduction builds against the copy", '-I "csmith-include"' in repro, True)
+            check("the reproduction never puts the system directory on -I", f'-I "{system}' in repro, False)
+        # Debian and Ubuntu: libcsmith-dev installs them in a directory of their own.
+        ubuntu = root / "ubuntu" / "usr" / "include"
+        (ubuntu / "csmith").mkdir(parents=True)
+        (ubuntu / "csmith" / "csmith.h").write_text("")
+        (ubuntu / "stdio.h").write_text("")
+        own = find_csmith(str(binary), None, (ubuntu,))
+        check("a csmith directory of its own is found", own and own.include, ubuntu / "csmith")
+        if own:
+            check("and taken as it is", private_headers(own, root / "work2", (ubuntu,)), own)
+
+        # A run that cannot find csmith or its headers fails unless asked to skip.
+        (root / "empty").mkdir()
+        saved = LEG
+        try:
+            for argv, want in (
+                (["--csmith", str(root / "absent")], 2),
+                (["--csmith", str(binary), "--csmith-include", str(root / "empty")], 2),
+                (["--csmith", str(root / "absent"), "--skip-without-csmith"], 0),
+            ):
+                quiet = io.StringIO()
+                with contextlib.redirect_stdout(quiet), contextlib.redirect_stderr(quiet):
+                    status = main(argv)
+                check(f"exit status of {' '.join(argv[2:]) or 'a missing generator'}", status, want)
+        finally:
+            LEG = saved
+
     outcomes = {
         "-O0": Outcome("-O0", Step([], 0, 0.1, "", "", False), Step([], 0, 0.1, "checksum = AA\n", "", False), "AA", None, []),
         "-O": Outcome("-O", Step([], 0, 0.1, "", "", False), Step([], 0, 0.1, "checksum = BB\n", "", False), "BB", None, []),
@@ -2095,12 +2225,19 @@ def self_test() -> int:
     return 1 if failures else 0
 
 
+def writes_platform_info(csmith: Csmith) -> bool:
+    with tempfile.TemporaryDirectory() as scratch:
+        subprocess.run([str(csmith.binary), "--version"], capture_output=True, cwd=scratch)
+        return (Path(scratch) / "platform.info").is_file()
+
+
 def generator_stays_out_of_the_tree() -> list[str]:
-    """csmith writes `platform.info` into its working directory.
+    """csmith 2.3.0 writes `platform.info` into its working directory.
 
     Every invocation does it, `--version` and `--help` included, so the check
     covers discovery as well as generation: both run from the repository root
-    here, and neither may leave that file in the tree.
+    here, and neither may leave that file in the tree. csmith 2.4.0 writes
+    none, and then only the tree's side of the check applies.
     """
     stray = REPO_ROOT / "platform.info"
     before = stray.exists()
@@ -2127,7 +2264,7 @@ def generator_stays_out_of_the_tree() -> list[str]:
             problems.append("the generated source is not in the scratch directory")
         if stray.exists() and not before:
             problems.append(f"the generator left {stray} in the repository")
-        if not (workdir / "platform.info").is_file():
+        if not (workdir / "platform.info").is_file() and writes_platform_info(csmith):
             problems.append("platform.info did not land in the scratch directory")
     if Path(tmp).exists():
         problems.append("the scratch directory outlived the run")
@@ -2161,7 +2298,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out-dir", help="keep the offending sources here")
     parser.add_argument("--keep", action="store_true", help="keep the scratch tree")
     parser.add_argument("--fail-on-findings", action="store_true")
-    parser.add_argument("--require-csmith", action="store_true")
+    parser.add_argument(
+        "--skip-without-csmith",
+        action="store_true",
+        help="exit 0 when csmith or its headers are missing (default: exit 2)",
+    )
     parser.add_argument("--compile-timeout", type=float, default=60.0)
     parser.add_argument("--run-timeout", type=float, default=10.0)
     # Over 120 bounded programs on an aarch64 host, every one that terminates
@@ -2191,6 +2332,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def headers_problem(badc: Path, csmith: Csmith, work: Path) -> str | None:
+    """Why `#include "csmith.h"` does not preprocess under the run's include
+    directory, or None. A header missing there would fail every case at the
+    reference's compile, which skips the case, and the run would be empty."""
+    probe = work / "csmith-probe.c"
+    probe.write_text('#include "csmith.h"\n', encoding="utf-8")
+    done = subprocess.run(
+        [str(badc), "-E", "-I", str(csmith.include), str(probe)],
+        capture_output=True,
+        text=True,
+        cwd=work,
+    )
+    if done.returncode == 0:
+        return None
+    tail = (done.stderr or done.stdout).strip().splitlines()[-3:]
+    return f"csmith.h does not preprocess with -I {csmith.include}: {' | '.join(tail)}"
+
+
 def generator_lacks(csmith: Csmith, flags: tuple[str, ...]) -> list[str]:
     """The options among `flags` the generator's help does not list: an
     option csmith does not know fails every generation, and the run would
@@ -2211,12 +2370,14 @@ def main(argv: list[str] | None = None) -> int:
 
     csmith = find_csmith(args.csmith, args.csmith_include)
     if csmith is None:
+        # A run whose acceptance is "no findings" passes when it ran nothing,
+        # so a missing generator fails it unless the caller asked to skip.
         message = missing_csmith(args.csmith, args.csmith_include)
-        if args.require_csmith:
-            print(f"error: {message}", file=sys.stderr)
-            return 2
-        print(f"{message}: skipping")
-        return 0
+        if args.skip_without_csmith:
+            print(f"{message}: skipping (--skip-without-csmith)")
+            return 0
+        print(f"error: {message}", file=sys.stderr)
+        return 2
     lacking = generator_lacks(csmith, LEG.csmith_flags)
     if lacking:
         print(
@@ -2262,14 +2423,19 @@ def main(argv: list[str] | None = None) -> int:
     jobs = args.jobs or min(4, os.cpu_count() or 1)
     rng = random.Random(args.seed) if args.seed else random.SystemRandom()
 
-    print(f"{run.csmith}, headers {csmith.include}")
-    print(f"badc: {badc} ({run.badc})")
-    print(f"reference: {run.reference}")
-    budget = f"{len(args.case)} named seed(s)" if args.case else f"{args.minutes} min"
-    print(f"{budget}, {jobs} cases in flight, arch {run.arch}, leg {args.leg}")
-
     root = Path(tempfile.mkdtemp(prefix="badc-csmith-"))
     try:
+        csmith = private_headers(csmith, root / "csmith-include")
+        problem = headers_problem(badc, csmith, root)
+        if problem:
+            print(f"error: {problem}", file=sys.stderr)
+            return 2
+        copied = f", copied from {csmith.copied_from}" if csmith.copied_from else ""
+        print(f"{run.csmith}, headers {csmith.include}{copied}")
+        print(f"badc: {badc} ({run.badc})")
+        print(f"reference: {run.reference}")
+        budget = f"{len(args.case)} named seed(s)" if args.case else f"{args.minutes} min"
+        print(f"{budget}, {jobs} cases in flight, arch {run.arch}, leg {args.leg}")
         fuzz(
             run,
             root,

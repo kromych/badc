@@ -85,9 +85,13 @@ python3 scripts/csmith_fuzz.py --minutes 5 --badc target/release/badc
 with `csmith`, builds it with `badc -O0`, `badc -O` and a reference compiler,
 runs all three and compares the checksum the program prints. csmith's output is
 free of undefined behaviour, so a disagreement, a crash or a compile failure is
-a defect in one of the compilers. Without csmith the script says so and exits 0,
-as the assembler fuzz tests do; on Debian and Ubuntu it comes from the `csmith`
-and `libcsmith-dev` packages.
+a defect in one of the compilers. Without csmith or its runtime headers the
+script exits 2, and 0 only under `--skip-without-csmith`: a run that compared
+nothing has no findings either. Debian and Ubuntu package them as `csmith` and
+`libcsmith-dev`, Fedora as `csmith` and `csmith-devel`, whose headers sit loose
+in `/usr/include`; the script copies those into its scratch tree and builds
+against the copy, since `-I/usr/include` would put the system libc headers
+ahead of badc's.
 
 The reference (`clang`, else `gcc`, else `cc`) is both the oracle and the gate.
 It is the gate because 12.5% of the generated programs do not terminate -- a

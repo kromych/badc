@@ -147,9 +147,8 @@ Disassembly of section .text:
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rbx, %xmm1
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
-               	movsd	0x38(%rsp), %xmm14
-               	movq	%rax, %xmm15
-               	vfmadd231sd	%xmm15, %xmm14, %xmm1 # xmm1 = (xmm14 * xmm15) + xmm1
+               	movq	%rax, %xmm14
+               	vfmadd231sd	0x38(%rsp), %xmm14, %xmm1 # xmm1 = (xmm14 * mem) + xmm1
                	xorps	%xmm2, %xmm2
                	cvtsi2sd	%r12, %xmm2
                	movabsq	$0x4008000000000000, %rax # imm = 0x4008000000000000

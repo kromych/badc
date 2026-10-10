@@ -313,9 +313,7 @@ pub(super) fn emit_bit_count(
 }
 
 /// `Inst::Fma`: `dst = (neg_product ? -(a*b) : a*b) + (neg_addend ? -c : c)`
-/// with one rounding (C99 6.5p8 / FP_CONTRACT), on the FMA3 baseline. The
-/// `231` form computes `dst = a*b OP dst`, so `c` is staged into `dst` and
-/// the multiplicands go to the scratch xmms first.
+/// with one rounding (C99 6.5p8 / FP_CONTRACT), on the FMA3 baseline.
 pub(super) fn emit_fma(
     code: &mut Vec<u8>,
     dst: Place,
@@ -329,59 +327,62 @@ pub(super) fn emit_fma(
     frame: Frame,
 ) -> Emit {
     let is_f32 = alloc.is_f32(v);
-    // The FMA destination doubles as one input, the overwritten operand
-    // of the form. An operand already in the destination's register
-    // takes that slot for free; otherwise a multiplicand that dies here
-    // does, and the addend then stays in its own register -- the
-    // 132/213 forms carry it as the vvvv / r/m operand, where the 231
-    // form would have copied it into the destination; otherwise the
-    // addend keeps the 231 shape. The vvvv slot names a register, the
-    // r/m slot may read a spill directly, so a spilled operand of the
-    // two points the form at the r/m slot.
+    // The form with the fewest moves: into `dd`, into an xmm for vvvv, out of a gpr for r/m.
     let dd = match dst {
         Place::FpReg(r) => Reg(r),
         Place::Spill(_) => Reg(frame.fp_scratch[2]),
         _ => return fail("Fma: dst not fp reg / spill"),
     };
-    let dies = |val: u32| alloc.last_use.get(val as usize).copied() == Some(v);
-    let (pa, pb, pc) = (place_of(alloc, a), place_of(alloc, b), place_of(alloc, c));
-    let in_dd = |p: Place| p == Place::FpReg(dd.0);
-    // `acc_place` is the overwritten input's place, `acc_is_addend`
-    // whether that input is `c`; `mult_place` / `addend_place` the
-    // other two, in those roles.
-    let (acc_place, acc_is_addend, mult_place, addend_place) = if in_dd(pa) {
-        (pa, false, pb, pc)
-    } else if in_dd(pb) {
-        (pb, false, pa, pc)
-    } else if in_dd(pc) {
-        (pc, true, pa, pb)
-    } else if dies(a) {
-        (pa, false, pb, pc)
-    } else if dies(b) {
-        (pb, false, pa, pc)
-    } else {
-        (pc, true, pa, pb)
+    let ops = [a, b, c].map(|x| place_of(alloc, x));
+    let in_dd = |k: &usize| ops[*k] == Place::FpReg(dd.0);
+    let vvvv_cost = |k: usize| u32::from(!matches!(ops[k], Place::FpReg(_)));
+    let rm_cost = |k: usize| u32::from(matches!(ops[k], Place::IntReg(_)));
+    let plan = |acc: usize| {
+        let (x, y) = match acc {
+            2 => (0, 1),
+            m if matches!(ops[1 - m], Place::FpReg(_)) => (1 - m, 2),
+            m => (2, 1 - m),
+        };
+        let (vv, rm) = if vvvv_cost(y) + rm_cost(x) < vvvv_cost(x) + rm_cost(y) {
+            (y, x)
+        } else {
+            (x, y)
+        };
+        let cost = u32::from(!in_dd(&acc)) + vvvv_cost(vv) + rm_cost(rm);
+        (cost, [acc, vv, rm])
     };
-    let Some(ra) = materialize_fp(code, acc_place, dd, frame) else {
+    let pinned = (0..3).any(|k| in_dd(&k));
+    let dies = |val: u32| alloc.last_use.get(val as usize).copied() == Some(v);
+    let order = if dies(a) {
+        [0, 1, 2]
+    } else if dies(b) {
+        [1, 0, 2]
+    } else {
+        [2, 0, 1]
+    };
+    let Some((_, [acc, vv, rm])) = order
+        .into_iter()
+        .filter(|k| !pinned || in_dd(k))
+        .map(plan)
+        .min_by_key(|p| p.0)
+    else {
+        return fail("Fma: no operand order");
+    };
+    let Some(ra) = materialize_fp(code, ops[acc], dd, frame) else {
         return fail("Fma: accumulator not fp reg / spill / int reg");
     };
     if ra.0 != dd.0 {
         emit_movapd_xmm_xmm(code, dd, ra);
     }
-    // With a multiplicand as the overwritten input, the 132/213 forms
-    // carry the addend as the vvvv / r/m operand; with the addend, the
-    // 231 form carries both multiplicands there.
-    let (vvvv_place, rm_place, form) = if acc_is_addend {
-        (pa, pb, 2)
-    } else if matches!(mult_place, Place::FpReg(_)) {
-        // 213: the addend is the r/m operand, the other
-        // multiplicand the vvvv operand.
-        (mult_place, addend_place, 1)
+    // 231 overwrites the addend; 132 carries it in vvvv, 213 in r/m.
+    let form = if acc == 2 {
+        2
+    } else if vv == 2 {
+        0
     } else {
-        // 132: the addend is the vvvv operand, the other
-        // multiplicand the r/m operand.
-        (addend_place, mult_place, 0)
+        1
     };
+    let (vvvv_place, rm_place) = (ops[vv], ops[rm]);
     let Some(rv) = materialize_fp(code, vvvv_place, Reg(frame.fp_scratch[0]), frame) else {
         return fail("Fma: vvvv operand not fp reg / spill / int reg");
     };

@@ -514,6 +514,111 @@ mod mul_add_tests {
 }
 
 #[cfg(test)]
+mod fma_tests {
+    use super::*;
+    use alloc::vec::Vec;
+
+    /// Lower `a * b + c` with `[a, b, c]` and the destination pinned.
+    fn lower(ops: [Place; 3], dst: Place, dying: [bool; 3]) -> (Vec<u8>, Frame) {
+        let target = Target::LinuxX64;
+        let program = crate::Compiler::with_target(
+            "double f(double a, double b, double c){ return a*b + c; } \
+             int main(void){ return 0; }"
+                .into(),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let mut funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        crate::c5::codegen::passes::fma::run(&mut funcs);
+        let func = funcs.into_iter().find(|f| f.name == "f").expect("f");
+        let (v, a, b, c) = func
+            .insts
+            .iter()
+            .enumerate()
+            .find_map(|(v, i)| match i {
+                crate::c5::ir::Inst::Fma { a, b, c, .. } => {
+                    Some((v as crate::c5::ir::ValueId, *a, *b, *c))
+                }
+                _ => None,
+            })
+            .expect("an Fma");
+        let mut alloc = super::super::ssa::reg_alloc::allocate(
+            &func,
+            target,
+            crate::c5::codegen::FixedRegs::NONE,
+        );
+        for ((x, p), d) in [a, b, c].into_iter().zip(ops).zip(dying) {
+            alloc.places[x as usize] = p;
+            alloc.last_use[x as usize] = if d { v } else { v + 1 };
+        }
+        alloc.places[v as usize] = dst;
+        alloc.spill_count = alloc.spill_count.max(4);
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
+        let mut code = Vec::new();
+        assert!(
+            emit_fma(&mut code, dst, v, a, b, c, false, false, &alloc, frame).is_ok(),
+            "emit_fma bailed"
+        );
+        (code, frame)
+    }
+
+    /// `a` dying in a register, `b` and `c` spilled: one spill loads into the
+    /// destination, where overwriting `a` costs a copy and a load.
+    #[test]
+    fn a_spill_loads_into_the_destination_when_the_others_cannot_both_stay() {
+        let (code, frame) = lower(
+            [Place::FpReg(1), Place::Spill(0), Place::Spill(1)],
+            Place::FpReg(0),
+            [true, false, false],
+        );
+        let (base, b_off) = spill_slot_addr(frame, 0);
+        let (_, c_off) = spill_slot_addr(frame, 1);
+        let cheapest = [(c_off, 0xB9, b_off), (b_off, 0xA9, c_off)].map(|(load, op, mem)| {
+            let mut want = Vec::new();
+            emit_movsd_xmm_mem(&mut want, Reg(0), base, load);
+            emit_vex_fma_mem(&mut want, op, true, Reg(0), Reg(1), base, mem);
+            want
+        });
+        assert!(cheapest.contains(&code), "{code:02x?}");
+    }
+
+    /// 231 with `a` spilled and `b` in a general register.
+    #[test]
+    fn a_spilled_multiplicand_takes_the_memory_slot() {
+        let (code, frame) = lower(
+            [Place::Spill(0), Place::IntReg(1), Place::FpReg(0)],
+            Place::FpReg(0),
+            [false, false, true],
+        );
+        let s0 = Reg(frame.fp_scratch[0]);
+        let mut want = Vec::new();
+        emit_movq_xmm_r(&mut want, s0, Reg(1));
+        let (base, a_off) = spill_slot_addr(frame, 0);
+        emit_vex_fma_mem(&mut want, 0xB9, true, Reg(0), s0, base, a_off);
+        assert_eq!(code, want, "movq b, then vfmadd231sd [a]");
+    }
+
+    /// An operand in the destination's register is the overwritten one.
+    #[test]
+    fn the_operand_in_the_destination_stays_overwritten() {
+        let (code, frame) = lower(
+            [Place::FpReg(0), Place::IntReg(1), Place::Spill(1)],
+            Place::FpReg(0),
+            [true, false, false],
+        );
+        let s0 = Reg(frame.fp_scratch[0]);
+        let mut want = Vec::new();
+        emit_movq_xmm_r(&mut want, s0, Reg(1));
+        let (base, c_off) = spill_slot_addr(frame, 1);
+        emit_vex_fma_mem(&mut want, 0xA9, true, Reg(0), s0, base, c_off);
+        assert_eq!(code, want, "movq b, then vfmadd213sd [c]");
+    }
+}
+
+#[cfg(test)]
 mod indexed_tests {
     use super::*;
     use crate::c5::ir::Inst;

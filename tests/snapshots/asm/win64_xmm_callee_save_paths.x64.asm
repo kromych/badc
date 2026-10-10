@@ -68,9 +68,8 @@ Disassembly of section .text:
                	vfmadd132sd	0x8(%rsp), %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	cvttsd2si	%xmm0, %rax
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
-               	movsd	0x28(%rsp), %xmm14
-               	movq	%rcx, %xmm15
-               	vfmadd132sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm14
+               	movq	%rcx, %xmm14
+               	vfmadd213sd	0x28(%rsp), %xmm14, %xmm0 # xmm0 = (xmm14 * xmm0) + mem
                	cvttsd2si	%xmm0, %rcx
                	cmpl	$0x2c, %eax
                	je	<addr>
@@ -112,9 +111,8 @@ Disassembly of section .text:
                	vfmadd132sd	0x8(%rsp), %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
                	cvttsd2si	%xmm0, %rax
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
-               	movsd	0x28(%rsp), %xmm14
-               	movq	%rcx, %xmm15
-               	vfmadd132sd	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm14
+               	movq	%rcx, %xmm14
+               	vfmadd213sd	0x28(%rsp), %xmm14, %xmm0 # xmm0 = (xmm14 * xmm0) + mem
                	cvttsd2si	%xmm0, %rcx
                	cmpl	$0xa, %eax
                	je	<addr>

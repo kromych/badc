@@ -1728,11 +1728,7 @@ impl<'a> RelocWriter<'a> {
         names.weak_names = program
             .symbols
             .iter()
-            .filter(|s| {
-                s.is_weak
-                    && (s.is_fun_entity() || s.class == Token::Glo as i64)
-                    && !s.name.is_empty()
-            })
+            .filter(|s| s.is_weak && s.is_link_entity() && !s.name.is_empty())
             .map(|s| s.link_name())
             .chain(program.asm_weak_names.iter().map(|s| s.as_str()))
             .chain(
@@ -1748,11 +1744,7 @@ impl<'a> RelocWriter<'a> {
         names.visibility = program
             .symbols
             .iter()
-            .filter(|s| {
-                s.is_hidden
-                    && (s.is_fun_entity() || s.class == Token::Glo as i64)
-                    && !s.name.is_empty()
-            })
+            .filter(|s| s.is_hidden && s.is_link_entity() && !s.name.is_empty())
             .map(|s| (s.link_name(), SymVisibility::Hidden))
             .chain(program.asm_visibility.iter().map(|(n, v)| (n.as_str(), *v)))
             .collect();

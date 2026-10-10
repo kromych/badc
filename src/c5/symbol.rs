@@ -532,6 +532,11 @@ pub(crate) struct Symbol {
     /// same function). Never cleared.
     pub scoped_fn_decl: bool,
 
+    /// True once a block-scope `extern` declared an object of this name.
+    /// Scope exit restores the binding, but the declared attributes (weak,
+    /// visibility) stay for the symbol table. Never cleared.
+    pub scoped_obj_decl: bool,
+
     /// ent_pc of the enclosing function for a block-scope static's
     /// emission record (the persistent `name.N` symbol; the scoped
     /// binding itself is restored at function exit). A block-scope
@@ -865,6 +870,15 @@ impl Symbol {
         self.class == crate::c5::token::Token::Fun as i64
             || (self.class == 0 && self.scoped_fn_decl)
     }
+
+    /// Whether the slot's name has a symbol of this unit's symbol table: a
+    /// function entity, a file-scope object, or an object a block-scope
+    /// `extern` declared, whatever binds the name now.
+    pub fn is_link_entity(&self) -> bool {
+        self.is_fun_entity()
+            || self.class == crate::c5::token::Token::Glo as i64
+            || self.scoped_obj_decl
+    }
 }
 
 impl crate::c5::layout::DataOffsets for Symbol {
@@ -966,6 +980,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             block_extern_active: _,
             is_scope_bound: _,
             scoped_fn_decl: _,
+            scoped_obj_decl: _,
             owner_ent_pc: _, // code address space
             static_local_record: _,
             h_static_local_record: _, // scope-restore shadow

@@ -1938,6 +1938,43 @@ fn a_block_scope_prototype_takes_the_attributes_a_file_scope_one_does() {
 }
 
 #[test]
+fn a_block_scope_extern_object_keeps_its_attributes_past_its_scope() {
+    // A block-scope `extern` object names the entity a file-scope one would
+    // (C99 6.2.2p4), and its `weak` and `visibility` reach its symbol after
+    // the scope ends, as gcc and clang give it; a later declarator of the
+    // declaration takes no trailing attribute of an earlier one. A local of
+    // the same name around the block keeps its own binding.
+    use crate::c5::Target;
+    use crate::c5::linker::parse_native_elf;
+    let src = "\
+        int f(void) { extern int bw __attribute__((weak)); return bw; }\n\
+        int g(void) { extern int bh __attribute__((visibility(\"hidden\"))); return bh; }\n\
+        int h(void) {\n\
+            __attribute__((weak)) extern int bl;\n\
+            extern int bm __attribute__((weak)), bn;\n\
+            return bl + bm + bn;\n\
+        }\n\
+        int k(int bs) {\n\
+            { extern int bs __attribute__((weak)); bs += 0; }\n\
+            return bs;\n\
+        }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let obj = parse_native_elf(&reloc_tu(src, target, false)).expect("parse");
+        let sym = |name: &str| {
+            let s = obj.symbols.iter().find(|s| s.name == name);
+            s.map(|s| (s.binding, s.visibility))
+        };
+        // (STB_*, STV_*): GLOBAL 1, WEAK 2; DEFAULT 0, HIDDEN 2.
+        assert_eq!(sym("bw"), Some((2, 0)), "{target:?}");
+        assert_eq!(sym("bh"), Some((1, 2)), "{target:?}");
+        assert_eq!(sym("bl"), Some((2, 0)), "{target:?}");
+        assert_eq!(sym("bm"), Some((2, 0)), "{target:?}");
+        assert_eq!(sym("bn"), Some((1, 0)), "{target:?}");
+        assert_eq!(sym("bs"), Some((2, 0)), "{target:?}");
+    }
+}
+
+#[test]
 fn dead_static_fnptr_table_drops_table_and_callee() {
     // A static function referenced only from a static, itself
     // unreferenced, function-pointer table: the table's relocation is

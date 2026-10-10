@@ -81,10 +81,9 @@ struct LocalDeclarator {
     is_static: bool,
     is_extern: bool,
     is_thread_local: bool,
-    /// A block-scope `extern` that names the file-scope entity rather than
-    /// shadowing an in-scope binding of the same name.
+    /// A block-scope `extern` that rebinds the name for its scope: no
+    /// file-scope object or function of the name is visible.
     convert_extern: bool,
-    extern_shadows_binding: bool,
     /// The declarator carries `__attribute__((uninitialized))`, which opts
     /// the object out of `-ftrivial-auto-var-init`.
     uninitialized: bool,
@@ -519,16 +518,13 @@ impl Compiler {
             self.ty = ty;
 
             // C99 6.2.1p4 / 6.2.2p4: a block-scope `extern` names the
-            // file-scope entity. Three prior states differ -- an existing
-            // `Glo`/`Fun` binding is that entity already; a never-declared
-            // name (`Id`) is converted and left bound past the scope, since
-            // this is its only binding; any other bound name (local,
-            // parameter, enum constant, typedef) must be saved and restored,
-            // with in-scope references routed through `block_extern_refs`.
+            // file-scope entity. An existing `Glo`/`Fun` binding is that
+            // entity already; any other state of the name (unbound, local,
+            // parameter, enum constant, typedef) is saved and restored, with
+            // in-scope references routed through `block_extern_refs`.
             let prior_class = self.symbols[loc_idx].class;
             let convert_extern =
                 is_extern && prior_class != Token::Glo as i64 && prior_class != Token::Fun as i64;
-            let extern_shadows_binding = convert_extern && prior_class != Token::Id as i64;
 
             // An extern naming an existing entity declares nothing new, so
             // none of the per-declarator writes below apply to it.
@@ -541,11 +537,9 @@ impl Compiler {
                     self.compile_err(Code::INVALID_DECLARATION, "duplicate local definition")
                 );
             }
-            // Save the outer binding of any name this declarator rebinds.
-            // The two exempt cases both leave nothing to restore: an extern
-            // naming an existing entity writes nothing, and one naming a
-            // never-declared name is deliberately left bound past the scope.
-            if !is_extern || extern_shadows_binding {
+            // Save the outer binding of any name this declarator rebinds; an
+            // extern naming an existing entity writes nothing to restore.
+            if rebinds_slot {
                 self.save_scope_binding(loc_idx);
             }
             if self.pending.attrs.maybe_unused {
@@ -599,7 +593,6 @@ impl Compiler {
                 is_extern,
                 is_thread_local,
                 convert_extern,
-                extern_shadows_binding,
                 uninitialized,
                 asm_reg,
                 base_spelling,
@@ -664,25 +657,15 @@ impl Compiler {
                 // at file scope: an incomplete array still decays to a
                 // pointer, while 0 would read the name as a scalar.
                 self.symbols[d.loc_idx].array_size = d.array_size;
-                if d.extern_shadows_binding {
-                    // Carry no in-unit offset and leave `is_extern_decl`
-                    // / `linkage` untouched so the restore is exact.
-                    self.symbols[d.loc_idx].val = 0;
-                    self.symbols[d.loc_idx].block_extern_active = true;
-                } else {
-                    // External linkage routes `&name` to a name-keyed
-                    // relocation; without it every block-scope extern
-                    // collapses onto the same `.data` base.
-                    self.symbols[d.loc_idx].is_extern_decl = true;
-                    self.symbols[d.loc_idx].linkage = crate::c5::symbol::Linkage::External;
-                }
+                // Carry no in-unit offset and leave `is_extern_decl` /
+                // `linkage` untouched so the restore is exact.
+                self.symbols[d.loc_idx].val = 0;
+                self.symbols[d.loc_idx].block_extern_active = true;
+                self.symbols[d.loc_idx].scoped_obj_decl = true;
             }
             // `weak` / `visibility("hidden")` are not part of the shadow
-            // snapshot, so they persist to the object symbol table. A
-            // shadowed bound name never reaches it, so skip that case.
-            if !d.extern_shadows_binding {
-                self.apply_symbol_attributes(d.loc_idx);
-            }
+            // snapshot, so they reach the symbol table past the scope.
+            self.apply_symbol_attributes(d.loc_idx);
         } else if d.is_static {
             self.symbols[d.loc_idx].class = Token::Glo as i64;
             self.symbols[d.loc_idx].type_ = d.ty;

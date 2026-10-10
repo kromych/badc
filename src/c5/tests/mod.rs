@@ -103,6 +103,18 @@ pub fn load_fixture(name: &str) -> String {
         .unwrap_or_else(|e| panic!("failed to load fixture {}: {}", path.display(), e))
 }
 
+/// The `-ffixed-` registers a fixture's leading `// snapshot-flags` line
+/// names, for a test that compiles the fixture as its snapshot does.
+pub fn fixture_fixed_regs(name: &str, target: crate::Target) -> crate::FixedRegs {
+    let src = load_fixture(name);
+    let mut out = crate::FixedRegs::NONE;
+    let flags = src.lines().next().unwrap_or("").split_whitespace();
+    for reg in flags.filter_map(|w| w.strip_prefix("-ffixed-")) {
+        out.insert(crate::fixed_register(target, reg).unwrap_or_else(|e| panic!("{e}")));
+    }
+    out
+}
+
 /// `<tmp>/<prefix>-<pid>-<n>-<stem><ext>`: unique per process and call.
 /// Concurrent `cargo test` processes share the temp directory, so a fixed
 /// name lets one run clobber the other's file. Callers remove what they

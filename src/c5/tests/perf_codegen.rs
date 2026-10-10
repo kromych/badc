@@ -4197,6 +4197,59 @@ fn a64_third_scratch_lowerings_borrow_the_locals_base() {
     m.finish();
 }
 
+/// An indirect call whose target no register can hold -- the marshal
+/// writes x0..x7 and x16 / x17, `-ffixed-` keeps the others -- stores the
+/// target in a cell above its nine stack arguments and reloads it into x16
+/// for the `blr`, at -O0 and -O. `jit::staged_indirect_call_target_
+/// reaches_its_callee` runs the same program.
+#[test]
+fn a64_indirect_call_without_a_free_register_stages_its_target() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
+    const NAME: &str = "indirect_call_staged_target.c";
+    let src = super::load_fixture(NAME);
+    let fixed_regs = super::fixture_fixed_regs(NAME, Target::LinuxAarch64);
+    let mut m = Misses::default();
+    for optimize in [false, true] {
+        let program = Compiler::with_options(
+            src.clone(),
+            Target::LinuxAarch64,
+            CompileOptions::default().with_optimize(optimize),
+        )
+        .compile()
+        .expect("compile");
+        let level = if optimize {
+            NativeOptions::new().with_optimize()
+        } else {
+            NativeOptions::new()
+        };
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            fixed_regs,
+            ..level
+        };
+        let obj = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+        let ws = function_words(&obj, "through");
+        // `ldr x16, [sp, #c]` right before `blr x16`, after a store to the same cell.
+        let blr = ws.iter().position(|&w| w == 0xD63F_0200);
+        let cell = blr
+            .and_then(|i| i.checked_sub(1))
+            .map(|i| ws[i])
+            .filter(|&w| w & 0xFFC0_03FF == 0xF940_03F0)
+            .map(|w| (w >> 10) & 0xFFF);
+        let staged = cell.is_some_and(|c| {
+            c * 8 >= 72
+                && ws[..blr.unwrap() - 1]
+                    .iter()
+                    .any(|&w| w & 0xFFC0_03E0 == 0xF900_03E0 && (w >> 10) & 0xFFF == c)
+        });
+        m.expect(staged, || {
+            let level = if optimize { "-O" } else { "-O0" };
+            format!("aarch64 {level}: no staged target: {ws:08x?}")
+        });
+    }
+    m.finish();
+}
+
 /// A leaf without a frame whose inline asm names sp reserves no outgoing
 /// area, so a binary128 conversion lowers sp for the registers it borrows
 /// before it stores them at `[sp, #0]` and raises it after the restore:
@@ -4222,6 +4275,50 @@ fn a64_binary128_borrow_in_a_frameless_leaf_lowers_sp() {
         );
     }
     m.finish();
+}
+
+/// The register a data-processing instruction writes and those it reads
+/// (Rn, Rm, Ra); `None` for another class.
+fn a64_dp_regs(w: u32) -> Option<(u32, [Option<u32>; 3])> {
+    let (rd, rn, rm) = (w & 31, (w >> 5) & 31, (w >> 16) & 31);
+    if (w >> 26) & 7 == 0b100 {
+        // Every immediate form but the PC-relative and move-wide ones reads Rn.
+        let reads_rn = !matches!((w >> 23) & 7, 0b000 | 0b001 | 0b101);
+        return Some((rd, [reads_rn.then_some(rn), None, None]));
+    }
+    if (w >> 25) & 7 == 0b101 {
+        let ra = (w >> 24) & 0x1F == 0b11011;
+        return Some((rd, [Some(rn), Some(rm), ra.then_some((w >> 10) & 31)]));
+    }
+    None
+}
+
+/// long_double_outgoing_area_borrow's `mix` at -O: the narrowing saves
+/// x9..x14 at `[sp]` while they hold values computed ahead of it and read
+/// after the restore, so the fixture runs that save and restore over live
+/// values.
+#[test]
+fn a64_binary128_borrow_saves_live_values() {
+    let src = super::load_fixture("long_double_outgoing_area_borrow.c");
+    let ws = a64(&src, "mix");
+    // `stp x9, x10, [sp]` and the `ldp x9, x10, [sp]` after it.
+    let save = ws.iter().position(|&w| w == 0xA900_2BE9);
+    let restore = save.and_then(|s| (s..ws.len()).find(|&i| ws[i] == 0xA940_2BE9));
+    let (Some(s), Some(r)) = (save, restore) else {
+        panic!("no save / restore of x9, x10: {ws:08x?}");
+    };
+    let written = |x: u32| {
+        ws[..s]
+            .iter()
+            .any(|&w| a64_dp_regs(w).is_some_and(|(d, _)| d == x))
+    };
+    let read = |x: u32| {
+        ws[r..]
+            .iter()
+            .any(|&w| a64_dp_regs(w).is_some_and(|(_, src)| src.contains(&Some(x))))
+    };
+    let live: Vec<u32> = (9..=14).filter(|&x| written(x) && read(x)).collect();
+    assert_eq!(live, (9..=14).collect::<Vec<u32>>(), "{ws:08x?}");
 }
 
 /// Four values live across a call made after an asm statement moves sp; with

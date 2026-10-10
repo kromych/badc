@@ -5076,23 +5076,51 @@ fn aarch64_frame_reserves_wide_outgoing_area_once() {
         .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
         .collect();
     // The 4112-byte outgoing area joins the frame, so the prologue's
-    // allocation takes the wide path: one `sub sp, sp, #N, lsl #12` page
-    // step and one plain residual `sub sp, sp, #imm`, each exactly once,
-    // and no call site adjusts SP on its own (`add sp, sp` never
-    // appears; the epilogue restores through a scratch).
-    let sub_sp = |w: u32| w & 0xFF80_0000 == 0xD100_0000 && (w >> 5) & 0x1F == 31 && w & 0x1F == 31;
-    let page_step = words
+    // allocation takes the wide path -- one `sub sp, sp, #N, lsl #12` page
+    // step and one plain residual `sub sp, sp, #imm` -- and the epilogue's
+    // mirror pair of `add sp` is the only other sp adjustment: the call
+    // site moves sp neither before nor after its `bl`.
+    let call = words
         .iter()
-        .filter(|&&w| sub_sp(w) && w & 0x400000 != 0)
-        .count();
-    let residual = words
-        .iter()
-        .filter(|&&w| sub_sp(w) && w & 0x400000 == 0)
-        .count();
-    // The one call site reserves nothing of its own: apart from the
-    // page-step + residual pair of the prologue, no SP decrement occurs.
-    assert_eq!(page_step, 1, "caller must take one page-step SP decrement");
-    assert_eq!(residual, 1, "caller must take one residual SP decrement");
+        .position(|&w| w & 0xFC00_0000 == 0x9400_0000)
+        .expect("caller's bl");
+    let (before, after) = words.split_at(call);
+    let sp_imm = |base: u32, shifted: bool| {
+        move |&&w: &&u32| {
+            w & 0xFF80_0000 == base && w & 0x3FF == 0x3FF && (w & 0x40_0000 != 0) == shifted
+        }
+    };
+    for (part, base, what) in [
+        (before, 0xD100_0000, "sub sp before the call"),
+        (after, 0x9100_0000, "add sp after the call"),
+    ] {
+        let page_step = part.iter().filter(sp_imm(base, true)).count();
+        let residual = part.iter().filter(sp_imm(base, false)).count();
+        assert_eq!((page_step, residual), (1, 1), "{what}: {words:08x?}");
+    }
+    for (part, base, what) in [
+        (after, 0xD100_0000, "sub sp after the call"),
+        (before, 0x9100_0000, "add sp before the call"),
+    ] {
+        let n = part.iter().filter(sp_imm(base, true)).count()
+            + part.iter().filter(sp_imm(base, false)).count();
+        assert_eq!(n, 0, "{what}: {words:08x?}");
+    }
+    // The area puts the callee-saved registers past the pair forms' reach:
+    // the saves and the restores address them through x16 = sp + 4112
+    // (`add x16, sp, #1, lsl #12; add x16, x16, #16`).
+    let x16_base = |part: &[u32]| part.windows(2).any(|p| p == [0x9140_07F0, 0x9100_4210]);
+    let pair_off_x16 = |part: &[u32], load: u32| {
+        part.iter()
+            .any(|&w| w & 0xFFC0_0000 == 0xA900_0000 | load && (w >> 5) & 31 == 16)
+    };
+    assert!(
+        x16_base(before)
+            && pair_off_x16(before, 0)
+            && x16_base(after)
+            && pair_off_x16(after, 1 << 22),
+        "saved registers through x16: {words:08x?}"
+    );
     // The raw-encoder overflow artifact: 4112 << 10 sets the shift bit
     // and leaves imm12 = 16, i.e. a 65536-byte adjustment.
     for word in [0xD140_43FFu32, 0x9140_43FF] {

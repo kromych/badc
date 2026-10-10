@@ -901,6 +901,7 @@ pub fn emit_native_reporting(
     shared_lib_name: Option<&str>,
 ) -> Result<NativeEmit, C5Error> {
     let output_kind = options.output_kind;
+    let freed_by_exit = options.freed_by_exit;
     let (compacted, bss_size, mut build) = compact_and_lower(program, target, options)?;
     let program = &compacted;
     build.bss_size = bss_size;
@@ -912,10 +913,12 @@ pub fn emit_native_reporting(
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);
     }
     let diagnostics = core::mem::take(&mut build.diagnostics);
-    Ok(NativeEmit {
-        image: write_for(program, &build, target)?,
-        diagnostics,
-    })
+    let image = write_for(program, &build, target)?;
+    if freed_by_exit {
+        core::mem::forget(build);
+        core::mem::forget(compacted);
+    }
+    Ok(NativeEmit { image, diagnostics })
 }
 
 /// One region of the data stream at its runtime placement.
@@ -977,6 +980,15 @@ fn compact_and_lower(
     let mut report = probe
         .data_liveness
         .expect("the liveness probe always reports");
+    if options.freed_by_exit {
+        let live = &report.sets.func_pcs;
+        let (kept, dead): (alloc::vec::Vec<_>, alloc::vec::Vec<_>) =
+            core::mem::take(&mut program.finished_functions)
+                .into_iter()
+                .partition(|f| live.contains(&f.ent_pc));
+        program.finished_functions = kept;
+        core::mem::forget(dead);
+    }
     debug_assert!(probe.stopped_at_data_liveness);
     // The probe ran the passes that report; the retry lowers the bodies
     // they produced, skipping those passes, so its own sink stays empty.

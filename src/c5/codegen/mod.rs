@@ -3712,6 +3712,8 @@ pub struct NativeOptions {
     /// A symbol's `st_size`
     /// covers its code only; the fill belongs to no function.
     pub min_function_alignment: u32,
+    /// Leave the program, the lowering and dead bodies unfreed to the process exit.
+    pub freed_by_exit: bool,
     /// `-fpatchable-function-entry=N,M`: the NOP area at every function
     /// entry. A function's own `patchable_function_entry` attribute
     /// replaces it.
@@ -4099,6 +4101,7 @@ impl NativeOptions {
             stack_protect: StackProtect::OFF,
             fixed_regs: FixedRegs::NONE,
             min_function_alignment: 1,
+            freed_by_exit: false,
             patchable_function_entry: PatchableEntry::NONE,
             profiling: Profiling::OFF,
         }

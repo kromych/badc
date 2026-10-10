@@ -4073,6 +4073,37 @@ const FAR_SLOTS_X19_ASM: &str = "void use(void *);\n\
         return v + w + (long)d;\n\
     }\n";
 
+/// The spill slots of a frame with alloca lie below a 4 KiB local array,
+/// past fp's unscaled reach, while the array itself is reached through
+/// one address: the slots' reloads are what selects the locals base,
+/// which then addresses each of them in one instruction.
+#[test]
+fn a64_far_spill_slots_select_the_locals_base() {
+    const SRC: &str = "void use(void *p, void *q);\n\
+        long f(long n) {\n\
+            char pad[4096];\n\
+            char *q = (char *)__builtin_alloca(n);\n\
+            long a0 = n * 3, a1 = n * 5, a2 = n * 7, a3 = n * 11, a4 = n * 13, a5 = n * 17,\n\
+                 a6 = n * 19, a7 = n * 23, a8 = n * 29, a9 = n * 31, a10 = n * 37,\n\
+                 a11 = n * 41, a12 = n * 43, a13 = n * 47, a14 = n * 53;\n\
+            use(pad, q);\n\
+            long s = a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10 + a11 + a12 + a13 + a14;\n\
+            use(pad, q);\n\
+            s += a0 * a1 + a2 * a3 + a4 * a5 + a6 * a7 + a8 * a9 + a10 * a11 + a12 * a13 + a14;\n\
+            return s + pad[0] + q[0];\n\
+        }\n";
+    let ws = a64(SRC, "f");
+    let off_x19 = ws
+        .iter()
+        .filter(|&&w| a64_mem_imm(w).is_some_and(|(rn, _, _)| rn == 19))
+        .count();
+    let built = a64_built_accesses(&ws, 29);
+    assert!(
+        ws.contains(&A64_MOV_X19_SP) && off_x19 >= 12 && built == (0, 0),
+        "{off_x19} accesses off x19, built off fp {built:?}: {ws:08x?}"
+    );
+}
+
 /// A statement that writes x19 runs its exits -- the store-backs and the
 /// register restores, on the fall-through and on each `asm goto` label --
 /// after x19 has changed, so a frame holding one takes no locals base:

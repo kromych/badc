@@ -122,6 +122,10 @@ pub(crate) fn compute_frame(
     let locals_bytes = declared_locals_bytes + canary_bytes;
     let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     let dynamic_sp = super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 16;
+    // The parameter cells sit below the locals, whose offsets they leave
+    // alone; every region below them shifts by their size.
+    let param_cells_bytes = param_cells_bytes(func, alloc, abi);
+    let upper_bytes = locals_bytes + param_cells_bytes;
     // x19 becomes the locals base only where sp moves at run time, the
     // prologue-end sp is a constant distance from fp (no realignment),
     // nothing in the body overwrites x19, and the one-instruction forms
@@ -131,7 +135,7 @@ pub(crate) fn compute_frame(
         && (super::ssa::emit_common::uses_dynamic_alloca(func) || func.has_sp_moving_asm())
         && func.frame_align <= 16
         && !abi.fixed_regs.has_gpr(19)
-        && local_base_wins(func, alloc, canary_bytes, alloc_spill_bytes) >= 4;
+        && local_base_wins(func, alloc, canary_bytes, upper_bytes) >= 4;
     let uses_x19 = writes_third_scratch || local_base;
     let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
     // A region aligned exactly 16 joins the static frame between the spill
@@ -145,10 +149,6 @@ pub(crate) fn compute_frame(
     } else {
         asm_scratch_bytes(func, alloc, abi.fixed_regs)
     };
-    // The parameter cells sit below the locals, whose offsets they leave
-    // alone; every region below them shifts by their size.
-    let param_cells_bytes = param_cells_bytes(func, alloc, abi);
-    let upper_bytes = locals_bytes + param_cells_bytes;
     // The outgoing area joins the static frame only while sp keeps its
     // prologue value across the body: `alloca`/VLA, the sp realignment
     // and an inline asm statement that may move sp leave it elsewhere, and

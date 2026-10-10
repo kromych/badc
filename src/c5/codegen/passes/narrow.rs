@@ -144,12 +144,12 @@ fn imm_ext32(imm: i64) -> Ext32 {
 /// it with the values, and a table shorter than `insts` reads as
 /// all-false -- the 64-bit form.
 ///
-/// An operand whose shape states no extension is judged by its range
-/// where the comparison reads it: a value inside `int` holds its own
-/// sign extension, one inside `[0, 2^32)` its zero extension. That keeps
-/// a comparison 32-bit over an operand whose extend an earlier run of
-/// the range fold already removed.
-pub(crate) fn mark_compares(func: &mut FunctionSsa) {
+/// With `with_ranges`, an operand whose shape states no extension is
+/// judged by its range where the comparison reads it: a value inside
+/// `int` holds its own sign extension, one inside `[0, 2^32)` its zero
+/// extension. That keeps a comparison 32-bit over an operand whose extend
+/// an earlier run of the range fold already removed.
+pub(crate) fn mark_compares(func: &mut FunctionSsa, with_ranges: bool) {
     let read: &FunctionSsa = func;
     // Ranges and the block of each instruction, built on first need.
     let mut ranges: Option<(super::value_range::Ranges, Vec<BlockId>)> = None;
@@ -178,7 +178,11 @@ pub(crate) fn mark_compares(func: &mut FunctionSsa) {
     };
     let mut side = |at: usize, v: ValueId| {
         let e = ext32(read, v);
-        if e.sign || e.zero { e } else { by_range(at, v) }
+        if e.sign || e.zero || !with_ranges {
+            e
+        } else {
+            by_range(at, v)
+        }
     };
     let out: Vec<bool> = read
         .insts
@@ -228,7 +232,7 @@ mod tests {
 
     fn marked(insts: alloc::vec::Vec<Inst>) -> alloc::vec::Vec<bool> {
         let mut f = fresh(insts);
-        mark_compares(&mut f);
+        mark_compares(&mut f, true);
         f.cmp32
     }
 

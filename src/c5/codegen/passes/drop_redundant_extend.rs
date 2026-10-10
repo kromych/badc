@@ -61,7 +61,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
         // Decide the comparison operand widths first: a comparison
         // read at 32 bits stops observing its operands' upper half,
         // which is what makes the renormalizations feeding it dead.
-        super::narrow::mark_compares(func);
+        super::narrow::mark_compares(func, true);
         let assumed = super::value_range::iv::assumptions(func);
         run_one(func);
         drop_fitting(func, &assumed);

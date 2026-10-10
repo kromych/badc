@@ -2133,6 +2133,12 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             &mut coalesced_slot_remap,
             &mut promoted_local_slots,
         );
+        // The compares a 32-bit form decides, by their operands' shapes.
+        pipeline.run("passes::narrow::mark_compares", &mut ssa_funcs, |funcs| {
+            for func in funcs.iter_mut() {
+                super::super::passes::narrow::mark_compares(func, false);
+            }
+        });
     }
     // Data the pipeline orphans: the static DCE's post-inline live set,
     // which the caller compacts `.data` against and then lowers again.

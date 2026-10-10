@@ -2181,6 +2181,25 @@ long long lu32(long long k, long long x) { long long n = 0; for (; (unsigned)k; 
     m.finish();
 }
 
+/// Unoptimized, the low words of two `int` reloads decide their compare.
+#[test]
+fn unoptimized_int_compare_reads_the_low_words() {
+    const SRC: &str =
+        "int count(int n) { int c = 0; for (int i = 0; i < n; i++) c++; return c; }\n";
+    let cmp_reg_sf_bits: Vec<u32> = a64_at(SRC, "count", false)
+        .into_iter()
+        .filter(|&w| w & 0x7F20_001F == 0x6B00_001F)
+        .map(|w| w >> 31)
+        .collect();
+    assert_eq!(cmp_reg_sf_bits, [0], "aarch64: one 32-bit compare");
+    let cmp_reg_rex_w: Vec<bool> = x64_at(SRC, "count", false)
+        .iter()
+        .filter(|i| matches!(i.op, 0x39 | 0x3B) && i.reg_form())
+        .map(|i| i.rex_w())
+        .collect();
+    assert_eq!(cmp_reg_rex_w, [false], "x86-64: one 32-bit compare");
+}
+
 /// Unoptimized, `k` lives in its frame slot and the branch on `(int)k`
 /// reads that slot once. It compares the low word (the loop runs while
 /// bits 0..31 are not all zero), never the quadword: `cmpq $0, mem` loops

@@ -150,7 +150,7 @@ const GOLDEN: &[(&str, &str, u64, usize)] = &[
     ("fparith", "linux-x64", 0x14c458cd02e0883c, 1104),
     ("fparith", "linux-arm64", 0x64a91f538ce76acc, 1264),
     ("fparith", "macos-arm64", 0x64a91f538ce76acc, 1264),
-    ("fparith", "win-x64", 0xec0f8ef7211e2fd9, 1120),
+    ("fparith", "win-x64", 0x5c9776042e7863c5, 1096),
     ("fparith", "win-arm64", 0x64a91f538ce76acc, 1264),
     ("fpunary", "linux-x64", 0x8c728cf33ab15dcf, 1176),
     ("fpunary", "linux-arm64", 0x56c72e5e33e1725e, 1304),

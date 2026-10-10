@@ -410,10 +410,8 @@ fn win64_xmm_saves_sit_above_the_pushed_registers() {
 }
 
 /// A Win64 function whose FP values live across calls holds them in
-/// xmm6..xmm15, one `movups` save per register; the emit scratch
-/// (xmm3..xmm5) is volatile, so no function saves it, and a leaf FP
-/// function builds no frame at all. Pre-fix every FP function saved
-/// the callee-saved scratch xmm13/14/15 and spilled the live values.
+/// xmm6..xmm15, one `movups` save per register; a leaf FP function whose
+/// values fit xmm0..xmm3 builds no frame.
 #[test]
 fn win64_fp_values_live_across_calls_take_the_callee_saved_xmms() {
     const SRC: &str = "double g(double);\n\
@@ -422,7 +420,13 @@ fn win64_fp_values_live_across_calls_take_the_callee_saved_xmms() {
             double t = g(a) + b;\n\
             return s + g(t) + c;\n\
         }\n\
-        double leaf(double a, double b) { return a * b + a + b; }\n";
+        double leaf(double a, double b) { return a * b + a + b; }\n\
+        double sink;\n\
+        double leaf4(double a, double b, double c, double d) {\n\
+            double t = a * b + c;\n\
+            sink = t;\n\
+            return t * d;\n\
+        }\n";
     let target = Target::WindowsX64;
     let saves = |name: &str| -> Vec<(u8, i64)> {
         let insns = insns_of(&optimized(SRC, target), name);
@@ -442,11 +446,13 @@ fn win64_fp_values_live_across_calls_take_the_callee_saved_xmms() {
         f_saves.iter().all(|&(r, _)| (6..=15).contains(&r)),
         "f saves a volatile xmm: {f_saves:?}"
     );
-    let leaf_insns = insns_of(&optimized(SRC, target), "leaf");
-    assert!(
-        frame_of(&leaf_insns, target).is_none(),
-        "a leaf FP function pays no scratch save: {leaf_insns:x?}"
-    );
+    for leaf in ["leaf", "leaf4"] {
+        let leaf_insns = insns_of(&optimized(SRC, target), leaf);
+        assert!(
+            frame_of(&leaf_insns, target).is_none(),
+            "{leaf} builds a frame: {leaf_insns:x?}"
+        );
+    }
 }
 
 /// A tail call marshals its arguments, then restores and tears the frame

@@ -1020,15 +1020,9 @@ impl Rows {
                 // the prologue and every epilogue path save and restore
                 // the full 128 bits of each one the body uses, so the
                 // allocator may hold a live-across-call FP value there.
-                // The volatile set is xmm0..xmm5. xmm0..xmm2 are the
-                // return and first three FP argument registers and stay
-                // allocatable; xmm4, xmm5 and xmm3 are the emit pass's
-                // scratch (xmm3 is the fourth FP argument register, so
-                // only a call with four FP arguments pays a marshal
-                // move into it).
-                callee_fprs: &[6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
-                caller_fprs: &[0, 1, 2],
-                fp_scratch: &[4, 5, 3],
+                callee_fprs: &[6, 7, 8, 9, 10, 11, 12, 13, 14],
+                caller_fprs: &[0, 1, 2, 3],
+                fp_scratch: &[4, 5, 15],
             },
         }
     }
@@ -1106,6 +1100,23 @@ pub(crate) fn fp_scratch_demand(func: &FunctionSsa) -> [bool; FP_SCRATCH_COUNT] 
     let fp_work = simd || func.insts.iter().any(produces_fp_result);
     let fma = func.insts.iter().any(|i| matches!(i, Inst::Fma { .. }));
     [fp_work, fp_work, fma]
+}
+
+/// [`fp_scratch_demand`], the x86-64 third scratch only for a spilled FMA.
+fn fp_scratch_writes(
+    func: &FunctionSsa,
+    places: &[Place],
+    target: Target,
+) -> [bool; FP_SCRATCH_COUNT] {
+    let mut demand = fp_scratch_demand(func);
+    if target.is_x86_64() {
+        demand[2] &= func
+            .insts
+            .iter()
+            .zip(places)
+            .any(|(i, p)| matches!(i, Inst::Fma { .. }) && matches!(p, Place::Spill(_)));
+    }
+    demand
 }
 
 /// Why `func` cannot be emitted with `fp_scratch`: an entry it needs
@@ -1797,7 +1808,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // value), so the filter above drops it; a callee-saved scratch the
     // body touches joins the list here so the prologue / epilogue's
     // FP-save loop preserves it, mirroring the r13 GPR handling above.
-    let demand = fp_scratch_demand(func);
+    let demand = fp_scratch_writes(func, &places, target);
     for (i, &r) in banks.fp_scratch.iter().enumerate() {
         if demand[i]
             && r != NO_FP_SCRATCH
@@ -4436,33 +4447,22 @@ mod tests {
 
     #[test]
     fn sysv_exposes_no_callee_saved_fp_and_win64_the_nonvolatile_xmm() {
-        // SysV AMD64 marks no xmm callee-saved, so its bank is empty
-        // and every live-across-call FP value spills. Win64 marks
-        // xmm6..xmm15 non-volatile (x64 calling convention) and the
-        // x86_64 prologue/epilogue save and restore the full 128 bits
-        // of each one the body uses, so the bank opens to them; the
-        // volatile xmm0..xmm2 (return and first three argument
-        // registers) stay the caller-saved bank and xmm3..xmm5 the
-        // emit pass's scratch.
+        // SysV AMD64 marks no xmm callee-saved; Win64 marks xmm6..xmm15
+        // non-volatile, xmm15 being the FMA accumulator scratch.
         assert!(
             RegBanks::for_target(Target::LinuxX64)
                 .callee_fprs
                 .is_empty()
         );
         let win = RegBanks::for_target(Target::WindowsX64);
-        assert_eq!(win.callee_fprs, [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
-        assert_eq!(win.caller_fprs, [0, 1, 2]);
-        assert_eq!(win.fp_scratch, [4, 5, 3]);
+        assert_eq!(win.callee_fprs, [6, 7, 8, 9, 10, 11, 12, 13, 14]);
+        assert_eq!(win.caller_fprs, [0, 1, 2, 3]);
+        assert_eq!(win.fp_scratch, [4, 5, 15]);
     }
 
     #[test]
     fn win64_fp_value_live_across_a_call_takes_a_callee_saved_xmm() {
-        // An FP local live across a call takes a Win64 non-volatile
-        // xmm (xmm6..xmm15); the prologue and every epilogue path save
-        // and restore the full 128 bits, so the placement survives the
-        // calls. Pre-fix the allocator spilled the sum `s`; every
-        // placement in xmm6..xmm15 must now reach `fp_used`, and a
-        // volatile placement must stay below xmm3.
+        // An FP local live across a call takes a Win64 non-volatile xmm.
         let src = r#"
 double g(double);
 double sink;
@@ -4497,7 +4497,7 @@ int main(void) { return 0; }
                         saved_any = true;
                     } else {
                         assert!(
-                            *r <= 2,
+                            *r <= 3,
                             "Win64 allocation parked an FP value in the scratch xmm{r} ({})",
                             func.name
                         );
@@ -4523,13 +4523,9 @@ int main(void) { return 0; }
     }
 
     #[test]
-    fn win64_fp_scratch_is_volatile_and_owes_no_save() {
-        // The Win64 emit pass scratch is xmm4/xmm5/xmm3 (the FMA
-        // accumulator), all volatile under the x64 calling convention,
-        // so a function doing FP work never saves a scratch register:
-        // `fp_used` holds only allocator-assigned non-volatile xmms.
-        // With the volatile scratch reserved it falls back to the
-        // callee-saved xmm tail, which then joins the save list.
+    fn win64_fp_scratch_is_saved_where_it_is_written() {
+        // xmm15 is saved where an FMA result spills; a reserved volatile
+        // scratch falls back to the callee-saved tail, which is saved.
         let fp_src = r#"
 double f(double a, double b, double c, double d, double e, double h) {
     double s = a * b + c * d;
@@ -4541,21 +4537,39 @@ int main(void) { return 0; }
         let program = Compiler::new(fp_src.to_string())
             .compile()
             .expect("compile");
-        let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+        let mut funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
             &program,
             Target::WindowsX64,
             false,
             true,
         )
         .expect("ssa");
+        crate::c5::codegen::passes::fma::run(&mut funcs);
         let f = funcs.iter().find(|f| f.name == "f").expect("f");
-        let alloc = allocate(f, Target::WindowsX64);
+        assert!(f.insts.iter().any(|i| matches!(i, Inst::Fma { .. })));
+        let spills_an_fma = |alloc: &Allocation| {
+            f.insts
+                .iter()
+                .zip(&alloc.places)
+                .any(|(i, p)| matches!(i, Inst::Fma { .. }) && matches!(p, Place::Spill(_)))
+        };
+        // The whole banks, whatever caps the run sets.
+        let alloc =
+            with_pool_size_override(usize::MAX, usize::MAX, || allocate(f, Target::WindowsX64));
+        assert!(!spills_an_fma(&alloc), "{:?}", alloc.places);
         assert!(
-            !alloc.fp_used.iter().any(|&r| (3..=5).contains(&r)),
-            "a Win64 FP function saves no volatile scratch: {:?}",
+            !alloc.fp_used.iter().any(|&r| matches!(r, 4 | 5 | 15)),
+            "a Win64 FP function saves no scratch it leaves alone: {:?}",
             alloc.fp_used
         );
-        assert_eq!(alloc.fp_scratch, [4, 5, 3]);
+        assert_eq!(alloc.fp_scratch, [4, 5, 15]);
+        let alloc = with_pool_size_override(usize::MAX, 1, || allocate(f, Target::WindowsX64));
+        assert!(spills_an_fma(&alloc), "{:?}", alloc.places);
+        assert!(
+            alloc.fp_used.contains(&15),
+            "a spilled FMA result writes the accumulator: {:?}",
+            alloc.fp_used
+        );
         let fixed = FixedRegs {
             gpr: 0,
             fpr: (1 << 3) | (1 << 4) | (1 << 5),

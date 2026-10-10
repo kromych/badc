@@ -49,6 +49,7 @@
 #pragma binding(libc::abs,     "_abs")
 #pragma binding(libc::abort,   "_abort")
 #pragma binding(libc::exit,    "_exit")
+#pragma binding(libc::_Exit,   "__Exit")
 #pragma binding(libc::system,  "_system")
 #pragma binding(libc::getenv,  "_getenv")
 #pragma binding(libc::setenv,  "_setenv")
@@ -110,6 +111,7 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(libc::abs,     "abs")
 #pragma binding(libc::abort,   "abort")
 #pragma binding(libc::exit,    "exit")
+#pragma binding(libc::_Exit,   "_Exit")
 #pragma binding(libc::system,  "system")
 #pragma binding(libc::getenv,  "getenv")
 #pragma binding(libc::setenv,  "setenv")
@@ -204,6 +206,9 @@ int mergesort(char *base, int n, int size, int *cmp);
 // itself.
 #pragma binding(msvcrt::atexit,    "atexit")
 #pragma binding(msvcrt::_exit,     "_exit")
+// msvcrt.dll exports no `_Exit` (a UCRT addition); its `_exit` ends the
+// process the same way, running no atexit handler (C99 7.20.4.4).
+#pragma binding(msvcrt::_Exit,     "_exit")
 #pragma binding(msvcrt::mblen,     "mblen")
 #pragma binding(msvcrt::mbtowc,    "mbtowc")
 #pragma binding(msvcrt::wctomb,    "wctomb")
@@ -359,6 +364,7 @@ static inline lldiv_t lldiv(long long n, long long d) {
 // reaching its continuation.
 _Noreturn void abort(void);
 _Noreturn void exit(int status);
+_Noreturn void _Exit(int status);
 int system(const char *cmd);
 char *getenv(const char *name);
 #ifdef _WIN32

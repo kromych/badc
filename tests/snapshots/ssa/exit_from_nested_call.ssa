@@ -5,7 +5,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(3)                                           -> x7
-    v2   CallExt { binding_idx=144, args=[v1], fp_arg_mask=0x0 } -> x0
+    v2   CallExt { binding_idx=145, args=[v1], fp_arg_mask=0x0 } -> x0
     terminator Unreachable
 ; --- SSA dump (ok=true) ent_pc=7 ---
 ; name=descend
@@ -49,7 +49,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmCode(ent_pc=6)                                -> x7
     v2   Imm(0)                                           -> x6
-    v3   CallExt { binding_idx=33, args=[v1, v2, v2], fp_arg_mask=0x0 } -> x0
+    v3   CallExt { binding_idx=34, args=[v1, v2, v2], fp_arg_mask=0x0 } -> x0
     v4   Imm(8)                                           -> x7
     v5   Call { target_pc=7, args=[v4], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v6   Extend { value=v5, kind=I32 }                    -> x1

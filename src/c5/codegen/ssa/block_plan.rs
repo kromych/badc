@@ -691,6 +691,7 @@ mod tests {
     #[test]
     fn only_dead_pure_values_and_phis_are_no_code() {
         let store = Inst::StoreLocal {
+            disp: 0,
             off: -1,
             value: 0,
             kind: StoreKind::I64,
@@ -973,6 +974,7 @@ mod tests {
         let (f, a) = rotated(alloc::vec![load(true), compare()]);
         assert!(repeats(&BlockPlan::build(&f, &a, true, None)).is_empty());
         let store = Inst::StoreLocal {
+            disp: 0,
             off: -1,
             value: 0,
             kind: StoreKind::I64,

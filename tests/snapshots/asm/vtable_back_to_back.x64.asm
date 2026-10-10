@@ -35,7 +35,7 @@ Disassembly of section .text:
 
 <my_generate>:
                	movq	%rdx, %rax
-               	movslq	0x8(%rdi), %rcx
+               	movl	0x8(%rdi), %ecx
                	movl	%ecx, (%rsi)
                	retq
 
@@ -53,15 +53,15 @@ Disassembly of section .text:
                	movl	$0x8, %ecx
                	callq	*%rax
                	leaq	-0x10(%rbp), %rdi
-               	movq	(%rdi), %rax
+               	movq	-0x10(%rbp), %rax
                	movq	0x8(%rax), %rax
                	leaq	-0x18(%rbp), %rsi
                	movl	$0x1, %edx
                	callq	*%rax
                	leaq	<rip>, %rdi
-               	movslq	-0x18(%rbp), %rsi
+               	movl	-0x18(%rbp), %esi
                	movb	$0x0, %al
                	callq	<addr>
-               	movslq	-0x18(%rbp), %rax
+               	movl	-0x18(%rbp), %eax
                	leave
                	retq

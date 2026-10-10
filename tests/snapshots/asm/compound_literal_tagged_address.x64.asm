@@ -55,7 +55,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	0x8(%rax), %rax
+               	movl	0x8(%rax), %eax
                	cmpl	$0x1e, %eax
                	je	<addr>
                	movl	$0x5, %eax

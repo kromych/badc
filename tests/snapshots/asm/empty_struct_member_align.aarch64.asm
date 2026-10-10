@@ -21,18 +21,18 @@ Disassembly of section .text:
                	and	sp, x16, #0xffffffffffffffc0
                	mov	x0, sp
                	mov	x1, #0x1                // =1
-               	str	x1, [x0]
+               	str	x1, [sp]
                	mov	x1, #0x2                // =2
-               	str	x1, [x0, #0x40]
+               	str	x1, [sp, #0x40]
                	add	x1, x0, #0x40
                	sub	x0, x1, x0
                	cmp	x0, #0x40
                	b.eq	<addr>
                	mov	x0, #0x12               // =18
-               	sub	sp, x29, #0x0
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	sub	sp, x29, #0x0
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret

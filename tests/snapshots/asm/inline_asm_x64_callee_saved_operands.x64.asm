@@ -77,29 +77,25 @@ Disassembly of section .text:
                	movl	$0x8, %ebx
                	movl	$0x9, %r12d
                	movq	%rbx, %r10
-               	movq	%rcx, %rbx
-               	movq	%rdx, %rcx
-               	movq	%rsi, %rdx
-               	movq	%rdi, %rsi
-               	movq	%r8, %rdi
-               	movq	%r9, %r8
-               	movq	%r10, %r9
+               	movq	%r12, %r11
                	addq	$0x1, %rax
-               	addq	$0x1, %rbx
                	addq	$0x1, %rcx
                	addq	$0x1, %rdx
                	addq	$0x1, %rsi
                	addq	$0x1, %rdi
                	addq	$0x1, %r8
                	addq	$0x1, %r9
-               	addq	$0x1, %r12
-               	addq	%rbx, %rax
+               	addq	$0x1, %r10
+               	addq	$0x1, %r11
+               	movq	%r10, %rbx
+               	movq	%r11, %r12
                	addq	%rcx, %rax
                	addq	%rdx, %rax
                	addq	%rsi, %rax
                	addq	%rdi, %rax
                	addq	%r8, %rax
                	addq	%r9, %rax
+               	addq	%rbx, %rax
                	addq	%r12, %rax
                	cmpq	$0x36, %rax
                	je	<addr>

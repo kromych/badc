@@ -123,9 +123,95 @@ impl WalkError {
 /// plus an `extern_imm_data_refs` entry the linker patches from the
 /// merged symbol table.
 #[derive(Clone, Copy)]
-enum GloAddr {
+pub(crate) enum GloAddr {
     Resolved(i64),
     Extern,
+}
+
+/// A `Token::Fun` binding, or a scoped declaration scope exit unwound.
+pub(crate) fn live_fun_sym(symbols: &[Symbol], sym: u32) -> Option<&Symbol> {
+    symbols.get(sym as usize).filter(|s| s.is_fun_entity())
+}
+
+/// The function's live `ent_pc`: a sys trampoline's `val` is patched late.
+pub(crate) fn live_fun_val(symbols: &[Symbol], sym: u32, fallback_val: i64) -> i64 {
+    live_fun_sym(symbols, sym).map_or(fallback_val, |s| s.val)
+}
+
+/// The `ent_pc` its address denotes: an inline definition's import (C99 6.2.2p2).
+pub(crate) fn live_fun_addr_val(symbols: &[Symbol], sym: u32, fallback_val: i64) -> i64 {
+    match live_fun_sym(symbols, sym).and_then(|s| s.inline_addr_pc) {
+        Some(pc) => pc,
+        None => live_fun_val(symbols, sym, fallback_val),
+    }
+}
+
+/// Whether a `Token::Sys` snapshot names a function the unit defined later.
+pub(crate) fn binding_defined_here(symbols: &[Symbol], sym: u32, class: i64) -> bool {
+    class == Token::Sys as i64
+        && symbols
+            .get(sym as usize)
+            .is_some_and(|s| s.class == Token::Fun as i64)
+}
+
+/// The address the non-TLS `Token::Glo` identifier node `id` lowers to.
+pub(crate) fn glo_ident_addr(
+    symbols: &[Symbol],
+    ast: &Ast,
+    id: ExprId,
+    sym: u32,
+    val: i64,
+) -> GloAddr {
+    if ast.block_extern_refs.contains(&id) {
+        block_extern_glo_addr(symbols, sym)
+    } else {
+        live_glo_addr(symbols, sym, val)
+    }
+}
+
+/// An `extern` declaration not defined here resolves by name.
+fn live_glo_addr(symbols: &[Symbol], sym: u32, fallback_val: i64) -> GloAddr {
+    use crate::c5::symbol::Linkage;
+    if let Some(s) = symbols.get(sym as usize) {
+        if s.class == Token::Glo as i64
+            && s.is_extern_decl
+            && s.linkage == Linkage::External
+            && !s.defined_here
+        {
+            return if s.val == 0 {
+                GloAddr::Extern
+            } else {
+                GloAddr::Resolved(s.val)
+            };
+        }
+        if s.class == Token::Glo as i64
+            && s.is_extern_decl
+            && s.linkage == Linkage::External
+            && s.val != 0
+        {
+            return GloAddr::Resolved(s.val);
+        }
+        // A block-scope `extern` parsed before the definition (C99 6.2.2p4)
+        // snapshots 0; a shadowed global snapshots its own nonzero offset.
+        if s.class == Token::Glo as i64
+            && s.defined_here
+            && !s.is_extern_decl
+            && fallback_val == 0
+            && s.val != 0
+        {
+            return GloAddr::Resolved(s.val);
+        }
+    }
+    GloAddr::Resolved(fallback_val)
+}
+
+/// A block-scope `extern` that shadowed a binding: the unit's definition,
+/// else a reference by name.
+fn block_extern_glo_addr(symbols: &[Symbol], sym: u32) -> GloAddr {
+    match symbols.get(sym as usize) {
+        Some(s) if s.class == Token::Glo as i64 && s.defined_here => GloAddr::Resolved(s.val),
+        _ => GloAddr::Extern,
+    }
 }
 
 /// A C99 6.6p9 address constant: a static-storage object plus a byte
@@ -234,51 +320,12 @@ struct Walker<'a> {
 }
 
 impl<'a> Walker<'a> {
-    /// The symbol's live function entity, if it holds one: a
-    /// `Token::Fun` binding, or a scoped function declaration whose
-    /// name binding was unwound at scope exit (class back to 0) while
-    /// the entity -- `val`, prototype, linkage -- stayed on the slot.
-    fn live_fun_sym(&self, sym: u32) -> Option<&crate::c5::symbol::Symbol> {
-        self.symbols.get(sym as usize).filter(|s| s.is_fun_entity())
-    }
-
-    /// Live `ent_pc` for a function symbol: the symbol's current `val`,
-    /// so a call resolves to the `pc_to_native` slot the codegen
-    /// populates even for a sys trampoline, whose `val` is patched
-    /// late.
-    fn live_fun_val(&self, sym: u32, fallback_val: i64) -> i64 {
-        self.live_fun_sym(sym).map_or(fallback_val, |s| s.val)
-    }
-
-    /// Whether an `Ident` snapshotted as a `Token::Sys` binding names a
-    /// function the unit defined after the snapshot was taken. The
-    /// binding is the unit's own function now, and the reference
-    /// follows the definition, as the ones parsed after it do.
-    fn binding_defined_here(&self, sym: u32, class: i64) -> bool {
-        class == Token::Sys as i64
-            && self
-                .symbols
-                .get(sym as usize)
-                .is_some_and(|s| s.class == Token::Fun as i64)
-    }
-
-    /// Live `ent_pc` for a function symbol whose address is taken. An
-    /// inline definition provides no external definition, so its
-    /// identifier resolves through the import placeholder and the
-    /// address denotes the program's one definition (C99 6.2.2p2).
-    fn live_fun_addr_val(&self, sym: u32, fallback_val: i64) -> i64 {
-        match self.live_fun_sym(sym).and_then(|s| s.inline_addr_pc) {
-            Some(pc) => pc,
-            None => self.live_fun_val(sym, fallback_val),
-        }
-    }
-
     /// True when the function symbol is a variadic function. A
     /// variadic c5 callee keeps the c5 cdecl stack-push argument
     /// shape, so its floating-point arguments ride the integer
     /// register class as widened doubles rather than the FP bank.
     fn fun_is_variadic(&self, sym: u32) -> bool {
-        self.live_fun_sym(sym).is_some_and(|s| s.is_variadic)
+        live_fun_sym(self.symbols, sym).is_some_and(|s| s.is_variadic)
     }
 
     /// Count of named (pre-ellipsis) parameters the symbol declares,
@@ -286,7 +333,7 @@ impl<'a> Walker<'a> {
     /// count are the variadic tail, which the macOS arm64 ABI places on
     /// the host stack rather than in the register banks.
     fn fun_fixed_args(&self, sym: u32) -> usize {
-        self.live_fun_sym(sym).map_or(0, |s| s.params.len())
+        live_fun_sym(self.symbols, sym).map_or(0, |s| s.params.len())
     }
 
     /// An indirect call's `(is_variadic, fixed_arg_count)`, from the
@@ -304,7 +351,7 @@ impl<'a> Walker<'a> {
     /// asks is asked of this, not of the target's own convention.
     fn callee_conv(&self, callee: ExprId) -> crate::c5::codegen::CallConv {
         if let Expr::Ident { sym, class, .. } = self.ast.expr(callee)
-            && (*class == Token::Fun as i64 || self.binding_defined_here(*sym, *class))
+            && (*class == Token::Fun as i64 || binding_defined_here(self.symbols, *sym, *class))
             && let Some(s) = self.symbols.get(*sym as usize)
             && s.conv != crate::c5::codegen::CallConv::Target
         {
@@ -320,72 +367,6 @@ impl<'a> Walker<'a> {
             .callee_types
             .get(&callee)
             .map_or(crate::c5::codegen::CallConv::Target, |f| f.conv)
-    }
-
-    /// Resolve a `Token::Glo` address producer to an intra-unit data
-    /// offset or a cross-TU symbol reference. A resolved offset is
-    /// unit-local pre-link and the defining unit's absolute offset
-    /// after the linker's merge. A symbol with `is_extern_decl &&
-    /// !defined_here` has no in-unit storage and resolves by name, so
-    /// its parser-tentative `val` is never consulted; `fallback_val`
-    /// carries the node's snapshot for the case where nothing in the
-    /// live entry updates it.
-    fn live_glo_addr(&self, sym: u32, fallback_val: i64) -> GloAddr {
-        use crate::c5::symbol::Linkage;
-        let idx = sym as usize;
-        if idx < self.symbols.len() {
-            let s = &self.symbols[idx];
-            if s.class == Token::Glo as i64
-                && s.is_extern_decl
-                && s.linkage == Linkage::External
-                && !s.defined_here
-            {
-                return if s.val == 0 {
-                    GloAddr::Extern
-                } else {
-                    GloAddr::Resolved(s.val)
-                };
-            }
-            if s.class == Token::Glo as i64
-                && s.is_extern_decl
-                && s.linkage == Linkage::External
-                && s.val != 0
-            {
-                return GloAddr::Resolved(s.val);
-            }
-            // A block-scope `extern int g;` parsed before the same-TU
-            // definition (C99 6.2.2p4) snapshots a stale 0 offset, so
-            // the live symbol's offset wins where it has one. The
-            // `fallback_val == 0` guard keeps a shadowed same-named
-            // global, which snapshots its own nonzero offset, on the
-            // snapshot path.
-            if s.class == Token::Glo as i64
-                && s.defined_here
-                && !s.is_extern_decl
-                && fallback_val == 0
-                && s.val != 0
-            {
-                return GloAddr::Resolved(s.val);
-            }
-        }
-        GloAddr::Resolved(fallback_val)
-    }
-
-    /// Resolve a block-scope `extern` reference that shadowed a bound
-    /// name. Block exit restored the slot's class to the shadowed
-    /// binding, so its live state no longer names the external
-    /// reference. A same-TU file-scope definition is the slot's final
-    /// writer and its offset is used; otherwise the reference is
-    /// cross-TU and resolves by name.
-    fn block_extern_glo_addr(&self, sym: u32) -> GloAddr {
-        let idx = sym as usize;
-        if idx < self.symbols.len() {
-            let s = &self.symbols[idx];
-            if s.class == Token::Glo as i64 && s.defined_here {
-                return GloAddr::Resolved(s.val);
-            }
-        }
-        GloAddr::Extern
     }
 
     /// Address class for a `_Thread_local` access: a pure extern

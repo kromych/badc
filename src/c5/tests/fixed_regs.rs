@@ -194,9 +194,21 @@ fn a_reserved_register_leaves_the_banks_and_the_scratch_moves() {
     assert_eq!(banks.fp_scratch, [NO_FP_SCRATCH; FP_SCRATCH_COUNT]);
     assert_eq!(banks.caller_fprs, [0, 1, 2, 3, 4, 5, 6, 7]);
 
-    let banks = RegBanks::new(win, reserve(win, &["xmm13", "xmm14", "xmm15"]));
-    assert_eq!(banks.fp_scratch, [6, 7, 8]);
-    assert_eq!(banks.caller_fprs, RegBanks::for_target(win).caller_fprs);
+    let default = RegBanks::for_target(win);
+    assert_eq!(default.fp_scratch, [4, 5, 15]);
+    assert_eq!(default.caller_fprs, [0, 1, 2, 3]);
+    assert_eq!(default.callee_fprs, [6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    // A reserved callee-saved xmm leaves the bank; the scratch stays.
+    let banks = RegBanks::new(win, reserve(win, &["xmm12", "xmm13", "xmm14"]));
+    assert_eq!(banks.fp_scratch, [4, 5, 15]);
+    assert_eq!(banks.caller_fprs, default.caller_fprs);
+    assert_eq!(banks.callee_fprs, [6, 7, 8, 9, 10, 11]);
+    // A reserved volatile scratch falls back to the callee-saved tail,
+    // which the prologue then saves (fp_scratch_demand).
+    let banks = RegBanks::new(win, reserve(win, &["xmm3", "xmm4", "xmm5"]));
+    assert_eq!(banks.fp_scratch, [15, 14, 13]);
+    assert_eq!(banks.caller_fprs, [0, 1, 2]);
+    assert_eq!(banks.callee_fprs, [6, 7, 8, 9, 10, 11, 12]);
 }
 
 /// Under register pressure the allocator uses every register of both

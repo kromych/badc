@@ -92,9 +92,9 @@ Disassembly of section .text:
                	retq
                	movl	$0x40a00000, %eax       # imm = 0x40A00000
                	movl	$0x40000000, %ecx       # imm = 0x40000000
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm0
-               	mulss	%xmm15, %xmm0
+               	vmulss	%xmm15, %xmm14, %xmm0
                	movl	$0x41200000, %eax       # imm = 0x41200000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0

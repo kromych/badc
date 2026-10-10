@@ -153,6 +153,7 @@ pub(crate) fn run(func: &mut FunctionSsa) {
                 &mut ins,
                 Inst::LoadLocal {
                     off: o.off,
+                    disp: 0,
                     kind: load_kind(o.width),
                     volatile: false,
                 },
@@ -200,7 +201,10 @@ pub(crate) fn run(func: &mut FunctionSsa) {
             }
         }
         for (&st, &value) in stores.iter().zip(&values) {
-            if let Inst::StoreLocal { value: v, .. } = &mut func.insts[st as usize] {
+            if let Inst::StoreLocal {
+                disp: 0, value: v, ..
+            } = &mut func.insts[st as usize]
+            {
                 *v = value;
             }
         }
@@ -224,6 +228,7 @@ pub(crate) fn run(func: &mut FunctionSsa) {
 fn store(o: &Out, value: ValueId) -> Inst {
     Inst::StoreLocal {
         off: o.off,
+        disp: 0,
         value,
         kind: store_kind(o.width),
         volatile: false,
@@ -286,6 +291,7 @@ mod tests {
 
     fn load(off: i64) -> Inst {
         Inst::LoadLocal {
+            disp: 0,
             off,
             kind: LoadKind::I64,
             volatile: false,
@@ -325,13 +331,21 @@ mod tests {
         assert!(matches!(
             f.insts[2],
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 1,
                 kind: StoreKind::I64,
                 ..
             }
         ));
-        assert!(matches!(f.insts[3], Inst::LoadLocal { off: -1, .. }));
+        assert!(matches!(
+            f.insts[3],
+            Inst::LoadLocal {
+                disp: 0,
+                off: -1,
+                ..
+            }
+        ));
         assert_eq!(f.blocks[0].inst_range, 0..4);
         assert_eq!(f.blocks[0].exit_acc, NO_VALUE);
     }
@@ -355,6 +369,7 @@ mod tests {
         assert!(matches!(
             f.insts[1],
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::U32,
                 ..
@@ -366,6 +381,7 @@ mod tests {
         assert!(matches!(
             f.insts[3],
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 2,
                 kind: StoreKind::I32,
@@ -453,6 +469,7 @@ mod tests {
         assert!(matches!(
             f.insts[4],
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 2,
                 kind: StoreKind::I32,
@@ -462,6 +479,7 @@ mod tests {
         assert!(matches!(
             f.insts[5],
             Inst::StoreLocal {
+                disp: 0,
                 off: -2,
                 value: 3,
                 kind: StoreKind::I32,
@@ -495,6 +513,7 @@ mod tests {
         assert!(matches!(
             f.insts[2],
             Inst::LoadLocal {
+                disp: 0,
                 off: -2,
                 kind: LoadKind::I64,
                 ..
@@ -507,6 +526,7 @@ mod tests {
         assert!(matches!(
             f.insts[5],
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 3,
                 kind: StoreKind::I8,
@@ -516,6 +536,7 @@ mod tests {
         assert!(matches!(
             f.insts[6],
             Inst::StoreLocal {
+                disp: 0,
                 off: -2,
                 value: 4,
                 kind: StoreKind::I64,

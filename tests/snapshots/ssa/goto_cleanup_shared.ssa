@@ -375,7 +375,7 @@ fn ent_pc=8 n_params=1 variadic=false locals=1
 fn ent_pc=9 n_params=2 variadic=false locals=2
   spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(9)                                    -> -
+    v0   AllocaInit(-1)                                   -> -
     v1   Imm(16)                                          -> x12
     v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=I32)                            -> x6

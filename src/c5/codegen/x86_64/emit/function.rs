@@ -181,7 +181,6 @@ pub(crate) fn emit_function(
     extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
-    conv_targets: &alloc::collections::BTreeMap<usize, super::CallConv>,
     ret_tags: &alloc::collections::BTreeMap<usize, i64>,
     tls_total_size: usize,
     fn_unwind: &mut Vec<super::FnUnwind>,
@@ -261,7 +260,6 @@ pub(crate) fn emit_function(
         bulk_xmm,
         imports,
         variadic_targets,
-        conv_targets,
         extern_tls_names,
         extern_data_names,
         extern_code_names,
@@ -650,7 +648,6 @@ impl FnEmit<'_, '_> {
             abi,
             target,
             variadic_targets,
-            conv_targets,
             ..
         } = self.fcx;
         let block = &func.blocks[block_idx];
@@ -669,15 +666,7 @@ impl FnEmit<'_, '_> {
         }
         // A direct call whose result the block returns lowers as `marshal;
         // epilogue; jmp` in the terminator; see `detect_tail_call`.
-        let tail_call = detect_tail_call(
-            func,
-            block,
-            abi,
-            variadic_targets,
-            conv_targets,
-            self.ret_tags,
-            target,
-        );
+        let tail_call = detect_tail_call(func, block, abi, variadic_targets, self.ret_tags, target);
         for v in block.inst_range.clone() {
             if self.plan.lowers(block_idx, v) {
                 self.emit_block_inst(block, v, tail_call)?;
@@ -861,7 +850,14 @@ impl FnEmit<'_, '_> {
                 // disp32 reaches into the blob; the writer patches it. A
                 // static link indexes the table by its address instead.
                 let site = if self.abs32_addrs {
-                    super::encode::emit_load_index_abs(code, LoadKind::I64, SCRATCH_R10, rt, 8)
+                    super::encode::emit_load_index_abs(
+                        code,
+                        LoadKind::I64,
+                        SCRATCH_R10,
+                        rt,
+                        8,
+                        true,
+                    )
                 } else {
                     let lea_start = code.len();
                     super::encode::emit_lea_r_rip32(code, SCRATCH_R11, 0);
@@ -1243,7 +1239,7 @@ fn saved_xmm_off(alloc: &Allocation) -> i32 {
 /// Save the callee-saved registers the allocator reported, with rsp
 /// `pushed_gpr_bytes` above the frame bottom: the GPRs are pushed in
 /// descending index order, so `gpr_used[i]` lands at `[rsp + 8 * i]` of the
-/// completed frame, and the non-volatile xmm scratch is stored above them
+/// completed frame, and the non-volatile xmms are stored above them
 /// (full 128-bit `movups`, the caller may use the upper lanes). The offsets
 /// have one source, so the prologue and every return path agree.
 fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation) {
@@ -1256,12 +1252,18 @@ fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation) {
     }
 }
 
-/// Re-establish `rsp = rbp - frame_bytes` in a dynamic-sp frame before
-/// the epilogue's rsp-relative restores. No-op for static frames. Every
-/// return path and the tail-call jump call this ahead of
-/// [`restore_callee_saved`].
-pub(super) fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame) {
-    if frame.dynamic_sp {
+/// Whether the epilogue re-establishes `rsp = rbp - frame_bytes`: a
+/// dynamic-sp frame whose restores address from rsp. Without them `leave`
+/// takes rsp from rbp.
+fn reestablishes_sp(frame: Frame, alloc: &Allocation) -> bool {
+    frame.dynamic_sp && (!alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty())
+}
+
+/// Re-establish rsp ahead of the epilogue's rsp-relative restores where
+/// [`reestablishes_sp`] holds. Every return path and the tail-call jump
+/// call this ahead of [`restore_callee_saved`].
+pub(super) fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame, alloc: &Allocation) {
+    if reestablishes_sp(frame, alloc) {
         emit_lea_r_mem(code, Reg::RSP, Reg::RBP, -(frame.frame_bytes as i32));
     }
 }
@@ -1370,8 +1372,10 @@ fn emit_prologue(
             code[rel32_at..rel32_at + 4].copy_from_slice(&rel.to_le_bytes());
         }
     }
-    // The allocator never assigns a non-volatile xmm (`callee_fprs` is empty);
-    // `fp_used` lists the fixed FP scratch of a Win64 function doing FP work.
+    // The pushed GPRs, then the movups saves of the non-volatile xmms
+    // the allocator assigned (on Win64; System V allocates none), and
+    // of any callee-saved scratch a `-ffixed-` fallback moved off the
+    // Win64 volatile set.
     save_callee_saved(code, alloc);
     // The canary slot is rbp-relative, so it is stored before the realign.
     emit_canary_store(code, frame, abi, extern_data_refs);
@@ -1528,7 +1532,7 @@ fn emit_return(
     if let Some(Inst::AggParts { parts, fp_mask, .. }) = func.insts.get(value as usize) {
         emit_parts_return(code, parts, fp_mask, alloc, frame)?;
         emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
-        restore_dynamic_sp(code, frame);
+        restore_dynamic_sp(code, frame, alloc);
         restore_callee_saved(code, alloc);
         emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
         return Ok(());
@@ -1543,8 +1547,8 @@ fn emit_return(
         Place::None
     };
     // A register-returned aggregate (System V AMD64 3.2.3): `value` is its
-    // address, staged through rcx across the restore; the eightbytes load
-    // into rax:rdx / xmm0:xmm1 after it, an x87 pair into st(0).
+    // address, staged through rcx; the eightbytes load into rax:rdx /
+    // xmm0:xmm1, an x87 pair into st(0), while rsp is still below the object.
     if let Some(ai) = func.ret_agg {
         let desc = &func.agg_descs[ai as usize];
         let eb_classes = reg_slot_classes(desc, abi, true);
@@ -1560,9 +1564,6 @@ fn emit_return(
             }
             _ => {}
         }
-        emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
-        restore_dynamic_sp(code, frame);
-        restore_callee_saved(code, alloc);
         // Place each eightbyte in its bank: System V returns SSE eightbytes
         // in xmm0/xmm1 and INTEGER eightbytes in rax/rdx, each in order.
         let int_ret = [Reg::RAX, Reg::RDX];
@@ -1601,6 +1602,9 @@ fn emit_return(
                 int_i += 1;
             }
         }
+        emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
+        restore_dynamic_sp(code, frame, alloc);
+        restore_callee_saved(code, alloc);
         emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
         return Ok(());
     }
@@ -1668,7 +1672,7 @@ fn emit_return(
     // The check calls out on a mismatch, so it runs while rsp is 16-aligned,
     // ahead of the pops.
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
-    restore_dynamic_sp(code, frame);
+    restore_dynamic_sp(code, frame, alloc);
     restore_callee_saved(code, alloc);
     if staged_int {
         emit_mov_rr(code, Reg::RAX, Reg::RCX);
@@ -1756,7 +1760,8 @@ pub(super) fn emit_frame_teardown(
     if is_full_leaf(func, frame, alloc, abi) {
         return;
     }
-    if frame.frame_bytes > pushed_gpr_bytes(alloc) {
+    let rsp_at_bottom = !frame.dynamic_sp || reestablishes_sp(frame, alloc);
+    if frame.frame_bytes > pushed_gpr_bytes(alloc) || !rsp_at_bottom {
         super::encode::emit_leave(code);
     } else {
         emit_pop_r(code, Reg::RBP);

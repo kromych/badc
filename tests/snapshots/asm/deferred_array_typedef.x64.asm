@@ -32,7 +32,7 @@ Disassembly of section .text:
                	movq	%rax, %rsi
                	shlq	$0x4, %rsi
                	addq	%rdx, %rsi
-               	movslq	0xc(%rsi), %rsi
+               	movl	0xc(%rsi), %esi
                	addq	%rsi, %rcx
                	incq	%rax
                	cmpl	$0x3, %eax

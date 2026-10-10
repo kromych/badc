@@ -24,8 +24,8 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x1, #0x30]
                	and	x2, x0, #0x7
                	str	x0, [x1, x2, lsl #3]
-               	ldr	x0, [x1]
-               	ldr	x1, [x1, #0x38]
+               	ldur	x0, [x29, #-0x40]
+               	ldur	x1, [x29, #-0x8]
                	add	x0, x0, x1
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
@@ -54,8 +54,8 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x1, #0xf0]
                	and	x2, x0, #0x1f
                	str	x0, [x1, x2, lsl #3]
-               	ldr	x0, [x1]
-               	ldr	x1, [x1, #0xf8]
+               	ldur	x0, [x29, #-0x100]
+               	ldur	x1, [x29, #-0x8]
                	add	x0, x0, x1
                	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
@@ -93,8 +93,8 @@ Disassembly of section .text:
                	mul	x2, x2, x17
                	sub	x2, x0, x2
                	str	x0, [x1, x2, lsl #3]
-               	ldr	x0, [x1]
-               	ldr	x1, [x1, #0x100]
+               	ldr	x0, [sp, #0x8]
+               	ldur	x1, [x29, #-0x8]
                	add	x0, x0, x1
                	add	sp, sp, #0x110
                	ldp	x29, x30, [sp], #0x10
@@ -115,8 +115,8 @@ Disassembly of section .text:
                	b.ne	<addr>
                	and	x2, x0, #0x1ff
                	str	x0, [x1, x2, lsl #3]
-               	ldr	x0, [x1]
-               	ldr	x1, [x1, #0xff8]
+               	ldr	x0, [sp]
+               	ldur	x1, [x29, #-0x8]
                	add	x0, x0, x1
                	add	sp, sp, #0x1, lsl #12   // =0x1000
                	ldp	x29, x30, [sp], #0x10
@@ -140,7 +140,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	and	x2, x0, #0x1fff
                	str	x0, [x1, x2, lsl #3]
-               	ldr	x0, [x1]
+               	ldr	x0, [sp]
                	mov	x17, #0xfff8            // =65528
                	add	x1, x1, x17
                	ldr	x1, [x1]
@@ -176,8 +176,8 @@ Disassembly of section .text:
                	mul	x2, x2, x17
                	sub	x2, x0, x2
                	str	w0, [x1, x2, lsl #2]
-               	ldrsw	x0, [x1]
-               	ldrsw	x1, [x1, #0xff0]
+               	ldrsw	x0, [sp, #0x8]
+               	ldursw	x1, [x29, #-0x8]
                	add	x0, x0, x1
                	add	sp, sp, #0x1, lsl #12   // =0x1000
                	ldp	x29, x30, [sp], #0x10

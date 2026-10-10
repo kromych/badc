@@ -33,8 +33,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movb	$0x63, 0x3(%rax)
-               	movb	$-0x38, 0xa(%rax)
+               	movb	$0x63, -0xd(%rbp)
+               	movb	$-0x38, -0x6(%rbp)
                	xorl	%eax, %eax
                	leave
                	retq

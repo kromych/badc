@@ -82,6 +82,12 @@ impl Sink {
         }
     }
 
+    /// Whether `code` can report anywhere in the unit: the command line
+    /// keeps it above `Ignore`, or a pragma raises it.
+    pub fn may_emit(&self, code: Code) -> bool {
+        self.config.level(code) != Level::Ignore || self.control.may_report(code)
+    }
+
     /// Report a diagnostic. An ignored one is dropped; the rest are
     /// recorded with the level they resolved to.
     pub fn emit(&mut self, code: Code, loc: Option<Loc>, text: impl Into<String>) -> Level {

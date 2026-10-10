@@ -82,13 +82,13 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
     v52  LocalAddr(-2)                                    -> x6
     v53  Imm(0)                                           -> x0
     v54  ImmData(108)                                     -> x1
-    v55  Store { addr=v52, disp=0, value=v54, kind=I64 }  -> -
+    v55  StoreLocal { off=-2, value=v54, kind=I64 }       -> -
     v56  LocalAddr(-2)                                    -> x1
     v57  Imm(8)                                           -> x1
     v58  BinopI { op=add, lhs=v52, rhs_imm=8 }            -> x1
-    v59  Store { addr=v52, disp=8, value=v53, kind=I64 }  -> -
+    v59  StoreLocal { off=-2, disp=8, value=v53, kind=I64 } -> -
     v60  LocalAddr(-3)                                    -> x2
-    v61  Store { addr=v60, disp=0, value=v53, kind=I64 }  -> -
+    v61  StoreLocal { off=-3, value=v53, kind=I64 }       -> -
     v62  ImmData(129)                                     -> x7
     v63  LocalAddr(-2)                                    -> x0
     v64  LocalAddr(-3)                                    -> x0

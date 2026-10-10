@@ -70,7 +70,6 @@ Disassembly of section .text:
                	cmpq	%rcx, %rdi
                	jne	<addr>
                	xorl	%eax, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	movl	$0x1, %eax

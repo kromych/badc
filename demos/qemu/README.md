@@ -69,7 +69,10 @@ the system shared libraries.
 - badc's own linker self-links the emulator and it reports
   `QEMU emulator version 11.1.1`.
 
-`$BADC_QEMU_OPT=1` also runs the `-O` lane; `$BADC_QEMU_JOBS` sets the compile
+`$BADC_QEMU_OPT=1` builds at `-O` instead of `-O0`, into `objs-O/` beside
+`objs/`; `$BADC_QEMU_VERIFY_SSA=1` compiles every unit under `--verify-ssa`, so
+a pass that breaks the SSA form fails that unit's compile with the pass, the
+function and the violation named; `$BADC_QEMU_JOBS` sets the compile
 parallelism.
 
 ## Boot check
@@ -82,10 +85,12 @@ userspace (`Run /sbin/init`), no fault marker (`Kernel panic`,
 `Unable to handle`, `Oops`, ...), and a clean power-down (the smoke sends
 `poweroff -f` over the console and the guest exits rc 0). The boot runs with
 `-smp 16`, `-nographic`, a 60s timeout, and `-no-reboot`. aarch64 `-M virt` and
-x86_64 `-M q35` boot the EFI-stub kernel through UEFI firmware when one is
-configured -- AAVMF (aarch64, with `acpi=off` so the PL011 probes as `ttyAMA0`)
-and OVMF (x86_64) -- matching a real UEFI system; without a configured firmware
-aarch64 falls back to `-M virt`'s legacy `-kernel` loader.
+x86_64 `-M q35` boot the EFI-stub kernel through UEFI firmware -- AAVMF
+(aarch64, with `acpi=off` so the PL011 probes as `ttyAMA0`) and OVMF (x86_64) --
+matching a real UEFI system. x86_64 fails without OVMF; without AAVMF aarch64
+falls back to `-M virt`'s legacy `-kernel` loader, unless
+`$BADC_QEMU_REQUIRE_FIRMWARE=1` makes that a failure. The serial log is written
+to `$BADC_QEMU_BOOT_LOG`, by default beside the emulator it booted.
 
 `$BADC_QEMU_BOOT` drives it:
 
@@ -107,7 +112,9 @@ boot those instead; `$BADC_QEMU_APPEND` overrides the kernel command line,
 `$BADC_QEMU_BOOT_TIMEOUT` the timeout. `$BADC_QEMU_OVMF_CODE` /
 `$BADC_QEMU_OVMF_VARS` (x86_64) and `$BADC_QEMU_AAVMF_CODE` /
 `$BADC_QEMU_AAVMF_VARS` (aarch64) point at the firmware images -- set in CI to
-the ovmf lane's badc-built firmware.
+the ovmf lane's badc-built firmware. Unset, the system's images are searched in
+the distributions' directories (`/usr/share/OVMF`, `/usr/share/AAVMF`,
+`/usr/share/edk2/...`), and the boot log names the pair it took.
 
 ## Scope
 
@@ -127,5 +134,6 @@ cleanly.
 `python3`, badc, `pkg-config` with the glib-2.0 development package
 (Debian/Ubuntu: `libglib2.0-dev`), and the zlib and libfdt shared libraries
 (`zlib1g-dev`, `libfdt-dev`). The x86_64 boot check also needs system OVMF
-(Debian/Ubuntu: `ovmf`; Fedora: `edk2-ovmf`). No `meson`, no `make`, no
-`./configure`, and no system linker.
+(Debian/Ubuntu: `ovmf`; Fedora: `edk2-ovmf`), and the aarch64 one AAVMF to
+boot through firmware (`qemu-efi-aarch64`; `edk2-aarch64`). No `meson`, no
+`make`, no `./configure`, and no system linker.

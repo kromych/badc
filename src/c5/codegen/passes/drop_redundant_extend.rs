@@ -61,7 +61,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
         // Decide the comparison operand widths first: a comparison
         // read at 32 bits stops observing its operands' upper half,
         // which is what makes the renormalizations feeding it dead.
-        super::narrow::mark_compares(func);
+        super::narrow::mark_compares(func, true);
         let assumed = super::value_range::iv::assumptions(func);
         run_one(func);
         drop_fitting(func, &assumed);
@@ -698,11 +698,13 @@ fn param_reextend_kinds(func: &FunctionSsa) -> Vec<Option<LoadKind>> {
                 }
                 Inst::LoadLocal {
                     off,
+                    disp,
                     kind: k,
                     volatile,
                 } if *off == slot
-                    && matches!(k, LoadKind::I64 | LoadKind::F64 | LoadKind::F32)
-                    && (*volatile || use_counts[idx] > 0) =>
+                    && (*disp != 0
+                        || (matches!(k, LoadKind::I64 | LoadKind::F64 | LoadKind::F32)
+                            && (*volatile || use_counts[idx] > 0))) =>
                 {
                     ok = false;
                     break;
@@ -791,7 +793,7 @@ fn narrow_int_load(insts: &[Inst], v: ValueId) -> Option<(u32, bool)> {
     }
     let kind = match insts.get(v as usize)? {
         Inst::Load { kind, .. } => *kind,
-        Inst::LoadLocal { kind, .. } => *kind,
+        Inst::LoadLocal { disp: 0, kind, .. } => *kind,
         Inst::LoadIndexed { kind, .. } => *kind,
         _ => return None,
     };
@@ -1055,6 +1057,7 @@ mod tests {
             is_naked: false,
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
+            general_regs_only: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,
@@ -1911,6 +1914,7 @@ mod tests {
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                     low_word_args: 0,
                     arg_widths: crate::c5::ir::ArgWidths::default(),
+                    callee_conv: crate::c5::codegen::CallConv::Target,
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
@@ -1977,6 +1981,7 @@ mod tests {
                         fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                         low_word_args: 0,
                         arg_widths: crate::c5::ir::ArgWidths::default(),
+                        callee_conv: crate::c5::codegen::CallConv::Target,
                         arg_aggs: Vec::new(),
                         ret_agg: None,
                         ret_slot_local: 0,
@@ -2097,6 +2102,7 @@ mod tests {
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                     low_word_args: 0,
                     arg_widths: crate::c5::ir::ArgWidths::default(),
+                    callee_conv: crate::c5::codegen::CallConv::Target,
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
@@ -2510,6 +2516,7 @@ mod tests {
             nsw: false,
         };
         let store = |value| Inst::StoreLocal {
+            disp: 0,
             off: -1,
             value,
             kind: StoreKind::I64,
@@ -2572,12 +2579,26 @@ mod tests {
             let mut f = decrement_on_both_sides(n.clone(), narrow_compare);
             drop_fitting(&mut f, &[]);
             assert!(
-                matches!(f.insts[4], Inst::StoreLocal { value: 2, .. }),
+                matches!(
+                    f.insts[4],
+                    Inst::StoreLocal {
+                        disp: 0,
+                        value: 2,
+                        ..
+                    }
+                ),
                 "narrow={narrow_compare}: {:?}",
                 f.insts[4]
             );
             assert!(
-                matches!(f.insts[7], Inst::StoreLocal { value: 6, .. }),
+                matches!(
+                    f.insts[7],
+                    Inst::StoreLocal {
+                        disp: 0,
+                        value: 6,
+                        ..
+                    }
+                ),
                 "narrow={narrow_compare}: {:?}",
                 f.insts[7]
             );
@@ -2591,6 +2612,7 @@ mod tests {
     #[test]
     fn narrow_guard_of_a_wide_value_drops_no_renormalization() {
         let wide = Inst::LoadLocal {
+            disp: 0,
             off: -2,
             kind: LoadKind::I64,
             volatile: false,
@@ -2598,8 +2620,22 @@ mod tests {
         for narrow_compare in [true, false] {
             let mut f = decrement_on_both_sides(wide.clone(), narrow_compare);
             drop_fitting(&mut f, &[]);
-            assert!(matches!(f.insts[4], Inst::StoreLocal { value: 3, .. }));
-            assert!(matches!(f.insts[7], Inst::StoreLocal { value: 6, .. }));
+            assert!(matches!(
+                f.insts[4],
+                Inst::StoreLocal {
+                    disp: 0,
+                    value: 3,
+                    ..
+                }
+            ));
+            assert!(matches!(
+                f.insts[7],
+                Inst::StoreLocal {
+                    disp: 0,
+                    value: 6,
+                    ..
+                }
+            ));
         }
     }
 

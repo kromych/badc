@@ -80,19 +80,18 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rax
-               	movw	$0xbeef, (%rax)         # imm = 0xBEEF
+               	movw	$0xbeef, -0x8(%rbp)     # imm = 0xBEEF
                	xorl	%ecx, %ecx
-               	movw	%cx, 0x2(%rax)
-               	movw	$0xfeed, 0x4(%rax)      # imm = 0xFEED
+               	movw	%cx, -0x6(%rbp)
+               	movw	$0xfeed, -0x4(%rbp)     # imm = 0xFEED
                	leaq	0x2(%rax), %rdx
                	movl	$0x11223344, %eax       # imm = 0x11223344
                	movw	%ax, (%rdx)
-               	leaq	-0x8(%rbp), %rdx
-               	movzwq	(%rdx), %rax
+               	movzwq	-0x8(%rbp), %rax
                	xorq	$0xbeef, %rax           # imm = 0xBEEF
                	testl	%eax, %eax
                	jne	<addr>
-               	movzwq	0x2(%rdx), %rax
+               	movzwq	-0x6(%rbp), %rax
                	xorq	$0x3344, %rax           # imm = 0x3344
                	testl	%eax, %eax
                	sete	%cl
@@ -100,7 +99,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	testq	%rcx, %rcx
                	je	<addr>
-               	movzwq	0x4(%rdx), %rax
+               	movzwq	-0x4(%rbp), %rax
                	xorq	$0xfeed, %rax           # imm = 0xFEED
                	testl	%eax, %eax
                	sete	%al

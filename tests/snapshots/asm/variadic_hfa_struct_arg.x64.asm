@@ -80,9 +80,8 @@ Disassembly of section .text:
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
                	leaq	-0x18(%rbp), %rax
-               	leaq	-0x28(%rbp), %rax
-               	movsd	(%rax), %xmm0
-               	movsd	0x8(%rax), %xmm1
+               	movsd	-0x28(%rbp), %xmm0
+               	movsd	-0x20(%rbp), %xmm1
                	addsd	%xmm1, %xmm0
                	leave
                	retq
@@ -94,10 +93,10 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %r9
                	movabsq	$0x3ff8000000000000, %rax # imm = 0x3FF8000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, (%r9)
+               	movsd	%xmm14, -0x10(%rbp)
                	movabsq	$0x4002000000000000, %rax # imm = 0x4002000000000000
                	movq	%rax, %xmm14
-               	movsd	%xmm14, 0x8(%r9)
+               	movsd	%xmm14, -0x8(%rbp)
                	movl	$0x1, %edi
                	movq	%r9, %r10
                	movsd	(%r10), %xmm0

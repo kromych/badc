@@ -33,18 +33,16 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	addq	%r8, %rax
                	addq	%r9, %rax
-               	movslq	0x10(%rbp), %rcx
+               	movl	0x10(%rbp), %ecx
                	addq	%rcx, %rax
-               	movslq	0x18(%rbp), %rcx
+               	movl	0x18(%rbp), %ecx
                	addq	%rcx, %rax
-               	movslq	0x20(%rbp), %rcx
+               	movl	0x20(%rbp), %ecx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rax, %xmm1
-               	movapd	%xmm0, %xmm15
-               	movapd	%xmm1, %xmm0
-               	addsd	%xmm15, %xmm0
+               	vaddsd	%xmm0, %xmm1, %xmm0
                	popq	%rbp
                	retq
 

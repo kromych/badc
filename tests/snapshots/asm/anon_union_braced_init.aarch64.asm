@@ -35,9 +35,9 @@ Disassembly of section .text:
                	ldursw	x20, [x29, #-0x20]
                	ldur	x21, [x29, #-0x18]
                	sub	x0, x29, #0x10
-               	str	w20, [x0]
-               	str	wzr, [x0, #0x4]
-               	str	x21, [x0, #0x8]
+               	stur	w20, [x29, #-0x10]
+               	stur	wzr, [x29, #-0xc]
+               	stur	x21, [x29, #-0x8]
                	bl	<addr>
                	ldrsw	x1, [x0]
                	cmp	w1, w20
@@ -49,9 +49,9 @@ Disassembly of section .text:
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	sub	x0, x29, #0x50
-               	str	w2, [x0]
-               	str	wzr, [x0, #0x4]
-               	str	x3, [x0, #0x8]
+               	stur	w2, [x29, #-0x50]
+               	stur	wzr, [x29, #-0x4c]
+               	stur	x3, [x29, #-0x48]
                	bl	<addr>
                	ldrsw	x1, [x0]
                	cmp	w1, #0x1
@@ -89,9 +89,9 @@ Disassembly of section .text:
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	sub	x0, x29, #0x30
-               	str	w2, [x0]
-               	str	wzr, [x0, #0x4]
-               	str	x3, [x0, #0x8]
+               	stur	w2, [x29, #-0x30]
+               	stur	wzr, [x29, #-0x2c]
+               	stur	x3, [x29, #-0x28]
                	bl	<addr>
                	ldrsw	x1, [x0]
                	cmp	w1, #0x5

@@ -36,12 +36,12 @@ Disassembly of section .text:
                	retq
                	callq	<addr>
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	addq	%rcx, %rax
                	subq	$0x2a, %rax
                	popq	%rbp
                	retq
-               	addb	%bh, 0x7(%rax)
+               	addb	%al, (%rax)
 
 <boot>:
                	movl	$0x7, %eax

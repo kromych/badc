@@ -31,12 +31,12 @@ Disassembly of section .text:
                	movsbq	(%rcx), %rcx
                	cmpl	$0x68, %ecx
                	jne	<addr>
-               	movslq	0x8(%rax), %rcx
+               	movl	0x8(%rax), %ecx
                	cmpl	$0x4, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movslq	0x18(%rax), %rcx
+               	movl	0x18(%rax), %ecx
                	cmpl	$0x8, %ecx
                	je	<addr>
                	movl	$0x3, %eax
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	movsbq	(%rcx), %rcx
                	cmpl	$0x78, %ecx
                	jne	<addr>
-               	movslq	0x8(%rax), %rax
+               	movl	0x8(%rax), %eax
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x5, %eax

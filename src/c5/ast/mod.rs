@@ -935,6 +935,76 @@ pub(crate) struct Ast {
     pub block_extern_refs: Vec<ExprId>,
 }
 
+/// Every data-segment byte offset an AST's nodes hold, passed to `$f` through
+/// the binding the arenas are iterated with (`&` or `&mut`): one exhaustive
+/// list for the linker's rebase, the compaction remap and the reachability.
+macro_rules! visit_data_offsets {
+    (@init $init:ident, $f:ident) => {
+        match $init {
+            LocalInit::Aggregate { src_data_off, .. }
+            | LocalInit::Runtime {
+                zero_init: Some(LocalInitPrelude::Template { src_data_off, .. }),
+                ..
+            } => $f(src_data_off),
+            LocalInit::Runtime {
+                zero_init: Some(LocalInitPrelude::Fill { .. }) | None,
+                ..
+            }
+            | LocalInit::Fill { .. }
+            | LocalInit::None
+            | LocalInit::Scalar(..) => {}
+        }
+    };
+    ($exprs:expr, $decls:expr, $f:ident) => {
+        for expr in $exprs {
+            match expr {
+                Expr::StrLit { data_off, .. } => $f(data_off),
+                Expr::Ident {
+                    class,
+                    val,
+                    is_thread_local,
+                    ..
+                } if *class == crate::c5::token::Token::Glo as i64 && !*is_thread_local => $f(val),
+                Expr::CompoundLiteral { init, .. } => visit_data_offsets!(@init init, $f),
+                Expr::Ident { .. }
+                | Expr::IntLit { .. }
+                | Expr::FloatLit { .. }
+                | Expr::Unary { .. }
+                | Expr::LabelAddr { .. }
+                | Expr::Binary { .. }
+                | Expr::Ternary { .. }
+                | Expr::Call { .. }
+                | Expr::Member { .. }
+                | Expr::Index { .. }
+                | Expr::Cast { .. }
+                | Expr::Assign { .. }
+                | Expr::BitfieldAssign { .. }
+                | Expr::CompoundAssign { .. }
+                | Expr::PreInc { .. }
+                | Expr::PostInc { .. }
+                | Expr::Sizeof { .. }
+                | Expr::Comma { .. }
+                | Expr::ShortCircuit { .. }
+                | Expr::Intrinsic { .. }
+                | Expr::InlineAsm { .. }
+                | Expr::Atomic { .. }
+                | Expr::VlaBase { .. }
+                | Expr::VlaSizeof { .. }
+                | Expr::StmtExpr { .. }
+                | Expr::CheckedArith { .. }
+                | Expr::X86Simd { .. }
+                | Expr::MemTransfer { .. } => {}
+            }
+        }
+        for decl in $decls {
+            match decl {
+                Decl::Local { init, .. } => visit_data_offsets!(@init init, $f),
+                Decl::Vla { .. } | Decl::StaticLocal { .. } => {}
+            }
+        }
+    };
+}
+
 impl Ast {
     pub(crate) fn new() -> Self {
         Self::default()
@@ -988,63 +1058,14 @@ impl Ast {
     }
 
     /// Apply `f` to every data-segment byte offset stored on AST nodes.
-    /// One visitor backs both the linker's uniform rebase and static
-    /// DCE's compaction remap, so the two can never drift on which
-    /// offsets count as data references. Touches:
-    ///   * `Expr::StrLit { data_off }`
-    ///   * `Expr::Ident { class: Glo, val }` (non-TLS) -- `val` is the
-    ///     symbol's data-segment byte offset.
-    ///   * `LocalInit::Aggregate { src_data_off }` and the
-    ///     `Runtime { zero_init: (src_data_off, _) }` prelude, on both
-    ///     `Expr::CompoundLiteral` and `Decl::Local`.
     fn for_each_data_offset(&mut self, f: &mut impl FnMut(&mut i64)) {
-        use crate::c5::token::Token;
-        for expr in &mut self.exprs {
-            match expr {
-                Expr::StrLit { data_off, .. } => f(data_off),
-                Expr::Ident {
-                    class,
-                    val,
-                    is_thread_local,
-                    ..
-                } if *class == Token::Glo as i64 && !*is_thread_local => f(val),
-                Expr::CompoundLiteral { init, .. } => local_init_offsets(init, f),
-                Expr::Ident { .. }
-                | Expr::IntLit { .. }
-                | Expr::FloatLit { .. }
-                | Expr::Unary { .. }
-                | Expr::LabelAddr { .. }
-                | Expr::Binary { .. }
-                | Expr::Ternary { .. }
-                | Expr::Call { .. }
-                | Expr::Member { .. }
-                | Expr::Index { .. }
-                | Expr::Cast { .. }
-                | Expr::Assign { .. }
-                | Expr::BitfieldAssign { .. }
-                | Expr::CompoundAssign { .. }
-                | Expr::PreInc { .. }
-                | Expr::PostInc { .. }
-                | Expr::Sizeof { .. }
-                | Expr::Comma { .. }
-                | Expr::ShortCircuit { .. }
-                | Expr::Intrinsic { .. }
-                | Expr::InlineAsm { .. }
-                | Expr::Atomic { .. }
-                | Expr::VlaBase { .. }
-                | Expr::VlaSizeof { .. }
-                | Expr::StmtExpr { .. }
-                | Expr::CheckedArith { .. }
-                | Expr::X86Simd { .. }
-                | Expr::MemTransfer { .. } => {}
-            }
-        }
-        for decl in &mut self.decls {
-            match decl {
-                Decl::Local { init, .. } => local_init_offsets(init, f),
-                Decl::Vla { .. } | Decl::StaticLocal { .. } => {}
-            }
-        }
+        visit_data_offsets!(&mut self.exprs, &mut self.decls, f);
+    }
+
+    /// The offsets [`Self::for_each_data_offset`] rewrites, read in place.
+    pub(crate) fn data_offsets(&self, mut f: impl FnMut(i64)) {
+        let mut read = |off: &i64| f(*off);
+        visit_data_offsets!(&self.exprs, &self.decls, read);
     }
 
     /// Rewrite the thread-local template offset every `Expr::Ident` naming
@@ -1347,25 +1368,6 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             crate::c5::layout::remap_self_u64(&mut s.data_offset, r);
         }
         ast.remap_data_offsets(r);
-    }
-}
-
-/// Offsets a local-object initializer holds. Matched exhaustively so a new
-/// initializer shape carrying staged data is classified here.
-fn local_init_offsets(init: &mut LocalInit, f: &mut impl FnMut(&mut i64)) {
-    match init {
-        LocalInit::Aggregate { src_data_off, .. } => f(src_data_off),
-        LocalInit::Runtime {
-            zero_init: Some(LocalInitPrelude::Template { src_data_off, .. }),
-            ..
-        } => f(src_data_off),
-        LocalInit::Runtime {
-            zero_init: Some(LocalInitPrelude::Fill { .. }) | None,
-            ..
-        }
-        | LocalInit::Fill { .. }
-        | LocalInit::None
-        | LocalInit::Scalar(..) => {}
     }
 }
 

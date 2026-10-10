@@ -32,16 +32,16 @@ Disassembly of section .text:
                	asr	x1, x1, #2
                	cmp	x1, #0x2
                	b.ne	<addr>
-               	add	x1, x0, #0x4
-               	cmp	x1, x1
+               	add	x0, x0, #0x4
+               	cmp	x0, x0
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x2                // =2
-               	str	w1, [x0, #0x4]
-               	ldr	w0, [x0, #0x4]
+               	mov	x0, #0x2                // =2
+               	stur	w0, [x29, #-0xc]
+               	ldur	w0, [x29, #-0xc]
                	eor	x0, x0, #0x2
                	cbnz	w0, <addr>
                	mov	x0, #0x0                // =0

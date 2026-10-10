@@ -38,7 +38,7 @@ Disassembly of section .text:
                	add	x2, x1, #0x10
                	mov	x0, #0x7                // =7
                	str	w0, [x2, #0x8]
-               	ldrsw	x3, [x1, #0x18]
+               	ldursw	x3, [x29, #-0x18]
                	cmp	w3, #0x7
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

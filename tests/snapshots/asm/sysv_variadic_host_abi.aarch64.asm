@@ -176,6 +176,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
+               	sub	sp, sp, #0x10
                	mov	x0, #0x1                // =1
                	mov	x1, #0x2                // =2
                	fmov	d0, #2.00000000
@@ -192,6 +193,7 @@ Disassembly of section .text:
                	cmp	x0, #0x3a
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x9                // =9
@@ -204,17 +206,17 @@ Disassembly of section .text:
                	fmov	d6, #7.00000000
                	fmov	d7, #8.00000000
                	fmov	d19, #9.00000000
-               	sub	sp, sp, #0x10
                	str	d19, [sp]
                	bl	<addr>
-               	add	sp, sp, #0x10
                	adrp	x16, <page>
                	ldr	d1, [x16]
                	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

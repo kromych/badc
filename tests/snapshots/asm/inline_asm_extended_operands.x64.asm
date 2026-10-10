@@ -26,37 +26,27 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
                	movabsq	$0x123456789abcdef, %rax # imm = 0x123456789ABCDEF
-               	movabsq	$-0x123456789abcdf0, %rbx # imm = 0xFEDCBA9876543210
-               	shldq	$0xc, %rbx, %rax
+               	movabsq	$-0x123456789abcdf0, %rdx # imm = 0xFEDCBA9876543210
+               	shldq	$0xc, %rdx, %rax
                	movabsq	$0x3456789abcdeffed, %r11 # imm = 0x3456789ABCDEFFED
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbx
-               	leave
                	retq
                	movabsq	$-0x123456789abcdf0, %rax # imm = 0xFEDCBA9876543210
-               	movabsq	$0x123456789abcdef, %rbx # imm = 0x123456789ABCDEF
-               	shrdq	$0x14, %rbx, %rax
+               	movabsq	$0x123456789abcdef, %rdx # imm = 0x123456789ABCDEF
+               	shrdq	$0x14, %rdx, %rax
                	movabsq	$-0x432100123456789b, %r11 # imm = 0xBCDEFFEDCBA98765
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbx
-               	leave
                	retq
                	movl	$0x11223344, %eax       # imm = 0x11223344
                	bswapl	%eax
                	cmpl	$0x44332211, %eax       # imm = 0x44332211
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbx
-               	leave
                	retq
                	movabsq	$0x102030405060708, %rax # imm = 0x102030405060708
                	bswapq	%rax
@@ -64,8 +54,6 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbx
-               	leave
                	retq
                	leaq	<rip>, %rsi      # <addr>
                	rdtscp
@@ -73,6 +61,4 @@ Disassembly of section .text:
                	orq	%rdx, %rax
                	movq	%rax, (%rsi)
                	xorl	%eax, %eax
-               	popq	%rbx
-               	leave
                	retq

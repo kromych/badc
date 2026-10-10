@@ -51,9 +51,9 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x4000000000000000, %rdx # imm = 0x4000000000000000
                	xorl	%eax, %eax
+               	movq	%rdx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rdx, %xmm0
-               	divsd	%xmm15, %xmm0
+               	vdivsd	%xmm15, %xmm14, %xmm0
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	ja	<addr>

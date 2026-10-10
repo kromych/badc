@@ -92,17 +92,15 @@ Disassembly of section .text:
                	retq
                	movl	$0x40000000, %eax       # imm = 0x40000000
                	movl	$0x40400000, %ecx       # imm = 0x40400000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm0
-               	mulss	%xmm15, %xmm0
+               	vmulss	%xmm15, %xmm14, %xmm0
                	movl	$0x40a00000, %ecx       # imm = 0x40A00000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm1
-               	mulss	%xmm15, %xmm1
-               	movapd	%xmm0, %xmm14
+               	vmulss	%xmm15, %xmm14, %xmm1
                	movq	%rax, %xmm15
-               	movapd	%xmm1, %xmm0
-               	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd132ss	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm1
                	movl	$0x40e00000, %eax       # imm = 0x40E00000
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0

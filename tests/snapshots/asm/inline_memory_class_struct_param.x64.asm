@@ -39,8 +39,7 @@ Disassembly of section .text:
                	movq	%r10, -0x10(%rbp)
                	movq	0x30(%rbp), %r10
                	movq	%r10, -0x8(%rbp)
-               	leaq	-0x28(%rbp), %rax
-               	movq	0x8(%rax), %rax
+               	movq	-0x20(%rbp), %rax
                	imulq	%rdi, %rax
                	leave
                	retq
@@ -159,10 +158,10 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x50(%rbp), %rax
-               	movq	(%rax), %rcx
+               	movq	-0x50(%rbp), %rcx
                	cmpq	$0x1, %rcx
                	jne	<addr>
-               	movq	0x20(%rax), %rcx
+               	movq	-0x30(%rbp), %rcx
                	cmpq	$0x5, %rcx
                	je	<addr>
                	movl	$0x2, %eax

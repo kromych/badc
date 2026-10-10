@@ -33,10 +33,10 @@ Disassembly of section .text:
                	movq	(%rcx), %rcx
                	orq	%rax, %rcx
                	leaq	<rip>, %rsi      # <addr>
-               	movslq	(%rsi), %rdi
+               	movl	(%rsi), %edi
                	cmpl	$0x1, %edi
                	jne	<addr>
-               	movslq	0x20(%rsi), %rdi
+               	movl	0x20(%rsi), %edi
                	cmpl	$0x2, %edi
                	jne	<addr>
                	movq	0x10(%rsi), %rdi

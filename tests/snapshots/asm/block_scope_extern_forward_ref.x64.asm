@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	addq	$0x4, %rcx
@@ -36,7 +36,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x2, %eax

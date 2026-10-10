@@ -89,7 +89,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=24
     v36  LocalAddr(-24)                                   -> x7
     v37  BinopI { op=add, lhs=v36, rhs_imm=56 }           -> x0
     v38  Imm(1)                                           -> x0
-    v39  Store { addr=v36, disp=56, value=v38, kind=I8 }  -> -
+    v39  StoreLocal { off=-24, disp=56, value=v38, kind=I8 } -> -
     v40  LocalAddr(-24)                                   -> x0
     v41  Call { target_pc=2, args=[v36], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v42  Extend { value=v41, kind=I32 }                   -> x1

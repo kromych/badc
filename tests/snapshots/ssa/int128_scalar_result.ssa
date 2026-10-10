@@ -520,29 +520,29 @@ fn ent_pc=2 n_params=0 variadic=false locals=2
     v439 Binop { op=eq, lhs=v2, rhs=v28 }                 -> x1
     v440 Binop { op=ult, lhs=v19, rhs=v43 }               -> x2
     v441 Binop { op=and, lhs=v439, rhs=v440 }             -> x1
-    v442 Binop { op=or, lhs=v438, rhs=v441 }              -> x1
-    v443 Imm(1)                                           -> x0
-    v444 Imm(0)                                           -> x2
+    v442 Binop { op=or, lhs=v438, rhs=v441 }              -> x0
+    v443 Imm(1)                                           -> x1
+    v444 Imm(0)                                           -> x1
     terminator Bnz { cond=v442, target=b41, fall=b26 }   (exit_acc=v442)
   block 26  start_pc=0
-    v445 Imm(0)                                           -> x1
-    v446 Imm(0)                                           -> x1
-    v447 Imm(0)                                           -> x1
-    v448 Imm(0)                                           -> x1
-    v449 Imm(0)                                           -> x1
-    v450 Imm(0)                                           -> x1
-    v451 Imm(0)                                           -> x1
-    v452 Imm(0)                                           -> x1
-    v453 Binop { op=ult, lhs=v28, rhs=v2 }                -> x1
-    v454 Binop { op=eq, lhs=v28, rhs=v2 }                 -> x1
-    v455 Binop { op=ult, lhs=v43, rhs=v19 }               -> x1
-    v456 Binop { op=and, lhs=v454, rhs=v455 }             -> x1
-    v457 Imm(1)                                           -> x1
+    v445 Imm(0)                                           -> x0
+    v446 Imm(0)                                           -> x0
+    v447 Imm(0)                                           -> x0
+    v448 Imm(0)                                           -> x0
+    v449 Imm(0)                                           -> x0
+    v450 Imm(0)                                           -> x0
+    v451 Imm(0)                                           -> x0
+    v452 Imm(0)                                           -> x0
+    v453 Binop { op=ult, lhs=v28, rhs=v2 }                -> x0
+    v454 Binop { op=eq, lhs=v28, rhs=v2 }                 -> x0
+    v455 Binop { op=ult, lhs=v43, rhs=v19 }               -> x0
+    v456 Binop { op=and, lhs=v454, rhs=v455 }             -> x0
+    v457 Imm(1)                                           -> x0
     v458 Imm(1)                                           -> x1
-    v459 Imm(0)                                           -> x1
-    terminator Jmp(b27)   (exit_acc=v443)
+    v459 Imm(0)                                           -> x0
+    terminator Jmp(b27)   (exit_acc=v458)
   block 27  start_pc=0
-    v460 Phi { incoming=[b41:v443, b26:v443], kind=I64 }  -> x0
+    v460 Phi { incoming=[b41:v443, b26:v458], kind=I64 }  -> -
     v461 Imm(0)                                           -> x0
     v462 Imm(0)                                           -> x0
     v463 Imm(0)                                           -> x0

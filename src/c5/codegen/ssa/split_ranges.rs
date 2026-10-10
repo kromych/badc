@@ -345,6 +345,7 @@ mod tests {
 
     fn load() -> Inst {
         Inst::LoadLocal {
+            disp: 0,
             off: 2,
             kind: LoadKind::I64,
             volatile: false,
@@ -353,6 +354,7 @@ mod tests {
 
     fn store_of(value: ValueId) -> Inst {
         Inst::StoreLocal {
+            disp: 0,
             off: -1,
             value,
             kind: StoreKind::I64,
@@ -686,6 +688,7 @@ mod tests {
         let mut insts: Vec<Inst> = Vec::new();
         for k in 0..6 {
             insts.push(Inst::LoadLocal {
+                disp: 0,
                 off: 2 + k,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -700,6 +703,7 @@ mod tests {
         let w0 = insts.len() as ValueId;
         for k in 0..4 {
             insts.push(Inst::LoadLocal {
+                disp: 0,
                 off: 20 + k,
                 kind: LoadKind::I64,
                 volatile: false,

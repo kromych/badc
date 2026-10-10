@@ -47,7 +47,7 @@ pub(crate) fn walk_function(
     // A non-zero `alloca_top_slot` marks the function dynamic-sp for the
     // codegen: spill slots move to fp-based addressing and the epilogue
     // re-establishes sp.
-    b.alloca_init(fun.alloca_top_slot);
+    b.alloca_init(-fun.alloca_top_slot);
     let ret = ReturnAbi::classify(&mut b, structs, target, fun.conv, fun.return_ty);
     let entry = ParamEntry::plan(&mut b, fun, structs, target, ret.outptr);
     entry.seed_param_refs(&mut b);

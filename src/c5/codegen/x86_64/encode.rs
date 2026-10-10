@@ -186,19 +186,20 @@ fn mindex(index: Reg, scale: u8, width: u8) -> super::table::Opnd {
 }
 
 /// Load of `kind` from `disp32(,%index,scale)` into `dst`, extended as the
-/// SIB loads below extend; returns the offset of the displacement field.
+/// SIB loads extend (`I32` only when `hi`); returns the displacement's offset.
 pub(crate) fn emit_load_index_abs(
     code: &mut Vec<u8>,
     kind: crate::c5::ir::LoadKind,
     dst: Reg,
     index: Reg,
     scale: u8,
+    hi: bool,
 ) -> usize {
     use crate::c5::ir::LoadKind;
     let (mnem, width_override, dst_width, width) = match kind {
         LoadKind::I64 => (Mnem::Mov, Some(8), 8, 8),
-        LoadKind::I32 => (Mnem::Movsxd, None, 8, 4),
-        LoadKind::U32 => (Mnem::Mov, Some(4), 4, 4),
+        LoadKind::I32 if hi => (Mnem::Movsxd, None, 8, 4),
+        LoadKind::I32 | LoadKind::U32 => (Mnem::Mov, Some(4), 4, 4),
         LoadKind::I16 => (Mnem::Movsx, None, 8, 2),
         LoadKind::U16 => (Mnem::Movzx, None, 8, 2),
         LoadKind::I8 => (Mnem::Movsx, None, 8, 1),
@@ -920,21 +921,6 @@ pub(crate) fn emit_addss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse_ss(code, 0x58, dst, src);
 }
 
-/// `SUBSS xmm, xmm` -- `dst = dst - src`.
-pub(crate) fn emit_subss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_sse_ss(code, 0x5C, dst, src);
-}
-
-/// `MULSS xmm, xmm`.
-pub(crate) fn emit_mulss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_sse_ss(code, 0x59, dst, src);
-}
-
-/// `DIVSS xmm, xmm` -- `dst = dst / src`.
-pub(crate) fn emit_divss(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_sse_ss(code, 0x5E, dst, src);
-}
-
 /// `UCOMISS xmm, xmm` -- ordered scalar single-precision compare,
 /// sets EFLAGS. Encoding: `0F 2E /r` (no mandatory prefix).
 pub(crate) fn emit_ucomiss(code: &mut Vec<u8>, lhs: Reg, rhs: Reg) {
@@ -956,14 +942,15 @@ pub(crate) fn emit_subsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
     emit_sse2_sd(code, 0x5C, dst, src);
 }
 
-/// `MULSD xmm, xmm`.
-pub(crate) fn emit_mulsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_sse2_sd(code, 0x59, dst, src);
-}
-
-/// `DIVSD xmm, xmm` -- `dst = dst / src`.
-pub(crate) fn emit_divsd(code: &mut Vec<u8>, dst: Reg, src: Reg) {
-    emit_sse2_sd(code, 0x5E, dst, src);
+/// The two-operand SSE scalar FP arithmetic row `dst <op>= src`
+/// (`addsd` / `addss` family): `is_f32` selects the single-precision
+/// (F3) vs double-precision (F2) form.
+pub(crate) fn emit_sse_fp_arith(code: &mut Vec<u8>, opcode: u8, is_f32: bool, dst: Reg, src: Reg) {
+    if is_f32 {
+        emit_sse_ss(code, opcode, dst, src);
+    } else {
+        emit_sse2_sd(code, opcode, dst, src);
+    }
 }
 
 /// `SQRTSD xmm, xmm` -- `dst = sqrt(src)`, scalar double. `F2 0F 51 /r`.
@@ -1043,13 +1030,16 @@ pub(crate) fn emit_ucomisd(code: &mut Vec<u8>, lhs: Reg, rhs: Reg) {
     emit_byte(code, modrm(0b11, lhs.lo(), rhs.lo()));
 }
 
-/// Emit a VEX-encoded FMA3 scalar instruction in the `231` operand
-/// order: `dst = (a * b) <op> dst`. `a` is the VEX.vvvv multiplicand,
-/// `b` the ModR/M.r/m multiplicand, `dst` the ModR/M.reg destination
-/// that also supplies the accumulator. `opcode` picks the variant
-/// (B9 / BB / BD / BF); `w64` selects the double-precision (W1) form,
-/// otherwise single-precision (W0). FMA3 is Haswell-and-later baseline.
-fn emit_vex_fma231(code: &mut Vec<u8>, opcode: u8, w64: bool, dst: Reg, a: Reg, b: Reg) {
+/// Emit a VEX-encoded FMA3 scalar instruction: `dst = (a <op> b)`
+/// with the operand slots per `opcode`'s form row. `a` is the
+/// VEX.vvvv operand, `b` the ModR/M.r/m operand, `dst` the ModR/M.reg
+/// destination that also supplies the overwritten input. The 132 row
+/// reads `dst = dst*b <op> a`, the 213 row `dst = a*dst <op> b`, the
+/// 231 row `dst = a*b <op> dst`; `opcode` picks the row and the
+/// add / sub / nmadd / nmsub variant (99..9F, A9..AF, B9..BF), and
+/// `w64` selects the double-precision (W1) form, otherwise
+/// single-precision (W0). FMA3 is Haswell-and-later baseline.
+pub(crate) fn emit_vex_fma(code: &mut Vec<u8>, opcode: u8, w64: bool, dst: Reg, a: Reg, b: Reg) {
     // 3-byte VEX (C4): the 0F38 opcode map forces the long form.
     //   byte1: R X B mmmmm   (R/B inverted high bits; mmmmm = 00010)
     //   byte2: W vvvv L pp    (vvvv inverted; L = 0 scalar; pp = 01 -> 66)
@@ -1064,44 +1054,96 @@ fn emit_vex_fma231(code: &mut Vec<u8>, opcode: u8, w64: bool, dst: Reg, a: Reg, 
     emit_byte(code, modrm(0b11, dst.lo(), b.lo()));
 }
 
-/// `VFMADD231SD dst, a, b` -- `dst = a*b + dst` (double, single round).
-pub(crate) fn emit_vfmadd231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
-    emit_vex_fma231(code, 0xB9, true, dst, a, b);
+/// [`emit_vex_fma`] with the `b` operand in memory (`m64` / `m32`).
+pub(crate) fn emit_vex_fma_mem(
+    code: &mut Vec<u8>,
+    opcode: u8,
+    w64: bool,
+    dst: Reg,
+    a: Reg,
+    base: Reg,
+    disp: i32,
+) {
+    let r = if dst.high() { 0u8 } else { 1u8 };
+    let b_bit = if base.high() { 0u8 } else { 1u8 };
+    let a_num = ((a.high() as u8) << 3) | a.lo();
+    let vvvv = (!a_num) & 0xF;
+    emit_byte(code, 0xC4);
+    emit_byte(code, (r << 7) | (1 << 6) | (b_bit << 5) | 0b00010);
+    emit_byte(code, ((w64 as u8) << 7) | (vvvv << 3) | 0b01);
+    emit_byte(code, opcode);
+    emit_modrm_mem(code, dst, base, disp);
 }
 
-/// `VFMSUB231SD dst, a, b` -- `dst = a*b - dst`.
-pub(crate) fn emit_vfmsub231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
-    emit_vex_fma231(code, 0xBB, true, dst, a, b);
+fn emit_vex_0f_prefix(code: &mut Vec<u8>, reg: Reg, vvvv: Reg, rm: Reg, pp: u8) {
+    let r = u8::from(!reg.high());
+    let v = !(((vvvv.high() as u8) << 3) | vvvv.lo()) & 0xF;
+    if rm.high() {
+        emit_byte(code, 0xC4);
+        emit_byte(code, (r << 7) | (1 << 6) | 0b00001);
+        emit_byte(code, (v << 3) | pp);
+    } else {
+        emit_byte(code, 0xC5);
+        emit_byte(code, (r << 7) | (v << 3) | pp);
+    }
 }
 
-/// `VFNMADD231SD dst, a, b` -- `dst = -(a*b) + dst`.
-pub(crate) fn emit_vfnmadd231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
-    emit_vex_fma231(code, 0xBD, true, dst, a, b);
+/// Emit a VEX three-operand scalar FP arithmetic instruction:
+/// `dst = a <op> b`, `a` in VEX.vvvv and `b` in ModR/M.r/m, so neither
+/// source is overwritten. `opcode` is the scalar SSE opcode (58 add,
+/// 5C sub, 59 mul, 5E div); `is_f32` picks the single-precision row
+/// (pp = 10 -> F3) vs the double-precision one (pp = 11 -> F2). The
+/// scalar row ignores W; W0 matches the assemblers' choice.
+pub(crate) fn emit_vex_fp_arith(
+    code: &mut Vec<u8>,
+    opcode: u8,
+    is_f32: bool,
+    dst: Reg,
+    a: Reg,
+    b: Reg,
+) {
+    emit_vex_0f_prefix(code, dst, a, b, if is_f32 { 0b10 } else { 0b11 });
+    emit_byte(code, opcode);
+    emit_byte(code, modrm(0b11, dst.lo(), b.lo()));
 }
 
-/// `VFNMSUB231SD dst, a, b` -- `dst = -(a*b) - dst`.
-pub(crate) fn emit_vfnmsub231sd(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
-    emit_vex_fma231(code, 0xBF, true, dst, a, b);
+/// [`emit_vex_fp_arith`] with the `b` operand in memory (`m64` / `m32`).
+pub(crate) fn emit_vex_fp_arith_mem(
+    code: &mut Vec<u8>,
+    opcode: u8,
+    is_f32: bool,
+    dst: Reg,
+    a: Reg,
+    base: Reg,
+    disp: i32,
+) {
+    emit_vex_0f_prefix(code, dst, a, base, if is_f32 { 0b10 } else { 0b11 });
+    emit_byte(code, opcode);
+    emit_modrm_mem(code, dst, base, disp);
 }
 
-/// `VFMADD231SS dst, a, b` -- `dst = a*b + dst` (single, single round).
-pub(crate) fn emit_vfmadd231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
-    emit_vex_fma231(code, 0xB9, false, dst, a, b);
-}
-
-/// `VFMSUB231SS dst, a, b` -- `dst = a*b - dst`.
-pub(crate) fn emit_vfmsub231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
-    emit_vex_fma231(code, 0xBB, false, dst, a, b);
-}
-
-/// `VFNMADD231SS dst, a, b` -- `dst = -(a*b) + dst`.
-pub(crate) fn emit_vfnmadd231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
-    emit_vex_fma231(code, 0xBD, false, dst, a, b);
-}
-
-/// `VFNMSUB231SS dst, a, b` -- `dst = -(a*b) - dst`.
-pub(crate) fn emit_vfnmsub231ss(code: &mut Vec<u8>, dst: Reg, a: Reg, b: Reg) {
-    emit_vex_fma231(code, 0xBF, false, dst, a, b);
+/// `SHLX` / `SHRX` / `SARX`: `dst = src OP count` with the count in any
+/// register and no flags written (BMI2, part of the x86-64-v3 baseline).
+/// VEX.NDD.LZ.<pp>.0F38.W0/1 F7 /r with `count` in vvvv and `src` in
+/// ModR/M.r/m; `pp` selects the row: 01 -> 66 (SHLX), 11 -> F2 (SHRX),
+/// 10 -> F3 (SARX).
+pub(crate) fn emit_vex_shift(
+    code: &mut Vec<u8>,
+    pp: u8,
+    w64: bool,
+    dst: Reg,
+    src: Reg,
+    count: Reg,
+) {
+    let r = if dst.high() { 0u8 } else { 1u8 };
+    let b_bit = if src.high() { 0u8 } else { 1u8 };
+    let count_num = ((count.high() as u8) << 3) | count.lo();
+    let vvvv = (!count_num) & 0xF;
+    emit_byte(code, 0xC4);
+    emit_byte(code, (r << 7) | (1 << 6) | (b_bit << 5) | 0b00010);
+    emit_byte(code, ((w64 as u8) << 7) | (vvvv << 3) | pp);
+    emit_byte(code, 0xF7);
+    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
 }
 
 /// `CVTSI2SD xmm, r64` -- signed 64-bit int to double, with REX.W.
@@ -1845,10 +1887,6 @@ struct X64Lower<'p> {
     fn_unwind: Vec<super::FnUnwind>,
     asm_text_abs_refs: Vec<super::AsmTextAbsRef>,
     abs_addr_refs: Vec<super::AbsAddrRef>,
-    /// Per-callee calling convention, for the callees that declare one
-    /// (`__attribute__((ms_abi))` / `((sysv_abi))`). A direct call site
-    /// reads it to marshal into that convention's argument window.
-    conv_targets: alloc::collections::BTreeMap<usize, super::CallConv>,
     /// Per-callee declared return type, read by the tail-call conversion to
     /// compare extension contracts.
     ret_tags: alloc::collections::BTreeMap<usize, i64>,
@@ -1866,7 +1904,6 @@ impl<'p> X64Lower<'p> {
             fn_unwind: Vec::new(),
             asm_text_abs_refs: Vec::new(),
             abs_addr_refs: Vec::new(),
-            conv_targets: alloc::collections::BTreeMap::new(),
             ret_tags: alloc::collections::BTreeMap::new(),
             fn_name_by_pc: program
                 .symbols
@@ -1896,22 +1933,13 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
     }
 
     fn note_callees(&mut self, funcs: &[crate::c5::ir::FunctionSsa]) {
-        self.conv_targets = funcs
-            .iter()
-            .filter(|f| f.conv != super::CallConv::Target)
-            .map(|f| (f.ent_pc, f.conv))
-            .collect();
         self.ret_tags = funcs.iter().map(|f| (f.ent_pc, f.ret_type_tag)).collect();
     }
 
-    /// A cross-TU callee's convention and return type come off its
-    /// declaration in this unit, the same place the definition's would. A
-    /// declaration without a prototype states no return contract a tail
-    /// call could rely on.
+    /// A cross-TU callee's return type comes off its declaration in this
+    /// unit, the same place the definition's would. A declaration without
+    /// a prototype states no return contract a tail call could rely on.
     fn note_extern_callee(&mut self, sym: &crate::c5::symbol::Symbol) {
-        if sym.conv != super::CallConv::Target {
-            self.conv_targets.insert(sym.val as usize, sym.conv);
-        }
         if sym.prototyped {
             self.ret_tags.insert(sym.val as usize, sym.type_);
         }
@@ -1982,7 +2010,6 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
             inputs.extern_tls_names,
             imports,
             inputs.variadic_targets,
-            &self.conv_targets,
             &self.ret_tags,
             // Variant II places the block at `tp - roundup(memsz, align)`.
             inputs
@@ -2483,38 +2510,145 @@ mod tests {
     }
 
     #[test]
-    fn vfma231_encodings() {
-        // vfmadd231sd xmm0, xmm1, xmm2  ->  C4 E2 F1 B9 C2
+    fn vfma_scalar_encodings() {
+        // The 132 / 213 / 231 rows of the 0F38 map, add / sub / nmadd
+        // / nmsub each: vfmadd132sd xmm0, xmm1, xmm2 (xmm0 = xmm0*xmm2
+        // + xmm1) -> C4 E2 F1 99 C2, and the other rows one opcode
+        // further per variant. Cross-checked against clang's assembler.
         assert_eq!(
-            assemble(|c| emit_vfmadd231sd(c, Reg(0), Reg(1), Reg(2))),
+            assemble(|c| emit_vex_fma(c, 0x99, true, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0xF1, 0x99, 0xC2]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fma(c, 0x9B, true, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0xF1, 0x9B, 0xC2]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fma(c, 0x9D, true, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0xF1, 0x9D, 0xC2]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fma(c, 0x9F, true, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0xF1, 0x9F, 0xC2]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fma(c, 0xA9, true, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0xF1, 0xA9, 0xC2]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fma(c, 0xAB, true, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0xF1, 0xAB, 0xC2]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fma(c, 0xAD, true, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0xF1, 0xAD, 0xC2]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fma(c, 0xAF, true, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0xF1, 0xAF, 0xC2]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fma(c, 0xB9, true, Reg(0), Reg(1), Reg(2))),
             vec![0xC4, 0xE2, 0xF1, 0xB9, 0xC2]
         );
-        // vfmsub231sd xmm0, xmm1, xmm2  ->  C4 E2 F1 BB C2
         assert_eq!(
-            assemble(|c| emit_vfmsub231sd(c, Reg(0), Reg(1), Reg(2))),
+            assemble(|c| emit_vex_fma(c, 0xBB, true, Reg(0), Reg(1), Reg(2))),
             vec![0xC4, 0xE2, 0xF1, 0xBB, 0xC2]
         );
-        // vfnmadd231sd xmm0, xmm1, xmm2 ->  C4 E2 F1 BD C2
         assert_eq!(
-            assemble(|c| emit_vfnmadd231sd(c, Reg(0), Reg(1), Reg(2))),
+            assemble(|c| emit_vex_fma(c, 0xBD, true, Reg(0), Reg(1), Reg(2))),
             vec![0xC4, 0xE2, 0xF1, 0xBD, 0xC2]
         );
-        // vfnmsub231sd xmm0, xmm1, xmm2 ->  C4 E2 F1 BF C2
         assert_eq!(
-            assemble(|c| emit_vfnmsub231sd(c, Reg(0), Reg(1), Reg(2))),
+            assemble(|c| emit_vex_fma(c, 0xBF, true, Reg(0), Reg(1), Reg(2))),
             vec![0xC4, 0xE2, 0xF1, 0xBF, 0xC2]
         );
-        // Single-precision clears VEX.W: vfmadd231ss xmm0, xmm1, xmm2
-        //   ->  C4 E2 71 B9 C2
+        // Single-precision clears VEX.W: vfmadd132ss xmm0, xmm1, xmm2
+        //   ->  C4 E2 71 99 C2
         assert_eq!(
-            assemble(|c| emit_vfmadd231ss(c, Reg(0), Reg(1), Reg(2))),
-            vec![0xC4, 0xE2, 0x71, 0xB9, 0xC2]
+            assemble(|c| emit_vex_fma(c, 0x99, false, Reg(0), Reg(1), Reg(2))),
+            vec![0xC4, 0xE2, 0x71, 0x99, 0xC2]
         );
         // Extended registers clear VEX.R / VEX.B: vfmadd231sd xmm8,
         // xmm9, xmm10  ->  C4 42 B1 B9 C2
         assert_eq!(
-            assemble(|c| emit_vfmadd231sd(c, Reg(8), Reg(9), Reg(10))),
+            assemble(|c| emit_vex_fma(c, 0xB9, true, Reg(8), Reg(9), Reg(10))),
             vec![0xC4, 0x42, 0xB1, 0xB9, 0xC2]
+        );
+        // A memory r/m operand keeps the base in VEX.B and takes a
+        // ModR/M addressing byte: vfmadd231sd xmm0, xmm1, 8(%rsp) ->
+        // C4 E2 F1 B9 44 24 08.
+        assert_eq!(
+            assemble(|c| emit_vex_fma_mem(c, 0xB9, true, Reg(0), Reg(1), Reg::RSP, 8)),
+            vec![0xC4, 0xE2, 0xF1, 0xB9, 0x44, 0x24, 0x08]
+        );
+    }
+
+    #[test]
+    fn vex_fp_arith_scalar_encodings() {
+        // The VEX.NDS.LIG rows of the 0F map, as clang's assembler encodes them.
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith(c, 0x58, false, Reg(0), Reg(1), Reg(2))),
+            vec![0xC5, 0xF3, 0x58, 0xC2]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith(c, 0x5C, false, Reg(2), Reg(3), Reg(4))),
+            vec![0xC5, 0xE3, 0x5C, 0xD4]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith(c, 0x58, true, Reg(0), Reg(1), Reg(2))),
+            vec![0xC5, 0xF2, 0x58, 0xC2]
+        );
+        // An extended r/m register or base needs VEX.B, which only C4 has.
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith(c, 0x58, false, Reg(8), Reg(9), Reg(2))),
+            vec![0xC5, 0x33, 0x58, 0xC2]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith(c, 0x58, false, Reg(8), Reg(9), Reg(10))),
+            vec![0xC4, 0x41, 0x33, 0x58, 0xC2]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith(c, 0x59, false, Reg(0), Reg(1), Reg(10))),
+            vec![0xC4, 0xC1, 0x73, 0x59, 0xC2]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith_mem(c, 0x58, false, Reg(0), Reg(1), Reg::RSP, 8)),
+            vec![0xC5, 0xF3, 0x58, 0x44, 0x24, 0x08]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith_mem(c, 0x58, false, Reg(0), Reg(1), Reg(12), 8)),
+            vec![0xC4, 0xC1, 0x73, 0x58, 0x44, 0x24, 0x08]
+        );
+    }
+
+    #[test]
+    fn vex_shift_encodings() {
+        // shlxq %rcx, %rsi, %rdi -> C4 E2 F1 F7 FE (count in vvvv, the
+        // shifted value in r/m); the shrx / sarx rows change only pp.
+        // Cross-checked against clang's assembler.
+        assert_eq!(
+            assemble(|c| emit_vex_shift(c, 0b01, true, Reg(7), Reg(6), Reg(1))),
+            vec![0xC4, 0xE2, 0xF1, 0xF7, 0xFE]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_shift(c, 0b11, true, Reg(7), Reg(6), Reg(1))),
+            vec![0xC4, 0xE2, 0xF3, 0xF7, 0xFE]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_shift(c, 0b10, true, Reg(7), Reg(6), Reg(1))),
+            vec![0xC4, 0xE2, 0xF2, 0xF7, 0xFE]
+        );
+        // The dword form clears VEX.W: shlxl %ecx, %esi, %edi.
+        assert_eq!(
+            assemble(|c| emit_vex_shift(c, 0b01, false, Reg(7), Reg(6), Reg(1))),
+            vec![0xC4, 0xE2, 0x71, 0xF7, 0xFE]
+        );
+        // Extended registers clear VEX.R / VEX.B: shlxq %r9, %r12, %r8
+        //   ->  C4 42 B1 F7 C4.
+        assert_eq!(
+            assemble(|c| emit_vex_shift(c, 0b01, true, Reg(8), Reg(12), Reg(9))),
+            vec![0xC4, 0x42, 0xB1, 0xF7, 0xC4]
         );
     }
 

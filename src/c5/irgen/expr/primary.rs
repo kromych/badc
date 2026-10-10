@@ -36,22 +36,17 @@ impl<'a> Walker<'a> {
                     GloAddr::Resolved(off) => Ok(b.tls_addr(off)),
                 }
             } else {
-                let addr = if self.ast.block_extern_refs.contains(&id) {
-                    self.block_extern_glo_addr(*sym)
-                } else {
-                    self.live_glo_addr(*sym, *val)
-                };
-                match addr {
+                match glo_ident_addr(self.symbols, self.ast, id, *sym, *val) {
                     GloAddr::Extern => Ok(b.imm_data_extern(*sym)),
                     GloAddr::Resolved(off) => Ok(b.imm_data(off)),
                 }
             }
-        } else if *class == Token::Fun as i64 || self.binding_defined_here(*sym, *class) {
+        } else if *class == Token::Fun as i64 || binding_defined_here(self.symbols, *sym, *class) {
             // A sys trampoline's `val` is filled in after the Ident
             // node snapshotted 0, so the live value comes off the
             // symbol table. A scoped function declaration's entity
             // likewise keeps its post-parse `val` there.
-            let live_val = self.live_fun_addr_val(*sym, *val);
+            let live_val = live_fun_addr_val(self.symbols, *sym, *val);
             if live_val == 0 {
                 Ok(b.imm_code_extern(*sym))
             } else {
@@ -91,18 +86,14 @@ impl<'a> Walker<'a> {
         // classes carry a stable slot, data offset or constant, so the
         // node's snapshot holds.
         let glo_addr = if class == Token::Glo as i64 && !is_thread_local {
-            Some(if self.ast.block_extern_refs.contains(&id) {
-                self.block_extern_glo_addr(_sym)
-            } else {
-                self.live_glo_addr(_sym, val)
-            })
+            Some(glo_ident_addr(self.symbols, self.ast, id, _sym, val))
         } else {
             None
         };
         let val: i64 = if class == Token::Fun as i64 {
             // The only `Token::Fun` rvalue is the function-pointer
             // decay of C99 6.3.2.1p4.
-            self.live_fun_addr_val(_sym, val)
+            live_fun_addr_val(self.symbols, _sym, val)
         } else {
             val
         };
@@ -166,8 +157,8 @@ impl<'a> Walker<'a> {
             } else {
                 Ok(b.imm_code(val as usize))
             }
-        } else if self.binding_defined_here(_sym, class) {
-            let live_val = self.live_fun_addr_val(_sym, 0);
+        } else if binding_defined_here(self.symbols, _sym, class) {
+            let live_val = live_fun_addr_val(self.symbols, _sym, 0);
             if live_val == 0 {
                 Ok(b.imm_code_extern(_sym))
             } else {

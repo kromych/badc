@@ -28,7 +28,7 @@ Disassembly of section .text:
 <counter>:
                	movq	%fs:0x0, %rax
                	addq	$-0x60, %rax
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	movq	%rcx, %rax

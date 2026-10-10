@@ -24,8 +24,8 @@ Disassembly of section .text:
                	ldrh	w16, [x0]
                	strh	w16, [x1]
                	sub	x0, x29, #0x10
-               	str	x1, [x0]
-               	str	x2, [x0, #0x8]
+               	stur	x1, [x29, #-0x10]
+               	stur	x2, [x29, #-0x8]
                	mov	x1, #0x14               // =20
                	bl	<addr>
                	mov	x20, x0

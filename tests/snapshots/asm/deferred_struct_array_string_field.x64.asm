@@ -82,10 +82,10 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	0x8(%rax), %rcx
+               	movl	0x8(%rax), %ecx
                	cmpl	$0x1, %ecx
                	jne	<addr>
-               	movslq	0x18(%rax), %rax
+               	movl	0x18(%rax), %eax
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x2, %eax
@@ -98,7 +98,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	0x18(%rax), %rax
+               	movl	0x18(%rax), %eax
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x3, %eax
@@ -133,7 +133,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	0x8(%rax), %rax
+               	movl	0x8(%rax), %eax
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x7, %eax

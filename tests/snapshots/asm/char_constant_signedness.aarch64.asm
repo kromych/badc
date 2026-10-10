@@ -60,7 +60,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	ldursw	x1, [x29, #-0x8]
                	and	x1, x1, #0xff
-               	strb	w1, [x0]
+               	sturb	w1, [x29, #-0x10]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
@@ -76,7 +76,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	ldursw	x1, [x29, #-0x8]
                	and	x1, x1, #0xff
-               	strb	w1, [x0]
+               	sturb	w1, [x29, #-0x10]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]

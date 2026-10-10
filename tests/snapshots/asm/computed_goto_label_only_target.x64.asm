@@ -34,7 +34,7 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	leave
                	retq
-               	movslq	-0x10(%rbp), %rax
+               	movl	-0x10(%rbp), %eax
                	addq	$0x2, %rax
                	leave
                	retq
@@ -79,7 +79,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x5, %edi
-               	movslq	-0x8(%rbp), %rsi
+               	movl	-0x8(%rbp), %esi
                	callq	<addr>
                	cmpl	$0x19, %eax
                	je	<addr>

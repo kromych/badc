@@ -76,32 +76,32 @@ Disassembly of section .text:
                	movl	$0x16, (%rdx)
                	movl	$0x21, (%rsi)
                	movl	$0x2c, (%rdi)
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0xb, %ecx
                	jne	<addr>
-               	movslq	(%rdx), %rcx
+               	movl	(%rdx), %ecx
                	cmpl	$0x16, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0x21, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0x2c, %ecx
                	je	<addr>
                	movl	$0xa, %eax
                	retq
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0x1, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0x2, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0x7, %ecx
                	je	<addr>
                	retq

@@ -446,6 +446,22 @@ impl LineIndex {
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Source-line lookups through the line index. Read by the test
+    /// that a disabled warning locates nothing, so the claim is exact
+    /// rather than timed.
+    pub(crate) static LINE_LOOKUP: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn note_line_lookup() {
+    LINE_LOOKUP.with(|c| c.set(c.get() + 1));
+}
+
+#[cfg(not(test))]
+fn note_line_lookup() {}
+
 pub(crate) struct Lexer {
     src: Vec<u8>,
     /// Lazily built (file, line) -> byte-span index for diagnostics.
@@ -1685,6 +1701,7 @@ impl Lexer {
     /// so the original (file, line) numbering is honoured. `None` when no
     /// such line is found.
     fn line_span(&self, file: &str, target: usize) -> Option<(u32, u32)> {
+        note_line_lookup();
         // Split the buffer into marker-delimited runs on first use. A
         // diagnostic may be constructed speculatively on a trial-parse
         // path that its caller discards, so this lookup must not

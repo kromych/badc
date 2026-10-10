@@ -28,11 +28,11 @@ Disassembly of section .text:
 <sum_at_high>:
                	movslq	%esi, %rsi
                	movslq	%edx, %rdx
-               	movslq	(%rdi,%rdx,4), %r8
+               	movl	(%rdi,%rdx,4), %r8d
                	xorl	%eax, %eax
                	cmpl	%edx, %esi
                	jg	<addr>
-               	movslq	(%rdi,%rsi,4), %rcx
+               	movl	(%rdi,%rsi,4), %ecx
                	addq	%rcx, %rax
                	incq	%rsi
                	cmpl	%edx, %esi
@@ -45,16 +45,16 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	leaq	-0x18(%rbp), %rdx
-               	movl	$0xc, (%rdx)
-               	movl	$0x7, 0x4(%rdx)
-               	movl	$0xf, 0x8(%rdx)
-               	movl	$0x5, 0xc(%rdx)
+               	movl	$0xc, -0x18(%rbp)
+               	movl	$0x7, -0x14(%rbp)
+               	movl	$0xf, -0x10(%rbp)
+               	movl	$0x5, -0xc(%rbp)
                	movl	$0xa, %ecx
-               	movl	%ecx, 0x10(%rdx)
+               	movl	%ecx, -0x8(%rbp)
                	xorl	%eax, %eax
                	movq	%rcx, %rdi
                	movq	%rax, %rcx
-               	movslq	(%rdx,%rcx,4), %rsi
+               	movl	(%rdx,%rcx,4), %esi
                	addq	%rsi, %rax
                	incq	%rcx
                	cmpl	$0x4, %ecx

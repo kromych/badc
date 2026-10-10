@@ -559,12 +559,13 @@ fn walk_block(
             }
             Inst::StoreLocal {
                 off,
+                disp,
                 value,
                 kind,
                 volatile,
                 ..
             } => {
-                let a = off.wrapping_mul(8);
+                let a = off.wrapping_mul(8) + i64::from(*disp);
                 let w = store_width(*kind);
                 kill(state, a, a + w);
                 if !*volatile && matches!(func.insts.get(*value as usize), Some(Inst::Imm(0))) {
@@ -603,6 +604,7 @@ fn walk_block(
             }
             Inst::LoadLocal {
                 off,
+                disp: 0,
                 kind,
                 volatile: false,
             } if fold => {

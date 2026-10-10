@@ -3343,6 +3343,49 @@ fn q_constraint_acquire_release_aarch64() {
     assert!(words().any(|w| w == 0xC89F_FC01), "stlr x1, [x0]");
 }
 
+/// The AArch64 `m` constraint: `%N` is the memory reference `[xN]` through
+/// the register holding the object's address, as GCC prints it, both in a
+/// plain template and in one the GNU-as directive pass substitutes. Each
+/// word is verified against `clang -target aarch64-linux-gnu`.
+#[test]
+fn m_constraint_substitutes_as_a_memory_reference_aarch64() {
+    use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+    let program = Compiler::with_target(
+        "long ld(long *p){ long v;\n\
+           __asm__ volatile(\"ldr %0, %1\" : \"=r\"(v) : \"m\"(*p));\n\
+           return v; }\n\
+         void st(long *p, long v){\n\
+           __asm__ volatile(\"str %1, %0\" : \"=m\"(*p) : \"r\"(v)); }\n\
+         void stu(long *p, long v){\n\
+           __asm__ volatile(\"stur %1, %0\" : \"=m\"(*p) : \"r\"(v)); }\n\
+         int ldw(int *p){ int v;\n\
+           __asm__ volatile(\"ldr %w0, %1\" : \"=r\"(v) : \"m\"(*p));\n\
+           return v; }\n\
+         int ldb(unsigned char *p, long k){ int v;\n\
+           __asm__ volatile(\".rept 1\\n\\tldrb %w0, %2\\n\\t.endr\"\n\
+                            : \"=r\"(v) : \"r\"(k), \"m\"(*p));\n\
+           return v; }\n\
+         int main(){ return 0; }"
+            .to_string(),
+        Target::LinuxAarch64,
+    )
+    .compile()
+    .expect("compile");
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, NativeOptions::default())
+        .expect("emit LinuxAarch64");
+    let words = || {
+        bytes
+            .windows(4)
+            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+    };
+    // Operands take x0, x1, x2 in order.
+    assert!(words().any(|w| w == 0xF940_0020), "ldr x0, [x1]");
+    assert!(words().any(|w| w == 0xF900_0001), "str x1, [x0]");
+    assert!(words().any(|w| w == 0xF800_0001), "stur x1, [x0]");
+    assert!(words().any(|w| w == 0xB940_0020), "ldr w0, [x1]");
+    assert!(words().any(|w| w == 0x3940_0040), "ldrb w0, [x2]");
+}
+
 /// The `+Q` read-write form in an LL/SC retry loop: one `%2` reference
 /// feeds both exclusive instructions, and the `%w` modifiers on the other
 /// operands are unaffected. The four words must be contiguous; each is
@@ -5028,14 +5071,14 @@ fn aarch64_fp_access_folds_constant_displacement() {
     );
 }
 
-/// A call whose outgoing-argument area exceeds the 12-bit add/sub
-/// immediate must split the call-site SP adjustment into the
-/// shifted-12 + remainder pair, as the prologue path does. 261
-/// by-value 16-byte structs leave 257 on the AAPCS64 stack: 257 * 16 =
-/// 4112 = 4096 + 16 bytes. The raw encoder used to fold 4112 into the
+/// An outgoing-argument area wider than the 12-bit add/sub immediate
+/// joins the frame, so the prologue's allocation splits into the
+/// page-step + remainder pair its wide-frame path uses. 261 by-value
+/// 16-byte structs leave 257 on the AAPCS64 stack: 257 * 16 = 4112 =
+/// 4096 + 16 bytes. The raw encoder used to fold 4112 into the
 /// `lsl #12` bit and adjust SP by 65536 instead.
 #[test]
-fn aarch64_call_sp_adjust_covers_wide_outgoing_area() {
+fn aarch64_frame_reserves_wide_outgoing_area_once() {
     use crate::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
     let mut src = String::from("struct pair { long a; long b; };\nstatic struct pair g[261];\n");
     src.push_str("long take(");
@@ -5075,20 +5118,52 @@ fn aarch64_call_sp_adjust_covers_wide_outgoing_area() {
         .iter()
         .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
         .collect();
-    // 4112 bytes split as `sub sp, sp, #1, lsl #12` + `sub sp, sp, #16`
-    // and restore with the matching adds. The caller's own frame stays
-    // below 4096, so only the call site produces the shifted forms.
-    for (word, what) in [
-        (0xD140_07FFu32, "sub sp, sp, #1, lsl #12"),
-        (0xD100_43FF, "sub sp, sp, #16"),
-        (0x9140_07FF, "add sp, sp, #1, lsl #12"),
-        (0x9100_43FF, "add sp, sp, #16"),
+    // The 4112-byte outgoing area joins the frame, so the prologue's
+    // allocation takes the wide path -- one `sub sp, sp, #N, lsl #12` page
+    // step and one plain residual `sub sp, sp, #imm` -- and the epilogue's
+    // mirror pair of `add sp` is the only other sp adjustment: the call
+    // site moves sp neither before nor after its `bl`.
+    let call = words
+        .iter()
+        .position(|&w| w & 0xFC00_0000 == 0x9400_0000)
+        .expect("caller's bl");
+    let (before, after) = words.split_at(call);
+    let sp_imm = |base: u32, shifted: bool| {
+        move |&&w: &&u32| {
+            w & 0xFF80_0000 == base && w & 0x3FF == 0x3FF && (w & 0x40_0000 != 0) == shifted
+        }
+    };
+    for (part, base, what) in [
+        (before, 0xD100_0000, "sub sp before the call"),
+        (after, 0x9100_0000, "add sp after the call"),
     ] {
-        assert!(
-            words.contains(&word),
-            "caller must contain `{what}` ({word:#010x}) for the 4112-byte outgoing area"
-        );
+        let page_step = part.iter().filter(sp_imm(base, true)).count();
+        let residual = part.iter().filter(sp_imm(base, false)).count();
+        assert_eq!((page_step, residual), (1, 1), "{what}: {words:08x?}");
     }
+    for (part, base, what) in [
+        (after, 0xD100_0000, "sub sp after the call"),
+        (before, 0x9100_0000, "add sp before the call"),
+    ] {
+        let n = part.iter().filter(sp_imm(base, true)).count()
+            + part.iter().filter(sp_imm(base, false)).count();
+        assert_eq!(n, 0, "{what}: {words:08x?}");
+    }
+    // The area puts the callee-saved registers past the pair forms' reach:
+    // the saves and the restores address them through x16 = sp + 4112
+    // (`add x16, sp, #1, lsl #12; add x16, x16, #16`).
+    let x16_base = |part: &[u32]| part.windows(2).any(|p| p == [0x9140_07F0, 0x9100_4210]);
+    let pair_off_x16 = |part: &[u32], load: u32| {
+        part.iter()
+            .any(|&w| w & 0xFFC0_0000 == 0xA900_0000 | load && (w >> 5) & 31 == 16)
+    };
+    assert!(
+        x16_base(before)
+            && pair_off_x16(before, 0)
+            && x16_base(after)
+            && pair_off_x16(after, 1 << 22),
+        "saved registers through x16: {words:08x?}"
+    );
     // The raw-encoder overflow artifact: 4112 << 10 sets the shift bit
     // and leaves imm12 = 16, i.e. a 65536-byte adjustment.
     for word in [0xD140_43FFu32, 0x9140_43FF] {
@@ -8143,20 +8218,26 @@ fn strict_align_narrows_the_under_aligned_member_access() {
         0,
         "x86_64 strict_align still accesses an under-aligned member through a wide mov"
     );
-    // The four-byte reads ride `movslq` (`REX.W 63 /r`) off the struct
-    // pointer; the narrowed form composes from `movzbq` instead.
-    let x64_movsxd = |obj: &[u8]| -> usize {
-        elf_text(obj)
-            .windows(3)
-            .filter(|w| w[0] & 0xF8 == 0x48 && w[1] == 0x63 && w[2] >> 6 != 3 && w[2] & 7 != 5)
+    // `get_a` reads its four bytes with one `movslq` (`REX.W 63 /r`) or `movl`
+    // (`8B /r`); the narrowed form composes from `movzbq` instead.
+    let x64_dword_loads = |code: &[u8]| -> usize {
+        let mem = |m: u8| m >> 6 != 3 && m & 7 != 5;
+        (0..code.len().saturating_sub(2))
+            .filter(|&i| {
+                let (a, b, c) = (code[i], code[i + 1], code[i + 2]);
+                let rex_w = i > 0 && code[i - 1] & 0xF8 == 0x48;
+                (a & 0xF8 == 0x48 && b == 0x63 && mem(c)) || (a == 0x8B && mem(b) && !rex_w)
+            })
             .count()
     };
-    assert!(
-        x64_movsxd(&emit(Target::LinuxX64, false)) >= 1,
-        "x86_64 default should read the packed int member with one movslq"
+    let get_a = |strict_align: bool| function_bytes(&emit(Target::LinuxX64, strict_align), "get_a");
+    assert_eq!(
+        x64_dword_loads(&get_a(false)),
+        1,
+        "x86_64 default should read the packed int member in one access"
     );
     assert_eq!(
-        x64_movsxd(&emit(Target::LinuxX64, true)),
+        x64_dword_loads(&get_a(true)),
         0,
         "x86_64 strict_align still reads a packed int member in one access"
     );
@@ -10087,10 +10168,12 @@ fn wide_member_keeps_its_object_in_memory() {
     let wide = |i: &str| i.contains("kind=F80") || i.contains("kind=F128");
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
         let (body, insts) = optimized_function(SRC, "wide", target);
+        // The member's access folds the frame offset into the access, so
+        // the store rides the object's slot at the member's displacement.
         assert!(
             insts
                 .iter()
-                .any(|(_, i)| i.starts_with("Store {") && wide(i)),
+                .any(|(_, i)| { i.starts_with("StoreLocal {") && i.contains("disp=") && wide(i) }),
             "{target:?}: the member is stored through its object: {body}"
         );
         let from_param = |i: &str| {
@@ -10100,9 +10183,12 @@ fn wide_member_keeps_its_object_in_memory() {
             })
         };
         assert!(
-            !insts
-                .iter()
-                .any(|(_, i)| { i.starts_with("StoreLocal { off=-") && wide(i) && !from_param(i) }),
+            !insts.iter().any(|(_, i)| {
+                i.starts_with("StoreLocal { off=-")
+                    && !i.contains("disp=")
+                    && wide(i)
+                    && !from_param(i)
+            }),
             "{target:?}: no one-cell slot holds the member: {body}"
         );
     }
@@ -10118,9 +10204,6 @@ fn wide_member_keeps_its_object_in_memory() {
 fn long_double_crosses_a_call_as_its_image() {
     const SRC: &str = "__attribute__((noinline)) long double f(long double x) { return x * 2; }\n\
         long double g(long double y) { return f(y) + 1; }\n";
-    fn stored_at(i: &str) -> Option<&str> {
-        i.split("addr=v").nth(1).and_then(|r| r.split(',').next())
-    }
     for (target, kind) in [
         (crate::Target::LinuxX64, "kind=F80"),
         (crate::Target::LinuxAarch64, "kind=F128"),
@@ -10139,10 +10222,18 @@ fn long_double_crosses_a_call_as_its_image() {
             .split("args=[v")
             .nth(1)
             .and_then(|r| r.split(']').next());
+        let arg_off = insts
+            .iter()
+            .find(|(v, i)| {
+                Some(alloc::format!("{v}").as_str()) == arg && i.starts_with("LocalAddr(")
+            })
+            .map(|(_, i)| i.trim_start_matches("LocalAddr(").trim_end_matches(')'));
         assert!(
-            insts
-                .iter()
-                .any(|(_, i)| i.starts_with("Store {") && i.contains(kind) && stored_at(i) == arg),
+            insts.iter().any(|(_, i)| {
+                i.starts_with("StoreLocal {")
+                    && arg_off.is_some_and(|o| i.contains(&alloc::format!("off={o}")))
+                    && i.contains(kind)
+            }),
             "{target:?}: the argument is the address of its image: {body}"
         );
         assert!(
@@ -10483,6 +10574,124 @@ fn forwarded_aggregate_leaves_no_slot_load() {
                 "{target:?}: {name} keeps no slot load: {body}"
             );
         }
+    }
+}
+
+/// `(off, disp)` of a `LoadLocal` / `StoreLocal` (as `head`) in dump text.
+fn slot_access(inst: &str, head: &str) -> Option<(String, String)> {
+    let fields = inst.strip_prefix(head)?.strip_prefix(" {")?;
+    let field = |name: &str| {
+        fields
+            .split([',', ' ', '}'])
+            .find_map(|f| f.strip_prefix(name))
+            .map(String::from)
+    };
+    Some((field("off=")?, field("disp=").unwrap_or_default()))
+}
+
+/// The read slot loads of a dump whose bytes a `StoreLocal` earlier in
+/// the block, with no call between, wrote: re-reads left unforwarded.
+fn unforwarded_rereads(body: &str) -> Vec<String> {
+    let read = |id: &str| {
+        let operand = alloc::format!("v{id}");
+        body.lines().map(str::trim_start).any(|l| {
+            let text = match l.split_once(char::is_whitespace) {
+                Some((head, text)) if head.starts_with('v') => text,
+                _ => l,
+            };
+            text.split(|c: char| !c.is_ascii_alphanumeric())
+                .any(|t| t == operand)
+        })
+    };
+    let mut stored = Vec::new();
+    let mut left = Vec::new();
+    for line in body.lines().map(str::trim_start) {
+        if line.starts_with("block ") {
+            stored.clear();
+        }
+        let Some((id, rest)) = line
+            .strip_prefix('v')
+            .and_then(|l| l.split_once(char::is_whitespace))
+        else {
+            continue;
+        };
+        let inst = rest.split("->").next().unwrap_or("").trim();
+        if inst.starts_with("Call") || inst.starts_with("Intrinsic") {
+            stored.clear();
+        } else if let Some(at) = slot_access(inst, "StoreLocal") {
+            stored.push(at);
+        } else if let Some(at) = slot_access(inst, "LoadLocal")
+            && stored.contains(&at)
+            && read(id)
+        {
+            left.push(alloc::format!("v{id} {inst}"));
+        }
+    }
+    left
+}
+
+/// A field stored and read back in one block, and one read twice around
+/// a load through it, forward in a frame with alloca and in a by-value
+/// parameter holding a union, whose slot the prologue fills.
+#[test]
+fn slot_fields_forward_in_alloca_frames_and_by_value_parameters() {
+    const SRC: &str = "typedef unsigned long long u64;\n\
+        void keep(void *);\n\
+        struct F { u64 a, b, c, d; };\n\
+        u64 with_alloca(int n) {\n\
+            struct F s = {0}; keep(&s);\n\
+            char *q = __builtin_alloca(n); keep(q);\n\
+            u64 t = 0;\n\
+            for (int i = 0; i < n; i++) {\n\
+                s.a += i; s.b += s.a; s.c += s.b; s.d += s.c; t += s.d;\n\
+            }\n\
+            return t;\n\
+        }\n\
+        typedef struct { union { void *ptr; double d; int i; } u; long tag; } V;\n\
+        long param_loop(V v, int n) {\n\
+            keep(&v);\n\
+            long t = 0;\n\
+            for (int i = 0; i < n; i++) { v.u.i += i; v.tag += v.u.i; t += v.tag; }\n\
+            return t;\n\
+        }\n\
+        long twice(V v) {\n\
+            keep(&v);\n\
+            unsigned char *p = v.u.ptr;\n\
+            long r = p[17] & 1;\n\
+            unsigned char *q = v.u.ptr;\n\
+            return r + q[3] + v.tag;\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for name in ["with_alloca", "param_loop"] {
+            let (body, _) = optimized_function(SRC, name, target);
+            let left = unforwarded_rereads(&body);
+            assert!(
+                left.is_empty(),
+                "{target:?}: {name} re-reads {left:?}: {body}"
+            );
+        }
+        let (body, insts) = optimized_function(SRC, "twice", target);
+        let ptr_reads: Vec<u32> = insts
+            .iter()
+            .filter(|(_, i)| slot_access(i, "LoadLocal").is_some_and(|(_, d)| d.is_empty()))
+            .map(|(id, _)| *id)
+            .collect();
+        let through = |id: u32| {
+            let addr = alloc::format!("addr=v{id},");
+            insts
+                .iter()
+                .any(|(_, i)| i.starts_with("Load {") && i.contains(&addr))
+        };
+        let used: Vec<u32> = ptr_reads
+            .iter()
+            .copied()
+            .filter(|&id| through(id))
+            .collect();
+        assert_eq!(
+            used.len(),
+            1,
+            "{target:?}: twice reads `v.u.ptr` through {used:?}: {body}"
+        );
     }
 }
 
@@ -11165,22 +11374,27 @@ fn volatile_aggregate_copies_stay_volatile_accesses() {
         }\n";
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
         let (body, insts) = optimized_function(SRC, "volatile_copy", target);
-        let count = |head: &str, vol: bool| {
+        let count = |heads: &[&str], vol: bool| {
             insts
                 .iter()
-                .filter(|(_, i)| i.starts_with(head) && i.contains(", volatile") == vol)
+                .filter(|(_, i)| {
+                    heads.iter().any(|h| i.starts_with(h)) && i.contains(", volatile") == vol
+                })
                 .count()
         };
         assert!(
             !insts.iter().any(|(_, i)| i.starts_with("Mcpy")),
             "{target:?}: no block copy names the object: {body}"
         );
+        // The volatile object's accesses fold the frame offset into the
+        // access, so the volatile mark rides the local forms.
         assert!(
-            count("Store {", true) >= 2 && count("Load {", true) == 4,
+            count(&["Store {", "StoreLocal {"], true) >= 2
+                && count(&["Load {", "LoadLocal {"], true) == 4,
             "{target:?}: the initializer and both copies read and write it volatile: {body}"
         );
         assert_eq!(
-            count("Store {", false),
+            count(&["Store {"], false),
             2,
             "{target:?}: the copy through the pointer stores plain: {body}"
         );
@@ -13879,6 +14093,119 @@ long g(long a, long b) { return sink(a, b); }\n";
         calls_out.contains(&6) && calls_out.contains(&7),
         "an ms_abi definition that calls out must give rsi/rdi back, saved={calls_out:?}"
     );
+}
+
+/// A System V callee preserves neither rsi, rdi nor any xmm register (AMD64
+/// psABI 3.2.1): a Microsoft x64 caller keeps no value there across the call
+/// and saves them for its own caller, the xmm registers but under `-mno-sse`.
+#[test]
+fn a_call_clobbers_what_its_callee_s_convention_leaves_volatile() {
+    use crate::c5::codegen::ssa::liveness::Liveness;
+    use crate::c5::codegen::ssa::reg_alloc::{Place, allocate, call_clobbers};
+    use crate::{CompileOptions, Compiler, FixedRegs, Target};
+    let funcs = |src: &str, target: Target| {
+        let copts = CompileOptions {
+            no_entry_point: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(src.to_string(), target, copts)
+            .compile()
+            .expect("compile");
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+            .expect("ssa")
+    };
+    let mask = |regs: &[u8]| regs.iter().fold(0u32, |m, &r| m | 1 << r);
+    let xmm6_15 = 0xffc0u32;
+    let rsi_rdi = (1u32 << 6) | (1 << 7);
+    const WIN: &str = "\
+__attribute__((sysv_abi)) double svx(double);\n\
+__attribute__((sysv_abi)) long long svl(long long);\n\
+double f(double p, double q) { double s = p * q; double t = svx(p); return s + t + q; }\n\
+long long g(long long a, long long b, long long c) {\n\
+    long long t = svl(a);\n\
+    return t + a * b + c;\n\
+}\n";
+    let win = funcs(WIN, Target::WindowsX64);
+    for name in ["f", "g"] {
+        let func = win.iter().find(|f| f.name == name).expect(name);
+        let alloc = allocate(func, Target::WindowsX64, FixedRegs::NONE);
+        let live = Liveness::compute(func);
+        let mut calls = 0;
+        for (c, inst) in func.insts.iter().enumerate() {
+            if inst.call_conv().is_none() || !live.in_cfg(c as u32) {
+                continue;
+            }
+            calls += 1;
+            let clobbers = call_clobbers(
+                inst,
+                Target::WindowsX64,
+                Target::WindowsX64,
+                FixedRegs::NONE,
+            );
+            assert_eq!(
+                clobbers,
+                (rsi_rdi, xmm6_15),
+                "{name}: the System V call's set"
+            );
+            for v in 0..func.insts.len() as u32 {
+                if v == c as u32 || !live.in_cfg(v) || !live.live_after(func, v, c as u32) {
+                    continue;
+                }
+                let kept = match alloc.places[v as usize] {
+                    Place::IntReg(r) => clobbers.0 & (1 << r) == 0,
+                    Place::FpReg(r) => clobbers.1 & (1 << r) == 0,
+                    _ => true,
+                };
+                assert!(
+                    kept,
+                    "{name}: v{v} at {:?} across the call",
+                    alloc.places[v as usize]
+                );
+            }
+        }
+        assert_eq!(calls, 1, "{name}");
+        assert_eq!(
+            mask(&alloc.gpr_used) & rsi_rdi,
+            rsi_rdi,
+            "{name}: {:?}",
+            alloc.gpr_used
+        );
+        assert_eq!(
+            mask(&alloc.fp_used) & xmm6_15,
+            xmm6_15,
+            "{name}: {:?}",
+            alloc.fp_used
+        );
+        let mut nosse = func.clone();
+        nosse.general_regs_only = true;
+        let alloc = allocate(&nosse, Target::WindowsX64, FixedRegs::NONE);
+        assert_eq!(
+            mask(&alloc.gpr_used) & rsi_rdi,
+            rsi_rdi,
+            "{name}: {:?}",
+            alloc.gpr_used
+        );
+        assert_eq!(
+            mask(&alloc.fp_used) & 0xff00,
+            0,
+            "{name} -mno-sse: {:?}",
+            alloc.fp_used
+        );
+    }
+    // The same on a System V target; the reverse direction owes nothing more.
+    const LINUX: &str = "\
+long long svl(long long);\n\
+__attribute__((ms_abi)) long long msl(long long);\n\
+__attribute__((ms_abi)) long long ms_calls_out(long long a) { return svl(a) + 1; }\n\
+long long sv_calls_ms(long long a) { return msl(a) + 1; }\n";
+    let linux = funcs(LINUX, Target::LinuxX64);
+    let saved = |name: &str| {
+        let func = linux.iter().find(|f| f.name == name).expect(name);
+        let alloc = allocate(func, Target::LinuxX64, FixedRegs::NONE);
+        (mask(&alloc.gpr_used), mask(&alloc.fp_used))
+    };
+    assert_eq!(saved("ms_calls_out"), (rsi_rdi, xmm6_15));
+    assert_eq!(saved("sv_calls_ms"), (0, 0));
 }
 
 /// A struct or union assigned from a compound literal whose initializer is

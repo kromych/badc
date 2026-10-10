@@ -85,8 +85,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
-               	sub	x0, x29, #0x40
-               	ldrb	w0, [x0, #0x10]
+               	ldurb	w0, [x29, #-0x30]
                	eor	x0, x0, #0x7f
                	cbz	w0, <addr>
                	mov	x0, #0x1                // =1
@@ -131,18 +130,18 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x1, x29, #0x40
                	mov	x0, #0x3                // =3
-               	strb	w0, [x1]
-               	strb	w0, [x1, #0x1]
-               	strb	w0, [x1, #0x2]
-               	strb	w0, [x1, #0x3]
-               	strb	w0, [x1, #0x4]
-               	strb	w0, [x1, #0x5]
-               	strb	w0, [x1, #0x6]
-               	strb	w0, [x1, #0x7]
-               	strb	w0, [x1, #0x8]
-               	strb	w0, [x1, #0x9]
-               	strb	w0, [x1, #0xa]
-               	strb	w0, [x1, #0xb]
+               	sturb	w0, [x29, #-0x40]
+               	sturb	w0, [x29, #-0x3f]
+               	sturb	w0, [x29, #-0x3e]
+               	sturb	w0, [x29, #-0x3d]
+               	sturb	w0, [x29, #-0x3c]
+               	sturb	w0, [x29, #-0x3b]
+               	sturb	w0, [x29, #-0x3a]
+               	sturb	w0, [x29, #-0x39]
+               	sturb	w0, [x29, #-0x38]
+               	sturb	w0, [x29, #-0x37]
+               	sturb	w0, [x29, #-0x36]
+               	sturb	w0, [x29, #-0x35]
                	mov	x0, #0x0                // =0
                	ldrb	w2, [x1, x0]
                	cmp	w2, #0x3
@@ -150,8 +149,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0xc
                	b.lt	<addr>
-               	sub	x0, x29, #0x40
-               	ldrb	w0, [x0, #0xc]
+               	ldurb	w0, [x29, #-0x34]
                	eor	x0, x0, #0x7f
                	cbz	w0, <addr>
                	mov	x0, #0x4                // =4
@@ -162,20 +160,20 @@ Disassembly of section .text:
                	mov	x1, #0x7f               // =127
                	mov	x2, #0x40               // =64
                	bl	<addr>
-               	sub	x0, x29, #0x40
-               	mov	x1, #0x5                // =5
-               	strb	w1, [x0, #0x4]
-               	strb	w1, [x0, #0x5]
-               	strb	w1, [x0, #0x6]
-               	strb	w1, [x0, #0x7]
-               	strb	w1, [x0, #0x8]
-               	strb	w1, [x0, #0x9]
-               	strb	w1, [x0, #0xa]
-               	strb	w1, [x0, #0xb]
-               	ldrb	w1, [x0, #0x3]
-               	eor	x1, x1, #0x7f
-               	cbnz	w1, <addr>
-               	add	x1, x0, #0x4
+               	sub	x1, x29, #0x40
+               	mov	x0, #0x5                // =5
+               	sturb	w0, [x29, #-0x3c]
+               	sturb	w0, [x29, #-0x3b]
+               	sturb	w0, [x29, #-0x3a]
+               	sturb	w0, [x29, #-0x39]
+               	sturb	w0, [x29, #-0x38]
+               	sturb	w0, [x29, #-0x37]
+               	sturb	w0, [x29, #-0x36]
+               	sturb	w0, [x29, #-0x35]
+               	ldurb	w0, [x29, #-0x3d]
+               	eor	x0, x0, #0x7f
+               	cbnz	w0, <addr>
+               	add	x1, x1, #0x4
                	mov	x0, #0x0                // =0
                	ldrb	w2, [x1, x0]
                	cmp	w2, #0x5
@@ -183,8 +181,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lt	<addr>
-               	sub	x0, x29, #0x40
-               	ldrb	w0, [x0, #0xc]
+               	ldurb	w0, [x29, #-0x34]
                	eor	x0, x0, #0x7f
                	cbz	w0, <addr>
                	mov	x0, #0x5                // =5
@@ -280,8 +277,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x9
                	b.lt	<addr>
-               	sub	x0, x29, #0x40
-               	ldrb	w0, [x0, #0x9]
+               	ldurb	w0, [x29, #-0x37]
                	cbz	w0, <addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x50]

@@ -32,12 +32,11 @@ Disassembly of section .text:
                	andq	$-0x40, %rsp
                	leaq	(%rsp), %rcx
                	xorl	%eax, %eax
-               	movb	$0x7, (%rcx)
+               	movb	$0x7, (%rsp)
                	testb	$0x3f, %cl
                	jne	<addr>
                	movl	$0x1, %eax
-               	leaq	(%rbp), %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <nested_auto_typed>:
@@ -47,16 +46,15 @@ Disassembly of section .text:
                	andq	$-0x40, %rsp
                	leaq	(%rsp), %rcx
                	xorl	%eax, %eax
-               	movl	$0x9, (%rcx)
+               	movl	$0x9, (%rsp)
                	testb	$0x3f, %cl
                	jne	<addr>
-               	movl	(%rcx), %eax
+               	movl	(%rsp), %eax
                	xorq	$0x9, %rax
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	leaq	(%rbp), %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

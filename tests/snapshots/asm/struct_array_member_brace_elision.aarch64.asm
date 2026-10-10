@@ -142,24 +142,23 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x18
                	fmov	s19, #2.00000000
                	fmov	s20, #3.00000000
                	fmov	s21, #4.00000000
                	fmov	s22, #5.00000000
-               	ldr	s3, [x0]
+               	ldur	s3, [x29, #-0x18]
                	fcmp	s3, s7
                	b.ne	<addr>
-               	ldr	s3, [x0, #0x4]
+               	ldur	s3, [x29, #-0x14]
                	fcmp	s3, s19
                	b.ne	<addr>
-               	ldr	s3, [x0, #0x8]
+               	ldur	s3, [x29, #-0x10]
                	fcmp	s3, s20
                	b.ne	<addr>
-               	ldr	s3, [x0, #0xc]
+               	ldur	s3, [x29, #-0xc]
                	fcmp	s3, s21
                	b.ne	<addr>
-               	ldr	s3, [x0, #0x10]
+               	ldur	s3, [x29, #-0x8]
                	fcmp	s3, s22
                	b.eq	<addr>
                	mov	x0, #0x6                // =6

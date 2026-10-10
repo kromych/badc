@@ -33,15 +33,15 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	sub	x2, x29, #0x18
                	mov	x0, #0xc                // =12
-               	str	w0, [x2]
+               	stur	w0, [x29, #-0x18]
                	mov	x0, #0x7                // =7
-               	str	w0, [x2, #0x4]
+               	stur	w0, [x29, #-0x14]
                	mov	x0, #0xf                // =15
-               	str	w0, [x2, #0x8]
+               	stur	w0, [x29, #-0x10]
                	mov	x0, #0x5                // =5
-               	str	w0, [x2, #0xc]
+               	stur	w0, [x29, #-0xc]
                	mov	x1, #0xa                // =10
-               	str	w1, [x2, #0x10]
+               	stur	w1, [x29, #-0x8]
                	mov	x0, #0x0                // =0
                	mov	x4, x1
                	mov	x1, x0

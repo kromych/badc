@@ -30,9 +30,8 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
-               	movapd	%xmm0, %xmm15
-               	movq	%rcx, %xmm0
-               	mulsd	%xmm15, %xmm0
+               	movq	%rcx, %xmm14
+               	vmulsd	%xmm0, %xmm14, %xmm0
                	movabsq	$0x4002000000000000, %rcx # imm = 0x4002000000000000
                	movabsq	$0x4008000000000000, %rdx # imm = 0x4008000000000000
                	movq	%rdx, %xmm15

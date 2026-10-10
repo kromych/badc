@@ -25,24 +25,23 @@ Disassembly of section .text:
                	mov	x1, #0x141              // =321
                	mov	x2, #0x3                // =3
                	bl	<addr>
-               	sub	x0, x29, #0x8
-               	ldrb	w1, [x0]
+               	ldurb	w0, [x29, #-0x8]
                	mov	x17, #0x41              // =65
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
-               	ldrb	w1, [x0, #0x1]
+               	eor	x0, x0, x17
+               	cbnz	w0, <addr>
+               	ldurb	w0, [x29, #-0x7]
                	mov	x17, #0x41              // =65
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
-               	ldrb	w1, [x0, #0x2]
+               	eor	x0, x0, x17
+               	cbnz	w0, <addr>
+               	ldurb	w0, [x29, #-0x6]
                	mov	x17, #0x41              // =65
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
+               	eor	x0, x0, x17
+               	cbz	w0, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w0, [x0, #0x3]
+               	ldurb	w0, [x29, #-0x5]
                	mov	x17, #0x9               // =9
                	eor	x0, x0, x17
                	cbz	w0, <addr>

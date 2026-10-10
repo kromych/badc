@@ -158,7 +158,9 @@ impl<'a> Folder<'a> {
         let same = match self.func.insts.get(v as usize) {
             Some(Inst::Copy { .. } | Inst::Phi { .. }) => true,
             Some(&Inst::Extend { kind, .. }) => load_int_kind(kind).is_some_and(|(w, _)| w >= 8),
-            Some(&Inst::LoadLocal { kind, .. }) => load_int_kind(kind).is_some_and(|(w, _)| w >= 8),
+            Some(&Inst::LoadLocal { disp: 0, kind, .. }) => {
+                load_int_kind(kind).is_some_and(|(w, _)| w >= 8)
+            }
             _ => false,
         };
         self.active.push((v, same));
@@ -202,6 +204,7 @@ impl<'a> Folder<'a> {
             }
             Some(&Inst::LoadLocal {
                 off,
+                disp: 0,
                 kind,
                 volatile: false,
             }) => {
@@ -402,6 +405,7 @@ fn reaching_local_stores(
             i -= 1;
             match &func.insts[i as usize] {
                 Inst::StoreLocal {
+                    disp: 0,
                     off: o,
                     value,
                     kind,
@@ -416,10 +420,14 @@ fn reaching_local_stores(
                     break;
                 }
                 Inst::LoadLocal {
+                    disp: 0,
                     off: o,
                     volatile: true,
                     ..
                 } if *o == off => return None,
+                Inst::StoreLocal {
+                    off: o, disp, kind, ..
+                } if writes_read_bytes(*o, *disp, *kind, off, lw) => return None,
                 inst => {
                     if may_write_slot(func, inst, off, exposed) {
                         return None;
@@ -443,6 +451,13 @@ fn reaching_local_stores(
         }
     }
     Some(out)
+}
+
+/// Whether a store of `kind` at `disp` past slot `o` overlaps the `lw` bytes at slot `off`.
+fn writes_read_bytes(o: i64, disp: i32, kind: StoreKind, off: i64, lw: u8) -> bool {
+    let at = o * 8 + i64::from(disp);
+    let w = i64::from(store_int_width(kind).unwrap_or(16));
+    at < off * 8 + i64::from(lw) && off * 8 < at + w
 }
 
 /// Whether `inst` may write slot `off`. An exposed slot ([`slot_exposed`])
@@ -674,6 +689,7 @@ mod tests {
 
     fn store(off: i64, value: u32) -> Inst {
         Inst::StoreLocal {
+            disp: 0,
             off,
             value,
             kind: StoreKind::I32,
@@ -684,6 +700,7 @@ mod tests {
 
     fn load(off: i64) -> Inst {
         Inst::LoadLocal {
+            disp: 0,
             off,
             kind: LoadKind::I32,
             volatile: false,
@@ -699,6 +716,7 @@ mod tests {
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             low_word_args: 0,
             arg_widths: crate::c5::ir::ArgWidths::default(),
+            callee_conv: crate::c5::codegen::CallConv::Target,
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -786,6 +804,38 @@ mod tests {
         assert_eq!(asm_operand_const(&func, 5), None);
     }
 
+    /// A store reaching the bytes read unsettles the constant stored before
+    /// it; one beside them does not.
+    #[test]
+    fn an_overlapping_slot_store_unsettles_the_constant() {
+        let at = |off, disp| Inst::StoreLocal {
+            off,
+            disp,
+            value: 0,
+            kind: StoreKind::I8,
+            volatile: false,
+            nsw: false,
+        };
+        for (between, settled) in [
+            (at(-1, 2), false),
+            (at(-2, 8), false),
+            (at(-2, 7), true),
+            (at(-1, 4), true),
+        ] {
+            let func = one_block(alloc::vec![
+                Inst::Imm(2323),
+                store(-1, 0),
+                between.clone(),
+                load(-1)
+            ]);
+            assert_eq!(
+                asm_operand_const(&func, 3),
+                settled.then_some(2323),
+                "{between:?}"
+            );
+        }
+    }
+
     /// A slot whose address flows only into an asm output (the statement
     /// stores the result through it) is written by nothing else, so a call
     /// between the constant store and the load does not unsettle the value.
@@ -856,6 +906,7 @@ mod tests {
             Inst::ImmData(64),
             add(0, 8),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 1,
                 kind: StoreKind::I64,
@@ -864,6 +915,7 @@ mod tests {
             },
             call(),
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,

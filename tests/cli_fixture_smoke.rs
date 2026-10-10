@@ -121,6 +121,8 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_x64_setcc.c", "linux-aarch64"),           // x86-64 setcc
     ("inline_asm_x64_cmov.c", "linux-aarch64"),            // x86-64 cmovcc
     ("inline_asm_x64_bound_operands.c", "linux-aarch64"),  // x86-64 bound register operands
+    ("inline_asm_x64_bound_scratch_pressure.c", "linux-aarch64"), // x86-64 bound operands
+    ("inline_asm_x64_staged_operand_pool.c", "linux-aarch64"), // x86-64 staged `r` operand pool
     ("inline_asm_x64_cdqe.c", "linux-aarch64"),            // x86-64 cdqe
     ("inline_asm_x64_movnti.c", "linux-aarch64"),          // x86-64 movnti/sfence
     ("inline_asm_x64_raid6_syndrome.c", "linux-aarch64"),  // x86-64 AVX2 / AVX-512 RAID-6 syndrome
@@ -3221,13 +3223,14 @@ fn prototyped_int_return_is_widened_once() {
             continue;
         };
         // The libc callers take pointer parameters, so every widening in
-        // them is the return's; `via_user_slot` takes an `int`, so its
-        // entry conversion joins the one its object's reload performs.
+        // them is the return's; `via_user_slot`'s reload of its `int` adds
+        // one on aarch64 (`ldursw`), none on x86-64 (`movl`).
+        let user_slot = if target == "linux-x64" { 1 } else { 2 };
         for (func, want) in [
             ("via_int_slot", 1usize),
             ("direct_libc_use", 1),
             ("pointer_offset", 1),
-            ("via_user_slot", 2),
+            ("via_user_slot", user_slot),
         ] {
             let (n, hits) = register_mentions(&text, func, widenings);
             assert!(n > 0, "{target}: `{func}` not found in the disassembly");

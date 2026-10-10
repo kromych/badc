@@ -33,45 +33,42 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	stp	xzr, xzr, [x0]
                	fmov	d0, #1.50000000
-               	mov	x1, #0x1                // =1
-               	str	x1, [x0, #0x8]
+               	mov	x0, #0x1                // =1
+               	stur	x0, [x29, #-0x8]
                	stur	d0, [x29, #-0x18]
-               	ldr	d0, [x0]
+               	ldur	d0, [x29, #-0x10]
                	stur	d0, [x29, #-0x20]
                	ldur	d0, [x29, #-0x20]
                	ldur	d1, [x29, #-0x18]
                	fadd	d0, d0, d1
-               	str	d0, [x0]
+               	stur	d0, [x29, #-0x10]
                	fmov	d0, #2.50000000
-               	ldr	x2, [x0, #0x8]
-               	add	x2, x2, #0x1
-               	str	x2, [x0, #0x8]
+               	add	x1, x0, #0x1
+               	stur	x1, [x29, #-0x8]
                	stur	d0, [x29, #-0x18]
-               	ldr	d0, [x0]
+               	ldur	d0, [x29, #-0x10]
                	stur	d0, [x29, #-0x20]
                	ldur	d0, [x29, #-0x20]
                	ldur	d1, [x29, #-0x18]
                	fadd	d0, d0, d1
-               	str	d0, [x0]
+               	stur	d0, [x29, #-0x10]
                	fmov	d0, #3.50000000
-               	ldr	x2, [x0, #0x8]
-               	add	x2, x2, #0x1
-               	str	x2, [x0, #0x8]
+               	add	x1, x1, #0x1
+               	stur	x1, [x29, #-0x8]
                	stur	d0, [x29, #-0x18]
-               	ldr	d0, [x0]
+               	ldur	d0, [x29, #-0x10]
                	stur	d0, [x29, #-0x20]
                	ldur	d0, [x29, #-0x20]
                	ldur	d1, [x29, #-0x18]
                	fadd	d0, d0, d1
-               	str	d0, [x0]
-               	ldr	d0, [x0]
+               	stur	d0, [x29, #-0x10]
+               	ldur	d0, [x29, #-0x10]
                	fmov	d1, #7.50000000
                	fcmp	d0, d1
                	b.ne	<addr>
-               	ldr	x0, [x0, #0x8]
-               	cmp	x0, #0x3
+               	ldur	x1, [x29, #-0x8]
+               	cmp	x1, #0x3
                	b.eq	<addr>
-               	mov	x0, x1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

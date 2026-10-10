@@ -21,24 +21,22 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x10]
                	mov	x0, #0x9                // =9
                	stur	w0, [x29, #-0x8]
-               	sub	x0, x29, #0x10
-               	ldrsw	x1, [x0]
-               	cmp	w1, #0x7
+               	ldursw	x0, [x29, #-0x10]
+               	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldursw	x1, [x29, #-0x8]
-               	cmp	w1, #0x9
+               	ldursw	x0, [x29, #-0x8]
+               	cmp	w0, #0x9
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0xb                // =11
-               	str	w1, [x0]
-               	ldursw	x0, [x29, #-0x10]
+               	mov	x0, #0xb                // =11
+               	stur	w0, [x29, #-0x10]
                	cmp	w0, #0xb
                	b.eq	<addr>
                	mov	x0, #0x5                // =5

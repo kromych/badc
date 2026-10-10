@@ -221,8 +221,7 @@ Disassembly of section .text:
                	cmp	x2, x3
                	b.lo	<addr>
                	bl	<addr>
-               	sub	sp, x29, #0x10
-               	add	sp, sp, #0x10
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -251,8 +250,7 @@ Disassembly of section .text:
                	cmp	x2, x3
                	b.lo	<addr>
                	bl	<addr>
-               	sub	sp, x29, #0x10
-               	add	sp, sp, #0x10
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
 

@@ -305,9 +305,10 @@ fn load_expr_key(insts: &[Inst], canon: &[ValueId], v: ValueId) -> Option<Key> {
         }) => Some((5, c(*addr), load_kind_code(*kind), *disp as i64)),
         Some(Inst::LoadLocal {
             off,
+            disp,
             kind,
             volatile: false,
-        }) => Some((6, 0, load_kind_code(*kind), *off)),
+        }) => Some((6, *disp as u32, load_kind_code(*kind), *off)),
         Some(Inst::LoadIndexed {
             base,
             index,
@@ -371,12 +372,13 @@ fn stored_facts(
         }),
         Inst::StoreLocal {
             off,
+            disp,
             value,
             kind,
             volatile: false,
             ..
         } => (load_kinds_of_store(*kind), *value, &|k| {
-            (6, 0, load_kind_code(k), *off)
+            (6, *disp as u32, load_kind_code(k), *off)
         }),
         Inst::StoreIndexed {
             base,
@@ -1005,7 +1007,7 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
         // A width-limited read cannot produce a value outside the width
         // it extends from, nor can a narrow atomic load or the prior
         // contents a compare-exchange zero-extends.
-        Inst::Load { kind, .. } | Inst::LoadLocal { kind, .. } => {
+        Inst::Load { kind, .. } | Inst::LoadLocal { disp: 0, kind, .. } => {
             extend_range(*kind).unwrap_or(UNIVERSE)
         }
         Inst::AtomicLoad { width, .. } | Inst::AtomicCas { width, .. } => {

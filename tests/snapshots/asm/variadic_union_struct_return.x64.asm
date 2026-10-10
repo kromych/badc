@@ -76,15 +76,15 @@ Disassembly of section .text:
                	movq	0x8(%r11), %r10
                	addq	$0x8, 0x8(%r11)
                	movq	%r10, %rax
-               	movslq	(%rax), %rdx
+               	movl	(%rax), %edx
                	leaq	-0x18(%rbp), %rax
                	leaq	-0x28(%rbp), %rax
                	testq	%rcx, %rcx
                	je	<addr>
                	movsbq	(%rcx), %rcx
                	addq	%rdx, %rcx
-               	movl	%ecx, (%rax)
-               	movq	$0x7, 0x8(%rax)
+               	movl	%ecx, -0x28(%rbp)
+               	movq	$0x7, -0x20(%rbp)
                	movq	%rax, %rcx
                	movq	(%rcx), %rax
                	movq	0x8(%rcx), %rdx
@@ -105,15 +105,14 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movl	(%rax), %ecx
-               	movq	0x8(%rax), %rax
-               	cmpl	$0xaf, %ecx
+               	movl	-0x10(%rbp), %eax
+               	movq	-0x8(%rbp), %rcx
+               	cmpl	$0xaf, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	cmpq	$0x7, %rax
+               	cmpq	$0x7, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	leave
@@ -126,15 +125,14 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movl	(%rax), %ecx
-               	movq	0x8(%rax), %rax
-               	cmpl	$0x42, %ecx
+               	movl	-0x10(%rbp), %eax
+               	movq	-0x8(%rbp), %rcx
+               	cmpl	$0x42, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	cmpq	$0x7, %rax
+               	cmpq	$0x7, %rcx
                	je	<addr>
                	movl	$0x4, %eax
                	leave

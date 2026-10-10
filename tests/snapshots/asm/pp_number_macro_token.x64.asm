@@ -27,10 +27,10 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	cmpl	$0x2, %ecx
                	jne	<addr>
-               	movslq	0x4(%rax), %rax
+               	movl	0x4(%rax), %eax
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x1, %eax

@@ -63,7 +63,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v35  Imm(6)                                           -> x0
     terminator Return(v35)   (exit_acc=v35)
   block 12  start_pc=0
-    v38  ImmData(256)                                     -> x0
+    v38  ImmData(128)                                     -> x0
     v39  BinopI { op=and, lhs=v38, rhs_imm=127 }          -> x1
     v40  BinopI { op=ne, lhs=v39, rhs_imm=0 }             -> x2
     terminator Bz { cond=v39, target=b15, fall=b13 }   (low word)   (exit_acc=v40)
@@ -74,7 +74,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v36  Imm(7)                                           -> x0
     terminator Return(v36)   (exit_acc=v36)
   block 15  start_pc=0
-    v42  ImmData(256)                                     -> x1
+    v42  ImmData(128)                                     -> x1
     v43  Load { addr=v38, disp=0, kind=I64 }              -> x0
     v44  Extend { value=v43, kind=I32 }                   -> x1
     v45  Extend { value=v43, kind=I32 }                   -> x1

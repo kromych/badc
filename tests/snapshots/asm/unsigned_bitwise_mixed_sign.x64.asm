@@ -35,7 +35,7 @@ Disassembly of section .text:
                	movl	$0xffffffaa, -0x8(%rbp) # imm = 0xFFFFFFAA
                	movsbq	-0x20(%rbp), %rax
                	movswq	-0x18(%rbp), %rsi
-               	movslq	-0x10(%rbp), %rdx
+               	movl	-0x10(%rbp), %edx
                	movl	-0x8(%rbp), %ecx
                	movq	%rcx, %rdi
                	xorq	%rax, %rdi

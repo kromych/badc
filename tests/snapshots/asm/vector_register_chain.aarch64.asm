@@ -193,45 +193,43 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x90
                	bl	<addr>
-               	sub	x1, x29, #0x30
-               	ldrb	w1, [x1]
+               	ldurb	w1, [x29, #-0x30]
                	add	x20, x0, x1
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x90
                	add	x0, x0, #0x10
                	bl	<addr>
-               	sub	x1, x29, #0x30
-               	ldrb	w1, [x1, #0x10]
+               	ldurb	w1, [x29, #-0x20]
                	add	x0, x0, x1
-               	add	x21, x20, x0
+               	add	x20, x20, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	add	x0, x0, #0x90
                	add	x0, x0, #0x20
                	bl	<addr>
-               	sub	x20, x29, #0x30
-               	ldrb	w1, [x20, #0x20]
+               	sub	x22, x29, #0x30
+               	ldurb	w1, [x29, #-0x10]
                	add	x0, x0, x1
-               	add	x23, x21, x0
+               	add	x23, x20, x0
                	mov	x0, #0x4                // =4
                	mov	x1, #0x30               // =48
                	sub	x2, x29, #0x80
+               	adrp	x20, <page>
+               	add	x20, x20, <lo12>
                	adrp	x21, <page>
                	add	x21, x21, <lo12>
-               	adrp	x22, <page>
-               	add	x22, x22, <lo12>
-               	mov	x3, x21
-               	mov	x4, x22
+               	mov	x3, x20
+               	mov	x4, x21
                	bl	<addr>
                	mov	x1, #0x0                // =0
-               	ldrb	w2, [x21, x1]
+               	ldrb	w2, [x20, x1]
                	sub	x3, x29, #0x60
                	ldrb	w3, [x3, x1]
                	cmp	w2, w3
                	b.ne	<addr>
-               	ldrb	w2, [x22, x1]
-               	ldrb	w3, [x20, x1]
+               	ldrb	w2, [x21, x1]
+               	ldrb	w3, [x22, x1]
                	cmp	w2, w3
                	b.ne	<addr>
                	add	x1, x1, #0x1

@@ -33,21 +33,17 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
-               	sub	x1, x29, #0x50
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x1]
+               	sub	x0, x29, #0x50
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x0]
                	sub	x0, x29, #0x40
                	stp	xzr, xzr, [x0]
                	stp	xzr, xzr, [x0, #0x10]
                	stp	xzr, xzr, [x0, #0x20]
                	stp	xzr, xzr, [x0, #0x30]
                	mov	x0, #0x0                // =0
-               	movi	d0, #0000000000000000
-               	lsl	x2, x0, #3
-               	add	x2, x1, x2
-               	ldr	d0, [x2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
@@ -60,11 +56,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0x50
-               	movi	d0, #0000000000000000
-               	lsl	x2, x0, #3
-               	add	x2, x1, x2
-               	ldr	d0, [x2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
@@ -75,12 +66,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0x50
                	mov	x0, #0x0                // =0
-               	movi	d0, #0000000000000000
-               	lsl	x2, x0, #3
-               	add	x2, x1, x2
-               	ldr	d0, [x2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
@@ -91,12 +77,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0x50
                	mov	x0, #0x0                // =0
-               	movi	d0, #0000000000000000
-               	lsl	x2, x0, #3
-               	add	x2, x1, x2
-               	ldr	d0, [x2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
@@ -109,12 +90,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0x50
                	mov	x0, #0x0                // =0
-               	movi	d0, #0000000000000000
-               	lsl	x2, x0, #3
-               	add	x2, x1, x2
-               	ldr	d0, [x2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>

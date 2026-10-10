@@ -90,7 +90,7 @@ Disassembly of section .text:
                	movq	%rsi, %rax
                	leave
                	retq
-               	movslq	-0x8(%rbp), %rax
+               	movl	-0x8(%rbp), %eax
                	cmpl	$0xe, %eax
                	je	<addr>
                	movl	$0x6, %eax

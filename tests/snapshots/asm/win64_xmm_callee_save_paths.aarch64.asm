@@ -1,5 +1,5 @@
 
-win64_xmm_scratch_callee_save.aarch64:	file format elf64-littleaarch64
+win64_xmm_callee_save_paths.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 

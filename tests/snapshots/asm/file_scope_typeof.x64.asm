@@ -31,19 +31,19 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x3, %eax
@@ -51,18 +51,18 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx      # <addr>
                	leaq	<rip>, %rax      # <addr>
                	movq	%rax, (%rcx)
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x4, %eax
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	addq	%rcx, %rax
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	addq	%rcx, %rax
                	cmpl	$0x6, %eax
                	je	<addr>

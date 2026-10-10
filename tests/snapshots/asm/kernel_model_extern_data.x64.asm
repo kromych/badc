@@ -17,7 +17,7 @@ Disassembly of section .text:
 <net_index>:
                	movq	$0x0, %rax
 		R_X86_64_32S	net0
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	retq
 
 <family>:

@@ -1065,25 +1065,25 @@ fn ent_pc=1 n_params=0 variadic=false locals=10
     v899 Mzero { dst=v898, size=16, align=8 }             -> -
     v900 Imm(0)                                           -> x1
     v901 LocalAddr(-6)                                    -> x1
-    v902 Store { addr=v898, disp=0, value=v896, kind=I32 } -> -
+    v902 StoreLocal { off=-6, value=v896, kind=I32 }      -> -
     v903 Imm(0)                                           -> x0
     v904 Imm(4)                                           -> x0
     v905 Imm(4)                                           -> x0
     v906 LocalAddr(-6)                                    -> x1
     v907 BinopI { op=add, lhs=v898, rhs_imm=4 }           -> x1
-    v908 Store { addr=v898, disp=4, value=v905, kind=I32 } -> -
+    v908 StoreLocal { off=-6, disp=4, value=v905, kind=I32 } -> -
     v909 Imm(0)                                           -> x0
     v910 Imm(5)                                           -> x0
     v911 Imm(5)                                           -> x0
     v912 LocalAddr(-6)                                    -> x1
     v913 BinopI { op=add, lhs=v898, rhs_imm=8 }           -> x1
-    v914 Store { addr=v898, disp=8, value=v911, kind=I32 } -> -
+    v914 StoreLocal { off=-6, disp=8, value=v911, kind=I32 } -> -
     v915 Imm(0)                                           -> x0
     v916 Imm(6)                                           -> x0
     v917 Imm(6)                                           -> x0
     v918 LocalAddr(-6)                                    -> x1
     v919 BinopI { op=add, lhs=v898, rhs_imm=12 }          -> x1
-    v920 Store { addr=v898, disp=12, value=v917, kind=I32 } -> -
+    v920 StoreLocal { off=-6, disp=12, value=v917, kind=I32 } -> -
     v921 LocalAddr(-6)                                    -> x0
     v922 Imm(2)                                           -> x0
     v923 Imm(2)                                           -> x0

@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <rd_direct>:
                	leaq	<rip>, %rax      # <addr>
-               	movslq	%gs:(%rax), %rax
+               	movl	%gs:(%rax), %eax
                	retq
 
 <wr_direct>:
@@ -37,7 +37,7 @@ Disassembly of section .text:
 
 <rmw_direct>:
                	leaq	<rip>, %rax      # <addr>
-               	movslq	%gs:(%rax), %rcx
+               	movl	%gs:(%rax), %ecx
                	addq	%rdi, %rcx
                	movl	%ecx, %gs:(%rax)
                	retq
@@ -113,10 +113,10 @@ Disassembly of section .text:
                	pushq	%rbx
                	leaq	<rip>, %rax      # <addr>
                	movl	$0x28, %gs:(%rax)
-               	movslq	%gs:(%rax), %rcx
+               	movl	%gs:(%rax), %ecx
                	addq	$0x2, %rcx
                	movl	%ecx, %gs:(%rax)
-               	movslq	%gs:(%rax), %rax
+               	movl	%gs:(%rax), %eax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x1, %eax

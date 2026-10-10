@@ -30,10 +30,13 @@ only SDK-libc target. `./scripts/validate_local_boxes.py` runs:
     binary by its exit status alone.
   * the gating demos, enumerated in `GATING_DEMOS` in the script -- sqlite3, lua,
     miniz, monocypher, stb, tweetnacl, quickjs, raylib, curl, libmill, libdill,
-    coroutines, nasm, qemu, edk2, bearssl, bzip2, kissfft, gui_hello, nt_loader,
-    kernel, tinycc, chibicc, uemacs, picocom, tcl. Each entry names the lane
-    kinds it runs on, and `scripts/run_demos.py` runs the lane's set
-    concurrently. `--demo-jobs` bounds how many run at a time, never which ones
+    coroutines, nasm, qemu at -O0 and at -O (`qemu@O`), edk2, bearssl, bzip2,
+    kissfft, gui_hello, nt_loader, kernel, tinycc, chibicc, uemacs, picocom,
+    tcl. Each entry names the lane kinds it runs on, and `scripts/run_demos.py`
+    runs the lane's set concurrently. An entry `path@config` runs a smoke in a
+    configuration the runner's `DEMO_ENV` defines; the configurations of one
+    smoke share its cache, so they run back to back in one slot, each with its
+    own verdict. `--demo-jobs` bounds how many run at a time, never which ones
     run; the runner prints its roster and its width.
   * the compile-throughput check over the QuickJS corpus the demos just
     fetched: `-O0` cost over `-O` cost, and the slowest unit over the
@@ -70,8 +73,20 @@ Linux only, and the pre-push hook lints on this host already).
 
 Out of `GATING_DEMOS` by measurement, and covered by CI instead: `demos/yasm`
 and `demos/python`; the script records the measurement behind each.
-`demos/qemu` gates its build, self-link and run, not its boot: the boot consumes
-the firmware CI's `ovmf` lane publishes as an artifact.
+
+`demos/qemu` runs on the Linux lanes at the two levels CI's qemu job builds:
+`qemu` at -O0 and `qemu@O` at -O with every unit compiled under `--verify-ssa`,
+which CI does not run. Each build self-links, runs, boots the published kernel
+bundle to a shell and powers off, through the box's own UEFI firmware (the
+system OVMF or AAVMF, where CI boots the `ovmf` lane's badc-built images); an
+entry fails on a box without that firmware. While the gate built -O0 alone and
+booted nothing, an -O pass defect whose qemu-system-aarch64 faulted in CI's
+boot passed all five lanes. Built with that commit's compiler, `qemu@O` now
+fails at compile time naming the pass, the function and the value, and the same
+build without the verifier faults in its boot. The two configurations share
+the demo's cache, so they run in one slot: 67 s on the idle aarch64 box and
+85 s on the x86_64 one, against 24 s and 27 s for the -O0 build alone. The
+phase stays tcl-bound: 138 to 140 s and 155 to 164 s per lane.
 
 `demos/kernel` runs both its architectures on the Linux lanes. Neither kernel
 exits once it has printed -- preempt.c ends in a halt loop and kernel.c returns

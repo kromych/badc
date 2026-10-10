@@ -169,10 +169,13 @@ pub(super) fn emit_inst(
             scratch,
             narrow_bound(*align, abi),
         ),
-        Inst::LoadLocal { off, kind, .. } => emit_load_local(
+        Inst::LoadLocal {
+            off, disp, kind, ..
+        } => emit_load_local(
             code,
             dst,
             *off,
+            *disp,
             *kind,
             alloc.is_f32(v),
             func,
@@ -180,9 +183,13 @@ pub(super) fn emit_inst(
             scratch,
         ),
         Inst::StoreLocal {
-            off, value, kind, ..
+            off,
+            disp,
+            value,
+            kind,
+            ..
         } => emit_store_local(
-            code, v, dst, *off, *value, *kind, alloc, func, frame, scratch,
+            code, v, dst, *off, *disp, *value, *kind, alloc, func, frame, scratch,
         ),
         Inst::LoadIndexed {
             base,

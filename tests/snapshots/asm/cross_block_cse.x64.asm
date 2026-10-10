@@ -29,19 +29,18 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x30, %rsp
-               	leaq	-0x28(%rbp), %rax
-               	movl	$0x0, (%rax)
-               	movl	$0x1, 0x4(%rax)
-               	movl	$0x4, 0x8(%rax)
-               	movl	$0x9, 0xc(%rax)
-               	movl	$0x10, 0x10(%rax)
-               	movl	$0x19, 0x14(%rax)
-               	movl	$0x24, 0x18(%rax)
+               	movl	$0x0, -0x28(%rbp)
+               	movl	$0x1, -0x24(%rbp)
+               	movl	$0x4, -0x20(%rbp)
+               	movl	$0x9, -0x1c(%rbp)
+               	movl	$0x10, -0x18(%rbp)
+               	movl	$0x19, -0x14(%rbp)
+               	movl	$0x24, -0x10(%rbp)
                	leaq	-0x28(%rbp), %rsi
-               	movl	$0x31, 0x1c(%rsi)
-               	movl	$0x40, 0x20(%rsi)
-               	movl	$0x51, 0x24(%rsi)
-               	movslq	0x1c(%rsi), %rax
+               	movl	$0x31, -0xc(%rbp)
+               	movl	$0x40, -0x8(%rbp)
+               	movl	$0x51, -0x4(%rbp)
+               	movl	-0xc(%rbp), %eax
                	cmpl	$0xc8, %eax
                	jle	<addr>
                	movl	$0x2, %eax
@@ -55,7 +54,7 @@ Disassembly of section .text:
                	shrq	$0x20, %rdx
                	imulq	$0xa, %rdx, %rdi
                	subq	%rdi, %rcx
-               	movslq	(%rsi,%rcx,4), %rcx
+               	movl	(%rsi,%rcx,4), %ecx
                	addq	%rcx, %rax
                	cmpl	$0xc8, %eax
                	jg	<addr>
@@ -74,7 +73,7 @@ Disassembly of section .text:
                	shrq	$0x20, %rdx
                	imulq	$0xa, %rdx, %rdi
                	subq	%rdi, %rcx
-               	movslq	(%rsi,%rcx,4), %rcx
+               	movl	(%rsi,%rcx,4), %ecx
                	addq	%rcx, %rax
                	cmpl	$0xc8, %eax
                	jg	<addr>
@@ -87,7 +86,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	movq	%rcx, %rax

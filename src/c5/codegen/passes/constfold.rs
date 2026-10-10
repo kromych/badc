@@ -988,6 +988,7 @@ mod tests {
             is_naked: false,
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
+            general_regs_only: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,
@@ -1875,6 +1876,7 @@ mod tests {
     fn bool_renormalize_redirects_to_the_source() {
         let mut f = fresh(vec![
             Inst::LoadLocal {
+                disp: 0,
                 off: 2,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -1890,6 +1892,7 @@ mod tests {
                 rhs_imm: 0,
             },
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 2,
                 kind: crate::c5::ir::StoreKind::I64,
@@ -1899,7 +1902,14 @@ mod tests {
         ]);
         run_one(&mut f);
         assert!(
-            matches!(f.insts[3], Inst::StoreLocal { value: 1, .. }),
+            matches!(
+                f.insts[3],
+                Inst::StoreLocal {
+                    disp: 0,
+                    value: 1,
+                    ..
+                }
+            ),
             "store must read the comparison, got {:?}",
             f.insts[3]
         );
@@ -1911,6 +1921,7 @@ mod tests {
     fn renormalize_of_a_non_bool_value_stays() {
         let mut f = fresh(vec![
             Inst::LoadLocal {
+                disp: 0,
                 off: 2,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -1926,6 +1937,7 @@ mod tests {
                 rhs_imm: 0,
             },
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 2,
                 kind: crate::c5::ir::StoreKind::I64,
@@ -1934,7 +1946,14 @@ mod tests {
             },
         ]);
         run_one(&mut f);
-        assert!(matches!(f.insts[3], Inst::StoreLocal { value: 2, .. }));
+        assert!(matches!(
+            f.insts[3],
+            Inst::StoreLocal {
+                disp: 0,
+                value: 2,
+                ..
+            }
+        ));
     }
 
     /// A phi merging a comparison with a 0/1 constant is 0/1, so a
@@ -1944,6 +1963,7 @@ mod tests {
     fn bool_renormalize_sees_through_a_bool_phi() {
         let mut f = fresh(vec![
             Inst::LoadLocal {
+                disp: 0,
                 off: 2,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -1964,6 +1984,7 @@ mod tests {
                 rhs_imm: 0,
             },
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 4,
                 kind: crate::c5::ir::StoreKind::I64,
@@ -1972,6 +1993,13 @@ mod tests {
             },
         ]);
         run_one(&mut f);
-        assert!(matches!(f.insts[5], Inst::StoreLocal { value: 3, .. }));
+        assert!(matches!(
+            f.insts[5],
+            Inst::StoreLocal {
+                disp: 0,
+                value: 3,
+                ..
+            }
+        ));
     }
 }

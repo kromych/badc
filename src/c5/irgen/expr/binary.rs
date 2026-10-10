@@ -3,7 +3,7 @@
 
 use super::super::access::{seg_copy_bytes, store_kind_for, store_kind_width, store_place};
 use super::super::atomic::{RmwOpen, RmwPlace};
-use super::super::types::{fold_int_binop, is_floating_scalar, is_fp_arith_op, type_size_bytes};
+use super::super::types::{is_floating_scalar, is_fp_arith_op, type_size_bytes};
 use super::super::*;
 use super::postfix::MemberRef;
 use crate::c5::ast::expr_ty;
@@ -113,13 +113,20 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Mask both operands of an unsigned relational compare need, or 0.
-    /// C99 6.3.1.8 converts a signed operand to the unsigned common
-    /// type, discarding the sign-extended high bits it carries in the
-    /// 64-bit register; left in place they make the compare read a huge
-    /// value. An unsigned operand, a non-negative literal and an 8-byte
-    /// operand need no mask.
-    fn unsigned_cmp_mask(&self, op: BinOp, lhs: ExprId, rhs: ExprId) -> i64 {
+    /// The mask both operands of integer `op` at common type `ty` take
+    /// before it reads them, or 0. C99 6.3.1.8 converts a signed operand of
+    /// an unsigned relational compare, divide or modulo at 32 bits to the
+    /// unsigned common type, discarding the sign-extended high bits it
+    /// carries in the 64-bit register; left in place they make the operator
+    /// read a huge value. An unsigned operand, a non-negative literal and an
+    /// 8-byte compare operand need no mask.
+    fn operand_mask(&self, op: BinOp, ty: i64, lhs: ExprId, rhs: ExprId) -> i64 {
+        if matches!(op, BinOp::Divu | BinOp::Modu) {
+            return match self.divmod_operand_width(op, ty, lhs, rhs) {
+                Some(32) => 0xffff_ffff,
+                _ => 0,
+            };
+        }
         if !matches!(op, BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge) {
             return 0;
         }
@@ -138,6 +145,21 @@ impl<'a> Walker<'a> {
         } else {
             0
         }
+    }
+
+    /// Integer `op` at common type `ty` over the constant values `l` and
+    /// `r` of `lhs` and `rhs`, converted as [`Self::operand_mask`] has the
+    /// operator read them; `None` for a zero divisor.
+    pub(super) fn fold_const_binop(
+        &self,
+        op: BinOp,
+        ty: i64,
+        (lhs, l): (ExprId, i64),
+        (rhs, r): (ExprId, i64),
+    ) -> Option<i64> {
+        let m = self.operand_mask(op, ty, lhs, rhs);
+        let (l, r) = if m == 0 { (l, r) } else { (l & m, r & m) };
+        crate::c5::ir::eval_int_binop(op, l, r).ok()
     }
 
     /// Lower a floating-point binop over walked operands. C99 6.3.1.8
@@ -246,9 +268,9 @@ impl<'a> Walker<'a> {
         if imm_safe_binop(op)
             && let Expr::IntLit { val: lv_imm, .. } = *self.ast.expr(lhs)
             && let Expr::IntLit { val: rv_imm, .. } = *self.ast.expr(rhs)
-            && self.unsigned_cmp_mask(op, lhs, rhs) == 0
+            && let Some(v) = self.fold_const_binop(op, ty, (lhs, lv_imm), (rhs, rv_imm))
         {
-            return Ok(b.imm(fold_int_binop(op, lv_imm, rv_imm)));
+            return Ok(b.imm(v));
         }
         let lv = self.walk_expr_rvalue(b, lhs)?;
         // The parser already pushes the narrowing (a mask, or a signed
@@ -306,22 +328,10 @@ impl<'a> Walker<'a> {
         ty: i64,
     ) -> Result<ValueId, WalkError> {
         let width = self.divmod_operand_width(op, ty, lhs, rhs);
-        // C99 6.3.1.3 + 6.3.1.8: an unsigned divide / modulo at a common
-        // type narrower than the register masks each operand first, or
-        // `udiv` / `umod` see the sign-extended high half a converted
-        // signed operand carries.
-        let divmod_mask = match (op, width) {
-            (BinOp::Divu | BinOp::Modu, Some(32)) => 0xffff_ffffi64,
-            _ => 0,
-        };
-        let cmp_mask = self.unsigned_cmp_mask(op, lhs, rhs);
+        let mask = self.operand_mask(op, ty, lhs, rhs);
         // An operand needing a mask takes the register path, since the
         // immediate fast paths skip the masking below.
-        let imm_safe_op = imm_safe_binop(op) && cmp_mask == 0;
-        debug_assert!(
-            !(imm_safe_op && divmod_mask != 0),
-            "imm_safe_binop should exclude Divu/Modu"
-        );
+        let imm_safe_op = imm_safe_binop(op) && mask == 0;
         if imm_safe_op && let Expr::IntLit { val, .. } = self.ast.expr(rhs) {
             return Ok(b.binop_imm(op, lv, *val));
         }
@@ -329,14 +339,9 @@ impl<'a> Walker<'a> {
         if imm_safe_op && let Some(v) = Self::binop_imm_form(b, op, lv, rv) {
             return Ok(v);
         }
-        if divmod_mask != 0 || cmp_mask != 0 {
-            let m = if divmod_mask != 0 {
-                divmod_mask
-            } else {
-                cmp_mask
-            };
-            lv = b.binop_imm(BinOp::And, lv, m);
-            rv = b.binop_imm(BinOp::And, rv, m);
+        if mask != 0 {
+            lv = b.binop_imm(BinOp::And, lv, mask);
+            rv = b.binop_imm(BinOp::And, rv, mask);
         }
         // `imm_safe_binop` excludes Div / Mod: the per-arch `BinopI` emit
         // does not lower them.

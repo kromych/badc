@@ -62,26 +62,25 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x60(%rbp), %rdx
-               	movw	$0x1, (%rdx)
-               	movw	$0x0, 0x2(%rdx)
+               	movw	$0x1, -0x60(%rbp)
+               	movw	$0x0, -0x5e(%rbp)
                	movl	$0x6, %esi
                	movq	%rbx, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movq	%rax, %r12
                	leaq	-0x60(%rbp), %rdx
-               	movw	$0x2, (%rdx)
+               	movw	$0x2, -0x60(%rbp)
                	movl	$0x6, %esi
                	movq	%rbx, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movq	%rax, %r13
                	leaq	-0x60(%rbp), %rdx
-               	movw	$0x1, (%rdx)
+               	movw	$0x1, -0x60(%rbp)
                	leaq	<rip>, %rax      # <addr>
-               	movq	(%rax), %rax
+               	movq	(%rax), %rcx
                	movl	$0x6, %esi
-               	movq	%rax, %rcx
                	movq	%rbx, %rdi
                	movb	$0x0, %al
                	callq	*%rcx

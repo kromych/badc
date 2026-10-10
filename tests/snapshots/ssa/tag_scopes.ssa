@@ -17,7 +17,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=1
     v11  Imm(3)                                           -> x0
     v12  StoreLocal { off=-1, value=v11, kind=I32 }       -> -
     v13  LocalAddr(-1)                                    -> x1
-    v14  Load { addr=v13, disp=0, kind=U32 }              -> x2
+    v14  LoadLocal { off=-1, kind=U32 }                   -> x2
     v15  Extend { value=v14, kind=I32 }                   -> x6
     v16  LifetimeEnd(-1)                                  -> -
     v17  Extend { value=v14, kind=I32 }                   -> x6

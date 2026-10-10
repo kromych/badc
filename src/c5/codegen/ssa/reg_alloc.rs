@@ -155,7 +155,8 @@ pub(crate) struct Allocation {
     /// the mask of those holding a value live across it: the fixed registers
     /// of an x86-64 shift or division ([`x86_implicit_writes`]), a count
     /// left in rcx excepted, which the emitter saves when named; every
-    /// register for a copy, which takes its temporaries among the free ones.
+    /// register for a copy, which takes its temporaries among the free ones;
+    /// a bound x86-64 asm statement's scratch candidates.
     pub implicit_live: Vec<u32>,
     /// Per-value coalescing hint: the physical register the
     /// allocator should prefer when one is set and free at the
@@ -201,25 +202,36 @@ pub(crate) struct Allocation {
     pub asm_preserve: (u32, u32),
 }
 
+/// Each value output of the asm statement at `site` with its place;
+/// `Place::None` for one nothing reads, whose place may be another's.
+fn asm_output_places(
+    func: &FunctionSsa,
+    site: ValueId,
+    places: &[Place],
+    use_counts: &[u32],
+) -> Vec<(usize, Place)> {
+    func.asm_output_values(site)
+        .into_iter()
+        .map(|(i, v)| {
+            let unread = use_counts.get(v as usize).is_some_and(|&n| n == 0);
+            let place = if v == NO_VALUE || unread {
+                Place::None
+            } else {
+                places.get(v as usize).copied().unwrap_or(Place::None)
+            };
+            (i, place)
+        })
+        .collect()
+}
+
 impl Allocation {
-    /// Each value output of the asm statement at `site` with its place;
-    /// `Place::None` for one nothing reads, whose place may be another's.
+    /// [`asm_output_places`] under this allocation.
     pub(crate) fn asm_output_places(
         &self,
         func: &FunctionSsa,
         site: ValueId,
     ) -> Vec<(usize, Place)> {
-        func.asm_output_values(site)
-            .into_iter()
-            .map(|(i, v)| {
-                let place = if v == NO_VALUE || self.is_unread(v) {
-                    Place::None
-                } else {
-                    self.places.get(v as usize).copied().unwrap_or(Place::None)
-                };
-                (i, place)
-            })
-            .collect()
+        asm_output_places(func, site, &self.places, &self.use_counts)
     }
 
     /// True when value `v` holds a single-precision `f32` pattern.
@@ -484,9 +496,16 @@ const X86_RAX: u8 = 0;
 const X86_RCX: u8 = 1;
 const X86_RDX: u8 = 2;
 
-/// A shift or rotate, whose variable count x86-64 reads in cl.
+/// A shift or rotate.
 fn is_shift_op(op: BinOp) -> bool {
     matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror)
+}
+
+/// A rotate, whose variable count x86-64 reads in cl: the shifts take
+/// the BMI2 `shlx` / `shrx` / `sarx` forms instead, which read the
+/// count in any register.
+fn is_cl_shift_op(op: BinOp) -> bool {
+    op == BinOp::Ror
 }
 
 /// A division, a remainder or a high multiply, which x86-64 computes in
@@ -499,12 +518,12 @@ fn is_rdx_rax_op(op: BinOp) -> bool {
 }
 
 /// The registers x86-64's lowering of `inst` writes besides its result, as
-/// a mask: rcx for a shift or rotate by a count no immediate form takes,
-/// rdx:rax for a division, a remainder, a high multiply and `Udiv128`, rax
-/// for the `CMPXCHG` of a compare-exchange and of a bitwise read-modify-write.
+/// a mask: rcx for a rotate or an out-of-range immediate shift, rdx:rax
+/// for a division, a remainder, a high multiply and `Udiv128`, rax for
+/// the `CMPXCHG` of a compare-exchange and of a bitwise read-modify-write.
 pub(crate) fn x86_implicit_writes(inst: &Inst) -> u16 {
     match *inst {
-        Inst::Binop { op, .. } if is_shift_op(op) => 1 << X86_RCX,
+        Inst::Binop { op, .. } if is_cl_shift_op(op) => 1 << X86_RCX,
         Inst::BinopI { op, rhs_imm, .. } if is_shift_op(op) && !(0..64).contains(&rhs_imm) => {
             1 << X86_RCX
         }
@@ -654,13 +673,14 @@ pub(crate) fn cmpxchg_rmw(op: AtomicRmwOp) -> bool {
 
 /// x86-64 register preferences the colorer honours among free caller-saved
 /// registers. `apart[root]` keeps the result of a non-commutative `op dst,
-/// rhs` (`sub`, `subsd`, `divsd`, a shift) off the register of `rhs`, which
-/// the emitter would copy aside first. A shift reads a register count in
-/// cl: the count is hinted to rcx, and `avoid[v]` holds rcx for the shift's
-/// result and operand. A division takes its dividend in rax and leaves the
-/// quotient there and the remainder in rdx, which the hints follow; its
-/// divisor avoids rdx:rax. The values live across an instruction avoid the
-/// registers it writes ([`x86_implicit_writes`]), a count excepted for rcx.
+/// rhs` (`sub`, `subsd`, `divsd`, a rotate) off the register of `rhs`, which
+/// the emitter would copy aside first. A rotate reads a register count in
+/// cl: the count is hinted to rcx, and `avoid[v]` holds rcx for the
+/// rotate's result and operand. A division takes its dividend in rax and
+/// leaves the quotient there and the remainder in rdx, which the hints
+/// follow; its divisor avoids rdx:rax. The values live across an
+/// instruction avoid the registers it writes
+/// ([`x86_implicit_writes`]), a count excepted for rcx.
 fn x86_preferences(
     func: &FunctionSsa,
     liveness: &super::liveness::Liveness,
@@ -698,7 +718,7 @@ fn x86_preferences(
         let Some((op, lhs, rhs)) = binop(inst) else {
             continue;
         };
-        if is_shift_op(op) {
+        if is_cl_shift_op(op) {
             is_count[rhs as usize] = true;
             hints[rhs as usize].get_or_insert(X86_RCX);
         } else if is_rdx_rax_op(op) {
@@ -731,7 +751,7 @@ fn x86_preferences(
         if is_rdx_rax_op(op) {
             keep_out(rhs, rdx_rax);
         }
-        if !is_shift_op(op) && !matches!(op, BinOp::Sub | BinOp::Fsub | BinOp::Fdiv) {
+        if !is_cl_shift_op(op) && !matches!(op, BinOp::Sub | BinOp::Fsub | BinOp::Fdiv) {
             continue;
         }
         let (a, b) = (node_of[v], node_of[rhs as usize]);
@@ -739,7 +759,7 @@ fn x86_preferences(
             apart[a as usize].push(b);
             apart[b as usize].push(a);
         }
-        if is_shift_op(op) {
+        if is_cl_shift_op(op) {
             keep_out(v as ValueId, rcx);
             keep_out(lhs, rcx);
         }
@@ -774,11 +794,10 @@ pub(crate) struct RegBanks {
     /// allocator spills them to memory instead.
     pub caller_gprs: Vec<u8>,
     /// Callee-saved FP regs the allocator may use. AAPCS64 marks
-    /// d8..d15 callee-saved. SysV AMD64 marks no xmm callee-saved.
-    /// Win64 marks xmm6..xmm15 non-volatile, but the x86_64
-    /// prologue/epilogue emit no FP save/restore, so this bank is
-    /// left empty there as well; both x86_64 ABIs force every
-    /// live-across-call FP value to memory.
+    /// d8..d15 callee-saved; Win64 marks xmm6..xmm15 non-volatile and
+    /// the x86_64 prologue/epilogue save and restore the full 128
+    /// bits of each one the body uses. SysV AMD64 marks no xmm
+    /// callee-saved.
     pub callee_fprs: Vec<u8>,
     /// Caller-saved FP regs (d0..d7 on aarch64; xmm0..xmm15 on
     /// x86_64).
@@ -786,6 +805,11 @@ pub(crate) struct RegBanks {
     /// FP registers the emit pass writes within one instruction's
     /// lowering, outside every bank; see [`FP_SCRATCH_COUNT`].
     pub fp_scratch: [u8; FP_SCRATCH_COUNT],
+    /// A callee-saved FP register preserves only its low 64 bits
+    /// across a call (AAPCS64 6.1.2), so a 128-bit value live across
+    /// one cannot take the callee bank. False where the convention
+    /// preserves the whole register, Win64 xmm6..xmm15 included.
+    pub callee_fpr_low64_only: bool,
 }
 
 impl RegBanks {
@@ -837,6 +861,7 @@ impl RegBanks {
             callee_fprs,
             caller_fprs,
             fp_scratch,
+            callee_fpr_low64_only: !target.is_x86_64(),
         }
     }
 }
@@ -852,6 +877,79 @@ pub(crate) fn fp_callee_saved(target: Target, r: u8) -> bool {
         Target::WindowsX64 => (6..=15).contains(&r),
         Target::LinuxX64 => false,
     }
+}
+
+/// `row`'s callee-saved `(gpr, fpr)` masks less the `-ffixed-` registers.
+fn preserved_regs(row: Target, fixed: FixedRegs) -> (u32, u32) {
+    let gpr = Rows::for_target(row)
+        .callee_gprs
+        .iter()
+        .fold(0u32, |m, &r| m | 1 << r);
+    let fpr = (0..u32::BITS as u8)
+        .filter(|&r| fp_callee_saved(row, r))
+        .fold(0u32, |m, r| m | 1 << r);
+    (gpr & !fixed.gpr, fpr & !fixed.fpr)
+}
+
+/// The registers of `kept`'s preserved set that the call `inst` may change:
+/// those its callee's convention leaves volatile (AMD64 psABI 3.2.1).
+pub(crate) fn call_clobbers(
+    inst: &Inst,
+    target: Target,
+    kept: Target,
+    fixed: FixedRegs,
+) -> (u32, u32) {
+    let Some(conv) = inst.call_conv() else {
+        return (0, 0);
+    };
+    let callee = target.abi_row(conv);
+    if callee == kept {
+        return (0, 0);
+    }
+    let (kg, kf) = preserved_regs(kept, fixed);
+    let (cg, cf) = preserved_regs(callee, fixed);
+    (kg & !cg, kf & !cf)
+}
+
+/// The registers of `kept`'s preserved set one of the calls may change; under
+/// `general_regs_only`, of the vector registers only the marshal's.
+fn call_saves(func: &FunctionSsa, target: Target, kept: Target, fixed: FixedRegs) -> (u32, u32) {
+    if func.is_naked {
+        return (0, 0);
+    }
+    func.insts.iter().fold((0, 0), |(g, f), inst| {
+        let (cg, mut cf) = call_clobbers(inst, target, kept, fixed);
+        if func.general_regs_only {
+            cf &= (1u32 << fp_arg_count(inst).min(8)) - 1;
+        }
+        (g | cg, f | cf)
+    })
+}
+
+/// Per phi-class root, the [`call_clobbers`] of the calls the value lives
+/// across.
+fn call_forbid_masks(
+    func: &FunctionSsa,
+    liveness: &super::liveness::Liveness,
+    target: Target,
+    fixed: FixedRegs,
+    node_of: &[ValueId],
+) -> Vec<(u32, u32)> {
+    let clobbers = |inst: &Inst| call_clobbers(inst, target, target, fixed);
+    let is_site = |inst: &Inst| clobbers(inst) != (0, 0);
+    if !func.insts.iter().any(is_site) {
+        return Vec::new();
+    }
+    let mut out = alloc::vec![(0u32, 0u32); func.insts.len()];
+    for (site, live) in liveness.values_live_after(func, &is_site) {
+        let (gpr, fpr) = clobbers(&func.insts[site as usize]);
+        for v in live {
+            let entry = &mut out[node_of[v as usize] as usize];
+            entry.0 |= gpr;
+            entry.1 |= fpr;
+        }
+    }
+    out
 }
 
 /// The target's full register banks.
@@ -930,22 +1028,13 @@ impl Rows {
                 // r9) plus rax.
                 callee_gprs: &[3, 6, 7, 12, 13, 14, 15],
                 caller_gprs: &[0, 1, 2, 8, 9],
-                // Win64 marks xmm6..xmm15 non-volatile (callee-saved),
-                // but the x86_64 prologue/epilogue and `Frame` layout
-                // reserve no space for and emit no save/restore of FP
-                // registers (`emit_prologue` only spills `gpr_used`).
-                // Assigning a live-across-call FP value to xmm6..xmm15
-                // would therefore corrupt the caller's non-volatile
-                // state on return. Keep the FP pool empty like SysV so
-                // the allocator forces every live-across-call FP value
-                // to memory and only ever uses the caller-saved
-                // (volatile) xmm0..xmm5. xmm0..xmm5 are the Win64
-                // volatile set per the x64 calling convention.
-                callee_fprs: &[],
-                caller_fprs: &[0, 1, 2, 3, 4, 5],
-                // xmm6..xmm15 are non-volatile and outside the banks; the
-                // prologue saves the scratch the body touches.
-                fp_scratch: &[14, 15, 13, 6, 7, 8, 9, 10, 11, 12],
+                // Win64 marks xmm6..xmm15 non-volatile (callee-saved);
+                // the prologue and every epilogue path save and restore
+                // the full 128 bits of each one the body uses, so the
+                // allocator may hold a live-across-call FP value there.
+                callee_fprs: &[6, 7, 8, 9, 10, 11, 12, 13, 14],
+                caller_fprs: &[0, 1, 2, 3],
+                fp_scratch: &[4, 5, 15],
             },
         }
     }
@@ -1003,11 +1092,12 @@ pub(crate) fn bank_capacity(target: Target, fixed: FixedRegs) -> BankCapacity {
 /// f64->f32 through the second, and the FMA lowering uses the third as
 /// its accumulator slot. Every use of the first two materialises or
 /// produces an FP value, so any FP-classed value implies the demand.
-/// A scratch the target's ABI marks callee-saved (Win64 xmm6..xmm15, or
-/// the AAPCS64 d8..d15 tail taken under `-ffixed-`) then joins the
-/// prologue's save list, so a foreign caller holding a live value there
-/// across a call into this code does not see it corrupted. A zero fill or a
-/// population count writes no scratch that owes a save ([`free_fp_register`]).
+/// A scratch the target's ABI marks callee-saved (the AAPCS64
+/// d8..d15 tail taken under `-ffixed-`, or a Win64 fallback off a
+/// reserved volatile scratch) then joins the prologue's save list, so
+/// a foreign caller holding a live value there across a call into this
+/// code does not see it corrupted. A zero fill or a population count
+/// writes no scratch that owes a save ([`free_fp_register`]).
 pub(crate) fn fp_scratch_demand(func: &FunctionSsa) -> [bool; FP_SCRATCH_COUNT] {
     // Tail-call forwarders jmp out with no epilogue, so a saved register
     // could never be restored; they touch no FP scratch either.
@@ -1022,6 +1112,23 @@ pub(crate) fn fp_scratch_demand(func: &FunctionSsa) -> [bool; FP_SCRATCH_COUNT] 
     let fp_work = simd || func.insts.iter().any(produces_fp_result);
     let fma = func.insts.iter().any(|i| matches!(i, Inst::Fma { .. }));
     [fp_work, fp_work, fma]
+}
+
+/// [`fp_scratch_demand`], the x86-64 third scratch only for a spilled FMA.
+fn fp_scratch_writes(
+    func: &FunctionSsa,
+    places: &[Place],
+    target: Target,
+) -> [bool; FP_SCRATCH_COUNT] {
+    let mut demand = fp_scratch_demand(func);
+    if target.is_x86_64() {
+        demand[2] &= func
+            .insts
+            .iter()
+            .zip(places)
+            .any(|(i, p)| matches!(i, Inst::Fma { .. }) && matches!(p, Place::Spill(_)));
+    }
+    demand
 }
 
 /// Why `func` cannot be emitted with `fp_scratch`: an entry it needs
@@ -1187,11 +1294,13 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         .map(|(v, inst)| produces_fp_result(inst) || fp_const[v])
         .collect();
     let param_incoming_forbid = compute_param_incoming_forbid(func, conv_target, &value_is_fp);
+    let call_target_forbid = compute_call_target_forbid(func, target);
     // Values live across an inline-asm block, and the registers each
     // block's lowering writes. A value kept out of that set survives the
     // block untouched, so the emit needs no save / restore pair for it.
-    let asm_live = asm_live_values(func, &liveness, target, fixed);
+    let mut asm_live = asm_live_values(func, &liveness, target, fixed);
     let asm_forbid = asm_forbid_masks(func, &asm_live, &node_of);
+    let call_forbid = call_forbid_masks(func, &liveness, target, fixed, &node_of);
     let wide = wide_values(func);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
@@ -1213,25 +1322,64 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         if entry.hint.is_none() {
             entry.hint = hints[v];
         }
-        entry.forbid |= param_incoming_forbid[v];
+        entry.forbid |= param_incoming_forbid[v] | call_target_forbid[v];
         entry.avoid |= avoid.get(v).copied().unwrap_or(0);
-        if let Some(&(gpr, fpr)) = asm_forbid.get(root) {
+        for &(gpr, fpr) in asm_forbid
+            .get(root)
+            .into_iter()
+            .chain(call_forbid.get(root))
+        {
             entry.forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
         }
     }
     let (max_gpr, max_fpr) = pool_size_limits();
     let spill_weights = compute_spill_weights(func, &node_of, &liveness);
-    let coloring = color_graph(
-        &value_interference,
-        &node_of,
-        &node_cons,
-        &banks,
-        max_gpr,
-        max_fpr,
-        func.has_returns_twice_call,
-        &spill_weights,
-        &apart,
-    );
+    let color = |node_cons: &[Option<NodeConstraints>]| {
+        color_graph(
+            &value_interference,
+            &node_of,
+            node_cons,
+            &banks,
+            max_gpr,
+            max_fpr,
+            func.has_returns_twice_call,
+            &spill_weights,
+            &apart,
+        )
+    };
+    let mut coloring = color(&node_cons);
+    // A bound x86-64 statement short of scratch under this coloring reserves
+    // its whole need, which any coloring leaves free, and colors again.
+    while target.is_x86_64() {
+        let mut widened = false;
+        for s in asm_live.iter_mut() {
+            if !s.full
+                && !asm_scratch_suffices(func, s, &coloring.places, &use_counts, fixed, target)
+            {
+                *s = asm_site(
+                    func,
+                    s.site,
+                    core::mem::take(&mut s.live),
+                    target,
+                    fixed,
+                    true,
+                );
+                widened = true;
+            }
+        }
+        if !widened {
+            break;
+        }
+        for (root, &(gpr, fpr)) in asm_forbid_masks(func, &asm_live, &node_of)
+            .iter()
+            .enumerate()
+        {
+            if let Some(entry) = node_cons[root].as_mut() {
+                entry.forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
+            }
+        }
+        coloring = color(&node_cons);
+    }
     places = coloring.places;
     let spill_count = coloring.spill_count;
     // A copy or an atomic read-modify-write may take any register as a
@@ -1253,9 +1401,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let is_site = |inst: &Inst| site_regs(inst) != 0;
     for (site, live) in liveness.values_live_after(func, &is_site) {
         let inst = &func.insts[site as usize];
-        // A shift reads its count in cl and leaves it there.
+        // A rotate reads its count in cl and leaves it there.
         let kept = match *inst {
-            Inst::Binop { op, rhs, .. } if is_shift_op(op) && target.is_x86_64() => rhs,
+            Inst::Binop { op, rhs, .. } if is_cl_shift_op(op) && target.is_x86_64() => rhs,
             _ => NO_VALUE,
         };
         let regs = site_regs(inst);
@@ -1265,6 +1413,15 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             {
                 implicit_live[site as usize] |= 1u32 << r;
             }
+        }
+    }
+    // A bound x86-64 statement's scratch: the candidates no live value holds.
+    for s in asm_live.iter().filter(|_| target.is_x86_64()) {
+        if let Inst::InlineAsm { asm, args } = &func.insts[s.site as usize]
+            && super::super::x86_64::emit::asm_binds_directly(func, asm, args, fixed, target)
+        {
+            implicit_live[s.site as usize] = asm_live_gprs(s, &places)
+                & super::super::x86_64::emit::bound_scratch_candidates(asm, fixed);
         }
     }
     // Recognise the c5 sign-narrow shape:
@@ -1377,7 +1534,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         let Some((shr_op, shr_lhs, shr_k, shr_imm_v)) = shift_shape(inst) else {
             continue;
         };
-        if shr_op != BinOp::Shr || !matches!(shr_k, 32 | 48 | 56) {
+        // An unread `Shr` is not emitted; the one reader the `Shl`'s count
+        // then holds is another instruction.
+        if shr_op != BinOp::Shr || !matches!(shr_k, 32 | 48 | 56) || use_counts[i] == 0 {
             continue;
         }
         let Some(shl_inst) = func.insts.get(shr_lhs as usize) else {
@@ -1618,7 +1777,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // downstream reads it, the emit path's mov-to-dst is dead work.
     // Setting the Place to None makes the propagate skip. An atomic's
     // unread prior contents take no register either, which lets a bitwise
-    // read-modify-write keep none.
+    // read-modify-write keep none. A phi nothing reads has no reader to
+    // place either: None drops its predecessor-exit moves in
+    // `edge_moves`.
     for (v, inst) in func.insts.iter().enumerate() {
         if use_counts[v] == 0
             && matches!(
@@ -1630,6 +1791,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                     | Inst::Mcpy { .. }
                     | Inst::AtomicRmw { .. }
                     | Inst::AtomicCas { .. }
+                    | Inst::Phi { .. }
             )
         {
             places[v] = Place::None;
@@ -1645,7 +1807,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // writer's fixed scratch -- are covered by the aarch64 frame's x19
     // decision and the Win64 xmm listing below, and phi-predecessor
     // moves write the phi's own place, which is reached through the
-    // phi (never dead-pure).
+    // phi's row (a live phi is never dead-pure; a dead one holds no
+    // place).
     let mut gpr_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     let mut fp_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     for (v, inst) in func.insts.iter().enumerate() {
@@ -1683,20 +1846,6 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         .into_iter()
         .filter(|r| banks.callee_gprs.contains(r) || conv_banks.callee_gprs.contains(r))
         .collect();
-    // `gpr_used` covers the registers the allocator hands out as values.
-    // The emit writes more on its own: every call marshals its arguments
-    // into the *callee's* argument registers, and this function's callees
-    // follow the target's convention. On a foreign convention some of
-    // those are registers this function owes its caller -- System V
-    // marshals into rsi and rdi, which the Microsoft x64 convention
-    // reserves -- so they join the save list too.
-    if conv_target != target && func.insts.iter().any(is_call) {
-        for &r in target.abi().int_arg_regs {
-            if conv_banks.callee_gprs.contains(&r) && !gpr_used_callee.contains(&r) {
-                gpr_used_callee.push(r);
-            }
-        }
-    }
     // The x86_64 writer's fixed scratch (r10 / r11) is caller-saved, so
     // it needs no save. The aarch64 writer's callee-saved x19 is saved
     // through `Frame::uses_x19`, not this list.
@@ -1704,29 +1853,20 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         .into_iter()
         .filter(|r| banks.callee_fprs.contains(r) || fp_callee_saved(conv_target, *r))
         .collect();
-    // The same for the floating-point argument registers a call
-    // marshals into: System V passes them in xmm0..xmm7
-    // (`plan_call_args_aggs`) where the Microsoft x64 convention
-    // reserves xmm6 upward, so a call passing that many reaches them.
-    if conv_target != target {
-        let fp_args = func
-            .insts
-            .iter()
-            .map(fp_arg_count)
-            .max()
-            .unwrap_or(0)
-            .min(8);
-        for r in 0..fp_args as u8 {
-            if fp_callee_saved(conv_target, r) && !fp_used_callee.contains(&r) {
-                fp_used_callee.push(r);
-            }
+    let (call_gpr, call_fpr) = call_saves(func, target, conv_target, fixed);
+    for r in 0..u32::BITS as u8 {
+        if call_gpr & (1 << r) != 0 && !gpr_used_callee.contains(&r) {
+            gpr_used_callee.push(r);
+        }
+        if call_fpr & (1 << r) != 0 && !fp_used_callee.contains(&r) {
+            fp_used_callee.push(r);
         }
     }
     // The FP scratch sits outside `callee_fprs` (never an allocator
     // value), so the filter above drops it; a callee-saved scratch the
     // body touches joins the list here so the prologue / epilogue's
     // FP-save loop preserves it, mirroring the r13 GPR handling above.
-    let demand = fp_scratch_demand(func);
+    let demand = fp_scratch_writes(func, &places, target);
     for (i, &r) in banks.fp_scratch.iter().enumerate() {
         if demand[i]
             && r != NO_FP_SCRATCH
@@ -1810,35 +1950,89 @@ fn asm_live_values(
     let live = liveness.values_live_after(func, &|inst| matches!(inst, Inst::InlineAsm { .. }));
     live.into_iter()
         .map(|(site, mut live)| {
-            let Inst::InlineAsm { asm, args } = &func.insts[site as usize] else {
-                return AsmSite {
-                    gpr: 0,
-                    fpr: 0,
-                    values: Vec::new(),
-                };
-            };
-            late_read_args(asm, args, &mut live);
-            let (gpr, fpr) = asm_write_masks(func, asm, args, target, fixed);
-            let mut values: Vec<(ValueId, u32, u32)> =
-                live.into_iter().map(|v| (v, gpr, fpr)).collect();
-            if target.is_aarch64() {
-                values.extend(
-                    super::super::aarch64::emit::asm_site_bound_values(
-                        func, asm, args, site, fixed,
-                    )
-                    .into_iter()
-                    .map(|v| (v, gpr, fpr)),
-                );
-            } else {
-                values.extend(super::super::x86_64::emit::asm_site_bound_values(
-                    func, asm, args, site, fixed, target,
-                ));
+            if let Inst::InlineAsm { asm, args } = &func.insts[site as usize] {
+                late_read_args(asm, args, &mut live);
             }
-            values.sort_unstable();
-            values.dedup();
-            AsmSite { gpr, fpr, values }
+            asm_site(func, site, live, target, fixed, false)
         })
         .collect()
+}
+
+/// The [`AsmSite`] of `site`, `live` the values live across it.
+fn asm_site(
+    func: &FunctionSsa,
+    site: ValueId,
+    live: Vec<ValueId>,
+    target: Target,
+    fixed: FixedRegs,
+    full: bool,
+) -> AsmSite {
+    let Inst::InlineAsm { asm, args } = &func.insts[site as usize] else {
+        return AsmSite {
+            site,
+            live,
+            full,
+            gpr: 0,
+            fpr: 0,
+            values: Vec::new(),
+        };
+    };
+    let (gpr, fpr) = asm_write_masks(func, asm, args, target, fixed, full);
+    let mut values: Vec<(ValueId, u32, u32)> = live.iter().map(|&v| (v, gpr, fpr)).collect();
+    if target.is_aarch64() {
+        values.extend(
+            super::super::aarch64::emit::asm_site_bound_values(func, asm, args, site, fixed)
+                .into_iter()
+                .map(|v| (v, gpr, fpr)),
+        );
+    } else {
+        values.extend(super::super::x86_64::emit::asm_site_bound_values(
+            func, asm, args, site, fixed, target, full,
+        ));
+    }
+    values.sort_unstable();
+    values.dedup();
+    AsmSite {
+        site,
+        live,
+        full,
+        gpr,
+        fpr,
+        values,
+    }
+}
+
+/// The GP registers `places` gives the values live across `s`.
+fn asm_live_gprs(s: &AsmSite, places: &[Place]) -> u32 {
+    s.live.iter().fold(0, |m, &v| match places[v as usize] {
+        Place::IntReg(r) => m | 1 << r,
+        _ => m,
+    })
+}
+
+/// Whether a bound x86-64 statement finds its scratch among the registers
+/// `places` leaves free at `s`.
+fn asm_scratch_suffices(
+    func: &FunctionSsa,
+    s: &AsmSite,
+    places: &[Place],
+    use_counts: &[u32],
+    fixed: FixedRegs,
+    target: Target,
+) -> bool {
+    let Inst::InlineAsm { asm, args } = &func.insts[s.site as usize] else {
+        return true;
+    };
+    super::super::x86_64::emit::asm_bound_scratch_suffices(
+        func,
+        asm,
+        args,
+        places,
+        &asm_output_places(func, s.site, places, use_counts),
+        asm_live_gprs(s, places),
+        fixed,
+        target,
+    )
 }
 
 /// Join the arguments a site reads after its template -- an output's
@@ -1858,10 +2052,14 @@ fn late_read_args(asm: &crate::c5::ir::AsmBlock, args: &[u32], values: &mut Vec<
     values.sort_unstable();
 }
 
-/// One inline-asm site: the registers its lowering writes, and each value
-/// kept out of some of them, with its masks: all of them for those live
-/// across it, the target's choice for bound operands.
+/// One inline-asm site: the values live across it, the registers its
+/// lowering writes, and each value kept out of some of them with its masks:
+/// all for those live across it, the target's choice for bound operands.
 struct AsmSite {
+    site: ValueId,
+    live: Vec<ValueId>,
+    /// A bound x86-64 statement reserves its whole scratch need.
+    full: bool,
     gpr: u32,
     fpr: u32,
     values: Vec<(ValueId, u32, u32)>,
@@ -1869,18 +2067,19 @@ struct AsmSite {
 
 /// The registers an inline-asm statement's lowering writes on `target`:
 /// the clobber list, the operand registers and, on x86_64, the operand
-/// staging register.
+/// staging register or a bound statement's reserved scratch.
 fn asm_write_masks(
     func: &FunctionSsa,
     asm: &crate::c5::ir::AsmBlock,
     args: &[u32],
     target: Target,
     fixed: FixedRegs,
+    full: bool,
 ) -> (u32, u32) {
     if target.is_aarch64() {
         super::super::aarch64::emit::asm_site_write_masks(func, asm, args, fixed)
     } else {
-        super::super::x86_64::emit::asm_site_write_masks(func, asm, args, fixed, target)
+        super::super::x86_64::emit::asm_site_write_masks(func, asm, args, fixed, target, full)
     }
 }
 
@@ -2069,14 +2268,10 @@ fn check_allocation(
 
     // Cross-call discipline: caller-saved registers do not survive a call.
     for (c, inst) in func.insts.iter().enumerate() {
-        if !covered(c)
-            || !matches!(
-                inst,
-                Inst::Call { .. } | Inst::CallExt { .. } | Inst::CallIndirect { .. }
-            )
-        {
+        if !covered(c) || inst.call_conv().is_none() {
             continue;
         }
+        let (gpr, fpr) = call_clobbers(inst, target, target, FixedRegs::NONE);
         let cid = c as ValueId;
         for v in 0..func.insts.len() {
             let vid = v as ValueId;
@@ -2084,12 +2279,18 @@ fn check_allocation(
                 continue;
             }
             match places.get(v).copied().unwrap_or(Place::None) {
-                Place::IntReg(r) if banks.caller_gprs.contains(&r) => report(alloc::format!(
-                    "cross-call: v{v} in caller-saved int reg {r} is live across the call at v{c}"
-                )),
-                Place::FpReg(r) if banks.caller_fprs.contains(&r) => report(alloc::format!(
-                    "cross-call: v{v} in caller-saved fp reg {r} is live across the call at v{c}"
-                )),
+                Place::IntReg(r) if banks.caller_gprs.contains(&r) || gpr & (1 << r) != 0 => {
+                    report(alloc::format!(
+                        "cross-call: v{v} in int reg {r}, which the call at v{c} may change, \
+                         is live across it"
+                    ))
+                }
+                Place::FpReg(r) if banks.caller_fprs.contains(&r) || fpr & (1 << r) != 0 => {
+                    report(alloc::format!(
+                        "cross-call: v{v} in fp reg {r}, which the call at v{c} may change, \
+                         is live across it"
+                    ))
+                }
                 _ => {}
             }
         }
@@ -2547,9 +2748,10 @@ pub(crate) fn color_graph(
         } else {
             (&banks.callee_gprs[..], &banks.caller_gprs[..])
         };
-        // A callee-saved SIMD register keeps only its low 64 bits across a
-        // call (AAPCS64 6.1.2), so a 128-bit value live across one spills.
-        let callee = if c.wide && c.must_callee {
+        // A callee-saved register of a low64-only convention keeps just
+        // its low 64 bits across a call, so a 128-bit value live across
+        // one spills; Win64 saves the whole register and takes it.
+        let callee = if c.wide && c.must_callee && banks.callee_fpr_low64_only {
             &callee_full[..0]
         } else {
             &callee_full[..callee_full.len().min(cap)]
@@ -2708,9 +2910,14 @@ fn compute_spill_weights(
 }
 
 /// Count consumers for every SSA value, then iterate to fixed point
-/// so transitively-dead pure insts also drop to use_count == 0.
-/// Drives the emit pass's dead-code skip, and the static DCE's
-/// address edges: both must agree on which materializations lower.
+/// so transitively-dead pure insts and phis also drop to
+/// use_count == 0. A phi nothing reads keeps its incoming values
+/// alive no more: its predecessor-exit moves are dropped, so its
+/// reads stop counting. Phis reading only one another form cycles,
+/// so the live phis grow backward from those some instruction or
+/// terminator reads, and the rest die. Drives the emit pass's
+/// dead-code skip, and the static DCE's address edges: both must
+/// agree on which materializations lower.
 pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
     let n = func.insts.len();
     let mut counts: Vec<u32> = vec![0; n];
@@ -2728,32 +2935,86 @@ pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
         for_each_operand(inst, |op| bump_into(&mut counts, op));
     }
     for block in &func.blocks {
-        match block.terminator {
-            super::super::ir::Terminator::Bz { cond, .. } => bump_into(&mut counts, cond),
-            super::super::ir::Terminator::Bnz { cond, .. } => bump_into(&mut counts, cond),
-            super::super::ir::Terminator::Return(v) => bump_into(&mut counts, v),
-            super::super::ir::Terminator::GotoIndirect { target }
-            | super::super::ir::Terminator::JumpTable { idx: target, .. } => {
-                bump_into(&mut counts, target)
-            }
-            _ => {}
-        }
+        block
+            .terminator
+            .for_each_operand(|v| bump_into(&mut counts, v));
     }
-    // Iterate to fixed point: a pure inst with zero uses is dead;
-    // its operand references stop counting. Worst case O(n^2)
-    // but n is typically small (per-function inst count) and the
-    // fixed point converges in few passes (chain length).
+    // Iterate to fixed point: a pure inst with zero uses is dead, and
+    // so is a phi nothing reads. Worst case O(n^2) but n is typically
+    // small (per-function inst count) and the fixed point converges in
+    // few passes (chain length).
     let mut killed: Vec<bool> = vec![false; n];
     loop {
         let mut changed = false;
+        loop {
+            let mut pure_changed = false;
+            for (i, inst) in func.insts.iter().enumerate() {
+                if killed[i] || !inst.is_pure() {
+                    continue;
+                }
+                if counts[i] == 0 {
+                    killed[i] = true;
+                    changed = true;
+                    pure_changed = true;
+                    for_each_operand(inst, |op| decrement(&mut counts, op));
+                }
+            }
+            if !pure_changed {
+                break;
+            }
+        }
+        // Phi liveness: a phi read by a non-phi instruction or a
+        // terminator that still emits is live, and liveness flows
+        // backward along the phi edges, so a phi read only by dead
+        // phis dies -- a cycle of phis reading only one another dies
+        // as a whole.
+        let mut live: Vec<bool> = vec![false; n];
+        let mut work: Vec<usize> = Vec::new();
+        let seed = |live: &mut Vec<bool>, work: &mut Vec<usize>, v: ValueId| {
+            if v != NO_VALUE
+                && (v as usize) < n
+                && !killed[v as usize]
+                && matches!(func.insts[v as usize], Inst::Phi { .. })
+                && !live[v as usize]
+            {
+                live[v as usize] = true;
+                work.push(v as usize);
+            }
+        };
         for (i, inst) in func.insts.iter().enumerate() {
-            if killed[i] || !inst.is_pure() {
+            if killed[i] || matches!(inst, Inst::Phi { .. }) {
                 continue;
             }
-            if counts[i] == 0 {
-                killed[i] = true;
-                changed = true;
-                for_each_operand(inst, |op| decrement(&mut counts, op));
+            for_each_operand(inst, |op| seed(&mut live, &mut work, op));
+        }
+        for block in &func.blocks {
+            block
+                .terminator
+                .for_each_operand(|v| seed(&mut live, &mut work, v));
+        }
+        while let Some(p) = work.pop() {
+            let Inst::Phi { incoming, .. } = &func.insts[p] else {
+                continue;
+            };
+            for &(_, s) in incoming {
+                seed(&mut live, &mut work, s);
+            }
+        }
+        for (i, inst) in func.insts.iter().enumerate() {
+            let Inst::Phi { incoming, kind } = inst else {
+                continue;
+            };
+            if killed[i] || live[i] {
+                continue;
+            }
+            killed[i] = true;
+            changed = true;
+            // Decrement the incomes whose edge move read a place;
+            // `drop_unread_incomes` removes the no-place ones.
+            for &(_, s) in incoming {
+                if !super::emit_common::phi_income_reads_no_place(func, *kind, s) {
+                    decrement(&mut counts, s);
+                }
             }
         }
         if !changed {
@@ -2784,13 +3045,19 @@ pub(crate) fn x86_mask_takes_bt(imm: i64) -> bool {
 
 /// Per instruction: whether its lowering reads its operands. A dead pure
 /// value ([`super::emit_common::is_dead_pure_counts`]) lowers to nothing,
-/// so the liveness and pressure walks skip its reads; the instruction
-/// itself stays as it is, since a site that folds it reads its contents.
+/// and so does a phi nothing reads, whose predecessor-exit moves are
+/// dropped, so the liveness and pressure walks skip its reads; the
+/// instruction itself stays as it is, since a site that folds it reads
+/// its contents.
 pub(crate) fn operands_read(func: &FunctionSsa, use_counts: &[u32]) -> Vec<bool> {
     func.insts
         .iter()
         .enumerate()
-        .map(|(v, inst)| !super::emit_common::is_dead_pure_counts(inst, v as ValueId, use_counts))
+        .map(|(v, inst)| {
+            let dead_phi =
+                matches!(inst, Inst::Phi { .. }) && use_counts.get(v).copied().unwrap_or(0) == 0;
+            !dead_phi && !super::emit_common::is_dead_pure_counts(inst, v as ValueId, use_counts)
+        })
         .collect()
 }
 
@@ -3061,7 +3328,7 @@ fn populate_call_arg_hints(
     calls_after_def: &[bool],
     hints: &mut [Option<u8>],
 ) {
-    use crate::c5::codegen::{ArgPlacement, CallConv};
+    use crate::c5::codegen::ArgPlacement;
     let incoming: Vec<Option<(bool, u8)>> = param_incoming_plan(func, target)
         .iter()
         .map(|p| match *p {
@@ -3072,7 +3339,7 @@ fn populate_call_arg_hints(
         .collect();
     for (pc, inst) in func.insts.iter().enumerate() {
         // An import's variadic count is unknown here; its arguments plan as fixed.
-        let (args, fixed, fp_arg_mask, arg_aggs, widths, conv) = match inst {
+        let (args, fixed, fp_arg_mask, arg_aggs, widths) = match inst {
             Inst::Call {
                 args,
                 fixed_args,
@@ -3080,14 +3347,7 @@ fn populate_call_arg_hints(
                 arg_aggs,
                 arg_widths,
                 ..
-            } => (
-                args,
-                *fixed_args,
-                fp_arg_mask,
-                arg_aggs,
-                *arg_widths,
-                CallConv::Target,
-            ),
+            } => (args, *fixed_args, fp_arg_mask, arg_aggs, *arg_widths),
             Inst::CallIndirect {
                 args,
                 callee_variadic,
@@ -3095,7 +3355,6 @@ fn populate_call_arg_hints(
                 fp_arg_mask,
                 arg_aggs,
                 arg_widths,
-                callee_conv,
                 ..
             } => {
                 let fixed = if *callee_variadic {
@@ -3103,14 +3362,7 @@ fn populate_call_arg_hints(
                 } else {
                     args.len()
                 };
-                (
-                    args,
-                    fixed,
-                    fp_arg_mask,
-                    arg_aggs,
-                    *arg_widths,
-                    *callee_conv,
-                )
+                (args, fixed, fp_arg_mask, arg_aggs, *arg_widths)
             }
             Inst::CallExt {
                 args,
@@ -3118,15 +3370,11 @@ fn populate_call_arg_hints(
                 arg_aggs,
                 arg_widths,
                 ..
-            } => (
-                args,
-                args.len(),
-                fp_arg_mask,
-                arg_aggs,
-                *arg_widths,
-                CallConv::Target,
-            ),
+            } => (args, args.len(), fp_arg_mask, arg_aggs, *arg_widths),
             _ => continue,
+        };
+        let Some(conv) = inst.call_conv() else {
+            continue;
         };
         let abi = target.abi_for(conv);
         let aggs = super::emit_common::build_arg_aggs(arg_aggs, &func.agg_descs, abi);
@@ -3180,11 +3428,45 @@ fn populate_call_arg_hints(
             // and no other call may sit between its definition and this
             // call. Otherwise the caller-saved arg-register hint races
             // the intervening clobber.
-            if last_use[vu] != pc || calls_after_def[vu] || hints[vu].is_some() {
+            if last_use[vu] != pc || calls_after_def[vu] {
+                continue;
+            }
+            // An existing hint stands, except the param-ref pass's home
+            // hint for a parameter that is this call's argument: the
+            // marshal reads the home, so the marshal's own register
+            // governs, sparing the marshal the scratch swap a source
+            // parked in another argument's register forces. The
+            // later-parameter guard below keeps the entry hazard out.
+            // The override never applies when the register is another
+            // parameter's incoming register: that parameter's own home
+            // hint pins it there, so the override would not be honoured
+            // and would displace the parameter's home instead -- the
+            // marshal's cycle-breaking swap (`xchg` on x86-64, the
+            // scratch on aarch64) is the cheaper route.
+            let own_incoming = match &func.insts[vu] {
+                Inst::ParamRef { idx: pi, .. } | Inst::ParamPart { idx: pi, .. } => incoming
+                    .get(*pi as usize)
+                    .copied()
+                    .flatten()
+                    .filter(|(fp, _)| !fp)
+                    .map(|(_, reg)| reg),
+                _ => None,
+            };
+            if let Some(h) = hints[vu]
+                && !(matches!(
+                    &func.insts[vu],
+                    Inst::ParamRef { idx: pi, .. } | Inst::ParamPart { idx: pi, .. }
+                        if incoming.get(*pi as usize).copied().flatten()
+                            == Some((false, h))
+                ) && !incoming
+                    .iter()
+                    .flatten()
+                    .any(|&(fp, reg)| !fp && reg == r && Some(reg) != own_incoming))
+            {
                 continue;
             }
             // Never into a later parameter's still unread incoming register.
-            if let Inst::ParamRef { idx: pi, .. } = func.insts[vu]
+            if let Inst::ParamRef { idx: pi, .. } | Inst::ParamPart { idx: pi, .. } = func.insts[vu]
                 && incoming[(pi as usize + 1).min(incoming.len())..].contains(&Some((false, r)))
             {
                 continue;
@@ -3316,18 +3598,6 @@ fn populate_return_hints(
             ResultKind::None => {}
         }
     }
-}
-
-/// True for an instruction that transfers control to a callee, which
-/// marshals its arguments into the callee convention's registers.
-fn is_call(inst: &Inst) -> bool {
-    matches!(
-        inst,
-        Inst::Call { .. }
-            | Inst::CallIndirect { .. }
-            | Inst::CallExt { .. }
-            | Inst::Intrinsic { .. }
-    )
 }
 
 /// How many floating-point arguments a call instruction passes, so the
@@ -3508,6 +3778,77 @@ fn compute_param_incoming_forbid(
                 forbid[v] |= 1u64 << reg;
             }
         }
+    }
+    forbid
+}
+
+/// Keep each `CallIndirect` target off the registers the same call
+/// marshals its arguments into: the emit would otherwise move the
+/// target aside before the argument setup. The registers mirror the
+/// per-arch emit's blocked set -- the integer registers the callee's
+/// convention fills with another value, the aarch64 indirect-result slot,
+/// and `al` for a System V variadic call, whose XMM count the marshal
+/// writes just before the branch.
+fn compute_call_target_forbid(func: &FunctionSsa, target: Target) -> Vec<u64> {
+    use crate::c5::codegen::{plan_call_args_aggs, plan_mirrored_call};
+    let mut forbid = alloc::vec![0u64; func.insts.len()];
+    for inst in &func.insts {
+        let Inst::CallIndirect {
+            target: t,
+            args,
+            callee_variadic,
+            fixed_args,
+            fp_arg_mask,
+            arg_widths,
+            callee_conv,
+            arg_aggs,
+            ..
+        } = inst
+        else {
+            continue;
+        };
+        let abi = target.abi_for(*callee_conv);
+        if (*t as usize) >= forbid.len() {
+            continue;
+        }
+        let aggs = super::emit_common::build_arg_aggs(arg_aggs, &func.agg_descs, abi);
+        let plan = if target.is_x86_64() && *callee_variadic && abi.position_indexed_args {
+            plan_mirrored_call(args.len(), fp_arg_mask, abi, &aggs)
+        } else if target.is_aarch64() {
+            let named =
+                crate::c5::codegen::named_args(abi, *callee_variadic, *fixed_args, args.len());
+            plan_call_args_aggs(
+                args.len(),
+                named,
+                fp_arg_mask,
+                abi,
+                &aggs,
+                false,
+                *arg_widths,
+            )
+        } else {
+            plan_call_args_aggs(
+                args.len(),
+                args.len(),
+                fp_arg_mask,
+                abi,
+                &aggs,
+                false,
+                crate::c5::ir::ArgWidths::default(),
+            )
+        };
+        let mut mask = 0u64;
+        for r in plan.int_regs_besides(args, *t) {
+            mask |= 1u64 << r;
+        }
+        if target.is_aarch64() {
+            // The indirect-result slot: the emit never calls through it.
+            mask |= 1u64 << 8;
+        } else if *callee_variadic && abi.sysv_host_variadic() {
+            // The marshal sets `al` to the XMM count just before the branch.
+            mask |= 1u64 << X86_RAX;
+        }
+        forbid[*t as usize] |= mask;
     }
     forbid
 }
@@ -3900,6 +4241,7 @@ mod tests {
             callee_fprs: Vec::new(),
             caller_fprs: Vec::new(),
             fp_scratch: [NO_FP_SCRATCH; FP_SCRATCH_COUNT],
+            callee_fpr_low64_only: true,
         }
     }
 
@@ -4015,7 +4357,8 @@ mod tests {
                     let Inst::InlineAsm { asm, args } = &func.insts[site as usize] else {
                         unreachable!("ICE: an asm site names a non-asm inst");
                     };
-                    let (w_gpr, w_fpr) = asm_write_masks(func, asm, args, target, FixedRegs::NONE);
+                    let (w_gpr, w_fpr) =
+                        asm_write_masks(func, asm, args, target, FixedRegs::NONE, false);
                     sites += 1;
                     for v in values {
                         let held = match alloc.places[v as usize] {
@@ -4153,7 +4496,7 @@ mod tests {
                             continue;
                         };
                         let (w_gpr, w_fpr) =
-                            asm_write_masks(func, asm, args, target, FixedRegs::NONE);
+                            asm_write_masks(func, asm, args, target, FixedRegs::NONE, false);
                         let (p_gpr, p_fpr) = alloc.asm_preserve;
                         covered +=
                             (w_gpr & callee_gpr).count_ones() + (w_fpr & callee_fpr).count_ones();
@@ -4205,43 +4548,23 @@ mod tests {
     }
 
     #[test]
-    fn x86_64_register_banks_expose_no_callee_saved_fp() {
-        // The x86_64 prologue/epilogue (`emit_prologue` / `emit_return`
-        // in ssa_emit_x86_64) and the `Frame` layout reserve no space
-        // for FP-register saves and emit no save/restore of any xmm.
-        // Both x86_64 ABIs must therefore expose an empty callee-saved
-        // FP bank: the allocator keeps every live-across-call FP value
-        // in memory and only ever uses the volatile xmm regs. Win64
-        // marks xmm6..xmm15 non-volatile (x64 calling convention); if
-        // they leaked into `callee_fprs` the allocator could park a
-        // value there and corrupt the caller's xmm6..xmm15 on return,
-        // since nothing saves them.
-        for target in [Target::LinuxX64, Target::WindowsX64] {
-            let banks = RegBanks::for_target(target);
-            assert!(
-                banks.callee_fprs.is_empty(),
-                "{target:?} exposes callee-saved FP regs {:?} but the x86_64 \
-                 prologue/epilogue emit no FP save/restore",
-                banks.callee_fprs
-            );
-        }
-        // The Win64 volatile xmm set is xmm0..xmm5; the caller-saved FP
-        // bank must not advertise a non-volatile register either.
-        let win = RegBanks::for_target(Target::WindowsX64);
+    fn sysv_exposes_no_callee_saved_fp_and_win64_the_nonvolatile_xmm() {
+        // SysV AMD64 marks no xmm callee-saved; Win64 marks xmm6..xmm15
+        // non-volatile, xmm15 being the FMA accumulator scratch.
         assert!(
-            win.caller_fprs.iter().all(|&r| r <= 5),
-            "Win64 caller_fprs {:?} includes a non-volatile xmm (>= xmm6)",
-            win.caller_fprs
+            RegBanks::for_target(Target::LinuxX64)
+                .callee_fprs
+                .is_empty()
         );
+        let win = RegBanks::for_target(Target::WindowsX64);
+        assert_eq!(win.callee_fprs, [6, 7, 8, 9, 10, 11, 12, 13, 14]);
+        assert_eq!(win.caller_fprs, [0, 1, 2, 3]);
+        assert_eq!(win.fp_scratch, [4, 5, 15]);
     }
 
     #[test]
-    fn win64_fp_value_live_across_call_does_not_use_callee_saved_xmm() {
-        // An FP local live across a call must not be parked in a Win64
-        // non-volatile xmm (xmm6..xmm15): the x86_64 prologue/epilogue
-        // emit no FP save/restore, so such a placement would corrupt
-        // the caller's register on return. Pre-fix the allocator put
-        // the sum `s` in xmm6 and read it back after the `g()` calls.
+    fn win64_fp_value_live_across_a_call_takes_a_callee_saved_xmm() {
+        // An FP local live across a call takes a Win64 non-volatile xmm.
         let src = r#"
 double g(double);
 double sink;
@@ -4263,24 +4586,38 @@ int main(void) { return 0; }
         .expect("produce_ssa_funcs");
         for func in &funcs {
             let alloc = allocate(func, Target::WindowsX64);
+            let mut saved_any = false;
             for place in &alloc.places {
                 if let Place::FpReg(r) = place {
-                    assert!(
-                        *r <= 5,
-                        "Win64 allocation parked an FP value in non-volatile xmm{r} \
-                         ({}); the prologue/epilogue do not save it",
-                        func.name
-                    );
+                    if *r >= 6 {
+                        assert!(
+                            alloc.fp_used.contains(r),
+                            "Win64 allocation parked an FP value in non-volatile xmm{r} \
+                             ({}) outside the save list",
+                            func.name
+                        );
+                        saved_any = true;
+                    } else {
+                        assert!(
+                            *r <= 3,
+                            "Win64 allocation parked an FP value in the scratch xmm{r} ({})",
+                            func.name
+                        );
+                    }
                 }
             }
-            // `fp_used` may now list the emit pass's fixed FP scratch
-            // (xmm13/14/15), which the prologue/epilogue save and restore
-            // on Win64. No other non-volatile xmm may appear: a value
-            // parked outside the scratch set would not be saved.
+            if func.name == "f" {
+                assert!(
+                    saved_any,
+                    "the sum live across the g() calls must take a callee-saved xmm"
+                );
+            }
+            // The volatile scratch owes no save; only allocator-assigned
+            // non-volatile xmms reach the list.
             for &r in &alloc.fp_used {
                 assert!(
-                    matches!(r, 13..=15),
-                    "Win64 fp_used in {} lists xmm{r}, not a saved scratch reg",
+                    (6..=15).contains(&r),
+                    "Win64 fp_used in {} lists the volatile xmm{r}",
                     func.name
                 );
             }
@@ -4288,12 +4625,9 @@ int main(void) { return 0; }
     }
 
     #[test]
-    fn win64_fp_function_saves_nonvolatile_xmm_scratch() {
-        // The x86_64 emit pass uses xmm14/15 (and xmm13 for FMA) as its default
-        // FP scratch; they are non-volatile under Win64, so a function
-        // that performs FP work must report them in `fp_used` for the
-        // prologue/epilogue to preserve. System V marks every xmm
-        // volatile, so the same body reports none.
+    fn win64_fp_scratch_is_saved_where_it_is_written() {
+        // xmm15 is saved where an FMA result spills; a reserved volatile
+        // scratch falls back to the callee-saved tail, which is saved.
         let fp_src = r#"
 double f(double a, double b, double c, double d, double e, double h) {
     double s = a * b + c * d;
@@ -4305,19 +4639,50 @@ int main(void) { return 0; }
         let program = Compiler::new(fp_src.to_string())
             .compile()
             .expect("compile");
-        for (target, want_scratch) in [(Target::WindowsX64, true), (Target::LinuxX64, false)] {
-            let funcs =
-                crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
-                    .expect("ssa");
-            let f = funcs.iter().find(|f| f.name == "f").expect("f");
-            let alloc = allocate(f, target);
-            let saves_14_15 = alloc.fp_used.contains(&14) && alloc.fp_used.contains(&15);
-            assert_eq!(
-                saves_14_15, want_scratch,
-                "{target:?}: fp_used = {:?}, expected scratch-saved = {want_scratch}",
-                alloc.fp_used
-            );
-        }
+        let mut funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+            &program,
+            Target::WindowsX64,
+            false,
+            true,
+        )
+        .expect("ssa");
+        crate::c5::codegen::passes::fma::run(&mut funcs);
+        let f = funcs.iter().find(|f| f.name == "f").expect("f");
+        assert!(f.insts.iter().any(|i| matches!(i, Inst::Fma { .. })));
+        let spills_an_fma = |alloc: &Allocation| {
+            f.insts
+                .iter()
+                .zip(&alloc.places)
+                .any(|(i, p)| matches!(i, Inst::Fma { .. }) && matches!(p, Place::Spill(_)))
+        };
+        // The whole banks, whatever caps the run sets.
+        let alloc =
+            with_pool_size_override(usize::MAX, usize::MAX, || allocate(f, Target::WindowsX64));
+        assert!(!spills_an_fma(&alloc), "{:?}", alloc.places);
+        assert!(
+            !alloc.fp_used.iter().any(|&r| matches!(r, 4 | 5 | 15)),
+            "a Win64 FP function saves no scratch it leaves alone: {:?}",
+            alloc.fp_used
+        );
+        assert_eq!(alloc.fp_scratch, [4, 5, 15]);
+        let alloc = with_pool_size_override(usize::MAX, 1, || allocate(f, Target::WindowsX64));
+        assert!(spills_an_fma(&alloc), "{:?}", alloc.places);
+        assert!(
+            alloc.fp_used.contains(&15),
+            "a spilled FMA result writes the accumulator: {:?}",
+            alloc.fp_used
+        );
+        let fixed = FixedRegs {
+            gpr: 0,
+            fpr: (1 << 3) | (1 << 4) | (1 << 5),
+        };
+        let alloc = super::allocate(f, Target::WindowsX64, fixed);
+        assert_eq!(alloc.fp_scratch, [15, 14, 13]);
+        assert!(
+            alloc.fp_used.contains(&14) && alloc.fp_used.contains(&15),
+            "the fallback scratch xmm14/15 must join the save list: {:?}",
+            alloc.fp_used
+        );
 
         // A non-FP function reports no FP scratch even on Win64.
         let int_src = "int g(int a, int b) { return a * b + a; }\nint main(void){return 0;}";
@@ -4825,6 +5190,59 @@ int main(void) { return 0; }
         );
     }
 
+    /// `t = x << 32; (void)(t >> 32); return a + t;`: the sign-narrowing
+    /// pair folds into one extension only for a read `Shr`. Folding the
+    /// unread one dropped the `Shl` as unread, and the add read a
+    /// register nothing wrote.
+    #[test]
+    fn an_unread_narrowing_shift_leaves_its_shl_to_the_other_reader() {
+        use crate::c5::ir::Block;
+        let n = 5;
+        let f = FunctionSsa {
+            n_params: 2,
+            inst_src: vec![(0, 0); n],
+            f32_values: vec![false; n],
+            insts: vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64,
+                },
+                Inst::BinopI {
+                    op: BinOp::Shl,
+                    lhs: 0,
+                    rhs_imm: 32,
+                },
+                Inst::BinopI {
+                    op: BinOp::Shr,
+                    lhs: 2,
+                    rhs_imm: 32,
+                },
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 1,
+                    rhs: 2,
+                },
+            ],
+            blocks: vec![Block {
+                start_pc: 0,
+                inst_range: 0..n as u32,
+                terminator: Terminator::Return(4),
+                exit_acc: 4,
+            }],
+            ..Default::default()
+        };
+        for target in [Target::LinuxAarch64, Target::LinuxX64] {
+            let alloc = allocate(&f, target);
+            assert_eq!(alloc.use_counts[3], 0, "{target:?}: the Shr is unread");
+            assert_eq!(alloc.sxtw_source[3], NO_VALUE, "{target:?}: no fold");
+            assert_eq!(alloc.use_counts[2], 1, "{target:?}: the add reads the Shl");
+        }
+    }
+
     /// A value the emit skips writes no register, so its color must not
     /// reach the prologue's save list. Ten simultaneously-live
     /// immediates exhaust the seven-entry x86_64 caller bank; the dead
@@ -4895,8 +5313,9 @@ int main(void) { return 0; }
         }
     }
 
-    /// The zero fill's FP register owes no save: the System V scratch, a bank register when
-    /// the scratch is reserved or on Win64 without FP work, and the saved scratch with it.
+    /// The zero fill's FP register owes no save: the System V scratch,
+    /// a bank register when the scratch is reserved, and the volatile
+    /// Win64 scratch (xmm4) whether or not the body does FP work.
     #[test]
     fn a_zero_fill_takes_an_fp_register_that_owes_no_save() {
         let src = "struct S { long long w[4]; };\n\
@@ -4924,12 +5343,14 @@ int main(void) { return 0; }
         assert_eq!(pick(Target::LinuxX64, "plain", FixedRegs::NONE).0, Some(14));
         assert_eq!(pick(Target::LinuxX64, "fp", FixedRegs::NONE).0, Some(14));
         assert_eq!(pick(Target::LinuxX64, "plain", scratch_fixed).0, Some(7));
+        // The Win64 scratch (xmm4) is volatile, so it needs no save
+        // whether or not the body does FP work.
         assert_eq!(
             pick(Target::WindowsX64, "plain", FixedRegs::NONE),
-            (Some(5), Vec::new())
+            (Some(4), Vec::new())
         );
         let (r, saved) = pick(Target::WindowsX64, "fp", FixedRegs::NONE);
-        assert!(r == Some(14) && saved.contains(&14), "{r:?} {saved:?}");
+        assert!(r == Some(4) && saved.is_empty(), "{r:?} {saved:?}");
     }
 
     /// A struct copy yields its destination as the assignment expression's
@@ -4993,22 +5414,26 @@ int main(void) { return 0; }
                 // non-None place, except for store-class insts
                 // whose "side-output" value (the propagated acc)
                 // is unread -- the allocator nulls those out so
-                // the emit pass skips the dst-propagate step.
+                // the emit pass skips the dst-propagate step --
+                // and a phi nothing reads, whose edge moves are
+                // dropped.
                 let kind = result_kind(&f.insts[i]);
-                let store_with_dead_dst = matches!(
-                    f.insts[i],
-                    Inst::Store { .. }
-                        | Inst::StoreLocal { .. }
-                        | Inst::StoreIndexed { .. }
-                        | Inst::SegStore { .. }
-                        | Inst::Mcpy { .. }
-                        | Inst::AtomicRmw { .. }
-                        | Inst::AtomicCas { .. }
-                ) && alloc.use_counts.get(i).copied().unwrap_or(0) == 0;
+                let dead_dst = alloc.use_counts.get(i).copied().unwrap_or(0) == 0
+                    && matches!(
+                        f.insts[i],
+                        Inst::Store { .. }
+                            | Inst::StoreLocal { .. }
+                            | Inst::StoreIndexed { .. }
+                            | Inst::SegStore { .. }
+                            | Inst::Mcpy { .. }
+                            | Inst::AtomicRmw { .. }
+                            | Inst::AtomicCas { .. }
+                            | Inst::Phi { .. }
+                    );
                 match kind {
                     ResultKind::None => assert_eq!(*p, Place::None),
                     ResultKind::Int | ResultKind::Fp => {
-                        if store_with_dead_dst {
+                        if dead_dst {
                             continue;
                         }
                         assert!(
@@ -5122,6 +5547,7 @@ int main(void) { return 0; }
             0,
             false,
             crate::c5::ir::FpMask::EMPTY,
+            crate::c5::codegen::CallConv::Target,
         );
         b.jmp(exit);
         // mid: v = 7; jmp body. Laid out after body, so def(v) pc is
@@ -5349,6 +5775,7 @@ int main(void) { return 0; }
             is_naked: false,
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
+            general_regs_only: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,
@@ -5590,6 +6017,7 @@ int main(void) { return 0; }
             is_naked: false,
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
+            general_regs_only: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,
@@ -5667,6 +6095,7 @@ int main(void) { return 0; }
 
     fn load_i64() -> Inst {
         Inst::LoadLocal {
+            disp: 0,
             off: 2,
             kind: LoadKind::I64,
             volatile: false,
@@ -5695,8 +6124,80 @@ int main(void) { return 0; }
         assert_eq!(compute_use_counts(&f)[..2], [1, 1]);
     }
 
+    /// A phi nothing reads is dead, and so, transitively, are the pure
+    /// values only it read: the phi's incoming values lose the phi's
+    /// read. A cycle of phis reading only one another dies as a whole;
+    /// a phi a terminator reads stays alive with its incomes counted.
+    #[test]
+    fn dead_phi_releases_its_incoming_values() {
+        use super::super::super::ir::Block;
+        // b0: v0=Imm(0); Jmp b1
+        // b1: v1=Phi[b0:v0, b1:v2]; v2=Phi[b0:v0, b1:v1]  (dead cycle)
+        //     v3=Phi[b0:v0, b1:v4]; v4=add v3, 1; v5=add v3, v4
+        //     ; Bz v5 -> b1 else b2
+        // b2: Return v3
+        let insts = vec![
+            Inst::Imm(0),
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 2)],
+                kind: LoadKind::I64,
+            },
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 1)],
+                kind: LoadKind::I64,
+            },
+            Inst::Phi {
+                incoming: vec![(0, 0), (1, 4)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 3,
+                rhs_imm: 1,
+            },
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs: 3,
+                rhs: 4,
+            },
+        ];
+        let blocks = vec![
+            Block {
+                start_pc: 0,
+                inst_range: 0..1,
+                terminator: Terminator::Jmp(1),
+                exit_acc: 0,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 1..6,
+                terminator: Terminator::Bz {
+                    cond: 5,
+                    target: 1,
+                    fall_through: 2,
+                },
+                exit_acc: 5,
+            },
+            Block {
+                start_pc: 0,
+                inst_range: 6..6,
+                terminator: Terminator::Return(3),
+                exit_acc: 3,
+            },
+        ];
+        let f = func_with(insts, blocks);
+        let counts = compute_use_counts(&f);
+        assert_eq!(counts[1], 0, "the dead cycle's phis read nothing");
+        assert_eq!(counts[2], 0, "the dead cycle's phis read nothing");
+        assert_eq!(counts[0], 1, "only the live phi reads the entry value");
+        assert_eq!(counts[3], 3, "v3: v4, v5 and the return");
+        assert_eq!(counts[4], 2, "v4: v5 and the phi's back edge");
+        assert_eq!(counts[5], 1, "v5: the branch");
+    }
+
     fn store_of(value: ValueId) -> Inst {
         Inst::StoreLocal {
+            disp: 0,
             off: -1,
             value,
             kind: StoreKind::I64,
@@ -5807,6 +6308,7 @@ int main(void) { return 0; }
                     store_kind(0, 11, StoreKind::F64),
                     Inst::Imm(9),
                     Inst::StoreLocal {
+                        disp: 0,
                         off: -1,
                         value: 13,
                         kind: StoreKind::I32,
@@ -5968,27 +6470,25 @@ int main(void) { return 0; }
         );
     }
 
-    /// On x86-64 a shift's count takes rcx, its result and a value live
-    /// across it keep out, and no save is recorded; a difference keeps its
-    /// result apart from its subtrahend. AArch64 records nothing.
+    /// On x86-64 a rotate's count takes rcx, its result and a value live
+    /// across it keep out, and no save is recorded; a shift (SHLX) records
+    /// no implicit write and leaves the count wherever it is. A difference
+    /// keeps its result apart from its subtrahend. AArch64 records nothing.
     #[test]
-    fn variable_shift_leaves_rcx_to_its_count() {
+    fn variable_shift_leaves_rcx_to_the_rotate() {
         let local = |off| Inst::LoadLocal {
+            disp: 0,
             off,
             kind: LoadKind::I64,
             volatile: false,
         };
-        let build = || {
+        let build = |op| {
             store_func(
                 vec![
                     local(2),
                     local(3),
                     local(4),
-                    Inst::Binop {
-                        op: BinOp::Shl,
-                        lhs: 0,
-                        rhs: 1,
-                    },
+                    Inst::Binop { op, lhs: 0, rhs: 1 },
                     Inst::Binop {
                         op: BinOp::Sub,
                         lhs: 2,
@@ -5998,9 +6498,10 @@ int main(void) { return 0; }
                 4,
             )
         };
-        let full =
-            |target| with_pool_size_override(usize::MAX, usize::MAX, || allocate(&build(), target));
-        let x64 = full(Target::LinuxX64);
+        let full = |target, op| {
+            with_pool_size_override(usize::MAX, usize::MAX, || allocate(&build(op), target))
+        };
+        let x64 = full(Target::LinuxX64, BinOp::Ror);
         let rcx = Place::IntReg(X86_RCX);
         assert_eq!(x64.places[1], rcx);
         for v in [0, 2, 3] {
@@ -6008,15 +6509,20 @@ int main(void) { return 0; }
         }
         assert_ne!(x64.places[4], x64.places[3]);
         assert!(!x64.holds_live_across(3, X86_RCX));
-        let a64 = full(Target::LinuxAarch64);
+        // A shift writes nothing besides its result: the count rides
+        // whatever register holds it and rcx stays unrecorded.
+        let shl = full(Target::LinuxX64, BinOp::Shl);
+        assert!(shl.implicit_live.iter().all(|&m| m == 0));
+        let a64 = full(Target::LinuxAarch64, BinOp::Shl);
         assert!(a64.implicit_live.iter().all(|&m| m == 0));
     }
 
-    /// With two caller-saved registers a value live across the shift ends
+    /// With two caller-saved registers a value live across a rotate ends
     /// in rcx, and the allocation records it for the emitter's save.
     #[test]
-    fn rcx_held_across_a_shift_is_recorded() {
+    fn rcx_held_across_a_rotate_is_recorded() {
         let local = |off| Inst::LoadLocal {
+            disp: 0,
             off,
             kind: LoadKind::I64,
             volatile: false,
@@ -6033,7 +6539,7 @@ int main(void) { return 0; }
                 local(4),
                 local(5),
                 Inst::Binop {
-                    op: BinOp::Shl,
+                    op: BinOp::Ror,
                     lhs: 0,
                     rhs: 3,
                 },
@@ -6049,6 +6555,7 @@ int main(void) { return 0; }
 
     fn local_i64(off: i64) -> Inst {
         Inst::LoadLocal {
+            disp: 0,
             off,
             kind: LoadKind::I64,
             volatile: false,
@@ -6089,6 +6596,7 @@ int main(void) { return 0; }
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                     low_word_args: 0,
                     arg_widths: crate::c5::ir::ArgWidths::default(),
+                    callee_conv: crate::c5::codegen::CallConv::Target,
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
@@ -6252,6 +6760,7 @@ int main(void) { return 0; }
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 low_word_args: 0,
                 arg_widths: crate::c5::ir::ArgWidths::default(),
+                callee_conv: crate::c5::codegen::CallConv::Target,
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -6336,11 +6845,7 @@ int main(void) { return 0; }
             let mut funcs =
                 crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, true, true)
                     .expect("ssa");
-            super::super::super::passes::agg_parts::run(
-                &mut funcs,
-                target,
-                &alloc::collections::BTreeMap::new(),
-            );
+            super::super::super::passes::agg_parts::run(&mut funcs, target);
             let ints = agg_return_regs(target).0;
             let args = target.abi().int_arg_regs;
             for (name, straight) in [("id", true), ("swap", false)] {
@@ -6452,6 +6957,7 @@ int main(void) { return 0; }
         let build = |kind: LoadKind, low_word: bool| {
             let mut f = branch_func(
                 vec![Inst::LoadLocal {
+                    disp: 0,
                     off: 2,
                     kind,
                     volatile: false,
@@ -6524,11 +7030,13 @@ int main(void) { return 0; }
             branch_func(
                 vec![
                     Inst::LoadLocal {
+                        disp: 0,
                         off: 2,
                         kind: LoadKind::F64,
                         volatile: false,
                     },
                     Inst::LoadLocal {
+                        disp: 0,
                         off: 3,
                         kind: LoadKind::F64,
                         volatile: false,

@@ -41,21 +41,20 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x2328, %eax           # imm = 0x2328
                	jl	<addr>
-               	leaq	-0x2330(%rbp), %rax
-               	movl	$0x4d2, 0x2328(%rax)    # imm = 0x4D2
-               	movzbq	(%rax), %rcx
-               	movzbq	0x2000(%rax), %rdx
-               	movl	0x2328(%rax), %eax
-               	movsbq	%cl, %rcx
-               	testl	%ecx, %ecx
+               	movl	$0x4d2, -0x8(%rbp)      # imm = 0x4D2
+               	movzbq	-0x2330(%rbp), %rax
+               	movzbq	-0x330(%rbp), %rcx
+               	movl	-0x8(%rbp), %edx
+               	movsbq	%al, %rax
+               	testl	%eax, %eax
                	jne	<addr>
-               	movsbq	%dl, %rcx
-               	testl	%ecx, %ecx
+               	movsbq	%cl, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	cmpl	$0x4d2, %eax            # imm = 0x4D2
+               	cmpl	$0x4d2, %edx            # imm = 0x4D2
                	je	<addr>
                	movl	$0x4, %eax
                	leave

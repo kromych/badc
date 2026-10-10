@@ -1131,19 +1131,31 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = stored;
             return Ok(());
         }
-        Inst::LoadLocal { off, kind, .. } => {
-            let addr = frame.slot_addr(*off).ok_or_else(|| {
-                C5Error::Runtime(format!("vm_ssa: LoadLocal: slot {off} out of range"))
-            })?;
+        Inst::LoadLocal {
+            off, disp, kind, ..
+        } => {
+            let addr = frame
+                .slot_addr(*off)
+                .map(|a| (a as i64 + i64::from(*disp)) as usize)
+                .ok_or_else(|| {
+                    C5Error::Runtime(format!("vm_ssa: LoadLocal: slot {off} out of range"))
+                })?;
             frame.regs[v as usize] = load_from_memory(mem, addr, *kind)?;
             return Ok(());
         }
         Inst::StoreLocal {
-            off, value, kind, ..
+            off,
+            disp,
+            value,
+            kind,
+            ..
         } => {
-            let addr = frame.slot_addr(*off).ok_or_else(|| {
-                C5Error::Runtime(format!("vm_ssa: StoreLocal: slot {off} out of range"))
-            })?;
+            let addr = frame
+                .slot_addr(*off)
+                .map(|a| (a as i64 + i64::from(*disp)) as usize)
+                .ok_or_else(|| {
+                    C5Error::Runtime(format!("vm_ssa: StoreLocal: slot {off} out of range"))
+                })?;
             let stored = narrow_store(frame.regs[*value as usize], *kind);
             store_to_memory(mem, addr, stored, *kind)?;
             frame.regs[v as usize] = stored;
@@ -2447,6 +2459,7 @@ fn run_inline_asm(
         },
         // The register model holds every memory operand's address.
         &|_| false,
+        crate::c5::codegen::Target::host(),
     )
     .map_err(C5Error::Runtime)?;
     // The interpreter models only the 16 GPRs; an `x` (xmm) operand carries a

@@ -67,7 +67,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	(%r9)
+               	fstpt	-0x10(%rbp)
                	subq	$0x10, %rsp
                	movq	%r9, %r10
                	movq	(%r10), %r11

@@ -33,37 +33,33 @@ Disassembly of section .text:
                	movq	%rax, -0x30(%rbp)
                	movq	$0x0, -0x8(%rbp)
                	leaq	-0x30(%rbp), %rcx
-               	movq	(%rcx), %rdx
-               	leaq	-0x8(%rbp), %rcx
-               	movq	%rdx, (%rcx)
-               	movq	-0x8(%rbp), %rdx
+               	movq	(%rcx), %rcx
+               	movq	%rcx, -0x8(%rbp)
                	movabsq	$0x1122334455667788, %r11 # imm = 0x1122334455667788
-               	cmpq	%r11, %rdx
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
                	movq	$0x0, -0x28(%rbp)
-               	movabsq	$0xdeadbeefcafe, %rdx   # imm = 0xDEADBEEFCAFE
-               	movq	%rdx, -0x8(%rbp)
+               	movabsq	$0xdeadbeefcafe, %rcx   # imm = 0xDEADBEEFCAFE
+               	movq	%rcx, -0x8(%rbp)
                	leaq	-0x28(%rbp), %rdx
-               	movq	(%rcx), %rsi
-               	movq	%rsi, %r10
+               	movq	%rcx, %r10
                	xchgq	%r10, (%rdx)
-               	movq	-0x28(%rbp), %rdx
+               	movq	-0x28(%rbp), %rcx
                	movabsq	$0xdeadbeefcafe, %r11   # imm = 0xDEADBEEFCAFE
-               	cmpq	%r11, %rdx
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
                	movl	$0x2a, -0x20(%rbp)
                	movl	$0x0, -0x8(%rbp)
-               	leaq	-0x20(%rbp), %rdx
-               	movl	(%rdx), %edx
-               	movl	%edx, (%rcx)
-               	movslq	-0x8(%rbp), %rdx
-               	cmpl	$0x2a, %edx
+               	leaq	-0x20(%rbp), %rcx
+               	movl	(%rcx), %ecx
+               	movl	%ecx, -0x8(%rbp)
+               	cmpl	$0x2a, %ecx
                	je	<addr>
                	movl	$0x3, %eax
                	leave
@@ -71,9 +67,9 @@ Disassembly of section .text:
                	movl	$0x0, -0x18(%rbp)
                	movl	$0xfffffff9, -0x8(%rbp) # imm = 0xFFFFFFF9
                	leaq	-0x18(%rbp), %rax
-               	movl	(%rcx), %ecx
+               	movl	-0x8(%rbp), %ecx
                	movl	%ecx, (%rax)
-               	movslq	-0x18(%rbp), %rax
+               	movl	-0x18(%rbp), %eax
                	cmpl	$-0x7, %eax
                	je	<addr>
                	movl	$0x4, %eax

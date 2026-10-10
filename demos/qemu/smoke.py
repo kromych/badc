@@ -230,6 +230,14 @@ def transform(argv: list[str], glib_cflags: list[str], src_dir: Path, build_dir:
     return out
 
 
+def diagnosis(stderr: str) -> str:
+    """The stderr line naming why a compile failed: the last one, ahead of
+    the backtrace hint the Rust runtime appends to a panic (an ICE)."""
+    lines = [ln for ln in stderr.strip().splitlines()
+             if not ln.startswith("note: run with `RUST_BACKTRACE")]
+    return lines[-1][:300] if lines else "?"
+
+
 def read_objects(build_dir: Path, stem: str) -> list[str]:
     toks = (build_dir / f"{stem}.rsp").read_text().split()
     return [t for t in toks if t.endswith(".o")]
@@ -339,6 +347,9 @@ def main() -> int:
     # the -O compile lane undefines it to match QEMU's build (optimization,
     # asserts on). The link keeps plain -O.
     opt_compile = [*opt, "-U", "NDEBUG"] if optimize else []
+    # The SSA checks after every pass: a pass that breaks the form stops the
+    # unit's compile rather than reaching the emulator's run time.
+    verify = ["--verify-ssa"] if os.environ.get("BADC_QEMU_VERIFY_SSA") == "1" else []
     host_accel = f"{HOST_INCLUDE}/{arch}"
 
     def compile_one(obj: str) -> tuple[str, str]:
@@ -352,17 +363,16 @@ def main() -> int:
         # Retry a unit needing a host SIMD-intrinsics header on the portable path.
         for scalar in (False, True):
             flags = transform(argv, glib_cflags, src_dir, build_dir, orig_build, orig_src, scalar, host_accel)
-            cmd = [str(badc), "--gnu", "-q", *opt_compile, *_syslib.sysroot_args(),
+            cmd = [str(badc), "--gnu", "-q", *opt_compile, *verify, *_syslib.sysroot_args(),
                    "-c", "-o", str(dst), *flags, src_file]
             r = subprocess.run(cmd, cwd=build_dir, capture_output=True, text=True)
             if r.returncode == 0:
                 return (obj, "ok")
             if scalar or not any(h in r.stderr for h in HOST_ACCEL_HEADERS):
-                last = r.stderr.strip().splitlines()[-1] if r.stderr.strip() else "?"
-                return (obj, f"fail: {last[:120]}")
+                return (obj, f"fail: {diagnosis(r.stderr)}")
         return (obj, "fail")
 
-    lane = "-O" if optimize else "-O0"
+    lane = " ".join(["-O" if optimize else "-O0", *verify])
     log(f"compiling {len(all_o)} translation units with badc [{lane}], {jobs} jobs")
     t0 = time.time()
     results: dict[str, str] = {}
@@ -605,10 +615,14 @@ OVMF_SEARCH = ("/usr/share/OVMF", "/usr/share/edk2/ovmf",
 # EFI-stub Image boots THROUGH the firmware (the firmware picks up QEMU's fw_cfg
 # -kernel), matching the x86_64 OVMF path; absent, the aarch64 boot falls back to
 # -M virt's legacy -kernel loader. The pflash pair is the QEMU_EFI/QEMU_VARS the
-# -M virt machine expects.
+# -M virt machine expects; Fedora names the template vars-template-pflash.raw,
+# and its *-qemuvars-* images are code for QEMU's host-side variable store.
 AAVMF_CODE_NAMES = ("QEMU_EFI-pflash.raw", "AAVMF_CODE.fd", "QEMU_EFI.fd")
-AAVMF_VARS_NAMES = ("QEMU_VARS-pflash.raw", "AAVMF_VARS.fd")
+AAVMF_VARS_NAMES = ("QEMU_VARS-pflash.raw", "AAVMF_VARS.fd", "vars-template-pflash.raw")
 AAVMF_SEARCH = ("/usr/share/AAVMF", "/usr/share/edk2/aarch64", "/usr/share/qemu-efi-aarch64")
+# A -M virt flash bank. An image of another size (QEMU_EFI.fd) is the -bios
+# form, which virt loads into the first bank; QEMU refuses it as a pflash drive.
+VIRT_FLASH_BANK = 64 << 20
 
 
 def _find_firmware(env: str, names: tuple[str, ...], dirs: tuple[str, ...]) -> Path | None:
@@ -629,69 +643,88 @@ def _find_firmware(env: str, names: tuple[str, ...], dirs: tuple[str, ...]) -> P
     return None
 
 
-def ovmf_pflash(cache: Path) -> list[str]:
+def ovmf_pflash(work: Path) -> list[str]:
     """Locate system OVMF and return the QEMU firmware args for a UEFI boot.
-    VARS is copied to a writable per-run file. Fails if no firmware is found."""
+    VARS is copied to a writable per-run file in `work`. Fails if no firmware
+    is found."""
     code = _find_firmware("BADC_QEMU_OVMF_CODE", OVMF_CODE_NAMES, OVMF_SEARCH)
     if code is None:
         fail("no OVMF firmware found for the x86_64 UEFI boot; install `ovmf` "
              "(Debian/Ubuntu) or `edk2-ovmf` (Fedora), or set $BADC_QEMU_OVMF_CODE")
     vars_src = _find_firmware("BADC_QEMU_OVMF_VARS", OVMF_VARS_NAMES,
                               (str(code.parent), *OVMF_SEARCH))
+    log(f"boot: firmware {code}, variable store {vars_src or 'none'}")
     if vars_src is None:
         return ["-bios", str(code)]
-    vars_rw = cache / "ovmf_vars.rw.fd"
+    vars_rw = work / "ovmf_vars.rw.fd"
     shutil.copyfile(vars_src, vars_rw)
     return ["-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={code}",
             "-drive", f"if=pflash,format=raw,unit=1,file={vars_rw}"]
 
 
-def aavmf_pflash(cache: Path) -> list[str] | None:
+def aavmf_pflash(work: Path) -> list[str] | None:
     """AArch64 AAVMF firmware pflash args for a UEFI boot, or None when none is
-    configured (the aarch64 boot then uses the legacy -kernel loader). VARS is
-    copied to a writable per-run file. Unlike OVMF this is optional: the env is
-    only set on the lane that publishes the badc-built firmware."""
+    found and the boot may use -M virt's -kernel loader instead
+    ($BADC_QEMU_REQUIRE_FIRMWARE=1 makes that a failure). VARS is copied to a
+    writable per-run file in `work`."""
     code = _find_firmware("BADC_QEMU_AAVMF_CODE", AAVMF_CODE_NAMES, AAVMF_SEARCH)
     if code is None:
+        if os.environ.get("BADC_QEMU_REQUIRE_FIRMWARE") == "1":
+            fail("no AAVMF firmware found for the aarch64 UEFI boot; install "
+                 "`qemu-efi-aarch64` (Debian/Ubuntu) or `edk2-aarch64` (Fedora), "
+                 "or set $BADC_QEMU_AAVMF_CODE")
         return None
+    if code.stat().st_size != VIRT_FLASH_BANK:
+        log(f"boot: firmware {code} (-bios), variable store none")
+        return ["-bios", str(code)]
     args = ["-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={code}"]
     vars_src = _find_firmware("BADC_QEMU_AAVMF_VARS", AAVMF_VARS_NAMES,
                               (str(code.parent), *AAVMF_SEARCH))
+    log(f"boot: firmware {code}, variable store {vars_src or 'none'}")
     if vars_src is not None:
-        vars_rw = cache / "aavmf_vars.rw.fd"
+        vars_rw = work / "aavmf_vars.rw.fd"
         shutil.copyfile(vars_src, vars_rw)
         args += ["-drive", f"if=pflash,format=raw,unit=1,file={vars_rw}"]
     return args
 
 
+def qsetup():
+    """setup.py, the sibling module that fetches the run-time assets."""
+    if str(QEMU_DIR) not in sys.path:
+        sys.path.insert(0, str(QEMU_DIR))
+    import setup
+    return setup
+
+
 def _shutdown_check(binp: Path, arch: str) -> None:
     """Exercise the host-initiated shutdown path: start the machine with no
-    devices, issue a QMP `quit`, and require a clean exit. This runs the QMP
-    dispatcher teardown a dropped store in QEMU_LOCK_GUARD's compound literal
-    once left with a null unlock pointer, SIGSEGV'ing on quit. No kernel or
-    firmware is needed (`-nodefaults`), so it is cheap and always runs. A
-    signal death here is an unambiguous codegen regression and is fatal; an
-    ambiguous non-clean exit is reported best-effort, matching the run gate."""
+    devices, issue a QMP `quit`, and require QMP's SHUTDOWN event and a clean
+    exit; anything else fails the smoke. This runs the QMP dispatcher
+    teardown a dropped store in QEMU_LOCK_GUARD's compound literal once left
+    with a null unlock pointer, SIGSEGV'ing on quit. `-nodefaults` leaves no
+    device ROM to load, but q35 still loads its BIOS: it takes the release's
+    x86 ROM set, as the emulator has no data directory."""
     machine = "virt" if arch == "aarch64" else "q35"
     cmd = [str(binp), "-M", machine, "-display", "none", "-serial", "null",
            "-qmp", "stdio", "-nodefaults"]
+    if arch == "x86_64":
+        roms = qsetup().fetch_pc_bios(QEMU_DIR / ".cache", QEMU_DIR / ".cache" / "pc-bios")
+        cmd += ["-L", str(roms)]
     qmp = b'{"execute":"qmp_capabilities"}\n{"execute":"quit"}\n'
     try:
         p = subprocess.run(cmd, input=qmp, capture_output=True, timeout=40)
     except subprocess.TimeoutExpired:
-        log(f"shutdown check [{machine}]: no exit on QMP quit within 40s "
-            "(best-effort)")
-        return
+        fail(f"shutdown check [{machine}]: no exit within 40s of QMP quit")
     out = p.stdout.decode(errors="replace")
     if p.returncode < 0:
         fail(f"shutdown check [{machine}]: qemu died from signal "
              f"{-p.returncode} on QMP quit -- the host-initiated shutdown "
              f"path faulted\n{out[-800:]}")
-    if p.returncode == 0 and '"event": "SHUTDOWN"' in out:
-        log(f"shutdown OK [{machine}]: QMP quit reached SHUTDOWN, clean exit")
-    else:
-        log(f"shutdown check [{machine}]: QMP quit did not confirm cleanly "
-            f"(rc={p.returncode}); best-effort\n  {out[-300:]}")
+    if p.returncode != 0 or '"event": "SHUTDOWN"' not in out:
+        err = p.stderr.decode(errors="replace").strip()
+        fail(f"shutdown check [{machine}]: exited rc={p.returncode} without "
+             f"QMP's SHUTDOWN event\n  stdout: {out.strip()[-300:]}\n  stderr: {err[-300:]}")
+    log(f"shutdown OK [{machine}]: QMP quit reached SHUTDOWN, clean exit")
 
 
 def maybe_boot(binp: Path, arch: str) -> None:
@@ -725,9 +758,7 @@ def maybe_boot(binp: Path, arch: str) -> None:
             "boot the published kernel, or point $BADC_QEMU_KERNEL at an image)")
         return
     if not kernel:
-        sys.path.insert(0, str(QEMU_DIR))
-        import setup as qsetup  # sibling module; fetches the boot bundle
-        pair = qsetup.fetch_kernel(QEMU_DIR / ".cache", arch, log)
+        pair = qsetup().fetch_kernel(QEMU_DIR / ".cache", arch, log)
         if pair is None:
             msg = f"boot: no kernel bundle published for {arch}"
             if not best_effort:
@@ -742,11 +773,12 @@ def maybe_boot(binp: Path, arch: str) -> None:
     # The guest runs badc output, so its CPU carries the instruction-set
     # baseline (doc/native-compilation.md; `qemu_efi.BASELINE_CPU`).
     cpu = "max" if arch == "aarch64" else "Haswell-noTSX,-pcid,-invpcid,-tsc-deadline"
-    # aarch64 boots THROUGH the AAVMF firmware when it is published (env set),
-    # matching the x86_64 OVMF path. acpi=off forces the device tree so the
-    # kernel probes the PL011 as ttyAMA0: QEMU's ACPI provides only an SPCR
-    # earlycon, which leaves init with no /dev/console and hangs the boot.
-    aavmf = aavmf_pflash(QEMU_DIR / ".cache") if arch == "aarch64" else None
+    # aarch64 boots THROUGH the AAVMF firmware when one is found (the env's or
+    # the system's), matching the x86_64 OVMF path. acpi=off forces the device
+    # tree so the kernel probes the PL011 as ttyAMA0: QEMU's ACPI provides only
+    # an SPCR earlycon, which leaves init with no /dev/console and hangs the
+    # boot.
+    aavmf = aavmf_pflash(binp.parent) if arch == "aarch64" else None
     if aavmf is not None:
         machine = "virt,acpi=off"
     console = "ttyAMA0" if arch == "aarch64" else "ttyS0"
@@ -761,10 +793,10 @@ def maybe_boot(binp: Path, arch: str) -> None:
     cmd = [str(binp), "-M", machine, "-cpu", cpu, "-smp", "16", "-m", "512",
            "-nographic", "-no-reboot", "-nic", "none"]
     # x86_64 boots the EFI-stub kernel through OVMF; aarch64 boots it through
-    # AAVMF when published, else -M virt's legacy -kernel loader. The cmdline +
+    # AAVMF when found, else -M virt's legacy -kernel loader. The cmdline +
     # initrd reach the stub via fw_cfg either way.
     if arch == "x86_64":
-        cmd += ovmf_pflash(QEMU_DIR / ".cache")
+        cmd += ovmf_pflash(binp.parent)
         # The q35 machine loads a few option ROMs (kvmvapic, the linuxboot /
         # multiboot loaders, the VGA BIOS); point -L at the ROM set shipped in
         # the kernel bundle so the run needs nothing from the host.
@@ -788,9 +820,9 @@ def maybe_boot(binp: Path, arch: str) -> None:
     elapsed = time.time() - t0
 
     # Persist the full serial log so CI can publish it as an artifact, on
-    # success and failure alike (see the qemu job's upload step).
-    log_path = os.environ.get("BADC_QEMU_BOOT_LOG") or str(
-        QEMU_DIR / ".cache" / f"boot-{arch}.log")
+    # success and failure alike (see the qemu job's upload step). By default
+    # it sits beside the emulator, so each build keeps its own.
+    log_path = os.environ.get("BADC_QEMU_BOOT_LOG") or str(binp.parent / f"boot-{arch}.log")
     try:
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
         with open(log_path, "w") as fh:
@@ -805,7 +837,8 @@ def maybe_boot(binp: Path, arch: str) -> None:
     powered = rc == 0 and any(m in out for m in POWERDOWN_MARKERS)
 
     if panic:
-        _boot_result(False, f"kernel fault after {elapsed:.0f}s (marker {panic!r})", out, best_effort)
+        reason = f"kernel fault after {elapsed:.0f}s (marker {panic!r}){_fault_note(out)}"
+        _boot_result(False, reason, out, best_effort)
     elif not booted and rc is not None and rc != 0:
         _boot_result(False, f"emulator exited (rc={rc}) before the kernel started", out, best_effort)
     elif not booted:
@@ -820,6 +853,16 @@ def maybe_boot(binp: Path, arch: str) -> None:
         shell = out.count(_SHELL_TOKEN) >= 2
         log(f"boot: kernel booted, reached userspace{' + shell' if shell else ''}, "
             f"powered off cleanly in {elapsed:.0f}s")
+
+
+def _fault_note(out: str) -> str:
+    """Where a guest fault's signature has a recorded cause, a pointer to it."""
+    # The x86 kernel patches code through a temporary int3; multi-threaded TCG
+    # can translate that byte between dropping the page's blocks and the store.
+    if "Oops: int3" in out:
+        return ("; a guest int3 trap at a code-patching site matches the upstream "
+                "QEMU multi-threaded TCG race in https://github.com/kromych/badc/issues/1484")
+    return ""
 
 
 def _boot_result(ok: bool, reason: str, out: str, best_effort: bool) -> None:

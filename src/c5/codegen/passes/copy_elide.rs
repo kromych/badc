@@ -37,9 +37,10 @@
 //! left it unchanged (C99 7.13.2.1p3). A read of the temporary past the
 //! copy -- one of `s` an earlier pass forwarded -- reads `s` instead,
 //! which holds the same bytes there when nothing else writes `s` and no
-//! escape of `s` reaches the read. An out-pointer call carries no result
-//! layout, so its copy must cover the temporary's whole cells, which a
-//! copy of a leading member cannot.
+//! escape of `s` reaches the read. A call returning in registers stores
+//! the result's own bytes, so its copy may fill a leading member; an
+//! out-pointer call carries no result layout, so its copy must cover the
+//! temporary's whole cells, which a copy of a leading member cannot.
 
 use super::super::ir::{BinOp, BlockId, FunctionSsa, Inst, NO_VALUE, ValueId};
 use alloc::collections::{BTreeMap, BTreeSet};
@@ -75,10 +76,10 @@ fn run_one(f: &mut FunctionSsa) {
     let mut named: BTreeMap<i64, Vec<usize>> = BTreeMap::new();
     for (i, inst) in f.insts.iter().enumerate() {
         match inst {
-            Inst::LocalAddr(off) | Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => {
-                named.entry(*off).or_default().push(i);
-            }
-            Inst::AllocaInit(off) => {
+            Inst::LocalAddr(off)
+            | Inst::LoadLocal { off, .. }
+            | Inst::StoreLocal { off, .. }
+            | Inst::AllocaInit(off) => {
                 named.entry(*off).or_default().push(i);
             }
             Inst::Call { ret_slot_local, .. }

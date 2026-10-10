@@ -937,23 +937,37 @@ fn mask_reg_operand(name: &str) -> Option<AsmOpnd> {
     })
 }
 
+/// The GP pools `r` operands draw from: the caller-saved registers in
+/// register-number order, then the callee-saved bank. An operand in a
+/// caller-saved register costs no save / restore and no frame; rax heads
+/// the order so that an operand constrained `rax` -- the r|a|x
+/// alternatives -- sits in the accumulator a template may read by name.
+/// r10 / r11 are usable: the stage picker excludes operand registers, so
+/// it moves on when an operand sits in one. rsp / rbp stay out (stack
+/// pointer, frame pointer the scratch region hangs off).
+const SYSV_POOL: [u8; 14] = [0, 1, 2, 6, 7, 8, 9, 10, 11, 3, 12, 13, 14, 15];
+/// Win64: rsi and rdi are callee-saved, so the caller-saved set is
+/// rax rcx rdx r8..r11, and rsi / rdi join the callee-saved bank.
+const WIN64_POOL: [u8; 14] = [0, 1, 2, 8, 9, 10, 11, 3, 6, 7, 12, 13, 14, 15];
+
 /// Assign an x86 register number to each register operand of an
 /// extended-asm statement, per its constraint. Returns a vector
 /// parallel to `operands`: `Some(reg)` for a register operand, `None`
 /// for an immediate. Fixed and matching constraints take their required
-/// register; `r` operands take free registers from a fixed pool (never
-/// r10 / r11, which the emitter reserves as bridge scratch, nor rsp /
-/// rbp, nor any GP register named in the clobber list). A
-/// register-or-immediate operand is the immediate when `const_of` yields
-/// a constant its immediate class admits, and takes no register then; nor
-/// does a memory operand `mem_direct` names RIP-relative. Shared by the
-/// emitter and the interpreter so both resolve `%N` alike.
+/// register; `r` operands take free registers from a pool ordered by
+/// `target`'s calling convention (never rsp / rbp, nor any GP register
+/// named in the clobber list). A register-or-immediate operand is the
+/// immediate when `const_of` yields a constant its immediate class
+/// admits, and takes no register then; nor does a memory operand
+/// `mem_direct` names RIP-relative. Shared by the emitter and the
+/// interpreter so both resolve `%N` alike.
 pub(crate) fn assign_operand_regs(
     operands: &[crate::c5::ir::AsmOperand],
     clobber_regs: u32,
     clobber_fp_regs: u32,
     const_of: &dyn Fn(usize) -> Option<i64>,
     mem_direct: &dyn Fn(usize) -> bool,
+    target: crate::c5::codegen::Target,
 ) -> Result<Vec<Option<u8>>, String> {
     use crate::c5::ir::AsmConstraint as C;
     let mut assigned: Vec<Option<u8>> = alloc::vec![None; operands.len()];
@@ -985,12 +999,14 @@ pub(crate) fn assign_operand_regs(
     // `r` operands take free pool registers; a memory operand takes one too, to
     // hold its address, and a flag output one to receive its `setcc` result.
     // Every pool register is byte addressable under REX, as `setcc` requires.
-    // rbx and r12..r15 are callee-saved but usable: the emitter saves and
-    // restores every operand register in the frame's asm scratch region, so a
-    // callee-saved register is preserved across the block. rsp / rbp / r10 /
-    // r11 are excluded (stack pointer, frame pointer the scratch region is
-    // addressed through, and the emitter's own bridge scratch).
-    let pool = [0u8, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15];
+    // A callee-saved register is usable too: the emitter saves and restores
+    // every operand register in the frame's asm scratch region, so one is
+    // preserved across the block; the pool order makes that the last resort.
+    let pool = if target.is_windows() {
+        &WIN64_POOL
+    } else {
+        &SYSV_POOL
+    };
     for (i, op) in operands.iter().enumerate() {
         let pooled = match op.constraint {
             C::Reg | C::Flags(_) => true,
@@ -7107,12 +7123,13 @@ mod tests {
         // `x` operands take xmm0, xmm1, ... from a file independent of the GPRs,
         // so a mixed GP + xmm operand list assigns each from its own pool.
         let ops = [op(C::Reg), op(C::Fp), op(C::Reg), op(C::Fp)];
-        let a = assign_operand_regs(&ops, 0, 0, &|_| None, &|_| false).unwrap();
-        assert_eq!(a, [Some(0), Some(0), Some(3), Some(1)]); // rax, xmm0, rbx, xmm1
+        let t = crate::c5::codegen::Target::LinuxX64;
+        let a = assign_operand_regs(&ops, 0, 0, &|_| None, &|_| false, t).unwrap();
+        assert_eq!(a, [Some(0), Some(0), Some(1), Some(1)]); // rax, xmm0, rcx, xmm1
         // An xmm named in the clobber list is skipped: xmm0 clobbered pushes the
         // first `x` operand onto xmm1.
-        let a =
-            assign_operand_regs(&[op(C::Fp), op(C::Fp)], 0, 1 << 0, &|_| None, &|_| false).unwrap();
+        let a = assign_operand_regs(&[op(C::Fp), op(C::Fp)], 0, 1 << 0, &|_| None, &|_| false, t)
+            .unwrap();
         assert_eq!(a, [Some(1), Some(2)]);
     }
 
@@ -7130,30 +7147,42 @@ mod tests {
             volatile_object: false,
             early_clobber: false,
         };
-        // Pool order is rax(0) rbx(3) rcx(1) rdx(2) rsi(6) rdi(7) r8(8) r9(9)
-        // r12(12) r13(13) r14(14) r15(15). With rax/rbx/rcx/rdx clobbered,
-        // three `r` operands skip them and land on rsi/rdi/r8 rather than
-        // reusing a clobbered register.
+        // SysV pool order is rax(0) rcx(1) rdx(2) rsi(6) rdi(7) r8(8) r9(9)
+        // r10(10) r11(11) rbx(3) r12(12) r13(13) r14(14) r15(15). With
+        // rax/rbx/rcx/rdx clobbered, three `r` operands skip them and land on
+        // rsi/rdi/r8 rather than reusing a clobbered register.
         let clob = (1 << 0) | (1 << 3) | (1 << 1) | (1 << 2);
         let gp = [op(C::Reg), op(C::Reg), op(C::Reg)];
-        let a = assign_operand_regs(&gp, clob, 0, &|_| None, &|_| false).unwrap();
+        let t = crate::c5::codegen::Target::LinuxX64;
+        let a = assign_operand_regs(&gp, clob, 0, &|_| None, &|_| false, t).unwrap();
         assert_eq!(a, [Some(6), Some(7), Some(8)]);
         // An asm that calls out clobbers the caller-saved bank
-        // (rax rcx rdx rsi rdi r8 r9); its `r` operands then take the
-        // callee-saved registers rbx r12..r15, which the emitter saves and
-        // restores around the block.
+        // (rax rcx rdx rsi rdi r8 r9); its `r` operands then take r10 / r11,
+        // and the callee-saved registers rbx r12 / r13 beyond them, which the
+        // emitter saves and restores around the block.
         let caller_saved = [0u8, 1, 2, 6, 7, 8, 9]
             .iter()
             .fold(0u32, |m, &r| m | (1 << r));
         let five = [op(C::Reg), op(C::Reg), op(C::Reg), op(C::Reg), op(C::Reg)];
-        let a = assign_operand_regs(&five, caller_saved, 0, &|_| None, &|_| false).unwrap();
-        assert_eq!(a, [Some(3), Some(12), Some(13), Some(14), Some(15)]);
+        let a = assign_operand_regs(&five, caller_saved, 0, &|_| None, &|_| false, t).unwrap();
+        assert_eq!(a, [Some(10), Some(11), Some(3), Some(12), Some(13)]);
         // A clobber list covering every pool register leaves nothing to assign;
         // reject rather than reuse a clobbered register.
-        let all = [0u8, 3, 1, 2, 6, 7, 8, 9, 12, 13, 14, 15]
+        let all = [0u8, 1, 2, 3, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
             .iter()
             .fold(0u32, |m, &r| m | (1 << r));
-        assert!(assign_operand_regs(&[op(C::Reg)], all, 0, &|_| None, &|_| false).is_err());
+        assert!(assign_operand_regs(&[op(C::Reg)], all, 0, &|_| None, &|_| false, t).is_err());
+        // Win64: rsi and rdi are callee-saved, so the caller-saved set
+        // rax rcx rdx r8 r9 r10 r11 comes first and rsi / rdi join the
+        // callee-saved bank behind rbx.
+        let t = crate::c5::codegen::Target::WindowsX64;
+        let a = assign_operand_regs(&gp, 0, 0, &|_| None, &|_| false, t).unwrap();
+        assert_eq!(a, [Some(0), Some(1), Some(2)]);
+        let all = [0u8, 1, 2, 8, 9, 10, 11]
+            .iter()
+            .fold(0u32, |m, &r| m | (1 << r));
+        let a = assign_operand_regs(&gp, all, 0, &|_| None, &|_| false, t).unwrap();
+        assert_eq!(a, [Some(3), Some(6), Some(7)]);
     }
 
     #[test]
@@ -7186,11 +7215,12 @@ mod tests {
         // Every value a constant: operands 0..2 are immediates, 3 is outside
         // the `I` range and is loaded, 4 is a register operand.
         let consts = [Some(5), Some(7), Some(3), Some(40), Some(0)];
-        let a = assign_operand_regs(&ops, 0, 0, &|i| consts[i], &|_| false).unwrap();
-        assert_eq!(a, [None, None, None, Some(0), Some(3)]);
+        let t = crate::c5::codegen::Target::LinuxX64;
+        let a = assign_operand_regs(&ops, 0, 0, &|i| consts[i], &|_| false, t).unwrap();
+        assert_eq!(a, [None, None, None, Some(0), Some(1)]);
         // No constants: the named register and the pool.
-        let a = assign_operand_regs(&ops, 0, 0, &|_| None, &|_| false).unwrap();
-        assert_eq!(a, [Some(0), Some(1), Some(3), Some(2), Some(6)]);
+        let a = assign_operand_regs(&ops, 0, 0, &|_| None, &|_| false, t).unwrap();
+        assert_eq!(a, [Some(0), Some(1), Some(2), Some(6), Some(7)]);
     }
 
     /// A link-time memory operand takes no register; a computed address does.
@@ -7209,8 +7239,9 @@ mod tests {
             early_clobber: false,
         };
         let ops = [op(C::Mem), op(C::Mem), op(C::Reg)];
-        let a = assign_operand_regs(&ops, 0, 0, &|_| None, &|i| i == 0).unwrap();
-        assert_eq!(a, [None, Some(0), Some(3)]);
+        let t = crate::c5::codegen::Target::LinuxX64;
+        let a = assign_operand_regs(&ops, 0, 0, &|_| None, &|i| i == 0, t).unwrap();
+        assert_eq!(a, [None, Some(0), Some(1)]);
     }
 
     #[test]

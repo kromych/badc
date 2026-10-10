@@ -1,26 +1,15 @@
 use super::*;
 
-/// Map an FP arithmetic [`BinOp`] to its scalar SSE encoder. `is_f32`
-/// selects the single-precision (`addss` / ...) vs double-precision
-/// (`addsd` / ...) form per C99 6.3.1.8. Returns `None` for any
+/// The scalar SSE opcode of an FP arithmetic [`BinOp`]: 58 add, 5C sub,
+/// 59 mul, 5E div, shared by the legacy and VEX rows. `None` for any
 /// non-FP-arith op.
-fn fp_arith_enc_for(op: BinOp, is_f32: bool) -> Option<fn(&mut Vec<u8>, Reg, Reg)> {
-    Some(if is_f32 {
-        match op {
-            BinOp::Fadd => emit_addss,
-            BinOp::Fsub => emit_subss,
-            BinOp::Fmul => emit_mulss,
-            BinOp::Fdiv => emit_divss,
-            _ => return None,
-        }
-    } else {
-        match op {
-            BinOp::Fadd => emit_addsd,
-            BinOp::Fsub => emit_subsd,
-            BinOp::Fmul => emit_mulsd,
-            BinOp::Fdiv => emit_divsd,
-            _ => return None,
-        }
+fn fp_arith_opcode(op: BinOp) -> Option<u8> {
+    Some(match op {
+        BinOp::Fadd => 0x58,
+        BinOp::Fsub => 0x5C,
+        BinOp::Fmul => 0x59,
+        BinOp::Fdiv => 0x5E,
+        _ => return None,
     })
 }
 
@@ -324,9 +313,7 @@ pub(super) fn emit_bit_count(
 }
 
 /// `Inst::Fma`: `dst = (neg_product ? -(a*b) : a*b) + (neg_addend ? -c : c)`
-/// with one rounding (C99 6.5p8 / FP_CONTRACT), on the FMA3 baseline. The
-/// `231` form computes `dst = a*b OP dst`, so `c` is staged into `dst` and
-/// the multiplicands go to the scratch xmms first.
+/// with one rounding (C99 6.5p8 / FP_CONTRACT), on the FMA3 baseline.
 pub(super) fn emit_fma(
     code: &mut Vec<u8>,
     dst: Place,
@@ -340,44 +327,78 @@ pub(super) fn emit_fma(
     frame: Frame,
 ) -> Emit {
     let is_f32 = alloc.is_f32(v);
-    let a_place = place_of(alloc, a);
-    let b_place = place_of(alloc, b);
-    let c_place = place_of(alloc, c);
-    let Some(ra) = materialize_fp(code, a_place, Reg(frame.fp_scratch[0]), frame) else {
-        return fail("Fma: a not fp reg / spill / int reg");
-    };
-    if ra.0 != frame.fp_scratch[0] {
-        emit_movapd_xmm_xmm(code, Reg(frame.fp_scratch[0]), ra);
-    }
-    let Some(rb) = materialize_fp(code, b_place, Reg(frame.fp_scratch[1]), frame) else {
-        return fail("Fma: b not fp reg / spill / int reg");
-    };
-    if rb.0 != frame.fp_scratch[1] {
-        emit_movapd_xmm_xmm(code, Reg(frame.fp_scratch[1]), rb);
-    }
-    // The destination also supplies the accumulator. A spilled result
-    // routes through a third scratch outside the pool.
+    // The form with the fewest moves: into `dd`, into an xmm for vvvv, out of a gpr for r/m.
     let dd = match dst {
         Place::FpReg(r) => Reg(r),
         Place::Spill(_) => Reg(frame.fp_scratch[2]),
         _ => return fail("Fma: dst not fp reg / spill"),
     };
-    let Some(rc) = materialize_fp(code, c_place, dd, frame) else {
-        return fail("Fma: c not fp reg / spill / int reg");
+    let ops = [a, b, c].map(|x| place_of(alloc, x));
+    let in_dd = |k: &usize| ops[*k] == Place::FpReg(dd.0);
+    let vvvv_cost = |k: usize| u32::from(!matches!(ops[k], Place::FpReg(_)));
+    let rm_cost = |k: usize| u32::from(matches!(ops[k], Place::IntReg(_)));
+    let plan = |acc: usize| {
+        let (x, y) = match acc {
+            2 => (0, 1),
+            m if matches!(ops[1 - m], Place::FpReg(_)) => (1 - m, 2),
+            m => (2, 1 - m),
+        };
+        let (vv, rm) = if vvvv_cost(y) + rm_cost(x) < vvvv_cost(x) + rm_cost(y) {
+            (y, x)
+        } else {
+            (x, y)
+        };
+        let cost = u32::from(!in_dd(&acc)) + vvvv_cost(vv) + rm_cost(rm);
+        (cost, [acc, vv, rm])
     };
-    if rc.0 != dd.0 {
-        emit_movapd_xmm_xmm(code, dd, rc);
+    let pinned = (0..3).any(|k| in_dd(&k));
+    let dies = |val: u32| alloc.last_use.get(val as usize).copied() == Some(v);
+    let order = if dies(a) {
+        [0, 1, 2]
+    } else if dies(b) {
+        [1, 0, 2]
+    } else {
+        [2, 0, 1]
+    };
+    let Some((_, [acc, vv, rm])) = order
+        .into_iter()
+        .filter(|k| !pinned || in_dd(k))
+        .map(plan)
+        .min_by_key(|p| p.0)
+    else {
+        return fail("Fma: no operand order");
+    };
+    let Some(ra) = materialize_fp(code, ops[acc], dd, frame) else {
+        return fail("Fma: accumulator not fp reg / spill / int reg");
+    };
+    if ra.0 != dd.0 {
+        emit_movapd_xmm_xmm(code, dd, ra);
     }
-    let (a14, b15) = (Reg(frame.fp_scratch[0]), Reg(frame.fp_scratch[1]));
-    match (neg_product, neg_addend, is_f32) {
-        (false, false, false) => emit_vfmadd231sd(code, dd, a14, b15),
-        (false, true, false) => emit_vfmsub231sd(code, dd, a14, b15),
-        (true, false, false) => emit_vfnmadd231sd(code, dd, a14, b15),
-        (true, true, false) => emit_vfnmsub231sd(code, dd, a14, b15),
-        (false, false, true) => emit_vfmadd231ss(code, dd, a14, b15),
-        (false, true, true) => emit_vfmsub231ss(code, dd, a14, b15),
-        (true, false, true) => emit_vfnmadd231ss(code, dd, a14, b15),
-        (true, true, true) => emit_vfnmsub231ss(code, dd, a14, b15),
+    // 231 overwrites the addend; 132 carries it in vvvv, 213 in r/m.
+    let form = if acc == 2 {
+        2
+    } else if vv == 2 {
+        0
+    } else {
+        1
+    };
+    let (vvvv_place, rm_place) = (ops[vv], ops[rm]);
+    let Some(rv) = materialize_fp(code, vvvv_place, Reg(frame.fp_scratch[0]), frame) else {
+        return fail("Fma: vvvv operand not fp reg / spill / int reg");
+    };
+    let opcode = [0x99u8, 0xA9, 0xB9][form] + (neg_product as u8) * 4 + (neg_addend as u8) * 2;
+    match rm_place {
+        Place::FpReg(r) => emit_vex_fma(code, opcode, !is_f32, dd, rv, Reg(r)),
+        Place::Spill(slot) => {
+            let (base, off) = spill_slot_addr(frame, slot);
+            emit_vex_fma_mem(code, opcode, !is_f32, dd, rv, base, off);
+        }
+        Place::IntReg(r) => {
+            let rm = Reg(frame.fp_scratch[1]);
+            emit_movq_xmm_r(code, rm, Reg(r));
+            emit_vex_fma(code, opcode, !is_f32, dd, rv, rm);
+        }
+        Place::None => return fail("Fma: r/m operand has no place"),
     }
     fp_spill_dst_to_slot(code, dst, dd, frame);
     Ok(())
@@ -773,8 +794,16 @@ pub(super) fn emit_binop(
 ) -> Emit {
     let lhs_place = place_of(alloc, lhs);
     let rhs_place = place_of(alloc, rhs);
-    if let Some(arith) = fp_arith_enc_for(op, alloc.is_f32(v)) {
-        return emit_fp_binop(code, arith, dst, lhs_place, rhs_place, frame);
+    if let Some(opcode) = fp_arith_opcode(op) {
+        return emit_fp_binop(
+            code,
+            opcode,
+            alloc.is_f32(v),
+            dst,
+            lhs_place,
+            rhs_place,
+            frame,
+        );
     }
     if let Some((cc, nan_fix)) = fp_compare_cc(op) {
         return emit_fp_compare(code, op, v, dst, lhs, rhs, cc, nan_fix, alloc, frame);
@@ -814,14 +843,11 @@ pub(super) fn emit_binop(
     emit_int_binop(code, op, v, dst, rd, lhs_place, rhs_place, alloc, frame)
 }
 
-/// Scalar FP arithmetic in xmm. `op dst, rhs` overwrites dst, so rhs is
-/// captured into a register distinct from dst before lhs is staged into
-/// dst: the allocator can color rhs to dst's xmm, and `materialize_fp`
-/// returns an `FpReg` source in place, so rhs is copied into the second FP
-/// scratch when it aliases dst.
+/// Scalar FP arithmetic in xmm: the VEX row, or in place the SSE row where no longer.
 fn emit_fp_binop(
     code: &mut Vec<u8>,
-    arith: fn(&mut Vec<u8>, Reg, Reg),
+    opcode: u8,
+    is_f32: bool,
     dst: Place,
     lhs_place: Place,
     rhs_place: Place,
@@ -830,23 +856,34 @@ fn emit_fp_binop(
     let Some(dd) = fp_or_spill_dst(dst, frame) else {
         return fail("Fbinop: dst not fp reg / spill");
     };
-    let dm = match rhs_place {
-        Place::FpReg(r) if r == dd.0 => {
-            emit_movapd_xmm_xmm(code, Reg(frame.fp_scratch[1]), dd);
-            Reg(frame.fp_scratch[1])
+    if lhs_place == Place::FpReg(dd.0) && !matches!(rhs_place, Place::Spill(_)) {
+        let Some(dm) = materialize_fp(code, rhs_place, Reg(frame.fp_scratch[1]), frame) else {
+            return fail("Fbinop: rhs not fp reg / spill / int reg");
+        };
+        if dd.high() && !dm.high() {
+            emit_vex_fp_arith(code, opcode, is_f32, dd, dd, dm);
+        } else {
+            emit_sse_fp_arith(code, opcode, is_f32, dd, dm);
         }
-        _ => match materialize_fp(code, rhs_place, Reg(frame.fp_scratch[1]), frame) {
-            Some(r) => r,
-            None => return fail("Fbinop: rhs not fp reg / spill / int reg"),
-        },
-    };
-    let Some(dn) = materialize_fp(code, lhs_place, dd, frame) else {
+        fp_spill_dst_to_slot(code, dst, dd, frame);
+        return Ok(());
+    }
+    let Some(ra) = materialize_fp(code, lhs_place, Reg(frame.fp_scratch[0]), frame) else {
         return fail("Fbinop: lhs not fp reg / spill / int reg");
     };
-    if dn.0 != dd.0 {
-        emit_movapd_xmm_xmm(code, dd, dn);
+    match rhs_place {
+        Place::FpReg(r) => emit_vex_fp_arith(code, opcode, is_f32, dd, ra, Reg(r)),
+        Place::Spill(slot) => {
+            let (base, off) = spill_slot_addr(frame, slot);
+            emit_vex_fp_arith_mem(code, opcode, is_f32, dd, ra, base, off);
+        }
+        Place::IntReg(r) => {
+            let rb = Reg(frame.fp_scratch[1]);
+            emit_movq_xmm_r(code, rb, Reg(r));
+            emit_vex_fp_arith(code, opcode, is_f32, dd, ra, rb);
+        }
+        Place::None => return fail("Fbinop: rhs has no place"),
     }
-    arith(code, dd, dm);
     fp_spill_dst_to_slot(code, dst, dd, frame);
     Ok(())
 }
@@ -987,7 +1024,7 @@ fn emit_int_binop(
     frame: Frame,
 ) -> Emit {
     // The rhs scratch carries a spilled shift count, or preserves a register
-    // rhs that aliases rd. It must not be rcx for a shift: the shift arm
+    // rhs that aliases rd. It must not be rcx for a shift: a rotate
     // moves the count into cl while preserving a live rcx with a push / pop,
     // which a count materialised into rcx here would defeat; r11 is always
     // safe.
@@ -1066,9 +1103,11 @@ fn emit_int_binop(
         emit_rr(code, alu_mnem(op).unwrap(), 8, rd, other);
         return Ok(());
     }
-    // A compare reads both operands and writes dst only through setcc, so it
-    // needs neither the staging mov nor the scratch.
-    let stage_rhs_to_scratch = rhs_aliases_rd && !is_cmp;
+    // A compare reads both operands and writes dst only through setcc, and
+    // `shlx` / `shrx` / `sarx` read the count before writing rd, so neither
+    // needs the staging mov nor the scratch.
+    let reads_count_first = is_cmp || matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru);
+    let stage_rhs_to_scratch = rhs_aliases_rd && !reads_count_first;
     let Some(rm) = (if rhs_preserved_in_scratch {
         Some(rhs_scratch)
     } else if stage_rhs_to_scratch {
@@ -1319,7 +1358,7 @@ pub(super) fn emit_udiv128(
 
 /// Source of a variable shift count for `emit_shift_by_count_reg`.
 enum ShiftCount {
-    /// Count already resident in a register; moved into cl.
+    /// Count already resident in a register; a rotate moves it into cl.
     Reg(Reg),
     /// Count is a compile-time immediate; loaded into cl. Reached
     /// only for an out-of-range `BinopI` shift (C99 6.5.7p3 makes
@@ -1327,9 +1366,13 @@ enum ShiftCount {
     Imm(i64),
 }
 
-/// `rd = src OP count` for a variable count: the count moves into rcx (cl),
-/// a live rcx preserved with push / pop; when `rd` is rcx the value is
-/// shifted in a reserved scratch and copied back.
+/// `rd = src OP count` for a variable count. Shifts take `shlx` / `shrx`
+/// / `sarx`, which read the count in whatever register holds it and
+/// write no flags (BMI2, part of the x86-64-v3 baseline; a build
+/// targeting below v3 selects the base forms, which stage the count
+/// into cl and save a live rcx). Rotates have no BMI2 register-count
+/// form, so they keep the cl path below; an out-of-range immediate
+/// count (C99 6.5.7p3) does too.
 #[allow(clippy::too_many_arguments)]
 fn emit_shift_by_count_reg(
     code: &mut Vec<u8>,
@@ -1342,6 +1385,18 @@ fn emit_shift_by_count_reg(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
+    if let ShiftCount::Reg(r) = count
+        && matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru)
+    {
+        let pp = match op {
+            BinOp::Shl => 0b01,
+            BinOp::Shru => 0b11,
+            _ => 0b10,
+        };
+        super::encode::emit_vex_shift(code, pp, true, rd, src, r);
+        spill_dst_to_slot(code, dst, rd, frame);
+        return Ok(());
+    }
     let count_reg = match count {
         ShiftCount::Reg(r) => Some(r),
         ShiftCount::Imm(_) => None,

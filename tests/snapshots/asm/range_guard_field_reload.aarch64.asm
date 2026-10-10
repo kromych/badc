@@ -44,72 +44,73 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
                	blr	x1
-               	sub	x0, x29, #0x18
-               	ldr	x1, [x0, #0x8]
+               	sub	x2, x29, #0x18
+               	ldur	x0, [x29, #-0x10]
                	mov	x17, #0x7fffffffffffffff // =9223372036854775807
-               	cmp	x1, x17
+               	cmp	x0, x17
                	b.lo	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x2, [x0, #0x8]
-               	ldr	w1, [x0, #0x10]
+               	ldur	x1, [x29, #-0x10]
+               	ldur	w0, [x29, #-0x8]
                	mov	x3, #0x7fffffffffffffff // =9223372036854775807
-               	sub	x2, x3, x2
-               	cmp	x1, x2
+               	sub	x1, x3, x1
+               	cmp	x0, x1
                	b.hs	<addr>
-               	cmp	w1, #0x7
+               	cmp	w0, #0x7
                	b.ne	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x2, #0x7ffffffffffffffc // =9223372036854775804
-               	str	x2, [x1]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x2, #0x9                // =9
-               	str	w2, [x1]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x7ffffffffffffffc // =9223372036854775804
+               	str	x1, [x0]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x9                // =9
+               	str	w1, [x0]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0]
+               	mov	x0, x2
                	blr	x1
-               	sub	x0, x29, #0x18
-               	ldr	x1, [x0, #0x8]
+               	sub	x2, x29, #0x18
+               	ldur	x0, [x29, #-0x10]
                	mov	x17, #0x7fffffffffffffff // =9223372036854775807
-               	cmp	x1, x17
+               	cmp	x0, x17
                	b.lo	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x2, [x0, #0x8]
-               	ldr	w1, [x0, #0x10]
+               	ldur	x1, [x29, #-0x10]
+               	ldur	w0, [x29, #-0x8]
                	mov	x3, #0x7fffffffffffffff // =9223372036854775807
-               	sub	x2, x3, x2
-               	cmp	x1, x2
+               	sub	x1, x3, x1
+               	cmp	x0, x1
                	b.hs	<addr>
-               	cmp	w1, #0x3
+               	cmp	w0, #0x3
                	b.ne	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x2, #0x4                // =4
-               	movk	x2, #0x8000, lsl #48
-               	str	x2, [x1]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x4                // =4
+               	movk	x1, #0x8000, lsl #48
+               	str	x1, [x0]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0]
+               	mov	x0, x2
                	blr	x1
-               	sub	x0, x29, #0x18
-               	ldr	x1, [x0, #0x8]
+               	ldur	x0, [x29, #-0x10]
                	mov	x17, #0x7fffffffffffffff // =9223372036854775807
-               	cmp	x1, x17
+               	cmp	x0, x17
                	b.lo	<addr>
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x1, [x0, #0x8]
-               	ldr	w0, [x0, #0x10]
+               	ldur	x1, [x29, #-0x10]
+               	ldur	w0, [x29, #-0x8]
                	mov	x2, #0x7fffffffffffffff // =9223372036854775807
                	sub	x1, x2, x1
                	cmp	x0, x1
@@ -123,7 +124,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, x1
                	b	<addr>
-               	mov	x1, x2
+               	mov	x0, x1
                	b	<addr>
-               	mov	x1, x2
+               	mov	x0, x1
                	b	<addr>

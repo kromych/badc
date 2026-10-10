@@ -59,7 +59,7 @@ Disassembly of section .text:
                	movq	(%rdx), %rdx
                	movb	$0x7, (%rdx)
                	leaq	<rip>, %rdx      # <addr>
-               	movslq	(%rdx), %rsi
+               	movl	(%rdx), %esi
                	incq	%rsi
                	movl	%esi, (%rdx)
                	movzbq	(%rax), %rax

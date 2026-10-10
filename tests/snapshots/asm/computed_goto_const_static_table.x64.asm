@@ -170,7 +170,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rcx
                	movq	(%rcx), %rcx
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x8, %eax
@@ -179,7 +179,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx      # <addr>
                	movq	%rcx, (%rax)
                	movq	(%rcx), %rax
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x9, %eax

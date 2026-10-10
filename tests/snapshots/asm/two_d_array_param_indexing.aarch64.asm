@@ -29,9 +29,9 @@ Disassembly of section .text:
                	b.lt	<addr>
                	sub	x0, x29, #0x400
                	mov	x1, #0x1234             // =4660
-               	strh	w1, [x0, #0x14]
+               	strh	w1, [sp, #0x14]
                	mov	x1, #0x10               // =16
-               	strh	w1, [x0, #0x16]
+               	strh	w1, [sp, #0x16]
                	add	x0, x0, #0x14
                	ldrh	w1, [x0]
                	ldrh	w0, [x0, #0x2]

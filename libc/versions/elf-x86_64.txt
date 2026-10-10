@@ -17,6 +17,7 @@
 # headers in step.
 
 [libc.so.6]
+_Exit                                    GLIBC_2.2.5
 __cxa_atexit                             GLIBC_2.2.5
 __environ                                GLIBC_2.2.5
 __errno_location                         GLIBC_2.2.5

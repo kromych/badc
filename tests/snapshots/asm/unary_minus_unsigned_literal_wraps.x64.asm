@@ -93,7 +93,7 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0xffffffff, -0x8(%rbp) # imm = 0xFFFFFFFF
-               	movslq	-0x8(%rbp), %rax
+               	movl	-0x8(%rbp), %eax
                	cmpl	$-0x1, %eax
                	je	<addr>
                	movl	$0xe, %eax

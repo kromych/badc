@@ -31,20 +31,20 @@ Disassembly of section .text:
                	movl	%eax, (%rcx)
                	movq	%fs:0x0, %rcx
                	addq	$-0x10, %rcx
-               	movslq	(%rcx), %rdx
+               	movl	(%rcx), %edx
                	cmpl	$0x7, %edx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	movq	%fs:0x0, %rdx
                	addq	$-0x8, %rdx
-               	movslq	(%rdx), %rsi
+               	movl	(%rdx), %esi
                	cmpl	$-0x3, %esi
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movslq	(%rcx), %rsi
-               	movslq	(%rdx), %rdx
+               	movl	(%rcx), %esi
+               	movl	(%rdx), %edx
                	addq	%rsi, %rdx
                	movl	%edx, (%rcx)
                	movq	%rdx, %rcx

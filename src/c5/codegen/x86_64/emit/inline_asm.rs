@@ -1593,6 +1593,9 @@ pub(super) fn emit_inline_asm(
 struct AsmStmt<'a> {
     fcx: &'a FnCtx<'a>,
     asm: &'a super::super::ir::AsmBlock,
+    /// The compile target, which picks the operand-register pool's
+    /// calling convention.
+    target: Target,
     /// The statement's instruction index, which keys its allocation
     /// facts (`Allocation::asm_live_regs_at`).
     site: super::super::ir::ValueId,
@@ -1683,7 +1686,13 @@ fn prepare_template(
     let op_reg = match bound_regs {
         Some(r) => r.to_vec(),
         None => {
-            match super::frame::asm_operand_regs(stmt.func, asm, stmt.args, stmt.frame.fixed_regs) {
+            match super::frame::asm_operand_regs(
+                stmt.func,
+                asm,
+                stmt.args,
+                stmt.frame.fixed_regs,
+                stmt.target,
+            ) {
                 Ok(r) => r,
                 Err(m) => return fail(m),
             }
@@ -1831,152 +1840,74 @@ struct BoundOperands {
     out_stores: alloc::vec::Vec<(u8, Place, Option<u8>)>,
 }
 
-/// Bind each input to the register its value occupies, or to a scratch it
-/// is loaded into; each value output to the register its value is given,
-/// or to a scratch no other output holds, which a non-`&` output may share
-/// with an input, as GCC's operand model allows, and which it is stored
-/// from. The read-write output's input moves into the output's register;
-/// an input bound there is parked in a scratch first.
+/// The moves and store-backs of [`super::frame::plan_bound_operands`]'
+/// binding, over the scratch the allocation leaves free: the registers no
+/// value live across the statement holds (`Allocation::implicit_live`).
 fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
-    use super::super::ir::AsmConstraint as C;
     let asm = stmt.asm;
     let fixed = stmt.frame.fixed_regs;
-    let Some(shape) = super::frame::bound_shape(stmt.func, asm, stmt.args, fixed, stmt.fcx.target)
-    else {
+    if super::frame::bound_shape(stmt.func, asm, stmt.args, fixed, stmt.fcx.target).is_none() {
         return fail("inline asm: the operands do not bind directly");
     };
-    let short = "inline asm: no scratch register for a bound operand";
-    let vector = |i: usize| matches!(asm.operand_class(i), C::Fp);
-    let xmm = |i: usize| vector(i).then_some(asm.operands[i].width);
-    let bank = |i: usize| usize::from(vector(i));
-    // Scratch by bank; `taken` loses what no other operand may share.
-    let pools = [
-        super::frame::bound_gp_scratch(asm, fixed, shape.gp_need()),
-        super::frame::bound_fp_scratch(asm, fixed, stmt.fcx.target),
-    ];
-    let mut taken = pools.clone();
-    let take = |pool: &mut alloc::vec::Vec<u8>| -> Emit<u8> {
-        if pool.is_empty() {
-            return fail(short);
-        }
-        Ok(pool.remove(0))
-    };
     let outs = stmt.alloc.asm_output_places(stmt.func, stmt.site);
-    let own = |i: usize, place: Place| match (vector(i), place) {
-        (true, Place::FpReg(x)) | (false, Place::IntReg(x)) => Some(x),
-        _ => None,
+    let live_gp = (0u8..16)
+        .filter(|&r| stmt.alloc.holds_live_across(stmt.site, r))
+        .fold(0u32, |m, r| m | 1 << r);
+    let Some(plan) = super::frame::plan_bound_operands(
+        stmt.func,
+        asm,
+        stmt.args,
+        &stmt.alloc.places,
+        &outs,
+        live_gp,
+        fixed,
+        stmt.fcx.target,
+    ) else {
+        return fail("inline asm: no scratch register for a bound operand");
     };
-    // The registers the outputs hold, which no other output may take.
-    let mut held: [alloc::vec::Vec<u8>; 2] = [alloc::vec::Vec::new(), alloc::vec::Vec::new()];
-    for &(i, place) in &outs {
-        held[bank(i)].extend(own(i, place));
-    }
-    let mut op_reg: alloc::vec::Vec<Option<u8>> = alloc::vec![None; asm.operands.len()];
+    let vector = |i: usize| matches!(asm.operand_class(i), super::super::ir::AsmConstraint::Fp);
+    let operand = |i: usize, r: u8| match vector(i) {
+        true => (XMM_UNIFIED + r, TransferKind::Xmm(asm.operands[i].width)),
+        false => (r, TransferKind::Value),
+    };
     let mut moves: alloc::vec::Vec<Transfer> = alloc::vec::Vec::new();
-    let mut out_stores: alloc::vec::Vec<(u8, Place, Option<u8>)> = alloc::vec::Vec::new();
-    let rw = outs.iter().copied().find(|&(i, _)| asm.operands[i].is_rw);
-    let mut rw_scratch = None;
-    if let Some((i, place)) = rw {
-        op_reg[i] = Some(match own(i, place) {
-            Some(x) => x,
-            None => {
-                let s = take(&mut taken[bank(i)])?;
-                out_stores.push((s, place, xmm(i)));
-                held[bank(i)].push(s);
-                rw_scratch = Some(s);
-                s
-            }
-        });
-    }
-    for (i, op) in asm.operands.iter().enumerate() {
-        if op.is_output {
-            continue;
-        }
-        let imm = match op.constraint {
-            C::Imm => true,
-            C::RegOrImm { reg: None, imm } => stmt
-                .const_of(i as u8)
-                .is_some_and(|v| crate::Compiler::x86_imm_alternative_accepts(imm, v)),
-            _ => false,
-        };
-        if imm {
-            continue;
-        }
+    for &(i, s) in &plan.loads {
+        let (dst, kind) = operand(i, s);
         let src = arg_source(stmt, i)?;
-        op_reg[i] = Some(match (vector(i), src) {
-            (true, ArgSrc::Xmm(x)) => x,
-            (false, ArgSrc::Gpr(r)) => r,
-            (true, src) => {
-                let s = take(&mut taken[1])?;
-                moves.push(Transfer {
-                    dst: XMM_UNIFIED + s,
-                    src,
-                    kind: TransferKind::Xmm(asm.operands[i].width),
-                });
-                s
-            }
-            (false, src) => {
-                let s = take(&mut taken[0])?;
-                moves.push(Transfer {
-                    dst: s,
-                    src,
-                    kind: TransferKind::Value,
-                });
-                s
-            }
-        });
+        moves.push(Transfer { dst, src, kind });
     }
-    if let Some((i, _)) = rw
-        && let Some(r) = op_reg[i]
-    {
+    if let Some((i, r, park)) = plan.rw {
         let src = arg_source(stmt, i)?;
-        let (dst, kind) = if vector(i) {
-            (XMM_UNIFIED + r, TransferKind::Xmm(asm.operands[i].width))
-        } else {
-            (r, TransferKind::Value)
-        };
+        let (dst, kind) = operand(i, r);
         if src.reads() != Some(dst) {
-            let displaced: alloc::vec::Vec<usize> = (0..asm.operands.len())
-                .filter(|&j| j != i && op_reg[j] == Some(r) && vector(j) == vector(i))
-                .collect();
-            if !displaced.is_empty() {
-                let p = take(&mut taken[bank(i)])?;
+            if let Some(p) = park {
+                let from = if vector(i) {
+                    ArgSrc::Xmm(r)
+                } else {
+                    ArgSrc::Gpr(r)
+                };
                 moves.push(Transfer {
-                    dst: if vector(i) { XMM_UNIFIED + p } else { p },
-                    src: if vector(i) {
-                        ArgSrc::Xmm(r)
-                    } else {
-                        ArgSrc::Gpr(r)
-                    },
+                    dst: operand(i, p).0,
+                    src: from,
                     kind,
                 });
-                for j in displaced {
-                    op_reg[j] = Some(p);
-                }
             }
             moves.push(Transfer { dst, src, kind });
         }
     }
-    for &(i, place) in outs.iter().filter(|&&(i, _)| !asm.operands[i].is_rw) {
-        op_reg[i] = Some(match own(i, place) {
-            Some(x) => x,
-            None => {
-                let b = bank(i);
-                let Some(s) = pools[b]
-                    .iter()
-                    .copied()
-                    .find(|&r| Some(r) != rw_scratch && !held[b].contains(&r))
-                else {
-                    return fail(short);
-                };
-                held[b].push(s);
-                out_stores.push((s, place, xmm(i)));
-                s
-            }
-        });
-    }
+    let out_stores = plan
+        .stores
+        .iter()
+        .map(|&(i, s)| {
+            let place = outs
+                .iter()
+                .find_map(|&(j, place)| (j == i).then_some(place))
+                .unwrap_or(Place::None);
+            (s, place, vector(i).then_some(asm.operands[i].width))
+        })
+        .collect();
     Ok(BoundOperands {
-        op_reg,
+        op_reg: plan.op_reg,
         moves,
         out_stores,
     })
@@ -4038,6 +3969,7 @@ fn emit_inline_asm_once(
         asm,
         site,
         args,
+        target: fcx.target,
         func: fcx.func,
         alloc: fcx.alloc,
         frame: fcx.frame,

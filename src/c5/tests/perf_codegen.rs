@@ -105,6 +105,8 @@ pub(super) struct X64Insn {
     pub(super) sib: Option<u8>,
     pub(super) imm: i64,
     pub(super) disp: i64,
+    /// A VEX-encoded instruction (C4 / C5 prefix).
+    pub(super) vex: bool,
 }
 
 impl X64Insn {
@@ -175,6 +177,7 @@ pub(super) fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
         }
         let mut op = u16::from(code[i]);
         i += 1;
+        let vex = matches!(op, 0xC4 | 0xC5);
         if op == 0x0F {
             op = 0x0F00 | u16::from(code[i]);
             i += 1;
@@ -308,6 +311,7 @@ pub(super) fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
             sib,
             imm,
             disp,
+            vex,
         });
     }
     assert_eq!(i, code.len(), "x86-64 walk overran the function");
@@ -1720,8 +1724,9 @@ fn saves_rcx(i: &X64Insn) -> bool {
     matches!(i.op, 0x51 | 0x59) && i.rex & 1 == 0
 }
 
-/// A variable shift in a loop takes its count in rcx and keeps the loop's
-/// values out of it, so rcx is not saved around the shift.
+/// A variable shift in a loop takes `shlx` / `shrx`, which read the
+/// count in whatever register holds it and write no flags (BMI2, the
+/// x86-64-v3 baseline), so rcx is neither saved nor reserved.
 #[test]
 fn x64_variable_shift_saves_no_rcx() {
     const SRC: &str = "unsigned long ones(unsigned long v, int n) {\n\
@@ -1730,16 +1735,19 @@ fn x64_variable_shift_saves_no_rcx() {
         return acc;\n}\n";
     let insns = x64(SRC, "ones");
     assert!(!insns.iter().any(saves_rcx), "{insns:x?}");
+    assert!(insns.iter().any(|i| i.op == 0x38F7), "no shrx: {insns:x?}");
 }
 
 /// A value that arrives in rcx and is read after a variable shift -- a
-/// fourth parameter -- leaves rcx to the count instead of being saved.
+/// fourth parameter -- stays in rcx: the shift's count rides its own
+/// register, so nothing is saved or moved.
 #[test]
-fn x64_variable_shift_moves_a_live_value_out_of_rcx() {
+fn x64_variable_shift_leaves_a_live_value_in_rcx() {
     const SRC: &str =
         "long past_fourth(long x, long c, long z, long k) { return (x << c) + k + z; }\n";
     let insns = x64(SRC, "past_fourth");
     assert!(!insns.iter().any(saves_rcx), "{insns:x?}");
+    assert!(insns.iter().any(|i| i.op == 0x38F7), "no shlx: {insns:x?}");
 }
 
 /// `push r` or `pop r` of a low register `r`.
@@ -2173,6 +2181,73 @@ long long lu32(long long k, long long x) { long long n = 0; for (; (unsigned)k; 
     m.finish();
 }
 
+/// Unoptimized, the low words of two `int` reloads decide their compare.
+#[test]
+fn unoptimized_int_compare_reads_the_low_words() {
+    const SRC: &str =
+        "int count(int n) { int c = 0; for (int i = 0; i < n; i++) c++; return c; }\n";
+    let cmp_reg_sf_bits: Vec<u32> = a64_at(SRC, "count", false)
+        .into_iter()
+        .filter(|&w| w & 0x7F20_001F == 0x6B00_001F)
+        .map(|w| w >> 31)
+        .collect();
+    assert_eq!(cmp_reg_sf_bits, [0], "aarch64: one 32-bit compare");
+    let cmp_reg_rex_w: Vec<bool> = x64_at(SRC, "count", false)
+        .iter()
+        .filter(|i| matches!(i.op, 0x39 | 0x3B) && i.reg_form())
+        .map(|i| i.rex_w())
+        .collect();
+    assert_eq!(cmp_reg_rex_w, [false], "x86-64: one 32-bit compare");
+}
+
+/// An `int` loads with a plain 32-bit `mov` unless a reader takes its high
+/// word (an index, a `long` return, store or argument, a division): a local
+/// unoptimized, an absolute-base table element at -O.
+#[test]
+fn x64_int_reload_widens_only_for_a_high_word_reader() {
+    const SRC: &str = "int count(int n) { int c = 0; for (int i = 0; i < n; i++) c++; return c; }\n\
+long index_of(long *a, int i) { return a[i]; }\n\
+long to_long(int i) { return i; }\n\
+void store_long(long *p, int i) { *p = i; }\n\
+long takes_long(long x);\n\
+long passes(int i) { return takes_long(i); }\n\
+int div2(int i) { return i / 2; }\n\
+static int tab[16];\n\
+int abs_get(unsigned i) { return tab[i] + 1; }\n\
+long abs_get_long(unsigned i) { return tab[i]; }\n";
+    let loads_at = |name: &str, optimize: bool| {
+        let insns = x64_at(SRC, name, optimize);
+        let movslq = insns
+            .iter()
+            .filter(|i| i.op == 0x63 && i.rex_w() && !i.reg_form())
+            .count();
+        let movl = insns
+            .iter()
+            .filter(|i| i.op == 0x8B && !i.rex_w() && !i.reg_form())
+            .count();
+        (movslq, movl)
+    };
+    let loads = |name: &str| loads_at(name, false);
+    let (movslq, movl) = loads("count");
+    assert!(
+        movslq == 0 && movl >= 4,
+        "count: {movslq} movslq, {movl} movl"
+    );
+    for name in ["index_of", "to_long", "store_long", "passes", "div2"] {
+        assert_eq!(loads(name).0, 1, "{name}: the reload sign-extends");
+    }
+    assert_eq!(
+        loads_at("abs_get", true),
+        (0, 1),
+        "abs_get: `movl tab(,%rax,4)`"
+    );
+    assert_eq!(
+        loads_at("abs_get_long", true),
+        (1, 0),
+        "abs_get_long: `movslq`"
+    );
+}
+
 /// Unoptimized, `k` lives in its frame slot and the branch on `(int)k`
 /// reads that slot once. It compares the low word (the loop runs while
 /// bits 0..31 are not all zero), never the quadword: `cmpq $0, mem` loops
@@ -2225,6 +2300,46 @@ int driver(void) { g_x = 7; g_y = 35; g_adder(&g_out, g_x, g_y); return g_out; }
     assert!(
         r != 0 && copied_into(&ws, r),
         "call1: the call reads x0 or no copy: {ws:08x?}"
+    );
+}
+
+/// A call target that is also its first argument branches through that
+/// register; one reloaded while every argument sits in its register, x16.
+#[test]
+fn indirect_call_targets_need_no_move() {
+    const SRC: &str = "typedef long (*fself)(void *, long);\n\
+long self_arg(fself f, long x) { return f((void *)f, x) + 1; }\n\
+long other(long x);\n\
+long spilled(long (*fp)(long, long), long a, long b) {\n\
+long v0 = other(a), v1 = other(v0), v2 = other(v1), v3 = other(v2);\n\
+long v4 = other(v3), v5 = other(v4), v6 = other(v5), v7 = other(v6);\n\
+long v8 = other(v7), v9 = other(v8), v10 = other(v9), v11 = other(v10);\n\
+long r = fp(a + v0, b - v1);\n\
+return r + v0 + v1 * 2 + v2 * 3 + v3 * 4 + v4 * 5 + v5 * 6 + v6 * 7 + v7 * 8 + v8 * 9 +\n\
+v9 * 10 + v10 * 11 + v11 * 12 + a + b;\n}\n";
+    let blr = |ws: &[u32]| {
+        ws.iter()
+            .find(|&&w| w & 0xFFFF_FC1F == 0xD63F_0000)
+            .map(|&w| (w >> 5) & 31)
+    };
+    // `mov xd, xm` (`orr xd, xzr, xm`).
+    let moves = |ws: &[u32]| ws.iter().any(|&w| w & 0xFFE0_FFE0 == 0xAA00_03E0);
+    let ws = a64(SRC, "self_arg");
+    assert!(blr(&ws) == Some(0) && !moves(&ws), "self_arg: {ws:08x?}");
+    let ws = a64(SRC, "spilled");
+    assert_eq!(blr(&ws), Some(16), "spilled: {ws:08x?}");
+    let call_through = |insns: &[X64Insn]| {
+        insns
+            .iter()
+            .find(|i| i.op == 0xFF && i.reg_form() && i.modrm.is_some_and(|m| (m >> 3) & 7 == 2))
+            .map(|i| i.regs().1)
+    };
+    // A register move other than the frame setup's `movq %rsp, %rbp`.
+    let reg_move = |i: &X64Insn| matches!(i.op, 0x89 | 0x8B) && i.reg_form() && i.regs() != (4, 5);
+    let insns = x64(SRC, "self_arg");
+    assert!(
+        call_through(&insns) == Some(7) && !insns.iter().any(reg_move),
+        "x86-64 self_arg: {insns:x?}"
     );
 }
 
@@ -2431,6 +2546,69 @@ fn aarch64_frames_spill_only_past_the_callee_saved_bank() {
         || format!("vfork main on aarch64: {a64_spills} spill slots while saving {a64_gprs:?}"),
     );
     m.finish();
+}
+
+/// The FMA form follows the operand that dies at the instruction: a
+/// multiplicand whose register holds the result becomes the
+/// overwritten operand of a 132/213 form (the addend then stays in
+/// place), and a dying addend keeps the 231 form. No operand is
+/// copied to a scratch register on the way.
+#[test]
+fn x64_fma_form_follows_the_dying_operand() {
+    const SRC: &str = "double f(double a, double b, double c) { return a * b + c; }\n\
+        double acc(double x, double y) { double s = x + y; s = x * y + s; return s; }\n";
+    let copies = |i: &X64Insn| matches!(i.op, 0x0F28 | 0x0F10 | 0x0F11 | 0x0F6E);
+    let f = x64(SRC, "f");
+    // a (xmm0) is the result register and dies at the FMA: the body is
+    // one `vfmadd213sd` (dst = a, vvvv = b, rm = c) and the return.
+    assert!(!f.iter().any(copies), "f copies an operand: {f:x?}");
+    assert_eq!(f[0].op, 0x38A9, "{f:x?}");
+    let acc = x64(SRC, "acc");
+    // The addend s rides the 213 form's r/m slot in place: the fused
+    // instruction directly follows the `addsd` that forms s, so no
+    // operand is copied on the way.
+    let fma_at = acc.iter().rposition(|i| i.op == 0x38A9).expect("the fma");
+    assert_eq!(
+        acc[fma_at - 1].op,
+        0x0F58,
+        "s forms ahead of the fma: {acc:x?}"
+    );
+}
+
+/// Scalar FP arithmetic takes the VEX three-operand row when the result
+/// register holds neither operand -- both stay live across the op, so
+/// the two-operand row would stage a copy first -- and keeps the
+/// two-operand row when the destination is the dying lhs register, the
+/// copy-free case where both rows are four bytes.
+#[test]
+fn x64_scalar_fp_arith_picks_the_vex_three_operand_row() {
+    const SRC: &str = "double g, h;\n\
+        void spread(double a, double b) {\n\
+            double x = a + b; double y = a - b; double z = a * b;\n\
+            g = x; h = y; g = z;\n}\n\
+        double acc(double a, double b) { return a + b; }\n";
+    let copies = |i: &X64Insn| matches!(i.op, 0x0F28 | 0x0F10 | 0x0F6E);
+    let arith = |i: &X64Insn| matches!(i.op, 0x0F58 | 0x0F5C | 0x0F59);
+    let spread = x64(SRC, "spread");
+    // a and b are live across the first two ops, so their result
+    // registers are distinct from both operands: the VEX rows read
+    // them in place, where the two-operand rows would stage a copy.
+    // The third may reuse a dying operand's register.
+    assert!(
+        !spread.iter().any(copies),
+        "spread copies an operand: {spread:x?}"
+    );
+    let ops: Vec<&X64Insn> = spread.iter().filter(|i| arith(i)).collect();
+    assert_eq!(ops.len(), 3, "{spread:x?}");
+    assert!(ops[0].vex && ops[1].vex, "not the VEX rows: {spread:x?}");
+    let acc = x64(SRC, "acc");
+    // a dies at the add and the result returns in a's register: the
+    // two-operand row writes in place.
+    let add = acc.iter().find(|i| i.op == 0x0F58).expect("the add");
+    assert!(
+        !add.vex && add.len == 4,
+        "not the two-operand row: {acc:x?}"
+    );
 }
 
 /// A register output of an inline asm statement into a scalar local is
@@ -3939,8 +4117,9 @@ fn an_out_pointer_return_ending_in_a_marker_is_built_in_place() {
 }
 
 /// A local far below fp is one load or store off sp where sp stays where
-/// the prologue left it; with alloca or an asm sp move it stays on fp, one
-/// instruction building the 4 KiB multiple and the access holding the rest.
+/// the prologue left it; with alloca or an asm sp move the base register
+/// captured after the prologue (`mov x19, sp`) addresses it the same way,
+/// where the fp form would build the 4 KiB multiple first.
 #[test]
 fn a64_far_local_is_addressed_off_the_fixed_sp() {
     let mut m = Misses::default();
@@ -3955,11 +4134,448 @@ fn a64_far_local_is_addressed_off_the_fixed_sp() {
     });
     for name in ["moving", "switched"] {
         let ws = a64(FAR_SLOTS, name);
+        let off_x19 = ws
+            .iter()
+            .filter(|&&w| a64_mem_imm(w).is_some_and(|(rn, _, _)| rn == 19))
+            .count();
         let built = a64_built_accesses(&ws, 29);
-        m.expect(built.0 >= 12 && built.1 == 0, || {
+        m.expect(off_x19 >= 12 && built == (0, 0), || {
+            format!("aarch64 {name}: {off_x19} accesses off x19, built {built:?}: {ws:08x?}")
+        });
+    }
+    m.finish();
+}
+
+/// `mov x19, sp`: the locals base capture.
+const A64_MOV_X19_SP: u32 = 0x9100_03F3;
+
+/// The `moving` shape of [`FAR_SLOTS`] around an inline asm statement that
+/// writes x19: a clobber, a register variable bound to it, an `asm goto`
+/// clobber.
+const FAR_SLOTS_X19_ASM: &str = "void use(void *);\n\
+    long clobbered(long n) {\n\
+        volatile char pad[4096];\n\
+        pad[0] = 1;\n\
+        volatile long v = n; volatile int w = (int)n; volatile double d = (double)n;\n\
+        use((void *)pad); use(__builtin_alloca(n));\n\
+        __asm__ volatile(\"mov x19, #0\" ::: \"x19\");\n\
+        v += 3; w += 5; d *= 2.0;\n\
+        return v + w + (long)d;\n\
+    }\n\
+    long bound(long n, long k) {\n\
+        volatile char pad[4096];\n\
+        pad[0] = 1;\n\
+        volatile long v = n; volatile int w = (int)n; volatile double d = (double)n;\n\
+        use((void *)pad); use(__builtin_alloca(n));\n\
+        register long r __asm__(\"x19\") = k;\n\
+        __asm__ volatile(\"add %0, %0, #1\" : \"+r\"(r));\n\
+        v += r; w += 5; d *= 2.0;\n\
+        return v + w + (long)d;\n\
+    }\n\
+    long jumped(long n, int take) {\n\
+        volatile char pad[4096];\n\
+        pad[0] = 1;\n\
+        volatile long v = n; volatile int w = (int)n; volatile double d = (double)n;\n\
+        use((void *)pad); use(__builtin_alloca(n));\n\
+        __asm__ goto(\"mov x19, #0\\n\\tcbnz %w0, %l[out]\" : : \"r\"(take) : \"x19\" : out);\n\
+        v += 1;\n\
+    out:\n\
+        v += 3; w += 5; d *= 2.0;\n\
+        return v + w + (long)d;\n\
+    }\n";
+
+/// The spill slots of a frame with alloca lie below a 4 KiB local array,
+/// past fp's unscaled reach, while the array itself is reached through
+/// one address: the slots' reloads are what selects the locals base,
+/// which then addresses each of them in one instruction.
+#[test]
+fn a64_far_spill_slots_select_the_locals_base() {
+    const SRC: &str = "void use(void *p, void *q);\n\
+        long f(long n) {\n\
+            char pad[4096];\n\
+            char *q = (char *)__builtin_alloca(n);\n\
+            long a0 = n * 3, a1 = n * 5, a2 = n * 7, a3 = n * 11, a4 = n * 13, a5 = n * 17,\n\
+                 a6 = n * 19, a7 = n * 23, a8 = n * 29, a9 = n * 31, a10 = n * 37,\n\
+                 a11 = n * 41, a12 = n * 43, a13 = n * 47, a14 = n * 53;\n\
+            use(pad, q);\n\
+            long s = a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a10 + a11 + a12 + a13 + a14;\n\
+            use(pad, q);\n\
+            s += a0 * a1 + a2 * a3 + a4 * a5 + a6 * a7 + a8 * a9 + a10 * a11 + a12 * a13 + a14;\n\
+            return s + pad[0] + q[0];\n\
+        }\n";
+    let ws = a64(SRC, "f");
+    let off_x19 = ws
+        .iter()
+        .filter(|&&w| a64_mem_imm(w).is_some_and(|(rn, _, _)| rn == 19))
+        .count();
+    let built = a64_built_accesses(&ws, 29);
+    assert!(
+        ws.contains(&A64_MOV_X19_SP) && off_x19 >= 12 && built == (0, 0),
+        "{off_x19} accesses off x19, built off fp {built:?}: {ws:08x?}"
+    );
+}
+
+/// `mov sp, x29`, `ldp x29, x30, [sp], #16` and `ret`: the teardown of a
+/// frame whose sp moved, taking sp from the frame pointer.
+const A64_MOV_SP_FP: u32 = 0x9100_03BF;
+const A64_LDP_FP_LR_POST: u32 = 0xA8C1_7BFD;
+const A64_RET: u32 = 0xD65F_03C0;
+
+/// Functions whose sp moves at run time: a VLA, an over-aligned automatic
+/// object, and a VLA with a value live across a call.
+const DYNAMIC_RETURNS: &str = "void use(char *);\n\
+    long vla(long n) {\n\
+        char a[n];\n\
+        if (n > 9) { use(a); return 1; }\n\
+        use(a);\n\
+        return 2;\n\
+    }\n\
+    long realigned(void) { _Alignas(64) char b[64]; use(b); return 3; }\n\
+    long saves(long n) { char a[n]; long x = n * 3; use(a); return x + a[0]; }\n";
+
+/// A load off sp, single or pair: a callee-saved register's restore, or
+/// the frame record's.
+fn a64_load_off_sp(w: u32) -> bool {
+    let pair = w & 0x3840_0000 == 0x2840_0000;
+    let single = a64_mem_imm(w).is_some_and(|(_, store, _)| !store);
+    (pair || single) && (w >> 5) & 31 == 31
+}
+
+/// A return from a frame whose sp moves at run time takes sp from the frame
+/// pointer in its teardown (`mov sp, x29` / `leave`), so sp is
+/// re-established at the frame bottom first only for restores that
+/// address from it: none where the frame saves no register.
+#[test]
+fn dynamic_frame_resets_sp_only_for_sp_relative_restores() {
+    let mut m = Misses::default();
+    for name in ["vla", "realigned", "saves"] {
+        let saves = name == "saves";
+        let ws = a64(DYNAMIC_RETURNS, name);
+        let rets: Vec<usize> = (3..ws.len()).filter(|&i| ws[i] == A64_RET).collect();
+        // Back over the epilogue's loads off sp and its `mov sp, x29`: what
+        // precedes them is the reset `sub sp, x29, #N` exactly when a
+        // restore reads off sp.
+        let ok = !rets.is_empty()
+            && rets.iter().all(|&i| {
+                let mut j = i - 1;
+                while a64_load_off_sp(ws[j]) || ws[j] == A64_MOV_SP_FP {
+                    j -= 1;
+                }
+                let reset = a64_add_sub_imm(ws[j]).is_some_and(|(rd, rn)| rd == 31 && rn == 29);
+                reset == saves
+                    && (saves || (ws[i - 1] == A64_LDP_FP_LR_POST && ws[i - 2] == A64_MOV_SP_FP))
+            });
+        m.expect(ok, || format!("aarch64 {name}: {ws:08x?}"));
+
+        let insns = x64(DYNAMIC_RETURNS, name);
+        let rets: Vec<usize> = (2..insns.len()).filter(|&i| insns[i].op == 0xC3).collect();
+        // Back over `leave` and the pops: `lea rsp, [rbp - N]` ahead of them
+        // exactly when a register is popped.
+        let ok = !rets.is_empty()
+            && rets.iter().all(|&i| {
+                let mut j = i - 1;
+                while insns[j].op == 0xC9 || (0x58..=0x5F).contains(&insns[j].op) {
+                    j -= 1;
+                }
+                let lea = insns[j].op == 0x8D && insns[j].regs().0 == 4;
+                lea == saves && (saves || insns[i - 1].op == 0xC9)
+            });
+        m.expect(ok, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
+/// A frame holding the locals base restores its saved registers off x19,
+/// x19 itself last, and resets nothing ahead: sp is taken from fp after.
+/// The folded shape, whose last restore post-indexes sp, resets sp from
+/// x19 first.
+#[test]
+fn a64_locals_base_frame_restores_off_the_base() {
+    const FOLDED: &str = "void use(volatile char *);\n\
+        long folded(long n) {\n\
+            volatile char pad[300];\n\
+            char *q = (char *)__builtin_alloca(n);\n\
+            long x = n * 3, y = n * 5;\n\
+            pad[0] = 1; pad[1] = 2;\n\
+            use(q); use(pad);\n\
+            return x * y + pad[0] + pad[1] + q[0];\n\
+        }\n";
+    const A64_MOV_SP_X19: u32 = 0x9100_027F;
+    let ws = a64(FOLDED, "folded");
+    let resets: Vec<usize> = (0..ws.len()).filter(|&i| ws[i] == A64_MOV_SP_X19).collect();
+    // `ldp x29, x30, [sp, #fold]` right after each reset.
+    let folded = ws.contains(&A64_MOV_X19_SP)
+        && !resets.is_empty()
+        && resets.iter().all(|&i| {
+            ws.get(i + 1)
+                .is_some_and(|&w| w & 0xFFC0_7FFF == 0xA940_7BFD)
+        });
+    assert!(folded, "folded: {ws:08x?}");
+
+    let ws = a64(FAR_SLOTS, "moving");
+    let rets: Vec<usize> = (3..ws.len()).filter(|&i| ws[i] == A64_RET).collect();
+    let off_x19 = |w: u32| {
+        let pair = w & 0x3840_0000 == 0x2840_0000;
+        let single = a64_mem_imm(w).is_some_and(|(_, store, _)| !store);
+        (pair || single) && (w >> 5) & 31 == 19
+    };
+    let ok = ws.contains(&A64_MOV_X19_SP)
+        && !rets.is_empty()
+        && rets.iter().all(|&i| {
+            let mut j = i - 3;
+            while off_x19(ws[j]) {
+                j -= 1;
+            }
+            // `ldr x19, [x19, #off]` last; no sp write ahead of the restores.
+            ws[i - 1] == A64_LDP_FP_LR_POST
+                && ws[i - 2] == A64_MOV_SP_FP
+                && ws[i - 3] & 0xFFC0_03FF == 0xF940_0273
+                && a64_add_sub_imm(ws[j]).is_none_or(|(rd, _)| rd != 31)
+        });
+    assert!(ok, "{ws:08x?}");
+}
+
+/// A statement that writes x19 runs its exits -- the store-backs and the
+/// register restores, on the fall-through and on each `asm goto` label --
+/// after x19 has changed, so a frame holding one takes no locals base:
+/// nothing captures sp in x19 and the far locals keep the fp form.
+#[test]
+fn a64_asm_writing_x19_leaves_the_locals_base_unselected() {
+    let mut m = Misses::default();
+    for name in ["clobbered", "bound", "jumped"] {
+        let ws = a64(FAR_SLOTS_X19_ASM, name);
+        let built = a64_built_accesses(&ws, 29);
+        m.expect(!ws.contains(&A64_MOV_X19_SP) && built.0 >= 12, || {
             format!("aarch64 {name}: built off fp {built:?}: {ws:08x?}")
         });
     }
+    m.finish();
+}
+
+/// The lowerings that take x19 as a third scratch -- a modulo whose
+/// operands and result all spill, and a cursor `va_arg` whose list
+/// pointer and result do -- borrow it where it holds the locals base:
+/// `str x19, [sp, #-16]!` before the write, `ldr x19, [sp], #16` after,
+/// with no access off x19 in between.
+#[test]
+fn a64_third_scratch_lowerings_borrow_the_locals_base() {
+    const SRC: &str = "#include <stdarg.h>\n\
+        long rem(long a, long b, long c, long d, long n) {\n\
+            volatile char pad[4096];\n\
+            volatile long v = a, w = b;\n\
+            pad[0] = 1;\n\
+            char *q = __builtin_alloca(n);\n\
+            q[0] = 2;\n\
+            long r = a % b, s = c % d, t = (a + c) % (b + d);\n\
+            v += r; w += s;\n\
+            return v + w + t + q[0] + pad[0] - a - b - c - d;\n\
+        }\n\
+        long walk(long n, ...) {\n\
+            volatile char pad[4096];\n\
+            volatile long v = n, w = n;\n\
+            pad[0] = 1;\n\
+            char *q = __builtin_alloca(n);\n\
+            q[0] = 2;\n\
+            va_list ap;\n\
+            va_start(ap, n);\n\
+            long s = 0;\n\
+            for (long i = 0; i < n; i++) s += va_arg(ap, long);\n\
+            va_end(ap);\n\
+            v += s; w += v;\n\
+            return v + w + q[0] + pad[0];\n\
+        }\n";
+    const PUSH_X19: u32 = 0xF81F_0FF3;
+    const POP_X19: u32 = 0xF841_07F3;
+    let mut m = Misses::default();
+    // The cursor `va_arg` is the macOS and Windows model.
+    for (target, name) in [
+        (Target::LinuxAarch64, "rem"),
+        (Target::MacOSAarch64, "walk"),
+    ] {
+        let ws = function_words(&object_with_pool(SRC, target, (1, 1)), name);
+        let mut spans = 0;
+        let mut at = 0;
+        while let Some(push) = ws[at..].iter().position(|&w| w == PUSH_X19).map(|i| at + i) {
+            let Some(pop) = ws[push..]
+                .iter()
+                .position(|&w| w == POP_X19)
+                .map(|i| push + i)
+            else {
+                break;
+            };
+            let inner = &ws[push + 1..pop];
+            // The borrowed value is defined in x19 (`sdiv x19` / `add x19`).
+            let writes = inner
+                .iter()
+                .any(|&w| w & 31 == 19 && a64_mem_imm(w).is_none());
+            let reads_off = inner
+                .iter()
+                .any(|&w| a64_mem_imm(w).is_some_and(|(rn, _, _)| rn == 19));
+            m.expect(writes && !reads_off, || {
+                format!("{target:?} {name}: borrow at {push}..{pop}: {ws:08x?}")
+            });
+            spans += 1;
+            at = pop + 1;
+        }
+        m.expect(ws.contains(&A64_MOV_X19_SP) && spans > 0, || {
+            format!("{target:?} {name}: {spans} borrows of the base: {ws:08x?}")
+        });
+    }
+    m.finish();
+}
+
+/// An indirect call whose target no register can hold -- the marshal
+/// writes x0..x7 and x16 / x17, `-ffixed-` keeps the others -- stores the
+/// target in a cell above its nine stack arguments and reloads it into x16
+/// for the `blr`, at -O0 and -O. `jit::staged_indirect_call_target_
+/// reaches_its_callee` runs the same program.
+#[test]
+fn a64_indirect_call_without_a_free_register_stages_its_target() {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
+    const NAME: &str = "indirect_call_staged_target.c";
+    let src = super::load_fixture(NAME);
+    let fixed_regs = super::fixture_fixed_regs(NAME, Target::LinuxAarch64);
+    let mut m = Misses::default();
+    for optimize in [false, true] {
+        let program = Compiler::with_options(
+            src.clone(),
+            Target::LinuxAarch64,
+            CompileOptions::default().with_optimize(optimize),
+        )
+        .compile()
+        .expect("compile");
+        let level = if optimize {
+            NativeOptions::new().with_optimize()
+        } else {
+            NativeOptions::new()
+        };
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            fixed_regs,
+            ..level
+        };
+        let obj = emit_native_with_options(&program, Target::LinuxAarch64, opts).expect("emit");
+        let ws = function_words(&obj, "through");
+        // `ldr x16, [sp, #c]` right before `blr x16`, after a store to the same cell.
+        let blr = ws.iter().position(|&w| w == 0xD63F_0200);
+        let cell = blr
+            .and_then(|i| i.checked_sub(1))
+            .map(|i| ws[i])
+            .filter(|&w| w & 0xFFC0_03FF == 0xF940_03F0)
+            .map(|w| (w >> 10) & 0xFFF);
+        let staged = cell.is_some_and(|c| {
+            c * 8 >= 72
+                && ws[..blr.unwrap() - 1]
+                    .iter()
+                    .any(|&w| w & 0xFFC0_03E0 == 0xF900_03E0 && (w >> 10) & 0xFFF == c)
+        });
+        m.expect(staged, || {
+            let level = if optimize { "-O" } else { "-O0" };
+            format!("aarch64 {level}: no staged target: {ws:08x?}")
+        });
+    }
+    m.finish();
+}
+
+/// A leaf without a frame whose inline asm names sp reserves no outgoing
+/// area, so a binary128 conversion lowers sp for the registers it borrows
+/// before it stores them at `[sp, #0]` and raises it after the restore:
+/// none of the stores reaches the caller's frame.
+#[test]
+fn a64_binary128_borrow_in_a_frameless_leaf_lowers_sp() {
+    const SRC: &str = "long double gld = 1.5L;\nlong double gout;\n\
+        double narrow(void) { __asm__ volatile(\"add sp, sp, #0\"); return (double)gld; }\n\
+        void widen(double d) { __asm__ volatile(\"add sp, sp, #0\"); gout = d; }\n";
+    // `str xt, [sp, #imm]` or `stp xt, xt2, [sp, #imm]`.
+    let stores_off_sp =
+        |w: u32| matches!(w & 0xFFC0_0000, 0xF900_0000 | 0xA900_0000) && (w >> 5) & 31 == 31;
+    let mut m = Misses::default();
+    for (name, bytes) in [("narrow", 64u32), ("widen", 48)] {
+        let ws = a64(SRC, name);
+        let lower = ws.iter().position(|&w| w == 0xD100_03FF | bytes << 10);
+        let raise = ws.iter().rposition(|&w| w == 0x9100_03FF | bytes << 10);
+        let first = ws.iter().position(|&w| stores_off_sp(w));
+        let last = ws.iter().rposition(|&w| stores_off_sp(w));
+        m.expect(
+            matches!((lower, first, last, raise), (Some(l), Some(f), Some(e), Some(r)) if l < f && e < r),
+            || format!("aarch64 {name}: sub sp {lower:?}, stores {first:?}..{last:?}, add sp {raise:?}: {ws:08x?}"),
+        );
+    }
+    m.finish();
+}
+
+/// The register a data-processing instruction writes and those it reads
+/// (Rn, Rm, Ra); `None` for another class.
+fn a64_dp_regs(w: u32) -> Option<(u32, [Option<u32>; 3])> {
+    let (rd, rn, rm) = (w & 31, (w >> 5) & 31, (w >> 16) & 31);
+    if (w >> 26) & 7 == 0b100 {
+        // Every immediate form but the PC-relative and move-wide ones reads Rn.
+        let reads_rn = !matches!((w >> 23) & 7, 0b000 | 0b001 | 0b101);
+        return Some((rd, [reads_rn.then_some(rn), None, None]));
+    }
+    if (w >> 25) & 7 == 0b101 {
+        let ra = (w >> 24) & 0x1F == 0b11011;
+        return Some((rd, [Some(rn), Some(rm), ra.then_some((w >> 10) & 31)]));
+    }
+    None
+}
+
+/// long_double_outgoing_area_borrow's `mix` at -O: the narrowing saves
+/// x9..x14 at `[sp]` while they hold values computed ahead of it and read
+/// after the restore, so the fixture runs that save and restore over live
+/// values.
+#[test]
+fn a64_binary128_borrow_saves_live_values() {
+    let src = super::load_fixture("long_double_outgoing_area_borrow.c");
+    let ws = a64(&src, "mix");
+    // `stp x9, x10, [sp]` and the `ldp x9, x10, [sp]` after it.
+    let save = ws.iter().position(|&w| w == 0xA900_2BE9);
+    let restore = save.and_then(|s| (s..ws.len()).find(|&i| ws[i] == 0xA940_2BE9));
+    let (Some(s), Some(r)) = (save, restore) else {
+        panic!("no save / restore of x9, x10: {ws:08x?}");
+    };
+    let written = |x: u32| {
+        ws[..s]
+            .iter()
+            .any(|&w| a64_dp_regs(w).is_some_and(|(d, _)| d == x))
+    };
+    let read = |x: u32| {
+        ws[r..]
+            .iter()
+            .any(|&w| a64_dp_regs(w).is_some_and(|(_, src)| src.contains(&Some(x))))
+    };
+    let live: Vec<u32> = (9..=14).filter(|&x| written(x) && read(x)).collect();
+    assert_eq!(live, (9..=14).collect::<Vec<u32>>(), "{ws:08x?}");
+}
+
+/// A field of a local struct whose address escapes is one `ldr` / `str`
+/// off the frame base, not an access through a built address.
+#[test]
+fn a64_frame_object_access_at_a_displacement_is_one_instruction() {
+    const SRC: &str = "struct Pair { long a, b, c, d; };\n\
+        void use_(struct Pair *);\n\
+        long fields(long n) {\n\
+            struct Pair p = {n, n + 1, n + 2, n + 3};\n\
+            use_(&p);\n\
+            p.a += 1; p.b += 2; p.c += 3; p.d += 4;\n\
+            use_(&p);\n\
+            return p.a + p.b + p.c + p.d;\n\
+        }\n";
+    let mut m = Misses::default();
+    let dump = ssa_dump_for(SRC, "fields", Target::LinuxAarch64, true);
+    m.expect(dump.contains("disp=8") && dump.contains("disp=24"), || {
+        format!("aarch64: the field accesses carry their displacement: {dump}")
+    });
+    let ws = a64(SRC, "fields");
+    // Four loads and four stores off fp or sp; none through a built address.
+    let off_frame = ws
+        .iter()
+        .filter(|&&w| a64_mem_imm(w).is_some_and(|(rn, _, _)| matches!(rn, 19 | 29 | 31)))
+        .count();
+    let built = [29, 31].map(|base| a64_built_accesses(&ws, base));
+    m.expect(off_frame >= 8 && built == [(0, 0); 2], || {
+        format!("aarch64: {off_frame} accesses off a frame base, built {built:?}: {ws:08x?}")
+    });
     m.finish();
 }
 

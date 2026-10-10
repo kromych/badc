@@ -28,9 +28,9 @@ Disassembly of section .text:
 <main>:
                	movl	$0x3f800000, %eax       # imm = 0x3F800000
                	movl	$0x40400000, %ecx       # imm = 0x40400000
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm0
-               	divss	%xmm15, %xmm0
+               	vdivss	%xmm15, %xmm14, %xmm0
                	movl	$0x3eaaaaab, %eax       # imm = 0x3EAAAAAB
                	movq	%rax, %xmm15
                	subss	%xmm15, %xmm0
@@ -50,9 +50,9 @@ Disassembly of section .text:
                	je	<addr>
                	retq
                	movl	$0x3dcccccd, %eax       # imm = 0x3DCCCCCD
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm0
-               	addss	%xmm15, %xmm0
+               	vaddss	%xmm15, %xmm14, %xmm0
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
                	movq	%rax, %xmm15
@@ -71,12 +71,10 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	addss	%xmm15, %xmm0
                	movq	%rax, %xmm15
-               	movapd	%xmm0, %xmm1
-               	addss	%xmm15, %xmm1
+               	vaddss	%xmm15, %xmm0, %xmm1
                	movl	$0x3f800001, %eax       # imm = 0x3F800001
                	movq	%rax, %xmm15
-               	movapd	%xmm1, %xmm0
-               	subss	%xmm15, %xmm0
+               	vsubss	%xmm15, %xmm1, %xmm0
                	xorl	%ecx, %ecx
                	movq	%rcx, %xmm15
                	ucomiss	%xmm0, %xmm15
@@ -93,16 +91,15 @@ Disassembly of section .text:
                	je	<addr>
                	retq
                	movl	$0x3f8ccccd, %eax       # imm = 0x3F8CCCCD
+               	movq	%rax, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rax, %xmm0
-               	mulss	%xmm15, %xmm0
+               	vmulss	%xmm15, %xmm14, %xmm0
                	movq	%rax, %xmm15
                	mulss	%xmm15, %xmm0
                	movl	$0x3fbb67a2, %edx       # imm = 0x3FBB67A2
-               	movapd	%xmm0, %xmm14
+               	movq	%rdx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rdx, %xmm0
-               	vfmsub231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) - xmm0
+               	vfmsub132ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm0 * xmm15) - xmm14
                	movq	%rcx, %xmm15
                	ucomiss	%xmm0, %xmm15
                	jbe	<addr>

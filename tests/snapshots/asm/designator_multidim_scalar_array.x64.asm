@@ -32,10 +32,10 @@ Disassembly of section .text:
                	movq	%rax, %rsi
                	shlq	$0x3, %rsi
                	addq	%rsi, %rcx
-               	movslq	(%rcx), %rsi
+               	movl	(%rcx), %esi
                	cmpl	$0x9, %esi
                	jne	<addr>
-               	movslq	0x4(%rcx), %rcx
+               	movl	0x4(%rcx), %ecx
                	cmpl	$0xa, %ecx
                	jne	<addr>
                	incq	%rax

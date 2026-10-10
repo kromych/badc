@@ -53,11 +53,7 @@ Disassembly of section .text:
                	movq	(%rsi,%rax,8), %rbx
                	movq	$-0x1, %r12
                	andq	$0x3f, %rcx
-               	movq	%rcx, %r10
-               	movq	%r12, %r11
-               	movq	%r10, %rcx
-               	shlq	%cl, %r11
-               	movq	%r11, %rcx
+               	shlxq	%rcx, %r12, %rcx
                	andq	%rbx, %rcx
                	testq	%rcx, %rcx
                	jne	<addr>

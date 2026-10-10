@@ -575,6 +575,7 @@ fn devirtualize_indirect_calls(
                 fp_arg_mask,
                 low_word_args,
                 arg_widths,
+                callee_conv,
                 arg_aggs,
                 ret_agg,
                 ret_slot_local,
@@ -591,6 +592,7 @@ fn devirtualize_indirect_calls(
                 fp_arg_mask,
                 low_word_args,
                 arg_widths,
+                callee_conv,
                 arg_aggs,
                 ret_agg,
                 ret_slot_local,
@@ -682,6 +684,7 @@ fn out_ptr_return(c: &FunctionSsa) -> Option<OutPtrReturn> {
         c.insts.get(rv as usize),
         Some(Inst::LoadLocal {
             off: 2,
+            disp: 0,
             kind: LoadKind::I64,
             volatile: false
         })
@@ -1458,6 +1461,7 @@ fn forwarded_param_cells(func: &FunctionSsa, used: &[bool]) -> BTreeSet<i64> {
             }
             Inst::LoadLocal {
                 off,
+                disp: 0,
                 kind,
                 volatile,
             } if *off >= 2 => {
@@ -1520,6 +1524,7 @@ fn materialized_param_cells(func: &FunctionSsa, used: &[bool]) -> BTreeSet<i64> 
             }
             Inst::LoadLocal {
                 off,
+                disp: 0,
                 kind,
                 volatile,
             } if *off >= 2 => {
@@ -2714,7 +2719,9 @@ fn splice_multi_block(
                     }
                     // A forwarded parameter cell's read takes the same
                     // width conversion against the call-site argument.
-                    Inst::LoadLocal { off, kind, .. } if forwarded.contains(off) => {
+                    Inst::LoadLocal {
+                        disp: 0, off, kind, ..
+                    } if forwarded.contains(off) => {
                         let arg = counted_args
                             .get((*off - 2) as usize)
                             .copied()
@@ -2888,6 +2895,7 @@ fn splice_multi_block(
                 .unwrap_or(NO_VALUE);
             new_insts.push(Inst::StoreLocal {
                 off: param_cell_reloc[&cell],
+                disp: 0,
                 value,
                 kind: StoreKind::I64,
                 volatile: false,
@@ -3073,7 +3081,9 @@ fn splice_multi_block(
                     // A forwarded parameter cell: the argument value the
                     // caller would have placed in its outgoing stack slot,
                     // taking the read's width conversion.
-                    Inst::LoadLocal { off, kind, .. } if forwarded.contains(off) => {
+                    Inst::LoadLocal {
+                        disp: 0, off, kind, ..
+                    } if forwarded.contains(off) => {
                         let arg = remapped_args
                             .get((*off - 2) as usize)
                             .copied()
@@ -3117,6 +3127,7 @@ fn splice_multi_block(
                     }
                     Inst::LoadLocal {
                         off,
+                        disp,
                         kind,
                         volatile,
                     } if *off < 0 || param_cell_reloc.contains_key(off) => {
@@ -3128,6 +3139,7 @@ fn splice_multi_block(
                         callee_remap[ce_pc as usize] = new_insts.len() as u32;
                         new_insts.push(Inst::LoadLocal {
                             off,
+                            disp: *disp,
                             kind: *kind,
                             volatile: *volatile,
                         });
@@ -3143,6 +3155,7 @@ fn splice_multi_block(
                     }
                     Inst::StoreLocal {
                         off,
+                        disp,
                         value,
                         kind,
                         volatile,
@@ -3156,6 +3169,7 @@ fn splice_multi_block(
                         callee_remap[ce_pc as usize] = new_insts.len() as u32;
                         new_insts.push(Inst::StoreLocal {
                             off,
+                            disp: *disp,
                             value: map_v(*value, &callee_remap),
                             kind: *kind,
                             volatile: *volatile,
@@ -3440,6 +3454,7 @@ fn splice_multi_block(
         is_naked: original.is_naked,
         is_noreturn: original.is_noreturn,
         conv: original.conv,
+        general_regs_only: original.general_regs_only,
         is_weak: original.is_weak,
         is_internal: original.is_internal,
         const_params: original.const_params,
@@ -3878,7 +3893,9 @@ fn inline_caller(
                             // A forwarded parameter cell: the argument value
                             // the caller would have placed in its outgoing
                             // stack slot, taking the read's width conversion.
-                            Inst::LoadLocal { off, kind, .. } if forwarded.contains(off) => {
+                            Inst::LoadLocal {
+                                disp: 0, off, kind, ..
+                            } if forwarded.contains(off) => {
                                 let arg = remapped_args
                                     .get((*off - 2) as usize)
                                     .copied()
@@ -4512,6 +4529,7 @@ mod tests {
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             low_word_args: 0,
             arg_widths: crate::c5::ir::ArgWidths::default(),
+            callee_conv: crate::c5::codegen::CallConv::Target,
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -4550,6 +4568,7 @@ mod tests {
                 args: alloc::vec![0],
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -4578,6 +4597,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(5),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
@@ -4586,6 +4606,7 @@ mod tests {
             },
             call_to(inner_pc),
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -4742,6 +4763,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(5),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
@@ -4764,6 +4786,7 @@ mod tests {
                 ret_slot_local: 0,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -5018,6 +5041,7 @@ mod tests {
                 [
                     Inst::Imm(3),
                     Inst::StoreLocal {
+                        disp: 0,
                         off: -1,
                         value: 0,
                         kind: StoreKind::I64,
@@ -5255,6 +5279,7 @@ mod tests {
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             low_word_args: 0,
             arg_widths: crate::c5::ir::ArgWidths::default(),
+            callee_conv: crate::c5::codegen::CallConv::Target,
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -5776,6 +5801,7 @@ mod tests {
         let in_range = single(
             alloc::vec![
                 Inst::LoadLocal {
+                    disp: 0,
                     off: 2,
                     kind: LoadKind::I32,
                     volatile: true,
@@ -5793,6 +5819,7 @@ mod tests {
             let read = single(
                 alloc::vec![
                     Inst::LoadLocal {
+                        disp: 0,
                         off: 3,
                         kind: LoadKind::I32,
                         volatile,
@@ -5805,6 +5832,7 @@ mod tests {
                 alloc::vec![
                     Inst::Imm(3),
                     Inst::StoreLocal {
+                        disp: 0,
                         off: -1,
                         value: 0,
                         kind: StoreKind::I32,
@@ -5869,6 +5897,7 @@ mod tests {
                     kind: LoadKind::I64,
                 });
                 insts.push(Inst::StoreLocal {
+                    disp: 0,
                     off: slot,
                     value: 0,
                     kind: StoreKind::I64,
@@ -5883,6 +5912,7 @@ mod tests {
                 args: alloc::vec![addr],
             });
             insts.push(Inst::LoadLocal {
+                disp: 0,
                 off: slot,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -6179,6 +6209,7 @@ mod tests {
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 low_word_args: 0,
                 arg_widths: crate::c5::ir::ArgWidths::default(),
+                callee_conv: crate::c5::codegen::CallConv::Target,
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -6267,6 +6298,7 @@ mod tests {
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             low_word_args: 0,
             arg_widths: crate::c5::ir::ArgWidths::default(),
+            callee_conv: crate::c5::codegen::CallConv::Target,
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -6334,6 +6366,7 @@ mod tests {
                     kind: LoadKind::I64,
                 },
                 Inst::StoreLocal {
+                    disp: 0,
                     off: 2,
                     value: 0,
                     kind: StoreKind::I64,
@@ -6341,6 +6374,7 @@ mod tests {
                     nsw: false,
                 },
                 Inst::LoadLocal {
+                    disp: 0,
                     off: 3,
                     kind,
                     volatile: false,
@@ -6429,6 +6463,7 @@ mod tests {
         let written = cell_read(
             LoadKind::I64,
             Some(Inst::StoreLocal {
+                disp: 0,
                 off: 3,
                 value: 3,
                 kind: StoreKind::I64,
@@ -6466,6 +6501,7 @@ mod tests {
         let fp = cell_read(
             LoadKind::F64,
             Some(Inst::StoreLocal {
+                disp: 0,
                 off: 3,
                 value: 3,
                 kind: StoreKind::F64,
@@ -6490,6 +6526,7 @@ mod tests {
         // Return(v3).
         let insts = alloc::vec![
             Inst::LoadLocal {
+                disp: 0,
                 off: 2,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -6500,6 +6537,7 @@ mod tests {
                 rhs_imm: 1,
             },
             Inst::StoreLocal {
+                disp: 0,
                 off: 2,
                 value: 1,
                 kind: StoreKind::I64,
@@ -6507,6 +6545,7 @@ mod tests {
                 nsw: false,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: 2,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -6541,6 +6580,7 @@ mod tests {
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             low_word_args: 0,
             arg_widths: crate::c5::ir::ArgWidths::default(),
+            callee_conv: crate::c5::codegen::CallConv::Target,
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,

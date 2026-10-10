@@ -54,7 +54,7 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	<rip>, %rax       # <addr>
                	addq	%r12, %rax
-               	movslq	0x10(%rax), %rax
+               	movl	0x10(%rax), %eax
                	cmpl	$0x7, %eax
                	jne	<addr>
                	incq	%rbx

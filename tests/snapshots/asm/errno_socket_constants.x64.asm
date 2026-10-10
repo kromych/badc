@@ -41,14 +41,14 @@ Disassembly of section .text:
                	movups	%xmm14, 0x30(%rax)
                	xorl	%edx, %edx
                	leaq	-0x40(%rbp), %rcx
-               	movslq	(%rcx,%rdx,4), %rax
+               	movl	(%rcx,%rdx,4), %eax
                	testl	%eax, %eax
                	jle	<addr>
                	leaq	0x1(%rdx), %rax
                	cmpl	$0x10, %eax
                	jge	<addr>
-               	movslq	(%rcx,%rdx,4), %rsi
-               	movslq	(%rcx,%rax,4), %rdi
+               	movl	(%rcx,%rdx,4), %esi
+               	movl	(%rcx,%rax,4), %edi
                	cmpl	%edi, %esi
                	je	<addr>
                	incq	%rax

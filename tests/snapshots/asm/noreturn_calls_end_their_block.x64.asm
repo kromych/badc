@@ -28,13 +28,12 @@ Disassembly of section .text:
 <die>:
                	pushq	%rbp
                	movq	%rsp, %rbp
+               	movq	%rdi, %rsi
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
-               	leaq	<rip>, %rax      # <addr>
-               	movq	%rdi, %rsi
-               	movq	%rax, %rdi
+               	leaq	<rip>, %rdi      # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
                	ud2
@@ -43,7 +42,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	leaq	0x4(%rax), %rdi
                	callq	<addr>
                	ud2
@@ -73,7 +72,7 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	jne	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x1, %eax
                	jne	<addr>
                	xorl	%eax, %eax

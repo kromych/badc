@@ -31,21 +31,17 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movabsq	$0x123456789abcdef, %rax # imm = 0x123456789ABCDEF
                	movl	$0x40, %ecx
-               	movq	%rax, %rdx
-               	shlq	%cl, %rdx
+               	shlxq	%rcx, %rax, %rcx
                	movabsq	$0x123456789abcdef, %r11 # imm = 0x123456789ABCDEF
-               	movq	%rdx, %rcx
-               	cmpq	%r11, %rdx
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x5, %eax
                	leave
                	retq
                	movl	$0x41, %ecx
-               	movq	%rax, %rdx
-               	shlq	%cl, %rdx
+               	shlxq	%rcx, %rax, %rcx
                	movabsq	$0x2468acf13579bde, %r11 # imm = 0x2468ACF13579BDE
-               	movq	%rdx, %rcx
-               	cmpq	%r11, %rdx
+               	cmpq	%r11, %rcx
                	je	<addr>
                	movl	$0x6, %eax
                	leave

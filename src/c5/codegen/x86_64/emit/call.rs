@@ -39,6 +39,9 @@ fn marshal_args(
     Ok(())
 }
 
+/// Tags r10 among the xmm numbers of an FP argument parallel copy.
+const GPR_SCRATCH_MARK: u8 = 0x80;
+
 /// One call's argument marshalling: the plan and the operands it reads.
 struct Marshal<'a> {
     plan: &'a super::CallPlan,
@@ -163,18 +166,37 @@ impl Marshal<'_> {
 
     /// FP register placements: the xmm-to-xmm moves as a parallel copy first,
     /// so every xmm source is consumed before a spilled or integer source
-    /// lands in its target xmm; the second FP scratch breaks a cycle.
+    /// lands in its target xmm; a cycle goes through a free operand scratch, else r10.
     fn fp_args(&self, code: &mut Vec<u8>) -> Emit {
         let mut fp_moves: Vec<(u8, u8)> = Vec::new();
+        let mut targets = 0u32;
         for (i, &placement) in self.plan.placements.iter().enumerate() {
-            if let super::ArgPlacement::FpReg(r) = placement
-                && let Place::FpReg(s) = self.arg_place(i)
-                && s != r
-            {
-                fp_moves.push((s, r));
+            if let super::ArgPlacement::FpReg(r) = placement {
+                targets |= 1 << r;
+                if let Place::FpReg(s) = self.arg_place(i)
+                    && s != r
+                {
+                    fp_moves.push((s, r));
+                }
             }
         }
-        schedule_xmm_reg_moves(code, &mut fp_moves, Reg(self.frame.fp_scratch[1]));
+        let scratch = [1, 0]
+            .map(|i| self.frame.fp_scratch[i])
+            .into_iter()
+            .find(|&r| r != super::ssa::reg_alloc::NO_FP_SCRATCH && targets & (1 << r) == 0);
+        match scratch {
+            Some(r) => schedule_xmm_reg_moves(code, &mut fp_moves, Reg(r)),
+            None => super::ssa::emit_common::schedule_reg_moves_via_scratch(
+                code,
+                &mut fp_moves,
+                SCRATCH_R10.0 | GPR_SCRATCH_MARK,
+                |code, t, s| match (t & GPR_SCRATCH_MARK != 0, s & GPR_SCRATCH_MARK != 0) {
+                    (true, _) => super::encode::emit_movq_r_xmm(code, SCRATCH_R10, Reg(s)),
+                    (_, true) => emit_movq_xmm_r(code, Reg(t), SCRATCH_R10),
+                    _ => emit_movapd_xmm_xmm(code, Reg(t), Reg(s)),
+                },
+            ),
+        }
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             if let super::ArgPlacement::FpReg(r) = placement {
                 match self.arg_place(i) {
@@ -387,11 +409,25 @@ fn store_agg_return(
     let mut sse_i = 0u8;
     for (class, off) in super::abi_classify::register_slots(&eb_classes) {
         let disp = (disp + i64::from(off)) as i32;
+        // The object's bytes alone: a copy elided into a member points the
+        // temp at storage its neighbours share.
+        let width = desc.size.saturating_sub(off).min(8);
         if class == super::abi_classify::RegClass::X87 {
             super::encode::emit_fstp_m80(code, base, disp);
         } else if class == super::abi_classify::RegClass::Integer {
-            emit_mov_mem_r(code, base, disp, int_ret[int_i]);
+            let r = int_ret[int_i];
             int_i += 1;
+            let mut shifted = 0;
+            for (o, w) in super::super::access_pieces(0, width, 8, false) {
+                if o > shifted {
+                    super::encode::emit_shift_ri(code, Mnem::Shr, 8, r, ((o - shifted) * 8) as u8);
+                    shifted = o;
+                }
+                emit_store_unit(code, w, base, disp + o as i32, r);
+            }
+        } else if class == super::abi_classify::RegClass::Sse && width == 4 {
+            super::encode::emit_movss_mem_xmm(code, base, disp, Reg(Reg::XMM0.0 + sse_i));
+            sse_i += 1;
         } else {
             emit_agg_store_slot_sse(code, class, base, disp, Reg(Reg::XMM0.0 + sse_i));
             sse_i += 1;
@@ -735,11 +771,11 @@ pub(super) fn emit_call_indirect(
         )
     };
     // The staged target must avoid every register the marshal reads (the
-    // argument sources) or writes (every integer register the plan fills,
-    // and the r10 staging scratch).
+    // argument sources) or writes (every integer register the plan fills
+    // with another value, and the r10 staging scratch).
     let mut blocked: alloc::vec::Vec<Reg> =
         alloc::vec::Vec::with_capacity(args.len() + abi.int_arg_regs.len() + 2);
-    blocked.extend(plan.int_regs().map(Reg));
+    blocked.extend(plan.int_regs_besides(args, target).map(Reg));
     blocked.push(SCRATCH_R10);
     // A System V variadic call sets `al` just before the `call`, so the
     // target must not sit in rax.
@@ -760,9 +796,22 @@ pub(super) fn emit_call_indirect(
     }
     // Otherwise the target pointer moves to a caller-saved scratch before
     // the marshal clobbers it; when every candidate is blocked it spills
-    // to the stack.
-    let target_scratch =
-        in_place.or_else(|| pick_caller_saved_scratch(Reg(0xff), &blocked, abi.fixed_regs));
+    // to the stack. r11 is the branch register when the marshal leaves it
+    // alone: its memory-argument, aggregate and va_list paths are the only
+    // writers.
+    let r11_free = !callee_variadic
+        && plan.placements.iter().all(|p| {
+            matches!(
+                p,
+                super::ArgPlacement::IntReg(_) | super::ArgPlacement::FpReg(_)
+            )
+        });
+    let target_scratch = in_place.or_else(|| {
+        let free = |r: Reg| !blocked.iter().any(|b| b.0 == r.0) && !abi.fixed_regs.has_gpr(r.0);
+        (r11_free && free(SCRATCH_R11))
+            .then_some(SCRATCH_R11)
+            .or_else(|| pick_caller_saved_scratch(Reg(0xff), &blocked, abi.fixed_regs))
+    });
     // System V AMD64 3.2.3: a variadic call passes the XMM-argument
     // count in `al`. Computed from the plan and emitted after the
     // marshal (which never writes rax, blocked above for the target).
@@ -1028,7 +1077,6 @@ pub(super) fn detect_tail_call<'a>(
     block: &super::super::ir::Block,
     abi: super::Abi,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
-    conv_targets: &alloc::collections::BTreeMap<usize, super::CallConv>,
     ret_tags: &alloc::collections::BTreeMap<usize, i64>,
     target: Target,
 ) -> Option<(usize, usize, &'a [u32])> {
@@ -1045,23 +1093,26 @@ pub(super) fn detect_tail_call<'a>(
     {
         return None;
     }
-    let (target_pc, args, arg_aggs, fp_arg_mask, fixed_args) = match &func.insts[v as usize] {
-        Inst::Call {
-            target_pc,
-            args,
-            arg_aggs,
-            fp_arg_mask,
-            fixed_args,
-            ..
-        } => (
-            *target_pc,
-            args.as_slice(),
-            arg_aggs.as_slice(),
-            fp_arg_mask,
-            *fixed_args,
-        ),
-        _ => return None,
-    };
+    let (target_pc, args, arg_aggs, fp_arg_mask, fixed_args, callee_conv) =
+        match &func.insts[v as usize] {
+            Inst::Call {
+                target_pc,
+                args,
+                arg_aggs,
+                fp_arg_mask,
+                fixed_args,
+                callee_conv,
+                ..
+            } => (
+                *target_pc,
+                args.as_slice(),
+                arg_aggs.as_slice(),
+                fp_arg_mask,
+                *fixed_args,
+                *callee_conv,
+            ),
+            _ => return None,
+        };
     // A stack argument would land in this function's incoming argument area.
     let plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
     if plan
@@ -1086,7 +1137,7 @@ pub(super) fn detect_tail_call<'a>(
     }
     // A callee on another convention wants a different argument window,
     // shadow space and preserved-register set.
-    if conv_targets.get(&target_pc).copied().unwrap_or_default() != func.conv {
+    if callee_conv != func.conv {
         return None;
     }
     // The callee's return extension replaces this function's, so the two
@@ -1151,7 +1202,7 @@ pub(super) fn emit_tail_call(
     // realigned for an over-aligned object has rsp below the saves;
     // `detect_tail_call` admits it, no address of the object being taken.
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
-    restore_dynamic_sp(code, frame);
+    restore_dynamic_sp(code, frame, alloc);
     restore_callee_saved(code, alloc);
     emit_frame_teardown(code, func, frame, alloc, abi);
     // A Call-kind fixup resolves the rel32 like an intra-unit call; the
@@ -1164,4 +1215,107 @@ pub(super) fn emit_tail_call(
     });
     super::encode::emit_jmp_rel32(code, 0);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The marshal's register moves as `(dst, src)`, the gprs numbered from 16.
+    fn decode_moves(mut code: &[u8]) -> Vec<(u8, u8)> {
+        let mut forms: Vec<(Vec<u8>, (u8, u8))> = Vec::new();
+        for a in 0..16u8 {
+            for b in 0..16u8 {
+                let mut c = Vec::new();
+                emit_movapd_xmm_xmm(&mut c, Reg(a), Reg(b));
+                forms.push((c, (a, b)));
+                let mut c = Vec::new();
+                emit_movq_xmm_r(&mut c, Reg(a), Reg(b));
+                forms.push((c, (a, 16 + b)));
+                let mut c = Vec::new();
+                super::super::encode::emit_movq_r_xmm(&mut c, Reg(a), Reg(b));
+                forms.push((c, (16 + a, b)));
+            }
+        }
+        let mut out = Vec::new();
+        while !code.is_empty() {
+            let (bytes, mv) = forms
+                .iter()
+                .filter(|(f, _)| code.starts_with(f))
+                .max_by_key(|(f, _)| f.len())
+                .unwrap_or_else(|| panic!("not a register move: {code:02x?}"));
+            out.push(*mv);
+            code = &code[bytes.len()..];
+        }
+        out
+    }
+
+    /// A System V callee takes its sixth floating argument in xmm5, an
+    /// operand scratch of the Microsoft x64 target (psABI 3.2.3).
+    #[test]
+    fn an_fp_argument_cycle_avoids_the_registers_the_call_fills() {
+        let target = Target::WindowsX64;
+        let program = crate::Compiler::with_target(
+            "__attribute__((sysv_abi)) double sv6(double, double, double, double, double, \
+             double);\n\
+             double swap6(double x, double y, double z) { return sv6(y, x, 3.0, 4.0, 5.0, z); }\n\
+             int main(void) { return 0; }"
+                .into(),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        let func = funcs.iter().find(|f| f.name == "swap6").expect("swap6");
+        let Some(Inst::Call {
+            args,
+            fp_arg_mask,
+            callee_conv,
+            ..
+        }) = func.insts.iter().find(|i| matches!(i, Inst::Call { .. }))
+        else {
+            panic!("swap6 calls sv6");
+        };
+        let mut alloc = super::super::ssa::reg_alloc::allocate(func, target, FixedRegs::NONE);
+        let sources = [
+            Place::FpReg(1),
+            Place::FpReg(0),
+            Place::IntReg(0),
+            Place::IntReg(1),
+            Place::IntReg(2),
+            Place::FpReg(2),
+        ];
+        for (&a, &p) in args.iter().zip(&sources) {
+            alloc.places[a as usize] = p;
+        }
+        let frame = compute_frame(func, &alloc, target.abi(), target);
+        let abi = callee_abi(target.abi(), target, *callee_conv);
+        let plan = super::super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
+        let mut code = Vec::new();
+        marshal_args(&mut code, &plan, args, &[], &alloc, frame, abi, "Call").expect("marshal");
+        let mut regs: [u8; 32] = core::array::from_fn(|r| r as u8);
+        for (dst, src) in decode_moves(&code) {
+            regs[dst as usize] = regs[src as usize];
+        }
+        for (k, (p, s)) in plan.placements.iter().zip(&sources).enumerate() {
+            let super::super::ArgPlacement::FpReg(t) = *p else {
+                panic!("argument {k} placed {p:?}");
+            };
+            let want = match *s {
+                Place::FpReg(r) => r,
+                Place::IntReg(r) => 16 + r,
+                _ => unreachable!(),
+            };
+            assert_eq!(
+                t, k as u8,
+                "System V places floating argument {k} in xmm{k}"
+            );
+            assert_eq!(
+                regs[t as usize], want,
+                "argument {k} in xmm{t}: {code:02x?}"
+            );
+        }
+    }
 }

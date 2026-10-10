@@ -176,16 +176,14 @@ Disassembly of section .text:
                	fcmp	d0, d1
                	b.eq	<addr>
                	orr	x20, x20, #0x100
-               	sub	x0, x29, #0x8
-               	ldr	x0, [x0]
+               	ldur	x0, [x29, #-0x8]
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000
                	fcmp	d0, d1
                	b.eq	<addr>
                	orr	x20, x20, #0x200
-               	sub	x0, x29, #0x8
-               	ldr	x0, [x0]
+               	ldur	x0, [x29, #-0x8]
                	fmov	d0, #3.00000000
                	blr	x0
                	fmov	d1, #6.00000000

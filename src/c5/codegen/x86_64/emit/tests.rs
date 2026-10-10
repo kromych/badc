@@ -106,13 +106,13 @@ mod asm_scratch_tests {
     }
 
     /// A statement of `r` inputs and value outputs binds its operands to
-    /// their values' registers and writes only its clobbers and the scratch
-    /// its loads may take: r10 and r11, then the caller-saved registers as
-    /// more inputs or outputs need them, none the statement clobbers. Its
-    /// inputs avoid both; a `=` output the clobbers alone, a `+` output both
-    /// and its input the scratch alone. A fixed, early-clobber or memory
-    /// operand, a second read-write output, or a clobbered frame register
-    /// keeps the staged lowering, whose operand registers the site writes.
+    /// their values' registers and reserves its clobbers and the scratch its
+    /// loads may take: r10 and r11, or its whole need where the coloring
+    /// leaves too few free. Its inputs avoid both; a `=` output the clobbers
+    /// and, under the whole need, the inputs' share; a `+` output both and its
+    /// input the scratch. A fixed, early-clobber or memory operand, a second
+    /// read-write output, or a clobbered frame register keeps the staged
+    /// lowering, whose operand registers the site writes.
     #[test]
     fn register_operands_bind_to_their_values() {
         let target = crate::c5::codegen::Target::LinuxX64;
@@ -162,15 +162,16 @@ mod asm_scratch_tests {
                 .position(|i| matches!(i, Inst::InlineAsm { .. }))
                 .unwrap()
         };
-        let masks = |func: &FunctionSsa| {
+        let reserved = |func: &FunctionSsa, full: bool| {
             let Inst::InlineAsm { asm, args } = &func.insts[site(func)] else {
                 unreachable!()
             };
             (
                 asm_binds_directly(func, asm, args, fixed, target),
-                asm_site_write_masks(func, asm, args, fixed, target),
+                asm_site_write_masks(func, asm, args, fixed, target, full),
             )
         };
+        let masks = |func: &FunctionSsa| reserved(func, false);
         let reg = |out: bool| operand(AsmConstraint::Reg, out);
         let two_in = alloc::vec![reg(true), reg(false), reg(false)];
         assert_eq!(
@@ -178,28 +179,45 @@ mod asm_scratch_tests {
             (true, ((1 << 10) | (1 << 11), 0))
         );
         let three_in = alloc::vec![reg(true), reg(false), reg(false), reg(false)];
+        // The site reserves only its floor scratch (r10 and r11); the
+        // scratch a register-less operand would take is decided once the
+        // allocation is known, so nothing beyond the floor is reserved
+        // up front.
         assert_eq!(
             masks(&statement(three_in.clone(), 0)),
-            (true, ((1 << 10) | (1 << 11) | (1 << 9), 0))
+            (true, ((1 << 10) | (1 << 11), 0))
         );
-        // r10 and r11 clobbered: the three inputs take r9, r8 and rdx.
+        // r10 and r11 clobbered: the floor moves to the next two of
+        // BOUND_SCRATCH, r9 and r8.
         let r10_r11 = (1 << 10) | (1 << 11);
-        let scratch = (1 << 9) | (1 << 8) | (1 << 2);
+        let floor = (1 << 9) | (1 << 8);
         assert_eq!(
             masks(&statement(three_in.clone(), r10_r11)),
-            (true, (r10_r11 | scratch, 0))
+            (true, (r10_r11 | floor, 0))
         );
-        let avoid = |func: &FunctionSsa| {
+        let avoid_with = |func: &FunctionSsa, full: bool| {
             let site = site(func);
             let Inst::InlineAsm { asm, args } = &func.insts[site] else {
                 unreachable!()
             };
-            asm_site_bound_values(func, asm, args, site as u32, fixed, target)
+            asm_site_bound_values(func, asm, args, site as u32, fixed, target, full)
         };
-        let all = r10_r11 | scratch;
+        let avoid = |func: &FunctionSsa| avoid_with(func, false);
+        let all = r10_r11 | floor;
         assert_eq!(
             avoid(&statement(three_in.clone(), r10_r11)),
             [(1, all, 0), (2, all, 0), (3, all, 0), (4, r10_r11, 0)]
+        );
+        // The whole need, three registers here; the `=` output avoids the
+        // inputs' share too.
+        let need = all | (1 << 2);
+        assert_eq!(
+            reserved(&statement(three_in.clone(), r10_r11), true),
+            (true, (need, 0))
+        );
+        assert_eq!(
+            avoid_with(&statement(three_in.clone(), r10_r11), true),
+            [(1, need, 0), (2, need, 0), (3, need, 0), (4, need, 0)]
         );
         let mut rw = alloc::vec![reg(true), reg(false)];
         rw[0].is_rw = true;
@@ -214,8 +232,14 @@ mod asm_scratch_tests {
             (true, (1 | r10_r11, 0))
         );
         assert_eq!(
-            avoid(&statement(two_out, 1)),
+            avoid(&statement(two_out.clone(), 1)),
             [(2, 1 | r10_r11, 0), (3, 1, 0), (4, 1, 0)]
+        );
+        // A whole need of two: the input's r10, which the outputs avoid.
+        let r10 = 1 << 10;
+        assert_eq!(
+            avoid_with(&statement(two_out, 1), true),
+            [(2, 1 | r10_r11, 0), (3, 1 | r10, 0), (4, 1 | r10, 0)]
         );
         let mut two_rw = alloc::vec![reg(true), reg(true)];
         two_rw[0].is_rw = true;
@@ -245,6 +269,83 @@ mod asm_scratch_tests {
         let (bound, (gpr, _)) = masks(&statement(mem, 0));
         assert!(!bound);
         assert_ne!(gpr & 1, 0, "the staged lowering's first operand is rax");
+    }
+
+    /// A bound statement's inputs without a register load into the scratch
+    /// no value live across it holds: three spilled inputs take r10, r11
+    /// and r9 while r8, rdx, rcx and rax hold live values, and find no third
+    /// once r9 does too -- the shortfall the allocator answers with the
+    /// statement's whole need. An input in a register binds there.
+    #[test]
+    fn bound_inputs_load_into_the_scratch_live_values_leave_free() {
+        let target = crate::c5::codegen::Target::LinuxX64;
+        let operand = |is_output: bool| AsmOperand {
+            constraint: AsmConstraint::Reg,
+            is_output,
+            is_rw: false,
+            width: 8,
+            seg: AsmSeg::None,
+            static_arg: false,
+            value: is_output,
+            volatile_object: false,
+            early_clobber: false,
+        };
+        let asm = AsmBlock {
+            template: b"nop".to_vec(),
+            operands: alloc::vec![
+                operand(true),
+                operand(false),
+                operand(false),
+                operand(false)
+            ],
+            clobber_regs: 0,
+            clobber_fp_regs: 0,
+            clobber_memory: false,
+            volatile: true,
+        };
+        let args = alloc::vec![0, 1, 2, 3];
+        let mut insts: alloc::vec::Vec<Inst> = (0..4).map(Inst::Imm).collect();
+        insts.push(Inst::InlineAsm {
+            asm: alloc::boxed::Box::new(asm.clone()),
+            args: args.clone(),
+        });
+        let func = FunctionSsa {
+            insts,
+            ..Default::default()
+        };
+        let output = Place::IntReg(Reg::RSI.0);
+        let mut places = alloc::vec![
+            Place::None,
+            Place::Spill(0),
+            Place::Spill(1),
+            Place::Spill(2),
+            output
+        ];
+        let plan = |places: &[Place], live: u32| {
+            let fixed = crate::c5::codegen::FixedRegs::NONE;
+            plan_bound_operands(
+                &func,
+                &asm,
+                &args,
+                places,
+                &[(0, output)],
+                live,
+                fixed,
+                target,
+            )
+        };
+        let live = (1 << 8) | (1 << 2) | (1 << 1) | 1;
+        let bound = plan(&places, live).expect("r10, r11 and r9 are free");
+        assert_eq!(bound.loads, [(1, 10), (2, 11), (3, 9)]);
+        assert_eq!(
+            bound.op_reg,
+            [Some(Reg::RSI.0), Some(10), Some(11), Some(9)]
+        );
+        assert!(plan(&places, live | (1 << 9)).is_none());
+        places[3] = Place::IntReg(9);
+        let bound = plan(&places, live | (1 << 9)).expect("two loads");
+        assert_eq!(bound.loads, [(1, 10), (2, 11)]);
+        assert_eq!(bound.op_reg[3], Some(9));
     }
 }
 
@@ -509,6 +610,111 @@ mod mul_add_tests {
 }
 
 #[cfg(test)]
+mod fma_tests {
+    use super::*;
+    use alloc::vec::Vec;
+
+    /// Lower `a * b + c` with `[a, b, c]` and the destination pinned.
+    fn lower(ops: [Place; 3], dst: Place, dying: [bool; 3]) -> (Vec<u8>, Frame) {
+        let target = Target::LinuxX64;
+        let program = crate::Compiler::with_target(
+            "double f(double a, double b, double c){ return a*b + c; } \
+             int main(void){ return 0; }"
+                .into(),
+            target,
+        )
+        .compile()
+        .expect("compile");
+        let mut funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("ssa");
+        crate::c5::codegen::passes::fma::run(&mut funcs);
+        let func = funcs.into_iter().find(|f| f.name == "f").expect("f");
+        let (v, a, b, c) = func
+            .insts
+            .iter()
+            .enumerate()
+            .find_map(|(v, i)| match i {
+                crate::c5::ir::Inst::Fma { a, b, c, .. } => {
+                    Some((v as crate::c5::ir::ValueId, *a, *b, *c))
+                }
+                _ => None,
+            })
+            .expect("an Fma");
+        let mut alloc = super::super::ssa::reg_alloc::allocate(
+            &func,
+            target,
+            crate::c5::codegen::FixedRegs::NONE,
+        );
+        for ((x, p), d) in [a, b, c].into_iter().zip(ops).zip(dying) {
+            alloc.places[x as usize] = p;
+            alloc.last_use[x as usize] = if d { v } else { v + 1 };
+        }
+        alloc.places[v as usize] = dst;
+        alloc.spill_count = alloc.spill_count.max(4);
+        let frame = compute_frame(&func, &alloc, target.abi(), target);
+        let mut code = Vec::new();
+        assert!(
+            emit_fma(&mut code, dst, v, a, b, c, false, false, &alloc, frame).is_ok(),
+            "emit_fma bailed"
+        );
+        (code, frame)
+    }
+
+    /// `a` dying in a register, `b` and `c` spilled: one spill loads into the
+    /// destination, where overwriting `a` costs a copy and a load.
+    #[test]
+    fn a_spill_loads_into_the_destination_when_the_others_cannot_both_stay() {
+        let (code, frame) = lower(
+            [Place::FpReg(1), Place::Spill(0), Place::Spill(1)],
+            Place::FpReg(0),
+            [true, false, false],
+        );
+        let (base, b_off) = spill_slot_addr(frame, 0);
+        let (_, c_off) = spill_slot_addr(frame, 1);
+        let cheapest = [(c_off, 0xB9, b_off), (b_off, 0xA9, c_off)].map(|(load, op, mem)| {
+            let mut want = Vec::new();
+            emit_movsd_xmm_mem(&mut want, Reg(0), base, load);
+            emit_vex_fma_mem(&mut want, op, true, Reg(0), Reg(1), base, mem);
+            want
+        });
+        assert!(cheapest.contains(&code), "{code:02x?}");
+    }
+
+    /// 231 with `a` spilled and `b` in a general register.
+    #[test]
+    fn a_spilled_multiplicand_takes_the_memory_slot() {
+        let (code, frame) = lower(
+            [Place::Spill(0), Place::IntReg(1), Place::FpReg(0)],
+            Place::FpReg(0),
+            [false, false, true],
+        );
+        let s0 = Reg(frame.fp_scratch[0]);
+        let mut want = Vec::new();
+        emit_movq_xmm_r(&mut want, s0, Reg(1));
+        let (base, a_off) = spill_slot_addr(frame, 0);
+        emit_vex_fma_mem(&mut want, 0xB9, true, Reg(0), s0, base, a_off);
+        assert_eq!(code, want, "movq b, then vfmadd231sd [a]");
+    }
+
+    /// An operand in the destination's register is the overwritten one.
+    #[test]
+    fn the_operand_in_the_destination_stays_overwritten() {
+        let (code, frame) = lower(
+            [Place::FpReg(0), Place::IntReg(1), Place::Spill(1)],
+            Place::FpReg(0),
+            [true, false, false],
+        );
+        let s0 = Reg(frame.fp_scratch[0]);
+        let mut want = Vec::new();
+        emit_movq_xmm_r(&mut want, s0, Reg(1));
+        let (base, c_off) = spill_slot_addr(frame, 1);
+        emit_vex_fma_mem(&mut want, 0xA9, true, Reg(0), s0, base, c_off);
+        assert_eq!(code, want, "movq b, then vfmadd213sd [c]");
+    }
+}
+
+#[cfg(test)]
 mod indexed_tests {
     use super::*;
     use crate::c5::ir::Inst;
@@ -580,15 +786,17 @@ mod indexed_tests {
             let mut code = Vec::new();
             let dst = Place::IntReg(Reg::RAX.0);
             let lsl = (index, IndexExt::None);
-            emit_load_indexed(&mut code, dst, base, lsl, scale, kind, &alloc, frame)
+            emit_load_indexed(&mut code, dst, base, lsl, scale, kind, true, &alloc, frame)
                 .expect("emit_load_indexed");
             assert_eq!(code, want, "{src}");
             // No SIB form widens its index: a marked access is refused.
             for ext in [IndexExt::Sxtw, IndexExt::Uxtw] {
                 let marked = (index, ext);
                 assert!(
-                    emit_load_indexed(&mut code, dst, base, marked, scale, kind, &alloc, frame)
-                        .is_err()
+                    emit_load_indexed(
+                        &mut code, dst, base, marked, scale, kind, true, &alloc, frame
+                    )
+                    .is_err()
                 );
             }
         }
@@ -720,12 +928,11 @@ mod two_address_tests {
         assert!(spilled.ends_with(&[0x4C, 0x29, 0xD0]), "{spilled:02x?}");
     }
 
-    /// A shift saves rcx around the count's move into cl exactly when the
-    /// allocation records a value other than the count live there; without
-    /// a record, any value allocated to rcx counts. A result in rcx is
-    /// shifted in r11 from the lhs's own register.
+    /// A shift by a register count reads the count where it sits: no move
+    /// into cl and no rcx save, whatever rcx holds, and no copy of a count
+    /// that shares the destination register.
     #[test]
-    fn shift_saves_rcx_as_the_allocation_records() {
+    fn shift_takes_the_vex_form_whatever_holds_rcx() {
         let target = Target::LinuxX64;
         let reg = |r: Reg| Place::IntReg(r.0);
         let (func, v, mut alloc) = binop_of("long f(long a, long c){ return a << c; }", BinOp::Shl);
@@ -746,27 +953,68 @@ mod two_address_tests {
                 .expect("emit_binop");
             code
         };
-        // mov rax, rdi; [push rcx;] mov rcx, rsi; shl rax, cl; [pop rcx]
-        let bare = [0x48, 0x89, 0xF8, 0x48, 0x89, 0xF1, 0x48, 0xD3, 0xE0];
-        let saved = [
-            0x48, 0x89, 0xF8, 0x51, 0x48, 0x89, 0xF1, 0x48, 0xD3, 0xE0, 0x59,
-        ];
+        // shlx rax, rdi, rsi: the count rides rsi, so nothing stages
+        // into cl or saves rcx whatever holds it.
+        let shifted = [0xC4, 0xE2, 0xC9, 0xF7, 0xC7];
         alloc.implicit_live = alloc::vec![0; func.insts.len()];
-        assert_eq!(emit(&alloc, Reg::RAX), bare);
+        assert_eq!(emit(&alloc, Reg::RAX), shifted);
         alloc.implicit_live[v as usize] = 1 << Reg::RCX.0;
-        assert_eq!(emit(&alloc, Reg::RAX), saved);
+        assert_eq!(emit(&alloc, Reg::RAX), shifted);
         alloc.implicit_live.clear();
-        assert_eq!(emit(&alloc, Reg::RAX), bare);
+        assert_eq!(emit(&alloc, Reg::RAX), shifted);
         let other = (0..func.insts.len() as u32).find(|&i| i != lhs && i != rhs && i != v);
         alloc.places[other.expect("another value") as usize] = reg(Reg::RCX);
-        assert_eq!(emit(&alloc, Reg::RAX), saved);
-        // mov r11, rdi; mov rcx, rsi; shl r11, cl; mov rcx, r11
-        assert_eq!(
-            emit(&alloc, Reg::RCX),
-            [
-                0x49, 0x89, 0xFB, 0x48, 0x89, 0xF1, 0x49, 0xD3, 0xE3, 0x4C, 0x89, 0xD9
-            ]
-        );
+        assert_eq!(emit(&alloc, Reg::RAX), shifted);
+        // The destination may be rcx itself: the VEX form reads both
+        // operands before writing.
+        assert_eq!(emit(&alloc, Reg::RCX), [0xC4, 0xE2, 0xC9, 0xF7, 0xCF]);
+        // shlx rax, rdi, rax: a count in the destination is read in place.
+        alloc.places[rhs as usize] = reg(Reg::RAX);
+        assert_eq!(emit(&alloc, Reg::RAX), [0xC4, 0xE2, 0xF9, 0xF7, 0xC7]);
+    }
+
+    #[test]
+    fn rotate_stages_its_count_into_cl() {
+        let target = Target::LinuxX64;
+        let reg = |r: Reg| Place::IntReg(r.0);
+        let (func, v, mut alloc) = binop_of("long f(long a, long c){ return a << c; }", BinOp::Shl);
+        // Reuse the shape: a rotate has no BMI2 register-count form, so
+        // the count moves into cl and a live rcx is saved.
+        let Inst::Binop { lhs, rhs, .. } = func.insts[v as usize] else {
+            panic!("{:?}", func.insts[v as usize])
+        };
+        for p in alloc.places.iter_mut() {
+            if *p == reg(Reg::RCX) {
+                *p = Place::None;
+            }
+        }
+        alloc.places[lhs as usize] = reg(Reg::RDI);
+        alloc.places[rhs as usize] = reg(Reg::RSI);
+        let emit = |alloc: &Allocation| {
+            let frame = compute_frame(&func, alloc, target.abi(), target);
+            let mut code = Vec::new();
+            emit_binop(
+                &mut code,
+                BinOp::Ror,
+                v,
+                reg(Reg::RAX),
+                lhs,
+                rhs,
+                alloc,
+                frame,
+            )
+            .expect("emit_binop");
+            code
+        };
+        // mov rax, rdi; [push rcx;] mov rcx, rsi; ror rax, cl; [pop rcx]
+        let bare = [0x48, 0x89, 0xF8, 0x48, 0x89, 0xF1, 0x48, 0xD3, 0xC8];
+        let saved = [
+            0x48, 0x89, 0xF8, 0x51, 0x48, 0x89, 0xF1, 0x48, 0xD3, 0xC8, 0x59,
+        ];
+        alloc.implicit_live = alloc::vec![0; func.insts.len()];
+        assert_eq!(emit(&alloc), bare);
+        alloc.implicit_live[v as usize] = 1 << Reg::RCX.0;
+        assert_eq!(emit(&alloc), saved);
     }
 
     /// The function of `src` holding a copy, the copy's id and the allocation.

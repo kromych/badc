@@ -29,27 +29,24 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x420, %rsp            # imm = 0x420
-               	movabsq	$0x123456789abcdef, %rcx # imm = 0x123456789ABCDEF
-               	movabsq	$-0x123456789abcdf0, %rsi # imm = 0xFEDCBA9876543210
-               	leaq	-0x418(%rbp), %rax
-               	movq	%rcx, (%rax)
-               	movq	%rsi, 0x8(%rax)
-               	movl	$0xdeadbeef, 0x10(%rax) # imm = 0xDEADBEEF
-               	movb	$0x5a, 0x14(%rax)
-               	movb	$0x0, 0x15(%rax)
-               	movw	$0x0, 0x16(%rax)
-               	cmpq	%rcx, %rcx
+               	movabsq	$0x123456789abcdef, %rax # imm = 0x123456789ABCDEF
+               	movabsq	$-0x123456789abcdf0, %rdx # imm = 0xFEDCBA9876543210
+               	movq	%rax, -0x418(%rbp)
+               	movq	%rdx, -0x410(%rbp)
+               	movl	$0xdeadbeef, -0x408(%rbp) # imm = 0xDEADBEEF
+               	movb	$0x5a, -0x404(%rbp)
+               	movb	$0x0, -0x403(%rbp)
+               	movw	$0x0, -0x402(%rbp)
+               	cmpq	%rax, %rax
                	jne	<addr>
-               	leaq	-0x418(%rbp), %rax
-               	movq	0x8(%rax), %rcx
-               	cmpq	%rsi, %rcx
+               	movq	-0x410(%rbp), %rax
+               	cmpq	%rdx, %rax
                	jne	<addr>
-               	movl	0x10(%rax), %eax
+               	movl	-0x408(%rbp), %eax
                	movl	$0xdeadbeef, %r11d      # imm = 0xDEADBEEF
                	cmpl	%r11d, %eax
                	jne	<addr>
-               	leaq	-0x418(%rbp), %rax
-               	movzbq	0x14(%rax), %rax
+               	movzbq	-0x404(%rbp), %rax
                	cmpl	$0x5a, %eax
                	je	<addr>
                	movl	$0x2, %eax
@@ -129,8 +126,7 @@ Disassembly of section .text:
                	cmpl	$0x11223348, %eax       # imm = 0x11223348
                	jne	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	leaq	-0x418(%rbp), %rcx
-               	movzbq	0x14(%rcx), %rcx
+               	movzbq	-0x404(%rbp), %rcx
                	movb	%cl, (%rax)
                	movb	%cl, 0x1(%rax)
                	movb	%cl, 0x2(%rax)
@@ -427,30 +423,26 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x18, %eax
                	jb	<addr>
-               	leaq	-0x200(%rbp), %rax
-               	movzbq	0x18(%rax), %rax
+               	movzbq	-0x1e8(%rbp), %rax
                	cmpl	$0x48, %eax
                	je	<addr>
                	movl	$0x9, %eax
                	leave
                	retq
-               	leaq	-0x418(%rbp), %rax
-               	movabsq	$0x123456789abcdef, %rdx # imm = 0x123456789ABCDEF
-               	movq	%rdx, (%rax)
-               	movabsq	$-0x123456789abcdf0, %rsi # imm = 0xFEDCBA9876543210
-               	movq	%rsi, 0x8(%rax)
-               	movl	$0xdeadbeef, 0x10(%rax) # imm = 0xDEADBEEF
-               	movb	$0x5a, 0x14(%rax)
-               	movb	$0x0, 0x15(%rax)
-               	movw	$0x0, 0x16(%rax)
-               	xorl	%ecx, %ecx
-               	movq	%rcx, (%rax)
-               	movq	%rcx, 0x8(%rax)
-               	movq	%rcx, 0x10(%rax)
-               	leaq	-0x418(%rbp), %rax
-               	movq	%rdx, (%rax)
-               	movq	%rsi, 0x8(%rax)
-               	movq	%rcx, %rax
+               	movabsq	$0x123456789abcdef, %rcx # imm = 0x123456789ABCDEF
+               	movq	%rcx, -0x418(%rbp)
+               	movabsq	$-0x123456789abcdf0, %rdx # imm = 0xFEDCBA9876543210
+               	movq	%rdx, -0x410(%rbp)
+               	movl	$0xdeadbeef, -0x408(%rbp) # imm = 0xDEADBEEF
+               	movb	$0x5a, -0x404(%rbp)
+               	movb	$0x0, -0x403(%rbp)
+               	movw	$0x0, -0x402(%rbp)
+               	xorl	%eax, %eax
+               	movq	%rax, -0x418(%rbp)
+               	movq	%rax, -0x410(%rbp)
+               	movq	%rax, -0x408(%rbp)
+               	movq	%rcx, -0x418(%rbp)
+               	movq	%rdx, -0x410(%rbp)
                	leave
                	retq
                	movl	$0x8, %eax

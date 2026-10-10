@@ -44,23 +44,20 @@
 //! to the caller's argument and copy a returned object field by field, and
 //! before `sroa`.
 
-use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use crate::c5::codegen::abi_classify::{RegClass, RegPart, ScalarKind, register_parts};
 use crate::c5::codegen::ssa::tape::{self, At, Insertion};
-use crate::c5::codegen::{ArgPlacement, CallConv, Target, offset_align};
+use crate::c5::codegen::{ArgPlacement, Target, offset_align};
 use crate::c5::ir::{
     AggDesc, BinOp, BlockId, FpMask, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
     ValueId,
 };
 
-/// `conv_of` names the direct-call targets on a convention other than the
-/// target's own, as the call emitters read them (`callee_conventions`).
-pub(crate) fn run(funcs: &mut [FunctionSsa], target: Target, conv_of: &BTreeMap<usize, CallConv>) {
+pub(crate) fn run(funcs: &mut [FunctionSsa], target: Target) {
     for f in funcs {
         if !f.is_naked && !f.blocks.is_empty() {
-            run_one(f, target, conv_of);
+            run_one(f, target);
         }
     }
 }
@@ -256,6 +253,7 @@ fn scatter(
                 at,
                 Inst::StoreLocal {
                     off: slot,
+                    disp: 0,
                     value: v,
                     kind,
                     volatile: false,
@@ -336,7 +334,7 @@ fn gather(plan: &mut Plan, at: At, addr: ValueId, p: &RegPart, desc: &AggDesc) -
     acc.unwrap_or_else(|| plan.push(at, Inst::Imm(0), false))
 }
 
-fn run_one(func: &mut FunctionSsa, target: Target, conv_of: &BTreeMap<usize, CallConv>) {
+fn run_one(func: &mut FunctionSsa, target: Target) {
     let abi = target.abi_row(func.conv).abi();
     let placements = crate::c5::codegen::ssa::emit_common::param_placements_common(func, abi);
     let mut plan = Plan {
@@ -409,7 +407,7 @@ fn run_one(func: &mut FunctionSsa, target: Target, conv_of: &BTreeMap<usize, Cal
     }
     // The call-side stores go first: a return at the same block end may
     // gather what they store.
-    let calls = call_parts(func, target, conv_of, &mut plan, ret_parts.is_some());
+    let calls = call_parts(func, target, &mut plan, ret_parts.is_some());
     let mut bundles: Vec<(usize, ValueId)> = Vec::new();
     if let Some((ai, parts)) = ret_parts {
         let desc = &func.agg_descs[ai as usize];
@@ -474,41 +472,38 @@ fn run_one(func: &mut FunctionSsa, target: Target, conv_of: &BTreeMap<usize, Cal
 
 /// Plan the `RetPart`s of each call returning in registers and their
 /// stores into its result temporary, placed right after the call. The
-/// callee's convention decides the registers, taken as the call emitters
-/// take it. Returns the calls whose slot the plan releases.
+/// callee's convention decides the registers ([`Inst::call_conv`]).
+/// Returns the calls whose slot the plan releases.
 fn call_parts(
     func: &FunctionSsa,
     target: Target,
-    conv_of: &BTreeMap<usize, CallConv>,
     plan: &mut Plan,
     returns_parts: bool,
 ) -> Vec<ValueId> {
     let mut calls = Vec::new();
     for block in &func.blocks {
         for v in block.inst_range.clone() {
-            let (conv, ret_agg, slot) = match &func.insts[v as usize] {
+            let inst = &func.insts[v as usize];
+            let (ret_agg, slot) = match inst {
                 Inst::Call {
-                    target_pc,
                     ret_agg,
                     ret_slot_local,
                     ..
-                } => (
-                    conv_of.get(target_pc).copied().unwrap_or_default(),
-                    *ret_agg,
-                    *ret_slot_local,
-                ),
-                Inst::CallIndirect {
-                    callee_conv,
+                }
+                | Inst::CallIndirect {
                     ret_agg,
                     ret_slot_local,
                     ..
-                } => (*callee_conv, *ret_agg, *ret_slot_local),
-                Inst::CallExt {
+                }
+                | Inst::CallExt {
                     ret_agg,
                     ret_slot_local,
                     ..
-                } => (func.conv, *ret_agg, *ret_slot_local),
+                } => (*ret_agg, *ret_slot_local),
                 _ => continue,
+            };
+            let Some(conv) = inst.call_conv() else {
+                continue;
             };
             let Some(ai) = ret_agg else {
                 continue;
@@ -550,6 +545,7 @@ fn call_parts(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::c5::codegen::CallConv;
     use crate::c5::codegen::ssa::shadow::produce_ssa_funcs;
     use crate::{Compiler, Target};
 
@@ -583,7 +579,7 @@ mod tests {
             let mut f = walked(SRC, "by_value", target);
             let slot = f.param_local_slots[0];
             assert!(slot < 0, "{target:?}: {}", text(&f));
-            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
+            run(core::slice::from_mut(&mut f), target);
             let t = text(&f);
             let entry = f.blocks[0].inst_range.clone();
             let parts: Vec<u32> = entry
@@ -645,7 +641,7 @@ mod tests {
             { return a.a + a.b + s0 + b.a + b.b + b.c + c.a + s1; }";
         for target in [Target::LinuxAarch64, Target::LinuxX64, Target::WindowsX64] {
             let mut f = walked(SRC, "take", target);
-            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
+            run(core::slice::from_mut(&mut f), target);
             let t = text(&f);
             let reads: Vec<usize> = (0..f.insts.len())
                 .filter(|&v| matches!(f.insts[v], Inst::ParamRef { .. } | Inst::ParamPart { .. }))
@@ -668,7 +664,7 @@ mod tests {
         const SRC: &str = "struct Q { int a, b; }; struct Q swap(struct Q v) { struct Q r; r.a = v.b; r.b = v.a; return r; }";
         for target in [Target::LinuxAarch64, Target::LinuxX64, Target::WindowsX64] {
             let mut f = walked(SRC, "swap", target);
-            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
+            run(core::slice::from_mut(&mut f), target);
             let t = text(&f);
             let shr = f.insts.iter().filter(|i| {
                 matches!(
@@ -731,7 +727,7 @@ mod tests {
         const SRC: &str = "struct S { char c; int i; }; int id(struct S s) { return s.i; }";
         for target in [Target::LinuxAarch64, Target::LinuxX64] {
             let mut f = walked(SRC, "id", target);
-            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
+            run(core::slice::from_mut(&mut f), target);
             let t = text(&f);
             let stores: Vec<(i32, StoreKind)> = f
                 .insts
@@ -768,7 +764,7 @@ mod tests {
             for (name, whole) in [("esc", true), ("idx", true), ("copy", false)] {
                 let mut f = walked(SRC, name, target);
                 let slot = f.param_local_slots[0];
-                run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
+                run(core::slice::from_mut(&mut f), target);
                 let t = text(&f);
                 // A whole register goes through the cell's own store.
                 let stores: Vec<(i32, StoreKind)> = f.blocks[0]
@@ -777,7 +773,9 @@ mod tests {
                     .take_while(|&v| !matches!(f.insts[v as usize], Inst::Load { .. }))
                     .filter_map(|v| match f.insts[v as usize] {
                         Inst::Store { disp, kind, .. } => Some((disp, kind)),
-                        Inst::StoreLocal { off, kind, .. } if off == slot => Some((0, kind)),
+                        Inst::StoreLocal {
+                            disp: 0, off, kind, ..
+                        } if off == slot => Some((0, kind)),
                         _ => None,
                     })
                     .collect();
@@ -807,7 +805,7 @@ mod tests {
         for target in [Target::LinuxAarch64, Target::LinuxX64] {
             let mut f = walked(SRC, "va", target);
             let slot = f.param_local_slots[0];
-            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
+            run(core::slice::from_mut(&mut f), target);
             let t = text(&f);
             assert!(
                 !f.insts.iter().any(|i| matches!(i, Inst::ParamPart { .. })),
@@ -831,24 +829,16 @@ mod tests {
         for target in [Target::LinuxAarch64, Target::LinuxX64] {
             let mut f = walked(UNION, "id", target);
             let before = text(&f);
-            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
+            run(core::slice::from_mut(&mut f), target);
             assert_eq!(before, text(&f), "{target:?}");
         }
         const FLOATS: &str = "struct F { float x, y; }; struct F id(struct F u) { return u; }";
         let mut f = walked(FLOATS, "id", Target::LinuxX64);
         let before = text(&f);
-        run(
-            core::slice::from_mut(&mut f),
-            Target::LinuxX64,
-            &BTreeMap::new(),
-        );
+        run(core::slice::from_mut(&mut f), Target::LinuxX64);
         assert_eq!(before, text(&f));
         let mut f = walked(FLOATS, "id", Target::LinuxAarch64);
-        run(
-            core::slice::from_mut(&mut f),
-            Target::LinuxAarch64,
-            &BTreeMap::new(),
-        );
+        run(core::slice::from_mut(&mut f), Target::LinuxAarch64);
         let t = text(&f);
         let Terminator::Return(r) = f.blocks[0].terminator else {
             panic!("{t}")
@@ -861,7 +851,7 @@ mod tests {
         const DOUBLES: &str = "struct D { double x, y; }; struct D id(struct D u) { return u; }";
         for target in [Target::LinuxAarch64, Target::LinuxX64] {
             let mut f = walked(DOUBLES, "id", target);
-            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
+            run(core::slice::from_mut(&mut f), target);
             let t = text(&f);
             let parts: Vec<LoadKind> = f
                 .insts
@@ -915,7 +905,7 @@ mod tests {
         };
         for target in [Target::LinuxAarch64, Target::LinuxX64] {
             let mut f = walked(SRC, "pair", target);
-            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
+            run(core::slice::from_mut(&mut f), target);
             let t = text(&f);
             assert_eq!(
                 parts_after_call(&f),
@@ -931,17 +921,13 @@ mod tests {
             assert!(stores >= 2, "{target:?}: {t}");
             let mut f = walked(SRC, "un", target);
             let before = slot_of(&f);
-            run(core::slice::from_mut(&mut f), target, &BTreeMap::new());
+            run(core::slice::from_mut(&mut f), target);
             assert_eq!(slot_of(&f), before, "{target:?}: {}", text(&f));
             assert!(parts_after_call(&f).is_empty(), "{target:?}");
         }
         // System V: the double in xmm0, the long in rax, each slot 0 of its bank.
         let mut f = walked(SRC, "mixed", Target::LinuxX64);
-        run(
-            core::slice::from_mut(&mut f),
-            Target::LinuxX64,
-            &BTreeMap::new(),
-        );
+        run(core::slice::from_mut(&mut f), Target::LinuxX64);
         assert_eq!(
             parts_after_call(&f),
             [(0, LoadKind::F64), (0, LoadKind::I64)],
@@ -959,16 +945,17 @@ mod tests {
             __attribute__((ms_abi)) struct D1 msd(void);\n\
             double f(void) { struct D1 d = msd(); return d.x; }";
         let mut f = walked(SRC, "f", Target::LinuxX64);
-        let target_pc = f
-            .insts
-            .iter()
-            .find_map(|i| match i {
-                Inst::Call { target_pc, .. } => Some(*target_pc),
-                _ => None,
-            })
-            .expect("a direct call");
-        let conv_of: BTreeMap<usize, CallConv> = [(target_pc, CallConv::Ms)].into();
-        run(core::slice::from_mut(&mut f), Target::LinuxX64, &conv_of);
+        assert!(
+            f.insts.iter().any(|i| matches!(
+                i,
+                Inst::Call {
+                    callee_conv: CallConv::Ms,
+                    ..
+                }
+            )),
+            "the direct call carries its callee's convention"
+        );
+        run(core::slice::from_mut(&mut f), Target::LinuxX64);
         let t = text(&f);
         let parts: Vec<LoadKind> = f
             .insts

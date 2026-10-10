@@ -382,6 +382,7 @@ mod tests {
             is_naked: false,
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
+            general_regs_only: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,
@@ -692,6 +693,7 @@ mod tests {
     #[test]
     fn branch_on_a_zero_test_takes_the_operand() {
         let load = Inst::LoadLocal {
+            disp: 0,
             off: 2,
             kind: crate::c5::ir::LoadKind::I64,
             volatile: false,
@@ -745,6 +747,7 @@ mod tests {
     #[test]
     fn narrow_zero_test_tests_the_low_word() {
         let load = |kind| Inst::LoadLocal {
+            disp: 0,
             off: 2,
             kind,
             volatile: false,
@@ -812,6 +815,7 @@ mod tests {
         };
         let run = |narrow: Inst, read_again: bool| {
             let load = Inst::LoadLocal {
+                disp: 0,
                 off: 2,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -843,6 +847,7 @@ mod tests {
             let mut f = fresh(
                 vec![
                     Inst::LoadLocal {
+                        disp: 0,
                         off: 2,
                         kind: LoadKind::I64,
                         volatile: false,
@@ -886,6 +891,7 @@ mod tests {
         let mut f = fresh(
             vec![
                 Inst::LoadLocal {
+                    disp: 0,
                     off: 2,
                     kind: crate::c5::ir::LoadKind::F64,
                     volatile: false,

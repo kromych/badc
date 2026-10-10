@@ -138,6 +138,9 @@ pub(crate) struct FrameStack {
     pub canary: u32,
     /// An over-aligned region, the realignment slack included.
     pub aligned: u32,
+    /// The outgoing argument area (aarch64), shared by the call sites
+    /// and the binary128 conversion sequences.
+    pub outgoing: u32,
 }
 
 impl FrameStack {
@@ -160,7 +163,7 @@ impl FrameStack {
             .join(", ")
     }
 
-    fn parts(&self) -> [(u32, &'static str); 9] {
+    fn parts(&self) -> [(u32, &'static str); 10] {
         [
             (self.locals, "in locals"),
             (self.spills, "in spill slots"),
@@ -171,6 +174,7 @@ impl FrameStack {
             (self.param_cells, "in parameter cells"),
             (self.canary, "for the canary"),
             (self.record, "for the frame record"),
+            (self.outgoing, "in the outgoing argument area"),
         ]
     }
 }
@@ -238,7 +242,7 @@ pub(crate) fn region_frame_offsets(
 
 /// The local slot (negative offset) the emitted form of `inst` addresses:
 /// a slot load / store / address-take, the alloca-top slot a non-zero
-/// `AllocaInit` names by its positive index, and the result temp a call
+/// `AllocaInit` names, and the result temp a call
 /// gathers an aggregate return into. Purely structural; whether the
 /// instruction is emitted at all is `is_dead_pure`'s decision, and the
 /// frame gate combines the two so it cannot disagree with the per-inst
@@ -246,8 +250,10 @@ pub(crate) fn region_frame_offsets(
 fn local_named(inst: &super::super::ir::Inst) -> Option<i64> {
     use super::super::ir::Inst;
     let off = match *inst {
-        Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } | Inst::LocalAddr(off) => off,
-        Inst::AllocaInit(slot) => -slot.abs(),
+        Inst::LoadLocal { off, .. }
+        | Inst::StoreLocal { off, .. }
+        | Inst::LocalAddr(off)
+        | Inst::AllocaInit(off) => off,
         Inst::Call { ret_slot_local, .. }
         | Inst::CallIndirect { ret_slot_local, .. }
         | Inst::CallExt { ret_slot_local, .. } => ret_slot_local,
@@ -440,7 +446,7 @@ const PARAM_HOME_BYTES: u32 = 8;
 /// incoming value the prologue would put there has no reader (C99
 /// 6.2.4p2). It is the `-O0` shape: the walker seeds each parameter's cell
 /// from its `ParamRef` and the body reads it back at the declared width.
-/// Coverage is the widest surviving `LoadLocal`, and [`PARAM_HOME_BYTES`]
+/// Coverage is the furthest byte a surviving `LoadLocal` reads, and [`PARAM_HOME_BYTES`]
 /// besides once the address is taken: a read through an address names no
 /// width here. The cell stays observed, so a caller sizing the cell region
 /// reads [`scan_param_slot_usage`] instead.
@@ -475,12 +481,13 @@ pub(crate) fn param_cell_written_first(
         seen[cell] = true;
         match inst {
             Inst::LocalAddr(_) => escapes[cell] = true,
-            Inst::LoadLocal { kind, .. } => {
+            Inst::LoadLocal { disp, kind, .. } => {
                 if !is_dead_pure(inst, idx as super::super::ir::ValueId, alloc) {
-                    widest_load[cell] = widest_load[cell].max(load_kind_width(*kind));
+                    let end = i64::from(*disp) + i64::from(load_kind_width(*kind));
+                    widest_load[cell] = widest_load[cell].max(end.max(0) as u32);
                 }
             }
-            Inst::StoreLocal { kind, .. } if first_in_entry => {
+            Inst::StoreLocal { disp: 0, kind, .. } if first_in_entry => {
                 written[cell] = store_kind_width(*kind);
             }
             _ => {}
@@ -1633,36 +1640,6 @@ pub(crate) fn site_registers(
     (free, held)
 }
 
-/// The direct-call targets on a convention other than the target's own,
-/// by entry: the unit's definitions and its cross-TU function
-/// declarations, the sources the call emitters read theirs from
-/// (`LowerTarget::note_callees`, `LowerTarget::note_extern_callee`).
-pub(crate) fn callee_conventions(
-    program: &super::super::program::Program,
-    funcs: &[super::super::ir::FunctionSsa],
-) -> alloc::collections::BTreeMap<usize, super::CallConv> {
-    let mut out: alloc::collections::BTreeMap<usize, super::CallConv> = funcs
-        .iter()
-        .filter(|f| f.conv != super::CallConv::Target)
-        .map(|f| (f.ent_pc, f.conv))
-        .collect();
-    let extern_pcs: alloc::collections::BTreeSet<usize> = program
-        .extern_function_imports
-        .iter()
-        .map(|(pc, _)| *pc)
-        .collect();
-    for sym in &program.symbols {
-        if sym.is_fun_entity()
-            && !sym.defined_here
-            && extern_pcs.contains(&(sym.val as usize))
-            && sym.conv != super::CallConv::Target
-        {
-            out.insert(sym.val as usize, sym.conv);
-        }
-    }
-    out
-}
-
 /// Accesses a transfer of `bytes` takes at `widest` bytes (a power of two)
 /// per access, the tail through halving widths.
 pub(crate) fn transfer_accesses(bytes: u32, widest: u32) -> u32 {
@@ -2147,8 +2124,10 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // these address-free slots to SSA values; this is the default-level
     // analog, shrinking frames built from many control-flow merges whose
     // phi-substitute slots never overlap. The pass runs regardless of debug
-    // info so the emitted code is identical with and without -g.
-    if !native.optimize && walked {
+    // info so the emitted code is identical with and without -g. A probe
+    // skips it: the stop discards the records it feeds the emitters, and
+    // the retry runs it on the reported bodies.
+    if !native.optimize && mode != super::LowerMode::DataLivenessProbe {
         let coalesce_dwarf = pipeline.run("ssa::slot_coalesce::run", &mut ssa_funcs, |funcs| {
             super::slot_coalesce::run(funcs, false, native.stack_protect)
         });
@@ -2157,10 +2136,13 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             &mut coalesced_slot_remap,
             &mut promoted_local_slots,
         );
+        // The compares a 32-bit form decides, by their operands' shapes.
+        pipeline.run("passes::narrow::mark_compares", &mut ssa_funcs, |funcs| {
+            for func in funcs.iter_mut() {
+                super::super::passes::narrow::mark_compares(func, false);
+            }
+        });
     }
-    // Data the -O pipeline orphans after the pre-inline compaction
-    // packed `.data`; the caller recompacts and lowers again.
-    let mut orphaned_data: Option<super::shadow::OrphanedData> = None;
     // Written only under the `std` dump path; the Build field is
     // unconditional.
     #[cfg_attr(not(feature = "std"), allow(unused_mut))]
@@ -2306,8 +2288,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // The register transfers of an aggregate parameter or return join
         // the tape, so the object below is one sroa can split.
         pipeline.run("passes::agg_parts::run", &mut ssa_funcs, |funcs| {
-            let conv_of = callee_conventions(program, funcs);
-            super::super::passes::agg_parts::run(funcs, target, &conv_of);
+            super::super::passes::agg_parts::run(funcs, target);
         });
         // Split address-taken local aggregates into per-field slots and
         // re-run mem2reg to promote them to SSA values, in every function
@@ -2421,26 +2402,45 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // (e.g. an unreachable build-time-assert canary the fold removed
     // from the caller) -- out of the object. It also reports the data the
     // pipeline orphaned; the passes below run on prebuilt bodies too, so a
-    // recompaction retry re-runs them and re-checks the report is empty.
-    if native.optimize {
-        orphaned_data = pipeline.run(
+    // compaction retry re-runs them and re-checks the report is empty.
+    // A probe always reports: its caller compacts the program from this
+    // set alone, so it needs the all-live one too.
+    if native.optimize || mode == super::LowerMode::DataLivenessProbe {
+        let sets = pipeline.run(
             "ssa::shadow::drop_unreachable_statics",
             &mut ssa_funcs,
-            |funcs| super::shadow::drop_unreachable_statics(funcs, program, &reachable_owners),
+            |funcs| {
+                super::shadow::drop_unreachable_statics(
+                    funcs,
+                    program,
+                    &reachable_owners,
+                    mode == super::LowerMode::DataLivenessProbe,
+                )
+            },
         );
-        if let Some(o) = &mut orphaned_data {
-            o.ssa.promoted_local_slots = promoted_local_slots.clone();
-            o.ssa.param_ranges = param_ranges.clone();
-        }
-        // A probe caller relowers the reported bodies against a `.data`
-        // this run cannot know, so everything below would be discarded.
-        if orphaned_data.is_some() && mode == super::LowerMode::DataLivenessProbe {
-            return Ok(super::Build {
-                diagnostics: reported(&mut sink)?,
-                orphaned_data,
-                stopped_at_data_liveness: true,
-                ..Default::default()
-            });
+        if let Some(sets) = sets {
+            // The probe's caller relowers the kept bodies; they move into the report.
+            if mode == super::LowerMode::DataLivenessProbe {
+                let funcs = core::mem::take(&mut ssa_funcs)
+                    .into_iter()
+                    .filter(|f| sets.func_pcs.contains(&f.ent_pc))
+                    .collect();
+                return Ok(super::Build {
+                    diagnostics: reported(&mut sink)?,
+                    data_liveness: Some(super::shadow::DataLiveness {
+                        sets,
+                        ssa: super::shadow::PrebuiltSsa {
+                            funcs,
+                            promoted_local_slots,
+                            reachable_owners,
+                            param_ranges,
+                        },
+                    }),
+                    stopped_at_data_liveness: true,
+                    ..Default::default()
+                });
+            }
+            debug_assert!(walked, "data liveness did not converge after compaction");
         }
         // Frame compaction after inlining, promotion, and the branch
         // folds: slots with no remaining reference are dropped and the
@@ -2487,10 +2487,10 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             let caps = super::reg_alloc::bank_capacity(target, native.fixed_regs);
             super::super::passes::cse::run(funcs, caps);
         });
-        // Fold a frame address into the one access that consumes it.
-        // After the value numbering, which merges the per-access
-        // `LocalAddr` duplicates the builder emits, so the use count
-        // tells a sole consumer from a shared base.
+        // Fold a frame address into each access through it at a constant
+        // displacement. After the slot-level passes, which do not model a
+        // displaced access, and the value numbering, which merges the
+        // per-access `LocalAddr` duplicates the builder emits.
         pipeline.run(
             "passes::index_fold::fold_slot_addresses",
             &mut ssa_funcs,
@@ -2579,6 +2579,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         if abs32 {
             super::super::passes::index_fold::mark_abs_bases(f, extern_abs);
         }
+        f.general_regs_only = native.no_fp_regs;
     }
     // At -O the operand-free values are set again past the calls they
     // would otherwise cross, then each function is allocated and
@@ -2956,7 +2957,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // Every import on this single-TU path gets a trampoline (data
         // imports ride `ResolvedImports::data_bindings`, not `imports`).
         plt_trampoline_offsets: plt_trampoline_offsets.into_iter().map(Some).collect(),
-        orphaned_data,
+        data_liveness: None,
         stopped_at_data_liveness: false,
         ssa_dump,
     };
@@ -3005,6 +3006,7 @@ mod tests {
             Inst::AllocaInit(0),
             part(0),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 1,
                 kind: StoreKind::I64,

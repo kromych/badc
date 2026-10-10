@@ -147,10 +147,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x90]
                	ldr	x20, [sp], #0xa0
                	ret
-               	ldrb	w1, [x0]
+               	ldurb	w1, [x29, #-0x80]
                	eor	x1, x1, #0x1
                	cbnz	w1, <addr>
-               	ldrb	w1, [x0, #0x7]
+               	ldurb	w1, [x29, #-0x79]
                	eor	x1, x1, #0x8
                	cbz	w1, <addr>
                	mov	x0, #0x4                // =4

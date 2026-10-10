@@ -28,11 +28,11 @@ Disassembly of section .text:
 <on_usr1>:
                	movq	0xa0(%rdx), %rcx
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rdx
+               	movl	(%rax), %edx
                	incq	%rdx
                	movl	%edx, (%rax)
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rsi), %rdx
+               	movl	(%rsi), %edx
                	cmpl	%edi, %edx
                	jne	<addr>
                	movl	%edi, (%rax)
@@ -59,8 +59,8 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	-0x130(%rbp), %rax
                	leaq	-<rip>, %rcx       # <addr>
-               	movq	%rcx, (%rax)
-               	movl	$0x4, 0x88(%rax)
+               	movq	%rcx, -0x130(%rbp)
+               	movl	$0x4, -0xa8(%rbp)
                	leaq	0x8(%rax), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
@@ -91,12 +91,11 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	leaq	-0x98(%rbp), %rax
-               	movq	(%rax), %rcx
-               	leaq	-<rip>, %rdx      # <addr>
-               	cmpq	%rdx, %rcx
+               	movq	-0x98(%rbp), %rax
+               	leaq	-<rip>, %rcx      # <addr>
+               	cmpq	%rcx, %rax
                	jne	<addr>
-               	movslq	0x88(%rax), %rax
+               	movl	-0x10(%rbp), %eax
                	testb	$0x4, %al
                	jne	<addr>
                	movl	$0x4, %eax
@@ -106,14 +105,14 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x5, %eax

@@ -939,6 +939,9 @@ pub(crate) fn data_region_addr(regions: &[DataRegion], off: u64) -> u64 {
 /// C99 6.2.2 / 6.7.8: drop static data no surviving function or relocation
 /// references, repacking `.data` and rewriting every offset surface (symbol
 /// values, AST data offsets, relocation slots), then lower the result.
+/// The lowering probes the program into SSA once and reports the
+/// post-inline reachable set; the compaction applies that report, so one
+/// SSA build serves both the liveness and the codegen.
 #[cfg(feature = "native-emit")]
 fn compact_and_lower(
     mut program: Program,
@@ -950,49 +953,53 @@ fn compact_and_lower(
     program.bind_trampoline_slots =
         target.binds_data_imports() || options.output_kind == OutputKind::Relocatable;
     let segregate = options.bss_segregate && !bss_segregation_disabled();
-    let first =
-        crate::c5::codegen::ssa::emit_common::time_pass("object::compact_program_data", || {
-            shadow::compact_program_data(&program, target, segregate, options.optimize)
-        })?;
-    let mode = match first.plan {
-        Some(_) => LowerMode::DataLivenessProbe,
-        None => LowerMode::Full,
-    };
-    let mut build = crate::c5::codegen::lower_for_with_prebuilt(
-        &first.program,
+    if program.data.is_empty()
+        || program.finished_functions.is_empty()
+        || shadow::data_dce_disabled()
+    {
+        let mut build = crate::c5::codegen::lower_for_with_prebuilt(
+            &program,
+            target,
+            options,
+            None,
+            LowerMode::Full,
+        )?;
+        crate::c5::codegen::emit_ssa_dump(&mut build);
+        return Ok((program, 0, build));
+    }
+    let probe = crate::c5::codegen::lower_for_with_prebuilt(
+        &program,
         target,
         options.clone(),
         None,
-        mode,
+        LowerMode::DataLivenessProbe,
     )?;
-    let (Some(mut orphaned), Some(plan)) = (build.orphaned_data.take(), first.plan.as_ref()) else {
-        assert!(
-            !build.stopped_at_data_liveness,
-            "a stopped probe carries no image and cannot be the emitted build",
-        );
-        crate::c5::codegen::emit_ssa_dump(&mut build);
-        return Ok((first.program, first.bss_size, build));
-    };
+    let mut report = probe
+        .data_liveness
+        .expect("the liveness probe always reports");
+    debug_assert!(probe.stopped_at_data_liveness);
     // The probe ran the passes that report; the retry lowers the bodies
     // they produced, skipping those passes, so its own sink stays empty.
-    let mut diagnostics = core::mem::take(&mut build.diagnostics);
-    let (recompacted, bss_size) =
-        shadow::recompact_after_inlining(program, plan, &mut orphaned, segregate);
+    let mut diagnostics = probe.diagnostics;
+    let identity = shadow::DataMap::identity(&program);
+    let (compacted, bss_size, _map) = shadow::apply_data_liveness(
+        program,
+        &report.sets,
+        &report.sets.func_pcs,
+        segregate,
+        Some((&mut report.ssa.funcs, &identity)),
+    );
     let mut build = crate::c5::codegen::lower_for_with_prebuilt(
-        &recompacted,
+        &compacted,
         target,
         options,
-        Some(orphaned.ssa),
-        crate::c5::codegen::LowerMode::Full,
+        Some(report.ssa),
+        LowerMode::Full,
     )?;
     diagnostics.append(&mut build.diagnostics);
     build.diagnostics = diagnostics;
     crate::c5::codegen::emit_ssa_dump(&mut build);
-    debug_assert!(
-        build.orphaned_data.is_none(),
-        "data liveness did not converge after recompaction",
-    );
-    Ok((recompacted, bss_size, build))
+    Ok((compacted, bss_size, build))
 }
 
 /// Test-only: emit a complete native image for a single program, satisfying
@@ -1177,7 +1184,7 @@ pub(crate) mod test_support {
             got_rel_fields: Vec::new(),
             got_pcrel_fixups: Vec::new(),
             text_align: 16,
-            orphaned_data: None,
+            data_liveness: None,
             stopped_at_data_liveness: false,
             ssa_dump: String::new(),
             asm_sections: Vec::new(),

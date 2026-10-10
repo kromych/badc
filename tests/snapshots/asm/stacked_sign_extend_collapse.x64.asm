@@ -47,23 +47,23 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rdx
+               	movl	(%rax), %edx
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rsi
+               	movl	(%rcx), %esi
                	addq	%rsi, %rdx
                	cmpl	$0xee6b2800, %edx       # imm = 0xEE6B2800
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	movslq	(%rax), %rdx
-               	movslq	(%rcx), %rsi
+               	movl	(%rax), %edx
+               	movl	(%rcx), %esi
                	addq	%rsi, %rdx
                	testl	%edx, %edx
                	jl	<addr>
                	movl	$0x6, %eax
                	retq
-               	movslq	(%rax), %rax
-               	movslq	(%rcx), %rcx
+               	movl	(%rax), %eax
+               	movl	(%rcx), %ecx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	leaq	<rip>, %rcx      # <addr>

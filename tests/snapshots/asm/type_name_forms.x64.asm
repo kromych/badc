@@ -99,11 +99,11 @@ Disassembly of section .text:
                	movq	(%rdx), %r12
                	movsbq	(%rax), %rdi
                	callq	*%rcx
-               	movslq	0x4(%r12), %rcx
+               	movl	0x4(%r12), %ecx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	addq	%rax, %rbx
-               	movslq	-0xd0(%rbp), %rax
+               	movl	-0xd0(%rbp), %eax
                	leaq	-0x1(%rax), %rcx
                	movl	%ecx, -0xd0(%rbp)
                	testl	%eax, %eax
@@ -119,19 +119,19 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	0x14(%rcx), %rax
+               	movl	0x14(%rcx), %eax
                	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	movslq	0x4(%rcx), %rax
+               	movl	0x4(%rcx), %eax
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	movslq	0xc(%rcx), %rax
+               	movl	0xc(%rcx), %eax
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x3, %eax

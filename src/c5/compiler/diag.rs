@@ -405,8 +405,12 @@ impl Compiler {
     /// command line and the pragmas in effect at that position and
     /// drops the diagnostic when it is ignored; what survives lands on
     /// `Program.warnings`. Raising one to an error does not unwind --
-    /// the driver fails the unit at the phase boundary.
+    /// the driver fails the unit at the phase boundary. A row nothing
+    /// raises above `Ignore` returns without locating its site.
     pub(super) fn warn_at(&mut self, code: Code, line: usize, message: alloc::string::String) {
+        if !self.sink.may_emit(code) {
+            return;
+        }
         let (loc, source) = self.locate(&self.lex.file, line);
         self.sink.emit_with_source(code, Some(loc), message, source);
     }
@@ -420,6 +424,9 @@ impl Compiler {
         line: usize,
         message: alloc::string::String,
     ) {
+        if !self.sink.may_emit(code) {
+            return;
+        }
         let (loc, source) = self.locate(file, line);
         self.sink.emit_with_source(code, Some(loc), message, source);
     }

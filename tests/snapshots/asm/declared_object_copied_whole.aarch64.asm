@@ -144,26 +144,25 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x58
                	mov	x1, #0x63               // =99
-               	str	x1, [x0, #0x10]
-               	str	w1, [x0, #0x54]
+               	stur	x1, [x29, #-0x48]
+               	stur	w1, [x29, #-0x4]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrsw	x1, [x1]
                	bl	<addr>
-               	sub	x0, x29, #0x58
-               	ldr	x1, [x0, #0x10]
-               	cbz	x1, <addr>
+               	ldur	x0, [x29, #-0x48]
+               	cbz	x0, <addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x1, [x0, #0x54]
-               	cmp	w1, #0x7
+               	ldursw	x0, [x29, #-0x4]
+               	cmp	w0, #0x7
                	b.ne	<addr>
-               	ldrsw	x1, [x0, #0x44]
-               	cmp	w1, #0x8
+               	ldursw	x0, [x29, #-0x14]
+               	cmp	w0, #0x8
                	b.ne	<addr>
-               	ldrsw	x0, [x0, #0x30]
+               	ldursw	x0, [x29, #-0x28]
                	cbz	w0, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x60

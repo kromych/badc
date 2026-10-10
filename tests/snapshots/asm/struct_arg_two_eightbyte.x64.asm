@@ -36,7 +36,7 @@ Disassembly of section .text:
                	movq	$0x2222, (%r8)          # imm = 0x2222
                	leaq	<rip>, %r9       # <addr>
                	movl	$0x6, (%r9)
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	cmpl	$0x9, %edx
                	je	<addr>
                	movl	$0x1, %eax

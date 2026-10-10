@@ -27,38 +27,36 @@ Disassembly of section .text:
 
 <stream_xor>:
                	stp	x20, x21, [sp, #-0x80]!
-               	stp	x22, x23, [sp, #0x10]
+               	str	x22, [sp, #0x10]
                	stp	x29, x30, [sp, #0x70]
                	add	x29, sp, #0x70
                	mov	x20, x0
-               	mov	x22, #0x0               // =0
                	mov	x0, #0x40               // =64
-               	mov	x23, x4
-               	sub	x1, x29, #0x50
-               	str	x22, [x1]
-               	str	x22, [x1, #0x8]
-               	ldrb	w2, [x3]
-               	strb	w2, [x1]
-               	ldrb	w2, [x3, #0x1]
-               	strb	w2, [x1, #0x1]
-               	ldrb	w2, [x3, #0x2]
-               	strb	w2, [x1, #0x2]
-               	ldrb	w2, [x3, #0x3]
-               	strb	w2, [x1, #0x3]
-               	ldrb	w2, [x3, #0x4]
-               	strb	w2, [x1, #0x4]
-               	ldrb	w2, [x3, #0x5]
-               	strb	w2, [x1, #0x5]
-               	ldrb	w2, [x3, #0x6]
-               	strb	w2, [x1, #0x6]
-               	ldrb	w2, [x3, #0x7]
-               	strb	w2, [x1, #0x7]
+               	mov	x22, x4
+               	stur	xzr, [x29, #-0x50]
+               	stur	xzr, [x29, #-0x48]
+               	ldrb	w1, [x3]
+               	sturb	w1, [x29, #-0x50]
+               	ldrb	w1, [x3, #0x1]
+               	sturb	w1, [x29, #-0x4f]
+               	ldrb	w1, [x3, #0x2]
+               	sturb	w1, [x29, #-0x4e]
+               	ldrb	w1, [x3, #0x3]
+               	sturb	w1, [x29, #-0x4d]
+               	ldrb	w1, [x3, #0x4]
+               	sturb	w1, [x29, #-0x4c]
+               	ldrb	w1, [x3, #0x5]
+               	sturb	w1, [x29, #-0x4b]
+               	ldrb	w1, [x3, #0x6]
+               	sturb	w1, [x29, #-0x4a]
+               	ldrb	w1, [x3, #0x7]
+               	sturb	w1, [x29, #-0x49]
                	sub	x21, x29, #0x40
                	sub	x1, x29, #0x50
                	adrp	x3, <addr>
                	add	x3, x3, <lo12>
                	mov	x0, x21
-               	mov	x2, x23
+               	mov	x2, x22
                	bl	<addr>
                	mov	x1, #0x0                // =0
                	ldrb	w0, [x21, x1]
@@ -72,7 +70,7 @@ Disassembly of section .text:
                	b.hs	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x70]
-               	ldp	x22, x23, [sp, #0x10]
+               	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x80
                	ret
 

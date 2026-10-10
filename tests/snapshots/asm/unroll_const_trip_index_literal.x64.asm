@@ -169,7 +169,7 @@ Disassembly of section .text:
                	addq	%rsi, %rdx
                	incq	%rax
                	leaq	<rip>, %rsi      # <addr>
-               	movslq	(%rsi), %rsi
+               	movl	(%rsi), %esi
                	cmpl	%esi, %eax
                	jl	<addr>
                	cmpq	%rcx, %rdx

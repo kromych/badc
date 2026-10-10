@@ -91,7 +91,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	popq	%rbx
                	leave
                	retq

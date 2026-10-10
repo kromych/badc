@@ -32,9 +32,9 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rdx
                	xorl	%eax, %eax
                	leaq	<rip>, %rcx        # <addr>
-               	movq	%rcx, (%rdx)
+               	movq	%rcx, -0x10(%rbp)
                	leaq	<rip>, %rcx        # <addr>
-               	movq	%rcx, 0x8(%rdx)
+               	movq	%rcx, -0x8(%rbp)
                	movq	%rax, %rcx
                	cmpl	%edi, %eax
                	jge	<addr>

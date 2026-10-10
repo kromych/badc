@@ -13,23 +13,23 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v7   StoreLocal { off=-13, value=v6, kind=I32 }       -> -
     v8   LocalAddr(-14)                                   -> x0
     v9   Imm(2)                                           -> x1
-    v10  Store { addr=v8, disp=0, value=v9, kind=I8 }     -> -
+    v10  StoreLocal { off=-14, value=v9, kind=I8 }        -> -
     v11  LocalAddr(-12)                                   -> x1
     v12  Imm(3)                                           -> x2
-    v13  Store { addr=v11, disp=0, value=v12, kind=I8 }   -> -
+    v13  StoreLocal { off=-12, value=v12, kind=I8 }       -> -
     v14  LocalAddr(-15)                                   -> x2
     v15  Imm(4)                                           -> x6
-    v16  Store { addr=v14, disp=0, value=v15, kind=I8 }   -> -
+    v16  StoreLocal { off=-15, value=v15, kind=I8 }       -> -
     v17  LocalAddr(-16)                                   -> x6
     v18  Imm(5)                                           -> x7
-    v19  Store { addr=v17, disp=0, value=v18, kind=I32 }  -> -
+    v19  StoreLocal { off=-16, value=v18, kind=I32 }      -> -
     v20  LocalAddr(-17)                                   -> x7
     v21  Imm(0)                                           -> x8
     v22  Imm(6)                                           -> x8
-    v23  Store { addr=v20, disp=0, value=v22, kind=I8 }   -> -
+    v23  StoreLocal { off=-17, value=v22, kind=I8 }       -> -
     v24  LocalAddr(-1)                                    -> x8
     v25  Imm(7)                                           -> x9
-    v26  Store { addr=v24, disp=0, value=v25, kind=I8 }   -> -
+    v26  StoreLocal { off=-1, value=v25, kind=I8 }        -> -
     v27  LocalAddr(-1)                                    -> x9
     v28  BinopI { op=add, lhs=v24, rhs_imm=1 }            -> x9
     v29  Imm(8)                                           -> x9
@@ -172,7 +172,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v138 Binop { op=add, lhs=v133, rhs=v137 }             -> x1
     v139 Extend { value=v138, kind=I32, nsw }             -> x2
     v140 LocalAddr(-1)                                    -> x2
-    v141 Load { addr=v103, disp=0, kind=I8 }              -> x2
+    v141 LoadLocal { off=-1, kind=I8 }                    -> x2
     v142 Binop { op=add, lhs=v138, rhs=v141 }             -> x1
     v143 Extend { value=v142, kind=I32, nsw }             -> x2
     v144 LocalAddr(-1)                                    -> x2

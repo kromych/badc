@@ -37,8 +37,7 @@ Disassembly of section .text:
                	ret
                	ldursw	x0, [x29, #-0x8]
                	bl	<addr>
-               	sub	x0, x29, #0x8
-               	ldrsw	x0, [x0, #0x4]
+               	ldursw	x0, [x29, #-0x4]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x1                // =1

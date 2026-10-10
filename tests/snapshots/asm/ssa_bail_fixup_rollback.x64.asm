@@ -40,41 +40,34 @@ Disassembly of section .text:
 <stream_xor>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x58, %rsp
-               	pushq	%r13
+               	subq	$0x50, %rsp
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %rbx
-               	xorl	%r12d, %r12d
                	movl	$0x40, %eax
-               	movq	%r8, %r13
-               	leaq	-0x50(%rbp), %rdx
-               	movq	%r12, (%rdx)
-               	movq	%r12, 0x8(%rdx)
-               	leaq	-0x50(%rbp), %rdx
-               	movzbq	(%rcx), %rsi
-               	movb	%sil, (%rdx)
-               	movzbq	0x1(%rcx), %rsi
-               	movb	%sil, 0x1(%rdx)
-               	leaq	-0x50(%rbp), %rdx
-               	movzbq	0x2(%rcx), %rsi
-               	movb	%sil, 0x2(%rdx)
-               	movzbq	0x3(%rcx), %rsi
-               	movb	%sil, 0x3(%rdx)
-               	leaq	-0x50(%rbp), %rdx
-               	movzbq	0x4(%rcx), %rsi
-               	movb	%sil, 0x4(%rdx)
-               	movzbq	0x5(%rcx), %rsi
-               	movb	%sil, 0x5(%rdx)
-               	leaq	-0x50(%rbp), %rdx
-               	movzbq	0x6(%rcx), %rsi
-               	movb	%sil, 0x6(%rdx)
+               	movq	%r8, %r12
+               	movq	$0x0, -0x50(%rbp)
+               	movq	$0x0, -0x48(%rbp)
+               	movzbq	(%rcx), %rdx
+               	movb	%dl, -0x50(%rbp)
+               	movzbq	0x1(%rcx), %rdx
+               	movb	%dl, -0x4f(%rbp)
+               	movzbq	0x2(%rcx), %rdx
+               	movb	%dl, -0x4e(%rbp)
+               	movzbq	0x3(%rcx), %rdx
+               	movb	%dl, -0x4d(%rbp)
+               	movzbq	0x4(%rcx), %rdx
+               	movb	%dl, -0x4c(%rbp)
+               	movzbq	0x5(%rcx), %rdx
+               	movb	%dl, -0x4b(%rbp)
+               	movzbq	0x6(%rcx), %rdx
+               	movb	%dl, -0x4a(%rbp)
                	movzbq	0x7(%rcx), %rcx
-               	movb	%cl, 0x7(%rdx)
+               	movb	%cl, -0x49(%rbp)
                	leaq	-0x40(%rbp), %rdi
                	leaq	-0x50(%rbp), %rsi
                	leaq	<rip>, %rcx       # <addr>
-               	movq	%r13, %rdx
+               	movq	%r12, %rdx
                	callq	<addr>
                	xorl	%eax, %eax
                	leaq	-0x40(%rbp), %rcx
@@ -90,7 +83,6 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%r13
                	leave
                	retq
 

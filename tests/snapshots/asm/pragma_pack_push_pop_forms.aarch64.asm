@@ -54,7 +54,7 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x1, x29, #0x18
                	mov	x0, #0x38               // =56
-               	strb	w0, [x1, #0x8]
+               	sturb	w0, [x29, #-0x10]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x2, #0x18               // =24

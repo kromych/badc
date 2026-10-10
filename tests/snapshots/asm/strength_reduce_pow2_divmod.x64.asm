@@ -203,10 +203,10 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0xfffffffb, -0x20(%rbp) # imm = 0xFFFFFFFB
-               	movslq	-0x20(%rbp), %rax
+               	movl	-0x20(%rbp), %eax
                	cmpl	$-0x5, %eax
                	jne	<addr>
-               	movslq	-0x20(%rbp), %rax
+               	movl	-0x20(%rbp), %eax
                	xorl	%eax, %eax
                	leave
                	retq

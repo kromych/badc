@@ -451,16 +451,15 @@ Disassembly of section .text:
                	sub	x0, x29, #0x28
                	mov	x1, #0x0                // =0
                	bl	<addr>
-               	mov	x2, x0
-               	sub	x0, x29, #0x28
-               	ldrsw	x1, [x0]
+               	sub	x2, x29, #0x28
+               	ldursw	x1, [x29, #-0x28]
                	mul	x1, x1, x1
-               	cmp	x2, x1
+               	cmp	x0, x1
                	b.ne	<addr>
                	mov	x1, #0x8                // =8
+               	mov	x0, x2
                	bl	<addr>
-               	sub	x1, x29, #0x28
-               	ldrsw	x1, [x1, #0x20]
+               	ldursw	x1, [x29, #-0x8]
                	mul	x1, x1, x1
                	cmp	x0, x1
                	b.eq	<addr>

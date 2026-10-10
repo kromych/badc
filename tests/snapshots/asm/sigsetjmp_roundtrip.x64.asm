@@ -43,7 +43,7 @@ Disassembly of section .text:
                	ud2
                	cmpl	$0x7, %eax
                	jne	<addr>
-               	movslq	-0x8(%rbp), %rax
+               	movl	-0x8(%rbp), %eax
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x1, %eax

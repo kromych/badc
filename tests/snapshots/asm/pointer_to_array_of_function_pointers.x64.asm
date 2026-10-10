@@ -171,9 +171,8 @@ Disassembly of section .text:
                	movabsq	$0x4010000000000000, %rcx # imm = 0x4010000000000000
                	movq	%rcx, %xmm0
                	callq	*%rax
-               	movapd	%xmm0, %xmm15
-               	movsd	0x8(%rsp), %xmm0
-               	addsd	%xmm15, %xmm0
+               	movsd	0x8(%rsp), %xmm14
+               	vaddsd	%xmm0, %xmm14, %xmm0
                	movabsq	$0x4024000000000000, %rax # imm = 0x4024000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

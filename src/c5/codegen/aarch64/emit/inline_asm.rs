@@ -551,8 +551,11 @@ impl AsmOperands<'_> {
         };
         let idx: u8 = digits.parse().ok()?;
         let r = self.resolve_ref(idx)?;
-        // A `Q` operand substitutes as `[xN]`, as the converter does for `%N`.
-        if matches!(self.constraint(idx), Some(AsmConstraint::MemBase)) {
+        // A memory operand substitutes as `[xN]`, as the converter does for `%N`.
+        if matches!(
+            self.constraint(idx),
+            Some(AsmConstraint::Mem | AsmConstraint::MemBase)
+        ) {
             return Some(alloc::format!("[x{r}]"));
         }
         let wide = self
@@ -602,8 +605,9 @@ impl AsmOperands<'_> {
                 num: r,
                 is_d: is64.unwrap_or(true),
             },
-            // A `Q` operand substitutes as `[xN]`.
-            AsmConstraint::MemBase => Opnd::Mem {
+            // A memory operand (`m`, `Q`) substitutes as `[xN]`, the register
+            // holding its address.
+            AsmConstraint::Mem | AsmConstraint::MemBase => Opnd::Mem {
                 base: r,
                 off: 0,
                 pre: false,

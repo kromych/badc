@@ -22,20 +22,20 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
-               	mov	x1, #0x3                // =3
-               	scvtf	d0, x1
-               	ldr	d1, [x0, #0x8]
+               	mov	x0, #0x3                // =3
+               	scvtf	d0, x0
+               	ldur	d1, [x29, #-0x8]
                	fmov	d2, #2.00000000
                	fmadd	d0, d1, d2, d0
-               	fcvtzs	x1, d0
-               	add	x1, x1, #0x2
-               	cmp	x1, #0xe
+               	fcvtzs	x0, d0
+               	add	x0, x0, #0x2
+               	cmp	x0, #0xe
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	d0, [x0, #0x8]
+               	ldur	d0, [x29, #-0x8]
                	fcvtzs	x0, d0
                	add	x0, x0, #0x18
                	cmp	x0, #0x1c

@@ -106,11 +106,11 @@ Disassembly of section .text:
                	ret
                	add	x1, sp, #0x10
                	mov	x0, #0x4                // =4
-               	str	x0, [x1]
+               	str	x0, [sp, #0x10]
                	mov	x0, #0x5                // =5
-               	str	x0, [x1, #0x2330]
+               	str	x0, [sp, #0x2340]
                	mov	x0, #0x6                // =6
-               	strb	w0, [x1, #0x8]
+               	strb	w0, [sp, #0x18]
                	mov	x17, #0x232f            // =9007
                	add	x0, x1, x17
                	mov	x2, #0x7                // =7

@@ -34,25 +34,25 @@ Disassembly of section .text:
                	leaq	(%rax,%rcx), %rsi
                	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rcx
-               	movslq	(%rcx), %rdx
+               	movl	(%rcx), %edx
                	incq	%rdx
                	movl	%edx, (%rcx)
                	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx), %rdx
-               	movslq	0x4(%rdx), %rdi
+               	movl	0x4(%rdx), %edi
                	addq	$0xa, %rdi
                	movl	%edi, 0x4(%rdx)
                	movq	(%rax), %rax
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	leaq	(%rsi,%rax), %rdx
                	movq	(%rcx), %rax
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	addq	%rdx, %rcx
-               	movslq	0x4(%rax), %rax
+               	movl	0x4(%rax), %eax
                	addq	%rcx, %rax
                	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx), %rcx
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	addq	%rcx, %rax
                	subq	$0x64, %rax
                	retq

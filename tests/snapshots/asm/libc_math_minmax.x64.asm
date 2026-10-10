@@ -70,9 +70,9 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	xorl	%eax, %eax
+               	movq	%rax, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rax, %xmm0
-               	divsd	%xmm15, %xmm0
+               	vdivsd	%xmm15, %xmm14, %xmm0
                	movabsq	$0x4010000000000000, %rax # imm = 0x4010000000000000
                	movq	%rax, %xmm1
                	xorl	%eax, %eax
@@ -87,9 +87,9 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x4014000000000000, %rcx # imm = 0x4014000000000000
                	xorl	%eax, %eax
+               	movq	%rax, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rax, %xmm0
-               	divsd	%xmm15, %xmm0
+               	vdivsd	%xmm15, %xmm14, %xmm0
                	movapd	%xmm0, %xmm1
                	movq	%rcx, %xmm0
                	xorl	%eax, %eax

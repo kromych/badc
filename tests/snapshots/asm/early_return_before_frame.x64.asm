@@ -237,7 +237,7 @@ Disassembly of section .text:
 
 <count_yield>:
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	retq
@@ -640,11 +640,11 @@ Disassembly of section .text:
                	leaq	<rip>, %rax      # <addr>
                	movl	$0x2, (%rax)
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x5, %eax
                	jne	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0xf, %eax

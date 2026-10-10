@@ -28,7 +28,7 @@ Disassembly of section .text:
 <main>:
                	xorl	%eax, %eax
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0x14, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx      # <addr>
@@ -37,26 +37,26 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0x4, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx), %rcx
-               	movslq	0x8(%rcx), %rcx
+               	movl	0x8(%rcx), %ecx
                	cmpl	$0x6, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx), %rcx
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0x1e, %ecx
                	je	<addr>
                	orq	$0x4, %rax
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0xc8, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$-0x5, %ecx
                	je	<addr>
                	orq	$0x8, %rax
@@ -69,16 +69,16 @@ Disassembly of section .text:
                	je	<addr>
                	orq	$0x10, %rax
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0x1020304, %ecx        # imm = 0x1020304
                	jne	<addr>
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0x6, %ecx
                	je	<addr>
                	orq	$0x20, %rax
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0x1e, %ecx
                	jne	<addr>
                	retq

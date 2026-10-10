@@ -36,21 +36,21 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	sub	x0, x29, #0x8
                	mov	x1, #0x1                // =1
-               	strb	w1, [x0]
+               	sturb	w1, [x29, #-0x8]
                	mov	x2, #0x2                // =2
-               	strb	w2, [x0, #0x1]
+               	sturb	w2, [x29, #-0x7]
                	mov	x2, #0x3                // =3
-               	strb	w2, [x0, #0x2]
+               	sturb	w2, [x29, #-0x6]
                	mov	x2, #0x4                // =4
-               	strb	w2, [x0, #0x3]
+               	sturb	w2, [x29, #-0x5]
                	mov	x2, #0x5                // =5
-               	strb	w2, [x0, #0x4]
+               	sturb	w2, [x29, #-0x4]
                	mov	x2, #0x6                // =6
-               	strb	w2, [x0, #0x5]
+               	sturb	w2, [x29, #-0x3]
                	mov	x2, #0x7                // =7
-               	strb	w2, [x0, #0x6]
+               	sturb	w2, [x29, #-0x2]
                	mov	x2, #0x8                // =8
-               	strb	w2, [x0, #0x7]
+               	sturb	w2, [x29, #-0x1]
                	ldr	x2, [x0]
                	rev	x2, x2
                	mov	x17, #0x708             // =1800

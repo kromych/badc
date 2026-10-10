@@ -363,9 +363,10 @@ fn the_canary_is_checked_ahead_of_the_pops() {
     }
 }
 
-/// Win64 saves its non-volatile FP scratch above the pushed registers: the
-/// `movups` stores follow the pushes at `slots16(pushes)` up, and every
-/// exit reloads them from the same offsets ahead of the pops.
+/// Win64 saves the non-volatile xmms the allocator assigned above the
+/// pushed registers: the `movups` stores follow the pushes at
+/// `slots16(pushes)` up, and every exit reloads them from the same
+/// offsets ahead of the pops.
 #[test]
 fn win64_xmm_saves_sit_above_the_pushed_registers() {
     const SRC: &str = "double g(double); long h(long);\n\
@@ -406,6 +407,52 @@ fn win64_xmm_saves_sit_above_the_pushed_registers() {
     let sysv = insns_of(&optimized(SRC, Target::LinuxX64), "mixed");
     let frame = frame_of(&sysv, Target::LinuxX64).expect("a frame");
     assert!(xmm_slot(&sysv[frame.body], 0x0F11).is_none(), "{sysv:x?}");
+}
+
+/// A Win64 function whose FP values live across calls holds them in
+/// xmm6..xmm15, one `movups` save per register; a leaf FP function whose
+/// values fit xmm0..xmm3 builds no frame.
+#[test]
+fn win64_fp_values_live_across_calls_take_the_callee_saved_xmms() {
+    const SRC: &str = "double g(double);\n\
+        double f(double a, double b, double c) {\n\
+            double s = a + b + c;\n\
+            double t = g(a) + b;\n\
+            return s + g(t) + c;\n\
+        }\n\
+        double leaf(double a, double b) { return a * b + a + b; }\n\
+        double sink;\n\
+        double leaf4(double a, double b, double c, double d) {\n\
+            double t = a * b + c;\n\
+            sink = t;\n\
+            return t * d;\n\
+        }\n";
+    let target = Target::WindowsX64;
+    let saves = |name: &str| -> Vec<(u8, i64)> {
+        let insns = insns_of(&optimized(SRC, target), name);
+        let Some(frame) = frame_of(&insns, target) else {
+            return Vec::new();
+        };
+        insns[frame.body..]
+            .iter()
+            .map_while(|x| {
+                (x.op == 0x0F11 && x.mem_base() == Some(4)).then_some((x.regs().0, x.disp))
+            })
+            .collect()
+    };
+    let f_saves = saves("f");
+    assert!(!f_saves.is_empty(), "f spills its live-across-call values");
+    assert!(
+        f_saves.iter().all(|&(r, _)| (6..=15).contains(&r)),
+        "f saves a volatile xmm: {f_saves:?}"
+    );
+    for leaf in ["leaf", "leaf4"] {
+        let leaf_insns = insns_of(&optimized(SRC, target), leaf);
+        assert!(
+            frame_of(&leaf_insns, target).is_none(),
+            "{leaf} builds a frame: {leaf_insns:x?}"
+        );
+    }
 }
 
 /// A tail call marshals its arguments, then restores and tears the frame
@@ -507,6 +554,54 @@ fn a_spilled_return_value_is_read_ahead_of_the_pops() {
         }
     }
     assert!(from_a_slot > 0, "no configuration returned a spilled value");
+}
+
+/// A small aggregate returned in registers is read through its address
+/// ahead of the epilogue, whose rsp reset and pops leave an object in the
+/// alloca region below rsp. The forms the epilogue itself gathers (an x87
+/// long double, two floats in one eightbyte, a union, a float beside an
+/// int) and those the tape gathers (a double beside a long, twelve bytes).
+#[test]
+fn a_returned_aggregate_is_read_ahead_of_the_epilogue() {
+    const SRC: &str = "struct L { long double x; };\n\
+        struct F2 { float a, b; };\n\
+        union U { long l; double d; };\n\
+        struct FI { float f; int i; };\n\
+        struct M { double d; long l; };\n\
+        struct C { char c[12]; };\n\
+        void init(void *p, long n);\n\
+        #define BODY(T) T *p = (T *)__builtin_alloca(sizeof *p * (unsigned long)n); \\\n\
+            long x = n * 3; init(p, n); init(p, x); return p[n - 1];\n\
+        struct L fl(long n) { BODY(struct L) }\n\
+        struct F2 ff(long n) { BODY(struct F2) }\n\
+        union U fu(long n) { BODY(union U) }\n\
+        struct FI fi(long n) { BODY(struct FI) }\n\
+        struct M fm(long n) { BODY(struct M) }\n\
+        struct C fc(long n) { BODY(struct C) }\n";
+    let in_registers: [(Target, &[&str]); 2] = [
+        (Target::LinuxX64, &["fl", "ff", "fu", "fi", "fm", "fc"]),
+        (Target::WindowsX64, &["fl", "ff", "fu", "fi"]),
+    ];
+    for (target, names) in in_registers {
+        let obj = optimized(SRC, target);
+        for name in names {
+            let insns = insns_of(&obj, name);
+            let frame = frame_of(&insns, target).expect("a frame");
+            assert!(!frame.pushes.is_empty(), "{target:?} {name}: {insns:x?}");
+            for e in exits(&insns) {
+                let reset = check_exit(&insns, e, &frame, target, name) - 1;
+                // `lea rsp, [rbp + disp]`, then nothing reads through another base.
+                let late = insns[reset..e]
+                    .iter()
+                    .filter(|x| x.mem_base().is_some_and(|b| b != 4 && b != 5))
+                    .count();
+                assert!(
+                    insns[reset].op == 0x8D && insns[reset].regs().0 == 4 && late == 0,
+                    "{target:?} {name}: {late} reads past the reset: {insns:x?}"
+                );
+            }
+        }
+    }
 }
 
 /// The link path's decoder over `name` of `obj`, with the window the

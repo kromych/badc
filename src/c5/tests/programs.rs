@@ -970,6 +970,84 @@ fn post_inline_dead_data_repack() {
     assert_eq!(run_fixture("post_inline_dead_data_repack.c"), 0);
 }
 
+/// The compaction packs each object at its own alignment, so dropping
+/// objects never grows the addressable image: a page-aligned survivor
+/// holds the section at 4096 while the small objects still pack on
+/// their own boundaries, and dropping the page itself collapses the
+/// section alignment and the padding ahead of the page with it.
+#[test]
+fn a_narrower_live_set_never_grows_the_packed_image() {
+    use crate::c5::codegen::ssa::shadow::{
+        LiveSets, apply_data_liveness, compute_live_sets, produce_ssa_funcs,
+    };
+    let src = "_Alignas(4096) long page[512] = {1}; \
+               static long unused_mid[100] = {5}; \
+               _Alignas(64) long cl[8] = {2}; \
+               long plain[3] = {3}; long zero[8]; \
+               static long unused_init[16] = {4}; static long unused_zero[16]; \
+               long sum(void) { return page[0] + cl[0] + plain[0] + zero[0]; } \
+               long *ca(void) { return cl; } \
+               int main(void) { return (int)sum(); }";
+    let program = crate::c5::Compiler::with_target(src.to_string(), crate::Target::LinuxX64)
+        .compile()
+        .expect("compile");
+    let funcs = produce_ssa_funcs(&program, crate::Target::LinuxX64, false, true).expect("ssa");
+    let sets = compute_live_sets(&funcs, &Default::default(), &program, false, None);
+    let addr = |out: &crate::c5::program::Program, name: &str| {
+        out.symbols
+            .iter()
+            .find(|s| s.name == name)
+            .expect("symbol")
+            .val
+    };
+    let interval = |off: i64| sets.starts.partition_point(|&s| s <= off) - 1;
+    assert!(
+        !sets.data_live[interval(addr(&program, "unused_mid"))]
+            && addr(&program, "cl") > addr(&program, "page") + 4096,
+        "the dead object lies between the page and the cache-line object"
+    );
+    let pack = |sets: &LiveSets| {
+        let (out, bss, _) = apply_data_liveness(program.clone(), sets, &sets.func_pcs, true, None);
+        (out, bss)
+    };
+    let with_live = |live: &dyn Fn(usize) -> bool| LiveSets {
+        func_pcs: sets.func_pcs.clone(),
+        starts: sets.starts.clone(),
+        data_live: (0..sets.data_live.len()).map(live).collect(),
+    };
+    let (wide_out, wide_bss) = pack(&with_live(&|_| true));
+    let (narrow_out, narrow_bss) = pack(&sets);
+    let page_interval = interval(addr(&program, "page"));
+    let (no_page_out, no_page_bss) = pack(&with_live(&|i| sets.data_live[i] && i != page_interval));
+    let size = |out: &crate::c5::program::Program, bss: i64| out.data.len() + bss as usize;
+    assert!(
+        size(&narrow_out, narrow_bss) <= size(&wide_out, wide_bss)
+            && size(&no_page_out, no_page_bss) <= size(&narrow_out, narrow_bss),
+        "a narrower live set emitted more addressable data ({} {} {})",
+        size(&wide_out, wide_bss),
+        size(&narrow_out, narrow_bss),
+        size(&no_page_out, no_page_bss)
+    );
+    assert_eq!(
+        addr(&narrow_out, "cl"),
+        addr(&narrow_out, "page") + 4096,
+        "the cache-line object did not pack behind the page"
+    );
+    assert!(
+        narrow_out.data.len() < 4096 + 4096 + 128,
+        "the packed image carries the dropped object's span ({})",
+        narrow_out.data.len()
+    );
+    // Dropping the page collapses the section alignment with it: what
+    // remains packs under a page.
+    assert!(
+        size(&no_page_out, no_page_bss) < 4096,
+        "the padding ahead of the dropped page survived ({}+{})",
+        no_page_out.data.len(),
+        no_page_bss
+    );
+}
+
 #[test]
 fn overaligned_data_placement() {
     // Objects with an explicit `aligned(N)` above 16 land on their
@@ -5196,14 +5274,17 @@ fn block_extern_shadows_local() {
 }
 
 #[test]
-fn win64_xmm_scratch_callee_save() {
-    // The x86_64 emit pass uses xmm13/14/15 as fixed FP scratch, which
-    // Win64 marks non-volatile. An FP function that returns a small
-    // struct by value (the register-aggregate return path) must save and
-    // restore those registers at offsets that match the prologue, or the
-    // epilogue restores callee-saved GPRs from the wrong slot and leaves
-    // the caller's xmm clobbered. Correctness check on every target.
-    assert_eq!(run_fixture("win64_xmm_scratch_callee_save.c"), 0);
+fn win64_xmm_callee_save_paths() {
+    // Win64 marks xmm6..xmm15 non-volatile; the allocator holds FP
+    // values live across calls there, and the prologue saves each one
+    // the body uses. An FP function that returns a small struct by
+    // value (the register-aggregate return path) must save and restore
+    // those registers at offsets that match the prologue, or the
+    // epilogue restores callee-saved GPRs from the wrong slot and
+    // leaves the caller's xmm clobbered. Correctness check on every
+    // target; on System V / AAPCS64 the values are volatile and no
+    // xmm is saved.
+    assert_eq!(run_fixture("win64_xmm_callee_save_paths.c"), 0);
 }
 
 #[test]
@@ -6109,6 +6190,40 @@ fn diagnostic_echoes_the_source_line() {
         w2.contains("int cmd(int f, int n)"),
         "expected the signature line, not the brace, got {w2:?}"
     );
+}
+
+#[test]
+fn a_disabled_warning_locates_no_source_line() {
+    // `unused-parameter` is off at the default level, yet its analysis
+    // still runs over every function's bindings; each report must stop
+    // at the level check and locate nothing. Counted in the lexer's
+    // line lookups, so the claim is exact rather than timed.
+    let src = "int cmd(int f, int n)\n{\n    return n;\n}\nint main(void) { return cmd(1, 2); }\n";
+    crate::c5::lexer::LINE_LOOKUP.with(|c| c.set(0));
+    let prog = super::compile_str_bare(src);
+    let lookups = crate::c5::lexer::LINE_LOOKUP.with(|c| c.get());
+    assert_eq!(
+        lookups, 0,
+        "a disabled warning paid {lookups} source-line lookups"
+    );
+    assert!(
+        prog.warnings.is_empty(),
+        "no row on by default fires here, got {:?}",
+        prog.warnings
+    );
+    // Control: the same unit with the group enabled locates the
+    // parameter's declaration line to report it.
+    crate::c5::lexer::LINE_LOOKUP.with(|c| c.set(0));
+    let prog2 = super::compile_str_bare_with_diags(src, &["extra"]);
+    let lookups2 = crate::c5::lexer::LINE_LOOKUP.with(|c| c.get());
+    assert!(lookups2 > 0, "the enabled warning located nothing");
+    let w2 = prog2
+        .warnings
+        .iter()
+        .map(|w| w.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(w2.contains("unused parameter `f`"), "warnings: {w2:?}");
 }
 
 #[test]

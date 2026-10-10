@@ -31,14 +31,13 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lt	<addr>
-               	sub	x0, x29, #0x40
-               	ldr	x1, [x0]
-               	ldr	x2, [x0, #0x8]
-               	add	x1, x1, x2
-               	ldr	x2, [x0, #0x10]
-               	add	x1, x1, x2
-               	ldr	x0, [x0, #0x18]
-               	add	x0, x1, x0
+               	ldur	x0, [x29, #-0x40]
+               	ldur	x1, [x29, #-0x38]
+               	add	x0, x0, x1
+               	ldur	x1, [x29, #-0x30]
+               	add	x0, x0, x1
+               	ldur	x1, [x29, #-0x28]
+               	add	x0, x0, x1
                	add	x0, x0, #0x55
                	mov	x17, #0xa055            // =41045
                	cmp	x0, x17

@@ -44,6 +44,5 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rax, %rsp
                	xorl	%eax, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq

@@ -31,15 +31,13 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
-               	sub	x0, x29, #0x10
-               	str	x1, [x0, #0x8]
-               	ldr	x2, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x3, [x0]
+               	stur	x1, [x29, #-0x8]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldrsw	x3, [x2]
                	add	x3, x3, #0x1
-               	str	w3, [x0]
-               	add	x0, x2, x1
+               	str	w3, [x2]
+               	add	x0, x0, x1
                	add	x0, x0, #0x4
                	add	x0, x0, #0x5
                	add	x0, x0, #0x6
@@ -52,15 +50,13 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
-               	sub	x0, x29, #0x10
-               	str	x1, [x0, #0x8]
-               	ldr	x2, [x0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrsw	x3, [x0]
+               	stur	x1, [x29, #-0x8]
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldrsw	x3, [x2]
                	add	x3, x3, #0x1
-               	str	w3, [x0]
-               	add	x0, x2, x1
+               	str	w3, [x2]
+               	add	x0, x0, x1
                	add	x0, x0, #0x1
                	add	x0, x0, #0x2
                	add	x0, x0, #0x3
@@ -72,9 +68,7 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
-               	sub	x0, x29, #0x10
-               	str	x1, [x0, #0x8]
-               	ldr	x0, [x0]
+               	stur	x1, [x29, #-0x8]
                	add	x2, x0, #0x5
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -88,9 +82,7 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
-               	sub	x0, x29, #0x10
-               	str	x1, [x0, #0x8]
-               	ldr	x0, [x0]
+               	stur	x1, [x29, #-0x8]
                	add	x2, x0, #0x5
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -104,9 +96,7 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
-               	sub	x0, x29, #0x10
-               	str	x1, [x0, #0x8]
-               	ldr	x0, [x0]
+               	stur	x1, [x29, #-0x8]
                	lsl	x0, x0, #1
                	add	x0, x0, x1
                	cmp	x0, #0x1a

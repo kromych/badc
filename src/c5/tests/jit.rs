@@ -2340,3 +2340,29 @@ fn constant_p_defers_to_post_inline_fold() {
         1 | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 7)
     );
 }
+
+/// An indirect call whose target no register can hold -- the marshal
+/// writes x0..x7 and x16 / x17, `-ffixed-` keeps the others -- stages the
+/// target in a cell above its stack arguments and still reaches the
+/// callee with every argument in place, at -O0 and -O.
+/// `perf_codegen::a64_indirect_call_without_a_free_register_stages_its_target`
+/// pins the staged shape.
+#[cfg(target_arch = "aarch64")]
+#[test]
+fn staged_indirect_call_target_reaches_its_callee() {
+    const NAME: &str = "indirect_call_staged_target.c";
+    let program = Compiler::new(super::with_prelude(&super::load_fixture(NAME)))
+        .compile()
+        .expect("compile failed");
+    let fixed_regs = super::fixture_fixed_regs(NAME, crate::Target::host());
+    for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
+        let optimize = opts.optimize;
+        let opts = NativeOptions { fixed_regs, ..opts };
+        let exit = jit_run_with_options(&program, &[], opts, &mut |_| {})
+            .expect("jit_run_with_options failed");
+        assert_eq!(
+            exit, 0,
+            "optimize {optimize}: the staged call returned {exit}"
+        );
+    }
+}

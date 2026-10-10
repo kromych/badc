@@ -192,12 +192,10 @@ Disassembly of section .text:
 <set_again>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w1, [x1]
-               	mov	x16, x1
                	mov	x1, x0
-               	mov	x0, x16
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	w0, [x0]
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10
@@ -208,12 +206,10 @@ Disassembly of section .text:
                	str	x22, [sp, #0x10]
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	w1, [x1]
-               	mov	x16, x1
                	mov	x1, x0
-               	mov	x0, x16
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	w0, [x0]
                	bl	<addr>
                	adrp	x20, <page>
                	add	x20, x20, <lo12>

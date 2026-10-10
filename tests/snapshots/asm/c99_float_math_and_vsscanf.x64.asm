@@ -125,7 +125,7 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movslq	-0x38(%rbp), %rax
+               	movl	-0x38(%rbp), %eax
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x3, %eax
@@ -205,10 +205,10 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpl	$0x2, %eax
                	jne	<addr>
-               	movslq	-0x28(%rbp), %rax
+               	movl	-0x28(%rbp), %eax
                	cmpl	$0xc, %eax
                	jne	<addr>
-               	movslq	-0x20(%rbp), %rax
+               	movl	-0x20(%rbp), %eax
                	cmpl	$0x22, %eax
                	je	<addr>
                	movl	$0x8, %eax

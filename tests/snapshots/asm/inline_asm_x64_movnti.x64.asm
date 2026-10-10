@@ -28,14 +28,12 @@ Disassembly of section .text:
 <main>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
-               	pushq	%rbx
+               	subq	$0x10, %rsp
                	movl	$0x0, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
-               	movl	$0x2a, %ebx
-               	movntil	%ebx, (%rax)
+               	movl	$0x2a, %ecx
+               	movntil	%ecx, (%rax)
                	sfence
-               	movslq	-0x8(%rbp), %rax
-               	popq	%rbx
+               	movl	-0x8(%rbp), %eax
                	leave
                	retq

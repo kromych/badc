@@ -28,14 +28,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x38
-               	ldr	x1, [x0, #0x30]
-               	cbnz	x1, <addr>
+               	ldur	x0, [x29, #-0x8]
+               	cbnz	x0, <addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x0, #0x30]
+               	ldur	x0, [x29, #-0x8]
                	bl	<addr>
                	cmp	x0, #0x40
                	b.ls	<addr>

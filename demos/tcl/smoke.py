@@ -247,6 +247,10 @@ def run_suite(tclsh: Path, log) -> None:
         for line in out.splitlines():
             if "FAILED" in line:
                 print("  " + line)
+        # interp-36.7 races a 10 ms timer against an idle-time handler.
+        if "==== interp-36.7 " in out:
+            print("  interp-36.7 loses its timer race under load, more often in "
+                  "the badc build: https://github.com/kromych/badc/issues/1516")
         sys.exit(f"smoke: {failed} test failures exceed baseline "
                  f"{BASELINE_FAILURES} (working directory {work})")
     if files == 0:

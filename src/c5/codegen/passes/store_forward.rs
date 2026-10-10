@@ -45,13 +45,13 @@
 //! exactly, so the extension already applied is the one wanted.
 //!
 //! Frame slots (`StoreLocal` / `LoadLocal`) are tracked in a second
-//! table keyed by slot index, with the same width, volatile, and
+//! table keyed by slot index and displacement, with the same width, volatile, and
 //! distance discipline. A slot reachable only through `LoadLocal` /
 //! `StoreLocal` -- no `LocalAddr`, no volatile access
-//! (`mem2reg::address_free_slots`), and no write through a `FunctionSsa`
-//! field or call result slot -- has no address value, so no `Store`,
+//! (`mem2reg::address_free_slots`), and not a call's result slot --
+//! has no address value, so no `Store`,
 //! `Mcpy`, or atomic can write it; its entries survive those
-//! instructions and die at another `StoreLocal` to the same slot, at a
+//! instructions and die at an overlapping `StoreLocal`, at a
 //! call (a reload after the call is cheaper than keeping the value live
 //! across it), or at the block boundary. An address-exposed slot
 //! (`LocalAddr` taken, e.g. by an asm output) still forwards, under a
@@ -145,13 +145,12 @@ struct Entry {
     load_kind: Option<LoadKind>,
 }
 
-/// A known-available frame-slot value within the current block. Slots
-/// are 8-byte cells and every `LoadLocal` / `StoreLocal` accesses a
-/// slot from its base, so entries for distinct slots are disjoint and
-/// any two accesses of one slot overlap.
+/// A known-available frame-slot value within the current block: the
+/// `width` bytes at `disp` past slot `off`'s base, which may reach the next cell.
 #[derive(Clone, Copy)]
 struct SlotEntry {
     off: i64,
+    disp: i32,
     width: u8,
     value: ValueId,
     src_idx: u32,
@@ -194,35 +193,18 @@ fn reuse(origin: Option<LoadKind>, kind: LoadKind) -> Option<Reuse> {
 }
 
 /// Slots whose store -> load pairs may forward: reachable only through
-/// `LoadLocal` / `StoreLocal`, so every write is visible in the SSA.
-/// Starts from `mem2reg::address_free_slots` (no `LocalAddr`, no volatile
-/// access, no alloca slot) and removes the slots the emit writes
-/// through `FunctionSsa` fields or call metadata rather than an
-/// instruction. A function with a runtime-growing frame is skipped
-/// entirely, as in mem2reg.
+/// `LoadLocal` / `StoreLocal` (`mem2reg::address_free_slots`: no `LocalAddr`,
+/// no volatile access, no alloca slot), so every write but the prologue's,
+/// which precede every entry, is visible in the SSA. A call writes its
+/// result slot, and [`fold_const_loads`] keeps these entries across calls.
 fn forwardable_slots(func: &FunctionSsa) -> BTreeSet<i64> {
-    if func
-        .insts
-        .iter()
-        .any(|i| matches!(i, Inst::AllocaInit(s) if *s != 0))
-    {
-        return BTreeSet::new();
-    }
     let mut slots = address_free_slots(func);
-    slots.remove(&func.indirect_result_slot);
-    for s in &func.param_local_slots {
-        slots.remove(s);
-    }
     for inst in &func.insts {
-        match inst {
-            Inst::Call { ret_slot_local, .. }
-            | Inst::CallIndirect { ret_slot_local, .. }
-            | Inst::CallExt { ret_slot_local, .. }
-                if *ret_slot_local != 0 =>
-            {
-                slots.remove(ret_slot_local);
-            }
-            _ => {}
+        if let Inst::Call { ret_slot_local, .. }
+        | Inst::CallIndirect { ret_slot_local, .. }
+        | Inst::CallExt { ret_slot_local, .. } = inst
+        {
+            slots.remove(ret_slot_local);
         }
     }
     slots
@@ -230,46 +212,24 @@ fn forwardable_slots(func: &FunctionSsa) -> BTreeSet<i64> {
 
 /// Slots outside `forwardable` that still forward under the stricter
 /// exposed discipline (every pointer write kills): any slot the body
-/// accesses through `LoadLocal` / `StoreLocal`, less the ones the emit
-/// writes outside the instruction stream. The runtime-frame bail
-/// matches `forwardable_slots`.
+/// accesses through `LoadLocal` / `StoreLocal` but the alloca slot.
 fn exposed_slots(func: &FunctionSsa, forwardable: &BTreeSet<i64>) -> BTreeSet<i64> {
-    if func
+    let reserved: BTreeSet<i64> = func
         .insts
         .iter()
-        .any(|i| matches!(i, Inst::AllocaInit(s) if *s != 0))
-    {
-        return BTreeSet::new();
-    }
-    let mut slots = BTreeSet::new();
-    for inst in &func.insts {
-        match inst {
-            Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => {
-                slots.insert(*off);
-            }
-            _ => {}
-        }
-    }
-    for inst in &func.insts {
-        match inst {
-            Inst::Call { ret_slot_local, .. }
-            | Inst::CallIndirect { ret_slot_local, .. }
-            | Inst::CallExt { ret_slot_local, .. }
-                if *ret_slot_local != 0 =>
-            {
-                slots.remove(ret_slot_local);
-            }
-            _ => {}
-        }
-    }
-    slots.remove(&func.indirect_result_slot);
-    for s in &func.param_local_slots {
-        slots.remove(s);
-    }
-    for s in forwardable {
-        slots.remove(s);
-    }
-    slots
+        .filter_map(|i| match i {
+            Inst::AllocaInit(off) if *off < 0 => Some(*off),
+            _ => None,
+        })
+        .collect();
+    func.insts
+        .iter()
+        .filter_map(|i| match i {
+            Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => Some(*off),
+            _ => None,
+        })
+        .filter(|off| !forwardable.contains(off) && !reserved.contains(off))
+        .collect()
 }
 
 /// Byte ranges `[a, a+aw)` and `[b, b+bw)` overlap.
@@ -400,10 +360,14 @@ fn run_one(func: &mut FunctionSsa) {
                     let w = store_width(kind);
                     // Drop every entry not provably disjoint from the
                     // written range. An exposed slot's address is a value,
-                    // so the write can reach it.
+                    // so the write can reach it, off its own address the bytes named.
                     table.retain(|e| e.addr == addr && !overlaps(e.disp, e.width, disp, w));
                     indexed.clear();
-                    slot_table.retain(|e| !exposed.contains(&e.off));
+                    match slot_bytes(func, addr, disp) {
+                        Some(at) => slot_table
+                            .retain(|e| !overlaps64(e.off * 8 + i64::from(e.disp), e.width, at, w)),
+                        None => slot_table.retain(|e| !exposed.contains(&e.off)),
+                    }
                     // A volatile store invalidates like any store but
                     // seeds no forward: a later load of the location
                     // must read memory (C99 6.7.3p6).
@@ -424,29 +388,35 @@ fn run_one(func: &mut FunctionSsa) {
                 Inst::LoadLocal { volatile: true, .. } => {}
                 Inst::LoadLocal {
                     off,
+                    disp,
                     kind,
                     volatile: false,
                 } => {
-                    let off = *off;
-                    let kind = *kind;
+                    let (off, disp, kind) = (*off, *disp, *kind);
                     if !slots.contains(&off) && !exposed.contains(&off) {
                         continue;
                     }
                     let w = load_width(kind);
+                    let same = |e: &SlotEntry| e.off == off && e.disp == disp && e.width == w;
+                    // A load no entry serves seeds one for the next load of its kind.
                     let hit = slot_table
                         .iter()
-                        .find(|e| e.off == off && e.width == w)
-                        .copied()
-                        .filter(|e| span(e.src_idx, i) <= MAX_FORWARD_DISTANCE);
+                        .rev()
+                        .find(|e| {
+                            same(e)
+                                && reuse(e.load_kind, kind).is_some()
+                                && span(e.src_idx, i) <= MAX_FORWARD_DISTANCE
+                        })
+                        .copied();
                     if let Some(e) = hit {
                         any |= take(&mut redirect, &mut rewrites, i, e.value, e.load_kind, kind);
-                    }
-                    if !slot_table.iter().any(|e| e.off == off && e.width == w) {
-                        let value = redirect[i].unwrap_or(i as ValueId);
+                    } else {
+                        slot_table.retain(|e| !(same(e) && e.load_kind == Some(kind)));
                         slot_table.push(SlotEntry {
                             off,
+                            disp,
                             width: w,
-                            value,
+                            value: i as ValueId,
                             src_idx: idx,
                             load_kind: Some(kind),
                         });
@@ -454,12 +424,14 @@ fn run_one(func: &mut FunctionSsa) {
                 }
                 Inst::StoreLocal {
                     off,
+                    disp,
                     value,
                     kind,
                     volatile,
                     ..
                 } => {
                     let off = *off;
+                    let disp = *disp;
                     let value = *value;
                     let kind = *kind;
                     let volatile = *volatile;
@@ -468,13 +440,17 @@ fn run_one(func: &mut FunctionSsa) {
                     // so the pointer table clears as before.
                     table.clear();
                     indexed.clear();
-                    slot_table.retain(|e| e.off != off);
+                    let at = off * 8 + i64::from(disp);
+                    let w = store_width(kind);
+                    slot_table
+                        .retain(|e| !overlaps64(e.off * 8 + i64::from(e.disp), e.width, at, w));
                     if (slots.contains(&off) || exposed.contains(&off))
                         && is_int_store(kind)
                         && !volatile
                     {
                         slot_table.push(SlotEntry {
                             off,
+                            disp,
                             width: store_width(kind),
                             value,
                             src_idx: idx,
@@ -711,6 +687,15 @@ fn overlaps64(a: i64, aw: u8, b: i64, bw: u8) -> bool {
     a < b + bw as i64 && b < a + aw as i64
 }
 
+/// The slot byte an access through a slot's `LocalAddr` plus constants names.
+fn slot_bytes(func: &FunctionSsa, addr: ValueId, disp: i32) -> Option<i64> {
+    let (base, at) = base_disp(func, addr, disp);
+    match func.insts.get(base as usize)? {
+        Inst::LocalAddr(off) => off.checked_mul(8)?.checked_add(at),
+        _ => None,
+    }
+}
+
 /// A location the block prefix has written a known constant to.
 #[derive(Clone, Copy, PartialEq)]
 struct ConstEntry {
@@ -771,7 +756,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
         || !func
             .insts
             .iter()
-            .any(|i| matches!(i, Inst::Store { .. } | Inst::StoreLocal { .. }))
+            .any(|i| matches!(i, Inst::Store { .. } | Inst::StoreLocal { disp: 0, .. }))
     {
         return false;
     }
@@ -814,7 +799,14 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                         folds.push((i, c));
                     }
                 }
-                Inst::LoadLocal { off, kind, .. } => {
+                // Entries hold slots' base bytes only.
+                Inst::LoadLocal { disp, .. } if disp != 0 => {}
+                Inst::LoadLocal {
+                    off,
+                    kind,
+                    volatile: false,
+                    ..
+                } => {
                     let w = load_width(kind);
                     if let Some(e) = slot_table.iter().find(|e| e.off == off && e.width == w)
                         && let Some(c) = const_for_load(e.bits, kind)
@@ -845,14 +837,18 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 }
                 Inst::StoreLocal {
                     off,
+                    disp,
                     value,
                     kind,
                     volatile,
                     ..
                 } => {
                     table.clear();
-                    slot_table.retain(|e| e.off != off);
-                    if (slots.contains(&off) || exposed.contains(&off))
+                    let at = off * 8 + i64::from(disp);
+                    let w = store_width(kind);
+                    slot_table.retain(|e| !overlaps64(e.off * 8, e.width, at, w));
+                    if disp == 0
+                        && (slots.contains(&off) || exposed.contains(&off))
                         && let Some(bits) = stored_const(func, value, kind, volatile)
                     {
                         slot_table.push(ConstSlotEntry {
@@ -954,6 +950,7 @@ mod tests {
             is_naked: false,
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
+            general_regs_only: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,
@@ -998,6 +995,191 @@ mod tests {
             extern_imm_data_refs: Vec::new(),
             extern_tls_refs: Vec::new(),
         }
+    }
+
+    /// `AllocaInit(off)` reserves slot `off` for the alloca bookkeeping: a
+    /// load of it never forwards, while another slot's load does.
+    #[test]
+    fn the_slot_alloca_reserves_does_not_forward() {
+        for (off, forwarded) in [(-3, false), (-2, true)] {
+            let mut f = fresh(
+                alloc::vec![
+                    Inst::AllocaInit(-3),
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: LoadKind::I64
+                    },
+                    Inst::StoreLocal {
+                        off,
+                        disp: 0,
+                        value: 1,
+                        kind: StoreKind::I64,
+                        volatile: false,
+                        nsw: false,
+                    },
+                    Inst::LoadLocal {
+                        off,
+                        disp: 0,
+                        kind: LoadKind::I64,
+                        volatile: false,
+                    },
+                ],
+                Terminator::Return(3),
+                3,
+            );
+            run_one(&mut f);
+            let ret = if forwarded { 1 } else { 3 };
+            assert!(
+                matches!(f.blocks[0].terminator, Terminator::Return(r) if r == ret),
+                "slot {off}: {:?}",
+                f.blocks[0].terminator
+            );
+        }
+    }
+
+    /// A store into either half of a 16-byte slot entry invalidates it,
+    /// one into a disjoint cell does not.
+    #[test]
+    fn a_store_overlapping_a_wide_slot_entry_invalidates_it() {
+        let wide = |off| Inst::LoadLocal {
+            off,
+            disp: 0,
+            kind: LoadKind::V128,
+            volatile: false,
+        };
+        for (off, disp, forwarded) in [
+            (-2, 9, false),
+            (-1, 0, false),
+            (-3, 0, true),
+            (-2, 16, true),
+        ] {
+            let mut f = fresh(
+                alloc::vec![
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: LoadKind::I64
+                    },
+                    wide(-2),
+                    Inst::StoreLocal {
+                        off,
+                        disp,
+                        value: 0,
+                        kind: StoreKind::I8,
+                        volatile: false,
+                        nsw: false,
+                    },
+                    wide(-2),
+                ],
+                Terminator::Return(3),
+                3,
+            );
+            run_one(&mut f);
+            let ret = if forwarded { 1 } else { 3 };
+            assert!(
+                matches!(f.blocks[0].terminator, Terminator::Return(r) if r == ret),
+                "store at slot {off} + {disp}: {:?}",
+                f.blocks[0].terminator
+            );
+        }
+    }
+
+    /// A displaced slot load forwards from its store unless a store between
+    /// them, to the slot or through its address, overlaps its bytes.
+    #[test]
+    fn a_displaced_slot_load_forwards_from_its_store() {
+        let local = |off, disp, kind| Inst::LoadLocal {
+            off,
+            disp,
+            kind,
+            volatile: false,
+        };
+        let store = |off, disp, value, kind| Inst::StoreLocal {
+            off,
+            disp,
+            value,
+            kind,
+            volatile: false,
+            nsw: false,
+        };
+        let through = |addr, disp, kind| Inst::Store {
+            addr,
+            disp,
+            value: 0,
+            kind,
+            volatile: false,
+            align: 8,
+        };
+        for (between, forwarded) in [
+            (store(-4, 0, 0, StoreKind::I64), true),
+            (store(-4, 12, 0, StoreKind::I32), false),
+            (store(-3, 0, 0, StoreKind::I32), false),
+            (store(-3, 4, 0, StoreKind::I8), false),
+            (store(-4, 16, 0, StoreKind::I64), true),
+            (through(1, 0, StoreKind::I64), true),
+            (through(1, 12, StoreKind::I32), false),
+            (through(0, 0, StoreKind::I64), false),
+        ] {
+            let mut f = fresh(
+                alloc::vec![
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: LoadKind::I64
+                    },
+                    Inst::LocalAddr(-4),
+                    store(-4, 8, 0, StoreKind::I64),
+                    between.clone(),
+                    local(-4, 8, LoadKind::I64),
+                ],
+                Terminator::Return(4),
+                4,
+            );
+            run_one(&mut f);
+            let ret = if forwarded { 0 } else { 4 };
+            assert!(
+                matches!(f.blocks[0].terminator, Terminator::Return(r) if r == ret),
+                "{between:?}: {:?}",
+                f.blocks[0].terminator
+            );
+        }
+    }
+
+    /// An unsigned re-read of a signed store's bytes forwards from the first.
+    #[test]
+    fn a_slot_load_no_entry_serves_seeds_one_for_its_kind() {
+        let store = |disp| Inst::StoreLocal {
+            off: -2,
+            disp,
+            value: 0,
+            kind: StoreKind::I32,
+            volatile: false,
+            nsw: false,
+        };
+        let load = Inst::LoadLocal {
+            off: -2,
+            disp: 0,
+            kind: LoadKind::U32,
+            volatile: false,
+        };
+        let mut f = fresh(
+            alloc::vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64
+                },
+                store(0),
+                load.clone(),
+                store(4),
+                load,
+            ],
+            Terminator::Return(4),
+            4,
+        );
+        run_one(&mut f);
+        assert!(
+            matches!(f.blocks[0].terminator, Terminator::Return(2)),
+            "{:?}",
+            f.blocks[0].terminator
+        );
     }
 
     /// `*p = s; return *p;` forwards the I64 load to the stored value, so
@@ -1343,6 +1525,7 @@ mod tests {
                     kind: LoadKind::I64
                 },
                 Inst::StoreLocal {
+                    disp: 0,
                     off: -1,
                     value: 0,
                     kind: StoreKind::I64,
@@ -1350,6 +1533,7 @@ mod tests {
                     nsw: false,
                 },
                 Inst::LoadLocal {
+                    disp: 0,
                     off: -1,
                     kind: LoadKind::I64,
                     volatile: false,
@@ -1377,6 +1561,7 @@ mod tests {
                     kind: LoadKind::I64
                 },
                 Inst::StoreLocal {
+                    disp: 0,
                     off: -1,
                     value: 0,
                     kind: StoreKind::I64,
@@ -1391,11 +1576,13 @@ mod tests {
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                     low_word_args: 0,
                     arg_widths: crate::c5::ir::ArgWidths::default(),
+                    callee_conv: crate::c5::codegen::CallConv::Target,
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
                 },
                 Inst::LoadLocal {
+                    disp: 0,
                     off: -1,
                     kind: LoadKind::I64,
                     volatile: false,
@@ -1424,6 +1611,7 @@ mod tests {
                 },
                 Inst::LocalAddr(-1),
                 Inst::StoreLocal {
+                    disp: 0,
                     off: -1,
                     value: 0,
                     kind: StoreKind::I64,
@@ -1439,6 +1627,7 @@ mod tests {
                     align: 0,
                 },
                 Inst::LoadLocal {
+                    disp: 0,
                     off: -1,
                     kind: LoadKind::I64,
                     volatile: false,
@@ -1465,6 +1654,7 @@ mod tests {
                     kind: LoadKind::I64
                 },
                 Inst::StoreLocal {
+                    disp: 0,
                     off: -1,
                     value: 0,
                     kind: StoreKind::I64,
@@ -1472,6 +1662,7 @@ mod tests {
                     nsw: false,
                 },
                 Inst::LoadLocal {
+                    disp: 0,
                     off: -1,
                     kind: LoadKind::I64,
                     volatile: false,
@@ -1502,6 +1693,7 @@ mod tests {
                     kind: LoadKind::I64
                 },
                 Inst::StoreLocal {
+                    disp: 0,
                     off: -1,
                     value: 0,
                     kind: StoreKind::I64,
@@ -1509,6 +1701,7 @@ mod tests {
                     nsw: false,
                 },
                 Inst::StoreLocal {
+                    disp: 0,
                     off: -1,
                     value: 1,
                     kind: StoreKind::I64,
@@ -1516,6 +1709,7 @@ mod tests {
                     nsw: false,
                 },
                 Inst::LoadLocal {
+                    disp: 0,
                     off: -1,
                     kind: LoadKind::I64,
                     volatile: false,
@@ -1542,6 +1736,7 @@ mod tests {
                     kind: LoadKind::I64
                 },
                 Inst::StoreLocal {
+                    disp: 0,
                     off: -1,
                     value: 0,
                     kind: StoreKind::I32,
@@ -1549,6 +1744,7 @@ mod tests {
                     nsw: false,
                 },
                 Inst::LoadLocal {
+                    disp: 0,
                     off: -1,
                     kind: LoadKind::I32,
                     volatile: false,
@@ -1582,6 +1778,7 @@ mod tests {
                     kind: LoadKind::I64
                 },
                 Inst::StoreLocal {
+                    disp: 0,
                     off: -2,
                     value: 0,
                     kind: StoreKind::I64,
@@ -1596,11 +1793,13 @@ mod tests {
                     fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                     low_word_args: 0,
                     arg_widths: crate::c5::ir::ArgWidths::default(),
+                    callee_conv: crate::c5::codegen::CallConv::Target,
                     arg_aggs: Vec::new(),
                     ret_agg: Some(0),
                     ret_slot_local: -2,
                 },
                 Inst::LoadLocal {
+                    disp: 0,
                     off: -2,
                     kind: LoadKind::I64,
                     volatile: false,
@@ -1794,6 +1993,7 @@ mod tests {
             plain_store(false),
             plain_store(true),
             Inst::StoreLocal {
+                disp: 0,
                 off: 8,
                 value: 2,
                 kind: StoreKind::I64,

@@ -97,11 +97,10 @@ Disassembly of section .text:
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x1, [x0, #0x8]
+               	ldr	x2, [x0, #0x8]
                	mov	x0, #0x1                // =1
-               	mov	x9, x1
                	mov	x1, x0
-               	blr	x9
+               	blr	x2
                	cmp	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x9                // =9

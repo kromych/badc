@@ -57,7 +57,7 @@ Disassembly of section .text:
                	movl	$0x2, %edi
                	movl	$0x1, %esi
                	callq	*%rax
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x15, %eax
                	je	<addr>
                	movl	$0x2, %eax
@@ -68,7 +68,7 @@ Disassembly of section .text:
                	movl	$0x3, %edi
                	movl	$0x4, %esi
                	callq	*%rax
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x22, %eax
                	je	<addr>
                	movl	$0x3, %eax
@@ -79,7 +79,7 @@ Disassembly of section .text:
                	movl	$0x5, %edi
                	movl	$0x6, %esi
                	callq	*%rax
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x38, %eax
                	je	<addr>
                	movl	$0x4, %eax
@@ -90,7 +90,7 @@ Disassembly of section .text:
                	movl	$0x7, %edi
                	movl	$0x8, %esi
                	callq	*%rax
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x4e, %eax
                	je	<addr>
                	movl	$0x5, %eax
@@ -167,8 +167,7 @@ Disassembly of section .text:
                	movl	$0xc, %eax
                	leave
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
+               	movq	-0x8(%rbp), %rax
                	movq	0x8(%rax), %rax
                	movl	$0x2, %edi
                	movl	$0x1, %esi
@@ -178,8 +177,7 @@ Disassembly of section .text:
                	movl	$0xd, %eax
                	leave
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
+               	movq	-0x8(%rbp), %rax
                	movq	0x8(%rax), %rax
                	movl	$0x2, %edi
                	movl	$0x1, %esi
@@ -189,8 +187,7 @@ Disassembly of section .text:
                	movl	$0xe, %eax
                	leave
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
+               	movq	-0x8(%rbp), %rax
                	movq	(%rax), %rax
                	movl	$0x2, %edi
                	movl	$0x1, %esi

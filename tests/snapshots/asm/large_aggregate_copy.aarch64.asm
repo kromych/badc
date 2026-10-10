@@ -29,21 +29,20 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, w1
                	b.lt	<addr>
-               	mov	x0, sp
-               	mov	x1, #0x4d2              // =1234
-               	str	w1, [x0, #0x2328]
-               	ldrb	w1, [x0]
-               	add	x17, x0, #0x2, lsl #12  // =0x2000
-               	ldrb	w2, [x17]
-               	ldr	w0, [x0, #0x2328]
-               	cbnz	w1, <addr>
-               	cbz	w2, <addr>
+               	mov	x0, #0x4d2              // =1234
+               	stur	w0, [x29, #-0x8]
+               	ldrb	w0, [sp]
+               	sub	x16, x29, #0x330
+               	ldrb	w1, [x16]
+               	ldur	w2, [x29, #-0x8]
+               	cbnz	w0, <addr>
+               	cbz	w1, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x2, lsl #12   // =0x2000
                	add	sp, sp, #0x330
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	w0, #0x4d2
+               	cmp	w2, #0x4d2
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x2, lsl #12   // =0x2000

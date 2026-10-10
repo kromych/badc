@@ -31,48 +31,48 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0x5, %eax
                	movl	%eax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rcx
-               	movslq	(%rcx), %rdx
-               	cmpl	$0x5, %edx
+               	movq	%rax, %rcx
+               	cmpl	$0x5, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movl	$0xa, (%rcx)
-               	movl	$0x9, -0x8(%rbp)
-               	movslq	(%rcx), %rdx
-               	cmpl	$0x9, %edx
+               	movl	$0xa, -0x8(%rbp)
+               	movl	$0x9, %ecx
+               	movl	%ecx, -0x8(%rbp)
+               	cmpl	$0x9, %ecx
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	movabsq	$0x4004000000000000, %rdx # imm = 0x4004000000000000
-               	movq	%rdx, %xmm14
+               	movabsq	$0x4004000000000000, %rcx # imm = 0x4004000000000000
+               	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x8(%rbp)
-               	movsd	(%rcx), %xmm0
-               	movq	%rdx, %xmm15
+               	movsd	-0x8(%rbp), %xmm0
+               	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax
                	leave
                	retq
-               	movb	$0x41, -0x8(%rbp)
-               	movsbq	(%rcx), %rdx
-               	cmpl	$0x41, %edx
+               	movl	$0x41, %ecx
+               	movb	%cl, -0x8(%rbp)
+               	movsbq	%cl, %rcx
+               	cmpl	$0x41, %ecx
                	je	<addr>
                	leave
                	retq
                	movl	$0x7, %eax
                	movl	%eax, -0x8(%rbp)
-               	movslq	(%rcx), %rdx
-               	cmpl	$0x7, %edx
+               	movq	%rax, %rcx
+               	cmpl	$0x7, %ecx
                	je	<addr>
                	movl	$0x6, %eax
                	leave
                	retq
-               	movl	$0x2a, -0x8(%rbp)
-               	movslq	(%rcx), %rcx
+               	movl	$0x2a, %ecx
+               	movl	%ecx, -0x8(%rbp)
                	cmpl	$0x2a, %ecx
                	je	<addr>
                	leave

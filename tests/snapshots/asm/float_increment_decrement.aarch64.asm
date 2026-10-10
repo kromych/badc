@@ -61,17 +61,16 @@ Disassembly of section .text:
                	ret
                	fmov	s2, #1.00000000
                	stur	s2, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	ldr	s2, [x0]
+               	ldur	s2, [x29, #-0x8]
                	fcvt	d2, s2
                	fadd	d2, d2, d0
                	fcvt	s2, d2
-               	str	s2, [x0]
-               	ldr	s2, [x0]
+               	stur	s2, [x29, #-0x8]
+               	ldur	s2, [x29, #-0x8]
                	fcvt	d2, s2
                	fadd	d2, d2, d0
                	fcvt	s2, d2
-               	str	s2, [x0]
+               	stur	s2, [x29, #-0x8]
                	ldur	s2, [x29, #-0x8]
                	fmov	s4, #3.00000000
                	fcmp	s2, s4
@@ -85,18 +84,18 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
-               	ldr	s2, [x0]
+               	ldur	s2, [x29, #-0x10]
                	fcvt	d2, s2
                	fadd	d2, d2, d0
                	fcvt	s2, d2
-               	str	s2, [x0]
-               	ldr	d2, [x0, #0x8]
+               	stur	s2, [x29, #-0x10]
+               	ldur	d2, [x29, #-0x8]
                	fadd	d2, d2, d3
-               	str	d2, [x0, #0x8]
-               	ldr	s2, [x0]
+               	stur	d2, [x29, #-0x8]
+               	ldur	s2, [x29, #-0x10]
                	fcmp	s2, s1
                	b.ne	<addr>
-               	ldr	d1, [x0, #0x8]
+               	ldur	d1, [x29, #-0x8]
                	fmov	d2, #1.50000000
                	fcmp	d1, d2
                	b.eq	<addr>
@@ -127,17 +126,17 @@ Disassembly of section .text:
                	stp	x16, x17, [x0]
                	ldr	x16, [x1, #0x10]
                	str	x16, [x0, #0x10]
-               	ldr	d1, [x0, #0x8]
+               	ldur	d1, [x29, #-0x10]
                	fadd	d1, d1, d0
-               	str	d1, [x0, #0x8]
-               	ldr	d1, [x0, #0x10]
+               	stur	d1, [x29, #-0x10]
+               	ldur	d1, [x29, #-0x8]
                	fadd	d1, d1, d3
-               	str	d1, [x0, #0x10]
-               	ldr	d1, [x0, #0x8]
+               	stur	d1, [x29, #-0x8]
+               	ldur	d1, [x29, #-0x10]
                	fmov	d2, #2.00000000
                	fcmp	d1, d2
                	b.ne	<addr>
-               	ldr	d1, [x0, #0x10]
+               	ldur	d1, [x29, #-0x8]
                	fcmp	d1, d0
                	b.eq	<addr>
                	mov	x0, #0x8                // =8

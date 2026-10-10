@@ -28,9 +28,9 @@ Disassembly of section .text:
 <main>:
                	movl	$0x40200000, %eax       # imm = 0x40200000
                	movl	$0x40000000, %ecx       # imm = 0x40000000
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm0
-               	mulss	%xmm15, %xmm0
+               	vmulss	%xmm15, %xmm14, %xmm0
                	cvttss2si	%xmm0, %rdx
                	cmpl	$0x5, %edx
                	je	<addr>
@@ -52,9 +52,9 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	retq
                	movl	$0x40600000, %eax       # imm = 0x40600000
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm0
-               	mulss	%xmm15, %xmm0
+               	vmulss	%xmm15, %xmm14, %xmm0
                	cvttss2si	%xmm0, %rax
                	cmpl	$0x7, %eax
                	je	<addr>

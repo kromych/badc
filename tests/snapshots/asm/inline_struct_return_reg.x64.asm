@@ -42,13 +42,12 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x4, %eax
                	jl	<addr>
-               	leaq	-0x40(%rbp), %rax
-               	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rdx
-               	addq	%rdx, %rcx
-               	movq	0x10(%rax), %rdx
-               	addq	%rdx, %rcx
-               	movq	0x18(%rax), %rax
+               	movq	-0x40(%rbp), %rax
+               	movq	-0x38(%rbp), %rcx
+               	addq	%rcx, %rax
+               	movq	-0x30(%rbp), %rcx
+               	addq	%rcx, %rax
+               	movq	-0x28(%rbp), %rcx
                	addq	%rcx, %rax
                	addq	$0x55, %rax
                	cmpq	$0xa055, %rax           # imm = 0xA055

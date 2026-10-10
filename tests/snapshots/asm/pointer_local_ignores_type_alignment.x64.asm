@@ -26,14 +26,14 @@ Disassembly of section .text:
                	int3
 
 <via_struct_pointer>:
-               	movslq	(%rdi), %rax
-               	movslq	0x4(%rdi), %rcx
+               	movl	(%rdi), %eax
+               	movl	0x4(%rdi), %ecx
                	addq	%rcx, %rax
                	retq
 
 <via_scalar_pointer>:
-               	movslq	(%rdi), %rax
-               	movslq	0xc(%rdi), %rcx
+               	movl	(%rdi), %eax
+               	movl	0xc(%rdi), %ecx
                	addq	%rcx, %rax
                	retq
 

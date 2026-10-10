@@ -17,16 +17,16 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldrsw	x0, [x2]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x0, [x1]
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
                	cbz	x0, <addr>
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x0, [x2]
+               	ldrsw	x0, [x1]
                	cbz	x0, <addr>
                	mov	x0, #0x9                // =9
                	add	sp, sp, #0x20
@@ -45,24 +45,24 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0x10
+               	sub	x3, x29, #0x10
                	mov	x0, #0x5                // =5
-               	str	w0, [x1]
-               	mov	x3, #0x6                // =6
-               	str	w3, [x1, #0x4]
+               	stur	w0, [x29, #-0x10]
+               	mov	x2, #0x6                // =6
+               	stur	w2, [x29, #-0xc]
                	mov	x4, #0x7                // =7
-               	str	w4, [x1, #0x8]
+               	stur	w4, [x29, #-0x8]
                	sub	x4, x29, #0x18
-               	cmp	x4, x1
+               	cmp	x4, x3
                	b.eq	<addr>
-               	ldrsw	x0, [x1]
-               	ldrsw	x4, [x1, #0x4]
-               	add	x0, x0, x4
-               	ldrsw	x1, [x1, #0x8]
-               	add	x0, x0, x1
+               	ldursw	x0, [x29, #-0x10]
+               	ldursw	x3, [x29, #-0xc]
+               	add	x0, x0, x3
+               	ldursw	x3, [x29, #-0x8]
+               	add	x0, x0, x3
                	cmp	w0, #0x12
                	b.eq	<addr>
-               	mov	x0, x3
+               	mov	x0, x2
                	b	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>

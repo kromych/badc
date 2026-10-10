@@ -45,10 +45,9 @@ Disassembly of section .text:
                	movq	%r10, -0x10(%rbp)
                	movq	0x18(%rbp), %r10
                	movq	%r10, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	(%rax), %rbx
-               	movq	0x8(%rax), %rax
-               	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
+               	movq	-0x10(%rbp), %rax
+               	movq	-0x8(%rbp), %rbx
+               	imulq	$0x3e8, %rbx, %rbx      # imm = 0x3E8
                	addq	%rbx, %rax
                	imulq	$0x7, %r9, %r9
                	addq	%r9, %rax
@@ -74,10 +73,9 @@ Disassembly of section .text:
                	movq	%r10, -0x10(%rbp)
                	movq	0x28(%rbp), %r10
                	movq	%r10, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	(%rax), %rbx
-               	movq	0x8(%rax), %rax
-               	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
+               	movq	-0x10(%rbp), %rax
+               	movq	-0x8(%rbp), %rbx
+               	imulq	$0x3e8, %rbx, %rbx      # imm = 0x3E8
                	addq	%rbx, %rax
                	movq	0x30(%rbp), %rbx
                	imulq	$0x7, %rbx, %rbx
@@ -178,8 +176,7 @@ Disassembly of section .text:
                	movq	%r10, -0x10(%rbp)
                	movq	0x38(%rbp), %r10
                	movq	%r10, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	0x8(%rax), %rax
+               	movq	-0x8(%rbp), %rax
                	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
                	movq	-0x10(%rbp), %rbx
                	addq	%rbx, %rax
@@ -233,7 +230,7 @@ Disassembly of section .text:
                	leaq	-0xd0(%rbp), %r10
                	movq	%r10, 0x10(%rcx)
                	movq	%rax, %rcx
-               	movslq	-0xd0(%rbp), %rdx
+               	movl	-0xd0(%rbp), %edx
                	cmpl	%edx, %eax
                	jge	<addr>
                	leaq	-0x18(%rbp), %rdx
@@ -251,7 +248,7 @@ Disassembly of section .text:
                	incq	%rax
                	imulq	%rax, %rdx
                	addq	%rdx, %rcx
-               	movslq	-0xd0(%rbp), %rdx
+               	movl	-0xd0(%rbp), %edx
                	cmpl	%edx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
@@ -299,20 +296,19 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	leaq	-0x30(%rbp), %rsi
-               	movq	$0xb, (%rsi)
-               	movq	$0x5, 0x8(%rsi)
-               	leaq	-0x20(%rbp), %rax
-               	movq	$0x28, (%rax)
-               	movq	$-0x2, 0x8(%rax)
-               	movq	(%rsi), %rcx
-               	movq	0x8(%rsi), %rdx
-               	imulq	$0x3e8, %rdx, %rdx      # imm = 0x3E8
-               	addq	%rdx, %rcx
-               	cmpq	$0x1393, %rcx           # imm = 0x1393
+               	movq	$0xb, -0x30(%rbp)
+               	movq	$0x5, -0x28(%rbp)
+               	movq	$0x28, -0x20(%rbp)
+               	movq	$-0x2, -0x18(%rbp)
+               	movq	-0x30(%rbp), %rax
+               	movq	-0x28(%rbp), %rcx
+               	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8
+               	addq	%rcx, %rax
+               	cmpq	$0x1393, %rax           # imm = 0x1393
                	jne	<addr>
-               	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rax
-               	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
+               	movq	-0x20(%rbp), %rax
+               	movq	-0x18(%rbp), %rcx
+               	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8
                	addq	%rcx, %rax
                	cmpq	$-0x7a8, %rax           # imm = 0xF858
                	je	<addr>
@@ -487,9 +483,7 @@ Disassembly of section .text:
                	movq	(%rsi), %rsi
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rdx, 0x8(%rax)
-               	movq	(%rax), %rax
+               	movq	%rdx, -0x8(%rbp)
                	xorq	$0x19, %rax
                	movq	%rdx, %rcx
                	xorq	$0xa, %rcx
@@ -509,9 +503,7 @@ Disassembly of section .text:
                	movq	(%rsi), %rsi
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rdx, 0x8(%rax)
-               	movq	(%rax), %rax
+               	movq	%rdx, -0x8(%rbp)
                	xorq	$0x51, %rax
                	movq	%rdx, %rcx
                	xorq	$-0x4, %rcx

@@ -1,5 +1,9 @@
 use super::*;
 
+/// Caller-saved registers an indirect call can stage its target in; see
+/// `emit_call_indirect`. The outgoing area holds it when none is free.
+pub(super) const TARGET_SCRATCH_CANDIDATES: &[u8] = &[9, 10, 11, 12, 13, 14, 15];
+
 /// AAPCS64 `va_start` (Appendix B): initialise the 32-byte `__va_list`
 /// at args[0] (args[1], `&last`, is unused; the named counts come from
 /// the prototype):
@@ -161,7 +165,15 @@ pub(super) fn emit_va_arg_cursor(
         return va_arg_result(code, dst, ap_r, frame);
     }
     let (rd, adv) = va_arg_cursor_regs(ap_r, dst, scratch);
-    let adv = adv.unwrap_or_else(|| scratch.third(frame));
+    let (adv, borrowed) = match adv {
+        Some(a) => (a, false),
+        None if frame.local_base => {
+            // x19 holds the locals base; borrow it for the advance.
+            emit(code, enc_str_pre(Reg(19), Reg(31), -16));
+            (Reg(19), true)
+        }
+        None => (scratch.third(frame), false),
+    };
     emit(code, enc_ldr_imm(rd, ap_r, 0));
     // Both cursor areas start 16-aligned, so rounding aligns the slot too.
     if desc.align > 8 {
@@ -170,6 +182,9 @@ pub(super) fn emit_va_arg_cursor(
     }
     emit(code, enc_add_imm(adv, rd, va_stride));
     emit(code, enc_str_imm(adv, ap_r, 0));
+    if borrowed {
+        emit(code, enc_ldr_post(Reg(19), Reg(31), 16));
+    }
     if desc.by_ref {
         emit(code, enc_ldr_imm(rd, rd, 0));
     }
@@ -452,7 +467,7 @@ impl CallOperands<'_> {
     /// leading [`super::named_args`] of them as named, the rest by the
     /// callee convention's variadic rules. `fixed_args` is the prototype's
     /// named parameter count.
-    fn plan(
+    pub(super) fn plan(
         &self,
         agg_descs: &[super::super::ir::AggDesc],
         abi: super::Abi,
@@ -509,7 +524,10 @@ pub(super) fn emit_call_ext(
     };
     let imp = &imports.imports[import_index];
     let plan = ops.plan(agg_descs, abi, imp.is_variadic, imp.fixed_args);
-    emit_stack_alloc(code, plan.scratch_bytes, None);
+    // The argument area at `[sp, #0]`: the reserved one, or bytes the call
+    // lowers sp by.
+    let lowered = frame.sp_lowering(plan.scratch_bytes);
+    emit_stack_alloc(code, lowered, None);
     marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     )?;
@@ -522,7 +540,7 @@ pub(super) fn emit_call_ext(
     });
     // The patcher rewrites only imm26, so the placeholder must be `bl`.
     emit(code, enc_bl(0));
-    emit_add_sp_imm(code, plan.scratch_bytes);
+    emit_add_sp_imm(code, lowered);
     if ret_agg.is_some() {
         finish_call_result(
             code,
@@ -622,7 +640,8 @@ pub(super) fn emit_call(
         return fail("Call: variadic callee not matched by a host-ABI branch");
     }
     let plan = ops.plan(agg_descs, abi, callee_is_variadic, fixed_args);
-    emit_stack_alloc(code, plan.scratch_bytes, None);
+    let lowered = frame.sp_lowering(plan.scratch_bytes);
+    emit_stack_alloc(code, lowered, None);
     marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     )?;
@@ -633,7 +652,7 @@ pub(super) fn emit_call(
         kind: BranchKind::Bl,
     });
     emit(code, enc_bl(0));
-    emit_add_sp_imm(code, plan.scratch_bytes);
+    emit_add_sp_imm(code, lowered);
     finish_call_result(
         code,
         ret_agg,
@@ -651,7 +670,8 @@ pub(super) fn emit_call(
 
 /// Point x8 at the caller's result temp before a call returning an
 /// aggregate larger than 16 bytes (AAPCS64 6.9), after `marshal_args`
-/// has set the argument registers; sp stands below the argument area.
+/// has set the argument registers; sp stands where the call lowered it
+/// ([`Frame::sp_lowering`]), which an sp-relative slot compensates.
 fn setup_indirect_result(
     code: &mut Vec<u8>,
     ret_agg: Option<u32>,
@@ -667,7 +687,8 @@ fn setup_indirect_result(
     {
         // A homogeneous aggregate over 16 bytes still returns in v-registers,
         // not through x8.
-        let slot = local_slot(ret_slot_off, func, frame).sp_lowered(plan.scratch_bytes);
+        let slot =
+            local_slot(ret_slot_off, func, frame).sp_lowered(frame.sp_lowering(plan.scratch_bytes));
         let _ = emit_frame_addr(code, Place::IntReg(8), slot, frame);
     }
 }
@@ -690,7 +711,6 @@ fn finish_call_result(
     strict_align: bool,
 ) {
     if let Some(ai) = ret_agg {
-        use super::encode::STR_X;
         // No result slot: the call's `RetPart`s read the registers.
         if ret_slot_off == 0 {
             return;
@@ -727,12 +747,23 @@ fn finish_call_result(
                 );
             }
         } else if size <= 16 {
-            let words = 1 + u32::from(size > 8);
-            let accesses = (0..words).map(|k| (STR_X, k * 8));
+            // The object's bytes alone, from x0 then x1: a copy elided into
+            // a member points the slot at storage its neighbours share.
+            let pieces = (0..size.div_ceil(8)).flat_map(|k| {
+                crate::c5::codegen::access_pieces(8 * k, (size - 8 * k).min(8), 8, false)
+            });
+            let accesses = pieces.clone().map(|(o, w)| (int_unit_ops(w).1, o));
             let (base, disp) = frame_object_base(code, slot, accesses, scratch.primary);
-            for k in 0..words {
-                let at = disp + i64::from(k * 8);
-                emit_mem(code, STR_X, k as u8, base, at, scratch.primary);
+            let mut shifted = [0u32; 2];
+            for (o, w) in pieces {
+                let (k, byte) = ((o / 8) as usize, o % 8);
+                if byte > shifted[k] {
+                    let r = Reg(k as u8);
+                    emit(code, enc_lsr_imm(r, r, ((byte - shifted[k]) * 8) as u8));
+                    shifted[k] = byte;
+                }
+                let (st, at) = (int_unit_ops(w).1, disp + i64::from(o));
+                emit_mem(code, st, k as u8, base, at, scratch.primary);
             }
         }
         return;
@@ -779,9 +810,44 @@ fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: boo
     }
 }
 
-/// A call through a function pointer: the target is captured in a
-/// caller-saved scratch the marshal does not touch (or a reserved stack
-/// cell when none is free), then `blr`.
+/// Whether the argument marshal writes neither x16 nor x17, so a call
+/// target staged there survives it: every argument already sits in its
+/// planned location, and no aggregate, stack or va_list path needs the
+/// pair.
+pub(super) fn marshal_leaves_branch_scratch(
+    plan: &super::CallPlan,
+    args: &[u32],
+    alloc: &Allocation,
+    callee_variadic: bool,
+) -> bool {
+    if callee_variadic {
+        return false;
+    }
+    plan.placements.iter().zip(args).all(|(placement, &a)| {
+        let src = alloc.places.get(a as usize).copied().unwrap_or(Place::None);
+        match placement {
+            super::ArgPlacement::IntReg(r) => matches!(src, Place::IntReg(s) if s == *r),
+            super::ArgPlacement::FpReg(r) => matches!(src, Place::FpReg(s) if s == *r),
+            _ => false,
+        }
+    })
+}
+
+/// Whether the call's indirect result routes through x8, which the
+/// address computation may reach through the scratch pair.
+pub(super) fn indirect_result_takes_x8(
+    ret_agg: Option<u32>,
+    agg_descs: &[super::super::ir::AggDesc],
+) -> bool {
+    ret_agg.is_some_and(|ai| {
+        agg_descs[ai as usize].size > 16
+            && super::abi_classify::fp_member_layout(&agg_descs[ai as usize], true).is_none()
+    })
+}
+
+/// A call through a function pointer: `blr` where the target sits when the
+/// marshal fills that register with nothing else, else from x16 / x17, a
+/// caller-saved scratch the marshal leaves, or a reserved stack cell.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_call_indirect(
     code: &mut Vec<u8>,
@@ -823,27 +889,34 @@ pub(super) fn emit_call_indirect(
     // prototype the walker could not recover.
     let mut plan = ops.plan(agg_descs, abi, callee_variadic, fixed_args);
     // A target in a register the marshal does not write is called where it
-    // is: no argument lands in it, and it is neither the scratch pair, x19,
-    // which a lowering may take as a third scratch, nor x8, which carries an
-    // indirect result's address.
+    // is: no other argument lands in it, and it is neither the scratch
+    // pair, x19, which a lowering may take as a third scratch, nor x8,
+    // which carries an indirect result's address.
     let in_place = match target_place {
-        Place::IntReg(r) if !matches!(r, 8 | 16 | 17 | 19) && !plan.int_regs().any(|p| p == r) => {
+        Place::IntReg(r)
+            if !matches!(r, 8 | 16 | 17 | 19)
+                && !plan.int_regs_besides(args, target).any(|p| p == r) =>
+        {
             Some(Reg(r))
         }
         _ => None,
     };
-    const TARGET_SCRATCH_CANDIDATES: &[u8] = &[9, 10, 11, 12, 13, 14, 15];
+    // The branch registers x16 / x17 are preferred when the marshal
+    // leaves them alone; the allocator's caller-saved pool follows.
+    let branch_scratch_free = marshal_leaves_branch_scratch(&plan, args, alloc, callee_variadic)
+        && !indirect_result_takes_x8(ret_agg, agg_descs);
     let free_target_reg = in_place.or_else(|| {
-        TARGET_SCRATCH_CANDIDATES
-            .iter()
-            .copied()
+        [16u8, 17]
+            .into_iter()
+            .filter(|_| branch_scratch_free)
+            .chain(TARGET_SCRATCH_CANDIDATES.iter().copied())
             .find(|&r| !arg_source_regs.contains(&r) && !abi.fixed_regs.has_gpr(r))
             .map(Reg)
     });
     let staged_off = match free_target_reg {
         Some(_) => None,
         None => {
-            // One 16-byte cell keeps SP 16-aligned; the argument
+            // One 16-byte cell keeps the area 16-aligned; the argument
             // slots stay below the original scratch_bytes.
             plan.scratch_bytes += 16;
             Some(plan.scratch_bytes - 16)
@@ -867,7 +940,8 @@ pub(super) fn emit_call_indirect(
             scratch.primary
         }
     };
-    emit_stack_alloc(code, plan.scratch_bytes, None);
+    let lowered = frame.sp_lowering(plan.scratch_bytes);
+    emit_stack_alloc(code, lowered, None);
     if let Some(off) = staged_off {
         emit_sp_str_x_auto(code, target_reg, off);
     }
@@ -875,17 +949,17 @@ pub(super) fn emit_call_indirect(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     )?;
     setup_indirect_result(code, ret_agg, ret_slot_off, agg_descs, func, frame, &plan);
-    // The marshal consumed every argument source, so x9 is free
-    // to carry the staged pointer to the blr.
+    // The marshal consumed every argument source, so x16 is free to
+    // carry the staged pointer to the blr.
     let call_reg = match staged_off {
         Some(off) => {
-            emit_sp_ldr_x(code, Reg(9), off);
-            Reg(9)
+            emit_sp_ldr_x(code, Reg(16), off);
+            Reg(16)
         }
         None => target_reg,
     };
     emit(code, enc_blr(call_reg));
-    emit_add_sp_imm(code, plan.scratch_bytes);
+    emit_add_sp_imm(code, lowered);
     finish_call_result(
         code,
         ret_agg,
@@ -918,21 +992,22 @@ impl CallArgs<'_> {
         place_of(self.alloc, self.args[i])
     }
 
+    /// How far the call lowered sp ([`Frame::sp_lowering`]), which an
+    /// sp-relative spill reload adds.
+    fn sp_shift(&self) -> u32 {
+        self.frame.sp_lowering(self.plan.scratch_bytes)
+    }
+
     /// Argument `i`'s value in an integer register, reloaded into `into`
-    /// when spilled, with the outgoing-argument area's sp shift applied.
+    /// when spilled, with the call's sp lowering applied.
     fn arg_int(&self, code: &mut Vec<u8>, i: usize, into: Reg) -> Option<Reg> {
-        materialize_int_shifted(
-            code,
-            self.arg_place(i),
-            into,
-            self.frame,
-            self.plan.scratch_bytes,
-        )
+        materialize_int_shifted(code, self.arg_place(i), into, self.frame, self.sp_shift())
     }
 
     /// Stack slots first: each source is read into a scratch and stored to
     /// the host-stack overflow region, preserving any source register that
-    /// a later pass touches.
+    /// a later pass touches. The region sits at `[sp + off]` in the
+    /// call's argument area.
     fn marshal_stack_args(&self, code: &mut Vec<u8>) -> Emit {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             let super::ArgPlacement::Stack(off) = placement else {
@@ -941,8 +1016,7 @@ impl CallArgs<'_> {
             let ap = self.arg_place(i);
             let bytes = self.plan.stack_widths.bytes(i);
             if let Place::FpReg(_) = ap {
-                let Some(dn) =
-                    materialize_fp_shifted(code, ap, 0u8, self.frame, self.plan.scratch_bytes)
+                let Some(dn) = materialize_fp_shifted(code, ap, 0u8, self.frame, self.sp_shift())
                 else {
                     return fail("Call: FP stack arg not fp reg / spill");
                 };
@@ -1044,9 +1118,7 @@ impl CallArgs<'_> {
             if let Place::FpReg(_) = ap {
                 continue;
             }
-            let Some(src) =
-                materialize_fp_shifted(code, ap, r, self.frame, self.plan.scratch_bytes)
-            else {
+            let Some(src) = materialize_fp_shifted(code, ap, r, self.frame, self.sp_shift()) else {
                 return fail("Call: FP arg not fp reg / spill");
             };
             if src != r {

@@ -151,21 +151,20 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x200(%rbp), %rax
-               	cmpq	$0x0, (%rax)
+               	cmpq	$0x0, -0x200(%rbp)
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
                	leave
                	retq
-               	movq	0x1f8(%rax), %rcx
-               	cmpq	$0x3f, %rcx
+               	movq	-0x8(%rbp), %rax
+               	cmpq	$0x3f, %rax
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx
                	leave
                	retq
-               	movq	0xb8(%rax), %rax
+               	movq	-0x148(%rbp), %rax
                	cmpq	$0x17, %rax
                	je	<addr>
                	movl	$0x5, %eax

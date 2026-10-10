@@ -205,14 +205,14 @@ fn ent_pc=11 n_params=2 variadic=false locals=4
     v11  Mzero { dst=v10, size=16, align=8 }              -> -
     v12  LocalAddr(-4)                                    -> x2
     v13  BinopI { op=add, lhs=v7, rhs_imm=8 }             -> x2
-    v14  Load { addr=v7, disp=8, kind=I64 }               -> x2
+    v14  LoadLocal { off=-4, disp=8, kind=I64 }           -> x2
     v15  LocalAddr(-2)                                    -> x7
-    v16  Store { addr=v10, disp=0, value=v14, kind=I64 }  -> -
+    v16  StoreLocal { off=-2, value=v14, kind=I64 }       -> -
     v17  LocalAddr(-4)                                    -> x2
-    v18  Load { addr=v7, disp=0, kind=I64 }               -> x2
+    v18  LoadLocal { off=-4, kind=I64 }                   -> x2
     v19  LocalAddr(-2)                                    -> x7
     v20  BinopI { op=add, lhs=v10, rhs_imm=8 }            -> x7
-    v21  Store { addr=v10, disp=8, value=v18, kind=I64 }  -> -
+    v21  StoreLocal { off=-2, disp=8, value=v18, kind=I64 } -> -
     terminator Bz { cond=v3, target=b3, fall=b1 }   (exit_acc=v3)
   block 1  start_pc=0
     v22  LocalAddr(-4)                                    -> x1

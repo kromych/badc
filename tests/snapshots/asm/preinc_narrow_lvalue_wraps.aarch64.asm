@@ -19,11 +19,10 @@ Disassembly of section .text:
                	add	x29, sp, #0x20
                	mov	x0, #0xff               // =255
                	sturb	w0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	ldrb	w1, [x0]
-               	add	x1, x1, #0x1
-               	strb	w1, [x0]
-               	ldrb	w0, [x0]
+               	ldurb	w0, [x29, #-0x8]
+               	add	x0, x0, #0x1
+               	sturb	w0, [x29, #-0x8]
+               	ldurb	w0, [x29, #-0x8]
                	cbnz	w0, <addr>
                	ldurb	w0, [x29, #-0x8]
                	cbnz	w0, <addr>

@@ -997,6 +997,41 @@ fn x86_high_byte_modifier_names_the_legacy_high_register() {
     );
 }
 
+/// Statements whose operands bind directly but lack a register more often
+/// than the two scratch registers a site reserves ahead of the allocation
+/// cover -- constants and a static address while the argument registers
+/// hold live parameters, inputs reaching the statement from spill slots --
+/// emit under both x86-64 conventions at `-O0` and `-O`: where the coloring
+/// leaves too few scratch registers free, the allocator reserves each such
+/// statement's whole need. Under System V the store's third scratch is
+/// r9, which the sixth parameter leaves.
+#[cfg(feature = "native-emit")]
+#[test]
+fn x86_bound_operands_past_the_reserved_scratch_emit() {
+    use crate::{NativeOptions, Target};
+    let src = include_str!("../../../tests/fixtures/c/inline_asm_x64_bound_scratch_pressure.c");
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        for optimize in [false, true] {
+            let program = crate::Compiler::with_options(
+                src.to_string(),
+                target,
+                crate::CompileOptions::default().with_optimize(optimize),
+            )
+            .compile()
+            .expect("compile");
+            let options = NativeOptions {
+                optimize,
+                ..NativeOptions::default()
+            };
+            crate::c5::object::emit_native_single_tu_for_test(&program, target, options)
+                .unwrap_or_else(|e| panic!("{target:?}, optimize {optimize}: {e}"));
+        }
+    }
+    // movq %r10, (%r11,%r9,8)
+    let store = [0x4F, 0x89, 0x14, 0xCB];
+    assert!(has_encoding(&x64_image(src, true), &store, None));
+}
+
 // Emits a native image, so it needs `native-emit`.
 #[cfg(feature = "native-emit")]
 #[test]

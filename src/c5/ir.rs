@@ -120,25 +120,30 @@ pub(crate) enum Inst {
         align: u8,
     },
     /// Load from a local / parameter slot. Equivalent to a
-    /// `LocalAddr(off)` followed by `Load { kind }`, but
+    /// `LocalAddr(off)` followed by `Load { disp, kind }`, but
     /// represented as a single instruction so the per-arch emit
     /// folds the address into the load's addressing mode and
     /// the allocator does not need to assign a register to the
-    /// intermediate address. `volatile` as for [`Self::Load`]; a
+    /// intermediate address. `disp` as for [`Self::Load`], possibly past
+    /// the slot's own cell; the slot-address fold sets it after the
+    /// slot-level passes. `volatile` as for [`Self::Load`]; a
     /// slot with any volatile access also stays out of mem2reg
     /// promotion and slot coalescing.
     LoadLocal {
         off: i64,
+        disp: i32,
         kind: LoadKind,
         volatile: bool,
     },
     /// Store to a local / parameter slot. Same shape as
     /// [`Self::Store`] but with the address represented as a
     /// constant slot offset, so the emit folds it into the
-    /// store's addressing mode. `nsw`: `value` overflowed undefined
+    /// store's addressing mode. `disp` as for [`Self::LoadLocal`];
+    /// `nsw`: `value` overflowed undefined
     /// (C99 6.5p5); promotion leaves a marked [`Self::Extend`] instead.
     StoreLocal {
         off: i64,
+        disp: i32,
         value: ValueId,
         kind: StoreKind,
         volatile: bool,
@@ -345,6 +350,8 @@ pub(crate) enum Inst {
         /// The width of each argument narrower than 8 bytes: a named
         /// parameter's type, past the prototype the promoted argument's.
         arg_widths: ArgWidths,
+        /// The calling convention the callee's declaration names.
+        callee_conv: crate::c5::codegen::CallConv,
         /// Host-ABI aggregate metadata. Parallel to `args`:
         /// `arg_aggs[k] = Some(i)` marks `args[k]` as the address of
         /// an aggregate laid out by the function's `agg_descs[i]`,
@@ -542,10 +549,11 @@ pub(crate) enum Inst {
         asm: alloc::boxed::Box<AsmBlock>,
         args: Vec<ValueId>,
     },
-    /// Marks the function as using `alloca` / VLAs when the slot is
-    /// non-zero (the parser's reserved slot index): the body moves sp
-    /// at runtime, so the codegen switches spill addressing to the
-    /// frame pointer. Zero means no alloca. Produces no SSA value.
+    /// Marks the function as using `alloca` / VLAs when non-zero: the
+    /// frame slot the parser reserves for the alloca bookkeeping, a
+    /// negative offset like every slot reference. The body moves sp at
+    /// runtime, so the codegen switches spill addressing to the frame
+    /// pointer. Zero means no alloca. Produces no SSA value.
     AllocaInit(i64),
     /// End of the lifetime of the automatic object based at this frame
     /// slot (C99 6.2.4p2): control has left the block the object was
@@ -680,6 +688,18 @@ impl Inst {
     /// emitted instructions leaves it out.
     pub(crate) fn is_lifetime_marker(&self) -> bool {
         matches!(self, Inst::LifetimeEnd(_))
+    }
+
+    /// The convention a call's callee follows, the target's own for a
+    /// library import.
+    pub(crate) fn call_conv(&self) -> Option<crate::c5::codegen::CallConv> {
+        match self {
+            Inst::Call { callee_conv, .. } | Inst::CallIndirect { callee_conv, .. } => {
+                Some(*callee_conv)
+            }
+            Inst::CallExt { .. } => Some(crate::c5::codegen::CallConv::Target),
+            _ => None,
+        }
     }
 
     /// Variant name for diagnostics. Exhaustive so a new variant is
@@ -1989,6 +2009,8 @@ pub(crate) struct FunctionSsa {
     /// arguments from that convention's registers and the allocator
     /// takes its callee-saved banks; see [`crate::c5::codegen::CallConv`].
     pub conv: crate::c5::codegen::CallConv,
+    /// `-mno-sse` / `-mgeneral-regs-only`: no vector register is used.
+    pub general_regs_only: bool,
     /// True when the definition binds STB_WEAK: `__attribute__((weak))` on
     /// the function or one of its declarations, or a file-scope asm `.weak`
     /// naming it. A strong definition in another object replaces it at link
@@ -2407,8 +2429,14 @@ impl crate::c5::layout::DataOffsets for Inst {
     fn remap_data_offsets(&mut self, r: &dyn crate::c5::layout::DataRemap) {
         match self {
             // The only `.data` offset the IR holds; an interior address is a
-            // separate add, so the payload is always an object base.
-            Inst::ImmData(off) => crate::c5::layout::remap_self(off, r),
+            // separate add, so the payload is always an object base. A dropped
+            // object's becomes `Imm(0)`, not a placeholder `ImmData` would merge.
+            Inst::ImmData(off) => {
+                let off = *off;
+                if r.in_data(off) {
+                    *self = r.remap(off, off).map_or(Inst::Imm(0), Inst::ImmData);
+                }
+            }
             Inst::Imm { .. }
             | Inst::Undef
             | Inst::ImmCode { .. }
@@ -2477,6 +2505,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             is_naked: _,
             is_noreturn: _,
             conv: _,
+            general_regs_only: _,
             is_weak: _,
             is_internal: _,
             section: _,
@@ -2519,9 +2548,16 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
         for i in insts.iter_mut() {
             i.remap_data_offsets(r);
         }
-        for l in label_data_relocs.iter_mut() {
-            crate::c5::layout::remap_self_u64(&mut l.data_offset, r);
-        }
+        // A `&&label` slot follows its object's base or goes with the object.
+        label_data_relocs.retain_mut(|l| {
+            let off = l.data_offset as i64;
+            if !r.in_data(off) {
+                return true;
+            }
+            r.remap(off, off)
+                .map(|new| l.data_offset = new as u64)
+                .is_some()
+        });
     }
 }
 
@@ -2576,6 +2612,7 @@ mod tests {
             (
                 Inst::StoreLocal {
                     off: 0,
+                    disp: 0,
                     value: 3,
                     kind: StoreKind::I64,
                     volatile: false,

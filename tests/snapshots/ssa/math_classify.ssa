@@ -464,12 +464,12 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v455 Imm(2)                                           -> x0
     terminator Jmp(b75)   (exit_acc=v455)
   block 75  start_pc=0
-    v457 Phi { incoming=[b74:v455, b77:v456], kind=I64 }  -> x0
-    v458 Extend { value=v457, kind=I32 }                  -> x1
+    v457 Phi { incoming=[b74:v455, b77:v456], kind=I64 }  -> -
+    v458 Extend { value=v457, kind=I32 }                  -> x0
     v459 LifetimeEnd(-1)                                  -> -
     terminator Jmp(b76)   (exit_acc=v457)
   block 76  start_pc=0
-    v479 Phi { incoming=[b75:v457, b81:v476], kind=I64 }  -> x0
+    v479 Phi { incoming=[b75:v457, b81:v476], kind=I64 }  -> -
     v480 Extend { value=v479, kind=I32 }                  -> x0
     v481 Imm(1)                                           -> x0
     v482 Imm(14)                                          -> x0
@@ -487,8 +487,8 @@ fn ent_pc=13 n_params=0 variadic=false locals=1
     v474 Imm(1)                                           -> x0
     terminator Jmp(b81)   (exit_acc=v474)
   block 81  start_pc=0
-    v476 Phi { incoming=[b80:v474, b82:v475], kind=I64 }  -> x0
-    v477 Extend { value=v476, kind=I32 }                  -> x1
+    v476 Phi { incoming=[b80:v474, b82:v475], kind=I64 }  -> -
+    v477 Extend { value=v476, kind=I32 }                  -> x0
     v478 LifetimeEnd(-1)                                  -> -
     terminator Jmp(b76)   (exit_acc=v476)
   block 82  start_pc=0

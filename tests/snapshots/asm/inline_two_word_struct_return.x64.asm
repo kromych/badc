@@ -41,42 +41,42 @@ Disassembly of section .text:
                	cmpl	$0x8, %eax
                	jl	<addr>
                	leaq	-0x80(%rbp), %rax
-               	movslq	(%rax), %rcx
-               	movq	0x8(%rax), %rdx
+               	movslq	-0x80(%rbp), %rcx
+               	movq	-0x78(%rbp), %rdx
                	addq	%rdx, %rcx
-               	movslq	0x10(%rax), %rdx
+               	movslq	-0x70(%rbp), %rdx
                	leaq	0x10(%rax), %rsi
                	movq	0x8(%rsi), %rsi
                	addq	%rsi, %rdx
                	addq	%rdx, %rcx
-               	movslq	0x20(%rax), %rdx
-               	leaq	0x20(%rax), %rsi
-               	movq	0x8(%rsi), %rsi
-               	addq	%rsi, %rdx
-               	addq	%rdx, %rcx
-               	movslq	0x30(%rax), %rdx
+               	movslq	-0x60(%rbp), %rdx
+               	addq	$0x20, %rax
+               	movq	0x8(%rax), %rax
+               	addq	%rdx, %rax
+               	addq	%rax, %rcx
+               	movslq	-0x50(%rbp), %rdx
                	leaq	-0x80(%rbp), %rax
                	leaq	0x30(%rax), %rsi
                	movq	0x8(%rsi), %rsi
                	addq	%rsi, %rdx
                	addq	%rdx, %rcx
-               	movslq	0x40(%rax), %rdx
+               	movslq	-0x40(%rbp), %rdx
                	leaq	0x40(%rax), %rsi
                	movq	0x8(%rsi), %rsi
                	addq	%rsi, %rdx
                	addq	%rdx, %rcx
-               	movslq	0x50(%rax), %rdx
-               	leaq	0x50(%rax), %rsi
-               	movq	0x8(%rsi), %rsi
-               	addq	%rsi, %rdx
-               	addq	%rdx, %rcx
-               	movslq	0x60(%rax), %rdx
+               	movslq	-0x30(%rbp), %rdx
+               	addq	$0x50, %rax
+               	movq	0x8(%rax), %rax
+               	addq	%rdx, %rax
+               	addq	%rax, %rcx
+               	movslq	-0x20(%rbp), %rdx
                	leaq	-0x80(%rbp), %rax
                	leaq	0x60(%rax), %rsi
                	movq	0x8(%rsi), %rsi
                	addq	%rsi, %rdx
                	addq	%rdx, %rcx
-               	movslq	0x70(%rax), %rdx
+               	movslq	-0x10(%rbp), %rdx
                	addq	$0x70, %rax
                	movq	0x8(%rax), %rax
                	addq	%rdx, %rax

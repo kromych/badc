@@ -16,27 +16,27 @@ Disassembly of section .text:
 <apply>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x9, x0
+               	mov	x2, x0
                	mov	x0, x1
-               	blr	x9
+               	blr	x2
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <apply_bare>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x9, x0
+               	mov	x2, x0
                	mov	x0, x1
-               	blr	x9
+               	blr	x2
                	ldp	x29, x30, [sp], #0x10
                	ret
 
 <passthrough>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x9, x0
+               	mov	x2, x0
                	mov	x0, x1
-               	blr	x9
+               	blr	x2
                	ldp	x29, x30, [sp], #0x10
                	ret
 

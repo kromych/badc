@@ -72,6 +72,7 @@ pub(crate) fn spliced_slots(callee: &FunctionSsa) -> BTreeSet<i64> {
 fn slot_load(off: i64) -> Inst {
     Inst::LoadLocal {
         off,
+        disp: 0,
         kind: LoadKind::V128,
         volatile: false,
     }
@@ -80,6 +81,7 @@ fn slot_load(off: i64) -> Inst {
 fn slot_store(off: i64, value: ValueId) -> Inst {
     Inst::StoreLocal {
         off,
+        disp: 0,
         value,
         kind: StoreKind::V128,
         volatile: false,
@@ -145,10 +147,11 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
             }
             Inst::LoadLocal {
                 off,
+                disp,
                 kind,
                 volatile,
             } => {
-                let whole = kind == LoadKind::V128 && !volatile;
+                let whole = disp == 0 && kind == LoadKind::V128 && !volatile;
                 reject.extend(covering(off).filter(|&b| b != off || !whole));
                 if whole && slots.contains(&off) {
                     reads.insert(off);
@@ -157,11 +160,12 @@ fn eligible(func: &FunctionSsa, spliced: bool) -> BTreeSet<i64> {
             }
             Inst::StoreLocal {
                 off,
+                disp,
                 kind,
                 volatile,
                 ..
             } => {
-                let whole = kind == StoreKind::V128 && !volatile;
+                let whole = disp == 0 && kind == StoreKind::V128 && !volatile;
                 reject.extend(covering(off).filter(|&b| b != off || !whole));
                 if whole && slots.contains(&off) {
                     simd.insert(off);

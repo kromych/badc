@@ -28,8 +28,7 @@ Disassembly of section .text:
 <worker>:
                	movl	$0x1, %eax
                	movl	%edi, %ecx
-               	movq	%rax, %r9
-               	shlq	%cl, %r9
+               	shlxq	%rcx, %rax, %r9
                	xorl	%r8d, %r8d
                	leaq	<rip>, %rdi      # <addr>
                	movq	(%rdi), %rcx
@@ -163,20 +162,16 @@ Disassembly of section .text:
                	callq	*%rbx
                	testl	%eax, %eax
                	jne	<addr>
-               	leaq	-0x20(%rbp), %rax
-               	movq	(%rax), %rdi
+               	movq	-0x20(%rbp), %rdi
                	xorl	%esi, %esi
                	callq	*%r12
-               	leaq	-0x20(%rbp), %rax
-               	movq	0x8(%rax), %rdi
+               	movq	-0x18(%rbp), %rdi
                	xorl	%esi, %esi
                	callq	*%r12
-               	leaq	-0x20(%rbp), %rax
-               	movq	0x10(%rax), %rdi
+               	movq	-0x10(%rbp), %rdi
                	xorl	%esi, %esi
                	callq	*%r12
-               	leaq	-0x20(%rbp), %rax
-               	movq	0x18(%rax), %rdi
+               	movq	-0x8(%rbp), %rdi
                	xorl	%esi, %esi
                	callq	*%r12
                	xorl	%eax, %eax

@@ -31,8 +31,7 @@ Disassembly of section .text:
                	cvtsi2sd	%rax, %xmm0
                	movabsq	$0x400f333333333333, %rcx # imm = 0x400F333333333333
                	movq	%rcx, %xmm15
-               	movapd	%xmm0, %xmm1
-               	addsd	%xmm15, %xmm1
+               	vaddsd	%xmm15, %xmm0, %xmm1
                	cvttsd2si	%xmm1, %rcx
                	cmpq	$0xd, %rcx
                	je	<addr>
@@ -40,8 +39,7 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x4004000000000000, %rcx # imm = 0x4004000000000000
                	movq	%rcx, %xmm15
-               	movapd	%xmm0, %xmm1
-               	subsd	%xmm15, %xmm1
+               	vsubsd	%xmm15, %xmm0, %xmm1
                	cvttsd2si	%xmm1, %rdx
                	cmpq	$0x7, %rdx
                	je	<addr>
@@ -59,8 +57,7 @@ Disassembly of section .text:
                	cvtsi2sd	%rcx, %xmm0
                	movabsq	$0x4008000000000000, %rcx # imm = 0x4008000000000000
                	movq	%rcx, %xmm15
-               	movapd	%xmm0, %xmm1
-               	divsd	%xmm15, %xmm1
+               	vdivsd	%xmm15, %xmm0, %xmm1
                	cvttsd2si	%xmm1, %rdx
                	cmpq	$0x21, %rdx
                	je	<addr>
@@ -121,8 +118,7 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x40494ccccccccccd, %rdx # imm = 0x40494CCCCCCCCCCD
                	movq	%rdx, %xmm15
-               	movapd	%xmm0, %xmm1
-               	addsd	%xmm15, %xmm1
+               	vaddsd	%xmm15, %xmm0, %xmm1
                	cvttsd2si	%xmm1, %rdx
                	movswq	%dx, %rdx
                	cmpl	$0x96, %edx
@@ -130,9 +126,9 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	retq
                	movabsq	$0x3ff0000000000000, %rdx # imm = 0x3FF0000000000000
+               	movq	%rdx, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rdx, %xmm1
-               	divsd	%xmm15, %xmm1
+               	vdivsd	%xmm15, %xmm14, %xmm1
                	addsd	%xmm1, %xmm0
                	cvttsd2si	%xmm0, %rcx
                	cmpq	$0x64, %rcx
@@ -143,9 +139,8 @@ Disassembly of section .text:
                	movl	$0x3, %edx
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rdx, %xmm0
-               	movapd	%xmm0, %xmm15
-               	movq	%rcx, %xmm0
-               	addsd	%xmm15, %xmm0
+               	movq	%rcx, %xmm14
+               	vaddsd	%xmm0, %xmm14, %xmm0
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
                	movq	%rcx, %xmm15
                	mulsd	%xmm15, %xmm0

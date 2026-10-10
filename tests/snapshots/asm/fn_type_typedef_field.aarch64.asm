@@ -36,16 +36,13 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
-               	sub	x0, x29, #0x10
-               	str	x1, [x0, #0x8]
-               	ldr	x0, [x0]
+               	stur	x1, [x29, #-0x8]
                	cmp	x0, #0x5
                	b.ne	<addr>
                	mov	x0, #0x5                // =5
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
-               	sub	x0, x29, #0x10
-               	str	x1, [x0, #0x8]
+               	stur	x1, [x29, #-0x8]
                	cmp	x1, #0xa
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

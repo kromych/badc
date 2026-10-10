@@ -62,7 +62,7 @@ Disassembly of section .text:
                	incq	%rax
                	movl	%eax, (%rcx)
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x4, %eax
@@ -118,7 +118,7 @@ Disassembly of section .text:
                	movslq	-0x10(%rbp), %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movslq	-0x8(%rbp), %rax
+               	movl	-0x8(%rbp), %eax
                	jmp	<addr>
                	leaq	<rip>, %rax
                	jmp	<addr>

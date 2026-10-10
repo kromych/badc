@@ -252,6 +252,9 @@ fn collect_uses(func: &FunctionSsa, layout: &Layout, cand: &[bool], reads: &[boo
     for (b, block) in func.blocks.iter().enumerate() {
         let b = b as BlockId;
         for idx in block.inst_range.clone() {
+            if !reads[idx as usize] {
+                continue;
+            }
             let inst = &func.insts[idx as usize];
             if let Inst::Phi { incoming, kind } = inst {
                 for &(pred, v) in incoming {
@@ -265,9 +268,6 @@ fn collect_uses(func: &FunctionSsa, layout: &Layout, cand: &[bool], reads: &[boo
                         });
                     }
                 }
-                continue;
-            }
-            if !reads[idx as usize] {
                 continue;
             }
             for_each_operand(inst, |v| {
@@ -505,6 +505,7 @@ mod tests {
 
     fn store_of(value: ValueId) -> Inst {
         Inst::StoreLocal {
+            disp: 0,
             off: -1,
             value,
             kind: StoreKind::I64,
@@ -615,6 +616,7 @@ mod tests {
             fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
             low_word_args: 0,
             arg_widths: crate::c5::ir::ArgWidths::default(),
+            callee_conv: crate::c5::codegen::CallConv::Target,
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
@@ -754,7 +756,7 @@ mod tests {
             split_across_calls(&mut f, Target::LinuxAarch64);
             let new = imms(&f, 5);
             let stores: Vec<ValueId> = (0..f.insts.len() as ValueId)
-                .filter(|&i| matches!(f.insts[i as usize], Inst::StoreLocal { .. }))
+                .filter(|&i| matches!(f.insts[i as usize], Inst::StoreLocal { disp: 0, .. }))
                 .map(|i| stored(&f, i))
                 .collect();
             if call_in_b1 {
@@ -862,6 +864,39 @@ mod tests {
             panic!("{:?}", f.insts[5]);
         };
         assert_eq!(incoming, &[(0, 2), (1, 4)]);
+    }
+
+    /// `b0: k; store k; call; branch` -- `b1: k2` -- `b2: phi(k from b0,
+    /// k2 from b1)` with the phi unread: its edge moves are dropped, so
+    /// its income past the call asks for no definition, and the store
+    /// ahead of the call keeps the original.
+    #[test]
+    fn a_dead_phi_income_asks_for_no_definition() {
+        let mut f = func_with(
+            vec![
+                Inst::Imm(5),
+                store_of(0),
+                call_of(vec![]),
+                Inst::Imm(1),
+                Inst::Imm(6),
+                phi(vec![(0, 0), (1, 4)]),
+            ],
+            vec![
+                block(
+                    0..4,
+                    Terminator::Bz {
+                        cond: 3,
+                        target: 2,
+                        fall_through: 1,
+                    },
+                ),
+                block(4..5, Terminator::Jmp(2)),
+                block(5..6, Terminator::Return(NO_VALUE)),
+            ],
+        );
+        split_across_calls(&mut f, Target::LinuxAarch64);
+        assert_eq!(imms(&f, 5), vec![0], "{:?}", f.insts);
+        assert_eq!(f.insts.len(), 6);
     }
 
     /// `b0: k; call; branch` -- `b1: k2` -- `b3: (empty)` -- `b2: phi(k

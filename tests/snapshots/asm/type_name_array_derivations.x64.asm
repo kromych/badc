@@ -112,21 +112,21 @@ Disassembly of section .text:
                	movl	$0x5, -0x38(%rbp)
                	leaq	-0x38(%rbp), %rax
                	movq	%rax, -0x30(%rbp)
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x15, %eax
                	leave
                	retq
                	movq	-0x30(%rbp), %rax
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x16, %eax
                	leave
                	retq
                	movq	-0x30(%rbp), %rax
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x17, %eax
@@ -134,9 +134,9 @@ Disassembly of section .text:
                	retq
                	movabsq	$0x4022000000000000, %rcx # imm = 0x4022000000000000
                	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm0
-               	divsd	%xmm15, %xmm0
+               	vdivsd	%xmm15, %xmm14, %xmm0
                	movabsq	$0x4012000000000000, %rcx # imm = 0x4012000000000000
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0

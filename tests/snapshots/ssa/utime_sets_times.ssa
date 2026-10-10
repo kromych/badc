@@ -6,7 +6,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=18
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(80)                                      -> x7
     v2   LocalAddr(-18)                                   -> x6
-    v3   CallExt { binding_idx=145, args=[v1, v2], fp_arg_mask=0x0 } -> x0
+    v3   CallExt { binding_idx=146, args=[v1, v2], fp_arg_mask=0x0 } -> x0
     v4   BinopI { op=ne, lhs=v3, rhs_imm=0 }              -> x1
     terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v4)
   block 1  start_pc=0
@@ -15,8 +15,8 @@ fn ent_pc=7 n_params=0 variadic=false locals=18
     terminator Return(v5)   (exit_acc=v5)
   block 2  start_pc=0
     v7   LocalAddr(-18)                                   -> x0
-    v8   BinopI { op=add, lhs=v7, rhs_imm=88 }            -> x1
-    v9   Load { addr=v7, disp=88, kind=I64 }              -> x0
+    v8   BinopI { op=add, lhs=v7, rhs_imm=88 }            -> x0
+    v9   LoadLocal { off=-18, disp=88, kind=I64 }         -> x0
     v10  LifetimeEnd(-18)                                 -> -
     terminator Return(v9)   (exit_acc=v9)
 ; --- SSA dump (ok=true) ent_pc=8 ---
@@ -26,7 +26,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(8)                                       -> x7
-    v2   CallExt { binding_idx=87, args=[v1], fp_arg_mask=0x0 } -> x3
+    v2   CallExt { binding_idx=88, args=[v1], fp_arg_mask=0x0 } -> x3
     v3   Imm(0)                                           -> x0
     v4   LocalAddr(-2)                                    -> x0
     v5   ImmData(16)                                      -> x1
@@ -38,7 +38,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     terminator Bnz { cond=v2, target=b13, fall=b1 }   (exit_acc=v10)
   block 1  start_pc=0
     v11  ImmData(32)                                      -> x7
-    v12  CallExt { binding_idx=87, args=[v11], fp_arg_mask=0x0 } -> x3
+    v12  CallExt { binding_idx=88, args=[v11], fp_arg_mask=0x0 } -> x3
     v13  Imm(0)                                           -> x0
     terminator Jmp(b2)   (exit_acc=v12)
   block 2  start_pc=0
@@ -57,8 +57,8 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     v22  ImmData(42)                                      -> x0
     v23  Imm(0)                                           -> x0
     v24  Imm(0)                                           -> x7
-    v25  CallExt { binding_idx=118, args=[v24], fp_arg_mask=0x0 } -> x12
-    v26  CallExt { binding_idx=97, args=[], fp_arg_mask=0x0 } -> x9
+    v25  CallExt { binding_idx=119, args=[v24], fp_arg_mask=0x0 } -> x12
+    v26  CallExt { binding_idx=98, args=[], fp_arg_mask=0x0 } -> x9
     v27  ImmData(80)                                      -> x7
     v28  Imm(512)                                         -> x6
     v29  ImmData(42)                                      -> x2
@@ -78,7 +78,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     v39  CallExt { binding_idx=16, args=[v33], fp_arg_mask=0x0 } -> x0
     v40  ImmData(80)                                      -> x7
     v41  LocalAddr(-2)                                    -> x6
-    v42  CallExt { binding_idx=287, args=[v40, v41], fp_arg_mask=0x0 } -> x0
+    v42  CallExt { binding_idx=288, args=[v40, v41], fp_arg_mask=0x0 } -> x0
     v43  BinopI { op=ne, lhs=v42, rhs_imm=0 }             -> x1
     terminator Bz { cond=v42, target=b9, fall=b7 }   (exit_acc=v43)
   block 7  start_pc=0
@@ -92,7 +92,7 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
   block 8  start_pc=0
     v58  Phi { incoming=[b11:v64, b10:v56, b7:v44], kind=I64 } -> x3
     v59  ImmData(80)                                      -> x7
-    v60  CallExt { binding_idx=166, args=[v59], fp_arg_mask=0x0 } -> x0
+    v60  CallExt { binding_idx=167, args=[v59], fp_arg_mask=0x0 } -> x0
     v61  Extend { value=v58, kind=I32 }                   -> x0
     v62  Extend { value=v58, kind=I32 }                   -> x0
     v63  LifetimeEnd(-2)                                  -> -

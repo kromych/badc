@@ -50,7 +50,7 @@ pub(crate) struct Frame {
     /// time (`alloca`, C99 6.7.6.2 VLA), the prologue realigns it, or an
     /// inline asm statement may leave it moved (`AsmBlock::may_move_sp`), as
     /// a stack switch does. Spill slots and locals are addressed through fp,
-    /// and each return re-establishes sp from fp.
+    /// and each return's teardown takes sp from fp.
     pub dynamic_sp: bool,
     /// Alignment the prologue forces on sp for automatic objects aligned
     /// above 16 (C11 6.7.5), or 0. The realigned region sits below the static
@@ -70,6 +70,40 @@ pub(crate) struct Frame {
     /// there. Slot `off` lives at `[sp + frame_bytes + asm_scratch_off + off]`,
     /// fp-based when `dynamic_sp`.
     pub asm_scratch_off: i64,
+    /// The outgoing argument area at the frame bottom, shared by the call
+    /// sites and the binary128 conversion sequences; 0 where sp may move
+    /// during the body, and then each site lowers sp for its own
+    /// ([`Frame::sp_lowering`]).
+    pub outgoing_bytes: u32,
+    /// x19 holds the frame bottom (`mov x19, sp` after the prologue), so
+    /// far locals, spills and inline-asm slots address from it in one
+    /// instruction. The modulo and cursor `va_arg` lowerings that take x19
+    /// as a third scratch push and pop it around the use.
+    pub local_base: bool,
+}
+
+impl Frame {
+    /// sp keeps its prologue value across the body and the prologue
+    /// reserved the outgoing argument area at `[sp, #0]`.
+    pub(crate) fn reserves_outgoing(self) -> bool {
+        !self.dynamic_sp && self.outgoing_bytes != 0
+    }
+
+    /// How far a call or binary128 sequence lowers sp to find its `need`
+    /// bytes at `[sp, #0]`: not at all where the area is reserved, by
+    /// `need` where it is not -- a dynamic frame, or a leaf without a
+    /// frame whose inline asm may move sp.
+    pub(crate) fn sp_lowering(self, need: u32) -> u32 {
+        if !self.reserves_outgoing() {
+            return need;
+        }
+        debug_assert!(
+            need <= self.outgoing_bytes,
+            "ICE: a site needs {need} outgoing bytes, the frame reserved {}",
+            self.outgoing_bytes
+        );
+        0
+    }
 }
 
 pub(crate) fn compute_frame(
@@ -77,6 +111,7 @@ pub(crate) fn compute_frame(
     alloc: &Allocation,
     abi: super::Abi,
     target: Target,
+    max_call_scratch: u32,
 ) -> Frame {
     let base = super::ssa::emit_common::compute_frame_base(func, alloc);
     let (declared_locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
@@ -86,7 +121,22 @@ pub(crate) fn compute_frame(
     let canary_bytes = super::ssa::emit_common::canary_bytes(func, &base, abi.stack_protect);
     let locals_bytes = declared_locals_bytes + canary_bytes;
     let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
-    let uses_x19 = writes_x19(func, alloc, abi);
+    let dynamic_sp = super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 16;
+    // The parameter cells sit below the locals, whose offsets they leave
+    // alone; every region below them shifts by their size.
+    let param_cells_bytes = param_cells_bytes(func, alloc, abi);
+    let upper_bytes = locals_bytes + param_cells_bytes;
+    // x19 becomes the locals base only where sp moves at run time, the
+    // prologue-end sp is a constant distance from fp (no realignment),
+    // nothing in the body overwrites x19, and the one-instruction forms
+    // pay for the register's save, restore and capture.
+    let writes_third_scratch = writes_x19(func, alloc, abi);
+    let local_base = !x19_overwritten(func, abi.fixed_regs)
+        && (super::ssa::emit_common::uses_dynamic_alloca(func) || func.has_sp_moving_asm())
+        && func.frame_align <= 16
+        && !abi.fixed_regs.has_gpr(19)
+        && local_base_wins(func, alloc, canary_bytes, upper_bytes) >= 4;
+    let uses_x19 = writes_third_scratch || local_base;
     let x19_save_bytes = if uses_x19 { 16u32 } else { 0 };
     // A region aligned exactly 16 joins the static frame between the spill
     // region and the saved registers; above 16 the prologue realigns sp.
@@ -99,18 +149,26 @@ pub(crate) fn compute_frame(
     } else {
         asm_scratch_bytes(func, alloc, abi.fixed_regs)
     };
-    // The parameter cells sit below the locals, whose offsets they leave
-    // alone; every region below them shifts by their size.
-    let param_cells_bytes = param_cells_bytes(func, alloc, abi);
-    let upper_bytes = locals_bytes + param_cells_bytes;
+    // The outgoing area joins the static frame only while sp keeps its
+    // prologue value across the body: `alloca`/VLA, the sp realignment
+    // and an inline asm statement that may move sp leave it elsewhere, and
+    // a callee reads its stack arguments at the call-time sp.
+    let outgoing_bytes = if dynamic_sp || func.has_sp_moving_asm() {
+        0
+    } else {
+        max_call_scratch
+    };
+    // The outgoing area sits at the very bottom, below the saved
+    // registers, so `[sp + off]` addresses it at the call sites while the
+    // other regions keep their fp-relative offsets.
     let frame_bytes = upper_bytes
         + alloc_spill_bytes
         + saved_gpr_bytes
         + saved_fpr_bytes
         + x19_save_bytes
         + asm_bytes
-        + static_region_bytes;
-    let dynamic_sp = super::ssa::emit_common::uses_dynamic_alloca(func) || func.frame_align > 16;
+        + static_region_bytes
+        + outgoing_bytes;
     // A host variadic callee reserves its register save area above the
     // saved fp/lr, where its top edge meets the caller's stack arguments:
     // the Windows cursor `va_list` walks the two as one region. Windows on
@@ -144,6 +202,7 @@ pub(crate) fn compute_frame(
             asm_scratch: asm_bytes,
             canary: canary_bytes,
             aligned: static_region_bytes,
+            outgoing: outgoing_bytes,
         },
         param_cells_bytes,
         param_cells_off: if param_cells_bytes > 0 {
@@ -175,10 +234,238 @@ pub(crate) fn compute_frame(
         } else {
             0
         },
+        outgoing_bytes,
+        local_base,
     };
     // A full leaf has nothing to address and no fp to restore sp from.
     frame.dynamic_sp |= func.has_sp_moving_asm() && !is_full_leaf(frame, alloc);
     frame
+}
+
+/// Access instances the locals base turns into one instruction: a local
+/// or a spill slot whose fp form lies past the unscaled +/-256 reach and
+/// takes the address build, each reload of a far spill slot counting as
+/// one. The base itself costs its save, restore and capture.
+fn local_base_wins(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    canary_bytes: u32,
+    alloc_spill_base: u32,
+) -> u32 {
+    let mut wins = 0u32;
+    let far = |disp: i64| disp < -256;
+    for block in &func.blocks {
+        for v in block.inst_range.clone() {
+            let inst = &func.insts[v as usize];
+            if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
+                continue;
+            }
+            match inst {
+                Inst::LoadLocal { off, disp, .. } | Inst::StoreLocal { off, disp, .. }
+                    if *off < 0 && far(*off * 8 + i64::from(*disp) - i64::from(canary_bytes)) =>
+                {
+                    wins += 1;
+                }
+                Inst::LocalAddr(off) if *off < 0 && far(*off * 8 - i64::from(canary_bytes)) => {
+                    wins += 1;
+                }
+                _ => {}
+            }
+        }
+    }
+    for (v, place) in alloc.places.iter().enumerate() {
+        let Place::Spill(slot) = place else {
+            continue;
+        };
+        if far(-(i64::from(alloc_spill_base) + (i64::from(*slot) + 1) * 8)) {
+            wins += alloc.use_counts.get(v).copied().unwrap_or(0);
+        }
+    }
+    wins
+}
+
+/// Whether the body writes x19 where the locals base must survive: the
+/// setjmp / longjmp helpers round-trip x19 through the jump buffer, and
+/// an inline asm statement that clobbers x19 or binds an operand to it
+/// runs its exits -- the fall-through and each `asm goto` trampoline --
+/// off a changed x19. The modulo and cursor `va_arg` lowerings push and
+/// pop x19 around their use instead.
+fn x19_overwritten(func: &FunctionSsa, fixed: super::FixedRegs) -> bool {
+    use crate::c5::op::Intrinsic as I;
+    func.insts.iter().any(|inst| match inst {
+        Inst::Intrinsic { kind, .. } => {
+            I::from_i64(*kind).is_some_and(|k| matches!(k, I::SetjmpAArch64 | I::LongjmpAArch64))
+        }
+        Inst::InlineAsm { asm, args } => {
+            asm.clobber_regs & (1 << 19) != 0
+                || asm_operand_regs(func, asm, args, fixed).map_or(true, |regs| {
+                    asm.operands.iter().zip(regs).any(|(op, r)| {
+                        r == Some(19)
+                            && !matches!(op.constraint, super::super::ir::AsmConstraint::Fp)
+                    })
+                })
+        }
+        _ => false,
+    })
+}
+
+/// The largest outgoing area the function's body needs at once: the
+/// biggest call's argument area (an indirect call's staging cell
+/// included) and the binary128 conversion sequences' register borrows.
+/// The two never run concurrently, so the maximum covers both; a frame
+/// whose sp stays put reserves it once in the prologue
+/// ([`compute_frame`]) and every site addresses its slice at fixed
+/// offsets from sp.
+pub(super) fn outgoing_bytes(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    abi: super::Abi,
+    variadic_targets: &alloc::collections::BTreeSet<usize>,
+    imports: &super::ResolvedImports,
+) -> u32 {
+    let mut max_out = 0u32;
+    let note = |m: &mut u32, n: u32| {
+        if n > *m {
+            *m = n;
+        }
+    };
+    let call_scratch = |ops: super::CallOperands, callee_variadic: bool, fixed_args: usize| {
+        ops.plan(&func.agg_descs, abi, callee_variadic, fixed_args)
+            .scratch_bytes
+    };
+    for block in &func.blocks {
+        for v in block.inst_range.clone() {
+            let inst = &func.insts[v as usize];
+            if super::ssa::emit_common::is_dead_pure(inst, v, alloc) {
+                continue;
+            }
+            match inst {
+                Inst::Call {
+                    target_pc,
+                    args,
+                    fixed_args,
+                    fp_arg_mask,
+                    arg_widths,
+                    arg_aggs,
+                    ..
+                } => note(
+                    &mut max_out,
+                    call_scratch(
+                        super::CallOperands {
+                            args,
+                            fp_arg_mask,
+                            arg_widths: *arg_widths,
+                            arg_aggs,
+                            ret_agg: None,
+                            ret_slot_off: 0,
+                        },
+                        variadic_targets.contains(target_pc),
+                        *fixed_args,
+                    ),
+                ),
+                Inst::CallExt {
+                    binding_idx,
+                    args,
+                    fp_arg_mask,
+                    arg_widths,
+                    arg_aggs,
+                    ..
+                } => {
+                    let Some(i) = imports.index_of_binding(*binding_idx) else {
+                        continue;
+                    };
+                    let imp = &imports.imports[i];
+                    note(
+                        &mut max_out,
+                        call_scratch(
+                            super::CallOperands {
+                                args,
+                                fp_arg_mask,
+                                arg_widths: *arg_widths,
+                                arg_aggs,
+                                ret_agg: None,
+                                ret_slot_off: 0,
+                            },
+                            imp.is_variadic,
+                            imp.fixed_args,
+                        ),
+                    );
+                }
+                Inst::CallIndirect {
+                    target,
+                    args,
+                    callee_variadic,
+                    fixed_args,
+                    fp_arg_mask,
+                    arg_widths,
+                    arg_aggs,
+                    ret_agg,
+                    ..
+                } => {
+                    let ops = super::CallOperands {
+                        args,
+                        fp_arg_mask,
+                        arg_widths: *arg_widths,
+                        arg_aggs,
+                        ret_agg: *ret_agg,
+                        ret_slot_off: 0,
+                    };
+                    let mut plan = ops.plan(&func.agg_descs, abi, *callee_variadic, *fixed_args);
+                    // Mirror `emit_call_indirect`'s register selection: a
+                    // target no register can hold is staged in a cell above
+                    // the argument slots.
+                    let target_place = place_of(alloc, *target);
+                    let in_place = matches!(
+                        target_place,
+                        Place::IntReg(r) if !matches!(r, 8 | 16 | 17 | 19)
+                            && !plan.int_regs_besides(args, *target).any(|p| p == r)
+                    );
+                    if !in_place {
+                        let arg_source_regs: alloc::vec::Vec<u8> = args
+                            .iter()
+                            .filter_map(|&a| {
+                                alloc.places.get(a as usize).and_then(|p| p.int_reg_u8())
+                            })
+                            .collect();
+                        let branch_scratch_free =
+                            super::marshal_leaves_branch_scratch(
+                                &plan,
+                                args,
+                                alloc,
+                                *callee_variadic,
+                            ) && !super::indirect_result_takes_x8(*ret_agg, &func.agg_descs);
+                        let free = [16u8, 17]
+                            .into_iter()
+                            .filter(|_| branch_scratch_free)
+                            .chain(super::TARGET_SCRATCH_CANDIDATES.iter().copied())
+                            .any(|r| !arg_source_regs.contains(&r) && !abi.fixed_regs.has_gpr(r));
+                        if !free {
+                            plan.scratch_bytes += 16;
+                        }
+                    }
+                    note(&mut max_out, plan.scratch_bytes);
+                }
+                Inst::Load {
+                    kind: LoadKind::F128,
+                    ..
+                }
+                | Inst::LoadLocal {
+                    kind: LoadKind::F128,
+                    ..
+                } => note(&mut max_out, super::binary128::NARROW_BORROW_BYTES),
+                Inst::Store {
+                    kind: StoreKind::F128,
+                    ..
+                }
+                | Inst::StoreLocal {
+                    kind: StoreKind::F128,
+                    ..
+                } => note(&mut max_out, super::binary128::WIDEN_BORROW_BYTES),
+                _ => {}
+            }
+        }
+    }
+    max_out
 }
 
 /// Frame scratch bytes of one inline-asm statement: 8 per operand

@@ -540,6 +540,7 @@ fn emit_mem_inst(
             *kind,
             None,
             alloc.is_f32(v),
+            !alloc.high_dead(v),
             alloc,
             frame,
             narrow_bound(*align, abi),
@@ -574,6 +575,7 @@ fn emit_mem_inst(
             *kind,
             seg_prefix(*seg),
             alloc.is_f32(v),
+            !alloc.high_dead(v),
             alloc,
             frame,
             None,
@@ -597,12 +599,29 @@ fn emit_mem_inst(
             frame,
             None,
         ),
-        Inst::LoadLocal { off, kind, .. } => {
-            emit_load_local(code, dst, *off, *kind, alloc.is_f32(v), frame, func, abi)
-        }
+        Inst::LoadLocal {
+            off, disp, kind, ..
+        } => emit_load_local(
+            code,
+            dst,
+            *off,
+            *disp,
+            *kind,
+            alloc.is_f32(v),
+            !alloc.high_dead(v),
+            frame,
+            func,
+            abi,
+        ),
         Inst::StoreLocal {
-            off, value, kind, ..
-        } => emit_store_local(code, dst, v, *off, *value, *kind, alloc, frame, func, abi),
+            off,
+            disp,
+            value,
+            kind,
+            ..
+        } => emit_store_local(
+            code, dst, v, *off, *disp, *value, *kind, alloc, frame, func, abi,
+        ),
         Inst::LoadIndexed {
             base,
             index,
@@ -617,6 +636,7 @@ fn emit_mem_inst(
             (*index, *index_ext),
             *scale,
             *kind,
+            !alloc.high_dead(v),
             alloc,
             frame,
         ),
@@ -659,7 +679,6 @@ fn emit_call_inst(
         target,
         imports,
         variadic_targets,
-        conv_targets,
         ..
     } = *fcx;
     let cx = &mut *out.cx;
@@ -674,6 +693,7 @@ fn emit_call_inst(
             fixed_args,
             fp_return,
             fp_arg_mask,
+            callee_conv,
             arg_aggs,
             ret_agg,
             ret_slot_local,
@@ -686,11 +706,7 @@ fn emit_call_inst(
             *fixed_args,
             alloc,
             frame,
-            callee_abi(
-                abi,
-                target,
-                conv_targets.get(target_pc).copied().unwrap_or_default(),
-            ),
+            callee_abi(abi, target, *callee_conv),
             fixups,
             variadic_targets.contains(target_pc),
             *fp_return,

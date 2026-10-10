@@ -98,7 +98,8 @@ DEMO_JOBS = 4
 
 # Longest first: the phase ends when the last long demo does, so one
 # that starts late after the pool drains extends the phase by its whole
-# duration. The four leading entries are the measured long poles.
+# duration. The four leading slots are the measured long poles; the two
+# qemu configurations share one (run_demos.slots).
 GATING_DEMOS = (
     # The only demo that drives ./configure + make and replays the
     # Makefile's own compile lines through badc, and the only one
@@ -110,13 +111,21 @@ GATING_DEMOS = (
     # subsystem-10 header, which no hosted demo reaches. Boots the
     # images where QEMU and firmware are installed.
     ("demos/edk2/smoke.py", ALL),
-    # The widest corpus in the tree (1683 units on aarch64, 1466 on
+    # The widest corpus in the tree (1722 units on aarch64, 1518 on
     # x86_64) and the only pure self-link -- badc's own linker over
-    # 100%-badc objects, no system linker. run_demos.py gates its build
-    # and its run, not its boot: the boot consumes the firmware CI's
-    # ovmf lane publishes as an artifact. Needs pkg-config,
-    # libglib2.0-dev, zlib1g-dev, libfdt-dev.
+    # 100%-badc objects, no system linker. The two levels CI's qemu job
+    # builds, back to back in one slot (run_demos.DEMO_ENV): -O0, and -O
+    # with --verify-ssa on every unit. Each build boots the published kernel
+    # bundle to a shell through the box's UEFI firmware and powers off. An
+    # -O emulator that compiled, linked and ran faulted in that boot on CI
+    # while this board, building -O0 alone and booting nothing, was green
+    # on all five lanes; --verify-ssa names that pass defect at compile
+    # time. The slot takes 67 s on the idle aarch64 box and 85 s on the
+    # x86_64 one, against 24 s and 27 s for the -O0 build alone, inside
+    # the phase tcl sets. Needs pkg-config, the glib, zlib and libfdt
+    # development packages, and OVMF (x86_64) or AAVMF (aarch64).
     ("demos/qemu/smoke.py", LINUX),
+    ("demos/qemu/smoke.py@O", LINUX),
     # The whole upstream src/ tree five ways, deliberately not
     # amalgamated: BearSSL reuses `static` names across files, so this
     # is the internal-linkage and cross-TU exercise. Runs 17 KAT suites.
@@ -480,11 +489,11 @@ def kernel_steps(nested: bool = False) -> list[str]:
         f"set -- --no-boot; fi",
     ]
     if nested:
-        # The demo phase's emulator, and on x86_64 the ROM set it reads,
-        # fetched as CI's kernel job fetches it; both ride on the boot
-        # arguments.
+        # The demo phase's -O0 emulator, the build CI's kernel job takes,
+        # and on x86_64 the ROM set it reads, fetched as that job fetches
+        # it; both ride on the boot arguments.
         steps += [
-            'gemu=$(find demos/qemu/.cache -path "*/objs*/qemu-system-$(uname -m)" '
+            'gemu=$(find demos/qemu/.cache -path "*/objs/qemu-system-$(uname -m)" '
             "-type f | sort | head -1)",
             "test -n \"$gemu\" || { echo \"--- no badc-built emulator under "
             "demos/qemu/.cache; the nested boot carries the qemu demo's\"; exit 1; }",
@@ -706,6 +715,30 @@ def self_test() -> int:
     extra = " ".join(nested[len(kernel) - 1 : -1])
     for flag in ("--nested-kvm", "--guest-qemu", "--pc-bios", "--guest-firmware"):
         assert flag in extra, (flag, extra)
+    # The nested boot takes the -O0 emulator, as CI's kernel job does; the
+    # demo phase leaves an -O one beside it.
+    assert '-path "*/objs/qemu-system-' in extra, extra
+
+    # The qemu demo runs at -O0 and -O on the Linux lanes, both booted
+    # through the box's firmware and the -O one under --verify-ssa.
+    # The runner holds a smoke's configurations in one slot: they share its
+    # cache. Every entry names a smoke and every configuration is defined.
+    import run_demos
+
+    roster = [d for d, kinds in GATING_DEMOS if "linux" in kinds]
+    qemu = [d for d in roster if run_demos.script(d) == "demos/qemu/smoke.py"]
+    assert qemu == ["demos/qemu/smoke.py", "demos/qemu/smoke.py@O"], qemu
+    for d, opt in zip(qemu, "01"):
+        env = run_demos.DEMO_ENV[d]
+        assert env["BADC_QEMU_BOOT"] == "gate" and env["BADC_QEMU_REQUIRE_FIRMWARE"] == "1", env
+        assert env["BADC_QEMU_OPT"] == env["BADC_QEMU_VERIFY_SSA"] == opt, env
+    for d, _ in GATING_DEMOS:
+        assert (REPO_ROOT / run_demos.script(d)).is_file(), d
+        assert "@" not in d or d in run_demos.DEMO_ENV, d
+    slots = run_demos.slots(roster)
+    assert qemu in slots and sum(map(len, slots)) == len(roster), slots
+    assert all(len({run_demos.script(e) for e in s}) == 1 for s in slots), slots
+    assert " ".join(qemu) in demo_command(boxes[0], DEMO_JOBS, "python3")
 
     # The tree the step builds comes from setup.py's pin, not from a glob of
     # the cache: two boxes holding different releases gated on different

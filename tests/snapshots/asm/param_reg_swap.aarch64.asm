@@ -29,39 +29,38 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
-               	sub	x1, x29, #0x30
                	mov	x0, #0x0                // =0
-               	strb	w0, [x1]
-               	mov	x2, #0x1                // =1
-               	strb	w2, [x1, #0x1]
-               	mov	x2, #0x2                // =2
-               	strb	w2, [x1, #0x2]
-               	mov	x2, #0x3                // =3
-               	strb	w2, [x1, #0x3]
-               	mov	x2, #0x4                // =4
-               	strb	w2, [x1, #0x4]
-               	mov	x2, #0x5                // =5
-               	strb	w2, [x1, #0x5]
-               	mov	x2, #0x6                // =6
-               	strb	w2, [x1, #0x6]
-               	mov	x2, #0x7                // =7
-               	strb	w2, [x1, #0x7]
-               	mov	x2, #0x8                // =8
-               	strb	w2, [x1, #0x8]
-               	mov	x2, #0x9                // =9
-               	strb	w2, [x1, #0x9]
-               	mov	x2, #0xa                // =10
-               	strb	w2, [x1, #0xa]
-               	mov	x2, #0xb                // =11
-               	strb	w2, [x1, #0xb]
-               	mov	x2, #0xc                // =12
-               	strb	w2, [x1, #0xc]
-               	mov	x2, #0xd                // =13
-               	strb	w2, [x1, #0xd]
-               	mov	x2, #0xe                // =14
-               	strb	w2, [x1, #0xe]
-               	mov	x2, #0xf                // =15
-               	strb	w2, [x1, #0xf]
+               	sturb	w0, [x29, #-0x30]
+               	mov	x1, #0x1                // =1
+               	sturb	w1, [x29, #-0x2f]
+               	mov	x1, #0x2                // =2
+               	sturb	w1, [x29, #-0x2e]
+               	mov	x1, #0x3                // =3
+               	sturb	w1, [x29, #-0x2d]
+               	mov	x1, #0x4                // =4
+               	sturb	w1, [x29, #-0x2c]
+               	mov	x1, #0x5                // =5
+               	sturb	w1, [x29, #-0x2b]
+               	mov	x1, #0x6                // =6
+               	sturb	w1, [x29, #-0x2a]
+               	mov	x1, #0x7                // =7
+               	sturb	w1, [x29, #-0x29]
+               	mov	x1, #0x8                // =8
+               	sturb	w1, [x29, #-0x28]
+               	mov	x1, #0x9                // =9
+               	sturb	w1, [x29, #-0x27]
+               	mov	x1, #0xa                // =10
+               	sturb	w1, [x29, #-0x26]
+               	mov	x1, #0xb                // =11
+               	sturb	w1, [x29, #-0x25]
+               	mov	x1, #0xc                // =12
+               	sturb	w1, [x29, #-0x24]
+               	mov	x1, #0xd                // =13
+               	sturb	w1, [x29, #-0x23]
+               	mov	x1, #0xe                // =14
+               	sturb	w1, [x29, #-0x22]
+               	mov	x1, #0xf                // =15
+               	sturb	w1, [x29, #-0x21]
                	sub	x1, x29, #0x20
                	strb	w0, [x1, x0]
                	add	x0, x0, #0x1

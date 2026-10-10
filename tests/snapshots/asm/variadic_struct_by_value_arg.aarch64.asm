@@ -68,22 +68,21 @@ Disassembly of section .text:
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
                	mov	x0, x16
-               	ldrsw	x1, [x0]
-               	sub	x0, x29, #0x30
-               	ldr	x2, [x29, #0x10]
-               	sub	x0, x29, #0x10
-               	ldrsw	x3, [x0]
-               	add	x2, x2, x3
-               	ldrsw	x3, [x0, #0x4]
-               	add	x2, x2, x3
-               	ldrsw	x3, [x0, #0x8]
-               	add	x2, x2, x3
-               	ldrsw	x0, [x0, #0xc]
-               	add	x0, x2, x0
+               	ldrsw	x0, [x0]
+               	sub	x1, x29, #0x30
+               	ldr	x1, [x29, #0x10]
+               	ldursw	x2, [x29, #-0x10]
+               	add	x1, x1, x2
+               	ldursw	x2, [x29, #-0xc]
+               	add	x1, x1, x2
+               	ldursw	x2, [x29, #-0x8]
+               	add	x1, x1, x2
+               	ldursw	x2, [x29, #-0x4]
+               	add	x1, x1, x2
                	ldr	x2, [x29, #0x28]
                	ldrb	w2, [x2]
-               	add	x0, x0, x2
-               	add	x0, x0, x1
+               	add	x1, x1, x2
+               	add	x0, x1, x0
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0

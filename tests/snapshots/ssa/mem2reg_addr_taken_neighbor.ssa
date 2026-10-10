@@ -13,47 +13,47 @@ fn ent_pc=0 n_params=1 variadic=false locals=1
     v7   Extend { value=v6, kind=I32, nsw }               -> x1
     v8   Imm(0)                                           -> x1
     v9   LocalAddr(-1)                                    -> x1
-    v10  Imm(0)                                           -> x2
-    v11  Imm(0)                                           -> x2
-    v12  Imm(0)                                           -> x2
-    v13  Imm(1)                                           -> x2
-    v14  Imm(0)                                           -> x2
-    v15  Imm(0)                                           -> x2
-    v16  Imm(0)                                           -> x2
-    v17  BinopI { op=add, lhs=v6, rhs_imm=0 }             -> x2
-    v18  Extend { value=v6, kind=I32, nsw }               -> x2
-    v19  Store { addr=v9, disp=0, value=v6, kind=I32 }    -> -
-    v20  Imm(0)                                           -> x2
-    v21  Imm(1)                                           -> x2
-    v22  Imm(1)                                           -> x2
-    v23  Imm(0)                                           -> x2
-    v24  Imm(1)                                           -> x2
-    v25  Imm(1)                                           -> x2
-    v26  Imm(0)                                           -> x2
-    v27  Extend { value=v6, kind=I32 }                    -> x2
-    v28  Imm(0)                                           -> x6
-    v29  Binop { op=add, lhs=v27, rhs=v6 }                -> x2
-    v30  Extend { value=v29, kind=I32, nsw }              -> x6
-    v31  Store { addr=v9, disp=0, value=v29, kind=I32 }   -> -
-    v32  Imm(1)                                           -> x6
-    v33  Imm(2)                                           -> x6
-    v34  Imm(2)                                           -> x6
-    v35  Imm(0)                                           -> x6
-    v36  Imm(2)                                           -> x6
-    v37  Imm(1)                                           -> x6
-    v38  Imm(0)                                           -> x6
-    v39  Extend { value=v29, kind=I32 }                   -> x2
-    v40  Imm(0)                                           -> x6
+    v10  Imm(0)                                           -> x1
+    v11  Imm(0)                                           -> x1
+    v12  Imm(0)                                           -> x1
+    v13  Imm(1)                                           -> x1
+    v14  Imm(0)                                           -> x1
+    v15  Imm(0)                                           -> x1
+    v16  Imm(0)                                           -> x1
+    v17  BinopI { op=add, lhs=v6, rhs_imm=0 }             -> x1
+    v18  Extend { value=v6, kind=I32, nsw }               -> x1
+    v19  StoreLocal { off=-1, value=v6, kind=I32 }        -> -
+    v20  Imm(0)                                           -> x1
+    v21  Imm(1)                                           -> x1
+    v22  Imm(1)                                           -> x1
+    v23  Imm(0)                                           -> x1
+    v24  Imm(1)                                           -> x1
+    v25  Imm(1)                                           -> x1
+    v26  Imm(0)                                           -> x1
+    v27  Extend { value=v6, kind=I32 }                    -> x1
+    v28  Imm(0)                                           -> x2
+    v29  Binop { op=add, lhs=v27, rhs=v6 }                -> x1
+    v30  Extend { value=v29, kind=I32, nsw }              -> x2
+    v31  StoreLocal { off=-1, value=v29, kind=I32 }       -> -
+    v32  Imm(1)                                           -> x2
+    v33  Imm(2)                                           -> x2
+    v34  Imm(2)                                           -> x2
+    v35  Imm(0)                                           -> x2
+    v36  Imm(2)                                           -> x2
+    v37  Imm(1)                                           -> x2
+    v38  Imm(0)                                           -> x2
+    v39  Extend { value=v29, kind=I32 }                   -> x1
+    v40  Imm(0)                                           -> x2
     v41  Binop { op=add, lhs=v39, rhs=v6 }                -> x0
-    v42  Extend { value=v41, kind=I32, nsw }              -> x2
-    v43  Store { addr=v9, disp=0, value=v41, kind=I32 }   -> -
-    v44  Imm(2)                                           -> x0
-    v45  Imm(3)                                           -> x0
-    v46  Imm(3)                                           -> x0
-    v47  Imm(0)                                           -> x0
-    v48  Imm(3)                                           -> x0
-    v49  Imm(0)                                           -> x0
-    v50  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v42  Extend { value=v41, kind=I32, nsw }              -> x1
+    v43  StoreLocal { off=-1, value=v41, kind=I32 }       -> -
+    v44  Imm(2)                                           -> x1
+    v45  Imm(3)                                           -> x1
+    v46  Imm(3)                                           -> x1
+    v47  Imm(0)                                           -> x1
+    v48  Imm(3)                                           -> x1
+    v49  Imm(0)                                           -> x1
+    v50  Extend { value=v41, kind=I32 }                   -> x0
     v51  Extend { value=v50, kind=I32 }                   -> x1
     v52  LifetimeEnd(-1)                                  -> -
     terminator Return(v50)   (exit_acc=v50)
@@ -70,20 +70,20 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v5   Imm(14)                                          -> x0
     v6   Imm(14)                                          -> x0
     v7   LocalAddr(-1)                                    -> x0
-    v8   Imm(0)                                           -> x1
-    v9   Imm(14)                                          -> x1
-    v10  Imm(14)                                          -> x1
-    v11  Store { addr=v7, disp=0, value=v10, kind=I32 }   -> -
-    v12  Imm(14)                                          -> x1
-    v13  Imm(28)                                          -> x1
-    v14  Imm(28)                                          -> x1
-    v15  Store { addr=v7, disp=0, value=v14, kind=I32 }   -> -
-    v16  Imm(28)                                          -> x1
-    v17  Imm(42)                                          -> x1
-    v18  Imm(42)                                          -> x1
-    v19  Store { addr=v7, disp=0, value=v18, kind=I32 }   -> -
-    v20  Imm(0)                                           -> x0
-    v21  LoadLocal { off=-1, kind=I32 }                   -> x0
+    v8   Imm(0)                                           -> x0
+    v9   Imm(14)                                          -> x0
+    v10  Imm(14)                                          -> x0
+    v11  StoreLocal { off=-1, value=v10, kind=I32 }       -> -
+    v12  Imm(14)                                          -> x0
+    v13  Imm(28)                                          -> x0
+    v14  Imm(28)                                          -> x0
+    v15  StoreLocal { off=-1, value=v14, kind=I32 }       -> -
+    v16  Imm(28)                                          -> x0
+    v17  Imm(42)                                          -> x0
+    v18  Imm(42)                                          -> x0
+    v19  StoreLocal { off=-1, value=v18, kind=I32 }       -> -
+    v20  Imm(0)                                           -> x1
+    v21  Extend { value=v18, kind=I32 }                   -> x0
     v22  Extend { value=v21, kind=I32 }                   -> x1
     v23  LifetimeEnd(-1)                                  -> -
     v24  Extend { value=v21, kind=I32 }                   -> x1

@@ -43,21 +43,20 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x40, %eax
                	jl	<addr>
-               	leaq	-0x100(%rbp), %rax
-               	movss	0x20(%rax), %xmm0
-               	movl	$0x40000000, %ecx       # imm = 0x40000000
-               	movq	%rcx, %xmm15
+               	movss	-0xe0(%rbp), %xmm0
+               	movl	$0x40000000, %eax       # imm = 0x40000000
+               	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movl	$0x42c60000, %ecx       # imm = 0x42C60000
-               	movq	%rcx, %xmm14
-               	movss	%xmm14, (%rax)
-               	movss	(%rax), %xmm0
-               	movq	%rcx, %xmm15
+               	movl	$0x42c60000, %eax       # imm = 0x42C60000
+               	movq	%rax, %xmm14
+               	movss	%xmm14, -0x100(%rbp)
+               	movss	-0x100(%rbp), %xmm0
+               	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>

@@ -200,9 +200,9 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm14
                	jp	<addr>
                	je	<addr>
+               	movq	%rcx, %xmm14
                	movq	%rax, %xmm15
-               	movq	%rcx, %xmm0
-               	subsd	%xmm15, %xmm0
+               	vsubsd	%xmm15, %xmm14, %xmm0
                	movq	%rdx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>

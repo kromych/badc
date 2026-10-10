@@ -152,23 +152,23 @@ Disassembly of section .text:
                	cmpl	$0x14, %eax
                	jl	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax,%rcx,4), %rdx
+               	movl	(%rax,%rcx,4), %edx
                	cmpl	$0x24, %edx
                	je	<addr>
                	movl	$0x21, %eax
                	retq
                	movslq	%r8d, %rdx
-               	movslq	(%rax,%rdx,4), %rdx
+               	movl	(%rax,%rdx,4), %edx
                	cmpl	$0x24, %edx
                	je	<addr>
                	movl	$0x22, %eax
                	retq
                	leaq	-0x5(%rcx), %rdx
                	movslq	%edx, %rdx
-               	movslq	(%rax,%rdx,4), %rsi
+               	movl	(%rax,%rdx,4), %esi
                	addq	%rdi, %rsi
                	movl	%esi, (%rax,%rdx,4)
-               	movslq	0x1c(%rax), %rax
+               	movl	0x1c(%rax), %eax
                	cmpl	$0x80000016, %eax       # imm = 0x80000016
                	je	<addr>
                	movl	$0x23, %eax

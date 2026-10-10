@@ -8,18 +8,18 @@ fn ent_pc=0 n_params=0 variadic=false locals=10
     v2   Imm(0)                                           -> x1
     v3   Imm(0)                                           -> x1
     v4   Imm(2)                                           -> x1
-    v5   Store { addr=v1, disp=0, value=v4, kind=I32 }    -> -
+    v5   StoreLocal { off=-10, value=v4, kind=I32 }       -> -
     v6   Imm(0)                                           -> x1
     v7   BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x1
     v8   Imm(0)                                           -> x1
     v9   Imm(1)                                           -> x1
-    v10  Store { addr=v1, disp=4, value=v9, kind=I8 }     -> -
+    v10  StoreLocal { off=-10, disp=4, value=v9, kind=I8 } -> -
     v11  Imm(0)                                           -> x1
     v12  BinopI { op=add, lhs=v1, rhs_imm=4 }             -> x1
     v13  Imm(3)                                           -> x1
     v14  BinopI { op=add, lhs=v1, rhs_imm=7 }             -> x1
     v15  Imm(9)                                           -> x1
-    v16  Store { addr=v1, disp=7, value=v15, kind=I8 }    -> -
+    v16  StoreLocal { off=-10, disp=7, value=v15, kind=I8 } -> -
     v17  Imm(0)                                           -> x1
     v18  Imm(2)                                           -> x1
     v19  Imm(0)                                           -> x1

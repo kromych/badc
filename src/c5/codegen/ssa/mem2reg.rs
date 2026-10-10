@@ -43,9 +43,18 @@ fn candidate_slots(func: &FunctionSsa) -> BTreeSet<i64> {
             // (C99 6.7.3p6), and the object must retain its last store
             // across control transfers the CFG does not model (7.13.2.1
             // longjmp), so the slot is never lifted into a register.
-            Inst::LoadLocal { off, volatile, .. } | Inst::StoreLocal { off, volatile, .. }
-                if *volatile =>
-            {
+            Inst::LoadLocal {
+                disp: 0,
+                off,
+                volatile,
+                ..
+            }
+            | Inst::StoreLocal {
+                disp: 0,
+                off,
+                volatile,
+                ..
+            } if *volatile => {
                 pinned.insert(*off);
             }
             // A wide `long double` access spans two cells and converts
@@ -54,24 +63,32 @@ fn candidate_slots(func: &FunctionSsa) -> BTreeSet<i64> {
             // TODO: extended-precision long double -- forward the f64
             // through matching-kind pairs (the round trip is identity).
             Inst::LoadLocal {
+                disp: 0,
                 off,
                 kind: LoadKind::F80 | LoadKind::F128,
                 ..
             }
             | Inst::StoreLocal {
+                disp: 0,
                 off,
                 kind: StoreKind::F80 | StoreKind::F128,
                 ..
             } => {
                 pinned.insert(*off);
             }
-            Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => {
+            // A displaced access reads the slot's bytes, not its value.
+            Inst::LoadLocal { off, disp, .. } | Inst::StoreLocal { off, disp, .. }
+                if *disp != 0 =>
+            {
+                pinned.insert(*off);
+            }
+            Inst::LoadLocal { disp: 0, off, .. } | Inst::StoreLocal { disp: 0, off, .. } => {
                 touched.insert(*off);
             }
             // A non-zero `AllocaInit` marks a dynamic-sp function; keep
             // its reserved slot unpromoted. `AllocaInit(0)` is the
-            // unconditional no-alloca marker and aliases nothing.
-            Inst::AllocaInit(off) if *off != 0 => {
+            // no-alloca marker and aliases nothing.
+            Inst::AllocaInit(off) if *off < 0 => {
                 pinned.insert(*off);
             }
             _ => {}
@@ -536,7 +553,7 @@ pub(crate) fn phi_placement(
     let mut def_blocks: BTreeMap<i64, BTreeSet<BlockId>> = BTreeMap::new();
     for (b, block) in func.blocks.iter().enumerate() {
         for inst in &func.insts[block.inst_range.start as usize..block.inst_range.end as usize] {
-            if let Inst::StoreLocal { off, .. } = inst
+            if let Inst::StoreLocal { disp: 0, off, .. } = inst
                 && promotable.contains(off)
             {
                 def_blocks.entry(*off).or_default().insert(b as BlockId);
@@ -752,7 +769,7 @@ fn slot_live_in_sets(
         for inst in &func.insts[block.inst_range.start as usize..block.inst_range.end as usize] {
             cursor.step(inst);
             match inst {
-                Inst::LoadLocal { off, .. } => {
+                Inst::LoadLocal { disp: 0, off, .. } => {
                     if let Some(&r) = rank.get(off)
                         && stored[r / 64] & (1u64 << (r % 64)) == 0
                         && !cursor.escaped(*off)
@@ -760,7 +777,7 @@ fn slot_live_in_sets(
                         gen_set[b * words + r / 64] |= 1u64 << (r % 64);
                     }
                 }
-                Inst::StoreLocal { off, .. } => {
+                Inst::StoreLocal { disp: 0, off, .. } => {
                     if let Some(&r) = rank.get(off) {
                         stored[r / 64] |= 1u64 << (r % 64);
                         kill[b * words + r / 64] |= 1u64 << (r % 64);
@@ -1063,7 +1080,9 @@ fn slot_accesses(
         for inst in &func.insts[block.inst_range.start as usize..block.inst_range.end as usize] {
             cursor.step(inst);
             match inst {
-                Inst::LoadLocal { off, kind, .. } if !cursor.escaped(*off) => {
+                Inst::LoadLocal {
+                    disp: 0, off, kind, ..
+                } if !cursor.escaped(*off) => {
                     let Some(a) = out.get_mut(off) else { continue };
                     a.has_load = true;
                     match a.load_kind {
@@ -1084,7 +1103,11 @@ fn slot_accesses(
                     }
                 }
                 Inst::StoreLocal {
-                    off, value, kind, ..
+                    disp: 0,
+                    off,
+                    value,
+                    kind,
+                    ..
                 } => {
                     // A vector store is FP-classed whatever produced its value, and
                     // so is a constant stored at an FP kind (a float's flagged f32).
@@ -1439,7 +1462,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
         .collect();
     if !dead_slots.is_empty() {
         for inst in func.insts.iter_mut() {
-            if let Inst::StoreLocal { off, .. } = inst
+            if let Inst::StoreLocal { disp: 0, off, .. } = inst
                 && dead_slots.contains(off)
             {
                 *inst = Inst::Imm(0);
@@ -1680,6 +1703,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                     cursor.step(inst);
                     match inst {
                         Inst::StoreLocal {
+                            disp: 0,
                             off,
                             value,
                             kind,
@@ -1713,9 +1737,9 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                                 store_slot.insert(id, *off);
                             }
                         }
-                        Inst::LoadLocal { off, kind, .. }
-                            if slots.contains(off) && !cursor.escaped(*off) =>
-                        {
+                        Inst::LoadLocal {
+                            disp: 0, off, kind, ..
+                        } if slots.contains(off) && !cursor.escaped(*off) => {
                             match current.get(off).copied() {
                                 Some((r, sw)) => {
                                     // A mixed-width slot's load is served
@@ -1779,7 +1803,12 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
         return Vec::new();
     }
     for &id in &marked_stores {
-        if let Inst::StoreLocal { off, value, .. } = func.insts[id as usize]
+        if let Inst::StoreLocal {
+            disp: 0,
+            off,
+            value,
+            ..
+        } = func.insts[id as usize]
             && let Some(&kind) = narrow_load.get(&off)
         {
             func.insts[id as usize] = Inst::Extend {
@@ -1807,7 +1836,7 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
                 Some(k)
             } else if mixed_slots.contains(&slot) {
                 match func.insts[load_id as usize] {
-                    Inst::LoadLocal { kind, .. }
+                    Inst::LoadLocal { disp: 0, kind, .. }
                         if load_byte_width(kind).map(|w| w < 8).unwrap_or(false) =>
                     {
                         Some(kind)
@@ -1946,6 +1975,7 @@ mod tests {
             is_naked: false,
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
+            general_regs_only: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,
@@ -2040,6 +2070,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(1),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
@@ -2047,12 +2078,14 @@ mod tests {
                 nsw: false,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
             },
             Inst::LocalAddr(-2),
             Inst::StoreLocal {
+                disp: 0,
                 off: -2,
                 value: 0,
                 kind: StoreKind::I64,
@@ -2078,6 +2111,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(1),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
@@ -2085,6 +2119,7 @@ mod tests {
                 nsw: false,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: true,
@@ -2107,6 +2142,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(1),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I32,
@@ -2115,6 +2151,7 @@ mod tests {
             },
             Inst::Imm(2),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 2,
                 kind: StoreKind::I32,
@@ -2164,7 +2201,10 @@ mod tests {
         }
         // No StoreLocal targeting slot -1 survives.
         for (i, inst) in f.insts.iter().enumerate() {
-            if let Inst::StoreLocal { off: -1, .. } = inst {
+            if let Inst::StoreLocal {
+                disp: 0, off: -1, ..
+            } = inst
+            {
                 panic!("StoreLocal to slot -1 at id {i} should have been neutralised");
             }
         }
@@ -2229,6 +2269,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(5),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
@@ -2236,6 +2277,7 @@ mod tests {
                 nsw: false,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -2271,6 +2313,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(0x3ff8_0000_0000_0000),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: store,
@@ -2278,6 +2321,7 @@ mod tests {
                 nsw: false,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: load,
                 volatile: false,
@@ -2321,7 +2365,7 @@ mod tests {
         let mut f = constant_slot(StoreKind::F32, LoadKind::F32, false);
         run(&mut f);
         assert!(
-            matches!(f.insts[1], Inst::StoreLocal { .. }),
+            matches!(f.insts[1], Inst::StoreLocal { disp: 0, .. }),
             "an unflagged constant at F32 stays in memory: {:?}",
             f.insts
         );
@@ -2334,6 +2378,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(0), // v0: 0.0
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::F64,
@@ -2349,6 +2394,7 @@ mod tests {
                 value: 2,
             }, // v3
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 3,
                 kind: StoreKind::F64,
@@ -2356,6 +2402,7 @@ mod tests {
                 nsw: false,
             }, // v4
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::F64,
                 volatile: false,
@@ -2388,9 +2435,10 @@ mod tests {
         let mut f = func_with(insts, blocks);
         run(&mut f);
         assert!(
-            !f.insts
-                .iter()
-                .any(|i| matches!(i, Inst::StoreLocal { .. } | Inst::LoadLocal { .. })),
+            !f.insts.iter().any(|i| matches!(
+                i,
+                Inst::StoreLocal { disp: 0, .. } | Inst::LoadLocal { disp: 0, .. }
+            )),
             "the slot promotes: {:?}",
             f.insts
         );
@@ -2402,6 +2450,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(5),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
@@ -2410,6 +2459,7 @@ mod tests {
             },
             Inst::LocalAddr(-1),
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -2424,7 +2474,7 @@ mod tests {
         let mut f = func_with(insts, blocks);
         run(&mut f);
         assert!(
-            matches!(f.insts[1], Inst::StoreLocal { .. }),
+            matches!(f.insts[1], Inst::StoreLocal { disp: 0, .. }),
             "address-taken slot's store must remain"
         );
         assert!(matches!(f.blocks[0].terminator, Terminator::Return(3)));
@@ -2441,6 +2491,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(5),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
@@ -2449,6 +2500,7 @@ mod tests {
             },
             Inst::AllocaInit(-8),
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -2474,6 +2526,40 @@ mod tests {
         assert!(matches!(f.blocks[0].terminator, Terminator::Return(0)));
     }
 
+    /// `AllocaInit(off)` reserves slot `off` for the alloca bookkeeping, so
+    /// an access to it never promotes.
+    #[test]
+    fn run_keeps_the_reserved_alloca_slot_in_memory() {
+        let insts = alloc::vec![
+            Inst::AllocaInit(-8),
+            Inst::Imm(5),
+            Inst::StoreLocal {
+                disp: 0,
+                off: -8,
+                value: 1,
+                kind: StoreKind::I64,
+                volatile: false,
+                nsw: false,
+            },
+            Inst::LoadLocal {
+                disp: 0,
+                off: -8,
+                kind: LoadKind::I64,
+                volatile: false,
+            },
+        ];
+        let blocks = alloc::vec![Block {
+            start_pc: 0,
+            inst_range: 0..4,
+            terminator: Terminator::Return(3),
+            exit_acc: 3,
+        }];
+        let mut f = func_with(insts, blocks);
+        assert!(run(&mut f).is_empty());
+        assert!(matches!(f.insts[3], Inst::LoadLocal { off: -8, .. }));
+        assert!(matches!(f.blocks[0].terminator, Terminator::Return(3)));
+    }
+
     #[test]
     fn run_sign_extends_signed_narrow_load() {
         // A signed char (I8) slot promotes: the load becomes an
@@ -2482,6 +2568,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(300),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I8,
@@ -2489,6 +2576,7 @@ mod tests {
                 nsw: false,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I8,
                 volatile: false,
@@ -2525,6 +2613,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(300),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I8,
@@ -2532,6 +2621,7 @@ mod tests {
                 nsw: false,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::U8,
                 volatile: false,
@@ -2571,6 +2661,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(7),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
@@ -2578,12 +2669,14 @@ mod tests {
                 nsw: false,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
             },
             Inst::Imm(2307),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 3,
                 kind: StoreKind::I32,
@@ -2591,6 +2684,7 @@ mod tests {
                 nsw: false,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I32,
                 volatile: false,
@@ -2632,6 +2726,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(5),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I32,
@@ -2639,6 +2734,7 @@ mod tests {
                 nsw: false,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -2653,7 +2749,7 @@ mod tests {
         let mut f = func_with(insts, blocks);
         run(&mut f);
         assert!(
-            matches!(f.insts[1], Inst::StoreLocal { .. }),
+            matches!(f.insts[1], Inst::StoreLocal { disp: 0, .. }),
             "narrow store must remain"
         );
         assert!(
@@ -2670,6 +2766,7 @@ mod tests {
             Inst::Imm(0), // block 0 cond
             Inst::Imm(1), // block 1
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 1,
                 kind: StoreKind::I64,
@@ -2678,6 +2775,7 @@ mod tests {
             },
             Inst::Imm(2), // block 2
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 3,
                 kind: StoreKind::I64,
@@ -2685,6 +2783,7 @@ mod tests {
                 nsw: false,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -2743,6 +2842,7 @@ mod tests {
             // block 1
             Inst::Imm(1),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 1,
                 kind: StoreKind::I64,
@@ -2752,6 +2852,7 @@ mod tests {
             // block 2
             Inst::Imm(2),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 3,
                 kind: StoreKind::I64,
@@ -2760,6 +2861,7 @@ mod tests {
             },
             // block 3
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -2822,7 +2924,9 @@ mod tests {
         }
         // The LoadLocal slid forward by one phi.
         match &f.insts[6] {
-            Inst::LoadLocal { off, kind, .. } => {
+            Inst::LoadLocal {
+                disp: 0, off, kind, ..
+            } => {
                 assert_eq!(*off, -1);
                 assert_eq!(*kind, LoadKind::I64);
             }
@@ -2837,11 +2941,11 @@ mod tests {
         // value_remap (which is identity here since no phi sits at
         // their block heads).
         match &f.insts[2] {
-            Inst::StoreLocal { value, .. } => assert_eq!(*value, 1),
+            Inst::StoreLocal { disp: 0, value, .. } => assert_eq!(*value, 1),
             other => panic!("expected StoreLocal at id 2, got {other:?}"),
         }
         match &f.insts[4] {
-            Inst::StoreLocal { value, .. } => assert_eq!(*value, 3),
+            Inst::StoreLocal { disp: 0, value, .. } => assert_eq!(*value, 3),
             other => panic!("expected StoreLocal at id 4, got {other:?}"),
         }
         // The Return terminator's value operand was at old id 5;
@@ -2868,6 +2972,7 @@ mod tests {
             Inst::Imm(0),
             Inst::Imm(1),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 1,
                 kind: StoreKind::I64,
@@ -2876,6 +2981,7 @@ mod tests {
             },
             Inst::Imm(2),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 3,
                 kind: StoreKind::I64,
@@ -2883,6 +2989,7 @@ mod tests {
                 nsw: false,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -2965,6 +3072,7 @@ mod tests {
             // block 1: ids 1..3
             Inst::Imm(11),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 1,
                 kind: StoreKind::I64,
@@ -2974,6 +3082,7 @@ mod tests {
             // block 2: ids 3..5
             Inst::Imm(22),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 3,
                 kind: StoreKind::I64,
@@ -2982,6 +3091,7 @@ mod tests {
             },
             // block 3: id 5
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -3096,6 +3206,7 @@ mod tests {
             Inst::Imm(0), // block 0: cond
             Inst::Imm(7), // block 1
             Inst::StoreLocal {
+                disp: 0,
                 off: slot,
                 value: 1,
                 kind: StoreKind::I64,
@@ -3103,6 +3214,7 @@ mod tests {
                 nsw: false,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: slot,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -3154,9 +3266,10 @@ mod tests {
         assert!(matches!(f.insts[from(0) as usize], Inst::Undef));
         assert!(f.blocks[0].inst_range.contains(&from(0)));
         assert!(
-            !f.insts
-                .iter()
-                .any(|i| matches!(i, Inst::LoadLocal { .. } | Inst::StoreLocal { .. })),
+            !f.insts.iter().any(|i| matches!(
+                i,
+                Inst::LoadLocal { disp: 0, .. } | Inst::StoreLocal { disp: 0, .. }
+            )),
             "{:?}",
             f.insts
         );
@@ -3186,7 +3299,11 @@ mod tests {
         result.blocks[2].inst_range = 3..5;
         assert!(run(&mut result).is_empty());
         for f in [&param, &result] {
-            assert!(f.insts.iter().any(|i| matches!(i, Inst::LoadLocal { .. })));
+            assert!(
+                f.insts
+                    .iter()
+                    .any(|i| matches!(i, Inst::LoadLocal { disp: 0, .. }))
+            );
             assert!(
                 !f.insts
                     .iter()
@@ -3202,11 +3319,13 @@ mod tests {
         // return, which reads it as the zero the allocation places.
         let insts = alloc::vec![
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
             },
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
@@ -3214,6 +3333,7 @@ mod tests {
                 nsw: false,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -3290,6 +3410,7 @@ mod tests {
             // b0
             Inst::Imm(0), // v0
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
@@ -3303,6 +3424,7 @@ mod tests {
             // b2: store -1 = imm(7); store -1 = imm(9)
             Inst::Imm(7), // v3
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 3,
                 kind: StoreKind::I64,
@@ -3311,6 +3433,7 @@ mod tests {
             }, // v4
             Inst::Imm(9), // v5
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 5,
                 kind: StoreKind::I64,
@@ -3319,6 +3442,7 @@ mod tests {
             }, // v6
             // b3: load -1
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -3387,6 +3511,7 @@ mod tests {
     fn slot_live_in_converges_on_reverse_block_layout() {
         const N: usize = 512;
         let insts = alloc::vec![Inst::LoadLocal {
+            disp: 0,
             off: -1,
             kind: LoadKind::I64,
             volatile: false,
@@ -3426,6 +3551,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(5),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
@@ -3433,12 +3559,14 @@ mod tests {
                 nsw: false,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
             },
             Inst::LocalAddr(-1),
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -3461,8 +3589,22 @@ mod tests {
             promoted.is_empty(),
             "the stores stay, so no frame location is dropped"
         );
-        assert!(matches!(f.insts[1], Inst::StoreLocal { off: -1, .. }));
-        assert!(matches!(f.insts[4], Inst::LoadLocal { off: -1, .. }));
+        assert!(matches!(
+            f.insts[1],
+            Inst::StoreLocal {
+                disp: 0,
+                off: -1,
+                ..
+            }
+        ));
+        assert!(matches!(
+            f.insts[4],
+            Inst::LoadLocal {
+                disp: 0,
+                off: -1,
+                ..
+            }
+        ));
         assert!(
             matches!(f.insts[5], Inst::Binop { lhs: 0, rhs: 4, .. }),
             "the load before the LocalAddr reads the stored value, the one after reads memory: {:?}",
@@ -3479,6 +3621,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(5),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
@@ -3486,6 +3629,7 @@ mod tests {
                 nsw: false,
             },
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -3518,8 +3662,22 @@ mod tests {
         ];
         let mut f = func_with(insts, blocks);
         assert!(run(&mut f).is_empty());
-        assert!(matches!(f.insts[1], Inst::StoreLocal { off: -1, .. }));
-        assert!(matches!(f.insts[2], Inst::LoadLocal { off: -1, .. }));
+        assert!(matches!(
+            f.insts[1],
+            Inst::StoreLocal {
+                disp: 0,
+                off: -1,
+                ..
+            }
+        ));
+        assert!(matches!(
+            f.insts[2],
+            Inst::LoadLocal {
+                disp: 0,
+                off: -1,
+                ..
+            }
+        ));
         assert!(matches!(
             f.blocks[1].terminator,
             Terminator::Bnz { cond: 2, .. }
@@ -3539,6 +3697,7 @@ mod tests {
             // block 1: ids 1..3
             Inst::Imm(11),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 1,
                 kind: StoreKind::I64,
@@ -3548,6 +3707,7 @@ mod tests {
             // block 2: ids 3..5
             Inst::Imm(22),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 3,
                 kind: StoreKind::I64,
@@ -3556,12 +3716,14 @@ mod tests {
             },
             // block 3: ids 5..9
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
             },
             Inst::LocalAddr(-1),
             Inst::LoadLocal {
+                disp: 0,
                 off: -1,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -3608,8 +3770,22 @@ mod tests {
             promoted.is_empty(),
             "the stores stay, so no frame location is dropped"
         );
-        assert!(matches!(f.insts[2], Inst::StoreLocal { off: -1, .. }));
-        assert!(matches!(f.insts[4], Inst::StoreLocal { off: -1, .. }));
+        assert!(matches!(
+            f.insts[2],
+            Inst::StoreLocal {
+                disp: 0,
+                off: -1,
+                ..
+            }
+        ));
+        assert!(matches!(
+            f.insts[4],
+            Inst::StoreLocal {
+                disp: 0,
+                off: -1,
+                ..
+            }
+        ));
         // One phi is prepended at block 3; the ids there shift by one.
         let phi_id = f.blocks[3].inst_range.start;
         match &f.insts[phi_id as usize] {
@@ -3627,7 +3803,14 @@ mod tests {
             other => panic!("expected a phi at the head of block 3, got {other:?}"),
         }
         assert!(matches!(f.insts[7], Inst::LocalAddr(-1)));
-        assert!(matches!(f.insts[8], Inst::LoadLocal { off: -1, .. }));
+        assert!(matches!(
+            f.insts[8],
+            Inst::LoadLocal {
+                disp: 0,
+                off: -1,
+                ..
+            }
+        ));
         assert!(
             matches!(&f.insts[9], Inst::Binop { lhs, rhs: 8, .. } if *lhs == phi_id),
             "the join load reads the phi, the load past the LocalAddr reads memory: {:?}",
@@ -3647,6 +3830,7 @@ mod tests {
 
     fn store(value: ValueId) -> Inst {
         Inst::StoreLocal {
+            disp: 0,
             off: -1,
             value,
             kind: StoreKind::I64,
@@ -3657,6 +3841,7 @@ mod tests {
 
     fn load() -> Inst {
         Inst::LoadLocal {
+            disp: 0,
             off: -1,
             kind: LoadKind::I64,
             volatile: false,
@@ -3721,7 +3906,12 @@ mod tests {
     fn slot_traffic(f: &FunctionSsa) -> usize {
         f.insts
             .iter()
-            .filter(|i| matches!(i, Inst::LoadLocal { .. } | Inst::StoreLocal { .. }))
+            .filter(|i| {
+                matches!(
+                    i,
+                    Inst::LoadLocal { disp: 0, .. } | Inst::StoreLocal { disp: 0, .. }
+                )
+            })
             .count()
     }
 
@@ -3775,6 +3965,7 @@ mod tests {
     #[test]
     fn marked_store_becomes_the_extension_the_phi_merges() {
         let store = |value, nsw| Inst::StoreLocal {
+            disp: 0,
             off: -1,
             value,
             kind: StoreKind::I32,
@@ -3782,6 +3973,7 @@ mod tests {
             nsw,
         };
         let load = || Inst::LoadLocal {
+            disp: 0,
             off: -1,
             kind: LoadKind::I32,
             volatile: false,

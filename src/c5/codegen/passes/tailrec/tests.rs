@@ -157,6 +157,7 @@ fn accum_add_long() -> FunctionSsa {
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 low_word_args: 0,
                 arg_widths: crate::c5::ir::ArgWidths::default(),
+                callee_conv: crate::c5::codegen::CallConv::Target,
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -402,6 +403,7 @@ fn const_void_tail() -> FunctionSsa {
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 low_word_args: 0,
                 arg_widths: crate::c5::ir::ArgWidths::default(),
+                callee_conv: crate::c5::codegen::CallConv::Target,
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -597,6 +599,7 @@ fn pure_value_tail_is_left_to_emit_conversion() {
                 fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
                 low_word_args: 0,
                 arg_widths: crate::c5::ir::ArgWidths::default(),
+                callee_conv: crate::c5::codegen::CallConv::Target,
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
@@ -625,6 +628,7 @@ fn store_local_body_is_rejected() {
     // A slot store means unpromoted frame state; keep recursive.
     let mut f = accum_add_long();
     f.insts.push(Inst::StoreLocal {
+        disp: 0,
         off: -1,
         value: 0,
         kind: StoreKind::I64,

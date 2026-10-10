@@ -75,10 +75,10 @@ Disassembly of section .text:
                	stp	x16, x17, [x2]
                	sub	x0, x29, #0x10
                	stp	xzr, xzr, [x0]
-               	ldr	x3, [x2, #0x8]
-               	str	x3, [x0]
-               	ldr	x3, [x2]
-               	str	x3, [x0, #0x8]
+               	ldur	x3, [x29, #-0x18]
+               	stur	x3, [x29, #-0x10]
+               	ldur	x3, [x29, #-0x20]
+               	stur	x3, [x29, #-0x8]
                	cbz	x1, <addr>
                	ldr	x0, [x2]
                	ldr	x1, [x2, #0x8]

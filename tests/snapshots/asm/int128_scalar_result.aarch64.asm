@@ -285,8 +285,7 @@ Disassembly of section .text:
                	cmp	x21, x23
                	cset	x3, lo
                	and	x0, x0, x3
-               	orr	x1, x1, x0
-               	mov	x0, #0x1                // =1
+               	orr	x0, x1, x0
                	eor	x0, x21, x21
                	eor	x1, x20, x20
                	orr	x0, x0, x1

@@ -458,7 +458,15 @@ pub(super) fn emit_binop(
     }
     if matches!(op, BinOp::Mod | BinOp::Modu) {
         // rem = rn - (rn / rm) * rm.
-        let quot = mod_quotient_reg(rn, rm, rd, scratch).unwrap_or_else(|| scratch.third(frame));
+        let (quot, borrowed) = match mod_quotient_reg(rn, rm, rd, scratch) {
+            Some(r) => (r, false),
+            None if frame.local_base => {
+                // x19 holds the locals base; borrow it for the quotient.
+                emit(code, enc_str_pre(Reg(19), Reg(31), -16));
+                (Reg(19), true)
+            }
+            None => (scratch.third(frame), false),
+        };
         let divider = if matches!(op, BinOp::Mod) {
             enc_sdiv(quot, rn, rm)
         } else {
@@ -466,6 +474,9 @@ pub(super) fn emit_binop(
         };
         emit(code, divider);
         emit(code, enc_msub(rd, quot, rm, rn));
+        if borrowed {
+            emit(code, enc_ldr_post(Reg(19), Reg(31), 16));
+        }
         store_spilled_int(code, frame, dst, rd);
         return Ok(());
     }

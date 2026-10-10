@@ -106,18 +106,12 @@ Disassembly of section .text:
                	and	x2, x2, #0x7ff
                	and	x1, x1, #0xfffffffffffff
                	cbnz	w2, <addr>
-               	cbnz	x1, <addr>
-               	mov	x0, #0x2                // =2
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3                // =3
-               	b	<addr>
                	cmp	w2, #0x7ff
                	b.ne	<addr>
-               	cbnz	x1, <addr>
-               	mov	x0, #0x1                // =1
                	b	<addr>
                	adrp	x16, <page>
                	ldr	d0, [x16]

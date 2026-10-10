@@ -42,13 +42,12 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	leaq	-0x38(%rbp), %rax
-               	cmpq	$0x0, 0x30(%rax)
+               	cmpq	$0x0, -0x8(%rbp)
                	jne	<addr>
                	movl	$0x5, %eax
                	leave
                	retq
-               	movq	0x30(%rax), %rdi
+               	movq	-0x8(%rbp), %rdi
                	xorl	%eax, %eax
                	callq	<addr>
                	cmpq	$0x40, %rax

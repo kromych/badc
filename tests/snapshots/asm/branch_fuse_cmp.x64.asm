@@ -133,7 +133,7 @@ Disassembly of section .text:
                	movl	%edx, (%rsi)
                	testq	%rdx, %rdx
                	je	<addr>
-               	movslq	(%rsi), %rdx
+               	movl	(%rsi), %edx
                	incq	%rdx
                	cmpl	$0x2, %edx
                	je	<addr>

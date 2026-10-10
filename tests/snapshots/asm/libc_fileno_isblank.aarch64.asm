@@ -30,13 +30,13 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	str	x2, [x1]
+               	stur	x2, [x29, #-0x18]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	str	x2, [x1, #0x8]
+               	stur	x2, [x29, #-0x10]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	str	x2, [x1, #0x10]
+               	stur	x2, [x29, #-0x8]
                	ldr	x1, [x1, w20, sxtw #3]
                	bl	<addr>
                	cbz	x0, <addr>

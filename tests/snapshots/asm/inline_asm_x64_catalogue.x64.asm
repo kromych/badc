@@ -26,43 +26,34 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
                	movq	$-0x14, %rax
-               	movq	%rax, %rcx
-               	negq	%rcx
-               	movq	$-0x8, %rax
                	movq	%rax, %rdx
-               	notq	%rdx
+               	negq	%rdx
+               	movq	$-0x8, %rax
+               	movq	%rax, %rsi
+               	notq	%rsi
                	movl	$0x64, %eax
-               	movl	$0xf, %esi
-               	movq	%rsi, %rbx
-               	xchgq	%rbx, %rax
-               	movl	$0x5, %esi
-               	rolq	%rsi
-               	movl	$0x14, %edi
+               	movl	$0xf, %ecx
+               	xchgq	%rcx, %rax
+               	movl	$0x5, %edi
+               	rolq	%rdi
+               	movl	$0x14, %r8d
                	movl	$0x16, %r10d
-               	addq	$0x0, %rdi
-               	adcq	%r10, %rdi
-               	cmpq	$0x14, %rcx
+               	addq	$0x0, %r8
+               	adcq	%r10, %r8
+               	cmpq	$0x14, %rdx
                	jne	<addr>
-               	cmpq	$0x7, %rdx
+               	cmpq	$0x7, %rsi
                	jne	<addr>
                	cmpq	$0xf, %rax
                	jne	<addr>
-               	cmpq	$0x64, %rbx
+               	cmpq	$0x64, %rcx
                	jne	<addr>
-               	cmpq	$0xa, %rsi
+               	cmpq	$0xa, %rdi
                	jne	<addr>
-               	cmpq	$0x2a, %rdi
+               	cmpq	$0x2a, %r8
                	jne	<addr>
                	movl	$0x2a, %eax
-               	popq	%rbx
-               	leave
                	retq
                	movl	$0x1, %eax
-               	popq	%rbx
-               	leave
                	retq

@@ -63,20 +63,19 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	leaq	-0xa8(%rbp), %rax
-               	movslq	0x14(%rax), %rcx
-               	cmpl	$0x5, %ecx
+               	movl	-0x94(%rbp), %eax
+               	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movslq	0x3c(%rax), %rcx
-               	cmpl	$0x6, %ecx
+               	movl	-0x6c(%rbp), %eax
+               	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	movslq	0xa0(%rax), %rax
+               	movl	-0x8(%rbp), %eax
                	cmpl	$0x64, %eax
                	je	<addr>
                	movl	$0x4, %eax

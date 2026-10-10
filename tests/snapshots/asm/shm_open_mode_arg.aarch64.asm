@@ -50,8 +50,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0xd0]
                	ldp	x20, x21, [sp], #0xe0
                	ret
-               	sub	x0, x29, #0x80
-               	ldrsw	x0, [x0, #0x10]
+               	ldursw	x0, [x29, #-0x70]
                	and	x0, x0, #0x1ff
                	cmp	w0, #0x180
                	b.eq	<addr>

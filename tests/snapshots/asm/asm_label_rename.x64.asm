@@ -53,20 +53,20 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x2c, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	cmpl	$0x1, %ecx
                	jne	<addr>
-               	movslq	0x4(%rax), %rcx
+               	movl	0x4(%rax), %ecx
                	cmpl	$0x2, %ecx
                	jne	<addr>
-               	movslq	0x8(%rax), %rax
+               	movl	0x8(%rax), %eax
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x6, %eax
@@ -80,14 +80,14 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x2c, %eax
                	je	<addr>
                	movl	$0x9, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	addq	$0xb, %rax
                	cmpl	$0x4d, %eax
                	je	<addr>
@@ -97,6 +97,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
+               	addb	%al, (%rax)
+               	addb	%al, (%rax)
 
 <badc_real_sect>:
                	movl	$0x58, %eax

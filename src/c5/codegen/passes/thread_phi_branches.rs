@@ -1050,6 +1050,7 @@ mod tests {
     fn a_loop_whose_test_writes_memory_keeps_its_entry() {
         let mut f = counted(20, 2);
         f.insts[4] = Inst::StoreLocal {
+            disp: 0,
             off: -1,
             value: 2,
             kind: crate::c5::ir::StoreKind::I64,

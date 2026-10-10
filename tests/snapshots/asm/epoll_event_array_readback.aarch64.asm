@@ -54,8 +54,8 @@ Disassembly of section .text:
                	movk	x22, #0x8877, lsl #48
                	sub	x3, x29, #0x30
                	mov	x1, #0x1                // =1
-               	str	w1, [x3]
-               	str	x21, [x3, #0x8]
+               	stur	w1, [x29, #-0x30]
+               	stur	x21, [x29, #-0x28]
                	ldursw	x2, [x29, #-0x40]
                	mov	x0, x24
                	bl	<addr>
@@ -68,7 +68,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x80
                	ret
                	sub	x3, x29, #0x30
-               	str	x22, [x3, #0x8]
+               	stur	x22, [x29, #-0x28]
                	mov	x1, #0x1                // =1
                	ldursw	x2, [x29, #-0x38]
                	mov	x0, x24
@@ -81,16 +81,14 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x80
                	ret
-               	sub	x0, x29, #0x40
-               	ldrsw	x0, [x0, #0x4]
+               	ldursw	x0, [x29, #-0x3c]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x1                // =1
                	bl	<addr>
                	cmp	x0, #0x1
                	b.ne	<addr>
-               	sub	x0, x29, #0x38
-               	ldrsw	x0, [x0, #0x4]
+               	ldursw	x0, [x29, #-0x34]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x1                // =1
@@ -143,13 +141,11 @@ Disassembly of section .text:
                	bl	<addr>
                	ldursw	x0, [x29, #-0x40]
                	bl	<addr>
-               	sub	x0, x29, #0x40
-               	ldrsw	x0, [x0, #0x4]
+               	ldursw	x0, [x29, #-0x3c]
                	bl	<addr>
                	ldursw	x0, [x29, #-0x38]
                	bl	<addr>
-               	sub	x0, x29, #0x38
-               	ldrsw	x0, [x0, #0x4]
+               	ldursw	x0, [x29, #-0x34]
                	bl	<addr>
                	cmp	w20, #0x3
                	b.ne	<addr>

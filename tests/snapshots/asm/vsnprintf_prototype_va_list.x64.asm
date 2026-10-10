@@ -161,7 +161,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x10(%rbp), %rdi
-               	movsbq	0x4(%rdi), %rax
+               	movsbq	-0xc(%rbp), %rax
                	cmpl	$0x78, %eax
                	je	<addr>
                	movl	$0x5, %eax
@@ -178,7 +178,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x10(%rbp), %rdi
-               	movsbq	(%rdi), %rax
+               	movsbq	-0x10(%rbp), %rax
                	cmpl	$0x34, %eax
                	je	<addr>
                	movl	$0x7, %eax

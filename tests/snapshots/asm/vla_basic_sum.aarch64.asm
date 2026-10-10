@@ -48,8 +48,7 @@ Disassembly of section .text:
                	cmp	w0, w2
                	b.lt	<addr>
                	mov	x0, x1
-               	sub	sp, x29, #0x10
-               	add	sp, sp, #0x10
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
 

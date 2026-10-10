@@ -31,8 +31,7 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	sub	x3, x29, #0x8
                	mov	x1, #0xf                // =15
-               	str	w1, [x3]
-               	ldursw	x1, [x29, #-0x8]
+               	stur	w1, [x29, #-0x8]
                	sub	x1, x1, #0xa
                	cmp	w1, #0x5
                	b.eq	<addr>

@@ -30,26 +30,22 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x48, %rsp
                	pushq	%rbx
-               	leaq	-0x40(%rbp), %rax
-               	movl	$0x1, (%rax)
-               	leaq	-0x20(%rbp), %rcx
-               	movl	$0xa, (%rcx)
-               	movl	$0x2, 0x4(%rax)
-               	movl	$0x14, 0x4(%rcx)
-               	movl	$0x3, 0x8(%rax)
-               	movl	$0x1e, 0x8(%rcx)
-               	movl	$0x4, 0xc(%rax)
-               	movl	$0x28, 0xc(%rcx)
-               	leaq	-0x40(%rbp), %rax
-               	movl	$0x5, 0x10(%rax)
-               	leaq	-0x20(%rbp), %rcx
-               	movl	$0x32, 0x10(%rcx)
-               	movl	$0x6, 0x14(%rax)
-               	movl	$0x3c, 0x14(%rcx)
-               	movl	$0x7, 0x18(%rax)
-               	movl	$0x46, 0x18(%rcx)
-               	movl	$0x8, 0x1c(%rax)
-               	movl	$0x50, 0x1c(%rcx)
+               	movl	$0x1, -0x40(%rbp)
+               	movl	$0xa, -0x20(%rbp)
+               	movl	$0x2, -0x3c(%rbp)
+               	movl	$0x14, -0x1c(%rbp)
+               	movl	$0x3, -0x38(%rbp)
+               	movl	$0x1e, -0x18(%rbp)
+               	movl	$0x4, -0x34(%rbp)
+               	movl	$0x28, -0x14(%rbp)
+               	movl	$0x5, -0x30(%rbp)
+               	movl	$0x32, -0x10(%rbp)
+               	movl	$0x6, -0x2c(%rbp)
+               	movl	$0x3c, -0xc(%rbp)
+               	movl	$0x7, -0x28(%rbp)
+               	movl	$0x46, -0x8(%rbp)
+               	movl	$0x8, -0x24(%rbp)
+               	movl	$0x50, -0x4(%rbp)
                	leaq	-0x40(%rbp), %r8
                	leaq	-0x20(%rbp), %rsi
                	xorl	%ecx, %ecx
@@ -57,15 +53,15 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	shlq	$0x2, %rdi
                	leaq	(%r8,%rdi), %rdx
-               	movslq	(%rdx), %r9
+               	movl	(%rdx), %r9d
                	addq	$0x3, %r9
                	addq	%rsi, %rdi
-               	movslq	(%rdi), %rbx
+               	movl	(%rdi), %ebx
                	subq	$0x3, %rbx
                	movl	%ebx, (%rdx)
                	movl	%r9d, (%rsi,%rax,4)
-               	movslq	(%rdx), %rdx
-               	movslq	(%rdi), %rdi
+               	movl	(%rdx), %edx
+               	movl	(%rdi), %edi
                	imulq	%rdi, %rdx
                	addq	%rdx, %rcx
                	incq	%rax

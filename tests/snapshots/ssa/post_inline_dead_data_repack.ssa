@@ -143,7 +143,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v119 Imm(8)                                           -> x0
     terminator Return(v119)   (exit_acc=v119)
   block 12  start_pc=0
-    v120 ImmData(72)                                      -> x7
+    v120 ImmData(56)                                      -> x7
     v121 Imm(0)                                           -> x6
     v122 ImmData(8)                                       -> x6
     v123 BinopI { op=add, lhs=v122, rhs_imm=24 }          -> x6

@@ -159,7 +159,7 @@ Disassembly of section .text:
                	xaddl	%eax, (%rcx)
                	cmpl	$0x4, %eax
                	jne	<addr>
-               	movslq	-0x10(%rbp), %rax
+               	movl	-0x10(%rbp), %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0xb, %eax
@@ -178,7 +178,7 @@ Disassembly of section .text:
                	movl	$0xc, %eax
                	leave
                	retq
-               	movslq	-0x10(%rbp), %rax
+               	movl	-0x10(%rbp), %eax
                	cmpl	$-0x1, %eax
                	je	<addr>
                	movl	$0xd, %eax
@@ -207,7 +207,7 @@ Disassembly of section .text:
                	jne	<addr>
                	testl	%eax, %eax
                	jne	<addr>
-               	movslq	-0x8(%rbp), %rax
+               	movl	-0x8(%rbp), %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0xf, %eax
@@ -221,7 +221,7 @@ Disassembly of section .text:
                	jne	<addr>
                	cmpl	$0x5, %eax
                	jne	<addr>
-               	movslq	-0x8(%rbp), %rax
+               	movl	-0x8(%rbp), %eax
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x10, %eax

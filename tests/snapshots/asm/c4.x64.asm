@@ -3081,21 +3081,15 @@ Disassembly of section .text:
                	cmpq	$0x17, %r13
                	jne	<addr>
                	leaq	0x8(%rbx), %rax
-               	movq	(%rbx), %rdx
-               	movq	%r12, %r10
-               	movq	%rdx, %r12
-               	movq	%r10, %rcx
-               	shlq	%cl, %r12
+               	movq	(%rbx), %rcx
+               	shlxq	%r12, %rcx, %r12
                	movq	%rax, %rbx
                	jmp	<addr>
                	cmpq	$0x18, %r13
                	jne	<addr>
                	leaq	0x8(%rbx), %rax
-               	movq	(%rbx), %rdx
-               	movq	%r12, %r10
-               	movq	%rdx, %r12
-               	movq	%r10, %rcx
-               	sarq	%cl, %r12
+               	movq	(%rbx), %rcx
+               	sarxq	%r12, %rcx, %r12
                	movq	%rax, %rbx
                	jmp	<addr>
                	cmpq	$0x19, %r13

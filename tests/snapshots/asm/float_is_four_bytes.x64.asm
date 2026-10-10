@@ -137,9 +137,9 @@ Disassembly of section .text:
                	movl	$0x3f800000, %eax       # imm = 0x3F800000
                	movl	$0x40000000, %ecx       # imm = 0x40000000
                	movl	$0x40600000, %edx       # imm = 0x40600000
+               	movq	%rax, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rax, %xmm0
-               	addss	%xmm15, %xmm0
+               	vaddss	%xmm15, %xmm14, %xmm0
                	movq	%rdx, %xmm15
                	addss	%xmm15, %xmm0
                	movl	$0x40d00000, %eax       # imm = 0x40D00000
@@ -155,10 +155,10 @@ Disassembly of section .text:
                	movl	$0x3fc00000, %eax       # imm = 0x3FC00000
                	movl	$0x40000000, %ecx       # imm = 0x40000000
                	movl	$0x3e800000, %edx       # imm = 0x3E800000
-               	movq	%rax, %xmm14
+               	movq	%rax, %xmm0
+               	movq	%rdx, %xmm14
                	movq	%rcx, %xmm15
-               	movq	%rdx, %xmm0
-               	vfmadd231ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm14 * xmm15) + xmm0
+               	vfmadd132ss	%xmm15, %xmm14, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm14
                	movl	$0x40500000, %eax       # imm = 0x40500000
                	movq	%rax, %xmm15
                	ucomiss	%xmm15, %xmm0

@@ -10,10 +10,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v4   RetPart(0, kind=I64)                             -> x0
     v5   StoreLocal { off=-1, value=v4, kind=I64 }        -> -
     v6   LocalAddr(-1)                                    -> x0
-    v7   Imm(0)                                           -> x1
-    v8   Load { addr=v6, disp=0, kind=U32 }               -> x1
-    v9   Imm(0)                                           -> x2
-    v10  Load { addr=v6, disp=4, kind=U32 }               -> x0
+    v7   Imm(0)                                           -> x0
+    v8   LoadLocal { off=-1, kind=U32 }                   -> x0
+    v9   Imm(0)                                           -> x1
+    v10  LoadLocal { off=-1, disp=4, kind=U32 }           -> x1
     v11  Imm(0)                                           -> x2
     v12  Imm(0)                                           -> x2
     v13  Extend { value=v8, kind=I32 }                    -> x2
@@ -51,10 +51,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v37  RetPart(0, kind=I64)                             -> x0
     v38  StoreLocal { off=-1, value=v37, kind=I64 }       -> -
     v39  LocalAddr(-1)                                    -> x0
-    v40  Imm(0)                                           -> x1
-    v41  Load { addr=v39, disp=0, kind=U32 }              -> x1
-    v42  Imm(0)                                           -> x2
-    v43  Load { addr=v39, disp=4, kind=U32 }              -> x0
+    v40  Imm(0)                                           -> x0
+    v41  LoadLocal { off=-1, kind=U32 }                   -> x0
+    v42  Imm(0)                                           -> x1
+    v43  LoadLocal { off=-1, disp=4, kind=U32 }           -> x1
     v44  Imm(0)                                           -> x2
     v45  Imm(0)                                           -> x2
     v46  Extend { value=v41, kind=I32 }                   -> x2

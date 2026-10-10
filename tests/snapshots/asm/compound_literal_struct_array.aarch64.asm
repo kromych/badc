@@ -413,13 +413,13 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	sub	x3, x29, #0x30
                	stp	xzr, xzr, [x3]
-               	str	w0, [x3]
+               	stur	w0, [x29, #-0x30]
                	mov	x0, #0x4                // =4
-               	str	w0, [x3, #0x4]
+               	stur	w0, [x29, #-0x2c]
                	mov	x0, #0x5                // =5
-               	str	w0, [x3, #0x8]
+               	stur	w0, [x29, #-0x28]
                	mov	x0, #0x6                // =6
-               	str	w0, [x3, #0xc]
+               	stur	w0, [x29, #-0x24]
                	mov	x4, #0xa                // =10
                	mov	x0, #0x0                // =0
                	mov	x1, x0

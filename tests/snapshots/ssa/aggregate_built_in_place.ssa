@@ -285,33 +285,33 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v279 Imm(0)                                           -> x0
     v280 Imm(0)                                           -> x0
     v281 Imm(7)                                           -> x0
-    v282 Imm(7)                                           -> x1
-    v283 Imm(0)                                           -> x0
-    v284 Imm(0)                                           -> x0
-    v285 Imm(0)                                           -> x0
-    v286 Imm(0)                                           -> x0
-    v287 Imm(0)                                           -> x0
-    v288 Imm(0)                                           -> x0
-    v289 Imm(0)                                           -> x0
-    v290 Imm(8)                                           -> x2
-    v291 Imm(0)                                           -> x0
-    v292 Imm(0)                                           -> x0
-    v293 Imm(0)                                           -> x0
-    v294 Imm(0)                                           -> x0
-    v295 LocalAddr(-2)                                    -> x0
+    v282 Imm(7)                                           -> x0
+    v283 Imm(0)                                           -> x1
+    v284 Imm(0)                                           -> x1
+    v285 Imm(0)                                           -> x1
+    v286 Imm(0)                                           -> x1
+    v287 Imm(0)                                           -> x1
+    v288 Imm(0)                                           -> x1
+    v289 Imm(0)                                           -> x1
+    v290 Imm(8)                                           -> x1
+    v291 Imm(0)                                           -> x2
+    v292 Imm(0)                                           -> x2
+    v293 Imm(0)                                           -> x2
+    v294 Imm(0)                                           -> x2
+    v295 LocalAddr(-2)                                    -> x2
     v296 Imm(0)                                           -> x6
-    v297 Store { addr=v295, disp=0, value=v282, kind=I64 } -> -
-    v298 Imm(0)                                           -> x1
-    v299 Store { addr=v295, disp=8, value=v290, kind=I64 } -> -
-    v300 LocalAddr(-2)                                    -> x1
-    v301 BinopI { op=add, lhs=v295, rhs_imm=8 }           -> x1
-    v302 ImmData(16)                                      -> x2
+    v297 StoreLocal { off=-2, value=v282, kind=I64 }      -> -
+    v298 Imm(0)                                           -> x0
+    v299 StoreLocal { off=-2, disp=8, value=v290, kind=I64 } -> -
+    v300 LocalAddr(-2)                                    -> x0
+    v301 BinopI { op=add, lhs=v295, rhs_imm=8 }           -> x0
+    v302 ImmData(16)                                      -> x1
     v303 Store { addr=v302, disp=0, value=v301, kind=I64 } -> -
-    v304 ImmData(16)                                      -> x2
-    v305 Load { addr=v302, disp=0, kind=I64 }             -> x2
-    v306 Load { addr=v301, disp=0, kind=I64 }             -> x1
-    v307 LocalAddr(-2)                                    -> x2
-    v308 Load { addr=v295, disp=0, kind=I64 }             -> x0
+    v304 ImmData(16)                                      -> x1
+    v305 Load { addr=v302, disp=0, kind=I64 }             -> x1
+    v306 Load { addr=v301, disp=0, kind=I64 }             -> x0
+    v307 LocalAddr(-2)                                    -> x1
+    v308 LoadLocal { off=-2, kind=I64 }                   -> x1
     v309 Binop { op=add, lhs=v306, rhs=v308 }             -> x0
     v310 LifetimeEnd(-2)                                  -> -
     v311 Imm(15)                                          -> x1

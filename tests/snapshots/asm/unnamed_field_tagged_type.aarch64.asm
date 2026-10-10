@@ -17,15 +17,14 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
-               	sub	x1, x29, #0x48
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	str	x0, [x1]
-               	mov	x2, #0x3                // =3
-               	str	w2, [x1, #0x8]
-               	mov	x3, #0x61               // =97
-               	strb	w3, [x1, #0x10]
-               	strb	wzr, [x1, #0x11]
+               	stur	x0, [x29, #-0x48]
+               	mov	x1, #0x3                // =3
+               	stur	w1, [x29, #-0x40]
+               	mov	x2, #0x61               // =97
+               	sturb	w2, [x29, #-0x38]
+               	sturb	wzr, [x29, #-0x37]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrb	w2, [x0]
@@ -47,7 +46,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x48
-               	ldrsw	x1, [x0, #0x8]
+               	ldursw	x1, [x29, #-0x40]
                	cmp	w1, #0x3
                	b.eq	<addr>
                	mov	x0, #0x6                // =6

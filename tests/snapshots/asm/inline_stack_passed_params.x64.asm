@@ -39,11 +39,11 @@ Disassembly of section .text:
                	andq	$0xff, %rax
                	movsbq	0x10(%rbp), %r9
                	movq	0x18(%rbp), %rbx
-               	movslq	0x20(%rbp), %r12
+               	movl	0x20(%rbp), %r12d
                	movq	0x28(%rbp), %r13
                	movq	0x30(%rbp), %r14
                	leaq	<rip>, %r15      # <addr>
-               	movslq	(%r15), %r15
+               	movl	(%r15), %r15d
                	cmpl	%r15d, %edi
                	je	<addr>
                	movl	$0x1, %eax
@@ -60,7 +60,7 @@ Disassembly of section .text:
                	addq	$0x14, %rax
                	jmp	<addr>
                	leaq	<rip>, %rdi      # <addr>
-               	movslq	(%rdi), %rdi
+               	movl	(%rdi), %edi
                	cmpl	%edi, %esi
                	je	<addr>
                	movl	$0x2, %eax
@@ -104,7 +104,7 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	jmp	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	%eax, %r12d
                	je	<addr>
                	movl	$0x9, %eax
@@ -134,7 +134,7 @@ Disassembly of section .text:
                	pushq	%r12
                	pushq	%rbx
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x1, %eax
@@ -186,7 +186,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$-0x2, %eax
                	je	<addr>
                	movl	$0x2, %eax
@@ -230,7 +230,7 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	jmp	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x9, %eax

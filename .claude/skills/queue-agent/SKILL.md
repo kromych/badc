@@ -100,6 +100,16 @@ binary's announced test count equals its reported count.
   Tests that compile for the host target need explicit targets (`run_fixture_for`)
   to cover the other formats.
 
+- A commit that adds an -O pass or changes what a pass transforms passes a
+  differential fuzz run before it is reported: `scripts/csmith_fuzz.py` (badc -O
+  against -O0 and the reference compiler, under `--verify-ssa`) for at least 30
+  minutes on aarch64 and on x86-64 with no findings, plus a generator aimed at the
+  pass's own shapes, which csmith seldom emits, whose programs are UB-free and are
+  checked the same way. The commit body gives both runs' case counts. The driver
+  exits 2 when csmith or its headers are missing; `--skip-without-csmith`, which
+  an acceptance run never passes, is its only way to skip. It finds the
+  distributions' headers itself: no `--csmith-include` names a system directory.
+
 Report counts (passed/failed/ignored) per lane, demo tallies, kernel units and boots
 and the kernel diagnostic rows. When a rerun covers only some targets, say which
 targets the earlier full run covered at which hash.

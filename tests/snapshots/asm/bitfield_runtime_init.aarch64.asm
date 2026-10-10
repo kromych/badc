@@ -58,22 +58,22 @@ Disassembly of section .text:
                	sub	x5, x29, #0x10
                	str	xzr, [x5]
                	str	wzr, [x5, #0x8]
-               	strh	w0, [x5]
-               	and	x6, x1, #0x7
-               	ldr	w1, [x5]
+               	sturh	w0, [x29, #-0x10]
+               	and	x5, x1, #0x7
+               	ldur	w1, [x29, #-0x10]
                	and	x1, x1, #0xfffffffffff8ffff
-               	lsl	x7, x6, #16
-               	orr	x1, x1, x7
-               	str	w1, [x5]
-               	and	x7, x2, #0x3ff
+               	lsl	x6, x5, #16
+               	orr	x1, x1, x6
+               	stur	w1, [x29, #-0x10]
+               	and	x6, x2, #0x3ff
                	and	x1, x1, #0xffffffffe007ffff
-               	lsl	x2, x7, #19
+               	lsl	x2, x6, #19
                	orr	x1, x1, x2
-               	str	w1, [x5]
+               	stur	w1, [x29, #-0x10]
                	and	x2, x3, #0x7ffff
-               	str	w2, [x5, #0x4]
-               	str	w4, [x5, #0x8]
-               	ldrh	w3, [x5]
+               	stur	w2, [x29, #-0xc]
+               	stur	w4, [x29, #-0x8]
+               	ldurh	w3, [x29, #-0x10]
                	and	x0, x0, #0xffff
                	cmp	w3, w0
                	mov	x0, #0x0                // =0
@@ -81,14 +81,14 @@ Disassembly of section .text:
                	mov	w3, w1
                	asr	x3, x3, #16
                	and	x3, x3, #0x7
-               	eor	x3, x3, x6
+               	eor	x3, x3, x5
                	cmp	w3, #0x0
                	cset	x3, eq
                	cbz	x3, <addr>
                	mov	w1, w1
                	asr	x1, x1, #19
                	and	x1, x1, #0x3ff
-               	eor	x1, x1, x7
+               	eor	x1, x1, x6
                	cmp	w1, #0x0
                	cset	x1, eq
                	cbz	x1, <addr>

@@ -84,16 +84,15 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
-               	leaq	-0x40(%rbp), %rax
-               	movq	$0x7, (%rax)
-               	movq	$0x1118, 0x8(%rax)      # imm = 0x1118
-               	movq	$0x2229, 0x10(%rax)     # imm = 0x2229
-               	movq	$0x333a, 0x18(%rax)     # imm = 0x333A
-               	movq	$0x444b, 0x20(%rax)     # imm = 0x444B
-               	movq	$0x555c, 0x28(%rax)     # imm = 0x555C
-               	movq	$0x666d, 0x30(%rax)     # imm = 0x666D
+               	movq	$0x7, -0x40(%rbp)
+               	movq	$0x1118, -0x38(%rbp)    # imm = 0x1118
+               	movq	$0x2229, -0x30(%rbp)    # imm = 0x2229
+               	movq	$0x333a, -0x28(%rbp)    # imm = 0x333A
+               	movq	$0x444b, -0x20(%rbp)    # imm = 0x444B
+               	movq	$0x555c, -0x18(%rbp)    # imm = 0x555C
+               	movq	$0x666d, -0x10(%rbp)    # imm = 0x666D
                	leaq	-0x40(%rbp), %rdi
-               	movq	$0x777e, 0x38(%rdi)     # imm = 0x777E
+               	movq	$0x777e, -0x8(%rbp)     # imm = 0x777E
                	movl	$0x5, %esi
                	callq	<addr>
                	cmpq	$0x14ebf84, %rax        # imm = 0x14EBF84

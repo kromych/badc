@@ -1050,6 +1050,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("signal_nsig.c", 0),
     ("thread_local_initializer.c", 0),
     ("thread_local_address_init.c", 0),
+    ("thread_local_fn_pointer_defined_later.c", 0),
     // Per-thread isolation -- spawns a pthread, has the child
     // mutate a TLS variable, joins, and verifies the main
     // thread's view is untouched. Apple's TLV implementation
@@ -2286,6 +2287,7 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("zero_sign_extension_32bit.c", 0),
     ("thread_local_initializer.c", 0),
     ("thread_local_address_init.c", 0),
+    ("thread_local_fn_pointer_defined_later.c", 0),
     ("const_pointer_object_fold.c", 0),
     ("const_object_member_fold.c", 0),
     ("typedef_name_label.c", 0),
@@ -3257,6 +3259,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("zero_sign_extension_32bit.c", 0),
     ("thread_local_initializer.c", 0),
     ("thread_local_address_init.c", 0),
+    ("thread_local_fn_pointer_defined_later.c", 0),
     ("const_pointer_object_fold.c", 0),
     ("const_object_member_fold.c", 0),
     ("typedef_name_label.c", 0),
@@ -3895,6 +3898,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_gnu.c", 0),
     ("thread_local_initializer.c", 0),
     ("thread_local_address_init.c", 0),
+    ("thread_local_fn_pointer_defined_later.c", 0),
     ("thread_local_object_alignment.c", 0),
     ("thread_local_image_alignment.c", 0),
     ("thread_local_tentative_array.c", 0),
@@ -4642,6 +4646,7 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("thread_local_gnu.c", 0),
     ("thread_local_initializer.c", 0),
     ("thread_local_address_init.c", 0),
+    ("thread_local_fn_pointer_defined_later.c", 0),
     ("thread_local_object_alignment.c", 0),
     ("thread_local_image_alignment.c", 0),
     ("thread_local_tentative_array.c", 0),
@@ -5773,6 +5778,10 @@ pub(super) const JIT_UNSUPPORTED_FIXTURES: &[(&str, &str)] = &[
     ("block_scope_thread_local.c", "thread-local storage"),
     ("deferred_jit_thread_local.c", "thread-local storage"),
     ("thread_local_address_init.c", "thread-local storage"),
+    (
+        "thread_local_fn_pointer_defined_later.c",
+        "thread-local storage",
+    ),
     ("thread_local_address_per_thread.c", "thread-local storage"),
     ("thread_local_basic.c", "thread-local storage"),
     ("thread_local_gnu.c", "thread-local storage"),

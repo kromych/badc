@@ -837,7 +837,8 @@ def maybe_boot(binp: Path, arch: str) -> None:
     powered = rc == 0 and any(m in out for m in POWERDOWN_MARKERS)
 
     if panic:
-        _boot_result(False, f"kernel fault after {elapsed:.0f}s (marker {panic!r})", out, best_effort)
+        reason = f"kernel fault after {elapsed:.0f}s (marker {panic!r}){_fault_note(out)}"
+        _boot_result(False, reason, out, best_effort)
     elif not booted and rc is not None and rc != 0:
         _boot_result(False, f"emulator exited (rc={rc}) before the kernel started", out, best_effort)
     elif not booted:
@@ -852,6 +853,16 @@ def maybe_boot(binp: Path, arch: str) -> None:
         shell = out.count(_SHELL_TOKEN) >= 2
         log(f"boot: kernel booted, reached userspace{' + shell' if shell else ''}, "
             f"powered off cleanly in {elapsed:.0f}s")
+
+
+def _fault_note(out: str) -> str:
+    """Where a guest fault's signature has a recorded cause, a pointer to it."""
+    # The x86 kernel patches code through a temporary int3; multi-threaded TCG
+    # can translate that byte between dropping the page's blocks and the store.
+    if "Oops: int3" in out:
+        return ("; a guest int3 trap at a code-patching site matches the upstream "
+                "QEMU multi-threaded TCG race in https://github.com/kromych/badc/issues/1484")
+    return ""
 
 
 def _boot_result(ok: bool, reason: str, out: str, best_effort: bool) -> None:

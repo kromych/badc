@@ -242,7 +242,7 @@ pub(crate) fn region_frame_offsets(
 
 /// The local slot (negative offset) the emitted form of `inst` addresses:
 /// a slot load / store / address-take, the alloca-top slot a non-zero
-/// `AllocaInit` names by its positive index, and the result temp a call
+/// `AllocaInit` names, and the result temp a call
 /// gathers an aggregate return into. Purely structural; whether the
 /// instruction is emitted at all is `is_dead_pure`'s decision, and the
 /// frame gate combines the two so it cannot disagree with the per-inst
@@ -250,8 +250,10 @@ pub(crate) fn region_frame_offsets(
 fn local_named(inst: &super::super::ir::Inst) -> Option<i64> {
     use super::super::ir::Inst;
     let off = match *inst {
-        Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } | Inst::LocalAddr(off) => off,
-        Inst::AllocaInit(slot) => -slot.abs(),
+        Inst::LoadLocal { off, .. }
+        | Inst::StoreLocal { off, .. }
+        | Inst::LocalAddr(off)
+        | Inst::AllocaInit(off) => off,
         Inst::Call { ret_slot_local, .. }
         | Inst::CallIndirect { ret_slot_local, .. }
         | Inst::CallExt { ret_slot_local, .. } => ret_slot_local,

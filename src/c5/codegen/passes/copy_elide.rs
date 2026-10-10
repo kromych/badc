@@ -76,10 +76,10 @@ fn run_one(f: &mut FunctionSsa) {
     let mut named: BTreeMap<i64, Vec<usize>> = BTreeMap::new();
     for (i, inst) in f.insts.iter().enumerate() {
         match inst {
-            Inst::LocalAddr(off) | Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => {
-                named.entry(*off).or_default().push(i);
-            }
-            Inst::AllocaInit(off) => {
+            Inst::LocalAddr(off)
+            | Inst::LoadLocal { off, .. }
+            | Inst::StoreLocal { off, .. }
+            | Inst::AllocaInit(off) => {
                 named.entry(*off).or_default().push(i);
             }
             Inst::Call { ret_slot_local, .. }

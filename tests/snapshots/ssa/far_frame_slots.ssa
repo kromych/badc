@@ -529,7 +529,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=519
 fn ent_pc=6 n_params=1 variadic=false locals=517
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(521)                                  -> -
+    v0   AllocaInit(-1)                                   -> -
     v1   ParamRef(0, kind=I32)                            -> x3
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0

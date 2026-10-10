@@ -678,8 +678,8 @@ impl SsaBuilder {
         self.push(Inst::ImmExtCode(binding_idx))
     }
 
-    /// `Inst::AllocaInit` -- per-function alloca bookkeeping
-    /// slot. Slot 0 means "no alloca in this function"; the
+    /// `Inst::AllocaInit` -- the frame offset of the per-function alloca
+    /// bookkeeping slot. Slot 0 means "no alloca in this function"; the
     /// per-arch emit short-circuits and writes nothing for the
     /// zero case. The walker emits one per function so the
     /// codegen's per-function state (`current_alloca_top`)

@@ -218,7 +218,7 @@ fn exposed_slots(func: &FunctionSsa, forwardable: &BTreeSet<i64>) -> BTreeSet<i6
         .insts
         .iter()
         .filter_map(|i| match i {
-            Inst::AllocaInit(s) if *s > 0 => Some(-*s),
+            Inst::AllocaInit(off) if *off < 0 => Some(*off),
             _ => None,
         })
         .collect();
@@ -997,14 +997,14 @@ mod tests {
         }
     }
 
-    /// `AllocaInit(k)` reserves slot `-k` for the alloca bookkeeping: a load
-    /// of it never forwards, while another slot's load does.
+    /// `AllocaInit(off)` reserves slot `off` for the alloca bookkeeping: a
+    /// load of it never forwards, while another slot's load does.
     #[test]
     fn the_slot_alloca_reserves_does_not_forward() {
         for (off, forwarded) in [(-3, false), (-2, true)] {
             let mut f = fresh(
                 alloc::vec![
-                    Inst::AllocaInit(3),
+                    Inst::AllocaInit(-3),
                     Inst::ParamRef {
                         idx: 0,
                         kind: LoadKind::I64

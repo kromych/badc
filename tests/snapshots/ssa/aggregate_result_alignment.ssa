@@ -546,7 +546,7 @@ fn ent_pc=12 n_params=1 variadic=false locals=3
 fn ent_pc=13 n_params=2 variadic=false locals=1
   spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(9)                                    -> -
+    v0   AllocaInit(-1)                                   -> -
     v1   ParamRef(0, kind=I32)                            -> x12
     v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=I8)                             -> x3

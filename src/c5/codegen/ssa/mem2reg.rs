@@ -86,10 +86,10 @@ fn candidate_slots(func: &FunctionSsa) -> BTreeSet<i64> {
                 touched.insert(*off);
             }
             // A non-zero `AllocaInit` marks a dynamic-sp function; keep
-            // its reserved slot, named by its positive index, unpromoted.
-            // `AllocaInit(0)` is the no-alloca marker and aliases nothing.
-            Inst::AllocaInit(slot) if *slot > 0 => {
-                pinned.insert(-*slot);
+            // its reserved slot unpromoted. `AllocaInit(0)` is the
+            // no-alloca marker and aliases nothing.
+            Inst::AllocaInit(off) if *off < 0 => {
+                pinned.insert(*off);
             }
             _ => {}
         }
@@ -2486,7 +2486,7 @@ mod tests {
         // reserved slot rides sp, but the fixed locals and the
         // allocator spills stay frame-pointer-relative, so an
         // address-free slot still promotes. Slot -1 is stored then
-        // loaded with `AllocaInit(8)` present: the store neutralizes
+        // loaded with `AllocaInit(-8)` present: the store neutralizes
         // and the load redirects to the stored value.
         let insts = alloc::vec![
             Inst::Imm(5),
@@ -2498,7 +2498,7 @@ mod tests {
                 volatile: false,
                 nsw: false,
             },
-            Inst::AllocaInit(8),
+            Inst::AllocaInit(-8),
             Inst::LoadLocal {
                 disp: 0,
                 off: -1,
@@ -2520,18 +2520,18 @@ mod tests {
         );
         assert!(matches!(f.insts[1], Inst::Imm(0)), "store must neutralize");
         assert!(
-            matches!(f.insts[2], Inst::AllocaInit(8)),
+            matches!(f.insts[2], Inst::AllocaInit(-8)),
             "AllocaInit marker must survive the rewrite"
         );
         assert!(matches!(f.blocks[0].terminator, Terminator::Return(0)));
     }
 
-    /// `AllocaInit(k)` reserves slot `-k` for the alloca bookkeeping, so an
-    /// access to it never promotes.
+    /// `AllocaInit(off)` reserves slot `off` for the alloca bookkeeping, so
+    /// an access to it never promotes.
     #[test]
     fn run_keeps_the_reserved_alloca_slot_in_memory() {
         let insts = alloc::vec![
-            Inst::AllocaInit(8),
+            Inst::AllocaInit(-8),
             Inst::Imm(5),
             Inst::StoreLocal {
                 disp: 0,

@@ -3,7 +3,7 @@
 fn ent_pc=4 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(4)                                    -> -
+    v0   AllocaInit(-1)                                   -> -
     v1   Imm(4)                                           -> x0
     v2   Imm(0)                                           -> x0
     v3   Intrinsic { kind=AllocaSave, args=[] }           -> x1
@@ -44,7 +44,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=1
 fn ent_pc=5 n_params=1 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(5)                                    -> -
+    v0   AllocaInit(-1)                                   -> -
     v1   Imm(3)                                           -> x0
     v2   Imm(0)                                           -> x0
     v3   Imm(5)                                           -> x0

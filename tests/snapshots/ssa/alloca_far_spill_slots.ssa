@@ -21,7 +21,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
 fn ent_pc=1 n_params=1 variadic=false locals=513
   spill_count=12 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(532)                                  -> -
+    v0   AllocaInit(-1)                                   -> -
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0

@@ -549,10 +549,11 @@ pub(crate) enum Inst {
         asm: alloc::boxed::Box<AsmBlock>,
         args: Vec<ValueId>,
     },
-    /// Marks the function as using `alloca` / VLAs when the slot is
-    /// non-zero (the parser's reserved slot index): the body moves sp
-    /// at runtime, so the codegen switches spill addressing to the
-    /// frame pointer. Zero means no alloca. Produces no SSA value.
+    /// Marks the function as using `alloca` / VLAs when non-zero: the
+    /// frame slot the parser reserves for the alloca bookkeeping, a
+    /// negative offset like every slot reference. The body moves sp at
+    /// runtime, so the codegen switches spill addressing to the frame
+    /// pointer. Zero means no alloca. Produces no SSA value.
     AllocaInit(i64),
     /// End of the lifetime of the automatic object based at this frame
     /// slot (C99 6.2.4p2): control has left the block the object was

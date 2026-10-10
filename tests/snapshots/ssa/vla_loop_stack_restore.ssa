@@ -3,7 +3,7 @@
 fn ent_pc=0 n_params=0 variadic=false locals=2
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(9)                                    -> -
+    v0   AllocaInit(-1)                                   -> -
     v1   Imm(1)                                           -> x0
     v2   StoreLocal { off=-2, value=v1, kind=I32, volatile } -> -
     v3   Imm(0)                                           -> x0

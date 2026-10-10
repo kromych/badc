@@ -3,7 +3,7 @@
 fn ent_pc=5 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(5)                                    -> -
+    v0   AllocaInit(-1)                                   -> -
     v1   Imm(32)                                          -> x2
     v2   Intrinsic { kind=Alloca, args=[v1] }             -> x3
     v3   Imm(0)                                           -> x0
@@ -41,7 +41,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
 fn ent_pc=6 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(4)                                    -> -
+    v0   AllocaInit(-1)                                   -> -
     v1   Imm(10)                                          -> x0
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
@@ -106,7 +106,7 @@ fn ent_pc=6 n_params=1 variadic=false locals=1
 fn ent_pc=7 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(6)                                    -> -
+    v0   AllocaInit(-1)                                   -> -
     v1   Imm(16)                                          -> x0
     v2   Intrinsic { kind=Alloca, args=[v1] }             -> x3
     v3   Imm(0)                                           -> x1
@@ -175,7 +175,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=1
 fn ent_pc=8 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(4)                                    -> -
+    v0   AllocaInit(-1)                                   -> -
     v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
@@ -216,7 +216,7 @@ fn ent_pc=8 n_params=1 variadic=false locals=1
 fn ent_pc=9 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(5)                                    -> -
+    v0   AllocaInit(-1)                                   -> -
     v1   Imm(51)                                          -> x6
     v2   Imm(0)                                           -> x0
     v3   Imm(64)                                          -> x2

@@ -270,7 +270,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
         .insts
         .iter()
         .find_map(|i| match i {
-            Inst::AllocaInit(slot) if *slot > 0 => Some(-*slot),
+            Inst::AllocaInit(off) if *off < 0 => Some(*off),
             _ => None,
         })
         .unwrap_or(0);

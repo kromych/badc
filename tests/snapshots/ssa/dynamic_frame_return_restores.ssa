@@ -19,7 +19,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
 fn ent_pc=1 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(5)                                    -> -
+    v0   AllocaInit(-1)                                   -> -
     v1   ParamRef(0, kind=I64)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
@@ -72,7 +72,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
 fn ent_pc=3 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(7)                                    -> -
+    v0   AllocaInit(-1)                                   -> -
     v1   ParamRef(0, kind=I64)                            -> x3
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
@@ -155,7 +155,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
 fn ent_pc=5 n_params=1 variadic=false locals=513
   spill_count=7 gpr_used=[3, 12, 13, 14, 15] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(526)                                  -> -
+    v0   AllocaInit(-513)                                 -> -
     v1   ParamRef(0, kind=I64)                            -> x3
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0
@@ -248,7 +248,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=513
 fn ent_pc=6 n_params=1 variadic=false locals=39
   spill_count=0 gpr_used=[3, 12, 13, 14] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(44)                                   -> -
+    v0   AllocaInit(-39)                                  -> -
     v1   ParamRef(0, kind=I64)                            -> x3
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0

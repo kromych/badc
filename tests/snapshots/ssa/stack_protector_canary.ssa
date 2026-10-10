@@ -66,7 +66,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=2
 fn ent_pc=8 n_params=1 variadic=false locals=1
   spill_count=0 gpr_used=[3] fp_used=[]
   block 0  start_pc=0
-    v0   AllocaInit(6)                                    -> -
+    v0   AllocaInit(-1)                                   -> -
     v1   Imm(9)                                           -> x6
     v2   Imm(0)                                           -> x0
     v3   Imm(0)                                           -> x0

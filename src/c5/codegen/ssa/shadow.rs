@@ -1134,7 +1134,28 @@ pub(crate) fn apply_data_liveness(
         .max()
         .unwrap_or(0)
         .max(crate::c5::layout::BSS_ALIGN_MIN as i64);
-    let obj_end = |i: usize| -> i64 { if i + 1 < n { starts[i + 1] } else { data_len } };
+    // An interval ends where the padding recorded ahead of the next start
+    // begins, as each kept object is placed at its own residue; object 0 keeps the NULL guard.
+    let pad_lo_by_hi: alloc::collections::BTreeMap<i64, i64> = {
+        let mut pads = out.data_pad_ranges.clone();
+        pads.sort_unstable();
+        let mut merged: Vec<(i64, i64)> = Vec::new();
+        for (lo, hi) in pads.into_iter().filter(|&(lo, hi)| lo < hi) {
+            match merged.last_mut() {
+                Some(last) if lo <= last.1 => last.1 = last.1.max(hi),
+                _ => merged.push((lo, hi)),
+            }
+        }
+        merged.into_iter().map(|(lo, hi)| (hi, lo)).collect()
+    };
+    let obj_ends: Vec<i64> = (0..n)
+        .map(|i| {
+            let next = if i + 1 < n { starts[i + 1] } else { data_len };
+            let floor = if i == 0 { next.min(8) } else { starts[i] };
+            pad_lo_by_hi.get(&next).map_or(next, |&lo| lo.max(floor))
+        })
+        .collect();
+    let obj_end = |i: usize| -> i64 { obj_ends[i] };
     // A relocation writes a (generally non-zero) value into its slot at
     // link/write time, so the slot's object is initialised data even when
     // its bytes are zero in `program.data` (a function-pointer slot, or a
@@ -1813,10 +1834,8 @@ mod tests {
                 .1
         };
         assert_eq!(at("a8"), 8, "the first object follows the NULL guard");
-        // Each base is the first one past the preceding object that meets
-        // the object's own alignment; the interval the pass copies carries
-        // the parse-recorded padding that followed the object.
-        assert_eq!(at("a64"), 128);
+        // Each base is the first one past the preceding object at its own alignment.
+        assert_eq!(at("a64"), 64);
         assert_eq!(at("a4k"), 4096);
         // The image ends with the last object, not on the 4096 the
         // section is placed at.

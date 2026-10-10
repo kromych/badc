@@ -4,7 +4,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(32)                                      -> x0
+    v1   ImmData(16)                                      -> x0
     v2   Load { addr=v1, disp=0, kind=I64 }               -> x1
     v3   BinopI { op=add, lhs=v1, rhs_imm=8 }             -> x2
     v4   Load { addr=v1, disp=8, kind=I64 }               -> x0
@@ -50,7 +50,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v33  LifetimeEnd(0)                                   -> -
     terminator Return(v3691)   (exit_acc=v3691)
   block 4  start_pc=0
-    v34  ImmData(48)                                      -> x1
+    v34  ImmData(32)                                      -> x1
     v35  Load { addr=v34, disp=0, kind=I64 }              -> x0
     v36  BinopI { op=add, lhs=v34, rhs_imm=8 }            -> x2
     v37  Load { addr=v34, disp=8, kind=I64 }              -> x2
@@ -96,7 +96,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v66  LifetimeEnd(0)                                   -> -
     terminator Return(v3712)   (exit_acc=v3712)
   block 8  start_pc=0
-    v67  ImmData(48)                                      -> x0
+    v67  ImmData(32)                                      -> x0
     v68  Load { addr=v34, disp=0, kind=I64 }              -> x0
     v69  BinopI { op=add, lhs=v34, rhs_imm=8 }            -> x0
     v70  Load { addr=v34, disp=8, kind=I64 }              -> x0
@@ -2491,7 +2491,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v2575 Imm(0)                                           -> x0
     v2576 Imm(0)                                           -> x0
     v2577 Imm(0)                                           -> x0
-    v2578 ImmData(64)                                      -> x0
+    v2578 ImmData(48)                                      -> x0
     v2579 BinopI { op=add, lhs=v2578, rhs_imm=1 }          -> x1
     v2580 Load { addr=v2578, disp=1, kind=U32, align=1 }   -> x1
     v2581 BinopI { op=add, lhs=v2578, rhs_imm=5 }          -> x2
@@ -2550,7 +2550,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     terminator Return(v3979)   (exit_acc=v3979)
   block 29  start_pc=0
     v2961 LocalAddr(-1)                                    -> x0
-    v2962 ImmData(16)                                      -> x1
+    v2962 ImmData(8)                                       -> x1
     v2963 Mcpy { dst=v2961, src=v2962, size=7, align=8 }   -> -
     v2964 LocalAddr(-1)                                    -> x1
     v2965 BinopI { op=add, lhs=v2961, rhs_imm=1 }          -> x1

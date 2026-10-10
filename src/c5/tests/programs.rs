@@ -974,15 +974,14 @@ fn post_inline_dead_data_repack() {
 /// objects never grows the addressable image: a page-aligned survivor
 /// holds the section at 4096 while the small objects still pack on
 /// their own boundaries, and dropping the page itself collapses the
-/// section alignment with it. Locks the shape where the old
-/// section-aligned residue rule made a narrower live set emit more
-/// `.data` than a wider one.
+/// section alignment and the padding ahead of the page with it.
 #[test]
 fn a_narrower_live_set_never_grows_the_packed_image() {
     use crate::c5::codegen::ssa::shadow::{
         LiveSets, apply_data_liveness, compute_live_sets, produce_ssa_funcs,
     };
     let src = "_Alignas(4096) long page[512] = {1}; \
+               static long unused_mid[100] = {5}; \
                _Alignas(64) long cl[8] = {2}; \
                long plain[3] = {3}; long zero[8]; \
                static long unused_init[16] = {4}; static long unused_zero[16]; \
@@ -994,21 +993,6 @@ fn a_narrower_live_set_never_grows_the_packed_image() {
         .expect("compile");
     let funcs = produce_ssa_funcs(&program, crate::Target::LinuxX64, false, true).expect("ssa");
     let sets = compute_live_sets(&funcs, &Default::default(), &program, false, None);
-    assert!(
-        sets.data_live.iter().any(|&l| !l),
-        "the fixture leaves dead objects to drop"
-    );
-    let pack = |sets: &LiveSets| {
-        let (out, bss, _) = apply_data_liveness(program.clone(), sets, &sets.func_pcs, true, None);
-        (out, bss)
-    };
-    let wide = LiveSets {
-        func_pcs: sets.func_pcs.clone(),
-        starts: sets.starts.clone(),
-        data_live: alloc::vec![true; sets.data_live.len()],
-    };
-    let (wide_out, wide_bss) = pack(&wide);
-    let (narrow_out, narrow_bss) = pack(&sets);
     let addr = |out: &crate::c5::program::Program, name: &str| {
         out.symbols
             .iter()
@@ -1016,18 +1000,34 @@ fn a_narrower_live_set_never_grows_the_packed_image() {
             .expect("symbol")
             .val
     };
+    let interval = |off: i64| sets.starts.partition_point(|&s| s <= off) - 1;
     assert!(
-        narrow_out.data.len() + narrow_bss as usize <= wide_out.data.len() + wide_bss as usize,
-        "the narrower live set emitted more addressable data \
-         ({}+{} over {}+{})",
-        narrow_out.data.len(),
-        narrow_bss,
-        wide_out.data.len(),
-        wide_bss
+        !sets.data_live[interval(addr(&program, "unused_mid"))]
+            && addr(&program, "cl") > addr(&program, "page") + 4096,
+        "the dead object lies between the page and the cache-line object"
     );
-    // The page keeps its own 4096 boundary (the gap ahead of it is the
-    // alignment itself); the 64-byte object packs right after it, not on
-    // the next page boundary the section-aligned residue rule gave it.
+    let pack = |sets: &LiveSets| {
+        let (out, bss, _) = apply_data_liveness(program.clone(), sets, &sets.func_pcs, true, None);
+        (out, bss)
+    };
+    let with_live = |live: &dyn Fn(usize) -> bool| LiveSets {
+        func_pcs: sets.func_pcs.clone(),
+        starts: sets.starts.clone(),
+        data_live: (0..sets.data_live.len()).map(live).collect(),
+    };
+    let (wide_out, wide_bss) = pack(&with_live(&|_| true));
+    let (narrow_out, narrow_bss) = pack(&sets);
+    let page_interval = interval(addr(&program, "page"));
+    let (no_page_out, no_page_bss) = pack(&with_live(&|i| sets.data_live[i] && i != page_interval));
+    let size = |out: &crate::c5::program::Program, bss: i64| out.data.len() + bss as usize;
+    assert!(
+        size(&narrow_out, narrow_bss) <= size(&wide_out, wide_bss)
+            && size(&no_page_out, no_page_bss) <= size(&narrow_out, narrow_bss),
+        "a narrower live set emitted more addressable data ({} {} {})",
+        size(&wide_out, wide_bss),
+        size(&narrow_out, narrow_bss),
+        size(&no_page_out, no_page_bss)
+    );
     assert_eq!(
         addr(&narrow_out, "cl"),
         addr(&narrow_out, "page") + 4096,
@@ -1035,40 +1035,16 @@ fn a_narrower_live_set_never_grows_the_packed_image() {
     );
     assert!(
         narrow_out.data.len() < 4096 + 4096 + 128,
-        "the packed image carries section-aligned padding ({})",
+        "the packed image carries the dropped object's span ({})",
         narrow_out.data.len()
     );
     // Dropping the page collapses the section alignment with it: what
     // remains packs under a page.
-    let page = &program.symbols[program
-        .symbols
-        .iter()
-        .position(|s| s.name == "page")
-        .expect("page symbol")];
-    let mut no_page = LiveSets {
-        func_pcs: sets.func_pcs.clone(),
-        starts: sets.starts.clone(),
-        data_live: sets.data_live.clone(),
-    };
-    for (i, start) in sets.starts.iter().enumerate() {
-        let end = if i + 1 < sets.starts.len() {
-            sets.starts[i + 1]
-        } else {
-            program.data.len() as i64
-        };
-        if no_page.data_live[i] && (*start..end).contains(&page.val) {
-            no_page.data_live[i] = false;
-        }
-    }
-    let (no_page_out, no_page_bss) = pack(&no_page);
     assert!(
-        no_page_out.data.len() + no_page_bss as usize
-            <= narrow_out.data.len() + narrow_bss as usize,
-        "dropping the page grew the image ({}+{} over {}+{})",
+        size(&no_page_out, no_page_bss) < 4096,
+        "the padding ahead of the dropped page survived ({}+{})",
         no_page_out.data.len(),
-        no_page_bss,
-        narrow_out.data.len(),
-        narrow_bss
+        no_page_bss
     );
 }
 

@@ -54,8 +54,8 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v36  BinopI { op=mul, lhs=v1, rhs_imm=19 }            -> x0
     v37  BinopI { op=add, lhs=v36, rhs_imm=3 }            -> [spill 10]
     v38  Imm(0)                                           -> x0
-    v39  ImmData(69664)                                   -> x0
-    v40  ImmData(32)                                      -> x0
+    v39  ImmData(69648)                                   -> x0
+    v40  ImmData(16)                                      -> x0
     v41  BinopI { op=add, lhs=v40, rhs_imm=65536 }        -> x0
     v42  BinopI { op=add, lhs=v40, rhs_imm=65280 }        -> x0
     v43  InlineAsm { template="mov %%rsp, (%0)\n\tmov %1, %%rsp", ops=2, args=[v39, v42] } -> -
@@ -126,7 +126,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v108 Imm(0)                                           -> x2
     v109 Binop { op=add, lhs=v107, rhs=v45 }              -> x1
     v110 Imm(0)                                           -> x0
-    v111 ImmData(69664)                                   -> x0
+    v111 ImmData(69648)                                   -> x0
     v112 InlineAsm { template="mov (%0), %%rsp", ops=1, args=[v111] } -> -
     v113 Imm(0)                                           -> x0
     terminator Return(v109)   (exit_acc=v109)
@@ -246,7 +246,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[3, 12] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ImmData(16)                                      -> x0
+    v1   ImmData(8)                                       -> x0
     v2   Load { addr=v1, disp=0, kind=I64, volatile }     -> x3
     v3   Imm(0)                                           -> x0
     v4   Imm(0)                                           -> x0

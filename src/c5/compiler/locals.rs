@@ -172,7 +172,7 @@ impl Compiler {
     /// function-body-top and inside-block declaration paths. A static
     /// local's `.data` slot honors the request like a file-scope object; an
     /// automatic object lives in 8-byte frame slots, so a wider requirement
-    /// goes to the over-aligned frame region. Consumes `pending.attr_align`
+    /// goes to the over-aligned frame region. Consumes `pending.attrs.align`
     /// either way, so a request cannot leak onto the next declarator.
     pub(super) fn resolve_decl_align(
         &mut self,
@@ -180,8 +180,8 @@ impl Compiler {
         is_static: bool,
         base_type_align: i64,
     ) -> Result<DeclAlign, C5Error> {
-        let req_align = core::mem::take(&mut self.pending.attr_align);
-        let alignas_align = core::mem::take(&mut self.pending.attr_alignas);
+        let req_align = core::mem::take(&mut self.pending.attrs.align);
+        let alignas_align = core::mem::take(&mut self.pending.attrs.alignas);
         if req_align > 8 && !(req_align as usize).is_power_of_two() {
             return Err(self.compile_err(
                 Code::INVALID_DECLARATION,
@@ -379,35 +379,17 @@ impl Compiler {
     /// when a nested block or `for`-init level is open, the
     /// function-body scope (shared with the parameters, C99 6.2.1p4)
     /// otherwise -- receives the bindings and the saved outer state its
-    /// exit restores.
-    pub(super) fn parse_local_decl(
-        &mut self,
-        maybe_unused: bool,
-        leading_noreturn: bool,
-    ) -> Result<(), C5Error> {
+    /// exit restores. The attributes the item led with are already on
+    /// `pending.attrs`.
+    pub(super) fn parse_local_decl(&mut self) -> Result<(), C5Error> {
         let mut is_static = false;
         let mut is_extern = false;
         let mut is_thread_local = false;
         let mut saw_specifier = false;
         let mut qual_bits: i64 = 0;
-        // Reset the per-declaration carriers; a stale one from the
-        // enclosing function would bleed onto a static's emission record.
-        self.pending_noreturn = leading_noreturn;
-        self.pending.attr_maybe_unused = false;
         self.pending.base_is_const = false;
         let _ = self.take_base_spelling();
         self.pending.saw_register_storage = false;
-        self.pending.attr_used = false;
-        self.pending.attr_section = None;
-        self.pending.attr_patchable_entry = None;
-        self.pending.attr_no_instrument = false;
-        self.pending.attr_no_stack_protector = false;
-        self.pending.attr_weak = false;
-        self.pending.attr_call_conv = crate::c5::codegen::CallConv::Target;
-        self.pending.attr_visibility = None;
-        self.pending.attr_constructor = false;
-        self.pending.attr_destructor = false;
-        self.pending.attr_init_priority = None;
         saw_specifier |= self.consume_local_decl_specifiers(
             &mut is_static,
             &mut is_extern,
@@ -451,17 +433,9 @@ impl Compiler {
         let base_is_function_type = self.pending.base_is_function_type;
         let base_fn_ptr_params = self.pending.fn_ptr_params.clone();
         let base_fn_ptr_ret_fn = self.pending.fn_ptr_ret_fn.clone();
-        // A leading `cleanup(fn)` or `uninitialized` applies to every
-        // declarator; one written after a declarator applies to it alone.
-        let leading_cleanup = self.pending.attr_cleanup.take();
-        let leading_uninitialized = core::mem::take(&mut self.pending.attr_uninitialized);
-        // `noreturn` and `unused` among the specifiers apply to every
-        // declarator; after one, to that declarator alone.
-        let base_noreturn = self.pending_noreturn;
-        let base_maybe_unused = maybe_unused || self.pending.attr_maybe_unused;
+        let spec_attrs = self.pending.attrs.clone();
         while self.lex.tk != ';' {
-            self.pending_noreturn = base_noreturn;
-            self.pending.attr_maybe_unused = base_maybe_unused;
+            self.pending.attrs = spec_attrs.clone();
             self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
             self.pending.fn_ptr_ret_indirection = base_fn_ptr_ret_indirection;
             self.pending.base_is_function_type = base_is_function_type;
@@ -495,7 +469,7 @@ impl Compiler {
                 let what = super::decl_base::ImplicitInt::Declarator(loc_idx);
                 self.report_implicit_int(what, declarator_line)?;
             }
-            self.pending.attr_transparent_union = false;
+            self.pending.attrs.transparent_union = false;
             // C99 6.7.1p5 + 6.9.1: a declarator of bare function type (a
             // function-TYPE typedef with no pointer level) declares a
             // function, not an object; classifying it as data would make a
@@ -511,10 +485,8 @@ impl Compiler {
                 continue;
             }
             let asm_reg = self.parse_register_asm_binding(loc_idx, is_static, is_extern)?;
-            // Trailing cleanup wins for this declarator; else the leading one.
-            let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);
-            let uninitialized =
-                core::mem::take(&mut self.pending.attr_uninitialized) || leading_uninitialized;
+            let cleanup_fn = self.pending.attrs.cleanup.take();
+            let uninitialized = core::mem::take(&mut self.pending.attrs.uninitialized);
             // Take the fn-pointer carriers before any initializer is parsed:
             // an initializer cast runs a base-type parse that clears them,
             // which would drop a variadic fn-pointer's prototype.
@@ -566,7 +538,7 @@ impl Compiler {
             if !is_extern || extern_shadows_binding {
                 self.save_scope_binding(loc_idx);
             }
-            if self.pending.attr_maybe_unused {
+            if self.pending.attrs.maybe_unused {
                 self.symbols[loc_idx].binding.maybe_unused = true;
             }
 
@@ -653,8 +625,6 @@ impl Compiler {
         }
         self.next()?;
         self.pending.auto_type_single_declarator = false;
-        self.pending_noreturn = false;
-        self.pending.attr_maybe_unused = false;
         Ok(())
     }
 
@@ -921,7 +891,7 @@ impl Compiler {
         // to that entity, as on the extern-object path, and so does
         // `noreturn` (C11 6.7.4).
         if c != Token::Loc as i64 {
-            self.symbols[loc_idx].is_noreturn |= self.pending_noreturn;
+            self.symbols[loc_idx].is_noreturn |= self.pending.attrs.noreturn;
             self.apply_symbol_attributes(loc_idx);
         }
         self.accept_declarator_separator()?;
@@ -949,7 +919,7 @@ impl Compiler {
             || self.lex.tk == Token::TypeQual
         {
             if self.lex.tk == Token::Noreturn {
-                self.pending_noreturn = true;
+                self.pending.attrs.noreturn = true;
             }
             if self.lex.tk == Token::Static {
                 *is_static = true;

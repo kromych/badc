@@ -447,7 +447,7 @@ impl Compiler {
         let depth = p.fn_ptr_indirection?;
         let f = FnType {
             params: p.fn_ptr_params.clone().unwrap_or_default(),
-            conv: p.attr_call_conv,
+            conv: p.attrs.call_conv,
             ret: p.fn_ptr_ret_fn.clone(),
         };
         Some((f, depth))

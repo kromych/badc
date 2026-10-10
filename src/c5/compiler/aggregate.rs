@@ -124,15 +124,12 @@ impl Compiler {
         is_union: bool,
         packed: bool,
     ) -> Result<usize, C5Error> {
-        // An alignment request preceding the tag
-        // (`__declspec(align(16)) struct S { ... }`) belongs to the
-        // declaration, not to the first member; park it across the
-        // body parse so the member checks see only member attributes.
-        let decl_attr_align = core::mem::take(&mut self.pending.attr_align);
-        let decl_attr_alignas = core::mem::take(&mut self.pending.attr_alignas);
+        // The attributes preceding the tag (`__declspec(align(16)) struct S
+        // { ... } s;`) belong to the enclosing declaration; each member
+        // declaration starts from its own.
+        let decl_attrs = core::mem::take(&mut self.pending.attrs);
         let r = self.parse_aggregate_body_inner(name, is_union, packed);
-        self.pending.attr_align = self.pending.attr_align.max(decl_attr_align);
-        self.pending.attr_alignas = self.pending.attr_alignas.max(decl_attr_alignas);
+        self.pending.attrs = decl_attrs;
         r
     }
 
@@ -142,8 +139,8 @@ impl Compiler {
     /// data section and static-object placement can realise; an automatic
     /// object of such a type is diagnosed at its declaration instead.
     fn take_member_align(&mut self) -> Result<i64, C5Error> {
-        let m_align = core::mem::take(&mut self.pending.attr_align);
-        self.pending.attr_alignas = 0;
+        let m_align = core::mem::take(&mut self.pending.attrs.align);
+        self.pending.attrs.alignas = 0;
         if m_align > 0 && !(m_align as usize).is_power_of_two() {
             return Err(self.compile_err(
                 Code::INVALID_DECLARATION,
@@ -192,6 +189,7 @@ impl Compiler {
                 self.next()?;
                 continue;
             }
+            self.pending.attrs = super::DeclAttrs::default();
             let base = self.parse_member_base_type(name)?;
             if let Some(inner_id) = base.anon_aggregate_inner_id
                 && self.lex.tk == ';'
@@ -254,12 +252,14 @@ impl Compiler {
         // does (an inline declarator prototype still overrides it).
         let base_field_fn_ptr_params = self.pending.fn_ptr_params.clone();
         let base_field_fn_ptr_ret_fn = self.pending.fn_ptr_ret_fn.clone();
+        let spec_attrs = self.pending.attrs.clone();
         loop {
+            self.pending.attrs = spec_attrs.clone();
             // Anonymous bitfield (`int :N;`) -- skips a name and
             // just reserves bits for padding. Detected by `:`
             // appearing in declarator position.
             if self.lex.tk == ':' {
-                self.pending.attr_packed = false;
+                self.pending.attrs.packed = false;
                 if implicit_int {
                     let what = super::decl_base::ImplicitInt::Declarator(usize::MAX);
                     self.report_implicit_int(what, self.lex.line)?;
@@ -271,12 +271,12 @@ impl Compiler {
                     ));
                 }
                 let width = self.parse_bitfield_width(field_base, false)?;
-                self.pending.attr_transparent_union = false;
+                self.pending.attrs.transparent_union = false;
                 let mut unit_ty = field_base;
-                if let Some(m) = self.pending.attr_mode.take() {
+                if let Some(m) = self.pending.attrs.mode.take() {
                     unit_ty = self.apply_mode_to_type(unit_ty, m)?;
                 }
-                let own_packed = core::mem::take(&mut self.pending.attr_packed);
+                let own_packed = core::mem::take(&mut self.pending.attrs.packed);
                 let shape = MemberShape {
                     is_union,
                     bit_width: width,
@@ -298,7 +298,7 @@ impl Compiler {
             self.pending.base_is_function_type = base_field_is_function_type;
             self.pending.fn_ptr_params = base_field_fn_ptr_params.clone();
             self.pending.fn_ptr_ret_fn = base_field_fn_ptr_ret_fn.clone();
-            self.pending.attr_packed = group_packed;
+            self.pending.attrs.packed = group_packed;
             let saved_member_ctx = self.pending.in_member_declarator;
             self.pending.in_member_declarator = true;
             self.pending.member_decl_save = None;
@@ -329,7 +329,7 @@ impl Compiler {
                     ));
                 }
                 // C11 6.7.5p2.
-                if group_alignas || self.pending.attr_alignas > 0 {
+                if group_alignas || self.pending.attrs.alignas > 0 {
                     let name = self.symbols[id_idx].name.clone();
                     return Err(self.compile_err(
                         Code::INVALID_DECLARATION,
@@ -340,10 +340,10 @@ impl Compiler {
             } else {
                 0
             };
-            self.pending.attr_transparent_union = false;
+            self.pending.attrs.transparent_union = false;
             // An attribute after the bit-field width types the member too.
             field_ty = self.apply_pending_type_attributes(field_ty)?;
-            let field_packed = core::mem::take(&mut self.pending.attr_packed);
+            let field_packed = core::mem::take(&mut self.pending.attrs.packed);
             let m_align = self.take_member_align()?;
             // Alignment for this declarator only (a comma-list peer
             // without its own attribute keeps the group alignment).
@@ -404,7 +404,7 @@ impl Compiler {
             // (`efi_status_t (__efiapi *exit)(...)`, or the typedef
             // form `efi_get_time_t __efiapi *get_time`). Consumed
             // here so it cannot leak to the next member.
-            let field_conv = core::mem::take(&mut self.pending.attr_call_conv);
+            let field_conv = core::mem::take(&mut self.pending.attrs.call_conv);
             let is_aggregate_value = is_struct_value_ty(field_ty);
             // C99 6.7.2.1: a member must have complete type, and an
             // array of an incomplete type is itself incomplete. Only a
@@ -856,7 +856,7 @@ impl Compiler {
         while is_decl_modifier(self.lex.tk) {
             if self.lex.tk == Token::Attribute {
                 group_packed |= self.skip_attribute_specifiers()?;
-                group_alignas |= self.pending.attr_alignas > 0;
+                group_alignas |= self.pending.attrs.alignas > 0;
                 let m_align = self.take_member_align()?;
                 if m_align > 0 {
                     group_align = group_align.max(m_align as usize);
@@ -954,11 +954,11 @@ impl Compiler {
         // `int long` / `char unsigned` fields re-derive the base
         // tag from the folded modifiers. An attribute among them applies
         // to every declarator; a nested type's own `packed` does not.
-        self.pending.attr_packed = false;
+        self.pending.attrs.packed = false;
         let (saw_int_mod, trailing_quals) =
             self.consume_trailing_decl_modifiers(&mut mods, None)?;
-        group_packed |= core::mem::take(&mut self.pending.attr_packed);
-        group_alignas |= self.pending.attr_alignas > 0;
+        group_packed |= core::mem::take(&mut self.pending.attrs.packed);
+        group_alignas |= self.pending.attrs.alignas > 0;
         group_align = group_align.max(self.take_member_align()?.max(0) as usize);
         if saw_int_mod {
             if field_base_tok == Token::Int {
@@ -1234,7 +1234,7 @@ impl Compiler {
         if self.skip_attribute_specifiers()? {
             self.repack_struct(struct_id, Packing::Attribute);
         }
-        let transparent = core::mem::take(&mut self.pending.attr_transparent_union);
+        let transparent = core::mem::take(&mut self.pending.attrs.transparent_union);
         let req = self.take_member_align()?;
         if req > 0 {
             let align = self.structs[struct_id].align.max(req as usize);

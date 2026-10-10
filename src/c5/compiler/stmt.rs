@@ -361,7 +361,8 @@ impl Compiler {
             // and the declared counter never reaches the
             // SSA prologue.
             let init_before = self.ast_stmts_snapshot();
-            self.parse_local_decl(false, false)?;
+            self.pending.attrs = super::DeclAttrs::default();
+            self.parse_local_decl()?;
             let init_after = self.ast.stmts.len();
             // C99 6.7p1: a declaration's init-declarator-list may name
             // several declarators (`for (int i = 0, l = n; ...)`).
@@ -679,6 +680,15 @@ impl Compiler {
         Ok(Some((a, b)))
     }
 
+    /// The attribute-specifier-sequence a block item may lead with, before a
+    /// declaration or a statement (C23 6.7.13, 6.8). The item starts from
+    /// these alone: none an earlier item or the enclosing definition named.
+    pub(super) fn parse_block_item_attributes(&mut self) -> Result<(), C5Error> {
+        self.pending.attrs = super::DeclAttrs::default();
+        self.skip_attribute_specifiers()?;
+        Ok(())
+    }
+
     /// Parse a `typedef` declaration at function/block scope (C99
     /// 6.7.7, 6.2.1), routed here so block-local typedefs (e.g.
     /// `typedef void(*LOGFUNC_t)(...)` inside a switch case) bind
@@ -689,14 +699,12 @@ impl Compiler {
     /// cleanup.
     pub(super) fn parse_block_typedef(&mut self) -> Result<(), C5Error> {
         self.next()?; // consume `typedef`
-        // Scope the object-alignment carrier to this typedef so a prior
-        // statement's `_Alignas` does not leak onto the alias.
-        self.pending.attr_align = 0;
-        self.pending.attr_alignas = 0;
         let lbt = self.parse_decl_base_type()?;
         let implicit_int = core::mem::take(&mut self.pending.base_implicit_int);
         let base_enum_tag = self.pending.base_enum_tag.take();
+        let spec_attrs = self.pending.attrs.clone();
         while self.lex.tk != ';' {
+            self.pending.attrs = spec_attrs.clone();
             let declarator_line = self.lex.line;
             let (id_idx, ty, mut td_array, mut td_zero_len) = self.parse_declarator(lbt)?;
             if id_idx == usize::MAX {
@@ -706,7 +714,7 @@ impl Compiler {
                 let what = super::decl_base::ImplicitInt::Declarator(id_idx);
                 self.report_implicit_int(what, declarator_line)?;
             }
-            let declarator_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
+            let declarator_transparent = core::mem::take(&mut self.pending.attrs.transparent_union);
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
             let ret_fn = self.take_decl_ret_fn(self.lex.tk == '(');
@@ -765,8 +773,8 @@ impl Compiler {
             }
             // GNU `aligned(N)` type attribute on the alias (its own
             // attribute, else propagated from an aligned typedef base).
-            let alias_align = if self.pending.attr_align > 0 {
-                self.pending.attr_align
+            let alias_align = if self.pending.attrs.align > 0 {
+                self.pending.attrs.align
             } else {
                 self.pending.type_align
             };
@@ -800,8 +808,8 @@ impl Compiler {
             // A function-type typedef records the calling convention its
             // declaration named, so a declarator through the alias
             // inherits it (`typedef efi_status_t __efiapi f_t(void);`).
-            if self.pending.attr_call_conv != crate::c5::codegen::CallConv::Target {
-                self.symbols[id_idx].fn_type.conv = self.pending.attr_call_conv;
+            if self.pending.attrs.call_conv != crate::c5::codegen::CallConv::Target {
+                self.symbols[id_idx].fn_type.conv = self.pending.attrs.call_conv;
             }
             if typedef_fpi > 0 {
                 self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
@@ -820,11 +828,7 @@ impl Compiler {
             self.accept_declarator_separator()?;
         }
         self.next()?; // consume `;`
-        // Clear the alignment carriers so this typedef's attribute does
-        // not leak onto a following block declaration; the file-scope
-        // loop resets them per declaration, the block path does not.
-        self.pending.attr_align = 0;
-        self.pending.attr_alignas = 0;
+        // A typedef base's alignment does not reach a following declaration.
         self.pending.type_align = 0;
         Ok(())
     }
@@ -1082,24 +1086,9 @@ impl Compiler {
                 continue;
             }
             at_block_start = false;
-            // C23 6.7.13 / 6.8: an attribute-specifier-sequence may
-            // lead either a declaration or a statement at block scope.
-            // Consume it, then dispatch on the following token.
-            let (mut leading_maybe_unused, mut leading_noreturn) = (false, false);
-            if self.at_attribute_specifier() {
-                self.pending.attr_maybe_unused = false;
-                // Clear per-item so a `cleanup` attribute leading a
-                // statement (not a declaration) cannot leak onto the next
-                // declaration; the declaration path re-reads it after this.
-                self.pending.attr_cleanup = None;
-                self.pending.attr_uninitialized = false;
-                self.pending_noreturn = false;
-                self.skip_attribute_specifiers()?;
-                leading_maybe_unused = self.pending.attr_maybe_unused;
-                leading_noreturn = core::mem::take(&mut self.pending_noreturn);
-                if self.lex.tk == '}' {
-                    break;
-                }
+            self.parse_block_item_attributes()?;
+            if self.lex.tk == '}' {
+                break;
             }
             if self.lex.tk == Token::Typedef {
                 self.parse_block_typedef()?;
@@ -1110,7 +1099,7 @@ impl Compiler {
             } else if self.lex_is_block_decl_start() {
                 let item_before = self.ast_stmts_snapshot();
                 let vla_before = self.func_vla_decls;
-                self.parse_local_decl(leading_maybe_unused, leading_noreturn)?;
+                self.parse_local_decl()?;
                 if self.func_vla_decls > vla_before && first_vla_item.is_none() {
                     first_vla_item = Some(top_level_ids.len());
                 }

@@ -242,7 +242,7 @@ impl Compiler {
         // An attribute may sit between the keyword and the tag
         // (`struct __attribute__((packed)) name`).
         let packed = self.skip_attribute_specifiers()?;
-        let head_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
+        let head_transparent = core::mem::take(&mut self.pending.attrs.transparent_union);
         let mut anonymous = false;
         let name = if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.clone();
@@ -1058,7 +1058,7 @@ impl Compiler {
     /// `__attribute__ (( ... ))` / `__declspec ( ... )` / `_Alignas
     /// ( ... )` and C23 `[[ ... ]]` -- if any. Returns true when one
     /// names the `packed` attribute, which sets an aggregate's layout;
-    /// `maybe_unused` / `unused` is recorded on `pending.attr_maybe_unused`.
+    /// `maybe_unused` / `unused` is recorded on `pending.attrs.maybe_unused`.
     /// Every other decorator is an advisory hint the dialect does not act
     /// on and is discarded. The payload is matched by balance, so any
     /// parenthesis depth and content -- nested calls, string literals,
@@ -1252,7 +1252,7 @@ impl Compiler {
                             // GCC `mode(M)`: the declared type becomes the
                             // integer or floating type of machine mode `M`.
                             self.next()?; // `(`
-                            self.pending.attr_mode = Some(self.parse_machine_mode()?);
+                            self.pending.attrs.mode = Some(self.parse_machine_mode()?);
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err(
                                     Code::SYNTAX,
@@ -1265,7 +1265,7 @@ impl Compiler {
                             // symbol's bytes in the named object section.
                             self.next()?; // `(`
                             let name = self.parse_attribute_string_operand("section")?;
-                            self.pending.attr_section = Some(name);
+                            self.pending.attrs.section = Some(name);
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err(
                                     Code::SYNTAX,
@@ -1290,7 +1290,7 @@ impl Compiler {
                                     "`patchable_function_entry` takes N >= M >= 0",
                                 ));
                             }
-                            self.pending.attr_patchable_entry = Some((n as u32, m as u32));
+                            self.pending.attrs.patchable_entry = Some((n as u32, m as u32));
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err(
                                     Code::SYNTAX,
@@ -1304,7 +1304,7 @@ impl Compiler {
                             // defined in this unit.
                             self.next()?; // `(`
                             let name = self.parse_attribute_string_operand("alias")?;
-                            self.pending.attr_alias = Some(name);
+                            self.pending.attrs.alias = Some(name);
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err(
                                     Code::SYNTAX,
@@ -1321,7 +1321,7 @@ impl Compiler {
                             // enclosing `#pragma GCC visibility` extent.
                             self.next()?; // `(`
                             let vis = self.parse_attribute_string_operand("visibility")?;
-                            self.pending.attr_visibility =
+                            self.pending.attrs.visibility =
                                 Some(vis == "hidden" || vis == "internal");
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err(
@@ -1341,7 +1341,7 @@ impl Compiler {
                                     "`cleanup` operand must be a function name",
                                 ));
                             }
-                            self.pending.attr_cleanup = Some(self.lex.curr_id_idx);
+                            self.pending.attrs.cleanup = Some(self.lex.curr_id_idx);
                             self.next()?; // function name
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err(
@@ -1420,71 +1420,71 @@ impl Compiler {
             }
         }
         if attrs.maybe_unused {
-            self.pending.attr_maybe_unused = true;
+            self.pending.attrs.maybe_unused = true;
         }
         if attrs.thread_local {
-            self.pending.attr_thread_local = true;
+            self.pending.attrs.thread_local = true;
         }
         if attrs.noreturn {
-            self.pending_noreturn = true;
+            self.pending.attrs.noreturn = true;
         }
         if attrs.dllexport {
-            self.pending.attr_dllexport = true;
+            self.pending.attrs.dllexport = true;
         }
         if align > 0 {
-            self.pending.attr_align = self.pending.attr_align.max(align);
+            self.pending.attrs.align = self.pending.attrs.align.max(align);
         }
         if alignas_align > 0 {
-            self.pending.attr_alignas = self.pending.attr_alignas.max(alignas_align);
+            self.pending.attrs.alignas = self.pending.attrs.alignas.max(alignas_align);
         }
         if attrs.packed {
-            self.pending.attr_packed = true;
+            self.pending.attrs.packed = true;
         }
         if attrs.transparent_union {
-            self.pending.attr_transparent_union = true;
+            self.pending.attrs.transparent_union = true;
         }
         if vector_size > 0 {
-            self.pending.attr_vector_size = vector_size;
+            self.pending.attrs.vector_size = vector_size;
         }
         if attrs.constructor {
-            self.pending.attr_constructor = true;
+            self.pending.attrs.constructor = true;
         }
         if attrs.destructor {
-            self.pending.attr_destructor = true;
+            self.pending.attrs.destructor = true;
         }
         if attrs.always_inline {
             // A mandatory inline request implies `inline` for the
             // inliner; it is not the `inline` specifier, so the linkage
             // model does not see it.
-            self.pending_is_inline = true;
-            self.pending_is_always_inline = true;
+            self.pending.attrs.is_inline = true;
+            self.pending.attrs.is_always_inline = true;
         }
         if attrs.noinline {
-            self.pending_is_noinline = true;
+            self.pending.attrs.is_noinline = true;
         }
         if attrs.gnu_inline {
-            self.pending_is_gnu_inline = true;
+            self.pending.attrs.is_gnu_inline = true;
         }
         if attrs.naked {
-            self.pending_is_naked = true;
+            self.pending.attrs.is_naked = true;
         }
         if attrs.no_instrument_function {
-            self.pending.attr_no_instrument = true;
+            self.pending.attrs.no_instrument = true;
         }
         if attrs.no_stack_protector {
-            self.pending.attr_no_stack_protector = true;
+            self.pending.attrs.no_stack_protector = true;
         }
         if let Some(p) = init_priority {
-            self.pending.attr_init_priority = Some(p);
+            self.pending.attrs.init_priority = Some(p);
         }
         if attrs.weak {
-            self.pending.attr_weak = true;
+            self.pending.attrs.weak = true;
         }
         if attrs.used {
-            self.pending.attr_used = true;
+            self.pending.attrs.used = true;
         }
         if attrs.uninitialized {
-            self.pending.attr_uninitialized = true;
+            self.pending.attrs.uninitialized = true;
         }
         // `ms_abi` / `sysv_abi` name the declared function's (or
         // function pointer's) calling convention. Both are inert off
@@ -1495,7 +1495,7 @@ impl Compiler {
             } else {
                 crate::c5::codegen::CallConv::SysV
             };
-            self.pending.attr_call_conv = if self.target.abi_row(conv) == self.target {
+            self.pending.attrs.call_conv = if self.target.abi_row(conv) == self.target {
                 crate::c5::codegen::CallConv::Target
             } else {
                 conv
@@ -1949,7 +1949,7 @@ impl Compiler {
     /// `__declspec(thread)` among the declaration specifiers is the MSVC
     /// spelling of `_Thread_local`.
     fn adopt_declspec_thread_local(&mut self, storage: Option<&mut DeclStorage>) {
-        if !core::mem::take(&mut self.pending.attr_thread_local) {
+        if !core::mem::take(&mut self.pending.attrs.thread_local) {
             return;
         }
         if let Some(s) = storage {
@@ -1962,14 +1962,14 @@ impl Compiler {
     /// by the caller's modifier run.
     fn note_decl_specifier_flags(&mut self) {
         if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
-            self.pending_is_inline = true;
-            self.pending_saw_inline_specifier = true;
+            self.pending.attrs.is_inline = true;
+            self.pending.attrs.saw_inline_specifier = true;
             if self.lex.tk == Token::ForceInline {
-                self.pending_is_always_inline = true;
+                self.pending.attrs.is_always_inline = true;
             }
         }
         if self.lex.tk == Token::Noreturn {
-            self.pending_noreturn = true;
+            self.pending.attrs.noreturn = true;
         }
         if self.lex_is_register_storage() {
             self.pending.saw_register_storage = true;
@@ -2061,9 +2061,9 @@ impl Compiler {
         // function's calling convention; a declarator through the alias
         // inherits it unless the declaration names one of its own.
         if self.symbols[idx].fn_type.conv != crate::c5::codegen::CallConv::Target
-            && self.pending.attr_call_conv == crate::c5::codegen::CallConv::Target
+            && self.pending.attrs.call_conv == crate::c5::codegen::CallConv::Target
         {
-            self.pending.attr_call_conv = self.symbols[idx].fn_type.conv;
+            self.pending.attrs.call_conv = self.symbols[idx].fn_type.conv;
         }
         let typedef_fpi = self.symbols[idx].fn_ptr_indirection;
         if typedef_fpi > 0 {

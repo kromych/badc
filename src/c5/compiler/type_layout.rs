@@ -417,7 +417,7 @@ impl Compiler {
     /// derivations; the element is an integer type other than `_Bool`, or a
     /// floating type.
     pub(super) fn apply_pending_vector_size(&mut self, ty: i64) -> Result<i64, C5Error> {
-        let n = core::mem::take(&mut self.pending.attr_vector_size);
+        let n = core::mem::take(&mut self.pending.attrs.vector_size);
         if n <= 0 {
             return Ok(ty);
         }
@@ -466,7 +466,7 @@ impl Compiler {
     /// `ty` with the pending `vector_size` and then `mode` attribute applied.
     pub(super) fn apply_pending_type_attributes(&mut self, ty: i64) -> Result<i64, C5Error> {
         let ty = self.apply_pending_vector_size(ty)?;
-        match self.pending.attr_mode.take() {
+        match self.pending.attrs.mode.take() {
             Some(m) => self.apply_mode_to_type(ty, m),
             None => Ok(ty),
         }
@@ -480,7 +480,7 @@ impl Compiler {
         &mut self,
         ret: i64,
     ) -> Result<i64, C5Error> {
-        if self.pending.attr_mode.take().is_some() {
+        if self.pending.attrs.mode.take().is_some() {
             return Err(self.compile_err(
                 Code::INVALID_DECLARATION,
                 "`mode` applied to an inappropriate type",

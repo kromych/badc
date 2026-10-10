@@ -41,6 +41,9 @@ struct FileScopeDecl {
     base_is_function_type: bool,
     base_fn_ptr_params: Option<crate::c5::symbol::FnParams>,
     base_fn_ptr_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
+    /// The attributes and function specifiers among the specifiers, which
+    /// each declarator starts from.
+    spec_attrs: super::DeclAttrs,
 }
 
 /// What one file-scope declarator supplied: the bound symbol, the type its
@@ -350,43 +353,14 @@ impl Compiler {
     }
 
     /// Clear the state one file-scope declaration owns: the `const` and
-    /// spelling carriers, the attribute results and the function-specifier
-    /// flags. `inline` matters even without a body -- an inline prototype
-    /// must not mark the following declaration as inline when the linkage
-    /// rule reads the flag.
+    /// spelling carriers, the attributes and the function specifiers.
     fn reset_file_scope_decl_state(&mut self) {
         self.pending.base_is_const = false;
         let _ = self.take_base_spelling();
-        self.pending_noreturn = false;
-        self.pending.attr_thread_local = false;
-        self.pending.attr_dllexport = false;
-        self.pending.attr_align = 0;
-        self.pending.attr_alignas = 0;
+        self.pending.attrs = super::DeclAttrs::default();
         self.pending.type_align = 0;
-        self.pending.attr_vector_size = 0;
-        self.pending.attr_constructor = false;
-        self.pending.attr_destructor = false;
-        self.pending.attr_init_priority = None;
-        self.pending.attr_cleanup = None;
-        self.pending.attr_uninitialized = false;
-        self.pending.attr_weak = false;
-        self.pending.attr_call_conv = crate::c5::codegen::CallConv::Target;
-        self.pending.attr_used = false;
-        self.pending.attr_maybe_unused = false;
-        self.pending.attr_visibility = None;
-        self.pending.attr_section = None;
-        self.pending.attr_patchable_entry = None;
-        self.pending.attr_no_instrument = false;
-        self.pending.attr_no_stack_protector = false;
-        self.pending.attr_alias = None;
         self.pending.saw_register_storage = false;
         self.pending.auto_type_single_declarator = false;
-        self.pending_is_inline = false;
-        self.pending_is_always_inline = false;
-        self.pending_saw_inline_specifier = false;
-        self.pending_is_gnu_inline = false;
-        self.pending_is_noinline = false;
-        self.pending_is_naked = false;
     }
 
     pub(super) fn run_compile(&mut self) -> Result<(), C5Error> {
@@ -450,6 +424,7 @@ impl Compiler {
             base_is_function_type: self.pending.base_is_function_type,
             base_fn_ptr_params: self.pending.fn_ptr_params.clone(),
             base_fn_ptr_ret_fn: self.pending.fn_ptr_ret_fn.clone(),
+            spec_attrs: self.pending.attrs.clone(),
         };
         let mut declarator_count = 0usize;
         while self.lex.tk != ';' && self.lex.tk != '}' {
@@ -479,6 +454,7 @@ impl Compiler {
             ..
         } = decl;
 
+        self.pending.attrs = decl.spec_attrs.clone();
         self.pending.fn_ptr_indirection = decl.base_fn_ptr_indirection;
         self.pending.fn_ptr_ret_indirection = decl.base_fn_ptr_ret_indirection;
         self.pending.base_is_function_type = decl.base_is_function_type;
@@ -510,8 +486,8 @@ impl Compiler {
         // `__declspec(dllexport)` on the declarator exports the name,
         // the equivalent of `#pragma export(name)`. resolve_exports
         // validates the name resolves to a defined function.
-        if self.pending.attr_dllexport {
-            self.pending.attr_dllexport = false;
+        if self.pending.attrs.dllexport {
+            self.pending.attrs.dllexport = false;
             let name = self.symbols[id_idx].name.clone();
             if !self.pending_exports.contains(&name) {
                 self.pending_exports.push(name);
@@ -523,7 +499,7 @@ impl Compiler {
         // asm label, where it types the declarator as well.
         self.skip_attribute_specifiers()?;
         ty = self.apply_pending_type_attributes(ty)?;
-        let declarator_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
+        let declarator_transparent = core::mem::take(&mut self.pending.attrs.transparent_union);
         // Captured per declarator, before a nested parse (a later parameter
         // of function type) can overwrite it.
         let bare_function_type = self.pending.bare_function_type_declarator;
@@ -752,15 +728,15 @@ impl Compiler {
         // convention its declaration named, so a declarator
         // through the alias inherits it
         // (`typedef efi_status_t __efiapi f_t(void);`).
-        if self.pending.attr_call_conv != crate::c5::codegen::CallConv::Target {
-            self.symbols[id_idx].fn_type.conv = self.pending.attr_call_conv;
+        if self.pending.attrs.call_conv != crate::c5::codegen::CallConv::Target {
+            self.symbols[id_idx].fn_type.conv = self.pending.attrs.call_conv;
         }
         // A GNU `aligned(N)` type attribute on the typedef
         // (its own declaration's attribute, else propagated
         // from an aligned typedef base) becomes the alias's
         // type alignment.
-        let alias_align = if self.pending.attr_align > 0 {
-            self.pending.attr_align
+        let alias_align = if self.pending.attrs.align > 0 {
+            self.pending.attrs.align
         } else {
             base_type_align
         };
@@ -946,7 +922,7 @@ impl Compiler {
         // C11 6.7.4: `_Noreturn` on any declaration marks the symbol, and the
         // reachability analysis then treats a call to it as not reaching its
         // continuation. The mark is sticky across later declarations.
-        if self.pending_noreturn {
+        if self.pending.attrs.noreturn {
             self.symbols[id_idx].is_noreturn = true;
         }
         // `weak` / `used` / `section("name")` collected for
@@ -956,7 +932,7 @@ impl Compiler {
         // Read the sticky request back so a definition follows what any
         // declaration of this name asked for, not what the preceding
         // declaration in the file happened to carry.
-        self.pending_is_noinline = self.symbols[id_idx].is_noinline;
+        self.pending.attrs.is_noinline = self.symbols[id_idx].is_noinline;
         // The `return` statement and the fall-off diagnostic read this. A prototype
         // records it too; a body that then disagrees is a C99 6.7p4 violation the
         // redeclaration check reports.
@@ -1005,7 +981,7 @@ impl Compiler {
             },
             line: declarator_line,
             implicit_int,
-            extern_inline: gnu89 && extern_seen && self.pending_saw_inline_specifier,
+            extern_inline: gnu89 && extern_seen && self.pending.attrs.saw_inline_specifier,
         };
         self.parse_function_definition(id_idx, params, def)
     }
@@ -1027,7 +1003,7 @@ impl Compiler {
         // `static`-vs-external decision the inline model does not affect.
         let sym = &mut self.symbols[id_idx];
         sym.saw_static_decl |= static_seen;
-        match (self.pending_saw_inline_specifier, extern_seen) {
+        match (self.pending.attrs.saw_inline_specifier, extern_seen) {
             (false, _) => sym.saw_noninline_decl = true,
             (true, false) => sym.saw_plain_inline_decl = true,
             (true, true) => sym.saw_extern_inline_decl = true,
@@ -1096,7 +1072,7 @@ impl Compiler {
         // another object replaces it at link time -- so it
         // never binds here; the unit-end resolver keeps its
         // references symbolic.
-        if let Some(target) = self.pending.attr_alias.take() {
+        if let Some(target) = self.pending.attrs.alias.take() {
             let tgt = (!self.symbols[id_idx].is_weak)
                 .then(|| {
                     self.symbols.iter().position(|s| {
@@ -1155,6 +1131,9 @@ impl Compiler {
         mut params: super::function::ParsedParams,
         def: Definition,
     ) -> Result<(), C5Error> {
+        // The parameter declarations and the body declare with their own
+        // attributes (C99 6.9.1p6).
+        self.current_func_attrs = core::mem::take(&mut self.pending.attrs);
         // The definition's position replaces the first declaration's, so a
         // report about the function points at its body.
         self.symbols[id_idx].binding.decl_line = def.line;
@@ -1261,6 +1240,7 @@ impl Compiler {
             // name -- that is the function body.
             let mut saw_specifier = false;
             let mut qual_bits: i64 = 0;
+            self.pending.attrs = super::DeclAttrs::default();
             while self.lex.tk == Token::FuncSpec
                 || self.lex.tk == Token::Static
                 || self.lex.tk == Token::Extern
@@ -1280,9 +1260,11 @@ impl Compiler {
             };
             let base = base | qual_bits;
             let base_enum_tag = self.pending.base_enum_tag.take();
+            let spec_attrs = self.pending.attrs.clone();
             while self.lex.tk != ';' && self.lex.tk != 0 {
                 // C99 6.9.1p6: the list declares the parameters, so a bound
                 // and a function type adjust as a prototype's (6.7.5.3p7-8).
+                self.pending.attrs = spec_attrs.clone();
                 self.pending.param_decl_context = true;
                 let decl_line = self.lex.line;
                 let (decl_idx, mut decl_ty, decl_arr, _) = self.parse_declarator(base)?;
@@ -1460,7 +1442,7 @@ impl Compiler {
             self.symbols[id_idx].val = ent_pc as i64;
         }
         self.symbols[id_idx].defined_here = true;
-        if !self.pending_saw_inline_specifier {
+        if !self.current_func_attrs.saw_inline_specifier {
             self.symbols[id_idx].saw_noninline_def = true;
         }
         // A body trumps any earlier `extern T f();`
@@ -1604,25 +1586,9 @@ impl Compiler {
                 continue;
             }
             at_block_start = false;
-            // C23 6.7.13 / 6.8: an attribute-specifier-
-            // sequence may lead either a declaration or a
-            // statement at the function-body top level.
-            // Consume it, then dispatch on the following
-            // token.
-            let (mut leading_maybe_unused, mut leading_noreturn) = (false, false);
-            if self.lex.tk == Token::Attribute
-                || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
-            {
-                self.pending.attr_maybe_unused = false;
-                self.pending.attr_cleanup = None;
-                self.pending.attr_uninitialized = false;
-                self.pending_noreturn = false;
-                self.skip_attribute_specifiers()?;
-                leading_maybe_unused = self.pending.attr_maybe_unused;
-                leading_noreturn = core::mem::take(&mut self.pending_noreturn);
-                if self.lex.tk == '}' {
-                    break;
-                }
+            self.parse_block_item_attributes()?;
+            if self.lex.tk == '}' {
+                break;
             }
             if self.lex.tk == Token::StaticAssert {
                 // C11 6.7.10 lets static_assert sit
@@ -1641,7 +1607,7 @@ impl Compiler {
                 self.parse_block_typedef()?;
             } else if self.lex_is_block_decl_start() {
                 let item_before = self.ast_stmts_snapshot();
-                self.parse_local_decl(leading_maybe_unused, leading_noreturn)?;
+                self.parse_local_decl()?;
                 let item_after = self.ast.stmts.len();
                 // Skip any statement-expression sub-statements
                 // interleaved by an initializer; they are
@@ -2181,7 +2147,7 @@ impl Compiler {
         // offset. It reserves no storage of its own; the
         // regular data-symbol emission picks it up with the
         // shared offset.
-        if let Some(target) = self.pending.attr_alias.take() {
+        if let Some(target) = self.pending.attrs.alias.take() {
             let tgt = self
                 .symbols
                 .iter()
@@ -2234,8 +2200,8 @@ impl Compiler {
         // requires a power of two (C11 6.7.5p3); anything past
         // the supported maximum is a diagnostic, never a silent
         // drop.
-        let req_align = core::mem::take(&mut self.pending.attr_align);
-        let alignas_align = core::mem::take(&mut self.pending.attr_alignas);
+        let req_align = core::mem::take(&mut self.pending.attrs.align);
+        let alignas_align = core::mem::take(&mut self.pending.attrs.alignas);
         if req_align > 8 && !(req_align as usize).is_power_of_two() {
             return Err(self.compile_err(
                 Code::INVALID_DECLARATION,
@@ -3124,13 +3090,13 @@ impl Compiler {
     /// `InitFunc` registration read the fields off the symbol, so an
     /// attribute written on a prototype reaches the later definition.
     pub(super) fn apply_symbol_attributes(&mut self, id_idx: usize) {
-        if self.pending.attr_weak {
+        if self.pending.attrs.weak {
             self.symbols[id_idx].is_weak = true;
         }
-        if self.pending.attr_used {
+        if self.pending.attrs.used {
             self.symbols[id_idx].is_used = true;
         }
-        if self.pending.attr_maybe_unused {
+        if self.pending.attrs.maybe_unused {
             self.symbols[id_idx].binding.maybe_unused = true;
         }
         // `ms_abi` / `sysv_abi`: the convention of the function this
@@ -3138,46 +3104,47 @@ impl Compiler {
         // points to. Sticky across declarations like the rest, so a
         // prototype carrying it and a later definition without it agree
         // on one convention.
-        if self.pending.attr_call_conv != crate::c5::codegen::CallConv::Target {
-            self.symbols[id_idx].fn_type.conv = self.pending.attr_call_conv;
+        if self.pending.attrs.call_conv != crate::c5::codegen::CallConv::Target {
+            self.symbols[id_idx].fn_type.conv = self.pending.attrs.call_conv;
         }
-        if self.pending.attr_constructor {
+        if self.pending.attrs.constructor {
             self.symbols[id_idx].is_constructor = true;
         }
-        if self.pending.attr_destructor {
+        if self.pending.attrs.destructor {
             self.symbols[id_idx].is_destructor = true;
         }
-        if let Some(p) = self.pending.attr_init_priority {
+        if let Some(p) = self.pending.attrs.init_priority {
             self.symbols[id_idx].init_priority = Some(p);
         }
         // Sticky like the rest: `gnu_inline` on any declaration selects
         // the GNU89 model for the name, whichever side of the declarator
         // the attribute was written on.
-        if self.pending_is_gnu_inline {
+        if self.pending.attrs.is_gnu_inline {
             self.symbols[id_idx].is_gnu_inline = true;
         }
         // An explicit `visibility` attribute states the answer; without one
         // the enclosing `#pragma GCC visibility` extent supplies it.
         let hidden = self
             .pending
-            .attr_visibility
+            .attrs
+            .visibility
             .unwrap_or_else(|| self.lex.visibility_hidden());
         if hidden {
             self.symbols[id_idx].is_hidden = true;
         }
-        if let Some(sec) = self.pending.attr_section.take() {
+        if let Some(sec) = self.pending.attrs.section.take() {
             self.symbols[id_idx].section_name = Some(sec);
         }
-        if let Some(area) = self.pending.attr_patchable_entry.take() {
+        if let Some(area) = self.pending.attrs.patchable_entry.take() {
             self.symbols[id_idx].patchable_function_entry = Some(area);
         }
-        if self.pending.attr_no_instrument {
+        if self.pending.attrs.no_instrument {
             self.symbols[id_idx].no_instrument_function = true;
         }
-        if self.pending.attr_no_stack_protector {
+        if self.pending.attrs.no_stack_protector {
             self.symbols[id_idx].no_stack_protector = true;
         }
-        if self.pending_is_noinline {
+        if self.pending.attrs.is_noinline {
             self.symbols[id_idx].is_noinline = true;
         }
     }

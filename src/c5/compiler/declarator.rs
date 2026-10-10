@@ -163,7 +163,7 @@ impl Compiler {
             }
             // C11 6.7.4: `noreturn` on any declaration marks the function.
             if c != Token::Loc as i64 {
-                self.symbols[id_idx].is_noreturn |= self.pending_noreturn;
+                self.symbols[id_idx].is_noreturn |= self.pending.attrs.noreturn;
             }
             // A block-scope prototype takes the same GNU asm-label rename a
             // file-scope one does; the declared entity has external linkage

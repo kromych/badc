@@ -1066,10 +1066,10 @@ impl Compiler {
             end_pc: self.next_ent_pc,
             n_params,
             is_variadic,
-            is_inline: self.pending_is_inline,
-            is_always_inline: self.pending_is_always_inline,
-            is_noinline: self.pending_is_noinline,
-            is_naked: self.pending_is_naked,
+            is_inline: self.current_func_attrs.is_inline,
+            is_always_inline: self.current_func_attrs.is_always_inline,
+            is_noinline: self.current_func_attrs.is_noinline,
+            is_naked: self.current_func_attrs.is_naked,
             is_noreturn: self.current_func_is_noreturn,
             conv: self.current_func_conv,
             n_locals: self.max_loc_offs,
@@ -1091,10 +1091,7 @@ impl Compiler {
             label_data_slots: core::mem::take(&mut self.pending_label_relocs),
         };
         self.in_function_body = false;
-        self.pending_is_inline = false;
-        self.pending_is_always_inline = false;
-        self.pending_is_noinline = false;
-        self.pending_is_naked = false;
+        self.current_func_attrs = super::DeclAttrs::default();
         self.current_func_conv = crate::c5::codegen::CallConv::Target;
         self.current_func_is_noreturn = false;
         self.finished_functions.push(finished);

@@ -1847,6 +1847,64 @@ fn noinline_binds_to_the_function_its_declaration_names() {
 }
 
 #[test]
+fn a_definition_and_the_declarations_in_its_body_keep_their_own_noinline() {
+    // A definition's `noinline` names that function, not one its body
+    // declares (`fnt inner;`); a `noinline` on a declaration in the body
+    // names `far_fn`, not the enclosing `wrapper`. gcc inlines and drops
+    // both `inner` and `wrapper`.
+    use crate::c5::Target;
+    let src = "\
+        static int inner(int x);\n\
+        static __attribute__((noinline)) int outer(int x) {\n\
+            typedef int fnt(int);\n\
+            fnt inner;\n\
+            return inner(x) + 1;\n\
+        }\n\
+        static int inner(int x) { return x * 2 + 1; }\n\
+        static int wrapper(int x) {\n\
+            __attribute__((noinline)) int far_fn(int);\n\
+            return far_fn(x) + 1;\n\
+        }\n\
+        int keep(int x) { return outer(x) + inner(x) + wrapper(x); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let obj = reloc_tu(src, target, true);
+        assert!(obj.windows(5).any(|w| w == b"outer"), "{target:?}");
+        assert!(!obj.windows(5).any(|w| w == b"inner"), "{target:?}");
+        assert!(!obj.windows(7).any(|w| w == b"wrapper"), "{target:?}");
+    }
+}
+
+#[test]
+fn an_attribute_after_a_declarator_binds_to_it_alone() {
+    // GNU attribute syntax: an attribute among the declaration specifiers
+    // applies to every declarator, one after a declarator to that
+    // declarator. gcc and clang bind `wv` weak and `hv` hidden, leave
+    // `helper2` and `helper3` global and default, and bind `w1` and `w2`
+    // weak.
+    use crate::c5::Target;
+    use crate::c5::linker::parse_native_elf;
+    let src = "\
+        extern int wv __attribute__((weak)), helper2(int);\n\
+        extern int hv __attribute__((visibility(\"hidden\"))), helper3(int);\n\
+        __attribute__((weak)) extern int w1, w2;\n\
+        int lists(int x) { return helper2(x) + helper3(x) + wv + hv + w1 + w2; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let obj = parse_native_elf(&reloc_tu(src, target, false)).expect("parse");
+        let sym = |name: &str| {
+            let s = obj.symbols.iter().find(|s| s.name == name);
+            s.map(|s| (s.binding, s.visibility))
+        };
+        // (STB_*, STV_*): GLOBAL 1, WEAK 2; DEFAULT 0, HIDDEN 2.
+        assert_eq!(sym("wv"), Some((2, 0)), "{target:?}");
+        assert_eq!(sym("helper2"), Some((1, 0)), "{target:?}");
+        assert_eq!(sym("hv"), Some((1, 2)), "{target:?}");
+        assert_eq!(sym("helper3"), Some((1, 0)), "{target:?}");
+        assert_eq!(sym("w1"), Some((2, 0)), "{target:?}");
+        assert_eq!(sym("w2"), Some((2, 0)), "{target:?}");
+    }
+}
+
+#[test]
 fn dead_static_fnptr_table_drops_table_and_callee() {
     // A static function referenced only from a static, itself
     // unreferenced, function-pointer table: the table's relocation is

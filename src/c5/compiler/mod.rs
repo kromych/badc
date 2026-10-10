@@ -1349,109 +1349,18 @@ pub(in crate::c5::compiler) struct Pending {
     /// literal carried no surrounding parentheses.
     pub compound_lit_close_parens: i64,
 
-    /// Side channel from `skip_attribute_specifiers`: set true when a
-    /// consumed attribute named `unused` / `maybe_unused` (C23
-    /// 6.7.12.4 `[[maybe_unused]]` or GNU `__attribute__((unused))`).
-    /// Read by `parse_block_stmt` right after the leading-attribute
-    /// skip to mark the declared locals so their unused-variable
-    /// diagnostics are suppressed.
-    pub attr_maybe_unused: bool,
-    /// Side channel from `skip_attribute_specifiers`: true when the most
-    /// recent run named `transparent_union`, false otherwise (every run
-    /// rewrites it). Consumed by the aggregate and typedef paths.
-    pub attr_transparent_union: bool,
-    /// Requested object alignment from `_Alignas(N)` /
-    /// `__attribute__((aligned(N)))` / `__declspec(align(N))`, 0 when
-    /// absent. The declaration parse takes it: file-scope objects
-    /// honor up to 16, anything larger (or an automatic object above
-    /// the 8-byte slot alignment) is a diagnostic, never silent.
-    pub attr_align: i64,
-    /// The `_Alignas(N)` share of `attr_align`, 0 when the request came
-    /// only from `__attribute__((aligned(N)))` / `__declspec(align(N))`.
-    /// C11 6.7.5 makes `_Alignas` raise-only and an alignment below the
-    /// type's a constraint violation, where a variable-level GNU
-    /// `aligned(N)` sets the object's alignment and may lower it.
-    pub attr_alignas: i64,
     /// Alignment (bytes) carried by the base type of the declaration
     /// under parse, from a typedef whose type has a GNU
-    /// `aligned(N)` attribute. Distinct from `attr_align` (an object /
+    /// `aligned(N)` attribute. Distinct from `attrs.align` (an object /
     /// member `_Alignas`, raise-only): a type attribute sets the
     /// alignment and may lower it below the natural value, so the
     /// struct-field layout uses it to replace the field's natural
     /// alignment rather than raising it. Seeded when a typedef-name
     /// resolves as a base type; 0 for a type with natural alignment.
     pub type_align: i64,
-    /// `__attribute__((packed))` seen on the declarator being parsed.
-    /// A struct member takes it to clamp that field's alignment to 1
-    /// (GCC member-level packed), independent of a struct-level `packed`.
-    /// Recorded here because the trailing member attribute is consumed
-    /// inside the declarator parse, not by the aggregate field loop.
-    pub attr_packed: bool,
-    /// `__attribute__((vector_size(N)))` byte width, 0 when absent. The base
-    /// type of the declaration is rebuilt into a GCC vector type of `N /
-    /// sizeof(element)` lanes (modeled as an N-byte aggregate).
-    pub attr_vector_size: i64,
-    /// `__attribute__((mode(M)))`: the machine mode the declaration's type
-    /// is rewritten to, as `(bytes, is_float)`. `None` when absent. GCC
-    /// applies it to the base type of an enum and to the declared type of
-    /// an object, member, or typedef alias.
-    pub attr_mode: Option<(u8, bool)>,
-    /// A consumed `__declspec(thread)`. Read by the declaration parse to mark
-    /// the declared object thread-local (the storage class `_Thread_local`
-    /// reaches the same flag through the keyword path).
-    pub attr_thread_local: bool,
-    /// A consumed `__declspec(dllexport)`. Read after the declarator to add the
-    /// declared name to the export list -- the equivalent of `#pragma export`.
-    pub attr_dllexport: bool,
-    /// A consumed `__attribute__((constructor))`. Merged onto
-    /// `Symbol::is_constructor`, which the function-body open reads to
-    /// record the function in `Compiler::init_funcs`.
-    pub attr_constructor: bool,
-    /// A consumed `__attribute__((destructor))`.
-    pub attr_destructor: bool,
-    /// Explicit priority from `constructor(N)` / `destructor(N)`; `None`
-    /// for the bare form. Applies to whichever of the two above is set.
-    pub attr_init_priority: Option<u32>,
-    /// A consumed `__attribute__((cleanup(fn)))`: the symbol index of the
-    /// cleanup function. Read where a local is bound to register a call to
-    /// `fn(&var)` at every exit from the variable's scope (C99 has no such
-    /// feature; this is the GCC/Clang extension that scope-guard and
-    /// auto-cleanup idioms rely on).
-    pub attr_cleanup: Option<usize>,
-    /// A consumed `__attribute__((uninitialized))`: the declared
-    /// automatic object is left out of `-ftrivial-auto-var-init`.
-    pub attr_uninitialized: bool,
-    /// A consumed `__attribute__((weak))`: the declared symbol binds
-    /// STB_WEAK in the object's symbol table.
-    pub attr_weak: bool,
-    /// A consumed `__attribute__((ms_abi))` / `((sysv_abi))`: the
-    /// calling convention of the function (or pointed-to function)
-    /// being declared. Already normalised against the target, so
-    /// `CallConv::Target` means "the target's own", including on a
-    /// target where the attribute is inert.
-    pub attr_call_conv: crate::c5::codegen::CallConv,
-    /// A consumed `__attribute__((used))`: keep the definition in the
-    /// object even when nothing in the unit references it.
-    pub attr_used: bool,
-    /// A consumed `__attribute__((visibility(...)))`: `Some(true)` for
-    /// `"hidden"` / `"internal"` -- the declared symbol is not preemptible,
-    /// marked STV_HIDDEN and addressed PC-relative directly rather than
-    /// through the GOT -- and `Some(false)` for the preemptible spellings.
-    /// `None` leaves the choice to the `#pragma GCC visibility` extent the
-    /// declaration sits in.
-    pub attr_visibility: Option<bool>,
-    /// A consumed `__attribute__((section("name")))`: the named object
-    /// section the declared symbol's bytes go to.
-    pub attr_section: Option<alloc::string::String>,
-    /// A consumed `__attribute__((patchable_function_entry(N, M)))`.
-    pub attr_patchable_entry: Option<(u32, u32)>,
-    /// A consumed `__attribute__((no_instrument_function))`.
-    pub attr_no_instrument: bool,
-    /// A consumed `__attribute__((no_stack_protector))`.
-    pub attr_no_stack_protector: bool,
-    /// A consumed `__attribute__((alias("target")))`: the declared name
-    /// is an additional symbol for `target`.
-    pub attr_alias: Option<alloc::string::String>,
+    /// The attributes and function specifiers of the declaration under
+    /// parse.
+    pub attrs: DeclAttrs,
     /// A consumed `register` storage-class specifier. Gates the GNU
     /// explicit-register `asm("reg")` declarator suffix; a plain
     /// `register` without the suffix stays the historical no-op hint.
@@ -1460,6 +1369,77 @@ pub(in crate::c5::compiler) struct Pending {
     /// hold exactly one declarator, so the declarator loop rejects a
     /// `,` while this is set. Cleared when the declaration ends.
     pub auto_type_single_declarator: bool,
+}
+
+/// The attributes and function specifiers a declaration names (GNU
+/// attribute syntax, C99 6.7.4). Those among the declaration specifiers
+/// apply to every declarator, those in or after a declarator to it alone,
+/// so a declaration snapshots the value after its specifiers and restores
+/// it at each declarator.
+#[derive(Clone, Debug, Default)]
+pub(super) struct DeclAttrs {
+    /// `unused` / `[[maybe_unused]]` (C23 6.7.12.4): no unused-variable
+    /// diagnostic for the declared locals.
+    pub maybe_unused: bool,
+    pub transparent_union: bool,
+    /// `_Alignas(N)` / `aligned(N)` / `__declspec(align(N))`, 0 for none.
+    pub align: i64,
+    /// The `_Alignas(N)` share of `align`: C11 6.7.5 makes it raise-only and
+    /// an alignment below the type's a constraint violation, where a GNU
+    /// `aligned(N)` on a variable sets the alignment and may lower it.
+    pub alignas: i64,
+    /// Member-level `packed`: the field's alignment is 1, whatever the
+    /// aggregate's own `packed`.
+    pub packed: bool,
+    /// `vector_size(N)` in bytes, 0 for none.
+    pub vector_size: i64,
+    /// `mode(M)` as `(bytes, is_float)`, for the base type of an enum and
+    /// the declared type of an object, member or typedef.
+    pub mode: Option<(u8, bool)>,
+    /// `__declspec(thread)`.
+    pub thread_local: bool,
+    /// `__declspec(dllexport)`: the name joins the export list, as by
+    /// `#pragma export`.
+    pub dllexport: bool,
+    pub constructor: bool,
+    pub destructor: bool,
+    /// The `N` of `constructor(N)` / `destructor(N)`.
+    pub init_priority: Option<u32>,
+    /// The symbol of `cleanup(fn)`'s function, called with the variable's
+    /// address at each exit from its scope.
+    pub cleanup: Option<usize>,
+    /// `uninitialized`: the object is left out of `-ftrivial-auto-var-init`.
+    pub uninitialized: bool,
+    pub weak: bool,
+    /// `ms_abi` / `sysv_abi`, normalised against the target: `Target` is the
+    /// target's own, including where the attribute is inert.
+    pub call_conv: crate::c5::codegen::CallConv,
+    /// `used`: the definition stays in the object unreferenced.
+    pub used: bool,
+    /// `visibility(...)`: `Some(true)` for `"hidden"` / `"internal"`,
+    /// `Some(false)` for the preemptible spellings, `None` for the
+    /// `#pragma GCC visibility` extent's choice.
+    pub visibility: Option<bool>,
+    pub section: Option<alloc::string::String>,
+    pub patchable_entry: Option<(u32, u32)>,
+    pub no_instrument: bool,
+    pub no_stack_protector: bool,
+    /// The target `alias("target")` names.
+    pub alias: Option<alloc::string::String>,
+    /// An `inline` function specifier or the request `always_inline` makes.
+    pub is_inline: bool,
+    /// `always_inline` / MSVC `__forceinline`; implies `is_inline`.
+    pub is_always_inline: bool,
+    pub is_noinline: bool,
+    /// The `inline` / `__forceinline` specifier itself, which the linkage
+    /// model reads (C99 6.7.4p6-p7) and `always_inline` does not set.
+    pub saw_inline_specifier: bool,
+    /// `gnu_inline`: the GNU89 inline model for the declared function.
+    pub is_gnu_inline: bool,
+    /// `naked`: no prologue, epilogue or implicit return.
+    pub is_naked: bool,
+    /// `_Noreturn` / `noreturn` (C11 6.7.4), the keyword or the attribute.
+    pub noreturn: bool,
 }
 
 /// The declaration-specifier carriers of an enclosing, still-open
@@ -1472,21 +1452,8 @@ pub(in crate::c5::compiler) struct Pending {
 pub(super) struct DeclSpecifiers {
     saw_register_storage: bool,
     base_is_const: bool,
-    attr_used: bool,
-    attr_weak: bool,
-    attr_call_conv: crate::c5::codegen::CallConv,
-    attr_visibility: Option<bool>,
-    attr_section: Option<alloc::string::String>,
-    attr_patchable_entry: Option<(u32, u32)>,
-    attr_no_instrument: bool,
-    attr_no_stack_protector: bool,
-    attr_cleanup: Option<usize>,
-    attr_uninitialized: bool,
-    attr_align: i64,
-    attr_alignas: i64,
     type_align: i64,
-    attr_vector_size: i64,
-    attr_mode: Option<(u8, bool)>,
+    attrs: DeclAttrs,
 }
 
 impl Pending {
@@ -1519,44 +1486,18 @@ impl Pending {
     /// any declaration does.
     pub(super) fn take_decl_specifiers(&mut self) -> DeclSpecifiers {
         DeclSpecifiers {
+            attrs: core::mem::take(&mut self.attrs),
             saw_register_storage: core::mem::take(&mut self.saw_register_storage),
             base_is_const: core::mem::take(&mut self.base_is_const),
-            attr_used: core::mem::take(&mut self.attr_used),
-            attr_weak: core::mem::take(&mut self.attr_weak),
-            attr_call_conv: core::mem::take(&mut self.attr_call_conv),
-            attr_visibility: self.attr_visibility.take(),
-            attr_section: self.attr_section.take(),
-            attr_patchable_entry: self.attr_patchable_entry.take(),
-            attr_no_instrument: core::mem::take(&mut self.attr_no_instrument),
-            attr_no_stack_protector: core::mem::take(&mut self.attr_no_stack_protector),
-            attr_cleanup: self.attr_cleanup.take(),
-            attr_uninitialized: core::mem::take(&mut self.attr_uninitialized),
-            attr_align: core::mem::take(&mut self.attr_align),
-            attr_alignas: core::mem::take(&mut self.attr_alignas),
             type_align: core::mem::take(&mut self.type_align),
-            attr_vector_size: core::mem::take(&mut self.attr_vector_size),
-            attr_mode: self.attr_mode.take(),
         }
     }
 
     pub(super) fn restore_decl_specifiers(&mut self, s: DeclSpecifiers) {
+        self.attrs = s.attrs;
         self.saw_register_storage = s.saw_register_storage;
         self.base_is_const = s.base_is_const;
-        self.attr_used = s.attr_used;
-        self.attr_weak = s.attr_weak;
-        self.attr_call_conv = s.attr_call_conv;
-        self.attr_visibility = s.attr_visibility;
-        self.attr_section = s.attr_section;
-        self.attr_patchable_entry = s.attr_patchable_entry;
-        self.attr_no_instrument = s.attr_no_instrument;
-        self.attr_no_stack_protector = s.attr_no_stack_protector;
-        self.attr_cleanup = s.attr_cleanup;
-        self.attr_uninitialized = s.attr_uninitialized;
-        self.attr_align = s.attr_align;
-        self.attr_alignas = s.attr_alignas;
         self.type_align = s.type_align;
-        self.attr_vector_size = s.attr_vector_size;
-        self.attr_mode = s.attr_mode;
     }
 
     /// Detach the declared-type carriers seeded by a base-type or
@@ -1700,30 +1641,8 @@ impl Default for Pending {
             last_emit_was_indirect_call: false,
             last_imm_was_zero: false,
             compound_lit_close_parens: 0,
-            attr_maybe_unused: false,
-            attr_transparent_union: false,
-            attr_align: 0,
-            attr_alignas: 0,
             type_align: 0,
-            attr_packed: false,
-            attr_vector_size: 0,
-            attr_mode: None,
-            attr_thread_local: false,
-            attr_dllexport: false,
-            attr_constructor: false,
-            attr_destructor: false,
-            attr_init_priority: None,
-            attr_cleanup: None,
-            attr_uninitialized: false,
-            attr_weak: false,
-            attr_call_conv: crate::c5::codegen::CallConv::Target,
-            attr_used: false,
-            attr_visibility: None,
-            attr_section: None,
-            attr_patchable_entry: None,
-            attr_no_instrument: false,
-            attr_no_stack_protector: false,
-            attr_alias: None,
+            attrs: DeclAttrs::default(),
             saw_register_storage: false,
             auto_type_single_declarator: false,
         }
@@ -1965,42 +1884,6 @@ pub struct Compiler {
     /// once (through the `Expr::StmtExpr` node). Pruned as each
     /// enclosing declaration is captured; cleared per function.
     stmt_expr_arena_ranges: Vec<(usize, usize)>,
-
-    /// True when the most recent decl-spec parse consumed an
-    /// `inline` / `__inline` / `__inline__` keyword. Captured at
-    /// function-symbol commit time onto `FinishedFunction::is_inline`
-    /// and reset after, so it scopes to the immediately following
-    /// declarator only.
-    pending_is_inline: bool,
-
-    /// Like [`Self::pending_is_inline`] but for a *mandatory* inline
-    /// request (`__attribute__((always_inline))` / MSVC
-    /// `__forceinline`); implies `pending_is_inline`.
-    pending_is_always_inline: bool,
-    /// `__attribute__((noinline))` seen on the declarator being emitted.
-    pending_is_noinline: bool,
-
-    /// True when the most recent decl-spec parse consumed an `inline`
-    /// function specifier -- `inline` / `__inline` / `__inline__` or
-    /// MSVC `__forceinline`. Distinct from [`Self::pending_is_inline`],
-    /// which `__attribute__((always_inline))` also sets: that is an
-    /// attribute, not a specifier, and the linkage model reads the
-    /// specifier the source spelled.
-    pending_saw_inline_specifier: bool,
-
-    /// Set by `__attribute__((gnu_inline))` on the current declaration;
-    /// selects the GNU89 inline model for the declared function.
-    pending_is_gnu_inline: bool,
-    /// Set by `__attribute__((naked))`; the next function emits no
-    /// prologue/epilogue and no implicit return -- its body is its full
-    /// machine code (inline asm).
-    pending_is_naked: bool,
-
-    /// True when the most recent decl-spec parse consumed a
-    /// `_Noreturn` / `noreturn` keyword. Captured at function-symbol
-    /// commit time onto `Symbol::is_noreturn` and reset after, so it
-    /// scopes to the immediately following declarator only.
-    pending_noreturn: bool,
 
     /// Nesting depth of operands that are not evaluated: the operands of
     /// `sizeof`, `_Alignof` and `typeof`, of `__builtin_object_size` and
@@ -2340,6 +2223,10 @@ pub struct Compiler {
     /// its symbol at the opening brace. Propagated onto
     /// `FinishedFunction::conv`.
     current_func_conv: crate::c5::codegen::CallConv,
+    /// The attributes and function specifiers of the definition whose
+    /// body is being parsed, taken from the declaration before the body
+    /// so its own declarations start from none.
+    current_func_attrs: DeclAttrs,
     /// `FnType::ret` of the function body being parsed: the function
     /// type a returned pointer to a function points to.
     current_func_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
@@ -3025,13 +2912,6 @@ impl Compiler {
             uses_alloca_in_current_fn: false,
             func_vla_decls: 0,
             stmt_expr_arena_ranges: Vec::new(),
-            pending_is_inline: false,
-            pending_is_always_inline: false,
-            pending_is_noinline: false,
-            pending_saw_inline_specifier: false,
-            pending_is_gnu_inline: false,
-            pending_is_naked: false,
-            pending_noreturn: false,
             const_unevaluated: 0,
             unevaluated: 0,
             folded_builtin_lits: Vec::new(),
@@ -3096,6 +2976,7 @@ impl Compiler {
             current_func_return_ty: 0,
             current_func_returns_void: false,
             current_func_conv: crate::c5::codegen::CallConv::Target,
+            current_func_attrs: DeclAttrs::default(),
             current_func_ret_fn: None,
             current_func_is_noreturn: false,
             pending: Pending::default(),

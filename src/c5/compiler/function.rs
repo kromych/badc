@@ -172,13 +172,11 @@ impl Compiler {
         (indirection, ret_indirection, params, ret_fn)
     }
 
-    /// A parameter's own `ms_abi` / `sysv_abi` describes that
-    /// parameter's pointed-to function, and its `unused` that parameter,
-    /// not the declarator the list belongs to, so the enclosing ones are
-    /// detached across the list the way the other declarator carriers are.
+    /// A parameter's attributes describe that parameter, not the declarator
+    /// the list belongs to, so the enclosing ones are detached across the
+    /// list the way the other declarator carriers are.
     pub(super) fn parse_function_params(&mut self) -> Result<ParsedParams, C5Error> {
-        let outer_conv = core::mem::take(&mut self.pending.attr_call_conv);
-        let outer_unused = core::mem::take(&mut self.pending.attr_maybe_unused);
+        let outer_attrs = core::mem::take(&mut self.pending.attrs);
         // The enclosing declarator's function-pointer carriers and function
         // types, which each parameter's own declarator starts afresh.
         let p = &mut self.pending;
@@ -207,8 +205,7 @@ impl Compiler {
         }
         let p = &mut self.pending;
         p.declarator_prior_shape = outer_prior;
-        p.attr_call_conv = outer_conv;
-        p.attr_maybe_unused = outer_unused;
+        p.attrs = outer_attrs;
         (
             p.fn_ptr_indirection,
             p.fn_ptr_ret_indirection,
@@ -275,13 +272,9 @@ impl Compiler {
             while self.lex.tk == Token::Extern || self.lex.tk == Token::Static {
                 self.next()?;
             }
-            // A `maybe_unused` / `unused` attribute may lead the
-            // parameter (`__attribute__((unused)) int a`) or trail its
-            // declarator (`int a __attribute__((unused))`). Clear the
-            // side channel here so a previous parameter's attribute
-            // cannot leak; the base-type parse below sets it for the
-            // leading form, the post-declarator skip for the trailing.
-            self.pending.attr_maybe_unused = false;
+            // Each parameter declares with its own attributes, leading
+            // (`__attribute__((unused)) int a`) or trailing its declarator.
+            self.pending.attrs = super::DeclAttrs::default();
             let _ = self.take_base_spelling();
             let param_line = self.lex.line;
             let (base, implicit_int) = if self.lex_is_type_start() {
@@ -380,7 +373,7 @@ impl Compiler {
                 // An unnamed parameter binds no symbol to receive the
                 // fn-pointer carriers its base (a fn-pointer typedef) seeded.
                 let carriers = self.take_param_fn_ptr_carriers();
-                let conv = core::mem::take(&mut self.pending.attr_call_conv);
+                let conv = core::mem::take(&mut self.pending.attrs.call_conv);
                 let adjusted = !dims.is_empty();
                 if let Some((f, depth)) = param_fn_type(carriers, conv, adjusted) {
                     fn_types.push((types.len(), f, depth));
@@ -414,7 +407,7 @@ impl Compiler {
             // A parameter may carry a trailing attribute
             // (`T *op __attribute__((unused))`).
             self.skip_attribute_specifiers()?;
-            let param_maybe_unused = self.pending.attr_maybe_unused;
+            let param_maybe_unused = self.pending.attrs.maybe_unused;
             // Per C99 6.7.5.3p7, a named array parameter is adjusted to a
             // pointer to its element type, the row of the inner bounds for
             // more than one. The same rule applies when the base type is a
@@ -450,7 +443,7 @@ impl Compiler {
             let carriers = self.take_param_fn_ptr_carriers();
             // Drained per parameter so one parameter's convention cannot
             // leak into the next.
-            let param_conv = core::mem::take(&mut self.pending.attr_call_conv);
+            let param_conv = core::mem::take(&mut self.pending.attrs.call_conv);
             if let Some((f, depth)) = param_fn_type(carriers.clone(), param_conv, adjusted) {
                 fn_types.push((types.len(), f, depth));
             }

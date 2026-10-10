@@ -3007,7 +3007,7 @@ impl Compiler {
         let dims = type_name.dims.len() as i64;
         let f = type_name.fn_ty.filter(|f| f.ptr_depth >= 1)?;
         let depth = f.ptr_depth as i64;
-        let conv = core::mem::take(&mut self.pending.attr_call_conv);
+        let conv = core::mem::take(&mut self.pending.attrs.call_conv);
         Some((FnType { conv, ..f.f }, depth + dims))
     }
 

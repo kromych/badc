@@ -409,11 +409,25 @@ fn store_agg_return(
     let mut sse_i = 0u8;
     for (class, off) in super::abi_classify::register_slots(&eb_classes) {
         let disp = (disp + i64::from(off)) as i32;
+        // The object's bytes alone: a copy elided into a member points the
+        // temp at storage its neighbours share.
+        let width = desc.size.saturating_sub(off).min(8);
         if class == super::abi_classify::RegClass::X87 {
             super::encode::emit_fstp_m80(code, base, disp);
         } else if class == super::abi_classify::RegClass::Integer {
-            emit_mov_mem_r(code, base, disp, int_ret[int_i]);
+            let r = int_ret[int_i];
             int_i += 1;
+            let mut shifted = 0;
+            for (o, w) in super::super::access_pieces(0, width, 8, false) {
+                if o > shifted {
+                    super::encode::emit_shift_ri(code, Mnem::Shr, 8, r, ((o - shifted) * 8) as u8);
+                    shifted = o;
+                }
+                emit_store_unit(code, w, base, disp + o as i32, r);
+            }
+        } else if class == super::abi_classify::RegClass::Sse && width == 4 {
+            super::encode::emit_movss_mem_xmm(code, base, disp, Reg(Reg::XMM0.0 + sse_i));
+            sse_i += 1;
         } else {
             emit_agg_store_slot_sse(code, class, base, disp, Reg(Reg::XMM0.0 + sse_i));
             sse_i += 1;

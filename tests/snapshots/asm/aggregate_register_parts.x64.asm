@@ -799,7 +799,7 @@ Disassembly of section .text:
                	movss	0x8(%r10), %xmm1
                	callq	<addr>
                	movsd	%xmm0, -0x40(%rbp)
-               	movsd	%xmm1, -0x38(%rbp)
+               	movss	%xmm1, -0x38(%rbp)
                	leaq	-0x40(%rbp), %rax
                	leaq	-0x90(%rbp), %rcx
                	movq	(%rax), %r10

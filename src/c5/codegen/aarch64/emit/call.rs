@@ -711,7 +711,6 @@ fn finish_call_result(
     strict_align: bool,
 ) {
     if let Some(ai) = ret_agg {
-        use super::encode::STR_X;
         // No result slot: the call's `RetPart`s read the registers.
         if ret_slot_off == 0 {
             return;
@@ -748,12 +747,23 @@ fn finish_call_result(
                 );
             }
         } else if size <= 16 {
-            let words = 1 + u32::from(size > 8);
-            let accesses = (0..words).map(|k| (STR_X, k * 8));
+            // The object's bytes alone, from x0 then x1: a copy elided into
+            // a member points the slot at storage its neighbours share.
+            let pieces = (0..size.div_ceil(8)).flat_map(|k| {
+                crate::c5::codegen::access_pieces(8 * k, (size - 8 * k).min(8), 8, false)
+            });
+            let accesses = pieces.clone().map(|(o, w)| (int_unit_ops(w).1, o));
             let (base, disp) = frame_object_base(code, slot, accesses, scratch.primary);
-            for k in 0..words {
-                let at = disp + i64::from(k * 8);
-                emit_mem(code, STR_X, k as u8, base, at, scratch.primary);
+            let mut shifted = [0u32; 2];
+            for (o, w) in pieces {
+                let (k, byte) = ((o / 8) as usize, o % 8);
+                if byte > shifted[k] {
+                    let r = Reg(k as u8);
+                    emit(code, enc_lsr_imm(r, r, ((byte - shifted[k]) * 8) as u8));
+                    shifted[k] = byte;
+                }
+                let (st, at) = (int_unit_ops(w).1, disp + i64::from(o));
+                emit_mem(code, st, k as u8, base, at, scratch.primary);
             }
         }
         return;

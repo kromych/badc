@@ -82,11 +82,8 @@ impl Sink {
         }
     }
 
-    /// Whether `code` can report at any position: the command line
-    /// keeps it above `Ignore`, or a pragma raises it somewhere in the
-    /// unit. A row that is off and that no pragma touches resolves to
-    /// `Ignore` at every offset, so its site can drop it without
-    /// locating itself.
+    /// Whether `code` can report anywhere in the unit: the command line
+    /// keeps it above `Ignore`, or a pragma raises it.
     pub fn may_emit(&self, code: Code) -> bool {
         self.config.level(code) != Level::Ignore || self.control.may_report(code)
     }

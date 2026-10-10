@@ -294,9 +294,8 @@ pub(crate) struct Preprocessor {
     /// name and validated against the current body text, so a
     /// redefinition never serves stale tokens.
     body_toks: RefCell<hashbrown::HashMap<String, expand::CachedBody>>,
-    /// One-name hidesets by macro name; a top-level invocation's
-    /// result set is always `{name}`, shared here across fires.
-    hs_singletons: RefCell<hashbrown::HashMap<String, alloc::rc::Rc<expand::Hideset>>>,
+    /// A small id per macro name, for the hidesets' sorted id runs.
+    hs_names: RefCell<hashbrown::HashMap<alloc::boxed::Box<str>, u32>>,
     /// Expansion-arena storage reused across lines.
     exp_scratch: RefCell<expand::ExpScratch>,
     /// Borland / Watcom `#pragma warn -<code>` codes the source asked to
@@ -1206,7 +1205,7 @@ impl Preprocessor {
             counter: Cell::new(0),
             pending_error: RefCell::new(None),
             body_toks: RefCell::new(hashbrown::HashMap::new()),
-            hs_singletons: RefCell::new(hashbrown::HashMap::new()),
+            hs_names: RefCell::new(hashbrown::HashMap::new()),
             exp_scratch: RefCell::new(expand::ExpScratch::default()),
             warn_disabled: BTreeSet::new(),
             diag_pragmas: 0,

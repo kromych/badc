@@ -48,19 +48,6 @@ pub(super) struct Tok {
     space: bool,
 }
 
-/// Sorted macro-name set shared behind `Rc`: every token of one
-/// substitution result points at the same set, so hideset updates
-/// cost one union per expansion, not one per token.
-pub(super) struct Hideset {
-    names: Vec<Rc<str>>,
-}
-
-impl Hideset {
-    fn contains(&self, name: &str) -> bool {
-        self.names.binary_search_by(|n| (**n).cmp(name)).is_ok()
-    }
-}
-
 /// A file name spelled as a string literal, for `__FILE__` and
 /// `__BASE_FILE__`. A name is arbitrary text, so it takes the escaping a
 /// line marker's filename takes.
@@ -70,31 +57,6 @@ fn quoted_path(path: &str) -> String {
     super::directive::push_string_body(path, &mut s);
     s.push('"');
     s
-}
-
-fn hs_union(a: &Hideset, b: &Hideset) -> Hideset {
-    let mut names = Vec::with_capacity(a.names.len() + b.names.len());
-    let (mut i, mut j) = (0, 0);
-    while i < a.names.len() && j < b.names.len() {
-        match (*a.names[i]).cmp(&b.names[j]) {
-            core::cmp::Ordering::Less => {
-                names.push(a.names[i].clone());
-                i += 1;
-            }
-            core::cmp::Ordering::Greater => {
-                names.push(b.names[j].clone());
-                j += 1;
-            }
-            core::cmp::Ordering::Equal => {
-                names.push(a.names[i].clone());
-                i += 1;
-                j += 1;
-            }
-        }
-    }
-    names.extend_from_slice(&a.names[i..]);
-    names.extend_from_slice(&b.names[j..]);
-    Hideset { names }
 }
 
 /// A macro body lexed once (token spans relative to `body`, `buf`
@@ -215,7 +177,10 @@ fn splice(out: &mut Vec<Tok>, mut src: Vec<Tok>, space: bool) {
 #[derive(Default)]
 pub(super) struct ExpScratch {
     bufs: Vec<Rc<str>>,
-    sets: Vec<Rc<Hideset>>,
+    /// Hideset `k` (0 is empty) is the sorted name-id run `hs_spans[k - 1]` spans in `hs_pool`.
+    hs_spans: Vec<(u32, u32)>,
+    hs_pool: Vec<u32>,
+    hs_memo: Vec<(u32, u32)>,
     /// Emptied token vectors for reuse; capacity survives.
     pool: Vec<Vec<Tok>>,
 }
@@ -237,7 +202,8 @@ impl<'a> Exp<'a> {
         ar: &'a mut ExpScratch,
     ) -> Self {
         ar.bufs.clear();
-        ar.sets.clear();
+        ar.hs_spans.clear();
+        ar.hs_pool.clear();
         Exp {
             pp,
             filename,
@@ -260,8 +226,9 @@ impl<'a> Exp<'a> {
         self.ar.pool.push(v);
     }
 
-    fn set(&self, id: u32) -> &Rc<Hideset> {
-        &self.ar.sets[(id - 1) as usize]
+    fn set_range(&self, id: u32) -> core::ops::Range<usize> {
+        let (start, len) = self.ar.hs_spans[(id - 1) as usize];
+        start as usize..(start + len) as usize
     }
 
     fn text(&self, t: Tok) -> &str {
@@ -305,13 +272,23 @@ impl<'a> Exp<'a> {
         }
     }
 
-    fn intern_set(&mut self, s: Rc<Hideset>) -> u32 {
-        self.ar.sets.push(s);
-        self.ar.sets.len() as u32
+    /// Close the run appended to the pool since `start` as a new hideset.
+    fn close_set(&mut self, start: usize) -> u32 {
+        let len = self.ar.hs_pool.len() - start;
+        if len == 0 {
+            return 0;
+        }
+        self.ar.hs_spans.push((start as u32, len as u32));
+        self.ar.hs_spans.len() as u32
     }
 
     fn hs_contains(&self, hs: u32, name: &str) -> bool {
-        hs != 0 && self.set(hs).contains(name)
+        hs != 0
+            && self.pp.hs_names.borrow().get(name).is_some_and(|id| {
+                self.ar.hs_pool[self.set_range(hs)]
+                    .binary_search(id)
+                    .is_ok()
+            })
     }
 
     /// C99 6.10.3.4: a function-like invocation's new hideset is the
@@ -324,36 +301,61 @@ impl<'a> Exp<'a> {
         if a == b {
             return a;
         }
-        let (sa, sb) = (self.set(a), self.set(b));
-        let names: Vec<Rc<str>> = sa
-            .names
-            .iter()
-            .filter(|n| sb.contains(n))
-            .cloned()
-            .collect();
-        if names.is_empty() {
-            0
-        } else {
-            self.intern_set(Rc::new(Hideset { names }))
+        let (ra, rb) = (self.set_range(a), self.set_range(b));
+        let start = self.ar.hs_pool.len();
+        let (mut i, mut j) = (ra.start, rb.start);
+        while i < ra.end && j < rb.end {
+            let (x, y) = (self.ar.hs_pool[i], self.ar.hs_pool[j]);
+            if x == y {
+                self.ar.hs_pool.push(x);
+            }
+            i += usize::from(x <= y);
+            j += usize::from(y <= x);
         }
+        self.close_set(start)
     }
 
-    /// `hs + {name}`; the empty-set case (every top-level fire) is
-    /// served from the preprocessor's per-name singleton cache.
     fn hs_with_name(&mut self, hs: u32, name: &str) -> u32 {
+        let id = {
+            let mut names = self.pp.hs_names.borrow_mut();
+            match names.get(name) {
+                Some(&id) => id,
+                None => {
+                    let id = names.len() as u32;
+                    names.insert(name.into(), id);
+                    id
+                }
+            }
+        };
+        let start = self.ar.hs_pool.len();
         if hs == 0 {
-            let s = self.pp.hs_singleton(name);
-            return self.intern_set(s);
+            self.ar.hs_pool.push(id);
+            return self.close_set(start);
         }
-        let set = self.set(hs);
-        if set.contains(name) {
-            return hs;
+        let r = self.set_range(hs);
+        let at = match self.ar.hs_pool[r.clone()].binary_search(&id) {
+            Ok(_) => return hs,
+            Err(at) => r.start + at,
+        };
+        self.ar.hs_pool.extend_from_within(r.start..at);
+        self.ar.hs_pool.push(id);
+        self.ar.hs_pool.extend_from_within(at..r.end);
+        self.close_set(start)
+    }
+
+    fn hs_union(&mut self, a: u32, b: u32) -> u32 {
+        let (ra, rb) = (self.set_range(a), self.set_range(b));
+        let start = self.ar.hs_pool.len();
+        let (mut i, mut j) = (ra.start, rb.start);
+        while i < ra.end && j < rb.end {
+            let (x, y) = (self.ar.hs_pool[i], self.ar.hs_pool[j]);
+            self.ar.hs_pool.push(x.min(y));
+            i += usize::from(x <= y);
+            j += usize::from(y <= x);
         }
-        let mut names = set.names.clone();
-        if let Err(at) = names.binary_search_by(|n| (**n).cmp(name)) {
-            names.insert(at, Rc::from(name));
-        }
-        self.intern_set(Rc::new(Hideset { names }))
+        self.ar.hs_pool.extend_from_within(i..ra.end);
+        self.ar.hs_pool.extend_from_within(j..rb.end);
+        self.close_set(start)
     }
 
     /// Union `hs` into every token whose hideset is ever consulted:
@@ -366,7 +368,8 @@ impl<'a> Exp<'a> {
         if hs == 0 {
             return;
         }
-        let mut memo: Vec<(u32, u32)> = Vec::new();
+        let mut memo = core::mem::take(&mut self.ar.hs_memo);
+        memo.clear();
         for t in toks {
             let consulted = t.kind == TokKind::Ident
                 || (t.kind == TokKind::Punct
@@ -381,14 +384,14 @@ impl<'a> Exp<'a> {
                 match memo.iter().find(|(k, _)| *k == t.hs) {
                     Some((_, u)) => *u,
                     None => {
-                        let u = hs_union(self.set(t.hs), self.set(hs));
-                        let id = self.intern_set(Rc::new(u));
-                        memo.push((t.hs, id));
-                        id
+                        let u = self.hs_union(t.hs, hs);
+                        memo.push((t.hs, u));
+                        u
                     }
                 }
             };
         }
+        self.ar.hs_memo = memo;
     }
 
     /// Render tokens back to text: one space where the source had
@@ -1089,19 +1092,6 @@ impl Preprocessor {
         let (_, toks, _) = self.cached_body(name, body);
         let last = toks.last().filter(|t| t.kind == TokKind::Ident)?;
         Some(&body[last.start as usize..last.end as usize])
-    }
-
-    /// The shared one-name hideset `{name}`.
-    fn hs_singleton(&self, name: &str) -> Rc<Hideset> {
-        let mut singles = self.hs_singletons.borrow_mut();
-        if let Some(s) = singles.get(name) {
-            return s.clone();
-        }
-        let s = Rc::new(Hideset {
-            names: alloc::vec![Rc::from(name)],
-        });
-        singles.insert(name.to_string(), s.clone());
-        s
     }
 
     /// Substitute every macro invocation in `line`. `filename` and

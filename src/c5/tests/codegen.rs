@@ -3343,6 +3343,49 @@ fn q_constraint_acquire_release_aarch64() {
     assert!(words().any(|w| w == 0xC89F_FC01), "stlr x1, [x0]");
 }
 
+/// The AArch64 `m` constraint: `%N` is the memory reference `[xN]` through
+/// the register holding the object's address, as GCC prints it, both in a
+/// plain template and in one the GNU-as directive pass substitutes. Each
+/// word is verified against `clang -target aarch64-linux-gnu`.
+#[test]
+fn m_constraint_substitutes_as_a_memory_reference_aarch64() {
+    use crate::{Compiler, NativeOptions, Target, emit_native_with_options};
+    let program = Compiler::with_target(
+        "long ld(long *p){ long v;\n\
+           __asm__ volatile(\"ldr %0, %1\" : \"=r\"(v) : \"m\"(*p));\n\
+           return v; }\n\
+         void st(long *p, long v){\n\
+           __asm__ volatile(\"str %1, %0\" : \"=m\"(*p) : \"r\"(v)); }\n\
+         void stu(long *p, long v){\n\
+           __asm__ volatile(\"stur %1, %0\" : \"=m\"(*p) : \"r\"(v)); }\n\
+         int ldw(int *p){ int v;\n\
+           __asm__ volatile(\"ldr %w0, %1\" : \"=r\"(v) : \"m\"(*p));\n\
+           return v; }\n\
+         int ldb(unsigned char *p, long k){ int v;\n\
+           __asm__ volatile(\".rept 1\\n\\tldrb %w0, %2\\n\\t.endr\"\n\
+                            : \"=r\"(v) : \"r\"(k), \"m\"(*p));\n\
+           return v; }\n\
+         int main(){ return 0; }"
+            .to_string(),
+        Target::LinuxAarch64,
+    )
+    .compile()
+    .expect("compile");
+    let bytes = emit_native_with_options(&program, Target::LinuxAarch64, NativeOptions::default())
+        .expect("emit LinuxAarch64");
+    let words = || {
+        bytes
+            .windows(4)
+            .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
+    };
+    // Operands take x0, x1, x2 in order.
+    assert!(words().any(|w| w == 0xF940_0020), "ldr x0, [x1]");
+    assert!(words().any(|w| w == 0xF900_0001), "str x1, [x0]");
+    assert!(words().any(|w| w == 0xF800_0001), "stur x1, [x0]");
+    assert!(words().any(|w| w == 0xB940_0020), "ldr w0, [x1]");
+    assert!(words().any(|w| w == 0x3940_0040), "ldrb w0, [x2]");
+}
+
 /// The `+Q` read-write form in an LL/SC retry loop: one `%2` reference
 /// feeds both exclusive instructions, and the `%w` modifiers on the other
 /// operands are unaffected. The four words must be contiguous; each is

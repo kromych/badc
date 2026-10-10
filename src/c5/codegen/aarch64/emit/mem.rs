@@ -620,11 +620,12 @@ pub(crate) fn emit_agg_load_int(
         }
         debug_assert!(dst.0 != base.0 && tmp.0 != base.0 && tmp.0 != dst.0);
         emit(code, enc_load_unit(w, tmp, base, o));
+        let lsl = super::encode::RegShift::Lsl;
+        let orr = super::encode::ORR_REG;
         emit(
             code,
-            super::encode::enc_lsl_imm(tmp, tmp, ((o - off) * 8) as u8),
+            super::encode::enc_rrr_shifted(orr, dst, dst, tmp, lsl, (o - off) * 8),
         );
-        emit(code, super::encode::enc_orr_reg(dst, dst, tmp));
     }
 }
 

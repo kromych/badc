@@ -311,8 +311,7 @@ Disassembly of section .text:
                	mov	x5, x25
                	ldrh	w6, [x5, #0x8]
                	ldrb	w16, [x5, #0xa]
-               	lsl	x16, x16, #16
-               	orr	x6, x6, x16
+               	orr	x6, x6, x16, lsl #16
                	ldr	x5, [x5]
                	bl	<addr>
                	cmp	w0, #0xc3c

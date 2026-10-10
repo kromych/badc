@@ -734,8 +734,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0xf8
                	ldrh	w16, [x0]
                	ldrb	w17, [x0, #0x2]
-               	lsl	x17, x17, #16
-               	orr	x16, x16, x17
+               	orr	x16, x16, x17, lsl #16
                	mov	x0, x16
                	bl	<addr>
                	sturh	w0, [x29, #-0x20]

@@ -442,42 +442,68 @@ fn enc_rrr(base: u32, rd: Reg, rn: Reg, rm: Reg) -> u32 {
     base | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// The shift a shifted-register operand applies (bits [23:22]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RegShift {
+    Lsl = 0,
+    Lsr = 1,
+    Asr = 2,
+}
+
+/// The shifted-register base words of the 64-bit ADD, SUB, AND, ORR, EOR
+/// and BIC.
+pub(crate) const ADD_REG: u32 = 0x8B00_0000;
+pub(crate) const SUB_REG: u32 = 0xCB00_0000;
+pub(crate) const AND_REG: u32 = 0x8A00_0000;
+pub(crate) const ORR_REG: u32 = 0xAA00_0000;
+pub(crate) const EOR_REG: u32 = 0xCA00_0000;
+pub(crate) const BIC_REG: u32 = 0x8A20_0000;
+
+/// `<base> <Xd>, <Xn>, <Xm>, <shift> #<amount>`: one of the words above
+/// with its `Xm` operand shifted by a 6-bit amount.
+pub(crate) fn enc_rrr_shifted(
+    base: u32,
+    rd: Reg,
+    rn: Reg,
+    rm: Reg,
+    shift: RegShift,
+    amount: u32,
+) -> u32 {
+    enc_rrr(base, rd, rn, rm) | ((shift as u32) << 22) | ((amount & 0x3f) << 10)
+}
+
 /// `ADD <Xd>, <Xn>, <Xm>` -- 64-bit register add, no shift.
 pub(crate) fn enc_add_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x8B00_0000, rd, rn, rm)
+    enc_rrr(ADD_REG, rd, rn, rm)
 }
 
 /// `ADD <Xd>, <Xn>, <Xm>, LSL #<shift>` -- 64-bit add of a left-shifted
 /// register. `shift` is a 6-bit amount.
 pub(crate) fn enc_add_reg_lsl(rd: Reg, rn: Reg, rm: Reg, shift: u32) -> u32 {
-    0x8B00_0000
-        | ((rm.0 as u32) << 16)
-        | ((shift & 0x3f) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rd.0 as u32)
+    enc_rrr_shifted(ADD_REG, rd, rn, rm, RegShift::Lsl, shift)
 }
 
 /// `SUB <Xd>, <Xn>, <Xm>` -- 64-bit register subtract.
 pub(crate) fn enc_sub_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0xCB00_0000, rd, rn, rm)
+    enc_rrr(SUB_REG, rd, rn, rm)
 }
 
 /// `NEG <Xd>, <Xm>` (`SUB Xd, XZR, Xm`) -- two's-complement negate.
 /// `Rn` is baked to XZR (31); the shifted-register SUB reads 31 as the
 /// zero register, not SP.
 pub(crate) fn enc_neg(rd: Reg, rm: Reg) -> u32 {
-    enc_rrr(0xCB00_0000, rd, Reg::SP, rm)
+    enc_rrr(SUB_REG, rd, Reg::SP, rm)
 }
 
 /// `AND <Xd>, <Xn>, <Xm>` -- bitwise and.
 pub(crate) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x8A00_0000, rd, rn, rm)
+    enc_rrr(AND_REG, rd, rn, rm)
 }
 
 /// `BIC <Xd>, <Xn>, <Xm>` -- bit clear: `Xn & ~Xm`. The logical
 /// shifted-register `AND` form with `N=1` (bit 21) complements `Xm`.
 pub(crate) fn enc_bic_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x8A20_0000, rd, rn, rm)
+    enc_rrr(BIC_REG, rd, rn, rm)
 }
 
 /// The logical-immediate field `N<<12 | immr<<6 | imms` (bits [22:10]) of
@@ -582,7 +608,7 @@ pub(crate) fn enc_and_align_down(rd: Reg, rn: Reg, log2_align: u32) -> u32 {
 
 /// `ORR <Xd>, <Xn>, <Xm>` -- bitwise or.
 pub(crate) fn enc_orr_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0xAA00_0000, rd, rn, rm)
+    enc_rrr(ORR_REG, rd, rn, rm)
 }
 
 /// `MOV <Wd>, <Wn>` (`ORR Wd, WZR, Wn`) -- 32-bit register move. A write
@@ -594,7 +620,7 @@ pub(crate) fn enc_mov_w_w(rd: Reg, rn: Reg) -> u32 {
 
 /// `EOR <Xd>, <Xn>, <Xm>` -- bitwise xor.
 pub(crate) fn enc_eor_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0xCA00_0000, rd, rn, rm)
+    enc_rrr(EOR_REG, rd, rn, rm)
 }
 
 /// `MVN <Xd>, <Xm>` (`ORN Xd, XZR, Xm`) -- bitwise NOT. `Rn` is baked
@@ -2913,6 +2939,22 @@ mod tests {
             enc_add_index(r(16), r(16), r(17), IndexExt::None, 3),
             enc_add_reg_lsl(r(16), r(16), r(17), 3)
         );
+    }
+
+    /// The shifted-register forms of the six base words, each shift kind,
+    /// and the widest amount. Verified against clang.
+    #[test]
+    fn shifted_register_forms() {
+        use RegShift::{Asr, Lsl, Lsr};
+        let f = enc_rrr_shifted;
+        assert_eq!(f(ORR_REG, r(0), r(1), r(0), Lsl, 16), 0xAA00_4020);
+        assert_eq!(f(ADD_REG, r(0), r(0), r(1), Lsl, 2), 0x8B01_0800);
+        assert_eq!(f(SUB_REG, r(0), r(0), r(1), Asr, 3), 0xCB81_0C00);
+        assert_eq!(f(EOR_REG, r(0), r(0), r(1), Lsr, 7), 0xCA41_1C00);
+        assert_eq!(f(AND_REG, r(0), r(0), r(1), Lsr, 7), 0x8A41_1C00);
+        assert_eq!(f(BIC_REG, r(13), r(13), r(13), Asr, 63), 0x8AAD_FDAD);
+        assert_eq!(f(ORR_REG, r(10), r(10), r(9), Lsr, 49), 0xAA49_C54A);
+        assert_eq!(f(ADD_REG, r(2), r(3), r(4), Asr, 63), 0x8B84_FC62);
     }
 
     /// `LDR Wt, [Xn, #imm]` -- 32-bit unsigned-offset load. The

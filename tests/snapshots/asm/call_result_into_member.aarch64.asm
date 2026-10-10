@@ -66,8 +66,7 @@ Disassembly of section .text:
                	mov	x16, x0
                	ldrh	w0, [x16]
                	ldrb	w17, [x16, #0x2]
-               	lsl	x17, x17, #16
-               	orr	x0, x0, x17
+               	orr	x0, x0, x17, lsl #16
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -112,8 +111,7 @@ Disassembly of section .text:
                	mov	x16, x0
                	ldr	w0, [x16]
                	ldrb	w17, [x16, #0x4]
-               	lsl	x17, x17, #32
-               	orr	x0, x0, x17
+               	orr	x0, x0, x17, lsl #32
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -135,8 +133,7 @@ Disassembly of section .text:
                	mov	x16, x0
                	ldr	w0, [x16]
                	ldrh	w17, [x16, #0x4]
-               	lsl	x17, x17, #32
-               	orr	x0, x0, x17
+               	orr	x0, x0, x17, lsl #32
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -167,11 +164,9 @@ Disassembly of section .text:
                	mov	x16, x0
                	ldr	w0, [x16]
                	ldrh	w17, [x16, #0x4]
-               	lsl	x17, x17, #32
-               	orr	x0, x0, x17
+               	orr	x0, x0, x17, lsl #32
                	ldrb	w17, [x16, #0x6]
-               	lsl	x17, x17, #48
-               	orr	x0, x0, x17
+               	orr	x0, x0, x17, lsl #48
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

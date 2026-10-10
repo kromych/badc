@@ -18,13 +18,14 @@ use alloc::vec::Vec;
 use super::emit::{
     Frame, NARROW_BORROW, bound_base, emit_agg_load_int, emit_mem, enc_store_unit, object_base,
 };
+use super::encode::RegShift::{Asr, Lsl, Lsr};
 use super::encode::{
-    Cond, LDR_X, LogicalOp, Reg, STR_X, emit, emit_add_sp_imm, emit_sub_sp_imm, enc_add_imm,
-    enc_add_imm_lsl12, enc_add_reg, enc_and_reg, enc_asr_imm, enc_b, enc_b_cond, enc_bic_reg,
+    ADD_REG, BIC_REG, Cond, LDR_X, LogicalOp, ORR_REG, Reg, STR_X, emit, emit_add_sp_imm,
+    emit_sub_sp_imm, enc_add_imm, enc_add_imm_lsl12, enc_add_reg, enc_and_reg, enc_b, enc_b_cond,
     enc_cbnz, enc_cbz, enc_clz, enc_cmp_reg, enc_cset, enc_fmov_d_to_x, enc_fmov_x_to_d,
     enc_ldp_off, enc_ldr_imm, enc_logical_imm, enc_lsl_imm, enc_lslv, enc_lsr_imm, enc_lsrv,
-    enc_mov_reg, enc_movz, enc_orr_reg, enc_stp_off, enc_str_imm, enc_sub_imm, enc_sub_imm_lsl12,
-    enc_sub_reg, enc_subs_imm,
+    enc_mov_reg, enc_movz, enc_orr_reg, enc_rrr_shifted, enc_stp_off, enc_str_imm, enc_sub_imm,
+    enc_sub_imm_lsl12, enc_sub_reg, enc_subs_imm,
 };
 
 /// The exponent bias difference between binary128 and binary64, less
@@ -177,20 +178,17 @@ pub(super) fn emit_narrow_load(
     emit(code, enc_orr_reg(tmp, hi, lo));
     let to_inf = branch(code, enc_cbz(tmp, 0));
     emit(code, enc_lsl_imm(tmp, hi, 4));
-    emit(code, enc_lsr_imm(aux, lo, 60));
-    emit(code, enc_orr_reg(tmp, tmp, aux));
+    emit(code, enc_rrr_shifted(ORR_REG, tmp, tmp, lo, Lsr, 60));
     logical_imm(code, LogicalOp::Orr, tmp, tmp, 0x7ff8 << 48);
     emit(code, enc_orr_reg(acc, sgn, tmp));
     let nan_done = branch(code, enc_b(0));
     patch(code, to_finite);
     // Top 64 significand bits as 1.63 fixed point; the rest is sticky.
     emit(code, enc_lsl_imm(hi, hi, 15));
-    emit(code, enc_lsr_imm(tmp, lo, 49));
-    emit(code, enc_orr_reg(hi, hi, tmp));
+    emit(code, enc_rrr_shifted(ORR_REG, hi, hi, lo, Lsr, 49));
     emit(code, enc_subs_imm(Reg::SP, exp, 0));
     emit(code, enc_cset(tmp, Cond::Ne));
-    emit(code, enc_lsl_imm(tmp, tmp, 63));
-    emit(code, enc_orr_reg(hi, hi, tmp));
+    emit(code, enc_rrr_shifted(ORR_REG, hi, hi, tmp, Lsl, 63));
     mask_low(code, lo, lo, 49);
     emit(code, enc_subs_imm(Reg::SP, lo, 0));
     emit(code, enc_cset(lo, Cond::Ne));
@@ -208,8 +206,7 @@ pub(super) fn emit_narrow_load(
     // result, one more per binade below the normal range.
     emit(code, enc_movz(tmp, 1, 0));
     emit(code, enc_sub_reg(tmp, tmp, exp));
-    emit(code, enc_asr_imm(aux, tmp, 63));
-    emit(code, enc_bic_reg(tmp, tmp, aux));
+    emit(code, enc_rrr_shifted(BIC_REG, tmp, tmp, tmp, Asr, 63));
     emit(code, enc_add_imm(tmp, tmp, 10));
     cmp_imm16(code, tmp, aux, 63);
     let to_zero2 = branch(code, enc_b_cond(Cond::Gt, 0));
@@ -226,10 +223,8 @@ pub(super) fn emit_narrow_load(
     mask_low(code, aux, aux, 1);
     emit(code, enc_and_reg(lo, lo, aux));
     emit(code, enc_sub_imm(hi, exp, 1));
-    emit(code, enc_asr_imm(aux, hi, 63));
-    emit(code, enc_bic_reg(exp, hi, aux));
-    emit(code, enc_lsl_imm(exp, exp, 52));
-    emit(code, enc_add_reg(acc, acc, exp));
+    emit(code, enc_rrr_shifted(BIC_REG, exp, hi, hi, Asr, 63));
+    emit(code, enc_rrr_shifted(ADD_REG, acc, acc, exp, Lsl, 52));
     emit(code, enc_add_reg(acc, acc, lo));
     emit(code, enc_add_reg(acc, acc, sgn));
     let round_done = branch(code, enc_b(0));
@@ -274,15 +269,12 @@ pub(super) fn emit_widen_store(
     // Pack: the significand's low 4 bits fall in the low half.
     let pack = code.len();
     emit(code, enc_lsl_imm(lo, man, 60));
-    emit(code, enc_lsr_imm(tmp, man, 4));
-    emit(code, enc_orr_reg(hi, hi, tmp));
-    emit(code, enc_lsl_imm(tmp, exp, 48));
-    emit(code, enc_orr_reg(hi, hi, tmp));
+    emit(code, enc_rrr_shifted(ORR_REG, hi, hi, man, Lsr, 4));
+    emit(code, enc_rrr_shifted(ORR_REG, hi, hi, exp, Lsl, 48));
     let to_store = branch(code, enc_b(0));
     patch(code, to_spec);
     emit(code, enc_lsl_imm(lo, man, 60));
-    emit(code, enc_lsr_imm(tmp, man, 4));
-    emit(code, enc_orr_reg(hi, hi, tmp));
+    emit(code, enc_rrr_shifted(ORR_REG, hi, hi, man, Lsr, 4));
     logical_imm(code, LogicalOp::Orr, hi, hi, 0x7fff << 48);
     let to_store2 = branch(code, enc_cbz(man, 0));
     logical_imm(code, LogicalOp::Orr, hi, hi, 0x8000 << 32);

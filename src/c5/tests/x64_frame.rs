@@ -556,6 +556,54 @@ fn a_spilled_return_value_is_read_ahead_of_the_pops() {
     assert!(from_a_slot > 0, "no configuration returned a spilled value");
 }
 
+/// A small aggregate returned in registers is read through its address
+/// ahead of the epilogue, whose rsp reset and pops leave an object in the
+/// alloca region below rsp. The forms the epilogue itself gathers (an x87
+/// long double, two floats in one eightbyte, a union, a float beside an
+/// int) and those the tape gathers (a double beside a long, twelve bytes).
+#[test]
+fn a_returned_aggregate_is_read_ahead_of_the_epilogue() {
+    const SRC: &str = "struct L { long double x; };\n\
+        struct F2 { float a, b; };\n\
+        union U { long l; double d; };\n\
+        struct FI { float f; int i; };\n\
+        struct M { double d; long l; };\n\
+        struct C { char c[12]; };\n\
+        void init(void *p, long n);\n\
+        #define BODY(T) T *p = (T *)__builtin_alloca(sizeof *p * (unsigned long)n); \\\n\
+            long x = n * 3; init(p, n); init(p, x); return p[n - 1];\n\
+        struct L fl(long n) { BODY(struct L) }\n\
+        struct F2 ff(long n) { BODY(struct F2) }\n\
+        union U fu(long n) { BODY(union U) }\n\
+        struct FI fi(long n) { BODY(struct FI) }\n\
+        struct M fm(long n) { BODY(struct M) }\n\
+        struct C fc(long n) { BODY(struct C) }\n";
+    let in_registers: [(Target, &[&str]); 2] = [
+        (Target::LinuxX64, &["fl", "ff", "fu", "fi", "fm", "fc"]),
+        (Target::WindowsX64, &["fl", "ff", "fu", "fi"]),
+    ];
+    for (target, names) in in_registers {
+        let obj = optimized(SRC, target);
+        for name in names {
+            let insns = insns_of(&obj, name);
+            let frame = frame_of(&insns, target).expect("a frame");
+            assert!(!frame.pushes.is_empty(), "{target:?} {name}: {insns:x?}");
+            for e in exits(&insns) {
+                let reset = check_exit(&insns, e, &frame, target, name) - 1;
+                // `lea rsp, [rbp + disp]`, then nothing reads through another base.
+                let late = insns[reset..e]
+                    .iter()
+                    .filter(|x| x.mem_base().is_some_and(|b| b != 4 && b != 5))
+                    .count();
+                assert!(
+                    insns[reset].op == 0x8D && insns[reset].regs().0 == 4 && late == 0,
+                    "{target:?} {name}: {late} reads past the reset: {insns:x?}"
+                );
+            }
+        }
+    }
+}
+
 /// The link path's decoder over `name` of `obj`, with the window the
 /// structured record implies.
 fn decoded(obj: &[u8], name: &str) -> (crate::c5::codegen::FnUnwind, Vec<u8>) {

@@ -1547,8 +1547,8 @@ fn emit_return(
         Place::None
     };
     // A register-returned aggregate (System V AMD64 3.2.3): `value` is its
-    // address, staged through rcx across the restore; the eightbytes load
-    // into rax:rdx / xmm0:xmm1 after it, an x87 pair into st(0).
+    // address, staged through rcx; the eightbytes load into rax:rdx /
+    // xmm0:xmm1, an x87 pair into st(0), while rsp is still below the object.
     if let Some(ai) = func.ret_agg {
         let desc = &func.agg_descs[ai as usize];
         let eb_classes = reg_slot_classes(desc, abi, true);
@@ -1564,9 +1564,6 @@ fn emit_return(
             }
             _ => {}
         }
-        emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
-        restore_dynamic_sp(code, frame, alloc);
-        restore_callee_saved(code, alloc);
         // Place each eightbyte in its bank: System V returns SSE eightbytes
         // in xmm0/xmm1 and INTEGER eightbytes in rax/rdx, each in order.
         let int_ret = [Reg::RAX, Reg::RDX];
@@ -1605,6 +1602,9 @@ fn emit_return(
                 int_i += 1;
             }
         }
+        emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
+        restore_dynamic_sp(code, frame, alloc);
+        restore_callee_saved(code, alloc);
         emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
         return Ok(());
     }

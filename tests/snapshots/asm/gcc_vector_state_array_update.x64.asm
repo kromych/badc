@@ -336,12 +336,12 @@ Disassembly of section .text:
                	xorq	%rdx, %rcx
                	movb	%cl, -0x41(%rbp)
                	movq	%rax, %rcx
+               	movups	(%rcx), %xmm0
                	popq	%rbx
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	movups	(%rcx), %xmm0
                	leave
                	retq
 

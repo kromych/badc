@@ -884,12 +884,12 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movb	%al, -0x31(%rbp)
                	movq	0xd8(%rsp), %rcx
+               	movups	(%rcx), %xmm0
                	popq	%rbx
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	movups	(%rcx), %xmm0
                	leave
                	retq
 

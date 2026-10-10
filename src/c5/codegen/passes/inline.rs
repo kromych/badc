@@ -3442,6 +3442,7 @@ fn splice_multi_block(
         is_naked: original.is_naked,
         is_noreturn: original.is_noreturn,
         conv: original.conv,
+        general_regs_only: original.general_regs_only,
         is_weak: original.is_weak,
         is_internal: original.is_internal,
         const_params: original.const_params,

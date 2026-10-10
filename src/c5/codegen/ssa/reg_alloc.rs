@@ -867,6 +867,79 @@ pub(crate) fn fp_callee_saved(target: Target, r: u8) -> bool {
     }
 }
 
+/// `row`'s callee-saved `(gpr, fpr)` masks less the `-ffixed-` registers.
+fn preserved_regs(row: Target, fixed: FixedRegs) -> (u32, u32) {
+    let gpr = Rows::for_target(row)
+        .callee_gprs
+        .iter()
+        .fold(0u32, |m, &r| m | 1 << r);
+    let fpr = (0..u32::BITS as u8)
+        .filter(|&r| fp_callee_saved(row, r))
+        .fold(0u32, |m, r| m | 1 << r);
+    (gpr & !fixed.gpr, fpr & !fixed.fpr)
+}
+
+/// The registers of `kept`'s preserved set that the call `inst` may change:
+/// those its callee's convention leaves volatile (AMD64 psABI 3.2.1).
+pub(crate) fn call_clobbers(
+    inst: &Inst,
+    target: Target,
+    kept: Target,
+    fixed: FixedRegs,
+) -> (u32, u32) {
+    let Some(conv) = inst.call_conv() else {
+        return (0, 0);
+    };
+    let callee = target.abi_row(conv);
+    if callee == kept {
+        return (0, 0);
+    }
+    let (kg, kf) = preserved_regs(kept, fixed);
+    let (cg, cf) = preserved_regs(callee, fixed);
+    (kg & !cg, kf & !cf)
+}
+
+/// The registers of `kept`'s preserved set one of the calls may change; under
+/// `general_regs_only`, of the vector registers only the marshal's.
+fn call_saves(func: &FunctionSsa, target: Target, kept: Target, fixed: FixedRegs) -> (u32, u32) {
+    if func.is_naked {
+        return (0, 0);
+    }
+    func.insts.iter().fold((0, 0), |(g, f), inst| {
+        let (cg, mut cf) = call_clobbers(inst, target, kept, fixed);
+        if func.general_regs_only {
+            cf &= (1u32 << fp_arg_count(inst).min(8)) - 1;
+        }
+        (g | cg, f | cf)
+    })
+}
+
+/// Per phi-class root, the [`call_clobbers`] of the calls the value lives
+/// across.
+fn call_forbid_masks(
+    func: &FunctionSsa,
+    liveness: &super::liveness::Liveness,
+    target: Target,
+    fixed: FixedRegs,
+    node_of: &[ValueId],
+) -> Vec<(u32, u32)> {
+    let clobbers = |inst: &Inst| call_clobbers(inst, target, target, fixed);
+    let is_site = |inst: &Inst| clobbers(inst) != (0, 0);
+    if !func.insts.iter().any(is_site) {
+        return Vec::new();
+    }
+    let mut out = alloc::vec![(0u32, 0u32); func.insts.len()];
+    for (site, live) in liveness.values_live_after(func, &is_site) {
+        let (gpr, fpr) = clobbers(&func.insts[site as usize]);
+        for v in live {
+            let entry = &mut out[node_of[v as usize] as usize];
+            entry.0 |= gpr;
+            entry.1 |= fpr;
+        }
+    }
+    out
+}
+
 /// The target's full register banks.
 struct Rows {
     callee_gprs: &'static [u8],
@@ -1204,6 +1277,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // block untouched, so the emit needs no save / restore pair for it.
     let asm_live = asm_live_values(func, &liveness, target, fixed);
     let asm_forbid = asm_forbid_masks(func, &asm_live, &node_of);
+    let call_forbid = call_forbid_masks(func, &liveness, target, fixed, &node_of);
     let wide = wide_values(func);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
@@ -1227,7 +1301,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
         entry.forbid |= param_incoming_forbid[v] | call_target_forbid[v];
         entry.avoid |= avoid.get(v).copied().unwrap_or(0);
-        if let Some(&(gpr, fpr)) = asm_forbid.get(root) {
+        for &(gpr, fpr) in asm_forbid
+            .get(root)
+            .into_iter()
+            .chain(call_forbid.get(root))
+        {
             entry.forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
         }
     }
@@ -1699,20 +1777,6 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         .into_iter()
         .filter(|r| banks.callee_gprs.contains(r) || conv_banks.callee_gprs.contains(r))
         .collect();
-    // `gpr_used` covers the registers the allocator hands out as values.
-    // The emit writes more on its own: every call marshals its arguments
-    // into the *callee's* argument registers, and this function's callees
-    // follow the target's convention. On a foreign convention some of
-    // those are registers this function owes its caller -- System V
-    // marshals into rsi and rdi, which the Microsoft x64 convention
-    // reserves -- so they join the save list too.
-    if conv_target != target && func.insts.iter().any(is_call) {
-        for &r in target.abi().int_arg_regs {
-            if conv_banks.callee_gprs.contains(&r) && !gpr_used_callee.contains(&r) {
-                gpr_used_callee.push(r);
-            }
-        }
-    }
     // The x86_64 writer's fixed scratch (r10 / r11) is caller-saved, so
     // it needs no save. The aarch64 writer's callee-saved x19 is saved
     // through `Frame::uses_x19`, not this list.
@@ -1720,22 +1784,13 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         .into_iter()
         .filter(|r| banks.callee_fprs.contains(r) || fp_callee_saved(conv_target, *r))
         .collect();
-    // The same for the floating-point argument registers a call
-    // marshals into: System V passes them in xmm0..xmm7
-    // (`plan_call_args_aggs`) where the Microsoft x64 convention
-    // reserves xmm6 upward, so a call passing that many reaches them.
-    if conv_target != target {
-        let fp_args = func
-            .insts
-            .iter()
-            .map(fp_arg_count)
-            .max()
-            .unwrap_or(0)
-            .min(8);
-        for r in 0..fp_args as u8 {
-            if fp_callee_saved(conv_target, r) && !fp_used_callee.contains(&r) {
-                fp_used_callee.push(r);
-            }
+    let (call_gpr, call_fpr) = call_saves(func, target, conv_target, fixed);
+    for r in 0..u32::BITS as u8 {
+        if call_gpr & (1 << r) != 0 && !gpr_used_callee.contains(&r) {
+            gpr_used_callee.push(r);
+        }
+        if call_fpr & (1 << r) != 0 && !fp_used_callee.contains(&r) {
+            fp_used_callee.push(r);
         }
     }
     // The FP scratch sits outside `callee_fprs` (never an allocator
@@ -2085,14 +2140,10 @@ fn check_allocation(
 
     // Cross-call discipline: caller-saved registers do not survive a call.
     for (c, inst) in func.insts.iter().enumerate() {
-        if !covered(c)
-            || !matches!(
-                inst,
-                Inst::Call { .. } | Inst::CallExt { .. } | Inst::CallIndirect { .. }
-            )
-        {
+        if !covered(c) || inst.call_conv().is_none() {
             continue;
         }
+        let (gpr, fpr) = call_clobbers(inst, target, target, FixedRegs::NONE);
         let cid = c as ValueId;
         for v in 0..func.insts.len() {
             let vid = v as ValueId;
@@ -2100,12 +2151,18 @@ fn check_allocation(
                 continue;
             }
             match places.get(v).copied().unwrap_or(Place::None) {
-                Place::IntReg(r) if banks.caller_gprs.contains(&r) => report(alloc::format!(
-                    "cross-call: v{v} in caller-saved int reg {r} is live across the call at v{c}"
-                )),
-                Place::FpReg(r) if banks.caller_fprs.contains(&r) => report(alloc::format!(
-                    "cross-call: v{v} in caller-saved fp reg {r} is live across the call at v{c}"
-                )),
+                Place::IntReg(r) if banks.caller_gprs.contains(&r) || gpr & (1 << r) != 0 => {
+                    report(alloc::format!(
+                        "cross-call: v{v} in int reg {r}, which the call at v{c} may change, \
+                         is live across it"
+                    ))
+                }
+                Place::FpReg(r) if banks.caller_fprs.contains(&r) || fpr & (1 << r) != 0 => {
+                    report(alloc::format!(
+                        "cross-call: v{v} in fp reg {r}, which the call at v{c} may change, \
+                         is live across it"
+                    ))
+                }
                 _ => {}
             }
         }
@@ -3431,18 +3488,6 @@ fn populate_return_hints(
     }
 }
 
-/// True for an instruction that transfers control to a callee, which
-/// marshals its arguments into the callee convention's registers.
-fn is_call(inst: &Inst) -> bool {
-    matches!(
-        inst,
-        Inst::Call { .. }
-            | Inst::CallIndirect { .. }
-            | Inst::CallExt { .. }
-            | Inst::Intrinsic { .. }
-    )
-}
-
 /// How many floating-point arguments a call instruction passes, so the
 /// caller can tell which of the FP argument registers its marshalling
 /// reaches. Zero for anything that is not a call.
@@ -3635,7 +3680,6 @@ fn compute_param_incoming_forbid(
 fn compute_call_target_forbid(func: &FunctionSsa, target: Target) -> Vec<u64> {
     use crate::c5::codegen::{plan_call_args_aggs, plan_mirrored_call};
     let mut forbid = alloc::vec![0u64; func.insts.len()];
-    let abi = target.abi_row(func.conv).abi();
     for inst in &func.insts {
         let Inst::CallIndirect {
             target: t,
@@ -3644,12 +3688,14 @@ fn compute_call_target_forbid(func: &FunctionSsa, target: Target) -> Vec<u64> {
             fixed_args,
             fp_arg_mask,
             arg_widths,
+            callee_conv,
             arg_aggs,
             ..
         } = inst
         else {
             continue;
         };
+        let abi = target.abi_for(*callee_conv);
         if (*t as usize) >= forbid.len() {
             continue;
         }
@@ -5560,6 +5606,7 @@ int main(void) { return 0; }
             is_naked: false,
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
+            general_regs_only: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,
@@ -5801,6 +5848,7 @@ int main(void) { return 0; }
             is_naked: false,
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
+            general_regs_only: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,

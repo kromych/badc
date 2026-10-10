@@ -2003,6 +2003,8 @@ pub(crate) struct FunctionSsa {
     /// arguments from that convention's registers and the allocator
     /// takes its callee-saved banks; see [`crate::c5::codegen::CallConv`].
     pub conv: crate::c5::codegen::CallConv,
+    /// `-mno-sse` / `-mgeneral-regs-only`: no vector register is used.
+    pub general_regs_only: bool,
     /// True when the definition binds STB_WEAK: `__attribute__((weak))` on
     /// the function or one of its declarations, or a file-scope asm `.weak`
     /// naming it. A strong definition in another object replaces it at link
@@ -2491,6 +2493,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             is_naked: _,
             is_noreturn: _,
             conv: _,
+            general_regs_only: _,
             is_weak: _,
             is_internal: _,
             section: _,

@@ -2564,6 +2564,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         if abs32 {
             super::super::passes::index_fold::mark_abs_bases(f, extern_abs);
         }
+        f.general_regs_only = native.no_fp_regs;
     }
     // At -O the operand-free values are set again past the calls they
     // would otherwise cross, then each function is allocated and

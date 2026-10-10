@@ -13885,6 +13885,119 @@ long g(long a, long b) { return sink(a, b); }\n";
     );
 }
 
+/// A System V callee preserves neither rsi, rdi nor any xmm register (AMD64
+/// psABI 3.2.1): a Microsoft x64 caller keeps no value there across the call
+/// and saves them for its own caller, the xmm registers but under `-mno-sse`.
+#[test]
+fn a_call_clobbers_what_its_callee_s_convention_leaves_volatile() {
+    use crate::c5::codegen::ssa::liveness::Liveness;
+    use crate::c5::codegen::ssa::reg_alloc::{Place, allocate, call_clobbers};
+    use crate::{CompileOptions, Compiler, FixedRegs, Target};
+    let funcs = |src: &str, target: Target| {
+        let copts = CompileOptions {
+            no_entry_point: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(src.to_string(), target, copts)
+            .compile()
+            .expect("compile");
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+            .expect("ssa")
+    };
+    let mask = |regs: &[u8]| regs.iter().fold(0u32, |m, &r| m | 1 << r);
+    let xmm6_15 = 0xffc0u32;
+    let rsi_rdi = (1u32 << 6) | (1 << 7);
+    const WIN: &str = "\
+__attribute__((sysv_abi)) double svx(double);\n\
+__attribute__((sysv_abi)) long long svl(long long);\n\
+double f(double p, double q) { double s = p * q; double t = svx(p); return s + t + q; }\n\
+long long g(long long a, long long b, long long c) {\n\
+    long long t = svl(a);\n\
+    return t + a * b + c;\n\
+}\n";
+    let win = funcs(WIN, Target::WindowsX64);
+    for name in ["f", "g"] {
+        let func = win.iter().find(|f| f.name == name).expect(name);
+        let alloc = allocate(func, Target::WindowsX64, FixedRegs::NONE);
+        let live = Liveness::compute(func);
+        let mut calls = 0;
+        for (c, inst) in func.insts.iter().enumerate() {
+            if inst.call_conv().is_none() || !live.in_cfg(c as u32) {
+                continue;
+            }
+            calls += 1;
+            let clobbers = call_clobbers(
+                inst,
+                Target::WindowsX64,
+                Target::WindowsX64,
+                FixedRegs::NONE,
+            );
+            assert_eq!(
+                clobbers,
+                (rsi_rdi, xmm6_15),
+                "{name}: the System V call's set"
+            );
+            for v in 0..func.insts.len() as u32 {
+                if v == c as u32 || !live.in_cfg(v) || !live.live_after(func, v, c as u32) {
+                    continue;
+                }
+                let kept = match alloc.places[v as usize] {
+                    Place::IntReg(r) => clobbers.0 & (1 << r) == 0,
+                    Place::FpReg(r) => clobbers.1 & (1 << r) == 0,
+                    _ => true,
+                };
+                assert!(
+                    kept,
+                    "{name}: v{v} at {:?} across the call",
+                    alloc.places[v as usize]
+                );
+            }
+        }
+        assert_eq!(calls, 1, "{name}");
+        assert_eq!(
+            mask(&alloc.gpr_used) & rsi_rdi,
+            rsi_rdi,
+            "{name}: {:?}",
+            alloc.gpr_used
+        );
+        assert_eq!(
+            mask(&alloc.fp_used) & xmm6_15,
+            xmm6_15,
+            "{name}: {:?}",
+            alloc.fp_used
+        );
+        let mut nosse = func.clone();
+        nosse.general_regs_only = true;
+        let alloc = allocate(&nosse, Target::WindowsX64, FixedRegs::NONE);
+        assert_eq!(
+            mask(&alloc.gpr_used) & rsi_rdi,
+            rsi_rdi,
+            "{name}: {:?}",
+            alloc.gpr_used
+        );
+        assert_eq!(
+            mask(&alloc.fp_used) & 0xff00,
+            0,
+            "{name} -mno-sse: {:?}",
+            alloc.fp_used
+        );
+    }
+    // The same on a System V target; the reverse direction owes nothing more.
+    const LINUX: &str = "\
+long long svl(long long);\n\
+__attribute__((ms_abi)) long long msl(long long);\n\
+__attribute__((ms_abi)) long long ms_calls_out(long long a) { return svl(a) + 1; }\n\
+long long sv_calls_ms(long long a) { return msl(a) + 1; }\n";
+    let linux = funcs(LINUX, Target::LinuxX64);
+    let saved = |name: &str| {
+        let func = linux.iter().find(|f| f.name == name).expect(name);
+        let alloc = allocate(func, Target::LinuxX64, FixedRegs::NONE);
+        (mask(&alloc.gpr_used), mask(&alloc.fp_used))
+    };
+    assert_eq!(saved("ms_calls_out"), (rsi_rdi, xmm6_15));
+    assert_eq!(saved("sv_calls_ms"), (0, 0));
+}
+
 /// A struct or union assigned from a compound literal whose initializer is
 /// the zero image is filled in place: one `Mzero` over the destination with
 /// the aggregate's size and alignment, no temporary object and no copy,

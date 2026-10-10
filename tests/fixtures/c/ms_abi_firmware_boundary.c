@@ -22,9 +22,23 @@ static long step(long v) {
     return t;
 }
 
+/* A System V callee may change every xmm register (AMD64 psABI 3.2.1). */
+#if defined(__x86_64__)
+__attribute__((sysv_abi, naked, noinline)) static void clobber_vectors(void) {
+    __asm__("pcmpeqd %xmm6, %xmm6\n\tpcmpeqd %xmm7, %xmm7\n\t"
+            "pcmpeqd %xmm8, %xmm8\n\tpcmpeqd %xmm9, %xmm9\n\t"
+            "pcmpeqd %xmm10, %xmm10\n\tpcmpeqd %xmm11, %xmm11\n\t"
+            "pcmpeqd %xmm12, %xmm12\n\tpcmpeqd %xmm13, %xmm13\n\t"
+            "pcmpeqd %xmm14, %xmm14\n\tpcmpeqd %xmm15, %xmm15\n\tret");
+}
+#else
+static void clobber_vectors(void) {}
+#endif
+
 long MS probe(long a, long b, long c, long d);
 
 long MS probe(long a, long b, long c, long d) {
+    clobber_vectors();
     long p = step(a);
     long q = step(b);
     long r = step(c);
@@ -37,6 +51,11 @@ long MS probe(long a, long b, long c, long d) {
 static long result;
 static long rsi_after;
 static long rdi_after;
+static long xmm_changed;
+
+/* xmm<n> holds n across the call; a difference from n joins rcx. */
+#define XMM_SET(n) "movq $" #n ", %%rax\n\tmovq %%rax, %%xmm" #n "\n\t"
+#define XMM_DIFF(n) "movq %%xmm" #n ", %%rax\n\txorq $" #n ", %%rax\n\torq %%rax, %%rcx\n\t"
 
 static void call_like_firmware(long (MS *fn)(long, long, long, long)) {
 #if defined(__x86_64__)
@@ -46,6 +65,8 @@ static void call_like_firmware(long (MS *fn)(long, long, long, long)) {
      * convention's requirement) and skips the 128-byte System V red
      * zone on top of the 32-byte shadow space. */
     __asm__ volatile(
+        XMM_SET(6) XMM_SET(7) XMM_SET(8) XMM_SET(9) XMM_SET(10)
+        XMM_SET(11) XMM_SET(12) XMM_SET(13) XMM_SET(14) XMM_SET(15)
         "movq %%rsp, %%r15\n\t"
         "andq $-16, %%rsp\n\t"
         "subq $160, %%rsp\n\t"
@@ -60,9 +81,15 @@ static void call_like_firmware(long (MS *fn)(long, long, long, long)) {
         "movq %%rax, %[res]\n\t"
         "movq %%rsi, %[si]\n\t"
         "movq %%rdi, %[di]\n\t"
-        : [res] "=m"(result), [si] "=m"(rsi_after), [di] "=m"(rdi_after)
+        "xorl %%ecx, %%ecx\n\t"
+        XMM_DIFF(6) XMM_DIFF(7) XMM_DIFF(8) XMM_DIFF(9) XMM_DIFF(10)
+        XMM_DIFF(11) XMM_DIFF(12) XMM_DIFF(13) XMM_DIFF(14) XMM_DIFF(15)
+        "movq %%rcx, %[xc]\n\t"
+        : [res] "=m"(result), [si] "=m"(rsi_after), [di] "=m"(rdi_after),
+          [xc] "=m"(xmm_changed)
         : "b"(fn)
-        : "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11", "r15",
+        : "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11", "r15", "xmm6",
+          "xmm7", "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15",
           "memory", "cc");
 #else
     result = fn(1, 2, 3, 4);
@@ -86,6 +113,10 @@ int main(void) {
     }
     if (rdi_after != 8738) {
         return 3;
+    }
+    /* So are xmm6..xmm15, which the System V callee of `probe` changes. */
+    if (xmm_changed != 0) {
+        return 4;
     }
     return 0;
 }

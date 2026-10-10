@@ -1565,7 +1565,7 @@ impl Compiler {
         // not collide, and a body-scope tag shadows a
         // file-scope one. Nested blocks push their own scopes
         // through parse_block_stmt.
-        self.tag_scopes.push(alloc::vec::Vec::new());
+        self.tag_scopes.push();
         // The function body's top-level block scope for
         // `__attribute__((cleanup))` variables; cleaned on
         // fall-through (below) and on every `return`.

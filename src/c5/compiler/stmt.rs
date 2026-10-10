@@ -1062,7 +1062,7 @@ impl Compiler {
         // union, and enum tags. Tag bindings declared in this block
         // shadow same-named tags in any enclosing scope and go out of
         // scope when the block exits.
-        self.tag_scopes.push(alloc::vec::Vec::new());
+        self.tag_scopes.push();
         // GCC local labels declared by this block; see
         // `Compiler::resolve_label_name`.
         self.local_label_scopes.open();

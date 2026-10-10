@@ -42,6 +42,9 @@ refs that are not checked out needs no `receive.denyCurrentBranch` change.
 - `llvm-objdump` for the snapshot-drift step; the step fails without it.
 - `qemu-system-<arch>` for the box's own architecture: the kernel step's boots and
   the kernel demo's. Without it the lane keeps compile + link cover only.
+- UEFI firmware for the box's architecture, OVMF (`edk2-ovmf`; Debian/Ubuntu
+  `ovmf`) or AAVMF (`edk2-aarch64`; `qemu-efi-aarch64`): the qemu demo boots both
+  of its builds through it, and its entries fail without it.
 - The kernel build's prerequisites: make, flex, bison, bc, the libelf and OpenSSL
   development packages, cpio, zstd.
 - Optional, for fuzz triage: csmith with its headers, cvise or creduce, gdb (the

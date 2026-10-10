@@ -65,15 +65,15 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rcx
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	movabsq	$0x4059000000000000, %rdx # imm = 0x4059000000000000
-               	movq	%rdx, %xmm14
+               	movabsq	$0x4059000000000000, %rcx # imm = 0x4059000000000000
+               	movq	%rcx, %xmm14
                	movsd	%xmm14, (%rax)
-               	movabsq	$0x4069000000000000, %rdx # imm = 0x4069000000000000
-               	movq	%rdx, %xmm14
+               	movabsq	$0x4069000000000000, %rcx # imm = 0x4069000000000000
+               	movq	%rcx, %xmm14
                	movsd	%xmm14, 0x8(%rax)
-               	movsd	(%rcx), %xmm0
+               	movsd	-0x10(%rbp), %xmm0
                	movabsq	$0x4024000000000000, %rax # imm = 0x4024000000000000
-               	movsd	0x8(%rcx), %xmm1
+               	movsd	-0x8(%rbp), %xmm1
                	movq	%rax, %xmm15
                	vfmadd132sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm1
                	leave

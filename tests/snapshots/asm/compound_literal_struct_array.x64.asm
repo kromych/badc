@@ -374,10 +374,10 @@ Disassembly of section .text:
                	leaq	-0x30(%rbp), %rsi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rsi)
-               	movl	$0x3, (%rsi)
-               	movl	$0x4, 0x4(%rsi)
-               	movl	$0x5, 0x8(%rsi)
-               	movl	$0x6, 0xc(%rsi)
+               	movl	$0x3, -0x30(%rbp)
+               	movl	$0x4, -0x2c(%rbp)
+               	movl	$0x5, -0x28(%rbp)
+               	movl	$0x6, -0x24(%rbp)
                	xorl	%eax, %eax
                	movq	%rax, %rcx
                	movq	%rax, %rdx

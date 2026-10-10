@@ -103,24 +103,23 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x28, %rsp
-               	pushq	%r13
+               	pushq	%r12
                	movslq	%edi, %rdi
-               	leaq	<rip>, %r8       # <addr>
-               	leaq	-0x18(%rbp), %rax
-               	leaq	<rip>, %r13      # <addr>
-               	movw	$0xa, (%r13)
-               	leaq	<rip>, %r13      # <addr>
-               	movswq	(%r13), %r13
-               	testl	%r13d, %r13d
+               	leaq	<rip>, %rsi      # <addr>
+               	leaq	<rip>, %r12      # <addr>
+               	movw	$0xa, (%r12)
+               	leaq	<rip>, %r12      # <addr>
+               	movswq	(%r12), %r12
+               	testl	%r12d, %r12d
                	jg	<addr>
-               	movq	$0x1, (%rax)
-               	movq	$0x2, 0x8(%rax)
-               	movq	$0x3, 0x10(%rax)
+               	movq	$0x1, -0x18(%rbp)
+               	movq	$0x2, -0x10(%rbp)
+               	movq	$0x3, -0x8(%rbp)
                	leaq	-0x18(%rbp), %rax
                	movups	(%rax), %xmm14
-               	movups	%xmm14, (%r8)
+               	movups	%xmm14, (%rsi)
                	movq	0x10(%rax), %r10
-               	movq	%r10, 0x10(%r8)
+               	movq	%r10, 0x10(%rsi)
                	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rcx
                	imulq	$0x64, %rcx, %rcx
@@ -129,20 +128,20 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movq	0x10(%rax), %rax
                	addq	%rcx, %rax
-               	popq	%r13
+               	popq	%r12
                	leave
                	retq
-               	leaq	<rip>, %r13      # <addr>
-               	movq	%r13, -0x20(%rbp)
+               	leaq	<rip>, %r12      # <addr>
+               	movq	%r12, -0x20(%rbp)
                	testq	%rdi, %rdi
                	je	<addr>
-               	movq	$0x4, (%rax)
-               	movq	$0x5, 0x8(%rax)
-               	movq	$0x6, 0x10(%rax)
+               	movq	$0x4, -0x18(%rbp)
+               	movq	$0x5, -0x10(%rbp)
+               	movq	$0x6, -0x8(%rbp)
                	jmp	<addr>
-               	movq	$0x1, (%rax)
-               	movq	$0x2, 0x8(%rax)
-               	movq	$0x3, 0x10(%rax)
+               	movq	$0x1, -0x18(%rbp)
+               	movq	$0x2, -0x10(%rbp)
+               	movq	$0x3, -0x8(%rbp)
                	jmp	<addr>
 
 <main>:

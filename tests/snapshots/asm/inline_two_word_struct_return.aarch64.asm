@@ -30,40 +30,40 @@ Disassembly of section .text:
                	cmp	w0, #0x8
                	b.lt	<addr>
                	sub	x0, x29, #0x80
-               	ldrsw	x1, [x0]
-               	ldr	x2, [x0, #0x8]
+               	ldursw	x1, [x29, #-0x80]
+               	ldur	x2, [x29, #-0x78]
                	add	x1, x1, x2
-               	ldrsw	x2, [x0, #0x10]
+               	ldursw	x2, [x29, #-0x70]
                	add	x3, x0, #0x10
                	ldr	x3, [x3, #0x8]
                	add	x2, x2, x3
                	add	x1, x1, x2
-               	ldrsw	x2, [x0, #0x20]
+               	ldursw	x2, [x29, #-0x60]
                	add	x3, x0, #0x20
                	ldr	x3, [x3, #0x8]
                	add	x2, x2, x3
                	add	x1, x1, x2
-               	ldrsw	x2, [x0, #0x30]
+               	ldursw	x2, [x29, #-0x50]
                	add	x3, x0, #0x30
                	ldr	x3, [x3, #0x8]
                	add	x2, x2, x3
                	add	x1, x1, x2
-               	ldrsw	x2, [x0, #0x40]
+               	ldursw	x2, [x29, #-0x40]
                	add	x3, x0, #0x40
                	ldr	x3, [x3, #0x8]
                	add	x2, x2, x3
                	add	x1, x1, x2
-               	ldrsw	x2, [x0, #0x50]
+               	ldursw	x2, [x29, #-0x30]
                	add	x3, x0, #0x50
                	ldr	x3, [x3, #0x8]
                	add	x2, x2, x3
                	add	x1, x1, x2
-               	ldrsw	x2, [x0, #0x60]
+               	ldursw	x2, [x29, #-0x20]
                	add	x3, x0, #0x60
                	ldr	x3, [x3, #0x8]
                	add	x2, x2, x3
                	add	x1, x1, x2
-               	ldrsw	x2, [x0, #0x70]
+               	ldursw	x2, [x29, #-0x10]
                	add	x0, x0, #0x70
                	ldr	x0, [x0, #0x8]
                	add	x0, x2, x0

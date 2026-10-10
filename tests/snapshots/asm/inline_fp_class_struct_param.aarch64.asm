@@ -55,9 +55,9 @@ Disassembly of section .text:
                	mov	x16, #0x4069000000000000 // =4641240890982006784
                	fmov	d0, x16
                	str	d0, [x0, #0x8]
-               	ldr	d0, [x1]
+               	ldur	d0, [x29, #-0x10]
                	fmov	d1, #10.00000000
-               	ldr	d2, [x1, #0x8]
+               	ldur	d2, [x29, #-0x8]
                	fmadd	d0, d0, d1, d2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

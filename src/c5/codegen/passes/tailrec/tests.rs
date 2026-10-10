@@ -628,6 +628,7 @@ fn store_local_body_is_rejected() {
     // A slot store means unpromoted frame state; keep recursive.
     let mut f = accum_add_long();
     f.insts.push(Inst::StoreLocal {
+        disp: 0,
         off: -1,
         value: 0,
         kind: StoreKind::I64,

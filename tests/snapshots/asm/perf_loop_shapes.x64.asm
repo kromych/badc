@@ -472,14 +472,13 @@ Disassembly of section .text:
                	xorl	%esi, %esi
                	callq	<addr>
                	leaq	-0x28(%rbp), %rdi
-               	movslq	(%rdi), %rcx
+               	movslq	-0x28(%rbp), %rcx
                	imulq	%rcx, %rcx
                	cmpq	%rcx, %rax
                	jne	<addr>
                	movl	$0x8, %esi
                	callq	<addr>
-               	leaq	-0x28(%rbp), %rcx
-               	movslq	0x20(%rcx), %rcx
+               	movslq	-0x8(%rbp), %rcx
                	imulq	%rcx, %rcx
                	cmpq	%rcx, %rax
                	je	<addr>

@@ -73,8 +73,8 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rdi
                	movq	$0x0, (%rdi)
-               	movb	$0x1, (%rdi)
-               	movl	$0x1, 0x4(%rdi)
+               	movb	$0x1, -0x8(%rbp)
+               	movl	$0x1, -0x4(%rbp)
                	leaq	<rip>, %rsi       # <addr>
                	movl	$0x3, %edx
                	callq	<addr>
@@ -88,7 +88,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rdi
                	movq	$0x0, (%rdi)
                	movl	$0x0, 0x8(%rdi)
-               	movb	$0x1, (%rdi)
+               	movb	$0x1, -0x10(%rbp)
                	leaq	<rip>, %rsi       # <addr>
                	movl	$0x4, %edx
                	callq	<addr>
@@ -102,7 +102,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rdi
                	movq	$0x0, (%rdi)
                	movl	$0x0, 0x8(%rdi)
-               	movw	$0x1, 0xa(%rdi)
+               	movw	$0x1, -0x6(%rbp)
                	leaq	<rip>, %rsi       # <addr>
                	movl	$0x4, %edx
                	callq	<addr>
@@ -142,7 +142,7 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rdi
                	movq	$0x0, (%rdi)
-               	movb	$0x1, (%rdi)
+               	movb	$0x1, -0x8(%rbp)
                	leaq	<rip>, %rsi       # <addr>
                	movl	$0x7, %edx
                	callq	<addr>
@@ -155,8 +155,8 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rdi
                	movq	$0x0, (%rdi)
-               	movb	$0x1, (%rdi)
-               	movl	$0x1, 0x4(%rdi)
+               	movb	$0x1, -0x8(%rbp)
+               	movl	$0x1, -0x4(%rbp)
                	leaq	<rip>, %rsi       # <addr>
                	movl	$0x3, %edx
                	callq	<addr>
@@ -181,8 +181,8 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	leaq	-0x8(%rbp), %rdi
                	movq	$0x0, (%rdi)
-               	movb	$0x1, (%rdi)
-               	movl	$0x1, 0x4(%rdi)
+               	movb	$0x1, -0x8(%rbp)
+               	movl	$0x1, -0x4(%rbp)
                	movq	(%rdi), %rdi
                	callq	<addr>
                	leave

@@ -19,39 +19,37 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0xc8               // =200
                	sturb	w0, [x29, #-0x10]
-               	sub	x0, x29, #0x10
-               	ldrb	w1, [x0]
+               	ldurb	w0, [x29, #-0x10]
                	mov	x17, #0xc8              // =200
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
+               	eor	x0, x0, x17
+               	cbz	w0, <addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0xfa               // =250
-               	strb	w1, [x0]
-               	ldurb	w1, [x29, #-0x10]
+               	mov	x0, #0xfa               // =250
+               	sturb	w0, [x29, #-0x10]
+               	ldurb	w0, [x29, #-0x10]
                	mov	x17, #0xfa              // =250
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
+               	eor	x0, x0, x17
+               	cbz	w0, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #-0x7               // =-7
-               	stur	w1, [x29, #-0x10]
-               	mov	x1, #0xd                // =13
-               	sturh	w1, [x29, #-0x8]
-               	ldursh	x1, [x29, #-0x8]
-               	cmp	w1, #0xd
+               	mov	x0, #-0x7               // =-7
+               	stur	w0, [x29, #-0x10]
+               	mov	x0, #0xd                // =13
+               	sturh	w0, [x29, #-0x8]
+               	ldursh	x0, [x29, #-0x8]
+               	cmp	w0, #0xd
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x15               // =21
-               	str	w1, [x0]
-               	ldursw	x0, [x29, #-0x10]
+               	mov	x0, #0x15               // =21
+               	stur	w0, [x29, #-0x10]
                	cmp	w0, #0x15
                	b.eq	<addr>
                	mov	x0, #0xa                // =10

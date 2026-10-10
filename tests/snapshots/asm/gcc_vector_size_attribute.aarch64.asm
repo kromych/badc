@@ -22,16 +22,15 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
-               	ldr	q0, [x0]
-               	sub	x0, x29, #0x10
-               	str	q0, [x0]
-               	ldrb	w1, [x0]
-               	eor	x1, x1, #0x1
-               	cbnz	w1, <addr>
-               	ldrb	w1, [x0, #0x7]
-               	eor	x1, x1, #0x8
-               	cbnz	w1, <addr>
-               	ldrb	w0, [x0, #0xf]
+               	ldur	q0, [x29, #-0x10]
+               	stur	q0, [x29, #-0x10]
+               	ldurb	w0, [x29, #-0x10]
+               	eor	x0, x0, #0x1
+               	cbnz	w0, <addr>
+               	ldurb	w0, [x29, #-0x9]
+               	eor	x0, x0, #0x8
+               	cbnz	w0, <addr>
+               	ldurb	w0, [x29, #-0x1]
                	eor	x0, x0, #0x10
                	cbz	w0, <addr>
                	mov	x0, #0x6                // =6

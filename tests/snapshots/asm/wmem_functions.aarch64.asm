@@ -63,16 +63,16 @@ Disassembly of section .text:
                	mov	x2, #0x3                // =3
                	bl	<addr>
                	sub	x1, x29, #0x18
-               	ldr	w0, [x1]
+               	ldur	w0, [x29, #-0x18]
                	eor	x0, x0, #0x7
                	cbnz	w0, <addr>
-               	ldr	w0, [x1, #0x4]
+               	ldur	w0, [x29, #-0x14]
                	eor	x0, x0, #0x7
                	cbnz	w0, <addr>
-               	ldr	w0, [x1, #0x8]
+               	ldur	w0, [x29, #-0x10]
                	eor	x0, x0, #0x7
                	cbnz	w0, <addr>
-               	ldr	w0, [x1, #0xc]
+               	ldur	w0, [x29, #-0xc]
                	mov	x17, #0x28              // =40
                	eor	x0, x0, x17
                	cbz	w0, <addr>
@@ -83,14 +83,13 @@ Disassembly of section .text:
                	add	x0, x1, #0x4
                	mov	x2, #0x3                // =3
                	bl	<addr>
-               	sub	x0, x29, #0x18
-               	ldr	w1, [x0, #0x4]
-               	eor	x1, x1, #0x7
-               	cbnz	w1, <addr>
-               	ldr	w1, [x0, #0x8]
-               	eor	x1, x1, #0x7
-               	cbnz	w1, <addr>
-               	ldr	w0, [x0, #0xc]
+               	ldur	w0, [x29, #-0x14]
+               	eor	x0, x0, #0x7
+               	cbnz	w0, <addr>
+               	ldur	w0, [x29, #-0x10]
+               	eor	x0, x0, #0x7
+               	cbnz	w0, <addr>
+               	ldur	w0, [x29, #-0xc]
                	eor	x0, x0, #0x7
                	cbz	w0, <addr>
                	mov	x0, #0x5                // =5

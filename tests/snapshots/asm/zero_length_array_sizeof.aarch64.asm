@@ -52,20 +52,19 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0x10
-               	ldrb	w2, [x1]
+               	ldurb	w1, [x29, #-0x10]
                	mov	x17, #0x42              // =66
-               	eor	x2, x2, x17
-               	cbnz	w2, <addr>
-               	ldrb	w2, [x1, #0x1]
+               	eor	x1, x1, x17
+               	cbnz	w1, <addr>
+               	ldurb	w1, [x29, #-0xf]
                	mov	x17, #0x41              // =65
-               	eor	x2, x2, x17
-               	cbnz	w2, <addr>
-               	ldrb	w2, [x1, #0x2]
+               	eor	x1, x1, x17
+               	cbnz	w1, <addr>
+               	ldurb	w1, [x29, #-0xe]
                	mov	x17, #0x44              // =68
-               	eor	x2, x2, x17
-               	cbnz	w2, <addr>
-               	ldrb	w1, [x1, #0x3]
+               	eor	x1, x1, x17
+               	cbnz	w1, <addr>
+               	ldurb	w1, [x29, #-0xd]
                	mov	x17, #0x43              // =67
                	eor	x1, x1, x17
                	cbz	w1, <addr>

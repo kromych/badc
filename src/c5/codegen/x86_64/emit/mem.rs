@@ -424,11 +424,12 @@ pub(super) fn local_slot_base_disp(
 }
 
 /// `Inst::LoadLocal`: the c5 slot offset folds into the load's
-/// displacement, so no `LocalAddr` is materialised.
+/// displacement with `disp`, so no `LocalAddr` is materialised.
 pub(super) fn emit_load_local(
     code: &mut Vec<u8>,
     dst: Place,
     off: i64,
+    disp: i32,
     kind: LoadKind,
     keep_f32: bool,
     hi: bool,
@@ -437,7 +438,7 @@ pub(super) fn emit_load_local(
     abi: super::Abi,
 ) -> Emit {
     let (base, bytes) = local_slot_base_disp(off, func, frame, abi);
-    let Ok(disp) = i32::try_from(bytes) else {
+    let Ok(disp) = i32::try_from(bytes + i64::from(disp)) else {
         return fail("LoadLocal: offset doesn't fit in disp32");
     };
     if is_fp_load(kind) {
@@ -487,6 +488,7 @@ pub(super) fn emit_store_local(
     dst: Place,
     _v: super::super::ir::ValueId,
     off: i64,
+    disp: i32,
     value: u32,
     kind: StoreKind,
     alloc: &Allocation,
@@ -495,7 +497,7 @@ pub(super) fn emit_store_local(
     abi: super::Abi,
 ) -> Emit {
     let (base, bytes) = local_slot_base_disp(off, func, frame, abi);
-    let Ok(disp) = i32::try_from(bytes) else {
+    let Ok(disp) = i32::try_from(bytes + i64::from(disp)) else {
         return fail("StoreLocal: offset doesn't fit in disp32");
     };
     let value_place = place_of(alloc, value);
@@ -739,9 +741,11 @@ pub(super) fn emit_zero_test_of_load(code: &mut Vec<u8>, inst: &Inst, fcx: &FnCt
                 0,
             );
         }
-        Inst::LoadLocal { off, kind, .. } => {
+        Inst::LoadLocal {
+            off, disp, kind, ..
+        } => {
             let (base, bytes) = local_slot_base_disp(*off, func, frame, abi);
-            let Ok(disp) = i32::try_from(bytes) else {
+            let Ok(disp) = i32::try_from(bytes + i64::from(*disp)) else {
                 return fail("LoadLocal: offset doesn't fit in disp32");
             };
             super::encode::emit_mi(
@@ -835,9 +839,9 @@ pub(super) fn emit_store_of_imm(
             code.extend(seg_prefix(*seg));
             super::encode::emit_mi(code, Mnem::Mov, width, base, 0, imm);
         }
-        Inst::StoreLocal { off, .. } => {
+        Inst::StoreLocal { off, disp, .. } => {
             let (base, bytes) = local_slot_base_disp(*off, func, frame, abi);
-            let Ok(disp) = i32::try_from(bytes) else {
+            let Ok(disp) = i32::try_from(bytes + i64::from(*disp)) else {
                 return fail("StoreLocal: offset doesn't fit in disp32");
             };
             super::encode::emit_mi(code, Mnem::Mov, width, base, disp, imm);

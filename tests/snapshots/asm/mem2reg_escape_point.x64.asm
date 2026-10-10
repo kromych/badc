@@ -41,8 +41,8 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0xa, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rsi
-               	movl	$0xf, (%rsi)
-               	movl	-0x8(%rbp), %ecx
+               	movl	$0xf, %ecx
+               	movl	%ecx, -0x8(%rbp)
                	subq	$0xa, %rcx
                	cmpl	$0x5, %ecx
                	je	<addr>

@@ -1665,6 +1665,7 @@ mod tests {
 
     fn local(off: i64) -> Inst {
         Inst::LoadLocal {
+            disp: 0,
             off,
             kind: LoadKind::I64,
             volatile: false,

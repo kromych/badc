@@ -19,14 +19,12 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	stur	wzr, [x29, #-0x8]
                	lsl	x0, x0, #1
-               	sub	x1, x29, #0x8
-               	str	w0, [x1]
-               	mov	x2, x0
-               	add	x2, x2, x0
-               	str	w2, [x1]
-               	add	x0, x2, x0
-               	str	w0, [x1]
-               	ldursw	x0, [x29, #-0x8]
+               	stur	w0, [x29, #-0x8]
+               	mov	x1, x0
+               	add	x1, x1, x0
+               	stur	w1, [x29, #-0x8]
+               	add	x0, x1, x0
+               	stur	w0, [x29, #-0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -36,14 +34,12 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	stur	wzr, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	mov	x1, #0xe                // =14
-               	str	w1, [x0]
-               	mov	x1, #0x1c               // =28
-               	str	w1, [x0]
-               	mov	x1, #0x2a               // =42
-               	str	w1, [x0]
-               	ldursw	x0, [x29, #-0x8]
+               	mov	x0, #0xe                // =14
+               	stur	w0, [x29, #-0x8]
+               	mov	x0, #0x1c               // =28
+               	stur	w0, [x29, #-0x8]
+               	mov	x0, #0x2a               // =42
+               	stur	w0, [x29, #-0x8]
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

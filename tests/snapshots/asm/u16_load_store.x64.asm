@@ -40,31 +40,29 @@ Disassembly of section .text:
                	movl	$0xa, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x10(%rbp), %rax
-               	movw	$0x4241, 0x2(%rax)      # imm = 0x4241
-               	cmpb	$0x0, (%rax)
+               	movw	$0x4241, -0xe(%rbp)     # imm = 0x4241
+               	cmpb	$0x0, -0x10(%rbp)
                	jne	<addr>
-               	cmpb	$0x0, 0x1(%rax)
+               	cmpb	$0x0, -0xf(%rbp)
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movsbq	0x2(%rax), %rcx
-               	cmpl	$0x41, %ecx
+               	movsbq	-0xe(%rbp), %rax
+               	cmpl	$0x41, %eax
                	jne	<addr>
-               	movsbq	0x3(%rax), %rcx
-               	cmpl	$0x42, %ecx
+               	movsbq	-0xd(%rbp), %rax
+               	cmpl	$0x42, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	cmpb	$0x0, 0x4(%rax)
+               	cmpb	$0x0, -0xc(%rbp)
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	leaq	-0x20(%rbp), %rax
-               	movzwq	0x1(%rax), %rax
+               	movzwq	-0x1f(%rbp), %rax
                	xorq	$0x4342, %rax           # imm = 0x4342
                	testl	%eax, %eax
                	je	<addr>

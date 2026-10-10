@@ -135,20 +135,16 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	blr	x20
                	cbnz	w0, <addr>
-               	sub	x0, x29, #0x20
-               	ldr	x0, [x0]
+               	ldur	x0, [x29, #-0x20]
                	mov	x1, #0x0                // =0
                	blr	x21
-               	sub	x0, x29, #0x20
-               	ldr	x0, [x0, #0x8]
+               	ldur	x0, [x29, #-0x18]
                	mov	x1, #0x0                // =0
                	blr	x21
-               	sub	x0, x29, #0x20
-               	ldr	x0, [x0, #0x10]
+               	ldur	x0, [x29, #-0x10]
                	mov	x1, #0x0                // =0
                	blr	x21
-               	sub	x0, x29, #0x20
-               	ldr	x0, [x0, #0x18]
+               	ldur	x0, [x29, #-0x8]
                	mov	x1, #0x0                // =0
                	blr	x21
                	mov	x0, #0x0                // =0

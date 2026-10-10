@@ -61,14 +61,14 @@ Disassembly of section .text:
                	mov	x2, #0x5                // =5
                	bl	<addr>
                	sub	x0, x29, #0x80
-               	ldrb	w1, [x0, #0x2]
+               	ldurb	w1, [x29, #-0x7e]
                	eor	x1, x1, #0x30
                	cbz	w1, <addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrb	w1, [x0, #0x6]
+               	ldurb	w1, [x29, #-0x7a]
                	mov	x17, #0x34              // =52
                	eor	x1, x1, x17
                	cbz	w1, <addr>

@@ -79,10 +79,10 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rcx
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rcx)
-               	movq	0x8(%rax), %rdx
-               	movq	%rdx, (%rcx)
-               	movq	(%rax), %rdx
-               	movq	%rdx, 0x8(%rcx)
+               	movq	-0x18(%rbp), %rdx
+               	movq	%rdx, -0x10(%rbp)
+               	movq	-0x20(%rbp), %rdx
+               	movq	%rdx, -0x8(%rbp)
                	testq	%rsi, %rsi
                	je	<addr>
                	movq	(%rax), %rcx

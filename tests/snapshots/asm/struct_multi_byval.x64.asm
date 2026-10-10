@@ -49,29 +49,27 @@ Disassembly of section .text:
                	addq	%rdx, %rax
                	addq	%rsi, %rax
                	addq	%rcx, %rax
-               	leaq	(%rax,%r8), %rcx
-               	leaq	-0x28(%rbp), %rax
-               	movl	(%rax), %edx
-               	addq	%rdx, %rcx
-               	movl	0x4(%rax), %edx
-               	addq	%rdx, %rcx
-               	movl	0x8(%rax), %edx
-               	addq	%rdx, %rcx
-               	movl	0xc(%rax), %eax
+               	addq	%r8, %rax
+               	movl	-0x28(%rbp), %ecx
                	addq	%rcx, %rax
-               	leaq	0x7d0(%rax), %rcx
-               	leaq	-0x18(%rbp), %rax
-               	movl	(%rax), %edx
-               	addq	%rdx, %rcx
-               	movl	0x4(%rax), %edx
-               	addq	%rdx, %rcx
-               	movl	0x8(%rax), %edx
-               	addq	%rdx, %rcx
-               	movl	0xc(%rax), %edx
-               	addq	%rdx, %rcx
-               	movl	0x10(%rax), %edx
-               	addq	%rdx, %rcx
-               	movl	0x14(%rax), %eax
+               	movl	-0x24(%rbp), %ecx
+               	addq	%rcx, %rax
+               	movl	-0x20(%rbp), %ecx
+               	addq	%rcx, %rax
+               	movl	-0x1c(%rbp), %ecx
+               	addq	%rcx, %rax
+               	addq	$0x7d0, %rax            # imm = 0x7D0
+               	movl	-0x18(%rbp), %ecx
+               	addq	%rcx, %rax
+               	movl	-0x14(%rbp), %ecx
+               	addq	%rcx, %rax
+               	movl	-0x10(%rbp), %ecx
+               	addq	%rcx, %rax
+               	movl	-0xc(%rbp), %ecx
+               	addq	%rcx, %rax
+               	movl	-0x8(%rbp), %ecx
+               	addq	%rcx, %rax
+               	movl	-0x4(%rbp), %ecx
                	addq	%rcx, %rax
                	movl	0x38(%rbp), %ecx
                	addq	%rcx, %rax

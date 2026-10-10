@@ -31,11 +31,9 @@ Disassembly of section .text:
                	ldrsw	x6, [x29, #0x10]
                	add	x0, x6, x0
                	str	w0, [x29, #0x10]
-               	add	x0, x29, #0x18
-               	ldr	x6, [x0]
-               	sub	x2, x6, x2
-               	str	x2, [x0]
                	ldr	x0, [x29, #0x18]
+               	sub	x0, x0, x2
+               	str	x0, [x29, #0x18]
                	ldursb	x2, [x29, #-0x20]
                	add	x0, x0, x2
                	str	x0, [x29, #0x18]
@@ -68,11 +66,9 @@ Disassembly of section .text:
                	mov	x6, #-0x7               // =-7
                	sturb	w6, [x29, #-0x10]
                	add	x2, x0, #0x9
-               	sub	x1, x29, #0x18
-               	ldr	x3, [x1]
-               	sub	x3, x3, #0x12c
-               	str	x3, [x1]
                	ldur	x1, [x29, #-0x18]
+               	sub	x1, x1, #0x12c
+               	stur	x1, [x29, #-0x18]
                	ldursb	x3, [x29, #-0x10]
                	add	x1, x1, x3
                	stur	x1, [x29, #-0x18]

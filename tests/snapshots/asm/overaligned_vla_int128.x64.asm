@@ -33,8 +33,8 @@ Disassembly of section .text:
                	movq	%rcx, %r11
                	addq	$0xf, %r11
                	andq	$-0x10, %r11
-               	movq	%rsp, %rdx
-               	subq	%r11, %rdx
+               	movq	%rsp, %rcx
+               	subq	%r11, %rcx
                	shrq	$0xc, %r11
                	testq	%r11, %r11
                	je	<addr>
@@ -42,31 +42,31 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x1, %r11
                	jne	<addr>
-               	movq	%rdx, %rsp
+               	movq	%rcx, %rsp
                	movq	$0x3, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rsi
-               	movq	%rsi, %rdi
-               	sarq	$0x3f, %rdi
-               	leaq	-0x20(%rbp), %rcx
-               	movq	%rsi, (%rcx)
-               	movq	%rdi, 0x8(%rcx)
-               	testb	$0xf, %cl
+               	movq	-0x10(%rbp), %rdx
+               	movq	%rdx, %rsi
+               	sarq	$0x3f, %rsi
+               	leaq	-0x20(%rbp), %rdi
+               	movq	%rdx, -0x20(%rbp)
+               	movq	%rsi, -0x18(%rbp)
+               	testb	$0xf, %dil
                	je	<addr>
-               	leaq	<rip>, %rsi      # <addr>
-               	movl	(%rsi), %edi
-               	orq	$0x1, %rdi
-               	movl	%edi, (%rsi)
-               	movl	$0x3, (%rdx)
-               	movl	$0x6, 0x8(%rdx)
-               	movq	(%rcx), %rdx
-               	movq	0x8(%rcx), %rsi
-               	leaq	0x9(%rdx), %rax
-               	cmpq	%rdx, %rax
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	addq	%rsi, %rdx
-               	movq	%rax, (%rcx)
-               	movq	%rdx, 0x8(%rcx)
+               	leaq	<rip>, %rdx      # <addr>
+               	movl	(%rdx), %esi
+               	orq	$0x1, %rsi
+               	movl	%esi, (%rdx)
+               	movl	$0x3, (%rcx)
+               	movl	$0x6, 0x8(%rcx)
+               	movq	-0x20(%rbp), %rcx
+               	movq	-0x18(%rbp), %rdx
+               	leaq	0x9(%rcx), %rax
+               	cmpq	%rcx, %rax
+               	setb	%cl
+               	movzbq	%cl, %rcx
+               	addq	%rdx, %rcx
+               	movq	%rax, -0x20(%rbp)
+               	movq	%rcx, -0x18(%rbp)
                	leaq	-0x20(%rbp), %rsp
                	leave
                	retq

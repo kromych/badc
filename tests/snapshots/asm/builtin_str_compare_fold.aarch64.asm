@@ -19,12 +19,12 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	sub	x0, x29, #0x8
                	mov	x2, #0x61               // =97
-               	strb	w2, [x0]
+               	sturb	w2, [x29, #-0x8]
                	mov	x2, #0x62               // =98
-               	strb	w2, [x0, #0x1]
+               	sturb	w2, [x29, #-0x7]
                	mov	x2, #0x63               // =99
-               	strb	w2, [x0, #0x2]
-               	strb	wzr, [x0, #0x3]
+               	sturb	w2, [x29, #-0x6]
+               	sturb	wzr, [x29, #-0x5]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>
@@ -48,7 +48,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	sub	x1, x29, #0x8
-               	ldrb	w2, [x1]
+               	ldurb	w2, [x29, #-0x8]
                	sub	x2, x2, #0x61
                	add	x2, x2, #0x3
                	mov	w2, w2

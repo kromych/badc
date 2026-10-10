@@ -10168,10 +10168,12 @@ fn wide_member_keeps_its_object_in_memory() {
     let wide = |i: &str| i.contains("kind=F80") || i.contains("kind=F128");
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
         let (body, insts) = optimized_function(SRC, "wide", target);
+        // The member's access folds the frame offset into the access, so
+        // the store rides the object's slot at the member's displacement.
         assert!(
             insts
                 .iter()
-                .any(|(_, i)| i.starts_with("Store {") && wide(i)),
+                .any(|(_, i)| { i.starts_with("StoreLocal {") && i.contains("disp=") && wide(i) }),
             "{target:?}: the member is stored through its object: {body}"
         );
         let from_param = |i: &str| {
@@ -10181,9 +10183,12 @@ fn wide_member_keeps_its_object_in_memory() {
             })
         };
         assert!(
-            !insts
-                .iter()
-                .any(|(_, i)| { i.starts_with("StoreLocal { off=-") && wide(i) && !from_param(i) }),
+            !insts.iter().any(|(_, i)| {
+                i.starts_with("StoreLocal { off=-")
+                    && !i.contains("disp=")
+                    && wide(i)
+                    && !from_param(i)
+            }),
             "{target:?}: no one-cell slot holds the member: {body}"
         );
     }
@@ -10199,9 +10204,6 @@ fn wide_member_keeps_its_object_in_memory() {
 fn long_double_crosses_a_call_as_its_image() {
     const SRC: &str = "__attribute__((noinline)) long double f(long double x) { return x * 2; }\n\
         long double g(long double y) { return f(y) + 1; }\n";
-    fn stored_at(i: &str) -> Option<&str> {
-        i.split("addr=v").nth(1).and_then(|r| r.split(',').next())
-    }
     for (target, kind) in [
         (crate::Target::LinuxX64, "kind=F80"),
         (crate::Target::LinuxAarch64, "kind=F128"),
@@ -10220,10 +10222,18 @@ fn long_double_crosses_a_call_as_its_image() {
             .split("args=[v")
             .nth(1)
             .and_then(|r| r.split(']').next());
+        let arg_off = insts
+            .iter()
+            .find(|(v, i)| {
+                Some(alloc::format!("{v}").as_str()) == arg && i.starts_with("LocalAddr(")
+            })
+            .map(|(_, i)| i.trim_start_matches("LocalAddr(").trim_end_matches(')'));
         assert!(
-            insts
-                .iter()
-                .any(|(_, i)| i.starts_with("Store {") && i.contains(kind) && stored_at(i) == arg),
+            insts.iter().any(|(_, i)| {
+                i.starts_with("StoreLocal {")
+                    && arg_off.is_some_and(|o| i.contains(&alloc::format!("off={o}")))
+                    && i.contains(kind)
+            }),
             "{target:?}: the argument is the address of its image: {body}"
         );
         assert!(
@@ -10564,6 +10574,124 @@ fn forwarded_aggregate_leaves_no_slot_load() {
                 "{target:?}: {name} keeps no slot load: {body}"
             );
         }
+    }
+}
+
+/// `(off, disp)` of a `LoadLocal` / `StoreLocal` (as `head`) in dump text.
+fn slot_access(inst: &str, head: &str) -> Option<(String, String)> {
+    let fields = inst.strip_prefix(head)?.strip_prefix(" {")?;
+    let field = |name: &str| {
+        fields
+            .split([',', ' ', '}'])
+            .find_map(|f| f.strip_prefix(name))
+            .map(String::from)
+    };
+    Some((field("off=")?, field("disp=").unwrap_or_default()))
+}
+
+/// The read slot loads of a dump whose bytes a `StoreLocal` earlier in
+/// the block, with no call between, wrote: re-reads left unforwarded.
+fn unforwarded_rereads(body: &str) -> Vec<String> {
+    let read = |id: &str| {
+        let operand = alloc::format!("v{id}");
+        body.lines().map(str::trim_start).any(|l| {
+            let text = match l.split_once(char::is_whitespace) {
+                Some((head, text)) if head.starts_with('v') => text,
+                _ => l,
+            };
+            text.split(|c: char| !c.is_ascii_alphanumeric())
+                .any(|t| t == operand)
+        })
+    };
+    let mut stored = Vec::new();
+    let mut left = Vec::new();
+    for line in body.lines().map(str::trim_start) {
+        if line.starts_with("block ") {
+            stored.clear();
+        }
+        let Some((id, rest)) = line
+            .strip_prefix('v')
+            .and_then(|l| l.split_once(char::is_whitespace))
+        else {
+            continue;
+        };
+        let inst = rest.split("->").next().unwrap_or("").trim();
+        if inst.starts_with("Call") || inst.starts_with("Intrinsic") {
+            stored.clear();
+        } else if let Some(at) = slot_access(inst, "StoreLocal") {
+            stored.push(at);
+        } else if let Some(at) = slot_access(inst, "LoadLocal")
+            && stored.contains(&at)
+            && read(id)
+        {
+            left.push(alloc::format!("v{id} {inst}"));
+        }
+    }
+    left
+}
+
+/// A field stored and read back in one block, and one read twice around
+/// a load through it, forward in a frame with alloca and in a by-value
+/// parameter holding a union, whose slot the prologue fills.
+#[test]
+fn slot_fields_forward_in_alloca_frames_and_by_value_parameters() {
+    const SRC: &str = "typedef unsigned long long u64;\n\
+        void keep(void *);\n\
+        struct F { u64 a, b, c, d; };\n\
+        u64 with_alloca(int n) {\n\
+            struct F s = {0}; keep(&s);\n\
+            char *q = __builtin_alloca(n); keep(q);\n\
+            u64 t = 0;\n\
+            for (int i = 0; i < n; i++) {\n\
+                s.a += i; s.b += s.a; s.c += s.b; s.d += s.c; t += s.d;\n\
+            }\n\
+            return t;\n\
+        }\n\
+        typedef struct { union { void *ptr; double d; int i; } u; long tag; } V;\n\
+        long param_loop(V v, int n) {\n\
+            keep(&v);\n\
+            long t = 0;\n\
+            for (int i = 0; i < n; i++) { v.u.i += i; v.tag += v.u.i; t += v.tag; }\n\
+            return t;\n\
+        }\n\
+        long twice(V v) {\n\
+            keep(&v);\n\
+            unsigned char *p = v.u.ptr;\n\
+            long r = p[17] & 1;\n\
+            unsigned char *q = v.u.ptr;\n\
+            return r + q[3] + v.tag;\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        for name in ["with_alloca", "param_loop"] {
+            let (body, _) = optimized_function(SRC, name, target);
+            let left = unforwarded_rereads(&body);
+            assert!(
+                left.is_empty(),
+                "{target:?}: {name} re-reads {left:?}: {body}"
+            );
+        }
+        let (body, insts) = optimized_function(SRC, "twice", target);
+        let ptr_reads: Vec<u32> = insts
+            .iter()
+            .filter(|(_, i)| slot_access(i, "LoadLocal").is_some_and(|(_, d)| d.is_empty()))
+            .map(|(id, _)| *id)
+            .collect();
+        let through = |id: u32| {
+            let addr = alloc::format!("addr=v{id},");
+            insts
+                .iter()
+                .any(|(_, i)| i.starts_with("Load {") && i.contains(&addr))
+        };
+        let used: Vec<u32> = ptr_reads
+            .iter()
+            .copied()
+            .filter(|&id| through(id))
+            .collect();
+        assert_eq!(
+            used.len(),
+            1,
+            "{target:?}: twice reads `v.u.ptr` through {used:?}: {body}"
+        );
     }
 }
 
@@ -11246,22 +11374,27 @@ fn volatile_aggregate_copies_stay_volatile_accesses() {
         }\n";
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
         let (body, insts) = optimized_function(SRC, "volatile_copy", target);
-        let count = |head: &str, vol: bool| {
+        let count = |heads: &[&str], vol: bool| {
             insts
                 .iter()
-                .filter(|(_, i)| i.starts_with(head) && i.contains(", volatile") == vol)
+                .filter(|(_, i)| {
+                    heads.iter().any(|h| i.starts_with(h)) && i.contains(", volatile") == vol
+                })
                 .count()
         };
         assert!(
             !insts.iter().any(|(_, i)| i.starts_with("Mcpy")),
             "{target:?}: no block copy names the object: {body}"
         );
+        // The volatile object's accesses fold the frame offset into the
+        // access, so the volatile mark rides the local forms.
         assert!(
-            count("Store {", true) >= 2 && count("Load {", true) == 4,
+            count(&["Store {", "StoreLocal {"], true) >= 2
+                && count(&["Load {", "LoadLocal {"], true) == 4,
             "{target:?}: the initializer and both copies read and write it volatile: {body}"
         );
         assert_eq!(
-            count("Store {", false),
+            count(&["Store {"], false),
             2,
             "{target:?}: the copy through the pointer stores plain: {body}"
         );

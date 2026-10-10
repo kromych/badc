@@ -69,20 +69,20 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
-               	movb	$0x77, 0x4(%rax)
-               	movb	$0x78, 0x5(%rax)
-               	movb	$0x79, 0x6(%rax)
-               	movb	$0x7a, 0x7(%rax)
-               	movb	$0x0, 0x8(%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movb	$0x0, 0x9(%rax)
-               	movb	$0x0, 0xa(%rax)
-               	movb	$0x0, 0xb(%rax)
-               	leaq	0x6(%rdi), %rcx
-               	movl	%ecx, 0xc(%rax)
-               	leaq	0x4(%rdi), %rcx
-               	movl	%ecx, (%rax)
-               	addq	$0x4, %rax
+               	movb	$0x77, -0xc(%rbp)
+               	movb	$0x78, -0xb(%rbp)
+               	movb	$0x79, -0xa(%rbp)
+               	movb	$0x7a, -0x9(%rbp)
+               	movb	$0x0, -0x8(%rbp)
+               	leaq	-0x10(%rbp), %rcx
+               	movb	$0x0, -0x7(%rbp)
+               	movb	$0x0, -0x6(%rbp)
+               	movb	$0x0, -0x5(%rbp)
+               	leaq	0x6(%rdi), %rax
+               	movl	%eax, -0x4(%rbp)
+               	leaq	0x4(%rdi), %rax
+               	movl	%eax, -0x10(%rbp)
+               	leaq	0x4(%rcx), %rax
                	leaq	<rip>, %rcx
                	cmpb	$0x0, (%rax)
                	je	<addr>
@@ -101,12 +101,11 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	movl	0xc(%rax), %ecx
-               	leaq	0x6(%rdi), %rdx
-               	cmpl	%edx, %ecx
+               	movl	-0x4(%rbp), %eax
+               	leaq	0x6(%rdi), %rcx
+               	cmpl	%ecx, %eax
                	jne	<addr>
-               	movl	(%rax), %eax
+               	movl	-0x10(%rbp), %eax
                	leaq	0x4(%rdi), %rcx
                	cmpl	%ecx, %eax
                	je	<addr>

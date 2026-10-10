@@ -1698,6 +1698,7 @@ mod tests {
                         align: 0,
                     },
                     Inst::LoadLocal {
+                        disp: 0,
                         off: -1,
                         kind: LoadKind::I64,
                         volatile: true,
@@ -1724,7 +1725,14 @@ mod tests {
             "protected: the array group takes cells -2 and -1"
         );
         assert!(
-            matches!(f.insts[3], Inst::LoadLocal { off: -3, .. }),
+            matches!(
+                f.insts[3],
+                Inst::LoadLocal {
+                    disp: 0,
+                    off: -3,
+                    ..
+                }
+            ),
             "protected: the scalar sits below the array"
         );
         assert_eq!(f.array_slots, alloc::vec![-2], "the base follows its group");
@@ -1758,11 +1766,13 @@ mod tests {
                         args: alloc::vec![],
                     },
                     Inst::LoadLocal {
+                        disp: 0,
                         off: -9,
                         kind: LoadKind::I64,
                         volatile: false,
                     },
                     Inst::StoreLocal {
+                        disp: 0,
                         off: -8,
                         value: 1,
                         kind: StoreKind::I64,
@@ -1778,7 +1788,8 @@ mod tests {
             f.insts
                 .iter()
                 .filter_map(|i| match i {
-                    Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. } => Some(*off),
+                    Inst::LoadLocal { disp: 0, off, .. }
+                    | Inst::StoreLocal { disp: 0, off, .. } => Some(*off),
                     _ => None,
                 })
                 .collect()
@@ -1818,6 +1829,7 @@ mod tests {
                     align: 0,
                 },
                 Inst::StoreLocal {
+                    disp: 0,
                     off: -2,
                     value: 1,
                     kind: StoreKind::I64,
@@ -1855,11 +1867,13 @@ mod tests {
                     align: 0,
                 },
                 Inst::LoadLocal {
+                    disp: 0,
                     off: -9,
                     kind: LoadKind::I64,
                     volatile: false,
                 },
                 Inst::StoreLocal {
+                    disp: 0,
                     off: -8,
                     value: 3,
                     kind: StoreKind::I64,
@@ -1873,8 +1887,22 @@ mod tests {
         let map = coalesce(&mut f, false, false);
         assert_eq!(f.locals, 3);
         assert!(matches!(f.insts[0], Inst::LocalAddr(-2)));
-        assert!(matches!(f.insts[3], Inst::LoadLocal { off: -3, .. }));
-        assert!(matches!(f.insts[4], Inst::StoreLocal { off: -3, .. }));
+        assert!(matches!(
+            f.insts[3],
+            Inst::LoadLocal {
+                disp: 0,
+                off: -3,
+                ..
+            }
+        ));
+        assert!(matches!(
+            f.insts[4],
+            Inst::StoreLocal {
+                disp: 0,
+                off: -3,
+                ..
+            }
+        ));
         assert_eq!(
             map,
             BTreeMap::from([(-9, None), (-8, None), (-3, Some(-2)), (-2, Some(-1))])
@@ -1912,6 +1940,7 @@ mod tests {
         };
         // v0 is the variable index (a param-slot load).
         let mut insts = alloc::vec![Inst::LoadLocal {
+            disp: 0,
             off: 2,
             kind: LoadKind::I64,
             volatile: false,
@@ -1932,6 +1961,7 @@ mod tests {
 
         // Interleaved: A write, B write, A read, B read.
         let mut insts = alloc::vec![Inst::LoadLocal {
+            disp: 0,
             off: 2,
             kind: LoadKind::I64,
             volatile: false,
@@ -2001,6 +2031,7 @@ mod tests {
             let mut f = one_block(
                 alloc::vec![
                     Inst::LoadLocal {
+                        disp: 0,
                         off: 2,
                         kind: LoadKind::I64,
                         volatile: false,
@@ -2150,6 +2181,7 @@ mod tests {
             alloc::vec![
                 Inst::LocalAddr(-8),
                 Inst::StoreLocal {
+                    disp: 0,
                     off: -10,
                     value: 0,
                     kind: StoreKind::I64,

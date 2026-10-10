@@ -64,7 +64,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0xc0(%rbp), %rdi
-               	movb	$0x1, 0x38(%rdi)
+               	movb	$0x1, -0x88(%rbp)
                	callq	<addr>
                	cmpl	$0x1, %eax
                	je	<addr>

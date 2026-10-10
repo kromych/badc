@@ -325,10 +325,9 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x40, %rsp
-               	leaq	-0x40(%rbp), %rax
                	movsbq	%dil, %rcx
-               	movb	%dil, (%rax)
-               	movsbq	(%rax), %rax
+               	movb	%dil, -0x40(%rbp)
+               	movsbq	-0x40(%rbp), %rax
                	subq	%rcx, %rax
                	leave
                	retq

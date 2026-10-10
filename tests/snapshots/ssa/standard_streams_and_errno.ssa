@@ -24,17 +24,17 @@ fn ent_pc=0 n_params=1 variadic=false locals=3
     v14  LocalAddr(-3)                                    -> x0
     v15  Imm(0)                                           -> x7
     v16  ImmData(8)                                       -> x1
-    v17  Store { addr=v14, disp=0, value=v16, kind=I64 }  -> -
+    v17  StoreLocal { off=-3, value=v16, kind=I64 }       -> -
     v18  LocalAddr(-3)                                    -> x1
     v19  Imm(8)                                           -> x1
     v20  BinopI { op=add, lhs=v14, rhs_imm=8 }            -> x1
     v21  ImmData(14)                                      -> x1
-    v22  Store { addr=v14, disp=8, value=v21, kind=I64 }  -> -
+    v22  StoreLocal { off=-3, disp=8, value=v21, kind=I64 } -> -
     v23  LocalAddr(-3)                                    -> x1
     v24  Imm(16)                                          -> x1
     v25  BinopI { op=add, lhs=v14, rhs_imm=16 }           -> x1
     v26  ImmData(21)                                      -> x1
-    v27  Store { addr=v14, disp=16, value=v26, kind=I64 } -> -
+    v27  StoreLocal { off=-3, disp=16, value=v26, kind=I64 } -> -
     v28  LocalAddr(-3)                                    -> x1
     v29  Imm(0)                                           -> x1
     v30  BinopI { op=shl, lhs=v1, rhs_imm=3 }             -> x1

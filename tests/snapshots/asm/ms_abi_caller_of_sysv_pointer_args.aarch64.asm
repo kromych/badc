@@ -51,24 +51,24 @@ Disassembly of section .text:
                	sub	x0, x29, #0x30
                	stp	xzr, xzr, [x0]
                	add	x3, x3, #0x1
-               	str	x3, [x0]
+               	stur	x3, [x29, #-0x30]
                	mov	x3, #0x2                // =2
-               	str	x3, [x0, #0x8]
+               	stur	x3, [x29, #-0x28]
                	mov	x17, #0x9               // =9
                	mul	x3, x4, x17
                	add	x3, x3, #0x2
                	sub	x4, x29, #0x20
                	stp	xzr, xzr, [x4]
                	add	x6, x1, #0x1
-               	str	x6, [x4]
+               	stur	x6, [x29, #-0x20]
                	mov	x6, #0x5                // =5
-               	str	x6, [x4, #0x8]
+               	stur	x6, [x29, #-0x18]
                	sub	x6, x29, #0x10
                	stp	xzr, xzr, [x6]
                	add	x5, x5, #0x1
-               	str	x5, [x6]
+               	stur	x5, [x29, #-0x10]
                	mov	x5, #0x6                // =6
-               	str	x5, [x6, #0x8]
+               	stur	x5, [x29, #-0x8]
                	lsl	x1, x1, #1
                	add	x1, x1, #0x5
                	mov	x5, #0x34ac             // =13484

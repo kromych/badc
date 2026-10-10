@@ -40,8 +40,8 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
-               	movq	%rsi, (%rdi)
-               	movq	$0x7, 0x8(%rdi)
+               	movq	%rsi, -0x10(%rbp)
+               	movq	$0x7, -0x8(%rbp)
                	movq	0x8(%rdi), %rsi
                	movq	(%rdi), %rdi
                	callq	*%rdx

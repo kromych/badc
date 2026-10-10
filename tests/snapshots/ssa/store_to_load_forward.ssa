@@ -48,20 +48,20 @@ fn ent_pc=3 n_params=0 variadic=false locals=1
     v42  Imm(0)                                           -> x0
     v43  StoreLocal { off=-1, value=v42, kind=I64 }       -> -
     v44  LocalAddr(-1)                                    -> x1
-    v45  Imm(21)                                          -> x2
-    v46  Store { addr=v44, disp=0, value=v45, kind=I64 }  -> -
-    v47  Imm(21)                                          -> x2
-    v48  Imm(21)                                          -> x2
-    v49  Imm(42)                                          -> x2
-    v50  Imm(42)                                          -> x2
-    v51  Imm(0)                                           -> x2
-    v52  Imm(5)                                           -> x2
+    v45  Imm(21)                                          -> x1
+    v46  StoreLocal { off=-1, value=v45, kind=I64 }       -> -
+    v47  Imm(21)                                          -> x1
+    v48  Imm(21)                                          -> x1
+    v49  Imm(42)                                          -> x1
+    v50  Imm(42)                                          -> x1
+    v51  Imm(0)                                           -> x1
+    v52  Imm(5)                                           -> x1
     v53  StoreLocal { off=-1, value=v52, kind=I64 }       -> -
-    v54  LocalAddr(-1)                                    -> x2
-    v55  Imm(9)                                           -> x2
-    v56  Imm(9)                                           -> x2
-    v57  Store { addr=v44, disp=0, value=v56, kind=I64 }  -> -
-    v58  Store { addr=v44, disp=0, value=v56, kind=I64 }  -> -
+    v54  LocalAddr(-1)                                    -> x1
+    v55  Imm(9)                                           -> x1
+    v56  Imm(9)                                           -> x1
+    v57  StoreLocal { off=-1, value=v56, kind=I64 }       -> -
+    v58  StoreLocal { off=-1, value=v56, kind=I64 }       -> -
     v59  Imm(9)                                           -> x1
     v60  Imm(9)                                           -> x1
     v61  Imm(18)                                          -> x1

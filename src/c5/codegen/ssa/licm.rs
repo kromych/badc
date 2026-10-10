@@ -570,6 +570,7 @@ mod tests {
 
     fn local(off: i64) -> Inst {
         Inst::LoadLocal {
+            disp: 0,
             off,
             kind: LoadKind::I64,
             volatile: false,
@@ -589,6 +590,7 @@ mod tests {
     /// A store keeps a body value read, so nothing under test is dead.
     fn sink(value: ValueId) -> Inst {
         Inst::StoreLocal {
+            disp: 0,
             off: -1,
             value,
             kind: StoreKind::I64,
@@ -874,6 +876,7 @@ mod tests {
                     rhs_imm: 0x5555_5555,
                 },
                 Inst::StoreLocal {
+                    disp: 0,
                     off: -1,
                     value: BODY,
                     kind,

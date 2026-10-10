@@ -43,10 +43,9 @@ Disassembly of section .text:
                	leaq	(%r8,%r8,2), %rcx
                	addq	%r9, %rcx
                	movq	%rcx, 0x18(%rax)
-               	leaq	-0x10(%rbp), %rcx
-               	movq	(%rcx), %rdx
-               	leaq	(%rdx,%rdx,2), %rdx
-               	movq	0x8(%rcx), %rcx
+               	movq	-0x10(%rbp), %rcx
+               	leaq	(%rcx,%rcx,2), %rcx
+               	movq	-0x8(%rbp), %rdx
                	addq	%rdx, %rcx
                	movq	%rcx, 0x20(%rax)
                	movl	0x20(%rbp), %ecx
@@ -66,34 +65,35 @@ Disassembly of section .text:
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
                	leaq	0x1(%rcx), %rax
-               	movq	%rax, (%rdi)
-               	movq	$0x2, 0x8(%rdi)
+               	movq	%rax, -0x30(%rbp)
+               	movq	$0x2, -0x28(%rbp)
                	movq	0x18(%rbp), %rdx
                	leaq	(%r8,%r8,8), %rax
                	leaq	0x2(%rax), %rcx
                	leaq	-0x20(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
-               	leaq	0x1(%rsi), %r8
-               	movq	%r8, (%rax)
-               	movq	$0x5, 0x8(%rax)
+               	leaq	0x1(%rsi), %rax
+               	movq	%rax, -0x20(%rbp)
+               	movq	$0x5, -0x18(%rbp)
                	leaq	-0x20(%rbp), %r8
                	leaq	-0x10(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
-               	movq	0x10(%rbp), %r9
-               	incq	%r9
-               	movq	%r9, (%rax)
-               	leaq	-0x10(%rbp), %rax
-               	movq	$0x6, 0x8(%rax)
-               	shlq	%rsi
-               	addq	$0x5, %rsi
-               	movl	$0x134ac, %r9d          # imm = 0x134AC
+               	movq	0x10(%rbp), %rax
+               	incq	%rax
+               	movq	%rax, -0x10(%rbp)
+               	leaq	-0x10(%rbp), %r9
+               	movq	$0x6, -0x8(%rbp)
+               	movq	%rsi, %rax
+               	shlq	%rax
+               	addq	$0x5, %rax
+               	movl	$0x134ac, %esi          # imm = 0x134AC
                	movq	0x18(%rbp), %rbx
                	subq	$0x20, %rsp
-               	movq	%rsi, 0x10(%rsp)
-               	movq	%r9, 0x18(%rsp)
-               	movq	%rax, %r10
+               	movq	%rax, 0x10(%rsp)
+               	movq	%rsi, 0x18(%rsp)
+               	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11

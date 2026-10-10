@@ -302,10 +302,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
-               	sub	x1, x29, #0x40
                	and	x0, x0, #0xff
-               	strb	w0, [x1]
-               	ldrb	w1, [x1]
+               	sturb	w0, [x29, #-0x40]
+               	ldurb	w1, [x29, #-0x40]
                	sub	x0, x1, x0
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10

@@ -19,10 +19,10 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	sub	x0, x29, #0x18
                	mov	x1, #0x1                // =1
-               	str	w1, [x0]
-               	str	x1, [x0, #0x8]
+               	stur	w1, [x29, #-0x18]
+               	stur	x1, [x29, #-0x10]
                	mov	x1, #0x2a               // =42
-               	str	w1, [x0, #0x10]
+               	stur	w1, [x29, #-0x8]
                	cbz	x0, <addr>
                	mov	x1, x0
                	ldrsw	x1, [x1, #0x10]

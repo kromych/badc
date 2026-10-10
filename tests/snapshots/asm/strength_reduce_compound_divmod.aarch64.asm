@@ -2467,293 +2467,289 @@ Disassembly of section .text:
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
                	str	w1, [x0]
-               	mov	x2, #0x0                // =0
-               	mov	x5, #0x3                // =3
-               	mov	x4, #0x5556             // =21846
-               	movk	x4, #0x5555, lsl #16
-               	mov	x8, #0x5556             // =21846
-               	movk	x8, #0x5555, lsl #16
-               	movk	x8, #0x5555, lsl #32
-               	movk	x8, #0x5555, lsl #48
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	mov	x0, #0x3                // =3
-               	stur	w0, [x29, #-0x8]
-               	sub	x0, x29, #0x90
-               	sub	x1, x29, #0x30
-               	ldr	x6, [x3, x2, lsl #3]
-               	and	x6, x6, #0x7ff
-               	ldr	w7, [x1]
+               	mov	x0, #0x0                // =0
+               	mov	x3, #0x3                // =3
+               	mov	x2, #0x5556             // =21846
+               	movk	x2, #0x5555, lsl #16
+               	mov	x6, #0x5556             // =21846
+               	movk	x6, #0x5555, lsl #16
+               	movk	x6, #0x5555, lsl #32
+               	movk	x6, #0x5555, lsl #48
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	mov	x4, #0x3                // =3
+               	stur	w4, [x29, #-0x8]
+               	ldr	x4, [x1, x0, lsl #3]
+               	and	x4, x4, #0x7ff
+               	ldur	w5, [x29, #-0x30]
+               	and	x5, x5, #0xfffffffffffff800
+               	orr	x5, x5, x4
+               	stur	w5, [x29, #-0x30]
+               	lsl	x4, x4, #53
+               	asr	x4, x4, #53
+               	and	x4, x4, #0x7ff
+               	ldur	w7, [x29, #-0x90]
                	and	x7, x7, #0xfffffffffffff800
-               	orr	x7, x7, x6
-               	str	w7, [x1]
-               	lsl	x6, x6, #53
-               	asr	x6, x6, #53
-               	and	x6, x6, #0x7ff
-               	ldr	w9, [x0]
-               	and	x9, x9, #0xfffffffffffff800
-               	orr	x6, x9, x6
-               	str	w6, [x0]
-               	ldr	x9, [x3, x2, lsl #3]
-               	and	x9, x9, #0x1fff
-               	and	x10, x7, #0xffffffffff0007ff
-               	lsl	x7, x9, #11
-               	orr	x9, x10, x7
-               	str	w9, [x1]
-               	and	x6, x6, #0xffffffffff0007ff
-               	orr	x6, x6, x7
-               	str	w6, [x0]
-               	ldr	x6, [x3, x2, lsl #3]
-               	and	x6, x6, #0xffffffffff
-               	ldr	x7, [x1]
-               	and	x7, x7, #0xffffff
-               	lsl	x6, x6, #24
-               	orr	x7, x7, x6
-               	str	x7, [x1]
-               	asr	x6, x6, #24
-               	and	x6, x6, #0xffffffffff
-               	ldr	x7, [x0]
-               	and	x7, x7, #0xffffff
-               	lsl	x6, x6, #24
-               	orr	x6, x7, x6
-               	str	x6, [x0]
-               	ldr	w6, [x0]
-               	and	x7, x6, #0x7ff
+               	orr	x4, x7, x4
+               	stur	w4, [x29, #-0x90]
+               	ldr	x7, [x1, x0, lsl #3]
+               	and	x7, x7, #0x1fff
+               	and	x8, x5, #0xffffffffff0007ff
+               	lsl	x5, x7, #11
+               	orr	x7, x8, x5
+               	stur	w7, [x29, #-0x30]
+               	and	x4, x4, #0xffffffffff0007ff
+               	orr	x4, x4, x5
+               	stur	w4, [x29, #-0x90]
+               	ldr	x4, [x1, x0, lsl #3]
+               	and	x4, x4, #0xffffffffff
+               	ldur	x5, [x29, #-0x30]
+               	and	x5, x5, #0xffffff
+               	lsl	x4, x4, #24
+               	orr	x5, x5, x4
+               	stur	x5, [x29, #-0x30]
+               	asr	x4, x4, #24
+               	and	x4, x4, #0xffffffffff
+               	ldur	x5, [x29, #-0x90]
+               	and	x5, x5, #0xffffff
+               	lsl	x4, x4, #24
+               	orr	x4, x5, x4
+               	stur	x4, [x29, #-0x90]
+               	ldur	w4, [x29, #-0x90]
+               	and	x5, x4, #0x7ff
+               	lsl	x5, x5, #53
+               	asr	x5, x5, #53
+               	mul	x5, x5, x2
+               	asr	x5, x5, #32
+               	lsr	x7, x5, #63
+               	add	x5, x5, x7
+               	and	x5, x5, #0x7ff
+               	and	x4, x4, #0xfffffffffffff800
+               	orr	x4, x4, x5
+               	stur	w4, [x29, #-0x90]
+               	ldur	w5, [x29, #-0x30]
+               	and	x7, x5, #0x7ff
                	lsl	x7, x7, #53
                	asr	x7, x7, #53
-               	mul	x7, x7, x4
+               	ldursw	x8, [x29, #-0x8]
+               	sdiv	x7, x7, x8
+               	and	x7, x7, #0x7ff
+               	and	x5, x5, #0xfffffffffffff800
+               	orr	x5, x5, x7
+               	stur	w5, [x29, #-0x30]
+               	mov	w7, w4
+               	asr	x7, x7, #11
+               	and	x7, x7, #0x1fff
+               	mul	x7, x7, x2
+               	lsr	x7, x7, #32
+               	and	x4, x4, #0xffffffffff0007ff
+               	lsl	x7, x7, #11
+               	orr	x4, x4, x7
+               	stur	w4, [x29, #-0x90]
+               	mov	w4, w5
+               	asr	x4, x4, #11
+               	and	x4, x4, #0x1fff
+               	ldursw	x7, [x29, #-0x8]
+               	sdiv	x4, x4, x7
+               	and	x4, x4, #0x1fff
+               	and	x5, x5, #0xffffffffff0007ff
+               	lsl	x4, x4, #11
+               	orr	x4, x5, x4
+               	stur	w4, [x29, #-0x30]
+               	ldur	x4, [x29, #-0x90]
+               	asr	x5, x4, #24
+               	and	x5, x5, #0xffffffffff
+               	lsl	x5, x5, #24
+               	asr	x5, x5, #24
+               	smulh	x5, x5, x6
+               	lsr	x7, x5, #63
+               	add	x5, x5, x7
+               	and	x5, x5, #0xffffffffff
+               	and	x4, x4, #0xffffff
+               	lsl	x5, x5, #24
+               	orr	x4, x4, x5
+               	stur	x4, [x29, #-0x90]
+               	ldur	x5, [x29, #-0x30]
+               	asr	x7, x5, #24
+               	and	x7, x7, #0xffffffffff
+               	lsl	x7, x7, #24
+               	asr	x7, x7, #24
+               	ldursw	x8, [x29, #-0x8]
+               	sdiv	x7, x7, x8
+               	and	x7, x7, #0xffffffffff
+               	and	x5, x5, #0xffffff
+               	lsl	x7, x7, #24
+               	orr	x5, x5, x7
+               	stur	x5, [x29, #-0x30]
+               	ldur	w7, [x29, #-0x90]
+               	and	x7, x7, #0x7ff
+               	lsl	x7, x7, #53
+               	asr	x7, x7, #53
+               	ldur	w8, [x29, #-0x30]
+               	and	x8, x8, #0x7ff
+               	lsl	x8, x8, #53
+               	asr	x8, x8, #53
+               	cmp	w7, w8
+               	b.ne	<addr>
+               	ldur	w7, [x29, #-0x90]
+               	asr	x7, x7, #11
+               	and	x7, x7, #0x1fff
+               	ldur	w8, [x29, #-0x30]
+               	asr	x8, x8, #11
+               	and	x8, x8, #0x1fff
+               	cmp	w7, w8
+               	b.ne	<addr>
+               	asr	x4, x4, #24
+               	and	x4, x4, #0xffffffffff
+               	lsl	x4, x4, #24
+               	asr	x4, x4, #24
+               	asr	x5, x5, #24
+               	and	x5, x5, #0xffffffffff
+               	lsl	x5, x5, #24
+               	asr	x5, x5, #24
+               	cmp	x4, x5
+               	b.ne	<addr>
+               	ldr	x4, [x1, x0, lsl #3]
+               	and	x4, x4, #0x7ff
+               	ldur	w5, [x29, #-0x30]
+               	and	x5, x5, #0xfffffffffffff800
+               	orr	x5, x5, x4
+               	stur	w5, [x29, #-0x30]
+               	lsl	x4, x4, #53
+               	asr	x4, x4, #53
+               	and	x4, x4, #0x7ff
+               	ldur	w7, [x29, #-0x90]
+               	and	x7, x7, #0xfffffffffffff800
+               	orr	x4, x7, x4
+               	stur	w4, [x29, #-0x90]
+               	ldr	x7, [x1, x0, lsl #3]
+               	and	x7, x7, #0x1fff
+               	and	x8, x5, #0xffffffffff0007ff
+               	lsl	x5, x7, #11
+               	orr	x7, x8, x5
+               	stur	w7, [x29, #-0x30]
+               	and	x4, x4, #0xffffffffff0007ff
+               	orr	x4, x4, x5
+               	stur	w4, [x29, #-0x90]
+               	ldr	x4, [x1, x0, lsl #3]
+               	and	x4, x4, #0xffffffffff
+               	ldur	x5, [x29, #-0x30]
+               	and	x5, x5, #0xffffff
+               	lsl	x4, x4, #24
+               	orr	x5, x5, x4
+               	stur	x5, [x29, #-0x30]
+               	asr	x4, x4, #24
+               	and	x4, x4, #0xffffffffff
+               	ldur	x5, [x29, #-0x90]
+               	and	x5, x5, #0xffffff
+               	lsl	x4, x4, #24
+               	orr	x4, x5, x4
+               	stur	x4, [x29, #-0x90]
+               	ldur	w4, [x29, #-0x90]
+               	and	x5, x4, #0x7ff
+               	lsl	x5, x5, #53
+               	asr	x5, x5, #53
+               	mul	x7, x5, x2
                	asr	x7, x7, #32
-               	lsr	x9, x7, #63
-               	add	x7, x7, x9
-               	and	x7, x7, #0x7ff
-               	and	x6, x6, #0xfffffffffffff800
-               	orr	x6, x6, x7
-               	str	w6, [x0]
-               	ldr	w7, [x1]
-               	and	x9, x7, #0x7ff
-               	lsl	x9, x9, #53
-               	asr	x9, x9, #53
-               	ldursw	x10, [x29, #-0x8]
-               	sdiv	x9, x9, x10
-               	and	x9, x9, #0x7ff
-               	and	x7, x7, #0xfffffffffffff800
-               	orr	x7, x7, x9
-               	str	w7, [x1]
-               	mov	w9, w6
-               	asr	x9, x9, #11
-               	and	x9, x9, #0x1fff
-               	mul	x9, x9, x4
-               	lsr	x9, x9, #32
-               	and	x6, x6, #0xffffffffff0007ff
-               	lsl	x9, x9, #11
-               	orr	x6, x6, x9
-               	str	w6, [x0]
-               	mov	w6, w7
-               	asr	x6, x6, #11
-               	and	x6, x6, #0x1fff
-               	ldursw	x9, [x29, #-0x8]
-               	sdiv	x6, x6, x9
-               	and	x6, x6, #0x1fff
-               	and	x7, x7, #0xffffffffff0007ff
-               	lsl	x6, x6, #11
-               	orr	x6, x7, x6
-               	str	w6, [x1]
-               	ldr	x6, [x0]
-               	asr	x7, x6, #24
-               	and	x7, x7, #0xffffffffff
-               	lsl	x7, x7, #24
-               	asr	x7, x7, #24
-               	smulh	x7, x7, x8
-               	lsr	x9, x7, #63
-               	add	x7, x7, x9
-               	and	x7, x7, #0xffffffffff
-               	and	x6, x6, #0xffffff
-               	lsl	x7, x7, #24
-               	orr	x6, x6, x7
-               	str	x6, [x0]
-               	ldr	x7, [x1]
-               	asr	x9, x7, #24
-               	and	x9, x9, #0xffffffffff
-               	lsl	x9, x9, #24
-               	asr	x9, x9, #24
-               	ldursw	x10, [x29, #-0x8]
-               	sdiv	x9, x9, x10
-               	and	x9, x9, #0xffffffffff
-               	and	x7, x7, #0xffffff
-               	lsl	x9, x9, #24
-               	orr	x7, x7, x9
-               	str	x7, [x1]
-               	ldr	w9, [x0]
-               	and	x9, x9, #0x7ff
-               	lsl	x9, x9, #53
-               	asr	x9, x9, #53
-               	ldr	w10, [x1]
-               	and	x10, x10, #0x7ff
-               	lsl	x10, x10, #53
-               	asr	x10, x10, #53
-               	cmp	w9, w10
-               	b.ne	<addr>
-               	ldr	w9, [x0]
-               	asr	x9, x9, #11
-               	and	x9, x9, #0x1fff
-               	ldr	w1, [x1]
-               	asr	x1, x1, #11
-               	and	x1, x1, #0x1fff
-               	cmp	w9, w1
-               	b.ne	<addr>
-               	asr	x1, x6, #24
-               	and	x1, x1, #0xffffffffff
-               	lsl	x1, x1, #24
-               	asr	x1, x1, #24
-               	asr	x6, x7, #24
-               	and	x6, x6, #0xffffffffff
-               	lsl	x6, x6, #24
-               	asr	x6, x6, #24
-               	cmp	x1, x6
-               	b.ne	<addr>
-               	sub	x1, x29, #0x30
-               	ldr	x6, [x3, x2, lsl #3]
-               	and	x6, x6, #0x7ff
-               	ldr	w7, [x1]
-               	and	x7, x7, #0xfffffffffffff800
-               	orr	x7, x7, x6
-               	str	w7, [x1]
-               	lsl	x6, x6, #53
-               	asr	x6, x6, #53
-               	and	x6, x6, #0x7ff
-               	ldr	w9, [x0]
-               	and	x9, x9, #0xfffffffffffff800
-               	orr	x6, x9, x6
-               	str	w6, [x0]
-               	sub	x0, x29, #0x90
-               	ldr	x9, [x3, x2, lsl #3]
-               	and	x9, x9, #0x1fff
-               	and	x10, x7, #0xffffffffff0007ff
-               	lsl	x7, x9, #11
-               	orr	x9, x10, x7
-               	str	w9, [x1]
-               	and	x6, x6, #0xffffffffff0007ff
-               	orr	x6, x6, x7
-               	str	w6, [x0]
-               	ldr	x6, [x3, x2, lsl #3]
-               	and	x6, x6, #0xffffffffff
-               	ldr	x7, [x1]
-               	and	x7, x7, #0xffffff
-               	lsl	x6, x6, #24
-               	orr	x7, x7, x6
-               	str	x7, [x1]
-               	asr	x6, x6, #24
-               	and	x6, x6, #0xffffffffff
-               	ldr	x7, [x0]
-               	and	x7, x7, #0xffffff
-               	lsl	x6, x6, #24
-               	orr	x6, x7, x6
-               	str	x6, [x0]
-               	ldr	w6, [x0]
-               	and	x7, x6, #0x7ff
+               	lsr	x8, x7, #63
+               	add	x7, x7, x8
+               	mul	x7, x7, x3
+               	sub	x5, x5, x7
+               	and	x5, x5, #0x7ff
+               	and	x4, x4, #0xfffffffffffff800
+               	orr	x4, x4, x5
+               	stur	w4, [x29, #-0x90]
+               	ldur	w5, [x29, #-0x30]
+               	and	x7, x5, #0x7ff
                	lsl	x7, x7, #53
                	asr	x7, x7, #53
-               	mul	x9, x7, x4
-               	asr	x9, x9, #32
-               	lsr	x10, x9, #63
-               	add	x9, x9, x10
-               	mul	x9, x9, x5
-               	sub	x7, x7, x9
+               	ldursw	x8, [x29, #-0x8]
+               	sdiv	x17, x7, x8
+               	msub	x7, x17, x8, x7
                	and	x7, x7, #0x7ff
-               	and	x6, x6, #0xfffffffffffff800
-               	orr	x6, x6, x7
-               	str	w6, [x0]
-               	ldr	w7, [x1]
-               	and	x9, x7, #0x7ff
-               	lsl	x9, x9, #53
-               	asr	x9, x9, #53
-               	ldursw	x10, [x29, #-0x8]
-               	sdiv	x17, x9, x10
-               	msub	x9, x17, x10, x9
-               	and	x9, x9, #0x7ff
-               	and	x7, x7, #0xfffffffffffff800
-               	orr	x7, x7, x9
-               	str	w7, [x1]
-               	mov	w9, w6
-               	asr	x9, x9, #11
-               	and	x9, x9, #0x1fff
-               	mul	x10, x9, x4
-               	lsr	x10, x10, #32
-               	mul	x10, x10, x5
-               	sub	x9, x9, x10
-               	and	x6, x6, #0xffffffffff0007ff
-               	lsl	x9, x9, #11
-               	orr	x6, x6, x9
-               	str	w6, [x0]
-               	mov	w6, w7
-               	asr	x6, x6, #11
-               	and	x6, x6, #0x1fff
-               	ldursw	x9, [x29, #-0x8]
-               	sdiv	x17, x6, x9
-               	msub	x6, x17, x9, x6
-               	and	x6, x6, #0x1fff
-               	and	x7, x7, #0xffffffffff0007ff
-               	lsl	x6, x6, #11
-               	orr	x6, x7, x6
-               	str	w6, [x1]
-               	ldr	x6, [x0]
-               	asr	x7, x6, #24
+               	and	x5, x5, #0xfffffffffffff800
+               	orr	x5, x5, x7
+               	stur	w5, [x29, #-0x30]
+               	mov	w7, w4
+               	asr	x7, x7, #11
+               	and	x7, x7, #0x1fff
+               	mul	x8, x7, x2
+               	lsr	x8, x8, #32
+               	mul	x8, x8, x3
+               	sub	x7, x7, x8
+               	and	x4, x4, #0xffffffffff0007ff
+               	lsl	x7, x7, #11
+               	orr	x4, x4, x7
+               	stur	w4, [x29, #-0x90]
+               	mov	w4, w5
+               	asr	x4, x4, #11
+               	and	x4, x4, #0x1fff
+               	ldursw	x7, [x29, #-0x8]
+               	sdiv	x17, x4, x7
+               	msub	x4, x17, x7, x4
+               	and	x4, x4, #0x1fff
+               	and	x5, x5, #0xffffffffff0007ff
+               	lsl	x4, x4, #11
+               	orr	x4, x5, x4
+               	stur	w4, [x29, #-0x30]
+               	ldur	x4, [x29, #-0x90]
+               	asr	x5, x4, #24
+               	and	x5, x5, #0xffffffffff
+               	lsl	x5, x5, #24
+               	asr	x5, x5, #24
+               	smulh	x7, x5, x6
+               	lsr	x8, x7, #63
+               	add	x7, x7, x8
+               	mul	x7, x7, x3
+               	sub	x5, x5, x7
+               	and	x5, x5, #0xffffffffff
+               	and	x4, x4, #0xffffff
+               	lsl	x5, x5, #24
+               	orr	x4, x4, x5
+               	stur	x4, [x29, #-0x90]
+               	ldur	x5, [x29, #-0x30]
+               	asr	x7, x5, #24
                	and	x7, x7, #0xffffffffff
                	lsl	x7, x7, #24
                	asr	x7, x7, #24
-               	smulh	x9, x7, x8
-               	lsr	x10, x9, #63
-               	add	x9, x9, x10
-               	mul	x9, x9, x5
-               	sub	x7, x7, x9
+               	ldursw	x8, [x29, #-0x8]
+               	sdiv	x17, x7, x8
+               	msub	x7, x17, x8, x7
                	and	x7, x7, #0xffffffffff
-               	and	x6, x6, #0xffffff
+               	and	x5, x5, #0xffffff
                	lsl	x7, x7, #24
-               	orr	x6, x6, x7
-               	str	x6, [x0]
-               	ldr	x7, [x1]
-               	asr	x9, x7, #24
-               	and	x9, x9, #0xffffffffff
-               	lsl	x9, x9, #24
-               	asr	x9, x9, #24
-               	ldursw	x10, [x29, #-0x8]
-               	sdiv	x17, x9, x10
-               	msub	x9, x17, x10, x9
-               	and	x9, x9, #0xffffffffff
-               	and	x7, x7, #0xffffff
-               	lsl	x9, x9, #24
-               	orr	x7, x7, x9
-               	str	x7, [x1]
-               	ldr	w9, [x0]
-               	and	x9, x9, #0x7ff
-               	lsl	x9, x9, #53
-               	asr	x9, x9, #53
-               	ldr	w10, [x1]
-               	and	x10, x10, #0x7ff
-               	lsl	x10, x10, #53
-               	asr	x10, x10, #53
-               	cmp	w9, w10
+               	orr	x5, x5, x7
+               	stur	x5, [x29, #-0x30]
+               	ldur	w7, [x29, #-0x90]
+               	and	x7, x7, #0x7ff
+               	lsl	x7, x7, #53
+               	asr	x7, x7, #53
+               	ldur	w8, [x29, #-0x30]
+               	and	x8, x8, #0x7ff
+               	lsl	x8, x8, #53
+               	asr	x8, x8, #53
+               	cmp	w7, w8
                	b.ne	<addr>
-               	ldr	w0, [x0]
-               	asr	x0, x0, #11
-               	and	x0, x0, #0x1fff
-               	ldr	w1, [x1]
-               	asr	x1, x1, #11
-               	and	x1, x1, #0x1fff
-               	cmp	w0, w1
+               	ldur	w7, [x29, #-0x90]
+               	asr	x7, x7, #11
+               	and	x7, x7, #0x1fff
+               	ldur	w8, [x29, #-0x30]
+               	asr	x8, x8, #11
+               	and	x8, x8, #0x1fff
+               	cmp	w7, w8
                	b.ne	<addr>
-               	asr	x0, x6, #24
-               	and	x0, x0, #0xffffffffff
-               	lsl	x0, x0, #24
-               	asr	x0, x0, #24
-               	asr	x1, x7, #24
-               	and	x1, x1, #0xffffffffff
-               	lsl	x1, x1, #24
-               	asr	x1, x1, #24
-               	cmp	x0, x1
+               	asr	x4, x4, #24
+               	and	x4, x4, #0xffffffffff
+               	lsl	x4, x4, #24
+               	asr	x4, x4, #24
+               	asr	x5, x5, #24
+               	and	x5, x5, #0xffffffffff
+               	lsl	x5, x5, #24
+               	asr	x5, x5, #24
+               	cmp	x4, x5
                	b.ne	<addr>
-               	add	x2, x2, #0x1
-               	cmp	w2, #0x18
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x18
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x90

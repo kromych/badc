@@ -35,10 +35,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x40
-               	mov	x1, #0x7                // =7
-               	strb	w1, [x0, #0x3b]
-               	ldrb	w0, [x0, #0x3b]
+               	mov	x0, #0x7                // =7
+               	sturb	w0, [x29, #-0x5]
+               	ldurb	w0, [x29, #-0x5]
                	eor	x0, x0, #0x7
                	cbz	w0, <addr>
                	mov	x0, #0x11               // =17

@@ -20,45 +20,45 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	asr	x1, x0, #63
                	sub	x2, x29, #0x30
-               	str	x0, [x2]
-               	str	x1, [x2, #0x8]
-               	sub	x1, x29, #0x20
-               	add	x3, x0, #0x1
-               	sxtw	x3, w3
-               	str	x3, [x1]
-               	add	x3, x0, #0x2
-               	sxtw	x3, w3
-               	str	x3, [x1, #0x8]
-               	sub	x3, x29, #0x10
-               	add	x4, x0, #0x3
-               	sxtw	x4, w4
-               	asr	x5, x4, #63
-               	str	x4, [x3]
-               	str	x5, [x3, #0x8]
-               	and	x5, x2, #0xf
-               	and	x6, x1, #0xf
-               	orr	x5, x5, x6
-               	and	x6, x3, #0xf
-               	orr	x5, x5, x6
-               	cbz	x5, <addr>
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
-               	ldrsw	x6, [x5]
-               	orr	x6, x6, #0x1
-               	str	w6, [x5]
-               	ldr	x2, [x2]
+               	stur	x0, [x29, #-0x30]
+               	stur	x1, [x29, #-0x28]
+               	sub	x3, x29, #0x20
+               	add	x1, x0, #0x1
+               	sxtw	x1, w1
+               	stur	x1, [x29, #-0x20]
+               	add	x1, x0, #0x2
+               	sxtw	x1, w1
+               	stur	x1, [x29, #-0x18]
+               	sub	x4, x29, #0x10
+               	add	x1, x0, #0x3
+               	sxtw	x1, w1
+               	asr	x5, x1, #63
+               	stur	x1, [x29, #-0x10]
+               	stur	x5, [x29, #-0x8]
+               	and	x2, x2, #0xf
+               	and	x3, x3, #0xf
+               	orr	x2, x2, x3
+               	and	x3, x4, #0xf
+               	orr	x2, x2, x3
+               	cbz	x2, <addr>
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldrsw	x3, [x2]
+               	orr	x3, x3, #0x1
+               	str	w3, [x2]
+               	ldur	x2, [x29, #-0x30]
                	cmp	x2, x0
                	b.ne	<addr>
-               	ldr	x2, [x1]
-               	ldr	x1, [x1, #0x8]
-               	add	x1, x2, x1
+               	ldur	x2, [x29, #-0x20]
+               	ldur	x3, [x29, #-0x18]
+               	add	x2, x2, x3
                	lsl	x0, x0, #1
                	add	x0, x0, #0x3
                	sxtw	x0, w0
-               	cmp	x1, x0
+               	cmp	x2, x0
                	b.ne	<addr>
-               	ldr	x0, [x3]
-               	cmp	x0, x4
+               	ldur	x0, [x29, #-0x10]
+               	cmp	x0, x1
                	b.eq	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -76,46 +76,46 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	stur	x0, [x29, #-0x8]
                	ldur	x1, [x29, #-0x8]
-               	asr	x3, x1, #63
-               	sub	x2, x29, #0x40
-               	str	x1, [x2]
-               	str	x3, [x2, #0x8]
-               	sub	x1, x29, #0x30
-               	ldur	x3, [x29, #-0x8]
-               	add	x3, x3, #0x1
-               	str	x3, [x1]
-               	ldur	x3, [x29, #-0x8]
-               	add	x3, x3, #0x2
-               	str	x3, [x1, #0x8]
-               	sub	x3, x29, #0x20
-               	ldur	x4, [x29, #-0x8]
-               	add	x4, x4, #0x3
-               	asr	x5, x4, #63
-               	str	x4, [x3]
-               	str	x5, [x3, #0x8]
-               	and	x4, x2, #0xf
-               	and	x5, x1, #0xf
-               	orr	x4, x4, x5
-               	and	x5, x3, #0xf
-               	orr	x4, x4, x5
-               	cbz	x4, <addr>
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
-               	ldrsw	x5, [x4]
-               	orr	x5, x5, #0x4
-               	str	w5, [x4]
-               	ldr	x2, [x2]
-               	cmp	x2, x0
+               	asr	x2, x1, #63
+               	sub	x3, x29, #0x40
+               	stur	x1, [x29, #-0x40]
+               	stur	x2, [x29, #-0x38]
+               	sub	x2, x29, #0x30
+               	ldur	x1, [x29, #-0x8]
+               	add	x1, x1, #0x1
+               	stur	x1, [x29, #-0x30]
+               	ldur	x1, [x29, #-0x8]
+               	add	x1, x1, #0x2
+               	stur	x1, [x29, #-0x28]
+               	sub	x4, x29, #0x20
+               	ldur	x1, [x29, #-0x8]
+               	add	x1, x1, #0x3
+               	asr	x5, x1, #63
+               	stur	x1, [x29, #-0x20]
+               	stur	x5, [x29, #-0x18]
+               	and	x1, x3, #0xf
+               	and	x2, x2, #0xf
+               	orr	x1, x1, x2
+               	and	x2, x4, #0xf
+               	orr	x1, x1, x2
+               	cbz	x1, <addr>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrsw	x2, [x1]
+               	orr	x2, x2, #0x4
+               	str	w2, [x1]
+               	ldur	x1, [x29, #-0x40]
+               	cmp	x1, x0
                	b.ne	<addr>
-               	ldr	x2, [x1]
-               	ldr	x1, [x1, #0x8]
-               	add	x1, x2, x1
+               	ldur	x1, [x29, #-0x30]
+               	ldur	x2, [x29, #-0x28]
+               	add	x1, x1, x2
                	lsl	x2, x0, #1
                	add	x2, x2, #0x3
                	sxtw	x2, w2
                	cmp	x1, x2
                	b.ne	<addr>
-               	ldr	x1, [x3]
+               	ldur	x1, [x29, #-0x20]
                	add	x0, x0, #0x3
                	sxtw	x0, w0
                	cmp	x1, x0

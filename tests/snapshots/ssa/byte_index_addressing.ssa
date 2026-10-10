@@ -1482,7 +1482,7 @@ fn ent_pc=19 n_params=0 variadic=false locals=3
     v887 Imm(1)                                           -> x0
     v888 BinopI { op=add, lhs=v884, rhs_imm=1 }           -> x0
     v889 Imm(60)                                          -> x0
-    v890 Store { addr=v884, disp=1, value=v889, kind=I8 } -> -
+    v890 StoreLocal { off=-1, disp=1, value=v889, kind=I8 } -> -
     v891 Imm(0)                                           -> x0
     v892 ImmData(32)                                      -> x0
     v893 Load { addr=v892, disp=0, kind=I32, volatile }   -> x0

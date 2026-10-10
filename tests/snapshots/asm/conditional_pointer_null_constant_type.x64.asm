@@ -30,9 +30,9 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	leaq	-0x18(%rbp), %rax
-               	movl	$0x1, (%rax)
-               	movq	$0x1, 0x8(%rax)
-               	movl	$0x2a, 0x10(%rax)
+               	movl	$0x1, -0x18(%rbp)
+               	movq	$0x1, -0x10(%rbp)
+               	movl	$0x2a, -0x8(%rbp)
                	testq	%rax, %rax
                	je	<addr>
                	movq	%rax, %rcx

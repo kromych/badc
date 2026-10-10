@@ -55,12 +55,11 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	str	x0, [x1]
                	stur	x1, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	ldr	x1, [x0]
+               	ldur	x0, [x29, #-0x8]
+               	ldr	x0, [x0]
+               	ldur	x1, [x29, #-0x8]
                	ldr	x1, [x1]
-               	ldr	x0, [x0]
-               	ldr	x0, [x0]
-               	add	x0, x1, x0
+               	add	x0, x0, x1
                	cmp	x0, #0xe
                	b.eq	<addr>
                	mov	x0, x3

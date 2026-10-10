@@ -19,38 +19,38 @@ Disassembly of section .text:
                	sub	sp, sp, #0x40
                	sub	x5, x29, #0x40
                	mov	x0, #0x1                // =1
-               	str	w0, [x5]
+               	stur	w0, [x29, #-0x40]
                	sub	x3, x29, #0x20
                	mov	x0, #0xa                // =10
-               	str	w0, [x3]
+               	stur	w0, [x29, #-0x20]
                	mov	x0, #0x2                // =2
-               	str	w0, [x5, #0x4]
+               	stur	w0, [x29, #-0x3c]
                	mov	x0, #0x14               // =20
-               	str	w0, [x3, #0x4]
+               	stur	w0, [x29, #-0x1c]
                	mov	x0, #0x3                // =3
-               	str	w0, [x5, #0x8]
+               	stur	w0, [x29, #-0x38]
                	mov	x0, #0x1e               // =30
-               	str	w0, [x3, #0x8]
+               	stur	w0, [x29, #-0x18]
                	mov	x0, #0x4                // =4
-               	str	w0, [x5, #0xc]
+               	stur	w0, [x29, #-0x34]
                	mov	x0, #0x28               // =40
-               	str	w0, [x3, #0xc]
+               	stur	w0, [x29, #-0x14]
                	mov	x0, #0x5                // =5
-               	str	w0, [x5, #0x10]
+               	stur	w0, [x29, #-0x30]
                	mov	x0, #0x32               // =50
-               	str	w0, [x3, #0x10]
+               	stur	w0, [x29, #-0x10]
                	mov	x0, #0x6                // =6
-               	str	w0, [x5, #0x14]
+               	stur	w0, [x29, #-0x2c]
                	mov	x0, #0x3c               // =60
-               	str	w0, [x3, #0x14]
+               	stur	w0, [x29, #-0xc]
                	mov	x0, #0x7                // =7
-               	str	w0, [x5, #0x18]
+               	stur	w0, [x29, #-0x28]
                	mov	x0, #0x46               // =70
-               	str	w0, [x3, #0x18]
+               	stur	w0, [x29, #-0x8]
                	mov	x0, #0x8                // =8
-               	str	w0, [x5, #0x1c]
+               	stur	w0, [x29, #-0x24]
                	mov	x0, #0x50               // =80
-               	str	w0, [x3, #0x1c]
+               	stur	w0, [x29, #-0x4]
                	mov	x1, #0x0                // =0
                	mov	x0, x1
                	lsl	x4, x0, #2

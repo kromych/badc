@@ -27,15 +27,14 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x1, [x0]
+               	stur	x1, [x29, #-0x10]
                	mov	x2, #0x0                // =0
                	stur	w2, [x29, #-0x8]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	sub	x4, x29, #0x8
-               	ldr	x5, [x0]
                	mov	x3, #0xffff             // =65535
-               	blr	x5
+               	bl	<addr>
                	mov	x20, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

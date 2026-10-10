@@ -120,25 +120,30 @@ pub(crate) enum Inst {
         align: u8,
     },
     /// Load from a local / parameter slot. Equivalent to a
-    /// `LocalAddr(off)` followed by `Load { kind }`, but
+    /// `LocalAddr(off)` followed by `Load { disp, kind }`, but
     /// represented as a single instruction so the per-arch emit
     /// folds the address into the load's addressing mode and
     /// the allocator does not need to assign a register to the
-    /// intermediate address. `volatile` as for [`Self::Load`]; a
+    /// intermediate address. `disp` as for [`Self::Load`], possibly past
+    /// the slot's own cell; the slot-address fold sets it after the
+    /// slot-level passes. `volatile` as for [`Self::Load`]; a
     /// slot with any volatile access also stays out of mem2reg
     /// promotion and slot coalescing.
     LoadLocal {
         off: i64,
+        disp: i32,
         kind: LoadKind,
         volatile: bool,
     },
     /// Store to a local / parameter slot. Same shape as
     /// [`Self::Store`] but with the address represented as a
     /// constant slot offset, so the emit folds it into the
-    /// store's addressing mode. `nsw`: `value` overflowed undefined
+    /// store's addressing mode. `disp` as for [`Self::LoadLocal`];
+    /// `nsw`: `value` overflowed undefined
     /// (C99 6.5p5); promotion leaves a marked [`Self::Extend`] instead.
     StoreLocal {
         off: i64,
+        disp: i32,
         value: ValueId,
         kind: StoreKind,
         volatile: bool,
@@ -2606,6 +2611,7 @@ mod tests {
             (
                 Inst::StoreLocal {
                     off: 0,
+                    disp: 0,
                     value: 3,
                     kind: StoreKind::I64,
                     volatile: false,

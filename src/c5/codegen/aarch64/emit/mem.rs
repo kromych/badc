@@ -922,6 +922,16 @@ impl FrameLoc {
         }
     }
 
+    /// The byte `disp` past the object at `self`.
+    pub(super) fn shifted(self, disp: i32) -> Self {
+        let d = i64::from(disp);
+        Self {
+            fp: self.fp.map(|x| x + d),
+            x19: self.x19.map(|x| x + d),
+            sp: self.sp.map(|x| x + d),
+        }
+    }
+
     /// The form whose base costs the fewest instructions ([`base_len`]), fp on a tie.
     fn pick(self, fits: impl Fn(i64) -> bool) -> (Reg, i64) {
         [(Reg(29), self.fp), (Reg(19), self.x19), (Reg(31), self.sp)]
@@ -1262,13 +1272,14 @@ pub(super) fn emit_load_local(
     code: &mut Vec<u8>,
     dst: Place,
     off: i64,
+    disp: i32,
     kind: LoadKind,
     keep_f32: bool,
     func: &FunctionSsa,
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
-    let loc = local_slot(off, func, frame);
+    let loc = local_slot(off, func, frame).shifted(disp);
     let t = scratch.primary;
     if let LoadKind::F32 | LoadKind::F64 | LoadKind::V128 = kind {
         let (op, what) = match kind {
@@ -1323,6 +1334,7 @@ pub(super) fn emit_store_local(
     v: super::super::ir::ValueId,
     dst: Place,
     off: i64,
+    disp: i32,
     value: u32,
     kind: StoreKind,
     alloc: &Allocation,
@@ -1330,7 +1342,7 @@ pub(super) fn emit_store_local(
     frame: Frame,
     scratch: &ScratchPool,
 ) -> Emit {
-    let loc = local_slot(off, func, frame);
+    let loc = local_slot(off, func, frame).shifted(disp);
     let t = scratch.secondary;
     let value_place = place_of(alloc, value);
     if let Some((op, rs)) = int_store_source(v, kind, value, dst, alloc) {

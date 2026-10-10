@@ -885,6 +885,7 @@ impl SsaBuilder {
         }
         let v = self.push(Inst::LoadLocal {
             off,
+            disp: 0,
             kind,
             volatile,
         });
@@ -941,6 +942,7 @@ impl SsaBuilder {
         self.local_cache.retain(|e| e.off != off);
         self.push(Inst::StoreLocal {
             off,
+            disp: 0,
             value,
             kind,
             volatile,
@@ -1122,7 +1124,9 @@ impl SsaBuilder {
                     kind: LoadKind::U8, ..
                 })
                 | Some(Inst::LoadLocal {
-                    kind: LoadKind::U8, ..
+                    disp: 0,
+                    kind: LoadKind::U8,
+                    ..
                 })
                 | Some(Inst::LoadIndexed {
                     kind: LoadKind::U8, ..
@@ -1132,6 +1136,7 @@ impl SsaBuilder {
                     ..
                 })
                 | Some(Inst::LoadLocal {
+                    disp: 0,
                     kind: LoadKind::U16,
                     ..
                 })
@@ -1144,6 +1149,7 @@ impl SsaBuilder {
                     ..
                 })
                 | Some(Inst::LoadLocal {
+                    disp: 0,
                     kind: LoadKind::U32,
                     ..
                 })
@@ -2102,7 +2108,7 @@ mod tests {
         let load_count = func
             .insts
             .iter()
-            .filter(|i| matches!(i, Inst::LoadLocal { .. }))
+            .filter(|i| matches!(i, Inst::LoadLocal { disp: 0, .. }))
             .count();
         assert_eq!(load_count, 2, "two distinct LoadLocal insts (I32 + I64)");
     }
@@ -2126,7 +2132,7 @@ mod tests {
         let load_count = func
             .insts
             .iter()
-            .filter(|i| matches!(i, Inst::LoadLocal { .. }))
+            .filter(|i| matches!(i, Inst::LoadLocal { disp: 0, .. }))
             .count();
         assert_eq!(load_count, 2, "two loads of slot 2 separated by a store");
     }
@@ -2152,7 +2158,7 @@ mod tests {
         let load_count = func
             .insts
             .iter()
-            .filter(|i| matches!(i, Inst::LoadLocal { .. }))
+            .filter(|i| matches!(i, Inst::LoadLocal { disp: 0, .. }))
             .count();
         assert_eq!(
             load_count, 2,

@@ -34,10 +34,9 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movl	(%rax), %ecx
-               	movl	0x4(%rax), %eax
-               	leaq	(%rcx,%rax), %rdx
+               	movl	-0x8(%rbp), %eax
+               	movl	-0x4(%rbp), %ecx
+               	leaq	(%rax,%rcx), %rdx
                	cmpl	$0x5, %edx
                	je	<addr>
                	movl	$0x1, %eax
@@ -54,9 +53,8 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rax
-               	movl	(%rax), %ecx
-               	movl	0x4(%rax), %eax
+               	movl	-0x8(%rbp), %eax
+               	movl	-0x4(%rbp), %ecx
                	addq	%rcx, %rax
                	cmpl	$0x10, %eax
                	je	<addr>

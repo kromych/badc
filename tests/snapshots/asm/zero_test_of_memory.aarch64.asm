@@ -207,13 +207,13 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x38
                	mov	x1, #-0x80              // =-128
-               	strb	w1, [x0, #0x1]
+               	sturb	w1, [x29, #-0x37]
                	mov	x1, #-0x8000            // =-32768
-               	strh	w1, [x0, #0x6]
+               	sturh	w1, [x29, #-0x32]
                	mov	x1, #-0x80000000        // =-2147483648
-               	str	w1, [x0, #0x10]
+               	stur	w1, [x29, #-0x28]
                	mov	x1, #-0x8000000000000000 // =-9223372036854775808
-               	str	x1, [x0, #0x28]
+               	stur	x1, [x29, #-0x10]
                	bl	<addr>
                	cbz	w0, <addr>
                	sub	x0, x29, #0x38
@@ -247,11 +247,11 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0x38
                	mov	x1, #0x100              // =256
-               	strh	w1, [x0, #0x6]
+               	sturh	w1, [x29, #-0x32]
                	mov	x1, #0x10000            // =65536
-               	str	w1, [x0, #0x10]
+               	stur	w1, [x29, #-0x28]
                	mov	x1, #0x100000000        // =4294967296
-               	str	x1, [x0, #0x28]
+               	stur	x1, [x29, #-0x10]
                	bl	<addr>
                	cbz	w0, <addr>
                	sub	x0, x29, #0x38

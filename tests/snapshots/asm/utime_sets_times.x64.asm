@@ -39,8 +39,7 @@ Disassembly of section .text:
                	movq	$-0x1, %rax
                	leave
                	retq
-               	leaq	-0x90(%rbp), %rax
-               	movq	0x58(%rax), %rax
+               	movq	-0x38(%rbp), %rax
                	leave
                	retq
 

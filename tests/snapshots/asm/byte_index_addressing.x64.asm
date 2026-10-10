@@ -575,7 +575,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x0, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rdi
-               	movb	$0x3c, 0x1(%rdi)
+               	movb	$0x3c, -0x7(%rbp)
                	leaq	<rip>, %rax      # <addr>
                	movl	(%rax), %eax
                	leaq	0x1(%rax), %rsi

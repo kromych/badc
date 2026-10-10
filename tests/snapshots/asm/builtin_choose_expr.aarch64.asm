@@ -53,7 +53,7 @@ Disassembly of section .text:
                	ret
                	sub	x0, x29, #0xc0
                	mov	x1, #0x1                // =1
-               	strb	w1, [x0, #0x38]
+               	sturb	w1, [x29, #-0x88]
                	bl	<addr>
                	cmp	w0, #0x1
                	b.eq	<addr>

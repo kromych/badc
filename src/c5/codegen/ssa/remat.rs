@@ -505,6 +505,7 @@ mod tests {
 
     fn store_of(value: ValueId) -> Inst {
         Inst::StoreLocal {
+            disp: 0,
             off: -1,
             value,
             kind: StoreKind::I64,
@@ -755,7 +756,7 @@ mod tests {
             split_across_calls(&mut f, Target::LinuxAarch64);
             let new = imms(&f, 5);
             let stores: Vec<ValueId> = (0..f.insts.len() as ValueId)
-                .filter(|&i| matches!(f.insts[i as usize], Inst::StoreLocal { .. }))
+                .filter(|&i| matches!(f.insts[i as usize], Inst::StoreLocal { disp: 0, .. }))
                 .map(|i| stored(&f, i))
                 .collect();
             if call_in_b1 {

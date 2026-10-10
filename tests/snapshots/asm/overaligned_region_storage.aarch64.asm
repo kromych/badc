@@ -293,7 +293,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	stur	x0, [x29, #-0x10]
                	sub	x0, x29, #0x10
-               	str	x1, [x0, #0x8]
+               	stur	x1, [x29, #-0x8]
                	bl	<addr>
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
@@ -379,9 +379,9 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	w2, [x1, #0x4]
-               	str	x2, [x0]
+               	stur	x2, [x29, #-0x10]
                	ldr	w1, [x1, #0x8]
-               	str	x1, [x0, #0x8]
+               	stur	x1, [x29, #-0x8]
                	ldr	x1, [x0, #0x8]
                	ldr	x0, [x0]
                	bl	<addr>

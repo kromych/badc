@@ -19,11 +19,11 @@ Disassembly of section .text:
                	sub	sp, sp, #0x50
                	sub	x0, x29, #0x50
                	mov	x1, #0x2                // =2
-               	str	w1, [x0]
+               	stur	w1, [x29, #-0x50]
                	mov	x1, #0x1                // =1
-               	strb	w1, [x0, #0x4]
+               	sturb	w1, [x29, #-0x4c]
                	mov	x1, #0x9                // =9
-               	strb	w1, [x0, #0x7]
+               	sturb	w1, [x29, #-0x49]
                	add	x1, x0, #0x4
                	sub	x0, x1, x0
                	cmp	x0, #0x4

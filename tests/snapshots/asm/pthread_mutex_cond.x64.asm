@@ -158,12 +158,11 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x10(%rbp), %rax
-               	movq	(%rax), %rcx
-               	movq	(%rbx), %rdx
-               	subq	%rdx, %rcx
-               	imulq	$0x3e8, %rcx, %rcx      # imm = 0x3E8
-               	movq	0x8(%rax), %rax
+               	movq	-0x10(%rbp), %rax
+               	movq	(%rbx), %rcx
+               	subq	%rcx, %rax
+               	imulq	$0x3e8, %rax, %rcx      # imm = 0x3E8
+               	movq	-0x8(%rbp), %rax
                	movq	0x8(%rbx), %rdx
                	subq	%rdx, %rax
                	movabsq	$0x431bde82d7b634db, %rsi # imm = 0x431BDE82D7B634DB
@@ -194,17 +193,17 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movq	0x8(%rax), %rcx
-               	addq	$0x2faf080, %rcx        # imm = 0x2FAF080
-               	movq	%rcx, 0x8(%rax)
-               	cmpq	$0x3b9aca00, %rcx       # imm = 0x3B9ACA00
+               	movq	-0x8(%rbp), %rax
+               	addq	$0x2faf080, %rax        # imm = 0x2FAF080
+               	movq	%rax, -0x8(%rbp)
+               	cmpq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00
                	jl	<addr>
-               	movq	0x8(%rax), %rcx
-               	subq	$0x3b9aca00, %rcx       # imm = 0x3B9ACA00
-               	movq	%rcx, 0x8(%rax)
-               	movq	(%rax), %rcx
-               	incq	%rcx
-               	movq	%rcx, (%rax)
+               	movq	-0x8(%rbp), %rax
+               	subq	$0x3b9aca00, %rax       # imm = 0x3B9ACA00
+               	movq	%rax, -0x8(%rbp)
+               	movq	-0x10(%rbp), %rax
+               	incq	%rax
+               	movq	%rax, -0x10(%rbp)
                	leaq	<rip>, %rdi      # <addr>
                	xorl	%eax, %eax
                	callq	<addr>
@@ -696,7 +695,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x60(%rbp), %rdx
-               	movq	$0x3b9aca00, 0x8(%rdx)  # imm = 0x3B9ACA00
+               	movq	$0x3b9aca00, -0x58(%rbp) # imm = 0x3B9ACA00
                	leaq	<rip>, %rdi      # <addr>
                	leaq	<rip>, %rsi      # <addr>
                	xorl	%eax, %eax

@@ -38,8 +38,8 @@ Disassembly of section .text:
                	movq	%rdi, %rcx
                	andq	$0x7, %rcx
                	movq	%rdi, (%rax,%rcx,8)
-               	movq	(%rax), %rcx
-               	movq	0x38(%rax), %rax
+               	movq	-0x40(%rbp), %rax
+               	movq	-0x8(%rbp), %rcx
                	addq	%rcx, %rax
                	leave
                	retq
@@ -69,8 +69,8 @@ Disassembly of section .text:
                	movq	%rdi, %rcx
                	andq	$0x1f, %rcx
                	movq	%rdi, (%rax,%rcx,8)
-               	movq	(%rax), %rcx
-               	movq	0xf8(%rax), %rax
+               	movq	-0x100(%rbp), %rax
+               	movq	-0x8(%rbp), %rcx
                	addq	%rcx, %rax
                	leave
                	retq
@@ -107,8 +107,8 @@ Disassembly of section .text:
                	movq	%rdi, %rdx
                	subq	%rax, %rdx
                	movq	%rdi, (%rcx,%rdx,8)
-               	movq	(%rcx), %rax
-               	movq	0x100(%rcx), %rcx
+               	movq	-0x108(%rbp), %rax
+               	movq	-0x8(%rbp), %rcx
                	addq	%rcx, %rax
                	leave
                	retq
@@ -129,8 +129,8 @@ Disassembly of section .text:
                	movq	%rdi, %rcx
                	andq	$0x1ff, %rcx            # imm = 0x1FF
                	movq	%rdi, (%rax,%rcx,8)
-               	movq	(%rax), %rcx
-               	movq	0xff8(%rax), %rax
+               	movq	-0x1000(%rbp), %rax
+               	movq	-0x8(%rbp), %rcx
                	addq	%rcx, %rax
                	leave
                	retq
@@ -154,7 +154,7 @@ Disassembly of section .text:
                	movq	%rdi, %rcx
                	andq	$0x1fff, %rcx           # imm = 0x1FFF
                	movq	%rdi, (%rax,%rcx,8)
-               	movq	(%rax), %rcx
+               	movq	-0x10000(%rbp), %rcx
                	addq	$0xfff8, %rax           # imm = 0xFFF8
                	movq	(%rax), %rax
                	addq	%rcx, %rax
@@ -187,8 +187,8 @@ Disassembly of section .text:
                	movq	%rdi, %rdx
                	subq	%rax, %rdx
                	movl	%edi, (%rcx,%rdx,4)
-               	movl	(%rcx), %eax
-               	movl	0xff0(%rcx), %ecx
+               	movl	-0xff8(%rbp), %eax
+               	movl	-0x8(%rbp), %ecx
                	addq	%rcx, %rax
                	leave
                	retq

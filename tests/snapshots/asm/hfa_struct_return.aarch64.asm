@@ -98,12 +98,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	s0, [x0]
-               	ldr	s1, [x0, #0x4]
+               	ldur	s0, [x29, #-0x10]
+               	ldur	s1, [x29, #-0xc]
                	fadd	s0, s0, s1
-               	ldr	s1, [x0, #0x8]
+               	ldur	s1, [x29, #-0x8]
                	fadd	s0, s0, s1
-               	ldr	s1, [x0, #0xc]
+               	ldur	s1, [x29, #-0x4]
                	fadd	s0, s0, s1
                	fmov	s1, #10.00000000
                	fcmp	s0, s1

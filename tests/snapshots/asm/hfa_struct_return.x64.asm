@@ -168,13 +168,12 @@ Disassembly of section .text:
                	popq	%r12
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	movss	(%rax), %xmm0
-               	movss	0x4(%rax), %xmm1
+               	movss	-0x10(%rbp), %xmm0
+               	movss	-0xc(%rbp), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	0x8(%rax), %xmm1
+               	movss	-0x8(%rbp), %xmm1
                	addss	%xmm1, %xmm0
-               	movss	0xc(%rax), %xmm1
+               	movss	-0x4(%rbp), %xmm1
                	addss	%xmm1, %xmm0
                	movl	$0x41200000, %eax       # imm = 0x41200000
                	movq	%rax, %xmm15

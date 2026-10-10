@@ -35,9 +35,9 @@ Disassembly of section .text:
                	stp	x16, x17, [x1]
                	b	<addr>
                	sub	x0, x29, #0x10
-               	ldr	x1, [x0]
+               	ldur	x1, [x29, #-0x10]
                	add	x1, x1, #0x1
-               	str	x1, [x0]
+               	stur	x1, [x29, #-0x10]
                	ldr	x1, [x0]
                	ldr	x0, [x0, #0x8]
                	cmp	x1, #0xa
@@ -65,9 +65,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x10
-               	ldr	x1, [x0, #0x8]
+               	ldur	x1, [x29, #-0x8]
                	add	x1, x1, #0x2
-               	str	x1, [x0, #0x8]
+               	stur	x1, [x29, #-0x8]
                	b	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10

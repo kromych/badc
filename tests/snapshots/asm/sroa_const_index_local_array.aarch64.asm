@@ -61,21 +61,21 @@ Disassembly of section .text:
                	sub	sp, sp, #0x40
                	sub	x0, x29, #0x40
                	mov	x1, #0x7                // =7
-               	str	x1, [x0]
+               	stur	x1, [x29, #-0x40]
                	mov	x1, #0x1118             // =4376
-               	str	x1, [x0, #0x8]
+               	stur	x1, [x29, #-0x38]
                	mov	x1, #0x2229             // =8745
-               	str	x1, [x0, #0x10]
+               	stur	x1, [x29, #-0x30]
                	mov	x1, #0x333a             // =13114
-               	str	x1, [x0, #0x18]
+               	stur	x1, [x29, #-0x28]
                	mov	x1, #0x444b             // =17483
-               	str	x1, [x0, #0x20]
+               	stur	x1, [x29, #-0x20]
                	mov	x1, #0x555c             // =21852
-               	str	x1, [x0, #0x28]
+               	stur	x1, [x29, #-0x18]
                	mov	x1, #0x666d             // =26221
-               	str	x1, [x0, #0x30]
+               	stur	x1, [x29, #-0x10]
                	mov	x1, #0x777e             // =30590
-               	str	x1, [x0, #0x38]
+               	stur	x1, [x29, #-0x8]
                	mov	x1, #0x5                // =5
                	bl	<addr>
                	mov	x17, #0xbf84            // =49028

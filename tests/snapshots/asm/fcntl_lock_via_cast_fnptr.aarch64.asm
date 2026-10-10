@@ -43,22 +43,22 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x2, x29, #0x60
                	mov	x0, #0x1                // =1
-               	strh	w0, [x2]
-               	strh	wzr, [x2, #0x2]
+               	sturh	w0, [x29, #-0x60]
+               	sturh	wzr, [x29, #-0x5e]
                	mov	x1, #0x6                // =6
                	mov	x0, x20
                	bl	<addr>
                	mov	x21, x0
                	sub	x2, x29, #0x60
                	mov	x0, #0x2                // =2
-               	strh	w0, [x2]
+               	sturh	w0, [x29, #-0x60]
                	mov	x1, #0x6                // =6
                	mov	x0, x20
                	bl	<addr>
                	mov	x22, x0
                	sub	x2, x29, #0x60
                	mov	x0, #0x1                // =1
-               	strh	w0, [x2]
+               	sturh	w0, [x29, #-0x60]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x3, [x0]

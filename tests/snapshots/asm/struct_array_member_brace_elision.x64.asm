@@ -248,38 +248,36 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	leaq	-0x18(%rbp), %rdx
-               	movl	$0x3f800000, %esi       # imm = 0x3F800000
-               	movl	$0x40000000, %r10d      # imm = 0x40000000
-               	movq	%r10, 0x58(%rsp)
+               	movl	$0x3f800000, %edx       # imm = 0x3F800000
+               	movl	$0x40000000, %esi       # imm = 0x40000000
                	movl	$0x40400000, %r10d      # imm = 0x40400000
-               	movq	%r10, 0x50(%rsp)
+               	movq	%r10, 0x58(%rsp)
                	movl	$0x40800000, %r10d      # imm = 0x40800000
-               	movq	%r10, 0x48(%rsp)
+               	movq	%r10, 0x50(%rsp)
                	movl	$0x40a00000, %r10d      # imm = 0x40A00000
-               	movq	%r10, 0x40(%rsp)
-               	movss	(%rdx), %xmm1
+               	movq	%r10, 0x48(%rsp)
+               	movss	-0x18(%rbp), %xmm1
+               	movq	%rdx, %xmm15
+               	ucomiss	%xmm15, %xmm1
+               	jp	<addr>
+               	jne	<addr>
+               	movss	-0x14(%rbp), %xmm1
                	movq	%rsi, %xmm15
                	ucomiss	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movss	0x4(%rdx), %xmm1
+               	movss	-0x10(%rbp), %xmm1
                	movsd	0x58(%rsp), %xmm15
                	ucomiss	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movss	0x8(%rdx), %xmm1
+               	movss	-0xc(%rbp), %xmm1
                	movsd	0x50(%rsp), %xmm15
                	ucomiss	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
-               	movss	0xc(%rdx), %xmm1
+               	movss	-0x8(%rbp), %xmm1
                	movsd	0x48(%rsp), %xmm15
-               	ucomiss	%xmm15, %xmm1
-               	jp	<addr>
-               	jne	<addr>
-               	movss	0x10(%rdx), %xmm1
-               	movsd	0x40(%rsp), %xmm15
                	ucomiss	%xmm15, %xmm1
                	jp	<addr>
                	je	<addr>

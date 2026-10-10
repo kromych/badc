@@ -20,40 +20,40 @@ Disassembly of section .text:
                	mov	x16, sp
                	and	sp, x16, #0xffffffffffffffc0
                	mov	x0, sp
-               	and	x2, x0, #0x3f
+               	and	x0, x0, #0x3f
                	add	x1, sp, #0x60
-               	and	x3, x1, #0x1f
-               	orr	x4, x2, x3
-               	add	x3, sp, #0x40
-               	and	x3, x3, #0x3f
-               	orr	x5, x4, x3
-               	add	x4, sp, #0x80
-               	and	x6, x4, #0x1f
-               	orr	x5, x5, x6
-               	cbz	w5, <addr>
+               	and	x1, x1, #0x1f
+               	orr	x2, x0, x1
+               	add	x1, sp, #0x40
+               	and	x1, x1, #0x3f
+               	orr	x2, x2, x1
+               	add	x3, sp, #0x80
+               	and	x3, x3, #0x1f
+               	orr	x2, x2, x3
+               	cbz	w2, <addr>
                	mov	x0, #0x1                // =1
                	sub	sp, x29, #0x0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x5, #0xb                // =11
-               	strb	w5, [x0]
-               	mov	x5, #0x16               // =22
-               	str	w5, [x1, #0xc]
-               	mov	x5, #0x21               // =33
-               	str	x5, [sp, #0x40]
-               	mov	x5, #0x2c               // =44
-               	str	w5, [x4]
-               	ldrb	w0, [x0]
+               	mov	x2, #0xb                // =11
+               	strb	w2, [sp]
+               	mov	x2, #0x16               // =22
+               	str	w2, [sp, #0x6c]
+               	mov	x2, #0x21               // =33
+               	str	x2, [sp, #0x40]
+               	mov	x2, #0x2c               // =44
+               	str	w2, [sp, #0x80]
+               	ldrb	w2, [sp]
                	mov	x17, #0xb               // =11
-               	eor	x0, x0, x17
-               	cbnz	w0, <addr>
-               	ldrsw	x0, [x1, #0xc]
-               	cmp	w0, #0x16
+               	eor	x2, x2, x17
+               	cbnz	w2, <addr>
+               	ldrsw	x2, [sp, #0x6c]
+               	cmp	w2, #0x16
                	b.ne	<addr>
-               	ldr	x0, [sp, #0x40]
-               	cmp	x0, #0x21
+               	ldr	x2, [sp, #0x40]
+               	cmp	x2, #0x21
                	b.ne	<addr>
-               	orr	x0, x2, x3
+               	orr	x0, x0, x1
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	sub	sp, x29, #0x0

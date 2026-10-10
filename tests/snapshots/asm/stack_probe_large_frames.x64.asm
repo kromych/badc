@@ -2305,10 +2305,10 @@ Disassembly of section .text:
                	movq	0x2340(%rbp), %r10
                	movq	%r10, -0x8(%rbp)
                	leaq	-0x2338(%rbp), %rax
-               	movq	(%rax), %rcx
-               	movq	0x2330(%rax), %rdx
+               	movq	-0x2338(%rbp), %rcx
+               	movq	-0x8(%rbp), %rdx
                	addq	%rdx, %rcx
-               	movsbq	0x8(%rax), %rdx
+               	movsbq	-0x2330(%rbp), %rdx
                	addq	%rdx, %rcx
                	addq	$0x232f, %rax           # imm = 0x232F
                	movsbq	(%rax), %rax
@@ -2362,9 +2362,9 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x2338(%rbp), %r9
-               	movq	$0x4, (%r9)
-               	movq	$0x5, 0x2330(%r9)
-               	movb	$0x6, 0x8(%r9)
+               	movq	$0x4, -0x2338(%rbp)
+               	movq	$0x5, -0x8(%rbp)
+               	movb	$0x6, -0x2330(%rbp)
                	leaq	0x232f(%r9), %rax
                	movb	$0x7, (%rax)
                	subq	$0x1000, %rsp           # imm = 0x1000

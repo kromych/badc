@@ -32,20 +32,20 @@ fn ent_pc=18 n_params=0 variadic=false locals=4
     terminator Return(v19)   (exit_acc=v19)
   block 4  start_pc=0
     v20  Imm(42)                                          -> x0
-    v21  Imm(42)                                          -> x1
-    v22  LocalAddr(-4)                                    -> x0
+    v21  Imm(42)                                          -> x0
+    v22  LocalAddr(-4)                                    -> x1
     v23  Mzero { dst=v22, size=16, align=8 }              -> -
-    v24  LocalAddr(-4)                                    -> x2
-    v25  Store { addr=v22, disp=0, value=v21, kind=I32 }  -> -
-    v26  LocalAddr(-4)                                    -> x2
-    v27  BinopI { op=add, lhs=v22, rhs_imm=4 }            -> x2
-    v28  Store { addr=v22, disp=4, value=v21, kind=I32 }  -> -
-    v29  LocalAddr(-4)                                    -> x2
-    v30  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x2
-    v31  Store { addr=v22, disp=8, value=v21, kind=I32 }  -> -
-    v32  LocalAddr(-4)                                    -> x2
-    v33  BinopI { op=add, lhs=v22, rhs_imm=12 }           -> x2
-    v34  Store { addr=v22, disp=12, value=v21, kind=I32 } -> -
+    v24  LocalAddr(-4)                                    -> x1
+    v25  StoreLocal { off=-4, value=v21, kind=I32 }       -> -
+    v26  LocalAddr(-4)                                    -> x1
+    v27  BinopI { op=add, lhs=v22, rhs_imm=4 }            -> x1
+    v28  StoreLocal { off=-4, disp=4, value=v21, kind=I32 } -> -
+    v29  LocalAddr(-4)                                    -> x1
+    v30  BinopI { op=add, lhs=v22, rhs_imm=8 }            -> x1
+    v31  StoreLocal { off=-4, disp=8, value=v21, kind=I32 } -> -
+    v32  LocalAddr(-4)                                    -> x1
+    v33  BinopI { op=add, lhs=v22, rhs_imm=12 }           -> x1
+    v34  StoreLocal { off=-4, disp=12, value=v21, kind=I32 } -> -
     v35  LocalAddr(-2)                                    -> x0
     v36  LocalAddr(-4)                                    -> x0
     v37  InlineAsm { template="movdqu %1, %%xmm0\n\tmovdqu %%xmm0, %0", ops=2, args=[v35, v22] } -> -
@@ -123,8 +123,8 @@ fn ent_pc=18 n_params=0 variadic=false locals=4
     v98  InlineAsm { template="movdqa %1, %%xmm7\n\tpaddd %2, %%xmm7\n\tmovdqa %%xmm7, %0", ops=3, args=[-, v90, v93] } -> d0
     v99  StoreLocal { off=-76, value=v98, kind=V128 }     -> -
     v100 LocalAddr(-76)                                   -> x0
-    v101 BinopI { op=add, lhs=v100, rhs_imm=12 }          -> x1
-    v102 Load { addr=v100, disp=12, kind=I32 }            -> x0
+    v101 BinopI { op=add, lhs=v100, rhs_imm=12 }          -> x0
+    v102 LoadLocal { off=-76, disp=12, kind=I32 }         -> x0
     v103 Extend { value=v102, kind=I32 }                  -> x1
     v104 Extend { value=v102, kind=I32 }                  -> x1
     v105 LifetimeEnd(-76)                                 -> -
@@ -161,8 +161,8 @@ fn ent_pc=18 n_params=0 variadic=false locals=4
     v129 InlineAsm { template="vpaddd %2, %1, %0", ops=3, args=[-, v121, v124] } -> d0
     v130 StoreLocal { off=-79, value=v129, kind=V128 }    -> -
     v131 LocalAddr(-79)                                   -> x0
-    v132 BinopI { op=add, lhs=v131, rhs_imm=12 }          -> x1
-    v133 Load { addr=v131, disp=12, kind=I32 }            -> x0
+    v132 BinopI { op=add, lhs=v131, rhs_imm=12 }          -> x0
+    v133 LoadLocal { off=-79, disp=12, kind=I32 }         -> x0
     v134 LifetimeEnd(-77)                                 -> -
     v135 LifetimeEnd(-78)                                 -> -
     v136 LifetimeEnd(-79)                                 -> -
@@ -200,17 +200,17 @@ fn ent_pc=18 n_params=0 variadic=false locals=4
     v161 InlineAsm { template="vpaddd %2, %1, %0", ops=3, args=[-, v156, v160] } -> d0
     v162 StoreLocal { off=-81, value=v161, kind=V128 }    -> -
     v163 LocalAddr(-2)                                    -> x0
-    v164 Load { addr=v163, disp=0, kind=I32 }             -> x1
-    v165 LocalAddr(-2)                                    -> x2
-    v166 BinopI { op=add, lhs=v163, rhs_imm=12 }          -> x2
-    v167 Load { addr=v163, disp=12, kind=I32 }            -> x0
+    v164 LoadLocal { off=-2, kind=I32 }                   -> x0
+    v165 LocalAddr(-2)                                    -> x1
+    v166 BinopI { op=add, lhs=v163, rhs_imm=12 }          -> x1
+    v167 LoadLocal { off=-2, disp=12, kind=I32 }          -> x1
     v168 Binop { op=add, lhs=v164, rhs=v167 }             -> x0
     v169 Extend { value=v168, kind=I32, nsw }             -> x1
     v170 BinopI { op=sub, lhs=v168, rhs_imm=42 }          -> x0
     v171 Extend { value=v170, kind=I32, nsw }             -> x1
     v172 LocalAddr(-81)                                   -> x1
-    v173 BinopI { op=add, lhs=v172, rhs_imm=12 }          -> x2
-    v174 Load { addr=v172, disp=12, kind=I32 }            -> x1
+    v173 BinopI { op=add, lhs=v172, rhs_imm=12 }          -> x1
+    v174 LoadLocal { off=-81, disp=12, kind=I32 }         -> x1
     v175 Binop { op=add, lhs=v170, rhs=v174 }             -> x0
     v176 Extend { value=v175, kind=I32, nsw }             -> x1
     v177 LifetimeEnd(-2)                                  -> -
@@ -308,8 +308,8 @@ fn ent_pc=18 n_params=0 variadic=false locals=4
     v246 InlineAsm { template="cvtdq2ps %1, %%xmm0\n\tcvtdq2ps %2, %%xmm1\n\tcvtdq2ps %3, %%xmm2\n\tvfmadd231ps %%xmm0, %%xmm1, %%xmm2\n\tcvtps2dq %%xmm2, %0", ops=4, args=[-, v234, v237, v240] } -> d3
     v247 StoreLocal { off=-88, value=v246, kind=V128 }    -> -
     v248 LocalAddr(-88)                                   -> x0
-    v249 BinopI { op=add, lhs=v248, rhs_imm=12 }          -> x1
-    v250 Load { addr=v248, disp=12, kind=I32 }            -> x0
+    v249 BinopI { op=add, lhs=v248, rhs_imm=12 }          -> x0
+    v250 LoadLocal { off=-88, disp=12, kind=I32 }         -> x0
     v251 LifetimeEnd(-85)                                 -> -
     v252 LifetimeEnd(-86)                                 -> -
     v253 LifetimeEnd(-87)                                 -> -
@@ -355,8 +355,8 @@ fn ent_pc=18 n_params=0 variadic=false locals=4
     v277 InlineAsm { template="movd %1, %%xmm0\n\tvpbroadcastd %%xmm0, %%xmm1\n\tvpaddd %%xmm1, %%xmm1, %0", ops=2, args=[-, v276] } -> d2
     v278 StoreLocal { off=-89, value=v277, kind=V128 }    -> -
     v279 LocalAddr(-89)                                   -> x0
-    v280 BinopI { op=add, lhs=v279, rhs_imm=8 }           -> x1
-    v281 Load { addr=v279, disp=8, kind=I32 }             -> x0
+    v280 BinopI { op=add, lhs=v279, rhs_imm=8 }           -> x0
+    v281 LoadLocal { off=-89, disp=8, kind=I32 }          -> x0
     v282 LifetimeEnd(-89)                                 -> -
     v283 Imm(0)                                           -> x1
     v284 Extend { value=v281, kind=I32 }                  -> x1
@@ -406,8 +406,8 @@ fn ent_pc=18 n_params=0 variadic=false locals=4
     v312 InlineAsm { template="vpsllvd %2, %1, %0", ops=3, args=[-, v304, v307] } -> d0
     v313 StoreLocal { off=-92, value=v312, kind=V128 }    -> -
     v314 LocalAddr(-92)                                   -> x0
-    v315 BinopI { op=add, lhs=v314, rhs_imm=12 }          -> x1
-    v316 Load { addr=v314, disp=12, kind=I32 }            -> x0
+    v315 BinopI { op=add, lhs=v314, rhs_imm=12 }          -> x0
+    v316 LoadLocal { off=-92, disp=12, kind=I32 }         -> x0
     v317 LifetimeEnd(-90)                                 -> -
     v318 LifetimeEnd(-91)                                 -> -
     v319 LifetimeEnd(-92)                                 -> -
@@ -459,10 +459,10 @@ fn ent_pc=18 n_params=0 variadic=false locals=4
     v349 InlineAsm { template="vpblendd $0x8, %2, %1, %0", ops=3, args=[-, v341, v344] } -> d0
     v350 StoreLocal { off=-95, value=v349, kind=V128 }    -> -
     v351 LocalAddr(-95)                                   -> x0
-    v352 BinopI { op=add, lhs=v351, rhs_imm=12 }          -> x1
-    v353 Load { addr=v351, disp=12, kind=I32 }            -> x1
-    v354 LocalAddr(-95)                                   -> x2
-    v355 Load { addr=v351, disp=0, kind=I32 }             -> x0
+    v352 BinopI { op=add, lhs=v351, rhs_imm=12 }          -> x0
+    v353 LoadLocal { off=-95, disp=12, kind=I32 }         -> x0
+    v354 LocalAddr(-95)                                   -> x1
+    v355 LoadLocal { off=-95, kind=I32 }                  -> x1
     v356 Binop { op=add, lhs=v353, rhs=v355 }             -> x0
     v357 Extend { value=v356, kind=I32, nsw }             -> x1
     v358 BinopI { op=sub, lhs=v356, rhs_imm=1 }           -> x0

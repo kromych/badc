@@ -119,7 +119,7 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	movq	0x10(%rdx), %r10
                	movq	%r10, 0x10(%rax)
-               	movsd	(%rax), %xmm0
+               	movsd	-0x18(%rbp), %xmm0
                	movq	%rcx, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
@@ -129,7 +129,7 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	movq	0x10(%rcx), %r10
                	movq	%r10, 0x10(%rax)
-               	movsd	(%rax), %xmm0
+               	movsd	-0x18(%rbp), %xmm0
                	movabsq	$0x4018000000000000, %rax # imm = 0x4018000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

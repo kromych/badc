@@ -235,7 +235,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v179 ImmData(8)                                       -> x2
     v180 Mcpy { dst=v178, src=v179, size=24, align=8 }    -> -
     v181 LocalAddr(-3)                                    -> x2
-    v182 Load { addr=v178, disp=0, kind=F64 }             -> d0
+    v182 LoadLocal { off=-3, kind=F64 }                   -> d0
     v183 Imm(4613937818241073152)                         -> x2
     v184 Binop { op=fne, lhs=v182, rhs=v145 }             -> x1
     v185 Imm(0)                                           -> x2
@@ -251,8 +251,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=3
     v193 LocalAddr(-3)                                    -> x1
     v194 ImmData(32)                                      -> x1
     v195 Mcpy { dst=v178, src=v194, size=24, align=8 }    -> -
-    v196 LocalAddr(-3)                                    -> x1
-    v197 Load { addr=v178, disp=0, kind=F64 }             -> d0
+    v196 LocalAddr(-3)                                    -> x0
+    v197 LoadLocal { off=-3, kind=F64 }                   -> d0
     v198 Imm(4618441417868443648)                         -> x0
     v199 Binop { op=fne, lhs=v197, rhs=v198 }             -> x0
     v200 Imm(0)                                           -> x1

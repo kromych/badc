@@ -150,21 +150,25 @@ fn fmt_inst(inst: &Inst) -> String {
         ),
         LoadLocal {
             off,
+            disp,
             kind,
             volatile,
         } => format!(
-            "LoadLocal {{ off={off}, kind={}{} }}",
+            "LoadLocal {{ off={off}{}, kind={}{} }}",
+            fmt_disp(*disp),
             fmt_load_kind(*kind),
             fmt_volatile(*volatile),
         ),
         StoreLocal {
             off,
+            disp,
             value,
             kind,
             volatile,
             ..
         } => format!(
-            "StoreLocal {{ off={off}, value=v{value}, kind={}{} }}",
+            "StoreLocal {{ off={off}{}, value=v{value}, kind={}{} }}",
+            fmt_disp(*disp),
             fmt_store_kind(*kind),
             fmt_volatile(*volatile),
         ),
@@ -422,6 +426,15 @@ fn fmt_place(p: Place) -> String {
 /// Rendered only when set so non-volatile dumps are unchanged.
 fn fmt_volatile(v: bool) -> &'static str {
     if v { ", volatile" } else { "" }
+}
+
+/// `, disp=N` for a nonzero displacement; a zero one prints nothing.
+fn fmt_disp(disp: i32) -> alloc::string::String {
+    if disp != 0 {
+        alloc::format!(", disp={disp}")
+    } else {
+        alloc::string::String::new()
+    }
 }
 
 /// ` abs` for a base carried as the access's absolute displacement.

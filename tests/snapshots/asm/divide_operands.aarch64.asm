@@ -546,21 +546,19 @@ Disassembly of section .text:
                	ldr	x0, [x1]
                	orr	x4, x3, x0
                	sub	x0, x29, #0x30
-               	str	x4, [x0]
-               	str	x2, [x0, #0x8]
+               	stur	x4, [x29, #-0x30]
+               	stur	x2, [x29, #-0x28]
                	ldr	x1, [x1, #0x8]
                	sub	x2, x29, #0x10
-               	str	x1, [x2]
-               	str	x3, [x2, #0x8]
+               	stur	x1, [x29, #-0x10]
+               	stur	x3, [x29, #-0x8]
                	ldr	x1, [x0, #0x8]
                	ldr	x0, [x0]
                	ldr	x3, [x2, #0x8]
                	ldr	x2, [x2]
                	bl	<addr>
                	stur	x0, [x29, #-0x20]
-               	sub	x0, x29, #0x20
-               	str	x1, [x0, #0x8]
-               	ldr	x0, [x0]
+               	stur	x1, [x29, #-0x18]
                	eor	x0, x0, #0x5555555555555555
                	eor	x1, x1, #0x5555555555555555
                	orr	x0, x0, x1
@@ -573,9 +571,7 @@ Disassembly of section .text:
                	ldr	x2, [x2]
                	bl	<addr>
                	stur	x0, [x29, #-0x20]
-               	sub	x0, x29, #0x20
-               	str	x1, [x0, #0x8]
-               	ldr	x0, [x0]
+               	stur	x1, [x29, #-0x18]
                	eor	x0, x0, #0x1
                	orr	x0, x0, x1
                	cbz	x0, <addr>

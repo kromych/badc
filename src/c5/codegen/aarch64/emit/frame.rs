@@ -261,8 +261,8 @@ fn local_base_wins(
                 continue;
             }
             match inst {
-                Inst::LoadLocal { off, .. } | Inst::StoreLocal { off, .. }
-                    if *off < 0 && far(*off * 8 - i64::from(canary_bytes)) =>
+                Inst::LoadLocal { off, disp, .. } | Inst::StoreLocal { off, disp, .. }
+                    if *off < 0 && far(*off * 8 + i64::from(*disp) - i64::from(canary_bytes)) =>
                 {
                     wins += 1;
                 }

@@ -25,11 +25,11 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
-               	str	x1, [x0]
+               	stur	x1, [x29, #-0x30]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
-               	str	x1, [x0, #0x8]
+               	stur	x1, [x29, #-0x28]
                	bl	<addr>
                	mov	x17, #0x2222            // =8738
                	cmp	x0, x17
@@ -44,13 +44,13 @@ Disassembly of section .text:
                	ldr	x1, [x1]
                	mov	x17, #0x5               // =5
                	mul	x1, x1, x17
-               	str	x1, [x0, #0x10]
+               	stur	x1, [x29, #-0x10]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x1, [x1]
                	mov	x17, #0x3               // =3
                	mul	x1, x1, x17
-               	str	x1, [x0, #0x18]
+               	stur	x1, [x29, #-0x8]
                	add	x0, x0, #0x10
                	bl	<addr>
                	mov	x17, #0x3333            // =13107

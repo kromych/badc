@@ -104,22 +104,22 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x18
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	str	x1, [x0]
+               	sub	x1, x29, #0x18
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	stur	x0, [x29, #-0x18]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	str	x2, [x0, #0x8]
-               	str	x1, [x0, #0x10]
-               	add	x1, x0, #0x10
-               	cmp	x1, x1
+               	stur	x2, [x29, #-0x10]
+               	stur	x0, [x29, #-0x8]
+               	add	x0, x1, #0x10
+               	cmp	x0, x0
                	b.eq	<addr>
                	mov	x0, #0x10               // =16
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x2, x1, x0
+               	sub	x2, x0, x1
                	asr	x3, x2, #63
                	lsr	x3, x3, #61
                	add	x2, x2, x3
@@ -130,21 +130,21 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x2, x0, #0x8
-               	cmp	x2, x2
+               	add	x1, x1, #0x8
+               	cmp	x1, x1
                	b.eq	<addr>
                	mov	x0, #0x12               // =18
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x2, x2, #0x8
-               	cmp	x2, x1
+               	add	x1, x1, #0x8
+               	cmp	x1, x0
                	b.eq	<addr>
                	mov	x0, #0x13               // =19
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x5, [x0, #0x8]
+               	ldur	x5, [x29, #-0x10]
                	mov	x0, #0x2                // =2
                	mov	x1, #0x3                // =3
                	mov	x2, #0x4                // =4

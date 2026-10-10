@@ -47,18 +47,18 @@ Disassembly of section .text:
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movups	%xmm14, 0x10(%rax)
-               	movl	$0x1, (%rax)
-               	movq	%rbx, 0x8(%rax)
-               	movq	%r12, 0x10(%rax)
-               	movl	$0x7, 0x18(%rax)
+               	movl	$0x1, -0x40(%rbp)
+               	movq	%rbx, -0x38(%rbp)
+               	movq	%r12, -0x30(%rbp)
+               	movl	$0x7, -0x28(%rbp)
                	leaq	-0x20(%rbp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movups	%xmm14, 0x10(%rax)
-               	movl	$0x2, (%rax)
-               	movq	%rbx, 0x8(%rax)
-               	movq	%r12, 0x10(%rax)
-               	movl	$0x8, 0x18(%rax)
+               	movl	$0x2, -0x20(%rbp)
+               	movq	%rbx, -0x18(%rbp)
+               	movq	%r12, -0x10(%rbp)
+               	movl	$0x8, -0x8(%rbp)
                	leaq	-0x40(%rbp), %rdi
                	callq	<addr>
                	movq	%rax, %r13
@@ -131,8 +131,8 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
-               	movl	$0x3, (%rdi)
-               	movq	%rbx, 0x8(%rdi)
+               	movl	$0x3, -0x20(%rbp)
+               	movq	%rbx, -0x18(%rbp)
                	callq	<addr>
                	movl	(%rax), %ecx
                	cmpl	$0x3, %ecx
@@ -154,12 +154,12 @@ Disassembly of section .text:
                	movups	%xmm14, (%rax)
                	movups	%xmm14, 0x10(%rax)
                	movq	$0x0, 0x20(%rax)
-               	movl	$0x9, (%rax)
-               	movl	$0x4, 0x8(%rax)
-               	movq	%rbx, 0x10(%rax)
-               	movq	%r12, 0x18(%rax)
+               	movl	$0x9, -0x38(%rbp)
+               	movl	$0x4, -0x30(%rbp)
+               	movq	%rbx, -0x28(%rbp)
+               	movq	%r12, -0x20(%rbp)
                	leaq	-0x38(%rbp), %rdi
-               	movl	$0x5, 0x20(%rdi)
+               	movl	$0x5, -0x18(%rbp)
                	callq	<addr>
                	movl	(%rax), %ecx
                	cmpl	$0x9, %ecx

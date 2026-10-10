@@ -1218,6 +1218,7 @@ fn split_objects(
                 } else {
                     *inst = Inst::StoreLocal {
                         off: slot,
+                        disp: 0,
                         value,
                         kind,
                         volatile: false,
@@ -1228,6 +1229,7 @@ fn split_objects(
         } else if let Inst::Load { kind, .. } = *inst {
             *inst = Inst::LoadLocal {
                 off: slot,
+                disp: 0,
                 kind,
                 volatile: false,
             };
@@ -1474,6 +1476,7 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
                     if let Some((slot, kind)) = e.mirror {
                         new_insts.push(Inst::StoreLocal {
                             off: slot,
+                            disp: 0,
                             value: kept_value,
                             kind,
                             volatile: false,
@@ -1497,6 +1500,7 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
                         });
                         new_insts.push(Inst::StoreLocal {
                             off: c.slot,
+                            disp: 0,
                             value: loaded,
                             kind: c.store,
                             volatile: false,
@@ -1511,6 +1515,7 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
                         let loaded = new_insts.len() as ValueId;
                         new_insts.push(Inst::LoadLocal {
                             off: c.slot,
+                            disp: 0,
                             kind: c.load,
                             volatile: false,
                         });
@@ -1812,9 +1817,14 @@ mod tests {
         let promoted = run(&mut f, 64);
         assert_eq!(promoted, alloc::vec![-2], "the array's base slot promotes");
         assert!(
-            !f.insts
-                .iter()
-                .any(|i| matches!(i, Inst::StoreLocal { off: -2 | -1, .. })),
+            !f.insts.iter().any(|i| matches!(
+                i,
+                Inst::StoreLocal {
+                    disp: 0,
+                    off: -2 | -1,
+                    ..
+                }
+            )),
             "promoted stores are neutralised"
         );
     }
@@ -1829,10 +1839,38 @@ mod tests {
             (-2, alloc::vec![-2, -1])
         );
         // Store/Load rewritten to per-element slots (-2 for a[0], -1 for a[1]).
-        assert!(matches!(f.insts[2], Inst::StoreLocal { off: -2, .. }));
-        assert!(matches!(f.insts[6], Inst::StoreLocal { off: -1, .. }));
-        assert!(matches!(f.insts[8], Inst::LoadLocal { off: -2, .. }));
-        assert!(matches!(f.insts[11], Inst::LoadLocal { off: -1, .. }));
+        assert!(matches!(
+            f.insts[2],
+            Inst::StoreLocal {
+                disp: 0,
+                off: -2,
+                ..
+            }
+        ));
+        assert!(matches!(
+            f.insts[6],
+            Inst::StoreLocal {
+                disp: 0,
+                off: -1,
+                ..
+            }
+        ));
+        assert!(matches!(
+            f.insts[8],
+            Inst::LoadLocal {
+                disp: 0,
+                off: -2,
+                ..
+            }
+        ));
+        assert!(matches!(
+            f.insts[11],
+            Inst::LoadLocal {
+                disp: 0,
+                off: -1,
+                ..
+            }
+        ));
         // Base-address instructions (LocalAddr + Add) neutralised.
         for id in [1usize, 4, 5, 7, 9, 10] {
             assert!(
@@ -2052,7 +2090,7 @@ mod tests {
         assert!(promoted.is_empty(), "one field stays in the frame");
         assert!(
             matches!(f.insts[0], Inst::Imm(0))
-                && matches!(f.insts[2], Inst::LoadLocal { off, .. } if off < -4),
+                && matches!(f.insts[2], Inst::LoadLocal { disp: 0,  off, .. } if off < -4),
             "the object gives up its storage and the stranded field reads its slot: {:?}",
             f.insts
         );
@@ -2072,8 +2110,21 @@ mod tests {
         let promoted = run(&mut f, 64);
         assert!(promoted.is_empty(), "nothing is lifted");
         assert!(
-            matches!(f.insts[1], Inst::LoadLocal { off: -2, .. })
-                && matches!(f.insts[3], Inst::StoreLocal { off: -2, .. }),
+            matches!(
+                f.insts[1],
+                Inst::LoadLocal {
+                    disp: 0,
+                    off: -2,
+                    ..
+                }
+            ) && matches!(
+                f.insts[3],
+                Inst::StoreLocal {
+                    disp: 0,
+                    off: -2,
+                    ..
+                }
+            ),
             "the field reads and writes its cell: {:?}",
             f.insts
         );
@@ -2145,6 +2196,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(1),
             Inst::LoadLocal {
+                disp: 0,
                 off: 2,
                 kind: LoadKind::I64,
                 volatile: false,
@@ -2189,6 +2241,7 @@ mod tests {
         assert!(matches!(
             f.insts[2],
             Inst::StoreLocal {
+                disp: 0,
                 off: -4,
                 kind: StoreKind::I32,
                 ..
@@ -2197,6 +2250,7 @@ mod tests {
         assert!(matches!(
             f.insts[4],
             Inst::LoadLocal {
+                disp: 0,
                 off: -4,
                 kind: LoadKind::U32,
                 ..
@@ -2257,7 +2311,7 @@ mod tests {
         assert!(
             !f.insts
                 .iter()
-                .any(|i| matches!(i, Inst::Store { .. } | Inst::StoreLocal { .. })),
+                .any(|i| matches!(i, Inst::Store { .. } | Inst::StoreLocal { disp: 0, .. })),
             "no member store survives: {:?}",
             f.insts
         );
@@ -2420,6 +2474,7 @@ mod tests {
             f.insts.iter().any(|i| matches!(
                 i,
                 Inst::StoreLocal {
+                    disp: 0,
                     value: 0,
                     kind: StoreKind::I64,
                     ..
@@ -2460,7 +2515,7 @@ mod tests {
             .insts
             .iter()
             .enumerate()
-            .filter(|(_, i)| matches!(i, Inst::StoreLocal { .. }))
+            .filter(|(_, i)| matches!(i, Inst::StoreLocal { disp: 0, .. }))
             .collect();
         assert_eq!(pairs.len(), 1, "one field copy, got {:?}", f.insts);
         let (si, _) = pairs[0];
@@ -2597,16 +2652,22 @@ mod tests {
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1, "the object splits");
         assert!(
-            matches!(f.insts[2], Inst::LoadLocal { off: -2, .. })
-                && matches!(
-                    f.insts[3],
-                    Inst::Store {
-                        addr: 1,
-                        disp: 0,
-                        kind: StoreKind::I64,
-                        ..
-                    }
-                ),
+            matches!(
+                f.insts[2],
+                Inst::LoadLocal {
+                    disp: 0,
+                    off: -2,
+                    ..
+                }
+            ) && matches!(
+                f.insts[3],
+                Inst::Store {
+                    addr: 1,
+                    disp: 0,
+                    kind: StoreKind::I64,
+                    ..
+                }
+            ),
             "the field moves through the destination: {:?}",
             f.insts
         );
@@ -2645,7 +2706,7 @@ mod tests {
         let fills = f
             .insts
             .iter()
-            .filter(|i| matches!(i, Inst::StoreLocal { .. }))
+            .filter(|i| matches!(i, Inst::StoreLocal { disp: 0, .. }))
             .count();
         let outs = f
             .insts
@@ -2772,6 +2833,7 @@ mod tests {
             f.insts.iter().any(|i| matches!(
                 i,
                 Inst::StoreLocal {
+                    disp: 0,
                     kind: StoreKind::F64,
                     ..
                 }
@@ -3124,7 +3186,14 @@ mod tests {
         assert_eq!(split_objects(&mut f, 64).len(), 1, "the object splits");
         assert!(
             matches!(f.insts[3], Inst::Imm(0))
-                && matches!(f.insts[4], Inst::LoadLocal { off: -2, .. }),
+                && matches!(
+                    f.insts[4],
+                    Inst::LoadLocal {
+                        disp: 0,
+                        off: -2,
+                        ..
+                    }
+                ),
             "only the read load reads the slot: {:?}",
             f.insts
         );
@@ -3210,6 +3279,7 @@ mod tests {
         let insts = alloc::vec![
             Inst::Imm(5), // v0
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 0,
                 kind: StoreKind::I64,
@@ -3466,11 +3536,11 @@ mod tests {
             "the written field keeps its memory read"
         );
         assert!(
-            matches!(f.insts[13], Inst::LoadLocal { .. }),
+            matches!(f.insts[13], Inst::LoadLocal { disp: 0, .. }),
             "the untouched field reads its slot"
         );
         assert!(
-            matches!(f.insts[6], Inst::StoreLocal { .. }),
+            matches!(f.insts[6], Inst::StoreLocal { disp: 0, .. }),
             "and writes it, with no memory write left"
         );
     }
@@ -3503,7 +3573,7 @@ mod tests {
             .insts
             .iter()
             .enumerate()
-            .filter(|(_, i)| matches!(i, Inst::Store { .. } | Inst::StoreLocal { .. }))
+            .filter(|(_, i)| matches!(i, Inst::Store { .. } | Inst::StoreLocal { disp: 0, .. }))
             .map(|(i, _)| i)
             .collect::<Vec<_>>();
         assert_eq!(
@@ -3514,7 +3584,7 @@ mod tests {
         );
         assert!(
             matches!(f.insts[stores[1]], Inst::Store { .. })
-                && matches!(f.insts[stores[2]], Inst::StoreLocal { .. }),
+                && matches!(f.insts[stores[2]], Inst::StoreLocal { disp: 0, .. }),
             "the memory write comes first, then the slot's"
         );
     }
@@ -3550,7 +3620,7 @@ mod tests {
             "the mirrored field must not pay for itself"
         );
         assert!(
-            matches!(f.insts[10], Inst::LoadLocal { .. }),
+            matches!(f.insts[10], Inst::LoadLocal { disp: 0, .. }),
             "the untouched field still promotes"
         );
     }

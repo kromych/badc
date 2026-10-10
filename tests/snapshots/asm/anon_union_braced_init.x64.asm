@@ -46,9 +46,9 @@ Disassembly of section .text:
                	movl	-0x20(%rbp), %ebx
                	movq	-0x18(%rbp), %r12
                	leaq	-0x10(%rbp), %rdi
-               	movl	%ebx, (%rdi)
-               	movl	$0x0, 0x4(%rdi)
-               	movq	%r12, 0x8(%rdi)
+               	movl	%ebx, -0x10(%rbp)
+               	movl	$0x0, -0xc(%rbp)
+               	movq	%r12, -0x8(%rbp)
                	callq	<addr>
                	movl	(%rax), %ecx
                	cmpl	%ebx, %ecx
@@ -58,9 +58,9 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	<rip>, %rdx      # <addr>
                	leaq	-0x50(%rbp), %rdi
-               	movl	$0x1, (%rdi)
-               	movl	$0x0, 0x4(%rdi)
-               	movq	%rdx, 0x8(%rdi)
+               	movl	$0x1, -0x50(%rbp)
+               	movl	$0x0, -0x4c(%rbp)
+               	movq	%rdx, -0x48(%rbp)
                	callq	<addr>
                	movl	(%rax), %ecx
                	cmpl	$0x1, %ecx
@@ -96,9 +96,9 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rdx      # <addr>
                	leaq	-0x30(%rbp), %rdi
-               	movl	$0x5, (%rdi)
-               	movl	$0x0, 0x4(%rdi)
-               	movq	%rdx, 0x8(%rdi)
+               	movl	$0x5, -0x30(%rbp)
+               	movl	$0x0, -0x2c(%rbp)
+               	movq	%rdx, -0x28(%rbp)
                	callq	<addr>
                	movl	(%rax), %ecx
                	cmpl	$0x5, %ecx

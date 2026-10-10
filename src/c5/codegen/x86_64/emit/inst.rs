@@ -599,10 +599,13 @@ fn emit_mem_inst(
             frame,
             None,
         ),
-        Inst::LoadLocal { off, kind, .. } => emit_load_local(
+        Inst::LoadLocal {
+            off, disp, kind, ..
+        } => emit_load_local(
             code,
             dst,
             *off,
+            *disp,
             *kind,
             alloc.is_f32(v),
             !alloc.high_dead(v),
@@ -611,8 +614,14 @@ fn emit_mem_inst(
             abi,
         ),
         Inst::StoreLocal {
-            off, value, kind, ..
-        } => emit_store_local(code, dst, v, *off, *value, *kind, alloc, frame, func, abi),
+            off,
+            disp,
+            value,
+            kind,
+            ..
+        } => emit_store_local(
+            code, dst, v, *off, *disp, *value, *kind, alloc, frame, func, abi,
+        ),
         Inst::LoadIndexed {
             base,
             index,

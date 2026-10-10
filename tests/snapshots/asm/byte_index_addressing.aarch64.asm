@@ -701,7 +701,7 @@ Disassembly of section .text:
                	stur	wzr, [x29, #-0x8]
                	sub	x0, x29, #0x8
                	mov	x1, #0x3c               // =60
-               	strb	w1, [x0, #0x1]
+               	sturb	w1, [x29, #-0x7]
                	adrp	x22, <page>
                	add	x22, x22, <lo12>
                	ldrsw	x1, [x22]

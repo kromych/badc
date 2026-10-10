@@ -52,13 +52,13 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x20(%rbp), %rax
+               	leaq	-0x20(%rbp), %rcx
                	xorps	%xmm14, %xmm14
-               	movups	%xmm14, (%rax)
-               	movl	$0x2a, (%rax)
-               	movl	$0x2a, 0x4(%rax)
-               	movl	$0x2a, 0x8(%rax)
-               	movl	$0x2a, 0xc(%rax)
+               	movups	%xmm14, (%rcx)
+               	movl	$0x2a, -0x20(%rbp)
+               	movl	$0x2a, -0x1c(%rbp)
+               	movl	$0x2a, -0x18(%rbp)
+               	movl	$0x2a, -0x14(%rbp)
                	leaq	-0x10(%rbp), %rax
                	leaq	-0x20(%rbp), %rcx
                	movdqu	(%rcx), %xmm0
@@ -129,8 +129,7 @@ Disassembly of section .text:
                	paddd	%xmm2, %xmm7
                	movdqa	%xmm7, %xmm0
                	movups	%xmm0, -0x40(%rbp)
-               	leaq	-0x40(%rbp), %rax
-               	movl	0xc(%rax), %eax
+               	movl	-0x34(%rbp), %eax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x8, %eax
@@ -156,8 +155,7 @@ Disassembly of section .text:
                	movups	-0x50(%rbp), %xmm2
                	vpaddd	%xmm2, %xmm1, %xmm0
                	movups	%xmm0, -0x40(%rbp)
-               	leaq	-0x40(%rbp), %rax
-               	movl	0xc(%rax), %eax
+               	movl	-0x34(%rbp), %eax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x9, %eax
@@ -181,13 +179,11 @@ Disassembly of section .text:
                	movups	-0x50(%rbp), %xmm1
                	vpaddd	<rip>, %xmm1, %xmm0 # <addr>
                	movups	%xmm0, -0x40(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movl	(%rax), %ecx
-               	movl	0xc(%rax), %eax
+               	movl	-0x10(%rbp), %eax
+               	movl	-0x4(%rbp), %ecx
                	addq	%rcx, %rax
                	subq	$0x2a, %rax
-               	leaq	-0x40(%rbp), %rcx
-               	movl	0xc(%rcx), %ecx
+               	movl	-0x34(%rbp), %ecx
                	addq	%rcx, %rax
                	cmpl	$0x2a, %eax
                	je	<addr>
@@ -258,8 +254,7 @@ Disassembly of section .text:
                	vfmadd231ps	%xmm0, %xmm1, %xmm2 # xmm2 = (xmm1 * xmm0) + xmm2
                	cvtps2dq	%xmm2, %xmm3
                	movups	%xmm3, -0x40(%rbp)
-               	leaq	-0x40(%rbp), %rax
-               	movl	0xc(%rax), %eax
+               	movl	-0x34(%rbp), %eax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0xc, %eax
@@ -286,8 +281,7 @@ Disassembly of section .text:
                	vpbroadcastd	%xmm0, %xmm1
                	vpaddd	%xmm1, %xmm1, %xmm2
                	movups	%xmm2, -0x40(%rbp)
-               	leaq	-0x40(%rbp), %rax
-               	movl	0x8(%rax), %eax
+               	movl	-0x38(%rbp), %eax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0xd, %eax
@@ -321,8 +315,7 @@ Disassembly of section .text:
                	movups	-0x50(%rbp), %xmm2
                	vpsllvd	%xmm2, %xmm1, %xmm0
                	movups	%xmm0, -0x40(%rbp)
-               	leaq	-0x40(%rbp), %rax
-               	movl	0xc(%rax), %eax
+               	movl	-0x34(%rbp), %eax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0xe, %eax
@@ -356,9 +349,8 @@ Disassembly of section .text:
                	movups	-0x50(%rbp), %xmm2
                	vpblendd	$0x8, %xmm2, %xmm1, %xmm0 # xmm0 = xmm1[0,1,2],xmm2[3]
                	movups	%xmm0, -0x40(%rbp)
-               	leaq	-0x40(%rbp), %rax
-               	movl	0xc(%rax), %ecx
-               	movl	(%rax), %eax
+               	movl	-0x34(%rbp), %eax
+               	movl	-0x40(%rbp), %ecx
                	addq	%rcx, %rax
                	decq	%rax
                	cmpl	$0x2a, %eax

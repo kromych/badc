@@ -68,11 +68,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x28
-               	ldr	x1, [x0]
-               	cmp	x1, #0x1
+               	ldur	x0, [x29, #-0x28]
+               	cmp	x0, #0x1
                	b.ne	<addr>
-               	ldr	x0, [x0, #0x20]
+               	ldur	x0, [x29, #-0x8]
                	cmp	x0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x2                // =2

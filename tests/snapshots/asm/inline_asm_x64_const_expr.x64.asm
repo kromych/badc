@@ -48,8 +48,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	leave
                	retq
-               	leaq	-0x20(%rbp), %rax
-               	movq	$0x64, 0x18(%rax)
+               	movq	$0x64, -0x8(%rbp)
                	xorl	%eax, %eax
                	leaq	-0x20(%rbp), %rcx
                	leaq	-0x20(%rbp), %rdx

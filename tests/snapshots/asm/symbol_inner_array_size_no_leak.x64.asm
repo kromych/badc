@@ -36,16 +36,15 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>
-               	movswq	0xe(%rcx), %rax
+               	movswq	-0x2(%rbp), %rax
                	cmpl	$0x15, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	leaq	-0x10(%rbp), %rax
-               	cmpw	$0x0, (%rax)
+               	cmpw	$0x0, -0x10(%rbp)
                	jne	<addr>
-               	movswq	0xe(%rax), %rax
+               	movswq	-0x2(%rbp), %rax
                	cmpl	$0x15, %eax
                	je	<addr>
                	movl	$0x2, %eax

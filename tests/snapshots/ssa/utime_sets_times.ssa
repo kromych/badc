@@ -15,8 +15,8 @@ fn ent_pc=7 n_params=0 variadic=false locals=18
     terminator Return(v5)   (exit_acc=v5)
   block 2  start_pc=0
     v7   LocalAddr(-18)                                   -> x0
-    v8   BinopI { op=add, lhs=v7, rhs_imm=88 }            -> x1
-    v9   Load { addr=v7, disp=88, kind=I64 }              -> x0
+    v8   BinopI { op=add, lhs=v7, rhs_imm=88 }            -> x0
+    v9   LoadLocal { off=-18, disp=88, kind=I64 }         -> x0
     v10  LifetimeEnd(-18)                                 -> -
     terminator Return(v9)   (exit_acc=v9)
 ; --- SSA dump (ok=true) ent_pc=8 ---

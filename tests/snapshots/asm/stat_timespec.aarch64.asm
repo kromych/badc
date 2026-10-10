@@ -27,24 +27,23 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x80
-               	ldr	x1, [x0, #0x58]
-               	cmp	x1, x1
+               	ldur	x0, [x29, #-0x28]
+               	cmp	x0, x0
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x1, [x0, #0x58]
+               	ldur	x0, [x29, #-0x28]
                	mov	x17, #0xca00            // =51712
                	movk	x17, #0x3b9a, lsl #16
-               	cmp	x1, x17
+               	cmp	x0, x17
                	b.ge	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x0, [x0, #0x10]
+               	ldursw	x0, [x29, #-0x70]
                	and	x0, x0, #0xf000
                	mov	x17, #0x4000            // =16384
                	cmp	w0, w17

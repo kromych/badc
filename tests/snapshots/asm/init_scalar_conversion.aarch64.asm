@@ -61,14 +61,14 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x7]
                	stp	xzr, xzr, [x7, #0x10]
                	movi	d4, #0000000000000000
-               	str	d4, [x7]
-               	str	d4, [x7, #0x8]
-               	str	d0, [x7, #0x10]
-               	str	d1, [x7, #0x18]
-               	ldr	d5, [x7, #0x10]
+               	stur	d4, [x29, #-0x20]
+               	stur	d4, [x29, #-0x18]
+               	stur	d0, [x29, #-0x10]
+               	stur	d1, [x29, #-0x8]
+               	ldur	d5, [x29, #-0x10]
                	fcmp	d5, d2
                	b.ne	<addr>
-               	ldr	d5, [x7, #0x18]
+               	ldur	d5, [x29, #-0x8]
                	fcmp	d5, d3
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
@@ -115,14 +115,14 @@ Disassembly of section .text:
                	sub	x7, x29, #0x20
                	stp	xzr, xzr, [x7]
                	stp	xzr, xzr, [x7, #0x10]
-               	str	xzr, [x7]
-               	str	xzr, [x7, #0x8]
+               	stur	xzr, [x29, #-0x20]
+               	stur	xzr, [x29, #-0x18]
                	mov	x0, #0x348              // =840
                	scvtf	d0, x0
-               	str	d0, [x7, #0x10]
+               	stur	d0, [x29, #-0x10]
                	mov	x0, #0x21c              // =540
                	scvtf	d0, x0
-               	str	d0, [x7, #0x18]
+               	stur	d0, [x29, #-0x8]
                	ldr	d0, [x7]
                	ldr	d1, [x7, #0x8]
                	ldr	d2, [x7, #0x10]

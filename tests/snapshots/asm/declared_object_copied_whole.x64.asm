@@ -140,24 +140,23 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x58(%rbp), %rdi
-               	movq	$0x63, 0x10(%rdi)
-               	movl	$0x63, 0x54(%rdi)
+               	movq	$0x63, -0x48(%rbp)
+               	movl	$0x63, -0x4(%rbp)
                	leaq	<rip>, %rax      # <addr>
                	movl	(%rax), %esi
                	callq	<addr>
-               	leaq	-0x58(%rbp), %rax
-               	cmpq	$0x0, 0x10(%rax)
+               	cmpq	$0x0, -0x48(%rbp)
                	je	<addr>
                	movl	$0x5, %eax
                	leave
                	retq
-               	movl	0x54(%rax), %ecx
-               	cmpl	$0x7, %ecx
+               	movl	-0x4(%rbp), %eax
+               	cmpl	$0x7, %eax
                	jne	<addr>
-               	movl	0x44(%rax), %ecx
-               	cmpl	$0x8, %ecx
+               	movl	-0x14(%rbp), %eax
+               	cmpl	$0x8, %eax
                	jne	<addr>
-               	cmpl	$0x0, 0x30(%rax)
+               	cmpl	$0x0, -0x28(%rbp)
                	je	<addr>
                	movl	$0x6, %eax
                	leave

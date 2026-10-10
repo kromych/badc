@@ -108,23 +108,22 @@ Disassembly of section .text:
                	add	sp, sp, #0x210
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x200
-               	ldr	x1, [x0]
-               	cbz	x1, <addr>
+               	ldr	x0, [sp, #0x10]
+               	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	ldr	x20, [sp]
                	add	sp, sp, #0x210
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x1, [x0, #0x1f8]
-               	cmp	x1, #0x3f
+               	ldur	x0, [x29, #-0x8]
+               	cmp	x0, #0x3f
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldr	x20, [sp]
                	add	sp, sp, #0x210
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x0, [x0, #0xb8]
+               	ldr	x0, [sp, #0xc8]
                	cmp	x0, #0x17
                	b.eq	<addr>
                	mov	x0, #0x5                // =5

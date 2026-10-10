@@ -21,39 +21,39 @@ Disassembly of section .text:
                	mov	x1, #0xc                // =12
                	add	x17, x1, #0xf
                	and	x17, x17, #0xfffffffffffffff0
-               	mov	x2, sp
-               	sub	x2, x2, x17
+               	mov	x1, sp
+               	sub	x1, x1, x17
                	lsr	x17, x17, #12
                	cbz	x17, <addr>
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
                	subs	x17, x17, #0x1
                	b.ne	<addr>
-               	mov	sp, x2
+               	mov	sp, x1
                	stur	x0, [x29, #-0x10]
-               	ldur	x3, [x29, #-0x10]
-               	asr	x4, x3, #63
-               	sub	x1, x29, #0x20
-               	str	x3, [x1]
-               	str	x4, [x1, #0x8]
-               	and	x3, x1, #0xf
-               	cbz	x3, <addr>
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldrsw	x4, [x3]
-               	orr	x4, x4, #0x1
-               	str	w4, [x3]
-               	str	w0, [x2]
+               	ldur	x2, [x29, #-0x10]
+               	asr	x3, x2, #63
+               	sub	x4, x29, #0x20
+               	stur	x2, [x29, #-0x20]
+               	stur	x3, [x29, #-0x18]
+               	and	x2, x4, #0xf
+               	cbz	x2, <addr>
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldrsw	x3, [x2]
+               	orr	x3, x3, #0x1
+               	str	w3, [x2]
+               	str	w0, [x1]
                	mov	x0, #0x6                // =6
-               	str	w0, [x2, #0x8]
-               	ldr	x2, [x1]
-               	ldr	x3, [x1, #0x8]
-               	add	x0, x2, #0x9
-               	cmp	x0, x2
-               	cset	x2, lo
-               	add	x2, x3, x2
-               	str	x0, [x1]
-               	str	x2, [x1, #0x8]
+               	str	w0, [x1, #0x8]
+               	ldur	x1, [x29, #-0x20]
+               	ldur	x2, [x29, #-0x18]
+               	add	x0, x1, #0x9
+               	cmp	x0, x1
+               	cset	x1, lo
+               	add	x1, x2, x1
+               	stur	x0, [x29, #-0x20]
+               	stur	x1, [x29, #-0x18]
                	sub	sp, x29, #0x20
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10

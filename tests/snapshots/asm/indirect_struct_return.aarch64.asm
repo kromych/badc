@@ -39,8 +39,7 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	bl	<addr>
                	stur	x0, [x29, #-0x8]
-               	sub	x0, x29, #0x8
-               	ldrsw	x0, [x0, #0x4]
+               	ldursw	x0, [x29, #-0x4]
                	add	x0, x0, #0x3
                	cmp	w0, #0x9
                	b.eq	<addr>

@@ -33,17 +33,17 @@ Disassembly of section .text:
                	andq	$-0x20, %rsp
                	movl	$0x1, 0x10(%rsp)
                	leaq	0x20(%rsp), %rax
-               	movb	$0x2, (%rax)
+               	movb	$0x2, 0x20(%rsp)
                	leaq	(%rsp), %rcx
-               	movb	$0x3, (%rcx)
+               	movb	$0x3, (%rsp)
                	leaq	0x30(%rsp), %rdx
-               	movb	$0x4, (%rdx)
+               	movb	$0x4, 0x30(%rsp)
                	leaq	0x40(%rsp), %rsi
-               	movl	$0x5, (%rsi)
+               	movl	$0x5, 0x40(%rsp)
                	leaq	0x50(%rsp), %rdi
-               	movb	$0x6, (%rdi)
+               	movb	$0x6, 0x50(%rsp)
                	leaq	-0x8(%rbp), %r8
-               	movb	$0x7, (%r8)
+               	movb	$0x7, -0x8(%rbp)
                	movl	$0x8, 0x1(%r8)
                	leaq	0x10(%rsp), %r8
                	testb	$0xf, %r8b
@@ -101,7 +101,7 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movsbq	0x50(%rsp), %rdx
                	addq	%rdx, %rcx
-               	movsbq	(%rax), %rdx
+               	movsbq	-0x8(%rbp), %rdx
                	addq	%rdx, %rcx
                	movl	0x1(%rax), %eax
                	addq	%rcx, %rax

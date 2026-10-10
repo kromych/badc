@@ -75,7 +75,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v24  Imm(0)                                           -> x0
     v25  LoadLocal { off=-1, kind=I32, volatile }         -> x0
     v26  Extend { value=v25, kind=I8 }                    -> x1
-    v27  Store { addr=v23, disp=0, value=v25, kind=I8 }   -> -
+    v27  StoreLocal { off=-2, value=v25, kind=I8 }        -> -
     v28  LocalAddr(-2)                                    -> x0
     v29  ImmData(8)                                       -> x0
     v30  Load { addr=v29, disp=0, kind=I64, volatile }    -> x0
@@ -94,7 +94,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v39  Imm(0)                                           -> x0
     v40  LoadLocal { off=-1, kind=I32, volatile }         -> x0
     v41  Extend { value=v40, kind=I8 }                    -> x1
-    v42  Store { addr=v38, disp=0, value=v40, kind=I8 }   -> -
+    v42  StoreLocal { off=-2, value=v40, kind=I8 }        -> -
     v43  LocalAddr(-2)                                    -> x0
     v44  ImmData(8)                                       -> x0
     v45  Load { addr=v44, disp=0, kind=I64, volatile }    -> x0

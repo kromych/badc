@@ -62,16 +62,16 @@ fn ent_pc=2 n_params=3 variadic=false locals=1
     v3   ParamRef(2, kind=I64)                            -> x7
     v4   Imm(0)                                           -> x0
     v5   LocalAddr(-1)                                    -> x0
-    v6   Imm(0)                                           -> x1
-    v7   Load { addr=v5, disp=0, kind=F32 }               -> d1 [f32]
-    v8   Imm(100)                                         -> x1
-    v9   Imm(1120403456)                                  -> x1 [f32]
+    v6   Imm(0)                                           -> x0
+    v7   LoadLocal { off=-1, kind=F32 }                   -> d1 [f32]
+    v8   Imm(100)                                         -> x0
+    v9   Imm(1120403456)                                  -> x0 [f32]
     v10  Binop { op=fmul, lhs=v7, rhs=v9 }                -> d2 [f32]
-    v11  LocalAddr(-1)                                    -> x2
-    v12  BinopI { op=add, lhs=v5, rhs_imm=4 }             -> x2
-    v13  Load { addr=v5, disp=4, kind=F32 }               -> d2 [f32]
-    v14  Imm(1000)                                        -> x0
-    v15  Imm(1148846080)                                  -> x0 [f32]
+    v11  LocalAddr(-1)                                    -> x1
+    v12  BinopI { op=add, lhs=v5, rhs_imm=4 }             -> x1
+    v13  LoadLocal { off=-1, disp=4, kind=F32 }           -> d2 [f32]
+    v14  Imm(1000)                                        -> x1
+    v15  Imm(1148846080)                                  -> x1 [f32]
     v16  Binop { op=fmul, lhs=v13, rhs=v15 }              -> d2 [f32]
     v17  Fma { a=v7, b=v9, c=v16, neg_product=false, neg_addend=false } -> d1 [f32]
     v18  Imm(0)                                           -> x0
@@ -97,7 +97,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=1
     v4   Mzero { dst=v3, size=4, align=8 }                -> -
     v5   Imm(0)                                           -> x0 [f32]
     v6   LocalAddr(-1)                                    -> x0
-    v7   Store { addr=v3, disp=0, value=v1, kind=F32 }    -> -
+    v7   StoreLocal { off=-1, value=v1, kind=F32 }        -> -
     v8   LoadLocal { off=2, kind=I64 }                    -> x0
     v9   LocalAddr(-1)                                    -> x2
     v10  Mcpy { dst=v8, src=v3, size=4, align=4 }         -> -

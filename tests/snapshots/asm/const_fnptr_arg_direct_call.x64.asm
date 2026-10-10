@@ -17,8 +17,8 @@ Disassembly of section .text:
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%r12)
                	movups	%xmm14, 0x10(%r12)
-               	movq	%rdi, (%r12)
-               	movq	%rsi, 0x8(%r12)
+               	movq	%rdi, -0x20(%rbp)
+               	movq	%rsi, -0x18(%rbp)
                	movl	$0x1a, %r13d
                	movl	$0xa, %ebx
                	jmp	<addr>
@@ -42,8 +42,7 @@ Disassembly of section .text:
                	movq	%rax, %rcx
                	cmpq	%r11, %rax
                	je	<addr>
-               	leaq	-0x20(%rbp), %rcx
-               	movq	0x10(%rcx), %rcx
+               	movq	-0x10(%rbp), %rcx
                	movq	%rcx, (%r14)
                	popq	%rbx
                	popq	%r12

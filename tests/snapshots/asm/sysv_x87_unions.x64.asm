@@ -34,7 +34,7 @@ Disassembly of section .text:
                	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	(%rax)
+               	fstpt	-0x10(%rbp)
                	movq	%rax, %rcx
                	fldt	(%rcx)
                	leave
@@ -49,7 +49,7 @@ Disassembly of section .text:
                	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	(%rax)
+               	fstpt	-0x10(%rbp)
                	movq	%rax, %rcx
                	fldt	(%rcx)
                	leave
@@ -64,7 +64,7 @@ Disassembly of section .text:
                	movq	%rcx, %xmm14
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	(%rax)
+               	fstpt	-0x10(%rbp)
                	movq	%rax, %rcx
                	fldt	(%rcx)
                	leave
@@ -90,7 +90,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	(%rax)
+               	fstpt	-0x10(%rbp)
                	movq	%rax, %rcx
                	fldt	(%rcx)
                	leave
@@ -120,7 +120,7 @@ Disassembly of section .text:
                	leaq	-0x10(%rbp), %rax
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	(%rax)
+               	fstpt	-0x10(%rbp)
                	movq	%rax, %rcx
                	fldt	(%rcx)
                	leave
@@ -145,7 +145,7 @@ Disassembly of section .text:
                	addsd	%xmm1, %xmm0
                	movsd	%xmm0, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	(%rcx)
+               	fstpt	-0x30(%rbp)
                	movq	-0x20(%rbp), %rax
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
@@ -191,7 +191,7 @@ Disassembly of section .text:
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rsp)
                	fldl	-0x8(%rsp)
-               	fstpt	(%r9)
+               	fstpt	-0x50(%rbp)
                	movabsq	$0x4004000000000000, %rax # imm = 0x4004000000000000
                	movq	%rax, %xmm14
                	movsd	%xmm14, -0x8(%rsp)

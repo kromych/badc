@@ -378,34 +378,27 @@ fn foldable_displaced_addresses(
         .collect()
 }
 
-/// The slot a frame address names, for an access that the local forms can
-/// carry unchanged: no displacement (they hold none) and no alignment
-/// bound below the natural one (they state none, so the strict-alignment
-/// lowering would widen the transfer). The access must be the address's
-/// only use, so the fold drops the address instead of leaving it to serve
-/// the rest: a frame offset past the immediate-offset forms is rebuilt
-/// once per access, which costs more than one shared base.
-fn folded_slot(insts: &[Inst], counts: &[u32], addr: ValueId, disp: i32, align: u8) -> Option<i64> {
-    if disp != 0 || align != 0 || counts.get(addr as usize) != Some(&1) {
+/// The slot and displacement a frame address names, for an access the
+/// local forms can carry: no alignment bound below the natural one (they
+/// state none, so the strict-alignment lowering would widen the transfer).
+fn folded_slot(insts: &[Inst], addr: ValueId, disp: i32, align: u8) -> Option<(i64, i32)> {
+    if align != 0 {
         return None;
     }
     match insts.get(addr as usize)? {
-        Inst::LocalAddr(off) => Some(*off),
+        Inst::LocalAddr(off) => Some((*off, disp)),
         _ => None,
     }
 }
 
-/// Fold a frame address its access is the sole consumer of into that
-/// access: `Load`/`Store` through `LocalAddr(off)` become `LoadLocal` /
+/// Fold `Load`/`Store` through `LocalAddr(off)` into `LoadLocal` /
 /// `StoreLocal`, which the per-arch emit addresses off the frame base
 /// with no register for the address. Runs after the value numbering, so
 /// the duplicate `LocalAddr`s the builder emits per access -- it keeps
-/// them out of its own cache -- are already merged and the use count
-/// says whether the address really serves one access. The address itself
-/// is left in place; the emit skips it once dead.
+/// them out of its own cache -- are already merged. The address itself
+/// is left in place for its other uses; the emit skips it once dead.
 pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
-        let counts = use_counts(func);
         let mut rewrites: Vec<(usize, Inst)> = Vec::new();
         for (idx, inst) in func.insts.iter().enumerate() {
             let folded = match inst {
@@ -415,9 +408,10 @@ pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa]) {
                     kind,
                     volatile,
                     align,
-                } => folded_slot(&func.insts, &counts, *addr, *disp, *align).map(|off| {
+                } => folded_slot(&func.insts, *addr, *disp, *align).map(|(off, disp)| {
                     Inst::LoadLocal {
                         off,
+                        disp,
                         kind: *kind,
                         volatile: *volatile,
                     }
@@ -429,9 +423,10 @@ pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa]) {
                     kind,
                     volatile,
                     align,
-                } => folded_slot(&func.insts, &counts, *addr, *disp, *align).map(|off| {
+                } => folded_slot(&func.insts, *addr, *disp, *align).map(|(off, disp)| {
                     Inst::StoreLocal {
                         off,
+                        disp,
                         value: *value,
                         kind: *kind,
                         volatile: *volatile,
@@ -1027,19 +1022,15 @@ mod tests {
         assert!(kept(&out, 4));
     }
 
-    /// The local forms carry no displacement and no alignment bound, so
-    /// the fold refuses both.
+    /// The local forms carry the displacement and no alignment bound.
     #[test]
-    fn a_local_address_folds_only_at_offset_zero_and_natural_alignment() {
+    fn a_local_address_folds_at_any_offset_and_natural_alignment() {
         let insts = vec![Inst::LocalAddr(-3)];
-        assert_eq!(folded_slot(&insts, &[1], 0, 0, 0), Some(-3));
-        assert_eq!(folded_slot(&insts, &[1], 0, 8, 0), None);
-        assert_eq!(folded_slot(&insts, &[1], 0, 0, 1), None);
-        // A second use keeps the address; folding one access would leave
-        // the materialisation standing.
-        assert_eq!(folded_slot(&insts, &[2], 0, 0, 0), None);
+        assert_eq!(folded_slot(&insts, 0, 0, 0), Some((-3, 0)));
+        assert_eq!(folded_slot(&insts, 0, 8, 0), Some((-3, 8)));
+        assert_eq!(folded_slot(&insts, 0, 0, 1), None);
         // Only a frame address folds; a computed one keeps its `Load`.
         let insts = vec![Inst::Imm(0)];
-        assert_eq!(folded_slot(&insts, &[1], 0, 0, 0), None);
+        assert_eq!(folded_slot(&insts, 0, 0, 0), None);
     }
 }

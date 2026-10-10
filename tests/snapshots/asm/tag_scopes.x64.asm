@@ -32,7 +32,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	movl	%eax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rcx
-               	movl	(%rcx), %edx
+               	movl	-0x8(%rbp), %edx
                	cmpl	$0x3, %edx
                	je	<addr>
                	leave

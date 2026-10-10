@@ -100,8 +100,8 @@ Disassembly of section .text:
                	xorl	%edi, %edi
                	movq	%rdi, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rdx
-               	movq	$0xf, (%rdx)
-               	movq	-0x8(%rbp), %rax
+               	movl	$0xf, %eax
+               	movq	%rax, -0x8(%rbp)
                	cmpq	$0xf, %rax
                	je	<addr>
                	movl	$0x1, %eax

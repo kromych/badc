@@ -66,21 +66,20 @@ Disassembly of section .text:
                	movq	0x8(%r11), %r10
                	addq	$0x8, 0x8(%r11)
                	movq	%r10, %rax
-               	movslq	(%rax), %rcx
-               	leaq	-0x28(%rbp), %rax
-               	movq	-0xe0(%rbp), %rdx
-               	leaq	-0x10(%rbp), %rax
-               	movslq	(%rax), %rsi
-               	addq	%rsi, %rdx
-               	movslq	0x4(%rax), %rsi
-               	addq	%rsi, %rdx
-               	movslq	0x8(%rax), %rsi
-               	addq	%rsi, %rdx
-               	movslq	0xc(%rax), %rax
-               	addq	%rdx, %rax
+               	movslq	(%rax), %rax
+               	leaq	-0x28(%rbp), %rcx
+               	movq	-0xe0(%rbp), %rcx
+               	movslq	-0x10(%rbp), %rdx
+               	addq	%rdx, %rcx
+               	movslq	-0xc(%rbp), %rdx
+               	addq	%rdx, %rcx
+               	movslq	-0x8(%rbp), %rdx
+               	addq	%rdx, %rcx
+               	movslq	-0x4(%rbp), %rdx
+               	addq	%rdx, %rcx
                	movq	-0xc8(%rbp), %rdx
                	movsbq	(%rdx), %rdx
-               	addq	%rdx, %rax
+               	addq	%rdx, %rcx
                	addq	%rcx, %rax
                	leave
                	retq

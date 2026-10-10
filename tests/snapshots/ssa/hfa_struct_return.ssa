@@ -286,15 +286,15 @@ fn ent_pc=8 n_params=0 variadic=false locals=2
     terminator Return(v233)   (exit_acc=v233)
   block 21  start_pc=0
     v240 LocalAddr(-2)                                    -> x0
-    v241 Load { addr=v240, disp=0, kind=F32 }             -> d0 [f32]
-    v242 BinopI { op=add, lhs=v240, rhs_imm=4 }           -> x1
-    v243 Load { addr=v240, disp=4, kind=F32 }             -> d1 [f32]
+    v241 LoadLocal { off=-2, kind=F32 }                   -> d0 [f32]
+    v242 BinopI { op=add, lhs=v240, rhs_imm=4 }           -> x0
+    v243 LoadLocal { off=-2, disp=4, kind=F32 }           -> d1 [f32]
     v244 Binop { op=fadd, lhs=v241, rhs=v243 }            -> d0 [f32]
-    v245 BinopI { op=add, lhs=v240, rhs_imm=8 }           -> x1
-    v246 Load { addr=v240, disp=8, kind=F32 }             -> d1 [f32]
+    v245 BinopI { op=add, lhs=v240, rhs_imm=8 }           -> x0
+    v246 LoadLocal { off=-2, disp=8, kind=F32 }           -> d1 [f32]
     v247 Binop { op=fadd, lhs=v244, rhs=v246 }            -> d0 [f32]
-    v248 BinopI { op=add, lhs=v240, rhs_imm=12 }          -> x1
-    v249 Load { addr=v240, disp=12, kind=F32 }            -> d1 [f32]
+    v248 BinopI { op=add, lhs=v240, rhs_imm=12 }          -> x0
+    v249 LoadLocal { off=-2, disp=12, kind=F32 }          -> d1 [f32]
     v250 Binop { op=fadd, lhs=v247, rhs=v249 }            -> d0 [f32]
     v251 Imm(1092616192)                                  -> x0 [f32]
     v252 Binop { op=fne, lhs=v250, rhs=v251 }             -> x0

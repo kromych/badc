@@ -108,11 +108,9 @@ Disassembly of section .text:
                	ret
                	mov	x1, #0x29               // =41
                	stur	x1, [x29, #-0x8]
-               	sub	x1, x29, #0x8
-               	ldr	x2, [x1]
-               	add	x2, x2, #0x1
-               	str	x2, [x1]
-               	cmp	x2, #0x2a
+               	add	x1, x1, #0x1
+               	stur	x1, [x29, #-0x8]
+               	cmp	x1, #0x2a
                	b.eq	<addr>
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

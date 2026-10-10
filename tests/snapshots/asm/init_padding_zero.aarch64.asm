@@ -68,8 +68,8 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	sub	x0, x29, #0x8
                	str	xzr, [x0]
-               	strb	w1, [x0]
-               	str	w1, [x0, #0x4]
+               	sturb	w1, [x29, #-0x8]
+               	stur	w1, [x29, #-0x4]
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	mov	x2, #0x3                // =3
@@ -86,7 +86,7 @@ Disassembly of section .text:
                	str	xzr, [x0]
                	str	wzr, [x0, #0x8]
                	mov	x1, #0x1                // =1
-               	strb	w1, [x0]
+               	sturb	w1, [x29, #-0x10]
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	mov	x2, #0x4                // =4
@@ -103,7 +103,7 @@ Disassembly of section .text:
                	str	xzr, [x0]
                	str	wzr, [x0, #0x8]
                	mov	x1, #0x1                // =1
-               	strh	w1, [x0, #0xa]
+               	sturh	w1, [x29, #-0x6]
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	mov	x2, #0x4                // =4
@@ -151,7 +151,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0x8
                	str	xzr, [x0]
                	mov	x1, #0x1                // =1
-               	strb	w1, [x0]
+               	sturb	w1, [x29, #-0x8]
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	mov	x2, #0x7                // =7
@@ -167,8 +167,8 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	sub	x0, x29, #0x8
                	str	xzr, [x0]
-               	strb	w1, [x0]
-               	str	w1, [x0, #0x4]
+               	sturb	w1, [x29, #-0x8]
+               	stur	w1, [x29, #-0x4]
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	mov	x2, #0x3                // =3
@@ -198,8 +198,8 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	sub	x0, x29, #0x8
                	str	xzr, [x0]
-               	strb	w1, [x0]
-               	str	w1, [x0, #0x4]
+               	sturb	w1, [x29, #-0x8]
+               	stur	w1, [x29, #-0x4]
                	ldr	x0, [x0]
                	bl	<addr>
                	add	sp, sp, #0x10

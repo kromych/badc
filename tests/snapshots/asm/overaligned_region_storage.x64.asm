@@ -311,7 +311,7 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movq	%rdi, -0x10(%rbp)
                	leaq	-0x10(%rbp), %rdi
-               	movq	%rsi, 0x8(%rdi)
+               	movq	%rsi, -0x8(%rbp)
                	callq	<addr>
                	leave
                	retq
@@ -404,9 +404,9 @@ Disassembly of section .text:
                	movups	%xmm14, (%rdi)
                	leaq	<rip>, %rax      # <addr>
                	movl	0x4(%rax), %ecx
-               	movq	%rcx, (%rdi)
+               	movq	%rcx, -0x10(%rbp)
                	movl	0x8(%rax), %eax
-               	movq	%rax, 0x8(%rdi)
+               	movq	%rax, -0x8(%rbp)
                	movq	0x8(%rdi), %rsi
                	movq	(%rdi), %rdi
                	callq	<addr>

@@ -55,16 +55,16 @@ fn ent_pc=16 n_params=1 variadic=false locals=256
     v1   ParamRef(0, kind=I32)                            -> x7
     v2   Imm(0)                                           -> x0
     v3   LocalAddr(-256)                                  -> x0
-    v4   Imm(0)                                           -> x1
-    v5   Imm(0)                                           -> x1
-    v6   Extend { value=v1, kind=I8 }                     -> x1
-    v7   Store { addr=v3, disp=0, value=v1, kind=I8, volatile } -> -
-    v8   LocalAddr(-256)                                  -> x1
-    v9   Imm(2047)                                        -> x1
-    v10  BinopI { op=add, lhs=v3, rhs_imm=2047 }          -> x1
-    v11  Imm(0)                                           -> x1
-    v12  Extend { value=v1, kind=I8 }                     -> x1
-    v13  Store { addr=v3, disp=2047, value=v1, kind=I8, volatile } -> -
+    v4   Imm(0)                                           -> x0
+    v5   Imm(0)                                           -> x0
+    v6   Extend { value=v1, kind=I8 }                     -> x0
+    v7   StoreLocal { off=-256, value=v1, kind=I8, volatile } -> -
+    v8   LocalAddr(-256)                                  -> x0
+    v9   Imm(2047)                                        -> x0
+    v10  BinopI { op=add, lhs=v3, rhs_imm=2047 }          -> x0
+    v11  Imm(0)                                           -> x0
+    v12  Extend { value=v1, kind=I8 }                     -> x0
+    v13  StoreLocal { off=-256, disp=2047, value=v1, kind=I8, volatile } -> -
     v14  Imm(0)                                           -> x0
     terminator Bz { cond=v1, target=b3, fall=b1 }   (exit_acc=v1)
   block 1  start_pc=0
@@ -81,14 +81,14 @@ fn ent_pc=16 n_params=1 variadic=false locals=256
     v25  Imm(0)                                           -> x1
     v26  Extend { value=v23, kind=I32 }                   -> x1
     v27  LocalAddr(-256)                                  -> x1
-    v28  Imm(0)                                           -> x2
-    v29  Load { addr=v27, disp=0, kind=I8, volatile }     -> x2
+    v28  Imm(0)                                           -> x1
+    v29  LoadLocal { off=-256, kind=I8, volatile }        -> x1
     v30  Binop { op=add, lhs=v23, rhs=v29 }               -> x0
-    v31  Extend { value=v30, kind=I32, nsw }              -> x2
-    v32  LocalAddr(-256)                                  -> x2
-    v33  Imm(2047)                                        -> x2
-    v34  BinopI { op=add, lhs=v27, rhs_imm=2047 }         -> x2
-    v35  Load { addr=v27, disp=2047, kind=I8, volatile }  -> x1
+    v31  Extend { value=v30, kind=I32, nsw }              -> x1
+    v32  LocalAddr(-256)                                  -> x1
+    v33  Imm(2047)                                        -> x1
+    v34  BinopI { op=add, lhs=v27, rhs_imm=2047 }         -> x1
+    v35  LoadLocal { off=-256, disp=2047, kind=I8, volatile } -> x1
     v36  Binop { op=sub, lhs=v30, rhs=v35 }               -> x0
     v37  Extend { value=v36, kind=I32, nsw }              -> x1
     v38  Extend { value=v36, kind=I32 }                   -> x1
@@ -728,7 +728,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=13
     v470 BinopI { op=shru, lhs=v468, rhs_imm=63 }         -> x1
     v471 Binop { op=add, lhs=v468, rhs=v470 }             -> x0
     v472 BinopI { op=shr, lhs=v471, rhs_imm=1 }           -> x0
-    v473 Store { addr=v464, disp=0, value=v472, kind=I32 } -> -
+    v473 StoreLocal { off=-12, value=v472, kind=I32 }     -> -
     v474 LocalAddr(-7)                                    -> x7
     v475 LocalAddr(-12)                                   -> x0
     v476 CallExt { binding_idx=173, args=[v474, v464], fp_arg_mask=0x0 } -> x0
@@ -751,7 +751,7 @@ fn ent_pc=18 n_params=0 variadic=false locals=13
     v489 Extend { value=v379, kind=I32 }                  -> x0
     v490 BinopI { op=sub, lhs=v379, rhs_imm=1 }           -> x0
     v491 Extend { value=v490, kind=I32, nsw }             -> x1
-    v492 Store { addr=v488, disp=0, value=v490, kind=I32 } -> -
+    v492 StoreLocal { off=-12, value=v490, kind=I32 }     -> -
     v493 LocalAddr(-7)                                    -> x7
     v494 LocalAddr(-12)                                   -> x0
     v495 CallExt { binding_idx=174, args=[v493, v488], fp_arg_mask=0x0 } -> x0

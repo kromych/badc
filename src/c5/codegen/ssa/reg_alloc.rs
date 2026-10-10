@@ -6040,6 +6040,7 @@ int main(void) { return 0; }
 
     fn load_i64() -> Inst {
         Inst::LoadLocal {
+            disp: 0,
             off: 2,
             kind: LoadKind::I64,
             volatile: false,
@@ -6141,6 +6142,7 @@ int main(void) { return 0; }
 
     fn store_of(value: ValueId) -> Inst {
         Inst::StoreLocal {
+            disp: 0,
             off: -1,
             value,
             kind: StoreKind::I64,
@@ -6251,6 +6253,7 @@ int main(void) { return 0; }
                     store_kind(0, 11, StoreKind::F64),
                     Inst::Imm(9),
                     Inst::StoreLocal {
+                        disp: 0,
                         off: -1,
                         value: 13,
                         kind: StoreKind::I32,
@@ -6419,6 +6422,7 @@ int main(void) { return 0; }
     #[test]
     fn variable_shift_leaves_rcx_to_the_rotate() {
         let local = |off| Inst::LoadLocal {
+            disp: 0,
             off,
             kind: LoadKind::I64,
             volatile: false,
@@ -6463,6 +6467,7 @@ int main(void) { return 0; }
     #[test]
     fn rcx_held_across_a_rotate_is_recorded() {
         let local = |off| Inst::LoadLocal {
+            disp: 0,
             off,
             kind: LoadKind::I64,
             volatile: false,
@@ -6495,6 +6500,7 @@ int main(void) { return 0; }
 
     fn local_i64(off: i64) -> Inst {
         Inst::LoadLocal {
+            disp: 0,
             off,
             kind: LoadKind::I64,
             volatile: false,
@@ -6896,6 +6902,7 @@ int main(void) { return 0; }
         let build = |kind: LoadKind, low_word: bool| {
             let mut f = branch_func(
                 vec![Inst::LoadLocal {
+                    disp: 0,
                     off: 2,
                     kind,
                     volatile: false,
@@ -6968,11 +6975,13 @@ int main(void) { return 0; }
             branch_func(
                 vec![
                     Inst::LoadLocal {
+                        disp: 0,
                         off: 2,
                         kind: LoadKind::F64,
                         volatile: false,
                     },
                     Inst::LoadLocal {
+                        disp: 0,
                         off: 3,
                         kind: LoadKind::F64,
                         volatile: false,

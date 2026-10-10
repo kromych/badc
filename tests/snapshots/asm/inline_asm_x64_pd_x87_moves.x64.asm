@@ -64,14 +64,13 @@ Disassembly of section .text:
                	movl	$0x10, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x10(%rbp), %rax
-               	movsd	(%rax), %xmm0
-               	movabsq	$0x3ff4000000000000, %rcx # imm = 0x3FF4000000000000
-               	movq	%rcx, %xmm15
+               	movsd	-0x10(%rbp), %xmm0
+               	movabsq	$0x3ff4000000000000, %rax # imm = 0x3FF4000000000000
+               	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movsd	0x8(%rax), %xmm0
+               	movsd	-0x8(%rbp), %xmm0
                	movabsq	$-0x3ff4000000000000, %rax # imm = 0xC00C000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

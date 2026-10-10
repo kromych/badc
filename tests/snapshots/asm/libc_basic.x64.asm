@@ -72,13 +72,13 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	-0x80(%rbp), %rdi
-               	movsbq	0x2(%rdi), %rax
+               	movsbq	-0x7e(%rbp), %rax
                	cmpl	$0x30, %eax
                	je	<addr>
                	movl	$0x8, %eax
                	leave
                	retq
-               	movsbq	0x6(%rdi), %rax
+               	movsbq	-0x7a(%rbp), %rax
                	cmpl	$0x34, %eax
                	je	<addr>
                	movl	$0x9, %eax

@@ -40,16 +40,16 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-10)                                   -> x7
     v2   ImmCode(ent_pc=0)                                -> x0
-    v3   Store { addr=v1, disp=0, value=v2, kind=I64 }    -> -
+    v3   StoreLocal { off=-10, value=v2, kind=I64 }       -> -
     v4   LocalAddr(-8)                                    -> x0
     v5   Imm(16)                                          -> x1
     v6   BinopI { op=add, lhs=v4, rhs_imm=16 }            -> x1
     v7   Imm(3)                                           -> x1
-    v8   Store { addr=v4, disp=16, value=v7, kind=I64 }   -> -
+    v8   StoreLocal { off=-8, disp=16, value=v7, kind=I64 } -> -
     v9   LocalAddr(-4)                                    -> x8
     v10  BinopI { op=add, lhs=v9, rhs_imm=16 }            -> x1
     v11  Imm(7)                                           -> x1
-    v12  Store { addr=v9, disp=16, value=v11, kind=I64 }  -> -
+    v12  StoreLocal { off=-4, disp=16, value=v11, kind=I64 } -> -
     v13  LocalAddr(-10)                                   -> x1
     v14  LocalAddr(-8)                                    -> x1
     v15  Imm(5)                                           -> x1
@@ -59,7 +59,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=10
     v19  Imm(9)                                           -> x9
     v20  Imm(0)                                           -> x2
     v21  StoreLocal { off=-9, value=v20, kind=I32 }       -> -
-    v22  Load { addr=v1, disp=0, kind=I64 }               -> x3
+    v22  LoadLocal { off=-10, kind=I64 }                  -> x3
     v23  LocalAddr(-9)                                    -> x6
     v24  BinopI { op=add, lhs=v4, rhs_imm=16 }            -> x2
     v25  BinopI { op=add, lhs=v9, rhs_imm=16 }            -> x8

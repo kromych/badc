@@ -131,18 +131,17 @@ Disassembly of section .text:
                	movl	$0x0, (%rax)
                	movl	$0x1, -0x10(%rbp)
                	movl	$0x2, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rsi
                	movl	(%rax), %edx
                	incq	%rdx
                	movl	%edx, (%rax)
                	leaq	<rip>, %rdx      # <addr>
-               	movl	(%rsi), %edi
-               	movl	%edi, (%rdx)
-               	movl	(%rax), %edi
-               	incq	%rdi
-               	movl	%edi, (%rax)
-               	movl	-0x10(%rbp), %edi
-               	movl	%edi, (%rdx)
+               	movl	-0x8(%rbp), %esi
+               	movl	%esi, (%rdx)
+               	movl	(%rax), %esi
+               	incq	%rsi
+               	movl	%esi, (%rax)
+               	movl	-0x10(%rbp), %esi
+               	movl	%esi, (%rdx)
                	movl	(%rax), %edx
                	cmpl	$0x2, %edx
                	je	<addr>
@@ -156,7 +155,7 @@ Disassembly of section .text:
                	incq	%rcx
                	movl	%ecx, (%rax)
                	leaq	<rip>, %rdx      # <addr>
-               	movl	(%rsi), %ecx
+               	movl	-0x8(%rbp), %ecx
                	movl	%ecx, (%rdx)
                	movl	(%rax), %ecx
                	cmpl	$0x1, %ecx
@@ -169,12 +168,11 @@ Disassembly of section .text:
                	retq
                	movl	$0x0, (%rax)
                	movl	$0x0, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rsi
-               	movl	(%rax), %edi
-               	incq	%rdi
-               	movl	%edi, (%rax)
-               	movl	(%rsi), %edi
-               	movl	%edi, (%rdx)
+               	movl	(%rax), %esi
+               	incq	%rsi
+               	movl	%esi, (%rax)
+               	movl	-0x8(%rbp), %esi
+               	movl	%esi, (%rdx)
                	movl	(%rax), %eax
                	cmpl	$0x1, %eax
                	je	<addr>
@@ -189,7 +187,7 @@ Disassembly of section .text:
                	incq	%rcx
                	movl	%ecx, (%rax)
                	leaq	<rip>, %rcx      # <addr>
-               	movl	(%rsi), %edx
+               	movl	-0x8(%rbp), %edx
                	movl	%edx, (%rcx)
                	movl	(%rax), %edx
                	incq	%rdx

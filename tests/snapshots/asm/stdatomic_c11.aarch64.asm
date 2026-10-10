@@ -64,29 +64,28 @@ Disassembly of section .text:
                	dmb	ish
                	mov	x0, #0x0                // =0
                	stur	x0, [x29, #-0x30]
-               	sub	x2, x29, #0x30
+               	sub	x1, x29, #0x30
                	fmov	d0, #2.50000000
-               	sub	x1, x29, #0x8
-               	str	d0, [x1]
-               	ldr	x3, [x1]
-               	stlr	x3, [x2]
-               	ldapr	x2, [x2]
-               	str	x2, [x1]
-               	ldr	d1, [x1]
+               	stur	d0, [x29, #-0x8]
+               	ldur	x2, [x29, #-0x8]
+               	stlr	x2, [x1]
+               	ldapr	x1, [x1]
+               	stur	x1, [x29, #-0x8]
+               	ldur	d1, [x29, #-0x8]
                	fcmp	d1, d0
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x2, x29, #0x28
+               	sub	x1, x29, #0x28
                	fmov	s0, #-1.25000000
-               	str	s0, [x1]
-               	ldr	w3, [x1]
-               	str	w3, [x2]
-               	ldar	w3, [x2]
-               	str	w3, [x1]
-               	ldr	s1, [x1]
+               	stur	s0, [x29, #-0x8]
+               	ldur	w2, [x29, #-0x8]
+               	str	w2, [x1]
+               	ldar	w2, [x1]
+               	stur	w2, [x29, #-0x8]
+               	ldur	s1, [x29, #-0x8]
                	fcmp	s1, s0
                	b.eq	<addr>
                	mov	x0, #0xe                // =14
@@ -94,9 +93,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	fmov	s0, #3.00000000
-               	str	s0, [x1]
-               	ldr	w1, [x1]
-               	stlr	w1, [x2]
+               	stur	s0, [x29, #-0x8]
+               	ldur	w2, [x29, #-0x8]
+               	stlr	w2, [x1]
                	ldur	s1, [x29, #-0x28]
                	fcmp	s1, s0
                	b.eq	<addr>
@@ -130,14 +129,14 @@ Disassembly of section .text:
                	mov	x3, #0x64               // =100
                	stlr	x3, [x1]
                	ldaddal	x2, x16, [x1]
-               	ldar	x3, [x1]
-               	cmp	x3, #0x65
+               	ldar	x1, [x1]
+               	cmp	x1, #0x65
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	str	w2, [x1, #0x8]
+               	stur	w2, [x29, #-0x8]
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

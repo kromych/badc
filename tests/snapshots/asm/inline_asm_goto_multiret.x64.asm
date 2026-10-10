@@ -44,9 +44,9 @@ Disassembly of section .text:
                	movups	%xmm14, (%rcx)
                	jmp	<addr>
                	leaq	-0x10(%rbp), %rax
-               	movq	(%rax), %rcx
+               	movq	-0x10(%rbp), %rcx
                	incq	%rcx
-               	movq	%rcx, (%rax)
+               	movq	%rcx, -0x10(%rbp)
                	movq	(%rax), %rcx
                	movq	0x8(%rax), %rax
                	cmpq	$0xa, %rcx
@@ -70,9 +70,9 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x10(%rbp), %rax
-               	movq	0x8(%rax), %rcx
+               	movq	-0x8(%rbp), %rcx
                	addq	$0x2, %rcx
-               	movq	%rcx, 0x8(%rax)
+               	movq	%rcx, -0x8(%rbp)
                	jmp	<addr>
                	movl	$0x2, %eax
                	leave

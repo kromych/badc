@@ -36,32 +36,31 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x80, %eax
                	jl	<addr>
-               	leaq	-0x80(%rbp), %rax
-               	movzbq	(%rax), %rcx
-               	orq	$0x8, %rcx
-               	movb	%cl, (%rax)
-               	movzbq	0x5(%rax), %rcx
-               	orq	$0x1, %rcx
-               	movb	%cl, 0x5(%rax)
-               	movzbq	(%rax), %rcx
-               	testb	$0x8, %cl
+               	movzbq	-0x80(%rbp), %rax
+               	orq	$0x8, %rax
+               	movb	%al, -0x80(%rbp)
+               	movzbq	-0x7b(%rbp), %rax
+               	orq	$0x1, %rax
+               	movb	%al, -0x7b(%rbp)
+               	movzbq	-0x80(%rbp), %rax
+               	testb	$0x8, %al
                	je	<addr>
-               	movzbq	0x5(%rax), %rcx
-               	testb	$0x1, %cl
+               	movzbq	-0x7b(%rbp), %rax
+               	testb	$0x1, %al
                	jne	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movzbq	(%rax), %rcx
-               	testb	$0x10, %cl
+               	movzbq	-0x80(%rbp), %rax
+               	testb	$0x10, %al
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	movzbq	(%rax), %rcx
-               	andq	$-0x9, %rcx
-               	movb	%cl, (%rax)
-               	movzbq	(%rax), %rax
+               	movzbq	-0x80(%rbp), %rax
+               	andq	$-0x9, %rax
+               	movb	%al, -0x80(%rbp)
+               	movzbq	-0x80(%rbp), %rax
                	testb	$0x8, %al
                	je	<addr>
                	movl	$0x4, %eax

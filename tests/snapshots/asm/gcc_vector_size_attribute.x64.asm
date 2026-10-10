@@ -33,18 +33,17 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
-               	movups	(%rax), %xmm0
-               	leaq	-0x10(%rbp), %rax
-               	movups	%xmm0, (%rax)
-               	movzbq	(%rax), %rcx
-               	xorq	$0x1, %rcx
-               	testl	%ecx, %ecx
+               	movups	-0x10(%rbp), %xmm0
+               	movups	%xmm0, -0x10(%rbp)
+               	movzbq	-0x10(%rbp), %rax
+               	xorq	$0x1, %rax
+               	testl	%eax, %eax
                	jne	<addr>
-               	movzbq	0x7(%rax), %rcx
-               	xorq	$0x8, %rcx
-               	testl	%ecx, %ecx
+               	movzbq	-0x9(%rbp), %rax
+               	xorq	$0x8, %rax
+               	testl	%eax, %eax
                	jne	<addr>
-               	movzbq	0xf(%rax), %rax
+               	movzbq	-0x1(%rbp), %rax
                	xorq	$0x10, %rax
                	testl	%eax, %eax
                	je	<addr>

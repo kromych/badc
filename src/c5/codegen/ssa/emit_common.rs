@@ -444,7 +444,7 @@ const PARAM_HOME_BYTES: u32 = 8;
 /// incoming value the prologue would put there has no reader (C99
 /// 6.2.4p2). It is the `-O0` shape: the walker seeds each parameter's cell
 /// from its `ParamRef` and the body reads it back at the declared width.
-/// Coverage is the widest surviving `LoadLocal`, and [`PARAM_HOME_BYTES`]
+/// Coverage is the furthest byte a surviving `LoadLocal` reads, and [`PARAM_HOME_BYTES`]
 /// besides once the address is taken: a read through an address names no
 /// width here. The cell stays observed, so a caller sizing the cell region
 /// reads [`scan_param_slot_usage`] instead.
@@ -479,12 +479,13 @@ pub(crate) fn param_cell_written_first(
         seen[cell] = true;
         match inst {
             Inst::LocalAddr(_) => escapes[cell] = true,
-            Inst::LoadLocal { kind, .. } => {
+            Inst::LoadLocal { disp, kind, .. } => {
                 if !is_dead_pure(inst, idx as super::super::ir::ValueId, alloc) {
-                    widest_load[cell] = widest_load[cell].max(load_kind_width(*kind));
+                    let end = i64::from(*disp) + i64::from(load_kind_width(*kind));
+                    widest_load[cell] = widest_load[cell].max(end.max(0) as u32);
                 }
             }
-            Inst::StoreLocal { kind, .. } if first_in_entry => {
+            Inst::StoreLocal { disp: 0, kind, .. } if first_in_entry => {
                 written[cell] = store_kind_width(*kind);
             }
             _ => {}
@@ -2484,10 +2485,10 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             let caps = super::reg_alloc::bank_capacity(target, native.fixed_regs);
             super::super::passes::cse::run(funcs, caps);
         });
-        // Fold a frame address into the one access that consumes it.
-        // After the value numbering, which merges the per-access
-        // `LocalAddr` duplicates the builder emits, so the use count
-        // tells a sole consumer from a shared base.
+        // Fold a frame address into each access through it at a constant
+        // displacement. After the slot-level passes, which do not model a
+        // displaced access, and the value numbering, which merges the
+        // per-access `LocalAddr` duplicates the builder emits.
         pipeline.run(
             "passes::index_fold::fold_slot_addresses",
             &mut ssa_funcs,
@@ -3003,6 +3004,7 @@ mod tests {
             Inst::AllocaInit(0),
             part(0),
             Inst::StoreLocal {
+                disp: 0,
                 off: -1,
                 value: 1,
                 kind: StoreKind::I64,

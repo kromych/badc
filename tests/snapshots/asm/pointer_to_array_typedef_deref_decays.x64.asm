@@ -32,32 +32,32 @@ Disassembly of section .text:
                	movq	$-0x1, -0x10(%rbp)
                	leaq	-0x50(%rbp), %rax
                	movq	%rax, -0x8(%rbp)
+               	movq	-0x10(%rbp), %rax
+               	movq	%rax, -0x50(%rbp)
+               	movq	-0x10(%rbp), %rax
+               	movq	%rax, -0x18(%rbp)
+               	movq	-0x8(%rbp), %rax
                	movq	-0x10(%rbp), %rcx
+               	addq	$0x1234568, %rcx        # imm = 0x1234568
                	movq	%rcx, (%rax)
-               	movq	-0x10(%rbp), %rcx
+               	incq	%rcx
                	movq	%rcx, 0x38(%rax)
-               	movq	-0x8(%rbp), %rcx
-               	movq	-0x10(%rbp), %rdx
-               	addq	$0x1234568, %rdx        # imm = 0x1234568
-               	movq	%rdx, (%rcx)
-               	incq	%rdx
-               	movq	%rdx, 0x38(%rcx)
-               	movq	(%rax), %rdx
-               	cmpq	$0x1234567, %rdx        # imm = 0x1234567
+               	movq	-0x50(%rbp), %rcx
+               	cmpq	$0x1234567, %rcx        # imm = 0x1234567
                	jne	<addr>
-               	movq	0x38(%rax), %rax
-               	cmpq	$0x1234568, %rax        # imm = 0x1234568
+               	movq	-0x18(%rbp), %rcx
+               	cmpq	$0x1234568, %rcx        # imm = 0x1234568
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movq	(%rcx), %rax
-               	cmpq	$0x1234567, %rax        # imm = 0x1234567
+               	movq	(%rax), %rcx
+               	cmpq	$0x1234567, %rcx        # imm = 0x1234567
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movq	0x38(%rcx), %rax
+               	movq	0x38(%rax), %rax
                	cmpq	$0x1234568, %rax        # imm = 0x1234568
                	je	<addr>
                	movl	$0x3, %eax

@@ -39,14 +39,13 @@ Disassembly of section .text:
                	pushq	%rbx
                	leaq	-0x10(%rbp), %rdi
                	leaq	-<rip>, %rax       # <addr>
-               	movq	%rax, (%rdi)
+               	movq	%rax, -0x10(%rbp)
                	xorl	%edx, %edx
                	movl	%edx, -0x8(%rbp)
                	leaq	<rip>, %rsi
                	leaq	-0x8(%rbp), %r8
-               	movq	(%rdi), %rax
                	movl	$0xffff, %ecx           # imm = 0xFFFF
-               	callq	*%rax
+               	callq	<addr>
                	movq	%rax, %rbx
                	leaq	<rip>, %rdi
                	movl	-0x8(%rbp), %edx

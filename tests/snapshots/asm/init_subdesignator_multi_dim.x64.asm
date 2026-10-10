@@ -120,13 +120,11 @@ Disassembly of section .text:
                	movq	$0x0, 0x90(%rbx)
                	movl	$0x0, 0x98(%rbx)
                	movw	%ax, -0x140(%rbp)
-               	leaq	-0x140(%rbp), %rax
-               	movw	%cx, 0x2(%rax)
-               	movw	%dx, 0xa(%rax)
-               	leaq	-0x140(%rbp), %rax
-               	movl	%esi, 0x24(%rax)
-               	movl	%r8d, 0x2c(%rax)
-               	movl	%r9d, 0x98(%rax)
+               	movw	%cx, -0x13e(%rbp)
+               	movw	%dx, -0x136(%rbp)
+               	movl	%esi, -0x11c(%rbp)
+               	movl	%r8d, -0x114(%rbp)
+               	movl	%r9d, -0xa8(%rbp)
                	leaq	-0xa0(%rbp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14

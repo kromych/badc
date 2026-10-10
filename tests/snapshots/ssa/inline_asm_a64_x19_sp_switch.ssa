@@ -11,30 +11,30 @@ fn ent_pc=1 n_params=0 variadic=false locals=67
     v5   StoreLocal { off=-66, value=v4, kind=I64, volatile } -> -
     v6   Imm(15)                                          -> x0
     v7   StoreLocal { off=-65, value=v6, kind=I64, volatile } -> -
-    v8   LocalAddr(-64)                                   -> x1
+    v8   LocalAddr(-64)                                   -> x0
     v9   Imm(1)                                           -> x0
-    v10  Store { addr=v8, disp=0, value=v9, kind=I8, volatile } -> -
-    v11  LoadLocal { off=-67, kind=I64, volatile }        -> x2
-    v12  LoadLocal { off=-66, kind=I64, volatile }        -> x6
-    v13  LoadLocal { off=-65, kind=I64, volatile }        -> x7
-    v14  Binop { op=add, lhs=v12, rhs=v13 }               -> x6
-    v15  Binop { op=add, lhs=v11, rhs=v14 }               -> x2
+    v10  StoreLocal { off=-64, value=v9, kind=I8, volatile } -> -
+    v11  LoadLocal { off=-67, kind=I64, volatile }        -> x1
+    v12  LoadLocal { off=-66, kind=I64, volatile }        -> x2
+    v13  LoadLocal { off=-65, kind=I64, volatile }        -> x6
+    v14  Binop { op=add, lhs=v12, rhs=v13 }               -> x2
+    v15  Binop { op=add, lhs=v11, rhs=v14 }               -> x1
     v16  StoreLocal { off=-67, value=v15, kind=I64, volatile } -> -
-    v17  LoadLocal { off=-66, kind=I64, volatile }        -> x2
-    v18  LoadLocal { off=-67, kind=I64, volatile }        -> x6
-    v19  Binop { op=add, lhs=v17, rhs=v18 }               -> x2
+    v17  LoadLocal { off=-66, kind=I64, volatile }        -> x1
+    v18  LoadLocal { off=-67, kind=I64, volatile }        -> x2
+    v19  Binop { op=add, lhs=v17, rhs=v18 }               -> x1
     v20  StoreLocal { off=-66, value=v19, kind=I64, volatile } -> -
-    v21  LoadLocal { off=-65, kind=I64, volatile }        -> x2
-    v22  LoadLocal { off=-66, kind=I64, volatile }        -> x6
-    v23  Binop { op=add, lhs=v21, rhs=v22 }               -> x2
+    v21  LoadLocal { off=-65, kind=I64, volatile }        -> x1
+    v22  LoadLocal { off=-66, kind=I64, volatile }        -> x2
+    v23  Binop { op=add, lhs=v21, rhs=v22 }               -> x1
     v24  StoreLocal { off=-65, value=v23, kind=I64, volatile } -> -
-    v25  LoadLocal { off=-67, kind=I64, volatile }        -> x2
-    v26  LoadLocal { off=-66, kind=I64, volatile }        -> x6
-    v27  Binop { op=add, lhs=v25, rhs=v26 }               -> x2
-    v28  LoadLocal { off=-65, kind=I64, volatile }        -> x6
-    v29  Binop { op=add, lhs=v27, rhs=v28 }               -> x2
-    v30  LocalAddr(-64)                                   -> x6
-    v31  Load { addr=v8, disp=0, kind=I8, volatile }      -> x1
+    v25  LoadLocal { off=-67, kind=I64, volatile }        -> x1
+    v26  LoadLocal { off=-66, kind=I64, volatile }        -> x2
+    v27  Binop { op=add, lhs=v25, rhs=v26 }               -> x1
+    v28  LoadLocal { off=-65, kind=I64, volatile }        -> x2
+    v29  Binop { op=add, lhs=v27, rhs=v28 }               -> x1
+    v30  LocalAddr(-64)                                   -> x2
+    v31  LoadLocal { off=-64, kind=I8, volatile }         -> x2
     v32  Binop { op=add, lhs=v29, rhs=v31 }               -> x1
     v33  LifetimeEnd(-64)                                 -> -
     v34  Imm(30)                                          -> x2

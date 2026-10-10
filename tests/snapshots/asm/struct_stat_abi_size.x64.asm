@@ -80,9 +80,8 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	leaq	-0x90(%rbp), %rax
-               	movq	0x30(%rax), %rcx
-               	cmpq	$0x10, %rcx
+               	movq	-0x60(%rbp), %rax
+               	cmpq	$0x10, %rax
                	je	<addr>
                	leaq	-0xa8(%rbp), %rdi
                	xorl	%eax, %eax
@@ -91,7 +90,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movl	0x18(%rax), %eax
+               	movl	-0x78(%rbp), %eax
                	andq	$0xf000, %rax           # imm = 0xF000
                	cmpl	$0x8000, %eax           # imm = 0x8000
                	je	<addr>

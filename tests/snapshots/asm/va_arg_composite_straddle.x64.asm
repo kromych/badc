@@ -116,9 +116,8 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	pushq	%r12
                	pushq	%rbx
-               	leaq	-0x10(%rbp), %rax
-               	movq	$0x6f, (%rax)
-               	movq	$0xde, 0x8(%rax)
+               	movq	$0x6f, -0x10(%rbp)
+               	movq	$0xde, -0x8(%rbp)
                	movl	$0x1, %edi
                	movl	$0x2, %esi
                	movl	$0x3, %edx

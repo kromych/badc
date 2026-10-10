@@ -75,11 +75,10 @@ Disassembly of section .text:
                	cmpq	%rdx, %rcx
                	sete	%cl
                	movzbq	%cl, %rcx
-               	movq	$0x1234abcd, -0x48(%rbp) # imm = 0x1234ABCD
-               	leaq	-0x48(%rbp), %rax
-               	movq	(%rax), %rdx
-               	xorq	$0xfeed, %rdx           # imm = 0xFEED
-               	movq	%rdx, (%rax)
+               	movl	$0x1234abcd, %eax       # imm = 0x1234ABCD
+               	movq	%rax, -0x48(%rbp)
+               	xorq	$0xfeed, %rax           # imm = 0xFEED
+               	movq	%rax, -0x48(%rbp)
                	xorl	%ebx, %ebx
                	testq	%rcx, %rcx
                	je	<addr>
@@ -102,24 +101,23 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %rdi
                	movl	$0xa, %esi
                	callq	<addr>
-               	leaq	-0x40(%rbp), %rax
-               	movq	(%rax), %rcx
-               	movq	0x8(%rax), %rdx
-               	movq	0x10(%rax), %rsi
-               	movq	0x18(%rax), %rdi
-               	movq	0x20(%rax), %r8
-               	movq	0x28(%rax), %r9
-               	movq	0x30(%rax), %r12
-               	movq	0x38(%rax), %rax
+               	movq	-0x40(%rbp), %rax
+               	movq	-0x38(%rbp), %rcx
+               	movq	-0x30(%rbp), %rdx
+               	movq	-0x28(%rbp), %rsi
+               	movq	-0x20(%rbp), %rdi
+               	movq	-0x18(%rbp), %r8
+               	movq	-0x10(%rbp), %r9
+               	movq	-0x8(%rbp), %r12
                	testq	%rbx, %rbx
                	je	<addr>
-               	addq	%rdx, %rcx
-               	addq	%rsi, %rcx
-               	addq	%rdi, %rcx
-               	addq	%r8, %rcx
-               	addq	%r9, %rcx
-               	addq	%r12, %rcx
                	addq	%rcx, %rax
+               	addq	%rdx, %rax
+               	addq	%rsi, %rax
+               	addq	%rdi, %rax
+               	addq	%r8, %rax
+               	addq	%r9, %rax
+               	addq	%r12, %rax
                	cmpq	$0x65, %rax
                	je	<addr>
                	leaq	<rip>, %rdi

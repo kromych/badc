@@ -32,29 +32,28 @@ Disassembly of section .text:
                	movq	$0x5, -0x218(%rbp)
                	movq	$0xa, -0x210(%rbp)
                	movq	$0xf, -0x208(%rbp)
-               	leaq	-0x200(%rbp), %rcx
                	movl	$0x1, %eax
-               	movb	%al, (%rcx)
-               	movq	-0x218(%rbp), %rdx
-               	movq	-0x210(%rbp), %rsi
-               	movq	-0x208(%rbp), %rdi
-               	addq	%rdi, %rsi
-               	addq	%rsi, %rdx
-               	movq	%rdx, -0x218(%rbp)
+               	movb	%al, -0x200(%rbp)
+               	movq	-0x218(%rbp), %rcx
                	movq	-0x210(%rbp), %rdx
-               	movq	-0x218(%rbp), %rsi
-               	addq	%rsi, %rdx
-               	movq	%rdx, -0x210(%rbp)
-               	movq	-0x208(%rbp), %rdx
-               	movq	-0x210(%rbp), %rsi
-               	addq	%rsi, %rdx
-               	movq	%rdx, -0x208(%rbp)
-               	movq	-0x218(%rbp), %rdx
-               	movq	-0x210(%rbp), %rsi
-               	addq	%rsi, %rdx
                	movq	-0x208(%rbp), %rsi
                	addq	%rsi, %rdx
-               	movsbq	(%rcx), %rcx
+               	addq	%rdx, %rcx
+               	movq	%rcx, -0x218(%rbp)
+               	movq	-0x210(%rbp), %rcx
+               	movq	-0x218(%rbp), %rdx
+               	addq	%rdx, %rcx
+               	movq	%rcx, -0x210(%rbp)
+               	movq	-0x208(%rbp), %rcx
+               	movq	-0x210(%rbp), %rdx
+               	addq	%rdx, %rcx
+               	movq	%rcx, -0x208(%rbp)
+               	movq	-0x218(%rbp), %rcx
+               	movq	-0x210(%rbp), %rdx
+               	addq	%rdx, %rcx
+               	movq	-0x208(%rbp), %rdx
+               	addq	%rdx, %rcx
+               	movsbq	-0x200(%rbp), %rdx
                	addq	%rdx, %rcx
                	cmpq	$0x7e, %rcx
                	jne	<addr>

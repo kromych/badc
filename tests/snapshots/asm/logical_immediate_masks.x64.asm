@@ -528,24 +528,23 @@ Disassembly of section .text:
                	movl	$0x12345, -0x28(%rbp)   # imm = 0x12345
                	movl	-0x28(%rbp), %esi
                	callq	<addr>
-               	leaq	-0x30(%rbp), %rcx
-               	movl	(%rcx), %edx
-               	andq	$0x7, %rdx
-               	cmpl	$0x5, %edx
+               	movl	-0x30(%rbp), %ecx
+               	andq	$0x7, %rcx
+               	cmpl	$0x5, %ecx
                	jne	<addr>
-               	movl	(%rcx), %edx
-               	sarq	$0x3, %rdx
-               	andq	$0x1f, %rdx
-               	cmpl	$0x5, %edx
+               	movl	-0x30(%rbp), %ecx
+               	sarq	$0x3, %rcx
+               	andq	$0x1f, %rcx
+               	cmpl	$0x5, %ecx
                	jne	<addr>
-               	movl	(%rcx), %edx
-               	sarq	$0x8, %rdx
-               	andq	$0xff, %rdx
-               	cmpl	$0xc8, %edx
+               	movl	-0x30(%rbp), %ecx
+               	sarq	$0x8, %rcx
+               	andq	$0xff, %rcx
+               	cmpl	$0xc8, %ecx
                	jne	<addr>
-               	movl	(%rcx), %edx
-               	sarq	$0x10, %rdx
-               	cmpl	$0x9daa, %edx           # imm = 0x9DAA
+               	movl	-0x30(%rbp), %ecx
+               	sarq	$0x10, %rcx
+               	cmpl	$0x9daa, %ecx           # imm = 0x9DAA
                	je	<addr>
                	movl	$0x1a, %eax
                	popq	%rbx
@@ -553,18 +552,18 @@ Disassembly of section .text:
                	popq	%r13
                	leave
                	retq
-               	movl	(%rcx), %ecx
+               	movl	-0x30(%rbp), %ecx
                	movq	%rcx, %rdx
                	andq	$0x7, %rdx
                	movq	%rcx, %rsi
                	sarq	$0x3, %rsi
                	andq	$0x1f, %rsi
                	addq	%rsi, %rdx
-               	sarq	$0x8, %rcx
-               	andq	$0xff, %rcx
-               	addq	%rdx, %rcx
-               	movl	-0x30(%rbp), %edx
-               	sarq	$0x10, %rdx
+               	movq	%rcx, %rsi
+               	sarq	$0x8, %rsi
+               	andq	$0xff, %rsi
+               	addq	%rsi, %rdx
+               	sarq	$0x10, %rcx
                	addq	%rdx, %rcx
                	xorq	%rcx, %rax
                	testl	%eax, %eax

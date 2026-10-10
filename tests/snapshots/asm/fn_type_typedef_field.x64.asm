@@ -48,16 +48,13 @@ Disassembly of section .text:
                	movl	$0x5, %edi
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rdx, 0x8(%rax)
-               	movq	(%rax), %rax
+               	movq	%rdx, -0x8(%rbp)
                	cmpq	$0x5, %rax
                	jne	<addr>
                	movl	$0x5, %edi
                	callq	<addr>
                	movq	%rax, -0x10(%rbp)
-               	leaq	-0x10(%rbp), %rax
-               	movq	%rdx, 0x8(%rax)
+               	movq	%rdx, -0x8(%rbp)
                	cmpq	$0xa, %rdx
                	je	<addr>
                	movl	$0x2, %eax

@@ -6,7 +6,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=8
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-8)                                    -> x7
     v2   Imm(0)                                           -> x0
-    v3   Store { addr=v1, disp=0, value=v2, kind=I8 }     -> -
+    v3   StoreLocal { off=-8, value=v2, kind=I8 }         -> -
     v4   LocalAddr(-8)                                    -> x0
     v5   Imm(64)                                          -> x6
     v6   ImmData(8)                                       -> x2

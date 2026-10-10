@@ -38,14 +38,13 @@ Disassembly of section .text:
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	leaq	-0x10(%rbp), %rax
-               	movq	0x8(%rax), %rcx
-               	testq	%rcx, %rcx
+               	movq	-0x8(%rbp), %rax
+               	testq	%rax, %rax
                	jl	<addr>
-               	movq	0x8(%rax), %rcx
-               	cmpq	$0xf4240, %rcx          # imm = 0xF4240
+               	movq	-0x8(%rbp), %rax
+               	cmpq	$0xf4240, %rax          # imm = 0xF4240
                	jge	<addr>
-               	movq	(%rax), %rax
+               	movq	-0x10(%rbp), %rax
                	testq	%rax, %rax
                	jle	<addr>
                	incq	%rbx

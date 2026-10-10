@@ -44,14 +44,14 @@ Disassembly of section .text:
                	sarq	$0x2, %rcx
                	cmpq	$0x2, %rcx
                	jne	<addr>
-               	leaq	0x4(%rax), %rcx
-               	cmpq	%rcx, %rcx
+               	addq	$0x4, %rax
+               	cmpq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	movl	$0x2, 0x4(%rax)
-               	movl	0x4(%rax), %eax
+               	movl	$0x2, -0xc(%rbp)
+               	movl	-0xc(%rbp), %eax
                	xorq	$0x2, %rax
                	testl	%eax, %eax
                	jne	<addr>

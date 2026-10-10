@@ -6,7 +6,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-3)                                    -> x0
     v2   Imm(4612811918334230528)                         -> x1
-    v3   Store { addr=v1, disp=0, value=v2, kind=F80 }    -> -
+    v3   StoreLocal { off=-3, value=v2, kind=F80 }        -> -
     v4   LocalAddr(-3)                                    -> x1
     v5   LifetimeEnd(-3)                                  -> -
     terminator Return(v1)   (exit_acc=v1)
@@ -18,7 +18,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-3)                                    -> x0
     v2   Imm(4615063718147915776)                         -> x1
-    v3   Store { addr=v1, disp=0, value=v2, kind=F80 }    -> -
+    v3   StoreLocal { off=-3, value=v2, kind=F80 }        -> -
     v4   LocalAddr(-3)                                    -> x1
     v5   LifetimeEnd(-3)                                  -> -
     terminator Return(v1)   (exit_acc=v1)
@@ -30,7 +30,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-3)                                    -> x0
     v2   Imm(4616752568008179712)                         -> x1
-    v3   Store { addr=v1, disp=0, value=v2, kind=F80 }    -> -
+    v3   StoreLocal { off=-3, value=v2, kind=F80 }        -> -
     v4   LocalAddr(-3)                                    -> x1
     v5   LifetimeEnd(-3)                                  -> -
     terminator Return(v1)   (exit_acc=v1)
@@ -51,7 +51,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v9   FpCast { kind=IntToFp, value=v1 }                -> d1
     v10  Fma { a=v4, b=v6, c=v9, neg_product=false, neg_addend=false } -> d0
     v11  LocalAddr(-6)                                    -> x0
-    v12  Store { addr=v11, disp=0, value=v10, kind=F80 }  -> -
+    v12  StoreLocal { off=-6, value=v10, kind=F80 }       -> -
     v13  LifetimeEnd(-5)                                  -> -
     terminator Return(v11)   (exit_acc=v11)
 ; --- SSA dump (ok=true) ent_pc=4 ---
@@ -77,7 +77,7 @@ fn ent_pc=4 n_params=3 variadic=false locals=0
     v15  FpCast { kind=IntToFp, value=v3 }                -> d1
     v16  Binop { op=fadd, lhs=v13, rhs=v15 }              -> d0
     v17  LocalAddr(-7)                                    -> x0
-    v18  Store { addr=v17, disp=0, value=v16, kind=F80 }  -> -
+    v18  StoreLocal { off=-7, value=v16, kind=F80 }       -> -
     v19  LifetimeEnd(-6)                                  -> -
     terminator Return(v17)   (exit_acc=v17)
 ; --- SSA dump (ok=true) ent_pc=5 ---
@@ -94,7 +94,7 @@ fn ent_pc=5 n_params=3 variadic=false locals=0
     v6   Imm(0)                                           -> x2
     v7   FpCast { kind=IntToFp, value=v1 }                -> d1
     v8   Binop { op=fadd, lhs=v5, rhs=v7 }                -> d0
-    v9   Store { addr=v3, disp=0, value=v8, kind=F80 }    -> -
+    v9   StoreLocal { off=-6, value=v8, kind=F80 }        -> -
     v10  LoadLocal { off=2, kind=I64 }                    -> x0
     v11  LocalAddr(-6)                                    -> x2
     v12  Mcpy { dst=v10, src=v3, size=16, align=16 }      -> -
@@ -164,7 +164,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   LocalAddr(-30)                                   -> x9
     v2   Imm(4609434218613702656)                         -> x0
-    v3   Store { addr=v1, disp=0, value=v2, kind=F80 }    -> -
+    v3   StoreLocal { off=-30, value=v2, kind=F80 }       -> -
     v4   LocalAddr(-31)                                   -> x0
     v5   Imm(4612811918334230528)                         -> x0
     v6   StoreLocal { off=-31, value=v5, kind=F80 }       -> -

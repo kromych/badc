@@ -30,11 +30,11 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
                	leaq	-0x18(%rbp), %rdx
-               	movl	$0x1, (%rdx)
-               	movl	$0x2, 0x4(%rdx)
-               	movl	$0x3, 0x8(%rdx)
-               	movl	$0x4, 0xc(%rdx)
-               	movl	$0x5, 0x10(%rdx)
+               	movl	$0x1, -0x18(%rbp)
+               	movl	$0x2, -0x14(%rbp)
+               	movl	$0x3, -0x10(%rbp)
+               	movl	$0x4, -0xc(%rbp)
+               	movl	$0x5, -0x8(%rbp)
                	xorl	%eax, %eax
                	movq	%rax, %rcx
                	movl	(%rdx,%rax,4), %esi

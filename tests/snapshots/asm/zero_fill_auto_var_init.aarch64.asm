@@ -24,8 +24,8 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x1, #0x30]
                	and	x2, x0, #0x7
                	str	x0, [x1, x2, lsl #3]
-               	ldr	x0, [x1]
-               	ldr	x1, [x1, #0x38]
+               	ldur	x0, [x29, #-0x40]
+               	ldur	x1, [x29, #-0x8]
                	add	x0, x0, x1
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
@@ -54,8 +54,8 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x1, #0xf0]
                	and	x2, x0, #0x1f
                	str	x0, [x1, x2, lsl #3]
-               	ldr	x0, [x1]
-               	ldr	x1, [x1, #0xf8]
+               	ldur	x0, [x29, #-0x100]
+               	ldur	x1, [x29, #-0x8]
                	add	x0, x0, x1
                	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
@@ -93,8 +93,8 @@ Disassembly of section .text:
                	mul	x2, x2, x17
                	sub	x2, x0, x2
                	str	x0, [x1, x2, lsl #3]
-               	ldr	x0, [x1]
-               	ldr	x1, [x1, #0x100]
+               	ldr	x0, [sp, #0x8]
+               	ldur	x1, [x29, #-0x8]
                	add	x0, x0, x1
                	add	sp, sp, #0x110
                	ldp	x29, x30, [sp], #0x10
@@ -115,8 +115,8 @@ Disassembly of section .text:
                	b.ne	<addr>
                	and	x2, x0, #0x1ff
                	str	x0, [x1, x2, lsl #3]
-               	ldr	x0, [x1]
-               	ldr	x1, [x1, #0xff8]
+               	ldr	x0, [sp]
+               	ldur	x1, [x29, #-0x8]
                	add	x0, x0, x1
                	add	sp, sp, #0x1, lsl #12   // =0x1000
                	ldp	x29, x30, [sp], #0x10
@@ -140,7 +140,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	and	x2, x0, #0x1fff
                	str	x0, [x1, x2, lsl #3]
-               	ldr	x0, [x1]
+               	ldr	x0, [sp]
                	mov	x17, #0xfff8            // =65528
                	add	x1, x1, x17
                	ldr	x1, [x1]
@@ -152,40 +152,38 @@ Disassembly of section .text:
 <uninit_vla>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x30
-               	stur	x1, [x29, #-0x20]
-               	lsl	x1, x0, #3
-               	add	x17, x1, #0xf
+               	sub	sp, sp, #0x10
+               	lsl	x2, x0, #3
+               	add	x17, x2, #0xf
                	and	x17, x17, #0xfffffffffffffff0
-               	mov	x2, sp
-               	sub	x2, x2, x17
+               	mov	x3, sp
+               	sub	x3, x3, x17
                	lsr	x17, x17, #12
                	cbz	x17, <addr>
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
                	subs	x17, x17, #0x1
                	b.ne	<addr>
-               	mov	sp, x2
-               	add	x1, x1, #0x7
-               	and	x1, x1, #0xfffffffffffffff8
-               	add	x3, x2, x1
-               	mov	x1, x2
-               	cmp	x1, x3
+               	mov	sp, x3
+               	add	x2, x2, #0x7
+               	and	x2, x2, #0xfffffffffffffff8
+               	add	x4, x3, x2
+               	mov	x2, x3
+               	cmp	x2, x4
                	b.hs	<addr>
-               	str	xzr, [x1]
-               	add	x1, x1, #0x8
-               	cmp	x1, x3
+               	str	xzr, [x2]
+               	add	x2, x2, #0x8
+               	cmp	x2, x4
                	b.lo	<addr>
-               	ldur	x1, [x29, #-0x20]
                	udiv	x17, x1, x0
-               	msub	x3, x17, x0, x1
-               	str	x1, [x2, x3, lsl #3]
-               	ldr	x1, [x2]
+               	msub	x2, x17, x0, x1
+               	str	x1, [x3, x2, lsl #3]
+               	ldr	x1, [x3]
                	sub	x0, x0, #0x1
-               	ldr	x0, [x2, x0, lsl #3]
+               	ldr	x0, [x3, x0, lsl #3]
                	add	x0, x1, x0
-               	sub	sp, x29, #0x30
-               	add	sp, sp, #0x30
+               	sub	sp, x29, #0x10
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 

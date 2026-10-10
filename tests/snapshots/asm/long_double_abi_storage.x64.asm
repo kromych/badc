@@ -126,16 +126,15 @@ Disassembly of section .text:
                	movl	$0x10, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x10(%rbp), %rax
-               	movzbq	0x7(%rax), %rcx
-               	xorq	$0x80, %rcx
-               	testl	%ecx, %ecx
+               	movzbq	-0x9(%rbp), %rax
+               	xorq	$0x80, %rax
+               	testl	%eax, %eax
                	jne	<addr>
-               	movzbq	0x8(%rax), %rcx
-               	xorq	$0xff, %rcx
-               	testl	%ecx, %ecx
+               	movzbq	-0x8(%rbp), %rax
+               	xorq	$0xff, %rax
+               	testl	%eax, %eax
                	jne	<addr>
-               	movzbq	0x9(%rax), %rax
+               	movzbq	-0x7(%rbp), %rax
                	xorq	$0x3f, %rax
                	testl	%eax, %eax
                	je	<addr>

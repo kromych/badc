@@ -17,67 +17,66 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sub	x0, x29, #0x10
-               	ldr	w1, [x0]
-               	and	x1, x1, #0xffffffff80000000
-               	orr	x1, x1, #0x7fffffff
-               	str	w1, [x0]
-               	ldrb	w1, [x0, #0x3]
-               	and	x1, x1, #0xffffffffffffff7f
-               	orr	x1, x1, #0x80
-               	strb	w1, [x0, #0x3]
-               	ldr	w2, [x0, #0x4]
-               	and	x2, x2, #0xffffffffc0000000
-               	orr	x2, x2, #0x3fffffff
-               	str	w2, [x0, #0x4]
-               	ldrb	w2, [x0, #0x7]
-               	and	x2, x2, #0xffffffffffffff3f
-               	orr	x2, x2, #0xc0
-               	strb	w2, [x0, #0x7]
-               	mov	x3, #0xbeef             // =48879
-               	movk	x3, #0xdead, lsl #16
-               	str	w3, [x0, #0x8]
-               	mov	x3, #0xab               // =171
-               	strb	w3, [x0, #0xc]
-               	ldr	w3, [x0]
-               	and	x3, x3, #0x7fffffff
+               	ldur	w0, [x29, #-0x10]
+               	and	x0, x0, #0xffffffff80000000
+               	orr	x0, x0, #0x7fffffff
+               	stur	w0, [x29, #-0x10]
+               	ldurb	w0, [x29, #-0xd]
+               	and	x0, x0, #0xffffffffffffff7f
+               	orr	x0, x0, #0x80
+               	sturb	w0, [x29, #-0xd]
+               	ldur	w1, [x29, #-0xc]
+               	and	x1, x1, #0xffffffffc0000000
+               	orr	x1, x1, #0x3fffffff
+               	stur	w1, [x29, #-0xc]
+               	ldurb	w1, [x29, #-0x9]
+               	and	x1, x1, #0xffffffffffffff3f
+               	orr	x1, x1, #0xc0
+               	sturb	w1, [x29, #-0x9]
+               	mov	x2, #0xbeef             // =48879
+               	movk	x2, #0xdead, lsl #16
+               	stur	w2, [x29, #-0x8]
+               	mov	x2, #0xab               // =171
+               	sturb	w2, [x29, #-0x4]
+               	ldur	w2, [x29, #-0x10]
+               	and	x2, x2, #0x7fffffff
                	mov	x17, #0x7fffffff        // =2147483647
-               	cmp	w3, w17
+               	cmp	w2, w17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	and	x1, x1, #0xff
-               	asr	x1, x1, #7
-               	cmp	w1, #0x1
+               	and	x0, x0, #0xff
+               	asr	x0, x0, #7
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	w1, [x0, #0x4]
-               	and	x1, x1, #0x3fffffff
+               	ldur	w0, [x29, #-0xc]
+               	and	x0, x0, #0x3fffffff
                	mov	x17, #0x3fffffff        // =1073741823
-               	cmp	w1, w17
+               	cmp	w0, w17
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	and	x1, x2, #0xff
-               	asr	x2, x1, #6
-               	cmp	w2, #0x3
+               	and	x0, x1, #0xff
+               	asr	x1, x0, #6
+               	cmp	w1, #0x3
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	w2, [x0]
-               	and	x2, x2, #0xffffffff80000000
-               	str	w2, [x0]
-               	and	x1, x1, #0xffffffffffffff3f
-               	strb	w1, [x0, #0x7]
+               	ldur	w1, [x29, #-0x10]
+               	and	x1, x1, #0xffffffff80000000
+               	stur	w1, [x29, #-0x10]
+               	and	x0, x0, #0xffffffffffffff3f
+               	sturb	w0, [x29, #-0x9]
                	mov	x0, #0x0                // =0
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10

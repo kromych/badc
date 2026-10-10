@@ -25,38 +25,37 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x28
                	b.lt	<addr>
-               	sub	x2, x29, #0xa8
-               	ldr	w0, [x2]
-               	ldr	w1, [x2, #0x9c]
+               	sub	x3, x29, #0xa8
+               	ldur	w0, [x29, #-0xa8]
+               	ldur	w1, [x29, #-0xc]
                	add	x0, x0, x1
                	stur	w0, [x29, #-0x8]
                	ldur	w0, [x29, #-0x8]
-               	sub	x3, x29, #0x70
-               	stp	xzr, xzr, [x3]
-               	stp	xzr, xzr, [x3, #0x10]
-               	stp	xzr, xzr, [x3, #0x20]
-               	stp	xzr, xzr, [x3, #0x30]
-               	stp	xzr, xzr, [x3, #0x40]
-               	stp	xzr, xzr, [x3, #0x50]
-               	str	wzr, [x3, #0x60]
+               	sub	x2, x29, #0x70
+               	stp	xzr, xzr, [x2]
+               	stp	xzr, xzr, [x2, #0x10]
+               	stp	xzr, xzr, [x2, #0x20]
+               	stp	xzr, xzr, [x2, #0x30]
+               	stp	xzr, xzr, [x2, #0x40]
+               	stp	xzr, xzr, [x2, #0x50]
+               	str	wzr, [x2, #0x60]
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	ldr	w4, [x3, x0, lsl #2]
+               	ldr	w4, [x2, x0, lsl #2]
                	add	x1, x1, x4
                	add	x0, x0, #0x1
                	cmp	w0, #0x19
                	b.lt	<addr>
-               	mov	x3, #0x5678             // =22136
-               	movk	x3, #0x1234, lsl #16
+               	mov	x2, #0x5678             // =22136
+               	movk	x2, #0x1234, lsl #16
                	mov	x0, #0x0                // =0
-               	str	w3, [x2, x0, lsl #2]
+               	str	w2, [x3, x0, lsl #2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x28
                	b.lt	<addr>
-               	sub	x0, x29, #0xa8
-               	ldr	w2, [x0]
-               	ldr	w0, [x0, #0x9c]
-               	add	x0, x2, x0
+               	ldur	w0, [x29, #-0xa8]
+               	ldur	w2, [x29, #-0xc]
+               	add	x0, x0, x2
                	stur	w0, [x29, #-0x8]
                	ldur	w0, [x29, #-0x8]
                	sub	x3, x29, #0x70

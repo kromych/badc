@@ -139,9 +139,9 @@ Disassembly of section .text:
                	sub	sp, sp, #0x30
                	sub	x7, x29, #0x10
                	mov	x0, #0x6f               // =111
-               	str	x0, [x7]
+               	stur	x0, [x29, #-0x10]
                	mov	x0, #0xde               // =222
-               	str	x0, [x7, #0x8]
+               	stur	x0, [x29, #-0x8]
                	mov	x0, #0x1                // =1
                	mov	x1, #0x2                // =2
                	mov	x2, #0x3                // =3

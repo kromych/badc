@@ -526,32 +526,31 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x28]
                	ldur	w1, [x29, #-0x28]
                	bl	<addr>
-               	sub	x1, x29, #0x30
-               	ldr	w2, [x1]
-               	and	x2, x2, #0x7
-               	cmp	w2, #0x5
+               	ldur	w1, [x29, #-0x30]
+               	and	x1, x1, #0x7
+               	cmp	w1, #0x5
                	b.ne	<addr>
-               	ldr	w2, [x1]
-               	asr	x2, x2, #3
-               	and	x2, x2, #0x1f
-               	cmp	w2, #0x5
+               	ldur	w1, [x29, #-0x30]
+               	asr	x1, x1, #3
+               	and	x1, x1, #0x1f
+               	cmp	w1, #0x5
                	b.ne	<addr>
-               	ldr	w2, [x1]
-               	asr	x2, x2, #8
-               	and	x2, x2, #0xff
-               	cmp	w2, #0xc8
+               	ldur	w1, [x29, #-0x30]
+               	asr	x1, x1, #8
+               	and	x1, x1, #0xff
+               	cmp	w1, #0xc8
                	b.ne	<addr>
-               	ldr	w2, [x1]
-               	asr	x2, x2, #16
+               	ldur	w1, [x29, #-0x30]
+               	asr	x1, x1, #16
                	mov	x17, #0x9daa            // =40362
-               	cmp	w2, w17
+               	cmp	w1, w17
                	b.eq	<addr>
                	mov	x0, #0x1a               // =26
                	ldp	x29, x30, [sp, #0x50]
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x60
                	ret
-               	ldr	w1, [x1]
+               	ldur	w1, [x29, #-0x30]
                	and	x2, x1, #0x7
                	asr	x3, x1, #3
                	and	x3, x3, #0x1f

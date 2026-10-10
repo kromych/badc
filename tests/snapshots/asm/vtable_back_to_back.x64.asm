@@ -53,7 +53,7 @@ Disassembly of section .text:
                	movl	$0x8, %ecx
                	callq	*%rax
                	leaq	-0x10(%rbp), %rdi
-               	movq	(%rdi), %rax
+               	movq	-0x10(%rbp), %rax
                	movq	0x8(%rax), %rax
                	leaq	-0x18(%rbp), %rsi
                	movl	$0x1, %edx

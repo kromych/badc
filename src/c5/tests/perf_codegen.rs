@@ -4428,6 +4428,37 @@ fn a64_binary128_borrow_saves_live_values() {
     assert_eq!(live, (9..=14).collect::<Vec<u32>>(), "{ws:08x?}");
 }
 
+/// A field of a local struct whose address escapes is one `ldr` / `str`
+/// off the frame base, not an access through a built address.
+#[test]
+fn a64_frame_object_access_at_a_displacement_is_one_instruction() {
+    const SRC: &str = "struct Pair { long a, b, c, d; };\n\
+        void use_(struct Pair *);\n\
+        long fields(long n) {\n\
+            struct Pair p = {n, n + 1, n + 2, n + 3};\n\
+            use_(&p);\n\
+            p.a += 1; p.b += 2; p.c += 3; p.d += 4;\n\
+            use_(&p);\n\
+            return p.a + p.b + p.c + p.d;\n\
+        }\n";
+    let mut m = Misses::default();
+    let dump = ssa_dump_for(SRC, "fields", Target::LinuxAarch64, true);
+    m.expect(dump.contains("disp=8") && dump.contains("disp=24"), || {
+        format!("aarch64: the field accesses carry their displacement: {dump}")
+    });
+    let ws = a64(SRC, "fields");
+    // Four loads and four stores off fp or sp; none through a built address.
+    let off_frame = ws
+        .iter()
+        .filter(|&&w| a64_mem_imm(w).is_some_and(|(rn, _, _)| matches!(rn, 19 | 29 | 31)))
+        .count();
+    let built = [29, 31].map(|base| a64_built_accesses(&ws, base));
+    m.expect(off_frame >= 8 && built == [(0, 0); 2], || {
+        format!("aarch64: {off_frame} accesses off a frame base, built {built:?}: {ws:08x?}")
+    });
+    m.finish();
+}
+
 /// Four values live across a call made after an asm statement moves sp; with
 /// the integer bank capped to two registers they spill. `set_sp`, whose asm
 /// takes no operand to stage, is a full leaf: it has no frame and keeps sp

@@ -253,6 +253,7 @@ fn scatter(
                 at,
                 Inst::StoreLocal {
                     off: slot,
+                    disp: 0,
                     value: v,
                     kind,
                     volatile: false,
@@ -772,7 +773,9 @@ mod tests {
                     .take_while(|&v| !matches!(f.insts[v as usize], Inst::Load { .. }))
                     .filter_map(|v| match f.insts[v as usize] {
                         Inst::Store { disp, kind, .. } => Some((disp, kind)),
-                        Inst::StoreLocal { off, kind, .. } if off == slot => Some((0, kind)),
+                        Inst::StoreLocal {
+                            disp: 0, off, kind, ..
+                        } if off == slot => Some((0, kind)),
                         _ => None,
                     })
                     .collect();

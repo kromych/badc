@@ -37,20 +37,19 @@ Disassembly of section .text:
                	movl	$0x3, %edx
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x8(%rbp), %rax
-               	movsbq	(%rax), %rcx
-               	cmpl	$0x41, %ecx
+               	movsbq	-0x8(%rbp), %rax
+               	cmpl	$0x41, %eax
                	jne	<addr>
-               	movsbq	0x1(%rax), %rcx
-               	cmpl	$0x41, %ecx
+               	movsbq	-0x7(%rbp), %rax
+               	cmpl	$0x41, %eax
                	jne	<addr>
-               	movsbq	0x2(%rax), %rcx
-               	cmpl	$0x41, %ecx
+               	movsbq	-0x6(%rbp), %rax
+               	cmpl	$0x41, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	movsbq	0x3(%rax), %rax
+               	movsbq	-0x5(%rbp), %rax
                	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x4, %eax

@@ -50,8 +50,7 @@ Disassembly of section .text:
                	movl	-0x8(%rbp), %edi
                	xorl	%eax, %eax
                	callq	<addr>
-               	leaq	-0x8(%rbp), %rax
-               	movl	0x4(%rax), %edi
+               	movl	-0x4(%rbp), %edi
                	leaq	<rip>, %rsi
                	movl	$0x1, %edx
                	xorl	%eax, %eax

@@ -327,13 +327,13 @@ Disassembly of section .text:
                	mov	x3, #0xc                // =12
                	sub	x1, x29, #0x20
                	adr	x13, <addr>
-               	str	x13, [x1]
+               	stur	x13, [x29, #-0x20]
                	adr	x13, <addr>
-               	str	x13, [x1, #0x8]
+               	stur	x13, [x29, #-0x18]
                	adr	x13, <addr>
-               	str	x13, [x1, #0x10]
+               	stur	x13, [x29, #-0x10]
                	adr	x13, <addr>
-               	str	x13, [x1, #0x18]
+               	stur	x13, [x29, #-0x8]
                	ldrb	w13, [x0]
                	ldr	x14, [x1, x13, lsl #3]
                	mov	x13, x15

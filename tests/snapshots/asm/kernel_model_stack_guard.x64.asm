@@ -14,9 +14,9 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rsi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rsi)
-               	movl	%edi, (%rsi)
-               	movl	$0x10, 0x4(%rsi)
-               	movq	%rax, 0x8(%rsi)
+               	movl	%edi, -0x20(%rbp)
+               	movl	$0x10, -0x1c(%rbp)
+               	movq	%rax, -0x18(%rbp)
                	movq	$0x0, %rdi
 		R_X86_64_32S	idt_table
                	movl	$0x1, %edx

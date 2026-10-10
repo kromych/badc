@@ -167,8 +167,7 @@ Disassembly of section .text:
                	movl	$0xc, %eax
                	leave
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
+               	movq	-0x8(%rbp), %rax
                	movq	0x8(%rax), %rax
                	movl	$0x2, %edi
                	movl	$0x1, %esi
@@ -178,8 +177,7 @@ Disassembly of section .text:
                	movl	$0xd, %eax
                	leave
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
+               	movq	-0x8(%rbp), %rax
                	movq	0x8(%rax), %rax
                	movl	$0x2, %edi
                	movl	$0x1, %esi
@@ -189,8 +187,7 @@ Disassembly of section .text:
                	movl	$0xe, %eax
                	leave
                	retq
-               	leaq	-0x8(%rbp), %rax
-               	movq	(%rax), %rax
+               	movq	-0x8(%rbp), %rax
                	movq	(%rax), %rax
                	movl	$0x2, %edi
                	movl	$0x1, %esi

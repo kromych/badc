@@ -476,8 +476,7 @@ Disassembly of section .text:
                	movabsq	$0x3fc0000000000000, %rax # imm = 0x3FC0000000000000
                	movq	%rax, %xmm14
                	vfmadd132sd	0x8(%rsp), %xmm14, %xmm0 # xmm0 = (xmm0 * mem) + xmm14
-               	movsd	0x8(%rsp), %xmm15
-               	mulsd	%xmm15, %xmm0
+               	vmulsd	0x8(%rsp), %xmm0, %xmm0
                	movabsq	$0x3fec000000000000, %rax # imm = 0x3FEC000000000000
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0

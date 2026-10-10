@@ -105,6 +105,8 @@ pub(super) struct X64Insn {
     pub(super) sib: Option<u8>,
     pub(super) imm: i64,
     pub(super) disp: i64,
+    /// A VEX-encoded instruction (C4 / C5 prefix).
+    pub(super) vex: bool,
 }
 
 impl X64Insn {
@@ -175,6 +177,7 @@ pub(super) fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
         }
         let mut op = u16::from(code[i]);
         i += 1;
+        let vex = matches!(op, 0xC4 | 0xC5);
         if op == 0x0F {
             op = 0x0F00 | u16::from(code[i]);
             i += 1;
@@ -308,6 +311,7 @@ pub(super) fn x64_insns(code: &[u8]) -> Vec<X64Insn> {
             sib,
             imm,
             disp,
+            vex,
         });
     }
     assert_eq!(i, code.len(), "x86-64 walk overran the function");
@@ -2468,7 +2472,7 @@ fn x64_fma_form_follows_the_dying_operand() {
 /// register holds neither operand -- both stay live across the op, so
 /// the two-operand row would stage a copy first -- and keeps the
 /// two-operand row when the destination is the dying lhs register, the
-/// copy-free case where it is a byte shorter.
+/// copy-free case where both rows are four bytes.
 #[test]
 fn x64_scalar_fp_arith_picks_the_vex_three_operand_row() {
     const SRC: &str = "double g, h;\n\
@@ -2489,15 +2493,15 @@ fn x64_scalar_fp_arith_picks_the_vex_three_operand_row() {
     );
     let ops: Vec<&X64Insn> = spread.iter().filter(|i| arith(i)).collect();
     assert_eq!(ops.len(), 3, "{spread:x?}");
-    assert!(
-        ops[0].len == 5 && ops[1].len == 5,
-        "not the VEX rows: {spread:x?}"
-    );
+    assert!(ops[0].vex && ops[1].vex, "not the VEX rows: {spread:x?}");
     let acc = x64(SRC, "acc");
     // a dies at the add and the result returns in a's register: the
     // two-operand row writes in place.
     let add = acc.iter().find(|i| i.op == 0x0F58).expect("the add");
-    assert_eq!(add.len, 4, "not the two-operand row: {acc:x?}");
+    assert!(
+        !add.vex && add.len == 4,
+        "not the two-operand row: {acc:x?}"
+    );
 }
 
 /// A register output of an inline asm statement into a scalar local is

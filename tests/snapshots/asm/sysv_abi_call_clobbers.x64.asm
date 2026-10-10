@@ -50,8 +50,7 @@ Disassembly of section .text:
                	movsd	0x8(%rsp), %xmm0
                	movsd	0x8(%rsp), %xmm14
                	vfmadd132sd	(%rsp), %xmm14, %xmm0 # xmm0 = (xmm0 * mem) + xmm14
-               	movsd	(%rsp), %xmm15
-               	addsd	%xmm15, %xmm0
+               	vaddsd	(%rsp), %xmm0, %xmm0
                	leave
                	retq
 
@@ -136,10 +135,8 @@ Disassembly of section .text:
                	callq	<addr>
                	movsd	0x18(%rsp), %xmm14
                	vfmadd231sd	0x10(%rsp), %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
-               	movsd	0x18(%rsp), %xmm15
-               	addsd	%xmm15, %xmm0
-               	movsd	0x10(%rsp), %xmm15
-               	addsd	%xmm15, %xmm0
+               	vaddsd	0x18(%rsp), %xmm0, %xmm0
+               	vaddsd	0x10(%rsp), %xmm0, %xmm0
                	popq	%rbx
                	leave
                	retq

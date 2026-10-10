@@ -1074,6 +1074,19 @@ pub(crate) fn emit_vex_fma_mem(
     emit_modrm_mem(code, dst, base, disp);
 }
 
+fn emit_vex_0f_prefix(code: &mut Vec<u8>, reg: Reg, vvvv: Reg, rm: Reg, pp: u8) {
+    let r = u8::from(!reg.high());
+    let v = !(((vvvv.high() as u8) << 3) | vvvv.lo()) & 0xF;
+    if rm.high() {
+        emit_byte(code, 0xC4);
+        emit_byte(code, (r << 7) | (1 << 6) | 0b00001);
+        emit_byte(code, (v << 3) | pp);
+    } else {
+        emit_byte(code, 0xC5);
+        emit_byte(code, (r << 7) | (v << 3) | pp);
+    }
+}
+
 /// Emit a VEX three-operand scalar FP arithmetic instruction:
 /// `dst = a <op> b`, `a` in VEX.vvvv and `b` in ModR/M.r/m, so neither
 /// source is overwritten. `opcode` is the scalar SSE opcode (58 add,
@@ -1088,17 +1101,7 @@ pub(crate) fn emit_vex_fp_arith(
     a: Reg,
     b: Reg,
 ) {
-    // 3-byte VEX (C4): byte1 R X B mmmmm (R/B inverted high bits;
-    // mmmmm = 00001 the 0F map), byte2 W vvvv L pp (vvvv inverted,
-    // L = 0 scalar).
-    let r = if dst.high() { 0u8 } else { 1u8 };
-    let b_bit = if b.high() { 0u8 } else { 1u8 };
-    let a_num = ((a.high() as u8) << 3) | a.lo();
-    let vvvv = (!a_num) & 0xF;
-    let pp = if is_f32 { 0b10 } else { 0b11 };
-    emit_byte(code, 0xC4);
-    emit_byte(code, (r << 7) | (1 << 6) | (b_bit << 5) | 0b00001);
-    emit_byte(code, (vvvv << 3) | pp);
+    emit_vex_0f_prefix(code, dst, a, b, if is_f32 { 0b10 } else { 0b11 });
     emit_byte(code, opcode);
     emit_byte(code, modrm(0b11, dst.lo(), b.lo()));
 }
@@ -1113,14 +1116,7 @@ pub(crate) fn emit_vex_fp_arith_mem(
     base: Reg,
     disp: i32,
 ) {
-    let r = if dst.high() { 0u8 } else { 1u8 };
-    let b_bit = if base.high() { 0u8 } else { 1u8 };
-    let a_num = ((a.high() as u8) << 3) | a.lo();
-    let vvvv = (!a_num) & 0xF;
-    let pp = if is_f32 { 0b10 } else { 0b11 };
-    emit_byte(code, 0xC4);
-    emit_byte(code, (r << 7) | (1 << 6) | (b_bit << 5) | 0b00001);
-    emit_byte(code, (vvvv << 3) | pp);
+    emit_vex_0f_prefix(code, dst, a, base, if is_f32 { 0b10 } else { 0b11 });
     emit_byte(code, opcode);
     emit_modrm_mem(code, dst, base, disp);
 }
@@ -2589,34 +2585,39 @@ mod tests {
 
     #[test]
     fn vex_fp_arith_scalar_encodings() {
-        // The VEX.NDS.LIG rows of the 0F map read both sources in place:
-        // vaddsd xmm0, xmm1, xmm2 -> C4 E1 73 58 C2 (vvvv = xmm1,
-        // pp = 0xF2), the ss row takes pp = 0xF3. Cross-checked against
-        // clang's assembler.
+        // The VEX.NDS.LIG rows of the 0F map, as clang's assembler encodes them.
         assert_eq!(
             assemble(|c| emit_vex_fp_arith(c, 0x58, false, Reg(0), Reg(1), Reg(2))),
-            vec![0xC4, 0xE1, 0x73, 0x58, 0xC2]
+            vec![0xC5, 0xF3, 0x58, 0xC2]
         );
         assert_eq!(
             assemble(|c| emit_vex_fp_arith(c, 0x5C, false, Reg(2), Reg(3), Reg(4))),
-            vec![0xC4, 0xE1, 0x63, 0x5C, 0xD4]
+            vec![0xC5, 0xE3, 0x5C, 0xD4]
         );
         assert_eq!(
             assemble(|c| emit_vex_fp_arith(c, 0x58, true, Reg(0), Reg(1), Reg(2))),
-            vec![0xC4, 0xE1, 0x72, 0x58, 0xC2]
+            vec![0xC5, 0xF2, 0x58, 0xC2]
         );
-        // Extended registers clear VEX.R / VEX.B: vaddsd xmm8, xmm9,
-        // xmm10 -> C4 41 33 58 C2.
+        // An extended r/m register or base needs VEX.B, which only C4 has.
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith(c, 0x58, false, Reg(8), Reg(9), Reg(2))),
+            vec![0xC5, 0x33, 0x58, 0xC2]
+        );
         assert_eq!(
             assemble(|c| emit_vex_fp_arith(c, 0x58, false, Reg(8), Reg(9), Reg(10))),
             vec![0xC4, 0x41, 0x33, 0x58, 0xC2]
         );
-        // A memory r/m operand keeps the base in VEX.B and takes a
-        // ModR/M addressing byte: vaddsd xmm0, xmm1, 8(%rsp) ->
-        // C4 E1 73 58 44 24 08.
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith(c, 0x59, false, Reg(0), Reg(1), Reg(10))),
+            vec![0xC4, 0xC1, 0x73, 0x59, 0xC2]
+        );
         assert_eq!(
             assemble(|c| emit_vex_fp_arith_mem(c, 0x58, false, Reg(0), Reg(1), Reg::RSP, 8)),
-            vec![0xC4, 0xE1, 0x73, 0x58, 0x44, 0x24, 0x08]
+            vec![0xC5, 0xF3, 0x58, 0x44, 0x24, 0x08]
+        );
+        assert_eq!(
+            assemble(|c| emit_vex_fp_arith_mem(c, 0x58, false, Reg(0), Reg(1), Reg(12), 8)),
+            vec![0xC4, 0xC1, 0x73, 0x58, 0x44, 0x24, 0x08]
         );
     }
 

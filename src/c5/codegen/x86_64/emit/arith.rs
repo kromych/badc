@@ -843,15 +843,7 @@ pub(super) fn emit_binop(
     emit_int_binop(code, op, v, dst, rd, lhs_place, rhs_place, alloc, frame)
 }
 
-/// Scalar FP arithmetic in xmm. With the destination in the lhs
-/// register the two-operand SSE row (`addsd dst, rhs`) writes in place
-/// and is a byte shorter, so it stays; the lhs cannot be live past the
-/// op then, or the allocator could not hold both in `dd`. Otherwise the
-/// VEX three-operand row (`vaddsd dst, lhs, rhs`) reads both operands
-/// in place and writes a distinct destination, where the two-operand
-/// row would stage a copy first; the r/m slot reads a spill directly.
-/// 128-bit VEX mixes with legacy SSE freely on the x86-64-v3 baseline
-/// while no 256-bit instruction dirties the upper halves.
+/// Scalar FP arithmetic in xmm: the VEX row, or in place the SSE row where no longer.
 fn emit_fp_binop(
     code: &mut Vec<u8>,
     opcode: u8,
@@ -864,11 +856,15 @@ fn emit_fp_binop(
     let Some(dd) = fp_or_spill_dst(dst, frame) else {
         return fail("Fbinop: dst not fp reg / spill");
     };
-    if lhs_place == Place::FpReg(dd.0) {
+    if lhs_place == Place::FpReg(dd.0) && !matches!(rhs_place, Place::Spill(_)) {
         let Some(dm) = materialize_fp(code, rhs_place, Reg(frame.fp_scratch[1]), frame) else {
             return fail("Fbinop: rhs not fp reg / spill / int reg");
         };
-        emit_sse_fp_arith(code, opcode, is_f32, dd, dm);
+        if dd.high() && !dm.high() {
+            emit_vex_fp_arith(code, opcode, is_f32, dd, dd, dm);
+        } else {
+            emit_sse_fp_arith(code, opcode, is_f32, dd, dm);
+        }
         fp_spill_dst_to_slot(code, dst, dd, frame);
         return Ok(());
     }

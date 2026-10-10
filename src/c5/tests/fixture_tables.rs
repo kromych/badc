@@ -40,6 +40,9 @@
 //!     macros are Linux-only: the macOS-hosted tables reject the
 //!     compile, and on Windows every check sits behind `__linux__` /
 //!     `__aarch64__`, leaving a row that asserts nothing.
+//!   * `asm_template_names_renamed_static.c` -- TODO: the x86-64
+//!     single-image ELF writer and the JIT report a function the unit
+//!     defines and an inline-asm `sym(%rip)` names undefined.
 //!
 //! TODO: `NATIVE_PE_ARM64_FIXTURES` takes none of them -- it runs only
 //! on a windows/aarch64 runner or linux/aarch64 under WINE, neither of
@@ -133,6 +136,10 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("attribute_weak_alias.c", 0),
     ("alias_extern_redeclaration.c", 0),
     ("asm_label_rename.c", 0),
+    ("asm_template_names_renamed_static.c", 0),
+    ("alias_target_assembler_name.c", 0),
+    ("overflow_builtin_result_pointer_operand.c", 0),
+    ("unevaluated_reference_unlowerable_static.c", 0),
     ("attribute_section_placement.c", 0),
     ("inline_section_mandatory.c", 0),
     // TODO: `speculative_init_parse_data_rewind.c` is held off the host
@@ -1402,6 +1409,10 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("c99_float_math_and_vsscanf.c", 0),
     ("alias_extern_redeclaration.c", 0),
     ("asm_label_rename.c", 0),
+    ("asm_template_names_renamed_static.c", 0),
+    ("alias_target_assembler_name.c", 0),
+    ("overflow_builtin_result_pointer_operand.c", 0),
+    ("unevaluated_reference_unlowerable_static.c", 0),
     ("weak_definition_not_inlined.c", 42),
     ("weak_alias_call_not_inlined.c", 42),
     ("nested_block_decl_alignment.c", 42),
@@ -2446,6 +2457,9 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("attribute_weak_alias.c", 0),
     ("alias_extern_redeclaration.c", 0),
     ("asm_label_rename.c", 0),
+    ("alias_target_assembler_name.c", 0),
+    ("overflow_builtin_result_pointer_operand.c", 0),
+    ("unevaluated_reference_unlowerable_static.c", 0),
     ("weak_definition_not_inlined.c", 42),
     ("weak_alias_call_not_inlined.c", 42),
     ("nested_block_decl_alignment.c", 42),
@@ -3288,6 +3302,9 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("asm_register_outputs.c", 0),
     ("asm_multiple_outputs.c", 0),
     ("static_local_shadows_file_scope.c", 0),
+    ("asm_template_names_renamed_static.c", 0),
+    ("overflow_builtin_result_pointer_operand.c", 0),
+    ("unevaluated_reference_unlowerable_static.c", 0),
     ("anon_bitfield_reserves_bits.c", 0),
     ("attribute_mode.c", 0),
     ("transparent_union_call.c", 0),
@@ -4020,6 +4037,9 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("asm_register_outputs.c", 0),
     ("asm_multiple_outputs.c", 0),
     ("static_local_shadows_file_scope.c", 0),
+    ("asm_template_names_renamed_static.c", 0),
+    ("overflow_builtin_result_pointer_operand.c", 0),
+    ("unevaluated_reference_unlowerable_static.c", 0),
     ("anon_bitfield_reserves_bits.c", 0),
     ("attribute_mode.c", 0),
     ("transparent_union_call.c", 0),
@@ -4688,6 +4708,8 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("asm_register_outputs.c", 0),
     ("asm_multiple_outputs.c", 0),
     ("static_local_shadows_file_scope.c", 0),
+    ("overflow_builtin_result_pointer_operand.c", 0),
+    ("unevaluated_reference_unlowerable_static.c", 0),
     // A declared `long double` object takes the target ABI's storage
     // format, and the compute path's binary64 round-trips through it.
     ("long_double_abi_storage.c", 0),

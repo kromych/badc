@@ -993,7 +993,7 @@ fn a_narrower_live_set_never_grows_the_packed_image() {
         .compile()
         .expect("compile");
     let funcs = produce_ssa_funcs(&program, crate::Target::LinuxX64, false, true).expect("ssa");
-    let sets = compute_live_sets(&funcs, &program, false, None);
+    let sets = compute_live_sets(&funcs, &Default::default(), &program, false, None);
     assert!(
         sets.data_live.iter().any(|&l| !l),
         "the fixture leaves dead objects to drop"

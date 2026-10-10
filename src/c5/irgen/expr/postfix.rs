@@ -75,7 +75,7 @@ impl<'a> Walker<'a> {
             && let Expr::Ident {
                 sym, class, val, ..
             } = self.ast.expr(callee)
-            && (*class == Token::Fun as i64 || self.binding_defined_here(*sym, *class))
+            && (*class == Token::Fun as i64 || binding_defined_here(self.symbols, *sym, *class))
         {
             return self.call_direct_out_ptr(b, *sym, *val, args, callee_conv, ty);
         }
@@ -113,7 +113,7 @@ impl<'a> Walker<'a> {
             sym, class, val, ..
         } = self.ast.expr(callee)
         {
-            if *class == Token::Fun as i64 || self.binding_defined_here(*sym, *class) {
+            if *class == Token::Fun as i64 || binding_defined_here(self.symbols, *sym, *class) {
                 return self.call_direct(b, *sym, *val, call_args);
             }
             if *class == Token::Sys as i64 {
@@ -178,7 +178,7 @@ impl<'a> Walker<'a> {
             }
             vals.push(v);
         }
-        let target_pc = self.live_fun_val(sym, val);
+        let target_pc = live_fun_val(self.symbols, sym, val);
         let named = if variadic {
             self.fun_fixed_args(sym).min(exprs.len())
         } else if self.win64_unprototyped(sym, conv) {
@@ -263,7 +263,7 @@ impl<'a> Walker<'a> {
         {
             self.widen_variadic_fp(b, &mut args, fixed_args);
             let fp_return = self.crosses_in_fp_reg(conv, ty);
-            let target_pc = self.live_fun_val(sym, val);
+            let target_pc = live_fun_val(self.symbols, sym, val);
             let call = emit_direct_call(
                 b, target_pc, sym, args.vals, fixed_args, fp_return, fp_mask, conv,
             );
@@ -286,7 +286,7 @@ impl<'a> Walker<'a> {
         // C99 6.2.5p10: a floating-point return rides the FP return
         // register; tag the call so the codegen reads it there.
         let fp_return = self.crosses_in_fp_reg(conv, ty);
-        let target_pc = self.live_fun_val(sym, val);
+        let target_pc = live_fun_val(self.symbols, sym, val);
         // The aggregate return temp is reserved before the call: its
         // frame slot rides on the call instruction rather than as an SSA
         // operand, so it survives value renumbering.
@@ -560,7 +560,7 @@ impl<'a> Walker<'a> {
     /// a variadic call's.
     fn win64_unprototyped(&self, sym: u32, conv: crate::c5::codegen::CallConv) -> bool {
         self.target.abi_for(conv).position_indexed_args
-            && self.live_fun_sym(sym).is_some_and(|s| !s.prototyped)
+            && live_fun_sym(self.symbols, sym).is_some_and(|s| !s.prototyped)
     }
 
     /// C99 6.5.2.2p6: widen each variadic floating-point argument to

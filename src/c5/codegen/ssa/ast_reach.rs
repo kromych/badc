@@ -1,385 +1,204 @@
-//! AST-level function and data reachability, computed ahead of the SSA
-//! walk so the walk -- and the -O passes over its bodies -- never see
-//! the unit's dead functions. Mirrors [`super::shadow::compute_live_sets`]:
-//! the same roots (through its `seed_reachability_roots`), the same edge
-//! set, read off the AST the walker is about to consume. The SSA-level
-//! pass re-derives the set from the walked bodies, and a debug assertion
-//! in the caller checks that this pass never dropped a function the SSA
-//! pass keeps.
+//! AST-level function reachability ahead of the walk: the [`ReachGraph`]
+//! the SSA liveness solves, with each function's edges read off its AST.
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
-use super::shadow::{Node, data_object_starts, push_asm_names, seed_reachability_roots};
-use crate::c5::ast::{BlockItem, Decl, Expr, ExprId, LocalInit, RuntimeInitValue, Stmt, StmtId};
+use super::shadow::{Node, ReachGraph};
+use crate::c5::ast::{Expr, ExprId, FinishedFunction};
+use crate::c5::irgen::{
+    GloAddr, binding_defined_here, glo_ident_addr, live_fun_addr_val, live_fun_val,
+};
 use crate::c5::program::Program;
+use crate::c5::symbol::Symbol;
 use crate::c5::token::Token;
 
-/// Per-function edges collected from the AST: the functions the body
-/// calls or names, and the data intervals its globals address.
-struct Collector<'a> {
-    ast: &'a crate::c5::ast::Ast,
-    symbols: &'a [crate::c5::symbol::Symbol],
-    named: &'a BTreeMap<&'a str, Node>,
-    fun: Vec<usize>,
-    data: Vec<usize>,
-    /// `data_object_starts(program)`, for the offset-to-interval map.
-    starts: &'a [i64],
-    data_len: i64,
-}
-
-impl<'a> Collector<'a> {
-    fn interval_of(&self, off: i64) -> usize {
-        match self.starts.binary_search(&off) {
-            Ok(i) => i,
-            Err(i) => i.saturating_sub(1),
-        }
-    }
-
-    fn push(&mut self, node: Node) {
-        match node {
-            Node::Func(pc) => self.fun.push(pc),
-            Node::Data(i) => self.data.push(i),
-        }
-    }
-
-    fn asm_names(&mut self, text: &[u8]) {
-        let mut found: Vec<Node> = Vec::new();
-        push_asm_names(text, self.named, &mut found);
-        for node in found {
-            self.push(node);
-        }
-    }
-
-    fn asm_block(&mut self, idx: u32) {
-        let block = &self.ast.asm_blocks[idx as usize];
-        for &e in &block.operand_exprs {
-            self.expr(e);
-        }
-        self.asm_names(&block.block.template);
-        for cleanups in &block.cleanups {
-            for &c in cleanups {
-                self.stmt(c);
-            }
-        }
-    }
-
-    fn stmt(&mut self, id: StmtId) {
-        match &self.ast.stmts[id as usize] {
-            Stmt::Compound(items) => {
-                for item in items {
-                    self.item(item);
-                }
-            }
-            Stmt::Expr(e) => self.expr(*e),
-            Stmt::If {
-                cond,
-                then_s,
-                else_s,
-            } => {
-                self.expr(*cond);
-                self.stmt(*then_s);
-                if let Some(e) = else_s {
-                    self.stmt(*e);
-                }
-            }
-            Stmt::While { cond, body } => {
-                self.expr(*cond);
-                self.stmt(*body);
-            }
-            Stmt::DoWhile { body, cond } => {
-                self.stmt(*body);
-                self.expr(*cond);
-            }
-            Stmt::For {
-                init,
-                cond,
-                post,
-                body,
-            } => {
-                if let Some(item) = init {
-                    self.item(item);
-                }
-                if let Some(c) = cond {
-                    self.expr(*c);
-                }
-                if let Some(p) = post {
-                    self.expr(*p);
-                }
-                self.stmt(*body);
-            }
-            Stmt::Switch { disc, body } => {
-                self.expr(*disc);
-                self.stmt(*body);
-            }
-            Stmt::Case { body, .. } | Stmt::Default { body } | Stmt::Labeled { body, .. } => {
-                self.stmt(*body);
-            }
-            Stmt::Break | Stmt::Continue | Stmt::Goto(_) => {}
-            Stmt::Return(e) => {
-                if let Some(e) = e {
-                    self.expr(*e);
-                }
-            }
-            Stmt::GotoIndirect(e) => self.expr(*e),
-            Stmt::Asm { text, .. } => self.asm_names(text.as_bytes()),
-            Stmt::AsmGoto(idx) => self.asm_block(*idx),
-            Stmt::Decl(d) => self.decl(*d),
-            Stmt::VlaScopeEnter { .. } | Stmt::VlaScopeExit { .. } | Stmt::ScopeEnd(_) => {}
-            Stmt::CleanupJump { cleanups, jump } => {
-                for &c in cleanups {
-                    self.stmt(c);
-                }
-                self.stmt(*jump);
-            }
-        }
-    }
-
-    fn item(&mut self, item: &BlockItem) {
-        match item {
-            BlockItem::Stmt(s) => self.stmt(*s),
-            BlockItem::Decl(d) => self.decl(*d),
-        }
-    }
-
-    fn decl(&mut self, id: u32) {
-        match &self.ast.decls[id as usize] {
-            Decl::Local { init, .. } => self.init(init),
-            Decl::Vla { dim, .. } => self.expr(*dim),
-            Decl::StaticLocal { .. } => {}
-        }
-    }
-
-    fn init(&mut self, init: &LocalInit) {
-        match init {
-            LocalInit::None | LocalInit::Aggregate { .. } | LocalInit::Fill { .. } => {}
-            LocalInit::Scalar(e) => self.expr(*e),
-            LocalInit::Runtime { elements, .. } => {
-                for el in elements {
-                    if let RuntimeInitValue::Expr(e) = el.value {
-                        self.expr(e);
-                    }
-                }
-            }
-        }
-    }
-
-    fn expr(&mut self, id: ExprId) {
-        match &self.ast.exprs[id as usize] {
-            Expr::IntLit { .. }
-            | Expr::FloatLit { .. }
-            | Expr::StrLit { .. }
-            | Expr::LabelAddr(_)
-            | Expr::Sizeof(_)
-            | Expr::VlaBase { .. }
-            | Expr::VlaSizeof { .. } => {}
-            Expr::Ident { sym, .. } => {
-                // The snapshot's class / val are the parse-time tags; the
-                // walker resolves the identifier through the symbol's
-                // live binding, as a later scope exit may have restored
-                // it. A function name -- a direct callee or an address
-                // taken -- keeps the definition (an inline one through
-                // its `inline_addr_pc`), a global keeps its data.
-                if let Some(s) = self.symbols.get(*sym as usize) {
-                    if s.is_fun_entity() {
-                        // The live pc is the symbol's `val`; an address
-                        // of an inline-only body resolves to the import
-                        // placeholder, which the closure drops.
-                        self.fun.push(s.val as usize);
-                    } else if s.class == Token::Glo as i64
-                        && s.defined_here
-                        && !s.is_thread_local
-                        && (0..self.data_len).contains(&s.val)
-                    {
-                        self.data.push(self.interval_of(s.val));
-                    }
-                }
-            }
-            Expr::Unary { child, .. }
-            | Expr::Cast { child, .. }
-            | Expr::PreInc { lvalue: child, .. }
-            | Expr::PostInc { lvalue: child, .. }
-            | Expr::Member { obj: child, .. } => self.expr(*child),
-            Expr::Binary { lhs, rhs, .. }
-            | Expr::Comma { lhs, rhs, .. }
-            | Expr::ShortCircuit { lhs, rhs, .. }
-            | Expr::Assign { lhs, rhs, .. }
-            | Expr::CompoundAssign { lhs, rhs, .. }
-            | Expr::Index {
-                array: lhs,
-                idx: rhs,
-                ..
-            }
-            | Expr::BitfieldAssign { obj: lhs, rhs, .. }
-            | Expr::MemTransfer {
-                dst: lhs, src: rhs, ..
-            }
-            | Expr::CheckedArith { a: lhs, b: rhs, .. } => {
-                self.expr(*lhs);
-                self.expr(*rhs);
-            }
-            Expr::Ternary {
-                cond,
-                then_e,
-                else_e,
-                ..
-            } => {
-                self.expr(*cond);
-                self.expr(*then_e);
-                self.expr(*else_e);
-            }
-            Expr::Call { callee, args, .. } => {
-                self.expr(*callee);
-                for &a in args {
-                    self.expr(a);
-                }
-            }
-            Expr::Intrinsic { args, .. }
-            | Expr::Atomic { args, .. }
-            | Expr::X86Simd { args, .. } => {
-                for &a in args {
-                    self.expr(a);
-                }
-            }
-            Expr::InlineAsm(idx) => self.asm_block(*idx),
-            Expr::CompoundLiteral { init, .. } => self.init(init),
-            Expr::StmtExpr { block, .. } => self.stmt(*block),
-        }
-    }
-}
-
-/// The functions of `program` reachable from the roots
-/// [`super::shadow::compute_live_sets`] starts from, with every edge the
-/// SSA pass would derive read off the AST instead: a call, a name used
-/// as a value, an asm template or operand, a global the body addresses,
-/// and the function / data pointers `.data` holds.
+/// The functions a root of `program` reaches: the set the walk lowers.
 pub(crate) fn reachable_functions(program: &Program) -> BTreeSet<usize> {
-    let data_len = program.data.len() as i64;
-    let starts = data_object_starts(program);
-    let n = starts.len();
-    let interval_of = |off: i64| -> usize {
-        match starts.binary_search(&off) {
-            Ok(i) => i,
-            Err(i) => i.saturating_sub(1),
-        }
-    };
-    let defined: BTreeSet<usize> = program
+    let graph = ReachGraph::new(program, &[]);
+    let by_ent: BTreeMap<usize, &FinishedFunction> = program
         .finished_functions
         .iter()
-        .map(|f| f.ent_pc)
+        .map(|f| (f.ent_pc, f))
         .collect();
-
-    // The names an asm template can spell, for the conservative scan.
-    let mut named: BTreeMap<&str, Node> = BTreeMap::new();
-    for sym in &program.symbols {
-        if sym.class == Token::Glo as i64
-            && sym.defined_here
-            && !sym.is_thread_local
-            && !sym.name.is_empty()
-            && (0..data_len).contains(&sym.val)
-        {
-            named.insert(sym.link_name(), Node::Data(interval_of(sym.val)));
+    let defined = by_ent.keys().copied().collect();
+    let (funcs, _) = graph.solve(&defined, None, false, |pc, work| {
+        if let Some(f) = by_ent.get(&pc) {
+            body_edges(&graph, &program.symbols, f, work);
         }
-    }
-    for f in &program.finished_functions {
-        if !f.name.is_empty() {
-            named.insert(f.name.as_str(), Node::Func(f.ent_pc));
-        }
-    }
-
-    // Per-function edges from the AST, and the data-side edges the
-    // program records: a function pointer slot, a `&&label` slot, and
-    // a data slot pointing at another object.
-    let mut fun_edges: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-    let mut data_edges: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-    for f in &program.finished_functions {
-        let mut c = Collector {
-            ast: &f.ast,
-            symbols: &program.symbols,
-            named: &named,
-            fun: Vec::new(),
-            data: Vec::new(),
-            starts: &starts,
-            data_len,
-        };
-        if let Some(body) = f.ast.body {
-            c.stmt(body);
-        }
-        fun_edges.insert(f.ent_pc, c.fun);
-        data_edges.insert(f.ent_pc, c.data);
-    }
-    let mut code_edges: Vec<Vec<usize>> = alloc::vec![Vec::new(); n];
-    let mut data2data: Vec<Vec<usize>> = alloc::vec![Vec::new(); n];
-    if n > 0 {
-        let bound = |r: &&crate::c5::program::CodeReloc| {
-            program.bound_trampoline(r.target_ent_pc).is_some()
-        };
-        for r in program.code_relocs.iter().filter(|r| !bound(r)) {
-            let off = r.data_offset as i64;
-            if (0..data_len).contains(&off) {
-                code_edges[interval_of(off)].push(r.target_ent_pc as usize);
-            }
-        }
-        for (off, ent_pc) in program.label_data_slots() {
-            let off = off as i64;
-            if (0..data_len).contains(&off) {
-                code_edges[interval_of(off)].push(ent_pc);
-            }
-        }
-        for r in &program.data_relocs {
-            let (off, anchor) = (r.data_offset as i64, r.target_anchor as i64);
-            if (0..data_len).contains(&off) && (0..data_len).contains(&anchor) {
-                data2data[interval_of(off)].push(interval_of(anchor));
-            }
-        }
-    }
-
-    // Block-scope statics join their owner's edges; a `used` one whose
-    // owner is never reached is unreachable, exactly as in the SSA pass.
-    let (mut work, mut owner_deps) = seed_reachability_roots(
-        program,
-        &defined,
-        data_len,
-        n,
-        &interval_of,
-        None,
-        false,
-        &named,
-    );
-    for (owner, deps) in core::mem::take(&mut owner_deps) {
-        data_edges.entry(owner).or_default().extend(deps);
-    }
-
-    let mut funcs: BTreeSet<usize> = BTreeSet::new();
-    let mut data_live = alloc::vec![false; n];
-    while let Some(node) = work.pop() {
-        match node {
-            Node::Func(pc) => {
-                if !funcs.insert(pc) {
-                    continue;
-                }
-                for &t in fun_edges.get(&pc).into_iter().flatten() {
-                    if defined.contains(&t) {
-                        work.push(Node::Func(t));
-                    }
-                }
-                for &d in data_edges.get(&pc).into_iter().flatten() {
-                    work.push(Node::Data(d));
-                }
-            }
-            Node::Data(i) => {
-                if data_live[i] {
-                    continue;
-                }
-                data_live[i] = true;
-                for &t in &code_edges[i] {
-                    work.push(Node::Func(t));
-                }
-                for &d in &data2data[i] {
-                    work.push(Node::Data(d));
-                }
-            }
-        }
-    }
+    });
     funcs
+}
+
+/// Every node the body of `f` can reference. The arenas are read whole, so no
+/// node kind or field hides one; an unevaluated operand's identifiers count.
+fn body_edges(graph: &ReachGraph, symbols: &[Symbol], f: &FinishedFunction, work: &mut Vec<Node>) {
+    let ast = &f.ast;
+    ast.data_offsets(|off| work.extend(graph.data(off)));
+    for (id, e) in ast.exprs.iter().enumerate() {
+        let Expr::Ident {
+            sym,
+            class,
+            val,
+            is_thread_local,
+            ..
+        } = *e
+        else {
+            continue;
+        };
+        if class == Token::Glo as i64 {
+            if !is_thread_local
+                && let GloAddr::Resolved(off) = glo_ident_addr(symbols, ast, id as ExprId, sym, val)
+            {
+                work.extend(graph.data(off));
+            }
+        } else if class == Token::Fun as i64 || binding_defined_here(symbols, sym, class) {
+            // A call names the body, an inline definition's address the import.
+            work.push(Node::Func(live_fun_val(symbols, sym, val) as usize));
+            work.push(Node::Func(live_fun_addr_val(symbols, sym, val) as usize));
+        }
+    }
+    for block in &ast.asm_blocks {
+        graph.asm_names(&block.block.template, work);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::shadow::{
+        compute_live_sets, dropped_live_functions, produce_ssa_funcs, walk_program,
+    };
+    use super::reachable_functions;
+    use crate::c5::Target;
+    use crate::c5::compiler::Compiler;
+
+    fn lowered(src: &str, target: Target) -> Result<alloc::vec::Vec<alloc::string::String>, ()> {
+        let opts = crate::c5::compiler::CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(src.into(), target, opts)
+            .compile()
+            .expect("compile");
+        produce_ssa_funcs(&program, target, false, true)
+            .map(|funcs| funcs.into_iter().map(|f| f.name).collect())
+            .map_err(|_| ())
+    }
+
+    fn walked_names(src: &str, target: Target) -> alloc::vec::Vec<alloc::string::String> {
+        lowered(src, target).expect("walk")
+    }
+
+    #[test]
+    fn an_asm_template_keeps_the_function_its_assembler_name_names() {
+        for (target, template) in [
+            (Target::LinuxAarch64, "adr %x0, renamed_target"),
+            (Target::LinuxX64, "lea renamed_target(%%rip), %0"),
+        ] {
+            let src = alloc::format!(
+                "static int foo(void) __asm__(\"renamed_target\");\n\
+                 static int foo(void) {{ return 7; }}\n\
+                 void *addr_of_target(void) {{ void *p; __asm__(\"{template}\" : \"=r\"(p)); return p; }}\n"
+            );
+            let names = walked_names(&src, target);
+            assert!(
+                names.iter().any(|n| n == "renamed_target"),
+                "{target:?}: {names:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_alias_spelling_the_assembler_name_keeps_its_target() {
+        let names = walked_names(
+            "static int impl(void) __asm__(\"impl_asm\");\n\
+             static int impl(void) { return 9; }\n\
+             int pub(void) __attribute__((weak, alias(\"impl_asm\")));\n",
+            Target::LinuxX64,
+        );
+        assert!(names.iter().any(|n| n == "impl_asm"), "{names:?}");
+    }
+
+    #[test]
+    fn an_overflow_builtin_result_pointer_keeps_what_it_reaches() {
+        let names = walked_names(
+            "static long sink;\n\
+             static long *where(void) { return &sink; }\n\
+             static int helper(int x) { return x + 1; }\n\
+             int (*volatile fp)(int);\n\
+             int f(long a) { return __builtin_add_overflow(a, 41L, (fp = helper, where())); }\n",
+            Target::LinuxX64,
+        );
+        for want in ["where", "helper"] {
+            assert!(names.iter().any(|n| n == want), "{want}: {names:?}");
+        }
+    }
+
+    /// A walk error fails the compile only for a live function: a root or a callee.
+    #[test]
+    fn a_walk_error_fails_the_compile_only_for_a_live_function() {
+        let f = "typedef struct { long a, b; } pair;\n\
+                 static _Atomic pair shared;\n\
+                 static pair f(void) { return __atomic_load_n(&shared, 5); }\n";
+        let external = f.replacen("static pair f", "pair f", 1);
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            for (user, live) in [
+                ("int g(void) { return sizeof(f()); }", false),
+                ("int g(void) { if (0) return f().a; return 0; }", false),
+                ("long g(void) { return f().a; }", true),
+            ] {
+                let src = alloc::format!("{f}{user}\n");
+                assert_eq!(lowered(&src, target).is_err(), live, "{target:?}: {user}");
+            }
+            assert!(lowered(&external, target).is_err(), "{target:?}");
+        }
+    }
+
+    /// The AST set holds what the liveness keeps over an unpruned walk, -O0 and -O.
+    #[test]
+    fn ast_reachability_keeps_what_the_unpruned_walk_keeps() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/c");
+        let mut names: alloc::vec::Vec<alloc::string::String> = std::fs::read_dir(&dir)
+            .expect("fixtures")
+            .filter_map(|e| e.ok()?.file_name().into_string().ok())
+            .filter(|n| n.ends_with(".c"))
+            .collect();
+        names.sort();
+        let corpus: alloc::vec::Vec<(&str, ())> = names.iter().map(|n| (n.as_str(), ())).collect();
+        let checked = core::sync::atomic::AtomicUsize::new(0);
+        let target = Target::host();
+        let failures = crate::c5::tests::parity_failures(&corpus, |name, _| {
+            let src = crate::c5::tests::with_prelude(&crate::c5::tests::load_fixture(name));
+            // A fixture this host rejects has no walk to compare.
+            let program = Compiler::with_target(src, target).compile().ok()?;
+            let reachable = reachable_functions(&program);
+            let every = program
+                .finished_functions
+                .iter()
+                .map(|f| f.ent_pc)
+                .collect();
+            for optimize in [false, true] {
+                let (funcs, failed) = walk_program(&program, target, optimize, true, &every);
+                let unwalked = failed.iter().map(|&(pc, _)| pc).collect();
+                let live = compute_live_sets(&funcs, &unwalked, &program, false, None).func_pcs;
+                if failed.iter().any(|(pc, _)| live.contains(pc)) {
+                    return None;
+                }
+                let dropped = dropped_live_functions(&program, &reachable, &live);
+                if !dropped.is_empty() {
+                    return Some(alloc::format!("{name} (optimize {optimize}): {dropped:?}"));
+                }
+            }
+            checked.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+            None
+        });
+        assert!(
+            failures.is_empty(),
+            "the AST reachability dropped functions the SSA liveness keeps:\n  {}",
+            failures.join("\n  ")
+        );
+        let checked = checked.into_inner();
+        assert!(
+            checked * 2 > corpus.len(),
+            "{checked} of {} fixtures compared",
+            corpus.len()
+        );
+    }
 }

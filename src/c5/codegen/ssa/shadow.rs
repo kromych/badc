@@ -78,18 +78,28 @@ fn defined_function_names(
 fn renamed_functions(
     program: &Program,
 ) -> alloc::collections::BTreeMap<&str, &alloc::string::String> {
+    program.symbols.iter().filter_map(function_rename).collect()
+}
+
+fn function_rename(s: &crate::c5::symbol::Symbol) -> Option<(&str, &alloc::string::String)> {
     use crate::c5::token::Token;
-    program
-        .symbols
-        .iter()
-        .filter(|s| s.class == Token::Fun as i64 && !s.name.is_empty())
-        .filter_map(|s| {
-            Some((
-                s.name.as_str(),
-                s.inline_body_name.as_ref().or(s.asm_name.as_ref())?,
-            ))
-        })
-        .collect()
+    if s.class != Token::Fun as i64 || s.name.is_empty() {
+        return None;
+    }
+    Some((
+        s.name.as_str(),
+        s.inline_body_name.as_ref().or(s.asm_name.as_ref())?,
+    ))
+}
+
+/// The assembler name [`walk_program`] emits `f` under.
+fn emitted_name<'p>(
+    renamed: &alloc::collections::BTreeMap<&str, &'p alloc::string::String>,
+    f: &'p crate::c5::ast::FinishedFunction,
+) -> &'p str {
+    renamed
+        .get(f.name.as_str())
+        .map_or(f.name.as_str(), |&n| n.as_str())
 }
 
 /// Names of function definitions with internal linkage (C99 6.2.2).
@@ -109,19 +119,16 @@ fn internal_function_names(program: &Program) -> alloc::collections::BTreeSet<&s
         .collect()
 }
 
-/// Walks every entry in `program.finished_functions` through
-/// [`crate::c5::irgen::walk_function`] and returns one
-/// `FunctionSsa` per source function in `ent_pc` order. Sys
-/// trampolines and the synthetic CRT entry don't go through
-/// the AST walker; the caller layers them on from
-/// `program.synthetic_ssa_funcs` after this returns.
+/// Walks each entry of `program.finished_functions` that `reachable` holds
+/// and adds the synthetic and linked bodies, in `ent_pc` order; a failed
+/// walk leaves its function out and its error, by entry pc, in the second.
 pub(crate) fn walk_program(
     program: &Program,
     target: Target,
     optimize: bool,
     jump_tables: bool,
     reachable: &alloc::collections::BTreeSet<usize>,
-) -> Result<Vec<FunctionSsa>, C5Error> {
+) -> (Vec<FunctionSsa>, Vec<(usize, C5Error)>) {
     // Walker entries from AST snapshots, keyed by ent_pc.
     let mut walker_pcs: alloc::collections::BTreeSet<usize> = alloc::collections::BTreeSet::new();
     let weak_names = weak_function_names(program);
@@ -132,6 +139,7 @@ pub(crate) fn walk_program(
     let no_stack_protector = no_stack_protector_names(program);
     let renamed = renamed_functions(program);
     let mut out: Vec<FunctionSsa> = Vec::with_capacity(program.finished_functions.len());
+    let mut failed = Vec::new();
     let mut ordered: Vec<usize> = (0..program.finished_functions.len()).collect();
     ordered.sort_by_key(|&i| program.finished_functions[i].ent_pc);
     for i in ordered {
@@ -140,7 +148,7 @@ pub(crate) fn walk_program(
             continue;
         }
         walker_pcs.insert(f.ent_pc);
-        let mut func = crate::c5::irgen::walk_function(
+        let walked = crate::c5::irgen::walk_function(
             f,
             &program.symbols,
             &program.structs,
@@ -165,14 +173,19 @@ pub(crate) fn walk_program(
                     alloc::format!("in function `{}`: {}", f.name, e,),
                 )
             }
-        })?;
+        });
+        let mut func = match walked {
+            Ok(func) => func,
+            Err(e) => {
+                failed.push((f.ent_pc, e));
+                continue;
+            }
+        };
         // `FunctionSsa::name` is the assembler name from here down: it feeds
         // `Build::func_names`, every writer's symbol table, and the bare-name
         // lookup an inline-asm `call`/`bl` resolves against. The identifier
         // stays available through `Program::symbols` for DWARF.
-        func.name = renamed
-            .get(f.name.as_str())
-            .map_or_else(|| f.name.clone(), |n| (*n).clone());
+        func.name = alloc::string::String::from(emitted_name(&renamed, f));
         func.is_inline = f.is_inline;
         func.is_always_inline = f.is_always_inline;
         func.is_noinline = f.is_noinline;
@@ -231,7 +244,7 @@ pub(crate) fn walk_program(
     // collapses to one incoming. The -O pipeline reruns this post-inline.
     crate::c5::codegen::passes::noreturn::run(&mut out, program, false);
     crate::c5::codegen::passes::simplify_branches::run(&mut out);
-    Ok(out)
+    (out, failed)
 }
 
 /// Bodies handed to a lowering in place of the AST walk, plus the frame
@@ -284,7 +297,14 @@ pub(crate) fn drop_unreachable_statics(
     reachable_owners: &alloc::collections::BTreeSet<usize>,
     force: bool,
 ) -> Option<OrphanedData> {
-    let live = compute_live_sets(funcs, program, true, Some(reachable_owners)).func_pcs;
+    let live = compute_live_sets(
+        funcs,
+        &Default::default(),
+        program,
+        true,
+        Some(reachable_owners),
+    )
+    .func_pcs;
     funcs.retain(|f| {
         let keep = live.contains(&f.ent_pc);
         #[cfg(feature = "codegen_test")]
@@ -297,7 +317,13 @@ pub(crate) fn drop_unreachable_statics(
         }
         keep
     });
-    let sets = compute_live_sets(funcs, program, false, Some(reachable_owners));
+    let sets = compute_live_sets(
+        funcs,
+        &Default::default(),
+        program,
+        false,
+        Some(reachable_owners),
+    );
     if sets.data_live.iter().all(|&l| l) && !force {
         return None;
     }
@@ -349,27 +375,26 @@ pub(crate) fn produce_ssa_funcs(
         // catches an AST pass that dropped a function the SSA pass
         // keeps (a walked body still naming it).
         let reachable = super::ast_reach::reachable_functions(program);
-        let mut funcs = walk_program(program, target, optimize, jump_tables, &reachable)?;
+        let (mut funcs, failed) = walk_program(program, target, optimize, jump_tables, &reachable);
         // C99 6.2.2: a function with internal linkage that no reachable
         // code or data references is unobservable; drop it before codegen
         // so the unused `static inline` helpers headers pull into every
         // unit do not reach the image.
-        let live = compute_live_sets(&funcs, program, false, None).func_pcs;
-        // An import placeholder pc rides the live set (a walked body calls
-        // it); the assertion is about the unit's own definitions.
-        let defined: alloc::collections::BTreeSet<usize> = program
-            .finished_functions
-            .iter()
-            .map(|f| f.ent_pc)
-            .collect();
-        debug_assert!(
-            live.iter()
-                .all(|pc| !defined.contains(pc) || reachable.contains(pc)),
-            "the AST reachability dropped a function the SSA liveness keeps: {:?}",
-            live.intersection(&defined)
-                .filter(|pc| !reachable.contains(pc))
-                .collect::<alloc::vec::Vec<_>>()
-        );
+        let unwalked = failed.iter().map(|&(pc, _)| pc).collect();
+        let live = compute_live_sets(&funcs, &unwalked, program, false, None).func_pcs;
+        // The AST set also holds functions only an unevaluated operand or a
+        // folded arm names, so a failed walk is an error only once live.
+        if let Some((_, e)) = failed.into_iter().find(|(pc, _)| live.contains(pc)) {
+            return Err(e);
+        }
+        #[cfg(debug_assertions)]
+        {
+            let dropped = dropped_live_functions(program, &reachable, &live);
+            assert!(
+                dropped.is_empty(),
+                "the AST reachability dropped functions the SSA liveness keeps: {dropped:?}"
+            );
+        }
         funcs.retain(|f| live.contains(&f.ent_pc));
         #[cfg(feature = "codegen_test")]
         measure_dead_data(&funcs, program);
@@ -393,6 +418,21 @@ pub(crate) fn produce_ssa_funcs(
         return Ok(order_by_section(out, program));
     }
     Ok(Vec::new())
+}
+
+/// The finished functions the SSA liveness `live` keeps and `reachable` lacks.
+#[cfg(any(debug_assertions, test))]
+pub(crate) fn dropped_live_functions<'p>(
+    program: &'p Program,
+    reachable: &alloc::collections::BTreeSet<usize>,
+    live: &alloc::collections::BTreeSet<usize>,
+) -> Vec<&'p str> {
+    program
+        .finished_functions
+        .iter()
+        .filter(|f| live.contains(&f.ent_pc) && !reachable.contains(&f.ent_pc))
+        .map(|f| f.name.as_str())
+        .collect()
 }
 
 /// Import-placeholder pcs that resolve inside this unit: entries of
@@ -531,140 +571,219 @@ pub(crate) fn data_object_starts(program: &Program) -> Vec<i64> {
     start_set.into_iter().collect()
 }
 
-/// Seed the reachability worklist with the roots both liveness passes
-/// start from: external-linkage / `used` / alias definitions, the
-/// constructors / destructors, the exports, the entry, the targets the
-/// TLS and data relocation slots hold, and the NULL guard. `defined`
-/// names the functions this unit defines -- the SSA pass's walked set
-/// or the AST pass's finished set. A block-scope static belongs to its
-/// function, so its `used` intent keeps it only once the owner is
-/// reached: an edge from the owner, not a root; `owner_deps` collects
-/// those, and `reachable_owners` settles them for a caller whose call
-/// graph no longer decides.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn seed_reachability_roots(
-    program: &Program,
-    defined: &alloc::collections::BTreeSet<usize>,
+/// Function and data reachability of a unit (C99 6.2.2: an unreferenced internal
+/// definition is dropped, as by gcc -O); a pass adds each function's own edges.
+pub(crate) struct ReachGraph<'p> {
+    program: &'p Program,
     data_len: i64,
-    n: usize,
-    interval_of: &impl Fn(i64) -> usize,
-    reachable_owners: Option<&alloc::collections::BTreeSet<usize>>,
-    assume_data_live: bool,
-    named: &alloc::collections::BTreeMap<&str, Node>,
-) -> (
-    alloc::vec::Vec<Node>,
-    alloc::collections::BTreeMap<usize, alloc::vec::Vec<usize>>,
-) {
-    use crate::c5::symbol::Linkage;
-    use crate::c5::token::Token;
-    use alloc::collections::BTreeMap;
-    let mut work: alloc::vec::Vec<Node> = alloc::vec::Vec::new();
-    let mut owner_deps: BTreeMap<usize, alloc::vec::Vec<usize>> = BTreeMap::new();
-    for s in &program.symbols {
-        // A named section retains neither a function nor an object (gcc
-        // parity: a section attribute selects placement, only `used`
-        // asks for the definition to be emitted unreferenced). A kept
-        // definition is still placed in its section. `used` and alias
-        // retain.
-        if s.class == Token::Fun as i64
-            && (matches!(s.linkage, Linkage::External) || s.is_used || s.is_alias)
-            && defined.contains(&(s.val as usize))
-        {
-            work.push(Node::Func(s.val as usize));
-        }
-        if s.class == Token::Glo as i64
-            && s.defined_here
-            && !s.is_thread_local
-            && (0..data_len).contains(&s.val)
-            && (matches!(s.linkage, Linkage::External) || s.is_used)
-        {
-            match s.owner_ent_pc {
-                Some(pc) if !reachable_owners.is_some_and(|o| o.contains(&(pc as usize))) => {
-                    owner_deps
-                        .entry(pc as usize)
-                        .or_default()
-                        .push(interval_of(s.val));
-                }
-                _ => work.push(Node::Data(interval_of(s.val))),
-            }
-        }
-    }
-    // A function alias exports its target under another name, so the
-    // chain's defined end stays live even when the alias symbol is the
-    // only reference (a weak alias's own `val` is an import placeholder,
-    // not the target's pc).
-    for a in &program.function_aliases {
-        let mut t = a.target.as_str();
-        for _ in 0..program.function_aliases.len() {
-            match program.function_aliases.iter().find(|x| x.name == t) {
-                Some(next) => t = next.target.as_str(),
-                None => break,
-            }
-        }
-        if let Some(&Node::Func(pc)) = named.get(t) {
-            work.push(Node::Func(pc));
-        }
-    }
-    // Constructors / destructors are referenced through `.init_array` /
-    // `.fini_array`, exports through the export table, the entry through
-    // the image header -- none has an in-image reference.
-    for f in &program.init_funcs {
-        work.push(Node::Func(f.ent_pc));
-    }
-    for e in &program.exports {
-        work.push(Node::Func(e.ent_pc));
-    }
-    if program.entry_name.is_some() {
-        work.push(Node::Func(program.entry_pc));
-    }
-    // The 8-byte NULL guard stays at offset 0 so a data pointer is never
-    // confused with NULL.
-    if n > 0 {
-        work.push(Node::Data(0));
-    }
-    // The TLS template is kept whole, so an object its initializer names is
-    // a root rather than an edge from a `data` interval.
-    for r in &program.tls_data_relocs {
-        let anchor = r.target_anchor as i64;
-        if (0..data_len).contains(&anchor) {
-            work.push(Node::Data(interval_of(anchor)));
-        }
-    }
-    for r in &program.tls_code_relocs {
-        work.push(Node::Func(r.target_ent_pc as usize));
-    }
-    // A file-scope `asm()` is not part of any function: its text reaches
-    // the object as written and the assembler and linker resolve the
-    // names in it, as they do for gcc, which parses no template. Naming
-    // a symbol there is therefore not a use that keeps a definition
-    // alive -- `used` asks for that. An included header's `static
-    // inline` would otherwise become an out-of-line definition of this
-    // unit, and a reference the program means for another unit's
-    // definition would bind to it: a file-scope `asm()` naming a function
-    // that one unit defines out of line while every other unit sees a
-    // header's inline copy.
-    if assume_data_live {
-        for i in 0..n {
-            work.push(Node::Data(i));
-        }
-    }
-    (work, owner_deps)
+    starts: Vec<i64>,
+    /// Assembler names of the defined objects and finished functions.
+    named: alloc::collections::BTreeMap<&'p str, Node>,
+    code_edges: Vec<Vec<usize>>,
+    data_edges: Vec<Vec<usize>>,
+    /// What a symbol keeps; an object with its owner if block-scope.
+    symbol_funcs: Vec<usize>,
+    symbol_objects: Vec<(usize, Option<u64>)>,
 }
 
-/// Joint function + data reachability for one translation unit (C99
-/// 6.2.2: an unreferenced internal-linkage definition is unobservable
-/// and dropped from the object, as gcc -O does). Nodes are functions
-/// (by ent_pc) and data objects (intervals over the sorted union of
-/// `data_object_starts` and the named-global offsets; an unrecorded
-/// start glues an object to its predecessor, kept conservatively).
-/// Roots: external-linkage / `used` / alias definitions, constructors
-/// / destructors, exports, the entry, names spelled in file-scope asm,
-/// and the NULL guard. A section attribute is placement, not a root.
-/// Edges: a live function keeps its callees, address-taken functions,
-/// addressed data, and symbols named in its asm templates; a live object
-/// keeps its relocation targets. A relocation in a dead object keeps
-/// nothing -- neither its target nor an extern undefined reference
-/// reaches the emitted object. `assume_data_live` pre-marks all data
+impl<'p> ReachGraph<'p> {
+    /// `funcs` add the names of the bodies with no AST.
+    pub(crate) fn new(program: &'p Program, funcs: &'p [FunctionSsa]) -> Self {
+        use crate::c5::symbol::Linkage;
+        use crate::c5::token::Token;
+        let starts = data_object_starts(program);
+        let n = starts.len();
+        let mut graph = ReachGraph {
+            program,
+            data_len: program.data.len() as i64,
+            starts,
+            named: alloc::collections::BTreeMap::new(),
+            code_edges: alloc::vec![Vec::new(); n],
+            data_edges: alloc::vec![Vec::new(); n],
+            symbol_funcs: Vec::new(),
+            symbol_objects: Vec::new(),
+        };
+        let mut renamed = alloc::collections::BTreeMap::new();
+        for s in &program.symbols {
+            let keeps = matches!(s.linkage, Linkage::External) || s.is_used;
+            if s.class == Token::Glo as i64
+                && s.defined_here
+                && !s.is_thread_local
+                && let Some(i) = graph.interval(s.val)
+            {
+                if !s.name.is_empty() {
+                    graph.named.insert(s.link_name(), Node::Data(i));
+                }
+                if keeps {
+                    graph.symbol_objects.push((i, s.owner_ent_pc));
+                }
+            }
+            // A section attribute selects placement and keeps nothing (gcc).
+            if s.class == Token::Fun as i64 && (keeps || s.is_alias) {
+                graph.symbol_funcs.push(s.val as usize);
+            }
+            renamed.extend(function_rename(s));
+        }
+        for f in &program.finished_functions {
+            if !f.name.is_empty() {
+                graph
+                    .named
+                    .insert(emitted_name(&renamed, f), Node::Func(f.ent_pc));
+            }
+        }
+        for f in funcs {
+            if !f.name.is_empty() {
+                graph.named.insert(f.name.as_str(), Node::Func(f.ent_pc));
+            }
+        }
+        // A slot the loader binds to a binding holds no trampoline.
+        for r in &program.code_relocs {
+            if program.bound_trampoline(r.target_ent_pc).is_none()
+                && let Some(i) = graph.interval(r.data_offset as i64)
+            {
+                graph.code_edges[i].push(r.target_ent_pc as usize);
+            }
+        }
+        // A `&&label` slot keeps its function as a function pointer does.
+        for (off, ent_pc) in program.label_data_slots() {
+            if let Some(i) = graph.interval(off as i64) {
+                graph.code_edges[i].push(ent_pc);
+            }
+        }
+        // By the anchor: a one-past-the-end target is the next object's start.
+        for r in &program.data_relocs {
+            if let (Some(i), Some(t)) = (
+                graph.interval(r.data_offset as i64),
+                graph.interval(r.target_anchor as i64),
+            ) {
+                graph.data_edges[i].push(t);
+            }
+        }
+        graph
+    }
+
+    fn interval(&self, off: i64) -> Option<usize> {
+        (0..self.data_len)
+            .contains(&off)
+            .then(|| match self.starts.binary_search(&off) {
+                Ok(i) => i,
+                Err(i) => i.saturating_sub(1),
+            })
+    }
+
+    pub(crate) fn data(&self, off: i64) -> Option<Node> {
+        self.interval(off).map(Node::Data)
+    }
+
+    pub(crate) fn asm_names(&self, text: &[u8], work: &mut Vec<Node>) {
+        push_asm_names(text, &self.named, work);
+    }
+
+    /// The roots, and the block-scope statics a symbol keeps by owner: an
+    /// edge from the owner, or a root once `reachable_owners` holds it.
+    fn roots(
+        &self,
+        defined: &alloc::collections::BTreeSet<usize>,
+        reachable_owners: Option<&alloc::collections::BTreeSet<usize>>,
+        assume_data_live: bool,
+    ) -> (Vec<Node>, alloc::collections::BTreeMap<usize, Vec<usize>>) {
+        let program = self.program;
+        let mut work: Vec<Node> = Vec::new();
+        let mut owner_deps: alloc::collections::BTreeMap<usize, Vec<usize>> =
+            alloc::collections::BTreeMap::new();
+        for &pc in &self.symbol_funcs {
+            if defined.contains(&pc) {
+                work.push(Node::Func(pc));
+            }
+        }
+        for &(i, owner) in &self.symbol_objects {
+            match owner {
+                Some(pc) if !reachable_owners.is_some_and(|o| o.contains(&(pc as usize))) => {
+                    owner_deps.entry(pc as usize).or_default().push(i);
+                }
+                _ => work.push(Node::Data(i)),
+            }
+        }
+        // An alias chain's defined end (a weak alias's `val` is an import).
+        for a in &program.function_aliases {
+            let mut t = a.target.as_str();
+            for _ in 0..program.function_aliases.len() {
+                match program.function_aliases.iter().find(|x| x.name == t) {
+                    Some(next) => t = next.target.as_str(),
+                    None => break,
+                }
+            }
+            if let Some(&Node::Func(pc)) = self.named.get(t) {
+                work.push(Node::Func(pc));
+            }
+        }
+        // Referenced from `.init_array`, the export table, the image header.
+        for f in &program.init_funcs {
+            work.push(Node::Func(f.ent_pc));
+        }
+        for e in &program.exports {
+            work.push(Node::Func(e.ent_pc));
+        }
+        if program.entry_name.is_some() {
+            work.push(Node::Func(program.entry_pc));
+        }
+        // The NULL guard.
+        if !self.starts.is_empty() {
+            work.push(Node::Data(0));
+        }
+        // The TLS template is kept whole.
+        for r in &program.tls_data_relocs {
+            work.extend(self.data(r.target_anchor as i64));
+        }
+        for r in &program.tls_code_relocs {
+            work.push(Node::Func(r.target_ent_pc as usize));
+        }
+        // A name in a file-scope `asm()` keeps nothing: the assembler resolves
+        // it, as for gcc, which parses no template; `used` keeps a definition.
+        if assume_data_live {
+            work.extend((0..self.starts.len()).map(Node::Data));
+        }
+        (work, owner_deps)
+    }
+
+    /// Close the roots over the `.data` edges and those `body_edges` pushes per
+    /// reached pc: the reached pcs (import placeholders among them), live intervals.
+    pub(crate) fn solve(
+        &self,
+        defined: &alloc::collections::BTreeSet<usize>,
+        reachable_owners: Option<&alloc::collections::BTreeSet<usize>>,
+        assume_data_live: bool,
+        mut body_edges: impl FnMut(usize, &mut Vec<Node>),
+    ) -> (alloc::collections::BTreeSet<usize>, Vec<bool>) {
+        let (mut work, owner_deps) = self.roots(defined, reachable_owners, assume_data_live);
+        let mut funcs = alloc::collections::BTreeSet::new();
+        let mut data_live = alloc::vec![false; self.starts.len()];
+        while let Some(node) = work.pop() {
+            match node {
+                Node::Func(pc) => {
+                    if !funcs.insert(pc) {
+                        continue;
+                    }
+                    if let Some(deps) = owner_deps.get(&pc) {
+                        work.extend(deps.iter().map(|&d| Node::Data(d)));
+                    }
+                    body_edges(pc, &mut work);
+                }
+                Node::Data(i) => {
+                    if core::mem::replace(&mut data_live[i], true) {
+                        continue;
+                    }
+                    work.extend(self.code_edges[i].iter().map(|&t| Node::Func(t)));
+                    work.extend(self.data_edges[i].iter().map(|&d| Node::Data(d)));
+                }
+            }
+        }
+        (funcs, data_live)
+    }
+}
+
+/// [`ReachGraph`] solved over SSA bodies; `unwalked` are definitions with
+/// no body to read. `assume_data_live` pre-marks all data
 /// live for callers running after the `.data` image is final.
 ///
 /// `reachable_owners` names functions reachable before the -O pipeline
@@ -677,167 +796,57 @@ pub(crate) fn seed_reachability_roots(
 /// source's.
 pub(crate) fn compute_live_sets(
     funcs: &[FunctionSsa],
+    unwalked: &alloc::collections::BTreeSet<usize>,
     program: &Program,
     assume_data_live: bool,
     reachable_owners: Option<&alloc::collections::BTreeSet<usize>>,
 ) -> LiveSets {
     use crate::c5::ir::Inst;
-    use crate::c5::token::Token;
-    use alloc::collections::{BTreeMap, BTreeSet};
-
-    let data_len = program.data.len() as i64;
-    let starts = data_object_starts(program);
-    let n = starts.len();
-    let interval_of = |off: i64| -> usize {
-        match starts.binary_search(&off) {
-            Ok(i) => i,
-            Err(i) => i.saturating_sub(1),
-        }
-    };
-
-    let by_ent: BTreeMap<usize, &FunctionSsa> = funcs.iter().map(|f| (f.ent_pc, f)).collect();
-
-    // Internal names an asm template can reference by spelling.
-    let mut named: BTreeMap<&str, Node> = BTreeMap::new();
-    for sym in &program.symbols {
-        if sym.class == Token::Glo as i64
-            && sym.defined_here
-            && !sym.is_thread_local
-            && !sym.name.is_empty()
-            && (0..data_len).contains(&sym.val)
-        {
-            named.insert(sym.link_name(), Node::Data(interval_of(sym.val)));
-        }
-    }
-    for f in funcs {
-        if !f.name.is_empty() {
-            named.insert(f.name.as_str(), Node::Func(f.ent_pc));
-        }
-    }
-
-    // Relocation edges, keyed by the interval holding the slot.
-    let mut code_edges: Vec<Vec<usize>> = alloc::vec![Vec::new(); n];
-    let mut data_edges: Vec<Vec<usize>> = alloc::vec![Vec::new(); n];
-    if n > 0 {
-        // A slot the loader binds to a binding holds no trampoline.
-        let bound = |r: &&crate::c5::program::CodeReloc| {
-            program.bound_trampoline(r.target_ent_pc).is_some()
-        };
-        for r in program.code_relocs.iter().filter(|r| !bound(r)) {
-            let off = r.data_offset as i64;
-            if (0..data_len).contains(&off) {
-                code_edges[interval_of(off)].push(r.target_ent_pc as usize);
-            }
-        }
-        // A `&&label` slot names a code location inside its function, so
-        // it holds that function live exactly as a function pointer does.
-        for (off, ent_pc) in program.label_data_slots() {
-            let off = off as i64;
-            if (0..data_len).contains(&off) {
-                code_edges[interval_of(off)].push(ent_pc);
-            }
-        }
-        // The target interval resolves via the anchor: a one-past-the-end
-        // target coincides with the next object's start and would mark
-        // the wrong object.
-        for r in &program.data_relocs {
-            let (off, anchor) = (r.data_offset as i64, r.target_anchor as i64);
-            if (0..data_len).contains(&off) && (0..data_len).contains(&anchor) {
-                data_edges[interval_of(off)].push(interval_of(anchor));
-            }
-        }
-    }
-
-    let mut func_pcs: BTreeSet<usize> = BTreeSet::new();
-    let mut data_live = alloc::vec![false; n];
-    let (mut work, owner_deps) = seed_reachability_roots(
-        program,
-        &by_ent.keys().copied().collect(),
-        data_len,
-        n,
-        &interval_of,
-        reachable_owners,
-        assume_data_live,
-        &named,
-    );
-
-    while let Some(node) = work.pop() {
-        match node {
-            Node::Func(pc) => {
-                if !func_pcs.insert(pc) {
-                    continue;
-                }
-                if let Some(deps) = owner_deps.get(&pc) {
-                    for &d in deps {
-                        work.push(Node::Data(d));
-                    }
-                }
-                let Some(f) = by_ent.get(&pc) else { continue };
-                // Address edges come from exactly the materializations
-                // the emitters lower: the use counts driving the
-                // per-arch dead-code skip. An address whose last reader
-                // was folded or pruned away emits nothing, so following
-                // it would keep the object it names -- and everything
-                // that object references -- in the image; one a pure
-                // cycle still holds is emitted, so it must keep its
-                // referent.
-                let counts = super::reg_alloc::compute_use_counts(f);
-                for blk in &f.blocks {
-                    for i in blk.inst_range.clone() {
-                        match &f.insts[i as usize] {
-                            Inst::Call { target_pc, .. } => work.push(Node::Func(*target_pc)),
-                            Inst::ImmCode(t) if counts[i as usize] > 0 => {
-                                work.push(Node::Func(*t));
-                            }
-                            Inst::ImmData(off)
-                                if counts[i as usize] > 0 && (0..data_len).contains(off) =>
-                            {
-                                work.push(Node::Data(interval_of(*off)));
-                            }
-                            Inst::InlineAsm { asm, args } => {
-                                push_asm_names(&asm.template, &named, &mut work);
-                                // A static operand's referent has no counted use.
-                                for (op, &a) in asm.operands.iter().zip(args) {
-                                    if !op.static_arg {
-                                        continue;
-                                    }
-                                    let base = match crate::c5::asm::asm_operand_static(f, a) {
-                                        Some(crate::c5::asm::StaticOperand::Addr {
-                                            base, ..
-                                        }) => base,
-                                        _ => continue,
-                                    };
-                                    match f.insts.get(base as usize) {
-                                        Some(Inst::ImmCode(t)) => work.push(Node::Func(*t)),
-                                        Some(Inst::ImmData(off)) if (0..data_len).contains(off) => {
-                                            work.push(Node::Data(interval_of(*off)));
-                                        }
-                                        _ => {}
-                                    }
+    let graph = ReachGraph::new(program, funcs);
+    let by_ent: alloc::collections::BTreeMap<usize, &FunctionSsa> =
+        funcs.iter().map(|f| (f.ent_pc, f)).collect();
+    let defined = by_ent.keys().chain(unwalked).copied().collect();
+    let (func_pcs, data_live) =
+        graph.solve(&defined, reachable_owners, assume_data_live, |pc, work| {
+            let Some(f) = by_ent.get(&pc) else { return };
+            // An address keeps its referent only if emitted: the use counts
+            // behind the emitters' dead-code skip.
+            let counts = super::reg_alloc::compute_use_counts(f);
+            for blk in &f.blocks {
+                for i in blk.inst_range.clone() {
+                    match &f.insts[i as usize] {
+                        Inst::Call { target_pc, .. } => work.push(Node::Func(*target_pc)),
+                        Inst::ImmCode(t) if counts[i as usize] > 0 => work.push(Node::Func(*t)),
+                        Inst::ImmData(off) if counts[i as usize] > 0 => {
+                            work.extend(graph.data(*off));
+                        }
+                        Inst::InlineAsm { asm, args } => {
+                            graph.asm_names(&asm.template, work);
+                            // A static operand's referent has no counted use.
+                            for (op, &a) in asm.operands.iter().zip(args) {
+                                if !op.static_arg {
+                                    continue;
+                                }
+                                let Some(crate::c5::asm::StaticOperand::Addr { base, .. }) =
+                                    crate::c5::asm::asm_operand_static(f, a)
+                                else {
+                                    continue;
+                                };
+                                match f.insts.get(base as usize) {
+                                    Some(Inst::ImmCode(t)) => work.push(Node::Func(*t)),
+                                    Some(Inst::ImmData(off)) => work.extend(graph.data(*off)),
+                                    _ => {}
                                 }
                             }
-                            _ => {}
                         }
+                        _ => {}
                     }
                 }
             }
-            Node::Data(i) => {
-                if data_live[i] {
-                    continue;
-                }
-                data_live[i] = true;
-                for &t in &code_edges[i] {
-                    work.push(Node::Func(t));
-                }
-                for &d in &data_edges[i] {
-                    work.push(Node::Data(d));
-                }
-            }
-        }
-    }
+        });
     LiveSets {
         func_pcs,
-        starts,
+        starts: graph.starts,
         data_live,
     }
 }
@@ -847,7 +856,7 @@ pub(crate) fn compute_live_sets(
 /// in a statement's leading position: that is a label, mnemonic or
 /// directive, never an operand. Statements separate on newline and `;`;
 /// `/* */` is skipped so a newline inside one does not open a statement.
-pub(crate) fn push_asm_names(
+fn push_asm_names(
     text: &[u8],
     named: &alloc::collections::BTreeMap<&str, Node>,
     work: &mut alloc::vec::Vec<Node>,
@@ -1064,7 +1073,7 @@ pub(crate) fn compact_program_data(
         })?;
     let live_func_pcs: alloc::collections::BTreeSet<usize> =
         funcs.iter().map(|f| f.ent_pc).collect();
-    let sets = compute_live_sets(&funcs, program, false, None);
+    let sets = compute_live_sets(&funcs, &Default::default(), program, false, None);
     let (out, bss_size, _map) =
         apply_data_liveness(program.clone(), &sets, &live_func_pcs, segregate, None);
     Ok(Compaction {
@@ -1444,7 +1453,7 @@ fn measure_dead_data(funcs: &[FunctionSsa], program: &Program) {
     if data_len == 0 {
         return;
     }
-    let sets = compute_live_sets(funcs, program, false, None);
+    let sets = compute_live_sets(funcs, &Default::default(), program, false, None);
     let (starts, live) = (sets.starts, sets.data_live);
     let n = starts.len();
 

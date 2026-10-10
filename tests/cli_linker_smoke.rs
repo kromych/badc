@@ -226,6 +226,91 @@ fn weak_alias_strong_override_wins_at_link() {
     );
 }
 
+/// Compile each source with `-c` at `opt`, link the objects in order and
+/// return the image's exit status.
+fn link_units_and_run(dir: &Path, opt: &str, sources: &[&Path]) -> Option<i32> {
+    let mut objects = Vec::new();
+    for src in sources {
+        run(
+            Command::new(badc())
+                .args([opt, "-c"])
+                .arg(src)
+                .current_dir(dir),
+            "compile unit",
+        );
+        objects.push(src.with_extension("o"));
+    }
+    let exe = dir.join(format!("prog{opt}"));
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .args(&objects)
+            .current_dir(dir),
+        "link",
+    );
+    Command::new(&exe).output().expect("run prog").status.code()
+}
+
+#[test]
+fn a_weak_alias_spelling_a_renamed_static_reaches_it_from_another_unit() {
+    // `alias` names its target by assembler name, so the alias of a static
+    // function renamed by an asm label spells the label. The alias is the
+    // definition's only reference; another unit calls through it.
+    let dir = tempdir("alias-renamed-static");
+    let a = write_source(
+        &dir,
+        "a.c",
+        "static int impl(void) __asm__(\"badc_alias_renamed_impl\");\n\
+         static int impl(void) { return 9; }\n\
+         int pub_name(void) __attribute__((weak, alias(\"badc_alias_renamed_impl\")));\n",
+    );
+    let b = write_source(
+        &dir,
+        "b.c",
+        "int pub_name(void) __attribute__((weak));\n\
+         int main(void) { int (*volatile fp)(void) = pub_name; return fp ? fp() : 100; }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        assert_eq!(link_units_and_run(&dir, opt, &[&a, &b]), Some(9), "{opt}");
+    }
+}
+
+#[test]
+fn an_asm_template_binds_its_units_renamed_static_over_an_external_namesake() {
+    // The template in a.c names the assembler label of a.c's own static
+    // function; b.c defines an external function under the same label. The
+    // assembler resolves a name its object defines, so the address is
+    // a.c's definition -- which no C expression references.
+    let dir = tempdir("asm-template-renamed-static");
+    let a = write_source(
+        &dir,
+        "a.c",
+        "static int renamed(void) __asm__(\"badc_template_target\");\n\
+         static int renamed(void) { return 7; }\n\
+         void *address_by_name(void) {\n\
+             void *p;\n\
+         #if defined(__aarch64__)\n\
+             __asm__(\"adr %x0, badc_template_target\" : \"=r\"(p));\n\
+         #else\n\
+             __asm__(\"lea badc_template_target(%%rip), %0\" : \"=r\"(p));\n\
+         #endif\n\
+             return p;\n\
+         }\n",
+    );
+    let b = write_source(
+        &dir,
+        "b.c",
+        "int other(void) __asm__(\"badc_template_target\");\n\
+         int other(void) { return 99; }\n\
+         void *address_by_name(void);\n\
+         int main(void) { return ((int (*)(void))address_by_name())(); }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        assert_eq!(link_units_and_run(&dir, opt, &[&a, &b]), Some(7), "{opt}");
+    }
+}
+
 // Gated on Linux: same end-to-end exec + native-ELF-only
 // constraint as `two_sources_compile_separately_then_link`.
 #[cfg(target_os = "linux")]

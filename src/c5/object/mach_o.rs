@@ -2199,10 +2199,13 @@ impl<'a> MachOWriter<'a> {
                 )
             }
         };
+        let tls_slot = |off: u64| (seg_data, l.thread_storage_offset_in_segment + off);
         let data_binds: Vec<DataBind> = (build.data_import_binds.iter())
-            .map(|b| DataBind {
+            .map(|b| (b, data_slot(b.data_offset)))
+            .chain((build.tls_data_import_binds.iter()).map(|b| (b, tls_slot(b.data_offset))))
+            .map(|(b, slot)| DataBind {
                 import: b.import,
-                slot: data_slot(b.data_offset),
+                slot,
                 addend: b.addend,
             })
             .collect();

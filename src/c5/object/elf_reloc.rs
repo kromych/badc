@@ -1196,7 +1196,8 @@ impl<'a> RelocWriter<'a> {
         let has_tls = !program.tls_data.is_empty();
         let has_tls_relocs = !build.tls_data_relocs.is_empty()
             || !build.tls_extern_data_relocs.is_empty()
-            || !build.tls_code_relocs.is_empty();
+            || !build.tls_code_relocs.is_empty()
+            || !build.tls_data_import_binds.is_empty();
         RelocWriter {
             program,
             build,
@@ -1903,7 +1904,7 @@ impl<'a> RelocWriter<'a> {
             .iter()
             .map(|(pc, name)| (*pc, name.as_str()))
             .collect();
-        for r in &build.code_relocs {
+        for r in build.code_relocs.iter().chain(&build.tls_code_relocs) {
             if let Some(&name) = names.extern_fn_by_pc.get(&(r.target_ent_pc as usize))
                 && !program.function_aliases.iter().any(|a| a.name == name)
                 && !names.asm_defined_labels.contains(name)
@@ -3680,6 +3681,10 @@ impl<'a> RelocWriter<'a> {
                 rtype,
                 addend.wrapping_add(r.addend),
             );
+        }
+        for b in &build.tls_data_import_binds {
+            let sym = self.syms.import_sym_indices[b.import] as u64;
+            Self::push_rela(&mut table, b.data_offset, sym, rtype, b.addend);
         }
         self.relocs.tdata = table;
         Ok(())

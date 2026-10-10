@@ -338,6 +338,37 @@ fn a_function_address_offset_outside_the_text_links() {
     }
 }
 
+#[test]
+fn a_thread_local_slot_names_another_units_function_and_a_library_function() {
+    // C11 6.7.9p4: a `_Thread_local` initializer's address constant may name
+    // another unit's function, an inline definition's external one, or a
+    // C-library function, whose slot holds what a `.data` slot holds
+    // (C99 6.5.9p6).
+    let dir = tempdir("tls-extern-function");
+    let a = write_source(
+        &dir,
+        "a.c",
+        "long ext_b(void) { return 7; }\nlong inl(void) { return 5; }\n",
+    );
+    let b = write_source(
+        &dir,
+        "b.c",
+        "#include <string.h>\n\
+         typedef long (*fn)(void);\n\
+         typedef size_t (*lenfn)(const char *);\n\
+         long ext_b(void);\n\
+         inline long inl(void) { return 5; }\n\
+         _Thread_local fn ta = ext_b;\n\
+         _Thread_local fn ti = inl;\n\
+         static _Thread_local lenfn t = strlen;\n\
+         static lenfn s = strlen;\n\
+         int main(void) { return ta() + ti() == 12 && t == s && t(\"abc\") == 3 ? 0 : 1; }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        assert_eq!(link_units_and_run(&dir, opt, &[&a, &b]), Some(0), "{opt}");
+    }
+}
+
 // Gated on Linux: same end-to-end exec + native-ELF-only
 // constraint as `two_sources_compile_separately_then_link`.
 #[cfg(target_os = "linux")]

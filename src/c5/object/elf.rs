@@ -2121,7 +2121,8 @@ impl<'a> ElfImageWriter<'a> {
         seg.rela_size = (n_got_slots
             + n_relative as u64
             + build.copy_relocs.len() as u64
-            + build.data_import_binds.len() as u64)
+            + build.data_import_binds.len() as u64
+            + build.tls_data_import_binds.len() as u64)
             * ELF64_RELA_SIZE;
         seg.relr_off = seg.rela_off + seg.rela_size;
         seg.relr_size = relr_size;
@@ -3153,6 +3154,17 @@ impl<'a> ElfImageWriter<'a> {
                 &mut rela,
                 &Elf64Rela {
                     r_offset: self.data_off_to_vaddr(b.data_offset),
+                    r_info: ((b.import as u64 + 1) << 32) | r_abs,
+                    r_addend: b.addend,
+                },
+            );
+        }
+        let tdata_vmaddr = self.va(self.seg.tdata_off);
+        for b in &build.tls_data_import_binds {
+            write_struct(
+                &mut rela,
+                &Elf64Rela {
+                    r_offset: tdata_vmaddr + b.data_offset,
                     r_info: ((b.import as u64 + 1) << 32) | r_abs,
                     r_addend: b.addend,
                 },

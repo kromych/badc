@@ -2003,6 +2003,8 @@ pub(crate) struct Build {
     pub eh_frame: Vec<EhFrameBlock>,
     /// Data slots naming an import, which the loader binds (Mach-O, ELF).
     pub data_import_binds: Vec<DataImportBind>,
+    /// The same for `_Thread_local` template slots (`tls_data` offsets).
+    pub tls_data_import_binds: Vec<DataImportBind>,
     /// Imports, ascending, whose call stub code takes as a value: an ELF
     /// executable publishes it as the import's address (a canonical PLT entry).
     pub canonical_imports: Vec<usize>,
@@ -4329,28 +4331,12 @@ pub(crate) fn lower_for_with_prebuilt(
     build.abi.stack_protect = options.stack_protect;
     build.data_relocs = program.data_relocs.clone();
     build.extern_data_relocs = program.extern_data_relocs.clone();
-    build.code_relocs = Vec::with_capacity(program.code_relocs.len());
-    for r in &program.code_relocs {
-        let Some(binding) = program.bound_trampoline(r.target_ent_pc) else {
-            build.code_relocs.push(*r);
-            continue;
-        };
-        let import = (build.imports.imports.iter())
-            .position(|i| i.binding_idx == binding)
-            .ok_or_else(|| {
-                C5Error::internal(alloc::format!(
-                    "a data slot names libc binding {binding}, which no import resolves"
-                ))
-            })?;
-        build.data_import_binds.push(DataImportBind {
-            data_offset: r.data_offset,
-            import,
-            addend: r.addend,
-        });
-    }
+    (build.code_relocs, build.data_import_binds) =
+        split_import_slots(program, &build.imports, &program.code_relocs)?;
     build.tls_data_relocs = program.tls_data_relocs.clone();
     build.tls_extern_data_relocs = program.tls_extern_data_relocs.clone();
-    build.tls_code_relocs = program.tls_code_relocs.clone();
+    (build.tls_code_relocs, build.tls_data_import_binds) =
+        split_import_slots(program, &build.imports, &program.tls_code_relocs)?;
     if options.output_kind != OutputKind::Relocatable {
         bind_code_reloc_aliases(program, &mut build.code_relocs);
         bind_code_reloc_aliases(program, &mut build.tls_code_relocs);
@@ -4483,6 +4469,37 @@ pub(crate) fn reloc_callee_ctx(
     }
     ctx.starts.sort_unstable();
     ctx
+}
+
+/// `relocs` without the slots naming a C-library function the loader
+/// binds, and those slots' import bindings, so every slot naming one holds
+/// the import's own address (C99 6.5.9p6).
+fn split_import_slots(
+    program: &Program,
+    imports: &ResolvedImports,
+    relocs: &[crate::c5::program::CodeReloc],
+) -> Result<(Vec<crate::c5::program::CodeReloc>, Vec<DataImportBind>), C5Error> {
+    let mut kept = Vec::with_capacity(relocs.len());
+    let mut binds = Vec::new();
+    for r in relocs {
+        let Some(binding) = program.bound_trampoline(r.target_ent_pc) else {
+            kept.push(*r);
+            continue;
+        };
+        let import = (imports.imports.iter())
+            .position(|i| i.binding_idx == binding)
+            .ok_or_else(|| {
+                C5Error::internal(alloc::format!(
+                    "a data slot names libc binding {binding}, which no import resolves"
+                ))
+            })?;
+        binds.push(DataImportBind {
+            data_offset: r.data_offset,
+            import,
+            addend: r.addend,
+        });
+    }
+    Ok((kept, binds))
 }
 
 /// Bind data-slot function addresses carrying an import placeholder a

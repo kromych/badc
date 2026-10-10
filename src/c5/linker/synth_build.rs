@@ -155,16 +155,16 @@ fn synth_program_and_build(
     let imports = synth_imports(merged, target)?;
     // Slots the PLT pass left unresolved for the loader to bind.
     let data_import_binds = merged.data_import_refs.clone();
+    let tls_data_import_binds = merged.tls_data_import_refs.clone();
     let placed = output_kind != OutputKind::SharedLibrary && opts.exec_form.placed();
-    if !data_import_binds.is_empty()
-        && super::DataImportSlots::of(target, placed) != super::DataImportSlots::Bind
+    let unresolved = data_import_binds.len() + tls_data_import_binds.len();
+    if unresolved != 0 && super::DataImportSlots::of(target, placed) != super::DataImportSlots::Bind
     {
         return Err(internal_err(
             MODULE,
             &alloc::format!(
-                "{} data slot(s) naming an import reached a {target:?} image unresolved; it \
-                 binds none",
-                data_import_binds.len()
+                "{unresolved} data slot(s) naming an import reached a {target:?} image \
+                 unresolved; it binds none",
             ),
         ));
     }
@@ -251,6 +251,7 @@ fn synth_program_and_build(
         compact_unwind: merged.compact_unwind.clone(),
         eh_frame: merged.eh_frame.clone(),
         data_import_binds,
+        tls_data_import_binds,
         canonical_imports,
         preemptible_imports: merged.preemptible_imports.iter().copied().collect(),
         data_liveness: None,
@@ -1615,6 +1616,7 @@ mod tests {
             data_abs_relocs: alloc::vec![],
             data_pcrel_relocs: alloc::vec![],
             data_import_refs: alloc::vec![],
+            tls_data_import_refs: alloc::vec![],
             machine: NativeMachine::Aarch64,
             import_dylib_map: alloc::collections::BTreeMap::new(),
             import_symbols: alloc::collections::BTreeMap::new(),

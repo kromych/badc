@@ -176,6 +176,8 @@ pub struct MergedNative {
     /// Data-initializer slots that hold the address of an imported
     /// symbol, resolved by the PLT pass as [`DataImportSlots`] says.
     pub data_import_refs: Vec<DataImportBind>,
+    /// The same for `_Thread_local` template slots.
+    pub tls_data_import_refs: Vec<DataImportBind>,
     /// Architecture of the merged image. Every unit must agree;
     /// the link errors out if they don't.
     pub machine: NativeMachine,
@@ -1130,6 +1132,7 @@ struct Link<'a> {
     data_pcrel_relocs: Vec<DataPcRel>,
     /// Data slots that name an import; see [`MergedNative::data_import_refs`].
     data_import_refs: Vec<DataImportBind>,
+    tls_data_import_refs: Vec<DataImportBind>,
     /// `.rela.tdata` slots, resolved like `.rela.data` ones.
     tls_abs_relocs: Vec<DataAbsReloc>,
 }
@@ -1224,6 +1227,7 @@ impl<'a> Link<'a> {
             data_abs_relocs: Vec::new(),
             data_pcrel_relocs: Vec::new(),
             data_import_refs: Vec::new(),
+            tls_data_import_refs: Vec::new(),
             tls_abs_relocs: Vec::new(),
         })
     }
@@ -3402,24 +3406,17 @@ impl<'a> Link<'a> {
                         || self.is_routed_import(sym.name.as_str())
                         || self.import_idx_for_name.contains_key(sym.name.as_str()) =>
                     {
-                        if in_tls {
-                            return Err(link_err(
-                                Code::RELOCATION,
-                                MODULE,
-                                &format!(
-                                    "`_Thread_local` initializer names imported symbol `{}`: \
-                                 the template is resolved at image load, before the \
-                                 import's stub address is known",
-                                    sym.name,
-                                ),
-                            ));
-                        }
                         if !self.is_routed_import(sym.name.as_str()) {
                             self.refuse_library_thread_local(&sym.name)?;
                         }
                         let idx = self.record_import(sym.name.as_str());
                         self.flat_imports.insert(sym.name.clone());
-                        self.data_import_refs.push(DataImportBind {
+                        let refs = if in_tls {
+                            &mut self.tls_data_import_refs
+                        } else {
+                            &mut self.data_import_refs
+                        };
+                        refs.push(DataImportBind {
                             data_offset: slot_offset,
                             import: idx,
                             addend: reloc.addend,
@@ -4306,6 +4303,7 @@ impl<'a> Link<'a> {
             data_abs_relocs: self.data_abs_relocs,
             data_pcrel_relocs: self.data_pcrel_relocs,
             data_import_refs: self.data_import_refs,
+            tls_data_import_refs: self.tls_data_import_refs,
             machine: self.machine,
             dylibs: merged_dylibs.dylibs,
             import_dylib_map: merged_dylibs.import_dylib_map,
@@ -4805,17 +4803,23 @@ fn emit_plt(
         };
         patch_site(merged, &reloc, tramp, &mut parked_back)?;
     }
-    let data_import_refs = match slots {
-        DataImportSlots::Stub | DataImportSlots::Thunk => {
-            core::mem::take(&mut merged.data_import_refs)
-        }
-        DataImportSlots::Bind => Vec::new(),
+    let (data_refs, tls_refs) = match slots {
+        DataImportSlots::Stub | DataImportSlots::Thunk => (
+            core::mem::take(&mut merged.data_import_refs),
+            core::mem::take(&mut merged.tls_data_import_refs),
+        ),
+        DataImportSlots::Bind => (Vec::new(), Vec::new()),
     };
-    for DataImportBind {
-        data_offset: slot,
-        import: import_index,
-        addend,
-    } in data_import_refs
+    let refs =
+        (data_refs.into_iter().map(|b| (false, b))).chain(tls_refs.into_iter().map(|b| (true, b)));
+    for (
+        in_tls,
+        DataImportBind {
+            data_offset: slot,
+            import: import_index,
+            addend,
+        },
+    ) in refs
     {
         let stub_at = match tramp_for_import.get(&import_index) {
             Some(&off) => off,
@@ -4831,11 +4835,16 @@ fn emit_plt(
             }
         };
         merged.stub_address_imports.insert(import_index);
-        merged.data_abs_relocs.push(DataAbsReloc {
+        let reloc = DataAbsReloc {
             slot_offset: slot,
             target: MergedTarget::Text(stub_at as i64 + addend),
             anchor: MergedTarget::Text(stub_at as i64),
-        });
+        };
+        if in_tls {
+            merged.tls_abs_relocs.push(reloc);
+        } else {
+            merged.data_abs_relocs.push(reloc);
+        }
     }
     merged.pending_imports = parked_back;
     record_plt_contribution(merged, plt_pool_start);

@@ -2562,15 +2562,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             i.remap_data_offsets(r);
         }
         // A `&&label` slot follows its object's base or goes with the object.
-        label_data_relocs.retain_mut(|l| {
-            let off = l.data_offset as i64;
-            if !r.in_data(off) {
-                return true;
-            }
-            r.remap(off, off)
-                .map(|new| l.data_offset = new as u64)
-                .is_some()
-        });
+        label_data_relocs.retain_mut(|l| crate::c5::layout::remap_kept_u64(&mut l.data_offset, r));
     }
 }
 

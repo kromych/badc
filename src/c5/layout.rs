@@ -277,6 +277,16 @@ pub(crate) fn remap_self_u64(off: &mut u64, r: &dyn DataRemap) {
     *off = v as u64;
 }
 
+/// Remap a self-anchored offset that goes with its object: `false` once the
+/// object is dropped, rather than a record left on the NULL guard.
+pub(crate) fn remap_kept_u64(off: &mut u64, r: &dyn DataRemap) -> bool {
+    let v = *off as i64;
+    if !r.in_data(v) {
+        return true;
+    }
+    r.remap(v, v).map(|new| *off = new as u64).is_some()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

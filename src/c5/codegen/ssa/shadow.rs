@@ -1552,6 +1552,38 @@ mod tests {
         );
     }
 
+    // A dropped label table's slots go with it rather than land on the NULL guard.
+    #[test]
+    fn a_dropped_label_table_takes_its_slots_along() {
+        let target = Target::LinuxX64;
+        let src = "static const char text[] = \"read only\";\n\
+                   static int run(int x) {\n\
+                       static void *const unread[] = { &&one, &&two };\n\
+                       static void *const read[] = { &&one, &&two };\n\
+                       goto *read[x != 0];\n\
+                   one: return 1;\n\
+                   two: return 2;\n\
+                   }\n\
+                   int main(void) { return run(1) + text[0]; }\n";
+        let program = compile(src, target);
+        assert_eq!(program.label_data_slots().count(), 4);
+        let c = compact_program_data(&program, target, true, false).expect("compact");
+        let slots: alloc::vec::Vec<(u64, usize)> = c.program.label_data_slots().collect();
+        assert_eq!(
+            slots.len(),
+            2,
+            "only the read table's slots remain: {slots:?}"
+        );
+        let ro = c.program.data_ro_len as i64;
+        assert!(ro > 0, "the literal forms a read-only prefix");
+        for off in c.program.data_reloc_offsets() {
+            assert!(
+                off >= ro,
+                "relocated slot {off:#x} below the prefix {ro:#x}"
+            );
+        }
+    }
+
     // File-backed objects pack into three regions bounded by
     // `Program::data_ro_len` and `Program::data_relro_len`: literals and
     // named const objects with no relocated slot form the prefix, a

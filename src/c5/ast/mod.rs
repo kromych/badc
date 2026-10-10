@@ -1364,9 +1364,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             label_data_slots,
             name: _,
         } = self;
-        for s in label_data_slots.iter_mut() {
-            crate::c5::layout::remap_self_u64(&mut s.data_offset, r);
-        }
+        label_data_slots.retain_mut(|s| crate::c5::layout::remap_kept_u64(&mut s.data_offset, r));
         ast.remap_data_offsets(r);
     }
 }

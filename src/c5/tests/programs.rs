@@ -978,7 +978,7 @@ fn post_inline_dead_data_repack() {
 #[test]
 fn a_narrower_live_set_never_grows_the_packed_image() {
     use crate::c5::codegen::ssa::shadow::{
-        LiveSets, apply_data_liveness, compute_live_sets, produce_ssa_funcs,
+        LiveSets, ReachGraph, apply_data_liveness, compute_live_sets, produce_ssa_funcs,
     };
     let src = "_Alignas(4096) long page[512] = {1}; \
                static long unused_mid[100] = {5}; \
@@ -992,7 +992,8 @@ fn a_narrower_live_set_never_grows_the_packed_image() {
         .compile()
         .expect("compile");
     let funcs = produce_ssa_funcs(&program, crate::Target::LinuxX64, false, true).expect("ssa");
-    let sets = compute_live_sets(&funcs, &Default::default(), &program, false, None);
+    let graph = ReachGraph::new(&program);
+    let sets = compute_live_sets(&funcs, &Default::default(), &graph, false, None);
     let addr = |out: &crate::c5::program::Program, name: &str| {
         out.symbols
             .iter()

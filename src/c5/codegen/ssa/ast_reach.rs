@@ -9,13 +9,12 @@ use crate::c5::ast::{Expr, ExprId, FinishedFunction};
 use crate::c5::irgen::{
     GloAddr, binding_defined_here, glo_ident_addr, live_fun_addr_val, live_fun_val,
 };
-use crate::c5::program::Program;
 use crate::c5::symbol::Symbol;
 use crate::c5::token::Token;
 
 /// The functions a root of `program` reaches: the set the walk lowers.
-pub(crate) fn reachable_functions(program: &Program) -> BTreeSet<usize> {
-    let graph = ReachGraph::new(program, &[]);
+pub(crate) fn reachable_functions(graph: &ReachGraph) -> BTreeSet<usize> {
+    let program = graph.program;
     let by_ent: BTreeMap<usize, &FinishedFunction> = program
         .finished_functions
         .iter()
@@ -24,7 +23,7 @@ pub(crate) fn reachable_functions(program: &Program) -> BTreeSet<usize> {
     let defined = by_ent.keys().copied().collect();
     let (funcs, _) = graph.solve(&defined, None, false, |pc, work| {
         if let Some(f) = by_ent.get(&pc) {
-            body_edges(&graph, &program.symbols, f, work);
+            body_edges(graph, &program.symbols, f, work);
         }
     });
     funcs
@@ -66,7 +65,7 @@ fn body_edges(graph: &ReachGraph, symbols: &[Symbol], f: &FinishedFunction, work
 #[cfg(test)]
 mod tests {
     use super::super::shadow::{
-        compute_live_sets, dropped_live_functions, produce_ssa_funcs, walk_program,
+        ReachGraph, compute_live_sets, dropped_live_functions, produce_ssa_funcs, walk_program,
     };
     use super::reachable_functions;
     use crate::c5::Target;
@@ -168,7 +167,8 @@ mod tests {
             let src = crate::c5::tests::with_prelude(&crate::c5::tests::load_fixture(name));
             // A fixture this host rejects has no walk to compare.
             let program = Compiler::with_target(src, target).compile().ok()?;
-            let reachable = reachable_functions(&program);
+            let graph = ReachGraph::new(&program);
+            let reachable = reachable_functions(&graph);
             let every = program
                 .finished_functions
                 .iter()
@@ -177,7 +177,7 @@ mod tests {
             for optimize in [false, true] {
                 let (funcs, failed) = walk_program(&program, target, optimize, true, &every);
                 let unwalked = failed.iter().map(|&(pc, _)| pc).collect();
-                let live = compute_live_sets(&funcs, &unwalked, &program, false, None).func_pcs;
+                let live = compute_live_sets(&funcs, &unwalked, &graph, false, None).func_pcs;
                 if failed.iter().any(|(pc, _)| live.contains(pc)) {
                     return None;
                 }

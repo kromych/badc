@@ -2072,6 +2072,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // post-inline bodies directly; the walk and the -O passes that produced
     // them are skipped, the rest of the pipeline runs unchanged.
     let walked = prebuilt.is_none();
+    let graph_cell = core::cell::OnceCell::new();
+    let graph = || graph_cell.get_or_init(|| super::shadow::ReachGraph::new(program));
     let pipeline = Pipeline {
         arch: B::ARCH,
         verify: cfg!(debug_assertions) || native.verify_ssa,
@@ -2085,8 +2087,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         ),
         None => (
             time_pass_arch("ssa::produce_ssa_funcs", B::ARCH, || {
-                super::shadow::produce_ssa_funcs(
-                    program,
+                super::shadow::produce_ssa_funcs_on(
+                    graph(),
                     target,
                     native.optimize,
                     native.jump_tables,
@@ -2412,7 +2414,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             |funcs| {
                 super::shadow::drop_unreachable_statics(
                     funcs,
-                    program,
+                    graph(),
                     &reachable_owners,
                     mode == super::LowerMode::DataLivenessProbe,
                 )

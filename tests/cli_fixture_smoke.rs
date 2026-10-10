@@ -3223,13 +3223,14 @@ fn prototyped_int_return_is_widened_once() {
             continue;
         };
         // The libc callers take pointer parameters, so every widening in
-        // them is the return's; `via_user_slot` takes an `int`, so its
-        // entry conversion joins the one its object's reload performs.
+        // them is the return's; `via_user_slot`'s reload of its `int` adds
+        // one on aarch64 (`ldursw`), none on x86-64 (`movl`).
+        let user_slot = if target == "linux-x64" { 1 } else { 2 };
         for (func, want) in [
             ("via_int_slot", 1usize),
             ("direct_libc_use", 1),
             ("pointer_offset", 1),
-            ("via_user_slot", 2),
+            ("via_user_slot", user_slot),
         ] {
             let (n, hits) = register_mentions(&text, func, widenings);
             assert!(n > 0, "{target}: `{func}` not found in the disassembly");

@@ -31,21 +31,21 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movl	$0xa, -0x18(%rbp)
                	movq	$0x3e8, -0x10(%rbp)     # imm = 0x3E8
-               	movslq	-0x18(%rbp), %rax
+               	movl	-0x18(%rbp), %eax
                	addq	$-0x5, %rax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movslq	-0x18(%rbp), %rax
+               	movl	-0x18(%rbp), %eax
                	addq	$-0xa, %rax
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movslq	-0x18(%rbp), %rax
+               	movl	-0x18(%rbp), %eax
                	subq	$-0x7, %rax
                	cmpl	$0x11, %eax
                	je	<addr>
@@ -66,14 +66,14 @@ Disassembly of section .text:
                	movl	$0x5, %eax
                	leave
                	retq
-               	movslq	-0x18(%rbp), %rax
+               	movl	-0x18(%rbp), %eax
                	addq	$-0xfff, %rax           # imm = 0xF001
                	cmpl	$0xfffff00b, %eax       # imm = 0xFFFFF00B
                	je	<addr>
                	movl	$0x6, %eax
                	leave
                	retq
-               	movslq	-0x18(%rbp), %rax
+               	movl	-0x18(%rbp), %eax
                	addq	$-0x1000, %rax          # imm = 0xF000
                	cmpl	$0xfffff00a, %eax       # imm = 0xFFFFF00A
                	je	<addr>
@@ -83,12 +83,12 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movl	$0x5, -0x8(%rbp)
                	jmp	<addr>
-               	movslq	-0x8(%rbp), %rcx
+               	movl	-0x8(%rbp), %ecx
                	addq	%rcx, %rax
-               	movslq	-0x8(%rbp), %rcx
+               	movl	-0x8(%rbp), %ecx
                	decq	%rcx
                	movl	%ecx, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rcx
+               	movl	-0x8(%rbp), %ecx
                	testl	%ecx, %ecx
                	jg	<addr>
                	cmpl	$0xf, %eax

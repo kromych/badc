@@ -42,7 +42,7 @@ Disassembly of section .text:
                	cmpq	%rsi, %rdx
                	jne	<addr>
                	movq	(%rax), %rdx
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	cmpl	$0x3, %edx
                	je	<addr>
                	movl	$0xbad2, %eax           # imm = 0xBAD2
@@ -119,7 +119,7 @@ Disassembly of section .text:
                	cmpq	%rdx, %rcx
                	jne	<addr>
                	movq	(%rax), %rax
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x4, %eax
@@ -135,7 +135,7 @@ Disassembly of section .text:
                	cmpq	%rdx, %rcx
                	jne	<addr>
                	movq	(%rax), %rax
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x5, %eax

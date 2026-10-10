@@ -53,7 +53,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	%rax, -0x8(%rbp)
                	leaq	-0x8(%rbp), %rax
-               	movslq	0x4(%rax), %rax
+               	movl	0x4(%rax), %eax
                	addq	$0x3, %rax
                	cmpl	$0x9, %eax
                	je	<addr>

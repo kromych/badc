@@ -33,6 +33,6 @@ Disassembly of section .text:
                	leaq	-0x8(%rbp), %rax
                	prefetcht0	(%rax)
                	clflush	(%rax)
-               	movslq	-0x8(%rbp), %rax
+               	movl	-0x8(%rbp), %eax
                	leave
                	retq

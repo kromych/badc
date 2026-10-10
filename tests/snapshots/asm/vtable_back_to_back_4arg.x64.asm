@@ -35,7 +35,7 @@ Disassembly of section .text:
 
 <g_generate>:
                	movq	%rdx, %rax
-               	movslq	0x8(%rdi), %rcx
+               	movl	0x8(%rdi), %ecx
                	addq	$0x64, %rcx
                	movl	%ecx, (%rsi)
                	retq
@@ -59,7 +59,7 @@ Disassembly of section .text:
                	leaq	-0x18(%rbp), %rsi
                	movl	$0x1, %edx
                	callq	*%rax
-               	movslq	-0x18(%rbp), %rax
+               	movl	-0x18(%rbp), %eax
                	leave
                	retq
 
@@ -82,6 +82,6 @@ Disassembly of section .text:
                	leaq	-0x40(%rbp), %rsi
                	movl	$0x1, %edx
                	callq	*%rax
-               	movslq	-0x40(%rbp), %rax
+               	movl	-0x40(%rbp), %eax
                	leave
                	retq

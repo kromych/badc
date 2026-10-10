@@ -40,7 +40,7 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	testq	%rax, %rax
                	je	<addr>
-               	movslq	(%rax), %rdx
+               	movl	(%rax), %edx
                	addq	%rdx, %rcx
                	movq	0x8(%rax), %rax
                	testq	%rax, %rax

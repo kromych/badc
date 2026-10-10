@@ -82,7 +82,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movslq	-0x170(%rbp), %rax
+               	movl	-0x170(%rbp), %eax
                	cmpl	$0x7a, %eax
                	je	<addr>
                	movl	$0x5, %eax
@@ -126,13 +126,13 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0xe8(%rbp), %rax
-               	movslq	0x14(%rax), %rcx
+               	movl	0x14(%rax), %ecx
                	cmpl	$0x7c, %ecx
                	jne	<addr>
-               	movslq	0x10(%rax), %rcx
+               	movl	0x10(%rax), %ecx
                	cmpl	$0x4, %ecx
                	jne	<addr>
-               	movslq	0xc(%rax), %rax
+               	movl	0xc(%rax), %eax
                	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x9, %eax

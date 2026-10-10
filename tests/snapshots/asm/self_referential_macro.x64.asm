@@ -26,11 +26,11 @@ Disassembly of section .text:
                	int3
 
 <unwrap>:
-               	movslq	(%rdi), %rax
+               	movl	(%rdi), %eax
                	retq
 
 <twice>:
-               	movslq	(%rdi), %rax
+               	movl	(%rdi), %eax
                	shlq	%rax
                	retq
 

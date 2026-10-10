@@ -8175,20 +8175,26 @@ fn strict_align_narrows_the_under_aligned_member_access() {
         0,
         "x86_64 strict_align still accesses an under-aligned member through a wide mov"
     );
-    // The four-byte reads ride `movslq` (`REX.W 63 /r`) off the struct
-    // pointer; the narrowed form composes from `movzbq` instead.
-    let x64_movsxd = |obj: &[u8]| -> usize {
-        elf_text(obj)
-            .windows(3)
-            .filter(|w| w[0] & 0xF8 == 0x48 && w[1] == 0x63 && w[2] >> 6 != 3 && w[2] & 7 != 5)
+    // `get_a` reads its four bytes with one `movslq` (`REX.W 63 /r`) or `movl`
+    // (`8B /r`); the narrowed form composes from `movzbq` instead.
+    let x64_dword_loads = |code: &[u8]| -> usize {
+        let mem = |m: u8| m >> 6 != 3 && m & 7 != 5;
+        (0..code.len().saturating_sub(2))
+            .filter(|&i| {
+                let (a, b, c) = (code[i], code[i + 1], code[i + 2]);
+                let rex_w = i > 0 && code[i - 1] & 0xF8 == 0x48;
+                (a & 0xF8 == 0x48 && b == 0x63 && mem(c)) || (a == 0x8B && mem(b) && !rex_w)
+            })
             .count()
     };
-    assert!(
-        x64_movsxd(&emit(Target::LinuxX64, false)) >= 1,
-        "x86_64 default should read the packed int member with one movslq"
+    let get_a = |strict_align: bool| function_bytes(&emit(Target::LinuxX64, strict_align), "get_a");
+    assert_eq!(
+        x64_dword_loads(&get_a(false)),
+        1,
+        "x86_64 default should read the packed int member in one access"
     );
     assert_eq!(
-        x64_movsxd(&emit(Target::LinuxX64, true)),
+        x64_dword_loads(&get_a(true)),
         0,
         "x86_64 strict_align still reads a packed int member in one access"
     );

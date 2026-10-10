@@ -30,7 +30,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movl	$0xff0000, -0x10(%rbp)  # imm = 0xFF0000
-               	movslq	-0x10(%rbp), %rax
+               	movl	-0x10(%rbp), %eax
                	movl	$0x20, %r11d
                	bsfl	%eax, %eax
                	cmovel	%r11d, %eax
@@ -45,7 +45,7 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	movl	%eax, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rcx
+               	movl	-0x8(%rbp), %ecx
                	movl	$0x20, %r11d
                	bsfl	%ecx, %ecx
                	cmovel	%r11d, %ecx

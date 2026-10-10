@@ -174,7 +174,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rdx      # <addr>
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	cmpl	$0x7, %edx
                	jne	<addr>
                	leaq	<rip>, %rdx      # <addr>

@@ -53,7 +53,7 @@ Disassembly of section .text:
                	testb	$0xf, %cl
                	je	<addr>
                	leaq	<rip>, %rsi      # <addr>
-               	movslq	(%rsi), %rdi
+               	movl	(%rsi), %edi
                	orq	$0x1, %rdi
                	movl	%edi, (%rsi)
                	movl	$0x3, (%rdx)
@@ -92,7 +92,7 @@ Disassembly of section .text:
                	testb	$0xf, %al
                	je	<addr>
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rsi
+               	movl	(%rcx), %esi
                	orq	$0x2, %rsi
                	movl	%esi, (%rcx)
                	movq	$0x2, (%rax)
@@ -123,6 +123,6 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	popq	%rbp
                	retq

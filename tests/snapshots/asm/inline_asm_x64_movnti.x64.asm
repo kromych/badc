@@ -34,6 +34,6 @@ Disassembly of section .text:
                	movl	$0x2a, %ecx
                	movntil	%ecx, (%rax)
                	sfence
-               	movslq	-0x8(%rbp), %rax
+               	movl	-0x8(%rbp), %eax
                	leave
                	retq

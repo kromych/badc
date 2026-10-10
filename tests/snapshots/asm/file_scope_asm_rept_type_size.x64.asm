@@ -68,7 +68,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	leaq	<rip>, %rax        # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x8, %eax
                	je	<addr>
                	movl	$0x3, %eax
@@ -82,7 +82,7 @@ Disassembly of section .text:
                	retq
                	addb	%al, (%rax)
                	addb	%al, (%rax)
-               	addb	%al, (%rsp,%rax)
+               	addb	%al, (%rax)
 
 <rept_run>:
   400540: 04 04 04 07 07 07 07 07         ........

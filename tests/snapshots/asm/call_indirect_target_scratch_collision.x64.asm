@@ -49,13 +49,13 @@ Disassembly of section .text:
                	callq	*%rax
                	movq	%rax, %rbx
                	leaq	<rip>, %rdi
-               	movslq	-0x8(%rbp), %rdx
+               	movl	-0x8(%rbp), %edx
                	movq	%rbx, %rsi
                	movb	$0x0, %al
                	callq	<addr>
                	testl	%ebx, %ebx
                	jne	<addr>
-               	movslq	-0x8(%rbp), %rax
+               	movl	-0x8(%rbp), %eax
                	cmpl	$0x10040, %eax          # imm = 0x10040
                	jne	<addr>
                	xorl	%eax, %eax

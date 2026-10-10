@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <bump>:
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	retq
@@ -43,7 +43,7 @@ Disassembly of section .text:
                	movq	%rsp, %rax
                	callq	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x1, %eax

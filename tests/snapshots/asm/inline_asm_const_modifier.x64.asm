@@ -39,7 +39,7 @@ Disassembly of section .text:
 
 <address_modifier>:
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	retq
 
 <call_modifier>:
@@ -57,7 +57,7 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x21, %eax
                	je	<addr>
                	movl	$0x2, %eax

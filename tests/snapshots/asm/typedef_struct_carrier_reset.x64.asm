@@ -64,19 +64,19 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0xa8(%rbp), %rax
-               	movslq	0x14(%rax), %rcx
+               	movl	0x14(%rax), %ecx
                	cmpl	$0x5, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
-               	movslq	0x3c(%rax), %rcx
+               	movl	0x3c(%rax), %ecx
                	cmpl	$0x6, %ecx
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	movslq	0xa0(%rax), %rax
+               	movl	0xa0(%rax), %eax
                	cmpl	$0x64, %eax
                	je	<addr>
                	movl	$0x4, %eax

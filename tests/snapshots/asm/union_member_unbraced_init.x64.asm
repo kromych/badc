@@ -36,7 +36,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movslq	0x10(%rax), %rcx
+               	movl	0x10(%rax), %ecx
                	cmpl	$0x2a, %ecx
                	je	<addr>
                	movl	$0x1, %eax
@@ -69,20 +69,20 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movslq	0x8(%rax), %rax
+               	movl	0x8(%rax), %eax
                	cmpl	$0x2b, %eax
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	cmpl	$0x1, %ecx
                	jne	<addr>
-               	movslq	0x4(%rax), %rcx
+               	movl	0x4(%rax), %ecx
                	cmpl	$0x2, %ecx
                	jne	<addr>
-               	movslq	0x8(%rax), %rax
+               	movl	0x8(%rax), %eax
                	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x4, %eax
@@ -95,7 +95,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movslq	0x10(%rax), %rdx
+               	movl	0x10(%rax), %edx
                	cmpl	$0x2a, %edx
                	je	<addr>
                	movl	$0x5, %eax
@@ -107,7 +107,7 @@ Disassembly of section .text:
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movslq	0x28(%rax), %rax
+               	movl	0x28(%rax), %eax
                	cmpl	$0x2b, %eax
                	je	<addr>
                	movl	$0x6, %eax

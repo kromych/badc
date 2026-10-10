@@ -36,7 +36,7 @@ Disassembly of section .text:
                	movss	-0x8(%rbp), %xmm1
                	addss	%xmm1, %xmm0
                	movss	%xmm0, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rcx
+               	movl	-0x8(%rbp), %ecx
                	movl	%ecx, -0x8(%rbp)
                	movss	-0x8(%rbp), %xmm0
                	movl	$0x42280000, %ecx       # imm = 0x42280000

@@ -2200,6 +2200,54 @@ fn unoptimized_int_compare_reads_the_low_words() {
     assert_eq!(cmp_reg_rex_w, [false], "x86-64: one 32-bit compare");
 }
 
+/// An `int` loads with a plain 32-bit `mov` unless a reader takes its high
+/// word (an index, a `long` return, store or argument, a division): a local
+/// unoptimized, an absolute-base table element at -O.
+#[test]
+fn x64_int_reload_widens_only_for_a_high_word_reader() {
+    const SRC: &str = "int count(int n) { int c = 0; for (int i = 0; i < n; i++) c++; return c; }\n\
+long index_of(long *a, int i) { return a[i]; }\n\
+long to_long(int i) { return i; }\n\
+void store_long(long *p, int i) { *p = i; }\n\
+long takes_long(long x);\n\
+long passes(int i) { return takes_long(i); }\n\
+int div2(int i) { return i / 2; }\n\
+static int tab[16];\n\
+int abs_get(unsigned i) { return tab[i] + 1; }\n\
+long abs_get_long(unsigned i) { return tab[i]; }\n";
+    let loads_at = |name: &str, optimize: bool| {
+        let insns = x64_at(SRC, name, optimize);
+        let movslq = insns
+            .iter()
+            .filter(|i| i.op == 0x63 && i.rex_w() && !i.reg_form())
+            .count();
+        let movl = insns
+            .iter()
+            .filter(|i| i.op == 0x8B && !i.rex_w() && !i.reg_form())
+            .count();
+        (movslq, movl)
+    };
+    let loads = |name: &str| loads_at(name, false);
+    let (movslq, movl) = loads("count");
+    assert!(
+        movslq == 0 && movl >= 4,
+        "count: {movslq} movslq, {movl} movl"
+    );
+    for name in ["index_of", "to_long", "store_long", "passes", "div2"] {
+        assert_eq!(loads(name).0, 1, "{name}: the reload sign-extends");
+    }
+    assert_eq!(
+        loads_at("abs_get", true),
+        (0, 1),
+        "abs_get: `movl tab(,%rax,4)`"
+    );
+    assert_eq!(
+        loads_at("abs_get_long", true),
+        (1, 0),
+        "abs_get_long: `movslq`"
+    );
+}
+
 /// Unoptimized, `k` lives in its frame slot and the branch on `(int)k`
 /// reads that slot once. It compares the low word (the loop runs while
 /// bits 0..31 are not all zero), never the quadword: `cmpq $0, mem` loops

@@ -187,8 +187,8 @@ Disassembly of section .text:
                	movq	%rdi, %rdx
                	subq	%rax, %rdx
                	movl	%edi, (%rcx,%rdx,4)
-               	movslq	(%rcx), %rax
-               	movslq	0xff0(%rcx), %rcx
+               	movl	(%rcx), %eax
+               	movl	0xff0(%rcx), %ecx
                	addq	%rcx, %rax
                	leave
                	retq
@@ -286,7 +286,7 @@ Disassembly of section .text:
                	movq	0xff8(%rcx), %rcx
                	addq	%rcx, %rax
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	0xff0(%rcx), %rcx
+               	movl	0xff0(%rcx), %ecx
                	addq	%rcx, %rax
                	popq	%rbp
                	retq

@@ -125,18 +125,18 @@ Disassembly of section .text:
                	movl	$0x2c, 0x40(%rdx)
                	leaq	<rip>, %rax      # <addr>
                	movl	$0x37, (%rax)
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0xb, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	0xc0(%rcx), %rcx
+               	movl	0xc0(%rcx), %ecx
                	cmpl	$0x21, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	0x40(%rcx), %rcx
+               	movl	0x40(%rcx), %ecx
                	cmpl	$0x2c, %ecx
                	jne	<addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x37, %eax
                	je	<addr>
                	movl	$0x17, %eax

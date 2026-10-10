@@ -28,14 +28,14 @@ Disassembly of section .text:
 <main>:
                	movq	%fs:0x0, %rax
                	addq	$-0x18, %rax
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	cmpl	$0x7, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	movq	%fs:0x0, %rcx
                	addq	$-0x10, %rcx
-               	movslq	(%rcx), %rdx
+               	movl	(%rcx), %edx
                	cmpl	$-0x3, %edx
                	je	<addr>
                	movl	$0x2, %eax
@@ -46,8 +46,8 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movslq	(%rax), %rdx
-               	movslq	(%rcx), %rcx
+               	movl	(%rax), %edx
+               	movl	(%rcx), %ecx
                	addq	%rdx, %rcx
                	movl	%ecx, (%rax)
                	movq	%rcx, %rax

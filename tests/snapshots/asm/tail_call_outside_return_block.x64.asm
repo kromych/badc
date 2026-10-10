@@ -29,7 +29,7 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %r9
+               	movl	(%rax), %r9d
                	incq	%r9
                	movl	%r9d, (%rax)
                	cmpl	$0x3e8, %r8d            # imm = 0x3E8
@@ -88,7 +88,7 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	callq	*%rax
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x1, %eax

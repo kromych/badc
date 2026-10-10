@@ -67,10 +67,10 @@ Disassembly of section .text:
                	jl	<addr>
                	leaq	-0x78(%rbp), %rax
                	addq	$0x54, %rax
-               	movslq	(%rax), %rcx
-               	movslq	0x4(%rax), %rdx
+               	movl	(%rax), %ecx
+               	movl	0x4(%rax), %edx
                	addq	%rdx, %rcx
-               	movslq	0x8(%rax), %rax
+               	movl	0x8(%rax), %eax
                	addq	%rcx, %rax
                	cmpl	$0x837, %eax            # imm = 0x837
                	je	<addr>

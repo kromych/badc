@@ -31,7 +31,7 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0xff, -0x8(%rbp)
                	movq	$-0x400, -0x10(%rbp)    # imm = 0xFC00
-               	movslq	-0x8(%rbp), %rax
+               	movl	-0x8(%rbp), %eax
                	movl	%eax, %r11d
                	shll	%r11d
                	xorl	%eax, %r11d

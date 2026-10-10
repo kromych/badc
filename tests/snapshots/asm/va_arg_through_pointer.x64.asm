@@ -78,7 +78,7 @@ Disassembly of section .text:
                	movq	0x8(%r11), %r10
                	addq	$0x8, 0x8(%r11)
                	movq	%r10, %rdx
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	movl	%edx, (%rcx)
                	leaq	<rip>, %rcx      # <addr>
                	movq	%rax, %r11
@@ -108,7 +108,7 @@ Disassembly of section .text:
                	movb	$0x1, %al
                	callq	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x1, %eax

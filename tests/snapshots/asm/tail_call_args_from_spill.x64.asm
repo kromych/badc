@@ -97,7 +97,7 @@ Disassembly of section .text:
                	subq	$0x18, %rsp
                	pushq	%rbx
                	movl	$0xa, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rdi
+               	movl	-0x8(%rbp), %edi
                	callq	<addr>
                	movq	%rax, %rbx
                	leaq	<rip>, %rdi

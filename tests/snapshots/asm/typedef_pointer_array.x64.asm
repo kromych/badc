@@ -27,10 +27,10 @@ Disassembly of section .text:
 
 <check_local>:
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	cmpl	$0x64, %ecx
                	jne	<addr>
-               	movslq	0x8(%rax), %rax
+               	movl	0x8(%rax), %eax
                	cmpl	$0x12c, %eax            # imm = 0x12C
                	je	<addr>
                	movl	$0x23, %eax
@@ -74,22 +74,22 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax      # <addr>
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	movslq	(%rcx), %rax
+               	movl	(%rcx), %eax
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x6, %eax
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	addq	%rcx, %rax
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	addq	%rcx, %rax
                	cmpl	$0x12, %eax
                	je	<addr>

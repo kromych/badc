@@ -80,25 +80,25 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	cmpl	$0xb, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
                	retq
-               	movslq	0x4(%rax), %rcx
+               	movl	0x4(%rax), %ecx
                	cmpl	$0x16, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbp
                	retq
-               	movslq	0x8(%rax), %rcx
+               	movl	0x8(%rax), %ecx
                	cmpl	$0x21, %ecx
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbp
                	retq
-               	movslq	0xc(%rax), %rax
+               	movl	0xc(%rax), %eax
                	cmpl	$0x2c, %eax
                	je	<addr>
                	movl	$0x4, %eax

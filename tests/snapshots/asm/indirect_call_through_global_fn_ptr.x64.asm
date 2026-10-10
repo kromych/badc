@@ -40,12 +40,12 @@ Disassembly of section .text:
                	movl	$0x23, %edx
                	movl	%edx, (%rcx)
                	leaq	<rip>, %rdi      # <addr>
-               	movslq	(%rax), %rsi
+               	movl	(%rax), %esi
                	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	callq	*%rax
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	popq	%rbp
                	retq
 
@@ -58,11 +58,11 @@ Disassembly of section .text:
                	movl	$0x23, %edx
                	movl	%edx, (%rcx)
                	leaq	<rip>, %rdi      # <addr>
-               	movslq	(%rax), %rsi
+               	movl	(%rax), %esi
                	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
                	callq	*%rax
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	popq	%rbp
                	retq

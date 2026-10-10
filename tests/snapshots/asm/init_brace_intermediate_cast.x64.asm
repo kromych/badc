@@ -60,12 +60,12 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	cmpl	$-0x38, %ecx
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	movslq	0x4(%rax), %rax
+               	movl	0x4(%rax), %eax
                	cmpl	$0xffff8000, %eax       # imm = 0xFFFF8000
                	je	<addr>
                	movl	$0x8, %eax
@@ -81,7 +81,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xa, %eax
                	retq
-               	movslq	0x10(%rax), %rax
+               	movl	0x10(%rax), %eax
                	cmpl	$-0x38, %eax
                	je	<addr>
                	movl	$0xb, %eax
@@ -103,7 +103,7 @@ Disassembly of section .text:
                	movl	$0xe, %eax
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0xf, %eax

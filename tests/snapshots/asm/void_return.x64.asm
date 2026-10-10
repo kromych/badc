@@ -26,7 +26,7 @@ Disassembly of section .text:
                	int3
 
 <bump>:
-               	movslq	(%rdi), %rax
+               	movl	(%rdi), %eax
                	incq	%rax
                	movl	%eax, (%rdi)
                	retq
@@ -37,12 +37,12 @@ Disassembly of section .text:
                	retq
 
 <clamp>:
-               	movslq	(%rdi), %rax
+               	movl	(%rdi), %eax
                	testl	%eax, %eax
                	jge	<addr>
                	movl	$0x0, (%rdi)
                	retq
-               	movslq	(%rdi), %rax
+               	movl	(%rdi), %eax
                	incq	%rax
                	movl	%eax, (%rdi)
                	retq
@@ -79,7 +79,7 @@ Disassembly of section .text:
 <count_down>:
                	testl	%edi, %edi
                	je	<addr>
-               	movslq	(%rsi), %rax
+               	movl	(%rsi), %eax
                	addq	%rdi, %rax
                	movl	%eax, (%rsi)
                	decq	%rdi
@@ -93,7 +93,7 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0xffffffff, -0x8(%rbp) # imm = 0xFFFFFFFF
                	leaq	-0x8(%rbp), %rax
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	testl	%ecx, %ecx
                	jge	<addr>
                	movl	$0x0, (%rax)
@@ -114,7 +114,7 @@ Disassembly of section .text:
                	retq
                	movl	$0x2, (%rax)
                	jmp	<addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	jmp	<addr>

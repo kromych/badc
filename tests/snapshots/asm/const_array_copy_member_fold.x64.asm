@@ -43,7 +43,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rdx
+               	movl	(%rax), %edx
                	incq	%rdx
                	movl	%edx, (%rax)
                	movq	%rdi, %rax
@@ -51,7 +51,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	movq	%rbx, %rax
@@ -59,7 +59,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	movq	%r12, %rax
@@ -67,7 +67,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	popq	%rbx
@@ -99,7 +99,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	je	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	movl	$0x1, %eax
@@ -117,7 +117,7 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	je	<addr>
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rdx
+               	movl	(%rcx), %edx
                	incq	%rdx
                	movl	%edx, (%rcx)
                	movl	$0x3c, %edx
@@ -135,6 +135,6 @@ Disassembly of section .text:
                	movq	%rsi, %r8
                	callq	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	leave
                	retq

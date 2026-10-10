@@ -28,11 +28,11 @@ Disassembly of section .text:
 <sum_at_high>:
                	movslq	%esi, %rsi
                	movslq	%edx, %rdx
-               	movslq	(%rdi,%rdx,4), %r8
+               	movl	(%rdi,%rdx,4), %r8d
                	xorl	%eax, %eax
                	cmpl	%edx, %esi
                	jg	<addr>
-               	movslq	(%rdi,%rsi,4), %rcx
+               	movl	(%rdi,%rsi,4), %ecx
                	addq	%rcx, %rax
                	incq	%rsi
                	cmpl	%edx, %esi
@@ -54,7 +54,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rcx, %rdi
                	movq	%rax, %rcx
-               	movslq	(%rdx,%rcx,4), %rsi
+               	movl	(%rdx,%rcx,4), %esi
                	addq	%rsi, %rax
                	incq	%rcx
                	cmpl	$0x4, %ecx

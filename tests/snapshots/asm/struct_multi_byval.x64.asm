@@ -51,29 +51,29 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	leaq	(%rax,%r8), %rcx
                	leaq	-0x28(%rbp), %rax
-               	movslq	(%rax), %rdx
+               	movl	(%rax), %edx
                	addq	%rdx, %rcx
-               	movslq	0x4(%rax), %rdx
+               	movl	0x4(%rax), %edx
                	addq	%rdx, %rcx
-               	movslq	0x8(%rax), %rdx
+               	movl	0x8(%rax), %edx
                	addq	%rdx, %rcx
-               	movslq	0xc(%rax), %rax
+               	movl	0xc(%rax), %eax
                	addq	%rcx, %rax
                	leaq	0x7d0(%rax), %rcx
                	leaq	-0x18(%rbp), %rax
-               	movslq	(%rax), %rdx
+               	movl	(%rax), %edx
                	addq	%rdx, %rcx
-               	movslq	0x4(%rax), %rdx
+               	movl	0x4(%rax), %edx
                	addq	%rdx, %rcx
-               	movslq	0x8(%rax), %rdx
+               	movl	0x8(%rax), %edx
                	addq	%rdx, %rcx
-               	movslq	0xc(%rax), %rdx
+               	movl	0xc(%rax), %edx
                	addq	%rdx, %rcx
-               	movslq	0x10(%rax), %rdx
+               	movl	0x10(%rax), %edx
                	addq	%rdx, %rcx
-               	movslq	0x14(%rax), %rax
+               	movl	0x14(%rax), %eax
                	addq	%rcx, %rax
-               	movslq	0x38(%rbp), %rcx
+               	movl	0x38(%rbp), %ecx
                	addq	%rcx, %rax
                	movslq	%eax, %rax
                	movq	%rax, (%r9)

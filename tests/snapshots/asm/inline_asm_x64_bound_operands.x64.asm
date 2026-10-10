@@ -227,12 +227,12 @@ Disassembly of section .text:
                	retq
                	callq	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
-               	movslq	0x4(%rax), %rdx
+               	movl	(%rax), %ecx
+               	movl	0x4(%rax), %edx
                	addq	%rdx, %rcx
-               	movslq	0x8(%rax), %rdx
+               	movl	0x8(%rax), %edx
                	addq	%rdx, %rcx
-               	movslq	0xc(%rax), %rax
+               	movl	0xc(%rax), %eax
                	addq	%rcx, %rax
                	cmpl	$0x6e, %eax
                	jne	<addr>
@@ -241,12 +241,12 @@ Disassembly of section .text:
                	jne	<addr>
                	leaq	<rip>, %rax      # <addr>
                	addq	$0x10, %rax
-               	movslq	(%rax), %rcx
-               	movslq	0x4(%rax), %rdx
+               	movl	(%rax), %ecx
+               	movl	0x4(%rax), %edx
                	addq	%rdx, %rcx
-               	movslq	0x8(%rax), %rdx
+               	movl	0x8(%rax), %edx
                	addq	%rdx, %rcx
-               	movslq	0xc(%rax), %rax
+               	movl	0xc(%rax), %eax
                	addq	%rcx, %rax
                	cmpl	$0x6e, %eax
                	je	<addr>

@@ -91,7 +91,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movslq	0x18(%rax), %rax
+               	movl	0x18(%rax), %eax
                	andq	$0xf000, %rax           # imm = 0xF000
                	cmpl	$0x8000, %eax           # imm = 0x8000
                	je	<addr>

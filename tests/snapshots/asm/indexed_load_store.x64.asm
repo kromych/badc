@@ -57,15 +57,15 @@ Disassembly of section .text:
                	movq	%rax, %rdi
                	shlq	$0x2, %rdi
                	leaq	(%r8,%rdi), %rdx
-               	movslq	(%rdx), %r9
+               	movl	(%rdx), %r9d
                	addq	$0x3, %r9
                	addq	%rsi, %rdi
-               	movslq	(%rdi), %rbx
+               	movl	(%rdi), %ebx
                	subq	$0x3, %rbx
                	movl	%ebx, (%rdx)
                	movl	%r9d, (%rsi,%rax,4)
-               	movslq	(%rdx), %rdx
-               	movslq	(%rdi), %rdi
+               	movl	(%rdx), %edx
+               	movl	(%rdi), %edi
                	imulq	%rdi, %rdx
                	addq	%rdx, %rcx
                	incq	%rax

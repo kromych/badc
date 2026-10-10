@@ -122,7 +122,7 @@ Disassembly of section .text:
                	movswq	-0x28(%rbp), %rax
                	subq	$0x2, %rax
                	movw	%ax, -0x28(%rbp)
-               	movslq	-0x20(%rbp), %rax
+               	movl	-0x20(%rbp), %eax
                	xorq	$0x55, %rax
                	movl	%eax, -0x20(%rbp)
                	movq	-0x18(%rbp), %rcx
@@ -350,7 +350,7 @@ Disassembly of section .text:
                	callq	<addr>
                	leaq	-0x1028(%rbp), %rdi
                	callq	<addr>
-               	movslq	-0x20(%rbp), %rax
+               	movl	-0x20(%rbp), %eax
                	movzbq	0x3(%r12), %rcx
                	addq	%rcx, %rax
                	movl	%eax, -0x20(%rbp)
@@ -364,7 +364,7 @@ Disassembly of section .text:
                	movq	%rcx, %xmm15
                	addsd	%xmm15, %xmm0
                	movsd	%xmm0, -0x10(%rbp)
-               	movslq	-0x20(%rbp), %rdx
+               	movl	-0x20(%rbp), %edx
                	leaq	(%rbx,%rbx,2), %rsi
                	leaq	0x3(%rbx), %rdi
                	andq	$0xff, %rdi
@@ -471,7 +471,7 @@ Disassembly of section .text:
                	movzbq	(%rcx), %rcx
                	imulq	%rcx, %rax
                	movq	%rax, -0x18(%rbp)
-               	movslq	-0x10(%rbp), %rax
+               	movl	-0x10(%rbp), %eax
                	leaq	-0x19d40(%rbp), %rcx
                	addq	$0x3039, %rcx           # imm = 0x3039
                	movzbq	(%rcx), %rcx
@@ -501,7 +501,7 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movslq	-0x10(%rbp), %rdx
+               	movl	-0x10(%rbp), %edx
                	movq	%rbx, %rsi
                	negq	%rsi
                	leaq	0x1(%rbx), %rdi
@@ -674,7 +674,7 @@ Disassembly of section .text:
                	subq	$0x8, %rsp
                	pushq	%rbx
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rbx
+               	movl	(%rax), %ebx
                	movq	%rbx, %rdi
                	callq	<addr>
                	movslq	%eax, %rax

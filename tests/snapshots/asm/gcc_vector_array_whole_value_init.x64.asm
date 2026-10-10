@@ -424,7 +424,7 @@ Disassembly of section .text:
                	xorq	$0x1, %rcx
                	testl	%ecx, %ecx
                	jne	<addr>
-               	movslq	0x10(%rax), %rax
+               	movl	0x10(%rax), %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x15, %eax

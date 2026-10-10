@@ -850,7 +850,14 @@ impl FnEmit<'_, '_> {
                 // disp32 reaches into the blob; the writer patches it. A
                 // static link indexes the table by its address instead.
                 let site = if self.abs32_addrs {
-                    super::encode::emit_load_index_abs(code, LoadKind::I64, SCRATCH_R10, rt, 8)
+                    super::encode::emit_load_index_abs(
+                        code,
+                        LoadKind::I64,
+                        SCRATCH_R10,
+                        rt,
+                        8,
+                        true,
+                    )
                 } else {
                     let lea_start = code.len();
                     super::encode::emit_lea_r_rip32(code, SCRATCH_R11, 0);

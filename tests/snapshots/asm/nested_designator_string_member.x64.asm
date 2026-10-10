@@ -57,10 +57,10 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	leave
                	retq
-               	movslq	0xc(%rax), %rcx
+               	movl	0xc(%rax), %ecx
                	cmpl	$0x7, %ecx
                	jne	<addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x3, %eax
@@ -102,11 +102,11 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x10(%rbp), %rax
-               	movslq	0xc(%rax), %rcx
+               	movl	0xc(%rax), %ecx
                	leaq	0x6(%rdi), %rdx
                	cmpl	%edx, %ecx
                	jne	<addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	leaq	0x4(%rdi), %rcx
                	cmpl	%ecx, %eax
                	je	<addr>

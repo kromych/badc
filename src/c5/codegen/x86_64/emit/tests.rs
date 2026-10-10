@@ -786,15 +786,17 @@ mod indexed_tests {
             let mut code = Vec::new();
             let dst = Place::IntReg(Reg::RAX.0);
             let lsl = (index, IndexExt::None);
-            emit_load_indexed(&mut code, dst, base, lsl, scale, kind, &alloc, frame)
+            emit_load_indexed(&mut code, dst, base, lsl, scale, kind, true, &alloc, frame)
                 .expect("emit_load_indexed");
             assert_eq!(code, want, "{src}");
             // No SIB form widens its index: a marked access is refused.
             for ext in [IndexExt::Sxtw, IndexExt::Uxtw] {
                 let marked = (index, ext);
                 assert!(
-                    emit_load_indexed(&mut code, dst, base, marked, scale, kind, &alloc, frame)
-                        .is_err()
+                    emit_load_indexed(
+                        &mut code, dst, base, marked, scale, kind, true, &alloc, frame
+                    )
+                    .is_err()
                 );
             }
         }

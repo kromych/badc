@@ -43,7 +43,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	movslq	-0x10(%rbp), %rax
+               	movl	-0x10(%rbp), %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x4, %eax

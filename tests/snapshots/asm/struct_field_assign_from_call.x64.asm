@@ -43,8 +43,8 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	movq	0x8(%rax), %rdx
                	movq	0x18(%rax), %rcx
-               	movslq	0x14(%rax), %r8
-               	movslq	0x24(%rax), %r9
+               	movl	0x14(%rax), %r8d
+               	movl	0x24(%rax), %r9d
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax

@@ -27,7 +27,7 @@ Disassembly of section .text:
 
 <touched>:
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	incq	%rcx
                	movl	%ecx, (%rax)
                	movq	$-0x1, %rax
@@ -46,20 +46,20 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	retq
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rdx
+               	movl	(%rcx), %edx
                	cmpl	$0x64, %edx
                	jne	<addr>
-               	movslq	0x4(%rcx), %rcx
+               	movl	0x4(%rcx), %ecx
                	cmpl	$0xc8, %ecx
                	je	<addr>
                	movl	$0x6, %eax
                	retq
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0xa, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0x14, %ecx
                	je	<addr>
                	movl	$0x7, %eax

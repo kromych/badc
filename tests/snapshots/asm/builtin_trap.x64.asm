@@ -30,7 +30,7 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x10, %rsp
                	movl	$0x7, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rax
+               	movl	-0x8(%rbp), %eax
                	testl	%eax, %eax
                	jl	<addr>
                	cmpl	$0x7, %eax
@@ -40,7 +40,7 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	movl	%eax, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rcx
+               	movl	-0x8(%rbp), %ecx
                	testl	%ecx, %ecx
                	jl	<addr>
                	testl	%ecx, %ecx

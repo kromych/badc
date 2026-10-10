@@ -65,8 +65,8 @@ Disassembly of section .text:
                	retq
                	movl	$0x77359400, -0x20(%rbp) # imm = 0x77359400
                	movl	$0x77359400, -0x28(%rbp) # imm = 0x77359400
-               	movslq	-0x20(%rbp), %rax
-               	movslq	-0x28(%rbp), %rsi
+               	movl	-0x20(%rbp), %eax
+               	movl	-0x28(%rbp), %esi
                	addq	%rsi, %rax
                	cmpl	$0xee6b2800, %eax       # imm = 0xEE6B2800
                	je	<addr>

@@ -35,12 +35,12 @@ Disassembly of section .text:
                	addb	%al, (%rax)
                	<unknown>
                	addb	%al, (%rax)
-               	addb	%cl, 0x63(%rax)
-               	orb	%al, 0x7740bf9(%rbx)
+               	addb	%cl, 0xbf98308(%rbx)
+               	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movslq	0x4(%rax), %rax
+               	movl	0x4(%rax), %eax
                	cmpl	$0x16, %eax
                	je	<addr>
                	movl	$0x2, %eax
@@ -52,13 +52,13 @@ Disassembly of section .text:
                	addb	%al, (%rax)
                	subb	$0x0, %al
                	addb	%al, (%rax)
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	cmpl	$0x21, %ecx
                	je	<addr>
                	movl	$0x3, %eax
                	leave
                	retq
-               	movslq	0x4(%rax), %rax
+               	movl	0x4(%rax), %eax
                	cmpl	$0x2c, %eax
                	je	<addr>
                	movl	$0x4, %eax
@@ -70,13 +70,13 @@ Disassembly of section .text:
                	addb	%al, (%rdx)
                	addb	%al, (%rax)
                	leaq	-<rip>, %rax        # <addr>
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	cmpl	$0x37, %ecx
                	je	<addr>
                	movl	$0x5, %eax
                	leave
                	retq
-               	movslq	0x4(%rax), %rax
+               	movl	0x4(%rax), %eax
                	cmpl	$0x42, %eax
                	je	<addr>
                	movl	$0x6, %eax

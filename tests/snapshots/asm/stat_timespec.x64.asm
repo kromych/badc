@@ -52,7 +52,7 @@ Disassembly of section .text:
                	movl	$0x3, %eax
                	leave
                	retq
-               	movslq	0x18(%rax), %rax
+               	movl	0x18(%rax), %eax
                	andq	$0xf000, %rax           # imm = 0xF000
                	cmpl	$0x4000, %eax           # imm = 0x4000
                	je	<addr>

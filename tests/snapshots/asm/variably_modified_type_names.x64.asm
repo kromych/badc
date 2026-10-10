@@ -48,7 +48,7 @@ Disassembly of section .text:
                	leaq	0x10(%rcx), %rdx
                	movl	$0x7, %eax
                	movl	%eax, 0x8(%rdx)
-               	movslq	0x18(%rcx), %rsi
+               	movl	0x18(%rcx), %esi
                	cmpl	$0x7, %esi
                	je	<addr>
                	movl	$0x4, %eax

@@ -79,7 +79,7 @@ Disassembly of section .text:
                	retq
                	movq	%fs:0x0, %rax
                	addq	$-0x8, %rax
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x2, %eax

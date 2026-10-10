@@ -68,7 +68,7 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	movl	%eax, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rcx
+               	movl	-0x8(%rbp), %ecx
                	incq	%rcx
                	movl	%ecx, -0x8(%rbp)
                	incq	%rax

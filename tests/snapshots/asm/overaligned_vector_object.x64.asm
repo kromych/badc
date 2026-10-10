@@ -52,8 +52,8 @@ Disassembly of section .text:
                	movl	$0xd, 0xc(%rcx)
                	movl	$0x11, %esi
                	movl	%esi, 0x4(%rdx)
-               	movslq	(%rcx), %rdx
-               	movslq	0xc(%rcx), %rcx
+               	movl	(%rcx), %edx
+               	movl	0xc(%rcx), %ecx
                	addq	%rdx, %rcx
                	movq	%rsi, %rdx
                	addq	%rdx, %rcx
@@ -94,7 +94,7 @@ Disassembly of section .text:
                	movl	$0x13, 0x8(%rax)
                	movl	$0x17, %edx
                	movl	%edx, (%rcx)
-               	movslq	0x8(%rax), %rax
+               	movl	0x8(%rax), %eax
                	movq	%rdx, %rcx
                	addq	%rcx, %rax
                	cmpl	$0x2a, %eax

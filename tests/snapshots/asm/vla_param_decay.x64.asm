@@ -42,9 +42,9 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	shlq	$0x2, %rdx
                	leaq	(%rsi,%rdx), %r8
-               	movslq	(%r8), %r8
+               	movl	(%r8), %r8d
                	addq	%rdi, %rdx
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	imulq	%r8, %rdx
                	addq	%rdx, %rcx
                	incq	%rax

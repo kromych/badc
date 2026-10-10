@@ -171,7 +171,8 @@ pub(super) fn seg_prefix(seg: AsmSeg) -> Option<u8> {
 }
 
 /// Width-dispatched integer load `rd = *(kind*)[base + disp]`
-/// (MOV / MOVSXD / MOVSX / MOVZX per C99 6.3.1.3).
+/// (MOV / MOVSXD / MOVSX / MOVZX per C99 6.3.1.3); an `I32` takes `movsxd`
+/// only when `hi`, a reader of its upper half, else the plain 32-bit `mov`.
 fn emit_load_kind_mem(
     code: &mut Vec<u8>,
     kind: LoadKind,
@@ -179,6 +180,7 @@ fn emit_load_kind_mem(
     base: Reg,
     disp: i32,
     seg: Option<u8>,
+    hi: bool,
 ) {
     // A segment override is a legacy prefix preceding the opcode (and REX).
     if let Some(p) = seg {
@@ -186,7 +188,8 @@ fn emit_load_kind_mem(
     }
     match kind {
         LoadKind::I64 => emit_mov_r_mem(code, rd, base, disp),
-        LoadKind::I32 => emit_movsxd_r_mem(code, rd, base, disp),
+        LoadKind::I32 if hi => emit_movsxd_r_mem(code, rd, base, disp),
+        LoadKind::I32 => super::encode::emit_mov_r32_mem(code, rd, base, disp),
         LoadKind::U32 => super::encode::emit_mov_r32_mem(code, rd, base, disp),
         LoadKind::I16 => emit_movsx_r_mem16(code, rd, base, disp),
         LoadKind::U16 => emit_movzx_r_mem16(code, rd, base, disp),
@@ -428,6 +431,7 @@ pub(super) fn emit_load_local(
     off: i64,
     kind: LoadKind,
     keep_f32: bool,
+    hi: bool,
     frame: Frame,
     func: &FunctionSsa,
     abi: super::Abi,
@@ -453,7 +457,7 @@ pub(super) fn emit_load_local(
     let Some(rd) = int_or_spill_dst(dst) else {
         return fail("LoadLocal: dst not int reg / spill");
     };
-    emit_load_kind_mem(code, kind, rd, base, disp, None);
+    emit_load_kind_mem(code, kind, rd, base, disp, None, hi);
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())
 }
@@ -548,6 +552,7 @@ pub(super) fn emit_load_indexed(
     (index, ext): (u32, IndexExt),
     scale: u8,
     kind: LoadKind,
+    hi: bool,
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
@@ -583,7 +588,8 @@ pub(super) fn emit_load_indexed(
     };
     match kind {
         LoadKind::I64 => super::encode::emit_mov_r_sib(code, rd, rbase, rindex, scale),
-        LoadKind::I32 => super::encode::emit_movsxd_r_sib(code, rd, rbase, rindex, scale),
+        LoadKind::I32 if hi => super::encode::emit_movsxd_r_sib(code, rd, rbase, rindex, scale),
+        LoadKind::I32 => super::encode::emit_mov_r32_sib(code, rd, rbase, rindex, scale),
         LoadKind::U32 => super::encode::emit_mov_r32_sib(code, rd, rbase, rindex, scale),
         LoadKind::I16 => super::encode::emit_movsx_r_sib16(code, rd, rbase, rindex, scale),
         LoadKind::U16 => super::encode::emit_movzx_r_sib16(code, rd, rbase, rindex, scale),
@@ -936,7 +942,8 @@ pub(super) fn emit_abs_indexed(
                 let Some(rd) = int_or_spill_dst(dst) else {
                     return fail("LoadIndexed: dst not int reg / spill");
                 };
-                let field = super::encode::emit_load_index_abs(code, *kind, rd, ri, scale);
+                let hi = !alloc.high_dead(v);
+                let field = super::encode::emit_load_index_abs(code, *kind, rd, ri, scale, hi);
                 spill_dst_to_slot(code, dst, rd, frame);
                 field
             }
@@ -974,6 +981,7 @@ pub(super) fn emit_load(
     kind: LoadKind,
     seg: Option<u8>,
     keep_f32: bool,
+    hi: bool,
     alloc: &Allocation,
     frame: Frame,
     bound: Option<u32>,
@@ -996,7 +1004,7 @@ pub(super) fn emit_load(
     };
     match bound {
         Some(a) => emit_narrow_load(code, rd, base, disp, kind, a),
-        None => emit_load_kind_mem(code, kind, rd, base, disp, seg),
+        None => emit_load_kind_mem(code, kind, rd, base, disp, seg, hi),
     }
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())

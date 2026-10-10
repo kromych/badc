@@ -40,13 +40,13 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	testl	%edx, %edx
                	jne	<addr>
-               	movslq	(%rcx), %rdx
+               	movl	(%rcx), %edx
                	cmpl	$0x9, %edx
                	sete	%dl
                	movzbq	%dl, %rdx
                	testq	%rdx, %rdx
                	je	<addr>
-               	movslq	0x4(%rcx), %rax
+               	movl	0x4(%rcx), %eax
                	cmpl	$0xa, %eax
                	sete	%al
                	movzbq	%al, %rax

@@ -68,7 +68,7 @@ Disassembly of section .text:
                	subq	$0x48, %rsp
                	pushq	%rbx
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x2, %eax
                	setg	%bl
                	movzbq	%bl, %rbx
@@ -428,7 +428,7 @@ Disassembly of section .text:
                	jp	<addr>
                	jne	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x1a, %eax
@@ -466,7 +466,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x1d, %eax

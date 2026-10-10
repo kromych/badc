@@ -28,11 +28,11 @@ Disassembly of section .text:
 <on_usr1>:
                	movq	0xa0(%rdx), %rcx
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rdx
+               	movl	(%rax), %edx
                	incq	%rdx
                	movl	%edx, (%rax)
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rsi), %rdx
+               	movl	(%rsi), %edx
                	cmpl	%edi, %edx
                	jne	<addr>
                	movl	%edi, (%rax)
@@ -96,7 +96,7 @@ Disassembly of section .text:
                	leaq	-<rip>, %rdx      # <addr>
                	cmpq	%rdx, %rcx
                	jne	<addr>
-               	movslq	0x88(%rax), %rax
+               	movl	0x88(%rax), %eax
                	testb	$0x4, %al
                	jne	<addr>
                	movl	$0x4, %eax
@@ -106,14 +106,14 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	callq	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x5, %eax

@@ -32,13 +32,13 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movl	%eax, -0x8(%rbp)
                	jmp	<addr>
-               	movslq	-0x8(%rbp), %rcx
+               	movl	-0x8(%rbp), %ecx
                	incq	%rcx
                	movl	%ecx, -0x8(%rbp)
                	incq	%rax
                	cmpl	$0xa, %eax
                	jg	<addr>
-               	movslq	-0x8(%rbp), %rcx
+               	movl	-0x8(%rbp), %ecx
                	cmpl	$0x3, %ecx
                	jl	<addr>
                	cmpl	$0x3, %eax

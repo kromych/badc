@@ -74,7 +74,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x90(%rbp), %rax
-               	movslq	0x18(%rax), %rax
+               	movl	0x18(%rax), %eax
                	andq	$0x1ff, %rax            # imm = 0x1FF
                	cmpl	$0x180, %eax            # imm = 0x180
                	je	<addr>

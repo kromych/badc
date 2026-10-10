@@ -208,7 +208,7 @@ Disassembly of section .text:
                	jl	<addr>
                	incq	%rcx
                	leaq	<rip>, %rdx      # <addr>
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	cmpl	%edx, %ecx
                	jl	<addr>
                	movq	%rsi, %rdx
@@ -257,7 +257,7 @@ Disassembly of section .text:
                	jl	<addr>
                	incq	%rcx
                	leaq	<rip>, %rdx      # <addr>
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	cmpl	%edx, %ecx
                	jl	<addr>
                	movq	%rsi, %rdx
@@ -306,7 +306,7 @@ Disassembly of section .text:
                	jl	<addr>
                	incq	%rcx
                	leaq	<rip>, %rdx      # <addr>
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	cmpl	%edx, %ecx
                	jl	<addr>
                	movq	%rsi, %rdx
@@ -356,7 +356,7 @@ Disassembly of section .text:
                	jl	<addr>
                	incq	%rcx
                	leaq	<rip>, %rdx      # <addr>
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	cmpl	%edx, %ecx
                	jl	<addr>
                	movq	%rsi, %rdx
@@ -402,7 +402,7 @@ Disassembly of section .text:
                	jl	<addr>
                	incq	%rcx
                	leaq	<rip>, %rdx      # <addr>
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	cmpl	%edx, %ecx
                	jl	<addr>
                	movq	%rsi, %rdx
@@ -448,7 +448,7 @@ Disassembly of section .text:
                	jl	<addr>
                	incq	%rcx
                	leaq	<rip>, %rdx      # <addr>
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	cmpl	%edx, %ecx
                	jl	<addr>
                	movq	%rsi, %rdx
@@ -495,7 +495,7 @@ Disassembly of section .text:
                	jl	<addr>
                	incq	%rcx
                	leaq	<rip>, %rdx      # <addr>
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	cmpl	%edx, %ecx
                	jl	<addr>
                	movq	%rsi, %rdx
@@ -541,7 +541,7 @@ Disassembly of section .text:
                	jl	<addr>
                	incq	%rcx
                	leaq	<rip>, %rdx      # <addr>
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	cmpl	%edx, %ecx
                	jl	<addr>
                	movq	%rsi, %rdx
@@ -587,7 +587,7 @@ Disassembly of section .text:
                	jl	<addr>
                	incq	%rcx
                	leaq	<rip>, %rdx      # <addr>
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	cmpl	%edx, %ecx
                	jl	<addr>
                	movq	%rsi, %rdx
@@ -636,7 +636,7 @@ Disassembly of section .text:
                	jl	<addr>
                	incq	%rcx
                	leaq	<rip>, %rdx      # <addr>
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	cmpl	%edx, %ecx
                	jl	<addr>
                	movq	%rsi, %rdx
@@ -684,7 +684,7 @@ Disassembly of section .text:
                	jl	<addr>
                	incq	%rcx
                	leaq	<rip>, %rdx      # <addr>
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	cmpl	%edx, %ecx
                	jl	<addr>
                	movq	%rsi, %rdx
@@ -732,7 +732,7 @@ Disassembly of section .text:
                	jl	<addr>
                	incq	%rcx
                	leaq	<rip>, %rdx      # <addr>
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	cmpl	%edx, %ecx
                	jl	<addr>
                	movq	%rsi, %rdx
@@ -780,7 +780,7 @@ Disassembly of section .text:
                	jl	<addr>
                	incq	%rcx
                	leaq	<rip>, %rdx      # <addr>
-               	movslq	(%rdx), %rdx
+               	movl	(%rdx), %edx
                	cmpl	%edx, %ecx
                	jl	<addr>
                	movq	%rsi, %rdx

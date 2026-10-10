@@ -80,9 +80,9 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x8, %eax
                	retq
-               	movslq	(%rcx), %rax
+               	movl	(%rcx), %eax
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	addq	%rcx, %rax
                	cmpl	$0x20, %eax
                	je	<addr>
@@ -104,20 +104,20 @@ Disassembly of section .text:
                	retq
                	movsbq	0x9(%rdx), %rax
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	addq	%rcx, %rax
                	cmpl	$0xb, %eax
                	je	<addr>
                	movl	$0xc, %eax
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0xd, %eax
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0xe, %eax

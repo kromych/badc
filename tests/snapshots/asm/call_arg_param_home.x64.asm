@@ -88,11 +88,11 @@ Disassembly of section .text:
                	callq	<addr>
                	addq	$0x10, %rsp
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x1, %eax
                	jne	<addr>
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x2, %eax
                	jne	<addr>
                	xorl	%eax, %eax

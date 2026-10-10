@@ -75,11 +75,11 @@ Disassembly of section .text:
                	movq	0x18(%rbp), %rcx
                	addq	%rax, %rcx
                	leaq	-0x10(%rbp), %rax
-               	movslq	(%rax), %rdx
+               	movl	(%rax), %edx
                	imulq	$0x64, %rdx, %rdx
                	movslq	%edx, %rdx
                	addq	%rdx, %rcx
-               	movslq	0x4(%rax), %rdx
+               	movl	0x4(%rax), %edx
                	imulq	$0xa, %rdx, %rdx
                	movslq	%edx, %rdx
                	addq	%rdx, %rcx
@@ -133,7 +133,7 @@ Disassembly of section .text:
                	leaq	-0x20(%rbp), %rax
                	movq	$0x0, (%rax)
                	movl	$0x0, 0x8(%rax)
-               	movslq	-0x8(%rbp), %rcx
+               	movl	-0x8(%rbp), %ecx
                	movl	%ecx, (%rax)
                	movl	$0x3, %edx
                	movl	%edx, 0x4(%rax)

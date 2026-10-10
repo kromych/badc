@@ -57,7 +57,7 @@ Disassembly of section .text:
                	movsbq	(%rax), %rax
                	cmpl	$0xb, %eax
                	jne	<addr>
-               	movslq	0xc(%rcx), %rax
+               	movl	0xc(%rcx), %eax
                	cmpl	$0x16, %eax
                	jne	<addr>
                	movq	0x40(%rsp), %rax

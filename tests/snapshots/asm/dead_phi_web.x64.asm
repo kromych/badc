@@ -167,7 +167,7 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rdi
+               	movl	(%rax), %edi
                	callq	<addr>
                	testl	%eax, %eax
                	setne	%al

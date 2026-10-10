@@ -31,5 +31,5 @@ Disassembly of section .text:
 
 <main>:
                	leaq	-<rip>, %rax        # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	retq

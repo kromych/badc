@@ -231,7 +231,7 @@ Disassembly of section .text:
                	callq	<addr>
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
-               	movslq	(%rbx,%rax,4), %rsi
+               	movl	(%rbx,%rax,4), %esi
                	cmpl	$0xa, %eax
                	jge	<addr>
                	movq	%rcx, %rdx

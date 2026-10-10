@@ -204,17 +204,17 @@ Disassembly of section .text:
                	negq	%rax
                	leaq	0x2(%rax), %rsi
                	callq	<addr>
-               	movslq	-0xb8(%rbp), %rax
+               	movl	-0xb8(%rbp), %eax
                	cmpl	$0x1, %eax
                	jne	<addr>
                	leaq	-0xb8(%rbp), %rax
-               	movslq	0x4(%rax), %rcx
+               	movl	0x4(%rax), %ecx
                	cmpl	$-0x7, %ecx
                	jne	<addr>
-               	movslq	0x8(%rax), %rcx
+               	movl	0x8(%rax), %ecx
                	cmpl	$0x3, %ecx
                	jne	<addr>
-               	movslq	0xc(%rax), %rax
+               	movl	0xc(%rax), %eax
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x7, %eax
@@ -280,7 +280,7 @@ Disassembly of section .text:
                	movq	0x1(%rax), %rcx
                	cmpq	$-0x3, %rcx
                	jne	<addr>
-               	movslq	0x9(%rax), %rax
+               	movl	0x9(%rax), %eax
                	cmpl	$0x11223344, %eax       # imm = 0x11223344
                	je	<addr>
                	movl	$0xb, %eax

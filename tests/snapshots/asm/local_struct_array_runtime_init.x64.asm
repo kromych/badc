@@ -32,20 +32,20 @@ Disassembly of section .text:
                	movl	$0x7, -0x10(%rbp)
                	movl	$0x9, -0x8(%rbp)
                	leaq	-0x10(%rbp), %rax
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	cmpl	$0x7, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	movslq	-0x8(%rbp), %rcx
+               	movl	-0x8(%rbp), %ecx
                	cmpl	$0x9, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	leave
                	retq
                	movl	$0xb, (%rax)
-               	movslq	-0x10(%rbp), %rax
+               	movl	-0x10(%rbp), %eax
                	cmpl	$0xb, %eax
                	je	<addr>
                	movl	$0x5, %eax

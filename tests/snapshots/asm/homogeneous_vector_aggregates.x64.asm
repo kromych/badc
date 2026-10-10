@@ -56,7 +56,7 @@ Disassembly of section .text:
                	movq	%r10, 0x10(%rcx)
                	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
-               	movslq	-0xd0(%rbp), %rcx
+               	movl	-0xd0(%rbp), %ecx
                	cmpl	%ecx, %eax
                	jge	<addr>
                	leaq	-0x18(%rbp), %rcx
@@ -88,7 +88,7 @@ Disassembly of section .text:
                	cvtss2sd	%xmm1, %xmm1
                	addsd	%xmm1, %xmm0
                	incq	%rax
-               	movslq	-0xd0(%rbp), %rcx
+               	movl	-0xd0(%rbp), %ecx
                	cmpl	%ecx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
@@ -126,7 +126,7 @@ Disassembly of section .text:
                	movq	%r10, 0x10(%rcx)
                	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
-               	movslq	-0xd0(%rbp), %rcx
+               	movl	-0xd0(%rbp), %ecx
                	cmpl	%ecx, %eax
                	jge	<addr>
                	leaq	-0x18(%rbp), %rcx
@@ -150,7 +150,7 @@ Disassembly of section .text:
                	cvtss2sd	%xmm1, %xmm1
                	movq	%rdx, %xmm15
                	vfmadd132sd	%xmm15, %xmm1, %xmm0 # xmm0 = (xmm0 * xmm15) + xmm1
-               	movslq	0x14(%rcx), %rdx
+               	movl	0x14(%rcx), %edx
                	imulq	$0xa, %rdx, %rdx
                	movslq	%edx, %rdx
                	xorps	%xmm1, %xmm1
@@ -160,7 +160,7 @@ Disassembly of section .text:
                	cvtss2sd	%xmm1, %xmm1
                	addsd	%xmm1, %xmm0
                	incq	%rax
-               	movslq	-0xd0(%rbp), %rcx
+               	movl	-0xd0(%rbp), %ecx
                	cmpl	%ecx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
@@ -198,7 +198,7 @@ Disassembly of section .text:
                	movq	%r10, 0x10(%rcx)
                	xorl	%r11d, %r11d
                	movq	%r11, %xmm0
-               	movslq	-0xe0(%rbp), %rcx
+               	movl	-0xe0(%rbp), %ecx
                	cmpl	%ecx, %eax
                	jge	<addr>
                	leaq	-0x30(%rbp), %rcx
@@ -229,7 +229,7 @@ Disassembly of section .text:
                	cvtss2sd	%xmm1, %xmm1
                	addsd	%xmm1, %xmm0
                	incq	%rax
-               	movslq	-0xe0(%rbp), %rcx
+               	movl	-0xe0(%rbp), %ecx
                	cmpl	%ecx, %eax
                	jl	<addr>
                	leaq	-0x30(%rbp), %rax
@@ -382,7 +382,7 @@ Disassembly of section .text:
                	ucomiss	%xmm15, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movslq	0x18(%rax), %rax
+               	movl	0x18(%rax), %eax
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x6, %eax
@@ -478,7 +478,7 @@ Disassembly of section .text:
                	movups	(%rsi), %xmm14
                	movups	%xmm14, (%rdi)
                	movss	0xc(%rax), %xmm0
-               	movslq	0x18(%rax), %rax
+               	movl	0x18(%rax), %eax
                	imulq	$0xa, %rax, %rax
                	movslq	%eax, %rax
                	xorps	%xmm1, %xmm1

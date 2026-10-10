@@ -157,18 +157,18 @@ Disassembly of section .text:
                	movq	%r9, %rdx
                	imulq	$0x14, %rdx, %rsi
                	leaq	(%rcx,%rsi), %rdi
-               	movslq	(%rdi), %rbx
+               	movl	(%rdi), %ebx
                	imulq	$0x64, %rdx, %r8
                	cmpl	%r8d, %ebx
                	jne	<addr>
                	movl	$0x1, %ebx
-               	movslq	0x4(%rdi), %rdi
+               	movl	0x4(%rdi), %edi
                	incq	%r8
                	cmpl	%r8d, %edi
                	jne	<addr>
                	movl	$0x2, %ebx
                	addq	%rcx, %rsi
-               	movslq	0x8(%rsi), %rdi
+               	movl	0x8(%rsi), %edi
                	imulq	$0x64, %rdx, %rsi
                	leaq	0x2(%rsi), %r8
                	cmpl	%r8d, %edi
@@ -176,12 +176,12 @@ Disassembly of section .text:
                	movl	$0x3, %r12d
                	imulq	$0x14, %rdx, %rdi
                	addq	%rcx, %rdi
-               	movslq	0xc(%rdi), %r8
+               	movl	0xc(%rdi), %r8d
                	leaq	0x3(%rsi), %rbx
                	cmpl	%ebx, %r8d
                	jne	<addr>
                	movl	$0x4, %r8d
-               	movslq	0x10(%rdi), %rdi
+               	movl	0x10(%rdi), %edi
                	addq	$0x4, %rsi
                	cmpl	%esi, %edi
                	jne	<addr>
@@ -192,18 +192,18 @@ Disassembly of section .text:
                	movq	%r9, %rdx
                	imulq	$0x14, %rdx, %rsi
                	leaq	(%rcx,%rsi), %rdi
-               	movslq	(%rdi), %rbx
+               	movl	(%rdi), %ebx
                	imulq	$0x64, %rdx, %r8
                	cmpl	%r8d, %ebx
                	jne	<addr>
                	movl	$0x1, %ebx
-               	movslq	0x4(%rdi), %rdi
+               	movl	0x4(%rdi), %edi
                	incq	%r8
                	cmpl	%r8d, %edi
                	jne	<addr>
                	movl	$0x2, %ebx
                	addq	%rcx, %rsi
-               	movslq	0x8(%rsi), %rdi
+               	movl	0x8(%rsi), %edi
                	imulq	$0x64, %rdx, %rsi
                	leaq	0x2(%rsi), %r8
                	cmpl	%r8d, %edi
@@ -211,12 +211,12 @@ Disassembly of section .text:
                	movl	$0x3, %r12d
                	imulq	$0x14, %rdx, %rdi
                	addq	%rcx, %rdi
-               	movslq	0xc(%rdi), %r8
+               	movl	0xc(%rdi), %r8d
                	leaq	0x3(%rsi), %rbx
                	cmpl	%ebx, %r8d
                	jne	<addr>
                	movl	$0x4, %r8d
-               	movslq	0x10(%rdi), %rdi
+               	movl	0x10(%rdi), %edi
                	addq	$0x4, %rsi
                	cmpl	%esi, %edi
                	jne	<addr>

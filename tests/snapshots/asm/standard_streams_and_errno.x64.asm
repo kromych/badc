@@ -250,7 +250,7 @@ Disassembly of section .text:
                	movl	$0x22, (%rax)
                	xorl	%eax, %eax
                	callq	<addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x22, %eax
                	je	<addr>
                	movl	$0xb, %eax

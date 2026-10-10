@@ -88,19 +88,19 @@ Disassembly of section .text:
                	leaq	<rip>, %rax     # <addr>
                	addq	$0x14000, %rax          # imm = 0x14000
                	movl	$0x2c, (%rax)
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0xb, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0x16, %ecx
                	jne	<addr>
                	leaq	<rip>, %rcx     # <addr>
                	addq	$0x4000, %rcx           # imm = 0x4000
-               	movslq	(%rcx), %rcx
+               	movl	(%rcx), %ecx
                	cmpl	$0x21, %ecx
                	jne	<addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0x2c, %eax
                	je	<addr>
                	movl	$0x1e, %eax

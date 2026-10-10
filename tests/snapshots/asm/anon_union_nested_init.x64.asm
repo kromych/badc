@@ -90,7 +90,7 @@ Disassembly of section .text:
                	xorq	$0x6, %rcx
                	testl	%ecx, %ecx
                	jne	<addr>
-               	movslq	0x4(%rax), %rax
+               	movl	0x4(%rax), %eax
                	cmpl	%ebx, %eax
                	je	<addr>
                	movl	$0xb, %eax
@@ -116,8 +116,8 @@ Disassembly of section .text:
                	retq
                	movl	$0x3, -0x10(%rbp)
                	movl	$0x5, -0x8(%rbp)
-               	movslq	-0x10(%rbp), %rdi
-               	movslq	-0x8(%rbp), %rsi
+               	movl	-0x10(%rbp), %edi
+               	movl	-0x8(%rbp), %esi
                	callq	<addr>
                	leave
                	retq

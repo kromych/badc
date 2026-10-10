@@ -98,7 +98,7 @@ Disassembly of section .text:
                	cmpxchgl	%edx, (%rsi)
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	movslq	-0x10(%rbp), %rax
+               	movl	-0x10(%rbp), %eax
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x9, %eax

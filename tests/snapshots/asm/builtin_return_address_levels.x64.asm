@@ -65,7 +65,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx         # <addr>
                	movq	%rcx, (%rax)
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	incq	%rax
                	popq	%rbp
                	retq
@@ -86,7 +86,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx         # <addr>
                	movq	%rcx, (%rax)
                	leaq	<rip>, %rax      # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	incq	%rax
                	popq	%rbp
                	retq

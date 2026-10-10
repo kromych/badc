@@ -526,7 +526,7 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x5, %rax
                	jne	<addr>
-               	movslq	-0x298(%rbp), %rax
+               	movl	-0x298(%rbp), %eax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x8, %eax

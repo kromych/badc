@@ -195,11 +195,11 @@ Disassembly of section .text:
                	callq	<addr>
                	cmpq	$0x64, %rax
                	jne	<addr>
-               	movslq	-0x18(%rbp), %rdi
+               	movl	-0x18(%rbp), %edi
                	callq	<addr>
                	cmpq	$-0x7fffffff, %rax      # imm = 0x80000001
                	jne	<addr>
-               	movslq	-0x20(%rbp), %rdi
+               	movl	-0x20(%rbp), %edi
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
@@ -322,12 +322,12 @@ Disassembly of section .text:
                	movl	$0x1e, %eax
                	leave
                	retq
-               	movslq	-0x18(%rbp), %rdi
-               	movslq	-0x18(%rbp), %rsi
+               	movl	-0x18(%rbp), %edi
+               	movl	-0x18(%rbp), %esi
                	callq	<addr>
                	cmpl	$0x7, %eax
                	jne	<addr>
-               	movslq	-0x18(%rbp), %rdi
+               	movl	-0x18(%rbp), %edi
                	xorl	%esi, %esi
                	callq	<addr>
                	cmpl	$0x9, %eax

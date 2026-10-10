@@ -186,19 +186,20 @@ fn mindex(index: Reg, scale: u8, width: u8) -> super::table::Opnd {
 }
 
 /// Load of `kind` from `disp32(,%index,scale)` into `dst`, extended as the
-/// SIB loads below extend; returns the offset of the displacement field.
+/// SIB loads extend (`I32` only when `hi`); returns the displacement's offset.
 pub(crate) fn emit_load_index_abs(
     code: &mut Vec<u8>,
     kind: crate::c5::ir::LoadKind,
     dst: Reg,
     index: Reg,
     scale: u8,
+    hi: bool,
 ) -> usize {
     use crate::c5::ir::LoadKind;
     let (mnem, width_override, dst_width, width) = match kind {
         LoadKind::I64 => (Mnem::Mov, Some(8), 8, 8),
-        LoadKind::I32 => (Mnem::Movsxd, None, 8, 4),
-        LoadKind::U32 => (Mnem::Mov, Some(4), 4, 4),
+        LoadKind::I32 if hi => (Mnem::Movsxd, None, 8, 4),
+        LoadKind::I32 | LoadKind::U32 => (Mnem::Mov, Some(4), 4, 4),
         LoadKind::I16 => (Mnem::Movsx, None, 8, 2),
         LoadKind::U16 => (Mnem::Movzx, None, 8, 2),
         LoadKind::I8 => (Mnem::Movsx, None, 8, 1),

@@ -32,7 +32,7 @@ Disassembly of section .text:
                	retq
                	movq	%rsi, %rax
                	andq	$0x3, %rax
-               	movslq	(%rdi,%rax,4), %rax
+               	movl	(%rdi,%rax,4), %eax
                	jmp	<addr>
 
 <main>:

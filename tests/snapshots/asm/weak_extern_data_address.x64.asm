@@ -40,10 +40,10 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x3, %eax
                	retq
-               	movslq	(%rax), %rcx
+               	movl	(%rax), %ecx
                	cmpl	$0xb, %ecx
                	jne	<addr>
-               	movslq	0x8(%rax), %rax
+               	movl	0x8(%rax), %eax
                	cmpl	$0x21, %eax
                	je	<addr>
                	movl	$0x4, %eax

@@ -39,7 +39,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax       # <addr>
-               	movslq	(%rax), %rax
+               	movl	(%rax), %eax
                	cmpl	$0xb, %eax
                	je	<addr>
                	movl	$0x3, %eax

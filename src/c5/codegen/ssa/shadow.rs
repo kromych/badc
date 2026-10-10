@@ -267,17 +267,10 @@ pub(crate) struct PrebuiltSsa {
 pub(crate) type ParamRanges =
     alloc::collections::BTreeMap<usize, Vec<crate::c5::codegen::passes::value_range::Range>>;
 
-/// The post-inline data-liveness report of a lowering's static DCE,
-/// made by [`drop_unreachable_statics`]. The function set was mutated
-/// (the -O pipeline's inliner and branch folds), so an object whose last
-/// reference the inliner removed is live per the pre-inline call graph;
-/// this names the reachable set the SSA bodies actually use. The caller
-/// compacts `.data` to it and lowers `ssa` against the result. It must
-/// lower `ssa` rather than re-walk: the ASTs describe the pre-inline
-/// program, which still materialises the address of the object the
-/// compaction drops.
+/// What a [`super::super::LowerMode::DataLivenessProbe`] lowering stops at: the static DCE's live
+/// sets and the post-inline bodies they were read from, lowered against the compacted `.data`.
 #[derive(Debug)]
-pub(crate) struct OrphanedData {
+pub(crate) struct DataLiveness {
     pub sets: LiveSets,
     pub ssa: PrebuiltSsa,
 }
@@ -288,7 +281,7 @@ pub(crate) struct OrphanedData {
 /// branch folds); at the default level the prune is the one
 /// [`produce_ssa_funcs`] applies. `force` keeps the report when nothing
 /// is dead: a probe caller compacts the program from this report alone,
-/// so it needs the all-live set and the pruned function list even when
+/// so it needs the all-live set even when
 /// no object drops. A caller lowering an already-compacted image passes
 /// `false`, and `None` then means the image is exactly the reachable set.
 pub(crate) fn drop_unreachable_statics(
@@ -296,7 +289,7 @@ pub(crate) fn drop_unreachable_statics(
     program: &Program,
     reachable_owners: &alloc::collections::BTreeSet<usize>,
     force: bool,
-) -> Option<OrphanedData> {
+) -> Option<LiveSets> {
     let live = compute_live_sets(
         funcs,
         &Default::default(),
@@ -324,25 +317,7 @@ pub(crate) fn drop_unreachable_statics(
         false,
         Some(reachable_owners),
     );
-    if sets.data_live.iter().all(|&l| l) && !force {
-        return None;
-    }
-    // The reported copy carries only the bodies the compacted lowering
-    // emits.
-    let kept: Vec<FunctionSsa> = funcs
-        .iter()
-        .filter(|f| sets.func_pcs.contains(&f.ent_pc))
-        .cloned()
-        .collect();
-    Some(OrphanedData {
-        sets,
-        ssa: PrebuiltSsa {
-            funcs: kept,
-            promoted_local_slots: alloc::collections::BTreeMap::new(),
-            param_ranges: ParamRanges::new(),
-            reachable_owners: reachable_owners.clone(),
-        },
-    })
+    (force || sets.data_live.iter().any(|&l| !l)).then_some(sets)
 }
 
 /// SSA-source pick for the codegen backends and the Vm. Two
@@ -959,6 +934,28 @@ impl crate::c5::layout::DataRemap for PackedData<'_> {
     }
 }
 
+/// [`PackedData`] for offsets in `space`'s image, carried back to the input image first.
+struct Through<'a> {
+    space: &'a DataMap,
+    packed: &'a PackedData<'a>,
+}
+
+impl crate::c5::layout::DataRemap for Through<'_> {
+    fn in_data(&self, _off: i64) -> bool {
+        true
+    }
+
+    fn remap(&self, off: i64, anchor: i64) -> Option<i64> {
+        let off = self.space.to_input(off)?;
+        self.packed.remap(off, self.space.to_input(anchor)?)
+    }
+
+    fn remap_span(&self, lo: i64, hi: i64) -> Option<(i64, i64)> {
+        let lo_in = self.space.to_input(lo)?;
+        self.packed.remap_span(lo_in, lo_in + (hi - lo))
+    }
+}
+
 /// New packed offset for a data byte at `off`, given the sorted object
 /// `starts` and each object's packed base (`new_base[i] < 0` for a
 /// dropped object). An offset outside `[0, data_len)` passes through
@@ -1024,6 +1021,18 @@ impl DataMap {
     }
 }
 
+/// Whether `BADC_NO_DATA_DCE` keeps the unpruned `.data`; read only under `codegen_test`.
+pub(crate) fn data_dce_disabled() -> bool {
+    #[cfg(feature = "codegen_test")]
+    {
+        std::env::var("BADC_NO_DATA_DCE").is_ok()
+    }
+    #[cfg(not(feature = "codegen_test"))]
+    {
+        false
+    }
+}
+
 /// What [`compact_program_data`] produced.
 pub(crate) struct Compaction {
     pub program: Program,
@@ -1056,11 +1065,7 @@ pub(crate) fn compact_program_data(
     if data_len == 0 || program.finished_functions.is_empty() {
         return Ok(unchanged());
     }
-    // A/B measurement against the unpruned data. Diagnostic only: read
-    // under the `codegen_test` feature so a production build never
-    // consults the environment.
-    #[cfg(feature = "codegen_test")]
-    if std::env::var("BADC_NO_DATA_DCE").is_ok() {
+    if data_dce_disabled() {
         return Ok(unchanged());
     }
     // Liveness is over program functions and data; the switch dispatch
@@ -1381,8 +1386,6 @@ pub(crate) fn apply_data_liveness(
         obj_lens: &obj_lens,
         data_len,
     };
-    let map = |off: i64| remap_data_off(off, starts, &new_base, data_len);
-
     // A relocation whose slot lies in a dropped object drops with it:
     // emitting it would plant a reference -- for an extern target, an
     // undefined symbol -- from an object the unit cannot reach.
@@ -1411,48 +1414,13 @@ pub(crate) fn apply_data_liveness(
     out.data_pad_ranges.extend(new_pad_ranges);
     out.data_pad_ranges.sort_unstable();
     out.data_align_marks.sort_unstable();
-    // A dropped object is named only by address materialisations nothing
-    // consumes -- that is why it was dropped. Those become plain constants:
-    // `ImmData` is deduplicated by key, so parking them all on one
-    // placeholder offset would merge distinct dead materialisations into a
-    // single value with live-looking uses.
     if let Some((funcs, space)) = ssa {
+        let through = Through {
+            space,
+            packed: &map_to,
+        };
         for f in funcs {
-            for inst in &mut f.insts {
-                let crate::c5::ir::Inst::ImmData(packed) = *inst else {
-                    continue;
-                };
-                // No covering object means the reference died in the
-                // earlier pass already. Every `ImmData` payload is an object
-                // base (an interior address is a separate `BinopI` add), so
-                // a live one always resolves.
-                let dead = match space.to_input(packed) {
-                    Some(off) => {
-                        if (0..data_len).contains(&off) && new_base[interval_of(off)] < 0 {
-                            true
-                        } else {
-                            *inst = crate::c5::ir::Inst::ImmData(map(off));
-                            false
-                        }
-                    }
-                    None => true,
-                };
-                if dead {
-                    *inst = crate::c5::ir::Inst::Imm(0);
-                }
-            }
-            // A `&&label` slot rides its object: it follows the new base,
-            // or goes with the object when that did not survive.
-            f.label_data_relocs
-                .retain_mut(|r| match space.to_input(r.data_offset as i64) {
-                    Some(off)
-                        if (0..data_len).contains(&off) && new_base[interval_of(off)] >= 0 =>
-                    {
-                        r.data_offset = map(off) as u64;
-                        true
-                    }
-                    _ => false,
-                });
+            crate::c5::layout::DataOffsets::remap_data_offsets(f, &through);
         }
     }
     (out, bss_size, DataMap::new(starts, &new_base, &obj_lens))

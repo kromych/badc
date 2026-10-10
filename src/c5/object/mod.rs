@@ -873,21 +873,6 @@ fn bss_segregation_disabled() -> bool {
     }
 }
 
-/// Diagnostic only, as [`bss_segregation_disabled`]: `BADC_NO_DATA_DCE`
-/// keeps the unpruned `.data`, for the A/B measurement the pass report
-/// supports.
-#[cfg(feature = "native-emit")]
-fn data_dce_disabled() -> bool {
-    #[cfg(feature = "codegen_test")]
-    {
-        std::env::var("BADC_NO_DATA_DCE").is_ok()
-    }
-    #[cfg(not(feature = "codegen_test"))]
-    {
-        false
-    }
-}
-
 /// Variant of [`emit_native_with_options`] that records the shared
 /// library's own name in the image (PE export-directory Name, Mach-O
 /// `LC_ID_DYLIB` install name) so a consumer linking against it by name
@@ -968,7 +953,10 @@ fn compact_and_lower(
     program.bind_trampoline_slots =
         target.binds_data_imports() || options.output_kind == OutputKind::Relocatable;
     let segregate = options.bss_segregate && !bss_segregation_disabled();
-    if program.data.is_empty() || program.finished_functions.is_empty() || data_dce_disabled() {
+    if program.data.is_empty()
+        || program.finished_functions.is_empty()
+        || shadow::data_dce_disabled()
+    {
         let mut build = crate::c5::codegen::lower_for_with_prebuilt(
             &program,
             target,
@@ -986,8 +974,8 @@ fn compact_and_lower(
         None,
         LowerMode::DataLivenessProbe,
     )?;
-    let mut orphaned = probe
-        .orphaned_data
+    let mut report = probe
+        .data_liveness
         .expect("the liveness probe always reports");
     debug_assert!(probe.stopped_at_data_liveness);
     // The probe ran the passes that report; the retry lowers the bodies
@@ -996,25 +984,21 @@ fn compact_and_lower(
     let identity = shadow::DataMap::identity(&program);
     let (compacted, bss_size, _map) = shadow::apply_data_liveness(
         program,
-        &orphaned.sets,
-        &orphaned.sets.func_pcs,
+        &report.sets,
+        &report.sets.func_pcs,
         segregate,
-        Some((&mut orphaned.ssa.funcs, &identity)),
+        Some((&mut report.ssa.funcs, &identity)),
     );
     let mut build = crate::c5::codegen::lower_for_with_prebuilt(
         &compacted,
         target,
         options,
-        Some(orphaned.ssa),
+        Some(report.ssa),
         LowerMode::Full,
     )?;
     diagnostics.append(&mut build.diagnostics);
     build.diagnostics = diagnostics;
     crate::c5::codegen::emit_ssa_dump(&mut build);
-    debug_assert!(
-        build.orphaned_data.is_none(),
-        "data liveness did not converge after compaction",
-    );
     Ok((compacted, bss_size, build))
 }
 
@@ -1200,7 +1184,7 @@ pub(crate) mod test_support {
             got_rel_fields: Vec::new(),
             got_pcrel_fixups: Vec::new(),
             text_align: 16,
-            orphaned_data: None,
+            data_liveness: None,
             stopped_at_data_liveness: false,
             ssa_dump: String::new(),
             asm_sections: Vec::new(),

@@ -253,7 +253,7 @@ fn synth_program_and_build(
         data_import_binds,
         canonical_imports,
         preemptible_imports: merged.preemptible_imports.iter().copied().collect(),
-        orphaned_data: None,
+        data_liveness: None,
         stopped_at_data_liveness: false,
         ssa_dump: alloc::string::String::new(),
         asm_sections: Vec::new(),

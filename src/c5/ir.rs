@@ -2423,8 +2423,14 @@ impl crate::c5::layout::DataOffsets for Inst {
     fn remap_data_offsets(&mut self, r: &dyn crate::c5::layout::DataRemap) {
         match self {
             // The only `.data` offset the IR holds; an interior address is a
-            // separate add, so the payload is always an object base.
-            Inst::ImmData(off) => crate::c5::layout::remap_self(off, r),
+            // separate add, so the payload is always an object base. A dropped
+            // object's becomes `Imm(0)`, not a placeholder `ImmData` would merge.
+            Inst::ImmData(off) => {
+                let off = *off;
+                if r.in_data(off) {
+                    *self = r.remap(off, off).map_or(Inst::Imm(0), Inst::ImmData);
+                }
+            }
             Inst::Imm { .. }
             | Inst::Undef
             | Inst::ImmCode { .. }
@@ -2536,9 +2542,16 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
         for i in insts.iter_mut() {
             i.remap_data_offsets(r);
         }
-        for l in label_data_relocs.iter_mut() {
-            crate::c5::layout::remap_self_u64(&mut l.data_offset, r);
-        }
+        // A `&&label` slot follows its object's base or goes with the object.
+        label_data_relocs.retain_mut(|l| {
+            let off = l.data_offset as i64;
+            if !r.in_data(off) {
+                return true;
+            }
+            r.remap(off, off)
+                .map(|new| l.data_offset = new as u64)
+                .is_some()
+        });
     }
 }
 

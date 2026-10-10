@@ -2356,16 +2356,10 @@ pub(crate) struct Build {
     /// against this in-image local symbol rather than getting
     /// lost in the dynamic linker's macro-expansion sites.
     pub plt_trampoline_offsets: Vec<Option<usize>>,
-    /// Data objects nothing reaches once the -O pipeline has inlined and
-    /// folded, reported by `ssa::shadow::drop_unreachable_statics`. `Some`
-    /// hands the caller the post-inline live set and the SSA bodies that
-    /// produced it, to compact `.data` against and lower; the build in
-    /// hand stays self-consistent either way. `None` where the lowering
-    /// ran to completion, or a compaction retry whose image is exactly
-    /// the reachable set.
-    pub orphaned_data: Option<super::codegen::ssa::shadow::OrphanedData>,
+    /// What a [`LowerMode::DataLivenessProbe`] lowering stops at; `None` once one completes.
+    pub data_liveness: Option<super::codegen::ssa::shadow::DataLiveness>,
     /// Set when [`LowerMode::DataLivenessProbe`] stopped the lowering at
-    /// the report above. Every field but `orphaned_data` is then unset,
+    /// the report above. Every field but `data_liveness` is then unset,
     /// and only the compaction retry's caller may read it.
     pub stopped_at_data_liveness: bool,
     /// `--dump-ssa` text for this lowering, buffered rather than written

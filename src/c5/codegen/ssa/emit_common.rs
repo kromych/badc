@@ -2140,9 +2140,6 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             }
         });
     }
-    // Data the pipeline orphans: the static DCE's post-inline live set,
-    // which the caller compacts `.data` against and then lowers again.
-    let mut orphaned_data: Option<super::shadow::OrphanedData> = None;
     // Written only under the `std` dump path; the Build field is
     // unconditional.
     #[cfg_attr(not(feature = "std"), allow(unused_mut))]
@@ -2406,7 +2403,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // A probe always reports: its caller compacts the program from this
     // set alone, so it needs the all-live one too.
     if native.optimize || mode == super::LowerMode::DataLivenessProbe {
-        orphaned_data = pipeline.run(
+        let sets = pipeline.run(
             "ssa::shadow::drop_unreachable_statics",
             &mut ssa_funcs,
             |funcs| {
@@ -2418,20 +2415,29 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 )
             },
         );
-        if let Some(o) = &mut orphaned_data {
-            o.ssa.promoted_local_slots = promoted_local_slots.clone();
-            o.ssa.param_ranges = param_ranges.clone();
-        }
-        // A probe caller compacts `.data` to the report and relowers the
-        // reported bodies against it, so everything below would be
-        // discarded.
-        if orphaned_data.is_some() && mode == super::LowerMode::DataLivenessProbe {
-            return Ok(super::Build {
-                diagnostics: reported(&mut sink)?,
-                orphaned_data,
-                stopped_at_data_liveness: true,
-                ..Default::default()
-            });
+        if let Some(sets) = sets {
+            // The probe's caller relowers the kept bodies; they move into the report.
+            if mode == super::LowerMode::DataLivenessProbe {
+                let funcs = core::mem::take(&mut ssa_funcs)
+                    .into_iter()
+                    .filter(|f| sets.func_pcs.contains(&f.ent_pc))
+                    .collect();
+                return Ok(super::Build {
+                    diagnostics: reported(&mut sink)?,
+                    data_liveness: Some(super::shadow::DataLiveness {
+                        sets,
+                        ssa: super::shadow::PrebuiltSsa {
+                            funcs,
+                            promoted_local_slots,
+                            reachable_owners,
+                            param_ranges,
+                        },
+                    }),
+                    stopped_at_data_liveness: true,
+                    ..Default::default()
+                });
+            }
+            debug_assert!(walked, "data liveness did not converge after compaction");
         }
         // Frame compaction after inlining, promotion, and the branch
         // folds: slots with no remaining reference are dropped and the
@@ -2948,7 +2954,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // Every import on this single-TU path gets a trampoline (data
         // imports ride `ResolvedImports::data_bindings`, not `imports`).
         plt_trampoline_offsets: plt_trampoline_offsets.into_iter().map(Some).collect(),
-        orphaned_data,
+        data_liveness: None,
         stopped_at_data_liveness: false,
         ssa_dump,
     };

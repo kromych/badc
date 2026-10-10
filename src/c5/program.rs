@@ -969,6 +969,40 @@ mod data_offset_tests {
         );
     }
 
+    struct DropAll;
+
+    impl DataRemap for DropAll {
+        fn in_data(&self, off: i64) -> bool {
+            (0..1024).contains(&off)
+        }
+        fn remap(&self, _off: i64, _anchor: i64) -> Option<i64> {
+            None
+        }
+        fn remap_span(&self, _lo: i64, _hi: i64) -> Option<(i64, i64)> {
+            None
+        }
+    }
+
+    #[test]
+    fn a_body_drops_its_references_to_a_dropped_object() {
+        use crate::c5::ir::{FunctionSsa, Inst, LabelDataReloc};
+        let mut f = FunctionSsa {
+            insts: alloc::vec![Inst::ImmData(88), Inst::ImmData(96)],
+            label_data_relocs: alloc::vec![LabelDataReloc {
+                data_offset: 104,
+                block: 0,
+            }],
+            ..Default::default()
+        };
+        f.remap_data_offsets(&DropAll);
+        assert!(
+            matches!(f.insts[..], [Inst::Imm(0), Inst::Imm(0)]),
+            "{:?}",
+            f.insts
+        );
+        assert!(f.label_data_relocs.is_empty());
+    }
+
     /// A `_Thread_local` symbol's `val` indexes the TLS image, and a
     /// function symbol's is an `ent_pc`; neither is a `.data` offset.
     #[test]

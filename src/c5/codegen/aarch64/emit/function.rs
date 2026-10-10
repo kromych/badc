@@ -1964,7 +1964,7 @@ fn frame_fold_bytes(alloc: &Allocation, frame: Frame) -> u32 {
     // `restore_dynamic_sp` returns sp to the static frame bottom first.
     // The folded shape's first save lands at sp + 0, the bytes the
     // outgoing area claims, so a frame with one keeps the unfolded shape.
-    if frame.realign_align != 0 || frame.outgoing_bytes != 0 {
+    if frame.realign_align != 0 || frame.reserves_outgoing() {
         return 0;
     }
     let n_bottom = if !alloc.fp_used.is_empty() {

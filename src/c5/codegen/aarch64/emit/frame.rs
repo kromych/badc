@@ -71,14 +71,39 @@ pub(crate) struct Frame {
     /// fp-based when `dynamic_sp`.
     pub asm_scratch_off: i64,
     /// The outgoing argument area at the frame bottom, shared by the call
-    /// sites and the binary128 conversion sequences; 0 where sp moves at
-    /// run time and each site carves its own slice below sp.
+    /// sites and the binary128 conversion sequences; 0 where sp may move
+    /// during the body, and then each site lowers sp for its own
+    /// ([`Frame::sp_lowering`]).
     pub outgoing_bytes: u32,
     /// x19 holds the frame bottom (`mov x19, sp` after the prologue), so
     /// far locals, spills and inline-asm slots address from it in one
     /// instruction. The modulo and cursor `va_arg` lowerings that take x19
     /// as a third scratch push and pop it around the use.
     pub local_base: bool,
+}
+
+impl Frame {
+    /// sp keeps its prologue value across the body and the prologue
+    /// reserved the outgoing argument area at `[sp, #0]`.
+    pub(crate) fn reserves_outgoing(self) -> bool {
+        !self.dynamic_sp && self.outgoing_bytes != 0
+    }
+
+    /// How far a call or binary128 sequence lowers sp to find its `need`
+    /// bytes at `[sp, #0]`: not at all where the area is reserved, by
+    /// `need` where it is not -- a dynamic frame, or a leaf without a
+    /// frame whose inline asm may move sp.
+    pub(crate) fn sp_lowering(self, need: u32) -> u32 {
+        if !self.reserves_outgoing() {
+            return need;
+        }
+        debug_assert!(
+            need <= self.outgoing_bytes,
+            "ICE: a site needs {need} outgoing bytes, the frame reserved {}",
+            self.outgoing_bytes
+        );
+        0
+    }
 }
 
 pub(crate) fn compute_frame(
@@ -125,9 +150,9 @@ pub(crate) fn compute_frame(
     let param_cells_bytes = param_cells_bytes(func, alloc, abi);
     let upper_bytes = locals_bytes + param_cells_bytes;
     // The outgoing area joins the static frame only while sp keeps its
-    // prologue value across the body: `alloca`/VLA and the sp realignment
-    // move sp at run time, and the callee reads its stack arguments at
-    // the call-time sp, so those frames carve the area per call below sp.
+    // prologue value across the body: `alloca`/VLA, the sp realignment
+    // and an inline asm statement that may move sp leave it elsewhere, and
+    // a callee reads its stack arguments at the call-time sp.
     let outgoing_bytes = if dynamic_sp || func.has_sp_moving_asm() {
         0
     } else {

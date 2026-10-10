@@ -6,11 +6,12 @@
 //! narrowing rounds to nearest with ties to even.
 //!
 //! Each sequence borrows integer registers from the allocator's pool
-//! and restores them before it ends; the saves live in the outgoing
-//! argument area the prologue reserved (`frame.outgoing_bytes`), or in
-//! a carve below sp where sp moves at run time. `addr` must name a
-//! register outside the borrow pool, and nothing between the save and
-//! the restore addresses sp.
+//! and restores them before it ends; the saves live at `[sp, #0]`, in
+//! the outgoing argument area the prologue reserved or in bytes the
+//! sequence lowers sp by where the frame reserves none
+//! (`Frame::sp_lowering`). `addr` must name a register outside the
+//! borrow pool, and nothing between the save and the restore addresses
+//! sp.
 
 use alloc::vec::Vec;
 
@@ -18,12 +19,12 @@ use super::emit::{
     Frame, NARROW_BORROW, bound_base, emit_agg_load_int, emit_mem, enc_store_unit, object_base,
 };
 use super::encode::{
-    Cond, LDR_X, LogicalOp, Reg, STR_X, emit, enc_add_imm, enc_add_imm_lsl12, enc_add_reg,
-    enc_and_reg, enc_asr_imm, enc_b, enc_b_cond, enc_bic_reg, enc_cbnz, enc_cbz, enc_clz,
-    enc_cmp_reg, enc_cset, enc_fmov_d_to_x, enc_fmov_x_to_d, enc_ldp_off, enc_ldr_imm,
-    enc_logical_imm, enc_lsl_imm, enc_lslv, enc_lsr_imm, enc_lsrv, enc_mov_reg, enc_movz,
-    enc_orr_reg, enc_stp_off, enc_str_imm, enc_sub_imm, enc_sub_imm_lsl12, enc_sub_reg,
-    enc_subs_imm,
+    Cond, LDR_X, LogicalOp, Reg, STR_X, emit, emit_add_sp_imm, emit_sub_sp_imm, enc_add_imm,
+    enc_add_imm_lsl12, enc_add_reg, enc_and_reg, enc_asr_imm, enc_b, enc_b_cond, enc_bic_reg,
+    enc_cbnz, enc_cbz, enc_clz, enc_cmp_reg, enc_cset, enc_fmov_d_to_x, enc_fmov_x_to_d,
+    enc_ldp_off, enc_ldr_imm, enc_logical_imm, enc_lsl_imm, enc_lslv, enc_lsr_imm, enc_lsrv,
+    enc_mov_reg, enc_movz, enc_orr_reg, enc_stp_off, enc_str_imm, enc_sub_imm, enc_sub_imm_lsl12,
+    enc_sub_reg, enc_subs_imm,
 };
 
 /// The exponent bias difference between binary128 and binary64, less
@@ -53,16 +54,11 @@ fn borrow<const N: usize>(addr: Reg) -> [Reg; N] {
     out
 }
 
-/// Save `regs` in the outgoing area at `[sp + 0]`, or in a fresh
-/// carve below sp where sp moves at run time; returns the bytes carved.
+/// Save `regs` at `[sp, #0]`; returns how far sp was lowered for them
+/// ([`Frame::sp_lowering`]).
 fn save(code: &mut Vec<u8>, regs: &[Reg], frame: Frame) -> u32 {
-    let bytes = (regs.len().div_ceil(2) * 16) as u32;
-    let carve = if frame.dynamic_sp {
-        emit(code, enc_sub_imm(Reg::SP, Reg::SP, bytes));
-        bytes
-    } else {
-        0
-    };
+    let lowered = frame.sp_lowering((regs.len().div_ceil(2) * 16) as u32);
+    emit_sub_sp_imm(code, lowered);
     let mut i = 0;
     while i + 1 < regs.len() {
         emit(
@@ -74,11 +70,11 @@ fn save(code: &mut Vec<u8>, regs: &[Reg], frame: Frame) -> u32 {
     if i < regs.len() {
         emit(code, enc_str_imm(regs[i], Reg::SP, (i * 8) as u32));
     }
-    carve
+    lowered
 }
 
-/// Mirror of [`save`]; `carve` is the bytes it moved sp down by.
-fn restore(code: &mut Vec<u8>, regs: &[Reg], frame: Frame, carve: u32) {
+/// Mirror of [`save`]; `lowered` is how far it moved sp down.
+fn restore(code: &mut Vec<u8>, regs: &[Reg], lowered: u32) {
     let mut i = 0;
     while i + 1 < regs.len() {
         emit(
@@ -90,9 +86,7 @@ fn restore(code: &mut Vec<u8>, regs: &[Reg], frame: Frame, carve: u32) {
     if i < regs.len() {
         emit(code, enc_ldr_imm(regs[i], Reg::SP, (i * 8) as u32));
     }
-    if frame.dynamic_sp {
-        emit(code, enc_add_imm(Reg::SP, Reg::SP, carve));
-    }
+    emit_add_sp_imm(code, lowered);
 }
 
 /// Retarget the placeholder branch at `at` to the end of `code`.
@@ -157,7 +151,7 @@ pub(super) fn emit_narrow_load(
 ) {
     let r = borrow::<7>(addr);
     let (lo, hi, sgn, exp, tmp, acc, aux) = (r[0], r[1], r[2], r[3], r[4], r[5], r[6]);
-    let carve = save(code, &r, frame);
+    let lowered = save(code, &r, frame);
     match bound {
         Some(a) => {
             let (base, off) = bound_base(code, addr, disp, 16, 8, a, aux);
@@ -250,7 +244,7 @@ pub(super) fn emit_narrow_load(
     patch(code, round_done);
     patch(code, inf_done);
     emit(code, enc_fmov_x_to_d(dd, acc));
-    restore(code, &r, frame, carve);
+    restore(code, &r, lowered);
 }
 
 /// Widen the f64 in `dn` into the binary128 object at `[addr + disp]`.
@@ -266,7 +260,7 @@ pub(super) fn emit_widen_store(
 ) {
     let r = borrow::<5>(addr);
     let (lo, hi, exp, man, tmp) = (r[0], r[1], r[2], r[3], r[4]);
-    let carve = save(code, &r, frame);
+    let lowered = save(code, &r, frame);
     emit(code, enc_fmov_d_to_x(lo, dn));
     emit(code, enc_lsr_imm(hi, lo, 63));
     emit(code, enc_lsl_imm(hi, hi, 63));
@@ -325,7 +319,7 @@ pub(super) fn emit_widen_store(
             emit_mem(code, STR_X, hi.0, base, disp + 8, exp);
         }
     }
-    restore(code, &r, frame, carve);
+    restore(code, &r, lowered);
 }
 
 /// Write the 8 bytes of `rs` to `[addr + off]` in `align`-wide pieces.

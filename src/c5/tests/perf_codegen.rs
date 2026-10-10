@@ -4162,6 +4162,33 @@ fn a64_third_scratch_lowerings_borrow_the_locals_base() {
     m.finish();
 }
 
+/// A leaf without a frame whose inline asm names sp reserves no outgoing
+/// area, so a binary128 conversion lowers sp for the registers it borrows
+/// before it stores them at `[sp, #0]` and raises it after the restore:
+/// none of the stores reaches the caller's frame.
+#[test]
+fn a64_binary128_borrow_in_a_frameless_leaf_lowers_sp() {
+    const SRC: &str = "long double gld = 1.5L;\nlong double gout;\n\
+        double narrow(void) { __asm__ volatile(\"add sp, sp, #0\"); return (double)gld; }\n\
+        void widen(double d) { __asm__ volatile(\"add sp, sp, #0\"); gout = d; }\n";
+    // `str xt, [sp, #imm]` or `stp xt, xt2, [sp, #imm]`.
+    let stores_off_sp =
+        |w: u32| matches!(w & 0xFFC0_0000, 0xF900_0000 | 0xA900_0000) && (w >> 5) & 31 == 31;
+    let mut m = Misses::default();
+    for (name, bytes) in [("narrow", 64u32), ("widen", 48)] {
+        let ws = a64(SRC, name);
+        let lower = ws.iter().position(|&w| w == 0xD100_03FF | bytes << 10);
+        let raise = ws.iter().rposition(|&w| w == 0x9100_03FF | bytes << 10);
+        let first = ws.iter().position(|&w| stores_off_sp(w));
+        let last = ws.iter().rposition(|&w| stores_off_sp(w));
+        m.expect(
+            matches!((lower, first, last, raise), (Some(l), Some(f), Some(e), Some(r)) if l < f && e < r),
+            || format!("aarch64 {name}: sub sp {lower:?}, stores {first:?}..{last:?}, add sp {raise:?}: {ws:08x?}"),
+        );
+    }
+    m.finish();
+}
+
 /// Four values live across a call made after an asm statement moves sp; with
 /// the integer bank capped to two registers they spill. `set_sp`, whose asm
 /// takes no operand to stage, is a full leaf: it has no frame and keeps sp

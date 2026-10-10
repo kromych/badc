@@ -524,12 +524,10 @@ pub(super) fn emit_call_ext(
     };
     let imp = &imports.imports[import_index];
     let plan = ops.plan(agg_descs, abi, imp.is_variadic, imp.fixed_args);
-    // A dynamic-sp frame carves the area below the call-time sp; a static
-    // one uses the reserved area at the frame bottom.
-    let carve = frame.dynamic_sp.then_some(plan.scratch_bytes);
-    if let Some(bytes) = carve {
-        emit_stack_alloc(code, bytes, None);
-    }
+    // The argument area at `[sp, #0]`: the reserved one, or bytes the call
+    // lowers sp by.
+    let lowered = frame.sp_lowering(plan.scratch_bytes);
+    emit_stack_alloc(code, lowered, None);
     marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     )?;
@@ -542,9 +540,7 @@ pub(super) fn emit_call_ext(
     });
     // The patcher rewrites only imm26, so the placeholder must be `bl`.
     emit(code, enc_bl(0));
-    if carve.is_some() {
-        emit_add_sp_imm(code, plan.scratch_bytes);
-    }
+    emit_add_sp_imm(code, lowered);
     if ret_agg.is_some() {
         finish_call_result(
             code,
@@ -644,10 +640,8 @@ pub(super) fn emit_call(
         return fail("Call: variadic callee not matched by a host-ABI branch");
     }
     let plan = ops.plan(agg_descs, abi, callee_is_variadic, fixed_args);
-    let carve = frame.dynamic_sp.then_some(plan.scratch_bytes);
-    if let Some(bytes) = carve {
-        emit_stack_alloc(code, bytes, None);
-    }
+    let lowered = frame.sp_lowering(plan.scratch_bytes);
+    emit_stack_alloc(code, lowered, None);
     marshal_args(
         code, &plan, args, alloc, scratch, frame, arg_aggs, agg_descs, abi,
     )?;
@@ -658,9 +652,7 @@ pub(super) fn emit_call(
         kind: BranchKind::Bl,
     });
     emit(code, enc_bl(0));
-    if carve.is_some() {
-        emit_add_sp_imm(code, plan.scratch_bytes);
-    }
+    emit_add_sp_imm(code, lowered);
     finish_call_result(
         code,
         ret_agg,
@@ -678,8 +670,8 @@ pub(super) fn emit_call(
 
 /// Point x8 at the caller's result temp before a call returning an
 /// aggregate larger than 16 bytes (AAPCS64 6.9), after `marshal_args`
-/// has set the argument registers; sp stands below the argument area
-/// (a dynamic-sp frame's carve), which an sp-relative slot compensates.
+/// has set the argument registers; sp stands where the call lowered it
+/// ([`Frame::sp_lowering`]), which an sp-relative slot compensates.
 fn setup_indirect_result(
     code: &mut Vec<u8>,
     ret_agg: Option<u32>,
@@ -695,10 +687,8 @@ fn setup_indirect_result(
     {
         // A homogeneous aggregate over 16 bytes still returns in v-registers,
         // not through x8.
-        let mut slot = local_slot(ret_slot_off, func, frame);
-        if frame.dynamic_sp {
-            slot = slot.sp_lowered(plan.scratch_bytes);
-        }
+        let slot =
+            local_slot(ret_slot_off, func, frame).sp_lowered(frame.sp_lowering(plan.scratch_bytes));
         let _ = emit_frame_addr(code, Place::IntReg(8), slot, frame);
     }
 }
@@ -937,10 +927,8 @@ pub(super) fn emit_call_indirect(
             scratch.primary
         }
     };
-    let carve = frame.dynamic_sp.then_some(plan.scratch_bytes);
-    if let Some(bytes) = carve {
-        emit_stack_alloc(code, bytes, None);
-    }
+    let lowered = frame.sp_lowering(plan.scratch_bytes);
+    emit_stack_alloc(code, lowered, None);
     if let Some(off) = staged_off {
         emit_sp_str_x_auto(code, target_reg, off);
     }
@@ -958,9 +946,7 @@ pub(super) fn emit_call_indirect(
         None => target_reg,
     };
     emit(code, enc_blr(call_reg));
-    if carve.is_some() {
-        emit_add_sp_imm(code, plan.scratch_bytes);
-    }
+    emit_add_sp_imm(code, lowered);
     finish_call_result(
         code,
         ret_agg,
@@ -993,27 +979,22 @@ impl CallArgs<'_> {
         place_of(self.alloc, self.args[i])
     }
 
-    /// The sp shift a dynamic-sp frame's carve adds to a spill reload;
-    /// a static frame reserves the area in the prologue and reloads
-    /// unshifted.
+    /// How far the call lowered sp ([`Frame::sp_lowering`]), which an
+    /// sp-relative spill reload adds.
     fn sp_shift(&self) -> u32 {
-        if self.frame.dynamic_sp {
-            self.plan.scratch_bytes
-        } else {
-            0
-        }
+        self.frame.sp_lowering(self.plan.scratch_bytes)
     }
 
     /// Argument `i`'s value in an integer register, reloaded into `into`
-    /// when spilled, with the outgoing-argument carve's sp shift applied.
+    /// when spilled, with the call's sp lowering applied.
     fn arg_int(&self, code: &mut Vec<u8>, i: usize, into: Reg) -> Option<Reg> {
         materialize_int_shifted(code, self.arg_place(i), into, self.frame, self.sp_shift())
     }
 
     /// Stack slots first: each source is read into a scratch and stored to
     /// the host-stack overflow region, preserving any source register that
-    /// a later pass touches. The region sits at `[sp + off]`, above the
-    /// reserved area of a static frame or the carve of a dynamic one.
+    /// a later pass touches. The region sits at `[sp + off]` in the
+    /// call's argument area.
     fn marshal_stack_args(&self, code: &mut Vec<u8>) -> Emit {
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             let super::ArgPlacement::Stack(off) = placement else {

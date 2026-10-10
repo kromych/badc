@@ -914,7 +914,7 @@ impl FrameLoc {
     }
 
     /// The same byte while sp stands `bytes` below the prologue's value
-    /// (a dynamic-sp frame's per-call carve).
+    /// ([`Frame::sp_lowering`]).
     pub(super) fn sp_lowered(self, bytes: u32) -> Self {
         Self {
             sp: self.sp.map(|d| d + i64::from(bytes)),

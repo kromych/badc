@@ -285,7 +285,7 @@ impl<'a> Walker<'a> {
                     UnOp::AddrOf | UnOp::Deref => None,
                 }
             }
-            Expr::Binary { op, lhs, rhs, .. } => {
+            Expr::Binary { op, lhs, rhs, ty } => {
                 if is_comparison_op(*op)
                     && let Some(v) = self.const_fold_addr_cmp(*op, *lhs, *rhs)
                 {
@@ -301,10 +301,7 @@ impl<'a> Walker<'a> {
                 }
                 let l = self.const_fold_int(*lhs)?;
                 let r = self.const_fold_int(*rhs)?;
-                if divmod && r == 0 {
-                    return None;
-                }
-                Some(fold_int_binop(*op, l, r))
+                self.fold_const_binop(*op, *ty, (*lhs, l), (*rhs, r))
             }
             Expr::ShortCircuit { op, lhs, rhs, .. } => {
                 let l = self.const_fold_int(*lhs)?;

@@ -235,8 +235,7 @@ pub(super) fn narrow_const_to_ty(v: i64, ty: i64, target: Target) -> i64 {
 
 /// Fold an integer binop on two constant operands, which C99 6.6 permits
 /// at translation time. The semantics are `ir::eval_int_binop`'s; a zero
-/// divisor is the caller's responsibility (`const_fold_int` declines it)
-/// and panics here.
+/// divisor is the caller's to exclude and panics here.
 pub(crate) fn fold_int_binop(op: BinOp, lhs: i64, rhs: i64) -> i64 {
     crate::c5::ir::eval_int_binop(op, lhs, rhs).expect("fold_int_binop reached with a zero divisor")
 }

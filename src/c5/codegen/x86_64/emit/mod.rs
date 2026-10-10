@@ -78,8 +78,8 @@ use call::*;
 use early_exit::*;
 use frame::*;
 pub(crate) use frame::{
-    Frame, asm_binds_directly, asm_site_bound_values, asm_site_write_masks, asm_staged_hints,
-    compute_frame,
+    Frame, asm_binds_directly, asm_bound_scratch_suffices, asm_site_bound_values,
+    asm_site_write_masks, asm_staged_hints, bound_scratch_candidates, compute_frame,
 };
 pub(crate) use function::emit_function;
 use function::*;

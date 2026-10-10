@@ -155,7 +155,8 @@ pub(crate) struct Allocation {
     /// the mask of those holding a value live across it: the fixed registers
     /// of an x86-64 shift or division ([`x86_implicit_writes`]), a count
     /// left in rcx excepted, which the emitter saves when named; every
-    /// register for a copy, which takes its temporaries among the free ones.
+    /// register for a copy, which takes its temporaries among the free ones;
+    /// a bound x86-64 asm statement's scratch candidates.
     pub implicit_live: Vec<u32>,
     /// Per-value coalescing hint: the physical register the
     /// allocator should prefer when one is set and free at the
@@ -201,25 +202,36 @@ pub(crate) struct Allocation {
     pub asm_preserve: (u32, u32),
 }
 
+/// Each value output of the asm statement at `site` with its place;
+/// `Place::None` for one nothing reads, whose place may be another's.
+fn asm_output_places(
+    func: &FunctionSsa,
+    site: ValueId,
+    places: &[Place],
+    use_counts: &[u32],
+) -> Vec<(usize, Place)> {
+    func.asm_output_values(site)
+        .into_iter()
+        .map(|(i, v)| {
+            let unread = use_counts.get(v as usize).is_some_and(|&n| n == 0);
+            let place = if v == NO_VALUE || unread {
+                Place::None
+            } else {
+                places.get(v as usize).copied().unwrap_or(Place::None)
+            };
+            (i, place)
+        })
+        .collect()
+}
+
 impl Allocation {
-    /// Each value output of the asm statement at `site` with its place;
-    /// `Place::None` for one nothing reads, whose place may be another's.
+    /// [`asm_output_places`] under this allocation.
     pub(crate) fn asm_output_places(
         &self,
         func: &FunctionSsa,
         site: ValueId,
     ) -> Vec<(usize, Place)> {
-        func.asm_output_values(site)
-            .into_iter()
-            .map(|(i, v)| {
-                let place = if v == NO_VALUE || self.is_unread(v) {
-                    Place::None
-                } else {
-                    self.places.get(v as usize).copied().unwrap_or(Place::None)
-                };
-                (i, place)
-            })
-            .collect()
+        asm_output_places(func, site, &self.places, &self.use_counts)
     }
 
     /// True when value `v` holds a single-precision `f32` pattern.
@@ -1286,7 +1298,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // Values live across an inline-asm block, and the registers each
     // block's lowering writes. A value kept out of that set survives the
     // block untouched, so the emit needs no save / restore pair for it.
-    let asm_live = asm_live_values(func, &liveness, target, fixed);
+    let mut asm_live = asm_live_values(func, &liveness, target, fixed);
     let asm_forbid = asm_forbid_masks(func, &asm_live, &node_of);
     let call_forbid = call_forbid_masks(func, &liveness, target, fixed, &node_of);
     let wide = wide_values(func);
@@ -1322,17 +1334,52 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     }
     let (max_gpr, max_fpr) = pool_size_limits();
     let spill_weights = compute_spill_weights(func, &node_of, &liveness);
-    let coloring = color_graph(
-        &value_interference,
-        &node_of,
-        &node_cons,
-        &banks,
-        max_gpr,
-        max_fpr,
-        func.has_returns_twice_call,
-        &spill_weights,
-        &apart,
-    );
+    let color = |node_cons: &[Option<NodeConstraints>]| {
+        color_graph(
+            &value_interference,
+            &node_of,
+            node_cons,
+            &banks,
+            max_gpr,
+            max_fpr,
+            func.has_returns_twice_call,
+            &spill_weights,
+            &apart,
+        )
+    };
+    let mut coloring = color(&node_cons);
+    // A bound x86-64 statement short of scratch under this coloring reserves
+    // its whole need, which any coloring leaves free, and colors again.
+    while target.is_x86_64() {
+        let mut widened = false;
+        for s in asm_live.iter_mut() {
+            if !s.full
+                && !asm_scratch_suffices(func, s, &coloring.places, &use_counts, fixed, target)
+            {
+                *s = asm_site(
+                    func,
+                    s.site,
+                    core::mem::take(&mut s.live),
+                    target,
+                    fixed,
+                    true,
+                );
+                widened = true;
+            }
+        }
+        if !widened {
+            break;
+        }
+        for (root, &(gpr, fpr)) in asm_forbid_masks(func, &asm_live, &node_of)
+            .iter()
+            .enumerate()
+        {
+            if let Some(entry) = node_cons[root].as_mut() {
+                entry.forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
+            }
+        }
+        coloring = color(&node_cons);
+    }
     places = coloring.places;
     let spill_count = coloring.spill_count;
     // A copy or an atomic read-modify-write may take any register as a
@@ -1366,6 +1413,15 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             {
                 implicit_live[site as usize] |= 1u32 << r;
             }
+        }
+    }
+    // A bound x86-64 statement's scratch: the candidates no live value holds.
+    for s in asm_live.iter().filter(|_| target.is_x86_64()) {
+        if let Inst::InlineAsm { asm, args } = &func.insts[s.site as usize]
+            && super::super::x86_64::emit::asm_binds_directly(func, asm, args, fixed, target)
+        {
+            implicit_live[s.site as usize] = asm_live_gprs(s, &places)
+                & super::super::x86_64::emit::bound_scratch_candidates(asm, fixed);
         }
     }
     // Recognise the c5 sign-narrow shape:
@@ -1892,35 +1948,89 @@ fn asm_live_values(
     let live = liveness.values_live_after(func, &|inst| matches!(inst, Inst::InlineAsm { .. }));
     live.into_iter()
         .map(|(site, mut live)| {
-            let Inst::InlineAsm { asm, args } = &func.insts[site as usize] else {
-                return AsmSite {
-                    gpr: 0,
-                    fpr: 0,
-                    values: Vec::new(),
-                };
-            };
-            late_read_args(asm, args, &mut live);
-            let (gpr, fpr) = asm_write_masks(func, asm, args, target, fixed);
-            let mut values: Vec<(ValueId, u32, u32)> =
-                live.into_iter().map(|v| (v, gpr, fpr)).collect();
-            if target.is_aarch64() {
-                values.extend(
-                    super::super::aarch64::emit::asm_site_bound_values(
-                        func, asm, args, site, fixed,
-                    )
-                    .into_iter()
-                    .map(|v| (v, gpr, fpr)),
-                );
-            } else {
-                values.extend(super::super::x86_64::emit::asm_site_bound_values(
-                    func, asm, args, site, fixed, target,
-                ));
+            if let Inst::InlineAsm { asm, args } = &func.insts[site as usize] {
+                late_read_args(asm, args, &mut live);
             }
-            values.sort_unstable();
-            values.dedup();
-            AsmSite { gpr, fpr, values }
+            asm_site(func, site, live, target, fixed, false)
         })
         .collect()
+}
+
+/// The [`AsmSite`] of `site`, `live` the values live across it.
+fn asm_site(
+    func: &FunctionSsa,
+    site: ValueId,
+    live: Vec<ValueId>,
+    target: Target,
+    fixed: FixedRegs,
+    full: bool,
+) -> AsmSite {
+    let Inst::InlineAsm { asm, args } = &func.insts[site as usize] else {
+        return AsmSite {
+            site,
+            live,
+            full,
+            gpr: 0,
+            fpr: 0,
+            values: Vec::new(),
+        };
+    };
+    let (gpr, fpr) = asm_write_masks(func, asm, args, target, fixed, full);
+    let mut values: Vec<(ValueId, u32, u32)> = live.iter().map(|&v| (v, gpr, fpr)).collect();
+    if target.is_aarch64() {
+        values.extend(
+            super::super::aarch64::emit::asm_site_bound_values(func, asm, args, site, fixed)
+                .into_iter()
+                .map(|v| (v, gpr, fpr)),
+        );
+    } else {
+        values.extend(super::super::x86_64::emit::asm_site_bound_values(
+            func, asm, args, site, fixed, target, full,
+        ));
+    }
+    values.sort_unstable();
+    values.dedup();
+    AsmSite {
+        site,
+        live,
+        full,
+        gpr,
+        fpr,
+        values,
+    }
+}
+
+/// The GP registers `places` gives the values live across `s`.
+fn asm_live_gprs(s: &AsmSite, places: &[Place]) -> u32 {
+    s.live.iter().fold(0, |m, &v| match places[v as usize] {
+        Place::IntReg(r) => m | 1 << r,
+        _ => m,
+    })
+}
+
+/// Whether a bound x86-64 statement finds its scratch among the registers
+/// `places` leaves free at `s`.
+fn asm_scratch_suffices(
+    func: &FunctionSsa,
+    s: &AsmSite,
+    places: &[Place],
+    use_counts: &[u32],
+    fixed: FixedRegs,
+    target: Target,
+) -> bool {
+    let Inst::InlineAsm { asm, args } = &func.insts[s.site as usize] else {
+        return true;
+    };
+    super::super::x86_64::emit::asm_bound_scratch_suffices(
+        func,
+        asm,
+        args,
+        places,
+        &asm_output_places(func, s.site, places, use_counts),
+        asm_live_gprs(s, places),
+        fixed,
+        target,
+    )
 }
 
 /// Join the arguments a site reads after its template -- an output's
@@ -1940,10 +2050,14 @@ fn late_read_args(asm: &crate::c5::ir::AsmBlock, args: &[u32], values: &mut Vec<
     values.sort_unstable();
 }
 
-/// One inline-asm site: the registers its lowering writes, and each value
-/// kept out of some of them, with its masks: all of them for those live
-/// across it, the target's choice for bound operands.
+/// One inline-asm site: the values live across it, the registers its
+/// lowering writes, and each value kept out of some of them with its masks:
+/// all for those live across it, the target's choice for bound operands.
 struct AsmSite {
+    site: ValueId,
+    live: Vec<ValueId>,
+    /// A bound x86-64 statement reserves its whole scratch need.
+    full: bool,
     gpr: u32,
     fpr: u32,
     values: Vec<(ValueId, u32, u32)>,
@@ -1951,18 +2065,19 @@ struct AsmSite {
 
 /// The registers an inline-asm statement's lowering writes on `target`:
 /// the clobber list, the operand registers and, on x86_64, the operand
-/// staging register.
+/// staging register or a bound statement's reserved scratch.
 fn asm_write_masks(
     func: &FunctionSsa,
     asm: &crate::c5::ir::AsmBlock,
     args: &[u32],
     target: Target,
     fixed: FixedRegs,
+    full: bool,
 ) -> (u32, u32) {
     if target.is_aarch64() {
         super::super::aarch64::emit::asm_site_write_masks(func, asm, args, fixed)
     } else {
-        super::super::x86_64::emit::asm_site_write_masks(func, asm, args, fixed, target)
+        super::super::x86_64::emit::asm_site_write_masks(func, asm, args, fixed, target, full)
     }
 }
 
@@ -4256,7 +4371,8 @@ mod tests {
                     let Inst::InlineAsm { asm, args } = &func.insts[site as usize] else {
                         unreachable!("ICE: an asm site names a non-asm inst");
                     };
-                    let (w_gpr, w_fpr) = asm_write_masks(func, asm, args, target, FixedRegs::NONE);
+                    let (w_gpr, w_fpr) =
+                        asm_write_masks(func, asm, args, target, FixedRegs::NONE, false);
                     sites += 1;
                     for v in values {
                         let held = match alloc.places[v as usize] {
@@ -4394,7 +4510,7 @@ mod tests {
                             continue;
                         };
                         let (w_gpr, w_fpr) =
-                            asm_write_masks(func, asm, args, target, FixedRegs::NONE);
+                            asm_write_masks(func, asm, args, target, FixedRegs::NONE, false);
                         let (p_gpr, p_fpr) = alloc.asm_preserve;
                         covered +=
                             (w_gpr & callee_gpr).count_ones() + (w_fpr & callee_fpr).count_ones();

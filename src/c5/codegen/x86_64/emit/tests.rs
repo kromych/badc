@@ -106,13 +106,13 @@ mod asm_scratch_tests {
     }
 
     /// A statement of `r` inputs and value outputs binds its operands to
-    /// their values' registers and writes only its clobbers and the scratch
-    /// its loads may take: r10 and r11, then the caller-saved registers as
-    /// more inputs or outputs need them, none the statement clobbers. Its
-    /// inputs avoid both; a `=` output the clobbers alone, a `+` output both
-    /// and its input the scratch alone. A fixed, early-clobber or memory
-    /// operand, a second read-write output, or a clobbered frame register
-    /// keeps the staged lowering, whose operand registers the site writes.
+    /// their values' registers and reserves its clobbers and the scratch its
+    /// loads may take: r10 and r11, or its whole need where the coloring
+    /// leaves too few free. Its inputs avoid both; a `=` output the clobbers
+    /// and, under the whole need, the inputs' share; a `+` output both and its
+    /// input the scratch. A fixed, early-clobber or memory operand, a second
+    /// read-write output, or a clobbered frame register keeps the staged
+    /// lowering, whose operand registers the site writes.
     #[test]
     fn register_operands_bind_to_their_values() {
         let target = crate::c5::codegen::Target::LinuxX64;
@@ -162,15 +162,16 @@ mod asm_scratch_tests {
                 .position(|i| matches!(i, Inst::InlineAsm { .. }))
                 .unwrap()
         };
-        let masks = |func: &FunctionSsa| {
+        let reserved = |func: &FunctionSsa, full: bool| {
             let Inst::InlineAsm { asm, args } = &func.insts[site(func)] else {
                 unreachable!()
             };
             (
                 asm_binds_directly(func, asm, args, fixed, target),
-                asm_site_write_masks(func, asm, args, fixed, target),
+                asm_site_write_masks(func, asm, args, fixed, target, full),
             )
         };
+        let masks = |func: &FunctionSsa| reserved(func, false);
         let reg = |out: bool| operand(AsmConstraint::Reg, out);
         let two_in = alloc::vec![reg(true), reg(false), reg(false)];
         assert_eq!(
@@ -194,17 +195,29 @@ mod asm_scratch_tests {
             masks(&statement(three_in.clone(), r10_r11)),
             (true, (r10_r11 | floor, 0))
         );
-        let avoid = |func: &FunctionSsa| {
+        let avoid_with = |func: &FunctionSsa, full: bool| {
             let site = site(func);
             let Inst::InlineAsm { asm, args } = &func.insts[site] else {
                 unreachable!()
             };
-            asm_site_bound_values(func, asm, args, site as u32, fixed, target)
+            asm_site_bound_values(func, asm, args, site as u32, fixed, target, full)
         };
+        let avoid = |func: &FunctionSsa| avoid_with(func, false);
         let all = r10_r11 | floor;
         assert_eq!(
             avoid(&statement(three_in.clone(), r10_r11)),
             [(1, all, 0), (2, all, 0), (3, all, 0), (4, r10_r11, 0)]
+        );
+        // The whole need, three registers here; the `=` output avoids the
+        // inputs' share too.
+        let need = all | (1 << 2);
+        assert_eq!(
+            reserved(&statement(three_in.clone(), r10_r11), true),
+            (true, (need, 0))
+        );
+        assert_eq!(
+            avoid_with(&statement(three_in.clone(), r10_r11), true),
+            [(1, need, 0), (2, need, 0), (3, need, 0), (4, need, 0)]
         );
         let mut rw = alloc::vec![reg(true), reg(false)];
         rw[0].is_rw = true;
@@ -219,8 +232,14 @@ mod asm_scratch_tests {
             (true, (1 | r10_r11, 0))
         );
         assert_eq!(
-            avoid(&statement(two_out, 1)),
+            avoid(&statement(two_out.clone(), 1)),
             [(2, 1 | r10_r11, 0), (3, 1, 0), (4, 1, 0)]
+        );
+        // A whole need of two: the input's r10, which the outputs avoid.
+        let r10 = 1 << 10;
+        assert_eq!(
+            avoid_with(&statement(two_out, 1), true),
+            [(2, 1 | r10_r11, 0), (3, 1 | r10, 0), (4, 1 | r10, 0)]
         );
         let mut two_rw = alloc::vec![reg(true), reg(true)];
         two_rw[0].is_rw = true;
@@ -250,6 +269,83 @@ mod asm_scratch_tests {
         let (bound, (gpr, _)) = masks(&statement(mem, 0));
         assert!(!bound);
         assert_ne!(gpr & 1, 0, "the staged lowering's first operand is rax");
+    }
+
+    /// A bound statement's inputs without a register load into the scratch
+    /// no value live across it holds: three spilled inputs take r10, r11
+    /// and r9 while r8, rdx, rcx and rax hold live values, and find no third
+    /// once r9 does too -- the shortfall the allocator answers with the
+    /// statement's whole need. An input in a register binds there.
+    #[test]
+    fn bound_inputs_load_into_the_scratch_live_values_leave_free() {
+        let target = crate::c5::codegen::Target::LinuxX64;
+        let operand = |is_output: bool| AsmOperand {
+            constraint: AsmConstraint::Reg,
+            is_output,
+            is_rw: false,
+            width: 8,
+            seg: AsmSeg::None,
+            static_arg: false,
+            value: is_output,
+            volatile_object: false,
+            early_clobber: false,
+        };
+        let asm = AsmBlock {
+            template: b"nop".to_vec(),
+            operands: alloc::vec![
+                operand(true),
+                operand(false),
+                operand(false),
+                operand(false)
+            ],
+            clobber_regs: 0,
+            clobber_fp_regs: 0,
+            clobber_memory: false,
+            volatile: true,
+        };
+        let args = alloc::vec![0, 1, 2, 3];
+        let mut insts: alloc::vec::Vec<Inst> = (0..4).map(Inst::Imm).collect();
+        insts.push(Inst::InlineAsm {
+            asm: alloc::boxed::Box::new(asm.clone()),
+            args: args.clone(),
+        });
+        let func = FunctionSsa {
+            insts,
+            ..Default::default()
+        };
+        let output = Place::IntReg(Reg::RSI.0);
+        let mut places = alloc::vec![
+            Place::None,
+            Place::Spill(0),
+            Place::Spill(1),
+            Place::Spill(2),
+            output
+        ];
+        let plan = |places: &[Place], live: u32| {
+            let fixed = crate::c5::codegen::FixedRegs::NONE;
+            plan_bound_operands(
+                &func,
+                &asm,
+                &args,
+                places,
+                &[(0, output)],
+                live,
+                fixed,
+                target,
+            )
+        };
+        let live = (1 << 8) | (1 << 2) | (1 << 1) | 1;
+        let bound = plan(&places, live).expect("r10, r11 and r9 are free");
+        assert_eq!(bound.loads, [(1, 10), (2, 11), (3, 9)]);
+        assert_eq!(
+            bound.op_reg,
+            [Some(Reg::RSI.0), Some(10), Some(11), Some(9)]
+        );
+        assert!(plan(&places, live | (1 << 9)).is_none());
+        places[3] = Place::IntReg(9);
+        let bound = plan(&places, live | (1 << 9)).expect("two loads");
+        assert_eq!(bound.loads, [(1, 10), (2, 11)]);
+        assert_eq!(bound.op_reg[3], Some(9));
     }
 }
 

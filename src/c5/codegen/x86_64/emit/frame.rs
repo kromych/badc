@@ -356,22 +356,23 @@ pub(super) fn asm_save_masks_and_stage(
 
 /// The GP / FP registers one inline-asm site's lowering writes: the
 /// clobber list, and the operand and staging registers or, when the
-/// operands bind directly, the scratch. A value live across the site must
-/// not sit in one. `(0, 0)` when the statement emits nothing or its
-/// operands do not assign, where the site writes nothing the allocator can see.
+/// operands bind directly, the reserved scratch. A value live across the
+/// site must not sit in one. `(0, 0)` when the statement emits nothing or
+/// its operands do not assign, where the site writes nothing the allocator can see.
 pub(crate) fn asm_site_write_masks(
     func: &FunctionSsa,
     asm: &super::super::ir::AsmBlock,
     args: &[u32],
     fixed: super::FixedRegs,
     target: Target,
+    full: bool,
 ) -> (u32, u32) {
     if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
         return (0, 0);
     }
-    if bound_shape(func, asm, args, fixed, target).is_some() {
+    if let Some(shape) = bound_shape(func, asm, args, fixed, target) {
         return (
-            (asm.clobber_regs | bound_scratch_floor(asm, fixed)) & !fixed.gpr,
+            (asm.clobber_regs | bound_scratch_reserved(&shape, asm, fixed, full).0) & !fixed.gpr,
             asm.clobber_fp_regs & !fixed.fpr,
         );
     }
@@ -388,13 +389,35 @@ pub(crate) fn asm_site_write_masks(
 /// then registers volatile under both x86-64 conventions.
 const BOUND_SCRATCH: [u8; 7] = [10, 11, 9, 8, 2, 1, 0];
 
-/// The scratch a bound site always reserves: the first two of
-/// [`BOUND_SCRATCH`] the statement neither clobbers nor `fixed` names.
-/// A value live across a bound site is kept out of these, so the emit's
-/// first picks are free; the emit chooses any further scratch around the
-/// allocation it sees, so no other register needs reserving up front.
-fn bound_scratch_floor(asm: &super::super::ir::AsmBlock, fixed: super::FixedRegs) -> u32 {
-    bound_gp_scratch(asm, fixed, 2)
+/// The scratch a bound site reserves ahead of the allocation: from the values
+/// live across it, its inputs and its read-write operand, and from its `=`
+/// outputs. The floor is the first two of [`BOUND_SCRATCH`] the statement
+/// neither clobbers nor `fixed` names, and none; `full`, every scratch its
+/// operands can need ([`BoundShape::gp_need`], [`BoundShape::gp_in_need`]).
+fn bound_scratch_reserved(
+    shape: &BoundShape,
+    asm: &super::super::ir::AsmBlock,
+    fixed: super::FixedRegs,
+    full: bool,
+) -> (u32, u32) {
+    let mask = |need: usize| {
+        bound_gp_scratch(asm, fixed, need)
+            .iter()
+            .fold(0u32, |m, &r| m | 1 << r)
+    };
+    match full {
+        true => (mask(shape.gp_need().max(2)), mask(shape.gp_in_need())),
+        false => (mask(2), 0),
+    }
+}
+
+/// [`BOUND_SCRATCH`] less the statement's clobbers and the `fixed` registers:
+/// what a bound statement's lowering may write besides its operands.
+pub(crate) fn bound_scratch_candidates(
+    asm: &super::super::ir::AsmBlock,
+    fixed: super::FixedRegs,
+) -> u32 {
+    bound_gp_scratch(asm, fixed, usize::MAX)
         .iter()
         .fold(0u32, |m, &r| m | 1 << r)
 }
@@ -416,14 +439,13 @@ impl BoundShape {
         usize::from(self.rw == Some(false)) + self.gp_in.max(self.gp_out)
     }
 
-    pub(super) fn fp_need(&self) -> usize {
-        usize::from(self.rw == Some(true)) + self.fp_in.max(self.fp_out)
+    /// The inputs' and the read-write output's part, which no `=` output shares.
+    fn gp_in_need(&self) -> usize {
+        usize::from(self.rw == Some(false)) + self.gp_in
     }
 
-    fn gp_scratch_mask(&self, asm: &super::super::ir::AsmBlock, fixed: super::FixedRegs) -> u32 {
-        bound_gp_scratch(asm, fixed, self.gp_need())
-            .iter()
-            .fold(0u32, |m, &r| m | 1 << r)
+    pub(super) fn fp_need(&self) -> usize {
+        usize::from(self.rw == Some(true)) + self.fp_in.max(self.fp_out)
     }
 }
 
@@ -532,11 +554,10 @@ pub(crate) fn asm_binds_directly(
 }
 
 /// A bound statement's operand values with the GP and FP registers each
-/// avoids: an input the clobbers and the floor scratch (r10 / r11, the
-/// only registers the site reserves before the allocation decides which
-/// operands need a scratch); an output, written once the inputs are
-/// read, the clobbers, and the floor too when its input moves in ahead
-/// of the loads; that input, read by the move, the floor.
+/// avoids ([`bound_scratch_reserved`]): an input the clobbers and the
+/// reserved scratch; the read-write output the same, and its input, read
+/// by the move ahead of the template, the reserved scratch; a `=` output,
+/// written once the inputs are read, the clobbers and the outputs' part.
 pub(crate) fn asm_site_bound_values(
     func: &FunctionSsa,
     asm: &super::super::ir::AsmBlock,
@@ -544,16 +565,18 @@ pub(crate) fn asm_site_bound_values(
     site: u32,
     fixed: super::FixedRegs,
     target: Target,
+    full: bool,
 ) -> alloc::vec::Vec<(u32, u32, u32)> {
     use super::super::ir::AsmConstraint as C;
     let mut out = alloc::vec::Vec::new();
     if crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86) {
         return out;
     }
-    if bound_shape(func, asm, args, fixed, target).is_none() {
+    let Some(shape) = bound_shape(func, asm, args, fixed, target) else {
         return out;
-    }
-    let scratch = bound_scratch_floor(asm, fixed) & !fixed.gpr;
+    };
+    let (scratch, outputs) = bound_scratch_reserved(&shape, asm, fixed, full);
+    let (scratch, outputs) = (scratch & !fixed.gpr, outputs & !fixed.gpr);
     let (gpr, fpr) = (
         asm.clobber_regs & !fixed.gpr,
         asm.clobber_fp_regs & !fixed.fpr,
@@ -570,9 +593,166 @@ pub(crate) fn asm_site_bound_values(
             continue;
         }
         let rw = asm.operands[i].is_rw;
-        out.push((v, gpr | if rw { scratch } else { 0 }, fpr));
+        out.push((v, gpr | if rw { scratch } else { outputs }, fpr));
     }
     out
+}
+
+/// A bound statement's operand registers under one allocation, with the
+/// inputs to load, the read-write operand's move and the outputs to store.
+pub(super) struct BoundPlan {
+    pub(super) op_reg: alloc::vec::Vec<Option<u8>>,
+    pub(super) loads: alloc::vec::Vec<(usize, u8)>,
+    pub(super) rw: Option<(usize, u8, Option<u8>)>,
+    pub(super) stores: alloc::vec::Vec<(usize, u8)>,
+}
+
+/// Bind each input to its value's register or a scratch it is loaded into,
+/// and each value output to its value's register or a scratch no other
+/// output holds, which a non-`&` output may share with an input (GCC's
+/// operand model). The scratch is [`BOUND_SCRATCH`] less the clobbers, the
+/// `fixed` registers, `live_gp` (the registers of values live across the
+/// statement) and, for an input, every operand's. `None` when it runs out.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn plan_bound_operands(
+    func: &FunctionSsa,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    places: &[Place],
+    outs: &[(usize, Place)],
+    live_gp: u32,
+    fixed: super::FixedRegs,
+    target: Target,
+) -> Option<BoundPlan> {
+    use super::super::ir::AsmConstraint as C;
+    let n = asm.operands.len();
+    let vector = |i: usize| matches!(asm.operand_class(i), C::Fp);
+    let bank = |i: usize| usize::from(vector(i));
+    let own = |i: usize, place: Place| match (vector(i), place) {
+        (true, Place::FpReg(x)) | (false, Place::IntReg(x)) => Some(x),
+        _ => None,
+    };
+    // The register operand `i`'s argument is in; none for a static one.
+    let at = |i: usize| -> Option<u8> {
+        if asm.operands[i].static_arg {
+            return None;
+        }
+        own(i, *places.get(*args.get(i)? as usize)?)
+    };
+    let imm = |i: usize| match asm.operands[i].constraint {
+        C::Imm => true,
+        C::RegOrImm { reg: None, imm } => asm_operand_const_at(func, args, i)
+            .is_some_and(|v| crate::Compiler::x86_imm_alternative_accepts(imm, v)),
+        _ => false,
+    };
+    let inputs: alloc::vec::Vec<usize> = (0..n)
+        .filter(|&i| !asm.operands[i].is_output && !imm(i))
+        .collect();
+    let rw = outs.iter().copied().find(|&(i, _)| asm.operands[i].is_rw);
+    let mut held: [alloc::vec::Vec<u8>; 2] = Default::default();
+    for &(i, place) in outs {
+        held[bank(i)].extend(own(i, place));
+    }
+    let mut busy = 0u32;
+    for &i in inputs.iter().filter(|&&i| !vector(i)) {
+        busy |= at(i).map_or(0, |r| 1 << r);
+    }
+    let free: alloc::vec::Vec<u8> = bound_gp_scratch(asm, fixed, usize::MAX)
+        .into_iter()
+        .filter(|&r| live_gp & (1 << r) == 0)
+        .collect();
+    let fp = bound_fp_scratch(asm, fixed, target);
+    let mut pool = [
+        free.iter()
+            .copied()
+            .filter(|r| busy & (1 << r) == 0 && !held[0].contains(r))
+            .collect::<alloc::vec::Vec<u8>>(),
+        fp.clone(),
+    ];
+    let take = |pool: &mut alloc::vec::Vec<u8>| (!pool.is_empty()).then(|| pool.remove(0));
+    let mut op_reg: alloc::vec::Vec<Option<u8>> = alloc::vec![None; n];
+    let mut loads = alloc::vec::Vec::new();
+    let mut stores = alloc::vec::Vec::new();
+    let mut rw_scratch = None;
+    if let Some((i, place)) = rw {
+        let b = bank(i);
+        op_reg[i] = Some(match own(i, place) {
+            Some(x) => x,
+            None => {
+                let s = take(&mut pool[b])?;
+                stores.push((i, s));
+                held[b].push(s);
+                rw_scratch = Some(s);
+                s
+            }
+        });
+    }
+    for &i in &inputs {
+        op_reg[i] = Some(match at(i) {
+            Some(r) => r,
+            None => {
+                let s = take(&mut pool[bank(i)])?;
+                loads.push((i, s));
+                s
+            }
+        });
+    }
+    let mut rw_move = None;
+    if let Some((i, _)) = rw {
+        let r = op_reg[i]?;
+        let mut park = None;
+        let displaced: alloc::vec::Vec<usize> = (0..n)
+            .filter(|&j| j != i && op_reg[j] == Some(r) && vector(j) == vector(i))
+            .collect();
+        if at(i) != Some(r) && !displaced.is_empty() {
+            let p = take(&mut pool[bank(i)])?;
+            for j in displaced {
+                op_reg[j] = Some(p);
+            }
+            park = Some(p);
+        }
+        rw_move = Some((i, r, park));
+    }
+    let out_pool = [free, fp];
+    for &(i, place) in outs.iter().filter(|&&(i, _)| !asm.operands[i].is_rw) {
+        let b = bank(i);
+        op_reg[i] = Some(match own(i, place) {
+            Some(x) => x,
+            None => {
+                let s = out_pool[b]
+                    .iter()
+                    .copied()
+                    .find(|&r| Some(r) != rw_scratch && !held[b].contains(&r))?;
+                held[b].push(s);
+                stores.push((i, s));
+                s
+            }
+        });
+    }
+    Some(BoundPlan {
+        op_reg,
+        loads,
+        rw: rw_move,
+        stores,
+    })
+}
+
+/// Whether a bound statement finds its scratch under `places`, `live_gp`
+/// holding the values live across it; any other statement needs none.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn asm_bound_scratch_suffices(
+    func: &FunctionSsa,
+    asm: &super::super::ir::AsmBlock,
+    args: &[u32],
+    places: &[Place],
+    outs: &[(usize, Place)],
+    live_gp: u32,
+    fixed: super::FixedRegs,
+    target: Target,
+) -> bool {
+    crate::c5::asm::asm_statement_is_noop(asm, crate::c5::asm::AsmComments::X86)
+        || !asm_binds_directly(func, asm, args, fixed, target)
+        || plan_bound_operands(func, asm, args, places, outs, live_gp, fixed, target).is_some()
 }
 
 /// `reg_alloc::asm_operand_hints` over a staged statement's registers.
@@ -647,30 +827,6 @@ pub(super) fn pick_caller_saved_scratch(
         return Some(Reg(*cand));
     }
     None
-}
-
-/// `pick_caller_saved_scratch` avoiding also every register holding an SSA
-/// value live across instruction `pc` (`x < pc < last_use[x]`).
-fn pick_caller_saved_scratch_live_aware(
-    rd: Reg,
-    operand_regs: &[Reg],
-    pc: u32,
-    alloc: &Allocation,
-    fixed: super::FixedRegs,
-) -> Option<Reg> {
-    let mut live: alloc::vec::Vec<Reg> = alloc::vec::Vec::with_capacity(operand_regs.len() + 4);
-    live.extend_from_slice(operand_regs);
-    for (idx, place) in alloc.places.iter().enumerate() {
-        let last = alloc.last_use.get(idx).copied().unwrap_or(0);
-        let i = idx as u32;
-        if i < pc
-            && pc < last
-            && let Place::IntReg(r) = place
-        {
-            live.push(Reg(*r));
-        }
-    }
-    pick_caller_saved_scratch(rd, &live, fixed)
 }
 
 /// What the prologue reserves below the return address: the pushed rbp,

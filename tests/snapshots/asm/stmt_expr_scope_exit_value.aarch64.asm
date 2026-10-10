@@ -36,8 +36,7 @@ Disassembly of section .text:
                	str	w2, [x0, #0xc]
                	mov	sp, x1
                	mov	x0, #0x2a               // =42
-               	sub	sp, x29, #0x10
-               	add	sp, sp, #0x10
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -72,8 +71,7 @@ Disassembly of section .text:
                	str	w2, [x0]
                	mov	sp, x1
                	mov	x0, #0x7                // =7
-               	sub	sp, x29, #0x10
-               	add	sp, sp, #0x10
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
 

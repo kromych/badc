@@ -130,17 +130,13 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	ldrb	w1, [x20]
                	add	x0, x0, x1
-               	sub	x16, x29, #0x1, lsl #12 // =0x1000
-               	sub	x16, x16, #0xb0
-               	mov	sp, x16
-               	ldr	x19, [sp, #0x50]
-               	ldr	x28, [sp, #0x40]
-               	ldp	x26, x27, [sp, #0x30]
-               	ldp	x24, x25, [sp, #0x20]
-               	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x1, lsl #12   // =0x1000
-               	add	sp, sp, #0xb0
+               	ldr	x28, [x19, #0x40]
+               	ldp	x26, x27, [x19, #0x30]
+               	ldp	x24, x25, [x19, #0x20]
+               	ldp	x22, x23, [x19, #0x10]
+               	ldp	x20, x21, [x19]
+               	ldr	x19, [x19, #0x50]
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
 

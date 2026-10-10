@@ -99,7 +99,6 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	je	<addr>
                	movl	$0x1, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	movb	$0xb, (%rax)
@@ -116,7 +115,6 @@ Disassembly of section .text:
                	cmpl	$0x21, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	movl	$0x1, %eax

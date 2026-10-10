@@ -853,7 +853,6 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x14, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movsd	0x80(%rsp), %xmm0
@@ -944,90 +943,68 @@ Disassembly of section .text:
                	cmpl	$0x10, %eax
                	jl	<addr>
                	xorl	%eax, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0x16, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0x15, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0x13, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0x12, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0x11, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0x10, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0xf, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0xe, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0xd, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0xc, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0xb, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0xa, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0x9, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0x8, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0x7, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0x6, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0x5, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0x4, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0x3, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0x2, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
                	movl	$0x1, %eax
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq

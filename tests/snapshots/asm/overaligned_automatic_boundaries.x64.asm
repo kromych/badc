@@ -50,8 +50,7 @@ Disassembly of section .text:
                	cmpl	$0xa, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	leaq	(%rbp), %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	%rax, %rcx
                	jmp	<addr>
@@ -104,8 +103,7 @@ Disassembly of section .text:
                	cmpl	$0x3, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	leaq	(%rbp), %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	%rcx, %rax
                	jmp	<addr>
@@ -142,8 +140,7 @@ Disassembly of section .text:
                	cmpl	$0x2, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	leaq	(%rbp), %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	%rax, %rcx
                	jmp	<addr>
@@ -190,8 +187,7 @@ Disassembly of section .text:
                	cmpl	$0x3, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	leaq	(%rbp), %rsp
-               	popq	%rbp
+               	leave
                	retq
                	movq	%rax, %rcx
                	jmp	<addr>
@@ -213,8 +209,7 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x1, %eax
-               	leaq	(%rbp), %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

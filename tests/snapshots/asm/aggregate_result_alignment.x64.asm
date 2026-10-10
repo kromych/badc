@@ -122,7 +122,6 @@ Disassembly of section .text:
                	movups	%xmm14, 0x20(%rax)
                	movups	0x30(%rcx), %xmm14
                	movups	%xmm14, 0x30(%rax)
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
 
@@ -157,7 +156,6 @@ Disassembly of section .text:
                	movups	%xmm14, 0x20(%rax)
                	movups	0x30(%rcx), %xmm14
                	movups	%xmm14, 0x30(%rax)
-               	leaq	-0x60(%rbp), %rsp
                	leave
                	retq
 

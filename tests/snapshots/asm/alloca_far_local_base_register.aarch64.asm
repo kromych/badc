@@ -60,24 +60,16 @@ Disassembly of section .text:
                	eor	x1, x1, #0x1
                	cbz	w1, <addr>
                	mov	x0, #0x1                // =1
-               	sub	x16, x29, #0x1, lsl #12 // =0x1000
-               	sub	x16, x16, #0x30
-               	mov	sp, x16
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x1, lsl #12   // =0x1000
-               	add	sp, sp, #0x30
+               	ldr	x19, [x19]
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w0, [x0]
                	eor	x0, x0, #0x3
                	cbz	w0, <addr>
                	mov	x0, #0x2                // =2
-               	sub	x16, x29, #0x1, lsl #12 // =0x1000
-               	sub	x16, x16, #0x30
-               	mov	sp, x16
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x1, lsl #12   // =0x1000
-               	add	sp, sp, #0x30
+               	ldr	x19, [x19]
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldr	x0, [x19, #0x10]
@@ -86,11 +78,7 @@ Disassembly of section .text:
                	ldr	x1, [x19, #0x20]
                	add	x0, x0, x1
                	sub	x0, x0, #0x16
-               	sub	x16, x29, #0x1, lsl #12 // =0x1000
-               	sub	x16, x16, #0x30
-               	mov	sp, x16
-               	ldr	x19, [sp]
-               	add	sp, sp, #0x1, lsl #12   // =0x1000
-               	add	sp, sp, #0x30
+               	ldr	x19, [x19]
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret

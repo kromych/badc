@@ -32,7 +32,6 @@ Disassembly of section .text:
                	mov	x1, #0x7                // =7
                	str	x1, [x0]
                	mov	x0, #0x0                // =0
-               	sub	sp, x29, #0x10
-               	add	sp, sp, #0x10
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret

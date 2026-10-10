@@ -1188,7 +1188,7 @@ pub(super) fn emit_tail_call(
     // realigned for an over-aligned object has rsp below the saves;
     // `detect_tail_call` admits it, no address of the object being taken.
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
-    restore_dynamic_sp(code, frame);
+    restore_dynamic_sp(code, frame, alloc);
     restore_callee_saved(code, alloc);
     emit_frame_teardown(code, func, frame, alloc, abi);
     // A Call-kind fixup resolves the rel32 like an intra-unit call; the

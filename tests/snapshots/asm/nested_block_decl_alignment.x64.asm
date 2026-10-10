@@ -36,8 +36,7 @@ Disassembly of section .text:
                	testb	$0x3f, %cl
                	jne	<addr>
                	movl	$0x1, %eax
-               	leaq	(%rbp), %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <nested_auto_typed>:
@@ -55,8 +54,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	sete	%al
                	movzbq	%al, %rax
-               	leaq	(%rbp), %rsp
-               	popq	%rbp
+               	leave
                	retq
 
 <main>:

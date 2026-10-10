@@ -317,7 +317,6 @@ Disassembly of section .text:
                	incq	%rcx
                	cmpl	%esi, %ecx
                	jl	<addr>
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
 

@@ -293,8 +293,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, w3
                	b.lt	<addr>
-               	sub	sp, x29, #0x10
-               	add	sp, sp, #0x10
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
 

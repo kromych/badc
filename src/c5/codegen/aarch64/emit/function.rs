@@ -1866,12 +1866,13 @@ fn emit_canary_check(
     emit(code, enc_movz(CANARY_SCRATCH2, 0, 0));
 }
 
-/// Re-establish `sp = fp - frame_bytes` in a dynamic-sp frame before the
-/// sp-relative restores, committed with one write so sp never rests
-/// above unrestored frame bytes (a signal delivered mid-sequence pushes
-/// its frame below sp).
+/// Re-establish sp at the frame bottom in a dynamic-sp frame ahead of
+/// sp-relative restores: from the locals base where x19 holds it, else
+/// `fp - frame_bytes`. One write, so sp never rests above unrestored
+/// frame bytes (a signal delivered mid-sequence pushes its frame below sp).
 fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame) {
-    if !frame.dynamic_sp {
+    if frame.local_base {
+        emit(code, enc_add_imm(Reg(31), Reg(19), 0));
         return;
     }
     let bytes = frame.frame_bytes;
@@ -1883,28 +1884,37 @@ fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame) {
     }
 }
 
+/// Whether the epilogue restores a callee-saved register.
+fn restores_regs(alloc: &Allocation, frame: Frame) -> bool {
+    frame.uses_x19 || !alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty()
+}
+
 /// Restore what `emit_prologue_saved_regs` saved, in mirror order so the
 /// offset-0 access comes last and, with `fold != 0`, post-indexes the
-/// whole frame plus the fp/lr pair back.
+/// whole frame plus the fp/lr pair back. The unfolded shape of a frame
+/// with a locals base addresses from x19, which then loads last.
 fn emit_epilogue_restore_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Frame, fold: u32) {
     let saved_fpr_bytes = super::ssa::emit_common::slots16(alloc.fp_used.len() as u32);
     let saved_gpr_bytes = super::ssa::emit_common::slots16(alloc.gpr_used.len() as u32);
     let out = frame.outgoing_bytes;
-    // Mirror of the prologue's base selection; x16 is free here (the
-    // canary check clears it, the dynamic-sp restore last used it).
-    let (sbase, shift) = if fold == 0 && out + saved_fpr_bytes + saved_gpr_bytes > 512 {
+    // The locals base, which holds the frame bottom; else the mirror of the
+    // prologue's base selection, x16 being free here (the canary check
+    // clears it, the dynamic-sp restore last used it).
+    let (sbase, shift) = if fold == 0 && frame.local_base {
+        (Reg(19), out)
+    } else if fold == 0 && out + saved_fpr_bytes + saved_gpr_bytes > 512 {
         emit_reg_disp(code, Reg(16), Reg(31), i64::from(out));
         (Reg(16), 0u32)
     } else {
         (Reg(31), out)
     };
     let gpr = &alloc.gpr_used;
-    if frame.uses_x19 {
-        let off = saved_fpr_bytes + saved_gpr_bytes + shift;
-        if off == 0 && fold != 0 {
+    let x19_off = saved_fpr_bytes + saved_gpr_bytes + shift;
+    if frame.uses_x19 && sbase != Reg(19) {
+        if x19_off == 0 && fold != 0 {
             emit(code, enc_ldr_post(Reg(19), Reg(31), fold as i32));
         } else {
-            emit(code, enc_ldr_imm(Reg(19), sbase, off));
+            emit(code, enc_ldr_imm(Reg(19), sbase, x19_off));
         }
     }
     let mut i = gpr.len();
@@ -1949,6 +1959,9 @@ fn emit_epilogue_restore_regs(code: &mut Vec<u8>, alloc: &Allocation, frame: Fra
                 enc_ldp_d_off(fp[i], fp[i + 1], sbase, ((i as u32) * 8 + shift) as i32),
             );
         }
+    }
+    if sbase == Reg(19) {
+        emit(code, enc_ldr_imm(Reg(19), Reg(19), x19_off));
     }
 }
 
@@ -2083,13 +2096,25 @@ pub(super) fn emit_return(
         return Ok(());
     }
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
-    restore_dynamic_sp(code, frame);
     // The folded shape restores fp/lr first (the lr load feeds `ret`) and
     // tears the frame down with the last restore's post-index.
     let fold = frame_fold_bytes(alloc, frame);
     if fold != 0 {
+        if frame.dynamic_sp {
+            restore_dynamic_sp(code, frame);
+        }
         emit(code, enc_ldp_off(Reg(29), Reg(30), Reg(31), fold as i32));
         emit_epilogue_restore_regs(code, alloc, frame, fold + 16);
+    } else if frame.dynamic_sp {
+        // The teardown takes sp from fp; sp is re-established first only
+        // for restores off sp, which a frame saving nothing or holding the
+        // locals base does not make.
+        if restores_regs(alloc, frame) && !frame.local_base {
+            restore_dynamic_sp(code, frame);
+        }
+        emit_epilogue_restore_regs(code, alloc, frame, 0);
+        emit(code, enc_add_imm(Reg(31), Reg(29), 0));
+        emit(code, enc_ldp_post(Reg(29), Reg(30), Reg(31), 16));
     } else {
         emit_epilogue_restore_regs(code, alloc, frame, 0);
         if frame.frame_bytes > 0 {

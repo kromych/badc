@@ -35,14 +35,12 @@ Disassembly of section .text:
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x4, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	leaq	(%rsp), %rax
                	testb	$0x1f, %al
                	je	<addr>
                	movl	$0x5, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	movl	$0x7, %eax
@@ -59,7 +57,6 @@ Disassembly of section .text:
                	cmpl	$0x29, %ecx
                	je	<addr>
                	movl	$0x6, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	movsbq	-0x10(%rbp), %rcx
@@ -67,11 +64,9 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	cmpl	$0xf, %ecx
                	je	<addr>
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	xorl	%eax, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
 

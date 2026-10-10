@@ -118,7 +118,6 @@ Disassembly of section .text:
                	je	<addr>
                	callq	<addr>
                	xorl	%r11d, %r11d
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
 

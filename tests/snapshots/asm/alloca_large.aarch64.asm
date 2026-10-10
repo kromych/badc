@@ -50,8 +50,7 @@ Disassembly of section .text:
                	cmp	w0, #0x3
                	b.ne	<addr>
                	mov	x0, #0x2a               // =42
-               	sub	sp, x29, #0x10
-               	add	sp, sp, #0x10
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1

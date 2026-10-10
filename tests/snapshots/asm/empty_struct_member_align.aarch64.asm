@@ -29,10 +29,10 @@ Disassembly of section .text:
                	cmp	x0, #0x40
                	b.eq	<addr>
                	mov	x0, #0x12               // =18
-               	sub	sp, x29, #0x0
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	sub	sp, x29, #0x0
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret

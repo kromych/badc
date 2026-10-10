@@ -45,15 +45,13 @@ Disassembly of section .text:
                	mov	x16, #0x7               // =7
                	cbnz	w16, <addr>
                	ldrb	w0, [x0]
-               	sub	sp, x29, #0x10
-               	add	sp, sp, #0x10
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldrb	w1, [x0]
                	ldrb	w0, [x0, #0x8]
                	add	x0, x1, x0
-               	sub	sp, x29, #0x10
-               	add	sp, sp, #0x10
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
 

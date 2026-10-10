@@ -29,7 +29,7 @@ Disassembly of section .text:
                	eor	x0, x0, #0x7
                	cmp	w0, #0x0
                	cset	x0, eq
-               	sub	sp, x29, #0x0
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -50,7 +50,7 @@ Disassembly of section .text:
                	eor	x0, x0, x17
                	cmp	w0, #0x0
                	cset	x0, eq
-               	sub	sp, x29, #0x0
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
 

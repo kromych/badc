@@ -105,11 +105,7 @@ Disassembly of section .text:
                	sub	x16, x29, #0x1, lsl #12 // =0x1000
                	ldrb	w1, [x16]
                	add	x0, x0, x1
-               	sub	x16, x29, #0x1, lsl #12 // =0x1000
-               	sub	x16, x16, #0x40
-               	mov	sp, x16
-               	add	sp, sp, #0x1, lsl #12   // =0x1000
-               	add	sp, sp, #0x40
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
 

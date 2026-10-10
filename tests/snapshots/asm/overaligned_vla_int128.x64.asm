@@ -67,7 +67,6 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	movq	%rax, -0x20(%rbp)
                	movq	%rcx, -0x18(%rbp)
-               	leaq	-0x20(%rbp), %rsp
                	leave
                	retq
 
@@ -101,7 +100,6 @@ Disassembly of section .text:
                	movq	$0x6, (%rax)
                	movq	$0x0, 0x8(%rax)
                	movl	$0x8, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
 

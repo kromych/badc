@@ -1252,12 +1252,18 @@ fn save_callee_saved(code: &mut Vec<u8>, alloc: &Allocation) {
     }
 }
 
-/// Re-establish `rsp = rbp - frame_bytes` in a dynamic-sp frame before
-/// the epilogue's rsp-relative restores. No-op for static frames. Every
-/// return path and the tail-call jump call this ahead of
-/// [`restore_callee_saved`].
-pub(super) fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame) {
-    if frame.dynamic_sp {
+/// Whether the epilogue re-establishes `rsp = rbp - frame_bytes`: a
+/// dynamic-sp frame whose restores address from rsp. Without them `leave`
+/// takes rsp from rbp.
+fn reestablishes_sp(frame: Frame, alloc: &Allocation) -> bool {
+    frame.dynamic_sp && (!alloc.gpr_used.is_empty() || !alloc.fp_used.is_empty())
+}
+
+/// Re-establish rsp ahead of the epilogue's rsp-relative restores where
+/// [`reestablishes_sp`] holds. Every return path and the tail-call jump
+/// call this ahead of [`restore_callee_saved`].
+pub(super) fn restore_dynamic_sp(code: &mut Vec<u8>, frame: Frame, alloc: &Allocation) {
+    if reestablishes_sp(frame, alloc) {
         emit_lea_r_mem(code, Reg::RSP, Reg::RBP, -(frame.frame_bytes as i32));
     }
 }
@@ -1526,7 +1532,7 @@ fn emit_return(
     if let Some(Inst::AggParts { parts, fp_mask, .. }) = func.insts.get(value as usize) {
         emit_parts_return(code, parts, fp_mask, alloc, frame)?;
         emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
-        restore_dynamic_sp(code, frame);
+        restore_dynamic_sp(code, frame, alloc);
         restore_callee_saved(code, alloc);
         emit_epilogue_ret(code, func, frame, alloc, abi, extern_sites);
         return Ok(());
@@ -1559,7 +1565,7 @@ fn emit_return(
             _ => {}
         }
         emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
-        restore_dynamic_sp(code, frame);
+        restore_dynamic_sp(code, frame, alloc);
         restore_callee_saved(code, alloc);
         // Place each eightbyte in its bank: System V returns SSE eightbytes
         // in xmm0/xmm1 and INTEGER eightbytes in rax/rdx, each in order.
@@ -1666,7 +1672,7 @@ fn emit_return(
     // The check calls out on a mismatch, so it runs while rsp is 16-aligned,
     // ahead of the pops.
     emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
-    restore_dynamic_sp(code, frame);
+    restore_dynamic_sp(code, frame, alloc);
     restore_callee_saved(code, alloc);
     if staged_int {
         emit_mov_rr(code, Reg::RAX, Reg::RCX);
@@ -1754,7 +1760,8 @@ pub(super) fn emit_frame_teardown(
     if is_full_leaf(func, frame, alloc, abi) {
         return;
     }
-    if frame.frame_bytes > pushed_gpr_bytes(alloc) {
+    let rsp_at_bottom = !frame.dynamic_sp || reestablishes_sp(frame, alloc);
+    if frame.frame_bytes > pushed_gpr_bytes(alloc) || !rsp_at_bottom {
         super::encode::emit_leave(code);
     } else {
         emit_pop_r(code, Reg::RBP);

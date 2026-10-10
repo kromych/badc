@@ -39,8 +39,8 @@ pub(crate) struct Frame {
     /// run time (`alloca` / C99 6.7.6.2 VLA), the prologue realigns it for an
     /// automatic object aligned above 16, or an inline asm statement may leave
     /// it moved (`AsmBlock::may_move_sp`), as a stack switch does. Spill slots
-    /// are addressed through rbp and the epilogue re-establishes rsp from rbp
-    /// before tearing the frame down.
+    /// are addressed through rbp and the epilogue takes rsp from rbp, ahead of
+    /// rsp-relative restores where there are any.
     pub dynamic_sp: bool,
     /// Alignment the prologue forces on rsp for automatic objects aligned
     /// above 16 (C11 6.7.5), a power of two > 16, or 0 when none. The

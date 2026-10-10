@@ -4215,6 +4215,126 @@ fn a64_far_spill_slots_select_the_locals_base() {
     );
 }
 
+/// `mov sp, x29`, `ldp x29, x30, [sp], #16` and `ret`: the teardown of a
+/// frame whose sp moved, taking sp from the frame pointer.
+const A64_MOV_SP_FP: u32 = 0x9100_03BF;
+const A64_LDP_FP_LR_POST: u32 = 0xA8C1_7BFD;
+const A64_RET: u32 = 0xD65F_03C0;
+
+/// Functions whose sp moves at run time: a VLA, an over-aligned automatic
+/// object, and a VLA with a value live across a call.
+const DYNAMIC_RETURNS: &str = "void use(char *);\n\
+    long vla(long n) {\n\
+        char a[n];\n\
+        if (n > 9) { use(a); return 1; }\n\
+        use(a);\n\
+        return 2;\n\
+    }\n\
+    long realigned(void) { _Alignas(64) char b[64]; use(b); return 3; }\n\
+    long saves(long n) { char a[n]; long x = n * 3; use(a); return x + a[0]; }\n";
+
+/// A load off sp, single or pair: a callee-saved register's restore, or
+/// the frame record's.
+fn a64_load_off_sp(w: u32) -> bool {
+    let pair = w & 0x3840_0000 == 0x2840_0000;
+    let single = a64_mem_imm(w).is_some_and(|(_, store, _)| !store);
+    (pair || single) && (w >> 5) & 31 == 31
+}
+
+/// A return from a frame whose sp moves at run time takes sp from the frame
+/// pointer in its teardown (`mov sp, x29` / `leave`), so sp is
+/// re-established at the frame bottom first only for restores that
+/// address from it: none where the frame saves no register.
+#[test]
+fn dynamic_frame_resets_sp_only_for_sp_relative_restores() {
+    let mut m = Misses::default();
+    for name in ["vla", "realigned", "saves"] {
+        let saves = name == "saves";
+        let ws = a64(DYNAMIC_RETURNS, name);
+        let rets: Vec<usize> = (3..ws.len()).filter(|&i| ws[i] == A64_RET).collect();
+        // Back over the epilogue's loads off sp and its `mov sp, x29`: what
+        // precedes them is the reset `sub sp, x29, #N` exactly when a
+        // restore reads off sp.
+        let ok = !rets.is_empty()
+            && rets.iter().all(|&i| {
+                let mut j = i - 1;
+                while a64_load_off_sp(ws[j]) || ws[j] == A64_MOV_SP_FP {
+                    j -= 1;
+                }
+                let reset = a64_add_sub_imm(ws[j]).is_some_and(|(rd, rn)| rd == 31 && rn == 29);
+                reset == saves
+                    && (saves || (ws[i - 1] == A64_LDP_FP_LR_POST && ws[i - 2] == A64_MOV_SP_FP))
+            });
+        m.expect(ok, || format!("aarch64 {name}: {ws:08x?}"));
+
+        let insns = x64(DYNAMIC_RETURNS, name);
+        let rets: Vec<usize> = (2..insns.len()).filter(|&i| insns[i].op == 0xC3).collect();
+        // Back over `leave` and the pops: `lea rsp, [rbp - N]` ahead of them
+        // exactly when a register is popped.
+        let ok = !rets.is_empty()
+            && rets.iter().all(|&i| {
+                let mut j = i - 1;
+                while insns[j].op == 0xC9 || (0x58..=0x5F).contains(&insns[j].op) {
+                    j -= 1;
+                }
+                let lea = insns[j].op == 0x8D && insns[j].regs().0 == 4;
+                lea == saves && (saves || insns[i - 1].op == 0xC9)
+            });
+        m.expect(ok, || format!("x86-64 {name}: {insns:x?}"));
+    }
+    m.finish();
+}
+
+/// A frame holding the locals base restores its saved registers off x19,
+/// x19 itself last, and resets nothing ahead: sp is taken from fp after.
+/// The folded shape, whose last restore post-indexes sp, resets sp from
+/// x19 first.
+#[test]
+fn a64_locals_base_frame_restores_off_the_base() {
+    const FOLDED: &str = "void use(volatile char *);\n\
+        long folded(long n) {\n\
+            volatile char pad[300];\n\
+            char *q = (char *)__builtin_alloca(n);\n\
+            long x = n * 3, y = n * 5;\n\
+            pad[0] = 1; pad[1] = 2;\n\
+            use(q); use(pad);\n\
+            return x * y + pad[0] + pad[1] + q[0];\n\
+        }\n";
+    const A64_MOV_SP_X19: u32 = 0x9100_027F;
+    let ws = a64(FOLDED, "folded");
+    let resets: Vec<usize> = (0..ws.len()).filter(|&i| ws[i] == A64_MOV_SP_X19).collect();
+    // `ldp x29, x30, [sp, #fold]` right after each reset.
+    let folded = ws.contains(&A64_MOV_X19_SP)
+        && !resets.is_empty()
+        && resets.iter().all(|&i| {
+            ws.get(i + 1)
+                .is_some_and(|&w| w & 0xFFC0_7FFF == 0xA940_7BFD)
+        });
+    assert!(folded, "folded: {ws:08x?}");
+
+    let ws = a64(FAR_SLOTS, "moving");
+    let rets: Vec<usize> = (3..ws.len()).filter(|&i| ws[i] == A64_RET).collect();
+    let off_x19 = |w: u32| {
+        let pair = w & 0x3840_0000 == 0x2840_0000;
+        let single = a64_mem_imm(w).is_some_and(|(_, store, _)| !store);
+        (pair || single) && (w >> 5) & 31 == 19
+    };
+    let ok = ws.contains(&A64_MOV_X19_SP)
+        && !rets.is_empty()
+        && rets.iter().all(|&i| {
+            let mut j = i - 3;
+            while off_x19(ws[j]) {
+                j -= 1;
+            }
+            // `ldr x19, [x19, #off]` last; no sp write ahead of the restores.
+            ws[i - 1] == A64_LDP_FP_LR_POST
+                && ws[i - 2] == A64_MOV_SP_FP
+                && ws[i - 3] & 0xFFC0_03FF == 0xF940_0273
+                && a64_add_sub_imm(ws[j]).is_none_or(|(rd, _)| rd != 31)
+        });
+    assert!(ok, "{ws:08x?}");
+}
+
 /// A statement that writes x19 runs its exits -- the store-backs and the
 /// register restores, on the fall-through and on each `asm goto` label --
 /// after x19 has changed, so a frame holding one takes no locals base:

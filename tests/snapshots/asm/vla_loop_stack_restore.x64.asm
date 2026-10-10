@@ -71,12 +71,10 @@ Disassembly of section .text:
                	cmpq	$0x1000, %rsi           # imm = 0x1000
                	jne	<addr>
                	movl	$0x2a, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	movl	$0x2, %eax
                	jmp	<addr>
                	movl	$0x1, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq

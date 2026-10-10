@@ -179,8 +179,7 @@ Disassembly of section .text:
                	ldrsw	x1, [x29, #0x10]
                	add	x0, x0, x1
                	sub	x0, x0, #0x4
-               	sub	sp, x29, #0x20
-               	add	sp, sp, #0x20
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0
                	ret
@@ -275,8 +274,7 @@ Disassembly of section .text:
                	ldr	x0, [x16, #0x10]
                	str	x0, [x17, #0x10]
                	mov	x0, x17
-               	sub	sp, x29, #0x40
-               	add	sp, sp, #0x40
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0
                	ret

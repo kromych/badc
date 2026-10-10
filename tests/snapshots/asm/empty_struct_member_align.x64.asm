@@ -38,10 +38,8 @@ Disassembly of section .text:
                	cmpq	$0x40, %rcx
                	je	<addr>
                	movl	$0x12, %eax
-               	leaq	(%rbp), %rsp
-               	popq	%rbp
+               	leave
                	retq
                	xorl	%eax, %eax
-               	leaq	(%rbp), %rsp
-               	popq	%rbp
+               	leave
                	retq

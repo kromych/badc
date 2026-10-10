@@ -293,7 +293,6 @@ Disassembly of section .text:
                	movsbq	%al, %rax
                	addq	%rdx, %rax
                	addq	%rcx, %rax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
 

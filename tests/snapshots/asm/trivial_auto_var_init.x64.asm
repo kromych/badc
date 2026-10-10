@@ -232,7 +232,6 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	jb	<addr>
                	callq	<addr>
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
 
@@ -263,7 +262,6 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	jb	<addr>
                	callq	<addr>
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
 

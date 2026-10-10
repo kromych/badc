@@ -75,14 +75,12 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x2, %eax
-               	leaq	-0xd0(%rbp), %rsp
                	leave
                	retq
                	movq	(%rdx), %rax
                	cmpq	$0x74, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	leaq	-0xd0(%rbp), %rsp
                	leave
                	retq
                	movq	0x8(%rdx), %rax
@@ -107,6 +105,5 @@ Disassembly of section .text:
                	cmpq	$0x7b, %rax
                	jne	<addr>
                	xorl	%eax, %eax
-               	leaq	-0xd0(%rbp), %rsp
                	leave
                	retq

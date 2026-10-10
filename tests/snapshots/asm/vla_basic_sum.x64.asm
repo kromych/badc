@@ -64,7 +64,6 @@ Disassembly of section .text:
                	cmpl	%edi, %eax
                	jl	<addr>
                	movq	%rcx, %rax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
 

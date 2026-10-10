@@ -58,13 +58,11 @@ Disassembly of section .text:
                	testl	%r10d, %r10d
                	jne	<addr>
                	movsbq	(%rax), %rax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	movsbq	(%rax), %rcx
                	movsbq	0x8(%rax), %rax
                	addq	%rcx, %rax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
 

@@ -50,7 +50,7 @@ pub(crate) struct Frame {
     /// time (`alloca`, C99 6.7.6.2 VLA), the prologue realigns it, or an
     /// inline asm statement may leave it moved (`AsmBlock::may_move_sp`), as
     /// a stack switch does. Spill slots and locals are addressed through fp,
-    /// and each return re-establishes sp from fp.
+    /// and each return's teardown takes sp from fp.
     pub dynamic_sp: bool,
     /// Alignment the prologue forces on sp for automatic objects aligned
     /// above 16 (C11 6.7.5), or 0. The realigned region sits below the static

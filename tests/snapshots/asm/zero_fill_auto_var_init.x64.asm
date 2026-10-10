@@ -198,7 +198,6 @@ Disassembly of section .text:
                	leaq	-0x1(%rdi), %rdx
                	movq	(%rcx,%rdx,8), %rcx
                	addq	%rcx, %rax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
 

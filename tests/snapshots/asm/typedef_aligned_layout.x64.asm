@@ -49,44 +49,37 @@ Disassembly of section .text:
                	testb	$0xf, %r8b
                	je	<addr>
                	movl	$0x1e, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x1f, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	testb	$0x1f, %cl
                	je	<addr>
                	movl	$0x20, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	testb	$0xf, %dl
                	je	<addr>
                	movl	$0x21, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	testb	$0xf, %sil
                	je	<addr>
                	movl	$0x22, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	testb	$0xf, %dil
                	je	<addr>
                	movl	$0x23, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	leaq	-0x8(%rbp), %rax
                	testb	$0x7, %al
                	je	<addr>
                	movl	$0x24, %eax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
                	movl	0x10(%rsp), %ecx
@@ -107,7 +100,6 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	subq	$0x9, %rax
                	subq	$0x24, %rax
-               	leaq	-0x10(%rbp), %rsp
                	leave
                	retq
 

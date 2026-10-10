@@ -79,7 +79,6 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movsbq	-0x1000(%rbp), %rcx
                	addq	%rcx, %rax
-               	leaq	-0x1020(%rbp), %rsp
                	leave
                	retq
 

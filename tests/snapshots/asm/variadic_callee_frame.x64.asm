@@ -140,7 +140,6 @@ Disassembly of section .text:
                	movl	-0xd0(%rbp), %eax
                	addq	%rcx, %rax
                	subq	$0x4, %rax
-               	leaq	-0xd0(%rbp), %rsp
                	leave
                	retq
 
@@ -209,7 +208,6 @@ Disassembly of section .text:
                	movq	%rcx, (%rax)
                	movq	%rdx, 0x8(%rax)
                	movq	%rsi, 0x10(%rax)
-               	leaq	-0xd0(%rbp), %rsp
                	leave
                	retq
 

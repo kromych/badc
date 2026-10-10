@@ -273,7 +273,7 @@ Disassembly of section .text:
                	cset	x0, ne
                	sub	sp, x29, #0x30
                	ldr	x20, [sp]
-               	add	sp, sp, #0x30
+               	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
 

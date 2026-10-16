@@ -68,13 +68,12 @@ Disassembly of section .text:
                	mul	x14, x1, x1
                	adrp	x15, <page>
                	add	x15, x15, <lo12>
-               	mov	x16, x15
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	stp	x13, x14, [sp, #0x20]
-               	str	x15, [sp, #0x30]
-               	ldr	x9, [x16]
-               	ldr	x10, [x16, #0x8]
+               	str	x0, [sp, #0x30]
+               	ldr	x9, [x15]
+               	ldr	x10, [x15, #0x8]
                	lsr	x11, x10, #63
                	lsl	x11, x11, #63
                	lsl	x12, x10, #1
@@ -114,12 +113,12 @@ Disassembly of section .text:
                	sub	x13, x13, x12
                	bic	x13, x13, x13, asr #63
                	add	x13, x13, #0xa
-               	mov	x15, #0x3f              // =63
-               	cmp	x13, x15
+               	mov	x0, #0x3f               // =63
+               	cmp	x13, x0
                	b.gt	<addr>
                	lsr	x14, x10, #1
                	lsr	x14, x14, x13
-               	lsr	x15, x10, x13
+               	lsr	x0, x10, x13
                	neg	x13, x13
                	lsl	x10, x10, x13
                	cmp	x10, #0x0
@@ -127,8 +126,8 @@ Disassembly of section .text:
                	orr	x9, x9, x10
                	and	x10, x14, #0x1
                	orr	x9, x9, x10
-               	and	x15, x15, #0x1
-               	and	x9, x9, x15
+               	and	x0, x0, #0x1
+               	and	x9, x9, x0
                	sub	x10, x12, #0x1
                	bic	x12, x10, x10, asr #63
                	add	x14, x14, x12, lsl #52
@@ -142,7 +141,7 @@ Disassembly of section .text:
                	ldp	x9, x10, [sp]
                	ldp	x11, x12, [sp, #0x10]
                	ldp	x13, x14, [sp, #0x20]
-               	ldr	x15, [sp, #0x30]
+               	ldr	x0, [sp, #0x30]
                	add	x20, x7, x8, lsl #1
                	mov	x17, #0x3               // =3
                	mul	x21, x2, x17
@@ -178,7 +177,6 @@ Disassembly of section .text:
                	add	x20, x20, x21
                	fmov	d0, #2.00000000
                	fmul	d0, d8, d0
-               	mov	x16, x15
                	stp	x9, x10, [sp]
                	stp	x11, x12, [sp, #0x10]
                	str	x13, [sp, #0x20]
@@ -214,8 +212,8 @@ Disassembly of section .text:
                	mov	x11, #0x3c01            // =15361
                	sub	x11, x11, x13
                	b	<addr>
-               	str	x9, [x16, #0x10]
-               	str	x10, [x16, #0x18]
+               	str	x9, [x15, #0x10]
+               	str	x10, [x15, #0x18]
                	ldp	x9, x10, [sp]
                	ldp	x11, x12, [sp, #0x10]
                	ldr	x13, [sp, #0x20]

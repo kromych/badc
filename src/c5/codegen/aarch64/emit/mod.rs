@@ -85,7 +85,7 @@ pub(crate) use function::emit_function;
 pub(super) use inline_asm::a64_align_asm_stream;
 pub(crate) use inline_asm::encode_a64_file_asm_section_code;
 pub(super) use mem::{
-    NARROW_BORROW, bound_base, emit_agg_load_int, emit_mem, emit_reg_disp, enc_store_unit,
+    borrow_regs, bound_base, emit_agg_load_int, emit_mem, emit_reg_disp, enc_store_unit,
     object_base,
 };
 

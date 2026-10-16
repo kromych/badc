@@ -406,3 +406,25 @@ fn no_fp_scratch_left_is_a_diagnostic() {
     );
     text_under(int_only, x64, reserve(x64, &names)).unwrap_or_else(|e| panic!("{e}"));
 }
+
+/// An AArch64 sequence that saves and restores the registers it borrows
+/// takes them from x0..x15 outside its operands and the reservations, and
+/// is refused by name when fewer remain: a binary128 load borrows seven
+/// beside its address in x0.
+#[test]
+fn too_few_registers_to_borrow_is_a_diagnostic() {
+    let src = "double ld_load(long double *p) { return (double)p[0]; }\n\
+               int main(void) { return 0; }\n";
+    let a64 = Target::LinuxAarch64;
+    let from = |first: u8| -> Vec<String> { (first..=15).map(|n| format!("x{n}")).collect() };
+    let eight = from(8);
+    let names: Vec<&str> = eight.iter().map(String::as_str).collect();
+    text_under(src, a64, reserve(a64, &names)).unwrap_or_else(|e| panic!("{e}"));
+    let nine = from(7);
+    let names: Vec<&str> = nine.iter().map(String::as_str).collect();
+    let err = text_under(src, a64, reserve(a64, &names)).expect_err("six left for seven");
+    assert!(
+        err.contains("needs 7 of x0..x15") && err.contains("ld_load"),
+        "{err}"
+    );
+}

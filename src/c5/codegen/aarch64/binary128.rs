@@ -5,18 +5,17 @@
 //! `f128_to_f64` / `f64_to_f128` step for step -- widening is exact,
 //! narrowing rounds to nearest with ties to even.
 //!
-//! Each sequence borrows integer registers from the allocator's pool
-//! and restores them before it ends; the saves live at `[sp, #0]`, in
-//! the outgoing argument area the prologue reserved or in bytes the
-//! sequence lowers sp by where the frame reserves none
-//! (`Frame::sp_lowering`). `addr` must name a register outside the
-//! borrow pool, and nothing between the save and the restore addresses
-//! sp.
+//! Each sequence borrows integer registers other than `addr` and the
+//! `-ffixed-` ones ([`borrow_regs`]) and restores them before it ends;
+//! the saves live at `[sp, #0]`, in the outgoing argument area the
+//! prologue reserved or in bytes the sequence lowers sp by where the
+//! frame reserves none (`Frame::sp_lowering`). Nothing between the save
+//! and the restore addresses sp.
 
 use alloc::vec::Vec;
 
 use super::emit::{
-    Frame, NARROW_BORROW, bound_base, emit_agg_load_int, emit_mem, enc_store_unit, object_base,
+    Frame, borrow_regs, bound_base, emit_agg_load_int, emit_mem, enc_store_unit, object_base,
 };
 use super::encode::RegShift::{Asr, Lsl, Lsr};
 use super::encode::{
@@ -27,6 +26,7 @@ use super::encode::{
     enc_mov_reg, enc_movz, enc_orr_reg, enc_rrr_shifted, enc_stp_off, enc_str_imm, enc_sub_imm,
     enc_sub_imm_lsl12, enc_sub_reg, enc_subs_imm,
 };
+use crate::c5::codegen::ssa::emit_common::Emit;
 
 /// The exponent bias difference between binary128 and binary64, less
 /// the 1023 the rounding step adds back.
@@ -37,23 +37,6 @@ pub(super) const NARROW_BORROW_BYTES: u32 = 64;
 
 /// Outgoing-area bytes a widening sequence's five borrows take.
 pub(super) const WIDEN_BORROW_BYTES: u32 = 48;
-
-/// Registers each sequence borrows, in the order they are assigned.
-fn borrow<const N: usize>(addr: Reg) -> [Reg; N] {
-    let mut out = [Reg(0); N];
-    let mut n = 0;
-    for cand in NARROW_BORROW {
-        if n == N {
-            break;
-        }
-        if cand != addr.0 {
-            out[n] = Reg(cand);
-            n += 1;
-        }
-    }
-    debug_assert_eq!(n, N, "binary128: no free borrow register");
-    out
-}
 
 /// Save `regs` at `[sp, #0]`; returns how far sp was lowered for them
 /// ([`Frame::sp_lowering`]).
@@ -149,8 +132,12 @@ pub(super) fn emit_narrow_load(
     disp: i64,
     bound: Option<u32>,
     frame: Frame,
-) {
-    let r = borrow::<7>(addr);
+) -> Emit {
+    let r = borrow_regs::<7>(
+        &[addr.0],
+        frame.fixed_regs,
+        "a binary128 `long double` load",
+    )?;
     let (lo, hi, sgn, exp, tmp, acc, aux) = (r[0], r[1], r[2], r[3], r[4], r[5], r[6]);
     let lowered = save(code, &r, frame);
     match bound {
@@ -240,6 +227,7 @@ pub(super) fn emit_narrow_load(
     patch(code, inf_done);
     emit(code, enc_fmov_x_to_d(dd, acc));
     restore(code, &r, lowered);
+    Ok(())
 }
 
 /// Widen the f64 in `dn` into the binary128 object at `[addr + disp]`.
@@ -252,8 +240,12 @@ pub(super) fn emit_widen_store(
     disp: i64,
     bound: Option<u32>,
     frame: Frame,
-) {
-    let r = borrow::<5>(addr);
+) -> Emit {
+    let r = borrow_regs::<5>(
+        &[addr.0],
+        frame.fixed_regs,
+        "a binary128 `long double` store",
+    )?;
     let (lo, hi, exp, man, tmp) = (r[0], r[1], r[2], r[3], r[4]);
     let lowered = save(code, &r, frame);
     emit(code, enc_fmov_d_to_x(lo, dn));
@@ -312,6 +304,7 @@ pub(super) fn emit_widen_store(
         }
     }
     restore(code, &r, lowered);
+    Ok(())
 }
 
 /// Write the 8 bytes of `rs` to `[addr + off]` in `align`-wide pieces.

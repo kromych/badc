@@ -226,13 +226,9 @@ pub(super) fn emit_va_copy_aapcs64(
     else {
         return fail("VaCopy: src not int reg / spill");
     };
-    // A caller-saved transfer register distinct from both pointers, saved
-    // and restored around the copy.
-    let borrow = [9u8, 10, 11]
-        .into_iter()
-        .map(Reg)
-        .find(|r| r.0 != dst_r.0 && r.0 != src_r.0)
-        .expect("a caller-saved transfer register is always free");
+    // A transfer register distinct from both pointers, saved and restored
+    // around the copy.
+    let [borrow] = borrow_regs::<1>(&[dst_r.0, src_r.0], frame.fixed_regs, "`va_copy`")?;
     emit(code, enc_str_pre(borrow, Reg(31), -16));
     for off in [0u32, 8, 16, 24] {
         emit(code, enc_ldr_imm(borrow, src_r, off));
@@ -274,7 +270,7 @@ pub(super) fn emit_va_copy_cursor(
 /// vector slot and are copied to the temporary `args[2]` names, whose
 /// address is returned.
 /// x17 holds the struct pointer, x16 the offset then the address, and a
-/// borrowed x9 / x10 / x11 (saved around the sequence) the area top.
+/// register borrowed around the sequence ([`borrow_regs`]) the area top.
 pub(super) fn emit_va_arg_aapcs64(
     code: &mut Vec<u8>,
     args: &[u32],
@@ -348,12 +344,8 @@ pub(super) fn emit_va_arg_aapcs64(
         _ => None,
     };
     let temp = args.get(2).map_or(Place::None, |&t| place_of(alloc, t));
-    let busy = [reg_of(dst), reg_of(temp)];
-    let borrow = [9u8, 10, 11]
-        .into_iter()
-        .find(|r| !busy.contains(&Some(*r)))
-        .map(Reg)
-        .expect("three candidates for two busy registers");
+    let busy: Vec<u8> = [dst, temp].into_iter().filter_map(reg_of).collect();
+    let [borrow] = borrow_regs::<1>(&busy, frame.fixed_regs, "`va_arg`")?;
     emit(code, enc_str_pre(borrow, Reg(31), -16));
     // x16 = offs (the signed 32-bit field, sign-extended into x16).
     emit(code, enc_ldrsw_imm(scratch.primary, ap, off_field));
@@ -1078,10 +1070,8 @@ impl CallArgs<'_> {
             }
             // Past the offset forms the destination takes a pool register,
             // saved below sp around the copy.
-            let free = |r: &u8| !self.abi.fixed_regs.has_gpr(*r);
-            let Some(dbase) = NARROW_BORROW.iter().copied().find(free).map(Reg) else {
-                return fail("Call: no register for a stack aggregate past the offset forms");
-            };
+            let what = "a stack argument copy past the offset forms";
+            let [dbase] = borrow_regs::<1>(&[], self.abi.fixed_regs, what)?;
             emit(code, enc_str_pre(dbase, Reg(31), -16));
             emit_sp_plus_off(code, dbase, off + 16);
             if from > 0 {

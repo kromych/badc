@@ -3239,6 +3239,8 @@ fn a_cast_to_an_array_or_function_type_is_rejected() {
         ("void *v = (A)0;", array),
         ("long x = (long)(int[2])0;", array),
         ("int n = sizeof((FP[2])0);", array),
+        ("long y = (long)(int (void))f;", function),
+        ("void *w = (int (void))f;", function),
     ] {
         let src = format!("{decls}{body}\nint main(void) {{ return 0; }}\n");
         let err = Compiler::new(src.clone()).compile().expect_err(&src);

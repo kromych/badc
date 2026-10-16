@@ -53,31 +53,6 @@ pub(super) struct AbstractDecl {
     pub(super) derivations: alloc::vec::Vec<Derivation>,
 }
 
-impl AbstractDecl {
-    pub(super) fn pointer_levels(&self) -> i64 {
-        let pointers = self.derivations.iter();
-        pointers
-            .filter(|d| matches!(d, Derivation::Pointer(_)))
-            .count() as i64
-    }
-
-    /// The bounds of the array a pointer to an array (`T (*)[M1]...[Mn]`)
-    /// points to, or `None` for any other type.
-    pub(super) fn pointee_dims(&self) -> Option<alloc::vec::Vec<i64>> {
-        let [Derivation::Pointer(_), rest @ ..] = self.derivations.as_slice() else {
-            return None;
-        };
-        let bound = |d: &Derivation| match d {
-            Derivation::Array(n) => Some(*n),
-            _ => None,
-        };
-        rest.iter()
-            .map(bound)
-            .collect::<Option<_>>()
-            .filter(|b: &alloc::vec::Vec<i64>| !b.is_empty())
-    }
-}
-
 impl Compiler {
     /// Record the array shape `idx` holds before this declarator
     /// overwrites it, for the scope save that runs after the declarator.
@@ -183,18 +158,32 @@ impl Compiler {
     /// declarator (`T (name)` / `T (*name)`). A type-start (including a
     /// typedef-name) or an empty list marks the function-type form. The
     /// lexer snapshot keeps the peek from consuming the paren.
-    fn paren_opens_param_type_list(&mut self) -> bool {
+    pub(super) fn paren_opens_param_type_list(&mut self) -> bool {
         let snap = self.lex.snapshot();
         let mut ok = self.next().is_ok(); // past `(`
         // A parenthesized declarator may lead with calling-convention /
         // qualifier tokens (`(__stdcall *fp)`, `(__cdecl name)`), which also
         // start a type. Skip them; a `*` after them is a declarator, while a
         // type-start or `)` is a parameter-type list.
+        // An attribute is skipped whole; a type specifier makes a list.
+        let mut specifier = false;
         while ok && is_decl_modifier(self.lex.tk) {
+            let tk = self.lex.tk;
+            specifier |= tk == Token::IntMod
+                || tk == Token::Signed
+                || tk == Token::Unsigned
+                || tk == Token::Long
+                || tk == Token::Short;
+            let attribute = self.lex.tk == Token::Attribute;
             ok = self.next().is_ok();
+            if attribute && ok && self.lex.tk == '(' {
+                ok = self.next().is_ok() && self.skip_balanced_parens_after_open().is_ok();
+            }
         }
-        let is_param_list =
-            ok && self.lex.tk != Token::MulOp && (self.lex.tk == ')' || self.lex_is_type_start());
+        let is_param_list = ok
+            && (specifier
+                || (self.lex.tk != Token::MulOp
+                    && (self.lex.tk == ')' || self.lex_is_type_start())));
         self.restore_lex(snap);
         is_param_list
     }
@@ -232,9 +221,15 @@ impl Compiler {
     fn parse_abstract_group(&mut self, capture_proto: bool) -> Result<AbstractDecl, C5Error> {
         // Each `*` and the qualifiers of that pointer (C99 6.7.5.1p1).
         let mut ptrs: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
-        while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
+        loop {
+            if self.at_attribute_specifier() {
+                self.skip_attribute_specifiers()?;
+                continue;
+            }
             if self.lex.tk == Token::MulOp {
                 ptrs.push(0);
+            } else if self.lex.tk != Token::TypeQual {
+                break;
             } else if let Some(quals) = ptrs.last_mut() {
                 *quals |= self.lex_qualifier_bits();
             } else {

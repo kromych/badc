@@ -5768,29 +5768,9 @@ impl Compiler {
                 self.next()?;
             }
         }
-        // `T (*)(params)` names a pointer to function, `T (params)` the
-        // function type itself, `T (*)[N]` a pointer to an array and
-        // `T (*[N])(params)` an array of pointers to functions (C99 6.7.6).
         if self.lex.tk == '(' {
-            let abs = if self.lex.peek_after_whitespace(b'*') {
-                self.parse_abstract_ptr_declarator(true)?
-            } else {
-                self.next()?;
-                let pp = self.parse_type_name_params()?;
-                let derivations = alloc::vec![Derivation::Function(Some(pp))];
-                super::declarator::AbstractDecl { derivations }
-            };
-            for step in abs.derivations.into_iter().rev() {
-                match step {
-                    Derivation::Pointer(quals) => {
-                        self.derive_pointer(&mut t);
-                        t.ty = apply_qual_bits(t.ty, quals);
-                    }
-                    Derivation::Array(n) => self.derive_array(&mut t, n)?,
-                    Derivation::RuntimeArray(dim) => self.derive_runtime_array(&mut t, dim)?,
-                    Derivation::Function(pp) => self.derive_function(&mut t, pp)?,
-                }
-            }
+            let abs = self.paren_declarator()?;
+            self.apply_derivations(&mut t, abs)?;
         }
         // Abstract array declarator `T []` / `T [N]`, outermost bound first;
         // an array typedef base supplies the inner bounds.
@@ -5825,6 +5805,84 @@ impl Compiler {
             type_align,
             vla: t.vla,
             is_vla: t.vla_value,
+        })
+    }
+
+    /// The parenthesized part of an abstract declarator at its `(`: a
+    /// nested declarator or a function's parameter list (C99 6.7.6).
+    fn paren_declarator(&mut self) -> Result<super::declarator::AbstractDecl, C5Error> {
+        if !self.paren_opens_param_type_list() {
+            return self.parse_abstract_ptr_declarator(true);
+        }
+        self.next()?;
+        let pp = self.parse_type_name_params()?;
+        let derivations = alloc::vec![Derivation::Function(Some(pp))];
+        Ok(super::declarator::AbstractDecl { derivations })
+    }
+
+    /// Apply `abs`'s derivations to `t`, nearest the identifier last.
+    fn apply_derivations(
+        &mut self,
+        t: &mut DerivedType,
+        abs: super::declarator::AbstractDecl,
+    ) -> Result<(), C5Error> {
+        for step in abs.derivations.into_iter().rev() {
+            match step {
+                Derivation::Pointer(quals) => {
+                    self.derive_pointer(t);
+                    t.ty = apply_qual_bits(t.ty, quals);
+                }
+                Derivation::Array(n) => self.derive_array(t, n)?,
+                Derivation::RuntimeArray(dim) => self.derive_runtime_array(t, dim)?,
+                Derivation::Function(pp) => self.derive_function(t, pp)?,
+            }
+        }
+        Ok(())
+    }
+
+    /// A constant expression's type name derived through the parenthesized
+    /// abstract declarator at the cursor; no bound may vary (C99 6.6p6).
+    pub(super) fn derive_const_declarator(
+        &mut self,
+        ty: i64,
+        dims: alloc::vec::Vec<i64>,
+        (fn_ty, is_function): (Option<(FnType, i64)>, bool),
+    ) -> Result<super::const_expr::ConstTypeName, C5Error> {
+        let abs = self.paren_declarator()?;
+        if abs
+            .derivations
+            .iter()
+            .any(|d| matches!(d, Derivation::RuntimeArray(_)))
+        {
+            return Err(self.compile_err(
+                Code::CONSTANT_EXPRESSION,
+                "a variably modified type in a constant expression",
+            ));
+        }
+        let mut t = DerivedType {
+            ty,
+            own_bounds: dims.len(),
+            dims,
+            fn_ptr_indirection: fn_ty.as_ref().map(|&(_, d)| d),
+            fn_ty: fn_ty.map(|(f, d)| FnTypeName {
+                ptr_depth: if is_function { 0 } else { d as usize },
+                f,
+            }),
+            is_function,
+            ptr_levels: 0,
+            vla: None,
+            vla_value: false,
+        };
+        self.apply_derivations(&mut t, abs)?;
+        let fn_ty = t
+            .fn_ty
+            .map(|f| (f.f, f.ptr_depth as i64 - t.own_bounds as i64));
+        Ok(super::const_expr::ConstTypeName {
+            ty: t.ty,
+            dims: t.dims,
+            object_is_const: super::types::is_const_object_ty(t.ty),
+            fn_ty,
+            is_function: t.is_function,
         })
     }
 

@@ -2220,9 +2220,9 @@ impl Compiler {
         // an anonymous static array and the element stores its
         // address. Distinguished from a plain cast by the `[`, or
         // for an array typedef (`(row){...}`) by the `{` past `)`.
-        if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
+        if self.lex.tk == Token::Brak || self.at_array_type_literal(&name)? {
             let elem = (cast_ty, name.fn_ty.clone());
-            let (v, reloc, dims) = self.parse_array_compound_literal(elem, &name.base_dims)?;
+            let (v, reloc, dims) = self.parse_array_compound_literal(elem, &name.dims)?;
             if let InitElemReloc::Data(Some(sym)) = reloc {
                 self.symbols[sym].storage_is_const = name.object_is_const;
                 self.reject_automatic_compound_literal(sym)?;
@@ -2231,6 +2231,7 @@ impl Compiler {
             let ty = self.array_value_ty(cast_ty, &dims);
             return Ok(InitLeaf::of(v, reloc, ty));
         }
+        self.reject_cast_type(!name.dims.is_empty(), name.is_function)?;
         // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
         // brace holds a single value; the result is that value
         // converted to `T`, keeping any relocation it carries.
@@ -2303,31 +2304,6 @@ impl Compiler {
             self.restore_lex(snap);
             return self.parse_constant_init_scalar();
         }
-        // A function-pointer abstract declarator `(*)(args)` after the
-        // base type: skip to the cast's outer `)` by paren count, then
-        // past the argument list. The value takes the cast's type.
-        let mut leaf_ty = cast_ty;
-        if self.lex.tk == '(' {
-            leaf_ty = add_ptr_level(cast_ty);
-            let mut depth: i64 = 1;
-            self.next()?;
-            while depth > 0 && self.lex.tk != 0 {
-                if self.lex.tk == '(' {
-                    depth += 1;
-                } else if self.lex.tk == ')' {
-                    depth -= 1;
-                    if depth == 0 {
-                        self.next()?;
-                        break;
-                    }
-                }
-                self.next()?;
-            }
-            if self.lex.tk == '(' {
-                self.next()?;
-                self.skip_balanced_parens_after_open()?;
-            }
-        }
         if self.lex.tk != ')' {
             return Err(self.compile_err(
                 Code::SYNTAX,
@@ -2337,7 +2313,7 @@ impl Compiler {
         self.next()?;
         let leaf = self.parse_constant_init_value()?;
         Ok(InitLeaf {
-            ty: leaf_ty,
+            ty: cast_ty,
             ..leaf
         })
     }

@@ -120,15 +120,16 @@ pub(super) enum ConstRoot {
 /// compound literal's type.
 pub(super) struct ConstTypeName {
     pub ty: i64,
-    /// An array typedef's dimensions, when no pointer derivation absorbed
-    /// them into a pointee.
-    pub base_dims: alloc::vec::Vec<i64>,
+    /// The bounds of an array type, outermost first.
+    pub dims: alloc::vec::Vec<i64>,
     /// The named object's own storage is const-qualified (C99 6.7.3): a
     /// `const` among the specifiers of a non-pointer type, or one after
     /// the outermost `*`.
     pub object_is_const: bool,
     /// The function type the named type leads to, and its depth.
     pub fn_ty: Option<(crate::c5::symbol::FnType, i64)>,
+    /// The named type is a function type.
+    pub is_function: bool,
 }
 
 impl ConstRoot {
@@ -2207,8 +2208,17 @@ impl Compiler {
     /// initialized.
     pub(super) fn parse_const_type_name(&mut self) -> Result<ConstTypeName, C5Error> {
         let outer = self.pending.take_decl_type_carriers();
-        let r = self.parse_const_type_name_inner();
+        let outer_conv = core::mem::take(&mut self.pending.attrs.call_conv);
+        let mut r = self.parse_const_type_name_inner();
+        let conv = core::mem::replace(&mut self.pending.attrs.call_conv, outer_conv);
         self.pending.restore_decl_type_carriers(outer);
+        if let Ok(ConstTypeName {
+            fn_ty: Some((f, _)),
+            ..
+        }) = &mut r
+        {
+            f.conv = conv;
+        }
         r
     }
 
@@ -2223,7 +2233,8 @@ impl Compiler {
         let ptr_levels = ptr.levels;
         // The first `*` on a function-type typedef forms the pointer to the
         // function, as in a declarator.
-        let absorbed = core::mem::take(&mut self.pending.base_is_function_type) && ptr_levels > 0;
+        let base_is_fn = core::mem::take(&mut self.pending.base_is_function_type);
+        let absorbed = base_is_fn && ptr_levels > 0;
         let ty = if absorbed {
             super::types::absorb_function_level(ptr.ty, super::types::ptr_depth_of(ty))
         } else {
@@ -2235,23 +2246,24 @@ impl Compiler {
         while self.lex.tk == Token::TypeQual {
             self.next()?;
         }
-        let base_dims = self.take_typedef_literal_dims(ptr_levels);
+        let dims = self.take_typedef_literal_dims(ptr_levels);
+        let is_function = base_is_fn && !absorbed;
+        if self.lex.tk == '(' {
+            return self.derive_const_declarator(ty, dims, (fn_ty, is_function));
+        }
         Ok(ConstTypeName {
             ty,
-            base_dims,
+            dims,
             object_is_const: outer_const || (base_is_const && ptr_levels == 0),
             fn_ty,
+            is_function,
         })
     }
 
-    /// On the `)` closing a type name an array typedef completed: whether
-    /// a `{` follows, which makes it a compound literal of the array type
-    /// rather than a cast. The lexer position is unchanged on return.
-    pub(super) fn at_typedef_array_literal(
-        &mut self,
-        name: &ConstTypeName,
-    ) -> Result<bool, C5Error> {
-        if name.base_dims.is_empty() || self.lex.tk != ')' {
+    /// On the `)` closing an array type name: whether a `{` follows (a
+    /// compound literal, not a cast); the lexer does not move.
+    pub(super) fn at_array_type_literal(&mut self, name: &ConstTypeName) -> Result<bool, C5Error> {
+        if name.dims.is_empty() || self.lex.tk != ')' {
             return Ok(false);
         }
         let snap = self.lex.snapshot();
@@ -2321,10 +2333,10 @@ impl Compiler {
                 // following `[i].member` chain designates -- typed by the
                 // element for one dimension, by the array-aggregate tag for
                 // more so each subscript strides by its row.
-                if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
+                if self.lex.tk == Token::Brak || self.at_array_type_literal(&name)? {
                     let elem = (ty, name.fn_ty.clone());
                     let (off, sym, dims) =
-                        self.emit_array_compound_literal_body(elem, &name.base_dims)?;
+                        self.emit_array_compound_literal_body(elem, &name.dims)?;
                     self.symbols[sym].storage_is_const = name.object_is_const;
                     let count = dims.first().copied().unwrap_or(0);
                     let desig_ty = self.array_desig_ty(ty, &dims, count);
@@ -2342,7 +2354,7 @@ impl Compiler {
                         "close paren expected after cast type in constant expression",
                     ));
                 }
-                self.reject_cast_type(!name.base_dims.is_empty(), false)?;
+                self.reject_cast_type(!name.dims.is_empty(), name.is_function)?;
                 self.next()?;
                 // C99 6.5.2.5 compound literal `(T){ ... }`: an anonymous
                 // static object, an lvalue whose address is the constant. A
@@ -2581,16 +2593,11 @@ impl Compiler {
                 .any(|r| hit(r.data_offset))
     }
 
-    /// An integer constant of type `ty` whose `i128` is the value the type
-    /// represents: the low bits of `v` at the type's width, zero-extended
-    /// for an unsigned type. A 64-bit literal or object read arrives as
-    /// sign-extended `i64` bits, which read as negative in a conversion to
-    /// a floating type (C99 6.3.1.4p2).
     /// C99 6.6p9: an integer constant converted to pointer type `ty` is an
     /// address constant with no symbol, whose arithmetic strides by the
-    /// pointee (6.5.6p8) -- `array_pointee` when it points to an array.
-    fn const_pointer_of(&self, v: i128, ty: i64, array_pointee: Option<i64>) -> ConstVal {
-        let pointee = array_pointee.unwrap_or_else(|| pointee_ty(ty));
+    /// pointee (6.5.6p8).
+    fn const_pointer_of(&self, v: i128, ty: i64) -> ConstVal {
+        let pointee = pointee_ty(ty);
         ConstVal::Addr(ConstAddr {
             value: v as i64,
             root: ConstRoot::None,
@@ -2600,6 +2607,8 @@ impl Compiler {
         })
     }
 
+    /// An integer constant of type `ty`: the low bits of `v` at its width,
+    /// zero-extended for an unsigned type.
     pub(super) fn const_int_of(&self, v: i128, ty: i64) -> ConstVal {
         let bytes = self.size_of_type(ty);
         let is_bool = strip_unsigned(ty) == Ty::Bool as i64;
@@ -2738,7 +2747,7 @@ impl Compiler {
         Some(match (is_floating_scalar(ty), size) {
             (true, 4) => ConstVal::float(f32::from_bits(bits as u32) as f64, ty),
             (true, _) => ConstVal::float(f64::from_bits(bits as u64), ty),
-            _ if is_pointer_ty(ty) => self.const_pointer_of(bits, ty, None),
+            _ if is_pointer_ty(ty) => self.const_pointer_of(bits, ty),
             (false, _) => self.const_int_of(bits, ty),
         })
     }
@@ -2862,16 +2871,16 @@ impl Compiler {
             // the cast clamps it back to integer per C99 6.3.1.4.
             if self.lex_is_type_start() {
                 let name = self.parse_const_type_name()?;
-                let mut target_ty = name.ty;
+                let target_ty = name.ty;
                 // C99 6.5.2.5 array-typed compound literal `(T[]){...}` in a
                 // value context: the literal decays to the address of its
                 // anonymous static object. A subscript chain selects a row
                 // per leading index; the final index reads the staged
                 // element back as the constant value.
-                if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
+                if self.lex.tk == Token::Brak || self.at_array_type_literal(&name)? {
                     let elem = (target_ty, name.fn_ty.clone());
                     let (off, sym, dims) =
-                        self.emit_array_compound_literal_body(elem, &name.base_dims)?;
+                        self.emit_array_compound_literal_body(elem, &name.dims)?;
                     self.pending.const_expr_compound_literal = true;
                     self.symbols[sym].storage_is_const = name.object_is_const;
                     let elem_size = (self.size_of_type(target_ty) as i64).max(1);
@@ -2912,31 +2921,10 @@ impl Compiler {
                         ty: add_ptr_level(row),
                     }));
                 }
-                // Parenthesized abstract declarator: `(*)(args)` (function
-                // pointer) or `(*)[N]` (pointer to array). The shared helper
-                // returns the pointer level and a pointed-to array's
-                // dimensions (C99 6.7.7).
-                let mut array_pointee = None;
-                if self.lex.tk == '(' {
-                    let abs = self.parse_abstract_ptr_declarator(false)?;
-                    let levels = abs.pointer_levels() * Ty::Ptr as i64;
-                    match abs.pointee_dims().filter(|d| d.iter().all(|&d| d > 0)) {
-                        // The pointer to the array, which arithmetic strides
-                        // by (C99 6.5.6p8) and the value keeps as its type.
-                        Some(dims) => {
-                            target_ty = self.array_agg_type(target_ty, &dims) + levels;
-                            array_pointee = Some(pointee_ty(target_ty));
-                        }
-                        None => target_ty += levels,
-                    }
-                    while self.lex.tk == Token::TypeQual {
-                        self.next()?;
-                    }
-                }
                 if self.lex.tk != ')' {
                     return Err(self.compile_err(Code::SYNTAX, "close paren expected after cast"));
                 }
-                self.reject_cast_type(!name.base_dims.is_empty(), false)?;
+                self.reject_cast_type(!name.dims.is_empty(), name.is_function)?;
                 self.next()?;
                 self.reject_void_value(target_ty)?;
                 // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
@@ -2993,10 +2981,7 @@ impl Compiler {
                     let ptr_target = is_pointer_ty(target_ty)
                         || (is_struct_ty(target_ty) && struct_ptr_depth(target_ty) > 0);
                     a.ty = target_ty;
-                    a.pointee = match array_pointee {
-                        Some(arr) => Some(arr),
-                        None => ptr_target.then(|| pointee_ty(target_ty)),
-                    };
+                    a.pointee = ptr_target.then(|| pointee_ty(target_ty));
                     a.elem_size = a
                         .pointee
                         .map_or(1, |p| (self.size_of_type(p) as i64).max(1));
@@ -3006,7 +2991,7 @@ impl Compiler {
                     let ptr_target = is_pointer_ty(target_ty)
                         || (is_struct_ty(target_ty) && struct_ptr_depth(target_ty) > 0);
                     if ptr_target {
-                        return Ok(self.const_pointer_of(v.as_i128(), target_ty, array_pointee));
+                        return Ok(self.const_pointer_of(v.as_i128(), target_ty));
                     }
                 }
                 return Ok(self.const_convert(v, target_ty));

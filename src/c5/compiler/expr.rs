@@ -2913,7 +2913,19 @@ impl Compiler {
             }
             return Ok(());
         }
+        let function = type_name.fn_ty.as_ref().is_some_and(|f| f.ptr_depth == 0);
+        self.reject_cast_type(!type_name.dims.is_empty() || type_name.is_vla, function)?;
         self.parse_cast_operand(type_name)
+    }
+
+    /// C99 6.5.4p2: a cast names `void` or a scalar type.
+    pub(super) fn reject_cast_type(&self, array: bool, function: bool) -> Result<(), C5Error> {
+        if array || function {
+            let what = if array { "array" } else { "function" };
+            let text = format!("cast specifies {what} type");
+            return Err(self.compile_err(Code::INVALID_OPERANDS, text));
+        }
+        Ok(())
     }
 
     /// The operand of a cast and its conversion to the named type

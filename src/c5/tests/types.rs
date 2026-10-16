@@ -3219,6 +3219,40 @@ fn an_operand_inside_its_c99_category_is_accepted() {
     }
 }
 
+/// C99 6.5.4p2: a cast names `void` or a scalar type, at block and file scope.
+#[test]
+fn a_cast_to_an_array_or_function_type_is_rejected() {
+    use crate::Compiler;
+    let array = "cast specifies array type [B3020]";
+    let function = "cast specifies function type [B3020]";
+    let decls = "typedef int (*FP)(void);\ntypedef int A[2];\nint f(void);\n";
+    for (body, text) in [
+        ("int t(void) { void *v = (FP[2])0; return v != 0; }", array),
+        ("int t(void) { void *v = (A)0; return v != 0; }", array),
+        ("unsigned long t(void) { return sizeof((int[2])0); }", array),
+        (
+            "int t(int n) { void *v = (int[n])0; return v != 0; }",
+            array,
+        ),
+        ("long t(void) { return (long)(int (void))f; }", function),
+        ("void *v = (FP[2])0;", array),
+        ("void *v = (A)0;", array),
+        ("long x = (long)(int[2])0;", array),
+        ("int n = sizeof((FP[2])0);", array),
+    ] {
+        let src = format!("{decls}{body}\nint main(void) {{ return 0; }}\n");
+        let err = Compiler::new(src.clone()).compile().expect_err(&src);
+        assert!(err.to_string().contains(text), "{src}{err}");
+    }
+    for body in [
+        "int t(void) { FP *p = (FP[2]){f, 0}; int *q = (A){1, 2}; return q[1] + (p[1] == 0); }",
+        "FP *p = (FP[2]){f, 0};\nint *q = (A){1, 2};",
+    ] {
+        let src = format!("{decls}{body}\nint main(void) {{ return 0; }}\n");
+        Compiler::new(src.clone()).compile().expect(&src);
+    }
+}
+
 #[test]
 fn the_address_of_a_function_designator_is_the_function_pointer() {
     // C99 6.5.3.2p3: `&` on an operand of function type yields a pointer

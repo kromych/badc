@@ -2646,12 +2646,7 @@ impl Compiler {
             );
         }
         self.next()?; // consume `)`
-        if self.lex.tk != '{' {
-            return Err(self.compile_err(
-                Code::SYNTAX,
-                "`{` expected to start compound-literal initializer",
-            ));
-        }
+        self.reject_cast_type(self.lex.tk != '{', false)?;
         let elem_size = self.size_of_type(elem_ty);
         let elem_is_struct = is_struct_value_ty(elem_ty);
         let inner_span: i64 = dims[1..].iter().product::<i64>().max(1);

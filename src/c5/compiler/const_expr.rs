@@ -2223,6 +2223,7 @@ impl Compiler {
                         "close paren expected after cast type in constant expression",
                     ));
                 }
+                self.reject_cast_type(!name.base_dims.is_empty(), false)?;
                 self.next()?;
                 // C99 6.5.2.5 compound literal `(T){ ... }`: an anonymous
                 // static object, an lvalue whose address is the constant. A
@@ -2816,6 +2817,7 @@ impl Compiler {
                 if self.lex.tk != ')' {
                     return Err(self.compile_err(Code::SYNTAX, "close paren expected after cast"));
                 }
+                self.reject_cast_type(!name.base_dims.is_empty(), false)?;
                 self.next()?;
                 self.reject_void_value(target_ty)?;
                 // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the

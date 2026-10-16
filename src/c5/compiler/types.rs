@@ -692,7 +692,9 @@ pub(super) fn format_type(ty: i64, structs: &[super::StructDef]) -> alloc::strin
             .map(|s| s.name.as_str())
             .filter(|n| !n.is_empty())
             .unwrap_or("<anonymous>");
-        let depth = ptr_depth_of(ty) as usize;
+        let Ok(depth) = usize::try_from(ptr_depth_of(ty)) else {
+            return format!("{prefix}ty@{bare}");
+        };
         return format!("{base_const}enum {name}{}", ptr_suffix(ty, depth));
     }
     if bare >= STRUCT_BASE {
@@ -799,7 +801,7 @@ pub(super) fn format_fn_type(
     (tag, depth): (i64, i64),
     structs: &[super::StructDef],
 ) -> alloc::string::String {
-    let top = ptr_depth_of(tag) as usize;
+    let top = usize::try_from(ptr_depth_of(tag)).unwrap_or(0);
     let mut decl = alloc::string::String::new();
     let mut level = Some((f, depth));
     while let Some((f, depth)) = level {
@@ -839,6 +841,7 @@ pub(super) fn fn_type_spelling(
         levels += d;
         next = r.ret.as_ref();
     }
+    let levels = levels.min(ptr_depth_of(tag));
     let ret = (0..levels).fold(tag, |t, _| pointee_ty(t));
     format_fn_type(ret, f, (tag, depth), structs)
 }
@@ -1647,6 +1650,16 @@ mod ty_tag {
         assert_eq!(unqualified_version_ty(vp), vp);
         assert_eq!(unqualified_version_ty(r), p);
         assert_eq!(unqualified_version_ty(cint), int);
+    }
+
+    #[test]
+    fn a_spelling_terminates_for_every_tag() {
+        // A function chain deeper than its `int *` tag spells from the
+        // tag's base; a tag below every band spells as no type.
+        let f = crate::c5::symbol::FnType::default();
+        let s = fn_type_spelling(add_ptr_level(Ty::Int as i64), &f, 2, &[]);
+        assert_eq!(s, "int (**)()");
+        assert!(format_type(-1, &[]).contains("ty@"));
     }
 
     #[test]

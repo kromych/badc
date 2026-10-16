@@ -92,6 +92,7 @@ fn pure(inst: &Inst) -> bool {
         | Inst::Extend { .. }
         | Inst::Phi { .. }
         | Inst::LifetimeEnd(_)
+        | Inst::MulAdd { .. }
         | Inst::ShiftOp { .. } => true,
         Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
             !matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu)

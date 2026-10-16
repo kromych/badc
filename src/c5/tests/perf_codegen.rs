@@ -4683,6 +4683,59 @@ fn a64_a_fused_shift_keeps_the_early_return_the_flags_and_sxtw() {
     m.finish();
 }
 
+/// A multiply-add contracted into `madd` keeps what the multiply and the
+/// add allowed apart: the return ahead of the frame when the entry
+/// computes one (`gm`), the compare's flags for a branch across one
+/// (`fm`), and the `sxtw` of a sign-narrowing shift pair around one
+/// (`sxm`).
+#[test]
+fn a64_a_multiply_add_keeps_the_early_return_the_flags_and_sxtw() {
+    const SRC: &str = "extern long foo(long);\n\
+        long gm(long *p, long a, long b, long c) {\n\
+            long t = a * b + c;\n\
+            if (p == 0) return 0;\n\
+            long r = 0;\n\
+            for (int i = 0; i < 10; i++) r += foo(p[i] + t);\n\
+            return r;\n\
+        }\n\
+        long fm(long a, long b, long x, long y, long *p) {\n\
+            int c = a < b;\n\
+            long t = x * y + a;\n\
+            if (c) return t + p[1];\n\
+            return p[0] - t;\n\
+        }\n\
+        long g1, g2;\n\
+        void sxm(long x, long a, long b, long c) {\n\
+            long t = (long)((unsigned long)x << 32);\n\
+            long u = a * b + c;\n\
+            long v = t >> 32;\n\
+            g1 = v;\n\
+            g2 = u;\n\
+        }\n";
+    // 64-bit MADD.
+    let madd = |w: u32| w & 0xFFE0_8000 == 0x9B00_0000;
+    let mut m = Misses::default();
+    for name in ["gm", "fm", "sxm"] {
+        let ws = a64(SRC, name);
+        m.expect(ws.iter().any(|&w| madd(w)), || {
+            format!("{name}: no madd: {ws:08x?}")
+        });
+    }
+    let ws = a64(SRC, "gm");
+    m.expect(a64_early_return(&ws).is_some(), || {
+        format!("gm: no bare return ahead of the frame: {ws:08x?}")
+    });
+    let ws = a64(SRC, "fm");
+    m.expect(!ws.iter().any(|&w| a64_is_cset(w)), || {
+        format!("fm: the compare's flags are materialised: {ws:08x?}")
+    });
+    let ws = a64(SRC, "sxm");
+    m.expect(ws.iter().any(|&w| a64_is_sxtw(w)), || {
+        format!("sxm: the shift pair is no sxtw: {ws:08x?}")
+    });
+    m.finish();
+}
+
 /// A field of a local struct whose address escapes is one `ldr` / `str`
 /// off the frame base, not an access through a built address.
 #[test]

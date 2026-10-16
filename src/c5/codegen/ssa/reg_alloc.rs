@@ -1487,6 +1487,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::StoreIndexed { .. }
             | Inst::SegLoad { .. }
             | Inst::SegStore { .. } => true,
+            // AArch64 `madd` / `msub` write only the result; the x86-64
+            // lowering may form the product in a multiplicand's register.
+            Inst::MulAdd { .. } => !target.is_x86_64(),
             Inst::BinopI { op, .. } => {
                 !matches!(op, BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu)
             }
@@ -1656,9 +1659,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                 !(is_x86 && matches!(kind, FpCastKind::UFpToInt | FpCastKind::UIntToFp))
             }
             // x86-64 `neg` sets the flags; the aarch64 `sub Xd,XZR,Xn` it
-            // lowers to does not, nor does a shifted-register ADD, SUB, AND,
-            // ORR or EOR.
-            Inst::Neg(_) | Inst::BitCount { .. } | Inst::ShiftOp { .. } => !is_x86,
+            // lowers to does not, nor do MADD, MSUB and a shifted-register
+            // ADD, SUB, AND, ORR or EOR.
+            Inst::Neg(_) | Inst::BitCount { .. } | Inst::MulAdd { .. } | Inst::ShiftOp { .. } => {
+                !is_x86
+            }
             Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
                 if is_x86 {
                     matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)

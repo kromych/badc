@@ -274,8 +274,14 @@ pub(crate) fn emit_function(
     let mcount_frame = entry.profile.is_some_and(|call| call.after_prologue);
     let early_exit = if repeat_tests && !mcount_frame && !is_full_leaf(func, frame, alloc, abi) {
         super::ssa::early_exit::early_exit(func, alloc, &param_plan).filter(|exit| {
-            emit_early_test(&mut Vec::new(), exit).is_some()
-                && emit_early_return(&mut Vec::new(), exit, abi, &mut Vec::new())
+            emit_early_test(&mut Vec::new(), exit, frame.fixed_regs).is_some()
+                && emit_early_return(
+                    &mut Vec::new(),
+                    exit,
+                    abi,
+                    frame.fixed_regs,
+                    &mut Vec::new(),
+                )
         })
     } else {
         None
@@ -458,7 +464,7 @@ impl FnEmit<'_, '_> {
                 code.len(),
                 self.out.cx.ssa_line_rows,
             );
-            let site = emit_early_test(code, exit);
+            let site = emit_early_test(code, exit, self.fcx.frame.fixed_regs);
             debug_assert!(site.is_some(), "the test fit its temporaries at planning");
             self.early_site = (site.unwrap_or(0), code.len());
         }
@@ -487,8 +493,13 @@ impl FnEmit<'_, '_> {
             exit_at,
             self.out.cx.ssa_line_rows,
         );
-        let emitted =
-            emit_early_return(code, exit, self.fcx.abi, self.out.cx.asm_extern_call_sites);
+        let emitted = emit_early_return(
+            code,
+            exit,
+            self.fcx.abi,
+            self.fcx.frame.fixed_regs,
+            self.out.cx.asm_extern_call_sites,
+        );
         debug_assert!(emitted, "the return fit its temporaries at planning");
         let (site, frame) = self.early_site;
         patch_early_branch(code, site, exit_at);

@@ -55,6 +55,33 @@ fn object_with(
     .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"))
 }
 
+/// The `-O` object of `src` under the `-ffixed-` reservations `names`.
+fn object_fixed(src: &str, target: Target, names: &[&str]) -> Vec<u8> {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
+    let mut fixed = crate::FixedRegs::NONE;
+    for name in names {
+        fixed.insert(crate::fixed_register(target, name).unwrap_or_else(|e| panic!("{e}")));
+    }
+    let program = Compiler::with_options(
+        src.to_string(),
+        target,
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        fixed_regs: fixed,
+        ..NativeOptions::new().with_optimize()
+    };
+    crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+        emit_native_with_options(&program, target, opts)
+    })
+    .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"))
+}
+
 pub(super) fn a64_at(src: &str, name: &str, optimize: bool) -> Vec<u32> {
     function_words(&object_at(src, Target::LinuxAarch64, optimize), name)
 }
@@ -4679,6 +4706,54 @@ fn a64_a_fused_shift_keeps_the_early_return_the_flags_and_sxtw() {
     let ws = a64(SRC, "sx");
     m.expect(ws.iter().any(|&w| a64_is_sxtw(w)), || {
         format!("sx: the shift pair is no sxtw: {ws:08x?}")
+    });
+    m.finish();
+}
+
+/// The return ahead of the frame computes in temporaries outside the
+/// `-ffixed-` set: with x9 or rax reserved the entry test takes the next
+/// temporary and still precedes the frame, and with all of x9..x15
+/// reserved the AArch64 function builds its frame first.
+#[test]
+fn early_return_temporaries_skip_reserved_registers() {
+    const SRC: &str = "extern long foo(long);\n\
+        long k(long a, long b, long *p) {\n\
+            long t = a ^ (b >> 3);\n\
+            if (t == 0) return 0;\n\
+            return foo(t) + foo(p[0]);\n\
+        }\n";
+    let mut m = Misses::default();
+    let a64_k =
+        |names: &[&str]| function_words(&object_fixed(SRC, Target::LinuxAarch64, names), "k");
+    let ws = a64_k(&[]);
+    m.expect(a64_early_return(&ws).is_some() && ws[0] & 31 == 9, || {
+        format!("aarch64: the test is not in x9 ahead of the frame: {ws:08x?}")
+    });
+    let ws = a64_k(&["x9"]);
+    m.expect(a64_early_return(&ws).is_some() && ws[0] & 31 == 10, || {
+        format!("aarch64 -ffixed-x9: the test is not in x10 ahead of the frame: {ws:08x?}")
+    });
+    let ws = a64_k(&["x9", "x10", "x11", "x12", "x13", "x14", "x15"]);
+    m.expect(a64_early_return(&ws).is_none(), || {
+        format!("aarch64 -ffixed-x9..x15: a test ahead of the frame: {ws:08x?}")
+    });
+    // The early test: the instructions ahead of the first `jcc`.
+    let x64_test = |names: &[&str]| {
+        let insns = x64_insns(&function_bytes(
+            &object_fixed(SRC, Target::LinuxX64, names),
+            "k",
+        ));
+        let g = insns.iter().position(X64Insn::is_jcc).unwrap_or(0);
+        insns[..g].to_vec()
+    };
+    let names_rax = |i: &X64Insn| i.reg_form() && (i.regs().0 == 0 || i.regs().1 == 0);
+    let plain = x64_test(&[]);
+    m.expect(plain.iter().any(names_rax), || {
+        format!("x86-64: the test does not use rax: {plain:x?}")
+    });
+    let fixed = x64_test(&["rax"]);
+    m.expect(!fixed.is_empty() && !fixed.iter().any(names_rax), || {
+        format!("x86-64 -ffixed-rax: the test uses rax: {fixed:x?}")
     });
     m.finish();
 }

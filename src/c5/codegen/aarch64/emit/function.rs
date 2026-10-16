@@ -234,8 +234,8 @@ pub(crate) fn emit_function(
     // more temporaries than it has.
     let early_exit = if repeat_tests && !is_full_leaf(frame, alloc) {
         super::ssa::early_exit::early_exit(func, alloc, &param_plan).filter(|exit| {
-            emit_early_test(&mut Vec::new(), exit, false).is_some()
-                && emit_early_return(&mut Vec::new(), exit)
+            emit_early_test(&mut Vec::new(), exit, false, frame.fixed_regs).is_some()
+                && emit_early_return(&mut Vec::new(), exit, frame.fixed_regs)
         })
     } else {
         None
@@ -363,7 +363,7 @@ impl FunctionEmitter<'_, '_> {
             exit_at,
             self.cx.ssa_line_rows,
         );
-        let emitted = emit_early_return(self.cx.code, exit);
+        let emitted = emit_early_return(self.cx.code, exit, self.fcx.frame.fixed_regs);
         debug_assert!(emitted, "the return fit its temporaries at planning");
         let (site, frame) = self.early_site;
         if !patch_early_branch(self.cx.code, site, exit_at, self.early_far) {
@@ -566,7 +566,12 @@ impl FunctionEmitter<'_, '_> {
                 self.cx.code.len(),
                 self.cx.ssa_line_rows,
             );
-            let site = emit_early_test(self.cx.code, exit, self.early_far);
+            let site = emit_early_test(
+                self.cx.code,
+                exit,
+                self.early_far,
+                self.fcx.frame.fixed_regs,
+            );
             debug_assert!(site.is_some(), "the test fit its temporaries at planning");
             self.early_site = (site.unwrap_or(0), self.cx.code.len());
         }

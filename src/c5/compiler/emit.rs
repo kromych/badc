@@ -53,6 +53,15 @@ fn pop_tail_past<T>(v: &mut alloc::vec::Vec<T>, past: impl Fn(&T) -> bool) -> us
     len - v.len() + usize::from(!v.is_empty())
 }
 
+/// The binding fields a callee `Ident` records.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct CalleeBinding {
+    class: i64,
+    val: i64,
+    is_thread_local: bool,
+    array_size: i64,
+}
+
 impl Compiler {
     // ---- Lexer plumbing ----
 
@@ -1538,20 +1547,30 @@ impl Compiler {
     /// a matching Ident node so [`Self::ast_emit_call`] can fill
     /// the `callee` field without re-running symbol resolution.
     pub(super) fn ast_synthesize_callee(&mut self, sym: u32, ty: i64) -> ExprId {
+        let binding = self.callee_binding(sym as usize);
+        self.ast_callee_ident(sym, ty, binding)
+    }
+
+    pub(super) fn callee_binding(&self, sym: usize) -> CalleeBinding {
+        let s = &self.symbols[sym];
+        CalleeBinding {
+            class: s.class,
+            val: s.val,
+            is_thread_local: s.is_thread_local,
+            array_size: s.array_size,
+        }
+    }
+
+    pub(super) fn ast_callee_ident(&mut self, sym: u32, ty: i64, b: CalleeBinding) -> ExprId {
         let pos = self.ast_src_pos();
-        let s = &self.symbols[sym as usize];
-        let class = s.class;
-        let val = s.val;
-        let is_thread_local = s.is_thread_local;
-        let array_size = s.array_size;
         let id = self.ast.push_expr(
             Expr::Ident {
                 sym,
                 ty,
-                class,
-                val,
-                is_thread_local,
-                array_size,
+                class: b.class,
+                val: b.val,
+                is_thread_local: b.is_thread_local,
+                array_size: b.array_size,
             },
             pos,
         );

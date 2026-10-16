@@ -53,6 +53,7 @@ pub(super) struct CleanupVar {
     is_thread_local: bool,
     array_size: i64,
     fn_ty: i64,
+    fn_binding: super::emit::CalleeBinding,
 }
 
 /// The case labels of one `switch` body.
@@ -897,6 +898,7 @@ impl Compiler {
                 s.array_size
             },
             fn_ty: self.symbols[fn_sym].type_,
+            fn_binding: self.callee_binding(fn_sym),
         };
         if let Some(scope) = self.cleanup_scopes.last_mut() {
             scope.vars.push(cv);
@@ -940,7 +942,7 @@ impl Compiler {
             },
             pos,
         );
-        let callee = self.ast_synthesize_callee(cv.fn_sym as u32, cv.fn_ty);
+        let callee = self.ast_callee_ident(cv.fn_sym as u32, cv.fn_ty, cv.fn_binding);
         let call = self.ast.push_expr(
             Expr::Call {
                 callee,

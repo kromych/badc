@@ -1775,7 +1775,7 @@ impl Compiler {
                 // An `Int` carrying a pointer type is a staged address
                 // (a string literal's data offset), not a value.
                 ConstVal::Int { ty: vty, .. } if is_pointer_ty(vty) => None,
-                ConstVal::Int { .. } | ConstVal::Float(_) => {
+                ConstVal::Int { .. } | ConstVal::Float { .. } => {
                     if super::types::is_floating_scalar(ty) {
                         let f = val.as_float();
                         let f = if self.size_of_type(ty) == 4 {

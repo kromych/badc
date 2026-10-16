@@ -692,7 +692,12 @@ impl Compiler {
         // floating form to here: an `as_int` first would truncate the
         // fraction of `3 * 0.5`, and 6.3.1.2 has a `_Bool` destination
         // test the value against 0 rather than truncate it.
-        let value = if var_is_float || matches!(cv, ConstVal::Float(_)) {
+        let value = if var_is_float || cv.is_float() {
+            let cv = if var_is_float {
+                self.const_convert(cv, var_ty)
+            } else {
+                cv
+            };
             self.to_storage_bits(
                 cv.as_float().to_bits() as i128,
                 InitElemReloc::Float64Bits,

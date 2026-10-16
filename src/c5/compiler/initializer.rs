@@ -24,8 +24,7 @@ use super::Compiler;
 use super::const_expr::ConstVal;
 use super::types::{
     add_ptr_level, is_bool_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty,
-    is_vector_ty, narrow_const_int, pointee_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
-    struct_ty_for,
+    is_vector_ty, pointee_ty, strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for,
 };
 
 /// A resolved chained array designator `[i][j]...`: `base` and
@@ -137,14 +136,19 @@ impl InitLeaf {
         InitLeaf { value, reloc, ty }
     }
 
-    /// An integer leaf the evaluator reports no narrower type for.
-    fn int(value: i128) -> Self {
-        Self::of(value, InitElemReloc::None, Ty::Int as i64)
-    }
-
-    /// A floating leaf, stored as its `f64` bit pattern.
-    fn float_bits(bits: i128) -> Self {
-        Self::of(bits, InitElemReloc::Float64Bits, Ty::Double as i64)
+    /// The arithmetic constant a leaf without a relocation holds.
+    fn arith(&self) -> Option<ConstVal> {
+        match self.reloc {
+            InitElemReloc::None => Some(ConstVal::Int {
+                val: self.value,
+                ty: self.ty,
+            }),
+            InitElemReloc::Float64Bits => Some(ConstVal::Float {
+                val: f64::from_bits(self.value as u64),
+                ty: self.ty,
+            }),
+            _ => None,
+        }
     }
 
     /// An integer constant zero: a null pointer constant (C99 6.3.2.3p3).
@@ -1742,7 +1746,7 @@ impl Compiler {
     /// consumes such an operand in unevaluated mode; on failure the
     /// lexer is restored and the caller falls back to parsing the arm
     /// as a full init value.
-    fn skip_unevaluated_cond_arm(&mut self) -> Result<bool, C5Error> {
+    fn skip_unevaluated_cond_arm(&mut self) -> Result<Option<Option<ConstVal>>, C5Error> {
         // A failed attempt may have staged a compound literal's bytes and
         // relocations; roll back the full initializer state, not just the
         // lexer, or the stale relocations patch whatever lands at those
@@ -1750,45 +1754,57 @@ impl Compiler {
         let cp = self.init_checkpoint();
         let nonconst = self.pending.const_expr_nonconst;
         self.const_unevaluated += 1;
-        let ok = self.parse_const_expr_cond_val().is_ok();
+        let arm = self.parse_const_expr_cond_val();
         self.const_unevaluated -= 1;
-        if !ok {
-            self.restore_init_checkpoint(cp);
-            self.pending.const_expr_nonconst = nonconst;
+        if let Ok(v) = arm {
+            return Ok(Some(Some(v)));
         }
-        Ok(ok)
+        self.restore_init_checkpoint(cp);
+        self.pending.const_expr_nonconst = nonconst;
+        Ok(self
+            .parse_constant_init_value()
+            .ok()
+            .map(|leaf| leaf.arith()))
     }
 
     /// Parse `cond`'s two arms with the selection already known: the taken
     /// arm is a full constant-init value, the not-taken arm is consumed
     /// unevaluated (with the init-value parse as a fallback for shapes the
     /// constant grammar does not cover). Returns `None` -- without a lexer
-    /// guarantee -- when either parse fails; callers restore.
+    /// guarantee -- when either parse fails; callers restore. The selected
+    /// value takes the arms' common type (C99 6.5.15p5).
     fn parse_selected_cond_arms(&mut self, taken_first: bool) -> Result<Option<InitLeaf>, C5Error> {
-        let mut selected: Option<InitLeaf> = None;
-        if taken_first {
-            if let Ok(v) = self.parse_constant_init_value()
-                && self.lex.tk == ':'
-            {
-                self.next()?; // `:`
-                if self.skip_unevaluated_cond_arm()? || self.parse_constant_init_value().is_ok() {
-                    selected = Some(v);
-                }
+        let (selected, other) = if taken_first {
+            let Ok(v) = self.parse_constant_init_value() else {
+                return Ok(None);
+            };
+            if self.lex.tk != ':' {
+                return Ok(None);
             }
+            self.next()?;
+            let Some(other) = self.skip_unevaluated_cond_arm()? else {
+                return Ok(None);
+            };
+            (v, other)
         } else {
-            let skipped = self.skip_unevaluated_cond_arm()?
-                || self
-                    .parse_constant_init_value()
-                    .map(|_| true)
-                    .unwrap_or(false);
-            if skipped && self.lex.tk == ':' {
-                self.next()?; // `:`
-                if let Ok(v) = self.parse_constant_init_value() {
-                    selected = Some(v);
-                }
+            let Some(other) = self.skip_unevaluated_cond_arm()? else {
+                return Ok(None);
+            };
+            if self.lex.tk != ':' {
+                return Ok(None);
             }
+            self.next()?;
+            let Ok(v) = self.parse_constant_init_value() else {
+                return Ok(None);
+            };
+            (v, other)
+        };
+        match (selected.arith(), other) {
+            (Some(s), Some(o)) => self
+                .init_scalar_of(self.const_cond_result(true, s, o))
+                .map(Some),
+            _ => Ok(Some(selected)),
         }
-        Ok(selected)
     }
 
     /// Try to parse `cond ? A : B )` as a constant-init value, with the
@@ -1953,15 +1969,8 @@ impl Compiler {
         // floating operands, so a trailing `+ - * /` continues the
         // chain and folds in f64 precision.
         if self.lex.tk == Token::FloatNum {
-            let v = self.lex.ival;
-            self.next()?;
-            if self.tk_is_float_arith_op() {
-                let bits = self
-                    .parse_const_expr_add_from(ConstVal::Float(f64::from_bits(v as u64)))?
-                    .as_float();
-                return Ok(InitLeaf::float_bits(bits.to_bits() as i128));
-            }
-            return Ok(InitLeaf::float_bits(v as i128));
+            let v = self.const_float_literal()?;
+            return self.float_init_chain(v);
         }
         // A signed numeric literal, intercepted only when a digit
         // follows the sign; the tail's `parse_constant_int` takes
@@ -1973,20 +1982,12 @@ impl Compiler {
             let snap = self.lex.snapshot();
             self.next()?; // consume `+`
             if self.lex.tk == Token::FloatNum {
-                let bits = self.lex.ival;
-                self.next()?;
-                if self.tk_is_float_arith_op() {
-                    let folded = self
-                        .parse_const_expr_add_from(ConstVal::Float(f64::from_bits(bits as u64)))?
-                        .as_float();
-                    return Ok(InitLeaf::float_bits(folded.to_bits() as i128));
-                }
-                return Ok(InitLeaf::float_bits(bits as i128));
+                let v = self.const_float_literal()?;
+                return self.float_init_chain(v);
             }
             if self.lex.tk == Token::Num {
                 self.restore_lex(snap);
-                let v = self.parse_constant_i128()?;
-                return Ok(InitLeaf::int(v));
+                return self.parse_constant_init_scalar();
             }
             return Err(self.compile_err(
                 Code::SYNTAX,
@@ -2000,15 +2001,8 @@ impl Compiler {
             let snap = self.lex.snapshot();
             self.next()?; // consume `-`
             if self.lex.tk == Token::FloatNum {
-                let bits = (self.lex.ival as u64) ^ (1u64 << 63);
-                self.next()?;
-                if self.tk_is_float_arith_op() {
-                    let folded = self
-                        .parse_const_expr_add_from(ConstVal::Float(f64::from_bits(bits)))?
-                        .as_float();
-                    return Ok(InitLeaf::float_bits(folded.to_bits() as i128));
-                }
-                return Ok(InitLeaf::float_bits(bits as i128));
+                let v = self.const_float_literal()?;
+                return self.float_init_chain(ConstVal::float(-v.as_float(), v.expr_ty()));
             }
             if self.lex.tk == Token::Num {
                 // A leading `-Num` may head a binary integer chain, so
@@ -2016,8 +2010,7 @@ impl Compiler {
                 // consume it whole; a trailing operator left behind
                 // would be counted as a brace-list entry.
                 self.restore_lex(snap);
-                let v = self.parse_constant_i128()?;
-                return Ok(InitLeaf::int(v));
+                return self.parse_constant_init_scalar();
             }
             return Err(self.compile_err(
                 Code::SYNTAX,
@@ -2038,8 +2031,8 @@ impl Compiler {
                 self.lex.tk == '(' && self.contents_until_close_paren_have_float()?;
             self.restore_lex(snap);
             if signed_float_paren {
-                let bits = self.parse_const_expr_add_val()?.as_float();
-                return Ok(InitLeaf::float_bits(bits.to_bits() as i128));
+                let v = self.parse_const_expr_add_val()?;
+                return self.init_scalar_of(v);
             }
         }
         // A cast, a compound literal or a parenthesized constant
@@ -2134,13 +2127,11 @@ impl Compiler {
                 || self.lex.tk == ';'
                 || self.lex.tk == ')'
                 || self.lex.tk == ':';
-            if matches!(leaf.reloc, InitElemReloc::None) && !ends {
-                let folded = self.parse_const_expr_cond_from(ConstVal::Int {
-                    val: leaf.value,
-                    ty: Ty::Int as i64,
-                })?;
-                let ty = folded.expr_ty();
-                return Ok(InitLeaf::of(folded.as_i128(), InitElemReloc::None, ty));
+            if let Some(seed) = leaf.arith()
+                && !ends
+            {
+                let folded = self.parse_const_expr_cond_from(seed)?;
+                return self.init_scalar_of(folded);
             }
             return Ok(leaf);
         }
@@ -2169,21 +2160,12 @@ impl Compiler {
         // trailing operator is absorbed too.
         if self.contents_until_close_paren_have_float()? {
             let seed = self.parse_const_expr_unary_val()?;
-            let v = self.parse_const_expr_add_from(seed)?.as_float();
+            let v = self.parse_const_expr_add_from(seed)?;
             if self.lex.tk != ')' {
                 return Err(self.compile_err(Code::SYNTAX, "close paren expected in initializer"));
             }
             self.next()?;
-            // The result of the parens is itself a float
-            // value; any trailing `+ / - / * / /` continues
-            // the float expression chain.
-            if self.tk_is_float_arith_op() {
-                let folded = self
-                    .parse_const_expr_add_from(ConstVal::Float(v))?
-                    .as_float();
-                return Ok(InitLeaf::float_bits(folded.to_bits() as i128));
-            }
-            return Ok(InitLeaf::float_bits(v.to_bits() as i128));
+            return self.float_init_chain(v);
         }
         // A cast around a string literal inside grouping parens,
         // `((const T *)"...")`: the outer `(` is not a cast start but
@@ -2270,34 +2252,14 @@ impl Compiler {
                     ));
                 }
                 self.next()?;
-                let target_fp = matches!(
-                    strip_unsigned(cast_ty),
-                    t if t == Ty::Float as i64 || t == Ty::Double as i64
-                );
-                let (value, reloc) = match reloc {
-                    InitElemReloc::None if target_fp => {
-                        ((v as f64).to_bits() as i128, InitElemReloc::Float64Bits)
-                    }
-                    InitElemReloc::Float64Bits if !target_fp => {
-                        let bytes = self.size_of_type(cast_ty);
-                        let is_bool = strip_unsigned(cast_ty) == Ty::Bool as i64;
-                        let n = f64::from_bits(v as u64) as i128;
-                        (
-                            narrow_const_int(bytes, is_unsigned_ty(cast_ty), is_bool, n),
-                            InitElemReloc::None,
-                        )
-                    }
-                    InitElemReloc::None => {
-                        let bytes = self.size_of_type(cast_ty);
-                        let is_bool = strip_unsigned(cast_ty) == Ty::Bool as i64;
-                        (
-                            narrow_const_int(bytes, is_unsigned_ty(cast_ty), is_bool, v),
-                            InitElemReloc::None,
-                        )
-                    }
-                    _ => (v, reloc),
+                let leaf = match leaf.arith() {
+                    Some(v) => self.init_scalar_of(self.const_convert(v, cast_ty))?,
+                    None => InitLeaf::of(v, reloc, cast_ty),
                 };
-                return Ok(InitLeaf::of(value, reloc, cast_ty));
+                return Ok(InitLeaf {
+                    ty: cast_ty,
+                    ..leaf
+                });
             }
             self.rewind_speculation(paren_snap, paren_data);
         }
@@ -2319,8 +2281,8 @@ impl Compiler {
                 || self.lex.tk == ':';
             let done = ends && self.data.len() == data_before;
             match whole {
-                Ok(ConstVal::Float(f)) if done => {
-                    return Ok(InitLeaf::float_bits(f.to_bits() as i128));
+                Ok(v @ ConstVal::Float { .. }) if done => {
+                    return self.init_scalar_of(v);
                 }
                 Ok(v @ ConstVal::Int { .. }) if done => {
                     return Ok(InitLeaf::of(v.as_i128(), InitElemReloc::None, v.expr_ty()));
@@ -2414,8 +2376,8 @@ impl Compiler {
             let snap = self.lex.snapshot();
             let data_snap = self.data.len();
             let nonconst = self.pending.const_expr_nonconst;
-            if let Ok(v) = self.parse_constant_i128() {
-                return Ok(InitLeaf::int(v));
+            if let Ok(leaf) = self.parse_constant_init_scalar() {
+                return Ok(leaf);
             }
             self.rewind_speculation(snap, data_snap);
             self.pending.const_expr_nonconst = nonconst;
@@ -2431,8 +2393,7 @@ impl Compiler {
             // A bare enum / macro value, or the head of a constant
             // arithmetic expression: the integer-constant evaluator
             // folds the trailing operator chain per C99 6.6.
-            let v = self.parse_constant_i128()?;
-            return Ok(InitLeaf::int(v));
+            return self.parse_constant_init_scalar();
         }
         if class == Token::Sys as i64 {
             // A libc binding's address lives in the loader's GOT / IAT
@@ -2551,6 +2512,16 @@ impl Compiler {
         self.init_scalar_of(v)
     }
 
+    /// A floating leaf `v` and the `+ - * /` chain that may follow it.
+    fn float_init_chain(&mut self, v: ConstVal) -> Result<InitLeaf, C5Error> {
+        let v = if self.tk_is_float_arith_op() {
+            self.parse_const_expr_add_from(v)?
+        } else {
+            v
+        };
+        self.init_scalar_of(v)
+    }
+
     /// The relocation an address constant's root calls for.
     fn init_elem_reloc_of(a: super::const_expr::ConstAddr) -> InitElemReloc {
         use super::const_expr::ConstRoot;
@@ -2572,7 +2543,11 @@ impl Compiler {
                 Self::init_elem_reloc_of(a),
                 a.ty,
             )),
-            ConstVal::Float(f) => Ok(InitLeaf::float_bits(f.to_bits() as i128)),
+            ConstVal::Float { val, ty } => Ok(InitLeaf::of(
+                val.to_bits() as i128,
+                InitElemReloc::Float64Bits,
+                ty,
+            )),
             v => {
                 let v = self.require_integer_const(v)?;
                 Ok(InitLeaf::of(v.as_i128(), InitElemReloc::None, v.expr_ty()))

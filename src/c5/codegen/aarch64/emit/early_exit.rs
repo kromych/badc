@@ -5,9 +5,28 @@
 //! so the frame path finds every argument where the caller left it.
 
 use super::super::ssa::early_exit::{EarlyExit, ShadowExpr, ShadowTest};
+use super::encode::{RegShift, enc_rrr_shifted};
 use super::*;
 
 const TEMPS: [u8; 7] = [9, 10, 11, 12, 13, 14, 15];
+
+/// `e` as the shifted second source of `op`: the shifted-register base
+/// word, the shift, the shifted value and the amount.
+fn shifted_operand(op: BinOp, e: &ShadowExpr) -> Option<(u32, RegShift, &ShadowExpr, u32)> {
+    let ShadowExpr::Binop {
+        op: shift,
+        lhs,
+        rhs,
+    } = e
+    else {
+        return None;
+    };
+    let ShadowExpr::Imm(k @ 1..=63) = **rhs else {
+        return None;
+    };
+    let (base, kind) = shifted_reg_form(op, *shift)?;
+    Some((base, kind, lhs, k as u32))
+}
 
 struct Shadow<'a> {
     code: &'a mut Vec<u8>,
@@ -61,8 +80,18 @@ impl Shadow<'_> {
                 rd
             }
             ShadowExpr::Binop { op, lhs, rhs } => {
+                let commutes = matches!(op, BinOp::Add | BinOp::And | BinOp::Or | BinOp::Xor);
+                let (lhs, rhs) = match (shifted_operand(*op, lhs), shifted_operand(*op, rhs)) {
+                    (Some(_), None) if commutes => (rhs, lhs),
+                    _ => (lhs, rhs),
+                };
                 let rn = self.reg(lhs)?;
                 let rd = self.result_of(rn, dst)?;
+                if let Some((base, kind, x, k)) = shifted_operand(*op, rhs) {
+                    let rm = self.reg(x)?;
+                    emit(self.code, enc_rrr_shifted(base, rd, rn, rm, kind, k));
+                    return Some(rd);
+                }
                 let word = match **rhs {
                     ShadowExpr::Imm(k) => binop_imm_peephole(*op, k, false, rd, rn),
                     _ => None,

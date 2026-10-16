@@ -78,8 +78,7 @@ Disassembly of section .text:
                	lsl	x3, x2, #2
                	add	x6, x3, #0x48
                	mul	x3, x1, x5
-               	lsl	x7, x0, #3
-               	add	x3, x3, x7
+               	add	x3, x3, x0, lsl #3
                	add	x7, x3, #0x48
                	cmp	x7, x6
                	b.ne	<addr>
@@ -124,23 +123,20 @@ Disassembly of section .text:
                	mul	x3, x4, x7
                	add	x1, x3, #0xac
                	mul	x2, x0, x5
-               	lsl	x8, x2, #2
-               	add	x8, x1, x8
+               	add	x8, x1, x2, lsl #2
                	mul	x9, x0, x6
                	add	x3, x3, x9
                	add	x9, x3, #0xac
                	cmp	x9, x8
                	b.ne	<addr>
                	add	x8, x2, #0x1
-               	lsl	x8, x8, #2
-               	add	x8, x1, x8
+               	add	x8, x1, x8, lsl #2
                	add	x9, x3, #0x4
                	add	x9, x9, #0xac
                	cmp	x9, x8
                	b.ne	<addr>
                	add	x2, x2, #0x2
-               	lsl	x2, x2, #2
-               	add	x1, x1, x2
+               	add	x1, x1, x2, lsl #2
                	add	x2, x3, #0x8
                	add	x2, x2, #0xac
                	cmp	x2, x1

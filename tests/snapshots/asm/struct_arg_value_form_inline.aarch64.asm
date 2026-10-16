@@ -21,18 +21,15 @@ Disassembly of section .text:
                	lsr	x2, x0, #16
                	and	x0, x0, #0xff
                	and	x1, x1, #0xff
-               	lsl	x1, x1, #8
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #8
                	and	x1, x2, #0xff
-               	lsl	x1, x1, #16
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #16
                	ret
 
 <take_pair>:
                	lsr	x1, x0, #32
-               	lsl	x1, x1, #32
                	mov	w0, w0
-               	orr	x0, x1, x0
+               	orr	x0, x0, x1, lsl #32
                	ret
 
 <take_wide>:

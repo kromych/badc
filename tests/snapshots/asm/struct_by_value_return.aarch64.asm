@@ -26,8 +26,7 @@ Disassembly of section .text:
 <make_pair>:
                	mov	w0, w0
                	mov	w1, w1
-               	lsl	x1, x1, #32
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #32
                	ret
 
 <clobber>:
@@ -38,13 +37,11 @@ Disassembly of section .text:
 
 <sum_pair_pair>:
                	lsr	x2, x0, #32
-               	lsr	x3, x1, #32
                	add	x0, x0, x1
-               	add	x1, x2, x3
+               	add	x1, x2, x1, lsr #32
                	mov	w0, w0
                	mov	w1, w1
-               	lsl	x1, x1, #32
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #32
                	ret
 
 <main>:

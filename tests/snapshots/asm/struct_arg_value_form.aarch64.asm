@@ -18,9 +18,8 @@ Disassembly of section .text:
 
 <take_pair>:
                	lsr	x1, x0, #32
-               	lsl	x1, x1, #32
                	mov	w0, w0
-               	orr	x0, x1, x0
+               	orr	x0, x0, x1, lsl #32
                	ret
 
 <take_kuid_proto>:

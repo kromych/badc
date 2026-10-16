@@ -480,6 +480,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
+                | Inst::ShiftOp { .. }
                 | Inst::Udiv128 { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
@@ -876,6 +877,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
+                | Inst::ShiftOp { .. }
                 | Inst::Udiv128 { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }

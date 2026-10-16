@@ -351,33 +351,26 @@ Disassembly of section .text:
                	lsl	x2, x3, #3
                	add	x0, x2, #0x7
                	ldrb	w0, [x1, x0]
-               	lsl	x0, x0, #8
                	add	x5, x2, #0x6
                	ldrb	w5, [x1, x5]
-               	orr	x0, x0, x5
-               	lsl	x0, x0, #8
+               	orr	x0, x5, x0, lsl #8
                	add	x5, x2, #0x5
                	ldrb	w5, [x1, x5]
-               	orr	x0, x0, x5
-               	lsl	x0, x0, #8
+               	orr	x0, x5, x0, lsl #8
                	add	x5, x2, #0x4
                	ldrb	w5, [x1, x5]
-               	orr	x0, x0, x5
-               	lsl	x0, x0, #8
+               	orr	x0, x5, x0, lsl #8
                	add	x5, x2, #0x3
                	ldrb	w5, [x1, x5]
-               	orr	x0, x0, x5
-               	lsl	x0, x0, #8
+               	orr	x0, x5, x0, lsl #8
                	add	x5, x2, #0x2
                	ldrb	w5, [x1, x5]
-               	orr	x0, x0, x5
-               	lsl	x0, x0, #8
+               	orr	x0, x5, x0, lsl #8
                	add	x5, x2, #0x1
                	ldrb	w5, [x1, x5]
-               	orr	x0, x0, x5
-               	lsl	x0, x0, #8
+               	orr	x0, x5, x0, lsl #8
                	ldrb	w2, [x1, x2]
-               	orr	x0, x0, x2
+               	orr	x0, x2, x0, lsl #8
                	add	x4, x4, x0
                	add	x3, x3, #0x1
                	cmp	w3, #0x8

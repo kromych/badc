@@ -40,8 +40,7 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0x8]
                	cmp	w1, #0x1ff
                	cset	x1, le
-               	lsl	x1, x1, #1
-               	add	x0, x0, x1
+               	add	x0, x0, x1, lsl #1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -67,8 +66,7 @@ Disassembly of section .text:
                	mov	x17, #-0x38             // =-56
                	cmp	w1, w17
                	cset	x1, eq
-               	lsl	x1, x1, #1
-               	add	x1, x2, x1
+               	add	x1, x2, x1, lsl #1
                	cmp	w1, #0x3
                	b.eq	<addr>
                	mov	x20, #0x2               // =2
@@ -94,8 +92,7 @@ Disassembly of section .text:
                	mov	x17, #-0x63c0           // =-25536
                	cmp	w1, w17
                	cset	x1, eq
-               	lsl	x1, x1, #1
-               	add	x1, x2, x1
+               	add	x1, x2, x1, lsl #1
                	cmp	w1, #0x3
                	b.eq	<addr>
                	orr	x20, x20, #0x8
@@ -110,8 +107,7 @@ Disassembly of section .text:
                	mov	x17, #0xffffffff        // =4294967295
                	cmp	w0, w17
                	cset	x0, eq
-               	lsl	x0, x0, #1
-               	add	x0, x1, x0
+               	add	x0, x1, x0, lsl #1
                	cmp	w0, #0x3
                	b.eq	<addr>
                	orr	x20, x20, #0x10
@@ -131,8 +127,7 @@ Disassembly of section .text:
                	mov	x17, #-0x7              // =-7
                	cmp	w0, w17
                	cset	x0, eq
-               	lsl	x0, x0, #1
-               	add	x0, x1, x0
+               	add	x0, x1, x0, lsl #1
                	cmp	w0, #0x3
                	b.eq	<addr>
                	orr	x20, x20, #0x20
@@ -157,8 +152,7 @@ Disassembly of section .text:
                	mov	x17, #-0x3              // =-3
                	cmp	w0, w17
                	cset	x0, eq
-               	lsl	x0, x0, #1
-               	add	x0, x1, x0
+               	add	x0, x1, x0, lsl #1
                	cmp	w0, #0x3
                	b.eq	<addr>
                	orr	x20, x20, #0x40

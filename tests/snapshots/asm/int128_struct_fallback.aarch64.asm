@@ -118,8 +118,7 @@ Disassembly of section .text:
                	mov	x0, #-0x8000000000000000 // =-9223372036854775808
                	bl	<addr>
                	lsr	x1, x22, #4
-               	lsl	x2, x0, #60
-               	orr	x1, x1, x2
+               	orr	x1, x1, x0, lsl #60
                	asr	x0, x0, #4
                	sub	x2, x29, #0x10
                	stp	xzr, xzr, [x2]

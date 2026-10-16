@@ -146,10 +146,9 @@ Disassembly of section .text:
                	mov	x0, x2
                	ldrb	w6, [x5, x0]
                	ldrb	w3, [x1, x0]
-               	lsl	x7, x3, #1
                	tbz	w3, #0x7, <addr>
-               	mov	x3, x4
-               	eor	x3, x7, x3
+               	mov	x7, x4
+               	eor	x3, x7, x3, lsl #1
                	and	x3, x3, #0xff
                	sub	x7, x29, #0x40
                	ldrb	w7, [x7, x0]
@@ -157,7 +156,7 @@ Disassembly of section .text:
                	cmp	w6, w3
                	b.eq	<addr>
                	b	<addr>
-               	mov	x3, x2
+               	mov	x7, x2
                	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x10

@@ -44,20 +44,13 @@ Disassembly of section .text:
                	mov	x23, xzr
                	mov	x24, xzr
                	mov	x25, xzr
-               	lsl	x0, x11, #1
-               	add	x0, x8, x0
-               	lsl	x1, x12, #2
-               	add	x0, x0, x1
-               	lsl	x1, x13, #3
-               	add	x0, x0, x1
-               	lsl	x1, x14, #4
-               	add	x0, x0, x1
-               	lsl	x1, x15, #5
-               	add	x0, x0, x1
-               	lsl	x1, x26, #6
-               	add	x0, x0, x1
-               	lsl	x1, x27, #7
-               	add	x0, x0, x1
+               	add	x0, x8, x11, lsl #1
+               	add	x0, x0, x12, lsl #2
+               	add	x0, x0, x13, lsl #3
+               	add	x0, x0, x14, lsl #4
+               	add	x0, x0, x15, lsl #5
+               	add	x0, x0, x26, lsl #6
+               	add	x0, x0, x27, lsl #7
                	ldp	x29, x30, [sp, #0x40]
                	ldp	x24, x25, [sp, #0x30]
                	ldp	x22, x23, [sp, #0x20]

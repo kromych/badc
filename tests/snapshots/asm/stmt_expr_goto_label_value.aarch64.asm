@@ -48,10 +48,9 @@ Disassembly of section .text:
                	b.hs	<addr>
                	ldr	x1, [x3, x0, lsl #3]
                	cbz	x1, <addr>
-               	lsl	x0, x0, #6
                	rbit	x1, x1
                	clz	x1, x1
-               	add	x0, x0, x1
+               	add	x0, x1, x0, lsl #6
                	cmp	x0, #0x64
                	b.hi	<addr>
                	mov	x2, x0
@@ -79,10 +78,9 @@ Disassembly of section .text:
                	b.hs	<addr>
                	ldr	x1, [x2, x0, lsl #3]
                	cbz	x1, <addr>
-               	lsl	x0, x0, #6
                	rbit	x1, x1
                	clz	x1, x1
-               	add	x0, x0, x1
+               	add	x0, x1, x0, lsl #6
                	cmp	x0, #0x64
                	b.ls	<addr>
                	mov	x0, #0x0                // =0

@@ -289,7 +289,11 @@ impl BlockPlan {
             emits_nothing(inst, v, alloc)
                 || matches!(
                     inst,
-                    Inst::Imm(_) | Inst::Binop { .. } | Inst::BinopI { .. } | Inst::Extend { .. }
+                    Inst::Imm(_)
+                        | Inst::Binop { .. }
+                        | Inst::BinopI { .. }
+                        | Inst::ShiftOp { .. }
+                        | Inst::Extend { .. }
                 )
         };
         if !range.clone().all(computes) {
@@ -490,6 +494,7 @@ fn repeatable_arms(
             Inst::Imm(_)
                 | Inst::Binop { .. }
                 | Inst::BinopI { .. }
+                | Inst::ShiftOp { .. }
                 | Inst::Extend { .. }
                 | Inst::Copy { .. }
                 | Inst::Load {

@@ -213,6 +213,12 @@ fn compute_high_observed_through(
             // Same low-word rule as the `Mul` / `Add` / `Sub` pair it
             // contracts: the result's low bytes need only the operands'.
             Inst::MulAdd { .. } => {}
+            // A right shift moves `rhs`'s high bits into the low word.
+            Inst::ShiftOp { rhs, shift, .. } => {
+                if *shift != BinOp::Shl {
+                    observe(&mut hi, &mut work, *rhs);
+                }
+            }
             // A quotient depends on every bit of its operands.
             Inst::Udiv128 {
                 hi: h,
@@ -396,6 +402,10 @@ fn compute_high_observed_through(
                 observe(&mut hi, &mut work, *a);
                 observe(&mut hi, &mut work, *b);
                 observe(&mut hi, &mut work, *c);
+            }
+            Inst::ShiftOp { lhs, rhs, .. } => {
+                observe(&mut hi, &mut work, *lhs);
+                observe(&mut hi, &mut work, *rhs);
             }
             Inst::Udiv128 {
                 hi: h,

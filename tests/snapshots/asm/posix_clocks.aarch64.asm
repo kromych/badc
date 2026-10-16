@@ -141,8 +141,7 @@ Disassembly of section .text:
                	movk	x0, #0x431b, lsl #48
                	smulh	x1, x1, x0
                	asr	x1, x1, #18
-               	lsr	x4, x1, #63
-               	add	x1, x1, x4
+               	add	x1, x1, x1, lsr #63
                	add	x1, x3, x1
                	sub	x3, x29, #0xb0
                	ldur	x4, [x29, #-0xb0]
@@ -151,8 +150,7 @@ Disassembly of section .text:
                	ldur	x5, [x29, #-0xa8]
                	smulh	x0, x5, x0
                	asr	x0, x0, #18
-               	lsr	x5, x0, #63
-               	add	x0, x0, x5
+               	add	x0, x0, x0, lsr #63
                	add	x0, x4, x0
                	sub	x0, x1, x0
                	cmp	x0, #0x14
@@ -215,8 +213,7 @@ Disassembly of section .text:
                	movk	x0, #0x431b, lsl #48
                	smulh	x1, x1, x0
                	asr	x1, x1, #18
-               	lsr	x3, x1, #63
-               	add	x1, x1, x3
+               	add	x1, x1, x1, lsr #63
                	add	x1, x2, x1
                	ldur	x2, [x29, #-0xa0]
                	mov	x17, #0x3e8             // =1000
@@ -224,8 +221,7 @@ Disassembly of section .text:
                	ldur	x3, [x29, #-0x98]
                	smulh	x0, x3, x0
                	asr	x0, x0, #18
-               	lsr	x3, x0, #63
-               	add	x0, x0, x3
+               	add	x0, x0, x0, lsr #63
                	add	x0, x2, x0
                	cmp	x1, x0
                	b.ge	<addr>
@@ -284,8 +280,7 @@ Disassembly of section .text:
                	movk	x0, #0x431b, lsl #48
                	smulh	x1, x1, x0
                	asr	x1, x1, #18
-               	lsr	x3, x1, #63
-               	add	x1, x1, x3
+               	add	x1, x1, x1, lsr #63
                	add	x1, x2, x1
                	ldur	x2, [x29, #-0x80]
                	mov	x17, #0x3e8             // =1000
@@ -293,8 +288,7 @@ Disassembly of section .text:
                	ldur	x3, [x29, #-0x78]
                	smulh	x0, x3, x0
                	asr	x0, x0, #18
-               	lsr	x3, x0, #63
-               	add	x0, x0, x3
+               	add	x0, x0, x0, lsr #63
                	add	x0, x2, x0
                	sub	x0, x1, x0
                	mov	x17, #0x1388            // =5000

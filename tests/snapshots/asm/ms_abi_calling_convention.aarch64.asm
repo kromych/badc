@@ -75,13 +75,11 @@ Disassembly of section .text:
                	mov	x24, x0
                	mov	x0, #0x6                // =6
                	bl	<addr>
-               	lsl	x1, x21, #1
-               	add	x1, x20, x1
+               	add	x1, x20, x21, lsl #1
                	mov	x17, #0x3               // =3
                	mul	x2, x22, x17
                	add	x1, x1, x2
-               	lsl	x2, x23, #2
-               	add	x1, x1, x2
+               	add	x1, x1, x23, lsl #2
                	mov	x17, #0x5               // =5
                	mul	x2, x24, x17
                	add	x1, x1, x2

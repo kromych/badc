@@ -451,8 +451,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x68
                	add	x0, x20, x21
                	sxtw	x0, w0
-               	lsr	x2, x0, #63
-               	add	x0, x0, x2
+               	add	x0, x0, x0, lsr #63
                	asr	x0, x0, #1
                	stur	w0, [x29, #-0x68]
                	sub	x0, x29, #0x40
@@ -479,8 +478,7 @@ Disassembly of section .text:
                	ldursw	x1, [x29, #-0x68]
                	add	x0, x20, x21
                	sxtw	x0, w0
-               	lsr	x2, x0, #63
-               	add	x0, x0, x2
+               	add	x0, x0, x0, lsr #63
                	asr	x0, x0, #1
                	cmp	w1, w0
                	b.eq	<addr>

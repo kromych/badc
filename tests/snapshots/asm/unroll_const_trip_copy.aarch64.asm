@@ -44,15 +44,13 @@ Disassembly of section .text:
                	stp	x16, x17, [x2, #0x30]
                	ldr	x1, [x2, #0x8]
                	ldr	x3, [x2, #0x10]
-               	lsl	x3, x3, #1
-               	add	x1, x1, x3
+               	add	x1, x1, x3, lsl #1
                	ldr	x3, [x2, #0x18]
                	mov	x17, #0x3               // =3
                	mul	x3, x3, x17
                	add	x1, x1, x3
                	ldr	x3, [x2, #0x20]
-               	lsl	x3, x3, #2
-               	add	x1, x1, x3
+               	add	x1, x1, x3, lsl #2
                	ldr	x3, [x2, #0x28]
                	mov	x17, #0x5               // =5
                	mul	x3, x3, x17
@@ -66,8 +64,7 @@ Disassembly of section .text:
                	mul	x3, x3, x17
                	add	x1, x1, x3
                	ldr	x2, [x2]
-               	lsl	x2, x2, #3
-               	add	x1, x1, x2
+               	add	x1, x1, x2, lsl #3
                	cmp	x1, #0x1c8
                	b.eq	<addr>
                	ret

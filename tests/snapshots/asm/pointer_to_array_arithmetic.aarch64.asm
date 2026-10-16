@@ -41,8 +41,7 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	ret
                	asr	x1, x2, #63
-               	lsr	x1, x1, #61
-               	add	x1, x2, x1
+               	add	x1, x2, x1, lsr #61
                	asr	x1, x1, #3
                	cmp	x1, #0x1
                	b.eq	<addr>

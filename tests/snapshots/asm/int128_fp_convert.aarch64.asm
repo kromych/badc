@@ -89,9 +89,8 @@ Disassembly of section .text:
                	mvn	x22, x15
                	lsr	x23, x1, x10
                	lsl	x1, x1, x21
-               	lsl	x1, x1, #1
                	lsr	x10, x11, x10
-               	orr	x1, x10, x1
+               	orr	x1, x10, x1, lsl #1
                	and	x1, x1, x22
                	and	x10, x23, x15
                	orr	x1, x1, x10
@@ -169,9 +168,8 @@ Disassembly of section .text:
                	mvn	x11, x8
                	lsr	x12, x1, x6
                	lsl	x1, x1, x10
-               	lsl	x1, x1, #1
                	lsr	x6, x7, x6
-               	orr	x1, x6, x1
+               	orr	x1, x6, x1, lsl #1
                	and	x1, x1, x11
                	and	x6, x12, x8
                	orr	x1, x1, x6
@@ -269,17 +267,15 @@ Disassembly of section .text:
                	mvn	x21, x13
                	lsr	x22, x2, x6
                	lsl	x2, x2, x20
-               	lsl	x2, x2, #1
                	lsr	x6, x9, x6
-               	orr	x2, x6, x2
+               	orr	x2, x6, x2, lsl #1
                	and	x2, x2, x21
                	and	x6, x22, x13
                	orr	x2, x2, x6
                	orr	x2, x2, x15
                	ucvtf	d0, x2
                	add	x1, x1, #0x3ff
-               	lsl	x1, x1, #52
-               	orr	x1, x1, x14
+               	orr	x1, x14, x1, lsl #52
                	stur	x1, [x29, #-0x18]
                	ldur	d1, [x29, #-0x18]
                	fmul	d0, d0, d1
@@ -360,9 +356,8 @@ Disassembly of section .text:
                	mvn	x10, x6
                	lsr	x11, x2, x3
                	lsl	x2, x2, x9
-               	lsl	x2, x2, #1
                	lsr	x3, x4, x3
-               	orr	x2, x3, x2
+               	orr	x2, x3, x2, lsl #1
                	and	x2, x2, x10
                	and	x3, x11, x6
                	orr	x2, x2, x3
@@ -370,8 +365,7 @@ Disassembly of section .text:
                	ucvtf	s0, x2
                	fcvt	d0, s0
                	add	x1, x1, #0x3ff
-               	lsl	x1, x1, #52
-               	orr	x1, x1, x7
+               	orr	x1, x7, x1, lsl #52
                	stur	x1, [x29, #-0x18]
                	ldur	d1, [x29, #-0x18]
                	fmul	d0, d0, d1
@@ -423,18 +417,16 @@ Disassembly of section .text:
                	mvn	x4, x7
                	lsl	x13, x6, x3
                	lsr	x15, x6, x12
-               	lsr	x15, x15, #1
                	lsl	x20, x0, x3
-               	orr	x15, x20, x15
+               	orr	x15, x20, x15, lsr #1
                	and	x20, x13, x4
                	and	x15, x15, x4
                	and	x13, x13, x7
                	orr	x15, x15, x13
                	lsr	x13, x0, x3
                	lsl	x12, x0, x12
-               	lsl	x12, x12, #1
                	lsr	x3, x6, x3
-               	orr	x3, x3, x12
+               	orr	x3, x3, x12, lsl #1
                	and	x3, x3, x4
                	and	x6, x13, x7
                	orr	x6, x3, x6
@@ -490,18 +482,16 @@ Disassembly of section .text:
                	mvn	x5, x7
                	lsl	x12, x6, x4
                	lsr	x13, x6, x11
-               	lsr	x13, x13, #1
                	lsl	x14, x0, x4
-               	orr	x13, x14, x13
+               	orr	x13, x14, x13, lsr #1
                	and	x14, x12, x5
                	and	x13, x13, x5
                	and	x12, x12, x7
                	orr	x13, x13, x12
                	lsr	x12, x0, x4
                	lsl	x11, x0, x11
-               	lsl	x11, x11, #1
                	lsr	x4, x6, x4
-               	orr	x4, x4, x11
+               	orr	x4, x4, x11, lsl #1
                	and	x4, x4, x5
                	and	x6, x12, x7
                	orr	x6, x4, x6
@@ -580,18 +570,16 @@ Disassembly of section .text:
                	mvn	x5, x7
                	lsl	x10, x6, x4
                	lsr	x13, x6, x9
-               	lsr	x13, x13, #1
                	lsl	x14, x0, x4
-               	orr	x13, x14, x13
+               	orr	x13, x14, x13, lsr #1
                	and	x14, x10, x5
                	and	x13, x13, x5
                	and	x10, x10, x7
                	orr	x13, x13, x10
                	lsr	x10, x0, x4
                	lsl	x9, x0, x9
-               	lsl	x9, x9, #1
                	lsr	x4, x6, x4
-               	orr	x4, x4, x9
+               	orr	x4, x4, x9, lsl #1
                	and	x4, x4, x5
                	and	x6, x10, x7
                	orr	x6, x4, x6
@@ -993,9 +981,8 @@ Disassembly of section .text:
                	and	x11, x11, x8
                	lsr	x12, x0, x3
                	lsl	x10, x0, x10
-               	lsl	x10, x10, #1
                	lsr	x3, x6, x3
-               	orr	x3, x3, x10
+               	orr	x3, x3, x10, lsl #1
                	and	x3, x3, x8
                	and	x6, x12, x7
                	orr	x3, x3, x6
@@ -1038,9 +1025,8 @@ Disassembly of section .text:
                	mvn	x8, x7
                	lsl	x11, x6, x3
                	lsr	x6, x6, x10
-               	lsr	x6, x6, #1
                	lsl	x10, x0, x3
-               	orr	x6, x10, x6
+               	orr	x6, x10, x6, lsr #1
                	and	x6, x6, x8
                	and	x7, x11, x7
                	orr	x6, x6, x7
@@ -1092,9 +1078,8 @@ Disassembly of section .text:
                	and	x11, x11, x9
                	lsr	x12, x0, x3
                	lsl	x10, x0, x10
-               	lsl	x10, x10, #1
                	lsr	x3, x7, x3
-               	orr	x3, x3, x10
+               	orr	x3, x3, x10, lsl #1
                	and	x3, x3, x9
                	and	x7, x12, x8
                	orr	x3, x3, x7
@@ -1140,18 +1125,16 @@ Disassembly of section .text:
                	mvn	x4, x6
                	lsl	x9, x5, x3
                	lsr	x10, x5, x8
-               	lsr	x10, x10, #1
                	lsl	x11, x0, x3
-               	orr	x10, x11, x10
+               	orr	x10, x11, x10, lsr #1
                	and	x11, x9, x4
                	and	x10, x10, x4
                	and	x9, x9, x6
                	orr	x10, x10, x9
                	lsr	x9, x0, x3
                	lsl	x8, x0, x8
-               	lsl	x8, x8, #1
                	lsr	x3, x5, x3
-               	orr	x3, x3, x8
+               	orr	x3, x3, x8, lsl #1
                	and	x3, x3, x4
                	and	x5, x9, x6
                	orr	x5, x3, x5
@@ -1255,9 +1238,8 @@ Disassembly of section .text:
                	mvn	x13, x10
                	lsr	x14, x2, x7
                	lsl	x2, x2, x12
-               	lsl	x2, x2, #1
                	lsr	x7, x8, x7
-               	orr	x2, x7, x2
+               	orr	x2, x7, x2, lsl #1
                	and	x2, x2, x13
                	and	x7, x14, x10
                	orr	x2, x2, x7
@@ -1290,9 +1272,8 @@ Disassembly of section .text:
                	and	x14, x14, x11
                	lsr	x15, x0, x3
                	lsl	x13, x0, x13
-               	lsl	x13, x13, #1
                	lsr	x3, x8, x3
-               	orr	x3, x3, x13
+               	orr	x3, x3, x13, lsl #1
                	and	x3, x3, x11
                	and	x8, x15, x10
                	orr	x3, x3, x8
@@ -1378,9 +1359,8 @@ Disassembly of section .text:
                	mvn	x11, x8
                	lsr	x12, x2, x4
                	lsl	x2, x2, x10
-               	lsl	x2, x2, #1
                	lsr	x4, x7, x4
-               	orr	x2, x4, x2
+               	orr	x2, x4, x2, lsl #1
                	and	x2, x2, x11
                	and	x4, x12, x8
                	orr	x2, x2, x4
@@ -1411,9 +1391,8 @@ Disassembly of section .text:
                	mvn	x8, x6
                	lsl	x11, x7, x3
                	lsr	x7, x7, x10
-               	lsr	x7, x7, #1
                	lsl	x10, x0, x3
-               	orr	x7, x10, x7
+               	orr	x7, x10, x7, lsr #1
                	and	x7, x7, x8
                	and	x6, x11, x6
                	orr	x6, x7, x6
@@ -1509,9 +1488,8 @@ Disassembly of section .text:
                	mvn	x12, x9
                	lsr	x13, x0, x4
                	lsl	x0, x0, x11
-               	lsl	x0, x0, #1
                	lsr	x4, x5, x4
-               	orr	x0, x4, x0
+               	orr	x0, x4, x0, lsl #1
                	and	x0, x0, x12
                	and	x4, x13, x9
                	orr	x0, x0, x4
@@ -1599,17 +1577,15 @@ Disassembly of section .text:
                	mvn	x8, x5
                	lsr	x10, x1, x2
                	lsl	x1, x1, x7
-               	lsl	x1, x1, #1
                	lsr	x2, x4, x2
-               	orr	x1, x2, x1
+               	orr	x1, x2, x1, lsl #1
                	and	x1, x1, x8
                	and	x2, x10, x5
                	orr	x1, x1, x2
                	orr	x1, x1, x6
                	ucvtf	d0, x1
                	add	x0, x0, #0x3ff
-               	lsl	x0, x0, #52
-               	orr	x0, x0, x9
+               	orr	x0, x9, x0, lsl #52
                	stur	x0, [x29, #-0x18]
                	ldur	d1, [x29, #-0x18]
                	fmul	d0, d0, d1

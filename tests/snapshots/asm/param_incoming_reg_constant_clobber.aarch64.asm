@@ -45,8 +45,7 @@ Disassembly of section .text:
                	ldrsw	x1, [x1]
                	orr	x1, x1, x3
                	lsr	x3, x1, #2
-               	lsl	x3, x3, #2
-               	sub	x1, x1, x3
+               	sub	x1, x1, x3, lsl #2
                	ldr	x0, [x0]
                	ldrh	w0, [x0]
                	sxth	x1, w1

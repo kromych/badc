@@ -2100,6 +2100,110 @@ fn mul_add_spilled_result_falls_back_to_mul_sub() {
     assert_ne!((sub >> 5) & 0x1f, product, "the addend is the left operand");
 }
 
+/// `a | (b << 16)` folded into one shifted-register `orr`, with both
+/// operands spilled and the result placed at `dst`. Returns the words.
+fn try_emit_spilled_shift_op(dst: Place) -> Result<Vec<u32>, Unsupported> {
+    let target = Target::MacOSAarch64;
+    let program = Compiler::with_target(
+        "long long f(long long a, long long b){ return a | (b << 16); } \
+         int main(void){ return 0; }"
+            .into(),
+        target,
+    )
+    .compile()
+    .expect("compile");
+    let mut funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+            .expect("ssa");
+    crate::c5::codegen::passes::shifted_operand::run(&mut funcs);
+    let (func, v, op, lhs, rhs, shift, amount) = funcs
+        .into_iter()
+        .find_map(|f| {
+            let found = f.insts.iter().enumerate().find_map(|(v, i)| match *i {
+                Inst::ShiftOp {
+                    op,
+                    lhs,
+                    rhs,
+                    shift,
+                    amount,
+                } => Some((v as crate::c5::ir::ValueId, op, lhs, rhs, shift, amount)),
+                _ => None,
+            })?;
+            Some((f, found.0, found.1, found.2, found.3, found.4, found.5))
+        })
+        .expect("a function with a ShiftOp");
+    let mut alloc =
+        super::super::ssa::reg_alloc::allocate(&func, target, crate::c5::codegen::FixedRegs::NONE);
+    alloc.places[lhs as usize] = Place::Spill(0);
+    alloc.places[rhs as usize] = Place::Spill(1);
+    alloc.places[v as usize] = dst;
+    alloc.spill_count = alloc.spill_count.max(3);
+    let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
+    let scratch = ScratchPool::new();
+    let mut code = Vec::new();
+    emit_shift_op(
+        &mut code, dst, op, lhs, rhs, shift, amount, &alloc, frame, &scratch,
+    )?;
+    Ok(code
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect())
+}
+
+/// The 64-bit `orr` (shifted register) word among `words`, as `(rd, rn,
+/// rm, shift type, amount)`.
+fn shifted_orr(words: &[u32]) -> (u32, u32, u32, u32, u32) {
+    let w = words
+        .iter()
+        .copied()
+        .find(|w| w & 0xFF20_0000 == 0xAA00_0000)
+        .expect("an ORR (shifted register) word");
+    (
+        w & 0x1f,
+        (w >> 5) & 0x1f,
+        (w >> 16) & 0x1f,
+        (w >> 22) & 3,
+        (w >> 10) & 0x3f,
+    )
+}
+
+/// Two spilled operands reload into two scratch registers, and the `orr`
+/// shifts the second by 16 into the result register.
+#[test]
+fn shift_op_spilled_operands_reload_into_two_registers() {
+    let words = try_emit_spilled_shift_op(Place::IntReg(5)).expect("emit_shift_op bailed");
+    let (rd, rn, rm, kind, amount) = shifted_orr(&words);
+    assert_eq!((rd, kind, amount), (5, 0, 16), "{words:08x?}");
+    assert_ne!(rn, rm, "reloads collided: {words:08x?}");
+}
+
+/// A spilled result is computed in a scratch register and stored back.
+#[test]
+fn shift_op_spilled_result_is_stored() {
+    let words = try_emit_spilled_shift_op(Place::Spill(2)).expect("emit_shift_op bailed");
+    let (rd, ..) = shifted_orr(&words);
+    let at = words
+        .iter()
+        .position(|w| w & 0xFF20_0000 == 0xAA00_0000)
+        .unwrap();
+    let last = *words.last().unwrap();
+    assert!(at + 1 < words.len(), "no store after the orr: {words:08x?}");
+    assert_eq!(
+        last & 0x1f,
+        rd,
+        "the store writes the orr's result: {words:08x?}"
+    );
+}
+
+/// A result the integer form cannot hold is refused with the form named.
+#[test]
+fn shift_op_fp_result_names_the_refused_form() {
+    let e = try_emit_spilled_shift_op(Place::FpReg(0)).expect_err("an FP result has no ShiftOp");
+    assert_eq!(e.reason(), "ShiftOp: dst not int reg / spill");
+}
+
 /// The first function of `src` holding an instruction `pick` accepts, its
 /// allocation over the full pool, and that instruction's value.
 fn func_with(

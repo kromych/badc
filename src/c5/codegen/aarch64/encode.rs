@@ -2235,7 +2235,8 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
     const FILE_ASM_COMMENTS: crate::c5::asm::AsmComments = crate::c5::asm::AsmComments::A64;
 
     /// Take a word index's widening into its access, then contract an
-    /// integer multiply into the add / sub that reads it (madd / msub).
+    /// integer multiply into the add / sub that reads it (madd / msub)
+    /// and a constant shift into its reader's shifted-register operand.
     /// After the index fold and the store forwarding, whose address
     /// matching reads the `base + index * scale` shape a fused node would
     /// hide, and after the divide pairing, which is what leaves `n - q*d`
@@ -2250,6 +2251,9 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
         });
         pipeline.run("passes::mul_add::run", funcs, |funcs| {
             crate::c5::codegen::passes::mul_add::run(funcs);
+        });
+        pipeline.run("passes::shifted_operand::run", funcs, |funcs| {
+            crate::c5::codegen::passes::shifted_operand::run(funcs);
         });
     }
 

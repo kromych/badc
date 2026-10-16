@@ -30,8 +30,7 @@ Disassembly of section .text:
                	stur	d0, [x29, #-0x8]
                	ldur	d0, [x29, #-0x8]
                	mov	x0, #0x3                // =3
-               	lsl	x2, x0, #3
-               	add	x2, x1, x2
+               	add	x2, x1, x0, lsl #3
                	ldr	d2, [x2]
                	fmadd	d0, d0, d1, d2
                	sub	x0, x0, #0x1
@@ -55,8 +54,7 @@ Disassembly of section .text:
                	sub	x1, x29, #0x28
                	ldur	d1, [x29, #-0x8]
                	mov	x0, #0x3                // =3
-               	lsl	x2, x0, #3
-               	add	x2, x1, x2
+               	add	x2, x1, x0, lsl #3
                	ldr	d2, [x2]
                	fmadd	d1, d1, d0, d2
                	sub	x0, x0, #0x1

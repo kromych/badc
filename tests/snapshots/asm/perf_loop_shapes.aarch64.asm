@@ -170,8 +170,7 @@ Disassembly of section .text:
                	movk	x17, #0x6666, lsl #16
                	mul	x0, x0, x17
                	asr	x0, x0, #34
-               	lsr	x1, x0, #63
-               	add	x0, x0, x1
+               	add	x0, x0, x0, lsr #63
                	ret
 
 <last_digit>:
@@ -180,8 +179,7 @@ Disassembly of section .text:
                	movk	x17, #0x6666, lsl #16
                	mul	x1, x0, x17
                	asr	x1, x1, #34
-               	lsr	x2, x1, #63
-               	add	x1, x1, x2
+               	add	x1, x1, x1, lsr #63
                	mov	x17, #0xa               // =10
                	mul	x1, x1, x17
                	sub	x0, x0, x1
@@ -190,8 +188,7 @@ Disassembly of section .text:
 <mid>:
                	add	x0, x0, x1
                	sxtw	x0, w0
-               	lsr	x1, x0, #63
-               	add	x0, x0, x1
+               	add	x0, x0, x0, lsr #63
                	asr	x0, x0, #1
                	ret
 

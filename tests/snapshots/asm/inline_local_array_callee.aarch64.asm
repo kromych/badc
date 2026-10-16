@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <f1>:
-               	lsl	x1, x0, #1
-               	sub	x1, x0, x1
+               	sub	x1, x0, x0, lsl #1
                	mov	x17, #0x64              // =100
                	mul	x1, x1, x17
                	add	x0, x1, x0
@@ -23,8 +22,7 @@ Disassembly of section .text:
 
 <f2>:
                	add	x1, x0, #0x1
-               	lsl	x0, x0, #1
-               	add	x0, x1, x0
+               	add	x0, x1, x0, lsl #1
                	mov	x17, #0x64              // =100
                	mul	x0, x0, x17
                	add	x0, x0, x1

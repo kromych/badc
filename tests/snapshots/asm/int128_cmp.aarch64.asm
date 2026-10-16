@@ -49,8 +49,7 @@ Disassembly of section .text:
                	orr	x11, x11, x12
                	cbz	x11, <addr>
                	ldr	x11, [x1]
-               	lsl	x11, x11, #63
-               	eor	x11, x0, x11
+               	eor	x11, x0, x11, lsl #63
                	eor	x11, x0, x11
                	orr	x10, x10, x11
                	cbnz	x10, <addr>

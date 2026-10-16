@@ -66,8 +66,7 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x8]
                	lsr	x0, x0, #7
                	ldur	x1, [x29, #-0x8]
-               	lsl	x1, x1, #57
-               	orr	x5, x0, x1
+               	orr	x5, x0, x1, lsl #57
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	mov	x2, #0x1                // =1

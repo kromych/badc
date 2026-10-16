@@ -27,8 +27,7 @@ Disassembly of section .text:
 
 <shalf>:
                	sxtw	x0, w0
-               	lsr	x1, x0, #63
-               	add	x0, x0, x1
+               	add	x0, x0, x0, lsr #63
                	asr	x0, x0, #1
                	sxth	x0, w0
                	ret

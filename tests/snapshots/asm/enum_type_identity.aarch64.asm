@@ -27,8 +27,7 @@ Disassembly of section .text:
                	add	x1, x0, #0x8
                	sub	x1, x1, x0
                	asr	x2, x1, #63
-               	lsr	x2, x2, #62
-               	add	x1, x1, x2
+               	add	x1, x1, x2, lsr #62
                	asr	x1, x1, #2
                	cmp	x1, #0x2
                	b.ne	<addr>

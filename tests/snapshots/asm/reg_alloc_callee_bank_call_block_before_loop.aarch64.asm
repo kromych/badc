@@ -24,8 +24,7 @@ Disassembly of section .text:
                	mov	x22, x2
                	add	x0, x1, x22
                	sxtw	x0, w0
-               	lsr	x2, x0, #63
-               	add	x0, x0, x2
+               	add	x0, x0, x0, lsr #63
                	asr	x0, x0, #1
                	ldrsw	x0, [x21, x0, lsl #2]
                	mov	x2, x22

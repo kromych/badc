@@ -913,6 +913,27 @@ fn divmod(op: BinOp, a: Range, d: Range) -> Range {
     }
 }
 
+/// Bounds of the register-operand integer operation `op` over `a` and `b`.
+fn binop(op: BinOp, a: Range, b: Range) -> Range {
+    match op {
+        _ if comparison(op).is_some() => Range { lo: 0, hi: 1 },
+        BinOp::And => match (a.non_negative(), b.non_negative()) {
+            (true, true) => Range {
+                lo: 0,
+                hi: a.hi.min(b.hi),
+            },
+            (true, false) => Range { lo: 0, hi: a.hi },
+            (false, true) => Range { lo: 0, hi: b.hi },
+            _ => UNIVERSE,
+        },
+        BinOp::Add => arith(a, b, false),
+        BinOp::Sub => arith(a, b, true),
+        BinOp::Or | BinOp::Xor => bitwise(a, b, matches!(op, BinOp::Or)),
+        BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu => divmod(op, a, b),
+        _ => UNIVERSE,
+    }
+}
+
 /// Forward bounds for an instruction, given its operands' ranges and
 /// the entry range of each parameter.
 fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Range) -> Range {
@@ -980,30 +1001,18 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
             }
             _ => UNIVERSE,
         },
-        Inst::Binop { op, lhs, rhs } => match op {
-            _ if comparison(*op).is_some() => Range { lo: 0, hi: 1 },
-            BinOp::And => {
-                let (a, b) = (range_of(*lhs), range_of(*rhs));
-                match (a.non_negative(), b.non_negative()) {
-                    (true, true) => Range {
-                        lo: 0,
-                        hi: a.hi.min(b.hi),
-                    },
-                    (true, false) => Range { lo: 0, hi: a.hi },
-                    (false, true) => Range { lo: 0, hi: b.hi },
-                    _ => UNIVERSE,
-                }
-            }
-            BinOp::Add => arith(range_of(*lhs), range_of(*rhs), false),
-            BinOp::Sub => arith(range_of(*lhs), range_of(*rhs), true),
-            BinOp::Or | BinOp::Xor => {
-                bitwise(range_of(*lhs), range_of(*rhs), matches!(op, BinOp::Or))
-            }
-            BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu => {
-                divmod(*op, range_of(*lhs), range_of(*rhs))
-            }
-            _ => UNIVERSE,
-        },
+        Inst::Binop { op, lhs, rhs } => binop(*op, range_of(*lhs), range_of(*rhs)),
+        // The `Binop` over the range of the shift it contracts.
+        Inst::ShiftOp {
+            op,
+            lhs,
+            rhs,
+            shift: sh,
+            amount,
+        } => {
+            let shifted = shift(range_of(*rhs), i64::from(*amount), *sh);
+            binop(*op, range_of(*lhs), shifted)
+        }
         // A width-limited read cannot produce a value outside the width
         // it extends from, nor can a narrow atomic load or the prior
         // contents a compare-exchange zero-extends.

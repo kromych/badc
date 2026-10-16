@@ -495,8 +495,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrh	w1, [x0]
                	ldrb	w0, [x0, #0x2]
-               	lsl	x0, x0, #16
-               	orr	x0, x1, x0
+               	orr	x0, x1, x0, lsl #16
                	and	x0, x0, #0x3fffff
                	lsl	x0, x0, #42
                	asr	x0, x0, #42

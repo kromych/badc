@@ -45,8 +45,7 @@ Disassembly of section .text:
                	ldr	x2, [x19, #0x18]
                	ldr	x3, [x19, #0x20]
                	add	x2, x2, x3
-               	lsl	x2, x2, #1
-               	add	x1, x1, x2
+               	add	x1, x1, x2, lsl #1
                	str	x1, [x19, #0x10]
                	ldr	x1, [x19, #0x18]
                	ldr	x2, [x19, #0x10]

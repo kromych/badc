@@ -1356,6 +1356,18 @@ fn run_inst<H: Host>(
             };
             return Ok(());
         }
+        Inst::ShiftOp {
+            op,
+            lhs,
+            rhs,
+            shift,
+            amount,
+        } => {
+            let eval = |op, a, b| crate::c5::ir::eval_int_binop(op, a, b).unwrap_or(0);
+            let shifted = eval(*shift, frame.regs[*rhs as usize], i64::from(*amount));
+            frame.regs[v as usize] = eval(*op, frame.regs[*lhs as usize], shifted);
+            return Ok(());
+        }
         Inst::Extend { value, kind, .. } => {
             let raw = frame.regs[*value as usize];
             frame.regs[v as usize] = eval::eval_extend(raw, *kind);

@@ -91,7 +91,8 @@ fn pure(inst: &Inst) -> bool {
         | Inst::Undef
         | Inst::Extend { .. }
         | Inst::Phi { .. }
-        | Inst::LifetimeEnd(_) => true,
+        | Inst::LifetimeEnd(_)
+        | Inst::ShiftOp { .. } => true,
         Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
             !matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu)
         }
@@ -301,6 +302,21 @@ impl Cone<'_> {
                 op: *op,
                 lhs: Box::new(self.expr(*lhs)?),
                 rhs: Box::new(self.expr(*rhs)?),
+            },
+            Inst::ShiftOp {
+                op,
+                lhs,
+                rhs,
+                shift,
+                amount,
+            } if shadow_op(*op) && shadow_op(*shift) => ShadowExpr::Binop {
+                op: *op,
+                lhs: Box::new(self.expr(*lhs)?),
+                rhs: Box::new(ShadowExpr::Binop {
+                    op: *shift,
+                    lhs: Box::new(self.expr(*rhs)?),
+                    rhs: Box::new(ShadowExpr::Imm(i64::from(*amount))),
+                }),
             },
             _ => return None,
         })

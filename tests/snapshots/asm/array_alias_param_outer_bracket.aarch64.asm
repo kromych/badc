@@ -34,8 +34,7 @@ Disassembly of section .text:
                	str	x1, [x0, #0x18]
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	lsl	x2, x0, #5
-               	add	x2, x3, x2
+               	add	x2, x3, x0, lsl #5
                	ldr	x4, [x2]
                	ldr	x2, [x2, #0x18]
                	add	x2, x4, x2
@@ -72,8 +71,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, x0
-               	lsl	x2, x0, #5
-               	add	x2, x3, x2
+               	add	x2, x3, x0, lsl #5
                	ldr	x4, [x2]
                	ldr	x2, [x2, #0x18]
                	add	x2, x4, x2

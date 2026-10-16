@@ -649,6 +649,7 @@ fn walk_block(
             | Inst::Fneg(_)
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }
+            | Inst::ShiftOp { .. }
             | Inst::Udiv128 { .. }
             | Inst::Extend { .. }
             | Inst::Bswap { .. }

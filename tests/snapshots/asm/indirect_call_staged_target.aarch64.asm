@@ -16,13 +16,11 @@ Disassembly of section .text:
 <weigh17>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	lsl	x1, x1, #1
-               	add	x0, x0, x1
+               	add	x0, x0, x1, lsl #1
                	mov	x17, #0x3               // =3
                	mul	x1, x2, x17
                	add	x0, x0, x1
-               	lsl	x1, x3, #2
-               	add	x0, x0, x1
+               	add	x0, x0, x3, lsl #2
                	mov	x17, #0x5               // =5
                	mul	x1, x4, x17
                	add	x0, x0, x1
@@ -32,8 +30,7 @@ Disassembly of section .text:
                	mov	x17, #0x7               // =7
                	mul	x1, x6, x17
                	add	x0, x0, x1
-               	lsl	x1, x7, #3
-               	add	x0, x0, x1
+               	add	x0, x0, x7, lsl #3
                	ldr	x1, [x29, #0x10]
                	mov	x17, #0x9               // =9
                	mul	x1, x1, x17
@@ -63,8 +60,7 @@ Disassembly of section .text:
                	mul	x1, x1, x17
                	add	x0, x0, x1
                	ldr	x1, [x29, #0x48]
-               	lsl	x1, x1, #4
-               	add	x0, x0, x1
+               	add	x0, x0, x1, lsl #4
                	ldr	x1, [x29, #0x50]
                	mov	x17, #0x11              // =17
                	mul	x1, x1, x17

@@ -34,15 +34,13 @@ Disassembly of section .text:
                	sub	x1, x29, #0x8
                	sub	x2, x1, x1
                	asr	x3, x2, #63
-               	lsr	x3, x3, #62
-               	add	x2, x2, x3
+               	add	x2, x2, x3, lsr #62
                	asr	x2, x2, #2
                	cbnz	x2, <addr>
                	add	x2, x1, #0x4
                	sub	x1, x2, x1
                	asr	x2, x1, #63
-               	lsr	x2, x2, #62
-               	add	x1, x1, x2
+               	add	x1, x1, x2, lsr #62
                	asr	x1, x1, #2
                	cmp	x1, #0x1
                	b.eq	<addr>

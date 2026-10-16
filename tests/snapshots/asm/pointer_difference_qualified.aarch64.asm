@@ -17,8 +17,7 @@ Disassembly of section .text:
                	ldr	x1, [x1]
                	sub	x0, x0, x1
                	asr	x1, x0, #63
-               	lsr	x1, x1, #62
-               	add	x0, x0, x1
+               	add	x0, x0, x1, lsr #62
                	asr	x0, x0, #2
                	sub	x0, x0, #0x1
                	ret
@@ -26,8 +25,7 @@ Disassembly of section .text:
 <unqualified_left>:
                	sub	x0, x0, x1
                	asr	x1, x0, #63
-               	lsr	x1, x1, #62
-               	add	x0, x0, x1
+               	add	x0, x0, x1, lsr #62
                	asr	x0, x0, #2
                	ret
 
@@ -38,14 +36,12 @@ Disassembly of section .text:
 <wide_elements>:
                	sub	x0, x0, x1
                	asr	x1, x0, #63
-               	lsr	x1, x1, #61
-               	add	x0, x0, x1
+               	add	x0, x0, x1, lsr #61
                	asr	x0, x0, #3
                	ret
 
 <back>:
-               	lsl	x1, x1, #2
-               	sub	x0, x0, x1
+               	sub	x0, x0, x1, lsl #2
                	ret
 
 <main>:
@@ -56,16 +52,14 @@ Disassembly of section .text:
                	add	x1, x0, #0x18
                	sub	x1, x1, x0
                	asr	x2, x1, #63
-               	lsr	x2, x2, #62
-               	add	x1, x1, x2
+               	add	x1, x1, x2, lsr #62
                	asr	x1, x1, #2
                	sub	x1, x1, #0x1
                	sub	x2, x1, #0x5
                	add	x1, x0, #0xc
                	sub	x1, x1, x0
                	asr	x3, x1, #63
-               	lsr	x3, x3, #62
-               	add	x1, x1, x3
+               	add	x1, x1, x3, lsr #62
                	asr	x1, x1, #2
                	sub	x1, x1, #0x3
                	add	x2, x2, x1
@@ -77,8 +71,7 @@ Disassembly of section .text:
                	add	x1, x0, #0x10
                	sub	x2, x1, x0
                	asr	x4, x2, #63
-               	lsr	x4, x4, #61
-               	add	x2, x2, x4
+               	add	x2, x2, x4, lsr #61
                	asr	x2, x2, #3
                	sub	x2, x2, #0x2
                	add	x2, x3, x2

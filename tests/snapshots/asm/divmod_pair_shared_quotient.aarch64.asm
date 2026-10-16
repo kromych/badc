@@ -53,8 +53,7 @@ Disassembly of section .text:
                	adrp	x8, <addr>
                	add	x8, x8, <lo12>
                	mov	x1, x4
-               	lsl	x0, x1, #4
-               	add	x0, x8, x0
+               	add	x0, x8, x1, lsl #4
                	ldrsw	x2, [x0]
                	ldrsw	x3, [x0, #0x4]
                	ldrsw	x5, [x0, #0x8]

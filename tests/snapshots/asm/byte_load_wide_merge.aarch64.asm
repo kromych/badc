@@ -35,8 +35,7 @@ Disassembly of section .text:
                	ldrb	w1, [x0]
                	lsl	x1, x1, #16
                	ldrb	w2, [x0, #0x1]
-               	lsl	x2, x2, #8
-               	orr	x1, x1, x2
+               	orr	x1, x1, x2, lsl #8
                	ldrb	w0, [x0, #0x2]
                	orr	x0, x1, x0
                	ret

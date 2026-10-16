@@ -160,16 +160,14 @@ Disassembly of section .text:
                	add	x5, x5, x6
                	add	x6, x2, #0x1
                	ldr	x6, [x0, x6, lsl #3]
-               	lsl	x6, x6, #1
-               	add	x5, x5, x6
+               	add	x5, x5, x6, lsl #1
                	add	x6, x2, #0x2
                	ldr	x6, [x0, x6, lsl #3]
                	mul	x6, x6, x9
                	add	x5, x5, x6
                	add	x6, x2, #0x3
                	ldr	x6, [x0, x6, lsl #3]
-               	lsl	x6, x6, #2
-               	add	x5, x5, x6
+               	add	x5, x5, x6, lsl #2
                	add	x6, x2, #0x4
                	add	x2, x6, #0x1
                	ldr	x6, [x0, x6, lsl #3]
@@ -280,16 +278,14 @@ Disassembly of section .text:
                	add	x3, x3, x4
                	add	x4, x2, #0x1
                	ldr	x4, [x0, x4, lsl #3]
-               	lsl	x4, x4, #1
-               	add	x3, x3, x4
+               	add	x3, x3, x4, lsl #1
                	add	x4, x2, #0x2
                	ldr	x4, [x0, x4, lsl #3]
                	mul	x4, x4, x7
                	add	x3, x3, x4
                	add	x4, x2, #0x3
                	ldr	x4, [x0, x4, lsl #3]
-               	lsl	x4, x4, #2
-               	add	x3, x3, x4
+               	add	x3, x3, x4, lsl #2
                	add	x4, x2, #0x4
                	b	<addr>
                	mov	x4, x2
@@ -352,8 +348,7 @@ Disassembly of section .text:
                	movk	x17, #0x2e8b, lsl #16
                	mul	x20, x14, x17
                	asr	x20, x20, #33
-               	lsr	x22, x20, #63
-               	add	x20, x20, x22
+               	add	x20, x20, x20, lsr #63
                	msub	x14, x20, x15, x14
                	ldrb	w14, [x0, x14]
                	ldr	x14, [x21, x14, lsl #3]
@@ -371,8 +366,7 @@ Disassembly of section .text:
                	movk	x17, #0x2e8b, lsl #16
                	mul	x20, x14, x17
                	asr	x20, x20, #33
-               	lsr	x22, x20, #63
-               	add	x20, x20, x22
+               	add	x20, x20, x20, lsr #63
                	msub	x14, x20, x15, x14
                	ldrb	w14, [x0, x14]
                	ldr	x14, [x21, x14, lsl #3]
@@ -383,8 +377,7 @@ Disassembly of section .text:
                	movk	x17, #0x2e8b, lsl #16
                	mul	x2, x14, x17
                	asr	x2, x2, #33
-               	lsr	x21, x2, #63
-               	add	x2, x2, x21
+               	add	x2, x2, x2, lsr #63
                	mul	x21, x2, x15
                	sub	x2, x14, x21
                	ldrb	w2, [x0, x2]
@@ -404,13 +397,11 @@ Disassembly of section .text:
                	ldrb	w14, [x0, x14]
                	ldr	x14, [x20, x14, lsl #3]
                	br	x14
-               	lsl	x0, x12, #1
-               	add	x0, x1, x0
+               	add	x0, x1, x12, lsl #1
                	mov	x17, #0x3               // =3
                	mul	x1, x11, x17
                	add	x0, x0, x1
-               	lsl	x1, x10, #2
-               	add	x0, x0, x1
+               	add	x0, x0, x10, lsl #2
                	mov	x17, #0x5               // =5
                	mul	x1, x9, x17
                	add	x0, x0, x1
@@ -420,8 +411,7 @@ Disassembly of section .text:
                	mov	x17, #0x7               // =7
                	mul	x1, x7, x17
                	add	x0, x0, x1
-               	lsl	x1, x6, #3
-               	add	x0, x0, x1
+               	add	x0, x0, x6, lsl #3
                	mov	x17, #0x9               // =9
                	mul	x1, x5, x17
                	add	x0, x0, x1
@@ -442,7 +432,7 @@ Disassembly of section .text:
                	ret
 
 <pressure_switch>:
-               	stp	x20, x21, [sp, #-0x20]!
+               	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	mov	x14, #0xb               // =11
@@ -465,8 +455,7 @@ Disassembly of section .text:
                	movk	x17, #0x2e8b, lsl #16
                	mul	x20, x15, x17
                	asr	x20, x20, #33
-               	lsr	x21, x20, #63
-               	add	x20, x20, x21
+               	add	x20, x20, x20, lsr #63
                	msub	x15, x20, x14, x15
                	ldrb	w15, [x0, x15]
                	cmp	w15, #0x1
@@ -480,8 +469,7 @@ Disassembly of section .text:
                	movk	x17, #0x2e8b, lsl #16
                	mul	x20, x15, x17
                	asr	x20, x20, #33
-               	lsr	x21, x20, #63
-               	add	x20, x20, x21
+               	add	x20, x20, x20, lsr #63
                	msub	x15, x20, x14, x15
                	ldrb	w15, [x0, x15]
                	eor	x15, x15, #0x3
@@ -508,13 +496,11 @@ Disassembly of section .text:
                	eor	x8, x8, x9
                	add	x7, x7, x8
                	b	<addr>
-               	lsl	x0, x11, #1
-               	add	x0, x1, x0
+               	add	x0, x1, x11, lsl #1
                	mov	x17, #0x3               // =3
                	mul	x1, x10, x17
                	add	x0, x0, x1
-               	lsl	x1, x9, #2
-               	add	x0, x0, x1
+               	add	x0, x0, x9, lsl #2
                	mov	x17, #0x5               // =5
                	mul	x1, x8, x17
                	add	x0, x0, x1
@@ -524,8 +510,7 @@ Disassembly of section .text:
                	mov	x17, #0x7               // =7
                	mul	x1, x6, x17
                	add	x0, x0, x1
-               	lsl	x1, x5, #3
-               	add	x0, x0, x1
+               	add	x0, x0, x5, lsl #3
                	mov	x17, #0x9               // =9
                	mul	x1, x4, x17
                	add	x0, x0, x1
@@ -541,7 +526,7 @@ Disassembly of section .text:
                	sxtw	x1, w13
                	add	x0, x0, x1
                	ldp	x29, x30, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x20
+               	ldr	x20, [sp], #0x20
                	ret
 
 <records>:
@@ -564,8 +549,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x64
                	add	x6, x2, #0x1
                	ldrb	w2, [x2]
-               	lsl	x2, x2, #4
-               	add	x2, x1, x2
+               	add	x2, x1, x2, lsl #4
                	ldr	x8, [x2]
                	ldr	x2, [x2, #0x8]
                	cmp	x2, x5

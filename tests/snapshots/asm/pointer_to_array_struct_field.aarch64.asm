@@ -49,8 +49,7 @@ Disassembly of section .text:
                	mov	x5, #0x0                // =0
                	mov	x4, #0x64               // =100
                	mov	x1, x5
-               	lsl	x2, x1, #4
-               	add	x2, x0, x2
+               	add	x2, x0, x1, lsl #4
                	ldrsh	x6, [x2]
                	mul	x3, x1, x4
                	sxth	x7, w3
@@ -93,8 +92,7 @@ Disassembly of section .text:
                	cmp	w2, w3
                	b.ne	<addr>
                	mov	x6, #0x7                // =7
-               	lsl	x2, x1, #4
-               	add	x2, x0, x2
+               	add	x2, x0, x1, lsl #4
                	ldrsh	x2, [x2, #0xe]
                	mul	x3, x1, x4
                	add	x3, x3, #0x7

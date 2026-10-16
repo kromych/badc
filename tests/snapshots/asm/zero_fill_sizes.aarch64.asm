@@ -169,8 +169,7 @@ Disassembly of section .text:
                	movk	x2, #0xc0, lsl #48
                	umulh	x2, x0, x2
                	sub	x3, x0, x2
-               	lsr	x3, x3, #1
-               	add	x2, x3, x2
+               	add	x2, x2, x3, lsr #1
                	lsr	x2, x2, #9
                	mov	x17, #0x3fd             // =1021
                	mul	x2, x2, x17

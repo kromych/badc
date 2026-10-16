@@ -18,15 +18,13 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x2, [x1]
                	ldr	x3, [x1, #0x8]
-               	lsl	x3, x3, #1
-               	add	x2, x2, x3
+               	add	x2, x2, x3, lsl #1
                	ldr	x3, [x1, #0x10]
                	mov	x17, #0x3               // =3
                	mul	x3, x3, x17
                	add	x2, x2, x3
                	ldr	x3, [x1, #0x18]
-               	lsl	x3, x3, #2
-               	add	x2, x2, x3
+               	add	x2, x2, x3, lsl #2
                	ldr	x3, [x1, #0x20]
                	mov	x17, #0x5               // =5
                	mul	x3, x3, x17
@@ -40,8 +38,7 @@ Disassembly of section .text:
                	mul	x3, x3, x17
                	add	x2, x2, x3
                	ldr	x3, [x1, #0x38]
-               	lsl	x3, x3, #3
-               	add	x2, x2, x3
+               	add	x2, x2, x3, lsl #3
                	ldr	x3, [x1, #0x40]
                	mov	x17, #0x9               // =9
                	mul	x3, x3, x17
@@ -71,8 +68,7 @@ Disassembly of section .text:
                	mul	x3, x3, x17
                	add	x2, x2, x3
                	ldr	x3, [x1, #0x78]
-               	lsl	x3, x3, #4
-               	add	x2, x2, x3
+               	add	x2, x2, x3, lsl #4
                	ldr	x3, [x1, #0x80]
                	mov	x17, #0x11              // =17
                	mul	x3, x3, x17
@@ -134,8 +130,7 @@ Disassembly of section .text:
                	mul	x3, x3, x17
                	add	x2, x2, x3
                	ldr	x3, [x1, #0xf8]
-               	lsl	x3, x3, #5
-               	add	x2, x2, x3
+               	add	x2, x2, x3, lsl #5
                	ldr	x3, [x1, #0x100]
                	mov	x17, #0x21              // =33
                	mul	x3, x3, x17
@@ -261,8 +256,7 @@ Disassembly of section .text:
                	mul	x3, x3, x17
                	add	x2, x2, x3
                	ldr	x3, [x1, #0x1f8]
-               	lsl	x3, x3, #6
-               	add	x2, x2, x3
+               	add	x2, x2, x3, lsl #6
                	ldr	x3, [x1, #0x200]
                	mov	x17, #0x41              // =65
                	mul	x3, x3, x17
@@ -516,8 +510,7 @@ Disassembly of section .text:
                	mul	x3, x3, x17
                	add	x2, x2, x3
                	ldr	x3, [x1, #0x3f8]
-               	lsl	x3, x3, #7
-               	add	x2, x2, x3
+               	add	x2, x2, x3, lsl #7
                	ldr	x3, [x1, #0x400]
                	mov	x17, #0x81              // =129
                	mul	x3, x3, x17

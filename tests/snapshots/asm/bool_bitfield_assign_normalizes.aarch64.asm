@@ -57,8 +57,7 @@ Disassembly of section .text:
                	and	x1, x1, #0x7
                	ldur	w3, [x29, #-0x8]
                	and	x3, x3, #0xffffffffffffffe3
-               	lsl	x1, x1, #2
-               	orr	x1, x3, x1
+               	orr	x1, x3, x1, lsl #2
                	stur	w1, [x29, #-0x8]
                	mov	w3, w1
                	asr	x3, x3, #2
@@ -73,8 +72,7 @@ Disassembly of section .text:
                	fcvtzs	x3, d0
                	and	x3, x3, #0xf
                	and	x1, x1, #0xfffffffffffffe1f
-               	lsl	x3, x3, #5
-               	orr	x1, x1, x3
+               	orr	x1, x1, x3, lsl #5
                	stur	w1, [x29, #-0x8]
                	mov	w3, w1
                	asr	x3, x3, #5

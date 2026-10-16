@@ -97,8 +97,7 @@ Disassembly of section .text:
                	orr	x1, x1, #0x1ffffe
                	stur	x1, [x29, #-0x18]
                	lsr	x0, x0, #5
-               	lsl	x2, x1, #59
-               	orr	x0, x0, x2
+               	orr	x0, x0, x1, lsl #59
                	and	x0, x0, #0xfffffffffffffff
                	mov	x17, #0xb               // =11
                	movk	x17, #0x800, lsl #48
@@ -162,8 +161,7 @@ Disassembly of section .text:
                	add	x2, x2, x3
                	lsr	x5, x2, #32
                	cbz	x5, <addr>
-               	lsl	x0, x0, #32
-               	orr	x8, x0, x1
+               	orr	x8, x1, x0, lsl #32
                	mov	x17, #0xdb85            // =56197
                	movk	x17, #0x6db6, lsl #16
                	movk	x17, #0xb6db, lsl #32
@@ -196,16 +194,14 @@ Disassembly of section .text:
                	lsr	x6, x0, #32
                	cbnz	x6, <addr>
                	mul	x6, x0, x4
-               	lsl	x7, x1, #32
-               	orr	x7, x7, x2
+               	orr	x7, x2, x1, lsl #32
                	cmp	x6, x7
                	b.ls	<addr>
                	sub	x0, x0, #0x1
                	add	x1, x1, x3
                	lsr	x6, x1, #32
                	cbz	x6, <addr>
-               	lsl	x1, x9, #32
-               	orr	x1, x1, x2
+               	orr	x1, x2, x9, lsl #32
                	mov	x17, #0x300000000000    // =52776558133248
                	movk	x17, #0xf424, lsl #48
                	mul	x2, x0, x17
@@ -221,16 +217,14 @@ Disassembly of section .text:
                	lsr	x6, x1, #32
                	cbnz	x6, <addr>
                	mul	x6, x1, x4
-               	lsl	x7, x2, #32
-               	orr	x7, x7, x5
+               	orr	x7, x5, x2, lsl #32
                	cmp	x6, x7
                	b.ls	<addr>
                	sub	x1, x1, #0x1
                	add	x2, x2, x3
                	lsr	x6, x2, #32
                	cbz	x6, <addr>
-               	lsl	x0, x0, #32
-               	orr	x0, x0, x1
+               	orr	x0, x1, x0, lsl #32
                	mov	x17, #0x4243            // =16963
                	movk	x17, #0xf, lsl #16
                	mul	x0, x0, x17
@@ -248,8 +242,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldur	w1, [x0, #0x1]
                	ldrb	w0, [x0, #0x5]
-               	lsl	x0, x0, #32
-               	orr	x0, x1, x0
+               	orr	x0, x1, x0, lsl #32
                	lsl	x0, x0, #24
                	asr	x0, x0, #24
                	asr	x1, x0, #63

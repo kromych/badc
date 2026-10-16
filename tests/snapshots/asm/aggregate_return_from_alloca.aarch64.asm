@@ -42,8 +42,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	cmp	x1, x21
                	b.ge	<addr>
-               	lsl	x0, x1, #4
-               	add	x0, x20, x0
+               	add	x0, x20, x1, lsl #4
                	add	x2, x1, x22
                	scvtf	d0, x2
                	sub	sp, sp, #0x30
@@ -245,8 +244,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	cmp	x1, x21
                	b.ge	<addr>
-               	lsl	x0, x1, #3
-               	add	x2, x20, x0
+               	add	x2, x20, x1, lsl #3
                	add	x3, x1, x22
                	scvtf	s0, x3
                	add	x0, x3, #0x1
@@ -342,8 +340,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	cmp	x1, x21
                	b.ge	<addr>
-               	lsl	x0, x1, #3
-               	add	x2, x20, x0
+               	add	x2, x20, x1, lsl #3
                	add	x3, x1, x22
                	scvtf	s0, x3
                	add	x0, x3, #0x1
@@ -393,8 +390,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	cmp	x1, x21
                	b.ge	<addr>
-               	lsl	x0, x1, #4
-               	add	x2, x20, x0
+               	add	x2, x20, x1, lsl #4
                	add	x3, x1, x22
                	scvtf	d0, x3
                	add	x0, x3, #0x2
@@ -545,36 +541,26 @@ Disassembly of section .text:
                	strb	w0, [x20, #0xb]
                	ldrb	w0, [x20]
                	ldrb	w1, [x20, #0x1]
-               	lsl	x1, x1, #8
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #8
                	ldrb	w1, [x20, #0x2]
-               	lsl	x1, x1, #16
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #16
                	ldrb	w1, [x20, #0x3]
-               	lsl	x1, x1, #24
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #24
                	ldrb	w1, [x20, #0x4]
-               	lsl	x1, x1, #32
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #32
                	ldrb	w1, [x20, #0x5]
-               	lsl	x1, x1, #40
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #40
                	ldrb	w1, [x20, #0x6]
-               	lsl	x1, x1, #48
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #48
                	ldrb	w1, [x20, #0x7]
-               	lsl	x1, x1, #56
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #56
                	ldrb	w1, [x20, #0x8]
                	ldrb	w2, [x20, #0x9]
-               	lsl	x2, x2, #8
-               	orr	x1, x1, x2
+               	orr	x1, x1, x2, lsl #8
                	ldrb	w2, [x20, #0xa]
-               	lsl	x2, x2, #16
-               	orr	x1, x1, x2
+               	orr	x1, x1, x2, lsl #16
                	ldrb	w2, [x20, #0xb]
-               	lsl	x2, x2, #24
-               	orr	x1, x1, x2
+               	orr	x1, x1, x2, lsl #24
                	sub	sp, x29, #0x30
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x22, [sp, #0x10]

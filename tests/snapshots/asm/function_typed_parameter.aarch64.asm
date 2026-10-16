@@ -48,8 +48,7 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	lsl	x0, x0, #2
-               	add	x0, x1, x0
+               	add	x0, x1, x0, lsl #2
                	ret
 
 <plain_func>:

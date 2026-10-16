@@ -53,8 +53,7 @@ Disassembly of section .text:
                	mov	x1, #0x40               // =64
                	ldurb	w2, [x29, #-0x7]
                	and	x2, x2, #0x1
-               	lsl	x2, x2, #3
-               	sub	x1, x1, x2
+               	sub	x1, x1, x2, lsl #3
                	cmp	w1, #0x38
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

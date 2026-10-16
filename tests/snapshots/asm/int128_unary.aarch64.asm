@@ -81,8 +81,7 @@ Disassembly of section .text:
                	neg	x1, x2
                	asr	x4, x1, #4
                	lsr	x2, x3, #4
-               	lsl	x5, x1, #60
-               	orr	x5, x2, x5
+               	orr	x5, x2, x1, lsl #60
                	mov	x2, #-0x1               // =-1
                	cmp	x5, x2
                	b.ne	<addr>

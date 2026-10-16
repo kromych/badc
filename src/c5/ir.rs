@@ -252,6 +252,16 @@ pub(crate) enum Inst {
         c: ValueId,
         neg_product: bool,
     },
+    /// `lhs <op> (rhs <shift> amount)` in 64 bits: an `Add`, `Sub`, `And`,
+    /// `Or` or `Xor` of a `Shl`, `Shr` or `Shru` by 1..=63, one AArch64
+    /// shifted-register instruction (`passes::shifted_operand`).
+    ShiftOp {
+        op: BinOp,
+        lhs: ValueId,
+        rhs: ValueId,
+        shift: BinOp,
+        amount: u8,
+    },
     /// The quotient of the unsigned 128-bit `hi:lo` by `divisor`, for `hi <
     /// divisor`: x86_64 `div` of rdx:rax (`irgen::int128`).
     Udiv128 {
@@ -671,6 +681,7 @@ impl Inst {
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
+                | Inst::ShiftOp { .. }
                 | Inst::Udiv128 { .. }
                 | Inst::FpCast { .. }
                 | Inst::Extend { .. }
@@ -728,6 +739,7 @@ impl Inst {
             Inst::Fneg(_) => "Fneg",
             Inst::Fma { .. } => "Fma",
             Inst::MulAdd { .. } => "MulAdd",
+            Inst::ShiftOp { .. } => "ShiftOp",
             Inst::Udiv128 { .. } => "Udiv128",
             Inst::Extend { .. } => "Extend",
             Inst::Bswap { .. } => "Bswap",
@@ -806,7 +818,7 @@ impl Inst {
                 f(*index);
                 f(*value);
             }
-            Inst::Binop { lhs, rhs, .. } => {
+            Inst::Binop { lhs, rhs, .. } | Inst::ShiftOp { lhs, rhs, .. } => {
                 f(*lhs);
                 f(*rhs);
             }
@@ -920,7 +932,7 @@ impl Inst {
                 f(index);
                 f(value);
             }
-            Inst::Binop { lhs, rhs, .. } => {
+            Inst::Binop { lhs, rhs, .. } | Inst::ShiftOp { lhs, rhs, .. } => {
                 f(lhs);
                 f(rhs);
             }
@@ -2458,6 +2470,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::Fneg { .. }
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }
+            | Inst::ShiftOp { .. }
             | Inst::Udiv128 { .. }
             | Inst::Extend { .. }
             | Inst::Bswap { .. }

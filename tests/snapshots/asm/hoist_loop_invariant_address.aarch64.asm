@@ -66,14 +66,12 @@ Disassembly of section .text:
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x0, x1
-               	lsl	x3, x0, #4
-               	add	x3, x2, x3
+               	add	x3, x2, x0, lsl #4
                	add	x0, x0, #0x1
                	str	w0, [x3]
                	cmp	w0, #0x18
                	b.ge	<addr>
-               	lsl	x4, x0, #4
-               	add	x4, x2, x4
+               	add	x4, x2, x0, lsl #4
                	b	<addr>
                	mov	x4, x1
                	str	x4, [x3, #0x8]
@@ -133,8 +131,7 @@ Disassembly of section .text:
                	smulh	x5, x2, x3
                	add	x2, x5, x2
                	asr	x2, x2, #29
-               	lsr	x5, x2, #63
-               	add	x2, x2, x5
+               	add	x2, x2, x2, lsr #63
                	add	x1, x1, x2
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -159,8 +156,7 @@ Disassembly of section .text:
                	smulh	x5, x2, x3
                	add	x2, x5, x2
                	asr	x2, x2, #29
-               	lsr	x5, x2, #63
-               	add	x2, x2, x5
+               	add	x2, x2, x2, lsr #63
                	add	x1, x1, x2
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -262,8 +258,7 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
                	movi	d0, #0000000000000000
-               	lsl	x1, x0, #2
-               	add	x1, x2, x1
+               	add	x1, x2, x0, lsl #2
                	str	s1, [x1]
                	ldr	s2, [x1]
                	fadd	s0, s0, s2
@@ -289,8 +284,7 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
                	movi	d0, #0000000000000000
-               	lsl	x1, x0, #2
-               	add	x1, x2, x1
+               	add	x1, x2, x0, lsl #2
                	str	s1, [x1]
                	ldr	s2, [x1]
                	fadd	s0, s0, s2

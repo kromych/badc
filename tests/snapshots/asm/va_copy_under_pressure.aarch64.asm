@@ -44,17 +44,16 @@ Disassembly of section .text:
                	mov	x17, #0xd               // =13
                	mul	x5, x0, x17
                	add	x6, x0, #0x1d
-               	lsl	x7, x0, #2
-               	add	x8, x0, #0x29
+               	add	x7, x0, #0x29
                	mov	x17, #0x9               // =9
-               	mul	x9, x0, x17
-               	add	x10, x0, #0x35
+               	mul	x8, x0, x17
+               	add	x9, x0, #0x35
                	mov	x17, #0x5               // =5
-               	mul	x11, x0, x17
-               	add	x12, x0, #0x3d
+               	mul	x10, x0, x17
+               	add	x11, x0, #0x3d
                	mov	x17, #0xf               // =15
-               	mul	x13, x0, x17
-               	add	x0, x0, #0x3
+               	mul	x12, x0, x17
+               	add	x13, x0, #0x3
                	sub	x14, x29, #0x40
                	add	x15, x29, #0x10
                	mov	x16, x14
@@ -127,14 +126,14 @@ Disassembly of section .text:
                	add	x1, x1, x4
                	add	x1, x1, x5
                	add	x1, x1, x6
-               	add	x1, x1, x7
-               	add	x1, x1, x8
-               	add	x1, x1, x9
-               	add	x1, x1, x10
-               	add	x1, x1, x11
-               	add	x1, x1, x12
-               	add	x1, x1, x13
-               	add	x0, x1, x0
+               	add	x0, x1, x0, lsl #2
+               	add	x0, x0, x7
+               	add	x0, x0, x8
+               	add	x0, x0, x9
+               	add	x0, x0, x10
+               	add	x0, x0, x11
+               	add	x0, x0, x12
+               	add	x0, x0, x13
                	add	x0, x0, x14
                	add	x0, x0, x15
                	ldp	x29, x30, [sp, #0x50]

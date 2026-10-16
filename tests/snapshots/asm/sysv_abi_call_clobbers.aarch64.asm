@@ -263,13 +263,11 @@ Disassembly of section .text:
                	fcmp	d0, d1
                	b.eq	<addr>
                	orr	x20, x20, #0x20
-               	lsl	x0, x22, #1
-               	add	x0, x21, x0
+               	add	x0, x21, x22, lsl #1
                	mov	x17, #0x3               // =3
                	mul	x1, x23, x17
                	add	x0, x0, x1
-               	lsl	x1, x24, #2
-               	add	x0, x0, x1
+               	add	x0, x0, x24, lsl #2
                	mov	x17, #0x5               // =5
                	mul	x1, x25, x17
                	add	x0, x0, x1

@@ -27,8 +27,7 @@ Disassembly of section .text:
                	movk	x1, #0x2492, lsl #48
                	umulh	x1, x0, x1
                	sub	x3, x0, x1
-               	lsr	x3, x3, #1
-               	add	x1, x3, x1
+               	add	x1, x1, x3, lsr #1
                	lsr	x1, x1, #2
                	mov	x17, #0x7               // =7
                	mul	x1, x1, x17

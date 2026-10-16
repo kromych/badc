@@ -239,6 +239,15 @@ pub(super) fn emit_inst(
             c,
             neg_product,
         } => emit_mul_add(code, dst, *a, *b, *c, *neg_product, alloc, frame, scratch),
+        Inst::ShiftOp {
+            op,
+            lhs,
+            rhs,
+            shift,
+            amount,
+        } => emit_shift_op(
+            code, dst, *op, *lhs, *rhs, *shift, *amount, alloc, frame, scratch,
+        ),
         Inst::BinopI { op, lhs, rhs_imm } => {
             emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame, scratch)
         }

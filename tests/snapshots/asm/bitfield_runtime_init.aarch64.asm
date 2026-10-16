@@ -16,12 +16,10 @@ Disassembly of section .text:
 <build_packed>:
                	and	x0, x0, #0xf
                	and	x4, x1, #0xf
-               	lsl	x1, x4, #4
-               	orr	x1, x0, x1
+               	orr	x1, x0, x4, lsl #4
                	and	x5, x2, #0x1f
                	and	x1, x1, #0xffffffffffffe0ff
-               	lsl	x5, x5, #8
-               	orr	x1, x1, x5
+               	orr	x1, x1, x5, lsl #8
                	and	x3, x3, #0xfffff
                	and	x5, x1, #0xf
                	eor	x5, x5, x0
@@ -62,13 +60,11 @@ Disassembly of section .text:
                	and	x5, x1, #0x7
                	ldur	w1, [x29, #-0x10]
                	and	x1, x1, #0xfffffffffff8ffff
-               	lsl	x6, x5, #16
-               	orr	x1, x1, x6
+               	orr	x1, x1, x5, lsl #16
                	stur	w1, [x29, #-0x10]
                	and	x6, x2, #0x3ff
                	and	x1, x1, #0xffffffffe007ffff
-               	lsl	x2, x6, #19
-               	orr	x1, x1, x2
+               	orr	x1, x1, x6, lsl #19
                	stur	w1, [x29, #-0x10]
                	and	x2, x3, #0x7ffff
                	stur	w2, [x29, #-0xc]

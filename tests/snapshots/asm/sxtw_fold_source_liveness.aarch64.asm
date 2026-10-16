@@ -16,8 +16,7 @@ Disassembly of section .text:
 <f>:
                	lsl	x2, x0, #32
                	add	x0, x0, x1
-               	asr	x2, x2, #32
-               	add	x0, x2, x0
+               	add	x0, x0, x2, asr #32
                	add	x0, x0, x1
                	ret
 

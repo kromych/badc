@@ -15,8 +15,7 @@ Disassembly of section .text:
 
 <check_field>:
                	sxtw	x1, w1
-               	lsl	x1, x1, #2
-               	add	x0, x0, x1
+               	add	x0, x0, x1, lsl #2
                	ldrb	w1, [x0]
                	ldrb	w6, [x0, #0x1]
                	ldrb	w7, [x0, #0x2]
@@ -81,8 +80,7 @@ Disassembly of section .text:
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	ldursw	x2, [x29, #-0x8]
-               	lsl	x2, x2, #2
-               	add	x2, x1, x2
+               	add	x2, x1, x2, lsl #2
                	ldrb	w3, [x2]
                	ldrb	w2, [x2, #0x2]
                	eor	x3, x3, #0x3c

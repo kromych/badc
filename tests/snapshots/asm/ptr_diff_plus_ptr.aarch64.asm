@@ -29,8 +29,7 @@ Disassembly of section .text:
                	add	x1, x0, #0x20
                	sub	x2, x1, x0
                	asr	x3, x2, #63
-               	lsr	x3, x3, #60
-               	add	x2, x2, x3
+               	add	x2, x2, x3, lsr #60
                	asr	x2, x2, #4
                	lsl	x2, x2, #4
                	add	x3, x2, x0

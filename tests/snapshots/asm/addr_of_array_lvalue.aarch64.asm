@@ -141,8 +141,7 @@ Disassembly of section .text:
                	add	x3, x0, #0x8
                	sub	x2, x3, x0
                	asr	x4, x2, #63
-               	lsr	x5, x4, #61
-               	add	x5, x2, x5
+               	add	x5, x2, x4, lsr #61
                	asr	x5, x5, #3
                	cmp	x5, #0x1
                	b.ne	<addr>
@@ -185,8 +184,7 @@ Disassembly of section .text:
                	and	x0, x0, #0xfffffffffffffff0
                	cmp	x0, #0x10
                	b.ne	<addr>
-               	lsr	x0, x4, #62
-               	add	x0, x2, x0
+               	add	x0, x2, x4, lsr #62
                	asr	x0, x0, #2
                	add	x0, x0, #0x3
                	and	x0, x0, #0xfffffffffffffffc

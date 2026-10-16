@@ -326,6 +326,62 @@ pub(super) fn emit_mul_add(
     Ok(())
 }
 
+/// The 64-bit ADD, SUB, AND, ORR or EOR (shifted register) base word for
+/// `op` and the LSL, LSR or ASR that applies `shift` (Arm ARM C6.2).
+pub(super) fn shifted_reg_form(op: BinOp, shift: BinOp) -> Option<(u32, super::encode::RegShift)> {
+    use super::encode::{ADD_REG, AND_REG, EOR_REG, ORR_REG, RegShift, SUB_REG};
+    let base = match op {
+        BinOp::Add => ADD_REG,
+        BinOp::Sub => SUB_REG,
+        BinOp::And => AND_REG,
+        BinOp::Or => ORR_REG,
+        BinOp::Xor => EOR_REG,
+        _ => return None,
+    };
+    let kind = match shift {
+        BinOp::Shl => RegShift::Lsl,
+        BinOp::Shru => RegShift::Lsr,
+        BinOp::Shr => RegShift::Asr,
+        _ => return None,
+    };
+    Some((base, kind))
+}
+
+/// `Inst::ShiftOp`: one shifted-register instruction, which reads both
+/// sources before writing `rd`; a spilled operand reloads into a scratch.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_shift_op(
+    code: &mut Vec<u8>,
+    dst: Place,
+    op: BinOp,
+    lhs: u32,
+    rhs: u32,
+    shift: BinOp,
+    amount: u8,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    let Some((base, shift)) = shifted_reg_form(op, shift) else {
+        return fail("ShiftOp: no shifted-register form");
+    };
+    let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+        return fail("ShiftOp: dst not int reg / spill");
+    };
+    let (Some(rn), Some(rm)) = (
+        materialize_int(code, place_of(alloc, lhs), scratch.primary, frame),
+        materialize_int(code, place_of(alloc, rhs), scratch.secondary, frame),
+    ) else {
+        return fail("ShiftOp: operand not int reg / spill");
+    };
+    emit(
+        code,
+        super::encode::enc_rrr_shifted(base, rd, rn, rm, shift, u32::from(amount)),
+    );
+    store_spilled_int(code, frame, dst, rd);
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_binop(
     code: &mut Vec<u8>,

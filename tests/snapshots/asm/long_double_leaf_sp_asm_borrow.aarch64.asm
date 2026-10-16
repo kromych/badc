@@ -149,8 +149,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x80
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x80
-               	lsl	x2, x0, #3
-               	add	x1, x1, x2
+               	add	x1, x1, x0, lsl #3
                	add	x2, x0, #0xb
                	str	x2, [x1]
                	add	x0, x0, #0x1
@@ -170,8 +169,7 @@ Disassembly of section .text:
                	sub	x2, x29, #0x80
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	lsl	x3, x0, #3
-               	add	x3, x2, x3
+               	add	x3, x2, x0, lsl #3
                	ldr	x3, [x3]
                	add	x1, x1, x3
                	add	x0, x0, #0x1
@@ -188,8 +186,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x80
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x80
-               	lsl	x2, x0, #3
-               	add	x1, x1, x2
+               	add	x1, x1, x0, lsl #3
                	add	x2, x0, #0xb
                	str	x2, [x1]
                	add	x0, x0, #0x1
@@ -206,8 +203,7 @@ Disassembly of section .text:
                	sub	x2, x29, #0x80
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	lsl	x3, x0, #3
-               	add	x3, x2, x3
+               	add	x3, x2, x0, lsl #3
                	ldr	x3, [x3]
                	add	x1, x1, x3
                	add	x0, x0, #0x1

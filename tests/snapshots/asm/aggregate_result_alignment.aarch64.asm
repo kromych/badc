@@ -46,48 +46,34 @@ Disassembly of section .text:
                	bl	<addr>
                	ldurb	w0, [x29, #-0x10]
                	ldurb	w1, [x29, #-0xf]
-               	lsl	x1, x1, #8
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #8
                	ldurb	w1, [x29, #-0xe]
-               	lsl	x1, x1, #16
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #16
                	ldurb	w1, [x29, #-0xd]
-               	lsl	x1, x1, #24
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #24
                	ldurb	w1, [x29, #-0xc]
-               	lsl	x1, x1, #32
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #32
                	ldurb	w1, [x29, #-0xb]
-               	lsl	x1, x1, #40
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #40
                	ldurb	w1, [x29, #-0xa]
-               	lsl	x1, x1, #48
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #48
                	ldurb	w1, [x29, #-0x9]
-               	lsl	x1, x1, #56
-               	orr	x0, x0, x1
+               	orr	x0, x0, x1, lsl #56
                	ldurb	w1, [x29, #-0x8]
                	ldurb	w2, [x29, #-0x7]
-               	lsl	x2, x2, #8
-               	orr	x1, x1, x2
+               	orr	x1, x1, x2, lsl #8
                	ldurb	w2, [x29, #-0x6]
-               	lsl	x2, x2, #16
-               	orr	x1, x1, x2
+               	orr	x1, x1, x2, lsl #16
                	ldurb	w2, [x29, #-0x5]
-               	lsl	x2, x2, #24
-               	orr	x1, x1, x2
+               	orr	x1, x1, x2, lsl #24
                	ldurb	w2, [x29, #-0x4]
-               	lsl	x2, x2, #32
-               	orr	x1, x1, x2
+               	orr	x1, x1, x2, lsl #32
                	ldurb	w2, [x29, #-0x3]
-               	lsl	x2, x2, #40
-               	orr	x1, x1, x2
+               	orr	x1, x1, x2, lsl #40
                	ldurb	w2, [x29, #-0x2]
-               	lsl	x2, x2, #48
-               	orr	x1, x1, x2
+               	orr	x1, x1, x2, lsl #48
                	ldurb	w2, [x29, #-0x1]
-               	lsl	x2, x2, #56
-               	orr	x1, x1, x2
+               	orr	x1, x1, x2, lsl #56
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -220,8 +206,7 @@ Disassembly of section .text:
                	ldrb	w21, [sp, #0x5f]
                	and	x0, x20, #0xff
                	bl	<addr>
-               	lsr	x0, x1, #56
-               	add	x21, x21, x0
+               	add	x21, x21, x1, lsr #56
                	and	x0, x20, #0xff
                	add	x8, sp, #0x40
                	bl	<addr>
@@ -354,8 +339,7 @@ Disassembly of section .text:
                	ldur	x2, [x29, #-0x10]
                	add	x1, x1, x2
                	ldur	x2, [x29, #-0x8]
-               	lsl	x2, x2, #1
-               	sub	x20, x1, x2
+               	sub	x20, x1, x2, lsl #1
                	add	x8, sp, #0x40
                	bl	<addr>
                	add	x0, sp, #0x40

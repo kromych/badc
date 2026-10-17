@@ -55,11 +55,14 @@ bash .claude/skills/queue-coordinator/scripts/land.sh <sha>...   # oldest first
 ```
 
 It fast-forwards when the list is exactly `HEAD..last`, otherwise cherry-picks each,
-and stops on a conflict or on drift the post-commit snapshot hook leaves. A
-snapshot-only conflict: take the commit's side (`git checkout --theirs`), continue,
-and read the regenerated drift. Drift that is the combination of two landed changes
-(a binding-index shift, a pass's effect on a fixture the other queue added) folds into
-that commit with `git commit --amend --no-edit`; anything else goes back to the queue.
+and stops on a conflict, on a landed commit that does not build, or on drift the
+post-commit snapshot hook leaves. Two stacks can merge as text and still not compile
+together, and the hook cannot regenerate snapshots from such a tree, so it leaves it
+clean. A snapshot-only conflict: take the commit's side (`git checkout --theirs`),
+continue, and read the regenerated drift. Drift or a build break that is the
+combination of two landed changes (a binding-index shift, a pass's effect on a fixture
+the other queue added, a field one stack renamed and the other reads) folds into that
+commit with `git commit --amend --no-edit`; anything else goes back to the queue.
 
 Then close what landed and tell the queues the new head:
 

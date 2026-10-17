@@ -203,6 +203,9 @@ pub(crate) fn emit_function(
     if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch) {
         return fail(why);
     }
+    if super::ssa::emit_common::needs_region_base(func, target) && frame.region_base.is_none() {
+        return fail(super::ssa::emit_common::NO_REGION_BASE);
+    }
     if frame.canary_bytes > 0 {
         cx.canary_frame_bytes
             .insert(func.ent_pc, frame.canary_bytes);
@@ -1510,6 +1513,9 @@ fn emit_prologue(
     emit_canary_store(code, frame, abi, extern_data_refs);
     if frame.realign_align > 0 {
         emit_realign_sp(code, frame);
+    }
+    if let Some(r) = frame.region_base {
+        emit(code, enc_add_imm(Reg(r), Reg(31), 0));
     }
     // A variadic callee reads its named parameters from the save area.
     if !variadic {

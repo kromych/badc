@@ -1924,20 +1924,6 @@ impl Compiler {
             }
         }
         let over_aligned = core::mem::take(&mut self.func_over_aligned);
-        // C11 6.7.5 + C99 6.7.6.2: an alignment above 16 is met by
-        // realigning sp in the prologue, which `alloca` and a
-        // variable-length array preclude (both move sp). Exactly 16
-        // is met at a static frame offset and coexists with both.
-        // Diagnosed here, where both facts are known, so the
-        // combination reads as a source-level rejection rather
-        // than reaching the walker's internal error.
-        if over_aligned.iter().any(|&(_, align, _)| align > 16) && self.uses_alloca_in_current_fn {
-            return Err(self.compile_err(
-                Code::UNSUPPORTED,
-                "an automatic object aligned above 16 cannot share a function \
-             with `alloca` or a variable-length array; use static storage",
-            ));
-        }
         if let Some(ff) = self.finished_functions.last_mut() {
             ff.multi_cell_slots = multi_cell;
             ff.array_slots = array_slots;

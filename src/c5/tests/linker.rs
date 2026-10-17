@@ -118,7 +118,9 @@ fn overaligned_source() -> String {
 #[cfg(test)]
 fn overaligned_text(src: &str, target: crate::c5::Target) -> Vec<u8> {
     use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
-    let program = Compiler::new(src.to_string()).compile().expect("compile");
+    let program = Compiler::with_target(src.to_string(), target)
+        .compile()
+        .expect("compile");
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
         ..Default::default()
@@ -184,6 +186,126 @@ fn overaligned_automatic_aarch64_realigns_prologue() {
     assert!(
         bytes.windows(4).any(|w| w == [0x1F, 0xE6, 0x7A, 0x92]),
         "aarch64 realigning prologue `and sp, x16, #-64` not emitted"
+    );
+}
+
+/// An automatic object aligned above 16 beside `alloca` (C11 6.7.5): the
+/// realigned sp lands in a callee-saved base register right after the
+/// realignment, rbx on x86-64 and x20 on AArch64, and the region is
+/// addressed from it while sp moves. An inline asm statement naming rbx
+/// moves the base to r12; without `alloca` sp stays put and no base is set.
+#[test]
+fn overaligned_automatic_beside_alloca_keeps_a_region_base() {
+    use crate::c5::Target;
+    let src = |asm: &str| {
+        alloc::format!(
+            "int use(void *, void *);\n\
+             int f(int n) {{ _Alignas(64) char buf[64]; {asm}\n\
+               char *p = __builtin_alloca(n); return use(buf, p); }}\n\
+             int main(void) {{ return f(0); }}\n"
+        )
+    };
+    let follows = |text: &[u8], first: &[u8], second: &[u8]| {
+        text.windows(first.len() + second.len())
+            .any(|w| w[..first.len()] == *first && w[first.len()..] == *second)
+    };
+    let and_rsp: &[u8] = &[0x48, 0x83, 0xE4, 0xC0];
+    let x64 = overaligned_text(&src(""), Target::LinuxX64);
+    assert!(follows(&x64, and_rsp, &[0x48, 0x89, 0xE3]), "mov rbx, rsp");
+    let named = src("long r; __asm__ volatile(\"\" : \"=b\"(r)); use(&r, 0);");
+    let x64 = overaligned_text(&named, Target::LinuxX64);
+    assert!(follows(&x64, and_rsp, &[0x49, 0x89, 0xE4]), "mov r12, rsp");
+    let and_sp: &[u8] = &[0x1F, 0xE6, 0x7A, 0x92];
+    let a64 = overaligned_text(&src(""), Target::LinuxAarch64);
+    assert!(
+        follows(&a64, and_sp, &[0xF4, 0x03, 0x00, 0x91]),
+        "mov x20, sp"
+    );
+    let still = overaligned_source();
+    let x64 = overaligned_text(&still, Target::LinuxX64);
+    assert!(
+        !follows(&x64, and_rsp, &[0x48, 0x89, 0xE3]),
+        "no base without alloca"
+    );
+    // An inline asm statement that may leave rsp moved needs the base too.
+    let switch = "int use(void *, void *);\n\
+        int f(void *top) { _Alignas(64) char buf[64];\n\
+          __asm__ volatile(\"mov %0, %%rsp\" : : \"r\"(top) : \"memory\");\n\
+          return use(buf, 0); }\n\
+        int main(void) { return 0; }\n";
+    let x64 = overaligned_text(switch, Target::LinuxX64);
+    assert!(
+        follows(&x64, and_rsp, &[0x48, 0x89, 0xE3]),
+        "mov rbx, rsp past an sp switch"
+    );
+    // A template that only reads rsp leaves it in place: no base, and a
+    // statement clobbering every candidate is no obstacle.
+    let read = "int use(void *, void *);\n\
+        int f(void) { _Alignas(64) char buf[64]; long sp;\n\
+          __asm__ volatile(\"mov %%rsp, %0\" : \"=r\"(sp));\n\
+          __asm__ volatile(\"\" ::: \"rbx\", \"r12\", \"r13\", \"r14\", \"r15\");\n\
+          return use(buf, (void *)sp); }\n\
+        int main(void) { return 0; }\n";
+    let x64 = overaligned_text(read, Target::LinuxX64);
+    assert!(
+        !follows(&x64, and_rsp, &[0x48, 0x89, 0xE3]),
+        "no base for an sp read"
+    );
+}
+
+/// When every candidate is written by some asm statement, the realigned
+/// frame's base is the first one an operand leaves, and each statement that
+/// writes it saves it ahead of the template and restores it after: `mov
+/// [rbp+d], rbx` / `mov rbx, [rbp+d]` around `xor ebx, ebx` on x86-64, and
+/// `stur x20, [x29, #d]` / `ldur x20, [x29, #d]` around `mov x20, xzr` on
+/// AArch64.
+#[test]
+fn a_statement_that_writes_the_region_base_saves_it() {
+    use crate::c5::Target;
+    let src = |zero: &str, clobbers: &str| {
+        alloc::format!(
+            "int use(void *, void *);\n\
+             int f(int n) {{ _Alignas(64) char buf[64];\n\
+               char *p = __builtin_alloca(n);\n\
+               __asm__ volatile(\"{zero}\" ::: {clobbers});\n\
+               return use(buf, p); }}\n\
+             int main(void) {{ return f(0); }}\n"
+        )
+    };
+    let x64 = overaligned_text(
+        &src(
+            "xor %%ebx, %%ebx",
+            "\"rbx\", \"r12\", \"r13\", \"r14\", \"r15\"",
+        ),
+        Target::LinuxX64,
+    );
+    assert!(
+        x64.windows(10).any(|w| w[..3] == [0x48, 0x89, 0x5D]
+            && w[4..6] == [0x31, 0xDB]
+            && w[6..9] == [0x48, 0x8B, 0x5D]
+            && w[3] == w[9]),
+        "rbx saved around the template"
+    );
+    let a64 = overaligned_text(
+        &src(
+            "mov x20, xzr",
+            "\"x20\", \"x21\", \"x22\", \"x23\", \"x24\", \"x25\", \"x26\", \"x27\", \"x28\"",
+        ),
+        Target::LinuxAarch64,
+    );
+    let words: Vec<u32> = a64
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_le_bytes(*w))
+        .collect();
+    let (stur, ldur, imm) = (0xF800_03B4u32, 0xF840_03B4u32, 0x001F_F000u32);
+    assert!(
+        words.windows(3).any(|w| w[0] & !imm == stur
+            && w[1] == 0xAA1F_03F4
+            && w[2] & !imm == ldur
+            && w[0] & imm == w[2] & imm),
+        "x20 saved around the template"
     );
 }
 

@@ -1203,6 +1203,8 @@ pub(crate) fn free_fp_register(
 /// Allocate physical placements for every value in `func`. See
 /// the module docs for the algorithm.
 pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Allocation {
+    let region_base = super::emit_common::region_base(func, target, fixed);
+    let fixed = super::emit_common::fixed_with_region_base(func, target, fixed);
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
     let mut hints: Vec<Option<u8>> = vec![None; n_insts];
@@ -1983,6 +1985,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             fp_used_callee.push(r);
         }
     }
+    if let Some(r) = region_base.filter(|r| !gpr_used_callee.contains(r)) {
+        gpr_used_callee.push(r);
+    }
     #[cfg(feature = "codegen_test")]
     verify_allocation(
         func,
@@ -1994,7 +1999,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         &use_counts,
     );
 
-    let asm_preserve = asm_preserve_masks(func, target);
+    let asm_preserve = asm_preserve_masks(func, target, region_base);
     Allocation {
         places,
         spill_count,
@@ -2251,7 +2256,8 @@ fn asm_callee_saved(
 
 /// Registers an inline-asm statement preserves around its body, for
 /// [`Allocation::asm_preserve`]: the ABI-reserved ones, which hold what
-/// the function runs on and which no prologue save list covers.
+/// the function runs on and which no prologue save list covers, and the
+/// realigned frame's base (`emit_common::region_base`).
 ///
 /// A save at the site is restored on the statement's own exits -- the
 /// fall-through and one trampoline per `asm goto` label -- and on no
@@ -2269,11 +2275,14 @@ fn asm_callee_saved(
 /// and no frame, the compiler emits nothing around the statement that
 /// reads a register, and a save at the site would address storage that
 /// does not exist.
-fn asm_preserve_masks(func: &FunctionSsa, target: Target) -> (u32, u32) {
+fn asm_preserve_masks(func: &FunctionSsa, target: Target, region_base: Option<u8>) -> (u32, u32) {
     if func.is_naked {
         return (0, 0);
     }
-    (abi_reserved_gprs(target), 0)
+    (
+        abi_reserved_gprs(target) | region_base.map_or(0, |r| 1 << r),
+        0,
+    )
 }
 
 /// [`check_allocation`], under the `codegen_test` feature and only when
@@ -4788,8 +4797,8 @@ int main(void) { return 0; }
             alloc.fp_used
         );
         let fixed = FixedRegs {
-            gpr: 0,
             fpr: (1 << 3) | (1 << 4) | (1 << 5),
+            ..FixedRegs::NONE
         };
         let alloc = super::allocate(f, Target::WindowsX64, fixed);
         assert_eq!(alloc.fp_scratch, [15, 14, 13]);
@@ -5452,8 +5461,8 @@ int main(void) { return 0; }
             (free_fp_register(f, &alloc, target, fixed), alloc.fp_used)
         };
         let scratch_fixed = FixedRegs {
-            gpr: 0,
             fpr: 0xFF00,
+            ..FixedRegs::NONE
         };
         assert_eq!(pick(Target::LinuxX64, "plain", FixedRegs::NONE).0, Some(14));
         assert_eq!(pick(Target::LinuxX64, "fp", FixedRegs::NONE).0, Some(14));

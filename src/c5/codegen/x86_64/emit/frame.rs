@@ -47,6 +47,8 @@ pub(crate) struct Frame {
     /// realigned region sits below the static frame; the objects live at
     /// `[rsp + region_off]`.
     pub realign_align: u32,
+    /// The register holding the realigned rsp in its place where rsp moves.
+    pub region_base: Option<u8>,
     /// Byte size of the realigned region, a multiple of 16.
     pub realign_region_bytes: u32,
     /// Bytes reserved directly below the frame base for the stack-protector
@@ -107,10 +109,12 @@ pub(crate) fn compute_frame(
     let saved_fpr_bytes = alloc.fp_used.len() as u32 * 16;
     // The inline-asm scratch region, sized for the largest statement. A
     // naked function has no frame and stages nothing.
+    let region_base = super::ssa::emit_common::region_base(func, target, abi.fixed_regs);
+    let fixed_regs = super::ssa::emit_common::fixed_with_region_base(func, target, abi.fixed_regs);
     let asm_bytes = if func.is_naked {
         0
     } else {
-        asm_scratch_bytes(func, alloc, abi.fixed_regs, target)
+        asm_scratch_bytes(func, alloc, fixed_regs, target)
     };
     let asm_scratch_off = if asm_bytes > 0 {
         -((upper_bytes + alloc_spill_bytes + va_save_bytes + asm_bytes) as i32)
@@ -144,7 +148,7 @@ pub(crate) fn compute_frame(
         keeps_record: super::ssa::emit_common::body_keeps_frame_record(func, target, |i| {
             intrinsic_keeps_frame(i, abi)
         }),
-        fixed_regs: abi.fixed_regs,
+        fixed_regs,
         fp_scratch: alloc.fp_scratch,
         parts: super::ssa::emit_common::FrameStack {
             record: 0,
@@ -170,6 +174,7 @@ pub(crate) fn compute_frame(
         asm_scratch_off,
         dynamic_sp: super::ssa::emit_common::uses_dynamic_alloca(func) || realign_align > 0,
         realign_align,
+        region_base,
         realign_region_bytes: if realign_align > 0 { region_bytes } else { 0 },
         align_region_off: if static_region_bytes > 0 {
             -((upper_bytes + alloc_spill_bytes + va_save_bytes + asm_bytes + static_region_bytes)
@@ -278,7 +283,7 @@ pub(super) fn asm_operand_regs(
     use super::super::ir::{AsmConstraint, AsmSeg};
     super::asm::assign_operand_regs(
         &asm.operands,
-        asm.clobber_regs | fixed.gpr,
+        asm.clobber_regs | fixed.kept_gpr(),
         asm.clobber_fp_regs | fixed.fpr,
         &|i| asm_operand_const_at(func, args, i),
         &|i| {
@@ -453,9 +458,9 @@ impl BoundShape {
 /// The shape of a statement whose register operands bind to their values'
 /// registers, as an instruction's do, or `None`: each operand is an
 /// immediate, an `r` or `x` input value, or a value output, one of them at
-/// most read-write, none `&` or segment-qualified; the clobbers spare rsp
-/// and rbp; and the scratch outside them can hold every operand that has
-/// no register.
+/// most read-write, none `&` or segment-qualified; the clobbers spare rsp,
+/// rbp and the frame's own register; and the scratch outside them can hold
+/// every operand that has no register.
 pub(super) fn bound_shape(
     func: &FunctionSsa,
     asm: &super::super::ir::AsmBlock,
@@ -465,7 +470,7 @@ pub(super) fn bound_shape(
 ) -> Option<BoundShape> {
     use super::super::ir::{AsmConstraint as C, AsmSeg};
     const RESERVED: u32 = (1 << 4) | (1 << 5);
-    if func.is_naked || func.has_sp_asm() || asm.clobber_regs & RESERVED != 0 {
+    if func.is_naked || func.has_sp_asm() || asm.clobber_regs & (RESERVED | fixed.frame) != 0 {
         return None;
     }
     let mut shape = BoundShape {

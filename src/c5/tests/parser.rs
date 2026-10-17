@@ -132,15 +132,18 @@ fn alignas_on_a_bit_field_is_diagnosed() {
 }
 
 #[test]
-fn overaligned_automatic_beside_a_vla_is_diagnosed() {
+fn overaligned_automatic_beside_a_vla_compiles() {
     // The realigned region (alignment above 16) and a variable-length array
-    // (C99 6.7.6.2) both move sp, so they cannot share a frame. The rejection
-    // is a source-level diagnostic, not the walker's internal error.
-    expect_compile_error(
+    // (C99 6.7.6.2) share a frame: the region is addressed from a base
+    // register while sp moves, as clang addresses it.
+    Compiler::new(
         "int use(void *, void *);\n\
-         int f(int n) { int v[n]; _Alignas(32) char c[32]; return use(v, c); }",
-        "cannot share a function with `alloca` or a variable-length array",
-    );
+         int f(int n) { int v[n]; _Alignas(32) char c[32]; return use(v, c); }\n\
+         int main(void) { return 0; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("32-aligned automatic and VLA share a frame");
     // An alignment of exactly 16 is met at a static frame offset, so it
     // coexists with a VLA; a VLA whose own element needs 16 is met by the
     // 16-byte-rounded sp carve.

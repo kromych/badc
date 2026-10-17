@@ -99,12 +99,8 @@ pub(crate) fn walk_function(
     // frame slot, declared or a temporary, lives in a packed region that
     // every backend addresses as `region_base + region_off`. At
     // `frame_align` 16 the region sits at a static frame offset; above 16
-    // the prologue realigns sp, which `alloca` precludes.
-    if b.place_region_members() > 16 && fun.alloca_top_slot != 0 {
-        return Err(WalkError::Unsupported(
-            "an automatic object aligned above 16 cannot share a function with alloca/VLA",
-        ));
-    }
+    // the prologue realigns sp.
+    b.place_region_members();
     Ok(b.finish())
 }
 

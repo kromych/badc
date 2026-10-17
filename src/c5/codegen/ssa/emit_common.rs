@@ -1463,6 +1463,77 @@ pub(crate) fn uses_dynamic_alloca(func: &super::super::ir::FunctionSsa) -> bool 
         .any(|i| matches!(i, super::super::ir::Inst::AllocaInit(slot) if *slot != 0))
 }
 
+/// The prologue realigns sp (C11 6.7.5) and sp moves during the body: the
+/// realigned region needs a base register, as clang's base pointer.
+pub(crate) fn needs_region_base(
+    func: &super::super::ir::FunctionSsa,
+    target: super::Target,
+) -> bool {
+    func.frame_align > 16
+        && !func.is_naked
+        && (uses_dynamic_alloca(func) || func.has_sp_moving_asm(target))
+}
+
+/// That register: the first of rbx, r12..r15 or x20..x28 (x19 is a scratch
+/// and the locals base) that `-ffixed-` and every asm operand leave, one no
+/// clobber names where there is one; a statement that clobbers it saves it
+/// (`Allocation::asm_preserve`).
+pub(crate) fn region_base(
+    func: &super::super::ir::FunctionSsa,
+    target: super::Target,
+    fixed: super::super::FixedRegs,
+) -> Option<u8> {
+    use super::super::ir::{AsmConstraint, Inst};
+    if !needs_region_base(func, target) {
+        return None;
+    }
+    let (mut operands, mut clobbers) = (0u32, 0u32);
+    for inst in &func.insts {
+        let Inst::InlineAsm { asm, .. } = inst else {
+            continue;
+        };
+        clobbers |= asm.clobber_regs;
+        for op in &asm.operands {
+            if let AsmConstraint::Fixed(r)
+            | AsmConstraint::Bound(r)
+            | AsmConstraint::RegOrImm { reg: Some(r), .. } = op.constraint
+            {
+                operands |= 1 << r;
+            }
+        }
+    }
+    let candidates: &[u8] = if target.is_aarch64() {
+        &[20, 21, 22, 23, 24, 25, 26, 27, 28]
+    } else {
+        &[3, 12, 13, 14, 15]
+    };
+    let free = || {
+        candidates
+            .iter()
+            .copied()
+            .filter(|&r| !fixed.has_gpr(r) && operands & (1 << r) == 0)
+    };
+    free()
+        .find(|&r| clobbers & (1 << r) == 0)
+        .or_else(|| free().next())
+}
+
+/// Why a function that [`needs_region_base`] got none.
+pub(crate) const NO_REGION_BASE: &str = "no callee-saved register is left to address the \
+    realigned frame: -ffixed- reserves or an inline asm operand names every candidate";
+
+/// `fixed` with the register [`region_base`] picks for `func` added.
+pub(crate) fn fixed_with_region_base(
+    func: &super::super::ir::FunctionSsa,
+    target: super::Target,
+    mut fixed: super::super::FixedRegs,
+) -> super::super::FixedRegs {
+    if let Some(r) = region_base(func, target, fixed) {
+        fixed.frame |= 1 << r;
+    }
+    fixed
+}
+
 /// Record a `.debug_line` row for the instruction `v`. The
 /// walker stamps each SSA inst with the source position of the
 /// statement that produced it (`FunctionSsa::inst_src`); the

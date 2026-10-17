@@ -910,14 +910,14 @@ pub(super) fn emit_agg_store_fp_at(
     emit_agg_store_fp(code, src, base, off, width, align, strict_align, tmp);
 }
 
-/// A frame byte's displacements from fp in the static layout, from x19
-/// where it holds the frame bottom ([`Frame::local_base`]), and from sp
-/// where sp keeps its prologue value (not `Frame::dynamic_sp`). An
-/// object in the realigned region (C11 6.7.5) has no fp form.
+/// A frame byte's displacements from fp in the static layout, from a base
+/// register ([`Frame::local_base`], [`Frame::region_base`]), and from sp
+/// where sp keeps its prologue value (not `Frame::dynamic_sp`). An object
+/// in the realigned region (C11 6.7.5) has no fp form.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct FrameLoc {
     fp: Option<i64>,
-    x19: Option<i64>,
+    base: Option<(Reg, i64)>,
     sp: Option<i64>,
 }
 
@@ -925,12 +925,12 @@ impl FrameLoc {
     /// The byte at `fp + disp` in the static layout.
     pub(super) fn at_fp(frame: Frame, disp: i64) -> Self {
         let sp = (!frame.dynamic_sp).then(|| disp + i64::from(frame.frame_bytes));
-        let x19 = frame
+        let base = frame
             .local_base
-            .then(|| disp + i64::from(frame.frame_bytes));
+            .then(|| (Reg(19), disp + i64::from(frame.frame_bytes)));
         Self {
             fp: Some(disp),
-            x19,
+            base,
             sp,
         }
     }
@@ -949,16 +949,17 @@ impl FrameLoc {
         let d = i64::from(disp);
         Self {
             fp: self.fp.map(|x| x + d),
-            x19: self.x19.map(|x| x + d),
+            base: self.base.map(|(r, x)| (r, x + d)),
             sp: self.sp.map(|x| x + d),
         }
     }
 
     /// The form whose base costs the fewest instructions ([`base_len`]), fp on a tie.
     fn pick(self, fits: impl Fn(i64) -> bool) -> (Reg, i64) {
-        [(Reg(29), self.fp), (Reg(19), self.x19), (Reg(31), self.sp)]
+        let (fp, sp) = (self.fp.map(|d| (Reg(29), d)), self.sp.map(|d| (Reg(31), d)));
+        [fp, self.base, sp]
             .into_iter()
-            .filter_map(|(base, disp)| Some((base, disp?)))
+            .flatten()
             .min_by_key(|&(_, disp)| base_len(disp, &fits))
             .expect("a frame location has an address")
     }
@@ -993,10 +994,17 @@ pub(super) fn local_slot(off: i64, func: &FunctionSsa, frame: Frame) -> FrameLoc
         Some(region_off) if frame.align_region_off != 0 => {
             FrameLoc::at_fp(frame, frame.align_region_off + region_off)
         }
-        Some(region_off) => FrameLoc {
-            fp: None,
-            x19: None,
-            sp: Some(region_off.max(0)),
+        Some(region_off) => match frame.region_base {
+            Some(r) => FrameLoc {
+                fp: None,
+                base: Some((Reg(r), region_off)),
+                sp: None,
+            },
+            None => FrameLoc {
+                fp: None,
+                base: None,
+                sp: Some(region_off.max(0)),
+            },
         },
     }
 }

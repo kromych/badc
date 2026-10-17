@@ -3544,24 +3544,35 @@ pub fn stack_guard_sysreg(name: &str) -> Option<u16> {
     aarch64::asm::sysreg_field(name)
 }
 
-/// Registers `-ffixed-REG` keeps out of the allocator, one bit per
-/// architectural number: `gpr` over the general file, `fpr` over the
-/// floating-point / SIMD file. The ABI still passes arguments and
-/// results through a reserved register; only the allocator's own
-/// choices, the emitters' scratch picks and the inline-asm operand
-/// pools exclude it.
+/// Registers kept out of the allocator, one bit per architectural number:
+/// `gpr` / `fpr` the general / floating-point ones `-ffixed-REG` names,
+/// `frame` the GPRs the frame keeps for itself (`emit_common::region_base`).
+/// The ABI still passes arguments and results through a reserved register;
+/// only the allocator's own choices, the emitters' scratch picks and the
+/// inline-asm operand pools exclude it. An asm statement that writes a
+/// `frame` register saves and restores it, a `-ffixed-` one is the program's.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct FixedRegs {
     pub gpr: u32,
     pub fpr: u32,
+    pub frame: u32,
 }
 
 impl FixedRegs {
     /// No register reserved.
-    pub const NONE: Self = Self { gpr: 0, fpr: 0 };
+    pub const NONE: Self = Self {
+        gpr: 0,
+        fpr: 0,
+        frame: 0,
+    };
 
     pub const fn has_gpr(self, r: u8) -> bool {
-        r < 32 && self.gpr & (1 << r) != 0
+        r < 32 && self.kept_gpr() & (1 << r) != 0
+    }
+
+    /// Every GPR kept out: the `-ffixed-` ones and the frame's.
+    pub const fn kept_gpr(self) -> u32 {
+        self.gpr | self.frame
     }
 
     pub const fn has_fpr(self, r: u8) -> bool {

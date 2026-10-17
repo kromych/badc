@@ -404,7 +404,7 @@ fn emit_store_fp_mem(
 }
 
 /// Base register and displacement of a local slot. An over-aligned object
-/// lives at `[rsp + region_off]` when the prologue realigned rsp, at
+/// lives at `region_off` from the realigned rsp or the region base, at
 /// `[rbp + align_region_off + region_off]` in the static 16-aligned
 /// placement; any other slot at `[rbp + local_slot_off]` (C11 6.7.5).
 pub(super) fn local_slot_base_disp(
@@ -424,7 +424,7 @@ pub(super) fn local_slot_base_disp(
         if frame.align_region_off != 0 {
             (Reg::RBP, frame.align_region_off + region_off)
         } else {
-            (Reg::RSP, region_off)
+            (frame.region_base.map_or(Reg::RSP, Reg), region_off)
         }
     } else {
         (Reg::RBP, local_slot_off(off, func, frame, abi))

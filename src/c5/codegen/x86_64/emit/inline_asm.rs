@@ -2372,7 +2372,14 @@ impl AsmScratch {
             }
             let Some(r) = op_reg[i] else { continue };
             let src = self.late_src(stmt, i)?;
-            let (base, disp) = self.emit_address(out, stmt, src)?;
+            let (mut base, disp) = self.emit_address(out, stmt, src)?;
+            // The template may have written the base; its save slot holds it.
+            if Some(base.0) == stmt.frame.region_base
+                && let Some(k) = self.save_list.iter().position(|&s| s == base.0)
+            {
+                super::encode::emit_mov_r_mem(out.cx.code, self.stage, self.anchor, self.gp_off(k));
+                base = self.stage;
+            }
             if matches!(op.constraint, AsmConstraint::Fp) {
                 emit_xmm_store(out.cx.code, base, disp, Reg(r), op.width);
             } else {

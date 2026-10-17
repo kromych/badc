@@ -2280,7 +2280,6 @@ pub struct Compiler {
     /// Base alignment the `.data` image requires, at least 8. Raised
     /// to 16 when a file-scope object requests `_Alignas(16)`.
     data_align: usize,
-    /// See [`Program::image_align_error`].
     image_align_error: Option<crate::c5::diag::Diagnostic>,
     /// Alignment of the thread-local image, at least 8: the largest
     /// alignment among the objects reserved in it.

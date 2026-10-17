@@ -229,9 +229,8 @@ fn resolve_single_image_asm_sym_fixups(
                 .or_else(|| defs.get(name.as_str()).copied())
             {
                 Some(def) => Loc::Def(def),
-                // Linker-defined, so looked up after the unit's own definitions
-                // and ahead of the weak rule: the usual C idiom for reaching
-                // the GOT declares the name weak-undefined.
+                // Linker-defined, and declared weak-undefined by the C idiom
+                // reaching the GOT, so ahead of the weak rule.
                 None if name == crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL => Loc::GotBase,
                 None if imports.as_ref().is_some_and(|s| s.binds(name)) => {
                     Loc::Import(name.clone())
@@ -372,8 +371,7 @@ fn resolve_single_tu_extern_refs(
 
     let mut kept_data = Vec::new();
     for r in core::mem::take(&mut build.user_extern_data_refs) {
-        // A `sym(%rip)` addend counts from the field's end, a fixup's
-        // from the instruction's.
+        // A `sym(%rip)` addend counts from the field's end, a fixup's from the instruction's.
         if let Some(def) = asm_labels
             .get(r.symbol_name.as_str())
             .map(|p| p.as_def())

@@ -1934,11 +1934,9 @@ mod jit_impl {
         Ok(())
     }
 
-    /// Rewrite each inline-asm symbol-operand record naming a definition
-    /// of this unit to its data or text offset. The emitter leaves an
-    /// external-linkage name symbolic so the object keeps the symbol's
-    /// binding; the JIT has no link step to interpose it, so the local
-    /// definition is the resolution.
+    /// Rewrite each inline-asm symbol-operand record naming a definition of
+    /// this unit to its offset: with no link step to interpose the name, the
+    /// unit's definition is its resolution.
     fn resolve_jit_asm_sym_targets(defs: &super::super::UnitDefs, build: &mut Build) {
         use super::super::UnitDef;
         use crate::c5::asm::AsmSectionTarget;

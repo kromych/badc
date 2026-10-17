@@ -222,8 +222,7 @@ pub struct Program {
     /// (or the attribute equivalents). The native writers place the
     /// data section at a multiple of it.
     pub data_align: usize,
-    /// C11 6.7.5p3: the first static object aligned past what the target's
-    /// image keeps at load, which a path writing an image reports.
+    /// C11 6.7.5p3: the first static object aligned past what an image keeps.
     pub image_align_error: Option<crate::c5::diag::Diagnostic>,
     /// Length of the read-only prefix of `data`: `const`-qualified
     /// storage with no relocated slot, packed to the front by the

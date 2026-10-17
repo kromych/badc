@@ -1810,13 +1810,6 @@ impl<'a> Link<'a> {
         out
     }
 
-    /// Each unit's `.text` / `.rodata` / `.data` / `.bss` base in the
-    /// merged image: 16-byte alignment for `.text` (matches the
-    /// writer's section header) and 8-byte for `.data` / `.bss`, raised
-    /// to a unit's own data alignment (a foreign object's high-align
-    /// sections, e.g. `.rodata.cst16`). Keeping one data space means a
-    /// parked data reference carries one kind of offset no matter which
-    /// region it hits.
     /// Keep a byte behind `fam`'s unmoved run when a label names its end.
     fn keep_end_label_byte(&mut self, fam: SectionFamily) {
         if fam == SectionFamily::Bss {
@@ -1828,6 +1821,13 @@ impl<'a> Link<'a> {
         }
     }
 
+    /// Each unit's `.text` / `.rodata` / `.data` / `.bss` base in the
+    /// merged image: 16-byte alignment for `.text` (matches the
+    /// writer's section header) and 8-byte for `.data` / `.bss`, raised
+    /// to a unit's own data alignment (a foreign object's high-align
+    /// sections, e.g. `.rodata.cst16`). Keeping one data space means a
+    /// parked data reference carries one kind of offset no matter which
+    /// region it hits.
     fn lay_out_sections(&mut self) {
         let objs = self.objs;
         let bss_align = bss_alignment(objs);

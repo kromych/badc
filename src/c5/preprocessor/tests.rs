@@ -1041,6 +1041,27 @@ fn named_rest_variadic_macro_paste_elides_comma() {
     assert!(out.contains("g(1, 2);"), "non-empty tail: {out:?}");
 }
 
+// GNU `, ## __VA_ARGS__` keeps the comma before a written, empty argument (gcc, clang).
+#[test]
+fn comma_paste_keeps_the_comma_before_an_empty_written_tail() {
+    let out = process(
+        "#define H(a, ...) h(a, ## __VA_ARGS__)\n#define N(a, rest...) n(a, ## rest)\n\
+         #define G(...) g(x, ## __VA_ARGS__)\n#define E(a, ...) e(a, ## __VA_ARGS__ end)\n\
+         H(1); H(1,); H(); H(,); N(1); N(1,); G(); E(1); E(1,);\n",
+    );
+    let words: alloc::string::String = out
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .collect::<alloc::vec::Vec<_>>()
+        .join(" ")
+        .split_whitespace()
+        .collect();
+    assert_eq!(
+        words, "h(1);h(1,);h();h(,);n(1);n(1,);g(x);e(1end);e(1,end);",
+        "got: {out:?}"
+    );
+}
+
 #[test]
 fn named_rest_variadic_macro_stringize() {
     let out = process("#define S(rest...) #rest\nconst char *s = S(a, b);\n");

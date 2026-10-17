@@ -854,13 +854,13 @@ impl<'a> Exp<'a> {
                     i += 2;
                     continue;
                 };
-                // GNU `, ## __VA_ARGS__`: an empty tail deletes the
-                // comma; a non-empty tail keeps comma and tail. The
+                // GNU `, ## __VA_ARGS__`: an omitted tail deletes the
+                // comma; a present one, even empty, keeps comma and tail. The
                 // tail is a `##` operand, so it is spliced unexpanded
                 // (C99 6.10.3.1p1) and the rescan expands whatever
                 // stays in a plain position.
                 if self.is_va(def, next) && out.last().is_some_and(|&p| self.is_punct(p, ",")) {
-                    if raw_va.is_empty() {
+                    if raw_va.is_empty() && raw_args.len() <= nfixed.max(1) {
                         out.pop();
                     } else {
                         splice(&mut out, raw_va.clone(), true);

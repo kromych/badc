@@ -483,7 +483,8 @@ impl Compiler {
                 } else {
                     -1
                 };
-                self.pending.set_base_array(size, dims, false);
+                let zero_len = dims.first() == Some(&0);
+                self.pending.set_base_array(size, dims, zero_len);
             } else if n != 0 && inner >= Ty::Ptr as i64 {
                 inner -= Ty::Ptr as i64;
                 self.pending

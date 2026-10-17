@@ -1297,7 +1297,7 @@ impl Compiler {
                 let count = if groups > 0 {
                     // `[N]` designators can push the size past the
                     // positional group count (C99 6.7.8p22).
-                    self.designated_array_count(groups as i64, 1)?
+                    self.designated_array_count(groups as i64, 1, None)?
                 } else {
                     let items = self.lex.count_top_level_items_in_array();
                     let slots = self.struct_flat_init_slots(sid).max(1);
@@ -1792,7 +1792,7 @@ impl Compiler {
     pub(super) fn struct_array_init_elem_count(&mut self, sid: usize) -> Result<i64, C5Error> {
         let positional = self.struct_array_positional_elem_count(sid)?;
         if self.lex.count_top_level_groups_in_array() > 0 {
-            return self.designated_array_count(positional, 1);
+            return self.designated_array_count(positional, 1, None);
         }
         Ok(positional)
     }
@@ -2220,7 +2220,8 @@ impl Compiler {
                 let inner = self.inner_dims_of(loc_idx);
                 let inner_span: i64 = inner.iter().product::<i64>().max(1);
                 let fallback = if inner_span > 1 { 0 } else { scan_count };
-                let rows = self.designated_array_count(fallback, inner_span)?;
+                let string_rows = self.string_rows(ty, &inner);
+                let rows = self.designated_array_count(fallback, inner_span, string_rows)?;
                 let final_size = rows * inner_span;
                 self.symbols[loc_idx].array_size = final_size;
                 self.symbols[loc_idx].val =
@@ -2585,15 +2586,7 @@ impl Compiler {
                     rows = self.struct_array_init_elem_count(struct_id_of(elem_ty))?;
                     needs_runtime = self.struct_init_needs_runtime()?;
                 } else {
-                    let (scan_count, scan_runtime) = self.scan_array_init()?;
-                    // C99 6.7.8p22: designators can push the size past the
-                    // positional entry count; brace elision folds a flat run
-                    // into one row of the inner span. The scan count tallies
-                    // leaves, not rows, so it is no floor for a multi-dim
-                    // literal.
-                    let fallback = if inner_span > 1 { 0 } else { scan_count };
-                    rows = self.designated_array_count(fallback, inner_span)?;
-                    needs_runtime = scan_runtime;
+                    (rows, needs_runtime) = self.array_literal_rows(elem_ty, inner_dims)?;
                 }
                 count = rows * inner_span;
                 slot =
@@ -2615,18 +2608,7 @@ impl Compiler {
                 } else {
                     self.pending.init_inner_dims = inner_dims.to_vec();
                     let elements = self.collect_array_initializer(elem_ty, elem_fn.clone())?;
-                    let (start, packed) = self.pack_initializer_into_data(elem_ty, &elements)?;
-                    // C99 6.7.8p21: positions the list leaves out are
-                    // zero; pad so the single Mcpy covers the object.
-                    let total = if packed < full {
-                        for _ in 0..(full - packed) {
-                            self.data.push(0);
-                        }
-                        full
-                    } else {
-                        packed
-                    };
-                    self.emit_local_array_init(slot, start, total);
+                    self.store_literal_elements(slot, elem_ty, &elements, count, full)?;
                 }
             } else {
                 rows = array_dims[0];
@@ -2667,25 +2649,7 @@ impl Compiler {
                     self.pending.init_target_array_size = count;
                     self.pending.init_inner_dims = inner_dims.to_vec();
                     let elements = self.collect_array_initializer(elem_ty, elem_fn.clone())?;
-                    if elements.len() as i64 > count {
-                        return Err(self.compile_err(
-                            Code::INVALID_INITIALIZER,
-                            format!(
-                                "too many initializers for compound literal ({} > {count})",
-                                elements.len()
-                            ),
-                        ));
-                    }
-                    let (start, packed) = self.pack_initializer_into_data(elem_ty, &elements)?;
-                    let total = if packed < full {
-                        for _ in 0..(full - packed) {
-                            self.data.push(0);
-                        }
-                        full
-                    } else {
-                        packed
-                    };
-                    self.emit_local_array_init(slot, start, total);
+                    self.store_literal_elements(slot, elem_ty, &elements, count, full)?;
                 }
             }
             final_array_size = count;
@@ -2774,6 +2738,29 @@ impl Compiler {
             self.drop_operand_array_decay();
         }
         self.ty = value_ty;
+        Ok(())
+    }
+
+    /// Copy a constant array literal's `elements` into its `count`-element
+    /// slot at `slot`, zero-padded to `full` bytes (C99 6.7.8p21).
+    fn store_literal_elements(
+        &mut self,
+        slot: i64,
+        elem_ty: i64,
+        elements: &[(i128, super::initializer::InitElemReloc)],
+        count: i64,
+        full: usize,
+    ) -> Result<(), C5Error> {
+        if elements.len() as i64 > count {
+            let n = elements.len();
+            let text = format!("too many initializers for compound literal ({n} > {count})");
+            return Err(self.compile_err(Code::INVALID_INITIALIZER, text));
+        }
+        let (start, packed) = self.pack_initializer_into_data(elem_ty, elements)?;
+        if packed < full {
+            self.data.resize(self.data.len() + full - packed, 0);
+        }
+        self.emit_local_array_init(slot, start, packed.max(full));
         Ok(())
     }
 
@@ -3122,10 +3109,21 @@ impl Compiler {
             }
             let off = base + cursor * elem_size;
             if level < child.len() {
-                if self.lex.tk == '{' {
+                let string = match sub {
+                    [row] => self.take_string_init(ty)?.map(|lit| (lit, *row as usize)),
+                    _ => None,
+                };
+                if let Some((lit, row)) = string {
+                    // C99 6.7.8p14: a string literal fills the row.
+                    if lit.overruns(row) {
+                        return Err(self.row_excess_err(lit.chars(), row));
+                    }
+                    self.push_string_init_stores(off, &lit, row, ty);
+                } else if self.lex.tk == '{' {
                     self.fill_array_init_runtime(local_val, off, sub, ty, elem_size, var_name)?;
                 } else {
-                    self.fill_array_leaves_runtime(local_val, off, span, ty, elem_size)?;
+                    let rows = sub.last().copied();
+                    self.fill_array_leaves_runtime(local_val, off, (span, rows), ty, elem_size)?;
                 }
             } else if self.is_traversable_aggregate_ty(ty) {
                 // Array-of-struct element (C99 6.7.8p17): recurse into the
@@ -3195,11 +3193,12 @@ impl Compiler {
     /// Fill up to `n` scalar leaves at consecutive offsets from `base`
     /// (a brace-elided sub-array). Stops early at `}` -- the omitted
     /// trailing positions keep the caller's zero seed (C99 6.7.8p21).
+    /// A string at a boundary of its `rows` fills that row (6.7.8p14).
     pub(super) fn fill_array_leaves_runtime(
         &mut self,
         local_val: i64,
         base: i64,
-        n: i64,
+        (n, rows): (i64, Option<i64>),
         ty: i64,
         elem_size: i64,
     ) -> Result<(), C5Error> {
@@ -3210,13 +3209,23 @@ impl Compiler {
             }
             // An aggregate element takes its own members from the same list
             // (C99 6.7.8p20), its braces elided too.
+            let row = rows.filter(|&r| r > 0 && k % r == 0);
             if self.is_traversable_aggregate_ty(ty) {
                 let sid = super::types::struct_id_of(ty);
                 self.emit_struct_array_element_runtime(local_val, base + k * elem_size, sid)?;
+                k += 1;
+            } else if let Some(row) = row
+                && let Some(lit) = self.take_string_init(ty)?
+            {
+                if lit.overruns(row as usize) {
+                    return Err(self.row_excess_err(lit.chars(), row as usize));
+                }
+                self.push_string_init_stores(base + k * elem_size, &lit, row as usize, ty);
+                k += row;
             } else {
                 self.emit_array_leaf_runtime(local_val, base + k * elem_size, ty)?;
+                k += 1;
             }
-            k += 1;
             if !self.initializer_separator(k >= n)? {
                 break;
             }

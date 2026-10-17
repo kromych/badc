@@ -23,8 +23,9 @@ use super::AnonMember;
 use super::Compiler;
 use super::const_expr::ConstVal;
 use super::types::{
-    add_ptr_level, is_bool_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty,
-    is_vector_ty, pointee_ty, strip_unsigned, struct_id_of, struct_ptr_depth, struct_ty_for,
+    add_ptr_level, is_bool_ty, is_integer_scalar_ty, is_pointer_ty, is_struct_ty,
+    is_struct_value_ty, is_unsigned_ty, is_vector_ty, pointee_ty, strip_unsigned, struct_id_of,
+    struct_ptr_depth, struct_ty_for,
 };
 
 /// A resolved chained array designator `[i][j]...`: `base` and
@@ -84,7 +85,7 @@ pub(super) enum DesignatorRule {
 /// or brace-wrapped array, multi-dimensional row, struct member,
 /// flexible array member -- reads its elements through this, so the
 /// C99 6.7.8p14/p21 copy rules are stated once.
-struct StagedStringLiteral {
+pub(super) struct StagedStringLiteral {
     /// Data-segment offset of the literal's first byte.
     start: usize,
     /// Bytes per element: 1 for a narrow literal, the target's
@@ -107,6 +108,15 @@ impl StagedStringLiteral {
             Some(t) if self.chars >= t => self.chars,
             _ => self.chars + 1,
         }
+    }
+
+    /// Whether the literal is too long for `bound` elements (C99 6.7.8p14).
+    pub(super) fn overruns(&self, bound: usize) -> bool {
+        self.chars > bound
+    }
+
+    pub(super) fn chars(&self) -> usize {
+        self.chars
     }
 }
 
@@ -885,38 +895,153 @@ impl Compiler {
         }
     }
 
-    /// Consume the string literal at the cursor together with its
-    /// adjacent parts (C99 5.1.1.2) and describe the bytes the lexer
-    /// staged for it. `elem_bytes` is the destination's element width,
-    /// which a wide literal's must equal (C99 6.7.8p15): a wider
-    /// element would store one code point per element at its own width
-    /// and run past the destination, a narrower one cannot hold the
-    /// code point.
-    fn take_staged_string_literal(
+    /// The string literal that is the whole initializer of an array of
+    /// `elem_ty` (C99 6.7.8p14, p15), bare, parenthesized or in braces:
+    /// narrow for a character element, wide for another integer one of its
+    /// width. Consumed with its closing tokens; else the cursor stays.
+    pub(super) fn take_string_init(
         &mut self,
-        elem_bytes: usize,
-    ) -> Result<StagedStringLiteral, C5Error> {
-        let wide = self.lex.str_is_wide;
-        if wide && self.lex.str_elem_bytes != elem_bytes {
+        elem_ty: i64,
+    ) -> Result<Option<StagedStringLiteral>, C5Error> {
+        let (snap, data_snap) = (self.lex.snapshot(), self.data.len());
+        let braced = self.accept('{')?;
+        let mut parens = 0usize;
+        while self.accept('(')? {
+            parens += 1;
+        }
+        let (wide, lit_bytes) = (self.lex.str_is_wide, self.lex.str_elem_bytes);
+        let of_kind = if wide {
+            is_integer_scalar_ty(elem_ty)
+        } else {
+            strip_unsigned(elem_ty) == Ty::Char as i64
+        };
+        let mut span = None;
+        if self.lex.tk == '"' && of_kind {
+            let start = self.take_concat_string_literal()?;
+            span = Some((start, self.data.len() - start));
+            for _ in 0..parens {
+                if !self.accept(')')? {
+                    span = None;
+                    break;
+                }
+            }
+        }
+        let whole = span.is_some()
+            && if braced {
+                if self.accept(',')? && self.lex.tk != '}' {
+                    return Err(self.compile_err(
+                        Code::INVALID_INITIALIZER,
+                        "excess elements after a string initializer",
+                    ));
+                }
+                self.accept('}')?
+            } else {
+                self.at_initializer_end()
+            };
+        let Some((start, staged)) = span.filter(|_| whole) else {
+            self.rewind_speculation(snap, data_snap);
+            return Ok(None);
+        };
+        let elem_bytes = if wide { self.size_of_type(elem_ty) } else { 1 };
+        if wide && lit_bytes != elem_bytes {
             return Err(self.compile_err(
                 Code::INVALID_INITIALIZER,
                 "wide string initializer requires a wchar_t-width array element",
             ));
         }
-        let start = self.take_concat_string_literal()?;
-        let staged = self.data.len().saturating_sub(start) / elem_bytes;
         // The lexer appends a wide literal's terminator and leaves a
         // narrow one's to the parser; report the spelled length either way.
-        let chars = if wide {
-            staged.saturating_sub(1)
-        } else {
-            staged
-        };
-        Ok(StagedStringLiteral {
+        let chars = (staged / elem_bytes).saturating_sub(usize::from(wide));
+        Ok(Some(StagedStringLiteral {
             start,
             elem_bytes,
             chars,
-        })
+        }))
+    }
+
+    /// The length a string initializer gives an unsized array of `elem_ty`.
+    pub(super) fn string_init_len(&mut self, elem_ty: i64) -> Result<Option<i64>, C5Error> {
+        let (snap, data_snap) = (self.lex.snapshot(), self.data.len());
+        let lit = self.take_string_init(elem_ty)?;
+        self.rewind_speculation(snap, data_snap);
+        Ok(lit.map(|l| l.elem_count(None) as i64))
+    }
+
+    /// The rows of an unsized array literal of non-aggregate elements
+    /// (C99 6.7.8p22), `inner_dims` its bounds below the outermost, and
+    /// whether an element needs a runtime store.
+    pub(super) fn array_literal_rows(
+        &mut self,
+        elem_ty: i64,
+        inner_dims: &[i64],
+    ) -> Result<(i64, bool), C5Error> {
+        if inner_dims.is_empty()
+            && let Some(n) = self.string_init_len(elem_ty)?
+        {
+            return Ok((n, false));
+        }
+        let (scanned, runtime) = self.scan_array_init()?;
+        let inner_span: i64 = inner_dims.iter().product::<i64>().max(1);
+        // The scan count tallies leaves, not rows, so it is no floor for a
+        // multi-dimensional literal.
+        let fallback = if inner_span > 1 { 0 } else { scanned };
+        let string_rows = self.string_rows(elem_ty, inner_dims);
+        let rows = self.designated_array_count(fallback, inner_span, string_rows)?;
+        Ok((rows, runtime))
+    }
+
+    /// The element type and length of an innermost row a string may fill.
+    pub(super) fn string_rows(&self, elem_ty: i64, inner_dims: &[i64]) -> Option<(i64, i64)> {
+        let len = *inner_dims.last()?;
+        (len > 0).then_some((elem_ty, len))
+    }
+
+    /// Store `count` elements of `lit` at `base` in the data segment.
+    fn write_string_init(
+        &mut self,
+        base: usize,
+        lit: &StagedStringLiteral,
+        count: usize,
+        elem_ty: i64,
+    ) -> Result<(), C5Error> {
+        let w = lit.elem_bytes;
+        for k in 0..count {
+            let v = self.string_init_elem(lit, k) as i128;
+            self.write_init_value(base + k * w, w, v, InitElemReloc::None, elem_ty)?;
+        }
+        Ok(())
+    }
+
+    /// Record a constant store of `count` elements of `lit` at local `base`.
+    pub(super) fn push_string_init_stores(
+        &mut self,
+        base: i64,
+        lit: &StagedStringLiteral,
+        count: usize,
+        elem_ty: i64,
+    ) {
+        for k in 0..count {
+            let v = self.string_init_elem(lit, k);
+            let value = self.ast_emit_int_lit(v, elem_ty);
+            self.pending_local_runtime_elements
+                .push(super::super::ast::RuntimeInitElement {
+                    offset: base + (k * lit.elem_bytes) as i64,
+                    value: super::super::ast::RuntimeInitValue::Expr(value),
+                    ty: elem_ty,
+                    bitfield: None,
+                });
+        }
+    }
+
+    fn member_excess_err(&self, struct_id: usize, field: &super::StructField) -> C5Error {
+        let s = &self.structs[struct_id].name;
+        let text = format!("too many initializers for `{s}.{}`", field.name);
+        self.compile_err(Code::INVALID_INITIALIZER, text)
+    }
+
+    pub(super) fn row_excess_err(&self, written: usize, row: usize) -> C5Error {
+        let text = format!("too many initializers for array row ({written} > {row})");
+        self.compile_err(Code::INVALID_INITIALIZER, text)
     }
 
     /// Value of `lit`'s element `k`, little-endian at the literal's
@@ -947,20 +1072,6 @@ impl Compiler {
             return Ok(false);
         }
         self.list_separator('}', "initializer")
-    }
-
-    /// Consume the closing `}` (and an optional trailing comma) of a
-    /// brace-wrapped string-literal array initializer (`{"abc"}`).
-    fn expect_close_brace_after_wrapped_string(&mut self) -> Result<(), C5Error> {
-        self.accept(',')?;
-        if self.lex.tk != '}' {
-            return Err(self.compile_err(
-                Code::SYNTAX,
-                "`}` expected after brace-wrapped string initializer",
-            ));
-        }
-        self.next()?;
-        Ok(())
     }
 
     /// Consume `depth` closing parentheses after a parenthesized string
@@ -1138,77 +1249,14 @@ impl Compiler {
         inner_dims: &[i64],
         target_size: i64,
     ) -> Result<ArrayInitHead, C5Error> {
-        // C99 6.7.8p14: a string-literal initializer for a character
-        // array may be enclosed in braces (`char x[] = {"abc"}`).
-        // Unwrap a single brace whose first token is a string literal so
-        // the string paths below see the literal directly; the closing
-        // `}` is consumed before each returns. A non-string brace list
-        // is left untouched (the speculative `{` is restored).
-        let mut brace_wrapped = false;
-        if self.lex.tk == '{' {
-            let snap = self.lex.snapshot();
-            // The peek stages the literal's bytes; the data length is
-            // restored with the lexer.
-            let data_snap = self.data.len();
-            self.next()?;
-            // Only a one-dimensional array of the literal's own element
-            // type takes a brace-wrapped string. A pointer array
-            // (`char *names[] = {"a", "b"}`) or a multi-dimensional
-            // char array (`char c[2][6] = {"a", "b"}`, one string per
-            // row) has a string as its first element and stays a brace
-            // list.
-            let is_char_array = strip_unsigned(elem_ty) == Ty::Char as i64;
-            let is_wchar_array = self.lex.str_is_wide
-                && !is_pointer_ty(elem_ty)
-                && self.size_of_type(elem_ty) == self.lex.str_elem_bytes;
-            if inner_dims.is_empty() && self.lex.tk == '"' && (is_wchar_array || is_char_array) {
-                brace_wrapped = true;
-            } else {
-                self.rewind_speculation(snap, data_snap);
-            }
-        }
-        // A string-literal array initializer may be parenthesized
-        // (`char x[] = ("abc")`, the form a macro produces). Skip the
-        // leading `(` so the string paths below see the literal; the
-        // matching `)`s are consumed before each return.
-        let mut paren_depth = 0usize;
-        if inner_dims.is_empty() && self.lex.tk == '(' {
-            let snap = self.lex.snapshot();
-            let data_snap = self.data.len();
-            let mut depth = 0usize;
-            while self.lex.tk == '(' {
-                depth += 1;
-                self.next()?;
-            }
-            let is_char_array = strip_unsigned(elem_ty) == Ty::Char as i64;
-            if self.lex.tk == '"' && (self.lex.str_is_wide || is_char_array) {
-                paren_depth = depth;
-            } else {
-                self.rewind_speculation(snap, data_snap);
-            }
-        }
-        // C99 6.7.8p14/p15: a string literal initializes an array whose
-        // element type matches the literal's -- a narrow literal a char
-        // array, a wide one a `wchar_t`-width array. `target_size` bounds
-        // the copy; a deferred-size declarator (`T xs[] = "..."`) takes its
-        // length from the result.
-        if self.lex.tk == '"'
-            && (self.lex.str_is_wide || strip_unsigned(elem_ty) == Ty::Char as i64)
+        // C99 6.7.8p14: `target_size` bounds the copy, else the string sizes it.
+        if inner_dims.is_empty()
+            && let Some(lit) = self.take_string_init(elem_ty)?
         {
-            let elem_bytes = if self.lex.str_is_wide {
-                self.size_of_type(elem_ty)
-            } else {
-                1
-            };
-            let lit = self.take_staged_string_literal(elem_bytes)?;
             let target = (target_size > 0).then_some(target_size as usize);
             let elems: Vec<(i128, InitElemReloc)> = (0..lit.elem_count(target))
                 .map(|k| (self.string_init_elem(&lit, k) as i128, InitElemReloc::None))
                 .collect();
-            if brace_wrapped {
-                self.expect_close_brace_after_wrapped_string()?;
-            }
-            self.expect_close_parens(paren_depth)?;
             return Ok(ArrayInitHead::String(elems));
         }
         // GCC "Compound Literals": an array initialized by a compound
@@ -1216,6 +1264,7 @@ impl Compiler {
         // and automatic storage alike (`static u8 m[6] = (u8[6]){ ... }`,
         // the shape a macro produces). Strip the cast so the list fills the
         // object in place; the grouping parens close after it.
+        let mut paren_depth = 0usize;
         if self.lex.tk == '(' && self.skip_opt_compound_literal_cast()? {
             paren_depth += core::mem::take(&mut self.pending.compound_lit_close_parens) as usize;
         }
@@ -1311,8 +1360,12 @@ impl Compiler {
                 } else {
                     dims_below[1..].to_vec()
                 };
+                self.pending.init_target_array_size = span as i64;
                 let inner = self.collect_array_initializer(elem_ty, self.array_elem_fn.clone())?;
                 let written = inner.len();
+                if !dims_below.is_empty() && span > 0 && written > span {
+                    return Err(self.row_excess_err(written, span));
+                }
                 // One sub-array copy spans its declared element count, or
                 // its own length when the brace list is longer (no declared
                 // inner dimension).
@@ -1340,23 +1393,17 @@ impl Compiler {
                 self.list_separator('}', "initializer")?;
                 continue;
             }
-            // A string literal initializing a row of a multi-dimensional
-            // array fills that row (C99 6.7.8p14): its elements, then a
+            // A string literal at a row boundary fills that innermost row of
+            // a multi-dimensional array (C99 6.7.8p14): its elements, then a
             // terminator if the row has room, zero-padded to the row width.
-            // The child is a one-dimensional array exactly when
-            // `inner_dims` has a single entry; a one-dimensional array took
-            // the brace-wrap / bare-string paths above instead.
-            if self.lex.tk == '"'
-                && inner_dims.len() == 1
-                && (self.lex.str_is_wide || strip_unsigned(elem_ty) == Ty::Char as i64)
+            if let Some((_, row)) = self.string_rows(elem_ty, &inner_dims)
+                && cursor.is_multiple_of(row as usize)
+                && let Some(lit) = self.take_string_init(elem_ty)?
             {
-                let row = inner_dims[0] as usize;
-                let elem_bytes = if self.lex.str_is_wide {
-                    self.size_of_type(elem_ty)
-                } else {
-                    1
-                };
-                let lit = self.take_staged_string_literal(elem_bytes)?;
+                let row = row as usize;
+                if lit.overruns(row) {
+                    return Err(self.row_excess_err(lit.chars, row));
+                }
                 let before = cursor;
                 // A range designator (`[a ... b] = "..."`) replicates the row
                 // across every covered index; a plain entry fills one row.
@@ -2220,6 +2267,12 @@ impl Compiler {
             if let InitElemReloc::Data(Some(sym)) = reloc {
                 self.symbols[sym].storage_is_const = name.object_is_const;
                 self.reject_automatic_compound_literal(sym)?;
+                if !self.at_initializer_end() {
+                    // An operand (`(char[]){1, 2} + 1`).
+                    let seed = self.literal_row_addr(sym, v as i64, cast_ty, &dims, 0);
+                    let v = self.parse_const_expr_cond_from(seed)?;
+                    return self.init_scalar_of(v);
+                }
             }
             // An array of arrays decays to a pointer to its first row.
             let ty = self.array_value_ty(cast_ty, &dims);
@@ -2545,11 +2598,15 @@ impl Compiler {
         if (extent <= 0 && !unknown_size) || ptr_levels > 0 {
             return alloc::vec::Vec::new();
         }
-        if dims.is_empty() {
+        let mut dims = if dims.is_empty() {
             alloc::vec![extent]
         } else {
             dims
+        };
+        if unknown_size && dims[0] == 0 {
+            dims[0] = -1;
         }
+        dims
     }
 
     /// C99 6.5.2.5 array-typed compound literal in a static initializer:
@@ -2611,14 +2668,13 @@ impl Compiler {
             // Brace elision folds a run of field values into one
             // aggregate element, not one per leaf (C99 6.7.8p20).
             self.struct_array_init_elem_count(struct_id_of(elem_ty))?
+                .max(dims[0])
+        } else if dims[0] >= 0 {
+            dims[0]
         } else {
-            let (scanned, _) = self.scan_array_init()?;
-            // The scan count tallies leaves, not rows, so it is no floor
-            // for a multi-dim literal.
-            let fallback = if inner_span > 1 { 0 } else { scanned };
-            self.designated_array_count(fallback, inner_span)?
+            self.array_literal_rows(elem_ty, &dims[1..])?.0
         };
-        let rows = rows.max(dims[0]).max(0);
+        let rows = rows.max(0);
         let count = (rows * inner_span) as usize;
         let mut full_dims = alloc::vec::Vec::with_capacity(dims.len());
         full_dims.push(rows);
@@ -3778,17 +3834,15 @@ impl Compiler {
             self.flex_array_measured_count = Some(elems.len());
             return Ok(());
         }
-        if self.lex.tk == '"' && strip_unsigned(elem_ty) == Ty::Char as i64 {
+        if inner_dims.is_empty()
+            && let Some(lit) = self.take_string_init(elem_ty)?
+        {
             // A flexible array member has no declared bound, so the copy is
             // the literal plus its terminator; the count sizes the object's
-            // tail. An embedded NUL is one of the copied bytes.
-            let lit = self.take_staged_string_literal(1)?;
+            // tail. An embedded NUL is one of the copied elements.
             let count = lit.elem_count(None);
-            grow_to(&mut self.data, field_base + count);
-            for k in 0..count {
-                let b = self.string_init_elem(&lit, k) as u8;
-                self.data[field_base + k] = b;
-            }
+            grow_to(&mut self.data, field_base + count * lit.elem_bytes);
+            self.write_string_init(field_base, &lit, count, elem_ty)?;
             self.flex_array_measured_count = Some(count);
             return Ok(());
         }
@@ -4161,102 +4215,17 @@ impl Compiler {
                 first_elided,
             );
         }
-        let mut char_array_brace_string = false;
+        // C99 6.7.8p14: a string fills a one-dimensional member; braces take the list.
+        let row = field.array_dims.last().map_or(field.array_size, |&d| d) as usize;
         if field.array_size > 0
             && field.inner_array_size == 0
-            && strip_unsigned(field.ty) == Ty::Char as i64
-            && self.lex.tk == '{'
+            && self.lex.tk != '{'
+            && let Some(lit) = self.take_string_init(field.ty)?
         {
-            let snap = self.lex.snapshot();
-            // Peeking the inner string token appends its bytes to the
-            // data segment; restore the length too if it is not a
-            // brace-wrapped string after all.
-            let data_snap = self.data.len();
-            self.next()?;
-            if self.lex.tk == '"' {
-                char_array_brace_string = true;
-            } else {
-                self.rewind_speculation(snap, data_snap);
+            if lit.overruns(row) {
+                return Err(self.member_excess_err(struct_id, field));
             }
-        }
-        // A string literal initializing a char array may be enclosed
-        // in parentheses (C99 6.5.1 -- a parenthesized expression has
-        // the same value; `._data = ("str")` is the form a macro
-        // produces). Skip the leading `(` so the string-copy path
-        // below sees the literal; the matching `)`s are consumed after
-        // the copy. Without this the parenthesized leaf falls into the
-        // single-value path and stores the string's pointer.
-        let mut char_array_paren_depth = 0usize;
-        if field.array_size > 0
-            && field.inner_array_size == 0
-            && strip_unsigned(field.ty) == Ty::Char as i64
-            && self.lex.tk == '('
-        {
-            let snap = self.lex.snapshot();
-            let data_snap = self.data.len();
-            let mut depth = 0usize;
-            while self.lex.tk == '(' {
-                depth += 1;
-                self.next()?;
-            }
-            if self.lex.tk == '"' {
-                char_array_paren_depth = depth;
-            } else {
-                self.rewind_speculation(snap, data_snap);
-            }
-        }
-        if field.array_size > 0 && self.lex.tk == '"' && strip_unsigned(field.ty) == Ty::Char as i64
-        {
-            // `struct S { char a[N]; } x = { "..." };` -- copy the string
-            // into the char-array field, zero-padding the remainder.
-            // Without this branch the parser falls into the single-value
-            // path and writes the *pointer* to the string's data-segment
-            // slot into the field's first 8 bytes, which produces garbage
-            // at read time.
-            let lit = self.take_staged_string_literal(1)?;
-            for idx in 0..field.array_size as usize {
-                let b = self.string_init_elem(&lit, idx);
-                self.write_init_value(
-                    field_base + idx,
-                    1,
-                    b as i128,
-                    super::initializer::InitElemReloc::None,
-                    field.ty,
-                )?;
-            }
-            if char_array_brace_string {
-                self.expect_close_brace_after_wrapped_string()?;
-            }
-            for _ in 0..char_array_paren_depth {
-                if self.lex.tk != ')' {
-                    return Err(self.compile_err(
-                        Code::SYNTAX,
-                        "`)` expected to close a parenthesized string initializer",
-                    ));
-                }
-                self.next()?;
-            }
-        } else if field.array_size > 0
-            && field.inner_array_size == 0
-            && self.lex.tk == '"'
-            && self.lex.str_is_wide
-        {
-            // `struct S { wchar_t w[N]; } = { L"..." }`: store each wide
-            // code point at its element stride, zero-padding the tail.
-            // Without this branch the leaf falls to the single-value path
-            // and stores the string's pointer.
-            let w = self.size_of_type(field.ty);
-            let lit = self.take_staged_string_literal(w)?;
-            for idx in 0..field.array_size as usize {
-                let v = self.string_init_elem(&lit, idx);
-                self.write_init_value(
-                    field_base + idx * w,
-                    w,
-                    v as i128,
-                    InitElemReloc::None,
-                    field.ty,
-                )?;
-            }
+            self.write_string_init(field_base, &lit, row, field.ty)?;
         } else if field.array_size > 0 && self.lex.tk == '{' {
             // C99 6.7.8p21: a brace-enclosed initializer for the array
             // member initializes every element; positions not named by a
@@ -4284,13 +4253,7 @@ impl Compiler {
                 let elem_fn = self.field_elem_fn_type(field);
                 let elements = self.collect_array_initializer(field.ty, elem_fn)?;
                 if elements.len() as i64 > field.array_size {
-                    return Err(self.compile_err(
-                        Code::INVALID_INITIALIZER,
-                        format!(
-                            "too many initializers for `{}.{}`",
-                            self.structs[struct_id].name, field.name
-                        ),
-                    ));
+                    return Err(self.member_excess_err(struct_id, field));
                 }
                 self.write_array_init_into_data(field_base as i64, field.ty, &elements)?;
             }
@@ -4309,14 +4272,24 @@ impl Compiler {
             while (idx as i64) < field.array_size && self.lex.tk != '}' {
                 let here = field_base + idx * elem_size;
                 // An aggregate element takes its own members from the same
-                // list, its braces elided too.
+                // list, its braces elided too; a string fills a row.
                 if self.is_traversable_aggregate_ty(field.ty) {
                     self.init_struct_array_element(struct_id_of(field.ty), here as i64)?;
+                    idx += 1;
+                } else if field.inner_array_size != 0
+                    && idx.is_multiple_of(row)
+                    && let Some(lit) = self.take_string_init(field.ty)?
+                {
+                    if lit.overruns(row) {
+                        return Err(self.member_excess_err(struct_id, field));
+                    }
+                    self.write_string_init(here, &lit, row, field.ty)?;
+                    idx += row;
                 } else {
                     let InitLeaf { value, reloc, .. } = self.parse_init_leaf_for(field.ty)?;
                     self.write_init_value(here, elem_size, value, reloc, field.ty)?;
+                    idx += 1;
                 }
-                idx += 1;
                 if !self.initializer_separator(idx as i64 >= field.array_size)? {
                     break;
                 }
@@ -4419,44 +4392,15 @@ impl Compiler {
         // with the bitfield descriptor so the walker emits a
         // read-modify-write of the storage unit instead of a full store.
         if field.array_size > 0 {
-            // C99 6.7.8p14 char array from a narrow string literal:
-            // emit a per-byte constant store, remainder zero-filled.
-            if self.lex.tk == '"'
-                && !self.lex.str_is_wide
-                && strip_unsigned(field.ty) == Ty::Char as i64
+            // C99 6.7.8p14: a string fills a one-dimensional member, a store each.
+            if field.inner_array_size == 0
+                && let Some(lit) = self.take_string_init(field.ty)?
             {
-                let lit = self.take_staged_string_literal(1)?;
-                for k in 0..field.array_size as usize {
-                    let b = self.string_init_elem(&lit, k);
-                    let value = self.ast_emit_int_lit(b, Ty::Char as i64);
-                    self.pending_local_runtime_elements.push(
-                        super::super::ast::RuntimeInitElement {
-                            offset: field_base + k as i64,
-                            value: super::super::ast::RuntimeInitValue::Expr(value),
-                            ty: Ty::Char as i64,
-                            bitfield: None,
-                        },
-                    );
+                if lit.overruns(field.array_size as usize) {
+                    return Err(self.member_excess_err(struct_id, field));
                 }
-                return Ok(false);
-            }
-            // Wide string into a wchar_t-width member (C99 6.7.8p15): a
-            // per-element constant store at the element's stride.
-            if self.lex.tk == '"' && self.lex.str_is_wide && field.inner_array_size == 0 {
-                let w = self.size_of_type(field.ty);
-                let lit = self.take_staged_string_literal(w)?;
-                for k in 0..field.array_size as usize {
-                    let v = self.string_init_elem(&lit, k);
-                    let value = self.ast_emit_int_lit(v, field.ty);
-                    self.pending_local_runtime_elements.push(
-                        super::super::ast::RuntimeInitElement {
-                            offset: field_base + (k * w) as i64,
-                            value: super::super::ast::RuntimeInitValue::Expr(value),
-                            ty: field.ty,
-                            bitfield: None,
-                        },
-                    );
-                }
+                let n = field.array_size as usize;
+                self.push_string_init_stores(field_base, &lit, n, field.ty);
                 return Ok(false);
             }
             // C99 6.7.8p13: an array member initialized by a brace list of
@@ -4482,10 +4426,13 @@ impl Compiler {
                     "<array member>",
                 )?;
             } else {
+                let rows = (inner_dim > 0)
+                    .then(|| field.array_dims.last().copied())
+                    .flatten();
                 self.fill_array_leaves_runtime(
                     local_val,
                     field_base,
-                    field.array_size,
+                    (field.array_size, rows),
                     field.ty,
                     elem_size,
                 )?;

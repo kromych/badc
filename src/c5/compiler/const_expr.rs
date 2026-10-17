@@ -2199,6 +2199,32 @@ impl Compiler {
         (ty, (self.size_of_type(ty) as i64).max(1))
     }
 
+    /// The address of the row at `level` of array literal `sym` at `base`.
+    pub(super) fn literal_row_addr(
+        &mut self,
+        sym: usize,
+        base: i64,
+        elem_ty: i64,
+        dims: &[i64],
+        level: usize,
+    ) -> ConstVal {
+        let elem_size = (self.size_of_type(elem_ty) as i64).max(1);
+        let span: i64 = dims[level + 1..].iter().product::<i64>().max(1);
+        let innermost = level + 1 == dims.len();
+        let row = if innermost {
+            elem_ty
+        } else {
+            self.array_agg_type(elem_ty, &dims[level + 1..])
+        };
+        ConstVal::Addr(ConstAddr {
+            value: base,
+            root: ConstRoot::Data(sym),
+            elem_size: span * elem_size,
+            pointee: innermost.then_some(elem_ty),
+            ty: add_ptr_level(row),
+        })
+    }
+
     fn reject_automatic_compound_literal_root(&self, root: ConstRoot) -> Result<(), C5Error> {
         match root {
             ConstRoot::Data(sym) => self.reject_automatic_compound_literal(sym),
@@ -2918,21 +2944,8 @@ impl Compiler {
                     }
                     // Fewer subscripts than dimensions: the address of a
                     // row, whose pointer strides by the remaining span.
-                    let root = ConstRoot::Data(sym);
-                    self.reject_automatic_compound_literal_root(root)?;
-                    let span: i64 = dims[level + 1..].iter().product::<i64>().max(1);
-                    let row = if level + 1 == dims.len() {
-                        target_ty
-                    } else {
-                        self.array_agg_type(target_ty, &dims[level + 1..])
-                    };
-                    return Ok(ConstVal::Addr(ConstAddr {
-                        value: base,
-                        root,
-                        elem_size: span * elem_size,
-                        pointee: (level + 1 == dims.len()).then_some(target_ty),
-                        ty: add_ptr_level(row),
-                    }));
+                    self.reject_automatic_compound_literal(sym)?;
+                    return Ok(self.literal_row_addr(sym, base, target_ty, &dims, level));
                 }
                 if self.lex.tk != ')' {
                     return Err(self.compile_err(Code::SYNTAX, "close paren expected after cast"));

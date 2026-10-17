@@ -5729,7 +5729,12 @@ impl Compiler {
         let dims = if base_extent == 0 && !base_zero_len {
             alloc::vec::Vec::new()
         } else if !base_dims.is_empty() {
-            base_dims
+            // A typedef of unknown size records its outer bound as 0.
+            let mut dims = base_dims;
+            if base_extent < 0 && !base_zero_len && dims[0] == 0 {
+                dims[0] = -1;
+            }
+            dims
         } else if base_zero_len {
             alloc::vec![0]
         } else {

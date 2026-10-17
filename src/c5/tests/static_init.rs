@@ -512,6 +512,7 @@ const ACCEPTED_ONLY_BY_BADC: &[Case] = &[
     // reject both forms, a compound literal being an object (C99 6.5.2.5p4).
     case!("compound_literal_element_read", "int x = (int[]){1, 2}[1];", "02000000"),
     case!("compound_literal_paren_element_read", "int x = ((int[]){1, 2})[1];", "02000000"),
+    case!("compound_literal_string_element_read", "char x = (char[]){\"abc\"}[1];", "62"),
     // gcc folds the difference to the address, as badc does; clang rejects
     // both forms.
     case!("string_minus_null", "long x = (char *)\"abc\" - (char *)0;", "0000000000000000", 0 => Data("61626300")),
@@ -528,6 +529,12 @@ const REJECTED_ONLY_BY_BADC: &[Reject] = &[
     // warn and drop it.
     reject!("string_too_long", "char x[3] = \"abcdef\";", "too many initializers for array `x` (6 > 3)"),
     reject!("excess_elements", "int x[2] = {1, 2, 3};", "too many initializers for array `x` (3 > 2)"),
+    reject!("string_too_long_for_a_row", "char x[2][2] = {\"abc\", \"d\"};", "too many initializers for array row (3 > 2)"),
+    reject!("braced_string_too_long_for_a_row", "char x[2][3] = {{\"abcd\"}};", "too many initializers for array row (4 > 3)"),
+    reject!("string_too_long_for_a_member", "struct m { char a[2]; } x = {\"abc\"};", "too many initializers for `m.a`"),
+    reject!("string_too_long_for_a_literal", "char *p = (char[2]){\"abc\"};", "too many initializers for array compound literal"),
+    reject!("excess_after_a_string", "char x[] = {\"ab\", \"cd\"};", "excess elements after a string initializer"),
+    reject!("excess_in_a_bounded_literal", "int *p = (int[2]){1, 2, 3};", "too many initializers for array compound literal"),
     // A union has one object to initialize (6.7.8p17); clang and gcc
     // keep the first value, badc's fill wrote the excess over it.
     reject!("excess_union_members", "union u { int a; int b; }; union u x = {1, 2};", "too many initializers for union u"),

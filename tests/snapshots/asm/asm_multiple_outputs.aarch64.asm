@@ -17,7 +17,6 @@ Disassembly of section .text:
                	mov	w0, #0x5678             // =22136
                	movk	w0, #0x1234, lsl #16
                	mov	w1, #0x9abc             // =39612
-               	mov	w1, w1
                	mov	w0, w0
                	orr	x0, x0, x1, lsl #32
                	ret

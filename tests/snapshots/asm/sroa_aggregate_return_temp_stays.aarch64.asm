@@ -31,8 +31,7 @@ Disassembly of section .text:
                	b.hs	<addr>
                	add	x0, x0, #0x1
                	mov	w0, w0
-               	mov	w1, w2
-               	orr	x0, x0, x1, lsl #32
+               	orr	x0, x0, x2, lsl #32
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -55,8 +54,7 @@ Disassembly of section .text:
                	b.hs	<addr>
                	add	x0, x0, #0x1
                	mov	w0, w0
-               	mov	w1, w2
-               	orr	x0, x0, x1, lsl #32
+               	orr	x0, x0, x2, lsl #32
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

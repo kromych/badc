@@ -36,7 +36,7 @@ Disassembly of section .text:
 
 <make_pair>:
                	movl	%edi, %eax
-               	movl	%esi, %ecx
+               	movq	%rsi, %rcx
                	shlq	$0x20, %rcx
                	orq	%rcx, %rax
                	retq
@@ -53,7 +53,6 @@ Disassembly of section .text:
                	leaq	(%rdi,%rsi), %rdx
                	addq	%rcx, %rax
                	movl	%edx, %ecx
-               	movl	%eax, %eax
                	shlq	$0x20, %rax
                	orq	%rcx, %rax
                	retq

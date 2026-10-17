@@ -64,7 +64,6 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	str	x1, [x0]
                	ldr	w1, [x0]
-               	and	x1, x1, #0x1fffffff
                	lsl	x1, x1, #35
                	asr	x1, x1, #35
                	mov	x17, #-0x5              // =-5
@@ -72,7 +71,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldr	x0, [x0]
                	asr	x0, x0, #29
-               	and	x0, x0, #0x3fffffff
                	lsl	x0, x0, #34
                	asr	x0, x0, #34
                	cmp	w0, #0x4d

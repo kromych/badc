@@ -88,7 +88,6 @@ Disassembly of section .text:
                	leave
                	retq
                	sarq	$0xa, %rax
-               	andq	$0x1, %rax
                	shlq	$0x3f, %rax
                	sarq	$0x3f, %rax
                	cmpl	$-0x1, %eax

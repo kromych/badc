@@ -34,7 +34,6 @@ Disassembly of section .text:
                	cbz	x4, <addr>
                	mov	w1, w1
                	asr	x1, x1, #8
-               	and	x1, x1, #0x1f
                	lsl	x1, x1, #59
                	asr	x1, x1, #59
                	cmp	w1, w2

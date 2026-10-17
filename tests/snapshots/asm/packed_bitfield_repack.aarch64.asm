@@ -31,7 +31,6 @@ Disassembly of section .text:
                	mov	x0, #0x9                // =9
                	sturb	w0, [x29, #-0x4]
                	ldr	w3, [x1]
-               	and	x3, x3, #0x1ffff
                	lsl	x3, x3, #47
                	asr	x3, x3, #47
                	mov	x17, #0xfde8            // =65000
@@ -39,7 +38,6 @@ Disassembly of section .text:
                	b.ne	<addr>
                	and	x2, x2, #0xffff
                	asr	x2, x2, #1
-               	and	x2, x2, #0x3ff
                	lsl	x2, x2, #54
                	asr	x2, x2, #54
                	cmp	w2, #0x1f4

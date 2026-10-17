@@ -167,7 +167,6 @@ Disassembly of section .text:
                	stur	w3, [x29, #-0x10]
                	mov	w4, w3
                	asr	x4, x4, #9
-               	and	x4, x4, #0x7f
                	lsl	x4, x4, #57
                	asr	x4, x4, #57
                	ldr	x1, [x1]
@@ -182,7 +181,6 @@ Disassembly of section .text:
                	tbz	w3, #0x0, <addr>
                	mov	w1, w1
                	asr	x1, x1, #9
-               	and	x1, x1, #0x7f
                	lsl	x1, x1, #57
                	asr	x1, x1, #57
                	cmp	w1, #0x8

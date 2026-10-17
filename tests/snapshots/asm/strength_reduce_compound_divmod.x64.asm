@@ -2445,10 +2445,11 @@ Disassembly of section .text:
                	movl	$0x3, -0x8(%rbp)
                	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rdx
-               	andq	$0x7ff, %rdx            # imm = 0x7FF
-               	movl	-0x30(%rbp), %esi
-               	andq	$-0x800, %rsi           # imm = 0xF800
-               	orq	%rdx, %rsi
+               	movq	%rdx, %rsi
+               	andq	$0x7ff, %rsi            # imm = 0x7FF
+               	movl	-0x30(%rbp), %edi
+               	andq	$-0x800, %rdi           # imm = 0xF800
+               	orq	%rdi, %rsi
                	movl	%esi, -0x30(%rbp)
                	shlq	$0x35, %rdx
                	sarq	$0x35, %rdx
@@ -2470,16 +2471,12 @@ Disassembly of section .text:
                	orq	%rsi, %rdx
                	movl	%edx, -0x90(%rbp)
                	movq	(%rax,%rcx,8), %rax
-               	movabsq	$0xffffffffff, %r11     # imm = 0xFFFFFFFFFF
-               	andq	%r11, %rax
                	movq	-0x30(%rbp), %rdx
                	andq	$0xffffff, %rdx         # imm = 0xFFFFFF
                	shlq	$0x18, %rax
                	orq	%rax, %rdx
                	movq	%rdx, -0x30(%rbp)
                	sarq	$0x18, %rax
-               	movabsq	$0xffffffffff, %r11     # imm = 0xFFFFFFFFFF
-               	andq	%r11, %rax
                	movq	-0x90(%rbp), %rdx
                	andq	$0xffffff, %rdx         # imm = 0xFFFFFF
                	shlq	$0x18, %rax
@@ -2487,7 +2484,6 @@ Disassembly of section .text:
                	movq	%rax, -0x90(%rbp)
                	movl	-0x90(%rbp), %eax
                	movq	%rax, %rdx
-               	andq	$0x7ff, %rdx            # imm = 0x7FF
                	shlq	$0x35, %rdx
                	sarq	$0x35, %rdx
                	imulq	$0x55555556, %rdx, %rdx # imm = 0x55555556
@@ -2502,7 +2498,6 @@ Disassembly of section .text:
                	movl	%esi, -0x90(%rbp)
                	movl	-0x30(%rbp), %edi
                	movq	%rdi, %rax
-               	andq	$0x7ff, %rax            # imm = 0x7FF
                	shlq	$0x35, %rax
                	sarq	$0x35, %rax
                	movslq	-0x8(%rbp), %r8
@@ -2539,8 +2534,6 @@ Disassembly of section .text:
                	movq	-0x90(%rbp), %rsi
                	movq	%rsi, %rax
                	sarq	$0x18, %rax
-               	movabsq	$0xffffffffff, %r11     # imm = 0xFFFFFFFFFF
-               	andq	%r11, %rax
                	shlq	$0x18, %rax
                	sarq	$0x18, %rax
                	movabsq	$0x5555555555555556, %rdi # imm = 0x5555555555555556
@@ -2548,8 +2541,6 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	shrq	$0x3f, %rax
                	addq	%rdx, %rax
-               	movabsq	$0xffffffffff, %r11     # imm = 0xFFFFFFFFFF
-               	andq	%r11, %rax
                	movq	%rsi, %rdx
                	andq	$0xffffff, %rdx         # imm = 0xFFFFFF
                	shlq	$0x18, %rax
@@ -2559,26 +2550,20 @@ Disassembly of section .text:
                	movq	-0x30(%rbp), %rdi
                	movq	%rdi, %rax
                	sarq	$0x18, %rax
-               	movabsq	$0xffffffffff, %r11     # imm = 0xFFFFFFFFFF
-               	andq	%r11, %rax
                	shlq	$0x18, %rax
                	sarq	$0x18, %rax
                	movslq	-0x8(%rbp), %r8
                	cqto
                	idivq	%r8
-               	movabsq	$0xffffffffff, %r11     # imm = 0xFFFFFFFFFF
-               	andq	%r11, %rax
                	movq	%rdi, %rdx
                	andq	$0xffffff, %rdx         # imm = 0xFFFFFF
                	shlq	$0x18, %rax
                	orq	%rdx, %rax
                	movq	%rax, -0x30(%rbp)
                	movl	-0x90(%rbp), %edx
-               	andq	$0x7ff, %rdx            # imm = 0x7FF
                	shlq	$0x35, %rdx
                	sarq	$0x35, %rdx
                	movl	-0x30(%rbp), %edi
-               	andq	$0x7ff, %rdi            # imm = 0x7FF
                	shlq	$0x35, %rdi
                	sarq	$0x35, %rdi
                	cmpl	%edi, %edx
@@ -2593,23 +2578,20 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rsi, %rdx
                	sarq	$0x18, %rdx
-               	movabsq	$0xffffffffff, %r11     # imm = 0xFFFFFFFFFF
-               	andq	%r11, %rdx
                	shlq	$0x18, %rdx
                	sarq	$0x18, %rdx
                	sarq	$0x18, %rax
-               	movabsq	$0xffffffffff, %r11     # imm = 0xFFFFFFFFFF
-               	andq	%r11, %rax
                	shlq	$0x18, %rax
                	sarq	$0x18, %rax
                	cmpq	%rax, %rdx
                	jne	<addr>
                	leaq	<rip>, %rax      # <addr>
                	movq	(%rax,%rcx,8), %rdx
-               	andq	$0x7ff, %rdx            # imm = 0x7FF
-               	movl	-0x30(%rbp), %esi
-               	andq	$-0x800, %rsi           # imm = 0xF800
-               	orq	%rdx, %rsi
+               	movq	%rdx, %rsi
+               	andq	$0x7ff, %rsi            # imm = 0x7FF
+               	movl	-0x30(%rbp), %edi
+               	andq	$-0x800, %rdi           # imm = 0xF800
+               	orq	%rdi, %rsi
                	movl	%esi, -0x30(%rbp)
                	shlq	$0x35, %rdx
                	sarq	$0x35, %rdx
@@ -2631,16 +2613,12 @@ Disassembly of section .text:
                	orq	%rsi, %rdx
                	movl	%edx, -0x90(%rbp)
                	movq	(%rax,%rcx,8), %rax
-               	movabsq	$0xffffffffff, %r11     # imm = 0xFFFFFFFFFF
-               	andq	%r11, %rax
                	movq	-0x30(%rbp), %rdx
                	andq	$0xffffff, %rdx         # imm = 0xFFFFFF
                	shlq	$0x18, %rax
                	orq	%rax, %rdx
                	movq	%rdx, -0x30(%rbp)
                	sarq	$0x18, %rax
-               	movabsq	$0xffffffffff, %r11     # imm = 0xFFFFFFFFFF
-               	andq	%r11, %rax
                	movq	-0x90(%rbp), %rdx
                	andq	$0xffffff, %rdx         # imm = 0xFFFFFF
                	shlq	$0x18, %rax
@@ -2648,7 +2626,6 @@ Disassembly of section .text:
                	movq	%rax, -0x90(%rbp)
                	movl	-0x90(%rbp), %eax
                	movq	%rax, %rdx
-               	andq	$0x7ff, %rdx            # imm = 0x7FF
                	shlq	$0x35, %rdx
                	sarq	$0x35, %rdx
                	imulq	$0x55555556, %rdx, %rsi # imm = 0x55555556
@@ -2665,7 +2642,6 @@ Disassembly of section .text:
                	movl	%esi, -0x90(%rbp)
                	movl	-0x30(%rbp), %edi
                	movq	%rdi, %rax
-               	andq	$0x7ff, %rax            # imm = 0x7FF
                	shlq	$0x35, %rax
                	movq	%rax, %r8
                	sarq	$0x35, %r8
@@ -2710,8 +2686,6 @@ Disassembly of section .text:
                	movq	-0x90(%rbp), %rsi
                	movq	%rsi, %rax
                	sarq	$0x18, %rax
-               	movabsq	$0xffffffffff, %r11     # imm = 0xFFFFFFFFFF
-               	andq	%r11, %rax
                	shlq	$0x18, %rax
                	movq	%rax, %rdi
                	sarq	$0x18, %rdi
@@ -2724,19 +2698,15 @@ Disassembly of section .text:
                	leaq	(%rax,%rax,2), %rax
                	movq	%rdi, %rdx
                	subq	%rax, %rdx
-               	movabsq	$0xffffffffff, %rax     # imm = 0xFFFFFFFFFF
-               	andq	%rdx, %rax
-               	movq	%rsi, %rdx
-               	andq	$0xffffff, %rdx         # imm = 0xFFFFFF
-               	shlq	$0x18, %rax
-               	movq	%rdx, %rsi
-               	orq	%rax, %rsi
+               	movq	%rsi, %rax
+               	andq	$0xffffff, %rax         # imm = 0xFFFFFF
+               	shlq	$0x18, %rdx
+               	movq	%rax, %rsi
+               	orq	%rdx, %rsi
                	movq	%rsi, -0x90(%rbp)
                	movq	-0x30(%rbp), %rdi
                	movq	%rdi, %rax
                	sarq	$0x18, %rax
-               	movabsq	$0xffffffffff, %r11     # imm = 0xFFFFFFFFFF
-               	andq	%r11, %rax
                	shlq	$0x18, %rax
                	movq	%rax, %r8
                	sarq	$0x18, %r8
@@ -2744,19 +2714,15 @@ Disassembly of section .text:
                	movq	%r8, %rax
                	cqto
                	idivq	%r9
-               	movabsq	$0xffffffffff, %rax     # imm = 0xFFFFFFFFFF
-               	andq	%rdx, %rax
-               	movq	%rdi, %rdx
-               	andq	$0xffffff, %rdx         # imm = 0xFFFFFF
-               	shlq	$0x18, %rax
+               	movq	%rdi, %rax
+               	andq	$0xffffff, %rax         # imm = 0xFFFFFF
+               	shlq	$0x18, %rdx
                	orq	%rdx, %rax
                	movq	%rax, -0x30(%rbp)
                	movl	-0x90(%rbp), %edx
-               	andq	$0x7ff, %rdx            # imm = 0x7FF
                	shlq	$0x35, %rdx
                	sarq	$0x35, %rdx
                	movl	-0x30(%rbp), %edi
-               	andq	$0x7ff, %rdi            # imm = 0x7FF
                	shlq	$0x35, %rdi
                	sarq	$0x35, %rdi
                	cmpl	%edi, %edx
@@ -2771,13 +2737,9 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rsi, %rdx
                	sarq	$0x18, %rdx
-               	movabsq	$0xffffffffff, %r11     # imm = 0xFFFFFFFFFF
-               	andq	%r11, %rdx
                	shlq	$0x18, %rdx
                	sarq	$0x18, %rdx
                	sarq	$0x18, %rax
-               	movabsq	$0xffffffffff, %r11     # imm = 0xFFFFFFFFFF
-               	andq	%r11, %rax
                	shlq	$0x18, %rax
                	sarq	$0x18, %rax
                	cmpq	%rax, %rdx

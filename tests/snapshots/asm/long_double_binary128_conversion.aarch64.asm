@@ -145,7 +145,6 @@ Disassembly of section .text:
 
 <round_to_double>:
                	sxtw	x2, w2
-               	sxtw	x3, w3
                	cmp	w3, #0x1
                	b.lt	<addr>
                	mov	x5, #0xb                // =11
@@ -268,20 +267,20 @@ Disassembly of section .text:
                	sub	x1, x29, #0x50
                	mov	x2, #0x10               // =16
                	bl	<addr>
-               	ldur	x0, [x29, #-0x40]
-               	and	x3, x0, #0x8000000000000000
-               	lsr	x1, x0, #52
-               	and	x1, x1, #0x7ff
-               	and	x0, x0, #0xfffffffffffff
+               	ldur	x2, [x29, #-0x40]
+               	and	x3, x2, #0x8000000000000000
+               	lsr	x0, x2, #52
+               	and	x1, x0, #0x7ff
+               	and	x0, x2, #0xfffffffffffff
                	cmp	w1, #0x7ff
                	b.ne	<addr>
                	orr	x1, x3, #0x7fff000000000000
-               	orr	x2, x1, x0, lsr #4
+               	orr	x1, x1, x0, lsr #4
                	cbz	x0, <addr>
-               	mov	x1, #0x800000000000     // =140737488355328
-               	orr	x1, x2, x1
-               	stur	x1, [x29, #-0x20]
-               	lsl	x0, x0, #60
+               	mov	x0, #0x800000000000     // =140737488355328
+               	orr	x0, x1, x0
+               	stur	x0, [x29, #-0x20]
+               	lsl	x0, x2, #60
                	stur	x0, [x29, #-0x18]
                	mov	x0, #0x0                // =0
                	ldur	x1, [x29, #-0x10]
@@ -295,7 +294,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x0                // =0
+               	mov	x0, #0x0                // =0
                	b	<addr>
                	cbnz	w1, <addr>
                	cbnz	x0, <addr>
@@ -313,7 +312,6 @@ Disassembly of section .text:
                	sub	x1, x1, #0x3ff
                	mov	x17, #0x3fff            // =16383
                	add	x1, x1, x17
-               	sxtw	x1, w1
                	orr	x1, x3, x1, lsl #48
                	orr	x1, x1, x0, lsr #4
                	stur	x1, [x29, #-0x20]

@@ -75,7 +75,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	asr	x0, x0, #10
-               	and	x0, x0, #0x1
                	lsl	x0, x0, #63
                	asr	x0, x0, #63
                	mov	x17, #-0x1              // =-1

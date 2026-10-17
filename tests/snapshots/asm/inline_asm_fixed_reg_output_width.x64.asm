@@ -55,7 +55,7 @@ Disassembly of section .text:
 
 <tick_int_halves>:
                	rdtsc
-               	movl	%edx, %ecx
+               	movq	%rdx, %rcx
                	shlq	$0x20, %rcx
                	movl	%eax, %eax
                	orq	%rcx, %rax

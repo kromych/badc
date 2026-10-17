@@ -92,7 +92,6 @@ Disassembly of section .text:
                	movl	%eax, -0x8(%rbp)
                	movl	%eax, %edx
                	sarq	$0x5, %rdx
-               	andq	$0xf, %rdx
                	shlq	$0x3c, %rdx
                	sarq	$0x3c, %rdx
                	cmpl	$0x1, %edx
@@ -127,7 +126,6 @@ Disassembly of section .text:
                	movl	%eax, -0x8(%rbp)
                	movl	%eax, %eax
                	sarq	$0x5, %rax
-               	andq	$0xf, %rax
                	shlq	$0x3c, %rax
                	sarq	$0x3c, %rax
                	cmpl	$-0x7, %eax
@@ -162,7 +160,6 @@ Disassembly of section .text:
                	retq
                	movl	(%rax), %eax
                	sarq	$0x5, %rax
-               	andq	$0xf, %rax
                	shlq	$0x3c, %rax
                	sarq	$0x3c, %rax
                	cmpl	$0x1, %eax

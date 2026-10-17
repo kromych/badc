@@ -58,7 +58,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	%esi, %ecx
                	sarq	$0x8, %rcx
-               	andq	$0x1f, %rcx
                	shlq	$0x3b, %rcx
                	sarq	$0x3b, %rcx
                	cmpl	%edx, %ecx

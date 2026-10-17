@@ -768,6 +768,21 @@ fn low_mask_transparent(mask: i64, width: u8) -> bool {
     }
 }
 
+/// The value an `And` masks, when `v` is that `And` and its mask keeps
+/// every bit a left shift by `k` keeps (bits `0..=63 - k`).
+fn masked_before_shl(func: &FunctionSsa, v: ValueId, k: i64) -> Option<ValueId> {
+    let Some(&Inst::BinopI {
+        op: BinOp::And,
+        lhs,
+        rhs_imm,
+    }) = func.insts.get(v as usize)
+    else {
+        return None;
+    };
+    let kept = u64::MAX.checked_shr(u32::try_from(k).ok()?)?;
+    ((1..64).contains(&k) && rhs_imm as u64 & kept == kept).then_some(lhs)
+}
+
 fn fold_round(func: &mut FunctionSsa) -> bool {
     let uses = count_uses(func);
     // A shared immediate operand only moves into the instruction when
@@ -918,6 +933,18 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
                 rhs_imm: 0,
                 ..
             } => Some(Inst::Imm(i64::from(*op == BinOp::Uge))),
+            // The shift discards every bit the mask clears.
+            Inst::BinopI {
+                op: BinOp::Shl,
+                lhs,
+                rhs_imm,
+            } if masked_before_shl(func, *lhs, *rhs_imm).is_some() => {
+                masked_before_shl(func, *lhs, *rhs_imm).map(|x| Inst::BinopI {
+                    op: BinOp::Shl,
+                    lhs: x,
+                    rhs_imm: *rhs_imm,
+                })
+            }
             Inst::BinopI { op, lhs, rhs_imm } => imm_of(func, *lhs)
                 .and_then(|l| eval::fold_binop(*op, l, *rhs_imm))
                 .map(Inst::Imm),
@@ -1209,6 +1236,41 @@ mod tests {
             };
             assert_eq!(reads == 0, forwarded, "{op:?} {k}");
         }
+    }
+
+    /// A left shift by `k` reads its operand's low `64 - k` bits, so a mask
+    /// that keeps them all is skipped and one that clears one stays.
+    #[test]
+    fn a_mask_a_left_shift_discards_is_skipped() {
+        let run = |mask: i64, k: i64| {
+            let mut f = fresh(vec![
+                Inst::LocalAddr(0),
+                Inst::BinopI {
+                    op: BinOp::And,
+                    lhs: 0,
+                    rhs_imm: mask,
+                },
+                Inst::BinopI {
+                    op: BinOp::Shl,
+                    lhs: 1,
+                    rhs_imm: k,
+                },
+            ]);
+            run_one(&mut f);
+            match f.insts[2] {
+                Inst::BinopI {
+                    op: BinOp::Shl,
+                    lhs,
+                    rhs_imm,
+                } if rhs_imm == k => lhs,
+                ref other => panic!("{other:?}"),
+            }
+        };
+        assert_eq!(run(0x3f_ffff, 42), 0, "22 bits kept by a shift by 42");
+        assert_eq!(run(0xff_ffff_ffff, 24), 0, "40 bits kept by a shift by 24");
+        assert_eq!(run(-2, 63), 1, "bit 0 cleared");
+        assert_eq!(run(0x1f_ffff, 42), 1, "bit 21 cleared");
+        assert_eq!(run(0x7fff_ffff, 32), 1, "bit 31 cleared");
     }
 
     /// A negated constant is the constant with its sign bit flipped: bit

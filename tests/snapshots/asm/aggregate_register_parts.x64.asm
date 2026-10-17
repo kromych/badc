@@ -38,7 +38,7 @@ Disassembly of section .text:
 <swapq>:
                	movq	%rdi, %rax
                	shrq	$0x20, %rax
-               	movl	%edi, %ecx
+               	movq	%rdi, %rcx
                	shlq	$0x20, %rcx
                	orq	%rcx, %rax
                	retq
@@ -90,7 +90,7 @@ Disassembly of section .text:
                	andq	$0xffff, %rcx           # imm = 0xFFFF
                	shlq	$0x10, %rcx
                	orq	%rcx, %rax
-               	movl	%r8d, %ecx
+               	movq	%r8, %rcx
                	shlq	$0x20, %rcx
                	orq	%rcx, %rax
                	retq
@@ -192,7 +192,7 @@ Disassembly of section .text:
                	shrq	$0x20, %rax
                	movslq	%edi, %rcx
                	leaq	(%rsi,%rcx), %rdx
-               	movl	%edi, %ecx
+               	movq	%rdi, %rcx
                	shlq	$0x20, %rcx
                	orq	%rcx, %rax
                	retq

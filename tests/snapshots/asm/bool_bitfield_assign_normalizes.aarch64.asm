@@ -76,7 +76,6 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x8]
                	mov	w3, w1
                	asr	x3, x3, #5
-               	and	x3, x3, #0xf
                	lsl	x3, x3, #60
                	asr	x3, x3, #60
                	cmp	w3, #0x1
@@ -113,7 +112,6 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x8]
                	mov	w1, w1
                	asr	x1, x1, #5
-               	and	x1, x1, #0xf
                	lsl	x1, x1, #60
                	asr	x1, x1, #60
                	mov	x17, #-0x7              // =-7
@@ -153,7 +151,6 @@ Disassembly of section .text:
                	ret
                	ldr	w1, [x1]
                	asr	x1, x1, #5
-               	and	x1, x1, #0xf
                	lsl	x1, x1, #60
                	asr	x1, x1, #60
                	cmp	w1, #0x1

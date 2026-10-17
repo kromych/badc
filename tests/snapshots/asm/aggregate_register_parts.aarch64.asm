@@ -22,7 +22,6 @@ Disassembly of section .text:
 
 <swapq>:
                	lsr	x1, x0, #32
-               	mov	w0, w0
                	orr	x0, x1, x0, lsl #32
                	ret
 
@@ -63,8 +62,7 @@ Disassembly of section .text:
                	add	x1, x1, x2
                	and	x0, x0, #0xffff
                	orr	x0, x4, x0, lsl #16
-               	mov	w2, w3
-               	orr	x0, x0, x2, lsl #32
+               	orr	x0, x0, x3, lsl #32
                	ret
 
 <dsum>:
@@ -165,7 +163,6 @@ Disassembly of section .text:
                	lsr	x2, x0, #32
                	sxtw	x3, w0
                	add	x1, x1, x3
-               	mov	w0, w0
                	orr	x0, x2, x0, lsl #32
                	ret
 

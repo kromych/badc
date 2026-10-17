@@ -46,7 +46,6 @@ Disassembly of section .text:
 <makeq>:
                	neg	x1, x0
                	mov	w0, w0
-               	mov	w1, w1
                	orr	x0, x0, x1, lsl #32
                	ret
 

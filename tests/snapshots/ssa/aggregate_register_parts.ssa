@@ -68,7 +68,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v18  LifetimeEnd(0)                                   -> -
     v19  BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x1
     v20  BinopI { op=and, lhs=v0, rhs_imm=4294967295 }    -> x1
-    v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x1
+    v21  BinopI { op=shl, lhs=v0, rhs_imm=32 }            -> x1
     v22  Binop { op=or, lhs=v3, rhs=v21 }                 -> x0
     v23  AggParts { desc=0, parts=[v22], fp_mask=0x0 }    -> -
     terminator Return(v23)   (exit_acc=v16)
@@ -216,7 +216,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v56  BinopI { op=shl, lhs=v55, rhs_imm=16 }           -> x1
     v57  Binop { op=or, lhs=v54, rhs=v56 }                -> x0
     v58  BinopI { op=and, lhs=v38, rhs_imm=4294967295 }   -> x1
-    v59  BinopI { op=shl, lhs=v58, rhs_imm=32 }           -> x1
+    v59  BinopI { op=shl, lhs=v38, rhs_imm=32 }           -> x1
     v60  Binop { op=or, lhs=v57, rhs=v59 }                -> x0
     v61  Imm(0)                                           -> x1
     v62  AggParts { desc=0, parts=[v60, v49], fp_mask=0x0 } -> -
@@ -479,7 +479,7 @@ fn ent_pc=16 n_params=1 variadic=false locals=0
     v29  LifetimeEnd(0)                                   -> -
     v30  BinopI { op=and, lhs=v4, rhs_imm=4294967295 }    -> x1
     v31  BinopI { op=and, lhs=v0, rhs_imm=4294967295 }    -> x1
-    v32  BinopI { op=shl, lhs=v31, rhs_imm=32 }           -> x1
+    v32  BinopI { op=shl, lhs=v0, rhs_imm=32 }            -> x1
     v33  Binop { op=or, lhs=v4, rhs=v32 }                 -> x0
     v34  Imm(0)                                           -> x1
     v35  AggParts { desc=0, parts=[v33, v25], fp_mask=0x0 } -> -

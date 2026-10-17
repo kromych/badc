@@ -28,7 +28,7 @@ Disassembly of section .text:
 <pair>:
                	movl	$0x12345678, %eax       # imm = 0x12345678
                	movl	$0x9abc, %edx           # imm = 0x9ABC
-               	movl	%edx, %ecx
+               	movq	%rdx, %rcx
                	shlq	$0x20, %rcx
                	movl	%eax, %eax
                	orq	%rcx, %rax

@@ -39,7 +39,6 @@ Disassembly of section .text:
                	ret
                	and	x0, x0, #0xffff
                	asr	x1, x0, #12
-               	and	x1, x1, #0x3
                	lsl	x1, x1, #62
                	asr	x1, x1, #62
                	mov	x17, #-0x1              // =-1

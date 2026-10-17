@@ -25,7 +25,6 @@ Disassembly of section .text:
 
 <make_pair>:
                	mov	w0, w0
-               	mov	w1, w1
                	orr	x0, x0, x1, lsl #32
                	ret
 
@@ -40,7 +39,6 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	add	x1, x2, x1, lsr #32
                	mov	w0, w0
-               	mov	w1, w1
                	orr	x0, x0, x1, lsl #32
                	ret
 

@@ -112,7 +112,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=1
     v102 LifetimeEnd(-1)                                  -> -
     v103 BinopI { op=and, lhs=v91, rhs_imm=4294967295 }   -> x0
     v104 BinopI { op=and, lhs=v64, rhs_imm=4294967295 }   -> x1
-    v105 BinopI { op=shl, lhs=v104, rhs_imm=32 }          -> x1
+    v105 BinopI { op=shl, lhs=v64, rhs_imm=32 }           -> x1
     v106 Binop { op=or, lhs=v103, rhs=v105 }              -> x0
     v107 AggParts { desc=0, parts=[v106], fp_mask=0x0 }   -> -
     terminator Return(v107)   (exit_acc=v101)
@@ -232,7 +232,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=1
     v102 LifetimeEnd(-1)                                  -> -
     v103 BinopI { op=and, lhs=v91, rhs_imm=4294967295 }   -> x0
     v104 BinopI { op=and, lhs=v64, rhs_imm=4294967295 }   -> x1
-    v105 BinopI { op=shl, lhs=v104, rhs_imm=32 }          -> x1
+    v105 BinopI { op=shl, lhs=v64, rhs_imm=32 }           -> x1
     v106 Binop { op=or, lhs=v103, rhs=v105 }              -> x0
     v107 AggParts { desc=0, parts=[v106], fp_mask=0x0 }   -> -
     terminator Return(v107)   (exit_acc=v101)

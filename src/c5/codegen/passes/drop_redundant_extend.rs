@@ -377,6 +377,12 @@ fn compute_high_observed_through(
                 lhs,
                 ..
             } => observe(&mut hi, &mut work, *lhs),
+            // A left shift by 32 or more fills the high word from the low.
+            Inst::BinopI {
+                op: BinOp::Shl,
+                rhs_imm: 32..=63,
+                ..
+            } => {}
             Inst::BinopI {
                 op:
                     BinOp::Add
@@ -403,9 +409,17 @@ fn compute_high_observed_through(
                 observe(&mut hi, &mut work, *b);
                 observe(&mut hi, &mut work, *c);
             }
-            Inst::ShiftOp { lhs, rhs, .. } => {
+            Inst::ShiftOp {
+                lhs,
+                rhs,
+                shift,
+                amount,
+                ..
+            } => {
                 observe(&mut hi, &mut work, *lhs);
-                observe(&mut hi, &mut work, *rhs);
+                if *shift != BinOp::Shl || *amount < 32 {
+                    observe(&mut hi, &mut work, *rhs);
+                }
             }
             Inst::Udiv128 {
                 hi: h,
@@ -1107,6 +1121,47 @@ mod tests {
             extern_imm_data_refs: Vec::new(),
             extern_tls_refs: Vec::new(),
         }
+    }
+
+    /// A left shift by 32 or more reads only its operand's low word, so an
+    /// `I32` extend under it drops even where the shift's result is read
+    /// whole; under a shift by 31 the extend's bit 32 survives and stays.
+    #[test]
+    fn extend_under_a_shift_out_of_the_high_word_drops() {
+        let run = |k: i64| {
+            let mut f = fresh(
+                vec![
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: LoadKind::I64,
+                    },
+                    Inst::Extend {
+                        value: 0,
+                        kind: LoadKind::I32,
+                        nsw: false,
+                    },
+                    Inst::BinopI {
+                        op: BinOp::Shl,
+                        lhs: 1,
+                        rhs_imm: k,
+                    },
+                ],
+                vec![Block {
+                    start_pc: 0,
+                    inst_range: 0..3,
+                    terminator: Terminator::Return(2),
+                    exit_acc: 2,
+                }],
+            );
+            run_one(&mut f);
+            match f.insts[2] {
+                Inst::BinopI { lhs, .. } => lhs,
+                ref other => panic!("{other:?}"),
+            }
+        };
+        assert_eq!(run(32), 0, "a shift by 32 reads the extend's low word only");
+        assert_eq!(run(63), 0, "a shift by 63 reads bit 0 only");
+        assert_eq!(run(31), 1, "a shift by 31 moves bit 32 to bit 63");
     }
 
     #[test]

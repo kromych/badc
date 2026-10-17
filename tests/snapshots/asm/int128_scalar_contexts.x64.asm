@@ -185,7 +185,6 @@ Disassembly of section .text:
                	movl	%eax, -0x10(%rbp)
                	movl	%eax, %ecx
                	sarq	$0x9, %rcx
-               	andq	$0x7f, %rcx
                	shlq	$0x39, %rcx
                	sarq	$0x39, %rcx
                	leaq	<rip>, %rdx      # <addr>
@@ -203,7 +202,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	%eax, %eax
                	sarq	$0x9, %rax
-               	andq	$0x7f, %rax
                	shlq	$0x39, %rax
                	sarq	$0x39, %rax
                	cmpl	$0x8, %eax

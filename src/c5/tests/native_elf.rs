@@ -10,7 +10,6 @@
 
 use std::io::Write;
 use std::path::Path;
-use std::process::Command;
 
 use super::fixture_tables::NATIVE_ELF_FIXTURES;
 use crate::{Compiler, NativeOptions, Target, emit_native, emit_native_with_options};

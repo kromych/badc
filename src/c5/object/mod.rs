@@ -504,10 +504,12 @@ pub fn emit_native_reporting(
         &mut imports,
     )?;
     if output_kind != OutputKind::Relocatable {
-        crate::c5::codegen::bind_placeholder_code_relocs(program, &mut build, |name| {
-            match asm_labels.get(name) {
-                Some(&AsmLabelPlacement::Text(off)) => Some(off as u64),
-                _ => None,
+        let mut named = defs;
+        named.extend(asm_labels.iter().map(|(n, at)| (n.clone(), at.as_def())));
+        crate::c5::codegen::bind_named_slots(program, &mut build, &named, &mut |build, r| {
+            match imports.as_mut() {
+                Some(slots) => Ok(slots.bind_slot(build, r)),
+                None => refuse_pe_data_slot(build, r),
             }
         })?;
     }
@@ -521,6 +523,25 @@ pub fn emit_native_reporting(
         core::mem::forget(compacted);
     }
     Ok(NativeEmit { image, diagnostics })
+}
+
+/// A PE loader writes an imported object's address into the import table alone.
+#[cfg(feature = "native-emit")]
+fn refuse_pe_data_slot(
+    build: &Build,
+    r: &crate::c5::program::ExternDataReloc,
+) -> Result<bool, C5Error> {
+    let name = r.symbol_name.as_str();
+    if !(build.imports.data_bindings.iter()).any(|(local, ..)| local == name) {
+        return Ok(false);
+    }
+    Err(C5Error::hard(
+        Code::RELOCATION,
+        format!(
+            "a static initializer takes the address of the imported object `{name}`, which a PE \
+             image reaches only through its import address table; take it at run time"
+        ),
+    ))
 }
 
 /// One region of the data stream at its runtime placement.

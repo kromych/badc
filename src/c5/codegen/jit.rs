@@ -577,12 +577,6 @@ mod jit_impl {
         let mut defs = super::super::unit_definitions(program, &build);
         let labels = fold_asm_sections(program, &mut build, target, &defs, "the JIT")?;
         bind_label_calls(&mut build, &labels, target.is_aarch64());
-        crate::c5::codegen::bind_placeholder_code_relocs(program, &mut build, |name| match labels
-            .get(name)
-        {
-            Some(&super::super::asm_fold::AsmLabelPlacement::Text(off)) => Some(off as u64),
-            _ => None,
-        })?;
         defs.extend(labels.iter().map(|(name, at)| (name.clone(), at.as_def())));
         // An extern call site left has no link step to resolve it, and would
         // branch to the zeroed placeholder: refuse it as the linker would.
@@ -592,6 +586,36 @@ mod jit_impl {
         bind_jit_unit_refs(&defs, &mut build);
         resolve_jit_asm_sym_targets(&defs, &mut build);
         route_jit_data_imports(&mut build)?;
+
+        // One slot per import, holding what dlsym finds, read as a loader's GOT.
+        let mut got_region = GotRegion::new(build.imports.imports.len())?;
+        got_region.bind_imports(&build.imports)?;
+        // A data import's slot must resolve, as the code dereferences it.
+        for fx in &build.got_fixups {
+            if fx.is_data_load && got_region.slot_value(fx.import_index) == 0 {
+                let name = &build.imports.imports[fx.import_index].real_symbol;
+                return Err(undefined_reference(name));
+            }
+        }
+        let got_vmaddr = got_region.as_ptr() as u64;
+        // The named slots bind as in an image, a library object through dlsym.
+        crate::c5::codegen::bind_named_slots(program, &mut build, &defs, &mut |build, r| {
+            let host = (build.imports.data_bindings.iter())
+                .find(|(local, ..)| *local == r.symbol_name)
+                .map_or(r.symbol_name.as_str(), |(_, host, _)| host.as_str());
+            let addr = got_region.resolve_symbol(host);
+            let at = r.data_offset as usize;
+            match build.data.get_mut(at..at + 8) {
+                _ if addr == 0 => Ok(false),
+                Some(slot) => {
+                    slot.copy_from_slice(&addr.wrapping_add_signed(r.addend).to_le_bytes());
+                    Ok(true)
+                }
+                None => Err(C5Error::internal(format!(
+                    "JIT: extern data slot {at:#x} past the data image"
+                ))),
+            }
+        })?;
 
         // Allocate a writable data region, copy `build.data` in. The
         // page is RW (no exec permission); an attempt to execute
@@ -629,27 +653,6 @@ mod jit_impl {
         // flipped to data_vmaddr but before the code region's
         // address is known -- so we defer this loop and run it
         // again once code_vmaddr is computed.
-
-        // Allocate a "fake GOT" -- one u64 per resolved import, each
-        // holding the runtime address of the corresponding libc
-        // symbol resolved via dlsym. The codegen's adrp+ldr / call
-        // qword [rip+disp32] sequences will read through this region
-        // exactly the way the ELF loader's relocations would.
-        let mut got_region = GotRegion::new(build.imports.imports.len())?;
-        got_region.bind_imports(&build.imports)?;
-        // A data import's GOT slot must resolve: unlike a function
-        // import (whose 0 slot faults only if called), the patched
-        // code loads the slot's value as an object address and
-        // dereferences it.
-        for fx in &build.got_fixups {
-            if fx.is_data_load && got_region.slot_value(fx.import_index) == 0 {
-                return Err(C5Error::internal(format!(
-                    "JIT: unresolved extern data symbol `{}`",
-                    build.imports.imports[fx.import_index].real_symbol,
-                )));
-            }
-        }
-        let got_vmaddr = got_region.as_ptr() as u64;
 
         // Allocate the code region. Patch fixups against the mmap'd
         // addresses *before* flipping to RX -- the writes need to
@@ -753,36 +756,6 @@ mod jit_impl {
                     )));
                 }
                 bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
-            }
-        }
-        // Pointer-to-extern-data initializers (`int *p = &extern_g;`): a
-        // name the unit's asm defines binds to it, any other resolves
-        // through the loader handles the GOT uses. Unlike a missing
-        // function import (a 0 GOT slot that faults only if called), a NULL
-        // data pointer is the defect being fixed, so an unresolved symbol
-        // is an undefined reference.
-        if !build.extern_data_relocs.is_empty()
-            && let Some(region) = &mut data_region
-        {
-            let bytes = region.as_mut_slice(build.data.len());
-            for r in &build.extern_data_relocs {
-                let addr = match defs.get(r.symbol_name.as_str()) {
-                    Some(&super::super::UnitDef::Data(off)) => data_vmaddr + off,
-                    Some(&super::super::UnitDef::Text(off)) => code_vmaddr + off as u64,
-                    None => got_region.resolve_symbol(&r.symbol_name),
-                };
-                if addr == 0 {
-                    return Err(undefined_reference(&r.symbol_name));
-                }
-                let off = r.data_offset as usize;
-                if off + 8 > bytes.len() {
-                    return Err(C5Error::internal(format!(
-                        "JIT: extern data reloc offset {off:#x} past end of data region ({})",
-                        bytes.len()
-                    )));
-                }
-                let value = (addr as i64 + r.addend) as u64;
-                bytes[off..off + 8].copy_from_slice(&value.to_le_bytes());
             }
         }
         apply_jit_fixups(

@@ -3354,6 +3354,20 @@ impl DataImportSlots {
         Ok(())
     }
 
+    /// Bind the data slot `r` to its object at load; false when no binding names it.
+    pub(crate) fn bind_slot(&mut self, build: &mut Build, r: &program::ExternDataReloc) -> bool {
+        if !self.binds(&r.symbol_name) {
+            return false;
+        }
+        let import = self.slot(build, &r.symbol_name);
+        build.data_import_binds.push(DataImportBind {
+            data_offset: r.data_offset,
+            import,
+            addend: r.addend,
+        });
+        true
+    }
+
     fn slot(&mut self, build: &mut Build, name: &str) -> usize {
         if let Some(&i) = self.slots.get(name) {
             return i;
@@ -4805,22 +4819,65 @@ pub(crate) fn bind_code_reloc_aliases(
     }
 }
 
-/// Bind each final-image function-pointer slot still naming an import
-/// placeholder (a function the unit does not define) as a link does: to
-/// the text label `label_of` names, to 0 for a weak reference, else refuse.
-pub(crate) fn bind_placeholder_code_relocs(
+/// Bind each final-image slot naming what the unit's C does not define as a
+/// link does (C99 6.7.8p4): to the definition `defs` holds, an object's else
+/// to what `import` binds; an undefined weak name holds 0 plus the offset.
+pub(crate) fn bind_named_slots(
     program: &Program,
     build: &mut Build,
-    label_of: impl Fn(&str) -> Option<u64>,
+    defs: &UnitDefs,
+    import: &mut dyn FnMut(&mut Build, &program::ExternDataReloc) -> Result<bool, C5Error>,
 ) -> Result<(), C5Error> {
+    use crate::c5::token::Token;
+    let weak = |name: &str, function: bool| {
+        (program.symbols.iter()).any(|s| {
+            s.is_weak
+                && s.link_name() == name
+                && if function {
+                    s.is_fun_entity()
+                } else {
+                    s.class == Token::Glo as i64
+                }
+        })
+    };
+    let undefined = |name: &str| {
+        C5Error::hard(
+            Code::UNDEFINED_SYMBOL,
+            format!("undefined reference to `{name}`"),
+        )
+    };
+    for r in core::mem::take(&mut build.extern_data_relocs) {
+        let at = r.data_offset as usize;
+        match defs.get(r.symbol_name.as_str()) {
+            Some(&UnitDef::Data(off)) => build.data_relocs.push(program::DataReloc {
+                data_offset: r.data_offset,
+                target_offset: off.wrapping_add_signed(r.addend),
+                target_anchor: off,
+                target_sym: None,
+            }),
+            Some(&UnitDef::Text(off)) => build.label_relocs.push(LabelReloc {
+                data_offset: r.data_offset,
+                text_offset: (off as u64).wrapping_add_signed(r.addend),
+            }),
+            None if import(build, &r)? => {}
+            None if weak(&r.symbol_name, false) => {
+                let slot = build.data.get_mut(at..at + 8).ok_or_else(|| {
+                    C5Error::internal(format!("extern data slot {at:#x} past its image"))
+                })?;
+                slot.copy_from_slice(&r.addend.to_le_bytes());
+            }
+            None => return Err(undefined(&r.symbol_name)),
+        }
+    }
     let names: alloc::collections::BTreeMap<u64, &str> = (program.extern_function_imports.iter())
         .map(|(pc, name)| (*pc as u64, name.as_str()))
         .collect();
     if names.is_empty() {
         return Ok(());
     }
-    let weak = |name: &str| {
-        (program.symbols.iter()).any(|s| s.is_weak && s.is_fun_entity() && s.link_name() == name)
+    let label_of = |name: &str| match defs.get(name) {
+        Some(&UnitDef::Text(off)) => Some(off as u64),
+        _ => None,
     };
     for tls in [false, true] {
         let relocs = if tls {
@@ -4849,7 +4906,7 @@ pub(crate) fn bind_placeholder_code_relocs(
                         ),
                     ));
                 }
-                None if weak(name) => {
+                None if weak(name, true) => {
                     let image = if tls {
                         &mut build.tls_data
                     } else {
@@ -4860,12 +4917,7 @@ pub(crate) fn bind_placeholder_code_relocs(
                     })?;
                     slot.copy_from_slice(&r.addend.to_le_bytes());
                 }
-                None => {
-                    return Err(C5Error::hard(
-                        Code::UNDEFINED_SYMBOL,
-                        format!("undefined reference to `{name}`"),
-                    ));
-                }
+                None => return Err(undefined(name)),
             }
         }
         if tls {

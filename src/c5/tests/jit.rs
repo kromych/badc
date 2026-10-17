@@ -174,6 +174,14 @@ fn asm_defined_names_bind_to_their_definitions() {
     assert_eq!(jit_exit_native_optimized(src, &["asm-defined-opt"]), 0);
 }
 
+/// A static slot naming what the unit's C does not define binds as an image's.
+#[test]
+fn a_slot_naming_what_the_unit_does_not_define_binds_to_it() {
+    let src = super::named_slots_source();
+    assert_eq!(jit_exit(src, &["named-slots"]), 0);
+    assert_eq!(jit_exit_native_optimized(src, &["named-slots-opt"]), 0);
+}
+
 /// A pointer initializer naming what the unit's asm defines binds to it, at
 /// the start and past the end of a read-only and a writable table; one
 /// naming nothing defined is an undefined reference.

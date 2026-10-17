@@ -691,6 +691,16 @@ fn asm_defined_names_bind_to_their_definitions() {
     }
 }
 
+/// A static slot naming what the unit's C does not define binds as a link binds it.
+#[test]
+fn a_slot_naming_what_the_unit_does_not_define_binds_to_it() {
+    let src = super::named_slots_source();
+    for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
+        let outcome = build_and_run_outcome_with_options(src, "named-slots", opts);
+        assert!(outcome.matches(0), "{outcome:?}");
+    }
+}
+
 /// A single-file image reaches an imported object through its GOT slot, a C
 /// read and an inline-asm address alike; an asm load or store in place is
 /// refused, as the slot stands in for the object's address alone.

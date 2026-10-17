@@ -62,6 +62,39 @@ fn unsupported_inline_asm_reports_the_specific_form_x86_64() {
     );
 }
 
+/// A single-file image refuses a static slot naming nothing, and on PE one
+/// naming an imported object, whose address the loader writes elsewhere.
+#[test]
+fn an_unbound_static_slot_in_a_single_image_is_reported() {
+    use crate::{Compiler, NativeOptions, Target};
+    let emit = |src: &str, target: Target| {
+        let program = Compiler::with_target(super::with_prelude(src), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile {target:?}: {e}"));
+        crate::emit_native_with_options(&program, target, NativeOptions::default())
+            .expect_err("the slot has no binding")
+            .to_string()
+    };
+    let undefined = "extern int nowhere_obj;\nint *p = &nowhere_obj;\n\
+                     int main(void) { return *p; }\n";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+    ] {
+        let err = emit(undefined, target);
+        assert!(
+            err.contains("undefined reference to `nowhere_obj`"),
+            "{target:?}: {err}"
+        );
+    }
+    let environ = "#include <stdlib.h>\nchar ***pe = &_environ;\n\
+                   int main(void) { return *pe != _environ; }\n";
+    let err = emit(environ, Target::WindowsX64);
+    assert!(err.contains("import address table"), "{err}");
+}
+
 #[test]
 fn deliberate_walker_rejection_is_not_an_internal_error() {
     use crate::{NativeOptions, Target};

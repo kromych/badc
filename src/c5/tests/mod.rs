@@ -950,6 +950,57 @@ int main(void) {
 "#
 }
 
+/// Static slots naming an asm table (at its start and past it) and function,
+/// `optind` directly and through a binding of the program's own, and an
+/// undefined weak object and function; one exit bit each.
+#[allow(dead_code)] // the image suites a Windows host compiles out
+pub fn named_slots_source() -> &'static str {
+    r#"
+#include <stdint.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+__asm__(".data\n.globl ns_words\n.p2align 3\nns_words:\n\t.quad 5, 6\n.text\n");
+#if defined(__x86_64__)
+__asm__(".text\n.globl ns_seven\n.p2align 4\nns_seven:\n\tmovl $7, %eax\n\tret\n");
+#else
+__asm__(".text\n.globl ns_seven\n.p2align 2\nns_seven:\n\tmov w0, #7\n\tret\n");
+#endif
+extern const long long ns_words[];
+int ns_seven(void);
+extern int ns_weak_obj[] __attribute__((weak));
+extern void ns_weak_fn(void) __attribute__((weak));
+const long long *const words = ns_words;
+const long long *const second = &ns_words[1];
+int (*const seven)(void) = ns_seven;
+int *weak_obj = &ns_weak_obj[2];
+void (*weak_fn)(void) = ns_weak_fn;
+#ifndef _WIN32
+#if defined(__APPLE__)
+#pragma binding(data libc::ns_opt, "_optind")
+#else
+#pragma binding(data libc::ns_opt, "optind")
+#endif
+extern int ns_opt;
+int *const opt = &optind;
+int *const opt_bound = &ns_opt;
+#endif
+int main(void) {
+    int bad = 0;
+    bad |= (words != ns_words || *words != 5) << 0;
+    bad |= (second != ns_words + 1 || *second != 6) << 1;
+    bad |= (seven != ns_seven || seven() != 7) << 2;
+    bad |= ((uintptr_t)weak_obj != 2 * sizeof(int)) << 3;
+    bad |= (weak_fn != 0) << 4;
+#ifndef _WIN32
+    bad |= (opt != &optind || *opt != optind) << 5;
+    bad |= (opt_bound != &optind) << 6;
+#endif
+    return bad;
+}
+"#
+}
+
 /// Inline asm naming the C library's `optind`, which the bundled headers
 /// bind as an imported object: `form` 1 takes its address, 2 loads it in
 /// place, 3 stores 7 to it in place. C reads of the object check each.

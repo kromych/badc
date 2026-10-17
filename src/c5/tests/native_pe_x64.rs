@@ -26,7 +26,7 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use super::fixture_tables::NATIVE_PE_X64_FIXTURES;
+use super::fixture_tables::{BADC_FIXTURES, NATIVE_PE_X64_FIXTURES};
 use crate::{Compiler, NativeOptions, Target};
 
 /// On Windows we run the binary directly; on macOS / Linux we go
@@ -760,6 +760,26 @@ fn fixture_parity_native_optimized() {
         NATIVE_PE_X64_FIXTURES.len(),
         failures.join("\n  ")
     );
+}
+
+/// [`BADC_FIXTURES`], at -O0 and -O.
+#[test]
+fn badc_fixtures() {
+    if !host_can_run_pe() {
+        eprintln!("skip badc_fixtures: no PE runner on this host");
+        return;
+    }
+    for (opts, suffix) in [
+        (NativeOptions::default(), "-O0"),
+        (NativeOptions::new().with_optimize(), "-O"),
+    ] {
+        let failures = super::parity_failures(BADC_FIXTURES, |name, expected| {
+            let outcome = build_and_run_fixture_with_options(name, opts.clone(), suffix);
+            (!outcome.matches(*expected))
+                .then(|| format!("{name} ({suffix}): expected exit {expected}, got {outcome:?}"))
+        });
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
 }
 
 #[test]

@@ -43,6 +43,7 @@
 //!   * `asm_template_names_renamed_static.c` -- TODO: the x86-64
 //!     single-image ELF writer and the JIT report a function the unit
 //!     defines and an inline-asm `sym(%rip)` names undefined.
+//!   * the fixtures of [`BADC_FIXTURES`], whose values are badc's own.
 //!
 //! TODO: `NATIVE_PE_ARM64_FIXTURES` takes none of them -- it runs only
 //! on a windows/aarch64 runner or linux/aarch64 under WINE, neither of
@@ -84,7 +85,6 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("call_arg_low_word.c", 0),
     ("scope_exit_storage.c", 0),
     ("early_return_before_frame.c", 0),
-    ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),
     ("dead_phi_web.c", 0),
     ("far_frame_slots.c", 0),
@@ -1399,7 +1399,6 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("call_arg_low_word.c", 0),
     ("scope_exit_storage.c", 0),
     ("early_return_before_frame.c", 0),
-    ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),
     ("dead_phi_web.c", 0),
     ("far_frame_slots.c", 0),
@@ -2412,7 +2411,6 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("call_arg_low_word.c", 0),
     ("scope_exit_storage.c", 0),
     ("early_return_before_frame.c", 0),
-    ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),
     ("dead_phi_web.c", 0),
     ("far_frame_slots.c", 0),
@@ -3415,7 +3413,6 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("call_arg_low_word.c", 0),
     ("scope_exit_storage.c", 0),
     ("early_return_before_frame.c", 0),
-    ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),
     ("dead_phi_web.c", 0),
     ("far_frame_slots.c", 0),
@@ -4195,7 +4192,6 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("call_arg_low_word.c", 0),
     ("scope_exit_storage.c", 0),
     ("early_return_before_frame.c", 0),
-    ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),
     ("dead_phi_web.c", 0),
     ("far_frame_slots.c", 0),
@@ -4902,7 +4898,6 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("call_arg_low_word.c", 0),
     ("scope_exit_storage.c", 0),
     ("early_return_before_frame.c", 0),
-    ("inline_asm_stack_switch_spill.c", 0),
     ("int128_divide_edges.c", 0),
     ("dead_phi_web.c", 0),
     ("far_frame_slots.c", 0),
@@ -5951,9 +5946,16 @@ pub(super) const JIT_UNSUPPORTED_FIXTURES: &[(&str, &str)] = &[
     ("thread_local_per_thread.c", "thread-local storage"),
 ];
 
+/// Fixtures whose exit codes rest on behavior badc defines past GNU C, so no
+/// reference compiler derives them. GNU C requires each `asm` statement to
+/// leave sp as it found it; badc's frames follow a stack switch that spans
+/// statements (`Frame::dynamic_sp`). Every backend runs these at -O0 and -O.
+pub(super) const BADC_FIXTURES: &[(&str, i32)] = &[("inline_asm_stack_switch_spill.c", 0)];
+
 /// Every table above, named so a failure points at the stale entry's table.
 fn registration_tables() -> &'static [(&'static str, &'static [(&'static str, i32)])] {
     &[
+        ("BADC_FIXTURES", BADC_FIXTURES),
         ("NATIVE_FIXTURES", NATIVE_FIXTURES),
         ("NATIVE_ELF_FIXTURES", NATIVE_ELF_FIXTURES),
         ("NATIVE_ELF_X64_FIXTURES", NATIVE_ELF_X64_FIXTURES),

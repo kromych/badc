@@ -11,7 +11,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
-use super::fixture_tables::NATIVE_FIXTURES;
+use super::fixture_tables::{BADC_FIXTURES, NATIVE_FIXTURES};
 use crate::{Compiler, NativeOptions, Target, emit_native, emit_native_with_options};
 
 /// Outcome of compiling-and-running a native binary. The fine-grained
@@ -1239,6 +1239,22 @@ fn fixture_parity_native_optimized() {
         NATIVE_FIXTURES.len(),
         failures.join("\n  ")
     );
+}
+
+/// [`BADC_FIXTURES`], at -O0 and -O.
+#[test]
+fn badc_fixtures() {
+    for (opts, suffix) in [
+        (NativeOptions::default(), "-O0"),
+        (NativeOptions::new().with_optimize(), "-O"),
+    ] {
+        let failures = super::parity_failures(BADC_FIXTURES, |name, expected| {
+            let outcome = build_and_run_fixture_with_options(name, opts.clone(), suffix);
+            (!outcome.matches(*expected))
+                .then(|| format!("{name} ({suffix}): expected exit {expected}, got {outcome:?}"))
+        });
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
 }
 
 /// A `static __always_inline` `asm goto` whose `"i"` operand is a

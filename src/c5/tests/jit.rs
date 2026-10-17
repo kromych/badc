@@ -21,7 +21,7 @@
     all(target_os = "macos", target_arch = "aarch64"),
 ))]
 
-use super::fixture_tables::{JIT_FIXTURES, JIT_UNSUPPORTED_FIXTURES};
+use super::fixture_tables::{BADC_FIXTURES, JIT_FIXTURES, JIT_UNSUPPORTED_FIXTURES};
 use crate::{Compiler, NativeOptions, jit_run, jit_run_with_options};
 
 /// Compile `src` and run it through the JIT with `args` as argv.
@@ -1966,6 +1966,20 @@ fn fixture_parity_native_optimized() {
         JIT_FIXTURES.len(),
         failures.join("\n  ")
     );
+}
+
+/// [`BADC_FIXTURES`], at -O0 and -O.
+#[test]
+fn badc_fixtures() {
+    for (name, expected) in BADC_FIXTURES {
+        assert_eq!(jit_fixture(name), *expected, "{name} (-O0)");
+        let src = super::load_fixture(name);
+        assert_eq!(
+            jit_exit_native_optimized(&src, &[name]),
+            *expected,
+            "{name} (-O)"
+        );
+    }
 }
 
 // ---- Standalone tests for fixtures that need argv setup the

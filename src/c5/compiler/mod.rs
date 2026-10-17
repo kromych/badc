@@ -2277,6 +2277,8 @@ pub struct Compiler {
     /// Base alignment the `.data` image requires, at least 8. Raised
     /// to 16 when a file-scope object requests `_Alignas(16)`.
     data_align: usize,
+    /// See [`Program::image_align_error`].
+    image_align_error: Option<crate::c5::diag::Diagnostic>,
     /// Alignment of the thread-local image, at least 8: the largest
     /// alignment among the objects reserved in it.
     tls_align: usize,
@@ -2951,6 +2953,7 @@ impl Compiler {
             warn_dead_store,
             no_entry_point: opts.no_entry_point,
             data_align: 8,
+            image_align_error: None,
             tls_align: crate::c5::layout::TLS_ALIGN_MIN,
             implicit_extern_fns: opts.implicit_extern_fns.clone(),
             export_all_functions: opts.export_all_functions,
@@ -3541,6 +3544,7 @@ impl Compiler {
             asm_file_names: self.asm_file_names,
             asm_idents: self.asm_idents,
             data_align: self.data_align,
+            image_align_error: self.image_align_error,
             data_ro_len: 0,
             data_relro_len: 0,
             data_object_starts: self.data_object_starts,

@@ -2307,7 +2307,7 @@ impl Compiler {
             if thread_local {
                 self.check_thread_local_align(want_align, self.lex.line)?;
             } else {
-                self.check_static_align(want_align, self.lex.line)?;
+                self.note_static_align(want_align, self.lex.line);
                 self.data_align = self.data_align.max(want_align);
             }
         }
@@ -2342,20 +2342,18 @@ impl Compiler {
     }
 
     /// C11 6.7.5p3: an alignment the loaded image cannot keep violates a constraint.
-    pub(super) fn check_static_align(&self, align: usize, line: usize) -> Result<(), C5Error> {
+    /// The first is kept for the paths that write an image.
+    pub(super) fn note_static_align(&mut self, align: usize, line: usize) {
         let format = self.target.binary_format();
         let limit = self.static_align_limit();
-        if align > limit {
-            return Err(self.compile_err_at(
-                Code::LIMIT,
-                line,
-                format!(
-                    "alignment {align} exceeds the {limit}-byte boundary a {} image keeps at load",
-                    format.name()
-                ),
-            ));
+        if align > limit && self.image_align_error.is_none() {
+            let message = format!(
+                "alignment {align} exceeds the {limit}-byte boundary a {} image keeps at load",
+                format.name()
+            );
+            let error = self.compile_err_at(Code::LIMIT, line, message);
+            self.image_align_error = error.into_diagnostics().pop();
         }
-        Ok(())
     }
 
     fn static_align_limit(&self) -> usize {

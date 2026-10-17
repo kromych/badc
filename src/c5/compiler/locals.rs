@@ -301,12 +301,7 @@ impl Compiler {
     /// declarator request, the type's natural alignment, and an
     /// `aligned(N)` type attribute on the base. Records it on the symbol
     /// and raises the unit's `.data` alignment to match.
-    pub(super) fn apply_static_local_align(
-        &mut self,
-        loc_idx: usize,
-        ty: i64,
-        a: &DeclAlign,
-    ) -> Result<(), C5Error> {
+    pub(super) fn apply_static_local_align(&mut self, loc_idx: usize, ty: i64, a: &DeclAlign) {
         let want_align = if a.gnu_set {
             core::cmp::max(a.req_align as usize, self.unattributed_align_of(ty))
         } else {
@@ -317,10 +312,9 @@ impl Compiler {
         };
         self.symbols[loc_idx].data_align = want_align.max(1) as i64;
         if want_align > 8 {
-            self.check_static_align(want_align, self.lex.line)?;
+            self.note_static_align(want_align, self.lex.line);
             self.data_align = self.data_align.max(want_align);
         }
-        Ok(())
     }
 
     /// Placement alignment of a block-scope static's storage: the
@@ -698,7 +692,7 @@ impl Compiler {
                 object_const && d.array_size == 0 && super::types::is_integer_scalar_ty(d.ty);
             self.symbols[d.loc_idx].storage_is_const = object_const;
             if let Some(a) = &d.decl_align {
-                self.apply_static_local_align(d.loc_idx, d.ty, a)?;
+                self.apply_static_local_align(d.loc_idx, d.ty, a);
                 // Declared object alignment for `__alignof__` on the
                 // name; distinct from the placement above, which never
                 // drops below the natural alignment.

@@ -953,6 +953,9 @@ fn compact_and_lower(
 ) -> Result<(Program, i64, Build), C5Error> {
     use crate::c5::codegen::LowerMode;
     use crate::c5::codegen::ssa::shadow;
+    if let Some(d) = &program.image_align_error {
+        return Err(C5Error::of(d.clone()));
+    }
     program.bind_trampoline_slots =
         target.binds_data_imports() || options.output_kind == OutputKind::Relocatable;
     program.weak_refs_by_name = options.output_kind == OutputKind::Relocatable;
@@ -1171,6 +1174,7 @@ pub(crate) mod test_support {
             entry_pragma: None,
             auto_includes: Vec::new(),
             data_align: 8,
+            image_align_error: None,
             subsystem: None,
             finished_functions: Vec::new(),
             symbols: Vec::new(),

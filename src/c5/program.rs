@@ -222,6 +222,9 @@ pub struct Program {
     /// (or the attribute equivalents). The native writers place the
     /// data section at a multiple of it.
     pub data_align: usize,
+    /// C11 6.7.5p3: the first static object aligned past what the target's
+    /// image keeps at load, which a path writing an image reports.
+    pub image_align_error: Option<crate::c5::diag::Diagnostic>,
     /// Length of the read-only prefix of `data`: `const`-qualified
     /// storage with no relocated slot, packed to the front by the
     /// native data compaction so the image writers can map it without
@@ -698,6 +701,7 @@ impl DataOffsets for Program {
             asm_file_names: _,
             asm_idents: _,
             data_align: _, // an alignment, not an offset
+            image_align_error: _,
             data_ro_len,
             data_relro_len,
             data_object_starts,
@@ -870,6 +874,7 @@ mod data_offset_tests {
             entry_pragma: None,
             auto_includes: Vec::new(),
             data_align: 8,
+            image_align_error: None,
             subsystem: None,
             finished_functions: Vec::new(),
             symbols: Vec::new(),

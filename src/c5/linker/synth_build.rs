@@ -410,6 +410,7 @@ fn synth_program(
         asm_file_names: Vec::new(),
         asm_idents: Vec::new(),
         data_align: 8,
+        image_align_error: None,
         data_ro_len: 0,
         data_relro_len: 0,
         data_object_starts: Vec::new(),

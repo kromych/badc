@@ -1084,6 +1084,50 @@ fn jit_exits_with_the_status_exit_was_given() {
     }
 }
 
+// A unit run in process keeps a 64 KiB alignment; a Mach-O image refuses it.
+#[test]
+fn in_process_runs_keep_a_64k_alignment() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-align-64k");
+    let src = dir.join("a64k.c");
+    std::fs::write(
+        &src,
+        "#include <stdint.h>\n\
+         _Alignas(65536) unsigned char d[3] = {1};\n\
+         _Alignas(65536) unsigned char b[3];\n\
+         static _Alignas(65536) const unsigned char r[3] = {2};\n\
+         int main(void) {\n\
+         static _Alignas(65536) unsigned char s[3];\n\
+         uintptr_t all = (uintptr_t)d | (uintptr_t)b | (uintptr_t)r | (uintptr_t)s;\n\
+         return all % 65536 != 0 || d[0] + r[0] + b[0] + s[0] != 3;\n\
+         }\n",
+    )
+    .expect("write source");
+    for mode in ["--jit", "--interp"] {
+        let out = Command::new(badc)
+            .arg(mode)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(0), "{mode}: {err}");
+    }
+    if cfg!(target_os = "macos") {
+        let out = Command::new(badc)
+            .arg("-o")
+            .arg(dir.join("a64k"))
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success()
+                && err.contains("exceeds the 16384-byte boundary a Mach-O image keeps at load"),
+            "{err}"
+        );
+    }
+}
+
 // `--install <dir>` writes every embedded header under <dir>/include
 // (recreating subdirectories) and the runtime source under <dir>/lib.
 #[test]

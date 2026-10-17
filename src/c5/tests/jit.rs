@@ -140,6 +140,22 @@ fn raw_byte_inline_asm_executes() {
     assert_eq!(jit_exit(src, &["jit-raw-bytes"]), 0x25);
 }
 
+/// A unit run in process places its own data: a program a library caller
+/// compiles keeps a 64 KiB alignment, past what a Mach-O image keeps.
+#[test]
+fn a_unit_run_in_process_keeps_a_64k_alignment() {
+    let src = "#include <stdint.h>\n\
+               _Alignas(65536) unsigned char d[3] = {1};\n\
+               _Alignas(65536) unsigned char b[3];\n\
+               int main(void) {\n\
+               static _Alignas(65536) unsigned char s[3];\n\
+               uintptr_t all = (uintptr_t)d | (uintptr_t)b | (uintptr_t)s;\n\
+               return all % 65536 != 0 || d[0] + b[0] + s[0] != 1;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["align-64k"]), 0, "the JIT");
+    assert_eq!(super::run_str(src), 0, "the interpreter");
+}
+
 /// An offset in an inline-asm reference counts from its symbol's own address.
 #[test]
 fn asm_offsets_count_from_the_symbols_own_address() {

@@ -240,6 +240,7 @@ fn static_alignment_follows_the_loader() {
                 .compile()
                 .unwrap_or_else(|e| panic!("{target:?}: {src}: {e}"));
             assert_eq!(program.data_align, 65536, "{target:?}: {src}");
+            assert!(program.image_align_error.is_none(), "{target:?}: {src}");
         }
     }
     for src in sources(16384) {
@@ -247,12 +248,15 @@ fn static_alignment_follows_the_loader() {
             .compile()
             .unwrap_or_else(|e| panic!("{src}: {e}"));
         assert_eq!(program.data_align, 16384, "{src}");
+        assert!(program.image_align_error.is_none(), "{src}");
     }
     for src in sources(32768) {
-        let err = Compiler::with_target(src.clone(), Target::MacOSAarch64)
+        let program = Compiler::with_target(src.clone(), Target::MacOSAarch64)
             .compile()
-            .err()
-            .unwrap_or_else(|| panic!("a 32 KiB alignment must be rejected: {src}"));
+            .unwrap_or_else(|e| panic!("{src}: {e}"));
+        let err = program
+            .image_align_error
+            .unwrap_or_else(|| panic!("a 32 KiB alignment must be held for an image: {src}"));
         assert!(
             err.to_string()
                 .contains("exceeds the 16384-byte boundary a Mach-O image keeps at load"),
@@ -280,12 +284,15 @@ fn an_extern_declaration_waits_for_the_definitions_alignment_check() {
             .compile()
             .unwrap_or_else(|e| panic!("{src}: {e}"));
         assert!(program.data_align < 32768, "{src}: {}", program.data_align);
+        assert!(program.image_align_error.is_none(), "{src}");
     }
     let src = format!("{s}extern struct S x;\nstruct S x;\nint main(void) {{ return x.c; }}");
-    let err = Compiler::with_target(src.clone(), Target::MacOSAarch64)
+    let program = Compiler::with_target(src.clone(), Target::MacOSAarch64)
         .compile()
-        .err()
-        .unwrap_or_else(|| panic!("the definition must be rejected: {src}"));
+        .unwrap_or_else(|e| panic!("{src}: {e}"));
+    let err = program
+        .image_align_error
+        .unwrap_or_else(|| panic!("the definition must be held for an image: {src}"));
     assert!(
         err.to_string().contains("exceeds the 16384-byte boundary"),
         "{err}"

@@ -122,27 +122,17 @@ impl ParsedParams {
     }
 }
 
-/// A parameter's function-pointer carriers: indirection, return lineage,
-/// pointee parameter information, and `FnType::ret`.
-type ParamFnCarriers = (
-    i64,
-    i64,
-    Option<crate::c5::symbol::FnParams>,
-    Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
-);
+/// A parameter's function-pointer carriers: indirection, return lineage and
+/// the function type it leads to.
+type ParamFnCarriers = (i64, i64, Option<crate::c5::symbol::FnType>);
 
 /// The function type a parameter with `carriers` leads to and the pointer
 /// levels above it; an adjusted array adds one (C99 6.7.5.3p7).
 pub(super) fn param_fn_type(
-    (depth, _, params, ret): ParamFnCarriers,
-    conv: crate::c5::codegen::CallConv,
+    (depth, _, f): ParamFnCarriers,
     adjusted: bool,
 ) -> Option<(crate::c5::symbol::FnType, i64)> {
-    (depth > 0).then(|| {
-        let params = params.unwrap_or_default();
-        let f = crate::c5::symbol::FnType { params, conv, ret };
-        (f, depth + i64::from(adjusted))
-    })
+    (depth > 0).then(|| (f.unwrap_or_default(), depth + i64::from(adjusted)))
 }
 
 /// How a function declarator specified its parameters (C99 6.7.5.3p14).
@@ -164,12 +154,11 @@ impl Compiler {
     /// first field of a following struct definition would record a phantom
     /// function-pointer prototype.
     pub(super) fn take_param_fn_ptr_carriers(&mut self) -> ParamFnCarriers {
-        let ret_fn = self.take_decl_ret_fn(false);
+        let f = self.take_decl_fn_type();
         let indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
         let ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
-        let params = self.pending.fn_ptr_params.take();
         self.pending.base_is_function_type = false;
-        (indirection, ret_indirection, params, ret_fn)
+        (indirection, ret_indirection, f)
     }
 
     /// A parameter's attributes describe that parameter, not the declarator
@@ -183,8 +172,8 @@ impl Compiler {
         let outer = (
             p.fn_ptr_indirection.take(),
             core::mem::take(&mut p.fn_ptr_ret_indirection),
-            p.fn_ptr_params.take(),
-            p.fn_ptr_ret_fn.take(),
+            p.fn_ptr_type.take(),
+            p.group_conv.take(),
             core::mem::take(&mut p.base_is_function_type),
         );
         let outer_chain = core::mem::take(&mut p.fn_ret_chain);
@@ -209,8 +198,8 @@ impl Compiler {
         (
             p.fn_ptr_indirection,
             p.fn_ptr_ret_indirection,
-            p.fn_ptr_params,
-            p.fn_ptr_ret_fn,
+            p.fn_ptr_type,
+            p.group_conv,
             p.base_is_function_type,
         ) = outer;
         p.fn_ret_chain = outer_chain;
@@ -373,9 +362,8 @@ impl Compiler {
                 // An unnamed parameter binds no symbol to receive the
                 // fn-pointer carriers its base (a fn-pointer typedef) seeded.
                 let carriers = self.take_param_fn_ptr_carriers();
-                let conv = core::mem::take(&mut self.pending.attrs.call_conv);
                 let adjusted = !dims.is_empty();
-                if let Some((f, depth)) = param_fn_type(carriers, conv, adjusted) {
+                if let Some((f, depth)) = param_fn_type(carriers, adjusted) {
                     fn_types.push((types.len(), f, depth));
                 }
                 if implicit_int {
@@ -441,13 +429,10 @@ impl Compiler {
             // set anything so they don't leak into the next
             // parameter or expression.
             let carriers = self.take_param_fn_ptr_carriers();
-            // Drained per parameter so one parameter's convention cannot
-            // leak into the next.
-            let param_conv = core::mem::take(&mut self.pending.attrs.call_conv);
-            if let Some((f, depth)) = param_fn_type(carriers.clone(), param_conv, adjusted) {
+            if let Some((f, depth)) = param_fn_type(carriers.clone(), adjusted) {
                 fn_types.push((types.len(), f, depth));
             }
-            let (fn_ptr_indirection, fn_ptr_ret_indirection, fnptr_pp, ret_fn) = carriers;
+            let (fn_ptr_indirection, fn_ptr_ret_indirection, param_fn) = carriers;
             // The adjusted pointer is one more level above a function-pointer
             // element, as `fn_t *p` counts it.
             let fn_ptr_indirection =
@@ -511,16 +496,12 @@ impl Compiler {
             // decay no-op to the unary `*` handler.
             self.symbols[param_idx].fn_ptr_indirection = fn_ptr_indirection;
             self.symbols[param_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
-            self.symbols[param_idx].fn_type.ret = ret_fn;
-            // A function-pointer parameter records its pointee signature's
-            // parameter types so an indirect call through it narrows each
-            // argument to its declared type (the common callback shape).
-            if fn_ptr_indirection > 0
-                && let Some(pp) = fnptr_pp
-            {
-                self.symbols[param_idx].set_fn_params(pp);
-            }
-            self.symbols[param_idx].fn_type.conv = param_conv;
+            // A function-pointer parameter records the function type it
+            // leads to, so a call through it converts each argument to its
+            // declared type (the common callback shape) by its convention.
+            self.symbols[param_idx].fn_type = param_fn
+                .filter(|_| fn_ptr_indirection > 0)
+                .unwrap_or_default();
 
             args.push(param_idx);
             enum_tags.extend(base_enum_tag.map(|t| (types.len(), t)));

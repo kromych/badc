@@ -53,13 +53,15 @@ fn pop_tail_past<T>(v: &mut alloc::vec::Vec<T>, past: impl Fn(&T) -> bool) -> us
     len - v.len() + usize::from(!v.is_empty())
 }
 
-/// The binding fields a callee `Ident` records.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+/// The binding fields a callee `Ident` records, and the function type the
+/// name led to with them.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct CalleeBinding {
     class: i64,
     val: i64,
     is_thread_local: bool,
     array_size: i64,
+    fn_type: Option<(crate::c5::symbol::FnType, i64)>,
 }
 
 impl Compiler {
@@ -1558,6 +1560,7 @@ impl Compiler {
             val: s.val,
             is_thread_local: s.is_thread_local,
             array_size: s.array_size,
+            fn_type: self.symbol_fn(sym),
         }
     }
 
@@ -1574,7 +1577,14 @@ impl Compiler {
             },
             pos,
         );
-        self.record_ident_fn(id, sym as usize);
+        if let Some((f, depth)) = b.fn_type {
+            self.set_expr_fn(id, f, depth);
+        }
+        // The call follows its callee's type here (C99 6.5.2.2); the walker
+        // runs after the scope ends.
+        if let Some(f) = self.callee_fn(Some(id)) {
+            self.ast.callee_types.insert(id, f);
+        }
         id
     }
 

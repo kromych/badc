@@ -305,10 +305,15 @@ impl Compiler {
     /// pointer object's, or an array's of them, whose value decays one
     /// level further per dimension.
     pub(super) fn record_ident_fn(&mut self, id: ExprId, idx: usize) {
-        if let Some(depth) = self.symbol_fn_depth(idx) {
-            let f = self.symbol_fn_type(idx);
+        if let Some((f, depth)) = self.symbol_fn(idx) {
             self.set_expr_fn(id, f, depth);
         }
+    }
+
+    /// The function type symbol `idx` leads to and its depth, if any.
+    pub(super) fn symbol_fn(&self, idx: usize) -> Option<(FnType, i64)> {
+        let depth = self.symbol_fn_depth(idx)?;
+        Some((self.symbol_fn_type(idx), depth))
     }
 
     /// The function type of expression `id` and its depth, through the
@@ -445,12 +450,7 @@ impl Compiler {
     pub(super) fn carriers_fn_type(&self) -> Option<(FnType, i64)> {
         let p = &self.pending;
         let depth = p.fn_ptr_indirection?;
-        let f = FnType {
-            params: p.fn_ptr_params.clone().unwrap_or_default(),
-            conv: p.attrs.call_conv,
-            ret: p.fn_ptr_ret_fn.clone(),
-        };
-        Some((f, depth))
+        Some((p.fn_ptr_type.clone().unwrap_or_default(), depth))
     }
 
     /// `FnType::ret` of the entity a declarator just declared, taking the
@@ -461,18 +461,36 @@ impl Compiler {
     pub(super) fn take_decl_ret_fn(&mut self, own: bool) -> Option<(Box<FnType>, i64)> {
         let chain = core::mem::take(&mut self.pending.fn_ret_chain);
         let base = self.pending.fn_decl_base.take();
-        let carrier = self.pending.fn_ptr_ret_fn.take();
         self.pending.fn_chain_levels = 0;
         let levels = core::mem::take(&mut self.pending.fn_base_levels)
             + core::mem::take(&mut self.pending.fn_chain_array_levels);
         if !core::mem::take(&mut self.pending.fn_own_sig) && !own {
-            return carrier;
+            return self
+                .pending
+                .fn_ptr_type
+                .as_ref()
+                .and_then(|f| f.ret.clone());
         }
         let mut ret = base.map(|(f, d)| (Box::new(f), d + levels));
-        for (params, depth) in chain.into_iter().rev() {
-            let conv = crate::c5::codegen::CallConv::Target;
-            ret = Some((Box::new(FnType { params, conv, ret }), depth));
+        for (f, depth) in chain.into_iter().rev() {
+            ret = Some((Box::new(FnType { ret, ..f }), depth));
         }
         ret
+    }
+
+    /// The function type the entity a declarator just declared leads to,
+    /// taking the carriers, on the convention the declaration's attributes
+    /// name if any (GNU attribute syntax).
+    pub(super) fn take_decl_fn_type(&mut self) -> Option<FnType> {
+        let ret = self.take_decl_ret_fn(false);
+        let f = self.pending.fn_ptr_type.take()?;
+        let named = self.pending.attrs.call_conv;
+        let (conv, conv_named) = (named.unwrap_or(f.conv), named.is_some() || f.conv_named);
+        Some(FnType {
+            conv,
+            conv_named,
+            ret,
+            ..f
+        })
     }
 }

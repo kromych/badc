@@ -743,8 +743,22 @@ impl Compiler {
         let implicit_int = core::mem::take(&mut self.pending.base_implicit_int);
         let base_enum_tag = self.pending.base_enum_tag.take();
         let spec_attrs = self.pending.attrs.clone();
+        // A function-pointer typedef base contributes its function type to
+        // every declarator (`typedef fn_t A, B;`).
+        let base_fn = (
+            self.pending.fn_ptr_indirection,
+            self.pending.fn_ptr_ret_indirection,
+            self.pending.fn_ptr_type.clone(),
+            self.pending.base_is_function_type,
+        );
         while self.lex.tk != ';' {
             self.pending.attrs = spec_attrs.clone();
+            (
+                self.pending.fn_ptr_indirection,
+                self.pending.fn_ptr_ret_indirection,
+                self.pending.fn_ptr_type,
+                self.pending.base_is_function_type,
+            ) = base_fn.clone();
             let declarator_line = self.lex.line;
             let (id_idx, ty, mut td_array, mut td_zero_len) = self.parse_declarator(lbt)?;
             if id_idx == usize::MAX {
@@ -757,30 +771,38 @@ impl Compiler {
             let declarator_transparent = core::mem::take(&mut self.pending.attrs.transparent_union);
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
-            let ret_fn = self.take_decl_ret_fn(self.lex.tk == '(');
             let bare_fn_type = core::mem::take(&mut self.pending.bare_function_type_declarator);
             // C99 function-type typedef: `typedef RET NAME(args);`
             // declared at block scope. Same handling as run_compile's
             // file-scope branch -- parse the `(args)` and bind the
             // typedef as a function-pointer alias.
-            let (typedef_ty, typedef_fpi, typedef_params, typedef_is_fn_type) =
-                if self.lex.tk == '(' {
-                    self.next()?; // consume `(`
-                    // C99 6.2.1p4: the parameter names of this function-type
-                    // typedef have no scope. Record their types without binding
-                    // the names, so one matching an enclosing local is not
-                    // shadowed (which would corrupt the single-slot shadow the
-                    // enclosing scope restores from at exit).
-                    let saved = self.pending.parsing_fn_ptr_proto;
-                    self.pending.parsing_fn_ptr_proto = true;
-                    let pp = self.parse_function_params()?;
-                    self.pending.parsing_fn_ptr_proto = saved;
-                    let fty = ty + Ty::Ptr as i64;
-                    (fty, 1i64, Some(pp), true)
-                } else {
-                    // An alias of a function-type typedef stays a function type.
-                    (ty, fn_ptr_indirection, None, bare_fn_type)
+            let (typedef_ty, typedef_fpi, typedef_fn, typedef_is_fn_type) = if self.lex.tk == '(' {
+                let ret = self.take_decl_ret_fn(true);
+                self.pending.fn_ptr_type = None;
+                self.next()?; // consume `(`
+                // C99 6.2.1p4: the parameter names of this function-type
+                // typedef have no scope. Record their types without binding
+                // the names, so one matching an enclosing local is not
+                // shadowed (which would corrupt the single-slot shadow the
+                // enclosing scope restores from at exit).
+                let saved = self.pending.parsing_fn_ptr_proto;
+                self.pending.parsing_fn_ptr_proto = true;
+                let pp = self.parse_function_params()?;
+                self.pending.parsing_fn_ptr_proto = saved;
+                // An attribute may trail the list (`typedef T f(void) a;`).
+                self.skip_attribute_specifiers()?;
+                let f = crate::c5::symbol::FnType {
+                    params: pp.fn_params(),
+                    conv: self.pending.attrs.call_conv.unwrap_or_default(),
+                    conv_named: self.pending.attrs.call_conv.is_some(),
+                    ret,
                 };
+                (ty + Ty::Ptr as i64, 1i64, Some(f), true)
+            } else {
+                // An alias of a function-type typedef stays a function type.
+                let f = self.take_decl_fn_type();
+                (ty, fn_ptr_indirection, f, bare_fn_type)
+            };
             // A name this scope already bound keeps its first save: a
             // second one would overwrite the outer binding with the
             // scope's own. C11 6.7p3 admits only a typedef redeclared
@@ -804,7 +826,8 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Typedef as i64;
             self.symbols[id_idx].type_ = typedef_ty;
             self.symbols[id_idx].val = 0;
-            self.symbols[id_idx].fn_type.ret = ret_fn;
+            // The function type the alias leads to, its convention included.
+            self.symbols[id_idx].fn_type = typedef_fn.unwrap_or_default();
             self.symbols[id_idx].incomplete_enum_tag = base_enum_tag;
             // A declarator-position `transparent_union` binds to the
             // aliased union, as at file scope.
@@ -845,26 +868,9 @@ impl Compiler {
             // A zero-length alias shares the `-1` count of one of unknown size.
             self.symbols[id_idx].is_zero_len_array = td_array < 0 && td_zero_len;
             self.symbols[id_idx].is_function_type = typedef_is_fn_type;
-            // A function-type typedef records the calling convention its
-            // declaration named, so a declarator through the alias
-            // inherits it (`typedef efi_status_t __efiapi f_t(void);`).
-            if self.pending.attrs.call_conv != crate::c5::codegen::CallConv::Target {
-                self.symbols[id_idx].fn_type.conv = self.pending.attrs.call_conv;
-            }
-            if typedef_fpi > 0 {
-                self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
-                self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
-            }
-            if let Some(pp) = typedef_params {
-                self.symbols[id_idx].set_fn_params(pp.fn_params());
-            } else if let Some(p) = self.pending.fn_ptr_params.take() {
-                // `typedef RET (*NAME)(args)` at block scope: the
-                // declarator captured the pointee's parameter list. Record
-                // it as the file-scope branch does, so an indirect call
-                // through a variable of this typedef narrows arguments
-                // and routes a variadic tail per the host ABI.
-                self.symbols[id_idx].set_fn_params(p);
-            }
+            self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
+            self.symbols[id_idx].fn_ptr_ret_indirection =
+                fn_ptr_ret_indirection * i64::from(typedef_fpi > 0);
             self.accept_declarator_separator()?;
         }
         self.next()?; // consume `;`
@@ -942,7 +948,7 @@ impl Compiler {
             },
             pos,
         );
-        let callee = self.ast_callee_ident(cv.fn_sym as u32, cv.fn_ty, cv.fn_binding);
+        let callee = self.ast_callee_ident(cv.fn_sym as u32, cv.fn_ty, cv.fn_binding.clone());
         let call = self.ast.push_expr(
             Expr::Call {
                 callee,

@@ -347,23 +347,11 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Calling convention the callee of a call expression follows,
-    /// directly or through a pointer. Every ABI question the call site
+    /// Calling convention the callee of a call expression follows, directly
+    /// or through a pointer: that of the callee expression's function type
+    /// the parse recorded (C99 6.5.2.2). Every ABI question the call site
     /// asks is asked of this, not of the target's own convention.
     fn callee_conv(&self, callee: ExprId) -> crate::c5::codegen::CallConv {
-        if let Expr::Ident { sym, class, .. } = self.ast.expr(callee)
-            && (*class == Token::Fun as i64 || binding_defined_here(self.symbols, *sym, *class))
-            && let Some(s) = self.symbols.get(*sym as usize)
-            && s.fn_type.conv != crate::c5::codegen::CallConv::Target
-        {
-            return s.fn_type.conv;
-        }
-        self.indirect_callee_conv(callee)
-    }
-
-    /// Calling convention the pointed-to function of an indirect call
-    /// follows, from the callee's function type the parse recorded.
-    fn indirect_callee_conv(&self, callee: ExprId) -> crate::c5::codegen::CallConv {
         self.ast
             .callee_types
             .get(&callee)

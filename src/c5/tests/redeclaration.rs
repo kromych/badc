@@ -231,6 +231,218 @@ fn block_scope_declarations_meet_the_other_declarations() {
 }
 
 #[test]
+fn a_function_keeps_one_calling_convention() {
+    // The calling convention is part of a function's type, as gcc and clang
+    // take it: the first declaration's, in whatever scope it is, which a
+    // later declaration names again or leaves unnamed; naming another, the
+    // target's own included, through an attribute, a typedef or typeof, is
+    // rejected (C99 6.2.7p2). `F` names the convention foreign to the
+    // target and `N` the target's own; every call and the definition of `f`
+    // follow the convention a row accepts.
+    use crate::c5::codegen::CallConv;
+    use crate::c5::ir::Inst;
+    #[derive(Clone, Copy)]
+    enum Outcome {
+        Foreign,
+        Own,
+        DeclaredForeign,
+        DeclaredOwn,
+    }
+    use Outcome::*;
+    const ROWS: &[(&str, Outcome)] = &[
+        (
+            "F int f(int); int g(void) { int f(int); return f(1); }",
+            Foreign,
+        ),
+        (
+            "void g(void) { F int f(int); } int f(int x) { return x; }",
+            Foreign,
+        ),
+        (
+            "int g(void) { F int f(int); return f(1); } int h(void) { int f(int); return f(2); }",
+            Foreign,
+        ),
+        (
+            "F int f(int); int g(void) { int f = 1; { int f(int); return f(1) + 0; } }",
+            Foreign,
+        ),
+        (
+            "void g(void) { F int f(int); } F int f(int x) { return x; }",
+            Foreign,
+        ),
+        (
+            "int g(void) { extern F int f(int); return f(1); } int f(int);",
+            Foreign,
+        ),
+        (
+            "int g(void) { F int f(int); { int f(int); return f(1); } }",
+            Foreign,
+        ),
+        (
+            "typedef int Pt(int); F int f(int); int g(void) { Pt f; return f(1); }",
+            Foreign,
+        ),
+        (
+            "F int n(int); void g(void) { __typeof__(n) f; } int f(int x) { return x; }",
+            Foreign,
+        ),
+        (
+            "F int f(int); int f(int); int g(void) { return f(1); }",
+            Foreign,
+        ),
+        ("F int f(int); F int f(int x) { return x; }", Foreign),
+        ("F int f(int); int f(int x) { return x; }", Foreign),
+        ("F int f(); int f(a) int a; { return a; }", Foreign),
+        ("F int f(a) int a; { return a; } int f(int);", Foreign),
+        (
+            "static F int f(int); static int f(int x) { return x; } int g(void) { return f(1); }",
+            Foreign,
+        ),
+        ("extern F int f(int); int f(int x) { return x; }", Foreign),
+        (
+            "static F int f(int); extern int f(int); static int f(int x) { return x; }\n\
+             int g(void) { return f(1); }",
+            Foreign,
+        ),
+        (
+            "typedef int Ft(int) F; Ft f; int f(int x) { return x; }",
+            Foreign,
+        ),
+        (
+            "typedef F int Ft(int); Ft f; int f(int x) { return x; }",
+            Foreign,
+        ),
+        (
+            "typedef int Pt(int); F int f(int); Pt f; int g(void) { return f(1); }",
+            Foreign,
+        ),
+        (
+            "F int f(int); typedef int Pt(int); Pt f; int f(int x) { return x; }",
+            Foreign,
+        ),
+        (
+            "typedef int Pt(int); typedef F int Ft(int); Ft f; Pt f; int g(void) { return f(1); }",
+            Foreign,
+        ),
+        (
+            "F int n(int); __typeof__(n) f; int f(int x) { return x; }",
+            Foreign,
+        ),
+        (
+            "int n(int); F int f(int); __typeof__(n) f; int g(void) { return f(1); }",
+            Foreign,
+        ),
+        ("N int f(int); int f(int x) { return x; }", Own),
+        ("int f(int); N int f(int x) { return x; }", Own),
+        ("int f(int); void g(void) { F int f(int); }", DeclaredOwn),
+        ("int f(int); void g(void) { int f(int) F; }", DeclaredOwn),
+        (
+            "typedef int Ft(int) F; int f(int); void g(void) { Ft f; }",
+            DeclaredOwn,
+        ),
+        (
+            "void g(void) { N int f(int); } F int f(int x) { return x; }",
+            DeclaredOwn,
+        ),
+        (
+            "int g(void) { int f(int); return f(1); } F int f(int x) { return x; }",
+            DeclaredOwn,
+        ),
+        ("int f(int); F int f(int);", DeclaredOwn),
+        ("int f(int); F int f(int x) { return x; }", DeclaredOwn),
+        ("int f(); F int f(a) int a; { return a; }", DeclaredOwn),
+        ("int f(a) int a; { return a; } F int f(int);", DeclaredOwn),
+        (
+            "static int f(int); static F int f(int x) { return x; } int g(void) { return f(1); }",
+            DeclaredOwn,
+        ),
+        ("extern int f(int); extern F int f(int);", DeclaredOwn),
+        ("typedef int Ft(int) F; int f(int); Ft f;", DeclaredOwn),
+        ("F int n(int); int f(int); __typeof__(n) f;", DeclaredOwn),
+        (
+            "int g(void) { F int f(int); return f(1); } int h(void) { N int f(int); return f(2); }",
+            DeclaredForeign,
+        ),
+        (
+            "F int f(int); int g(void) { int f = 1; { N int f(int); return f(1) + 0; } }",
+            DeclaredForeign,
+        ),
+        (
+            "void g(void) { F int f(int); } N int f(int x) { return x; }",
+            DeclaredForeign,
+        ),
+        (
+            "int g(void) { F int f(int); { N int f(int); return f(1); } }",
+            DeclaredForeign,
+        ),
+        ("F int f(int); N int f(int);", DeclaredForeign),
+        (
+            "F int f(a) int a; { return a; } N int f(int);",
+            DeclaredForeign,
+        ),
+        (
+            "typedef int Ft(int) F; Ft f; N int f(int x) { return x; }",
+            DeclaredForeign,
+        ),
+        (
+            "F int n(int); __typeof__(n) f; N int f(int x) { return x; }",
+            DeclaredForeign,
+        ),
+        (
+            "F int f(int); typedef N int Nt(int); Nt f;",
+            DeclaredForeign,
+        ),
+        (
+            "N int n(int); F int f(int); __typeof__(n) f;",
+            DeclaredForeign,
+        ),
+    ];
+    for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+        let (f, n, foreign) = match target {
+            crate::Target::WindowsX64 => ("sysv_abi", "ms_abi", CallConv::SysV),
+            _ => ("ms_abi", "sysv_abi", CallConv::Ms),
+        };
+        for &(decls, outcome) in ROWS {
+            let src = alloc::format!(
+                "#define F __attribute__(({f}))\n#define N __attribute__(({n}))\n\
+                 {decls}\nint main(void) {{ return 0; }}\n"
+            );
+            let compiled = Compiler::with_target(src, target).compile();
+            let want = match outcome {
+                Foreign => foreign,
+                Own => CallConv::Target,
+                DeclaredForeign | DeclaredOwn => {
+                    let (was, now) = match outcome {
+                        DeclaredForeign => (f, n),
+                        _ => (n, f),
+                    };
+                    let msg = compiled.err().map(|e| e.to_string()).unwrap_or_default();
+                    let needle = alloc::format!("for `f`: declared `{was}`, now `{now}`");
+                    assert!(msg.contains(&needle), "{target:?} {decls}: {msg:?}");
+                    continue;
+                }
+            };
+            let prog = compiled.unwrap_or_else(|e| panic!("{target:?} {decls}: {e}"));
+            if let Some(def) = prog.finished_functions.iter().find(|d| d.name == "f") {
+                assert_eq!(def.conv, want, "{target:?} {decls}: the definition");
+            }
+            let funcs =
+                crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&prog, target, false, true)
+                    .expect("ssa");
+            for (func, inst) in funcs
+                .iter()
+                .flat_map(|u| u.insts.iter().map(move |i| (u, i)))
+            {
+                if matches!(inst, Inst::Call { .. } | Inst::CallIndirect { .. }) {
+                    let at = &func.name;
+                    assert_eq!(inst.call_conv(), Some(want), "{target:?} {decls}: in {at}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn a_second_body_is_rejected() {
     for decls in [
         "int f(void) { return 1; }\nint f(void) { return 2; }\n",

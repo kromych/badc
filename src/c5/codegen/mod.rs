@@ -4806,7 +4806,7 @@ impl Default for Abi {
 /// rcx/rdx/r8/r9 by position, 32 bytes of shadow space, rsi/rdi and
 /// xmm6..xmm15 callee-saved) and `SysV` is [`Target::LinuxX64`]'s. See
 /// [`Target::abi_row`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub(crate) enum CallConv {
     /// The target's own convention.
     #[default]

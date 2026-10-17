@@ -2221,8 +2221,9 @@ impl Compiler {
             fn_ty: Some((f, _)),
             ..
         }) = &mut r
+            && let Some(conv) = conv
         {
-            f.conv = conv;
+            (f.conv, f.conv_named) = (conv, true);
         }
         r
     }

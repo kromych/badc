@@ -6,6 +6,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use super::super::codegen::CallConv;
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::Ty;
@@ -61,16 +62,18 @@ impl Params {
 }
 
 /// The type one declaration gives an identifier with linkage: an object's
-/// type and bounds (outermost first, `-1` unspecified), or a function's.
+/// type and bounds (outermost first, `-1` unspecified), or a function's, with
+/// the calling convention an attribute named.
 #[derive(Clone, Debug)]
 pub(super) enum DeclaredType {
     Object(Spelled, Vec<i64>),
-    Function(Spelled, Params),
+    Function(Spelled, Params, Option<CallConv>),
 }
 
 /// What a function definition adds to its type: its line and its GNU forms.
 pub(super) struct Definition {
     pub(super) ret: Spelled,
+    pub(super) conv: Option<CallConv>,
     pub(super) line: usize,
     pub(super) implicit_int: bool,
     pub(super) extern_inline: bool,
@@ -112,14 +115,49 @@ fn compose(prior: DeclaredType, new: DeclaredType) -> DeclaredType {
             let bounds = a.iter().zip(&b).map(|(&x, &y)| if x < 0 { y } else { x });
             DeclaredType::Object(ty, bounds.collect())
         }
-        (DeclaredType::Function(ret, p), DeclaredType::Function(_, q)) if q.rank() > p.rank() => {
-            DeclaredType::Function(ret, q)
+        (DeclaredType::Function(ret, p, c), DeclaredType::Function(_, q, _))
+            if q.rank() > p.rank() =>
+        {
+            DeclaredType::Function(ret, q, c)
         }
         (prior, _) => prior,
     }
 }
 
 impl Compiler {
+    /// The calling convention a declaration of function `idx` naming `named`
+    /// gives it, and whether a declaration of the function named one: as in
+    /// gcc and clang, the first declaration's, in any scope, which a later
+    /// one may name again or not at all; naming another is an error.
+    pub(super) fn declared_conv(
+        &self,
+        idx: usize,
+        named: Option<CallConv>,
+        line: usize,
+    ) -> Result<(CallConv, bool), C5Error> {
+        let first = match self.linked_entities.get(&idx).map(|e| &e.ty) {
+            Some(DeclaredType::Function(.., c)) => *c,
+            _ => return Ok((named.unwrap_or_default(), named.is_some())),
+        };
+        let conv = first.unwrap_or_default();
+        match named {
+            Some(n) if n != conv => {
+                let spell = |c| match self.target.abi_row(c) {
+                    crate::Target::WindowsX64 => "ms_abi",
+                    _ => "sysv_abi",
+                };
+                let text = format!(
+                    "conflicting calling conventions for `{}`: declared `{}`, now `{}`",
+                    self.symbols[idx].name,
+                    spell(conv),
+                    spell(n)
+                );
+                Err(self.compile_err_at(Code::INVALID_DECLARATION, line, text))
+            }
+            _ => Ok((conv, first.is_some())),
+        }
+    }
+
     /// Check a declaration of `idx` against the earlier ones and fold it in.
     pub(super) fn declare_linked(
         &mut self,
@@ -138,12 +176,12 @@ impl Compiler {
         def: Definition,
         params: Params,
     ) -> Result<(), C5Error> {
-        let new = DeclaredType::Function(def.ret, params);
+        let new = DeclaredType::Function(def.ret, params, def.conv);
         self.fold_linked(idx, new, def.line, def.implicit_int)?;
         // GNU: the implicit `int` keeps the declared return type.
         if def.implicit_int
             && let Some(LinkedEntity {
-                ty: DeclaredType::Function(ret, _),
+                ty: DeclaredType::Function(ret, ..),
                 ..
             }) = self.linked_entities.get(&idx)
         {
@@ -176,7 +214,7 @@ impl Compiler {
     /// argument promotions (6.5.2.2p6).
     pub(super) fn old_style_arrival_tys(&self, idx: usize, declared: &[i64]) -> Vec<i64> {
         match self.linked_entities.get(&idx).map(|e| &e.ty) {
-            Some(DeclaredType::Function(_, Params::Prototype(t, false)))
+            Some(DeclaredType::Function(_, Params::Prototype(t, false), _))
                 if t.len() == declared.len() =>
             {
                 t.iter().map(|s| self.spelled_ty(*s)).collect()
@@ -191,7 +229,7 @@ impl Compiler {
         !matches!(params.form, ParamForm::Empty | ParamForm::IdentifierList)
             || matches!(
                 self.linked_entities.get(&idx).map(|e| &e.ty),
-                Some(DeclaredType::Function(_, Params::Prototype(..)))
+                Some(DeclaredType::Function(_, Params::Prototype(..), _))
             )
     }
 
@@ -269,7 +307,7 @@ impl Compiler {
                     Verdict::Conflict
                 }
             }
-            (DeclaredType::Function(ra, pa), DeclaredType::Function(rb, pb)) => {
+            (DeclaredType::Function(ra, pa, _), DeclaredType::Function(rb, pb, _)) => {
                 // GNU: an implicit `int` definition of a function declared `void`.
                 let gnu_void = implicit_int && is_void_ty(ra.ty);
                 let rb = if gnu_void { *ra } else { *rb };
@@ -395,8 +433,8 @@ impl Compiler {
                 };
                 format!("{} {}", name(t), bounds.iter().map(dim).collect::<String>())
             }
-            DeclaredType::Function(ret, Params::Unspecified) => format!("{} ()", name(ret)),
-            DeclaredType::Function(ret, Params::IdentifierList(t)) => {
+            DeclaredType::Function(ret, Params::Unspecified, _) => format!("{} ()", name(ret)),
+            DeclaredType::Function(ret, Params::IdentifierList(t), _) => {
                 let list: Vec<String> = t.iter().map(name).collect();
                 format!(
                     "{} ({}) in an old-style definition",
@@ -404,7 +442,7 @@ impl Compiler {
                     list.join(", ")
                 )
             }
-            DeclaredType::Function(ret, Params::Prototype(t, v)) => {
+            DeclaredType::Function(ret, Params::Prototype(t, v), _) => {
                 let types: Vec<i64> = t.iter().map(|s| self.spelled_ty(*s)).collect();
                 format_signature(self.spelled_ty(*ret), &types, *v, &self.structs)
             }

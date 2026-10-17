@@ -243,15 +243,13 @@ impl Compiler {
         let base_field_fn_ptr_indirection = self.pending.fn_ptr_indirection;
         let base_field_fn_ptr_ret_indirection = self.pending.fn_ptr_ret_indirection;
         let base_field_is_function_type = self.pending.base_is_function_type;
-        // A function-pointer typedef base (`fn_t cb;`) seeds its
-        // prototype (parameter types + variadic flag) once; a nested
-        // base-type parse inside `parse_declarator` would clear it, and
-        // the per-declarator `.take()` zeros it for declarators after
-        // the first. Capture and re-seed each iteration so a typedef'd
-        // fn-pointer field inherits the prototype the same way a local
+        // A function-pointer typedef base (`fn_t cb;`) seeds its function
+        // type once; a nested base-type parse inside `parse_declarator`
+        // would clear it, and the per-declarator `.take()` zeros it for
+        // declarators after the first. Capture and re-seed each iteration
+        // so a typedef'd fn-pointer field inherits it the same way a local
         // does (an inline declarator prototype still overrides it).
-        let base_field_fn_ptr_params = self.pending.fn_ptr_params.clone();
-        let base_field_fn_ptr_ret_fn = self.pending.fn_ptr_ret_fn.clone();
+        let base_field_fn_type = self.pending.fn_ptr_type.clone();
         let spec_attrs = self.pending.attrs.clone();
         loop {
             self.pending.attrs = spec_attrs.clone();
@@ -296,8 +294,7 @@ impl Compiler {
             self.pending.fn_ptr_indirection = base_field_fn_ptr_indirection;
             self.pending.fn_ptr_ret_indirection = base_field_fn_ptr_ret_indirection;
             self.pending.base_is_function_type = base_field_is_function_type;
-            self.pending.fn_ptr_params = base_field_fn_ptr_params.clone();
-            self.pending.fn_ptr_ret_fn = base_field_fn_ptr_ret_fn.clone();
+            self.pending.fn_ptr_type = base_field_fn_type.clone();
             self.pending.attrs.packed = group_packed;
             let saved_member_ctx = self.pending.in_member_declarator;
             self.pending.in_member_declarator = true;
@@ -393,18 +390,9 @@ impl Compiler {
             let field_fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let field_fn_ptr_ret_indirection =
                 core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
-            let field_ret_fn = self.take_decl_ret_fn(false);
-            // Capture the function-pointer field's parameter information
-            // (set by the same declarator branch, or the re-seeded typedef
-            // base) so a later `s.fp(args)` converts its arguments and
-            // splits them at the fixed-parameter count. Always consume the
-            // side-channel so it cannot leak to the next field.
-            let field_fn_params = self.pending.fn_ptr_params.take().unwrap_or_default();
-            // A function-pointer member's `ms_abi` / `sysv_abi`
-            // (`efi_status_t (__efiapi *exit)(...)`, or the typedef
-            // form `efi_get_time_t __efiapi *get_time`). Consumed
-            // here so it cannot leak to the next member.
-            let field_conv = core::mem::take(&mut self.pending.attrs.call_conv);
+            // The function type a function-pointer member leads to, its
+            // convention included (`efi_status_t (__efiapi *exit)(...)`).
+            let field_fn_type = self.take_decl_fn_type().unwrap_or_default();
             let is_aggregate_value = is_struct_value_ty(field_ty);
             // C99 6.7.2.1: a member must have complete type, and an
             // array of an incomplete type is itself incomplete. Only a
@@ -463,11 +451,7 @@ impl Compiler {
                 bit_unit_size: if bit_width > 0 { bit_unit as u8 } else { 0 },
                 fn_ptr_indirection: field_fn_ptr_indirection,
                 fn_ptr_ret_indirection: field_fn_ptr_ret_indirection,
-                fn_type: crate::c5::symbol::FnType {
-                    params: field_fn_params,
-                    conv: field_conv,
-                    ret: field_ret_fn,
-                },
+                fn_type: field_fn_type,
                 anon_union_group: 0,
                 anon_struct_group: 0,
                 explicit_align: placement.required as u32,

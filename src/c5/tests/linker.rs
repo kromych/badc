@@ -1905,6 +1905,39 @@ fn an_attribute_after_a_declarator_binds_to_it_alone() {
 }
 
 #[test]
+fn a_block_scope_prototype_takes_the_attributes_a_file_scope_one_does() {
+    // A block-scope function declaration names the entity a file-scope one
+    // would (C99 6.2.2p4), and gcc and clang give it the same attributes:
+    // `weak`, an asm label followed by an attribute, the hidden extent of a
+    // `#pragma GCC visibility`, and `constructor`.
+    use crate::c5::Target;
+    use crate::c5::linker::parse_native_elf;
+    let src = "\
+        int lists(void) {\n\
+            __attribute__((weak)) extern int wfn(void);\n\
+            int helper(int) __asm__(\"helper_label\") __attribute__((noinline));\n\
+            __attribute__((constructor)) void my_init(void);\n\
+            return wfn() + helper(1);\n\
+        }\n\
+        #pragma GCC visibility push(hidden)\n\
+        int hidden_user(void) { int hidden_fn(int); return hidden_fn(0); }\n\
+        #pragma GCC visibility pop\n\
+        void my_init(void) {}\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let obj = parse_native_elf(&reloc_tu(src, target, false)).expect("parse");
+        let sym = |name: &str| {
+            let s = obj.symbols.iter().find(|s| s.name == name);
+            s.map(|s| (s.binding, s.visibility))
+        };
+        // (STB_*, STV_*): GLOBAL 1, WEAK 2; DEFAULT 0, HIDDEN 2.
+        assert_eq!(sym("wfn"), Some((2, 0)), "{target:?}");
+        assert_eq!(sym("helper_label"), Some((1, 0)), "{target:?}");
+        assert_eq!(sym("hidden_fn"), Some((1, 2)), "{target:?}");
+        assert_eq!(obj.init_funcs.len(), 1, "{target:?}");
+    }
+}
+
+#[test]
 fn dead_static_fnptr_table_drops_table_and_callee() {
     // A static function referenced only from a static, itself
     // unreferenced, function-pointer table: the table's relocation is

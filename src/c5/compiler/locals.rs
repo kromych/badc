@@ -46,12 +46,14 @@ pub(super) struct DeclAlign {
 }
 
 /// A block-scope function declaration: its result type, parameters, the
-/// function type its result leads to, and that result's fn-pointer lineage
-/// (`Symbol::fn_ptr_indirection`, `Symbol::fn_ptr_ret_indirection`).
+/// function type its result leads to, the calling convention its type
+/// names, and its result's fn-pointer lineage (`Symbol::fn_ptr_indirection`,
+/// `Symbol::fn_ptr_ret_indirection`).
 pub(super) struct BlockFunction {
     pub(super) ret: super::redeclaration::Spelled,
     pub(super) params: super::function::ParsedParams,
     pub(super) ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
+    pub(super) conv: Option<crate::c5::codegen::CallConv>,
     pub(super) lineage: (i64, i64),
 }
 
@@ -442,16 +444,14 @@ impl Compiler {
         let base_fn_ptr_indirection = self.pending.fn_ptr_indirection;
         let base_fn_ptr_ret_indirection = self.pending.fn_ptr_ret_indirection;
         let base_is_function_type = self.pending.base_is_function_type;
-        let base_fn_ptr_params = self.pending.fn_ptr_params.clone();
-        let base_fn_ptr_ret_fn = self.pending.fn_ptr_ret_fn.clone();
+        let base_fn_type = self.pending.fn_ptr_type.clone();
         let spec_attrs = self.pending.attrs.clone();
         while self.lex.tk != ';' {
             self.pending.attrs = spec_attrs.clone();
             self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
             self.pending.fn_ptr_ret_indirection = base_fn_ptr_ret_indirection;
             self.pending.base_is_function_type = base_is_function_type;
-            self.pending.fn_ptr_params = base_fn_ptr_params.clone();
-            self.pending.fn_ptr_ret_fn = base_fn_ptr_ret_fn.clone();
+            self.pending.fn_ptr_type = base_fn_type.clone();
             // Any declarator of the list may declare a function (C99 6.7p1).
             let base = super::redeclaration::Spelled {
                 ty: lbt,
@@ -501,10 +501,9 @@ impl Compiler {
             // Take the fn-pointer carriers before any initializer is parsed:
             // an initializer cast runs a base-type parse that clears them,
             // which would drop a variadic fn-pointer's prototype.
-            let ret_fn = self.take_decl_ret_fn(false);
+            let fn_type = self.take_decl_fn_type();
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
-            let fnptr_params = self.pending.fn_ptr_params.take();
             // C99 6.7.7p3: an array typedef contributes its dimension only
             // when no derivation of the declarator applied to it; `A *p`
             // points to the array. Peek without clearing so the rest of the
@@ -588,10 +587,7 @@ impl Compiler {
             if rebinds_slot {
                 self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
                 self.symbols[loc_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
-                self.symbols[loc_idx].fn_type.ret = ret_fn;
-                if let Some(p) = fnptr_params {
-                    self.symbols[loc_idx].set_fn_params(p);
-                }
+                self.symbols[loc_idx].fn_type = fn_type.unwrap_or_default();
             }
             self.bind_local_declarator(&LocalDeclarator {
                 loc_idx,
@@ -810,7 +806,7 @@ impl Compiler {
         if !core::mem::take(&mut self.pending.bare_function_type_declarator) {
             return Ok(false);
         }
-        let params = self.pending.fn_ptr_params.take().unwrap_or_default();
+        let base = self.pending.fn_ptr_type.take().unwrap_or_default();
         self.pending.fn_ptr_indirection = None;
         self.pending.fn_ptr_ret_indirection = 0;
         if loc_idx == usize::MAX {
@@ -818,13 +814,15 @@ impl Compiler {
             return Ok(true);
         }
         // Undo the typedef's pre-decay to pointer-to-function.
+        let named = self.pending.attrs.call_conv;
         let f = BlockFunction {
             ret: super::redeclaration::Spelled {
                 ty: ty.ty - Ty::Ptr as i64,
                 ..ty
             },
-            params: super::function::ParsedParams::of_type(params),
-            ret_fn: None,
+            params: super::function::ParsedParams::of_type(base.params),
+            ret_fn: base.ret,
+            conv: named.or(base.conv_named.then_some(base.conv)),
             lineage: (0, 0),
         };
         self.bind_block_function(loc_idx, f, is_static)
@@ -850,12 +848,12 @@ impl Compiler {
         let ret_fn = self.take_decl_ret_fn(true);
         let fpi = self.pending.fn_ptr_indirection.take().unwrap_or(0);
         let fpri = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
-        self.pending.fn_ptr_params = None;
-        self.pending.fn_ptr_ret_fn = None;
+        self.pending.fn_ptr_type = None;
         let f = BlockFunction {
             ret: ty,
             params,
             ret_fn,
+            conv: self.pending.attrs.call_conv,
             lineage: (fpi, fpri),
         };
         self.bind_block_function(loc_idx, f, is_static)
@@ -886,8 +884,9 @@ impl Compiler {
         is_static: bool,
         label: Option<alloc::string::String>,
     ) -> Result<(), C5Error> {
+        let (conv, conv_named) = self.declared_conv(idx, f.conv, self.lex.line)?;
         let listed = super::redeclaration::Params::of(&f.params, false);
-        let declared = super::redeclaration::DeclaredType::Function(f.ret, listed);
+        let declared = super::redeclaration::DeclaredType::Function(f.ret, listed, f.conv);
         self.declare_linked(idx, declared, self.lex.line)?;
         let prototyped = f.params.form == super::function::ParamForm::Prototype;
         let fresh = super::stmt::FnEntity {
@@ -897,8 +896,9 @@ impl Compiler {
             val: 0,
             fn_type: crate::c5::symbol::FnType {
                 params: f.params.fn_params(),
+                conv,
+                conv_named,
                 ret: f.ret_fn,
-                ..Default::default()
             },
             lineage: f.lineage,
             is_extern_decl: true,
@@ -938,6 +938,9 @@ impl Compiler {
         let sym = &mut self.symbols[idx];
         if c != 0 && c != Token::Sys as i64 && prototyped && !sym.fn_type.params.prototyped {
             sym.fn_type.params = fresh.fn_type.params.clone();
+        }
+        if sym.class == Token::Fun as i64 {
+            (sym.fn_type.conv, sym.fn_type.conv_named) = (conv, conv_named);
         }
         sym.is_noreturn |= self.pending.attrs.noreturn;
         self.apply_symbol_attributes(idx);

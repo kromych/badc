@@ -39,8 +39,7 @@ struct FileScopeDecl {
     base_fn_ptr_indirection: Option<i64>,
     base_fn_ptr_ret_indirection: i64,
     base_is_function_type: bool,
-    base_fn_ptr_params: Option<crate::c5::symbol::FnParams>,
-    base_fn_ptr_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
+    base_fn_type: Option<crate::c5::symbol::FnType>,
     /// The attributes and function specifiers among the specifiers, which
     /// each declarator starts from.
     spec_attrs: super::DeclAttrs,
@@ -59,6 +58,8 @@ struct DeclaratorBinding {
     fn_ptr_ret_indirection: i64,
     bare_function_type: bool,
     declarator_transparent: bool,
+    /// The calling convention a bare function type's typedef names.
+    base_conv: Option<crate::c5::codegen::CallConv>,
 }
 
 /// What the symbol table held for this name before the declarator bound it.
@@ -431,8 +432,7 @@ impl Compiler {
             base_fn_ptr_indirection: self.pending.fn_ptr_indirection,
             base_fn_ptr_ret_indirection: self.pending.fn_ptr_ret_indirection,
             base_is_function_type: self.pending.base_is_function_type,
-            base_fn_ptr_params: self.pending.fn_ptr_params.clone(),
-            base_fn_ptr_ret_fn: self.pending.fn_ptr_ret_fn.clone(),
+            base_fn_type: self.pending.fn_ptr_type.clone(),
             spec_attrs: self.pending.attrs.clone(),
         };
         let mut declarator_count = 0usize;
@@ -467,8 +467,7 @@ impl Compiler {
         self.pending.fn_ptr_indirection = decl.base_fn_ptr_indirection;
         self.pending.fn_ptr_ret_indirection = decl.base_fn_ptr_ret_indirection;
         self.pending.base_is_function_type = decl.base_is_function_type;
-        self.pending.fn_ptr_params = decl.base_fn_ptr_params.clone();
-        self.pending.fn_ptr_ret_fn = decl.base_fn_ptr_ret_fn.clone();
+        self.pending.fn_ptr_type = decl.base_fn_type.clone();
         // The declarator's own line -- the name and its parameter
         // list -- for diagnostics that would otherwise point at the
         // function body's opening brace parsed further below.
@@ -513,14 +512,23 @@ impl Compiler {
         // of function type) can overwrite it.
         let bare_function_type = self.pending.bare_function_type_declarator;
         self.pending.bare_function_type_declarator = false;
+        // The function type the entity leads to: a function declarator's list
+        // is the function path's to parse, its result's function types are
+        // taken here; any other declarator takes the carriers' whole.
+        let own_signature = self.lex.tk == '(' || self.pending.fn_params.is_some();
+        let decl_fn = if own_signature {
+            if let Some(ret) = self.take_decl_ret_fn(true) {
+                self.symbols[id_idx].fn_type.ret = Some(ret);
+            }
+            self.pending.fn_ptr_type = None;
+            None
+        } else {
+            self.take_decl_fn_type()
+        };
         // Pick up the fn-pointer indirection count
         // the declarator (or its typedef base type)
         // recorded, and store it on the symbol so a later
         // identifier load can seed the chain-depth tracker.
-        let own_signature = self.lex.tk == '(' || self.pending.fn_params.is_some();
-        if let Some(ret) = self.take_decl_ret_fn(own_signature) {
-            self.symbols[id_idx].fn_type.ret = Some(ret);
-        }
         let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
         let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
         // C99 6.7.7p3: an array typedef contributes its dimension to a declarator
@@ -567,20 +575,13 @@ impl Compiler {
             self.symbols[id_idx].fn_ptr_indirection = fn_ptr_indirection;
             self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
         }
-        // The bound declarator takes the pointee's parameter information,
-        // so an indirect call through it converts its arguments and routes
-        // a variadic tail per the host variadic ABI.
-        let mut fnptr_params = self.pending.fn_ptr_params.take();
-        // The carrier holds the pointee signature of a fn-pointer typedef, so it
-        // describes an object (`cb x;`) -- not a function whose return type is that
-        // typedef (`cb f(args)`), and not a bare function-type declarator (`extern
-        // typeof(f) f;`); both of those install a list of their own.
-        let carrier_names_object = !bare_function_type || is_typedef;
-        if self.lex.tk != '('
-            && carrier_names_object
-            && let Some(p) = fnptr_params.take()
+        // An object takes the function type it leads to; a bare function
+        // type and a typedef bind theirs below.
+        if !bare_function_type
+            && !is_typedef
+            && let Some(f) = &decl_fn
         {
-            self.symbols[id_idx].set_fn_params(p);
+            self.symbols[id_idx].fn_type = f.clone();
         }
         // Carry the bare-`void` side channel onto the
         // declarator. `pending_base_was_void` was set if
@@ -620,21 +621,24 @@ impl Compiler {
             fn_ptr_ret_indirection,
             bare_function_type,
             declarator_transparent,
+            base_conv: None,
         };
         if is_typedef {
-            return self.bind_file_scope_typedef(decl, &b, preconsumed_params);
+            return self.bind_file_scope_typedef(decl, &b, preconsumed_params, decl_fn);
         }
 
         // C99 6.9.1: an identifier declared with a bare function type (a
         // function-TYPE typedef used with no pointer) declares a function,
         // not an object. The base type was pre-decayed to a function
         // pointer; undo that level and route through the function path with
-        // the typedef's prototype, so a following definition of the same
-        // name merges as a redeclaration rather than colliding.
+        // the typedef's prototype and result, so a following definition of
+        // the same name merges as a redeclaration rather than colliding.
         if bare_function_type && preconsumed_params.is_none() && self.lex.tk != '(' {
             b.ty -= Ty::Ptr as i64;
-            let p = fnptr_params.unwrap_or_default();
-            preconsumed_params = Some(super::function::ParsedParams::of_type(p));
+            let f = decl_fn.unwrap_or_default();
+            b.base_conv = f.conv_named.then_some(f.conv);
+            self.symbols[id_idx].fn_type.ret = f.ret;
+            preconsumed_params = Some(super::function::ParsedParams::of_type(f.params));
         }
 
         let prior = self.check_file_scope_redeclaration(decl, &b, preconsumed_params.is_some())?;
@@ -653,6 +657,7 @@ impl Compiler {
         decl: &FileScopeDecl,
         b: &DeclaratorBinding,
         preconsumed_params: Option<super::function::ParsedParams>,
+        decl_fn: Option<crate::c5::symbol::FnType>,
     ) -> Result<(), C5Error> {
         let &FileScopeDecl {
             base_type_align, ..
@@ -679,6 +684,8 @@ impl Compiler {
                 for &p in &pp.indices {
                     Self::restore_shadowed_symbol(&mut self.symbols[p]);
                 }
+                // An attribute may trail the list (`typedef T f(void) a;`).
+                self.skip_attribute_specifiers()?;
                 // `typedef RET NAME(args);` -- a function TYPE.
                 // The type is pre-decayed to a function pointer
                 // (`RET` + one pointer level); the flag lets a
@@ -733,13 +740,17 @@ impl Compiler {
         self.symbols[id_idx].is_void_typedef = declarator_is_bare_void;
         self.symbols[id_idx].incomplete_enum_tag = decl.base_enum_tag;
         self.symbols[id_idx].is_function_type = typedef_is_fn_type;
-        // A function-type typedef records the calling
-        // convention its declaration named, so a declarator
-        // through the alias inherits it
+        // The function type the alias leads to, its convention included
         // (`typedef efi_status_t __efiapi f_t(void);`).
-        if self.pending.attrs.call_conv != crate::c5::codegen::CallConv::Target {
-            self.symbols[id_idx].fn_type.conv = self.pending.attrs.call_conv;
-        }
+        self.symbols[id_idx].fn_type = match typedef_params {
+            Some(pp) => crate::c5::symbol::FnType {
+                params: pp.fn_params(),
+                conv: self.pending.attrs.call_conv.unwrap_or_default(),
+                conv_named: self.pending.attrs.call_conv.is_some(),
+                ret: self.symbols[id_idx].fn_type.ret.take(),
+            },
+            None => decl_fn.unwrap_or_default(),
+        };
         // A GNU `aligned(N)` type attribute on the typedef
         // (its own declaration's attribute, else propagated
         // from an aligned typedef base) becomes the alias's
@@ -759,12 +770,6 @@ impl Compiler {
         if typedef_fpi > 0 {
             self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
             self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
-        }
-        // The `typedef RET NAME(args)` / `typedef RET (*NAME)(args)` spellings
-        // parse a list of their own; an alias of an existing function type
-        // took the one its carrier held.
-        if let Some(pp) = typedef_params {
-            self.symbols[id_idx].set_fn_params(pp.fn_params());
         }
         Ok(())
     }
@@ -928,6 +933,12 @@ impl Compiler {
             ..params.fn_params()
         };
         self.symbols[id_idx].set_fn_params(fn_params);
+        let named = self.pending.attrs.call_conv.or(b.base_conv);
+        let (conv, conv_named) = self.declared_conv(id_idx, named, declarator_line)?;
+        (
+            self.symbols[id_idx].fn_type.conv,
+            self.symbols[id_idx].fn_type.conv_named,
+        ) = (conv, conv_named);
         // C11 6.7.4: `_Noreturn` on any declaration marks the symbol, and the
         // reachability analysis then treats a call to it as not reaching its
         // continuation. The mark is sticky across later declarations.
@@ -955,7 +966,7 @@ impl Compiler {
                 ty,
                 enum_tag: decl.base_enum_tag,
             };
-            let declared = DeclaredType::Function(ret, Params::of(&params, false));
+            let declared = DeclaredType::Function(ret, Params::of(&params, false), named);
             self.declare_linked(id_idx, declared, declarator_line)?;
         }
         // For Sys symbols (header-bound libc functions),
@@ -988,6 +999,7 @@ impl Compiler {
                 ty,
                 enum_tag: decl.base_enum_tag,
             },
+            conv: named,
             line: declarator_line,
             implicit_int,
             extern_inline: gnu89 && extern_seen && self.pending.attrs.saw_inline_specifier,
@@ -1270,10 +1282,22 @@ impl Compiler {
             let base = base | qual_bits;
             let base_enum_tag = self.pending.base_enum_tag.take();
             let spec_attrs = self.pending.attrs.clone();
+            let base_fn = (
+                self.pending.fn_ptr_indirection,
+                self.pending.fn_ptr_ret_indirection,
+                self.pending.fn_ptr_type.clone(),
+                self.pending.base_is_function_type,
+            );
             while self.lex.tk != ';' && self.lex.tk != 0 {
                 // C99 6.9.1p6: the list declares the parameters, so a bound
                 // and a function type adjust as a prototype's (6.7.5.3p7-8).
                 self.pending.attrs = spec_attrs.clone();
+                (
+                    self.pending.fn_ptr_indirection,
+                    self.pending.fn_ptr_ret_indirection,
+                    self.pending.fn_ptr_type,
+                    self.pending.base_is_function_type,
+                ) = base_fn.clone();
                 self.pending.param_decl_context = true;
                 let decl_line = self.lex.line;
                 let (decl_idx, mut decl_ty, decl_arr, _) = self.parse_declarator(base)?;
@@ -1281,8 +1305,8 @@ impl Compiler {
                     let what = decl_base::ImplicitInt::Declarator(decl_idx);
                     self.report_implicit_int(what, decl_line)?;
                 }
-                let (fn_ptr_indirection, fn_ptr_ret_indirection, fn_params, ret_fn) =
-                    self.take_param_fn_ptr_carriers();
+                let carriers = self.take_param_fn_ptr_carriers();
+                let (fn_ptr_indirection, fn_ptr_ret_indirection, _) = carriers;
                 if decl_idx != usize::MAX {
                     // An array parameter is adjusted to a pointer to its
                     // element type (6.7.5.3p7), a row for more than one
@@ -1305,24 +1329,13 @@ impl Compiler {
                         // The adjusted pointer is one more level above a
                         // function-pointer element.
                         let adjusted = decl_arr != 0 || typedef_array;
-                        let carriers = (
-                            fn_ptr_indirection,
-                            fn_ptr_ret_indirection,
-                            fn_params.clone(),
-                            ret_fn.clone(),
-                        );
-                        let conv = crate::c5::codegen::CallConv::Target;
-                        let fn_type = super::function::param_fn_type(carriers, conv, adjusted);
+                        let fn_type = super::function::param_fn_type(carriers, adjusted);
+                        self.symbols[decl_idx].fn_type =
+                            fn_type.as_ref().map(|(f, _)| f.clone()).unwrap_or_default();
                         params.note_fn_type(pos, fn_type);
                         self.symbols[decl_idx].fn_ptr_indirection =
                             fn_ptr_indirection + i64::from(adjusted && fn_ptr_indirection > 0);
                         self.symbols[decl_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
-                        self.symbols[decl_idx].fn_type.ret = ret_fn;
-                        if fn_ptr_indirection > 0
-                            && let Some(pp) = fn_params
-                        {
-                            self.symbols[decl_idx].set_fn_params(pp);
-                        }
                         params.types[pos] = decl_ty;
                         params.note_enum_tag(pos, base_enum_tag);
                     } else {
@@ -3118,14 +3131,6 @@ impl Compiler {
         }
         if self.pending.attrs.maybe_unused {
             self.symbols[id_idx].binding.maybe_unused = true;
-        }
-        // `ms_abi` / `sysv_abi`: the convention of the function this
-        // symbol names, or of the function a function-pointer object
-        // points to. Sticky across declarations like the rest, so a
-        // prototype carrying it and a later definition without it agree
-        // on one convention.
-        if self.pending.attrs.call_conv != crate::c5::codegen::CallConv::Target {
-            self.symbols[id_idx].fn_type.conv = self.pending.attrs.call_conv;
         }
         if self.pending.attrs.constructor {
             self.symbols[id_idx].is_constructor = true;

@@ -359,6 +359,19 @@ fn gnu_inline_attribute_on_any_declaration_selects_the_model() {
 }
 
 #[test]
+fn a_definitions_gnu_inline_does_not_reach_a_declaration_in_its_body() {
+    // `gnu_inline` selects the GNU89 model for the function it names. The
+    // prototype in `wrap`'s body names `f`, whose C99 `extern inline`
+    // definition is an external one (C99 6.7.4p7), as gcc gives it.
+    let src = "extern inline __attribute__((__gnu_inline__)) int wrap(int x) {\n\
+                   int f(int);\n\
+                   return f(x) + 1;\n\
+               }\n\
+               extern inline int f(int x) { return x * 3; }\n";
+    assert_eq!(probe(src, Model::C99, false), Sym::External);
+}
+
+#[test]
 fn an_inline_only_body_is_still_available_to_the_inliner() {
     // The out-of-line copy is dropped once every call is absorbed, and
     // an `always_inline` request is honored even though the definition

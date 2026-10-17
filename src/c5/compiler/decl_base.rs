@@ -352,8 +352,7 @@ impl Compiler {
             self.pending.fn_ptr_indirection = name.fn_ptr_indirection;
             self.pending.fn_ptr_ret_indirection = f.ret.as_ref().map_or(0, |r| r.1);
             self.pending.base_is_function_type = name.names_function();
-            self.pending.fn_ptr_params = Some(f.params.clone());
-            self.pending.fn_ptr_ret_fn = f.ret.clone();
+            self.pending.fn_ptr_type = Some(f.clone());
         }
         Ok(())
     }
@@ -401,8 +400,7 @@ impl Compiler {
                 self.pending.fn_ptr_indirection = Some(1);
                 self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.base_is_function_type = true;
-                self.pending.fn_ptr_params = Some(self.symbols[idx].fn_params());
-                self.pending.fn_ptr_ret_fn = self.symbols[idx].fn_type.ret.clone();
+                self.pending.fn_ptr_type = Some(self.symbols[idx].fn_type.clone());
                 self.next()?; // identifier
                 self.next()?; // )
                 return Ok(finish(fty));
@@ -578,8 +576,7 @@ impl Compiler {
                 self.pending.fn_ptr_indirection = Some(1);
                 self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.base_is_function_type = false;
-                self.pending.fn_ptr_params = Some(self.symbols[idx].fn_params());
-                self.pending.fn_ptr_ret_fn = self.symbols[idx].fn_type.ret.clone();
+                self.pending.fn_ptr_type = Some(self.symbols[idx].fn_type.clone());
                 self.symbols[idx].type_ + Ty::Ptr as i64
             }
             None => {
@@ -591,8 +588,7 @@ impl Compiler {
                     self.pending.fn_ptr_indirection = Some(depth.max(1));
                     self.pending.fn_ptr_ret_indirection = f.ret.as_ref().map_or(0, |r| r.1);
                     self.pending.base_is_function_type = false;
-                    self.pending.fn_ptr_params = Some(f.params);
-                    self.pending.fn_ptr_ret_fn = f.ret;
+                    self.pending.fn_ptr_type = Some(f);
                 }
                 self.ty
             }
@@ -1495,11 +1491,11 @@ impl Compiler {
             } else {
                 crate::c5::codegen::CallConv::SysV
             };
-            self.pending.attrs.call_conv = if self.target.abi_row(conv) == self.target {
+            self.pending.attrs.call_conv = Some(if self.target.abi_row(conv) == self.target {
                 crate::c5::codegen::CallConv::Target
             } else {
                 conv
-            };
+            });
         }
         Ok(attrs.packed)
     }
@@ -1917,8 +1913,7 @@ impl Compiler {
         self.pending.base_enum_tag = None;
         self.pending.clear_base_array();
         self.pending.type_align = 0;
-        self.pending.fn_ptr_params = None;
-        self.pending.fn_ptr_ret_fn = None;
+        self.pending.fn_ptr_type = None;
     }
 
     /// Consume a storage-class or linkage keyword into `storage`. Returns
@@ -2057,25 +2052,14 @@ impl Compiler {
         // would otherwise be lost; DWARF 4 5.3 names it with a
         // DW_TAG_typedef DIE.
         self.pending.spell_base_typedef = Some(idx as u32);
-        // A function / function-pointer typedef carries the pointed-to
-        // function's calling convention; a declarator through the alias
-        // inherits it unless the declaration names one of its own.
-        if self.symbols[idx].fn_type.conv != crate::c5::codegen::CallConv::Target
-            && self.pending.attrs.call_conv == crate::c5::codegen::CallConv::Target
-        {
-            self.pending.attrs.call_conv = self.symbols[idx].fn_type.conv;
-        }
         let typedef_fpi = self.symbols[idx].fn_ptr_indirection;
         if typedef_fpi > 0 {
             self.pending.fn_ptr_indirection = Some(typedef_fpi);
             self.pending.fn_ptr_ret_indirection = self.symbols[idx].fn_ptr_ret_indirection;
             self.pending.base_is_function_type = self.symbols[idx].is_function_type;
-            // The pointed-to function's prototype travels to the bound
-            // declarator so an indirect call through the variable narrows
-            // each argument to its declared parameter type and splits fixed
-            // from variadic arguments per the host variadic ABI.
-            self.pending.fn_ptr_params = Some(self.symbols[idx].fn_params());
-            self.pending.fn_ptr_ret_fn = self.symbols[idx].fn_type.ret.clone();
+            // The function type the alias leads to, its convention included,
+            // is that of what a declarator through the alias leads to.
+            self.pending.fn_ptr_type = Some(self.symbols[idx].fn_type.clone());
         }
         // `(VOID)` in parameter position is the no-parameter idiom.
         if self.symbols[idx].is_void_typedef {

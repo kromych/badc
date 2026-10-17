@@ -991,10 +991,11 @@ pub(in crate::c5::compiler) struct Pending {
     /// Set by a declarator frame before it parses its parenthesised inner
     /// declarator, which then continues the same entity's function types.
     pub declarator_in_group: bool,
-    /// The signatures a declarator spells past its entity's own, innermost
-    /// first, with the pointer levels from the previous result to each
-    /// (`int (*(*f)(void))(int)` spells `(int)` one level past `(void)`).
-    pub fn_ret_chain: alloc::vec::Vec<(crate::c5::symbol::FnParams, i64)>,
+    /// The function types a declarator spells past its entity's own,
+    /// innermost first, results unset, with the pointer levels from the
+    /// previous result to each (`int (*(*f)(void))(int)` spells `(int)` one
+    /// level past `(void)`).
+    pub fn_ret_chain: alloc::vec::Vec<(crate::c5::symbol::FnType, i64)>,
     /// Pointer levels of the entity's declarator the own signature and
     /// `fn_ret_chain` account for.
     pub fn_chain_levels: i64,
@@ -1126,17 +1127,15 @@ pub(in crate::c5::compiler) struct Pending {
     /// compound literal, which denotes an object (C99 6.5.2.5p4) rather
     /// than a value; `__builtin_constant_p` answers 0 for such an operand.
     pub const_expr_compound_literal: bool,
-    /// The parameter information of the function a function-pointer
-    /// declarator, or a function or function-pointer typedef or `typeof`
-    /// base, names: an indirect call through the bound variable converts
-    /// each argument to its parameter type and splits fixed from variadic
-    /// arguments per the host variadic ABI. `None` for any other base type;
+    /// The function type a function or function-pointer typedef, `typeof`
+    /// or `__auto_type` base names, which a declarator spelling its own
+    /// signature replaces with that signature's (its result's type is the
+    /// one `take_decl_ret_fn` builds). `None` for any other base type;
     /// cleared by every base-type parse.
-    pub fn_ptr_params: Option<crate::c5::symbol::FnParams>,
-    /// `FnType::ret` of the function type `fn_ptr_params` describes: a
-    /// typedef or `typeof` base's, or the signatures a declarator spells
-    /// past the declared entity's own. Taken with it.
-    pub fn_ptr_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
+    pub fn_ptr_type: Option<crate::c5::symbol::FnType>,
+    /// The convention the attributes of the declarator group being parsed
+    /// name for the signature after it (GNU attribute syntax).
+    pub group_conv: Option<crate::c5::codegen::CallConv>,
     /// Fn-pointer lineage of the return value of the function pointer an
     /// in-progress postfix call will call (`tbl[i](args)`, `(*fp)(args)`),
     /// in `Symbol::fn_ptr_ret_indirection`'s plus-1 convention. Set at the
@@ -1413,7 +1412,7 @@ pub(super) struct DeclAttrs {
     pub weak: bool,
     /// `ms_abi` / `sysv_abi`, normalised against the target: `Target` is the
     /// target's own, including where the attribute is inert.
-    pub call_conv: crate::c5::codegen::CallConv,
+    pub call_conv: Option<crate::c5::codegen::CallConv>,
     /// `used`: the definition stays in the object unreferenced.
     pub used: bool,
     /// `visibility(...)`: `Some(true)` for `"hidden"` / `"internal"`,
@@ -1517,8 +1516,7 @@ impl Pending {
             base_is_function_type: core::mem::take(&mut self.base_is_function_type),
             fn_ptr_indirection: self.fn_ptr_indirection.take(),
             fn_ptr_ret_indirection: core::mem::take(&mut self.fn_ptr_ret_indirection),
-            fn_ptr_params: self.fn_ptr_params.take(),
-            fn_ptr_ret_fn: self.fn_ptr_ret_fn.take(),
+            fn_ptr_type: self.fn_ptr_type.take(),
             typedef_base_array_size: core::mem::take(&mut self.typedef_base_array_size),
             typedef_base_array_dims: core::mem::take(&mut self.typedef_base_array_dims),
             typedef_base_zero_len: core::mem::take(&mut self.typedef_base_zero_len),
@@ -1537,8 +1535,7 @@ impl Pending {
         self.base_is_function_type = s.base_is_function_type;
         self.fn_ptr_indirection = s.fn_ptr_indirection;
         self.fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
-        self.fn_ptr_params = s.fn_ptr_params;
-        self.fn_ptr_ret_fn = s.fn_ptr_ret_fn;
+        self.fn_ptr_type = s.fn_ptr_type;
         self.set_base_array(
             s.typedef_base_array_size,
             s.typedef_base_array_dims,
@@ -1562,8 +1559,7 @@ pub(super) struct DeclTypeCarriers {
     base_is_function_type: bool,
     fn_ptr_indirection: Option<i64>,
     fn_ptr_ret_indirection: i64,
-    fn_ptr_params: Option<crate::c5::symbol::FnParams>,
-    fn_ptr_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
+    fn_ptr_type: Option<crate::c5::symbol::FnType>,
     typedef_base_array_size: i64,
     typedef_base_zero_len: bool,
     typedef_base_array_dims: alloc::vec::Vec<i64>,
@@ -1610,9 +1606,9 @@ impl Default for Pending {
             sizeof_vla_store: None,
             const_expr_nonconst: false,
             const_expr_compound_literal: false,
-            fn_ptr_params: None,
+            fn_ptr_type: None,
+            group_conv: None,
             indirect_callee_ret_fn_ptr: 0,
-            fn_ptr_ret_fn: None,
             parsing_fn_ptr_proto: false,
             member_decl_save: None,
             in_member_declarator: false,

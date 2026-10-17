@@ -664,7 +664,7 @@ impl BindingInfo {
 }
 
 /// A function type's parameter information (C99 6.7.5.3p14).
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct FnParams {
     /// Parameter types, empty when the type declares none.
     pub types: Vec<i64>,
@@ -692,10 +692,13 @@ impl FnParams {
 /// The part of a function type its `i64` tag, the return type's, leaves
 /// out: what a call converts its arguments to (C99 6.5.2.2p7) and passes
 /// them by, and the function type a returned pointer points to.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct FnType {
     pub params: FnParams,
     pub conv: crate::c5::codegen::CallConv,
+    /// An attribute named `conv`; a declaration of a type naming none takes
+    /// the function's convention.
+    pub conv_named: bool,
     /// The function type the returned value points to, and the pointer
     /// levels from the value down to it (1 for a pointer to function).
     pub ret: Option<(alloc::boxed::Box<FnType>, i64)>,

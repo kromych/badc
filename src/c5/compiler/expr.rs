@@ -1757,7 +1757,7 @@ impl Compiler {
         // `__builtin_va_arg` yields the argument as a value of `T`: the slot
         // address the intrinsic returns is read through a pointer to the type
         // the caller passed, then converted to `T`.
-        if let Some(res_ty) = va_arg_result_ty {
+        if let Some((res_ty, res_fn)) = va_arg_result_ty {
             let slot_ty = self.va_arg_slot_ty(res_ty);
             if let Some(child) = self.ast_acc {
                 self.ast_emit_cast(child, slot_ty + Ty::Ptr as i64);
@@ -1772,6 +1772,11 @@ impl Compiler {
             {
                 self.ast_emit_cast(read, res_ty);
                 self.ty = res_ty;
+            }
+            // The value has the type the call names, its function type
+            // included (C99 7.15.1.1p2).
+            if let (Some((f, depth)), Some(id)) = (res_fn, self.ast_acc) {
+                self.set_expr_fn(id, f, depth);
             }
         }
         // A frame record holds the caller's frame pointer at offset 0, so
@@ -1817,7 +1822,7 @@ impl Compiler {
         let is_int_bit_unary = intr_kind.is_some_and(|i| i.is_int_bit_unary());
         let is_bit_unary_64 = intr_kind.is_some_and(|i| i.is_bit_unary_64());
         let is_bswap = intr_kind.is_some_and(|i| i.is_bswap());
-        let mut va_arg_result_ty: Option<i64> = None;
+        let mut va_arg_result_ty: Option<(i64, Option<(FnType, i64)>)> = None;
         let mut frame_walk_levels: i64 = 0;
         let mut walked_return_slot = false;
         let mut ast_intrinsic_args: alloc::vec::Vec<super::super::ast::ExprId> =
@@ -2062,7 +2067,7 @@ impl Compiler {
         &mut self,
         fn_name: &str,
         args: &mut alloc::vec::Vec<super::super::ast::ExprId>,
-    ) -> Result<i64, C5Error> {
+    ) -> Result<(i64, Option<(FnType, i64)>), C5Error> {
         // The first operand is reduced to the `va_list`'s storage address;
         // the second is the packed `VaArgDesc`.
         self.expr(Token::Assign as i64)?;
@@ -2085,12 +2090,13 @@ impl Compiler {
         }
         let type_name = self.parse_type_name()?;
         let arg_ty = type_name.ty;
+        let is_pointer = type_name.ptr_levels > 0;
+        let arg_fn = self.type_name_fn(type_name);
         // C99 7.15.1.1p2: the type is an object type a pointer to which is
         // spelled by adding `*`.
         self.require_complete_value(arg_ty, Code::INVALID_ARGUMENTS, |t| {
             format!("second operand of `{fn_name}` has incomplete type `{t}`")
         })?;
-        let is_pointer = type_name.ptr_levels > 0;
         let size = self.size_of_type(self.va_arg_slot_ty(arg_ty)) as i64;
         // C99 6.5.2.2p6: a floating argument past the promotions is `double`
         // and rides the fp save area; a pointer or integer the gp save area.
@@ -2187,7 +2193,7 @@ impl Compiler {
                 pos,
             ));
         }
-        Ok(arg_ty)
+        Ok((arg_ty, arg_fn))
     }
 
     /// The level operand of `__builtin_frame_address` /
@@ -2590,11 +2596,6 @@ impl Compiler {
         // object and yields its address as the call's value.
         let callee_ty = self.symbols[id_idx].type_;
         let callee_id = self.ast_synthesize_callee(id_idx as u32, callee_ty);
-        // Recorded while a block-scope binding is live (C99 6.2.1p4); the
-        // walker runs after the scope is gone.
-        if is_var_call && let Some(f) = self.callee_fn(Some(callee_id)) {
-            self.ast.callee_types.insert(callee_id, f);
-        }
         self.ast_emit_call(callee_id, ast_arg_ids.clone(), result_ty);
         // A struct result is its temp's address (the address-as-value rule).
         if callee.returns_struct {
@@ -3015,12 +3016,10 @@ impl Compiler {
     /// The function type a value of type `type_name` has and its depth,
     /// when it is a pointer to a function; an array value decays one
     /// level further per dimension.
-    fn type_name_fn(&mut self, type_name: TypeName) -> Option<(FnType, i64)> {
+    pub(super) fn type_name_fn(&self, type_name: TypeName) -> Option<(FnType, i64)> {
         let dims = type_name.dims.len() as i64;
         let f = type_name.fn_ty.filter(|f| f.ptr_depth >= 1)?;
-        let depth = f.ptr_depth as i64;
-        let conv = core::mem::take(&mut self.pending.attrs.call_conv);
-        Some((FnType { conv, ..f.f }, depth + dims))
+        Some((f.f, f.ptr_depth as i64 + dims))
     }
 
     fn parse_deref(&mut self) -> Result<(), C5Error> {
@@ -5712,13 +5711,21 @@ impl Compiler {
     /// token after the declarator. The type carriers the base parse seeds
     /// are consumed here, so none reaches a following declarator.
     pub(super) fn parse_type_name(&mut self) -> Result<TypeName, C5Error> {
+        // A type name's attributes are its own (C99 6.7.6): none of the
+        // enclosing declaration's applies to it, and none of its leaves it.
+        let outer = core::mem::take(&mut self.pending.attrs);
+        let r = self.parse_type_name_inner();
+        self.pending.attrs = outer;
+        r
+    }
+
+    fn parse_type_name_inner(&mut self) -> Result<TypeName, C5Error> {
         self.pending.typeof_operand_was_array = false;
         self.pending.clear_base_array();
         let base = self.parse_type_name_base()?;
         let is_function = core::mem::take(&mut self.pending.base_is_function_type);
-        let base_params = self.pending.fn_ptr_params.take();
+        let base_fn = self.pending.fn_ptr_type.take();
         self.pending.fn_ptr_ret_indirection = 0;
-        let base_ret = self.pending.fn_ptr_ret_fn.take();
         let fn_ptr_indirection = self.pending.fn_ptr_indirection.take();
         let type_align = core::mem::take(&mut self.pending.type_align);
         let base_extent = core::mem::take(&mut self.pending.typedef_base_array_size);
@@ -5741,11 +5748,7 @@ impl Compiler {
             } else {
                 depth.max(0) as usize
             } + dims.len(),
-            f: FnType {
-                params: base_params.unwrap_or_default(),
-                ret: base_ret,
-                ..FnType::default()
-            },
+            f: base_fn.unwrap_or_default(),
         });
         let mut t = DerivedType {
             ty: base,
@@ -5794,6 +5797,11 @@ impl Compiler {
         }
         if let Some(f) = t.fn_ty.as_mut() {
             f.ptr_depth -= t.own_bounds;
+            // A specifier's convention names the function type the type
+            // leads to, as a declaration's does.
+            if let Some(conv) = self.pending.attrs.call_conv {
+                (f.f.conv, f.f.conv_named) = (conv, true);
+            }
         }
         Ok(TypeName {
             base,
@@ -5816,7 +5824,7 @@ impl Compiler {
         }
         self.next()?;
         let pp = self.parse_type_name_params()?;
-        let derivations = alloc::vec![Derivation::Function(Some(pp))];
+        let derivations = alloc::vec![Derivation::Function(Some(pp), None)];
         Ok(super::declarator::AbstractDecl { derivations })
     }
 
@@ -5834,7 +5842,7 @@ impl Compiler {
                 }
                 Derivation::Array(n) => self.derive_array(t, n)?,
                 Derivation::RuntimeArray(dim) => self.derive_runtime_array(t, dim)?,
-                Derivation::Function(pp) => self.derive_function(t, pp)?,
+                Derivation::Function(pp, conv) => self.derive_function(t, pp, conv)?,
             }
         }
         Ok(())
@@ -6038,13 +6046,15 @@ impl Compiler {
         Ok(())
     }
 
-    /// A function returning the type `t` holds, which is spelled as that
-    /// type one pointer level up; the function type `t` leads to becomes
-    /// the returned pointer's (C99 6.7.5.3p1: no array or function result).
+    /// A function returning the type `t` holds, on convention `conv`, which
+    /// is spelled as that type one pointer level up; the function type `t`
+    /// leads to becomes the returned pointer's (C99 6.7.5.3p1: no array or
+    /// function result).
     fn derive_function(
         &mut self,
         t: &mut DerivedType,
         params: Option<super::function::ParsedParams>,
+        conv: Option<crate::c5::codegen::CallConv>,
     ) -> Result<(), C5Error> {
         if t.is_function || !t.dims.is_empty() || t.vla_value {
             return Err(self.compile_err(
@@ -6058,8 +6068,9 @@ impl Compiler {
             .map(|f| (alloc::boxed::Box::new(f.f), f.ptr_depth as i64));
         let f = FnType {
             params: params.map(|p| p.fn_params()).unwrap_or_default(),
+            conv: conv.unwrap_or_default(),
+            conv_named: conv.is_some(),
             ret,
-            ..FnType::default()
         };
         t.fn_ty = Some(FnTypeName { ptr_depth: 0, f });
         t.ty += Ty::Ptr as i64;
@@ -6372,11 +6383,11 @@ enum BuiltinCall {
 }
 
 /// What the intrinsic-operand parse hands the node build: the operands,
-/// the type `__builtin_va_arg` yields, and the frame-walk level of the
-/// frame builtins.
+/// the type `__builtin_va_arg` yields with the function type it leads to,
+/// and the frame-walk level of the frame builtins.
 struct IntrinsicOperands {
     args: alloc::vec::Vec<super::super::ast::ExprId>,
-    va_arg_result_ty: Option<i64>,
+    va_arg_result_ty: Option<(i64, Option<(FnType, i64)>)>,
     frame_walk_levels: i64,
     walked_return_slot: bool,
 }

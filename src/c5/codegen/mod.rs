@@ -43,6 +43,7 @@ pub(crate) mod aarch64;
 // ABI; the rules + unit tests land first as a standalone unit.
 #[allow(dead_code)]
 pub(crate) mod abi_classify;
+pub(crate) mod asm_fold;
 mod jit;
 pub(crate) mod magic;
 pub(crate) mod map_syms;

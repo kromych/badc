@@ -4977,6 +4977,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
         0,
     ),
     ("library_function_address_is_one_pointer.c", 0),
+    ("function_slot_names_a_file_scope_asm_function.c", 0),
     // A declared `long double` object takes the target ABI's storage
     // format, and the compute path's binary64 round-trips through it.
     ("long_double_abi_storage.c", 0),
@@ -5960,10 +5961,6 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
 /// [`JIT_FIXTURES`] with its expected exit code.
 pub(super) const JIT_UNSUPPORTED_FIXTURES: &[(&str, &str)] = &[
     ("thread_local_reads_a_code_slot.c", "thread-local storage"),
-    (
-        "function_slot_names_a_file_scope_asm_function.c",
-        "undefined reference to `fsa_fn`",
-    ),
     (
         "thread_local_slot_escapes_a_function.c",
         "thread-local storage",

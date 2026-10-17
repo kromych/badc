@@ -562,21 +562,6 @@ mod jit_impl {
             report(d);
         }
 
-        // Undefined extern functions: the lowering partitioned each
-        // call / address site targeting a placeholder ent_pc into
-        // `user_extern_call_sites`, and there is no link step to
-        // resolve them. Executing such a site would branch to the
-        // zeroed placeholder, so refuse up front, mirroring the
-        // linker's diagnosis.
-        if let Some(site) = build.user_extern_call_sites.first() {
-            return Err(undefined_reference(&site.symbol_name));
-        }
-        let labels: alloc::collections::BTreeMap<String, u64> = (build.asm_text_labels.iter())
-            .map(|l| (l.name.clone(), l.text_offset as u64))
-            .collect();
-        crate::c5::codegen::bind_placeholder_code_relocs(program, &mut build, |name| {
-            labels.get(name).copied()
-        })?;
         // A thread-pointer-relative access has no block to reach here: the
         // executing thread's TLS belongs to the host runtime, and the
         // fixups the backends record need the link step the JIT has not.
@@ -586,7 +571,24 @@ mod jit_impl {
         {
             return Err(unsupported_thread_local(program));
         }
-        let defs = super::super::unit_definitions(program, &build);
+        // The asm the unit holds is placed with its code, and a name it
+        // defines binds ahead of the unit's C definitions, as in an image.
+        use super::super::asm_fold::{bind_label_calls, fold_asm_sections};
+        let mut defs = super::super::unit_definitions(program, &build);
+        let labels = fold_asm_sections(program, &mut build, target, &defs, "the JIT")?;
+        bind_label_calls(&mut build, &labels, target.is_aarch64());
+        crate::c5::codegen::bind_placeholder_code_relocs(program, &mut build, |name| match labels
+            .get(name)
+        {
+            Some(&super::super::asm_fold::AsmLabelPlacement::Text(off)) => Some(off as u64),
+            _ => None,
+        })?;
+        defs.extend(labels.iter().map(|(name, at)| (name.clone(), at.as_def())));
+        // An extern call site left has no link step to resolve it, and would
+        // branch to the zeroed placeholder: refuse it as the linker would.
+        if let Some(site) = build.user_extern_call_sites.first() {
+            return Err(undefined_reference(&site.symbol_name));
+        }
         bind_jit_unit_refs(&defs, &mut build);
         resolve_jit_asm_sym_targets(&defs, &mut build);
         route_jit_data_imports(&mut build)?;

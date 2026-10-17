@@ -914,6 +914,42 @@ int main(void) {
 "#
 }
 
+/// Names inline asm defines, reached from C and from other asm: a function
+/// in a file-scope block, a label in a function body and a word in a
+/// file-scope data section. Exits 0 when each resolves.
+#[allow(dead_code)] // the image suites a Windows host compiles out
+pub fn asm_defined_names_source() -> &'static str {
+    r#"
+#include <stdint.h>
+#if defined(__x86_64__)
+__asm__(".text\n.globl fs_seven\n.p2align 4\nfs_seven:\n\tmovl $7, %eax\n\tret\n");
+#define ADDR(r, sym) __asm__("lea " sym "(%%rip), %0" : "=r"(r))
+#else
+__asm__(".text\n.globl fs_seven\n.p2align 2\nfs_seven:\n\tmov w0, #7\n\tret\n");
+#define ADDR(r, sym) __asm__("adrp %0, " sym "\n\tadd %0, %0, :lo12:" sym : "=r"(r))
+#endif
+__asm__(".data\n.globl fs_word\n.p2align 2\nfs_word:\n\t.long 0x1234\n.text\n");
+int fs_seven(void);
+extern int fs_word;
+static int with_label(int x) {
+    __asm__ volatile(".globl body_label\nbody_label:\n");
+    return x + 1;
+}
+int main(void) {
+    uintptr_t fn, label, word;
+    ADDR(fn, "fs_seven");
+    ADDR(label, "body_label");
+    ADDR(word, "fs_word");
+    int bad = 0;
+    bad |= fs_seven() != 7;
+    bad |= ((int (*)(void))fn)() != 7;
+    bad |= label == 0 || with_label(1) != 2;
+    bad |= fs_word != 0x1234 || *(int *)word != 0x1234;
+    return bad;
+}
+"#
+}
+
 /// Inline asm naming the C library's `optind`, which the bundled headers
 /// bind as an imported object: `form` 1 takes its address, 2 loads it in
 /// place, 3 stores 7 to it in place. C reads of the object check each.

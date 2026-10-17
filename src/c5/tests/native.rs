@@ -1152,6 +1152,18 @@ fn asm_offsets_count_from_the_symbols_own_address() {
     assert_eq!(link_run_capture(&src, "asm-edges-linked").0, 0, "linked");
 }
 
+/// A single-file image places the unit's asm: a call to a function a
+/// file-scope block defines, and the address of it, of a label in a function
+/// body and of a word in a file-scope data section, bind to them.
+#[test]
+fn asm_defined_names_bind_to_their_definitions() {
+    let src = super::asm_defined_names_source();
+    for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
+        let outcome = build_and_run_outcome_with_options(src, "asm-defined", opts);
+        assert!(outcome.matches(0), "{outcome:?}");
+    }
+}
+
 /// A single-file image reaches an imported object through its GOT slot, a C
 /// read and an inline-asm address alike; an asm load or store in place is
 /// refused, as the slot stands in for the object's address alone.

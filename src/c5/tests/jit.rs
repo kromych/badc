@@ -164,6 +164,16 @@ fn asm_offsets_count_from_the_symbols_own_address() {
     assert_eq!(jit_exit_native_optimized(src, &["asm-region-edges-opt"]), 0);
 }
 
+/// The JIT places the unit's asm with its code: a call to a function a
+/// file-scope block defines, and the address of it, of a label in a function
+/// body and of a word in a file-scope data section, bind as in an image.
+#[test]
+fn asm_defined_names_bind_to_their_definitions() {
+    let src = super::asm_defined_names_source();
+    assert_eq!(jit_exit(src, &["asm-defined"]), 0);
+    assert_eq!(jit_exit_native_optimized(src, &["asm-defined-opt"]), 0);
+}
+
 /// Inline asm reaches an imported object through its GOT slot, which stands
 /// in for its address alone; a load or store in place is refused.
 #[test]

@@ -252,6 +252,88 @@ fn link_units_and_run(dir: &Path, opt: &str, sources: &[&Path]) -> Option<i32> {
     Command::new(&exe).output().expect("run prog").status.code()
 }
 
+/// Inline asm naming the C library's `optind`: `T` 1 takes its address, 2
+/// loads it in place, 3 stores 7 to it in place. Exits 0 when each access
+/// reaches the library's object.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const ASM_LIBRARY_OBJECT: &str = r#"#include <unistd.h>
+int main(void) {
+#if defined(__x86_64__)
+#if T == 1
+    int *p;
+    __asm__("lea optind(%%rip), %0" : "=r"(p));
+    return p != &optind || *p != optind;
+#elif T == 2
+    int v;
+    __asm__("movl optind(%%rip), %0" : "=r"(v));
+    return v != optind;
+#elif T == 3
+    __asm__ volatile("movl $7, optind(%%rip)" ::: "memory");
+    return optind != 7;
+#else
+    char *p;
+    __asm__("lea optind+4(%%rip), %0" : "=r"(p));
+    return p != (char *)&optind + 4;
+#endif
+#else
+#if T == 1
+    int *p;
+    __asm__("adrp %0, optind\n\tadd %0, %0, :lo12:optind" : "=r"(p));
+    return p != &optind || *p != optind;
+#elif T == 2
+    long v;
+    __asm__("adrp %0, optind\n\tldr %w0, [%0, :lo12:optind]" : "=r"(v));
+    return (int)v != optind;
+#elif T == 3
+    long t;
+    __asm__ volatile("mov w1, #7\n\tadrp %0, optind\n\tstr w1, [%0, :lo12:optind]"
+                     : "=&r"(t) :: "x1", "memory");
+    return optind != 7;
+#else
+    char *p;
+    __asm__("adrp %0, optind+4\n\tadd %0, %0, :lo12:optind+4" : "=r"(p));
+    return p != (char *)&optind + 4;
+#endif
+#endif
+}
+"#;
+
+// Inline asm loading or storing a C library object in place reaches the
+// object's own bytes in an ELF executable, which holds a copy bound to the
+// library's by a copy relocation, as GNU ld gives it. Mach-O has no copy
+// relocation, so the link refuses the use. Taking the address loads the
+// object's GOT slot on both.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn an_asm_use_of_a_library_object_in_place_reaches_its_bytes() {
+    let dir = tempdir("asm-library-object");
+    let src = write_source(&dir, "optind.c", ASM_LIBRARY_OBJECT);
+    for form in 1..=4 {
+        for opt in ["-O0", "-O"] {
+            let exe = dir.join(format!("optind-{form}{opt}"));
+            let out = Command::new(badc())
+                .arg(opt)
+                .arg(format!("-DT={form}"))
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src)
+                .output()
+                .expect("run badc");
+            let err = String::from_utf8_lossy(&out.stderr);
+            if cfg!(target_os = "macos") && form > 1 {
+                assert!(
+                    !out.status.success() && err.contains("uses it in place or at an offset"),
+                    "form {form} {opt}: {err}"
+                );
+                continue;
+            }
+            assert!(out.status.success(), "form {form} {opt}: {err}");
+            let status = Command::new(&exe).status().expect("run the image");
+            assert_eq!(status.code(), Some(0), "form {form} {opt}");
+        }
+    }
+}
+
 #[test]
 fn a_weak_alias_spelling_a_renamed_static_reaches_it_from_another_unit() {
     // `alias` names its target by assembler name, so the alias of a static

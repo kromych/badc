@@ -136,7 +136,7 @@ mod jit_impl {
     use super::super::super::program::Program;
     use super::super::Target;
     use super::super::ssa::shadow;
-    use super::super::{AddrPart, Build, GotFixup, NativeOptions, ResolvedImport, ResolvedImports};
+    use super::super::{AddrPart, Build, NativeOptions, ResolvedImports};
     use super::super::{aarch64, x86_64};
     use super::host_target;
     use alloc::format;
@@ -588,8 +588,8 @@ mod jit_impl {
         }
         let defs = super::super::unit_definitions(program, &build);
         bind_jit_unit_refs(&defs, &mut build);
-        route_jit_data_imports(&mut build)?;
         resolve_jit_asm_sym_targets(&defs, &mut build);
+        route_jit_data_imports(&mut build)?;
 
         // Allocate a writable data region, copy `build.data` in. The
         // page is RW (no exec permission); an attempt to execute
@@ -1098,52 +1098,25 @@ mod jit_impl {
         }
     }
 
-    /// Route `#pragma binding(data ...)` references through the fake
-    /// GOT. The emitters record each extern-data site as a named
-    /// [`super::super::UserExternDataRef`]; register the binding's host
-    /// symbol as a flat-lookup import so `bind_imports` resolves it via
-    /// the loader and `apply_jit_fixups` rewrites the site into a
-    /// GOT-slot load -- the JIT equivalent of the loader-bound data
-    /// import an AOT image gets. A leftover reference has no binding
-    /// and no definition anywhere: refuse it like the linker would.
+    /// Route `#pragma binding(data ...)` references, asm operands included,
+    /// through flat-lookup imports in the fake GOT. A leftover reference has
+    /// no binding and no definition anywhere: refuse it like the linker would.
     fn route_jit_data_imports(build: &mut Build) -> Result<(), C5Error> {
-        if build.user_extern_data_refs.is_empty() {
-            return Ok(());
-        }
-        let hosts: alloc::collections::BTreeMap<String, (String, usize)> = build
-            .imports
-            .data_bindings
-            .iter()
-            .map(|(local, host, dylib)| (local.clone(), (host.clone(), *dylib)))
-            .collect();
-        let mut import_for: alloc::collections::BTreeMap<String, usize> =
-            alloc::collections::BTreeMap::new();
+        use crate::c5::asm::AsmSectionTarget;
+        let mut slots = super::super::DataImportSlots::new(build, true, "the JIT");
         for r in core::mem::take(&mut build.user_extern_data_refs) {
-            let Some((host, dylib)) = hosts.get(&r.symbol_name) else {
+            if !slots.binds(&r.symbol_name) {
                 return Err(undefined_reference(&r.symbol_name));
-            };
-            let idx = *import_for.entry(r.symbol_name.clone()).or_insert_with(|| {
-                let i = build.imports.imports.len();
-                build.imports.imports.push(ResolvedImport {
-                    binding_idx: i as i64,
-                    local_name: r.symbol_name.clone(),
-                    real_symbol: host.clone(),
-                    dylib_index: *dylib,
-                    flat_lookup: true,
-                    kind: crate::c5::codegen::ImportKind::Function,
-                    is_variadic: false,
-                    fixed_args: 0,
-                    return_type_tag: 0,
-                    param_types: alloc::vec::Vec::new(),
-                });
-                i
-            });
-            build.got_fixups.push(GotFixup {
-                instr_offset: r.instr_offset,
-                part: AddrPart::Whole,
-                import_index: idx,
-                is_data_load: true,
-            });
+            }
+            slots.route_ref(build, &r)?;
+        }
+        for fx in core::mem::take(&mut build.asm_sym_fixups) {
+            match &fx.target {
+                AsmSectionTarget::Symbol(name) if slots.binds(name) => {
+                    slots.route_asm_operand(build, &fx, name)?
+                }
+                _ => build.asm_sym_fixups.push(fx),
+            }
         }
         Ok(())
     }

@@ -188,60 +188,6 @@ pub fn emit_native_with_options_owned(
     emit_native_with_options_named(program, target, options, None)
 }
 
-/// Route a single-TU final image's `#pragma binding(data ...)` references
-/// through the GOT, the same way the multi-TU linker does. A name the unit
-/// defines keeps its definition.
-#[cfg(feature = "native-emit")]
-fn route_single_tu_data_imports(build: &mut Build, target: Target, defs: &UnitDefs) {
-    if target != Target::MacOSAarch64 || build.output_kind == OutputKind::Relocatable {
-        return;
-    }
-    if build.imports.data_bindings.is_empty() || build.user_extern_data_refs.is_empty() {
-        return;
-    }
-    let hosts: alloc::collections::BTreeMap<String, String> = build
-        .imports
-        .data_bindings
-        .iter()
-        .map(|(l, h, _dylib)| (l.clone(), h.clone()))
-        .collect();
-    let mut import_for: alloc::collections::BTreeMap<String, usize> =
-        alloc::collections::BTreeMap::new();
-    let mut remaining = Vec::with_capacity(build.user_extern_data_refs.len());
-    for r in core::mem::take(&mut build.user_extern_data_refs) {
-        let Some(host) = hosts
-            .get(&r.symbol_name)
-            .filter(|_| !defs.contains_key(&r.symbol_name))
-        else {
-            remaining.push(r);
-            continue;
-        };
-        let idx = *import_for.entry(r.symbol_name.clone()).or_insert_with(|| {
-            let i = build.imports.imports.len();
-            build.imports.imports.push(ResolvedImport {
-                binding_idx: i as i64,
-                local_name: r.symbol_name.clone(),
-                real_symbol: host.clone(),
-                dylib_index: 0,
-                flat_lookup: true,
-                kind: crate::c5::codegen::ImportKind::Function,
-                is_variadic: false,
-                fixed_args: 0,
-                return_type_tag: 0,
-                param_types: Vec::new(),
-            });
-            i
-        });
-        build.got_fixups.push(GotFixup {
-            instr_offset: r.instr_offset,
-            part: AddrPart::Whole,
-            import_index: idx,
-            is_data_load: false,
-        });
-    }
-    build.user_extern_data_refs = remaining;
-}
-
 /// Where a label an inline-asm template defines ended up in a single-TU
 /// final image: a byte offset within `Build::text` or within the data image
 /// (`Build::data` plus its zero-fill tail).
@@ -603,6 +549,7 @@ fn resolve_single_image_asm_sym_fixups(
     build: &mut Build,
     asm_labels: &alloc::collections::BTreeMap<String, AsmLabelPlacement>,
     defs: &UnitDefs,
+    imports: &mut Option<crate::c5::codegen::DataImportSlots>,
 ) -> Result<(), C5Error> {
     use crate::c5::asm::{AsmRelocKind, AsmSectionTarget, patch_asm_insn_field};
     if build.output_kind == OutputKind::Relocatable || build.asm_sym_fixups.is_empty() {
@@ -619,6 +566,7 @@ fn resolve_single_image_asm_sym_fixups(
         Def(UnitDef),
         /// The GOT base; the record's addend is a byte offset from it.
         GotBase,
+        Import(String),
         WeakUndef,
     }
     let records = core::mem::take(&mut build.asm_sym_fixups);
@@ -636,6 +584,9 @@ fn resolve_single_image_asm_sym_fixups(
                 // and ahead of the weak rule: the usual C idiom for reaching
                 // the GOT declares the name weak-undefined.
                 None if name == crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL => Loc::GotBase,
+                None if imports.as_ref().is_some_and(|s| s.binds(name)) => {
+                    Loc::Import(name.clone())
+                }
                 None if weak_names.contains(name.as_str()) => Loc::WeakUndef,
                 None => {
                     return Err(err(
@@ -668,6 +619,10 @@ fn resolve_single_image_asm_sym_fixups(
             _ => None,
         };
         match (part, loc) {
+            (_, Loc::Import(name)) => {
+                let slots = imports.as_mut().expect("an import was found in the slots");
+                slots.route_asm_operand(build, &r, &name)?
+            }
             (Some(part), Loc::Def(def)) => def.bind(build, r.instr_offset, part, r.addend),
             // The GOT's address is the writer's to decide, so the site
             // takes the same record the link path parks for it.
@@ -728,6 +683,7 @@ fn resolve_single_tu_extern_refs(
     target: Target,
     asm_labels: &alloc::collections::BTreeMap<String, AsmLabelPlacement>,
     defs: &UnitDefs,
+    imports: &mut Option<crate::c5::codegen::DataImportSlots>,
 ) -> Result<(), C5Error> {
     if build.output_kind == OutputKind::Relocatable
         || (build.user_extern_data_refs.is_empty() && build.user_extern_call_sites.is_empty())
@@ -776,6 +732,10 @@ fn resolve_single_tu_extern_refs(
         {
             let addend = r.direct_pcrel.map_or(0, |a| a + 4);
             def.bind(build, r.instr_offset, AddrPart::Whole, addend);
+            continue;
+        }
+        if let Some(slots) = imports.as_mut().filter(|s| s.binds(&r.symbol_name)) {
+            slots.route_ref(build, &r)?;
             continue;
         }
         if data_bindings.contains(r.symbol_name.as_str()) {
@@ -897,10 +857,20 @@ pub fn emit_native_reporting(
     let program = &compacted;
     build.bss_size = bss_size;
     let defs = crate::c5::codegen::unit_definitions(program, &build);
-    route_single_tu_data_imports(&mut build, target, &defs);
+    let mut imports = target.binds_data_imports().then(|| {
+        let flat = target == Target::MacOSAarch64;
+        crate::c5::codegen::DataImportSlots::new(&build, flat, "a single-file image")
+    });
     let asm_labels = fold_asm_sections(program, &mut build, target, &defs)?;
-    resolve_single_image_asm_sym_fixups(program, &mut build, &asm_labels, &defs)?;
-    resolve_single_tu_extern_refs(program, &mut build, target, &asm_labels, &defs)?;
+    resolve_single_image_asm_sym_fixups(program, &mut build, &asm_labels, &defs, &mut imports)?;
+    resolve_single_tu_extern_refs(
+        program,
+        &mut build,
+        target,
+        &asm_labels,
+        &defs,
+        &mut imports,
+    )?;
     if output_kind != OutputKind::Relocatable {
         crate::c5::codegen::bind_placeholder_code_relocs(program, &mut build, |name| {
             match asm_labels.get(name) {

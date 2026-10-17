@@ -3276,6 +3276,126 @@ pub(crate) fn unit_definitions(program: &Program, build: &Build) -> UnitDefs {
     defs
 }
 
+/// Whether the RIP-relative field at `field` is the operand of a `lea`.
+pub(crate) fn x86_64_lea_rip(code: &[u8], field: usize) -> bool {
+    field >= 2 && code[field - 2] == 0x8D && code[field - 1] & 0xC7 == 0x05
+}
+
+/// The GOT slots through which a unit's own image reaches the imported
+/// objects (`#pragma binding(data ...)`) it names, registered on first use.
+pub(crate) struct DataImportSlots {
+    hosts: alloc::collections::BTreeMap<String, (String, usize)>,
+    slots: alloc::collections::BTreeMap<String, usize>,
+    /// The loader looks each up by name alone, not in its binding's library.
+    flat: bool,
+    path: &'static str,
+}
+
+impl DataImportSlots {
+    pub(crate) fn new(build: &Build, flat: bool, path: &'static str) -> Self {
+        let hosts = (build.imports.data_bindings.iter())
+            .map(|(local, host, dylib)| (local.clone(), (host.clone(), *dylib)))
+            .collect();
+        Self {
+            hosts,
+            slots: alloc::collections::BTreeMap::new(),
+            flat,
+            path,
+        }
+    }
+
+    pub(crate) fn binds(&self, name: &str) -> bool {
+        self.hosts.contains_key(name)
+    }
+
+    /// Route `r` through its object's slot, which stands in for the address
+    /// alone: an x86-64 asm `sym(%rip)` qualifies only as a `lea` operand.
+    pub(crate) fn route_ref(
+        &mut self,
+        build: &mut Build,
+        r: &UserExternDataRef,
+    ) -> Result<(), C5Error> {
+        if let Some(addend) = r.direct_pcrel
+            && (addend != -4 || !x86_64_lea_rip(&build.text, r.instr_offset + 3))
+        {
+            return Err(self.used_in_place(&r.symbol_name));
+        }
+        let import_index = self.slot(build, &r.symbol_name);
+        build.got_fixups.push(GotFixup {
+            instr_offset: r.instr_offset,
+            part: AddrPart::Whole,
+            import_index,
+            is_data_load: true,
+        });
+        Ok(())
+    }
+
+    /// The same for an aarch64 asm `adrp` or `add :lo12:` operand.
+    pub(crate) fn route_asm_operand(
+        &mut self,
+        build: &mut Build,
+        fx: &AsmSymFixup,
+        name: &str,
+    ) -> Result<(), C5Error> {
+        use crate::c5::asm::AsmRelocKind;
+        let part = match fx.kind {
+            AsmRelocKind::A64AdrpPage21 if fx.addend == 0 => AddrPart::Page,
+            AsmRelocKind::A64AddLo12 if fx.addend == 0 => AddrPart::InPage,
+            _ => return Err(self.used_in_place(name)),
+        };
+        let import_index = self.slot(build, name);
+        build.got_fixups.push(GotFixup {
+            instr_offset: fx.instr_offset,
+            part,
+            import_index,
+            is_data_load: true,
+        });
+        Ok(())
+    }
+
+    fn slot(&mut self, build: &mut Build, name: &str) -> usize {
+        if let Some(&i) = self.slots.get(name) {
+            return i;
+        }
+        let (real_symbol, dylib_index) = self.hosts[name].clone();
+        let i = build.imports.imports.len();
+        // A data import has no call stub.
+        if build.plt_trampoline_offsets.len() == i {
+            build.plt_trampoline_offsets.push(None);
+        }
+        build.imports.imports.push(ResolvedImport {
+            binding_idx: i as i64,
+            local_name: name.into(),
+            real_symbol,
+            dylib_index,
+            flat_lookup: self.flat,
+            kind: if self.flat {
+                ImportKind::Function
+            } else {
+                ImportKind::Object
+            },
+            is_variadic: false,
+            fixed_args: 0,
+            return_type_tag: 0,
+            param_types: Vec::new(),
+        });
+        self.slots.insert(name.into(), i);
+        i
+    }
+
+    fn used_in_place(&self, name: &str) -> C5Error {
+        C5Error::hard(
+            Code::RELOCATION,
+            format!(
+                "inline asm uses the imported object `{name}` in place or at an offset; {} \
+                 reaches it only through its GOT slot, which stands in for its address alone \
+                 (`lea {name}(%rip)`, `adrp` + `add :lo12:{name}`)",
+                self.path
+            ),
+        )
+    }
+}
+
 /// Compiler-side speculative-execution mitigations, selected by the
 /// gcc `-m` hardening flags and off in every field by default: with no
 /// flag present the emitted code is byte-identical to an unhardened

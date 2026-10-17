@@ -914,6 +914,49 @@ int main(void) {
 "#
 }
 
+/// Inline asm naming the C library's `optind`, which the bundled headers
+/// bind as an imported object: `form` 1 takes its address, 2 loads it in
+/// place, 3 stores 7 to it in place. C reads of the object check each.
+/// Exits 0 when every access reaches the library's object.
+#[allow(dead_code)] // the image suites a Windows host compiles out
+pub fn asm_library_object_source(form: u32) -> String {
+    let body = r#"
+#include <unistd.h>
+int main(void) {
+#if defined(__x86_64__)
+#if T == 1
+    int *p;
+    __asm__("lea optind(%%rip), %0" : "=r"(p));
+    return p != &optind || *p != optind;
+#elif T == 2
+    int v;
+    __asm__("movl optind(%%rip), %0" : "=r"(v));
+    return v != optind;
+#else
+    __asm__ volatile("movl $7, optind(%%rip)" ::: "memory");
+    return optind != 7;
+#endif
+#else
+#if T == 1
+    int *p;
+    __asm__("adrp %0, optind\n\tadd %0, %0, :lo12:optind" : "=r"(p));
+    return p != &optind || *p != optind;
+#elif T == 2
+    long v;
+    __asm__("adrp %0, optind\n\tldr %w0, [%0, :lo12:optind]" : "=r"(v));
+    return (int)v != optind;
+#else
+    long t;
+    __asm__ volatile("mov w1, #7\n\tadrp %0, optind\n\tstr w1, [%0, :lo12:optind]"
+                     : "=&r"(t) :: "x1", "memory");
+    return optind != 7;
+#endif
+#endif
+}
+"#;
+    format!("#define T {form}\n{body}")
+}
+
 /// Inline asm naming objects at the edges of `.rodata`, relro, `.data` and
 /// `.bss` with offsets before and past them, aliases of a function and an
 /// object, and on x86-64 fields an immediate trails; `WITH_TLS` adds a

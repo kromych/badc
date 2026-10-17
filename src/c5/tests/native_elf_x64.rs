@@ -679,6 +679,27 @@ fn asm_offsets_count_from_the_symbols_own_address() {
     }
 }
 
+/// A single-file image reaches an imported object through its GOT slot, a C
+/// read and an inline-asm address alike; an asm load or store in place is
+/// refused, as the slot stands in for the object's address alone.
+#[test]
+fn asm_reaches_an_imported_object_through_its_slot() {
+    for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
+        let src = super::asm_library_object_source(1);
+        let outcome = build_and_run_outcome_with_options(&src, "asm-import", opts.clone());
+        assert!(outcome.matches(0), "{outcome:?}");
+        for form in [2, 3] {
+            let src = super::asm_library_object_source(form);
+            let outcome = build_and_run_outcome_with_options(&src, "asm-import", opts.clone());
+            assert!(
+                matches!(&outcome, RunOutcome::BuildError(m)
+                    if m.contains("uses the imported object `optind` in place")),
+                "form {form}: {outcome:?}"
+            );
+        }
+    }
+}
+
 /// A single-file image is the unit: inline asm naming its definitions binds to them.
 #[test]
 fn asm_pcrel_reference_binds_to_the_units_definition() {

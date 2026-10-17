@@ -5222,6 +5222,7 @@ fn a_shared_librarys_exported_definitions_bind_through_its_dynamic_symbols() {
                 preemption,
                 export_all: true,
                 export_data: true,
+                ..Default::default()
             };
             let mut merged = link_native_objects_with(&objs, &[], &opts).expect("link");
             let what = format!("{target:?} {preemption:?}");
@@ -5335,6 +5336,7 @@ fn link_defined_bounds_are_hidden_or_protected() {
                 preemption,
                 export_all: true,
                 export_data: true,
+                ..Default::default()
             };
             let mut merged = link_native_objects_with(&objs, &[], &opts).expect("link");
             assert!(merged.preemptible_imports.is_empty(), "{target:?} {kind:?}");

@@ -164,6 +164,25 @@ fn asm_offsets_count_from_the_symbols_own_address() {
     assert_eq!(jit_exit_native_optimized(src, &["asm-region-edges-opt"]), 0);
 }
 
+/// Inline asm reaches an imported object through its GOT slot, which stands
+/// in for its address alone; a load or store in place is refused.
+#[test]
+fn asm_reaches_an_imported_object_through_its_slot() {
+    let src = super::asm_library_object_source(1);
+    assert_eq!(jit_exit(&src, &["asm-import"]), 0);
+    assert_eq!(jit_exit_native_optimized(&src, &["asm-import-opt"]), 0);
+    for form in [2, 3] {
+        let src = super::with_prelude(&super::asm_library_object_source(form));
+        let program = Compiler::new(src).compile().expect("compile");
+        let err = jit_run(&program, &[]).expect_err("an in-place use");
+        assert!(
+            err.to_string()
+                .contains("uses the imported object `optind` in place"),
+            "form {form}: {err}"
+        );
+    }
+}
+
 /// The JIT image is the unit: inline asm naming its definitions binds to them.
 #[test]
 fn asm_pcrel_reference_binds_to_the_units_definition() {

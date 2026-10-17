@@ -38,9 +38,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	and	x0, x0, #0xffff
-               	asr	x1, x0, #12
-               	lsl	x1, x1, #62
-               	asr	x1, x1, #62
+               	sbfx	x1, x0, #12, #2
                	mov	x17, #-0x1              // =-1
                	cmp	w1, w17
                	b.eq	<addr>
@@ -48,9 +46,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	asr	x0, x0, #14
-               	lsl	x0, x0, #62
-               	asr	x0, x0, #62
+               	sbfx	x0, x0, #14, #2
                	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x21               // =33

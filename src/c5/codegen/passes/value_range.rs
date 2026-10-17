@@ -1013,6 +1013,21 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
             let shifted = shift(range_of(*rhs), i64::from(*amount), *sh);
             binop(*op, range_of(*lhs), shifted)
         }
+        // A `width`-bit field, whatever its operand holds.
+        Inst::BitField { width, signed, .. } => {
+            let span = 1i128 << width;
+            if *signed {
+                Range {
+                    lo: -(span / 2),
+                    hi: span / 2 - 1,
+                }
+            } else {
+                Range {
+                    lo: 0,
+                    hi: span - 1,
+                }
+            }
+        }
         // A width-limited read cannot produce a value outside the width
         // it extends from, nor can a narrow atomic load or the prior
         // contents a compare-exchange zero-extends.

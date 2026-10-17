@@ -33,19 +33,17 @@ Disassembly of section .text:
                	ret
 
 <bytes>:
-               	lsr	x1, x0, #8
-               	lsr	x2, x0, #16
-               	and	x0, x0, #0xff
-               	add	x0, x0, #0x1
+               	and	x1, x0, #0xff
+               	add	x1, x1, #0x1
+               	ubfx	x2, x0, #8, #8
+               	add	x2, x2, #0x2
+               	ubfx	x0, x0, #16, #8
+               	add	x0, x0, #0x3
                	and	x1, x1, #0xff
-               	add	x1, x1, #0x2
                	and	x2, x2, #0xff
-               	add	x2, x2, #0x3
+               	orr	x1, x1, x2, lsl #8
                	and	x0, x0, #0xff
-               	and	x1, x1, #0xff
-               	orr	x0, x0, x1, lsl #8
-               	and	x1, x2, #0xff
-               	orr	x0, x0, x1, lsl #16
+               	orr	x0, x1, x0, lsl #16
                	ret
 
 <mixed>:

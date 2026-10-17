@@ -100,8 +100,7 @@ Disassembly of section .text:
                	orr	x1, x1, x17
                	sturb	w1, [x29, #-0x5]
                	ldurb	w1, [x29, #-0x6]
-               	asr	x1, x1, #2
-               	and	x1, x1, #0x1
+               	ubfx	x1, x1, #2, #1
                	cmp	w1, #0x1
                	b.ne	<addr>
                	ldurb	w1, [x29, #-0x6]

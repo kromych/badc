@@ -617,6 +617,7 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
                 Inst::Binop { .. }
                 | Inst::BinopI { .. }
                 | Inst::ShiftOp { .. }
+                | Inst::BitField { .. }
                 | Inst::Neg(_)
                 | Inst::Bswap { .. }
                 | Inst::BitCount { .. },

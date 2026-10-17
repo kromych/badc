@@ -248,6 +248,14 @@ pub(super) fn emit_inst(
         } => emit_shift_op(
             code, dst, *op, *lhs, *rhs, *shift, *amount, alloc, frame, scratch,
         ),
+        Inst::BitField {
+            value,
+            lsb,
+            width,
+            signed,
+        } => emit_bit_field(
+            code, dst, *value, *lsb, *width, *signed, alloc, frame, scratch,
+        ),
         Inst::BinopI { op, lhs, rhs_imm } => {
             emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame, scratch)
         }

@@ -64,8 +64,7 @@ Disassembly of section .text:
                	cmp	w1, #0x1
                	b.ne	<addr>
                	ldr	w0, [x0]
-               	asr	x0, x0, #1
-               	and	x0, x0, #0x7f
+               	ubfx	x0, x0, #1, #7
                	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

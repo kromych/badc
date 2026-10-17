@@ -33,11 +33,9 @@ Disassembly of section .text:
 
 <store_be24>:
                	mov	w2, w1
-               	lsr	x3, x2, #16
-               	and	x3, x3, #0xff
+               	ubfx	x3, x2, #16, #8
                	strb	w3, [x0]
-               	lsr	x2, x2, #8
-               	and	x2, x2, #0xff
+               	ubfx	x2, x2, #8, #8
                	strb	w2, [x0, #0x1]
                	and	x1, x1, #0xff
                	strb	w1, [x0, #0x2]

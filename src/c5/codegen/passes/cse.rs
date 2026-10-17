@@ -76,6 +76,7 @@ enum Key {
     Fma(ValueId, ValueId, ValueId, bool, bool, bool),
     MulAdd(ValueId, ValueId, ValueId, bool),
     ShiftOp(BinOp, ValueId, ValueId, BinOp, u8),
+    BitField(ValueId, u8, u8, bool),
     Udiv128(ValueId, ValueId, ValueId),
 }
 
@@ -610,6 +611,12 @@ fn key_of(inst: &Inst, vn: &[ValueId], is_f32: bool, sym: u32) -> Option<Key> {
             shift,
             amount,
         } => Some(Key::ShiftOp(*op, r(*lhs), r(*rhs), *shift, *amount)),
+        Inst::BitField {
+            value,
+            lsb,
+            width,
+            signed,
+        } => Some(Key::BitField(r(*value), *lsb, *width, *signed)),
         Inst::Udiv128 { hi, lo, divisor } => Some(Key::Udiv128(r(*hi), r(*lo), r(*divisor))),
         _ => None,
     }

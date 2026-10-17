@@ -650,6 +650,7 @@ fn walk_block(
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }
             | Inst::ShiftOp { .. }
+            | Inst::BitField { .. }
             | Inst::Udiv128 { .. }
             | Inst::Extend { .. }
             | Inst::Bswap { .. }

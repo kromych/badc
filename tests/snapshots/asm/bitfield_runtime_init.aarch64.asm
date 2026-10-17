@@ -26,16 +26,13 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cbnz	w5, <addr>
                	mov	w5, w1
-               	asr	x5, x5, #4
-               	and	x5, x5, #0xf
+               	ubfx	x5, x5, #4, #4
                	eor	x4, x5, x4
                	cmp	w4, #0x0
                	cset	x4, eq
                	cbz	x4, <addr>
                	mov	w1, w1
-               	asr	x1, x1, #8
-               	lsl	x1, x1, #59
-               	asr	x1, x1, #59
+               	sbfx	x1, x1, #8, #5
                	cmp	w1, w2
                	cset	x1, eq
                	cbz	x1, <addr>
@@ -74,15 +71,13 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	b.ne	<addr>
                	mov	w3, w1
-               	asr	x3, x3, #16
-               	and	x3, x3, #0x7
+               	ubfx	x3, x3, #16, #3
                	eor	x3, x3, x5
                	cmp	w3, #0x0
                	cset	x3, eq
                	cbz	x3, <addr>
                	mov	w1, w1
-               	asr	x1, x1, #19
-               	and	x1, x1, #0x3ff
+               	ubfx	x1, x1, #19, #10
                	eor	x1, x1, x6
                	cmp	w1, #0x0
                	cset	x1, eq

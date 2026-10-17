@@ -262,6 +262,14 @@ pub(crate) enum Inst {
         shift: BinOp,
         amount: u8,
     },
+    /// Bits `lsb..lsb + width` of `value`, sign- or zero-extended, `width` in
+    /// 1..=63 and `lsb + width <= 64`: AArch64 SBFX / UBFX (`passes::bit_field`).
+    BitField {
+        value: ValueId,
+        lsb: u8,
+        width: u8,
+        signed: bool,
+    },
     /// The quotient of the unsigned 128-bit `hi:lo` by `divisor`, for `hi <
     /// divisor`: x86_64 `div` of rdx:rax (`irgen::int128`).
     Udiv128 {
@@ -682,6 +690,7 @@ impl Inst {
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
                 | Inst::ShiftOp { .. }
+                | Inst::BitField { .. }
                 | Inst::Udiv128 { .. }
                 | Inst::FpCast { .. }
                 | Inst::Extend { .. }
@@ -740,6 +749,7 @@ impl Inst {
             Inst::Fma { .. } => "Fma",
             Inst::MulAdd { .. } => "MulAdd",
             Inst::ShiftOp { .. } => "ShiftOp",
+            Inst::BitField { .. } => "BitField",
             Inst::Udiv128 { .. } => "Udiv128",
             Inst::Extend { .. } => "Extend",
             Inst::Bswap { .. } => "Bswap",
@@ -822,7 +832,7 @@ impl Inst {
                 f(*lhs);
                 f(*rhs);
             }
-            Inst::BinopI { lhs, .. } => f(*lhs),
+            Inst::BinopI { lhs, .. } | Inst::BitField { value: lhs, .. } => f(*lhs),
             Inst::Neg(v) | Inst::Fneg(v) => f(*v),
             Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
                 f(*a);
@@ -936,7 +946,7 @@ impl Inst {
                 f(lhs);
                 f(rhs);
             }
-            Inst::BinopI { lhs, .. } => f(lhs),
+            Inst::BinopI { lhs, .. } | Inst::BitField { value: lhs, .. } => f(lhs),
             Inst::Neg(v) | Inst::Fneg(v) => f(v),
             Inst::Fma { a, b, c, .. } | Inst::MulAdd { a, b, c, .. } => {
                 f(a);
@@ -1197,6 +1207,17 @@ pub(crate) fn is_imm_arith_op(op: BinOp) -> bool {
 /// lowering are both defined.
 pub(crate) fn imm_safe_binop(op: BinOp) -> bool {
     is_imm_arith_op(op) || is_int_comparison_op(op)
+}
+
+/// [`Inst::BitField`]'s value for `x`.
+pub(crate) fn eval_bit_field(x: i64, lsb: u8, width: u8, signed: bool) -> i64 {
+    let left = x.wrapping_shl(64 - u32::from(lsb) - u32::from(width));
+    let down = 64 - u32::from(width);
+    if signed {
+        left >> down
+    } else {
+        ((left as u64) >> down) as i64
+    }
 }
 
 /// The C integer operators on two known operands, in one place for the AST
@@ -2471,6 +2492,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }
             | Inst::ShiftOp { .. }
+            | Inst::BitField { .. }
             | Inst::Udiv128 { .. }
             | Inst::Extend { .. }
             | Inst::Bswap { .. }

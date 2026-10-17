@@ -50,8 +50,7 @@ Disassembly of section .text:
                	mul	x1, x1, x4
                	add	x1, x1, x3
                	mov	w5, w1
-               	lsr	x5, x5, #16
-               	and	x5, x5, #0xff
+               	ubfx	x5, x5, #16, #8
                	strb	w5, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
@@ -77,8 +76,7 @@ Disassembly of section .text:
                	mul	x1, x1, x4
                	add	x1, x1, x3
                	mov	w5, w1
-               	lsr	x5, x5, #16
-               	and	x5, x5, #0xff
+               	ubfx	x5, x5, #16, #8
                	strb	w5, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0xc
@@ -106,8 +104,7 @@ Disassembly of section .text:
                	mul	x1, x1, x4
                	add	x1, x1, x3
                	mov	w5, w1
-               	lsr	x5, x5, #16
-               	and	x5, x5, #0xff
+               	ubfx	x5, x5, #16, #8
                	strb	w5, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0xd
@@ -137,8 +134,7 @@ Disassembly of section .text:
                	mul	x1, x1, x4
                	add	x1, x1, x3
                	mov	w5, w1
-               	lsr	x5, x5, #16
-               	and	x5, x5, #0xff
+               	ubfx	x5, x5, #16, #8
                	strb	w5, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x18
@@ -172,8 +168,7 @@ Disassembly of section .text:
                	mul	x1, x1, x4
                	add	x1, x1, x3
                	mov	w5, w1
-               	lsr	x5, x5, #16
-               	and	x5, x5, #0xff
+               	ubfx	x5, x5, #16, #8
                	strb	w5, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x28
@@ -209,8 +204,7 @@ Disassembly of section .text:
                	mul	x1, x1, x4
                	add	x1, x1, x3
                	mov	w5, w1
-               	lsr	x5, x5, #16
-               	and	x5, x5, #0xff
+               	ubfx	x5, x5, #16, #8
                	strb	w5, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x28
@@ -240,8 +234,7 @@ Disassembly of section .text:
                	mul	x1, x1, x4
                	add	x1, x1, x3
                	mov	w5, w1
-               	lsr	x5, x5, #16
-               	and	x5, x5, #0xff
+               	ubfx	x5, x5, #16, #8
                	strb	w5, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -270,8 +263,7 @@ Disassembly of section .text:
                	mul	x1, x1, x4
                	add	x1, x1, x3
                	mov	w5, w1
-               	lsr	x5, x5, #16
-               	and	x5, x5, #0xff
+               	ubfx	x5, x5, #16, #8
                	strb	w5, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x3e
@@ -314,8 +306,7 @@ Disassembly of section .text:
                	mul	x1, x1, x4
                	add	x1, x1, x3
                	mov	w5, w1
-               	lsr	x5, x5, #16
-               	and	x5, x5, #0xff
+               	ubfx	x5, x5, #16, #8
                	strb	w5, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x208
@@ -351,8 +342,7 @@ Disassembly of section .text:
                	mul	x1, x1, x4
                	add	x1, x1, x3
                	mov	w5, w1
-               	lsr	x5, x5, #16
-               	and	x5, x5, #0xff
+               	ubfx	x5, x5, #16, #8
                	strb	w5, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x20c
@@ -390,8 +380,7 @@ Disassembly of section .text:
                	mul	x1, x1, x4
                	add	x1, x1, x3
                	mov	w5, w1
-               	lsr	x5, x5, #16
-               	and	x5, x5, #0xff
+               	ubfx	x5, x5, #16, #8
                	strb	w5, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x3e8
@@ -432,8 +421,7 @@ Disassembly of section .text:
                	mul	x1, x1, x5
                	add	x1, x1, x4
                	mov	w6, w1
-               	lsr	x6, x6, #16
-               	and	x6, x6, #0xff
+               	ubfx	x6, x6, #16, #8
                	strb	w6, [x2, x0]
                	add	x0, x0, #0x1
                	cmp	w0, w3

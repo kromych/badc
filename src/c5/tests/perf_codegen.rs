@@ -4758,6 +4758,47 @@ fn early_return_temporaries_skip_reserved_registers() {
     m.finish();
 }
 
+/// A bit-field read is one SBFX / UBFX after its load: signed at bit 0 and
+/// above it, unsigned above bit 0, in the first and the second word. So
+/// are the shift pairs and the masked shift that extract a field from a
+/// register.
+#[test]
+fn a64_a_bit_field_extract_is_one_instruction() {
+    const SRC: &str = "struct S { int a : 22; unsigned b : 7; int c : 3;\n\
+            long long d : 40; unsigned long long e : 20; };\n\
+        long get_a(struct S *s) { return s->a; }\n\
+        long get_b(struct S *s) { return s->b; }\n\
+        long get_c(struct S *s) { return s->c; }\n\
+        long long get_d(struct S *s) { return s->d; }\n\
+        unsigned long long get_e(struct S *s) { return s->e; }\n\
+        long field(long x) { return (x << 20) >> 40; }\n\
+        unsigned long ufield(unsigned long x) { return (x << 20) >> 40; }\n\
+        unsigned long masked(unsigned long x) { return (x >> 7) & 0x3ff; }\n";
+    // 64-bit SBFM / UBFM with immr = lsb and imms = lsb + width - 1.
+    let bfx = |w: u32, signed: bool, lsb: u32, width: u32| {
+        let base = if signed { 0x9340_0000 } else { 0xD340_0000 };
+        w & 0xFFC0_0000 == base && (w >> 16) & 63 == lsb && (w >> 10) & 63 == lsb + width - 1
+    };
+    let mut m = Misses::default();
+    for (name, len, signed, lsb, width) in [
+        ("get_a", 3, true, 0, 22),
+        ("get_b", 3, false, 22, 7),
+        ("get_c", 3, true, 29, 3),
+        ("get_d", 3, true, 0, 40),
+        ("get_e", 3, false, 40, 20),
+        ("field", 2, true, 20, 24),
+        ("ufield", 2, false, 20, 24),
+        ("masked", 2, false, 7, 10),
+    ] {
+        let ws = a64(SRC, name);
+        m.expect(
+            ws.len() == len && bfx(ws[len - 2], signed, lsb, width),
+            || format!("{name}: not one {signed} extract #{lsb}, #{width}: {ws:08x?}"),
+        );
+    }
+    m.finish();
+}
+
 /// A multiply-add contracted into `madd` keeps what the multiply and the
 /// add allowed apart: the return ahead of the frame when the entry
 /// computes one (`gm`), the compare's flags for a branch across one

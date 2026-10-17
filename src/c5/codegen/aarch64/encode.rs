@@ -1980,6 +1980,18 @@ pub(crate) fn enc_lsr32_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
     0x5300_7C00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `SBFX` / `UBFX <Xd>, <Xn>, #lsb, #width`, the aliases of `SBFM` / `UBFM
+/// Xd, Xn, #lsb, #(lsb + width - 1)`.
+pub(crate) fn enc_bfx(signed: bool, rd: Reg, rn: Reg, lsb: u8, width: u8) -> u32 {
+    let (lsb, width) = (u32::from(lsb), u32::from(width));
+    debug_assert!(
+        (1..64).contains(&width) && lsb + width <= 64,
+        "bfx #{lsb}, #{width}"
+    );
+    let base = if signed { 0x9340_0000 } else { 0xD340_0000 };
+    base | (lsb << 16) | ((lsb + width - 1) << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// `SXTW <Xd>, <Wn>` -- sign-extend low 32 bits of `Wn` into `Xd`.
 /// Alias of `SBFM Xd, Xn, #0, #31`. Used by the sxtw peephole that
 /// folds c5's `Shl 32; Shr 32` sign-narrow shape into one inst.
@@ -2235,7 +2247,8 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
     const FILE_ASM_COMMENTS: crate::c5::asm::AsmComments = crate::c5::asm::AsmComments::A64;
 
     /// Take a word index's widening into its access, then contract an
-    /// integer multiply into the add / sub that reads it (madd / msub)
+    /// integer multiply into the add / sub that reads it (madd / msub),
+    /// the shifts and mask of a bit-field extract into one SBFX / UBFX,
     /// and a constant shift into its reader's shifted-register operand.
     /// After the index fold and the store forwarding, whose address
     /// matching reads the `base + index * scale` shape a fused node would
@@ -2251,6 +2264,9 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
         });
         pipeline.run("passes::mul_add::run", funcs, |funcs| {
             crate::c5::codegen::passes::mul_add::run(funcs);
+        });
+        pipeline.run("passes::bit_field::run", funcs, |funcs| {
+            crate::c5::codegen::passes::bit_field::run(funcs);
         });
         pipeline.run("passes::shifted_operand::run", funcs, |funcs| {
             crate::c5::codegen::passes::shifted_operand::run(funcs);

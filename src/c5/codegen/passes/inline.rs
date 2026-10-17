@@ -1151,6 +1151,7 @@ fn is_inline_candidate(
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }
             | Inst::ShiftOp { .. }
+            | Inst::BitField { .. }
             | Inst::Udiv128 { .. }
             | Inst::FpCast { .. }
             | Inst::Load { .. }
@@ -2126,6 +2127,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::Fma { .. }
         | Inst::MulAdd { .. }
         | Inst::ShiftOp { .. }
+        | Inst::BitField { .. }
         | Inst::Udiv128 { .. }
         | Inst::Extend { .. }
         | Inst::Bswap { .. }

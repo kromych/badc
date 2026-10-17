@@ -17,13 +17,11 @@ Disassembly of section .text:
                	ret
 
 <take_triple>:
-               	lsr	x1, x0, #8
-               	lsr	x2, x0, #16
-               	and	x0, x0, #0xff
-               	and	x1, x1, #0xff
-               	orr	x0, x0, x1, lsl #8
-               	and	x1, x2, #0xff
-               	orr	x0, x0, x1, lsl #16
+               	and	x1, x0, #0xff
+               	ubfx	x2, x0, #8, #8
+               	orr	x1, x1, x2, lsl #8
+               	ubfx	x0, x0, #16, #8
+               	orr	x0, x1, x0, lsl #16
                	ret
 
 <take_pair>:

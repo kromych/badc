@@ -210,12 +210,10 @@ Disassembly of section .text:
                	ldr	w1, [x0]
                	and	x1, x1, #0x7
                	ldr	w2, [x0]
-               	asr	x2, x2, #3
-               	and	x2, x2, #0x1f
+               	ubfx	x2, x2, #3, #5
                	add	x1, x1, x2
                	ldr	w2, [x0]
-               	asr	x2, x2, #8
-               	and	x2, x2, #0xff
+               	ubfx	x2, x2, #8, #8
                	add	x1, x1, x2
                	ldr	w0, [x0]
                	add	x0, x1, x0, asr #16
@@ -527,13 +525,11 @@ Disassembly of section .text:
                	cmp	w1, #0x5
                	b.ne	<addr>
                	ldur	w1, [x29, #-0x30]
-               	asr	x1, x1, #3
-               	and	x1, x1, #0x1f
+               	ubfx	x1, x1, #3, #5
                	cmp	w1, #0x5
                	b.ne	<addr>
                	ldur	w1, [x29, #-0x30]
-               	asr	x1, x1, #8
-               	and	x1, x1, #0xff
+               	ubfx	x1, x1, #8, #8
                	cmp	w1, #0xc8
                	b.ne	<addr>
                	ldur	w1, [x29, #-0x30]
@@ -548,11 +544,9 @@ Disassembly of section .text:
                	ret
                	ldur	w1, [x29, #-0x30]
                	and	x2, x1, #0x7
-               	asr	x3, x1, #3
-               	and	x3, x3, #0x1f
+               	ubfx	x3, x1, #3, #5
                	add	x2, x2, x3
-               	asr	x3, x1, #8
-               	and	x3, x3, #0xff
+               	ubfx	x3, x1, #8, #8
                	add	x2, x2, x3
                	add	x1, x2, x1, asr #16
                	eor	x0, x0, x1

@@ -54,69 +54,57 @@ Disassembly of section .text:
                	bl	<addr>
                	and	x0, x0, #0xff
                	and	x1, x0, #0x1
-               	lsr	x2, x0, #4
-               	and	x6, x2, #0x1
+               	ubfx	x6, x0, #4, #1
                	eor	x2, x1, x6
-               	lsr	x3, x0, #5
-               	and	x3, x3, #0x1
+               	ubfx	x3, x0, #5, #1
                	eor	x2, x2, x3
-               	lsr	x4, x0, #6
-               	and	x4, x4, #0x1
+               	ubfx	x4, x0, #6, #1
                	eor	x5, x2, x4
                	lsr	x2, x0, #7
                	eor	x5, x5, x2
                	eor	x7, x5, #0x1
-               	lsr	x5, x0, #1
-               	and	x5, x5, #0x1
+               	ubfx	x5, x0, #1, #1
                	eor	x3, x5, x3
                	eor	x3, x3, x4
                	eor	x3, x3, x2
                	eor	x3, x3, x1
                	eor	x3, x3, #0x1
                	orr	x7, x7, x3, lsl #1
-               	lsr	x3, x0, #2
-               	and	x3, x3, #0x1
+               	ubfx	x3, x0, #2, #1
                	eor	x4, x3, x4
                	eor	x4, x4, x2
                	eor	x4, x4, x1
                	eor	x4, x4, x5
                	orr	x7, x7, x4, lsl #2
-               	lsr	x4, x0, #3
-               	and	x4, x4, #0x1
+               	ubfx	x4, x0, #3, #1
                	eor	x2, x4, x2
                	eor	x2, x2, x1
                	eor	x2, x2, x5
                	eor	x2, x2, x3
                	orr	x5, x7, x2, lsl #3
                	eor	x1, x6, x1
-               	lsr	x2, x0, #1
-               	and	x2, x2, #0x1
+               	ubfx	x2, x0, #1, #1
                	eor	x1, x1, x2
                	eor	x1, x1, x3
                	eor	x1, x1, x4
                	orr	x5, x5, x1, lsl #4
-               	lsr	x1, x0, #5
-               	and	x1, x1, #0x1
+               	ubfx	x1, x0, #5, #1
                	eor	x2, x1, x2
                	eor	x2, x2, x3
                	eor	x3, x2, x4
-               	lsr	x2, x0, #4
-               	and	x2, x2, #0x1
+               	ubfx	x2, x0, #4, #1
                	eor	x3, x3, x2
                	eor	x3, x3, #0x1
                	orr	x5, x5, x3, lsl #5
-               	lsr	x3, x0, #6
-               	and	x3, x3, #0x1
-               	lsr	x6, x0, #2
-               	and	x6, x6, #0x1
+               	ubfx	x3, x0, #6, #1
+               	ubfx	x6, x0, #2, #1
                	eor	x6, x3, x6
                	eor	x4, x6, x4
                	eor	x4, x4, x2
                	eor	x4, x4, x1
                	eor	x4, x4, #0x1
                	orr	x4, x5, x4, lsl #6
-               	lsr	x5, x0, #3
-               	and	x5, x5, #0x1
+               	ubfx	x5, x0, #3, #1
                	eor	x0, x5, x0, lsr #7
                	eor	x0, x0, x2
                	eor	x0, x0, x1

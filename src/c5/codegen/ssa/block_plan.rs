@@ -293,6 +293,7 @@ impl BlockPlan {
                         | Inst::Binop { .. }
                         | Inst::BinopI { .. }
                         | Inst::ShiftOp { .. }
+                        | Inst::BitField { .. }
                         | Inst::Extend { .. }
                 )
         };
@@ -495,6 +496,7 @@ fn repeatable_arms(
                 | Inst::Binop { .. }
                 | Inst::BinopI { .. }
                 | Inst::ShiftOp { .. }
+                | Inst::BitField { .. }
                 | Inst::Extend { .. }
                 | Inst::Copy { .. }
                 | Inst::Load {

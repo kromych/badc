@@ -285,8 +285,7 @@ Disassembly of section .text:
                	mov	x4, #0x0                // =0
                	b	<addr>
                	and	x1, x5, #0xffffffffffffff00
-               	lsr	x2, x6, #4
-               	and	x2, x2, #0xff
+               	ubfx	x2, x6, #4, #8
                	orr	x1, x1, x2
                	mov	x4, #0x2d               // =45
                	cmp	x0, x1
@@ -320,8 +319,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x4, #0x0                // =0
                	b	<addr>
-               	lsr	x1, x5, #8
-               	and	x1, x1, #0xfff
+               	ubfx	x1, x5, #8, #12
                	mov	x4, #0x28               // =40
                	cmp	x0, x1
                	b.ne	<addr>

@@ -219,8 +219,7 @@ Disassembly of section .text:
                	bl	<addr>
                	ldur	x22, [x29, #-0x18]
                	and	x0, x21, #0x8000000000000000
-               	lsr	x1, x21, #48
-               	and	x3, x1, #0x7fff
+               	ubfx	x3, x21, #48, #15
                	and	x1, x21, #0xffffffffffff
                	mov	x17, #0x7fff            // =32767
                	cmp	w3, w17
@@ -269,8 +268,7 @@ Disassembly of section .text:
                	bl	<addr>
                	ldur	x2, [x29, #-0x40]
                	and	x3, x2, #0x8000000000000000
-               	lsr	x0, x2, #52
-               	and	x1, x0, #0x7ff
+               	ubfx	x1, x2, #52, #11
                	and	x0, x2, #0xfffffffffffff
                	cmp	w1, #0x7ff
                	b.ne	<addr>

@@ -481,6 +481,7 @@ fn run_one(func: &mut FunctionSsa) {
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
                 | Inst::ShiftOp { .. }
+                | Inst::BitField { .. }
                 | Inst::Udiv128 { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }
@@ -878,6 +879,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
                 | Inst::ShiftOp { .. }
+                | Inst::BitField { .. }
                 | Inst::Udiv128 { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }

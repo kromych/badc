@@ -237,6 +237,12 @@ fn fmt_inst(inst: &Inst) -> String {
             fmt_binop(*op),
             fmt_binop(*shift)
         ),
+        BitField {
+            value,
+            lsb,
+            width,
+            signed,
+        } => format!("BitField {{ value=v{value}, lsb={lsb}, width={width}, signed={signed} }}"),
         Extend { value, kind, nsw } => {
             let mark = if *nsw { ", nsw" } else { "" };
             format!(

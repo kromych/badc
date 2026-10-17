@@ -1368,6 +1368,16 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = eval(*op, frame.regs[*lhs as usize], shifted);
             return Ok(());
         }
+        Inst::BitField {
+            value,
+            lsb,
+            width,
+            signed,
+        } => {
+            let x = frame.regs[*value as usize];
+            frame.regs[v as usize] = crate::c5::ir::eval_bit_field(x, *lsb, *width, *signed);
+            return Ok(());
+        }
         Inst::Extend { value, kind, .. } => {
             let raw = frame.regs[*value as usize];
             frame.regs[v as usize] = eval::eval_extend(raw, *kind);

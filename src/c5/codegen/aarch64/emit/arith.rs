@@ -326,6 +326,30 @@ pub(super) fn emit_mul_add(
     Ok(())
 }
 
+/// `Inst::BitField`: one SBFX / UBFX; a spilled operand reloads into a scratch.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_bit_field(
+    code: &mut Vec<u8>,
+    dst: Place,
+    value: u32,
+    lsb: u8,
+    width: u8,
+    signed: bool,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+        return fail("BitField: dst not int reg / spill");
+    };
+    let Some(rn) = materialize_int(code, place_of(alloc, value), scratch.primary, frame) else {
+        return fail("BitField: value not int reg / spill");
+    };
+    emit(code, super::encode::enc_bfx(signed, rd, rn, lsb, width));
+    store_spilled_int(code, frame, dst, rd);
+    Ok(())
+}
+
 /// The 64-bit ADD, SUB, AND, ORR or EOR (shifted register) base word for
 /// `op` and the LSL, LSR or ASR that applies `shift` (Arm ARM C6.2).
 pub(super) fn shifted_reg_form(op: BinOp, shift: BinOp) -> Option<(u32, super::encode::RegShift)> {

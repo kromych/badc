@@ -534,13 +534,11 @@ Disassembly of section .text:
                	cmp	w0, #0x5
                	b.ne	<addr>
                	ldr	w0, [sp, #0x38]
-               	asr	x0, x0, #3
-               	and	x0, x0, #0x1f
+               	ubfx	x0, x0, #3, #5
                	cmp	w0, #0x11
                	b.ne	<addr>
                	ldr	w0, [sp, #0x38]
-               	asr	x0, x0, #8
-               	and	x0, x0, #0xfff
+               	ubfx	x0, x0, #8, #12
                	and	x1, x20, #0xfff
                	cmp	w0, w1
                	b.ne	<addr>

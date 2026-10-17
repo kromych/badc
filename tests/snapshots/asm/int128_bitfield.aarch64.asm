@@ -61,11 +61,10 @@ Disassembly of section .text:
                	orr	x0, x1, #0x200000
                	stur	x2, [x29, #-0x20]
                	stur	x0, [x29, #-0x18]
-               	lsr	x1, x0, #8
-               	lsl	x0, x0, #56
-               	orr	x0, x0, #0x3
-               	and	x1, x1, #0xfffffffff
-               	cmp	x0, #0x3
+               	lsl	x1, x0, #56
+               	orr	x1, x1, #0x3
+               	ubfx	x0, x0, #8, #36
+               	cmp	x1, #0x3
                	b.eq	<addr>
                	mov	x0, #0x35               // =53
                	cbz	x0, <addr>
@@ -112,8 +111,7 @@ Disassembly of section .text:
                	and	x0, x0, #0x1f
                	cmp	w0, #0x1f
                	b.ne	<addr>
-               	asr	x0, x1, #1
-               	and	x0, x0, #0xfffff
+               	ubfx	x0, x1, #1, #20
                	mov	x17, #0xfffff           // =1048575
                	cmp	w0, w17
                	b.eq	<addr>
@@ -243,8 +241,7 @@ Disassembly of section .text:
                	ldur	w1, [x0, #0x1]
                	ldrb	w0, [x0, #0x5]
                	orr	x0, x1, x0, lsl #32
-               	lsl	x0, x0, #24
-               	asr	x0, x0, #24
+               	sbfx	x0, x0, #0, #40
                	asr	x1, x0, #63
                	mov	x17, #-0x3              // =-3
                	cmp	x0, x17
@@ -297,7 +294,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	b	<addr>
                	mov	x17, #0x2000            // =8192
-               	cmp	x1, x17
+               	cmp	x0, x17
                	b.eq	<addr>
                	mov	x0, #0x36               // =54
                	b	<addr>

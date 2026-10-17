@@ -1479,6 +1479,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::Fneg(_)
             | Inst::Fma { .. }
             | Inst::ShiftOp { .. }
+            | Inst::BitField { .. }
             | Inst::Load { .. }
             | Inst::LoadLocal { .. }
             | Inst::LoadIndexed { .. }
@@ -1659,11 +1660,13 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                 !(is_x86 && matches!(kind, FpCastKind::UFpToInt | FpCastKind::UIntToFp))
             }
             // x86-64 `neg` sets the flags; the aarch64 `sub Xd,XZR,Xn` it
-            // lowers to does not, nor do MADD, MSUB and a shifted-register
-            // ADD, SUB, AND, ORR or EOR.
-            Inst::Neg(_) | Inst::BitCount { .. } | Inst::MulAdd { .. } | Inst::ShiftOp { .. } => {
-                !is_x86
-            }
+            // lowers to does not, nor do MADD, MSUB, SBFM, UBFM and a
+            // shifted-register ADD, SUB, AND, ORR or EOR.
+            Inst::Neg(_)
+            | Inst::BitCount { .. }
+            | Inst::MulAdd { .. }
+            | Inst::ShiftOp { .. }
+            | Inst::BitField { .. } => !is_x86,
             Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
                 if is_x86 {
                     matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
@@ -3256,7 +3259,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Neg(_) => ResultKind::Int,
         Fneg(_) => ResultKind::Fp,
         Fma { .. } => ResultKind::Fp,
-        MulAdd { .. } | ShiftOp { .. } | Udiv128 { .. } => ResultKind::Int,
+        MulAdd { .. } | ShiftOp { .. } | BitField { .. } | Udiv128 { .. } => ResultKind::Int,
         Extend { .. } => ResultKind::Int,
         Bswap { .. } | BitCount { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {

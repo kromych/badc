@@ -166,9 +166,7 @@ Disassembly of section .text:
                	orr	x3, x3, #0x200
                	stur	w3, [x29, #-0x10]
                	mov	w4, w3
-               	asr	x4, x4, #9
-               	lsl	x4, x4, #57
-               	asr	x4, x4, #57
+               	sbfx	x4, x4, #9, #7
                	ldr	x1, [x1]
                	lsl	x1, x4, x1
                	and	x1, x1, #0x7f
@@ -180,9 +178,7 @@ Disassembly of section .text:
                	ldurb	w3, [x29, #-0xf]
                	tbz	w3, #0x0, <addr>
                	mov	w1, w1
-               	asr	x1, x1, #9
-               	lsl	x1, x1, #57
-               	asr	x1, x1, #57
+               	sbfx	x1, x1, #9, #7
                	cmp	w1, #0x8
                	b.eq	<addr>
                	mov	x0, #0xa                // =10

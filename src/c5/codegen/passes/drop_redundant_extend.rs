@@ -219,6 +219,14 @@ fn compute_high_observed_through(
                     observe(&mut hi, &mut work, *rhs);
                 }
             }
+            // A field that reaches past bit 31 reads the high word.
+            Inst::BitField {
+                value, lsb, width, ..
+            } => {
+                if lsb + width > 32 {
+                    observe(&mut hi, &mut work, *value);
+                }
+            }
             // A quotient depends on every bit of its operands.
             Inst::Udiv128 {
                 hi: h,

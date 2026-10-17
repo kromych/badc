@@ -1508,7 +1508,29 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                     | BinOp::Shr
                     | BinOp::Shru
             ),
-            _ => false,
+            Inst::TlsAddr(_)
+            | Inst::Udiv128 { .. }
+            | Inst::Call { .. }
+            | Inst::CallIndirect { .. }
+            | Inst::CallExt { .. }
+            | Inst::TailExt(_)
+            | Inst::Mzero { .. }
+            | Inst::Mcpy { .. }
+            | Inst::AtomicRmw { .. }
+            | Inst::AtomicCas { .. }
+            | Inst::AtomicLoad { .. }
+            | Inst::AtomicStore { .. }
+            | Inst::Intrinsic { .. }
+            | Inst::X86Simd { .. }
+            | Inst::InlineAsm { .. }
+            | Inst::AllocaInit(_)
+            | Inst::LifetimeEnd(_)
+            | Inst::ParamRef { .. }
+            | Inst::ParamPart { .. }
+            | Inst::RetPart { .. }
+            | Inst::AsmOut { .. }
+            | Inst::AggParts { .. }
+            | Inst::Phi { .. } => false,
         }
     };
     let fold_preserves_source = |shl_pc: ValueId, shr_pc: ValueId| -> bool {
@@ -1674,7 +1696,30 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                     !is_compare_op(*op)
                 }
             }
-            _ => false,
+            Inst::TlsAddr(_)
+            | Inst::SegLoad { .. }
+            | Inst::SegStore { .. }
+            | Inst::Udiv128 { .. }
+            | Inst::Bswap { .. }
+            | Inst::Call { .. }
+            | Inst::CallIndirect { .. }
+            | Inst::CallExt { .. }
+            | Inst::TailExt(_)
+            | Inst::Mzero { .. }
+            | Inst::Mcpy { .. }
+            | Inst::AtomicRmw { .. }
+            | Inst::AtomicCas { .. }
+            | Inst::AtomicLoad { .. }
+            | Inst::AtomicStore { .. }
+            | Inst::Intrinsic { .. }
+            | Inst::X86Simd { .. }
+            | Inst::InlineAsm { .. }
+            | Inst::AllocaInit(_)
+            | Inst::LifetimeEnd(_)
+            | Inst::ParamPart { .. }
+            | Inst::RetPart { .. }
+            | Inst::AsmOut { .. }
+            | Inst::AggParts { .. } => false,
         }
     };
     // Whether the edge `pred -> succ` carries an FP-classed phi income

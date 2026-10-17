@@ -98,7 +98,44 @@ fn pure(inst: &Inst) -> bool {
         Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
             !matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu)
         }
-        _ => false,
+        Inst::ImmData(_)
+        | Inst::ImmCode(_)
+        | Inst::ImmExtCode(_)
+        | Inst::BlockAddr(_)
+        | Inst::LocalAddr(_)
+        | Inst::TlsAddr(_)
+        | Inst::Load { .. }
+        | Inst::Store { .. }
+        | Inst::LoadLocal { .. }
+        | Inst::StoreLocal { .. }
+        | Inst::LoadIndexed { .. }
+        | Inst::StoreIndexed { .. }
+        | Inst::SegLoad { .. }
+        | Inst::SegStore { .. }
+        | Inst::Neg(_)
+        | Inst::Fneg(_)
+        | Inst::Fma { .. }
+        | Inst::Udiv128 { .. }
+        | Inst::Bswap { .. }
+        | Inst::BitCount { .. }
+        | Inst::Copy { .. }
+        | Inst::FpCast { .. }
+        | Inst::Call { .. }
+        | Inst::CallIndirect { .. }
+        | Inst::CallExt { .. }
+        | Inst::TailExt(_)
+        | Inst::Mzero { .. }
+        | Inst::Mcpy { .. }
+        | Inst::AtomicRmw { .. }
+        | Inst::AtomicCas { .. }
+        | Inst::AtomicLoad { .. }
+        | Inst::AtomicStore { .. }
+        | Inst::Intrinsic { .. }
+        | Inst::X86Simd { .. }
+        | Inst::InlineAsm { .. }
+        | Inst::RetPart { .. }
+        | Inst::AsmOut { .. }
+        | Inst::AggParts { .. } => false,
     }
 }
 

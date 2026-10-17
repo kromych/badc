@@ -27,6 +27,77 @@ fn empty_source_has_no_main() {
     expect_compile_error("", "main() not defined");
 }
 
+/// GNU C's cast to a union takes a member of the operand's own type,
+/// signedness included, and yields a value: the union, a member of it and
+/// a structure a call returns are no lvalue (C99 6.3.2.1p1, 6.5.2.3p3).
+#[test]
+fn a_cast_to_a_union_and_a_call_result_are_values() {
+    let decls = "union IL { int i; long l; };\n\
+                 union S { unsigned u; double d; };\n\
+                 struct T { int i; };\n\
+                 struct T f(void);\n";
+    for (body, needle) in [
+        (
+            "union IL *p = &(union IL)x; return p != 0;",
+            "bad address-of",
+        ),
+        ("(union IL)x = v;", "bad lvalue in assignment"),
+        ("((union IL)x).i = 5;", "bad lvalue in assignment"),
+        ("++((union IL)x).i;", "bad lvalue in pre-increment"),
+        (
+            "int *q = &((union IL)x).i; return q != 0;",
+            "bad address-of",
+        ),
+        (
+            "union S s = (union S)x; return s.u;",
+            "invalid cast from `int` to `union S`",
+        ),
+        ("f().i = 5;", "bad lvalue in assignment"),
+        ("struct T *t = &f(); return t != 0;", "bad address-of"),
+        ("f() = f();", "bad lvalue in assignment"),
+    ] {
+        let src = format!(
+            "{decls}int main(void) {{ int x = 1; union IL v = {{0}}; (void)v; {body} return 0; }}\n"
+        );
+        expect_compile_error(&src, needle);
+    }
+}
+
+/// A member of a value is no lvalue (C99 6.5.2.3p3) for any store: a
+/// bit-field, a 128-bit integer or a vector member, and a vector a call
+/// returns, under `=`, `op=`, `++` and `--`.
+#[test]
+fn no_store_takes_a_member_of_a_value() {
+    let decls = "typedef int v4 __attribute__((vector_size(16)));\n\
+                 struct B { int m; unsigned bf : 3; __int128 w; v4 v; };\n\
+                 union U { unsigned bf : 3; int i; };\n\
+                 struct B g(void);\n\
+                 v4 fv(void);\n";
+    for (body, needle) in [
+        ("g().bf = 1;", "bad lvalue in assignment"),
+        ("g().bf += 1;", "bad lvalue in compound assignment"),
+        ("++g().bf;", "bad lvalue in pre-increment"),
+        ("g().bf--;", "bad lvalue in post-increment"),
+        ("(g().bf)++;", "bad lvalue in post-increment"),
+        ("(x ? b1 : b2).bf = 1;", "bad lvalue in assignment"),
+        ("(0, b1).bf = 1;", "bad lvalue in assignment"),
+        ("({ b1; }).bf = 1;", "bad lvalue in assignment"),
+        ("(b1 = b2).bf = 1;", "bad lvalue in assignment"),
+        ("((union U)x).bf = 1;", "bad lvalue in assignment"),
+        ("g().w += 1;", "bad lvalue in compound assignment"),
+        ("++g().w;", "bad lvalue in pre-increment"),
+        ("g().v += w4;", "bad lvalue in compound assignment"),
+        ("fv() += w4;", "bad lvalue in compound assignment"),
+        ("fv() = w4;", "bad lvalue in assignment"),
+    ] {
+        let src = format!(
+            "{decls}int main(void) {{ int x = 1; struct B b1 = {{0}}, b2 = {{0}}; \
+             v4 w4 = {{0}}; (void)w4; {body} return 0; }}\n"
+        );
+        expect_compile_error(&src, needle);
+    }
+}
+
 /// C11 6.7.5p2: no alignment specifier in the declaration of a bit-field,
 /// whether it leads the member group or names one declarator of it; gcc's
 /// `aligned` attribute on a bit-field stays accepted.

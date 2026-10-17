@@ -1262,7 +1262,7 @@ impl Compiler {
     /// integer (its lvalue's value is its address, so there is no
     /// trailing load at all).
     fn direct_inc_lvalue(&self) -> Option<(super::super::ast::ExprId, i64)> {
-        let lv = self.ast_acc?;
+        let lv = self.object_lvalue()?;
         if let super::super::ast::Expr::Member {
             bitfield: Some(_),
             ty,
@@ -2939,6 +2939,9 @@ impl Compiler {
             self.reject_incomplete_value(self.ty)?;
             self.check_cast(t, self.ty)?;
         }
+        if let Some(member) = self.union_cast_member(t, self.ty) {
+            return self.union_cast_literal(t, member);
+        }
         let cast_child_ast = self.ast_acc;
         // A cast between floating and integer converts; one within a class
         // (integer / pointer, float / double) keeps the bit pattern.
@@ -3142,6 +3145,9 @@ impl Compiler {
             None
         };
         self.ty += Ty::Ptr as i64;
+        if is_struct_value_ty(pre_addr_ty) && !self.value_designates_object() {
+            return Err(self.compile_err(Code::INVALID_OPERANDS, "bad address-of"));
+        }
         if is_struct_value_ty(pre_addr_ty) {
             // The address stands; an `AddrOf` node over the lvalue forms the
             // walker handles records the pointer type, so a consumer tells a
@@ -3226,11 +3232,25 @@ impl Compiler {
         self.require_category(self.ty, category, Code::INVALID_OPERANDS, &what)
     }
 
+    /// The member of union `to` a GNU cast from `from` initializes: the
+    /// first of `from`'s unqualified type, an array or a bit-field aside.
+    pub(super) fn union_cast_member(&self, to: i64, from: i64) -> Option<super::StructField> {
+        let unqualified = super::types::unqualified_object_ty;
+        let u = self.structs.get(struct_id_of(to)).filter(|u| u.is_union)?;
+        let plain = |f: &&super::StructField| f.array_size == 0 && f.bit_width == 0;
+        (is_struct_value_ty(to) && unqualified(to) != unqualified(from))
+            .then(|| {
+                (u.fields.iter().filter(plain)).find(|f| unqualified(f.ty) == unqualified(from))
+            })
+            .flatten()
+            .cloned()
+    }
+
     /// C99 6.5.4p2 and C11 6.5.4p4: a cast to a non-`void` type converts a
     /// scalar to a scalar, and no pointer to or from a floating type. GNU C
     /// adds a cast to the operand's own type, a union from a member's type,
     /// and a cast involving a vector.
-    fn check_cast(&self, to: i64, from: i64) -> Result<(), C5Error> {
+    pub(super) fn check_cast(&self, to: i64, from: i64) -> Result<(), C5Error> {
         let bare = |ty: i64| {
             super::types::unqualified_object_ty(ty) & !(UNSIGNED_BIT | super::types::PLAIN_CHAR_BIT)
         };
@@ -3240,10 +3260,7 @@ impl Compiler {
                 bare(to) == bare(from)
                     || is_vector_ty(&self.structs, to)
                     || is_vector_ty(&self.structs, from)
-                    || (is_struct_value_ty(to)
-                        && self.structs.get(struct_id_of(to)).is_some_and(|u| {
-                            u.is_union && u.fields.iter().any(|f| bare(f.ty) == bare(from))
-                        }))
+                    || self.union_cast_member(to, from).is_some()
             }
             _ => true,
         };
@@ -3707,7 +3724,7 @@ impl Compiler {
         // as the read node the member parser built, since the parentheses
         // hid the `=`; it becomes a bitfield store.
         let bf_lvalue = self
-            .ast_acc
+            .object_lvalue()
             .and_then(|id| match &self.ast.exprs[id as usize] {
                 super::super::ast::Expr::Member {
                     obj,
@@ -3728,7 +3745,7 @@ impl Compiler {
                 let res_ty = self.ty;
                 self.ast_emit_bitfield_assign(obj, field_off, desc, rhs, res_ty);
             }
-        } else if lhs_is_struct_value {
+        } else if lhs_is_struct_value && self.value_designates_object() {
             self.parse_struct_assignment(lhs_ty)?;
         } else if self.rewrite_trailing_load_as_psh().is_some() {
             // The trailing load becomes a push of the address. The dead-store
@@ -3847,7 +3864,7 @@ impl Compiler {
         self.require_modifiable(lhs_ty, "assignment")?;
         // The lexer left the operator's token in `lex.ival`.
         let binop = self.lex.ival;
-        let compound_lhs_ast = self.ast_acc;
+        let compound_lhs_ast = self.object_lvalue();
         // GCC vector extension: `v OP= w` is `v = v OP w` (C99 6.5.16.2p3),
         // with the side-effect-free lvalue as both store target and
         // operand.
@@ -5145,6 +5162,14 @@ impl Compiler {
                 "assignment"
             };
             self.require_modifiable(field_ty, what)?;
+            if !obj_ast.is_none_or(|obj| self.member_designates_object(obj)) {
+                let op = if is_bf_assign {
+                    "assignment"
+                } else {
+                    "post-increment"
+                };
+                return Err(self.compile_err(Code::INVALID_OPERANDS, format!("bad lvalue in {op}")));
+            }
         }
         let bf_desc = super::super::ast::BitfieldDesc {
             bit_offset: field.bit_offset as u8,

@@ -3297,6 +3297,11 @@ impl Compiler {
         struct_id: usize,
         target: InitTarget,
     ) -> Result<(), C5Error> {
+        if let InitTarget::Data { base } = target
+            && self.take_union_cast_init(struct_id, base)?
+        {
+            return Ok(());
+        }
         if self.lex.tk != '{' {
             return Err(self.compile_err(
                 Code::INVALID_INITIALIZER,
@@ -3307,6 +3312,36 @@ impl Compiler {
         self.fill_struct_fields_t(struct_id, target, true)?;
         self.next()?; // consume `}`
         Ok(())
+    }
+
+    /// A GNU cast to union `struct_id` as a constant initializer at `base`,
+    /// `(union U)v`: the member of `v`'s type takes `v`, the rest stays
+    /// zero. `false`, the cursor in place, for any other initializer.
+    fn take_union_cast_init(&mut self, struct_id: usize, base: usize) -> Result<bool, C5Error> {
+        if self.lex.tk != '(' || !self.structs[struct_id].is_union {
+            return Ok(false);
+        }
+        let (snap, data_snap) = (self.lex.snapshot(), self.data.len());
+        let union_ty = struct_ty_for(struct_id);
+        self.next()?;
+        let cast = self.lex_is_type_start() && {
+            let name = self.parse_const_type_name()?;
+            let to = super::types::unqualified_object_ty(name.ty);
+            self.accept(')')? && self.lex.tk != '{' && to == union_ty
+        };
+        if !cast {
+            self.rewind_speculation(snap, data_snap);
+            return Ok(false);
+        }
+        let v = self.parse_const_expr_unary_val()?;
+        let leaf = self.init_scalar_of(v)?;
+        self.check_cast(union_ty, leaf.ty)?;
+        let Some(m) = self.union_cast_member(union_ty, leaf.ty) else {
+            return Err(self.compile_err(Code::INVALID_OPERANDS, "cast to a union of its own type"));
+        };
+        let size = self.size_of_type(m.ty);
+        self.write_init_value(base + m.offset, size, leaf.value, leaf.reloc, m.ty)?;
+        Ok(true)
     }
 
     /// Fill a (possibly multi-dimensional) array of structs from a brace
@@ -3910,6 +3945,12 @@ impl Compiler {
         braced: bool,
     ) -> Result<(), C5Error> {
         let var_offset = target.base();
+        if let InitTarget::Data { base } = target
+            && !braced
+            && self.take_union_cast_init(struct_id, base)?
+        {
+            return Ok(());
+        }
         let n_fields = self.structs[struct_id].fields.len();
         let mut pos: usize = 0;
         let mut items = 0usize;

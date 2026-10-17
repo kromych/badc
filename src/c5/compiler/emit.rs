@@ -15,14 +15,16 @@
 //! through `current_scalar_load_kind` and converting the trailing
 //! rvalue load into a stack push or address producer.
 
-use super::super::ast::{Expr, ExprId, SrcPos, UnOp};
+use super::super::ast::{Expr, ExprId, SrcPos, UnOp, expr_ty};
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::ir::LoadKind;
 use super::super::symbol::{BindingInfo, Symbol};
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{is_bool_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, load_op_for};
+use super::types::{
+    is_bool_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, load_op_for,
+};
 
 #[cfg(test)]
 thread_local! {
@@ -447,6 +449,36 @@ impl Compiler {
         self.pending.last_imm_was_zero
     }
 
+    /// Whether the value in hand designates an object (C99 6.3.2.1p1), not
+    /// a structure a call, `?:`, comma, assignment, `({...})` or cast yields.
+    pub(super) fn value_designates_object(&self) -> bool {
+        self.ast_acc.is_none_or(|id| self.designates_object(id))
+    }
+
+    /// The node in hand as an lvalue: absent where it designates no object.
+    pub(super) fn object_lvalue(&self) -> Option<ExprId> {
+        self.ast_acc.filter(|&id| self.designates_object(id))
+    }
+
+    fn designates_object(&self, id: ExprId) -> bool {
+        match self.ast.expr(id) {
+            Expr::Call { .. }
+            | Expr::Ternary { .. }
+            | Expr::Comma { .. }
+            | Expr::Assign { .. }
+            | Expr::StmtExpr { .. }
+            | Expr::Cast { .. } => false,
+            Expr::Member { obj, .. } => self.member_designates_object(*obj),
+            _ => true,
+        }
+    }
+
+    /// Whether a member of `obj`, reached by `.` or `->`, is an object
+    /// (C99 6.5.2.3p3-4).
+    pub(super) fn member_designates_object(&self, obj: ExprId) -> bool {
+        expr_ty(self.ast.expr(obj)).is_some_and(is_pointer_ty) || self.designates_object(obj)
+    }
+
     /// Inspect `ast_acc` for the load kind the current expression
     /// just produced. Returns `Some(kind)` when the topmost
     /// `Expr` produces a scalar value via a single load
@@ -522,7 +554,9 @@ impl Compiler {
     /// The pattern shows up in pre/post-increment, plain
     /// assignment, and compound assignment.
     pub(super) fn rewrite_trailing_load_as_psh(&mut self) -> Option<LoadKind> {
-        let load_op = self.current_scalar_load_kind()?;
+        let load_op = self
+            .current_scalar_load_kind()
+            .filter(|_| self.value_designates_object())?;
         // The address producer's value moves to the c5 stack;
         // push the current `ast_acc` slot onto the parser vstack
         // and clear the accumulator.
@@ -570,7 +604,7 @@ impl Compiler {
     /// success. Used by `&expr` to convert an rvalue load chain
     /// into an lvalue-address chain.
     pub(super) fn pop_trailing_scalar_load(&mut self) -> bool {
-        if self.current_scalar_load_kind().is_none() {
+        if self.current_scalar_load_kind().is_none() || !self.value_designates_object() {
             return false;
         }
         // The load is gone -- the symbol's value never gets

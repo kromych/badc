@@ -2857,6 +2857,47 @@ impl Compiler {
         Ok(())
     }
 
+    /// GNU C cast to a union, `(union U)v`: the compound literal `(union
+    /// U){ .m = v }` of the member `m` of `v`'s type, the operand just parsed.
+    pub(super) fn union_cast_literal(
+        &mut self,
+        t: i64,
+        m: super::StructField,
+    ) -> Result<(), C5Error> {
+        use super::super::ast::{
+            LocalInit, LocalInitPrelude, RuntimeInitElement, RuntimeInitValue,
+        };
+        let slots = self.slots_of_type(t);
+        let slot = self.reserve_object_slots(t, slots)?;
+        self.record_multi_cell_temp(slot, slots.max(1), t);
+        self.convert_assign_rhs(m.ty);
+        let Some(value) = self.ast_acc else {
+            return Err(self.compile_err(Code::INTERNAL, "cast to a union has no operand"));
+        };
+        let element = RuntimeInitElement {
+            offset: m.offset as i64,
+            value: RuntimeInitValue::Expr(value),
+            ty: m.ty,
+            bitfield: None,
+        };
+        let size_bytes = self.size_of_type(t) as i64;
+        let init = LocalInit::Runtime {
+            zero_init: Some(LocalInitPrelude::Fill {
+                byte: 0,
+                size_bytes,
+            }),
+            elements: alloc::vec![element],
+        };
+        self.commit_block_slot(slot);
+        self.ast_emit_compound_literal(slot, t, 0, init);
+        // A cast yields a value, which no lvalue path takes.
+        self.ast_apply_assign_conv(t);
+        self.drop_operand_array_decay();
+        self.pending.object_ref = None;
+        self.ty = t;
+        Ok(())
+    }
+
     /// Number of 8-byte stack slots a local declaration consumes,
     /// honouring an array dimension if present. For non-arrays this
     /// is just `slots_of_type(ty)`; for an array of N Ts the

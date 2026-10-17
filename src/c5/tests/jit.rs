@@ -174,6 +174,35 @@ fn asm_defined_names_bind_to_their_definitions() {
     assert_eq!(jit_exit_native_optimized(src, &["asm-defined-opt"]), 0);
 }
 
+/// A pointer initializer naming what the unit's asm defines binds to it, at
+/// the start and past the end of a read-only and a writable table; one
+/// naming nothing defined is an undefined reference.
+#[test]
+fn an_initializer_naming_an_asm_definition_binds_to_it() {
+    let src = r#"
+__asm__(".section .rodata\n.globl ro_t, ro_t_end\n.p2align 3\nro_t: .quad 1, 2\nro_t_end:\n"
+        ".data\n.globl rw_t, rw_t_end\n.p2align 3\nrw_t: .quad 3, 4\nrw_t_end:\n.text\n");
+extern const long long ro_t[], ro_t_end[];
+extern long long rw_t[], rw_t_end[];
+const long long *const ptrs[] = {ro_t, ro_t_end - 1, rw_t, rw_t_end - 1};
+int main(void) {
+    return (*ptrs[0] != 1) + (*ptrs[1] != 2) + (*ptrs[2] != 3) + (*ptrs[3] != 4);
+}
+"#;
+    assert_eq!(jit_exit(src, &["asm-init"]), 0);
+    let undefined =
+        "extern int nowhere_obj;\nint *p = &nowhere_obj;\nint main(void) { return *p; }\n";
+    let program = Compiler::new(super::with_prelude(undefined))
+        .compile()
+        .expect("compile failed");
+    let err = jit_run(&program, &[]).expect_err("an undefined name");
+    assert!(
+        err.to_string()
+            .contains("undefined reference to `nowhere_obj`"),
+        "{err}"
+    );
+}
+
 /// Inline asm reaches an imported object through its GOT slot, which stands
 /// in for its address alone; a load or store in place is refused.
 #[test]

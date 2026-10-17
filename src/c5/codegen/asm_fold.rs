@@ -120,6 +120,12 @@ pub(crate) fn fold_asm_sections(
                 .iter()
                 .map(|r| r.symbol_name.clone()),
         )
+        .chain(
+            build
+                .extern_data_relocs
+                .iter()
+                .map(|r| r.symbol_name.clone()),
+        )
         .chain(slot_names)
         .collect();
     let mut wanted: alloc::collections::BTreeSet<usize> = build

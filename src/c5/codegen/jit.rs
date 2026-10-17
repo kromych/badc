@@ -755,23 +755,24 @@ mod jit_impl {
                 bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
             }
         }
-        // Pointer-to-extern-data initializers (`int *p = &extern_g;`).
-        // Resolve each symbol's runtime address through the same loader
-        // handles the GOT uses and write it into the data slot. Unlike a
-        // missing function import (a 0 GOT slot that faults only if
-        // called), a NULL data pointer is the defect being fixed, so an
-        // unresolved symbol is a hard error.
+        // Pointer-to-extern-data initializers (`int *p = &extern_g;`): a
+        // name the unit's asm defines binds to it, any other resolves
+        // through the loader handles the GOT uses. Unlike a missing
+        // function import (a 0 GOT slot that faults only if called), a NULL
+        // data pointer is the defect being fixed, so an unresolved symbol
+        // is an undefined reference.
         if !build.extern_data_relocs.is_empty()
             && let Some(region) = &mut data_region
         {
             let bytes = region.as_mut_slice(build.data.len());
             for r in &build.extern_data_relocs {
-                let addr = got_region.resolve_symbol(&r.symbol_name);
+                let addr = match defs.get(r.symbol_name.as_str()) {
+                    Some(&super::super::UnitDef::Data(off)) => data_vmaddr + off,
+                    Some(&super::super::UnitDef::Text(off)) => code_vmaddr + off as u64,
+                    None => got_region.resolve_symbol(&r.symbol_name),
+                };
                 if addr == 0 {
-                    return Err(C5Error::internal(format!(
-                        "JIT: unresolved extern data symbol `{}`",
-                        r.symbol_name
-                    )));
+                    return Err(undefined_reference(&r.symbol_name));
                 }
                 let off = r.data_offset as usize;
                 if off + 8 > bytes.len() {

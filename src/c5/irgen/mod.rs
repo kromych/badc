@@ -45,6 +45,8 @@ mod types;
 mod vector;
 
 pub(crate) use function::walk_function;
+pub(crate) use types::fold_const_int_binop;
+#[cfg(test)]
 pub(crate) use types::fold_int_binop;
 
 /// The low and high 64-bit halves of a 128-bit value, in that order.

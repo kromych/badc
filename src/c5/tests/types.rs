@@ -3320,6 +3320,27 @@ fn a_cast_to_an_array_or_function_type_is_rejected() {
     }
 }
 
+/// C99 6.3.2.3p3, 6.5.15p6: a null pointer constant is valued in its operands' types.
+#[test]
+fn a_null_pointer_constant_is_valued_in_its_operands_types() {
+    use crate::Compiler;
+    let src = "extern int *ip;\n\
+               #define TYPE_OF(e) __typeof__(1 ? ip : (void *)(e))\n\
+               #define IS(t, e, n) _Static_assert(__builtin_types_compatible_p(TYPE_OF(e), t), n);\n\
+               IS(void *, -2 < 0xffffffffu, \"1\")\n\
+               IS(int *, -4 / 2u - 2147483646u, \"2\")\n\
+               IS(int *, -2 < 1u, \"3\")\n\
+               IS(int *, (unsigned char)256, \"4\")\n\
+               IS(void *, (long long)(unsigned)-1 + 1, \"5\")\n\
+               IS(void *, (char *)0, \"6\")\n\
+               IS(int *, 0, \"7\")\n\
+               _Static_assert(__builtin_types_compatible_p(__typeof__(1 ? (int *)0 : (void *)0), int *), \"8\");\n\
+               int main(void) { return 0; }\n";
+    Compiler::new(src.to_string())
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+}
+
 #[test]
 fn the_address_of_a_function_designator_is_the_function_pointer() {
     // C99 6.5.3.2p3: `&` on an operand of function type yields a pointer

@@ -3,7 +3,7 @@
 
 use super::super::access::{seg_copy_bytes, store_kind_for, store_kind_width, store_place};
 use super::super::atomic::{RmwOpen, RmwPlace};
-use super::super::types::{is_floating_scalar, is_fp_arith_op, type_size_bytes};
+use super::super::types::{is_floating_scalar, is_fp_arith_op};
 use super::super::*;
 use super::postfix::MemberRef;
 use crate::c5::ast::expr_ty;
@@ -71,16 +71,7 @@ impl<'a> Walker<'a> {
         lhs: ExprId,
         rhs: ExprId,
     ) -> Option<u32> {
-        if !matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu) {
-            return None;
-        }
-        let sz =
-            |id: ExprId| expr_ty(self.ast.expr(id)).map_or(8, |t| type_size_bytes(t, self.target));
-        match type_size_bytes(ty, self.target).max(sz(lhs)).max(sz(rhs)) {
-            0..=4 => Some(32),
-            5..=8 => Some(64),
-            _ => None,
-        }
+        super::super::types::divmod_operand_width(self.ast, self.target, op, ty, (lhs, rhs))
     }
 
     /// Re-derive `op` from the operand types when either is
@@ -113,53 +104,18 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// The mask both operands of integer `op` at common type `ty` take
-    /// before it reads them, or 0. C99 6.3.1.8 converts a signed operand of
-    /// an unsigned relational compare, divide or modulo at 32 bits to the
-    /// unsigned common type, discarding the sign-extended high bits it
-    /// carries in the 64-bit register; left in place they make the operator
-    /// read a huge value. An unsigned operand, a non-negative literal and an
-    /// 8-byte compare operand need no mask.
     fn operand_mask(&self, op: BinOp, ty: i64, lhs: ExprId, rhs: ExprId) -> i64 {
-        if matches!(op, BinOp::Divu | BinOp::Modu) {
-            return match self.divmod_operand_width(op, ty, lhs, rhs) {
-                Some(32) => 0xffff_ffff,
-                _ => 0,
-            };
-        }
-        if !matches!(op, BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge) {
-            return 0;
-        }
-        let needs = |id: ExprId| -> (bool, usize) {
-            let e = self.ast.expr(id);
-            let ty = expr_ty(e);
-            let sz = ty.map_or(8, |t| type_size_bytes(t, self.target));
-            let signed = ty.is_some_and(|t| t & UNSIGNED_BIT == 0);
-            let nonneg_lit = matches!(e, Expr::IntLit { val, .. } if *val >= 0);
-            (signed && !nonneg_lit, sz)
-        };
-        let (l_needs, lsz) = needs(lhs);
-        let (r_needs, rsz) = needs(rhs);
-        if lsz <= 4 && rsz <= 4 && (l_needs || r_needs) {
-            0xffff_ffffi64
-        } else {
-            0
-        }
+        super::super::types::const_operand_mask(self.ast, self.target, op, ty, (lhs, rhs))
     }
 
-    /// Integer `op` at common type `ty` over the constant values `l` and
-    /// `r` of `lhs` and `rhs`, converted as [`Self::operand_mask`] has the
-    /// operator read them; `None` for a zero divisor.
     pub(super) fn fold_const_binop(
         &self,
         op: BinOp,
         ty: i64,
-        (lhs, l): (ExprId, i64),
-        (rhs, r): (ExprId, i64),
+        lhs: (ExprId, i64),
+        rhs: (ExprId, i64),
     ) -> Option<i64> {
-        let m = self.operand_mask(op, ty, lhs, rhs);
-        let (l, r) = if m == 0 { (l, r) } else { (l & m, r & m) };
-        crate::c5::ir::eval_int_binop(op, l, r).ok()
+        super::super::types::fold_const_int_binop(self.ast, self.target, op, ty, lhs, rhs)
     }
 
     /// Lower a floating-point binop over walked operands. C99 6.3.1.8

@@ -1908,8 +1908,9 @@ fn an_attribute_after_a_declarator_binds_to_it_alone() {
 fn a_block_scope_prototype_takes_the_attributes_a_file_scope_one_does() {
     // A block-scope function declaration names the entity a file-scope one
     // would (C99 6.2.2p4), and gcc and clang give it the same attributes:
-    // `weak`, an asm label followed by an attribute, the hidden extent of a
-    // `#pragma GCC visibility`, and `constructor`.
+    // `weak`, leading a later declarator of the list too, an asm label
+    // followed by an attribute, the hidden extent of a `#pragma GCC
+    // visibility`, and `constructor`.
     use crate::c5::Target;
     use crate::c5::linker::parse_native_elf;
     let src = "\
@@ -1917,7 +1918,9 @@ fn a_block_scope_prototype_takes_the_attributes_a_file_scope_one_does() {
             __attribute__((weak)) extern int wfn(void);\n\
             int helper(int) __asm__(\"helper_label\") __attribute__((noinline));\n\
             __attribute__((constructor)) void my_init(void);\n\
-            return wfn() + helper(1);\n\
+            int plain(int), __attribute__((weak)) wlist(int);\n\
+            int x = 1, __attribute__((weak)) wafter(int), __attribute__((weak)) *wptr(int);\n\
+            return wfn() + helper(1) + plain(x) + wlist(2) + wafter(3) + *wptr(4);\n\
         }\n\
         #pragma GCC visibility push(hidden)\n\
         int hidden_user(void) { int hidden_fn(int); return hidden_fn(0); }\n\
@@ -1931,6 +1934,10 @@ fn a_block_scope_prototype_takes_the_attributes_a_file_scope_one_does() {
         };
         // (STB_*, STV_*): GLOBAL 1, WEAK 2; DEFAULT 0, HIDDEN 2.
         assert_eq!(sym("wfn"), Some((2, 0)), "{target:?}");
+        assert_eq!(sym("plain"), Some((1, 0)), "{target:?}");
+        for weak in ["wlist", "wafter", "wptr"] {
+            assert_eq!(sym(weak), Some((2, 0)), "{target:?} {weak}");
+        }
         assert_eq!(sym("helper_label"), Some((1, 0)), "{target:?}");
         assert_eq!(sym("hidden_fn"), Some((1, 2)), "{target:?}");
         assert_eq!(obj.init_funcs.len(), 1, "{target:?}");

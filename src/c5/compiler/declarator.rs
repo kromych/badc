@@ -84,6 +84,8 @@ impl Compiler {
         let proto_snap = self.lex.snapshot();
         let attrs_snap = self.pending.attrs.clone();
         let base_fn = self.carriers_fn_type();
+        // Attributes may begin a declarator and describe its entity.
+        self.skip_attribute_specifiers()?;
         let mut ret_ptr_levels: i64 = 0;
         while self.lex.tk == Token::MulOp {
             ret_ptr_levels += 1;

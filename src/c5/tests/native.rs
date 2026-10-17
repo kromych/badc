@@ -83,7 +83,7 @@ fn emit_sign_run(program: &crate::c5::Program, stem: &str, opts: NativeOptions) 
     set_executable(&path);
     codesign(&path);
 
-    let output = super::output_when_not_busy(|| Command::new(&path));
+    let output = super::output_when_not_busy(|| super::image_command(&path));
     let _ = std::fs::remove_file(&path);
     if let Some(code) = output.status.code() {
         RunOutcome::Exit(code)
@@ -245,7 +245,7 @@ fn link_run_capture(src: &str, stem: &str) -> (i32, String) {
     }
     set_executable(&path);
     codesign(&path);
-    let output = super::output_when_not_busy(|| Command::new(&path));
+    let output = super::output_when_not_busy(|| super::image_command(&path));
     let _ = std::fs::remove_file(&path);
     let code = output.status.code().unwrap_or(-1);
     (code, String::from_utf8_lossy(&output.stdout).into_owned())
@@ -423,10 +423,7 @@ fn faulting_fixture_dies_with_the_fault_signal_blocked() {
     codesign(&path);
 
     let saved = super::signals::block_on_this_thread(super::signals::STORE_TO_READ_ONLY);
-    let spawned = super::image_command(&path)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn();
+    let spawned = super::image_command(&path).spawn();
     super::signals::set_thread_mask(&saved);
 
     let mut child = spawned.expect("spawn the produced binary");
@@ -472,7 +469,7 @@ int main(void) { return *third == 30 ? 0 : 1; }\n";
     }
     set_executable(&path);
     codesign(&path);
-    let output = super::output_when_not_busy(|| Command::new(&path));
+    let output = super::output_when_not_busy(|| super::image_command(&path));
     let _ = std::fs::remove_file(&path);
     assert_eq!(output.status.code(), Some(0));
 }
@@ -913,7 +910,7 @@ where
 
     let args: Vec<String> = args.into_iter().map(|s| s.as_ref().to_string()).collect();
     let output = super::output_when_not_busy(|| {
-        let mut cmd = Command::new(&bin_path);
+        let mut cmd = super::image_command(&bin_path);
         cmd.args(&args);
         cmd
     });
@@ -949,7 +946,7 @@ fn file_io_natively() {
     codesign(&bin_path);
 
     let output = super::output_when_not_busy(|| {
-        let mut cmd = Command::new(&bin_path);
+        let mut cmd = super::image_command(&bin_path);
         cmd.current_dir(&cwd);
         cmd
     });
@@ -979,7 +976,7 @@ fn getenv_value_natively() {
     codesign(&bin_path);
 
     let output = super::output_when_not_busy(|| {
-        let mut cmd = Command::new(&bin_path);
+        let mut cmd = super::image_command(&bin_path);
         cmd.env("C4RS_TEST_GETENV", "Vox");
         cmd
     });
@@ -1034,7 +1031,7 @@ fn string_extensions_join_the_macos_link() {
     std::fs::write(&path, &bytes).expect("write temp file");
     set_executable(&path);
     codesign(&path);
-    let output = super::output_when_not_busy(|| Command::new(&path));
+    let output = super::output_when_not_busy(|| super::image_command(&path));
     let _ = std::fs::remove_file(&path);
     assert_eq!(
         output.status.code(),
@@ -1065,7 +1062,7 @@ fn unistd_extensions_join_the_macos_link() {
     std::fs::write(&path, &bytes).expect("write temp file");
     set_executable(&path);
     codesign(&path);
-    let output = super::output_when_not_busy(|| Command::new(&path));
+    let output = super::output_when_not_busy(|| super::image_command(&path));
     let _ = std::fs::remove_file(&path);
     assert_eq!(
         output.status.code(),

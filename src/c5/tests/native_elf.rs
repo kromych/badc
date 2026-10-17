@@ -1173,7 +1173,7 @@ fn frame_past_the_immediate_reach_runs() {
     }
     set_executable(&path);
     let output = super::output_when_not_busy(|| {
-        let mut c = Command::new("sh");
+        let mut c = super::image_command("sh");
         c.arg("-c")
             .arg(format!("ulimit -s 65536 && exec {}", path.display()));
         c

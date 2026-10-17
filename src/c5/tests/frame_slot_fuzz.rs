@@ -1700,7 +1700,7 @@ fn reference_accs(cc: &str, cases: &[Case], tag: u64) -> Result<Vec<u64>, String
         .output()
         .map_err(|e| format!("spawn {cc}: {e}"))?;
     let result = if built.status.success() {
-        let o = super::output_when_not_busy(|| std::process::Command::new(&exe));
+        let o = super::output_when_not_busy(|| super::image_command(&exe));
         if o.status.success() {
             String::from_utf8_lossy(&o.stdout)
                 .lines()

@@ -85,13 +85,9 @@ fn exec_with_retry(path: &Path) -> std::io::Result<std::process::Output> {
 /// (environment, working directory). The closure is called afresh per
 /// attempt because `Command` is consumed by `output`.
 fn exec_with_retry_cmd(
-    mut build: impl FnMut() -> Command,
+    mut build: impl FnMut() -> super::ImageCommand,
 ) -> std::io::Result<std::process::Output> {
-    let mut run = || {
-        let mut cmd = build();
-        super::with_default_signals(&mut cmd);
-        cmd.output()
-    };
+    let mut run = || build().output();
     for attempt in 0..10 {
         match run() {
             Ok(o) => return Ok(o),
@@ -1206,7 +1202,7 @@ fn badc_caller_oversize_struct_return_from_foreign() {
     // ETXTBSY: the image was just written, and a concurrent test in
     // this process may still hold a writable handle to its own output.
     let output = exec_with_retry_cmd(|| {
-        let mut c = Command::new(&exe_path);
+        let mut c = super::image_command(&exe_path);
         c.env("LD_LIBRARY_PATH", &dir);
         c
     })

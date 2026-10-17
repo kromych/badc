@@ -149,7 +149,6 @@ pub mod signals {
     #[cfg(not(target_vendor = "apple"))]
     const SIG_SETMASK: c_int = 2;
 
-    const SIG_DFL: usize = 0;
     const SIG_IGN: usize = 1;
     const SIG_ERR: usize = usize::MAX;
 
@@ -165,15 +164,11 @@ pub mod signals {
     /// `SIG_IGN` without changing what the process does.
     pub const WINDOW_CHANGE: c_int = 28;
 
-    /// Darwin defines 31 signals and Linux 64. `signal` rejects what a
-    /// host does not define, along with `SIGKILL` and `SIGSTOP`.
-    const NSIG: c_int = 64;
-
     unsafe extern "C" {
         fn sigemptyset(set: *mut Set) -> c_int;
+        fn sigfillset(set: *mut Set) -> c_int;
         fn sigaddset(set: *mut Set, sig: c_int) -> c_int;
         fn sigismember(set: *const Set, sig: c_int) -> c_int;
-        fn sigprocmask(how: c_int, set: *const Set, old: *mut Set) -> c_int;
         fn pthread_sigmask(how: c_int, set: *const Set, old: *mut Set) -> c_int;
         fn signal(sig: c_int, handler: usize) -> usize;
     }
@@ -182,6 +177,12 @@ pub mod signals {
         pub fn empty() -> Self {
             let mut set = Set([0; 256]);
             unsafe { sigemptyset(&mut set) };
+            set
+        }
+
+        pub fn full() -> Self {
+            let mut set = Set([0; 256]);
+            unsafe { sigfillset(&mut set) };
             set
         }
 
@@ -194,20 +195,6 @@ pub mod signals {
         pub fn holds(&self, sig: c_int) -> bool {
             unsafe { sigismember(self, sig) == 1 }
         }
-    }
-
-    /// Unblock every signal and put every disposition back to
-    /// `SIG_DFL`. Runs between `fork` and `exec`, so it calls only
-    /// what POSIX.1 2.4.3 lists as async-signal-safe.
-    pub fn reset_to_default() -> std::io::Result<()> {
-        let empty = Set::empty();
-        if unsafe { sigprocmask(SIG_SETMASK, &empty, core::ptr::null_mut()) } != 0 {
-            return Err(std::io::Error::last_os_error());
-        }
-        for sig in 1..=NSIG {
-            unsafe { signal(sig, SIG_DFL) };
-        }
-        Ok(())
     }
 
     /// Block `sig` on the calling thread and return the previous mask.
@@ -250,9 +237,9 @@ pub mod signals {
     }
 }
 
-/// A [`Command`](std::process::Command) for a program the harness runs:
+/// `posix_spawn`, through which the harness runs every image it produces:
 /// the child starts with an empty signal mask and every disposition at
-/// `SIG_DFL`.
+/// `SIG_DFL`, set by the spawn itself.
 ///
 /// `exec` keeps the signal mask and every `SIG_IGN` disposition (POSIX.1
 /// 2.4.3), and `std::process::Command` resets neither -- it documents
@@ -260,30 +247,311 @@ pub mod signals {
 /// A fixture that starts with `SIGBUS` or `SIGSEGV` blocked or ignored
 /// does not die on a faulting store: the kernel leaves the signal
 /// pending and restarts the instruction, so the fixture spins at 100%
-/// CPU and the test that spawned it never returns.
-pub fn image_command(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
-    let mut cmd = std::process::Command::new(program);
-    with_default_signals(&mut cmd);
-    cmd
-}
-
-/// Apply [`image_command`]'s guarantee to a command built elsewhere.
+/// CPU and the test that spawned it never returns. A reset in a
+/// `pre_exec` closure needs `fork`, whose child in this many-threaded
+/// process runs the C library's `atfork` handlers: on macOS one of them
+/// aborts on a corrupt `os_once` gate, and the parent saw the abort as
+/// the image's `SIGKILL`. A spawned child runs no code before `exec`, and
+/// a failed `exec` is the spawn's error.
 #[cfg(unix)]
-pub fn with_default_signals(cmd: &mut std::process::Command) {
-    use std::os::unix::process::CommandExt;
-    // The closure runs in the forked child before `exec`, where only
-    // async-signal-safe calls are legal; `reset_to_default` uses those.
-    unsafe { cmd.pre_exec(signals::reset_to_default) };
+pub mod spawn {
+    use super::signals::Set;
+    use std::ffi::{CString, OsString};
+    use std::io::{Error, ErrorKind, Read, Result};
+    use std::os::fd::AsRawFd;
+    use std::os::raw::{c_char, c_int, c_short};
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::{Command, ExitStatus, Output};
+
+    /// Wider than `posix_spawnattr_t` and `posix_spawn_file_actions_t` on
+    /// every host the harness builds for (a pointer on Darwin, 336 and 80
+    /// bytes on glibc).
+    #[repr(C, align(8))]
+    struct Opaque([u8; 512]);
+
+    #[cfg(target_vendor = "apple")]
+    type Mode = u16;
+    #[cfg(not(target_vendor = "apple"))]
+    type Mode = u32;
+
+    const POSIX_SPAWN_SETSIGDEF: c_short = 0x04;
+    const POSIX_SPAWN_SETSIGMASK: c_short = 0x08;
+    const O_RDONLY: c_int = 0;
+    const O_WRONLY: c_int = 1;
+    const WNOHANG: c_int = 1;
+    const SIGKILL: c_int = 9;
+    const EINTR: i32 = 4;
+
+    unsafe extern "C" {
+        fn posix_spawnp(
+            pid: *mut c_int,
+            file: *const c_char,
+            actions: *const Opaque,
+            attr: *const Opaque,
+            argv: *const *const c_char,
+            envp: *const *const c_char,
+        ) -> c_int;
+        fn posix_spawnattr_init(attr: *mut Opaque) -> c_int;
+        fn posix_spawnattr_destroy(attr: *mut Opaque) -> c_int;
+        fn posix_spawnattr_setflags(attr: *mut Opaque, flags: c_short) -> c_int;
+        fn posix_spawnattr_setsigmask(attr: *mut Opaque, mask: *const Set) -> c_int;
+        fn posix_spawnattr_setsigdefault(attr: *mut Opaque, set: *const Set) -> c_int;
+        fn posix_spawn_file_actions_init(actions: *mut Opaque) -> c_int;
+        fn posix_spawn_file_actions_destroy(actions: *mut Opaque) -> c_int;
+        fn posix_spawn_file_actions_addopen(
+            actions: *mut Opaque,
+            fd: c_int,
+            path: *const c_char,
+            flags: c_int,
+            mode: Mode,
+        ) -> c_int;
+        fn posix_spawn_file_actions_adddup2(actions: *mut Opaque, fd: c_int, to: c_int) -> c_int;
+        fn posix_spawn_file_actions_addchdir_np(actions: *mut Opaque, dir: *const c_char) -> c_int;
+        fn waitpid(pid: c_int, status: *mut c_int, options: c_int) -> c_int;
+        fn kill(pid: c_int, sig: c_int) -> c_int;
+    }
+
+    fn c_string(s: &[u8]) -> Result<CString> {
+        CString::new(s).map_err(|e| Error::new(ErrorKind::InvalidInput, e))
+    }
+
+    fn check(rc: c_int) -> Result<()> {
+        if rc == 0 {
+            Ok(())
+        } else {
+            Err(Error::from_raw_os_error(rc))
+        }
+    }
+
+    /// The program, arguments, environment and directory `cmd` names, run
+    /// with its streams on `/dev/null` or, given `pipes`, its output on the
+    /// write ends.
+    fn start(cmd: &Command, pipes: Option<[&dyn AsRawFd; 2]>) -> Result<c_int> {
+        let program = c_string(cmd.get_program().as_bytes())?;
+        let mut argv = vec![program.clone()];
+        for a in cmd.get_args() {
+            argv.push(c_string(a.as_bytes())?);
+        }
+        let mut env: std::collections::BTreeMap<OsString, OsString> = std::env::vars_os().collect();
+        for (k, v) in cmd.get_envs() {
+            match v {
+                Some(v) => env.insert(k.to_owned(), v.to_owned()),
+                None => env.remove(k),
+            };
+        }
+        let mut envp = Vec::with_capacity(env.len());
+        for (k, v) in &env {
+            envp.push(c_string(&[k.as_bytes(), b"=", v.as_bytes()].concat())?);
+        }
+        let dir = (cmd.get_current_dir())
+            .map(|d| c_string(d.as_os_str().as_bytes()))
+            .transpose()?;
+        let null = c"/dev/null";
+        let mut actions = Opaque([0; 512]);
+        let mut attr = Opaque([0; 512]);
+        let mut pid: c_int = 0;
+        let argv_p: Vec<*const c_char> = argv
+            .iter()
+            .map(|a| a.as_ptr())
+            .chain([core::ptr::null()])
+            .collect();
+        let envp_p: Vec<*const c_char> = envp
+            .iter()
+            .map(|e| e.as_ptr())
+            .chain([core::ptr::null()])
+            .collect();
+        unsafe {
+            check(posix_spawn_file_actions_init(&mut actions))?;
+            if let Err(e) = check(posix_spawnattr_init(&mut attr)) {
+                posix_spawn_file_actions_destroy(&mut actions);
+                return Err(e);
+            }
+            let rc = (|| {
+                check(posix_spawn_file_actions_addopen(
+                    &mut actions,
+                    0,
+                    null.as_ptr(),
+                    O_RDONLY,
+                    0,
+                ))?;
+                for (fd, out) in [1, 2].into_iter().zip(pipes.into_iter().flatten()) {
+                    check(posix_spawn_file_actions_adddup2(
+                        &mut actions,
+                        out.as_raw_fd(),
+                        fd,
+                    ))?;
+                }
+                if pipes.is_none() {
+                    for fd in [1, 2] {
+                        check(posix_spawn_file_actions_addopen(
+                            &mut actions,
+                            fd,
+                            null.as_ptr(),
+                            O_WRONLY,
+                            0,
+                        ))?;
+                    }
+                }
+                if let Some(dir) = &dir {
+                    check(posix_spawn_file_actions_addchdir_np(
+                        &mut actions,
+                        dir.as_ptr(),
+                    ))?;
+                }
+                check(posix_spawnattr_setsigmask(&mut attr, &Set::empty()))?;
+                check(posix_spawnattr_setsigdefault(&mut attr, &Set::full()))?;
+                let flags = POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF;
+                check(posix_spawnattr_setflags(&mut attr, flags))?;
+                let (a, p) = (argv_p.as_ptr(), program.as_ptr());
+                check(posix_spawnp(
+                    &mut pid,
+                    p,
+                    &actions,
+                    &attr,
+                    a,
+                    envp_p.as_ptr(),
+                ))
+            })();
+            posix_spawnattr_destroy(&mut attr);
+            posix_spawn_file_actions_destroy(&mut actions);
+            rc?;
+        }
+        Ok(pid)
+    }
+
+    fn wait(pid: c_int, options: c_int) -> Result<Option<ExitStatus>> {
+        let mut status: c_int = 0;
+        loop {
+            match unsafe { waitpid(pid, &mut status, options) } {
+                0 => return Ok(None),
+                r if r == pid => return Ok(Some(ExitStatus::from_raw(status))),
+                _ => {
+                    let e = Error::last_os_error();
+                    if e.raw_os_error() != Some(EINTR) {
+                        return Err(e);
+                    }
+                }
+            }
+        }
+    }
+
+    /// `cmd.output()`, run through `posix_spawn`: standard input on
+    /// `/dev/null`, both output streams captured.
+    pub fn output(cmd: &Command) -> Result<Output> {
+        let (mut out_r, out_w) = std::io::pipe()?;
+        let (mut err_r, err_w) = std::io::pipe()?;
+        let pid = start(cmd, Some([&out_w, &err_w]));
+        drop((out_w, err_w));
+        let pid = pid?;
+        let errs = std::thread::spawn(move || {
+            let mut v = Vec::new();
+            err_r.read_to_end(&mut v).map(|_| v)
+        });
+        let mut stdout = Vec::new();
+        let read = out_r.read_to_end(&mut stdout);
+        let stderr = errs.join().expect("read the image's stderr");
+        let status = wait(pid, 0)?.expect("a blocking wait returns a status");
+        read?;
+        Ok(Output {
+            status,
+            stdout,
+            stderr: stderr?,
+        })
+    }
+
+    /// A running image from [`spawn`], its streams on `/dev/null`.
+    pub struct Child {
+        pid: c_int,
+        status: Option<ExitStatus>,
+    }
+
+    #[allow(dead_code)] // the Mach-O suite alone stops a hung image
+    impl Child {
+        pub fn try_wait(&mut self) -> Result<Option<ExitStatus>> {
+            if self.status.is_none() {
+                self.status = wait(self.pid, WNOHANG)?;
+            }
+            Ok(self.status)
+        }
+
+        pub fn wait(&mut self) -> Result<ExitStatus> {
+            if self.status.is_none() {
+                self.status = wait(self.pid, 0)?;
+            }
+            Ok(self.status.expect("a blocking wait returns a status"))
+        }
+
+        pub fn kill(&mut self) -> Result<()> {
+            if self.status.is_none() && unsafe { kill(self.pid, SIGKILL) } != 0 {
+                return Err(Error::last_os_error());
+            }
+            Ok(())
+        }
+    }
+
+    pub fn spawn(cmd: &Command) -> Result<Child> {
+        let pid = start(cmd, None)?;
+        Ok(Child { pid, status: None })
+    }
 }
 
-#[cfg(not(unix))]
-pub fn with_default_signals(_cmd: &mut std::process::Command) {}
+/// A command for an image the harness runs, through [`spawn`] where the host
+/// has it: only the settings it can carry there are offered.
+pub struct ImageCommand(std::process::Command);
+
+pub fn image_command(program: impl AsRef<std::ffi::OsStr>) -> ImageCommand {
+    ImageCommand(std::process::Command::new(program))
+}
+
+#[allow(dead_code)] // each image suite uses a part, and a host compiles some out
+impl ImageCommand {
+    pub fn arg(&mut self, a: impl AsRef<std::ffi::OsStr>) -> &mut Self {
+        self.0.arg(a);
+        self
+    }
+
+    pub fn args<I: IntoIterator<Item = S>, S: AsRef<std::ffi::OsStr>>(
+        &mut self,
+        a: I,
+    ) -> &mut Self {
+        self.0.args(a);
+        self
+    }
+
+    pub fn env(
+        &mut self,
+        k: impl AsRef<std::ffi::OsStr>,
+        v: impl AsRef<std::ffi::OsStr>,
+    ) -> &mut Self {
+        self.0.env(k, v);
+        self
+    }
+
+    pub fn current_dir(&mut self, dir: impl AsRef<std::path::Path>) -> &mut Self {
+        self.0.current_dir(dir);
+        self
+    }
+
+    pub fn output(&mut self) -> std::io::Result<std::process::Output> {
+        #[cfg(unix)]
+        return spawn::output(&self.0);
+        #[cfg(not(unix))]
+        return self.0.output();
+    }
+
+    #[cfg(unix)]
+    pub fn spawn(&mut self) -> std::io::Result<spawn::Child> {
+        spawn::spawn(&self.0)
+    }
+}
 
 /// Wait for `child`, giving up after `limit`. `None` means it was still
 /// running when the limit ran out; the caller decides what to do with it.
+#[cfg(unix)]
 #[allow(dead_code)]
 pub fn wait_within(
-    child: &mut std::process::Child,
+    child: &mut spawn::Child,
     limit: std::time::Duration,
 ) -> Option<std::process::ExitStatus> {
     let deadline = std::time::Instant::now() + limit;
@@ -310,16 +578,14 @@ pub fn wait_within(
 /// Reached only where a shell mediates the exec (the aarch64 ELF tests)
 /// and on Mach-O; the x86-64 ELF tests carry their own errno-26 retry.
 #[allow(dead_code)]
-pub fn output_when_not_busy(build: impl Fn() -> std::process::Command) -> std::process::Output {
+pub fn output_when_not_busy(build: impl Fn() -> ImageCommand) -> std::process::Output {
     let mut waited = std::time::Duration::ZERO;
     let mut delay = std::time::Duration::from_millis(5);
     loop {
         let spent = waited >= std::time::Duration::from_secs(5);
         // Direct exec reports the condition as errno 26; a shell in
         // between reports it as 126 with the message on stderr.
-        let mut cmd = build();
-        with_default_signals(&mut cmd);
-        let busy = match cmd.output() {
+        let busy = match build().output() {
             Ok(out) => {
                 let busy = out.status.code() == Some(126)
                     && String::from_utf8_lossy(&out.stderr).contains("Text file busy");
@@ -463,6 +729,16 @@ fn spawned_image_starts_from_the_default_signal_state() {
         Some(0),
         "child inherited signal state: bit 0 fault signal blocked, bit 1 SIGWINCH ignored"
     );
+}
+
+/// An image the harness cannot start is the spawn's error, never a status
+/// the image would have exited with.
+#[cfg(unix)]
+#[test]
+fn an_image_that_cannot_start_is_a_spawn_error() {
+    let missing = unique_temp_path("badc-test", "missing", ".bin");
+    let err = (image_command(&missing).output()).expect_err("there is no image to start");
+    assert_eq!(err.kind(), std::io::ErrorKind::NotFound, "{err}");
 }
 
 /// Completion order is the reverse of corpus order here, so an unsorted

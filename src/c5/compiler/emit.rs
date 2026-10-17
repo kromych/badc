@@ -242,7 +242,6 @@ impl Compiler {
     pub(super) fn mark_emit_scalar_load(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
-        self.pending.value_is_fn_designator = false;
         self.pending.last_loaded_local = None;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
@@ -254,7 +253,6 @@ impl Compiler {
     pub(super) fn ast_psh(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
-        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
         self.ast_vstack.push(self.ast_acc.take());
@@ -267,7 +265,6 @@ impl Compiler {
     pub(super) fn ast_binop(&mut self, binop: super::super::ir::BinOp) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
-        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
         self.ast_apply_binop(binop);
@@ -279,7 +276,6 @@ impl Compiler {
     pub(super) fn ast_neg(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
-        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
         self.ast_apply_unary(super::super::ast::UnOp::Neg);
@@ -304,7 +300,6 @@ impl Compiler {
     pub(super) fn mark_emit_other(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
-        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
     }
@@ -317,7 +312,6 @@ impl Compiler {
     pub(super) fn ast_assign(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
-        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
         self.ast_apply_assign();
@@ -361,7 +355,6 @@ impl Compiler {
     pub(super) fn emit_imm(&mut self, val: i64) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
-        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         // Only literal-zero immediates set the peek flag; every
         // other immediate clears it.

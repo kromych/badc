@@ -2769,6 +2769,9 @@ impl Compiler {
             } else {
                 -1
             };
+        } else {
+            // A non-array literal is no decayed array, whatever it was initialized from.
+            self.drop_operand_array_decay();
         }
         self.ty = value_ty;
         Ok(())

@@ -243,6 +243,11 @@ impl Compiler {
         self.expr_fns.insert(id, (f, depth));
     }
 
+    /// Whether the value in hand is a function designator: its recorded depth is 0.
+    pub(super) fn value_is_fn_designator(&self) -> bool {
+        (self.ast_acc.and_then(|id| self.expr_fn(id))).is_some_and(|(_, d)| d == 0)
+    }
+
     /// Re-record the value in hand at the depth `to` gives: `*` and `&`
     /// between a function and a pointer to it, between an array and its
     /// address and between an array of arrays and its first row add no

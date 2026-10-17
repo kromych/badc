@@ -433,13 +433,14 @@ impl Compiler {
         } else {
             // The conservative volatile marker a dereference leaves on the
             // operand describes its accesses, not its type.
-            let mut inner = types::exact_volatile_ty(self.parse_unevaluated_expr_ty(true)?);
+            let (operand_ty, designator) = self.parse_unevaluated_expr_ty(true)?;
+            let mut inner = types::exact_volatile_ty(operand_ty);
             // C99 6.5.3.2p4: `*` on a pointer to a function designates the
             // function, so `typeof(*p)` names a function type. Route it
             // through the function-TYPE carrier a `typedef RET F(args)`
             // base uses, so a `*` in a declarator through the specifier
             // forms the pointer to that function instead of adding a level.
-            if self.pending.value_is_fn_designator {
+            if designator {
                 self.pending.base_is_function_type = true;
                 if self.pending.fn_ptr_indirection.is_none() {
                     self.pending.fn_ptr_indirection = Some(1);
@@ -513,7 +514,7 @@ impl Compiler {
     /// a trailing comma operator whose last term gives the type
     /// (`typeof`'s operand grammar); a declarator initializer stops at
     /// the comma. Sets `pending.typeof_operand_was_array` when the
-    /// operand's value decayed from an array.
+    /// operand's value decayed from an array; the flag returned marks a designator.
     /// The symbol index of the function whose address the accumulated
     /// expression takes (`&f`), if that is its whole shape.
     fn addressed_function_symbol(&self) -> Option<usize> {
@@ -536,7 +537,7 @@ impl Compiler {
         (*class == Token::Fun as i64 || *class == Token::Sys as i64).then_some(*sym as usize)
     }
 
-    fn parse_unevaluated_expr_ty(&mut self, comma_operands: bool) -> Result<i64, C5Error> {
+    fn parse_unevaluated_expr_ty(&mut self, comma_operands: bool) -> Result<(i64, bool), C5Error> {
         let saved_text_len = self.next_ent_pc;
         let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
         let saved_ast_acc = self.ast_acc;
@@ -567,6 +568,7 @@ impl Compiler {
             }
             Ok(())
         })?;
+        let designator = self.value_is_fn_designator();
         // `&f` where `f` names a function: the operand is a pointer to
         // `f`'s function type. Route the same pending carriers the
         // function-typedef and `typeof(f)` bases use, so the prototype
@@ -619,7 +621,7 @@ impl Compiler {
         self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
         self.ast_acc = saved_ast_acc;
         self.ast_vstack.truncate(saved_vstack);
-        Ok(expr_ty)
+        Ok((expr_ty, designator))
     }
 
     /// `asm ( "reg" )` after a block-scope declarator: a GNU
@@ -955,7 +957,7 @@ impl Compiler {
                 "`__auto_type` initializer must be a single expression",
             ));
         }
-        let ty = self.parse_unevaluated_expr_ty(false)?;
+        let (ty, _) = self.parse_unevaluated_expr_ty(false)?;
         // The initializer decayed any array to a pointer; the declared
         // variable is that pointer, never an array.
         self.pending.typeof_operand_was_array = false;

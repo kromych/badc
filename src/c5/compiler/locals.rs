@@ -696,11 +696,10 @@ impl Compiler {
             // fixed array rather than a VLA. Static storage plus a const
             // object type also makes the initializer the value for the
             // whole execution, as at file scope.
-            self.symbols[d.loc_idx].is_const_qualified = self.pending.base_is_const
-                && d.array_size == 0
-                && super::types::is_integer_scalar_ty(d.ty);
-            self.symbols[d.loc_idx].storage_is_const = self.pending.declarator_outer_const
-                || (self.pending.base_is_const && !super::types::is_pointer_ty(d.ty));
+            let object_const = self.declared_object_is_const(d.ty);
+            self.symbols[d.loc_idx].is_const_qualified =
+                object_const && d.array_size == 0 && super::types::is_integer_scalar_ty(d.ty);
+            self.symbols[d.loc_idx].storage_is_const = object_const;
             if let Some(a) = &d.decl_align {
                 self.apply_static_local_align(d.loc_idx, d.ty, a);
                 // Declared object alignment for `__alignof__` on the
@@ -748,7 +747,7 @@ impl Compiler {
             // Unconditional write so a reused slot leaks no stale
             // value from an outer binding.
             self.symbols[d.loc_idx].const_object_value = None;
-            if self.pending.base_is_const
+            if self.declared_object_is_const(d.ty)
                 && d.array_size == 0
                 && d.asm_reg.is_none()
                 && !super::types::is_volatile_ty(d.ty)

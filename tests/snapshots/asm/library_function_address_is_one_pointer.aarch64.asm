@@ -24,11 +24,6 @@ Disassembly of section .text:
                	ldr	x2, [x1]
                	cmp	x2, x0
                	b.ne	<addr>
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	x2, [x2]
-               	cmp	x2, x0
-               	b.ne	<addr>
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	ldr	x2, [x1]
@@ -46,8 +41,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1]
+               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	add	x20, x20, x0
                	adrp	x0, <page>

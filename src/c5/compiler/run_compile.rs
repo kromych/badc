@@ -352,6 +352,14 @@ impl Compiler {
         Ok(())
     }
 
+    /// Whether the declared object is itself `const` (C99 6.7.3): as spelled,
+    /// or through its type's own qualifier, which a pointer typedef carries.
+    pub(super) fn declared_object_is_const(&self, ty: i64) -> bool {
+        self.pending.declarator_outer_const
+            || (self.pending.base_is_const && !super::types::is_pointer_ty(ty))
+            || super::types::is_const_object_ty(ty)
+    }
+
     /// Clear the state one file-scope declaration owns: the `const` and
     /// spelling carriers, the attributes and the function specifiers.
     fn reset_file_scope_decl_state(&mut self) {
@@ -543,8 +551,9 @@ impl Compiler {
         }
         // A `const`-qualified plain integer scalar folds its value
         // in later constant expressions (read back from `.data`).
+        let object_const = self.declared_object_is_const(ty);
         self.symbols[id_idx].is_const_qualified =
-            self.pending.base_is_const && array_size == 0 && super::types::is_integer_scalar_ty(ty);
+            object_const && array_size == 0 && super::types::is_integer_scalar_ty(ty);
         // The declared object's own storage is const-qualified (C99
         // 6.7.3p5 then makes modifying it undefined, so its
         // initializer is its value for the whole execution). A
@@ -553,8 +562,7 @@ impl Compiler {
         // `const char *p` / `const char *t[2]` are writable. A
         // `const` after the outermost `*` qualifies the object
         // again: `char *const p`, `const char *const t[2]`.
-        self.symbols[id_idx].storage_is_const = self.pending.declarator_outer_const
-            || (self.pending.base_is_const && !super::types::is_pointer_ty(ty));
+        self.symbols[id_idx].storage_is_const = object_const;
         if fn_ptr_indirection > 0 {
             self.symbols[id_idx].fn_ptr_indirection = fn_ptr_indirection;
             self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;

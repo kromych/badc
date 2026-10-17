@@ -2259,7 +2259,9 @@ impl Compiler {
         Ok(ConstTypeName {
             ty,
             dims,
-            object_is_const: outer_const || (base_is_const && ptr_levels == 0),
+            object_is_const: outer_const
+                || (base_is_const && ptr_levels == 0)
+                || super::types::is_const_object_ty(ty),
             fn_ty,
             is_function,
         })

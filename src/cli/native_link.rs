@@ -619,8 +619,12 @@ struct Selection {
 impl Selection {
     /// A global or weak definition satisfies references; only a strong
     /// (STB_GLOBAL) undefined reference pulls a member, matching ELF
-    /// archive practice.
+    /// archive practice. An import the object routes to a library is
+    /// resolved at load time.
     fn account(&mut self, o: &badc::NativeObject) {
+        for (name, _) in &o.import_dylib_map {
+            self.shared.insert(name.clone());
+        }
         for s in &o.symbols {
             if s.binding == 0 {
                 continue;

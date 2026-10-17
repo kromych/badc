@@ -7161,6 +7161,58 @@ fn align16_arguments_cross_the_system_compiler_boundary() {
     }
 }
 
+// C99 6.5.9p6: a C-library function's address is one pointer from a data
+// slot, a `_Thread_local` slot and code when the system linker links the
+// object, as a fixed and as a position-independent executable. A weak
+// declaration of a function a header declares is a weak reference, null
+// where no library linked defines it, as in gcc's objects.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_library_function_address_is_one_pointer_under_the_system_linker() {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping a_library_function_address_is_one_pointer: no system C compiler");
+        return;
+    };
+    let dir = tempdir("lib-fn-address");
+    let imp = "#include <string.h>\n\
+               typedef size_t (*lenfn)(const char *);\n\
+               static lenfn s = strlen;\n\
+               static _Thread_local lenfn t = strlen;\n\
+               int main(void) {\n\
+                   lenfn d = strlen;\n\
+                   return (s != d) + 2 * (t != d) + 4 * (s(\"ab\") != 2);\n\
+               }\n";
+    let weak = "#include <math.h>\n\
+                extern double cbrt(double) __attribute__((weak));\n\
+                int main(void) { return cbrt ? (int)cbrt(27.0) : 3; }\n";
+    for (name, text, want) in [("imp", imp, 0), ("weak", weak, 3)] {
+        let src = write_source(&dir, &format!("{name}.c"), text);
+        let obj = dir.join(format!("{name}.o"));
+        run(
+            Command::new(badc())
+                .args(["-c", "-o"])
+                .arg(&obj)
+                .arg(&src)
+                .current_dir(&dir),
+            "compile",
+        );
+        for pie in ["-no-pie", "-pie"] {
+            let exe = dir.join(format!("{name}{pie}"));
+            run(
+                Command::new(&cc)
+                    .arg(pie)
+                    .arg("-o")
+                    .arg(&exe)
+                    .arg(&obj)
+                    .current_dir(&dir),
+                "system link",
+            );
+            let out = Command::new(&exe).output().expect("run");
+            assert_eq!(out.status.code(), Some(want), "{name}{pie}");
+        }
+    }
+}
+
 // An aggregate with no member of storage crosses a call in nothing on System V
 // x86-64 and AAPCS64 -- no register, no stack slot, no result register --
 // between badc and the system C compiler, each calling the other's functions

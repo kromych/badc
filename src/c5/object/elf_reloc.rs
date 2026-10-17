@@ -1725,12 +1725,26 @@ impl<'a> RelocWriter<'a> {
             .filter(|s| s.class == Token::Fun as i64 && s.defined_here && !s.is_alias)
             .map(|s| (s.val as usize, s.linkage))
             .collect();
+        let weak_library_fns: BTreeSet<&str> = program
+            .symbols
+            .iter()
+            .filter(|s| s.is_weak && s.class == Token::Sys as i64)
+            .map(|s| s.name.as_str())
+            .collect();
         names.weak_names = program
             .symbols
             .iter()
             .filter(|s| s.is_weak && s.is_link_entity() && !s.name.is_empty())
             .map(|s| s.link_name())
             .chain(program.asm_weak_names.iter().map(|s| s.as_str()))
+            .chain(
+                build
+                    .imports
+                    .imports
+                    .iter()
+                    .filter(|i| weak_library_fns.contains(i.local_name.as_str()))
+                    .map(|i| i.real_symbol.as_str()),
+            )
             .chain(
                 build
                     .asm_sym_decls
@@ -2808,15 +2822,15 @@ impl<'a> RelocWriter<'a> {
         Ok(())
     }
 
-    /// Import symbols: `STB_WEAK` + `STT_NOTYPE` + `SHN_UNDEF`, since the
-    /// dynamic linker resolves them at load time and an unresolved entry at
-    /// static-link time is not an error.
+    /// Import symbols: undefined and untyped, as gcc and clang write a
+    /// reference; global unless the declaration is weak.
     fn emit_import_symbols(&mut self) {
         let build = self.build;
         for i in 0..build.imports.imports.len() {
+            let name = build.imports.imports[i].real_symbol.as_str();
             let sym = Elf64Sym {
                 st_name: self.names.name_offs[self.names.at.imports + i],
-                st_info: pack_sym_info(STB_WEAK, STT_NOTYPE),
+                st_info: pack_sym_info(self.bind_for(name), STT_NOTYPE),
                 st_shndx: SHN_UNDEF,
                 ..Default::default()
             };

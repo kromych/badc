@@ -870,6 +870,53 @@ fn freestanding_entry_defined_in_object_links() {
     assert!(bin.exists(), "freestanding image was not produced");
 }
 
+// A slot may name the label that ends the text, or a function whose last
+// byte ends it: the code length closes the link's pc map, as it closes the
+// lowering's. Freestanding, so nothing follows the unit's code; linked for
+// linux-x64 on every host and run there.
+#[test]
+fn a_slot_naming_the_end_of_the_text_links() {
+    let dir = tempdir("text-end-slot");
+    let pad = "__asm__(\".text\\n.p2align 4\\n.globl pad16\\npad16:\\n\"\n\
+               \".byte 0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90\\n\"\n";
+    let exit = "__asm__ volatile(\"syscall\" : : \"a\"(60L), \"D\"(code) : \"rcx\", \"r11\", \"memory\");\n\
+                for (;;) {\n}\n";
+    let end = write_source(
+        &dir,
+        "end.c",
+        &format!(
+            "{pad}\".byte 0xc3\\n.globl text_end_mark\\ntext_end_mark:\\n\");\n\
+             extern char text_end_mark[];\nextern char pad16[];\n\
+             static char *end_p = text_end_mark;\n\
+             void __c5_entry(void) {{\nlong code = end_p - pad16;\n{exit}}}\n"
+        ),
+    );
+    let last = write_source(
+        &dir,
+        "last.c",
+        &format!(
+            "{pad}\".globl one_byte_ret\\none_byte_ret:\\n.byte 0xc3\\n\");\n\
+             void one_byte_ret(void);\nstatic void (*fp)(void) = one_byte_ret;\n\
+             void __c5_entry(void) {{\nlong code = 7;\nfp();\n{exit}}}\n"
+        ),
+    );
+    for (src, want) in [(&end, 16), (&last, 7)] {
+        let bin = src.with_extension("bin");
+        run(
+            Command::new(badc())
+                .args(["--freestanding", "--target=linux-x64", "-o"])
+                .arg(&bin)
+                .arg(src)
+                .current_dir(&dir),
+            "freestanding link",
+        );
+        if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            let out = Command::new(&bin).output().expect("run image");
+            assert_eq!(out.status.code(), Some(want), "{}", src.display());
+        }
+    }
+}
+
 // The freestanding entry is a link root: an archive member that only
 // defines the entry must be pulled so the image links.
 #[cfg(target_os = "linux")]

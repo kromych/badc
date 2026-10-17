@@ -498,6 +498,8 @@ fn function_table(merged: &MergedNative, pc_to_native: Vec<usize>) -> FunctionTa
     for (name, offset) in &merged.local_funcs {
         table.note(merged, name, *offset as usize);
     }
+    // The code length ends the map, as the lowering's does (Build::native_entry).
+    table.pc_to_native.push(merged.text.len());
     table
 }
 

@@ -3625,17 +3625,11 @@ impl<'a> RelocWriter<'a> {
         if let Some(&name) = self.names.extern_fn_by_pc.get(&ent_pc) {
             return Ok(self.extern_fn_ref(name));
         }
-        let native_off = self
-            .build
-            .pc_to_native
-            .get(ent_pc)
-            .copied()
-            .unwrap_or(usize::MAX);
-        if native_off == usize::MAX {
+        let Some(native_off) = self.build.native_entry(ent_pc) else {
             return Err(Self::internal(format!(
                 "elf_reloc: code reloc references missing ent_pc {ent_pc}",
             )));
-        }
+        };
         Ok(self.text_ref(native_off as u64))
     }
 

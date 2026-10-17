@@ -2012,11 +2012,12 @@ impl<'a> ElfImageWriter<'a> {
             sites.push(data(r.data_offset, addend));
         }
         for r in &build.code_relocs {
-            let native_off = build
-                .pc_to_native
-                .get(r.target_ent_pc as usize)
-                .copied()
-                .unwrap_or(0);
+            let ent_pc = r.target_ent_pc as usize;
+            let Some(native_off) = build.native_entry(ent_pc) else {
+                return Err(C5Error::internal(format!(
+                    "ELF: code reloc references missing ent_pc {ent_pc}"
+                )));
+            };
             let at = (self.text_vmaddr() + native_off as u64).wrapping_add_signed(r.addend);
             sites.push(data(r.data_offset, at));
         }

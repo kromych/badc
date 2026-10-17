@@ -2155,6 +2155,24 @@ fn undefined_extern_call_is_a_link_error() {
     assert!(msg.contains("undefined reference to `bar`"), "{msg}");
 }
 
+/// A function-pointer initializer naming an undefined function refuses to
+/// run, as a call to one does, rather than branch through its placeholder.
+#[test]
+fn undefined_function_in_an_initializer_is_a_link_error() {
+    let program = Compiler::new(
+        "int svd(void);\n\
+         int (*gsd)(void) = svd;\n\
+         int helper(void) { return 3; }\n\
+         int main(void) { return gsd(); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let err = jit_run(&program, &["jit-undef-slot".to_string()]).expect_err("must not run");
+    let msg = err.to_string();
+    assert!(msg.contains("undefined reference to `svd`"), "{msg}");
+}
+
 #[test]
 fn undefined_extern_object_is_a_link_error() {
     let program = Compiler::new(

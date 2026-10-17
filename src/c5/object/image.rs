@@ -46,16 +46,11 @@ pub(crate) fn bake_data_relocs(
     }
     for r in &build.code_relocs {
         let ent_pc = r.target_ent_pc as usize;
-        let native_off = build
-            .pc_to_native
-            .get(ent_pc)
-            .copied()
-            .unwrap_or(usize::MAX);
-        if native_off == usize::MAX {
+        let Some(native_off) = build.native_entry(ent_pc) else {
             return Err(internal(format!(
                 "{format}: code reloc references missing ent_pc {ent_pc}"
             )));
-        }
+        };
         let absolute = (text_vmaddr + native_off as u64).wrapping_add_signed(r.addend);
         let off = slot(&data, r.data_offset, "code", 8)?;
         #[cfg(feature = "codegen_test")]
@@ -132,7 +127,7 @@ pub(crate) fn tls_reloc_sites(
     }
     for r in &build.tls_code_relocs {
         let ent_pc = r.target_ent_pc as usize;
-        let Some(&native_off) = build.pc_to_native.get(ent_pc) else {
+        let Some(native_off) = build.native_entry(ent_pc) else {
             return Err(internal(format!(
                 "{format}: TLS code reloc references missing ent_pc {ent_pc}"
             )));

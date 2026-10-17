@@ -571,6 +571,12 @@ mod jit_impl {
         if let Some(site) = build.user_extern_call_sites.first() {
             return Err(undefined_reference(&site.symbol_name));
         }
+        let labels: alloc::collections::BTreeMap<String, u64> = (build.asm_text_labels.iter())
+            .map(|l| (l.name.clone(), l.text_offset as u64))
+            .collect();
+        crate::c5::codegen::bind_placeholder_code_relocs(program, &mut build, |name| {
+            labels.get(name).copied()
+        })?;
         // A thread-pointer-relative access has no block to reach here: the
         // executing thread's TLS belongs to the host runtime, and the
         // fixups the backends record need the link step the JIT has not.
@@ -710,16 +716,11 @@ mod jit_impl {
             let bytes = region.as_mut_slice(build.data.len());
             for r in &build.code_relocs {
                 let ent_pc = r.target_ent_pc as usize;
-                let native_off = build
-                    .pc_to_native
-                    .get(ent_pc)
-                    .copied()
-                    .unwrap_or(usize::MAX);
-                if native_off == usize::MAX {
+                let Some(native_off) = build.native_entry(ent_pc) else {
                     return Err(C5Error::internal(format!(
                         "JIT: code reloc references missing ent_pc {ent_pc}"
                     )));
-                }
+                };
                 let absolute = (code_vmaddr + native_off as u64).wrapping_add_signed(r.addend);
                 let off = r.data_offset as usize;
                 if off + 8 > bytes.len() {

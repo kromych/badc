@@ -153,6 +153,8 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("function_address_offset_outside_the_text.c", 0),
     ("thread_local_reads_a_code_slot.c", 0),
     ("thread_local_slot_escapes_a_function.c", 0),
+    ("function_slot_names_no_c_definition.c", 0),
+    ("function_slot_names_a_file_scope_asm_function.c", 0),
     ("attribute_section_placement.c", 0),
     ("inline_section_mandatory.c", 0),
     // TODO: `speculative_init_parse_data_rewind.c` is held off the host
@@ -1445,6 +1447,8 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("function_address_offset_outside_the_text.c", 0),
     ("thread_local_reads_a_code_slot.c", 0),
     ("thread_local_slot_escapes_a_function.c", 0),
+    ("function_slot_names_no_c_definition.c", 0),
+    ("function_slot_names_a_file_scope_asm_function.c", 0),
     ("weak_definition_not_inlined.c", 42),
     ("weak_alias_call_not_inlined.c", 42),
     ("nested_block_decl_alignment.c", 42),
@@ -2511,6 +2515,8 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("function_address_offset_outside_the_text.c", 0),
     ("thread_local_reads_a_code_slot.c", 0),
     ("thread_local_slot_escapes_a_function.c", 0),
+    ("function_slot_names_no_c_definition.c", 0),
+    ("function_slot_names_a_file_scope_asm_function.c", 0),
     ("weak_definition_not_inlined.c", 42),
     ("weak_alias_call_not_inlined.c", 42),
     ("nested_block_decl_alignment.c", 42),
@@ -3368,6 +3374,8 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("function_address_offset_outside_the_text.c", 0),
     ("thread_local_reads_a_code_slot.c", 0),
     ("thread_local_slot_escapes_a_function.c", 0),
+    ("function_slot_names_no_c_definition.c", 0),
+    ("function_slot_names_a_file_scope_asm_function.c", 0),
     ("anon_bitfield_reserves_bits.c", 0),
     ("attribute_mode.c", 0),
     ("transparent_union_call.c", 0),
@@ -4122,6 +4130,8 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("function_address_offset_outside_the_text.c", 0),
     ("thread_local_reads_a_code_slot.c", 0),
     ("thread_local_slot_escapes_a_function.c", 0),
+    ("function_slot_names_no_c_definition.c", 0),
+    ("function_slot_names_a_file_scope_asm_function.c", 0),
     ("anon_bitfield_reserves_bits.c", 0),
     ("attribute_mode.c", 0),
     ("transparent_union_call.c", 0),
@@ -4809,6 +4819,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("code_slot_read_by_a_later_initializer.c", 0),
     ("function_address_arithmetic_counts_bytes.c", 0),
     ("function_address_offset_outside_the_text.c", 0),
+    ("function_slot_names_no_c_definition.c", 0),
     // A declared `long double` object takes the target ABI's storage
     // format, and the compute path's binary64 round-trips through it.
     ("long_double_abi_storage.c", 0),
@@ -5783,6 +5794,10 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
 /// [`JIT_FIXTURES`] with its expected exit code.
 pub(super) const JIT_UNSUPPORTED_FIXTURES: &[(&str, &str)] = &[
     ("thread_local_reads_a_code_slot.c", "thread-local storage"),
+    (
+        "function_slot_names_a_file_scope_asm_function.c",
+        "undefined reference to `fsa_fn`",
+    ),
     (
         "thread_local_slot_escapes_a_function.c",
         "thread-local storage",

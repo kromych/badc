@@ -13745,6 +13745,33 @@ fn undefined_strong_reference_in_single_tu_image_is_diagnosed() {
     }
 }
 
+/// A function-pointer initializer naming a function no part of a single-TU
+/// image defines is an undefined reference, as the link reports it, and not
+/// the address its import placeholder happens to index.
+#[test]
+fn an_initializer_naming_an_undefined_function_in_a_single_tu_image_is_diagnosed() {
+    use crate::c5::{NativeOptions, Target, emit_native_with_options};
+    const SRC: &str = "int svd(void);\nint svx(void);\nint (*gsd)(void) = svd;\n\
+                       int helper(void) { return 3; }\nint main(void) { return gsd(); }\n";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+    ] {
+        let program =
+            Compiler::with_options(SRC.to_string(), target, crate::CompileOptions::default())
+                .compile()
+                .expect("compile");
+        let err = emit_native_with_options(&program, target, NativeOptions::default())
+            .expect_err("an undefined function in an initializer must be diagnosed");
+        assert!(
+            format!("{err}").contains("undefined reference to `svd`"),
+            "{target:?}: unexpected diagnostic: {err}"
+        );
+    }
+}
+
 /// A call to a function defined `__attribute__((weak))` in the same TU
 /// must go through a relocation, not a baked local displacement, and
 /// the linker must resolve that relocation against the strong sibling

@@ -2466,6 +2466,15 @@ impl Build {
             .and_then(|&next| self.pc_to_native.get(next).copied())
             .unwrap_or(self.text.len())
     }
+
+    /// The `text` offset of the code at `ent_pc`; `None` where none starts,
+    /// including the final entry, which is the code length.
+    pub(crate) fn native_entry(&self, ent_pc: usize) -> Option<usize> {
+        let last = self.pc_to_native.len().checked_sub(1)?;
+        (ent_pc < last)
+            .then(|| self.pc_to_native[ent_pc])
+            .filter(|&o| o != usize::MAX)
+    }
 }
 
 /// A named label an inline-asm template defines in the emitted code stream
@@ -4522,6 +4531,78 @@ pub(crate) fn bind_code_reloc_aliases(
             r.target_ent_pc = t as u64;
         }
     }
+}
+
+/// Bind each final-image function-pointer slot still naming an import
+/// placeholder (a function the unit does not define) as a link does: to
+/// the text label `label_of` names, to 0 for a weak reference, else refuse.
+pub(crate) fn bind_placeholder_code_relocs(
+    program: &Program,
+    build: &mut Build,
+    label_of: impl Fn(&str) -> Option<u64>,
+) -> Result<(), C5Error> {
+    let names: alloc::collections::BTreeMap<u64, &str> = (program.extern_function_imports.iter())
+        .map(|(pc, name)| (*pc as u64, name.as_str()))
+        .collect();
+    if names.is_empty() {
+        return Ok(());
+    }
+    let weak = |name: &str| {
+        (program.symbols.iter()).any(|s| s.is_weak && s.is_fun_entity() && s.link_name() == name)
+    };
+    for tls in [false, true] {
+        let relocs = if tls {
+            core::mem::take(&mut build.tls_code_relocs)
+        } else {
+            core::mem::take(&mut build.code_relocs)
+        };
+        let mut kept = Vec::with_capacity(relocs.len());
+        for r in relocs {
+            let Some(&name) = names.get(&r.target_ent_pc) else {
+                kept.push(r);
+                continue;
+            };
+            let at = r.data_offset as usize;
+            match label_of(name) {
+                Some(off) if !tls => build.label_relocs.push(LabelReloc {
+                    data_offset: r.data_offset,
+                    text_offset: off.wrapping_add_signed(r.addend),
+                }),
+                Some(_) => {
+                    return Err(C5Error::hard(
+                        Code::UNSUPPORTED,
+                        format!(
+                            "a `_Thread_local` initializer naming the assembler label `{name}` \
+                             cannot be resolved in a single-file image; compile with `-c` and link"
+                        ),
+                    ));
+                }
+                None if weak(name) => {
+                    let image = if tls {
+                        &mut build.tls_data
+                    } else {
+                        &mut build.data
+                    };
+                    let slot = image.get_mut(at..at + 8).ok_or_else(|| {
+                        C5Error::internal(format!("code reloc slot {at:#x} past its image"))
+                    })?;
+                    slot.copy_from_slice(&r.addend.to_le_bytes());
+                }
+                None => {
+                    return Err(C5Error::hard(
+                        Code::UNDEFINED_SYMBOL,
+                        format!("undefined reference to `{name}`"),
+                    ));
+                }
+            }
+        }
+        if tls {
+            build.tls_code_relocs = kept;
+        } else {
+            build.code_relocs = kept;
+        }
+    }
+    Ok(())
 }
 
 /// Per-target ABI knobs that affect lowering, not just the final

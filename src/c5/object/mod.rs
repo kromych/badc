@@ -272,6 +272,7 @@ impl AsmLabelPlacement {
 /// stops being a diagnostic here.
 #[cfg(feature = "native-emit")]
 fn fold_asm_sections(
+    program: &Program,
     build: &mut Build,
     target: Target,
 ) -> Result<alloc::collections::BTreeMap<String, AsmLabelPlacement>, C5Error> {
@@ -302,6 +303,16 @@ fn fold_asm_sections(
     if build.asm_sections.is_empty() {
         return Ok(label_at);
     }
+    // A function-pointer slot names a function no C body defines by its
+    // import placeholder.
+    let slot_names = (build.code_relocs.iter().chain(&build.tls_code_relocs)).filter_map(|r| {
+        let at = |&&(pc, _): &&(usize, String)| pc as u64 == r.target_ent_pc;
+        program
+            .extern_function_imports
+            .iter()
+            .find(at)
+            .map(|(_, n)| n.clone())
+    });
     let mut needed: alloc::collections::BTreeSet<String> = build
         .user_extern_call_sites
         .iter()
@@ -312,6 +323,7 @@ fn fold_asm_sections(
                 .iter()
                 .map(|r| r.symbol_name.clone()),
         )
+        .chain(slot_names)
         .collect();
     let mut wanted: alloc::collections::BTreeSet<usize> = build
         .asm_section_text_refs
@@ -906,9 +918,17 @@ pub fn emit_native_reporting(
     let program = &compacted;
     build.bss_size = bss_size;
     route_single_tu_data_imports(&mut build, target);
-    let asm_labels = fold_asm_sections(&mut build, target)?;
+    let asm_labels = fold_asm_sections(program, &mut build, target)?;
     resolve_single_image_asm_sym_fixups(program, &mut build, &asm_labels)?;
     resolve_single_tu_extern_refs(program, &mut build, target, &asm_labels)?;
+    if output_kind != OutputKind::Relocatable {
+        crate::c5::codegen::bind_placeholder_code_relocs(program, &mut build, |name| {
+            match asm_labels.get(name) {
+                Some(&AsmLabelPlacement::Text(off)) => Some(off as u64),
+                _ => None,
+            }
+        })?;
+    }
     if output_kind == OutputKind::SharedLibrary {
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);
     }

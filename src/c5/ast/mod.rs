@@ -758,6 +758,8 @@ pub(crate) enum Decl {
         size_slot: i64,
         dim: ExprId,
         fill: Option<u8>,
+        /// Alignment past the 16 an allocation gets (C11 6.7.5), else 0.
+        align: u32,
     },
     /// Block-scope `static T name [= init];` declaration. C99
     /// 6.2.4p3 (lifetime is whole program) + 6.7.8p4 (init must

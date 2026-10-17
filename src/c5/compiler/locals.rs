@@ -327,9 +327,8 @@ impl Compiler {
 
     /// Record an over-aligned automatic object's frame slot so it is placed
     /// in the over-aligned frame region. A variable-length array's storage is
-    /// carved by a 16-byte-rounded sp move, so an element alignment up to 16
-    /// is already met and needs no record; above 16 the storage cannot be
-    /// placed and is rejected.
+    /// carved by a 16-byte-rounded sp move, so an alignment up to 16 is
+    /// already met; above it the `Decl::Vla` just pushed carries it.
     pub(super) fn record_over_aligned_local(
         &mut self,
         loc_idx: usize,
@@ -337,14 +336,16 @@ impl Compiler {
         auto_align: i64,
     ) -> Result<(), C5Error> {
         if self.symbols[loc_idx].is_vla {
-            if auto_align <= 16 {
-                return Ok(());
+            let vla = self.ast.decls.iter_mut().rev().find_map(|d| match d {
+                super::super::ast::Decl::Vla { sym, align, .. } if *sym as usize == loc_idx => {
+                    Some(align)
+                }
+                _ => None,
+            });
+            if let Some(align) = vla.filter(|_| auto_align > 16) {
+                *align = auto_align as u32;
             }
-            return Err(self.compile_err(
-                Code::UNSUPPORTED,
-                "an over-aligned variable-length array is not supported; \
-                 use static storage or a fixed size",
-            ));
+            return Ok(());
         }
         let slot = self.symbols[loc_idx].val;
         let asz = self.symbols[loc_idx].array_size;
@@ -1801,6 +1802,7 @@ impl Compiler {
             size_slot,
             dim,
             fill,
+            align: 0,
         });
         Ok(())
     }

@@ -153,12 +153,15 @@ fn overaligned_automatic_beside_a_vla_is_diagnosed() {
     )
     .compile()
     .expect("16-aligned automatic and VLA share a frame");
-    // An over-aligned VLA itself has no fixed extent to place in the region.
-    expect_compile_error(
+    // A VLA aligned above 16 rounds its base up within its own allocation.
+    Compiler::new(
         "int use(void *);\n\
-         int f(int n) { _Alignas(32) char v[n]; return use(v); }",
-        "over-aligned variable-length array",
-    );
+         int f(int n) { _Alignas(32) char v[n]; return use(v); }\n\
+         int main(void) { return 0; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("32-aligned VLA");
 }
 
 #[test]

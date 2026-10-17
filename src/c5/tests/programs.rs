@@ -1174,6 +1174,13 @@ fn overaligned_automatic_beside_vla() {
 }
 
 #[test]
+fn overaligned_vla() {
+    // A VLA aligned above 16 by its element type or its declaration lands on
+    // its alignment within its own allocation (C11 6.7.5, C99 6.7.6.2).
+    assert_eq!(run_fixture("overaligned_vla.c"), 0);
+}
+
+#[test]
 fn packed_enum() {
     // `enum __attribute__((packed))` uses the smallest integer type holding
     // its values, changing the layout of an embedding struct (a real-world

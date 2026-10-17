@@ -166,6 +166,18 @@ impl<H: Host> Vm<H> {
         // access checks. The starting offset is captured before
         // the TLS bytes are appended.
         let mut data = program.data;
+        // A slot naming a C-library binding holds `Inst::ImmExtCode`'s value.
+        let slot_value = |r: &crate::c5::program::CodeReloc| {
+            let binding = program
+                .sys_trampolines
+                .iter()
+                .find(|t| t.0 == r.target_ent_pc);
+            let raw = match binding {
+                Some(&(_, b)) => (ssa::IMPORT_ADDR_TAG | b) as u64,
+                None => ssa::CODE_ADDR_TAG as u64 | r.target_ent_pc,
+            };
+            raw.wrapping_add_signed(r.addend)
+        };
         // Apply CodeReloc entries: a function-pointer initializer in
         // the data segment is patched to `CODE_ADDR_TAG | ent_pc` --
         // the same encoding an `Inst::ImmCode` materializes and a
@@ -177,9 +189,7 @@ impl<H: Host> Vm<H> {
         // slot here at VM construction time.
         for r in &program.code_relocs {
             let off = r.data_offset as usize;
-            let runtime =
-                (ssa::CODE_ADDR_TAG as u64 | r.target_ent_pc).wrapping_add_signed(r.addend);
-            data[off..off + 8].copy_from_slice(&runtime.to_le_bytes());
+            data[off..off + 8].copy_from_slice(&slot_value(r).to_le_bytes());
         }
         // A `&&label` initializer slot holds the value a runtime label
         // address has: the code position `Inst::BlockAddr` materializes
@@ -207,9 +217,7 @@ impl<H: Host> Vm<H> {
         // offset, which is the VM's pointer representation.
         for r in &program.tls_code_relocs {
             let off = tls_base + r.data_offset as usize;
-            let runtime =
-                (ssa::CODE_ADDR_TAG as u64 | r.target_ent_pc).wrapping_add_signed(r.addend);
-            data[off..off + 8].copy_from_slice(&runtime.to_le_bytes());
+            data[off..off + 8].copy_from_slice(&slot_value(r).to_le_bytes());
         }
         Self {
             data,

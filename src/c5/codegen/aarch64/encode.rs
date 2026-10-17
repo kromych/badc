@@ -2391,6 +2391,17 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
         apply_fixups(code, fixups, pc_to_native, pc_extent)
     }
 
+    fn address_to_slot_load(code: &mut [u8], at: usize) -> Result<(), C5Error> {
+        let Some(word) = code.get_mut(at + 4..at + 8) else {
+            return Err(C5Error::internal("an import address has no `add` to load"));
+        };
+        let add = u32::from_le_bytes([word[0], word[1], word[2], word[3]]);
+        let ldr = super::patch::slot_load_form(add, super::patch::SlotWidth::W64)
+            .map_err(|e| C5Error::internal(e.describe("an import address load")))?;
+        word.copy_from_slice(&ldr.to_le_bytes());
+        Ok(())
+    }
+
     fn emit_plt_trampolines(
         code: &mut Vec<u8>,
         got_fixups: &mut Vec<GotFixup>,

@@ -1977,6 +1977,9 @@ pub(crate) trait LowerTarget {
         pc_extent: usize,
     ) -> Result<(), crate::c5::error::C5Error>;
 
+    /// The address materialization at `at` as a load of the slot it addresses.
+    fn address_to_slot_load(code: &mut [u8], at: usize) -> Result<(), crate::c5::error::C5Error>;
+
     /// Append one PLT trampoline per import; returns their code offsets.
     fn emit_plt_trampolines(
         code: &mut alloc::vec::Vec<u8>,
@@ -2836,21 +2839,35 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         });
     }
 
-    // Address-of-import sites (`&strcmp`, `Inst::ImmExtCode`) in the
-    // local-image path resolve to the import's PLT trampoline, the same stub
-    // a call to the import reaches. A `FuncFixup` routes the address pair
-    // through the writer's func-fixup pass exactly like a function-pointer
-    // literal. Relocatable output (empty `plt_trampoline_offsets`) emits the
-    // reloc via `reloc_call_sites` instead.
+    // `&strcmp` (`Inst::ImmExtCode`) takes the address a data slot naming the
+    // import holds (C99 6.5.9p6): the import from the GOT where the loader
+    // binds slots, else the slots' trampoline, else the PLT stub.
     if native.output_kind != super::OutputKind::Relocatable {
-        for fx in &st.plt_call_fixups {
-            if fx.is_addr {
-                func_fixups.push(super::FuncFixup {
+        let slot_trampolines: alloc::collections::BTreeMap<i64, usize> =
+            (program.sys_trampolines.iter())
+                .filter_map(|&(pc, binding)| {
+                    let at = *st.pc_to_native.get(pc as usize)?;
+                    (at != usize::MAX).then_some((binding, at))
+                })
+                .collect();
+        for fx in st.plt_call_fixups.iter().filter(|fx| fx.is_addr) {
+            if program.bind_trampoline_slots {
+                B::address_to_slot_load(&mut st.code, fx.instr_offset)?;
+                st.got_fixups.push(super::GotFixup {
                     instr_offset: fx.instr_offset,
-                    target_native_offset: plt_trampoline_offsets[fx.import_index],
                     part: super::AddrPart::Whole,
+                    import_index: fx.import_index,
+                    is_data_load: true,
                 });
+                continue;
             }
+            let binding = imports.imports[fx.import_index].binding_idx;
+            func_fixups.push(super::FuncFixup {
+                instr_offset: fx.instr_offset,
+                target_native_offset: (slot_trampolines.get(&binding).copied())
+                    .unwrap_or(plt_trampoline_offsets[fx.import_index]),
+                part: super::AddrPart::Whole,
+            });
         }
     }
 

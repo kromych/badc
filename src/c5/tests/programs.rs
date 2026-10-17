@@ -8136,3 +8136,12 @@ fn a_pragma_operator_keeps_the_lines_after_it_numbered() {
         .collect();
     assert_eq!(lines, [4], "{err}");
 }
+
+#[test]
+fn a_library_function_slot_holds_the_address_code_takes_under_the_vm() {
+    let src = "typedef size_t (*lenfn)(const char *);\n\
+               static _Thread_local lenfn t = strlen;\n\
+               static lenfn s = strlen;\n\
+               int main(void) { lenfn d = strlen; return (t == s) * 4 + (s == d) * 2 + (t == d); }\n";
+    assert_eq!(super::run_str(src), 7);
+}

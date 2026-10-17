@@ -2073,6 +2073,11 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
         apply_fixups(code, fixups, pc_to_native, pc_extent)
     }
 
+    // The writer rewrites an `is_data_load` fixup's `lea` into the `mov`.
+    fn address_to_slot_load(_code: &mut [u8], _at: usize) -> Result<(), C5Error> {
+        Ok(())
+    }
+
     fn emit_plt_trampolines(
         code: &mut Vec<u8>,
         got_fixups: &mut Vec<GotFixup>,

@@ -16,16 +16,22 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
+               	adrp	x2, <page>
+               	ldr	x2, [x2, <lo12>]
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
                	add	x1, x1, #0x10
                	ldr	x0, [x1]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldr	x2, [x2]
-               	cmp	x0, x2
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	ldr	x3, [x3]
+               	cmp	x0, x3
                	mov	x0, #0x0                // =0
                	b.ne	<addr>
+               	ldr	x3, [x1]
+               	cmp	x3, x2
+               	cset	x2, eq
+               	cbz	x2, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x1, [x1]
@@ -46,6 +52,8 @@ Disassembly of section .text:
                	cset	x0, eq
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x2, x0
+               	b	<addr>
 
 <__c5_sys_strlen>:
                	stp	x29, x30, [sp, #-0x10]!

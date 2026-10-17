@@ -50,7 +50,7 @@ fn code_position_block(position: i64) -> usize {
 /// routes a call through an imported-function address (`&strcmp`)
 /// to the libc dispatch by binding index rather than looking up a
 /// c5 function body. The low bits hold the binding index.
-const IMPORT_ADDR_TAG: i64 = 0x2000_0000_0000_0000;
+pub(super) const IMPORT_ADDR_TAG: i64 = 0x2000_0000_0000_0000;
 
 /// Byte-addressed memory backing the SSA-VM. Layout:
 ///

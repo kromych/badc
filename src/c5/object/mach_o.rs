@@ -53,7 +53,7 @@ const VM_PROT_EXECUTE: u32 = 4;
 
 const PLATFORM_MACOS: u32 = 1;
 
-const PAGE_SIZE: u64 = 0x4000;
+const PAGE_SIZE: u64 = crate::c5::layout::MACHO_PAGE_SIZE as u64;
 
 const PAGEZERO_VMSIZE: u64 = 0x1_0000_0000;
 
@@ -1819,7 +1819,7 @@ struct MachOWriter<'a> {
 pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error> {
     let mut w = MachOWriter::new(program, build)?;
     w.size_load_commands();
-    w.layout_segments();
+    w.layout_segments()?;
     w.build_linkedit_streams()?;
     w.build_symbol_tables()?;
     w.layout_dwarf_and_linkedit()?;
@@ -2015,8 +2015,8 @@ impl<'a> MachOWriter<'a> {
             + entry_lc_size;
     }
 
-    /// The file and vmaddr layout.
-    fn layout_segments(&mut self) {
+    /// The file and vmaddr layout; the kernel slides an image by whole pages.
+    fn layout_segments(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let l = &mut self.layout;
         l.header_plus_lcs = MACH_HEADER_64_SIZE as u64 + self.commands.sizeofcmds;
@@ -2026,6 +2026,16 @@ impl<'a> MachOWriter<'a> {
         let code_size = build.text.len() as u64;
         l.ro_align =
             (crate::c5::layout::data_image_align(build.data_align) as u64).max(l.named_ro_align);
+        let widest = l.text_align.max(l.ro_align);
+        if widest > PAGE_SIZE {
+            return Err(C5Error::hard(
+                Code::LIMIT,
+                format!(
+                    "Mach-O: section alignment {widest} exceeds the {PAGE_SIZE}-byte page the \
+                     loader slides an image by"
+                ),
+            ));
+        }
         l.const_fileoff = round_up(l.entry_file_offset + code_size, l.ro_align);
         l.unwind_fileoff = round_up(l.const_fileoff + l.const_region_size, 4);
         l.eh_frame_fileoff = round_up(l.unwind_fileoff + l.unwind_size, 8);
@@ -2074,18 +2084,23 @@ impl<'a> MachOWriter<'a> {
         } else {
             l.data_section_offset_in_segment + l.writable_data_size
         };
-        let data_segment_vm_used: u64 = if self.tls_present {
-            l.thread_storage_offset_in_segment + l.thread_storage_size + build.bss_size as u64
+        let bss_offset_in_segment = if self.tls_present {
+            l.thread_storage_offset_in_segment + l.thread_storage_size
         } else {
-            data_segment_file_used + build.bss_size as u64
+            l.data_section_offset_in_segment + l.writable_data_size
         };
+        let bss_offset_in_segment = if build.bss_size > 0 {
+            round_up(
+                bss_offset_in_segment,
+                crate::c5::layout::bss_image_align(build.data_align) as u64,
+            )
+        } else {
+            bss_offset_in_segment
+        };
+        let data_segment_vm_used = bss_offset_in_segment + build.bss_size as u64;
         l.data_filesize = round_up(data_segment_file_used.max(PAGE_SIZE), PAGE_SIZE);
         l.data_vmsize = round_up(data_segment_vm_used.max(PAGE_SIZE), PAGE_SIZE);
-        l.bss_base_vmaddr = if self.tls_present {
-            l.thread_storage_vmaddr() + l.thread_storage_size
-        } else {
-            l.data_section_vmaddr() + l.writable_data_size
-        };
+        l.bss_base_vmaddr = l.data_vmaddr() + bss_offset_in_segment;
         let named_out: Vec<NamedOut> = self
             .named
             .iter()
@@ -2131,6 +2146,7 @@ impl<'a> MachOWriter<'a> {
         l.idx_named_data = l.idx_data + 1;
         l.idx_bss = l.idx_named_data + l.counts.data + if self.tls_present { 2 } else { 0 };
         l.idx_named_bss = l.idx_bss + u8::from(l.has_bss_section);
+        Ok(())
     }
 
     fn data_off_to_vaddr(&self, off: u64) -> u64 {
@@ -3106,6 +3122,29 @@ mod tests {
     fn writes_mh_magic_64() {
         let bytes = write(&tiny_program(), &tiny_build()).unwrap();
         assert_eq!(read_u32(&bytes, 0), MH_MAGIC_64);
+    }
+
+    /// `__bss` past the thread storage starts on the data's alignment, and
+    /// an alignment past the page the image slides by is refused.
+    #[test]
+    fn data_alignment_is_kept_or_diagnosed() {
+        let mut build = tiny_build();
+        build.data = vec![1; 0x4000];
+        build.data_align = 0x4000;
+        build.bss_size = 16;
+        build.tls_data = vec![7; 12];
+        build.tls_init_size = 12;
+        let program = tiny_program();
+        let mut w = MachOWriter::new(&program, &build).expect("writer");
+        w.size_load_commands();
+        w.layout_segments().expect("a page-aligned image");
+        assert_eq!(w.layout.bss_base_vmaddr % 0x4000, 0);
+        build.data_align = 0x8000;
+        let err = write(&tiny_program(), &build).expect_err("past a page");
+        assert!(
+            err.to_string().contains("exceeds the 16384-byte page"),
+            "{err}"
+        );
     }
 
     #[test]

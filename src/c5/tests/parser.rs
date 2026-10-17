@@ -216,6 +216,83 @@ fn thread_local_alignment_follows_the_loader() {
 }
 
 #[test]
+fn static_alignment_follows_the_loader() {
+    // C11 6.7.5p3: an alignment the loaded image cannot keep is diagnosed:
+    // past 64 KiB, and on Mach-O, which slides by 16 KiB pages, past that.
+    use crate::c5::Target;
+    let sources = |align: usize| {
+        let s = format!("struct S {{ _Alignas({align}) char c; }};\n");
+        [
+            format!("_Alignas({align}) char g[4]; int main(void) {{ return g[0]; }}"),
+            format!("{s}struct S t; int main(void) {{ return t.c; }}"),
+            format!("int main(void) {{ static _Alignas({align}) char s[4]; return s[0]; }}"),
+            format!("{s}struct S *p = &(struct S){{1}}; int main(void) {{ return p->c; }}"),
+        ]
+    };
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        for src in sources(65536) {
+            let program = Compiler::with_target(src.clone(), target)
+                .compile()
+                .unwrap_or_else(|e| panic!("{target:?}: {src}: {e}"));
+            assert_eq!(program.data_align, 65536, "{target:?}: {src}");
+        }
+    }
+    for src in sources(16384) {
+        let program = Compiler::with_target(src.clone(), Target::MacOSAarch64)
+            .compile()
+            .unwrap_or_else(|e| panic!("{src}: {e}"));
+        assert_eq!(program.data_align, 16384, "{src}");
+    }
+    for src in sources(32768) {
+        let err = Compiler::with_target(src.clone(), Target::MacOSAarch64)
+            .compile()
+            .err()
+            .unwrap_or_else(|| panic!("a 32 KiB alignment must be rejected: {src}"));
+        assert!(
+            err.to_string()
+                .contains("exceeds the 16384-byte boundary a Mach-O image keeps at load"),
+            "{src}: {err}"
+        );
+    }
+}
+
+#[test]
+fn an_extern_declaration_waits_for_the_definitions_alignment_check() {
+    // C99 6.9.2: a declaration without an initializer defines nothing, so an
+    // alignment past what the Mach-O image keeps is diagnosed at the
+    // definition and the declaration places no storage the image would hold.
+    use crate::c5::Target;
+    let s = "struct S { _Alignas(32768) char c; };\n\
+             struct T { _Alignas(32) char c; };\n";
+    for decl in [
+        "extern struct S never_defined;\nint main(void) { return 0; }",
+        "extern struct S tbl[];\nint main(void) { return 0; }",
+        "extern _Thread_local struct T tl;\nint main(void) { return 0; }",
+        "extern struct S named;\nint main(void) { return named.c; }",
+    ] {
+        let src = format!("{s}{decl}");
+        let program = Compiler::with_target(src.clone(), Target::MacOSAarch64)
+            .compile()
+            .unwrap_or_else(|e| panic!("{src}: {e}"));
+        assert!(program.data_align < 32768, "{src}: {}", program.data_align);
+    }
+    let src = format!("{s}extern struct S x;\nstruct S x;\nint main(void) {{ return x.c; }}");
+    let err = Compiler::with_target(src.clone(), Target::MacOSAarch64)
+        .compile()
+        .err()
+        .unwrap_or_else(|| panic!("the definition must be rejected: {src}"));
+    assert!(
+        err.to_string().contains("exceeds the 16384-byte boundary"),
+        "{err}"
+    );
+}
+
+#[test]
 fn overaligned_automatic_is_realigned() {
     use crate::c5::Target;
     // An over-aligned automatic object -- an explicit declarator request or

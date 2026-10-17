@@ -474,6 +474,53 @@ int main(void) { return *third == 30 ? 0 : 1; }\n";
     assert_eq!(output.status.code(), Some(0));
 }
 
+/// C11 6.7.5: 8 and 16 KiB objects, the widest a Mach-O image keeps, land on
+/// their boundary through the single image, the executable and two units.
+#[test]
+fn over_aligned_objects_keep_their_alignment() {
+    use crate::CompileOptions;
+    let (defs, main) = super::over_aligned_objects_units(Target::MacOSAarch64);
+    let one = format!("{defs}{main}");
+    let got = build_and_run_outcome(&one, "over_aligned_single");
+    assert!(got.matches(0), "single image: {got:?}");
+    assert_eq!(link_run_capture(&one, "over_aligned_linked").0, 0, "linked");
+    let compile = |src: &str| {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::MacOSAarch64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&compile(main), &compile(&defs)],
+        Target::MacOSAarch64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link two units: {e}"));
+    let path = super::unique_temp_path("badc-test", "over_aligned_two_units", ".bin");
+    std::fs::write(&path, &bytes).expect("write temp file");
+    set_executable(&path);
+    codesign(&path);
+    let output = super::output_when_not_busy(|| super::image_command(&path));
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(output.status.code(), Some(0), "two units");
+}
+
+/// An `extern` declaration of an object aligned past what the image keeps
+/// places nothing, so an image that never defines it builds.
+#[test]
+fn an_extern_declaration_past_the_images_alignment_builds() {
+    let src = "struct big { _Alignas(32768) char c; };\n\
+               extern struct big never_defined;\n\
+               int main(void) { return 0; }\n";
+    let got = build_and_run_outcome(src, "extern_past_limit_single");
+    assert!(got.matches(0), "single image: {got:?}");
+    assert_eq!(
+        link_run_capture(src, "extern_past_limit_linked").0,
+        0,
+        "linked"
+    );
+}
+
 #[test]
 fn bss_segregation_maps_and_zero_fills() {
     // With segregation on, wholly-zero globals leave `__data` for the

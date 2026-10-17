@@ -77,6 +77,9 @@ pub(crate) const DATA_ALIGN_MIN: usize = 8;
 /// packed base. Covers `_Alignas(16)` and 16-byte aggregates.
 pub(crate) const BSS_ALIGN_MIN: usize = 16;
 
+/// Page size of an arm64 Mach-O image, the unit the kernel slides it by.
+pub(crate) const MACHO_PAGE_SIZE: usize = 0x4000;
+
 /// Alignment the `.data` image is placed at, given a unit's declared
 /// requirement.
 pub(crate) fn data_image_align(declared: usize) -> usize {

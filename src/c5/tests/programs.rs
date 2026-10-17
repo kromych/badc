@@ -1136,10 +1136,9 @@ fn section_attr_flexible_array_tail() {
 
 #[test]
 fn max_alignment_placement() {
-    // The widest static alignment badc honors (64 KiB) lands on its
-    // boundary for bare, initialised, and block-scope-static storage. Off
-    // the Mach-O list: macOS slides a PIE by whole pages, so a wider
-    // boundary is not guaranteed at run time (clang rejects it likewise).
+    // The widest static alignment badc honors for the target -- 64 KiB, 16 KiB
+    // on Mach-O -- lands on its boundary for bare, initialised, and
+    // block-scope-static storage.
     assert_eq!(run_fixture("max_alignment_placement.c"), 0);
 }
 

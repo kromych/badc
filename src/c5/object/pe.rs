@@ -18,6 +18,8 @@ use crate::c5::program::Program;
 
 const IMAGE_BASE: u64 = 0x1_4000_0000;
 const SECTION_ALIGNMENT: u32 = 0x1000;
+/// The allocation granularity an image loads at, which an RVA's alignment keeps.
+const MAX_SECTION_ALIGNMENT: u32 = 0x1_0000;
 const FILE_ALIGNMENT: u32 = 0x200;
 
 const IMAGE_FILE_MACHINE_AMD64: u16 = 0x8664;
@@ -171,14 +173,19 @@ struct DwarfPeSlot {
 /// byte is written.
 #[derive(Default)]
 struct PeLayout<'a> {
+    /// `SectionAlignment`, covering every section's strictest content.
+    section_align: u32,
+    data_align: u32,
     ro_len: u32,
     relro_total: u32,
     relro_size: u32,
     file_data_len: u32,
     ro_head: u32,
     relro_head_len: u32,
+    relro_base_in_rdata: u32,
     data_head_len: u32,
     bss_head: u32,
+    bss_base_in_data: u32,
     /// What `.rdata` keeps of the two read-only families once their named
     /// runs move out.
     rdata_prefix_len: u32,
@@ -257,8 +264,8 @@ struct PeWriter<'a> {
     imports: Vec<(String, String)>,
     dlls: Vec<DllGroup>,
     /// The stub occupies a span rounded up to the alignment `build.text`'s
-    /// own input sections claim; the section starts at SECTION_ALIGNMENT,
-    /// so the span places `build.text[0]` on that alignment absolutely.
+    /// own input sections claim; SectionAlignment covers it, so the span
+    /// places `build.text[0]` on that alignment absolutely.
     text_prologue_len: u32,
     layout: PeLayout<'a>,
     text_bytes: Vec<u8>,
@@ -382,7 +389,27 @@ impl<'a> PeWriter<'a> {
     /// `.pdata` and `.idata`.
     fn layout_code_sections(&mut self) -> Result<(), C5Error> {
         let (program, build) = (self.program, self.build);
+        let section_align = build
+            .named_sections
+            .iter()
+            .map(|n| n.align as usize)
+            .chain([
+                build.text_align,
+                crate::c5::layout::bss_image_align(build.data_align),
+            ])
+            .fold(SECTION_ALIGNMENT as usize, usize::max)
+            .next_power_of_two();
+        if section_align > MAX_SECTION_ALIGNMENT as usize {
+            return Err(C5Error::hard(
+                Code::LIMIT,
+                format!(
+                    "PE: section alignment {section_align} exceeds the {MAX_SECTION_ALIGNMENT} \
+                     bytes the loader places an image on"
+                ),
+            ));
+        }
         let l = &mut self.layout;
+        l.section_align = section_align as u32;
         l.ro_len = build.data_ro_len.min(build.data.len()) as u32;
         l.relro_total = build
             .data_relro_len
@@ -399,7 +426,14 @@ impl<'a> PeWriter<'a> {
         l.relro_head_len = relro_head_len;
         l.data_head_len = data_head_len;
         l.bss_head = bss_head;
-        l.rdata_prefix_len = ro_head + relro_head_len;
+        // Each data region starts on the image's alignment, keeping residues.
+        l.data_align = crate::c5::layout::data_image_align(build.data_align) as u32;
+        l.relro_base_in_rdata = if relro_head_len > 0 {
+            round_up(ro_head, l.data_align)
+        } else {
+            ro_head
+        };
+        l.rdata_prefix_len = l.relro_base_in_rdata + relro_head_len;
         l.jt_base_in_rdata = if build.rodata.bytes.is_empty() {
             l.rdata_prefix_len
         } else {
@@ -417,7 +451,7 @@ impl<'a> PeWriter<'a> {
             || !build.text_abs_relocs.is_empty();
         l.edata_present = !build.exports.is_empty() || !build.dynamic_exports.is_empty();
         l.dwarf_present = build.debug_info;
-        l.text_rva = SECTION_ALIGNMENT;
+        l.text_rva = l.section_align;
         let text_vmaddr = IMAGE_BASE + (l.text_rva + self.text_prologue_len) as u64;
         let raw = image::image_dwarf(program, build, self.target, text_vmaddr, None, None)?;
         l.dwarf_blobs = [
@@ -452,7 +486,7 @@ impl<'a> PeWriter<'a> {
         l.text_file_off = l.headers_size;
         l.text_size = self.text_prologue_len + build.text.len() as u32;
         l.text_raw_size = round_up(l.text_size, FILE_ALIGNMENT);
-        l.pdata_rva = round_up(l.text_rva + l.text_size, SECTION_ALIGNMENT);
+        l.pdata_rva = round_up(l.text_rva + l.text_size, l.section_align);
         l.pdata_file_off = l.text_file_off + l.text_raw_size;
         let pdata = build_pdata(
             self.machine,
@@ -465,7 +499,7 @@ impl<'a> PeWriter<'a> {
         );
         l.pdata_directory_size = pdata.directory_size;
         l.pdata_raw_size = round_up(pdata.bytes.len() as u32, FILE_ALIGNMENT);
-        l.idata_rva = round_up(l.pdata_rva + pdata.bytes.len() as u32, SECTION_ALIGNMENT);
+        l.idata_rva = round_up(l.pdata_rva + pdata.bytes.len() as u32, l.section_align);
         l.pdata_bytes = pdata.bytes;
         l.idata_file_off = l.pdata_file_off + l.pdata_raw_size;
         l.idata = plan_idata(&self.dlls, &self.imports, l.idata_rva);
@@ -475,13 +509,13 @@ impl<'a> PeWriter<'a> {
 
     /// `.rdata`, `.data` (the writable head, then under TLS the 4-byte
     /// `_tls_index` slot, the 40-byte `IMAGE_TLS_DIRECTORY64` and the TLS
-    /// template) and the named sections, each on its own RVA page past
-    /// `.data` since a PE section RVA is SectionAlignment-aligned and
-    /// cannot sit inside its family's range.
+    /// template, then the zero-fill tail) and the named sections, each on
+    /// its own RVA past `.data` since a PE section RVA is
+    /// SectionAlignment-aligned and cannot sit inside its family's range.
     fn layout_data_sections(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let l = &mut self.layout;
-        l.rdata_rva = round_up(l.idata_rva + l.idata.bytes.len() as u32, SECTION_ALIGNMENT);
+        l.rdata_rva = round_up(l.idata_rva + l.idata.bytes.len() as u32, l.section_align);
         l.rdata_file_off = l.idata_file_off + l.idata_raw_size;
         l.rdata_raw_size = if l.rdata_present {
             round_up(l.rdata_size, FILE_ALIGNMENT)
@@ -490,9 +524,15 @@ impl<'a> PeWriter<'a> {
         };
         l.tls = compute_tls_layout(build, l.data_head_len);
         l.data_size = l.data_head_len + l.tls.tls_blob_size;
-        l.data_vsize = l.data_size + l.bss_head;
+        l.bss_base_in_data = if l.bss_head > 0 {
+            let bss_align = crate::c5::layout::bss_image_align(build.data_align) as u32;
+            round_up(l.data_size, bss_align)
+        } else {
+            l.data_size
+        };
+        l.data_vsize = l.bss_base_in_data + l.bss_head;
         l.data_rva = if l.rdata_present {
-            round_up(l.rdata_rva + l.rdata_size, SECTION_ALIGNMENT)
+            round_up(l.rdata_rva + l.rdata_size, l.section_align)
         } else {
             l.rdata_rva
         };
@@ -503,7 +543,7 @@ impl<'a> PeWriter<'a> {
             0
         };
         let mut rva = if l.data_present {
-            round_up(l.data_rva + l.data_vsize, SECTION_ALIGNMENT)
+            round_up(l.data_rva + l.data_vsize, l.section_align)
         } else {
             l.data_rva
         };
@@ -540,7 +580,7 @@ impl<'a> PeWriter<'a> {
                 // An empty section takes no header, as the loader maps the
                 // sections back to back; its bounds name where the next starts.
                 if size > 0 {
-                    rva = round_up(rva + size, SECTION_ALIGNMENT);
+                    rva = round_up(rva + size, l.section_align);
                 }
                 file_off += raw_size;
                 out
@@ -612,9 +652,13 @@ impl<'a> PeWriter<'a> {
         };
         [
             region(0, l.rdata_rva, l.ro_head),
-            region(l.ro_len, l.rdata_rva + l.ro_head, l.relro_head_len),
+            region(
+                l.ro_len,
+                l.rdata_rva + l.relro_base_in_rdata,
+                l.relro_head_len,
+            ),
             region(l.relro_total, l.data_rva, l.data_head_len),
-            region(l.file_data_len, l.data_rva + l.data_size, l.bss_head),
+            region(l.file_data_len, l.data_rva + l.bss_base_in_data, l.bss_head),
         ]
     }
 
@@ -662,10 +706,7 @@ impl<'a> PeWriter<'a> {
         let l = &self.layout;
         let reloc_present = l.reloc_present;
         let (reloc_rva, reloc_file_off) = if reloc_present {
-            (
-                round_up(l.named_rva_end, SECTION_ALIGNMENT),
-                l.named_file_end,
-            )
+            (round_up(l.named_rva_end, l.section_align), l.named_file_end)
         } else {
             (0, 0)
         };
@@ -702,7 +743,7 @@ impl<'a> PeWriter<'a> {
                 } else {
                     l.idata_rva + l.idata.bytes.len() as u32
                 },
-                SECTION_ALIGNMENT,
+                l.section_align,
             )
         } else {
             0
@@ -815,7 +856,7 @@ impl<'a> PeWriter<'a> {
         }
         let mut dwarf_sections: Vec<DwarfPeSlot> = Vec::new();
         if l.dwarf_present {
-            let mut next_rva = round_up(l.pre_dwarf_end_rva, SECTION_ALIGNMENT);
+            let mut next_rva = round_up(l.pre_dwarf_end_rva, l.section_align);
             let mut next_file_off = l.pre_dwarf_end_file_off;
             for (long_name, bytes) in l.dwarf_blobs.iter() {
                 if bytes.is_empty() {
@@ -835,7 +876,7 @@ impl<'a> PeWriter<'a> {
                     file_off: next_file_off,
                     bytes: bytes.clone(),
                 });
-                next_rva = round_up(next_rva + raw_size, SECTION_ALIGNMENT);
+                next_rva = round_up(next_rva + raw_size, l.section_align);
                 next_file_off += raw_size;
             }
         }
@@ -845,7 +886,7 @@ impl<'a> PeWriter<'a> {
             .unwrap_or(l.pre_dwarf_end_file_off);
         l.dwarf_end_rva = dwarf_sections
             .last()
-            .map(|s| round_up(s.rva + s.bytes.len() as u32, SECTION_ALIGNMENT))
+            .map(|s| round_up(s.rva + s.bytes.len() as u32, l.section_align))
             .unwrap_or(l.pre_dwarf_end_rva);
         l.dwarf_sections = dwarf_sections;
         // One `IMAGE_SYMBOL` per trampoline, `IMAGE_SYM_CLASS_EXTERNAL` so
@@ -901,15 +942,15 @@ impl<'a> PeWriter<'a> {
         l.image_size = if l.dwarf_present {
             l.dwarf_end_rva
         } else if l.edata_present {
-            round_up(l.edata_rva + l.edata_bytes.len() as u32, SECTION_ALIGNMENT)
+            round_up(l.edata_rva + l.edata_bytes.len() as u32, l.section_align)
         } else if l.reloc_present {
-            round_up(l.reloc_rva + l.reloc_bytes.len() as u32, SECTION_ALIGNMENT)
+            round_up(l.reloc_rva + l.reloc_bytes.len() as u32, l.section_align)
         } else if l.data_present || !l.named_out.is_empty() {
-            round_up(l.named_rva_end, SECTION_ALIGNMENT)
+            round_up(l.named_rva_end, l.section_align)
         } else if l.rdata_present {
-            round_up(l.rdata_rva + l.rdata_size, SECTION_ALIGNMENT)
+            round_up(l.rdata_rva + l.rdata_size, l.section_align)
         } else {
-            round_up(l.idata_rva + l.idata.bytes.len() as u32, SECTION_ALIGNMENT)
+            round_up(l.idata_rva + l.idata.bytes.len() as u32, l.section_align)
         };
         l.coff_strtab = coff_strtab;
         l.coff_symbols = coff_symbols;
@@ -1123,6 +1164,7 @@ impl<'a> PeWriter<'a> {
             OptionalHeaderInputs {
                 entry_rva,
                 base_of_code: l.text_rva,
+                section_alignment: l.section_align,
                 size_of_code: l.text_size,
                 size_of_initialized_data: l.idata.bytes.len() as u32
                     + l.rdata_size
@@ -1296,6 +1338,10 @@ impl<'a> PeWriter<'a> {
         pad_to(&mut out, (l.idata_file_off + l.idata_raw_size) as usize)?;
         if l.rdata_present {
             out.extend_from_slice(&build.data[..l.ro_head as usize]);
+            pad_to(
+                &mut out,
+                (l.rdata_file_off + l.relro_base_in_rdata) as usize,
+            )?;
             out.extend_from_slice(&data[..l.relro_head_len as usize]);
             pad_to(&mut out, (l.rdata_file_off + l.jt_base_in_rdata) as usize)?;
             out.extend_from_slice(&self.jt_bytes);
@@ -1797,6 +1843,7 @@ fn write_coff_header(
 struct OptionalHeaderInputs {
     entry_rva: u32,
     base_of_code: u32,
+    section_alignment: u32,
     size_of_code: u32,
     size_of_initialized_data: u32,
     size_of_image: u32,
@@ -1864,7 +1911,7 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
             address_of_entry_point: inp.entry_rva,
             base_of_code: inp.base_of_code,
             image_base: IMAGE_BASE,
-            section_alignment: SECTION_ALIGNMENT,
+            section_alignment: inp.section_alignment,
             file_alignment: FILE_ALIGNMENT,
             // Windows 6.0 (Vista) is the earliest version that supports the
             // modern PE security characteristics this image opts into
@@ -2838,6 +2885,68 @@ mod tests {
             assert_eq!(w.data_off_to_rva(16), full.rva, "{target:?}: empty_a");
             let next = round_up(full.rva + full.vsize, align);
             assert_eq!(w.data_off_to_rva(48), next, "{target:?}: empty_b");
+        }
+    }
+
+    /// C11 6.7.5: SectionAlignment covers data aligned past the page, and so
+    /// do the relro head past a moved-out named run and `.bss` past the TLS.
+    #[test]
+    fn section_alignment_covers_the_data_it_holds() {
+        use crate::Compiler;
+        const ALIGN: u32 = 0x4000;
+        for (machine, target) in [
+            (Machine::X86_64, super::super::Target::WindowsX64),
+            (Machine::Aarch64, super::super::Target::WindowsAarch64),
+        ] {
+            let src = "int main(void) { return 0; }";
+            let program = Compiler::with_target(src.to_string(), target)
+                .compile()
+                .expect("compile");
+            let mut build =
+                lower_for(&program, target, super::super::NativeOptions::default()).expect("lower");
+            build.data = vec![1; 3 * ALIGN as usize];
+            build.data_ro_len = ALIGN as usize;
+            build.data_relro_len = 2 * ALIGN as usize;
+            build.data_align = ALIGN as usize;
+            build.bss_size = 16;
+            build.tls_data = vec![7; 12];
+            build.tls_init_size = 12;
+            build.named_sections.push(crate::c5::codegen::NamedSection {
+                name: ".rdovr".into(),
+                offset: (ALIGN - 64) as u64,
+                size: 64,
+                align: 8,
+                bss: false,
+                write: false,
+            });
+            let bytes = write(&program, &build, machine, target).expect("write PE");
+            let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+            let coff_off = pe_off + 4;
+            let optional_off = coff_off + COFF_HEADER_SIZE;
+            let section_alignment = u32::from_le_bytes(
+                bytes[optional_off + 32..optional_off + 36]
+                    .try_into()
+                    .unwrap(),
+            );
+            assert_eq!(section_alignment, ALIGN, "{target:?}");
+            let n = u16::from_le_bytes([bytes[coff_off + 2], bytes[coff_off + 3]]) as usize;
+            let optional_size =
+                u16::from_le_bytes([bytes[coff_off + 16], bytes[coff_off + 17]]) as usize;
+            for i in 0..n {
+                let h = optional_off + optional_size + i * SECTION_HEADER_SIZE;
+                let rva = u32::from_le_bytes(bytes[h + 12..h + 16].try_into().unwrap());
+                assert_eq!(rva % ALIGN, 0, "{target:?}: section {i} at {rva:#x}");
+            }
+            let mut w = PeWriter::new(&program, &build, machine, target);
+            w.layout_code_sections().expect("code layout");
+            w.layout_data_sections().expect("data layout");
+            for (what, off) in [("relro head", ALIGN + 8), ("zero-fill tail", 3 * ALIGN + 8)] {
+                let rva = w.data_off_to_rva(off);
+                assert_eq!(rva % ALIGN, 8, "{target:?}: {what} at {rva:#x}");
+            }
+            build.data_align = 0x2_0000;
+            let err = write(&program, &build, machine, target).expect_err("past 64 KiB");
+            assert!(err.to_string().contains("exceeds the 65536 bytes"), "{err}");
         }
     }
 

@@ -388,9 +388,10 @@ impl Compiler {
     /// `ty` -- a compound literal (C99 6.5.2.5p5). It sits on the type's
     /// boundary, and never below the 8-byte width the static-initializer
     /// writes use.
-    pub(super) fn reserve_literal_bytes(&mut self, ty: i64, bytes: usize) -> i64 {
+    pub(super) fn reserve_literal_bytes(&mut self, ty: i64, bytes: usize) -> Result<i64, C5Error> {
         let align = self.align_of_type(ty).max(8);
-        self.reserve_data_bytes(DataStore::Static, align, bytes)
+        self.check_static_align(align, self.lex.line)?;
+        Ok(self.reserve_data_bytes(DataStore::Static, align, bytes))
     }
 
     /// Move the image an initializer staged in `.data` for the
@@ -2687,7 +2688,7 @@ impl Compiler {
         let mut full_dims = alloc::vec::Vec::with_capacity(dims.len());
         full_dims.push(rows);
         full_dims.extend_from_slice(&dims[1..]);
-        let off = self.reserve_literal_bytes(elem_ty, count * elem_size);
+        let off = self.reserve_literal_bytes(elem_ty, count * elem_size)?;
         if elem_is_struct {
             self.collect_struct_array_data(elem_ty, off, &full_dims)?;
         } else {
@@ -2794,7 +2795,7 @@ impl Compiler {
         // unnamed object (C99 6.5.2.5p3) and the data-object model
         // identifies an object by its start offset.
         let size = self.size_of_type(cl_ty).max(1);
-        let off = self.reserve_literal_bytes(cl_ty, size.div_ceil(8) * 8);
+        let off = self.reserve_literal_bytes(cl_ty, size.div_ceil(8) * 8)?;
         let sym_idx = self.intern_compound_literal_symbol(off, cl_ty, size as i64);
         self.collect_struct_initializer(struct_id_of(cl_ty), off)?;
         Ok((off, sym_idx))
@@ -2812,7 +2813,7 @@ impl Compiler {
         cl_ty: i64,
     ) -> Result<(i64, usize), C5Error> {
         let size = self.size_of_type(cl_ty).max(1);
-        let off = self.reserve_literal_bytes(cl_ty, size.div_ceil(8) * 8);
+        let off = self.reserve_literal_bytes(cl_ty, size.div_ceil(8) * 8)?;
         let sym_idx = self.intern_compound_literal_symbol(off, cl_ty, size as i64);
         self.parse_global_initializer(cl_ty, off, false, &None)?;
         Ok((off, sym_idx))

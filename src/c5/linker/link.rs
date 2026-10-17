@@ -723,6 +723,19 @@ fn note_extent(extents: &mut Vec<NamedExtent>, e: NamedExtent) {
     }
 }
 
+/// The strictest alignment among each name's contributions, which a group
+/// starts on so a section of its own keeps every contribution's residue.
+fn named_group_aligns<'o>(
+    order: &[(usize, &'o super::object::InputSection)],
+) -> BTreeMap<&'o str, u64> {
+    let mut widest: BTreeMap<&'o str, u64> = BTreeMap::new();
+    for (_, s) in order {
+        let w = widest.entry(s.name.as_str()).or_insert(1);
+        *w = (*w).max(s.align.max(1));
+    }
+    widest
+}
+
 /// Append the grouped named sections of `fam` to the merged data
 /// stream, recording each one's new offset in its unit's map.
 fn group_named_bytes(
@@ -737,6 +750,7 @@ fn group_named_bytes(
     let order = named_group_order(objs, fam);
     let any = !order.is_empty();
     let write = fam != SectionFamily::RoData;
+    let widest = named_group_aligns(&order);
     let mut prev: Option<&str> = None;
     // The unwind table's previous contribution, `(start, end)` in `data`.
     let mut last_eh: Option<(usize, usize)> = None;
@@ -748,9 +762,15 @@ fn group_named_bytes(
             close_named_group(data, p, extents);
             data.push(0);
         }
+        let opens = prev != Some(s.name.as_str());
         prev = Some(&s.name);
         let unpadded = data.len();
-        align_up(data, s.align.max(1) as usize);
+        let align = if opens {
+            widest[s.name.as_str()]
+        } else {
+            s.align.max(1)
+        };
+        align_up(data, align as usize);
         let pad = data.len() - unpadded;
         if s.name == EH_FRAME
             && let Some((start, end)) = last_eh
@@ -818,13 +838,20 @@ fn group_named_zerofill(
 ) {
     let order = named_group_order(objs, SectionFamily::Bss);
     let any = !order.is_empty();
+    let widest = named_group_aligns(&order);
     let mut prev: Option<&str> = None;
     for (i, s) in order {
         if prev.is_some_and(|p| p != s.name) {
             *bss_size += 1;
         }
+        let opens = prev != Some(s.name.as_str());
         prev = Some(&s.name);
-        *bss_size = align_usize(*bss_size, s.align.max(1) as usize);
+        let align = if opens {
+            widest[s.name.as_str()]
+        } else {
+            s.align.max(1)
+        };
+        *bss_size = align_usize(*bss_size, align as usize);
         let at = *bss_size as u64;
         *bss_size += s.size as usize;
         maps[i].moved.push(moved_section(&objs[i], s, at));

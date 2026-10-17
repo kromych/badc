@@ -1427,6 +1427,8 @@ struct Segments {
     exit_call_offset: Option<usize>,
     segment1_filesize: u64,
     align: u64,
+    code_seg_align: u64,
+    ro_seg_align: u64,
     rodata_off: u64,
     rodata_end: u64,
     segment2_off: u64,
@@ -1448,6 +1450,7 @@ struct Segments {
     tdata_size: u64,
     tbss_size: u64,
     segment2_filesize: u64,
+    bss_align: u64,
     bss_off: u64,
     bss_vmaddr: u64,
     file_data_len: u64,
@@ -1956,7 +1959,7 @@ impl<'a> ElfImageWriter<'a> {
     fn lay_out(&mut self) -> Result<(), C5Error> {
         for _ in 0..4 {
             self.layout_text_segment();
-            self.layout_data_segments();
+            self.layout_data_segments()?;
             if !self.relr {
                 return Ok(());
             }
@@ -2167,12 +2170,13 @@ impl<'a> ElfImageWriter<'a> {
     /// placed one takes the two-segment form `ld` and the script engine
     /// produce: the read-only bytes join the read-execute load, and the
     /// read-write load's address rather than its file offset steps over
-    /// a page, so the loads still land on separate pages and the file
+    /// its p_align, so the loads still land on separate pages and the file
     /// holds no page-sized hole -- 64K per boundary on aarch64. Its relro
     /// region joins the read-execute load too: every slot in it holds a
     /// link-time address and the loader writes none of them, so nothing
     /// needs `PT_GNU_RELRO` to re-protect it, which a static image lacks.
-    fn layout_data_segments(&mut self) {
+    /// Each load's `p_align` covers its strictest content, as GNU ld sets it.
+    fn layout_data_segments(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let placed = self.placed();
         let dynamic_size = if self.loader_tables {
@@ -2181,8 +2185,23 @@ impl<'a> ElfImageWriter<'a> {
             0
         };
         let n_got_slots = self.n_got_slots() as u64;
+        let text_align = self.text_align;
         let seg = &mut self.seg;
         seg.data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
+        seg.tls_align = crate::c5::layout::tls_image_align(build.tls_align) as u64;
+        let data_load_align = seg.align.max(seg.data_align.next_power_of_two());
+        seg.rw_seg_align = data_load_align.max(seg.tls_align);
+        seg.code_seg_align = seg.align.max(text_align);
+        let widest = seg.rw_seg_align.max(seg.code_seg_align);
+        if !TEXT_VMADDR_BASE.is_multiple_of(widest) {
+            return Err(C5Error::hard(
+                Code::LIMIT,
+                format!(
+                    "ELF: section alignment {widest} exceeds the {TEXT_VMADDR_BASE:#x} boundary \
+                     the image is linked at"
+                ),
+            ));
+        }
         if placed {
             seg.rodata_off = if seg.ro_total > 0 {
                 round_up(seg.segment1_filesize, seg.data_align)
@@ -2195,11 +2214,19 @@ impl<'a> ElfImageWriter<'a> {
             } else {
                 seg.rodata_end
             };
+            if seg.ro_total + seg.relro_size > 0 {
+                seg.code_seg_align = seg.code_seg_align.max(data_load_align);
+            }
             seg.segment1_filesize = seg.relro_off + seg.relro_size;
             seg.segment2_off = round_up(seg.segment1_filesize, seg.data_align);
-            seg.rw_bias = seg.align;
+            seg.rw_bias = seg.rw_seg_align;
         } else {
-            seg.rodata_off = round_up(seg.segment1_filesize, seg.align);
+            seg.ro_seg_align = data_load_align;
+            seg.rodata_off = if seg.ro_total > 0 {
+                round_up(seg.segment1_filesize, seg.ro_seg_align)
+            } else {
+                round_up(seg.segment1_filesize, seg.align)
+            };
             seg.rodata_end = if seg.ro_total > 0 {
                 round_up(seg.rodata_off + seg.ro_total, seg.align)
             } else {
@@ -2233,15 +2260,6 @@ impl<'a> ElfImageWriter<'a> {
         seg.relro_end = round_up(rw_relro_start + rw_relro_size, relro_end_align);
         seg.data_off = round_up(seg.relro_end, seg.data_align);
         seg.data_size = build.data.len() as u64 - seg.relro_total;
-        // An object wider than the page needs the RW segment's p_align
-        // raised to it: the loader aligns the load bias down to the maximum
-        // PT_LOAD p_align. TEXT_VMADDR_BASE is a multiple of every
-        // alignment up to itself, so the congruence holds.
-        seg.tls_align = crate::c5::layout::tls_image_align(build.tls_align) as u64;
-        seg.rw_seg_align = seg
-            .align
-            .max(seg.data_align.next_power_of_two())
-            .max(seg.tls_align);
         // The TLS template starts on the image's alignment, so the loader
         // places each thread's copy at the offset the code computed:
         // `tp - roundup(memsz, p_align)` below the thread pointer on
@@ -2254,14 +2272,19 @@ impl<'a> ElfImageWriter<'a> {
         seg.tdata_size = build.tls_init_size as u64;
         seg.tbss_size = build.tls_data.len() as u64 - seg.tdata_size;
         seg.segment2_filesize = seg.tdata_off + seg.tdata_size - seg.segment2_off;
+        seg.bss_align = crate::c5::layout::bss_image_align(build.data_align) as u64;
         seg.bss_off = seg.segment2_off + seg.segment2_filesize + seg.tbss_size;
+        if build.bss_size > 0 {
+            seg.bss_off = round_up(seg.bss_off, seg.bss_align);
+        }
         seg.file_data_len = build.data.len() as u64;
-        seg.segment2_memsize = seg.segment2_filesize + seg.tbss_size + build.bss_size as u64;
+        seg.segment2_memsize = seg.bss_off - seg.segment2_off + build.bss_size as u64;
         // The DWARF / section-header tail past here carries no PT_LOAD, so
         // it needs only the file alignment, not the 64K one that would pad
         // every aarch64 binary with a second hole.
         seg.segment2_end = round_up(seg.segment2_off + seg.segment2_filesize, FILE_TAIL_ALIGN);
         self.seg.bss_vmaddr = self.va(self.seg.bss_off);
+        Ok(())
     }
 
     /// The data stream's regions at their runtime addresses: the read-only
@@ -2905,7 +2928,7 @@ impl<'a> ElfImageWriter<'a> {
             TEXT_VMADDR_BASE,
             seg.segment1_filesize,
             seg.segment1_filesize,
-            seg.align,
+            seg.code_seg_align,
         );
         if seg.has_rodata && !self.placed() {
             write_phdr(
@@ -2916,7 +2939,7 @@ impl<'a> ElfImageWriter<'a> {
                 self.va(seg.rodata_off),
                 seg.ro_total,
                 seg.ro_total,
-                seg.align,
+                seg.ro_seg_align,
             );
         }
         write_phdr(
@@ -3783,9 +3806,7 @@ impl<'a> ElfImageWriter<'a> {
                     SHF_ALLOC | SHF_WRITE,
                     seg.bss_off,
                     size,
-                    // `sh_addr` stays congruent to its own 2-adic alignment
-                    // (<= 16).
-                    1u64 << seg.bss_vmaddr.trailing_zeros().min(4),
+                    seg.bss_align,
                 )
             }),
         ));
@@ -5444,6 +5465,63 @@ mod tests {
         }
     }
 
+    /// C11 6.7.5: each data region, `.bss` past a TLS template included,
+    /// starts on an alignment past the page, and so does its load's `p_align`,
+    /// in a position-independent and a placed image; wider ones are refused.
+    #[test]
+    fn a_load_covers_the_alignment_of_the_data_it_holds() {
+        const ALIGN: u64 = 0x2_0000;
+        for (machine, target) in [
+            (Machine::Aarch64, super::super::Target::LinuxAarch64),
+            (Machine::X86_64, super::super::Target::LinuxX64),
+        ] {
+            let mut build = tiny_build();
+            build.abi = target.abi();
+            build.data = vec![1; 3 * ALIGN as usize];
+            build.data_ro_len = ALIGN as usize;
+            build.data_relro_len = 2 * ALIGN as usize;
+            build.data_align = ALIGN as usize;
+            build.bss_size = 4;
+            build.tls_data = vec![7; 12];
+            build.tls_init_size = 12;
+            for form in [ExecForm::Pie, ExecForm::Placed] {
+                build.exec_form = form;
+                let b = write(&tiny_program(), &build, machine).expect("write ELF");
+                let phoff = read_u64(&b, 32);
+                let phnum = u16::from_le_bytes(b[56..58].try_into().unwrap()) as u64;
+                let loads: Vec<(u64, u64, u64, u64)> = (0..phnum)
+                    .map(|i| (phoff + i * PROGRAM_HEADER_SIZE) as usize)
+                    .filter(|&p| read_u32(&b, p) == PT_LOAD)
+                    .map(|p| {
+                        let field = |at: usize| read_u64(&b, p + at);
+                        (field(8), field(16), field(40), field(48))
+                    })
+                    .collect();
+                for (off, vaddr, _, align) in &loads {
+                    assert_eq!(vaddr % align, off % align, "{machine:?} {form:?}");
+                }
+                for name in [".rodata", ".data.rel.ro", ".data", ".bss"] {
+                    let (_, _, at, _, sh_align) = find_section(&b, name)
+                        .unwrap_or_else(|| panic!("{machine:?} {form:?}: no `{name}`"));
+                    let what = format!("{machine:?} {form:?}: `{name}` at {at:#x}");
+                    assert_eq!(sh_align % ALIGN, 0, "{what}");
+                    assert_eq!(at % ALIGN, 0, "{what}");
+                    let (_, _, _, align) = loads
+                        .iter()
+                        .find(|(_, vaddr, memsz, _)| (*vaddr..vaddr + memsz).contains(&at))
+                        .unwrap_or_else(|| panic!("{what}: in no load"));
+                    assert_eq!(align % ALIGN, 0, "{what}");
+                }
+            }
+            build.data_align = 0x80_0000;
+            let err = write(&tiny_program(), &build, machine).expect_err("past the base");
+            assert!(
+                err.to_string().contains("exceeds the 0x400000 boundary"),
+                "{err}"
+            );
+        }
+    }
+
     /// `DT_DEBUG` is the slot the loader writes its `r_debug` into, where a
     /// debugger finds the link map: an executable carries it in a load the
     /// loader can write, a shared object carries none, as under GNU ld.
@@ -5628,21 +5706,33 @@ mod tests {
             ".bss sh_addr {sh_addr:#x} not congruent to align {sh_align}"
         );
 
+        assert_eq!(
+            sh_align,
+            crate::c5::layout::BSS_ALIGN_MIN as u64,
+            ".bss sh_addralign"
+        );
+
         // The rw PT_LOAD reserves the bss bytes past its file image
-        // (p_memsz > p_filesz); no TLS here, so the tail equals bss.
+        // (p_memsz > p_filesz), through the end of `.bss`.
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
-        let mut reserved = None;
+        let mut load = None;
         for i in 0..phnum {
             let off = (phoff + i * PROGRAM_HEADER_SIZE) as usize;
             if read_u32(&bytes, off) == PT_LOAD && read_u32(&bytes, off + 4) & PF_W != 0 {
-                reserved = Some(read_u64(&bytes, off + 40) - read_u64(&bytes, off + 32));
+                load = Some((
+                    read_u64(&bytes, off + 16),
+                    read_u64(&bytes, off + 32),
+                    read_u64(&bytes, off + 40),
+                ));
             }
         }
+        let (vaddr, filesz, memsz) = load.expect("rw PT_LOAD");
+        assert!(sh_addr >= vaddr + filesz, ".bss starts past the file image");
         assert_eq!(
-            reserved,
-            Some(build.bss_size as u64),
-            "rw PT_LOAD memsz tail must equal bss_size"
+            vaddr + memsz,
+            sh_addr + sh_size,
+            "rw PT_LOAD memsz must reach the end of .bss"
         );
     }
 

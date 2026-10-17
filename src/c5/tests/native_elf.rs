@@ -837,6 +837,49 @@ int check_other(void) {\n\
     );
 }
 
+/// C11 6.7.5: 8 and 16 KiB objects land on their boundary through the single
+/// image, the linked executable (PIE and placed) and a two-unit link.
+#[test]
+fn over_aligned_objects_keep_their_alignment() {
+    use crate::{CompileOptions, ExecForm};
+    let run = |bytes: Vec<u8>, stem: &str| -> Option<i32> {
+        let path = super::unique_temp_path("badc-elf-overaligned", stem, ".bin");
+        std::fs::write(&path, &bytes).expect("write temp file");
+        set_executable(&path);
+        let output = exec_with_retry(&path).expect("exec produced binary");
+        let _ = std::fs::remove_file(&path);
+        output.status.code()
+    };
+    let (defs, main) = super::over_aligned_objects_units(Target::LinuxAarch64);
+    let one = format!("{defs}{main}");
+    let got = build_and_run_outcome(&one, "over_aligned_single");
+    assert!(got.matches(0), "single image: {got:?}");
+    let compile = |src: &str| {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxAarch64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let program = compile(&one);
+    for form in [ExecForm::Pie, ExecForm::Placed] {
+        let bytes = super::link_executable_with_runtime_as(
+            &program,
+            Target::LinuxAarch64,
+            NativeOptions::default(),
+            form,
+        )
+        .unwrap_or_else(|e| panic!("link {form:?}: {e}"));
+        assert_eq!(run(bytes, "over_aligned_linked"), Some(0), "{form:?}");
+    }
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&compile(main), &compile(&defs)],
+        Target::LinuxAarch64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link two units: {e}"));
+    assert_eq!(run(bytes, "over_aligned_two_units"), Some(0), "two units");
+}
+
 /// Cross-unit `extern _Thread_local` on Linux/aarch64. Two translation
 /// units each define TLS storage; `main` reads its own and the other
 /// unit's thread-locals both directly (extern) and through the defining

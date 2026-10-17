@@ -642,6 +642,50 @@ fn script_link_places_sections_and_symbols() {
     assert_eq!(p0_paddr, p0_vaddr - 0x400000);
 }
 
+/// A section aligned past the page raises its load's `p_align`, as bfd and
+/// lld set it, with `p_vaddr` congruent to `p_offset` modulo it.
+#[test]
+fn a_load_takes_the_alignment_of_its_widest_section() {
+    let obj = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0xc3],
+        )
+        .sec(
+            ".data",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_WRITE,
+            0x1_0000,
+            &[1u8; 8],
+        )
+        .sym("_start", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+        .build(EM_X86_64);
+    let script =
+        parse_linker_script("SECTIONS { . = 0x401000; .text : { *(.text) } .data : { *(.data) } }")
+            .expect("script parses");
+    let opts = LdsOptions {
+        emit: LdsEmit::Exec,
+        max_page_size: 0x1000,
+        ..Default::default()
+    };
+    let objs = alloc::vec![parse_lds_object("a.o", obj).expect("a.o parses")];
+    let res = link_with_script(&script, objs, &opts).expect("link succeeds");
+    let data = readelf_sections(&res.image)
+        .into_iter()
+        .find(|s| s.0 == ".data")
+        .expect(".data");
+    assert_eq!(data.2 % 0x1_0000, 0, ".data at {:#x}", data.2);
+    let load = image_phdrs(&res.image)
+        .into_iter()
+        .find(|p| p.p_type == PT_LOAD && (p.p_vaddr..p.p_vaddr + p.p_memsz).contains(&data.2))
+        .expect("a load holds .data");
+    assert_eq!(load.p_align, 0x1_0000);
+    assert_eq!(load.p_vaddr % load.p_align, load.p_offset % load.p_align);
+}
+
 /// `--emit-relocs`: every applied relocation reappears as a
 /// `.rela.<outsec>` entry whose `r_offset` is the final address and
 /// from which `S + A` reconstructs, so a post-link tool can relocate the

@@ -2065,8 +2065,10 @@ impl Compiler {
         if self.bind_object_alias(id_idx, ty)? {
             return Ok(());
         }
-        let decl_align = self.object_alignment(id_idx, ty, base_type_align, thread_local)?;
-        let was_extern_only_decl = extern_seen && self.lex.tk != Token::Assign && array_size != -1;
+        let defines = !extern_seen || self.lex.tk == Token::Assign;
+        let decl_align =
+            self.object_alignment(id_idx, ty, base_type_align, thread_local, defines)?;
+        let was_extern_only_decl = !defines && array_size != -1;
         // `extern struct S s;` whose tag has no fixed size -- incomplete, or with a
         // flexible array member whose count the defining initializer fixes (C99
         // 6.7.2.1) -- reserves nothing: C99 6.9.2 makes it a pure declaration, and
@@ -2223,13 +2225,14 @@ impl Compiler {
 
     /// C11 6.7.5: the object is placed at the strictest alignment its
     /// declarations request and its type requires. Returns the alignment
-    /// the data cursor is now at.
+    /// its storage takes; a declaration that `defines` nothing places nothing.
     fn object_alignment(
         &mut self,
         id_idx: usize,
         ty: i64,
         base_type_align: i64,
         thread_local: bool,
+        defines: bool,
     ) -> Result<usize, C5Error> {
         // C11 6.7.5: a requested alignment is honored on
         // file-scope objects -- the object writer aligns the
@@ -2299,20 +2302,19 @@ impl Compiler {
             req_align.max(self.align_of_type(ty) as i64)
         };
         self.symbols[id_idx].type_align = self.symbols[id_idx].type_align.max(obj_align);
-        let decl_align: usize = if want_align > 8 {
+        let decl_align = want_align.max(8);
+        if decl_align > 8 && defines {
             if thread_local {
                 self.check_thread_local_align(want_align, self.lex.line)?;
             } else {
+                self.check_static_align(want_align, self.lex.line)?;
                 self.data_align = self.data_align.max(want_align);
             }
-            want_align
-        } else {
-            8
-        };
+        }
         // Align the data cursor before any of the branches
         // below reserve storage, so a tentative or zero-init
         // definition starts on the object's boundary.
-        if decl_align > 8 && !thread_local {
+        if decl_align > 8 && !thread_local && defines {
             self.align_data_to(decl_align);
         }
         Ok(decl_align)
@@ -2337,6 +2339,27 @@ impl Compiler {
             ));
         }
         Ok(())
+    }
+
+    /// C11 6.7.5p3: an alignment the loaded image cannot keep violates a constraint.
+    pub(super) fn check_static_align(&self, align: usize, line: usize) -> Result<(), C5Error> {
+        let format = self.target.binary_format();
+        let limit = self.static_align_limit();
+        if align > limit {
+            return Err(self.compile_err_at(
+                Code::LIMIT,
+                line,
+                format!(
+                    "alignment {align} exceeds the {limit}-byte boundary a {} image keeps at load",
+                    format.name()
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    fn static_align_limit(&self) -> usize {
+        self.target.binary_format().max_object_align()
     }
 
     /// A deferred-size array (`T xs[]`): the initializer supplies the
@@ -2688,7 +2711,6 @@ impl Compiler {
         // reserved so the single-unit compile can write through the name; a
         // multi-unit build references the defining unit's bytes instead, leaving
         // this slot as the fallback.
-        let _ = was_extern_only_decl;
         // C99 6.9.2: the definition writes into the storage the tentative
         // definition reserved, and a redundant `T x;` after a definition is a
         // redeclaration of the same object, so neither takes fresh zeroed bytes.
@@ -2714,8 +2736,11 @@ impl Compiler {
         // would add a phantom per-unit copy (one TLS block
         // per object), breaking the shared-state semantics
         // and the multi-object link.
-        let extern_tls_ref = thread_local && was_extern_only_decl;
         let align = self.data_placement_align(ty, decl_align.max(obj_align as usize));
+        // Nor does an `extern` object aligned past the image's limit; it binds to a definition.
+        let extern_tls_ref = was_extern_only_decl
+            && (thread_local
+                || (!self.symbols[id_idx].defined_here && align > self.static_align_limit()));
         let var_offset = if extern_tls_ref {
             self.symbols[id_idx].is_extern_decl = true;
             self.symbols[id_idx].defined_here = false;

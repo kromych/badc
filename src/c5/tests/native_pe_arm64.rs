@@ -337,6 +337,34 @@ fn asm_offsets_below_the_image_base_resolve() {
     }
 }
 
+/// C11 6.7.5: 8 and 16 KiB objects land on their boundary through the linked
+/// executable and a two-unit link.
+#[test]
+fn over_aligned_objects_keep_their_alignment() {
+    let (defs, main) = super::over_aligned_objects_units(Target::WindowsAarch64);
+    assert_exit(&format!("{defs}{main}"), "overaligned", &[], 0);
+    let compile = |src: &str| {
+        let opts = crate::CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::WindowsAarch64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&compile(main), &compile(&defs)],
+        Target::WindowsAarch64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link two units: {e}"));
+    let path = super::unique_temp_path("badc-pe-arm64-test", "overaligned_two_units", ".exe");
+    std::fs::write(&path, &bytes).expect("write temp file");
+    let output = run_pe(&path, &[]);
+    let _ = std::fs::remove_file(&path);
+    match output {
+        Some(o) => assert_eq!(o.expect("run").status.code(), Some(0), "two units"),
+        None => eprintln!("skip overaligned_two_units: no PE runner on this host"),
+    }
+}
+
 #[test]
 fn malloc_memset_memcmp_roundtrip() {
     let src = r#"

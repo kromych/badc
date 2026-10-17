@@ -71,6 +71,7 @@
 /// pointers resolve to native offsets via `FuncFixup`, so fixtures
 /// that exercise those paths run end-to-end.
 pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
+    ("max_alignment_placement.c", 0),
     ("neon_raid6_checksum.c", 0),
     ("long_double_math.c", 0),
     ("long_double_call_shapes.c", 0),
@@ -3401,6 +3402,7 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
 /// Subset of the cross-arch fixture corpus that doesn't lean on
 /// POSIX-only semantics.
 pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
+    ("max_alignment_placement.c", 0),
     ("neon_raid6_checksum.c", 0),
     ("long_double_math.c", 0),
     ("long_double_call_shapes.c", 0),
@@ -4180,6 +4182,7 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
 /// limitations (POSIX-only setenv shape, dlopen-against-libc-soname)
 /// are arch-independent.
 pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
+    ("max_alignment_placement.c", 0),
     ("neon_raid6_checksum.c", 0),
     ("long_double_math.c", 0),
     ("long_double_call_shapes.c", 0),

@@ -9580,6 +9580,30 @@ fn named_section_members_pack_in_declaration_order() {
 
 #[test]
 #[cfg(feature = "native-emit")]
+fn a_named_group_starts_on_its_widest_member() {
+    // An 8-aligned and a 16384-aligned contribution, the stream short of
+    // 16384 before them: the group starts on the wider one.
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    let unit = |src: &str| parse_native_elf(&emit_reloc_for(src)).expect("parse");
+    let merged = link_native_objects(&[
+        unit("__attribute__((section(\"ngrp\"))) long a1 = 1;\n"),
+        unit("__attribute__((section(\"ngrp\"), aligned(16384))) long b1 = 2;\n"),
+        unit("long plain = 3;\n"),
+    ])
+    .expect("link");
+    let group = merged
+        .named_sections
+        .iter()
+        .find(|n| n.name == "ngrp")
+        .expect("the group");
+    assert_eq!(group.align, 16384);
+    assert_eq!(group.offset % 16384, 0, "group at {:#x}", group.offset);
+    let b1 = merged.defined["b1"].value;
+    assert_eq!((b1 - group.offset) % 16384, 0, "b1 at {b1:#x}");
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
 fn named_section_object_keeps_its_flexible_array_tail() {
     // C99 6.7.2.1p16 leaves a flexible array member out of `sizeof`, but
     // a definition that initializes it occupies the element bytes: the

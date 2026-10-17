@@ -142,6 +142,15 @@ impl BinaryFormat {
     pub fn version_before_ext(self) -> bool {
         !matches!(self, BinaryFormat::Elf)
     }
+
+    /// Strictest alignment a static object keeps once the image is loaded:
+    /// the kernel slides a Mach-O image by whole pages.
+    pub fn max_object_align(self) -> usize {
+        match self {
+            BinaryFormat::MachO => crate::c5::layout::MACHO_PAGE_SIZE,
+            BinaryFormat::Elf | BinaryFormat::Pe => crate::c5::compiler::MAX_STATIC_ALIGN,
+        }
+    }
 }
 
 /// In-memory format of `long double`, fixed per target by the platform

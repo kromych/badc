@@ -1107,6 +1107,56 @@ int main(void) {{
     )
 }
 
+/// Objects at 8 KiB and 16 KiB alignment in `.data`, `.bss`, a named
+/// read-only section and the relro region, as the defining unit and the
+/// checking one; the second holds a thread-local, whose template the
+/// image places ahead of `.bss`. Its `main` returns a bitmask of the
+/// misplaced objects, 128 for a wrong value. Concatenated, they form one
+/// unit.
+#[cfg(feature = "full")]
+pub fn over_aligned_objects_units(target: crate::Target) -> (String, &'static str) {
+    let section = match target.binary_format() {
+        crate::BinaryFormat::Elf => ".rodata.overaligned",
+        crate::BinaryFormat::Pe => ".rdovr",
+        crate::BinaryFormat::MachO => "__DATA,__ovr",
+    };
+    let defs = format!(
+        "_Alignas(8192) unsigned char d8[3] = {{1}};
+_Alignas(16384) unsigned char d16[3] = {{2}};
+_Alignas(8192) unsigned char b8[3];
+_Alignas(16384) unsigned char b16[3];
+_Alignas(8192) const unsigned char r8[3] __attribute__((section(\"{section}\"))) = {{3}};
+_Alignas(16384) const unsigned char r16[3] __attribute__((section(\"{section}\"))) = {{4}};
+_Alignas(16384) const char *const p16[2] = {{\"p\", \"q\"}};
+"
+    );
+    let main = "#include <stdint.h>
+extern unsigned char d8[], d16[], b8[], b16[];
+extern const unsigned char r8[], r16[];
+extern const char *const p16[];
+static _Thread_local int tl = 5;
+static int bad;
+static void check(const void *p, uintptr_t align, int bit) {
+    const void *volatile q = p;
+    if ((uintptr_t)q % align)
+        bad |= bit;
+}
+int main(void) {
+    check(d8, 8192, 1);
+    check(d16, 16384, 2);
+    check(b8, 8192, 4);
+    check(b16, 16384, 8);
+    check(r8, 8192, 16);
+    check(r16, 16384, 32);
+    check(p16, 16384, 64);
+    if (d8[0] + d16[0] + b8[0] + b16[0] + r8[0] + r16[0] + tl != 15 || p16[1][0] != 'q')
+        bad |= 128;
+    return bad;
+}
+";
+    (defs, main)
+}
+
 /// Compile inline source.
 pub fn compile_str(src: &str) -> Program {
     Compiler::new(with_prelude(src)).compile().unwrap()
@@ -1344,7 +1394,6 @@ pub fn link_shared_library(
 /// cross-unit references the single-program helper can't, e.g. an
 /// `extern _Thread_local` defined in one unit and read from another.
 #[cfg(feature = "full")]
-#[allow(dead_code)] // only the Linux/x86_64 native lane links multiple user units
 pub fn link_executable_with_runtime_multi(
     programs: &[&Program],
     target: crate::Target,

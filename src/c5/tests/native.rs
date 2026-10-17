@@ -1087,6 +1087,22 @@ fn far_stack_arguments_reach_their_slots() {
     }
 }
 
+/// A single-file image is the unit: inline asm naming its definitions binds to them.
+#[test]
+fn asm_pcrel_reference_binds_to_the_units_definition() {
+    let src = format!(
+        "#define ASM_DATA_END 1\n{}",
+        super::asm_pcrel_unit_definitions_source()
+    );
+    for (opts, stem) in [
+        (NativeOptions::default(), "asm-pcrel-defs"),
+        (NativeOptions::new().with_optimize(), "asm-pcrel-defs-O"),
+    ] {
+        let outcome = build_and_run_outcome_with_options(&src, stem, opts);
+        assert!(outcome.matches(0), "{stem}: {outcome:?}");
+    }
+}
+
 /// Under `-mgeneral-regs-only` the population count takes the
 /// general-register reduction; the edge fixture checks every count against
 /// its references at `-O0` and `-O`.

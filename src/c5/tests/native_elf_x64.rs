@@ -633,6 +633,19 @@ fn riprel_param_fixture_runs_under_optimize() {
     );
 }
 
+/// A single-file image is the unit: inline asm naming its definitions binds to them.
+#[test]
+fn asm_pcrel_reference_binds_to_the_units_definition() {
+    let src = format!(
+        "#define FILE_SCOPE_ASM 1\n#define ASM_DATA_END 1\n{}",
+        super::asm_pcrel_unit_definitions_source()
+    );
+    assert_eq!(build_and_run(&src, "asm-pcrel-defs"), 0);
+    let opts = NativeOptions::new().with_optimize();
+    let outcome = build_and_run_outcome_with_options(&src, "asm-pcrel-defs-opt", opts);
+    assert!(outcome.matches(0), "{outcome:?}");
+}
+
 // ---- Standalone tests for fixtures that need argv / env / CWD
 //      setup the parity harness can't provide. ----
 

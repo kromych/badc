@@ -140,6 +140,14 @@ fn raw_byte_inline_asm_executes() {
     assert_eq!(jit_exit(src, &["jit-raw-bytes"]), 0x25);
 }
 
+/// The JIT image is the unit: inline asm naming its definitions binds to them.
+#[test]
+fn asm_pcrel_reference_binds_to_the_units_definition() {
+    let src = super::asm_pcrel_unit_definitions_source();
+    assert_eq!(jit_exit(src, &["asm-pcrel-defs"]), 0);
+    assert_eq!(jit_exit_native_optimized(src, &["asm-pcrel-defs-opt"]), 0);
+}
+
 #[test]
 fn external_int_return_is_sign_extended() {
     // C99 6.3.1.1 + AAPCS64: a callee returning `int` leaves only the low

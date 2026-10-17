@@ -2835,6 +2835,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         func_fixups.push(super::FuncFixup {
             instr_offset,
             target_native_offset: target,
+            addend: 0,
             part: super::AddrPart::Whole,
         });
     }
@@ -2866,6 +2867,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 instr_offset: fx.instr_offset,
                 target_native_offset: (slot_trampolines.get(&binding).copied())
                     .unwrap_or(plt_trampoline_offsets[fx.import_index]),
+                addend: 0,
                 part: super::AddrPart::Whole,
             });
         }

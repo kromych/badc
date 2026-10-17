@@ -1090,7 +1090,7 @@ fn apply_data_fixups(
     fixups: &[super::DataFixup],
 ) -> Result<(), C5Error> {
     for fx in fixups {
-        let target = data_off_to_vaddr(fx.data_offset);
+        let target = data_off_to_vaddr(fx.data_offset).wrapping_add_signed(fx.addend);
         patch_adrp_add(
             out,
             code_base_in_file,
@@ -1136,7 +1136,8 @@ fn apply_func_fixups(
     fixups: &[super::FuncFixup],
 ) -> Result<(), C5Error> {
     for fx in fixups {
-        let target = code_vmaddr_base + fx.target_native_offset as u64;
+        let target =
+            (code_vmaddr_base + fx.target_native_offset as u64).wrapping_add_signed(fx.addend);
         patch_adrp_add(
             out,
             code_base_in_file,

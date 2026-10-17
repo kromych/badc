@@ -586,8 +586,10 @@ mod jit_impl {
         {
             return Err(unsupported_thread_local(program));
         }
+        let defs = super::super::unit_definitions(program, &build);
+        bind_jit_unit_refs(&defs, &mut build);
         route_jit_data_imports(&mut build)?;
-        resolve_jit_asm_sym_targets(program, &mut build);
+        resolve_jit_asm_sym_targets(&defs, &mut build);
 
         // Allocate a writable data region, copy `build.data` in. The
         // page is RW (no exec permission); an attempt to execute
@@ -1080,6 +1082,20 @@ mod jit_impl {
             Code::UNDEFINED_SYMBOL,
             format!("undefined reference to `{name}`"),
         )
+    }
+
+    /// Bind each by-name reference to a definition of this unit to it, as
+    /// a single-file image does: the JIT image is the unit.
+    fn bind_jit_unit_refs(defs: &super::super::UnitDefs, build: &mut Build) {
+        for r in core::mem::take(&mut build.user_extern_data_refs) {
+            match defs.get(r.symbol_name.as_str()) {
+                Some(&def) => {
+                    let addend = r.direct_pcrel.map_or(0, |a| a + 4);
+                    def.bind(build, r.instr_offset, super::super::AddrPart::Whole, addend);
+                }
+                None => build.user_extern_data_refs.push(r),
+            }
+        }
     }
 
     /// Route `#pragma binding(data ...)` references through the fake
@@ -1949,7 +1965,7 @@ mod jit_impl {
                 code,
                 code_vmaddr,
                 fx.instr_offset as u64,
-                data_vmaddr + fx.data_offset,
+                (data_vmaddr + fx.data_offset).wrapping_add_signed(fx.addend),
                 fx.part,
                 "data fixup",
             )?;
@@ -1960,7 +1976,7 @@ mod jit_impl {
                 code,
                 code_vmaddr,
                 fx.instr_offset as u64,
-                code_vmaddr + fx.target_native_offset as u64,
+                (code_vmaddr + fx.target_native_offset as u64).wrapping_add_signed(fx.addend),
                 fx.part,
                 "func fixup",
             )?;
@@ -1969,36 +1985,21 @@ mod jit_impl {
         Ok(())
     }
 
-    /// Rewrite each inline-asm symbol-operand record naming a data object
-    /// this unit defines to its resolved data offset. The emitter leaves an
+    /// Rewrite each inline-asm symbol-operand record naming a definition
+    /// of this unit to its data or text offset. The emitter leaves an
     /// external-linkage name symbolic so the object keeps the symbol's
     /// binding; the JIT has no link step to interpose it, so the local
     /// definition is the resolution.
-    fn resolve_jit_asm_sym_targets(program: &Program, build: &mut Build) {
+    fn resolve_jit_asm_sym_targets(defs: &super::super::UnitDefs, build: &mut Build) {
+        use super::super::UnitDef;
         use crate::c5::asm::AsmSectionTarget;
-        use crate::c5::symbol::Linkage;
-        use crate::c5::token::Token;
-        if build.asm_sym_fixups.is_empty() {
-            return;
-        }
-        let defined_data_by_name: alloc::collections::BTreeMap<&str, i64> = program
-            .symbols
-            .iter()
-            .filter(|s| {
-                s.class == Token::Glo as i64
-                    && s.defined_here
-                    && !s.is_alias
-                    && !s.is_thread_local
-                    && !s.name.is_empty()
-                    && matches!(s.linkage, Linkage::External | Linkage::Internal)
-            })
-            .map(|s| (s.link_name(), s.val))
-            .collect();
         for r in &mut build.asm_sym_fixups {
-            if let AsmSectionTarget::Symbol(name) = &r.target
-                && let Some(&val) = defined_data_by_name.get(name.as_str())
-            {
-                r.target = AsmSectionTarget::Data(val.max(0) as u64);
+            if let AsmSectionTarget::Symbol(name) = &r.target {
+                match defs.get(name.as_str()) {
+                    Some(&UnitDef::Data(off)) => r.target = AsmSectionTarget::Data(off),
+                    Some(&UnitDef::Text(off)) => r.target = AsmSectionTarget::Text(off),
+                    None => {}
+                }
             }
         }
     }
@@ -2018,20 +2019,11 @@ mod jit_impl {
         let internal = |m: String| C5Error::internal(m);
         for r in &build.asm_sym_fixups {
             let target_vmaddr = match &r.target {
-                AsmSectionTarget::Data(off) => {
-                    data_vmaddr.wrapping_add(off.wrapping_add_signed(r.addend))
+                AsmSectionTarget::Data(off) => (data_vmaddr + off).wrapping_add_signed(r.addend),
+                AsmSectionTarget::Text(off) => {
+                    (code_vmaddr + *off as u64).wrapping_add_signed(r.addend)
                 }
-                AsmSectionTarget::Symbol(name) => {
-                    let off = build
-                        .func_names
-                        .iter()
-                        .position(|n| n == name)
-                        .and_then(|i| build.pc_to_native.get(*build.func_ent_pcs.get(i)?).copied())
-                        .ok_or_else(|| undefined_reference(name))?;
-                    code_vmaddr
-                        .wrapping_add(off as u64)
-                        .wrapping_add_signed(r.addend)
-                }
+                AsmSectionTarget::Symbol(name) => return Err(undefined_reference(name)),
                 other => {
                     return Err(internal(format!(
                         "JIT: asm operand relocation target {other:?} is not a data offset \

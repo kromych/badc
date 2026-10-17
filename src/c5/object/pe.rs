@@ -963,12 +963,15 @@ impl<'a> PeWriter<'a> {
         }
         for f in &build.data_fixups {
             let instr_off = (f.instr_offset as u32) + prologue;
-            let target_rva = self.data_off_to_rva(f.data_offset as u32);
+            let target_rva = self
+                .data_off_to_rva(f.data_offset as u32)
+                .wrapping_add_signed(f.addend as i32);
             patch_addr_load(machine, &mut text, instr_off, text_rva, target_rva, f.part)?;
         }
         for f in &build.func_fixups {
             let instr_off = (f.instr_offset as u32) + prologue;
-            let target_rva = text_rva + prologue + f.target_native_offset as u32;
+            let target_rva = (text_rva + prologue + f.target_native_offset as u32)
+                .wrapping_add_signed(f.addend as i32);
             patch_addr_load(machine, &mut text, instr_off, text_rva, target_rva, f.part)?;
         }
         for r in &build.text_pcrel_relocs {

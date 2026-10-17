@@ -3517,7 +3517,8 @@ impl AsmPass<'_> {
                 AsmRipSym::Local { data_offset } => {
                     out.cx.data_fixups.push(DataFixup {
                         instr_offset,
-                        data_offset: (data_offset + disp - trailing) as u64,
+                        data_offset: data_offset as u64,
+                        addend: disp - trailing,
                         part: AddrPart::Whole,
                     });
                 }

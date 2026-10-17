@@ -97,6 +97,7 @@ pub(super) fn emit_inst(
             cx.data_fixups.push(DataFixup {
                 instr_offset,
                 data_offset: *offset as u64,
+                addend: 0,
                 part: AddrPart::Whole,
             });
             store_spilled_int(code, frame, dst, rd);

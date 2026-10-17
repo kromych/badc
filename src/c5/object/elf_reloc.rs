@@ -3134,7 +3134,7 @@ impl<'a> RelocWriter<'a> {
                 &mut table,
                 fx.instr_offset as u64,
                 sym,
-                addend,
+                addend + fx.addend,
                 fx.part,
             )?;
         }
@@ -3271,7 +3271,7 @@ impl<'a> RelocWriter<'a> {
                 &mut table,
                 fx.instr_offset as u64,
                 self.syms.text_sym_idx,
-                fx.target_native_offset as i64,
+                fx.target_native_offset as i64 + fx.addend,
                 fx.part,
             )?;
         }

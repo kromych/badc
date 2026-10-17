@@ -1154,6 +1154,7 @@ fn project_aarch64_pending(
             data_fixups.push(DataFixup {
                 instr_offset: reloc.text_offset as usize,
                 data_offset: reloc.addend as u64,
+                addend: 0,
                 part,
             });
             Ok(())
@@ -1162,6 +1163,7 @@ fn project_aarch64_pending(
             func_fixups.push(FuncFixup {
                 instr_offset: reloc.text_offset as usize,
                 target_native_offset: reloc.addend as usize,
+                addend: 0,
                 part,
             });
             Ok(())
@@ -1379,6 +1381,7 @@ fn project_x86_64_pending(
             data_fixups.push(DataFixup {
                 instr_offset,
                 data_offset: target_byte_offset as u64,
+                addend: 0,
                 part: AddrPart::Whole,
             });
             Ok(())
@@ -1387,6 +1390,7 @@ fn project_x86_64_pending(
             func_fixups.push(FuncFixup {
                 instr_offset,
                 target_native_offset: target_byte_offset as usize,
+                addend: 0,
                 part: AddrPart::Whole,
             });
             Ok(())

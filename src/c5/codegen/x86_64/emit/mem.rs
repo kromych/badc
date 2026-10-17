@@ -1097,6 +1097,7 @@ pub(super) fn emit_imm_data(
     data_fixups.push(DataFixup {
         instr_offset,
         data_offset: offset as u64,
+        addend: 0,
         part: AddrPart::Whole,
     });
     // `lea rd, [rip + 0]` placeholder; the writer patches the

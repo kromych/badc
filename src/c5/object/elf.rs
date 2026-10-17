@@ -4023,7 +4023,9 @@ impl<'a> ElfImageWriter<'a> {
             field.copy_from_slice(&disp.to_le_bytes());
         }
         for fx in &build.data_fixups {
-            let target = self.data_off_to_vaddr(fx.data_offset);
+            let target = self
+                .data_off_to_vaddr(fx.data_offset)
+                .wrapping_add_signed(fx.addend);
             patch_addr_load(
                 machine,
                 &mut self.out,
@@ -4051,7 +4053,7 @@ impl<'a> ElfImageWriter<'a> {
                 &mut self.out,
                 code,
                 stub_len + fx.instr_offset as u64,
-                text_vmaddr + fx.target_native_offset as u64,
+                (text_vmaddr + fx.target_native_offset as u64).wrapping_add_signed(fx.addend),
                 fx.part,
                 "func fixup",
             )?;

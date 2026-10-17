@@ -802,6 +802,97 @@ pub fn with_prelude(src: &str) -> String {
     out
 }
 
+/// Inline asm naming the unit's data object, functions external, static and
+/// weak, offsets before the first object and function, a `#pragma binding`
+/// name it defines, and on x86-64 a field an immediate trails; exits 0 when
+/// all are right. `FILE_SCOPE_ASM` adds a file-scope asm reference,
+/// `ASM_DATA_END` a label at the end of a file-scope asm `.data` table, past
+/// which a thread-local sits ahead of `.bss`.
+#[allow(dead_code)] // the image suites a Windows host compiles out
+pub fn asm_pcrel_unit_definitions_source() -> &'static str {
+    r#"
+#include <stdio.h>
+const long ro_first = 5;
+int first_fn(int x) { return x + 1; }
+int data_obj = 42;
+int f(void) { return 7; }
+static int g(void) { return 9; }
+__attribute__((weak)) int w(void) { return 5; }
+__attribute__((aligned(16))) int vec4[4] = {1, 2, 3, 4};
+#pragma binding(data libc::dup_env, "environ")
+char **dup_env = 0;
+#if defined(__x86_64__)
+#define ADDR(r, sym) __asm__("lea " sym "(%%rip), %0" : "=r"(r))
+#define F_OFF "f+1"
+#define OFF 1
+#else
+#define ADDR(r, sym) __asm__("adrp %0, " sym "\n\tadd %0, %0, :lo12:" sym : "=r"(r))
+#define F_OFF "f+4"
+#define OFF 4
+#endif
+#ifdef FILE_SCOPE_ASM
+int *fs_get(void);
+int (*fs_fn(void))(void);
+#if defined(__x86_64__)
+__asm__(".text\n.globl fs_get\nfs_get:\n\tleaq data_obj(%rip), %rax\n\tret\n"
+        ".globl fs_fn\nfs_fn:\n\tleaq f(%rip), %rax\n\tret\n");
+#else
+__asm__(".text\n.globl fs_get\nfs_get:\n\tadrp x0, data_obj\n\tadd x0, x0, :lo12:data_obj\n\tret\n"
+        ".globl fs_fn\nfs_fn:\n\tadrp x0, f\n\tadd x0, x0, :lo12:f\n\tret\n");
+#endif
+#endif
+#ifdef ASM_DATA_END
+_Thread_local long tls_pad = 1;
+long bss_obj[2];
+__asm__(".data\n.globl asm_tbl, asm_tbl_end\n.p2align 3\nasm_tbl: .quad 3, 4\nasm_tbl_end:\n.text\n");
+extern long asm_tbl[], asm_tbl_end[];
+#endif
+int main(void) {
+    int *d;
+    int (*pf)(void);
+    int (*pg)(void);
+    int (*pw)(void);
+    char *f_off, *ro, *ff;
+    char ***pb;
+    ADDR(d, "data_obj");
+    ADDR(pf, "f");
+    ADDR(pg, "g");
+    ADDR(pw, "w");
+    ADDR(f_off, F_OFF);
+    ADDR(ro, "ro_first-64");
+    ADDR(ff, "first_fn-16");
+    ADDR(pb, "dup_env");
+    if (*d != 42) return 1;
+    if (pf != f || pf() != 7) return 2;
+    if (pg() != 9) return 3;
+    if (f_off != (char *)f + OFF) return 4;
+    if (pw != w || pw() != 5) return 5;
+    if (ro != (char *)&ro_first - 64 || ff != (char *)first_fn - 16) return 6;
+    if (pb != &dup_env || first_fn(1) != 2) return 7;
+#if defined(__x86_64__)
+    int out[4], r;
+    __asm__ volatile("pshufd $0x1b, vec4(%%rip), %%xmm1\n\tmovdqu %%xmm1, %0" : "=m"(out) :: "xmm1");
+    if (out[0] != 4 || out[3] != 1) return 8;
+    __asm__ volatile("movl $0, %0\n\tcmpl $3, vec4+8(%%rip)\n\tsete %b0" : "=&q"(r) :: "cc");
+    if (r != 1) return 9;
+    __asm__ volatile("movl $77, vec4(%%rip)" ::: "memory");
+    if (vec4[0] != 77) return 10;
+#endif
+#ifdef FILE_SCOPE_ASM
+    if (fs_get() != &data_obj || fs_fn() != f) return 11;
+#endif
+#ifdef ASM_DATA_END
+    char *e0, *e8;
+    ADDR(e0, "asm_tbl_end");
+    ADDR(e8, "asm_tbl_end-8");
+    if (e0 != (char *)(asm_tbl + 2) || e8 != (char *)(asm_tbl + 1)) return 12;
+    if (asm_tbl_end - asm_tbl != 2 || asm_tbl_end[-1] != 4 || tls_pad + bss_obj[1] != 1) return 13;
+#endif
+    return 0;
+}
+"#
+}
+
 /// A program whose fixed and variadic calls place stack arguments past the
 /// scaled offsets of the outgoing area: a 3-byte aggregate above 4096, and
 /// an 8-byte slot, a `double` and a 12-byte aggregate above 32768. The

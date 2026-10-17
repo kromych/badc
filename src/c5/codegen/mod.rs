@@ -2665,6 +2665,8 @@ pub(crate) struct DataFixup {
     pub instr_offset: usize,
     /// Offset into `Build::data`.
     pub data_offset: u64,
+    /// Displacement from the object's address: `S + A`.
+    pub addend: i64,
     /// Fields of the reference this record covers.
     pub part: AddrPart,
 }
@@ -3179,8 +3181,69 @@ pub(crate) struct FuncFixup {
     /// instruction. Resolved by the codegen during `lower()` so the
     /// writer doesn't need to consult `pc_to_native` for this entry.
     pub target_native_offset: usize,
+    /// Displacement from the target's address: `S + A`.
+    pub addend: i64,
     /// Fields of the reference this record covers.
     pub part: AddrPart,
+}
+
+/// A name's place in the unit's own image: a data or a text offset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UnitDef {
+    Data(u64),
+    Text(usize),
+}
+
+pub(crate) type UnitDefs = alloc::collections::BTreeMap<String, UnitDef>;
+
+impl UnitDef {
+    /// Record the fixup of `part` at `instr_offset` to this plus `addend`.
+    pub(crate) fn bind(self, build: &mut Build, instr_offset: usize, part: AddrPart, addend: i64) {
+        match self {
+            UnitDef::Data(data_offset) => build.data_fixups.push(DataFixup {
+                instr_offset,
+                data_offset,
+                addend,
+                part,
+            }),
+            UnitDef::Text(target_native_offset) => build.func_fixups.push(FuncFixup {
+                instr_offset,
+                target_native_offset,
+                addend,
+                part,
+            }),
+        }
+    }
+}
+
+/// Every data object and function a unit defines, which a by-name reference
+/// binds to ahead of a `#pragma binding` when the unit is its own image.
+pub(crate) fn unit_definitions(program: &Program, build: &Build) -> UnitDefs {
+    use crate::c5::symbol::Linkage;
+    use crate::c5::token::Token;
+    let mut defs = alloc::collections::BTreeMap::new();
+    for s in &program.symbols {
+        if s.class == Token::Glo as i64
+            && s.defined_here
+            && !s.is_alias
+            && !s.is_thread_local
+            && !s.name.is_empty()
+            && matches!(s.linkage, Linkage::External | Linkage::Internal)
+        {
+            defs.insert(
+                s.link_name().to_string(),
+                UnitDef::Data(s.val.max(0) as u64),
+            );
+        }
+    }
+    for (name, &pc) in build.func_names.iter().zip(&build.func_ent_pcs) {
+        if let Some(&off) = build.pc_to_native.get(pc)
+            && !name.is_empty()
+        {
+            defs.entry(name.clone()).or_insert(UnitDef::Text(off));
+        }
+    }
+    defs
 }
 
 /// Compiler-side speculative-execution mitigations, selected by the

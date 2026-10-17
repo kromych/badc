@@ -446,7 +446,7 @@ impl<'a> PeWriter<'a> {
             reloc: l.reloc_present,
             edata: l.edata_present,
             dwarf: dwarf_section_count,
-            named: build.named_sections.len(),
+            named: build.named_sections.iter().filter(|n| n.size > 0).count(),
         };
         l.headers_size = headers_raw_size(&l.plan) as u32;
         l.text_file_off = l.headers_size;
@@ -537,16 +537,21 @@ impl<'a> PeWriter<'a> {
                     file_off: if raw_size > 0 { file_off } else { 0 },
                     raw_size,
                 };
-                rva = round_up(rva + size.max(1), SECTION_ALIGNMENT);
+                // An empty section takes no header, as the loader maps the
+                // sections back to back; its bounds name where the next starts.
+                if size > 0 {
+                    rva = round_up(rva + size, SECTION_ALIGNMENT);
+                }
                 file_off += raw_size;
                 out
             })
             .collect();
         l.named_file_end =
             l.data_file_off + l.data_raw_size + named_out.iter().map(|n| n.raw_size).sum::<u32>();
-        l.named_rva_end = match named_out.last() {
-            Some(n) => round_up(n.rva + n.size.max(1), SECTION_ALIGNMENT),
-            None => l.data_rva + l.data_vsize,
+        l.named_rva_end = if named_out.is_empty() {
+            l.data_rva + l.data_vsize
+        } else {
+            rva
         };
         l.named_out = named_out;
         if let Some(md) = &build.merged_dwarf {
@@ -1190,7 +1195,7 @@ impl<'a> PeWriter<'a> {
         }
         // Read-only families keep `.rdata`'s protection, the writable ones
         // `.data`'s.
-        for n in &l.named_out {
+        for n in l.named_out.iter().filter(|n| n.size > 0) {
             let mut name = [0u8; 8];
             let bytes = n.name.as_bytes();
             name[..bytes.len().min(8)].copy_from_slice(&bytes[..bytes.len().min(8)]);
@@ -2742,6 +2747,88 @@ mod tests {
         let rva = u32::from_le_bytes(bytes[entry_off..entry_off + 4].try_into().unwrap());
         let size = u32::from_le_bytes(bytes[entry_off + 4..entry_off + 8].try_into().unwrap());
         (rva, size)
+    }
+
+    struct Header {
+        name: [u8; 8],
+        vsize: u32,
+        rva: u32,
+    }
+
+    /// Each section's header, the SectionAlignment and the SizeOfImage.
+    fn section_table(bytes: &[u8]) -> (Vec<Header>, u32, u32) {
+        let word = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+        let coff_off = word(60) as usize + 4;
+        let optional_off = coff_off + COFF_HEADER_SIZE;
+        let n = u16::from_le_bytes([bytes[coff_off + 2], bytes[coff_off + 3]]) as usize;
+        let optional_size =
+            u16::from_le_bytes([bytes[coff_off + 16], bytes[coff_off + 17]]) as usize;
+        let headers = (0..n)
+            .map(|i| {
+                let h = optional_off + optional_size + i * SECTION_HEADER_SIZE;
+                Header {
+                    name: bytes[h..h + 8].try_into().unwrap(),
+                    vsize: word(h + 8),
+                    rva: word(h + 12),
+                }
+            })
+            .collect();
+        (headers, word(optional_off + 32), word(optional_off + 56))
+    }
+
+    /// An empty named section takes no header, and its bounds name where the next starts.
+    #[test]
+    fn an_empty_named_section_takes_no_header() {
+        use crate::Compiler;
+        for (machine, target) in [
+            (Machine::X86_64, super::super::Target::WindowsX64),
+            (Machine::Aarch64, super::super::Target::WindowsAarch64),
+        ] {
+            let src = "int main(void) { return 0; }".to_string();
+            let program = Compiler::with_target(src, target)
+                .compile()
+                .expect("compile");
+            let mut build =
+                lower_for(&program, target, super::super::NativeOptions::default()).expect("lower");
+            build.data = vec![1; 64];
+            for (name, offset, size) in [("empty_a", 16, 0), ("full", 24, 16), ("empty_b", 48, 0)] {
+                build.named_sections.push(crate::c5::codegen::NamedSection {
+                    name: name.into(),
+                    offset,
+                    size,
+                    align: 8,
+                    bss: false,
+                    write: true,
+                });
+            }
+            let bytes = write(&program, &build, machine, target).expect("write PE");
+            let (headers, align, image_size) = section_table(&bytes);
+            assert!(
+                !headers.iter().any(|h| h.name.starts_with(b"empty")),
+                "{target:?}"
+            );
+            for pair in headers.windows(2) {
+                let end = round_up(pair[0].rva + pair[0].vsize, align);
+                let name = pair[1].name;
+                assert_eq!(pair[1].rva, end, "{target:?}: a gap before {name:?}");
+            }
+            let last = headers.last().expect("sections");
+            assert_eq!(
+                image_size,
+                round_up(last.rva + last.vsize, align),
+                "{target:?}"
+            );
+            let full = headers
+                .iter()
+                .find(|h| h.name.starts_with(b"full\0"))
+                .expect("full");
+            let mut w = PeWriter::new(&program, &build, machine, target);
+            w.layout_code_sections().expect("code layout");
+            w.layout_data_sections().expect("data layout");
+            assert_eq!(w.data_off_to_rva(16), full.rva, "{target:?}: empty_a");
+            let next = round_up(full.rva + full.vsize, align);
+            assert_eq!(w.data_off_to_rva(48), next, "{target:?}: empty_b");
+        }
     }
 
     /// PE without `_Thread_local`: TLS directory entry must be zero so the

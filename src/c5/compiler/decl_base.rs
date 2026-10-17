@@ -783,8 +783,10 @@ impl Compiler {
                 "file-scope register variables are supported for the stack and frame pointer only",
             ));
         }
+        // A function block-scope declarations left on the slot is a prior
+        // declaration too.
         let prior_class = self.symbols[id_idx].class;
-        if prior_class != 0 {
+        if prior_class != 0 || self.symbols[id_idx].is_fun_entity() {
             let same =
                 prior_class == Token::Loc as i64 && self.symbols[id_idx].asm_register == Some(reg);
             if !same {

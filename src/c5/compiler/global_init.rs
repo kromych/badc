@@ -210,7 +210,7 @@ impl Compiler {
         // A block-scope static's address anchors to its emission record;
         // the binding slot is restored at scope exit (see `ast_emit_ident`).
         let target_idx = self.symbols[target_idx]
-            .static_local_record
+            .entity_record
             .map_or(target_idx, |r| r as usize);
         self.symbols[target_idx].binding.was_referenced = true;
         if !is_thread_local {
@@ -296,9 +296,7 @@ impl Compiler {
             },
             InitElemReloc::Code(sym_idx) => {
                 self.symbols[sym_idx].binding.was_referenced = true;
-                let reloc = self.code_reloc_at(off as u64, sym_idx, value as i64);
-                self.tls_code_relocs.push(reloc);
-                self.tls_code_reloc_sym_idx.push(sym_idx);
+                self.push_code_reloc(true, off as u64, sym_idx, value as i64);
             }
             // `&&label` names a block in the function being parsed; a
             // file-scope `_Thread_local` has no enclosing function.
@@ -447,18 +445,14 @@ impl Compiler {
                 };
             }
             let bytes = (ent_pc as u64).to_le_bytes();
-            let reloc = self.code_reloc_at(var_offset as u64, sym_idx, ent_pc);
             if is_thread_local {
                 self.tls_data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                 self.note_tls_init(var_offset);
-                self.tls_code_relocs.push(reloc);
-                self.tls_code_reloc_sym_idx.push(sym_idx);
             } else {
                 self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                 self.note_init_reloc(var_offset as usize);
-                self.code_relocs.push(reloc);
-                self.code_reloc_sym_idx.push(sym_idx);
             }
+            self.push_code_reloc(is_thread_local, var_offset as u64, sym_idx, ent_pc);
             return Ok(());
         }
         // C99 6.3.2.1p3: an array lvalue decays to a pointer to its
@@ -686,19 +680,15 @@ impl Compiler {
                 self.symbols[sym_idx].binding.was_referenced = true;
                 let ent_pc = self.symbols[sym_idx].val;
                 let bytes = (ent_pc as u64).to_le_bytes();
-                let reloc = self.code_reloc_at(var_offset as u64, sym_idx, ent_pc);
                 if is_thread_local {
                     self.tls_data[var_offset as usize..var_offset as usize + 8]
                         .copy_from_slice(&bytes);
                     self.note_tls_init(var_offset);
-                    self.tls_code_relocs.push(reloc);
-                    self.tls_code_reloc_sym_idx.push(sym_idx);
                 } else {
                     self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                     self.note_init_reloc(var_offset as usize);
-                    self.code_relocs.push(reloc);
-                    self.code_reloc_sym_idx.push(sym_idx);
                 }
+                self.push_code_reloc(is_thread_local, var_offset as u64, sym_idx, ent_pc);
             } else {
                 if is_thread_local {
                     self.note_tls_init(var_offset);

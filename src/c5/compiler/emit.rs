@@ -787,8 +787,8 @@ impl Compiler {
         // The inner binding records its own folded const value, if any.
         s.h_const_object_value = s.const_object_value;
         s.const_object_value = None;
-        s.h_static_local_record = s.static_local_record;
-        s.static_local_record = None;
+        s.h_entity_record = s.entity_record;
+        s.entity_record = None;
         s.h_binding = Self::save_binding(&mut s.binding);
     }
 
@@ -806,7 +806,7 @@ impl Compiler {
             sym.class = 0;
             sym.is_scope_bound = false;
             sym.block_extern_active = false;
-            sym.static_local_record = sym.h_static_local_record;
+            sym.entity_record = sym.h_entity_record;
             return;
         }
         let same_function = sym.class == Token::Fun as i64 && sym.h_class == Token::Fun as i64;
@@ -838,7 +838,7 @@ impl Compiler {
         sym.is_global_register = sym.h_is_global_register;
         sym.asm_name = sym.h_asm_name.take();
         sym.const_object_value = sym.h_const_object_value;
-        sym.static_local_record = sym.h_static_local_record;
+        sym.entity_record = sym.h_entity_record;
         sym.is_scope_bound = false;
         sym.block_extern_active = false;
         // The register-asm binding belongs to the block-scope local
@@ -895,7 +895,7 @@ impl Compiler {
             && sym.is_global_register == sym.h_is_global_register
             && sym.asm_name == sym.h_asm_name
             && sym.const_object_value == sym.h_const_object_value
-            && sym.static_local_record == sym.h_static_local_record
+            && sym.entity_record == sym.h_entity_record
             && !sym.is_scope_bound
             && !sym.block_extern_active
     }
@@ -1176,12 +1176,12 @@ impl Compiler {
         // by name / same-TU offset regardless of the class restored at
         // block exit. Record it for the walker.
         let block_extern = class == Token::Glo as i64 && s.block_extern_active;
-        // A reference to a block-scope static resolves against its
-        // emission record: the slot's binding is restored at scope exit,
-        // so walk-time re-resolution through the slot would see whatever
-        // file-scope binding the name has (C99 6.2.1p4 shadowing).
-        let sym = match s.static_local_record {
+        // A reference to a block-scope static, or to a function held apart
+        // from its name, resolves against the entity's record: the slot's
+        // binding is restored at scope exit (C99 6.2.1p4 shadowing).
+        let sym = match s.entity_record {
             Some(r) if class == Token::Glo as i64 && !s.block_extern_active => r,
+            Some(r) if class == Token::Fun as i64 => r,
             _ => sym,
         };
         let id = self.ast.push_expr(
@@ -1543,7 +1543,17 @@ impl Compiler {
     /// the `callee` field without re-running symbol resolution.
     pub(super) fn ast_synthesize_callee(&mut self, sym: u32, ty: i64) -> ExprId {
         let binding = self.callee_binding(sym as usize);
-        self.ast_callee_ident(sym, ty, binding)
+        let entity = self.fn_entity_of(sym as usize);
+        self.ast_callee_ident(entity as u32, ty, binding)
+    }
+
+    /// The slot holding the function a `Token::Fun` binding of `idx` denotes.
+    pub(super) fn fn_entity_of(&self, idx: usize) -> usize {
+        let s = &self.symbols[idx];
+        match s.entity_record {
+            Some(r) if s.class == Token::Fun as i64 => r as usize,
+            _ => idx,
+        }
     }
 
     pub(super) fn callee_binding(&self, sym: usize) -> CalleeBinding {

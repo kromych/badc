@@ -1982,6 +1982,137 @@ fn a_block_scope_extern_object_keeps_its_attributes_past_its_scope() {
 }
 
 #[test]
+fn a_block_scope_function_outlives_a_file_scope_binding_without_linkage() {
+    // C99 6.2.1p4 + 6.2.2p4: past a file-scope typedef or enumerator of its
+    // name, which has no linkage, a block-scope function declaration names
+    // a function with external linkage, which the binding hides but does not
+    // replace, in either order. Each call, address, static initializer and
+    // cleanup relocates against the undefined function, weak and renamed as
+    // its attributes say, as with gcc and clang.
+    use crate::c5::Target;
+    use crate::c5::linker::{NativeSymSection, parse_native_elf};
+    // (source, symbol, STB_*, a `.data` relocation rather than a `.text` one)
+    let rows: &[(&str, &str, u8, bool)] = &[
+        (
+            "long f(void) { long big(int); return big(5); }\ntypedef short big;\nbig s = 1;\n",
+            "big",
+            1,
+            false,
+        ),
+        (
+            "long f(void) { long big(int); return big(5); }\nenum { big = 9 };\nint e = big;\n",
+            "big",
+            1,
+            false,
+        ),
+        (
+            "typedef short big;\nlong f(void) { long big(int); return big(5); }\nbig s = 1;\n",
+            "big",
+            1,
+            false,
+        ),
+        (
+            "enum { big = 9 };\nlong f(void) { long big(int); return big(5); }\nint e = big;\n",
+            "big",
+            1,
+            false,
+        ),
+        (
+            "long (*f(void))(int) { long big(int); return big; }\ntypedef short big;\n",
+            "big",
+            1,
+            false,
+        ),
+        (
+            "typedef short big;\nlong (*f(void))(int) { long big(int); return &big; }\n",
+            "big",
+            1,
+            false,
+        ),
+        (
+            "long f(void) { long big(int); static long (*p)(int) = big; return p(5); }\n\
+             typedef short big;\n",
+            "big",
+            1,
+            true,
+        ),
+        (
+            "typedef short big;\n\
+             long f(void) { long big(int); static long (*p)(int) = big; return p(5); }\n",
+            "big",
+            1,
+            true,
+        ),
+        (
+            "long f(void) { long big(int); return big(5); }\ntypedef short big;\n\
+             long g(void) { big s = 1; { long big(int); { long big(int); return big(s); } } }\n",
+            "big",
+            1,
+            false,
+        ),
+        (
+            "typedef short big;\n\
+             void f(void) { void big(int *); int v __attribute__((cleanup(big))) = 1; }\n",
+            "big",
+            1,
+            false,
+        ),
+        (
+            "long f(void) { long w(int) __attribute__((weak)); return &w ? w(5) : 7; }\n\
+             typedef short w;\n",
+            "w",
+            2,
+            false,
+        ),
+        (
+            "typedef short w;\n\
+             long f(void) { long w(int) __attribute__((weak)); return &w ? w(5) : 7; }\n",
+            "w",
+            2,
+            false,
+        ),
+        (
+            "long f(void) { long other(int) __asm__(\"real\"); return other(5); }\n\
+             typedef short other;\n",
+            "real",
+            1,
+            false,
+        ),
+        (
+            "typedef short other;\n\
+             long f(void) { long other(int) __asm__(\"real\"); return other(5); }\n",
+            "real",
+            1,
+            false,
+        ),
+    ];
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        for &(src, name, binding, in_data) in rows {
+            for optimize in [false, true] {
+                let obj = parse_native_elf(&reloc_tu(src, target, optimize)).expect("parse");
+                let at = obj.symbols.iter().position(|s| s.name == name);
+                let at =
+                    at.unwrap_or_else(|| panic!("{target:?} -O={optimize} {src:?}: no `{name}`"));
+                let s = &obj.symbols[at];
+                assert!(
+                    matches!(s.section, NativeSymSection::Undef) && s.binding == binding,
+                    "{target:?} -O={optimize} {src:?}: `{name}` is not undefined with binding {binding}"
+                );
+                let relocs = if in_data {
+                    &obj.data_relocs
+                } else {
+                    &obj.text_relocs
+                };
+                assert!(
+                    relocs.iter().any(|r| r.sym_idx == at),
+                    "{target:?} -O={optimize} {src:?}: no relocation against `{name}`"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn dead_static_fnptr_table_drops_table_and_callee() {
     // A static function referenced only from a static, itself
     // unreferenced, function-pointer table: the table's relocation is

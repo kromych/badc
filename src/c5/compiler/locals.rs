@@ -859,7 +859,8 @@ impl Compiler {
     /// composite type of the visible declarations (6.2.7p4). The function is
     /// the entity a file-scope binding of the name denotes, a library one
     /// included; with none the declaration starts one, which the scope exits
-    /// leave on the slot for the rest of the unit (6.2.2p4).
+    /// leave on the slot for the rest of the unit (6.2.2p4), or past a
+    /// file-scope binding without linkage hold apart (`entity_record`).
     pub(super) fn bind_block_function_decl(
         &mut self,
         idx: usize,
@@ -867,10 +868,17 @@ impl Compiler {
         is_static: bool,
         label: Option<alloc::string::String>,
     ) -> Result<(), C5Error> {
-        let (conv, conv_named) = self.declared_conv(idx, f.conv, self.lex.line)?;
+        let c = self.symbols[idx].class;
+        let apart = self.names_fn_apart(idx, c);
+        let ent = if apart {
+            self.detached_fn_slot(idx)
+        } else {
+            self.fn_entity_of(idx)
+        };
+        let (conv, conv_named) = self.declared_conv(ent, f.conv, self.lex.line)?;
         let listed = super::redeclaration::Params::of(&f.params, false);
         let declared = super::redeclaration::DeclaredType::Function(f.ret, listed, f.conv);
-        self.declare_linked(idx, declared, self.lex.line)?;
+        self.declare_linked(ent, declared, self.lex.line)?;
         let prototyped = f.params.form == super::function::ParamForm::Prototype;
         let fresh = super::stmt::FnEntity {
             class: Token::Fun as i64,
@@ -886,11 +894,21 @@ impl Compiler {
             lineage: f.lineage,
             is_extern_decl: true,
         };
-        let c = self.symbols[idx].class;
         let mut keep_at = None;
-        if c == Token::Fun as i64 {
+        if apart {
+            if !self.symbols[ent].scoped_fn_decl {
+                self.set_fn_entity(ent, &fresh, is_static);
+                self.symbols[ent].class = 0;
+            }
+            let held = self.live_fn_entity(ent);
+            self.rebind_scoped(idx)?;
+            self.adopt_fn_entity(idx, held);
+            self.symbols[idx].entity_record = Some(ent as u32);
+        } else if c == Token::Fun as i64 {
             if !self.binds_in_current_scope(idx) {
+                let outer_record = self.symbols[idx].entity_record;
                 self.rebind_scoped(idx)?;
+                self.symbols[idx].entity_record = outer_record;
             }
         } else if c == 0 {
             self.rebind_scoped(idx)?;
@@ -907,33 +925,108 @@ impl Compiler {
                     self.set_fn_entity(idx, &fresh, is_static);
                     keep_at = Some(at);
                 }
-                // TODO: a function entity kept apart from its name's slot.
                 None => {
-                    let name = self.symbols[idx].name.clone();
-                    let msg = format!(
-                        "block-scope declaration of function `{name}` hiding a \
-                         file-scope `{name}` that is not a function"
-                    );
-                    return Err(self.compile_err(Code::UNSUPPORTED, msg));
+                    let name = &self.symbols[idx].name;
+                    let msg = format!("`{name}` redeclared as a function");
+                    return Err(self.compile_err(Code::INVALID_DECLARATION, msg));
                 }
             }
         }
-        let sym = &mut self.symbols[idx];
-        if c != 0 && c != Token::Sys as i64 && prototyped && !sym.fn_type.params.prototyped {
-            sym.fn_type.params = fresh.fn_type.params.clone();
+        let slots = if ent == idx {
+            &[idx][..]
+        } else {
+            &[ent, idx][..]
+        };
+        for &slot in slots {
+            let sym = &mut self.symbols[slot];
+            if c != 0 && c != Token::Sys as i64 && prototyped && !sym.fn_type.params.prototyped {
+                sym.fn_type.params = fresh.fn_type.params.clone();
+            }
+            if sym.is_fun_entity() {
+                (sym.fn_type.conv, sym.fn_type.conv_named) = (conv, conv_named);
+            }
+            sym.is_noreturn |= self.pending.attrs.noreturn;
         }
-        if sym.class == Token::Fun as i64 {
-            (sym.fn_type.conv, sym.fn_type.conv_named) = (conv, conv_named);
-        }
-        sym.is_noreturn |= self.pending.attrs.noreturn;
-        self.apply_symbol_attributes(idx);
+        self.apply_symbol_attributes(ent);
         if let Some(label) = label {
-            self.set_asm_label(idx, label)?;
+            self.set_asm_label(ent, label)?;
         }
         if let Some(at) = keep_at {
             self.keep_fn_entity(idx, at, &fresh);
         }
         Ok(())
+    }
+
+    /// Whether a block-scope declaration of function `idx`, bound now as
+    /// `class`, follows a file-scope typedef or enumerator, which has no
+    /// linkage (C99 6.2.2p4, p6).
+    fn names_fn_apart(&self, idx: usize, class: i64) -> bool {
+        let not_fn = class != 0 && class != Token::Fun as i64 && class != Token::Sys as i64;
+        let outer = match self.file_scope_state(idx) {
+            SavedAt::Top => self.symbols[idx].h_class,
+            SavedAt::Block(level, at) => self.block_scopes[level][at].class().0,
+            SavedAt::Current => class,
+        };
+        not_fn && (outer == Token::Typedef as i64 || outer == Token::Num as i64)
+    }
+
+    /// The name's detached function slot: an earlier declaration's, or new.
+    fn detached_fn_slot(&mut self, idx: usize) -> usize {
+        let name = self.symbols[idx].name.clone();
+        let hash = crate::c5::lexer::hash_name(name.as_bytes());
+        if let Some(home) = self
+            .symbol_index
+            .lookup_detached(&self.symbols, hash, name.as_bytes())
+        {
+            return home;
+        }
+        let home = self.fresh_name_slot(idx);
+        self.symbols[home].detached = true;
+        home
+    }
+
+    /// The slot a file-scope typedef or enumerator binds for the name of
+    /// `idx`: a fresh one, with the declarator's shape, when `idx` holds a
+    /// block-scope declaration's function past its scope (C99 6.2.2p4).
+    pub(super) fn claim_file_scope_name(&mut self, idx: usize) -> usize {
+        let s = &self.symbols[idx];
+        if self.in_function_body() || s.class != 0 || !s.scoped_fn_decl {
+            return idx;
+        }
+        let fresh = self.fresh_name_slot(idx);
+        let held = &mut self.symbols[idx];
+        held.detached = true;
+        let shape = (held.inner_array_size, core::mem::take(&mut held.array_dims));
+        (
+            self.symbols[fresh].inner_array_size,
+            self.symbols[fresh].array_dims,
+        ) = shape;
+        fresh
+    }
+
+    fn fresh_name_slot(&mut self, idx: usize) -> usize {
+        let name = self.symbols[idx].name.clone();
+        let hash = crate::c5::lexer::hash_name(name.as_bytes());
+        self.symbols.push(crate::c5::symbol::Symbol {
+            name,
+            token: Token::Id as i64,
+            ..Default::default()
+        });
+        self.symbol_index.record(hash);
+        self.symbols.len() - 1
+    }
+
+    fn live_fn_entity(&self, idx: usize) -> super::stmt::FnEntity {
+        let s = &self.symbols[idx];
+        super::stmt::FnEntity {
+            class: s.class,
+            type_: s.type_,
+            incomplete_enum_tag: s.incomplete_enum_tag,
+            val: s.val,
+            fn_type: s.fn_type.clone(),
+            lineage: (s.fn_ptr_indirection, s.fn_ptr_ret_indirection),
+            is_extern_decl: s.is_extern_decl,
+        }
     }
 
     fn set_fn_entity(&mut self, idx: usize, e: &super::stmt::FnEntity, is_static: bool) {
@@ -1159,7 +1252,7 @@ impl Compiler {
             },
             ..Default::default()
         });
-        self.symbols[loc_idx].static_local_record = Some(record_idx as u32);
+        self.symbols[loc_idx].entity_record = Some(record_idx as u32);
         self.symbol_index.record(hash);
         self.apply_symbol_attributes(record_idx);
         self.pending_block_static_syms.push(record_idx);

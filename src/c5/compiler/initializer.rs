@@ -621,11 +621,8 @@ impl Compiler {
                 }
                 // A block-scope static's address anchors to its emission
                 // record (see `emit_addr_reloc`).
-                let src_sym = src_sym.map(|i| {
-                    self.symbols[i]
-                        .static_local_record
-                        .map_or(i, |r| r as usize)
-                });
+                let src_sym =
+                    src_sym.map(|i| self.symbols[i].entity_record.map_or(i, |r| r as usize));
                 self.note_init_reloc(here);
                 // A target defined in another unit (`extern T x;` with no
                 // definition here) resolves by name at link time, not
@@ -666,9 +663,7 @@ impl Compiler {
             }
             InitElemReloc::Code(sym_idx) => {
                 self.note_init_reloc(here);
-                let reloc = self.code_reloc_at(here as u64, sym_idx, value);
-                self.code_relocs.push(reloc);
-                self.code_reloc_sym_idx.push(sym_idx);
+                self.push_code_reloc(false, here as u64, sym_idx, value);
             }
             InitElemReloc::Label(label) => {
                 self.note_init_reloc(here);

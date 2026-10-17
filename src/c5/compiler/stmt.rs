@@ -94,7 +94,7 @@ pub(super) struct BlockShadow {
     asm_register: Option<crate::c5::symbol::AsmRegister>,
     is_global_register: bool,
     const_object_value: Option<crate::c5::symbol::ConstObjectValue>,
-    static_local_record: Option<u32>,
+    entity_record: Option<u32>,
     binding: crate::c5::symbol::BindingInfo,
 }
 
@@ -185,12 +185,12 @@ impl Compiler {
             asm_register: s.asm_register,
             is_global_register: s.is_global_register,
             const_object_value: s.const_object_value,
-            static_local_record: s.static_local_record,
+            entity_record: s.entity_record,
             binding,
         };
-        // The inner binding is not (yet) a block-scope static; its own
-        // promotion re-sets the record. Its type records its own enum tag.
-        self.symbols[idx].static_local_record = None;
+        // The inner binding denotes no record yet; its declaration sets
+        // its own. Its type records its own enum tag.
+        self.symbols[idx].entity_record = None;
         self.symbols[idx].incomplete_enum_tag = None;
         shadow
     }
@@ -206,7 +206,7 @@ impl Compiler {
         if s.scoped_fn_decl && s.class == Token::Fun as i64 && b.class == 0 {
             s.class = 0;
             s.block_extern_active = false;
-            s.static_local_record = b.static_local_record;
+            s.entity_record = b.entity_record;
             return;
         }
         let same_function = s.class == Token::Fun as i64 && b.class == Token::Fun as i64;
@@ -237,7 +237,7 @@ impl Compiler {
         s.asm_register = b.asm_register;
         s.is_global_register = b.is_global_register;
         s.const_object_value = b.const_object_value;
-        s.static_local_record = b.static_local_record;
+        s.entity_record = b.entity_record;
         s.block_extern_active = false;
     }
 
@@ -893,7 +893,7 @@ impl Compiler {
         let s = &self.symbols[var_sym];
         let cv = CleanupVar {
             var_sym,
-            fn_sym,
+            fn_sym: self.fn_entity_of(fn_sym),
             class: s.class,
             ty: s.type_,
             val: s.val,

@@ -133,7 +133,7 @@ impl Compiler {
         named: Option<CallConv>,
         line: usize,
     ) -> Result<(CallConv, bool), C5Error> {
-        let earlier = match self.linked_entities.get(&idx).map(|e| &e.ty) {
+        let earlier = match self.linked(idx).map(|e| &e.ty) {
             Some(DeclaredType::Function(.., c)) => *c,
             _ => return Ok((named.unwrap_or_default(), named.is_some())),
         };
@@ -181,7 +181,7 @@ impl Compiler {
             && let Some(LinkedEntity {
                 ty: DeclaredType::Function(ret, ..),
                 ..
-            }) = self.linked_entities.get(&idx)
+            }) = self.linked(idx)
         {
             let ret = self.resolve_spelling(*ret);
             self.symbols[idx].type_ = ret.ty;
@@ -190,7 +190,7 @@ impl Compiler {
         let at = (def.line, self.intern_source_file());
         let prior = self
             .linked_entities
-            .get_mut(&idx)
+            .get_mut(self.symbols[idx].name.as_str())
             .and_then(|e| e.body.replace((at, def.extern_inline)));
         match prior {
             Some(((line, file), extern_inline)) if !extern_inline || def.extern_inline => Err(self
@@ -211,7 +211,7 @@ impl Compiler {
     /// prototype (6.7.5.3p15), else the declared types after the default
     /// argument promotions (6.5.2.2p6).
     pub(super) fn old_style_arrival_tys(&self, idx: usize, declared: &[i64]) -> Vec<i64> {
-        match self.linked_entities.get(&idx).map(|e| &e.ty) {
+        match self.linked(idx).map(|e| &e.ty) {
             Some(DeclaredType::Function(_, Params::Prototype(t, false), _))
                 if t.len() == declared.len() =>
             {
@@ -226,7 +226,7 @@ impl Compiler {
     pub(super) fn has_prototype(&self, idx: usize, params: &ParsedParams) -> bool {
         !matches!(params.form, ParamForm::Empty | ParamForm::IdentifierList)
             || matches!(
-                self.linked_entities.get(&idx).map(|e| &e.ty),
+                self.linked(idx).map(|e| &e.ty),
                 Some(DeclaredType::Function(_, Params::Prototype(..), _))
             )
     }
@@ -240,7 +240,9 @@ impl Compiler {
         if let Some(LinkedEntity {
             ty: DeclaredType::Object(_, bounds),
             ..
-        }) = self.linked_entities.get_mut(&idx)
+        }) = self
+            .linked_entities
+            .get_mut(self.symbols[idx].name.as_str())
             && let Some(outer) = bounds.first_mut().filter(|b| **b < 0)
         {
             *outer = count;
@@ -286,13 +288,14 @@ impl Compiler {
         implicit_int: bool,
     ) -> Result<(), C5Error> {
         let at = (line, self.intern_source_file());
-        let Some(prior) = self.linked_entities.remove(&idx) else {
+        let key = self.symbols[idx].name.clone();
+        let Some(prior) = self.linked_entities.remove(&key) else {
             let entity = LinkedEntity {
                 ty: new,
                 at,
                 body: None,
             };
-            self.linked_entities.insert(idx, entity);
+            self.linked_entities.insert(key, entity);
             return Ok(());
         };
         let verdict = match (&prior.ty, &new) {
@@ -322,13 +325,17 @@ impl Compiler {
             if verdict == Verdict::Conflict {
                 let (prior_line, file) = prior.at;
                 let file = &self.source_files[file as usize];
+                let what = match (&prior.ty, &new) {
+                    (DeclaredType::Object(..), DeclaredType::Object(..))
+                    | (DeclaredType::Function(..), DeclaredType::Function(..)) => {
+                        format!("conflicting types for `{name}`")
+                    }
+                    _ => format!("`{name}` redeclared as a different kind of symbol"),
+                };
                 return Err(self.compile_err_at(
                     Code::INVALID_DECLARATION,
                     line,
-                    format!(
-                        "conflicting types for `{name}`\n  previous: {was} ({file}:{prior_line})\n  \
-                         now:      {now}"
-                    ),
+                    format!("{what}\n  previous: {was} ({file}:{prior_line})\n  now:      {now}"),
                 ));
             }
             self.warn_at(
@@ -342,8 +349,13 @@ impl Compiler {
         }
         let ty = compose(prior.ty, new);
         self.linked_entities
-            .insert(idx, LinkedEntity { ty, ..prior });
+            .insert(key, LinkedEntity { ty, ..prior });
         Ok(())
+    }
+
+    /// What the declarations of `idx`'s identifier with linkage gave it.
+    fn linked(&self, idx: usize) -> Option<&LinkedEntity> {
+        self.linked_entities.get(self.symbols[idx].name.as_str())
     }
 
     fn function_verdict(

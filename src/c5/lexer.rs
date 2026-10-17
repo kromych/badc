@@ -628,12 +628,27 @@ impl SymbolIndex {
     /// the old linear scan did; in practice no caller zeroes `token`
     /// today, but the check is cheap and keeps behaviour identical.
     pub fn lookup(&self, symbols: &[Symbol], hash: i64, name: &[u8]) -> Option<usize> {
+        self.find(symbols, hash, name, |s| s.token != 0 && !s.detached)
+    }
+
+    /// The most recent [`Symbol::detached`] slot of the name.
+    pub fn lookup_detached(&self, symbols: &[Symbol], hash: i64, name: &[u8]) -> Option<usize> {
+        self.find(symbols, hash, name, |s| s.detached)
+    }
+
+    fn find(
+        &self,
+        symbols: &[Symbol],
+        hash: i64,
+        name: &[u8],
+        accept: impl Fn(&Symbol) -> bool,
+    ) -> Option<usize> {
         let mut cur = self.buckets[(hash as u32 & self.mask) as usize];
         while cur != u32::MAX {
             let i = cur as usize;
             if self.hashes[i] == hash {
                 let s = &symbols[i];
-                if s.token != 0 && s.name.as_bytes() == name {
+                if s.name.as_bytes() == name && accept(s) {
                     return Some(i);
                 }
             }

@@ -212,6 +212,52 @@ fn object_redeclarations_of_another_type_are_rejected() {
 }
 
 #[test]
+fn declarations_with_linkage_meet_past_a_binding_without_one() {
+    // C99 6.2.2p2, p4: every declaration of an identifier with linkage
+    // denotes one entity, so a function and an object declared at block
+    // scope meet across a typedef or enumerator of the name, in any order,
+    // as gcc and clang diagnose; a GNU global register variable takes the
+    // name too.
+    let kind = "`big` redeclared as a different kind of symbol";
+    for src in [
+        "long a(void) { long big(int); return big(5); }\ntypedef short big;\n\
+         long b(void) { extern long big; return big; }\n",
+        "long a(void) { extern long big; return big; }\ntypedef short big;\n\
+         long b(void) { long big(int); return big(5); }\n",
+        "typedef short big;\nlong a(void) { extern long big; return big; }\n\
+         long b(void) { long big(int); return big(5); }\n",
+        "long a(void) { long big(int); return big(1); }\ntypedef short big;\n\
+         long b(void) { extern long (*big)(int); return big(2); }\n",
+        "long a(void) { long big(int); return big(5); }\nenum { big = 1 };\n\
+         long b(void) { extern long big; return big; }\n",
+        "long a(void) { long big(int); return big(5); }\n\
+         long b(void) { extern long big; return big; }\n",
+    ] {
+        expect_conflict(
+            &alloc::format!("{src}int main(void) {{ return 0; }}\n"),
+            &[kind],
+        );
+    }
+    for (src, needle) in [
+        (
+            "long a(void) { long rg(int); return rg(5); }\n\
+             register unsigned long rg __asm__(\"rsp\");\n",
+            "`rg` conflicts with a prior declaration",
+        ),
+        (
+            "register unsigned long rg __asm__(\"rsp\");\n\
+             long a(void) { long rg(int); return rg(5); }\n",
+            "`rg` redeclared as a function",
+        ),
+    ] {
+        expect_conflict(
+            &alloc::format!("{src}int main(void) {{ return 0; }}\n"),
+            &[needle],
+        );
+    }
+}
+
+#[test]
 fn block_scope_declarations_meet_the_other_declarations() {
     // C99 6.2.2p4: a block-scope `extern` or function declaration names the
     // entity every other declaration of the identifier names.
@@ -225,6 +271,11 @@ fn block_scope_declarations_meet_the_other_declarations() {
          int main(void) { F g; return g(1); }\n",
         "typedef int F(void);\nint g(int a) { return a; }\n\
          int main(void) { F g; return g(1); }\n",
+        // A typedef of the name between or before them hides neither.
+        "long f(void) { long g(int); return g(1); }\ntypedef short g;\n\
+         long h(void) { double g(int); return g(1); }\nint main(void) { return 0; }\n",
+        "enum { g = 1 };\nlong f(void) { long g(int); return g(1); }\n\
+         long h(void) { double g(int); return g(1); }\nint main(void) { return 0; }\n",
     ] {
         expect_conflict(src, &["conflicting types for `"]);
     }

@@ -484,6 +484,11 @@ impl Compiler {
         // function body's opening brace parsed further below.
         let signature_line = self.lex.line;
         let (id_idx, mut ty, mut array_size, mut zero_len_array) = self.parse_declarator(bt)?;
+        let id_idx = if is_typedef {
+            self.claim_file_scope_name(id_idx)
+        } else {
+            id_idx
+        };
         // A function declarator reports in `define_file_scope_function`.
         if decl.implicit_int
             && (is_typedef || (self.lex.tk != '(' && self.pending.fn_params.is_none()))

@@ -323,6 +323,7 @@ impl Compiler {
             // redeclaration (6.7p3); otherwise the outer binding is
             // saved and restored at scope exit. File scope binds
             // permanently.
+            let idx = self.claim_file_scope_name(idx);
             self.rebind_scoped(idx)?;
             self.symbols[idx].class = Token::Num as i64;
             self.symbols[idx].incomplete_enum_tag = None;

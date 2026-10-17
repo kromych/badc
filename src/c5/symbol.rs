@@ -532,6 +532,10 @@ pub(crate) struct Symbol {
     /// same function). Never cleared.
     pub scoped_fn_decl: bool,
 
+    /// True for a slot name lookup skips: it holds a function of block-scope
+    /// declarations past a file-scope binding without linkage. Never cleared.
+    pub detached: bool,
+
     /// True once a block-scope `extern` declared an object of this name.
     /// Scope exit restores the binding, but the declared attributes (weak,
     /// visibility) stay for the symbol table. Never cleared.
@@ -545,14 +549,14 @@ pub(crate) struct Symbol {
     /// owner survives. `None` for file-scope symbols.
     pub owner_ent_pc: Option<u64>,
 
-    /// Index of the emission record while this slot's live binding is a
-    /// block-scope static. Reference-capture sites resolve the name to
-    /// the record, whose state outlives the scope-exit restore of the
-    /// slot (which may bring back a same-named file-scope `extern`).
-    /// Set at the promotion, cleared when the binding's scope exits.
-    pub static_local_record: Option<u32>,
-    /// Shadow slot for `static_local_record` at function-body scope.
-    pub h_static_local_record: Option<u32>,
+    /// Index of the symbol holding the entity this slot's live binding
+    /// denotes when it is not the slot: a block-scope static's emission
+    /// record, or a function held apart from its name. Reference-capture
+    /// sites resolve the name to it, whose state outlives the scope-exit
+    /// restore of the slot. Set at the declaration, cleared at scope exit.
+    pub entity_record: Option<u32>,
+    /// Shadow slot for `entity_record` at function-body scope.
+    pub h_entity_record: Option<u32>,
 
     /// True for the synthetic internal symbol of an anonymous compound
     /// literal staged in the data segment. Its initializer bytes are
@@ -980,10 +984,11 @@ impl crate::c5::layout::DataOffsets for Symbol {
             block_extern_active: _,
             is_scope_bound: _,
             scoped_fn_decl: _,
+            detached: _,
             scoped_obj_decl: _,
             owner_ent_pc: _, // code address space
-            static_local_record: _,
-            h_static_local_record: _, // scope-restore shadow
+            entity_record: _,
+            h_entity_record: _, // scope-restore shadow
             is_compound_literal: _,
             is_string_literal: _,
             binding: _, // declaration site and uses, not an offset

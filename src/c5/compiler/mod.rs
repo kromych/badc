@@ -2236,8 +2236,9 @@ pub struct Compiler {
     /// to and their depth, for the conversion check of each element.
     array_elem_fn: Option<(crate::c5::symbol::FnType, i64)>,
     /// The composite type and the function body of each identifier with
-    /// linkage, by symbol index.
-    linked_entities: hashbrown::HashMap<usize, redeclaration::LinkedEntity>,
+    /// linkage, by its spelling: every declaration of it denotes the one
+    /// entity whatever slot binds it (C99 6.2.2p2).
+    linked_entities: hashbrown::HashMap<alloc::string::String, redeclaration::LinkedEntity>,
 
     /// The native target this compilation is producing for.
     /// Drives data-model picks: `long` is 8 bytes on LP64

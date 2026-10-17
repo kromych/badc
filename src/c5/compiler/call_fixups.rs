@@ -34,7 +34,7 @@ impl Compiler {
     /// The relocation of an 8-byte slot at `data_offset` holding `value`,
     /// a constant address of function `sym_idx`: its entry now, which
     /// [`Self::resolve_code_relocs`] updates, and the offset past it.
-    pub(super) fn code_reloc_at(
+    fn code_reloc_at(
         &self,
         data_offset: u64,
         sym_idx: usize,
@@ -46,6 +46,26 @@ impl Compiler {
             target_ent_pc: pc as u64,
             addend: value.wrapping_sub(pc),
         }
+    }
+
+    /// Record the relocation of a static slot holding the address of the
+    /// function the binding `sym_idx` denotes.
+    pub(super) fn push_code_reloc(
+        &mut self,
+        tls: bool,
+        data_offset: u64,
+        sym_idx: usize,
+        value: i64,
+    ) {
+        let sym_idx = self.fn_entity_of(sym_idx);
+        let reloc = self.code_reloc_at(data_offset, sym_idx, value);
+        let (relocs, syms) = if tls {
+            (&mut self.tls_code_relocs, &mut self.tls_code_reloc_sym_idx)
+        } else {
+            (&mut self.code_relocs, &mut self.code_reloc_sym_idx)
+        };
+        relocs.push(reloc);
+        syms.push(sym_idx);
     }
 
     /// Rewrite every `code_relocs[i].target_ent_pc` to the

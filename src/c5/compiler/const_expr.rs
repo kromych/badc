@@ -2666,7 +2666,7 @@ impl Compiler {
         let s = &self.symbols[idx];
         // A block-scope static is complete at its declaration; a file-scope
         // object without an initializer yet may still receive one.
-        let initialized = s.has_initializer || s.static_local_record.is_some();
+        let initialized = s.has_initializer || s.entity_record.is_some();
         if s.class != Token::Glo as i64
             || !s.storage_is_const
             || !initialized

@@ -1890,23 +1890,18 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // prologue's `str xN, [sp, ...]` sequence to exactly the
     // registers AAPCS64 / SysV / Win64 require the callee to
     // preserve.
-    // A definition on a foreign calling convention gives back whatever
-    // that convention marks non-volatile on top of the target's own set
-    // (`ms_abi` adds rsi, rdi and xmm6..xmm15 to the System V list), so
-    // the save list is the union. `conv_target == target` for a
-    // definition on the target's own convention, and the union is then
-    // the plain filter.
+    // The set is the definition's own convention's (`conv_target`).
     let conv_banks = RegBanks::new(conv_target, fixed);
     let mut gpr_used_callee: Vec<u8> = gpr_used
         .into_iter()
-        .filter(|r| banks.callee_gprs.contains(r) || conv_banks.callee_gprs.contains(r))
+        .filter(|r| conv_banks.callee_gprs.contains(r))
         .collect();
     // The x86_64 writer's fixed scratch (r10 / r11) is caller-saved, so
     // it needs no save. The aarch64 writer's callee-saved x19 is saved
     // through `Frame::uses_x19`, not this list.
     let mut fp_used_callee: Vec<u8> = fp_used
         .into_iter()
-        .filter(|r| banks.callee_fprs.contains(r) || fp_callee_saved(conv_target, *r))
+        .filter(|r| fp_callee_saved(conv_target, *r))
         .collect();
     let (call_gpr, call_fpr) = call_saves(func, target, conv_target, fixed);
     for r in 0..u32::BITS as u8 {
@@ -1925,7 +1920,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     for (i, &r) in banks.fp_scratch.iter().enumerate() {
         if demand[i]
             && r != NO_FP_SCRATCH
-            && (fp_callee_saved(target, r) || fp_callee_saved(conv_target, r))
+            && fp_callee_saved(conv_target, r)
             && !fp_used_callee.contains(&r)
         {
             fp_used_callee.push(r);
@@ -1933,8 +1928,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     }
     // A callee-saved register an inline-asm block writes joins the save
     // list, so the prologue preserves it and the epilogue restores it.
-    let (asm_gpr, asm_fpr) =
-        asm_callee_saved(func, &asm_live, &banks, &conv_banks, target, conv_target);
+    let (asm_gpr, asm_fpr) = asm_callee_saved(func, &asm_live, &conv_banks, target, conv_target);
     for r in 0..u32::BITS as u8 {
         if asm_gpr & (1 << r) != 0 && !gpr_used_callee.contains(&r) {
             gpr_used_callee.push(r);
@@ -2190,7 +2184,6 @@ fn abi_reserved_gprs(target: Target) -> u32 {
 fn asm_callee_saved(
     func: &FunctionSsa,
     sites: &[AsmSite],
-    banks: &RegBanks,
     conv_banks: &RegBanks,
     target: Target,
     conv_target: Target,
@@ -2199,10 +2192,9 @@ fn asm_callee_saved(
         return (0, 0);
     }
     let mask = |regs: &[u8]| regs.iter().fold(0u32, |m, &r| m | 1 << r);
-    let callee_gpr =
-        (mask(&banks.callee_gprs) | mask(&conv_banks.callee_gprs)) & !abi_reserved_gprs(target);
+    let callee_gpr = mask(&conv_banks.callee_gprs) & !abi_reserved_gprs(target);
     let callee_fpr = (0u8..u32::BITS as u8)
-        .filter(|&r| fp_callee_saved(target, r) || fp_callee_saved(conv_target, r))
+        .filter(|&r| fp_callee_saved(conv_target, r))
         .fold(0u32, |m, r| m | 1 << r);
     let (gpr, fpr) = sites
         .iter()

@@ -24,7 +24,10 @@ impl Compiler {
             self.next()?; // past the close paren
             ok = self.lex.tk != Token::Brak
                 && self.lex.tk != Token::Dot
-                && self.lex.tk != Token::Arrow;
+                && self.lex.tk != Token::Arrow
+                && self.lex.tk != '('
+                && self.lex.tk != Token::Inc
+                && self.lex.tk != Token::Dec;
         }
         self.restore_lex(snap);
         Ok(ok)
@@ -89,8 +92,10 @@ impl Compiler {
         } else if self.lex.tk == Token::Id
             && self.symbols[self.lex.curr_id_idx].class != 0
             && !self.lex.peek_after_whitespace(b'-')
+            && !self.lex.peek_after_whitespace(b'+')
             && !self.lex.peek_after_whitespace(b'.')
             && !self.lex.peek_after_whitespace(b'[')
+            && !self.lex.peek_after_whitespace(b'(')
             && (!had_paren || self.sizeof_bare_id_paren_ok()?)
         {
             // A declared identifier is looked up directly, so an array yields

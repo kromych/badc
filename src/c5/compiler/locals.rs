@@ -3249,9 +3249,7 @@ impl Compiler {
                 };
                 if let Some((lit, row)) = string {
                     // C99 6.7.8p14: a string literal fills the row.
-                    if lit.overruns(row) {
-                        return Err(self.row_excess_err(lit.chars(), row));
-                    }
+                    self.warn_string_overrun(&lit, row);
                     self.push_string_init_stores(off, &lit, row, ty);
                 } else if self.lex.tk == '{' {
                     self.fill_array_init_runtime(local_val, off, sub, ty, elem_size, var_name)?;
@@ -3351,9 +3349,7 @@ impl Compiler {
             } else if let Some(row) = row
                 && let Some(lit) = self.take_string_init(ty)?
             {
-                if lit.overruns(row as usize) {
-                    return Err(self.row_excess_err(lit.chars(), row as usize));
-                }
+                self.warn_string_overrun(&lit, row as usize);
                 self.push_string_init_stores(base + k * elem_size, &lit, row as usize, ty);
                 k += row;
             } else {

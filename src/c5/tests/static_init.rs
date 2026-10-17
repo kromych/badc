@@ -527,12 +527,7 @@ const ACCEPTED_ONLY_BY_BADC: &[Case] = &[
 const REJECTED_ONLY_BY_BADC: &[Reject] = &[
     // C99 6.7.8p2 makes the excess a constraint violation; gcc and clang
     // warn and drop it.
-    reject!("string_too_long", "char x[3] = \"abcdef\";", "too many initializers for array `x` (6 > 3)"),
     reject!("excess_elements", "int x[2] = {1, 2, 3};", "too many initializers for array `x` (3 > 2)"),
-    reject!("string_too_long_for_a_row", "char x[2][2] = {\"abc\", \"d\"};", "too many initializers for array row (3 > 2)"),
-    reject!("braced_string_too_long_for_a_row", "char x[2][3] = {{\"abcd\"}};", "too many initializers for array row (4 > 3)"),
-    reject!("string_too_long_for_a_member", "struct m { char a[2]; } x = {\"abc\"};", "too many initializers for `m.a`"),
-    reject!("string_too_long_for_a_literal", "char *p = (char[2]){\"abc\"};", "too many initializers for array compound literal"),
     reject!("excess_after_a_string", "char x[] = {\"ab\", \"cd\"};", "excess elements after a string initializer"),
     reject!("excess_in_a_bounded_literal", "int *p = (int[2]){1, 2, 3};", "too many initializers for array compound literal"),
     // A union has one object to initialize (6.7.8p17); clang and gcc

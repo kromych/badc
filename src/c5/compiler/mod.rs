@@ -2229,6 +2229,10 @@ pub struct Compiler {
     /// return-type prototype (implicit int). Dedupes the diagnostic to
     /// one per callee.
     warned_implicit_ret: alloc::collections::BTreeSet<usize>,
+    /// Source offsets of the string initializers reported as longer than
+    /// their arrays: a literal read for its type and then for its value,
+    /// as `__auto_type` reads it, is reported once.
+    warned_string_overruns: alloc::collections::BTreeSet<usize>,
     /// Where the operand the precedence loop is extending begins, so a
     /// diagnostic about a call can spell the callee expression.
     operand_start: usize,
@@ -2857,6 +2861,7 @@ impl Compiler {
             deferred_error,
             dylibs,
             warned_implicit_ret: alloc::collections::BTreeSet::new(),
+            warned_string_overruns: alloc::collections::BTreeSet::new(),
             operand_start: 0,
             array_elem_fn: None,
             linked_entities: hashbrown::HashMap::new(),

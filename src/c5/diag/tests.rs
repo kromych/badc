@@ -449,6 +449,7 @@ fn the_named_codes_match_their_rows() {
         (Code::IGNORED_ASM_LABEL, "ignored-asm-label"),
         (Code::SHADOWED_BINDING, "shadowed-binding"),
         (Code::INT_CONVERSION, "int-conversion"),
+        (Code::EXCESS_INITIALIZERS, "excess-initializers"),
         (Code::INCOMPATIBLE_STRUCT_TYPES, "incompatible-struct-types"),
         (Code::RETURN_TYPE, "return-type"),
         (Code::TOO_FEW_ARGUMENTS, "too-few-arguments"),

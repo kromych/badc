@@ -3656,10 +3656,6 @@ fn static_local_array_initializer_over_bound_rejected() {
         "too many initializers for array `a` (4 > 1)",
     );
     expect_compile_error(
-        "int main(void) { static char c[2] = \"abcdef\"; return c[0]; }",
-        "too many initializers for array `c` (6 > 2)",
-    );
-    expect_compile_error(
         "int main(void) { static int a[1] = {1, 2}; static int b[2] = {3, 4};\n\
          return a[0] + b[0]; }",
         "too many initializers for array `a` (2 > 1)",
@@ -3675,6 +3671,85 @@ fn static_local_array_initializer_over_bound_rejected() {
     .compile()
     .expect("an exactly-filling or short static-local initializer stays legal");
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+/// C99 6.7.8p2: a string longer than the array, member or row it
+/// initializes is reported as `-Wexcess-initializers`, on by default, and
+/// truncated, as gcc and clang do, once for each literal; an exact fit
+/// leaves the terminator out silently (6.7.8p14).
+#[test]
+fn a_string_longer_than_its_array_warns_and_is_truncated() {
+    let types = "#include <wchar.h>\n\
+                 struct M { char m[2]; int n; };\n\
+                 struct D { char m[2][3]; int n; };\n";
+    for (globals, body, warned) in [
+        ("char g[2] = \"abc\";", "return g[1] != 'b';", 1),
+        ("char *q = (char[2]){\"abc\"};", "return q[1] != 'b';", 1),
+        ("", "static char a[2] = \"abc\"; return a[1] != 'b';", 1),
+        ("", "char a[2] = {\"abc\"}; return a[1] != 'b';", 1),
+        (
+            "",
+            "static struct M s = {\"abc\", 5}; return s.m[1] != 'b' || s.n != 5;",
+            1,
+        ),
+        (
+            "",
+            "int x = 7; struct M s = {\"abc\", x}; return s.m[1] != 'b' || s.n != 7;",
+            1,
+        ),
+        (
+            "",
+            "static char r[2][2] = {\"abc\", \"d\"}; return r[0][1] != 'b' || r[1][0] != 'd';",
+            1,
+        ),
+        (
+            "",
+            "int x = 7; char r[2][2] = {\"abc\", {x}}; return r[0][1] != 'b' || r[1][0] != 7;",
+            1,
+        ),
+        (
+            "",
+            "static char b[2][3] = {{\"abcd\"}, {\"e\"}}; return b[0][2] != 'c' || b[1][0] != 'e';",
+            1,
+        ),
+        (
+            "",
+            "static struct D d = {\"abcd\", \"e\"}; return d.m[0][2] != 'c' || d.m[1][0] != 'e';",
+            1,
+        ),
+        ("", "char *p = (char[2]){\"abc\"}; return p[1] != 'b';", 1),
+        (
+            "",
+            "static wchar_t w[2] = L\"abc\"; return w[1] != L'b';",
+            1,
+        ),
+        ("", "static char e[3] = \"abc\"; return e[2] != 'c';", 0),
+        (
+            "",
+            "__auto_type p = (char[2]){\"abc\"}; return p[1] != 'b';",
+            1,
+        ),
+        (
+            "",
+            "__typeof__((char[2]){\"abc\"}) t = {'x', 'y'}; return t[1] != 'y';",
+            1,
+        ),
+        ("", "return sizeof((char[2]){\"abc\"}) != 2;", 1),
+        (
+            "#define L (char[2]){\"abc\"}",
+            "__auto_type q = L; __auto_type r = L; return q[1] != r[1];",
+            2,
+        ),
+    ] {
+        let src = format!("{types}{globals}\nint main(void) {{ {body} }}\n");
+        let prog = Compiler::new(src.clone())
+            .compile()
+            .unwrap_or_else(|e| panic!("{src}: {e}"));
+        let warnings = prog.warnings.iter().map(|w| w.to_string());
+        let n = warnings.filter(|w| w.contains("[B3013]")).count();
+        assert_eq!(n, warned, "{src}");
+        assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0, "{src}");
+    }
 }
 
 #[test]

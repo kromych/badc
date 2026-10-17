@@ -173,6 +173,9 @@ catalog! {
     3012, "switch-bool", [], Warning, Controllable,
         [DEFAULT], Live,
         "a `switch` on a boolean value with a case label outside 0 and 1, or with a `default` beside labels covering both";
+    3013, "excess-initializers", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a string literal longer than the array, member or row it initializes, a terminator aside; the characters past the bound are dropped";
     3020, "invalid-operands", [], Error, Hard,
         [], Live,
         "an operator applied to operands its constraints reject, or a non-lvalue where an lvalue is required";
@@ -436,6 +439,7 @@ impl Code {
     pub const CONSTANT_CONVERSION: Code = Code::new(3010);
     pub const NESTED_QUALIFIERS: Code = Code::new(3011);
     pub const SWITCH_BOOL: Code = Code::new(3012);
+    pub const EXCESS_INITIALIZERS: Code = Code::new(3013);
     pub const LINK_PRAGMA_IGNORED: Code = Code::new(7008);
     pub const FREESTANDING_IMPORT: Code = Code::new(7010);
     pub const DWARF_OUTPUT: Code = Code::new(7011);

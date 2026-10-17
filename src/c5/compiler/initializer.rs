@@ -95,6 +95,9 @@ pub(super) struct StagedStringLiteral {
     /// NUL is one of them (C99 6.4.5p5 counts it in the literal's
     /// length), not a stop.
     chars: usize,
+    line: usize,
+    /// Source offset of the literal's first token.
+    pos: usize,
 }
 
 impl StagedStringLiteral {
@@ -113,10 +116,6 @@ impl StagedStringLiteral {
     /// Whether the literal is too long for `bound` elements (C99 6.7.8p14).
     pub(super) fn overruns(&self, bound: usize) -> bool {
         self.chars > bound
-    }
-
-    pub(super) fn chars(&self) -> usize {
-        self.chars
     }
 }
 
@@ -907,6 +906,7 @@ impl Compiler {
             strip_unsigned(elem_ty) == Ty::Char as i64
         };
         let mut span = None;
+        let (line, pos) = (self.lex.line, self.lex.tok_start());
         if self.lex.tk == '"' && of_kind {
             let start = self.take_concat_string_literal()?;
             span = Some((start, self.data.len() - start));
@@ -947,7 +947,21 @@ impl Compiler {
             start,
             elem_bytes,
             chars,
+            line,
+            pos,
         }))
+    }
+
+    /// Report a string longer than the `bound` elements it initializes, as
+    /// gcc and clang do (C99 6.7.8p2); the fill drops the excess.
+    pub(super) fn warn_string_overrun(&mut self, lit: &StagedStringLiteral, bound: usize) {
+        if lit.overruns(bound) && self.warned_string_overruns.insert(lit.pos) {
+            let text = format!(
+                "initializer string is too long for an array of {bound} ({} dropped)",
+                lit.chars - bound
+            );
+            self.warn_at(Code::EXCESS_INITIALIZERS, lit.line, text);
+        }
     }
 
     /// The length a string initializer gives an unsized array of `elem_ty`.
@@ -1245,7 +1259,12 @@ impl Compiler {
             && let Some(lit) = self.take_string_init(elem_ty)?
         {
             let target = (target_size > 0).then_some(target_size as usize);
-            let elems: Vec<(i128, InitElemReloc)> = (0..lit.elem_count(target))
+            let mut count = lit.elem_count(target);
+            if let Some(t) = target {
+                self.warn_string_overrun(&lit, t);
+                count = count.min(t);
+            }
+            let elems: Vec<(i128, InitElemReloc)> = (0..count)
                 .map(|k| (self.string_init_elem(&lit, k) as i128, InitElemReloc::None))
                 .collect();
             return Ok(ArrayInitHead::String(elems));
@@ -1392,9 +1411,7 @@ impl Compiler {
                 && let Some(lit) = self.take_string_init(elem_ty)?
             {
                 let row = row as usize;
-                if lit.overruns(row) {
-                    return Err(self.row_excess_err(lit.chars, row));
-                }
+                self.warn_string_overrun(&lit, row);
                 let before = cursor;
                 // A range designator (`[a ... b] = "..."`) replicates the row
                 // across every covered index; a plain entry fills one row.
@@ -4254,9 +4271,7 @@ impl Compiler {
             && self.lex.tk != '{'
             && let Some(lit) = self.take_string_init(field.ty)?
         {
-            if lit.overruns(row) {
-                return Err(self.member_excess_err(struct_id, field));
-            }
+            self.warn_string_overrun(&lit, row);
             self.write_string_init(field_base, &lit, row, field.ty)?;
         } else if field.array_size > 0 && self.lex.tk == '{' {
             // C99 6.7.8p21: a brace-enclosed initializer for the array
@@ -4312,9 +4327,7 @@ impl Compiler {
                     && idx.is_multiple_of(row)
                     && let Some(lit) = self.take_string_init(field.ty)?
                 {
-                    if lit.overruns(row) {
-                        return Err(self.member_excess_err(struct_id, field));
-                    }
+                    self.warn_string_overrun(&lit, row);
                     self.write_string_init(here, &lit, row, field.ty)?;
                     idx += row;
                 } else {
@@ -4428,10 +4441,8 @@ impl Compiler {
             if field.inner_array_size == 0
                 && let Some(lit) = self.take_string_init(field.ty)?
             {
-                if lit.overruns(field.array_size as usize) {
-                    return Err(self.member_excess_err(struct_id, field));
-                }
                 let n = field.array_size as usize;
+                self.warn_string_overrun(&lit, n);
                 self.push_string_init_stores(field_base, &lit, n, field.ty);
                 return Ok(false);
             }

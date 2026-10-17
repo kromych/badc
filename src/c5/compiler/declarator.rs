@@ -101,51 +101,24 @@ impl Compiler {
             self.skip_attribute_specifiers()?;
             let ret = lbt + ret_ptr_levels * Ty::Ptr as i64;
             let ret = self.apply_function_declarator_attributes(ret)?;
-            let declared = super::redeclaration::Params::of(&params, false);
-            let spelled = super::redeclaration::Spelled {
-                ty: ret,
-                enum_tag: base.enum_tag,
-            };
-            let declared = super::redeclaration::DeclaredType::Function(spelled, declared);
-            self.declare_linked(id_idx, declared, self.lex.line)?;
-            // Bind only an as-yet-undeclared name; one already bound to a
-            // libc binding, a function, or a variable is the same entity.
-            let c = self.symbols[id_idx].class;
-            let known = c == Token::Sys as i64
-                || c == Token::Fun as i64
-                || c == Token::Glo as i64
-                || c == Token::Loc as i64;
-            if !known {
-                // The name has block scope (C99 6.2.1p4): save it for
-                // the scope-exit restore. The declared entity survives
-                // on the slot past the unbind for call resolution.
-                self.rebind_scoped(id_idx)?;
-                let sym = &mut self.symbols[id_idx];
-                sym.class = Token::Fun as i64;
-                sym.scoped_fn_decl = true;
-                sym.type_ = ret;
-                sym.incomplete_enum_tag = base.enum_tag;
-                sym.set_fn_params(params.fn_params());
-                // A function-pointer base is the result's function type.
-                sym.fn_type.ret =
-                    base_fn.map(|(f, d)| (alloc::boxed::Box::new(f), d + ret_ptr_levels));
-                sym.is_extern_decl = true;
-                sym.linkage = if is_static {
-                    crate::c5::symbol::Linkage::Internal
-                } else {
-                    crate::c5::symbol::Linkage::External
-                };
-            }
-            // C11 6.7.4: `noreturn` on any declaration marks the function.
-            if c != Token::Loc as i64 {
-                self.symbols[id_idx].is_noreturn |= self.pending.attrs.noreturn;
-            }
             // A block-scope prototype takes the same GNU asm-label rename a
-            // file-scope one does; the declared entity has external linkage
-            // either way (C99 6.2.2p4).
-            if self.lex.tk == Token::Asm {
-                self.parse_declarator_asm_label(id_idx)?;
-            }
+            // file-scope one does (C99 6.2.2p4).
+            let label = if self.lex.tk == Token::Asm {
+                Some(self.parse_asm_register_suffix()?)
+            } else {
+                None
+            };
+            let f = super::locals::BlockFunction {
+                ret: super::redeclaration::Spelled {
+                    ty: ret,
+                    enum_tag: base.enum_tag,
+                },
+                params,
+                // A function-pointer base is the result's function type.
+                ret_fn: base_fn.map(|(f, d)| (alloc::boxed::Box::new(f), d + ret_ptr_levels)),
+                lineage: (0, 0),
+            };
+            self.bind_block_function_decl(id_idx, f, is_static, label)?;
             return Ok(Some(id_idx));
         }
         self.restore_lex(proto_snap);

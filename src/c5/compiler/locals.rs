@@ -48,11 +48,22 @@ pub(super) struct DeclAlign {
 /// A block-scope function declaration: its result type, parameters, the
 /// function type its result leads to, and that result's fn-pointer lineage
 /// (`Symbol::fn_ptr_indirection`, `Symbol::fn_ptr_ret_indirection`).
-struct BlockFunction {
-    ret: super::redeclaration::Spelled,
-    params: super::function::ParsedParams,
-    ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
-    lineage: (i64, i64),
+pub(super) struct BlockFunction {
+    pub(super) ret: super::redeclaration::Spelled,
+    pub(super) params: super::function::ParsedParams,
+    pub(super) ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
+    pub(super) lineage: (i64, i64),
+}
+
+/// Where a name's binding from outside the current function is kept.
+#[derive(Clone, Copy)]
+enum SavedAt {
+    /// The function-top save, `h_*` on the slot.
+    Top,
+    /// The outermost block's save: level, position.
+    Block(usize, usize),
+    /// The slot itself: no scope of the function binds the name.
+    Current,
 }
 
 /// One block-scope declarator as its binding step sees it: the symbol and
@@ -850,51 +861,196 @@ impl Compiler {
         self.bind_block_function(loc_idx, f, is_static)
     }
 
-    /// Bind a block-scope function declaration: the name has block scope and
-    /// the entity external linkage, or internal under `static` (C99 6.2.2).
+    /// Bind a block-scope function declaration and consume its separator.
     fn bind_block_function(
         &mut self,
         loc_idx: usize,
         f: BlockFunction,
         is_static: bool,
     ) -> Result<bool, C5Error> {
-        let listed = super::redeclaration::Params::of(&f.params, false);
-        let declared = super::redeclaration::DeclaredType::Function(f.ret, listed);
-        self.declare_linked(loc_idx, declared, self.lex.line)?;
-        let c = self.symbols[loc_idx].class;
-        let known = c == Token::Sys as i64
-            || c == Token::Fun as i64
-            || c == Token::Glo as i64
-            || c == Token::Loc as i64;
-        if !known {
-            // The name has block scope (C99 6.2.1p4); the
-            // declared entity survives the unbind on the slot.
-            self.rebind_scoped(loc_idx)?;
-            let sym = &mut self.symbols[loc_idx];
-            sym.class = Token::Fun as i64;
-            sym.scoped_fn_decl = true;
-            sym.type_ = f.ret.ty;
-            sym.incomplete_enum_tag = f.ret.enum_tag;
-            sym.set_fn_params(f.params.fn_params());
-            sym.fn_type.ret = f.ret_fn;
-            (sym.fn_ptr_indirection, sym.fn_ptr_ret_indirection) = f.lineage;
-            sym.is_extern_decl = true;
-            sym.linkage = if is_static {
-                crate::c5::symbol::Linkage::Internal
-            } else {
-                crate::c5::symbol::Linkage::External
-            };
-        }
-        // The declaration names the file-scope entity unless it
-        // shadows a local; attributes (`weak`, visibility) attach
-        // to that entity, as on the extern-object path, and so does
-        // `noreturn` (C11 6.7.4).
-        if c != Token::Loc as i64 {
-            self.symbols[loc_idx].is_noreturn |= self.pending.attrs.noreturn;
-            self.apply_symbol_attributes(loc_idx);
-        }
+        self.bind_block_function_decl(loc_idx, f, is_static, None)?;
         self.accept_declarator_separator()?;
         Ok(true)
+    }
+
+    /// Bind a block-scope function declaration (C99 6.2.1p4): in the block the
+    /// name denotes the function, whatever binding it hides, with the
+    /// composite type of the visible declarations (6.2.7p4). The function is
+    /// the entity a file-scope binding of the name denotes, a library one
+    /// included; with none the declaration starts one, which the scope exits
+    /// leave on the slot for the rest of the unit (6.2.2p4).
+    pub(super) fn bind_block_function_decl(
+        &mut self,
+        idx: usize,
+        f: BlockFunction,
+        is_static: bool,
+        label: Option<alloc::string::String>,
+    ) -> Result<(), C5Error> {
+        let listed = super::redeclaration::Params::of(&f.params, false);
+        let declared = super::redeclaration::DeclaredType::Function(f.ret, listed);
+        self.declare_linked(idx, declared, self.lex.line)?;
+        let prototyped = f.params.form == super::function::ParamForm::Prototype;
+        let fresh = super::stmt::FnEntity {
+            class: Token::Fun as i64,
+            type_: f.ret.ty,
+            incomplete_enum_tag: f.ret.enum_tag,
+            val: 0,
+            fn_type: crate::c5::symbol::FnType {
+                params: f.params.fn_params(),
+                ret: f.ret_fn,
+                ..Default::default()
+            },
+            lineage: f.lineage,
+            is_extern_decl: true,
+        };
+        let c = self.symbols[idx].class;
+        let mut keep_at = None;
+        if c == Token::Fun as i64 {
+            if !self.binds_in_current_scope(idx) {
+                self.rebind_scoped(idx)?;
+            }
+        } else if c == 0 {
+            self.rebind_scoped(idx)?;
+            self.set_fn_entity(idx, &fresh, is_static);
+            keep_at = Some(self.file_scope_state(idx));
+        } else if c != Token::Sys as i64 {
+            // Hiding a binding of another kind: the entity is the file-scope one.
+            let at = self.file_scope_state(idx);
+            let outer = self.saved_fn_entity(idx, at);
+            self.rebind_scoped(idx)?;
+            match outer {
+                Some(Some(e)) => self.adopt_fn_entity(idx, e),
+                Some(None) => {
+                    self.set_fn_entity(idx, &fresh, is_static);
+                    keep_at = Some(at);
+                }
+                // TODO: a function entity kept apart from its name's slot.
+                None => {
+                    let name = self.symbols[idx].name.clone();
+                    let msg = format!(
+                        "block-scope declaration of function `{name}` hiding a \
+                         file-scope `{name}` that is not a function"
+                    );
+                    return Err(self.compile_err(Code::UNSUPPORTED, msg));
+                }
+            }
+        }
+        let sym = &mut self.symbols[idx];
+        if c != 0 && c != Token::Sys as i64 && prototyped && !sym.fn_type.params.prototyped {
+            sym.fn_type.params = fresh.fn_type.params.clone();
+        }
+        sym.is_noreturn |= self.pending.attrs.noreturn;
+        self.apply_symbol_attributes(idx);
+        if let Some(label) = label {
+            self.set_asm_label(idx, label)?;
+        }
+        if let Some(at) = keep_at {
+            self.keep_fn_entity(idx, at, &fresh);
+        }
+        Ok(())
+    }
+
+    fn set_fn_entity(&mut self, idx: usize, e: &super::stmt::FnEntity, is_static: bool) {
+        self.adopt_fn_entity(idx, e.clone());
+        let sym = &mut self.symbols[idx];
+        sym.scoped_fn_decl = true;
+        sym.linkage = if is_static {
+            crate::c5::symbol::Linkage::Internal
+        } else {
+            crate::c5::symbol::Linkage::External
+        };
+    }
+
+    /// Bind `idx` to the function entity `e`; its val is the entity's entry.
+    fn adopt_fn_entity(&mut self, idx: usize, e: super::stmt::FnEntity) {
+        let sym = &mut self.symbols[idx];
+        sym.class = if e.class == 0 {
+            Token::Fun as i64
+        } else {
+            e.class
+        };
+        sym.type_ = e.type_;
+        sym.incomplete_enum_tag = e.incomplete_enum_tag;
+        sym.val = e.val;
+        sym.fn_type = e.fn_type;
+        (sym.fn_ptr_indirection, sym.fn_ptr_ret_indirection) = e.lineage;
+        sym.is_extern_decl = e.is_extern_decl;
+    }
+
+    /// Where the binding `idx` had outside the current function is kept.
+    fn file_scope_state(&self, idx: usize) -> SavedAt {
+        let s = &self.symbols[idx];
+        let outer = self
+            .block_scopes
+            .iter()
+            .enumerate()
+            .find_map(|(level, saves)| {
+                saves
+                    .iter()
+                    .position(|b| b.idx == idx)
+                    .map(|at| (level, at))
+            });
+        let (class, global_register) = match outer {
+            Some((level, at)) => self.block_scopes[level][at].class(),
+            None => (s.class, s.is_global_register),
+        };
+        let top = (class == Token::Loc as i64 && !global_register) || s.is_scope_bound;
+        match outer {
+            _ if top => SavedAt::Top,
+            Some((level, at)) => SavedAt::Block(level, at),
+            None => SavedAt::Current,
+        }
+    }
+
+    /// The binding saved at `at`: `Some(Some(entity))` for a function or
+    /// library binding, `Some(None)` for none, `None` for another kind.
+    fn saved_fn_entity(&self, idx: usize, at: SavedAt) -> Option<Option<super::stmt::FnEntity>> {
+        let s = &self.symbols[idx];
+        let e = match at {
+            SavedAt::Top => super::stmt::FnEntity {
+                class: s.h_class,
+                type_: s.h_type,
+                incomplete_enum_tag: s.h_incomplete_enum_tag,
+                val: s.h_val,
+                fn_type: s.h_fn_type.clone(),
+                lineage: (s.h_fn_ptr_indirection, s.h_fn_ptr_ret_indirection),
+                is_extern_decl: s.h_is_extern_decl,
+            },
+            SavedAt::Block(level, at) => self.block_scopes[level][at].fn_entity(),
+            SavedAt::Current => return None,
+        };
+        if e.class == Token::Fun as i64
+            || e.class == Token::Sys as i64
+            || (e.class == 0 && s.scoped_fn_decl)
+        {
+            Some(Some(e))
+        } else if e.class == 0 {
+            Some(None)
+        } else {
+            None
+        }
+    }
+
+    /// Leave the function entity `e` started by a declaration that hid
+    /// another binding in the state the scope exits restore at `at`.
+    fn keep_fn_entity(&mut self, idx: usize, at: SavedAt, e: &super::stmt::FnEntity) {
+        let unbound = super::stmt::FnEntity {
+            class: 0,
+            ..e.clone()
+        };
+        match at {
+            SavedAt::Top => {
+                let s = &mut self.symbols[idx];
+                s.h_type = unbound.type_;
+                s.h_incomplete_enum_tag = unbound.incomplete_enum_tag;
+                s.h_fn_type = unbound.fn_type;
+                (s.h_fn_ptr_indirection, s.h_fn_ptr_ret_indirection) = unbound.lineage;
+                s.h_is_extern_decl = unbound.is_extern_decl;
+                s.h_asm_name = s.asm_name.clone();
+            }
+            SavedAt::Block(level, at) => self.block_scopes[level][at].set_fn_entity(&unbound),
+            SavedAt::Current => {}
+        }
     }
 
     /// Consume a run of storage-class specifiers, function specifiers and

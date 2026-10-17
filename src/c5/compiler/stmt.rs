@@ -97,11 +97,50 @@ pub(super) struct BlockShadow {
     binding: crate::c5::symbol::BindingInfo,
 }
 
+/// The fields of a name's slot that make it a function entity.
+#[derive(Clone)]
+pub(super) struct FnEntity {
+    pub(super) class: i64,
+    pub(super) type_: i64,
+    pub(super) incomplete_enum_tag: Option<u32>,
+    pub(super) val: i64,
+    pub(super) fn_type: crate::c5::symbol::FnType,
+    pub(super) lineage: (i64, i64),
+    pub(super) is_extern_decl: bool,
+}
+
 impl BlockShadow {
     /// Rewrite the saved binding's types an enum definition completes.
     pub(super) fn complete_enum(&mut self, c: &super::enum_decl::EnumCompletion) {
         c.ty(&mut self.type_, &mut self.incomplete_enum_tag);
         c.fn_type(&mut self.fn_type);
+    }
+
+    /// The saved binding's class, and whether it is a global register.
+    pub(super) fn class(&self) -> (i64, bool) {
+        (self.class, self.is_global_register)
+    }
+
+    pub(super) fn fn_entity(&self) -> FnEntity {
+        FnEntity {
+            class: self.class,
+            type_: self.type_,
+            incomplete_enum_tag: self.incomplete_enum_tag,
+            val: self.val,
+            fn_type: self.fn_type.clone(),
+            lineage: (self.fn_ptr_indirection, self.fn_ptr_ret_indirection),
+            is_extern_decl: self.is_extern_decl,
+        }
+    }
+
+    pub(super) fn set_fn_entity(&mut self, e: &FnEntity) {
+        self.class = e.class;
+        self.type_ = e.type_;
+        self.incomplete_enum_tag = e.incomplete_enum_tag;
+        self.val = e.val;
+        self.fn_type = e.fn_type.clone();
+        (self.fn_ptr_indirection, self.fn_ptr_ret_indirection) = e.lineage;
+        self.is_extern_decl = e.is_extern_decl;
     }
 }
 

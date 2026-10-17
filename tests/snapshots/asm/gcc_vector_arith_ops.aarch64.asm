@@ -7343,13 +7343,12 @@ Disassembly of section .text:
                	eor	x2, x3, x2
                	stur	x0, [x29, #-0x60]
                	stur	x2, [x29, #-0x58]
-               	sub	x4, x29, #0x1b0
+               	sub	x5, x29, #0x1b0
                	mov	x0, #0x0                // =0
-               	mov	x5, #0x1b               // =27
-               	ldrb	w2, [x4, x0]
+               	ldrb	w2, [x5, x0]
                	sxtb	x3, w2
-               	asr	x3, x3, #7
-               	and	x3, x3, x5
+               	mov	x4, #0x1b               // =27
+               	and	x3, x4, x3, asr #7
                	lsl	x2, x2, #1
                	and	x2, x2, #0xff
                	eor	x2, x2, x3

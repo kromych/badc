@@ -81,10 +81,9 @@ Disassembly of section .text:
                	eor	x1, x1, #0x6
                	cbnz	w1, <addr>
                	mov	w0, w0
-               	asr	x0, x0, #8
-               	mov	x17, #0xcdef            // =52719
-               	movk	x17, #0xab, lsl #16
-               	eor	x0, x0, x17
+               	mov	x1, #0xcdef             // =52719
+               	movk	x1, #0xab, lsl #16
+               	eor	x0, x1, x0, asr #8
                	cbz	w0, <addr>
                	mov	x0, #0xc                // =12
                	add	sp, sp, #0x10

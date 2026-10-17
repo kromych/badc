@@ -4631,6 +4631,34 @@ fn a64_a_single_use_shift_is_its_readers_operand() {
     m.finish();
 }
 
+/// A shift whose one reader combines it with an immediate the emit builds
+/// into a register is that reader's shifted operand over the built
+/// immediate; an immediate the instruction encodes keeps the shift.
+#[test]
+fn a64_a_shift_beside_a_built_immediate_is_its_readers_operand() {
+    const SRC: &str = "unsigned long orimm(unsigned long x) { return (x << 32) | 0x181c; }\n\
+        unsigned long addimm(unsigned long x) { return (x << 3) + 0x123456789; }\n\
+        unsigned long keep(unsigned long x) { return (x << 32) | 0xff; }\n";
+    // The 64-bit shifted-register form of `base`, LSL by `amount`.
+    let lsl = |w: u32, base: u32, amount: u32| {
+        w & 0xFFE0_0000 == base && (w >> 22) & 3 == 0 && (w >> 10) & 0x3f == amount
+    };
+    let mut m = Misses::default();
+    for (name, base, amount) in [("orimm", 0xAA00_0000, 32), ("addimm", 0x8B00_0000, 3)] {
+        let ws = a64(SRC, name);
+        let at = ws.len().saturating_sub(2);
+        m.expect(lsl(ws[at], base, amount) && ws[..at].iter().all(|&w| w & 0x1F80_0000 == 0x1280_0000), || {
+            format!("{name}: not the built immediate and one shifted-register instruction: {ws:08x?}")
+        });
+    }
+    let ws = a64(SRC, "keep");
+    let lsl32 = |w: u32| w & 0xFFC0_0000 == 0xD340_0000 && (w >> 16) & 0x3f == 32;
+    m.expect(ws.iter().any(|&w| lsl32(w)), || {
+        format!("keep: the encodable immediate lost its shift: {ws:08x?}")
+    });
+    m.finish();
+}
+
 /// A fused shift keeps what the shift and its reader allowed apart: the
 /// return ahead of the frame when the entry computes one (`g`), returns
 /// one (`h`) or tests one (`k`); the compare's flags for a branch across

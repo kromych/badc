@@ -138,3 +138,47 @@ fn two_shifted_operands_fold_once() {
     ));
     assert_eq!(live_shifts(&func), 1);
 }
+
+/// A commutative operation of a single-use shift and an immediate the
+/// emit builds into a register takes the immediate into the shift's slot
+/// and the shifted value as its own operand; an immediate the instruction
+/// encodes, a shift read twice and a subtraction stay.
+#[test]
+fn a_materialized_immediate_takes_the_shifts_slot() {
+    for (op, k) in [
+        (BinOp::Or, 0x181c),
+        (BinOp::Xor, 0x181c),
+        (BinOp::And, 0x181c),
+        (BinOp::Add, 0x1_2345_6789),
+    ] {
+        let func = build(|b, _, y| {
+            let s = b.binop_imm(BinOp::Shl, y, 32);
+            b.binop_imm(op, s, k)
+        });
+        let (fop, lhs, rhs, shift, amount) = fused(&func).expect("the reader folds");
+        assert_eq!((fop, rhs, shift, amount), (op, 1, BinOp::Shl, 32), "{op:?}");
+        assert!(
+            matches!(func.insts[lhs as usize], Inst::Imm(v) if v == k),
+            "{op:?}"
+        );
+    }
+    let encoded = build(|b, _, y| {
+        let s = b.binop_imm(BinOp::Shl, y, 32);
+        b.binop_imm(BinOp::Or, s, 0xff)
+    });
+    assert_eq!(fused(&encoded), None);
+    let twice = build(|b, _, y| {
+        let s = b.binop_imm(BinOp::Shl, y, 32);
+        let t = b.binop_imm(BinOp::Or, s, 0x181c);
+        b.binop(BinOp::Add, t, s)
+    });
+    assert!(matches!(
+        twice.insts[2],
+        Inst::BinopI { op: BinOp::Shl, .. }
+    ));
+    let sub = build(|b, _, y| {
+        let s = b.binop_imm(BinOp::Shl, y, 32);
+        b.binop_imm(BinOp::Sub, s, 0x1_2345_6789)
+    });
+    assert_eq!(fused(&sub), None);
+}

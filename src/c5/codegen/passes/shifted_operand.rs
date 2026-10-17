@@ -4,7 +4,8 @@
 //! or a multiply by `2^k`, becomes `ShiftOp { op, lhs: a, rhs: x, sh, k }`,
 //! and a commutative `op` takes `s` on either side. Both forms compute in
 //! 64 bits, so no value changes. The rewrite is in place at the reader and
-//! leaves the shift to the emit's skip of unread values.
+//! leaves the shift to the emit's skip of unread values, except that a
+//! materialized immediate of a commutative `BinopI` takes over its slot.
 
 use alloc::vec::Vec;
 
@@ -61,6 +62,32 @@ fn match_shift_op(func: &FunctionSsa, counts: &[u32], idx: usize) -> Option<Inst
     single_use_shift(func, counts, lhs).map(|s| fused(rhs, s))
 }
 
+/// The rewrites, shift slot first, of a commutative `BinopI` over a single-use shift.
+fn match_shift_imm(func: &FunctionSsa, counts: &[u32], idx: usize) -> Option<[(usize, Inst); 2]> {
+    let Inst::BinopI { op, lhs, rhs_imm } = func.insts[idx] else {
+        return None;
+    };
+    if !matches!(op, BinOp::Add | BinOp::And | BinOp::Or | BinOp::Xor)
+        || !crate::c5::codegen::aarch64::emit::binop_imm_materializes(op, rhs_imm, false)
+    {
+        return None;
+    }
+    let (rhs, shift, amount) = single_use_shift(func, counts, lhs)?;
+    Some([
+        (lhs as usize, Inst::Imm(rhs_imm)),
+        (
+            idx,
+            Inst::ShiftOp {
+                op,
+                lhs,
+                rhs,
+                shift,
+                amount,
+            },
+        ),
+    ])
+}
+
 /// Walk every function, folding recognised shifts into their readers.
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
@@ -72,6 +99,8 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
             }
             if let Some(fused) = match_shift_op(func, &counts, idx) {
                 rewrites.push((idx, fused));
+            } else if let Some(pair) = match_shift_imm(func, &counts, idx) {
+                rewrites.extend(pair);
             }
         }
         for (idx, fused) in rewrites {

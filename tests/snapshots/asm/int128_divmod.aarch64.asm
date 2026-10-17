@@ -543,8 +543,8 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x20
                	ret
                	mov	x3, #0x0                // =0
-               	mov	x11, #0x3039            // =12345
-               	mov	x13, #0x3000000000      // =206158430208
+               	mov	x10, #0x3039            // =12345
+               	mov	x11, #0x3000000000      // =206158430208
                	mov	x4, #0x80000000         // =2147483648
                	mov	x0, #0x30               // =48
                	mov	x1, x3
@@ -563,18 +563,17 @@ Disassembly of section .text:
                	neg	x2, x1
                	lsr	x1, x2, #31
                	sub	x2, x2, x1, lsl #31
-               	mov	x7, #0x181c             // =6172
-               	lsr	x9, x1, #32
-               	cbnz	x9, <addr>
-               	mul	x9, x1, x3
-               	lsl	x10, x2, #32
-               	orr	x10, x10, x7
-               	cmp	x9, x10
+               	lsr	x7, x1, #32
+               	cbnz	x7, <addr>
+               	mul	x7, x1, x3
+               	mov	x9, #0x181c             // =6172
+               	orr	x9, x9, x2, lsl #32
+               	cmp	x7, x9
                	b.ls	<addr>
                	sub	x1, x1, #0x1
                	add	x2, x2, x4
-               	lsr	x9, x2, #32
-               	cbz	x9, <addr>
+               	lsr	x7, x2, #32
+               	cbz	x7, <addr>
                	orr	x0, x1, x0, lsl #32
                	lsr	x0, x0, #6
                	cmp	x0, #0x0
@@ -583,9 +582,9 @@ Disassembly of section .text:
                	umulh	x1, x0, x3
                	mul	x2, x0, x3
                	add	x1, x1, x0, lsl #6
-               	cmp	x11, x2
+               	cmp	x10, x2
                	cset	x2, lo
-               	sub	x1, x13, x1
+               	sub	x1, x11, x1
                	sub	x1, x1, x2
                	cmp	x1, #0x40
                	cset	x1, lo
@@ -599,8 +598,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	mov	x13, #0x3039            // =12345
-               	mov	x14, #0x3000000000      // =206158430208
+               	mov	x11, #0x3039            // =12345
+               	mov	x13, #0x3000000000      // =206158430208
                	mov	x4, #0x0                // =0
                	mov	x7, #0x80000000         // =2147483648
                	mov	x0, #0x30               // =48
@@ -620,18 +619,17 @@ Disassembly of section .text:
                	neg	x2, x1
                	lsr	x1, x2, #31
                	sub	x2, x2, x1, lsl #31
-               	mov	x9, #0x181c             // =6172
-               	lsr	x10, x1, #32
-               	cbnz	x10, <addr>
-               	mul	x10, x1, x4
-               	lsl	x11, x2, #32
-               	orr	x11, x11, x9
-               	cmp	x10, x11
+               	lsr	x9, x1, #32
+               	cbnz	x9, <addr>
+               	mul	x9, x1, x4
+               	mov	x10, #0x181c            // =6172
+               	orr	x10, x10, x2, lsl #32
+               	cmp	x9, x10
                	b.ls	<addr>
                	sub	x1, x1, #0x1
                	add	x2, x2, x7
-               	lsr	x10, x2, #32
-               	cbz	x10, <addr>
+               	lsr	x9, x2, #32
+               	cbz	x9, <addr>
                	orr	x0, x1, x0, lsl #32
                	lsr	x0, x0, #6
                	cmp	x0, #0x0
@@ -640,10 +638,10 @@ Disassembly of section .text:
                	umulh	x2, x0, x4
                	mul	x1, x0, x4
                	add	x0, x2, x0, lsl #6
-               	cmp	x13, x1
+               	cmp	x11, x1
                	cset	x2, lo
-               	sub	x1, x13, x1
-               	sub	x0, x14, x0
+               	sub	x1, x11, x1
+               	sub	x0, x13, x0
                	sub	x0, x0, x2
                	cmp	x0, #0x40
                	cset	x2, lo
@@ -670,8 +668,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	mov	x13, #0x3039            // =12345
-               	mov	x14, #0x3000000000      // =206158430208
+               	mov	x11, #0x3039            // =12345
+               	mov	x13, #0x3000000000      // =206158430208
                	mov	x4, #0x0                // =0
                	mov	x7, #0x80000000         // =2147483648
                	mov	x0, #0x30               // =48
@@ -691,18 +689,17 @@ Disassembly of section .text:
                	neg	x2, x1
                	lsr	x1, x2, #31
                	sub	x2, x2, x1, lsl #31
-               	mov	x9, #0x181c             // =6172
-               	lsr	x10, x1, #32
-               	cbnz	x10, <addr>
-               	mul	x10, x1, x4
-               	lsl	x11, x2, #32
-               	orr	x11, x11, x9
-               	cmp	x10, x11
+               	lsr	x9, x1, #32
+               	cbnz	x9, <addr>
+               	mul	x9, x1, x4
+               	mov	x10, #0x181c            // =6172
+               	orr	x10, x10, x2, lsl #32
+               	cmp	x9, x10
                	b.ls	<addr>
                	sub	x1, x1, #0x1
                	add	x2, x2, x7
-               	lsr	x10, x2, #32
-               	cbz	x10, <addr>
+               	lsr	x9, x2, #32
+               	cbz	x9, <addr>
                	orr	x0, x1, x0, lsl #32
                	lsr	x0, x0, #6
                	cmp	x0, #0x0
@@ -711,9 +708,9 @@ Disassembly of section .text:
                	umulh	x1, x0, x4
                	mul	x2, x0, x4
                	add	x1, x1, x0, lsl #6
-               	cmp	x13, x2
+               	cmp	x11, x2
                	cset	x2, lo
-               	sub	x1, x14, x1
+               	sub	x1, x13, x1
                	sub	x1, x1, x2
                	cmp	x1, #0x40
                	cset	x1, lo
@@ -737,8 +734,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	mov	x13, #0x3039            // =12345
-               	mov	x14, #0x3000000000      // =206158430208
+               	mov	x11, #0x3039            // =12345
+               	mov	x13, #0x3000000000      // =206158430208
                	mov	x4, #0x0                // =0
                	mov	x7, #0x80000000         // =2147483648
                	mov	x0, #0x30               // =48
@@ -758,18 +755,17 @@ Disassembly of section .text:
                	neg	x2, x1
                	lsr	x1, x2, #31
                	sub	x2, x2, x1, lsl #31
-               	mov	x9, #0x181c             // =6172
-               	lsr	x10, x1, #32
-               	cbnz	x10, <addr>
-               	mul	x10, x1, x4
-               	lsl	x11, x2, #32
-               	orr	x11, x11, x9
-               	cmp	x10, x11
+               	lsr	x9, x1, #32
+               	cbnz	x9, <addr>
+               	mul	x9, x1, x4
+               	mov	x10, #0x181c            // =6172
+               	orr	x10, x10, x2, lsl #32
+               	cmp	x9, x10
                	b.ls	<addr>
                	sub	x1, x1, #0x1
                	add	x2, x2, x7
-               	lsr	x10, x2, #32
-               	cbz	x10, <addr>
+               	lsr	x9, x2, #32
+               	cbz	x9, <addr>
                	orr	x0, x1, x0, lsl #32
                	lsr	x0, x0, #6
                	cmp	x0, #0x0
@@ -778,10 +774,10 @@ Disassembly of section .text:
                	umulh	x2, x0, x4
                	mul	x1, x0, x4
                	add	x0, x2, x0, lsl #6
-               	cmp	x13, x1
+               	cmp	x11, x1
                	cset	x2, lo
-               	sub	x1, x13, x1
-               	sub	x0, x14, x0
+               	sub	x1, x11, x1
+               	sub	x0, x13, x0
                	sub	x0, x0, x2
                	cmp	x0, #0x40
                	cset	x2, lo
@@ -912,8 +908,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x20
                	ret
-               	mov	x13, #0x3039            // =12345
-               	mov	x14, #0x3000000000      // =206158430208
+               	mov	x11, #0x3039            // =12345
+               	mov	x13, #0x3000000000      // =206158430208
                	mov	x4, #0x0                // =0
                	mov	x7, #0x80000000         // =2147483648
                	mov	x0, #0x30               // =48
@@ -933,18 +929,17 @@ Disassembly of section .text:
                	neg	x2, x1
                	lsr	x1, x2, #31
                	sub	x2, x2, x1, lsl #31
-               	mov	x9, #0x181c             // =6172
-               	lsr	x10, x1, #32
-               	cbnz	x10, <addr>
-               	mul	x10, x1, x4
-               	lsl	x11, x2, #32
-               	orr	x11, x11, x9
-               	cmp	x10, x11
+               	lsr	x9, x1, #32
+               	cbnz	x9, <addr>
+               	mul	x9, x1, x4
+               	mov	x10, #0x181c            // =6172
+               	orr	x10, x10, x2, lsl #32
+               	cmp	x9, x10
                	b.ls	<addr>
                	sub	x1, x1, #0x1
                	add	x2, x2, x7
-               	lsr	x10, x2, #32
-               	cbz	x10, <addr>
+               	lsr	x9, x2, #32
+               	cbz	x9, <addr>
                	orr	x0, x1, x0, lsl #32
                	lsr	x0, x0, #6
                	cmp	x0, #0x0
@@ -953,21 +948,21 @@ Disassembly of section .text:
                	umulh	x1, x0, x4
                	mul	x2, x0, x4
                	add	x1, x1, x0, lsl #6
-               	cmp	x13, x2
+               	cmp	x11, x2
                	cset	x2, lo
-               	sub	x1, x14, x1
+               	sub	x1, x13, x1
                	sub	x1, x1, x2
                	cmp	x1, #0x40
                	cset	x1, lo
                	eor	x1, x1, #0x1
                	add	x0, x0, x1
-               	mul	x11, x0, x3
+               	mul	x10, x0, x3
                	umulh	x1, x0, x3
                	mov	x17, #-0x40             // =-64
                	mul	x0, x0, x17
-               	add	x14, x1, x0
-               	mov	x13, #0x3039            // =12345
-               	mov	x15, #0x3000000000      // =206158430208
+               	add	x13, x1, x0
+               	mov	x11, #0x3039            // =12345
+               	mov	x14, #0x3000000000      // =206158430208
                	mov	x3, #0x0                // =0
                	mov	x4, #0x80000000         // =2147483648
                	mov	x0, #0x30               // =48
@@ -987,18 +982,17 @@ Disassembly of section .text:
                	neg	x2, x1
                	lsr	x1, x2, #31
                	sub	x2, x2, x1, lsl #31
-               	mov	x7, #0x181c             // =6172
-               	lsr	x9, x1, #32
-               	cbnz	x9, <addr>
-               	mul	x9, x1, x3
-               	lsl	x10, x2, #32
-               	orr	x10, x10, x7
-               	cmp	x9, x10
+               	lsr	x7, x1, #32
+               	cbnz	x7, <addr>
+               	mul	x7, x1, x3
+               	mov	x9, #0x181c             // =6172
+               	orr	x9, x9, x2, lsl #32
+               	cmp	x7, x9
                	b.ls	<addr>
                	sub	x1, x1, #0x1
                	add	x2, x2, x4
-               	lsr	x9, x2, #32
-               	cbz	x9, <addr>
+               	lsr	x7, x2, #32
+               	cbz	x7, <addr>
                	orr	x0, x1, x0, lsl #32
                	lsr	x0, x0, #6
                	cmp	x0, #0x0
@@ -1007,10 +1001,10 @@ Disassembly of section .text:
                	umulh	x2, x0, x3
                	mul	x1, x0, x3
                	add	x0, x2, x0, lsl #6
-               	cmp	x13, x1
+               	cmp	x11, x1
                	cset	x2, lo
-               	sub	x1, x13, x1
-               	sub	x0, x15, x0
+               	sub	x1, x11, x1
+               	sub	x0, x14, x0
                	sub	x0, x0, x2
                	cmp	x0, #0x40
                	cset	x2, lo
@@ -1026,10 +1020,10 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	add	x1, x1, #0x1
                	sub	x1, x1, x2
-               	add	x0, x11, x0
-               	cmp	x0, x11
+               	add	x0, x10, x0
+               	cmp	x0, x10
                	cset	x2, lo
-               	add	x1, x14, x1
+               	add	x1, x13, x1
                	add	x1, x1, x2
                	mov	x17, #-0x3039           // =-12345
                	eor	x0, x0, x17

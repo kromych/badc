@@ -742,18 +742,17 @@ Disassembly of section .text:
                	neg	x1, x0
                	lsr	x0, x1, #31
                	sub	x1, x1, x0, lsl #31
-               	mov	x5, #0x19               // =25
-               	lsr	x6, x0, #32
-               	cbnz	x6, <addr>
-               	mul	x6, x0, x3
-               	lsl	x7, x1, #32
-               	orr	x7, x7, x5
-               	cmp	x6, x7
+               	lsr	x5, x0, #32
+               	cbnz	x5, <addr>
+               	mul	x5, x0, x3
+               	mov	x6, #0x19               // =25
+               	orr	x6, x6, x1, lsl #32
+               	cmp	x5, x6
                	b.ls	<addr>
                	sub	x0, x0, #0x1
                	add	x1, x1, x4
-               	lsr	x6, x1, #32
-               	cbz	x6, <addr>
+               	lsr	x5, x1, #32
+               	cbz	x5, <addr>
                	orr	x0, x0, x2, lsl #32
                	cmp	x0, #0x0
                	cset	x1, ne

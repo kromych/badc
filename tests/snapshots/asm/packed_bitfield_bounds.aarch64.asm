@@ -486,15 +486,13 @@ Disassembly of section .text:
                	ldur	w0, [x24, #0x9]
                	ldrb	w1, [x24, #0xd]
                	orr	x0, x0, x1, lsl #32
-               	lsl	x0, x0, #28
-               	mov	x17, #0xcba9            // =52137
-               	movk	x17, #0xfed, lsl #16
-               	orr	x0, x0, x17
-               	lsl	x1, x0, #36
-               	mov	x17, #0x3210            // =12816
-               	movk	x17, #0x7654, lsl #16
-               	movk	x17, #0x8, lsl #32
-               	orr	x1, x1, x17
+               	mov	x1, #0xcba9             // =52137
+               	movk	x1, #0xfed, lsl #16
+               	orr	x0, x1, x0, lsl #28
+               	mov	x1, #0x3210             // =12816
+               	movk	x1, #0x7654, lsl #16
+               	movk	x1, #0x8, lsl #32
+               	orr	x1, x1, x0, lsl #36
                	add	x2, x1, #0x1
                	cmp	x2, x1
                	cset	x1, lo
@@ -515,7 +513,9 @@ Disassembly of section .text:
                	orr	x1, x1, x2, lsl #32
                	lsl	x1, x1, #28
                	orr	x1, x1, x0, lsr #36
-               	asr	x2, x1, #28
+               	mov	x2, #0x6789             // =26505
+               	movk	x2, #0x2345, lsl #16
+               	movk	x2, #0x1, lsl #32
                	ubfx	x0, x0, #0, #36
                	orr	x0, x0, x1, lsl #36
                	mov	x17, #0x3211            // =12817
@@ -523,10 +523,7 @@ Disassembly of section .text:
                	movk	x17, #0xba98, lsl #32
                	movk	x17, #0xfedc, lsl #48
                	eor	x0, x0, x17
-               	mov	x17, #0x6789            // =26505
-               	movk	x17, #0x2345, lsl #16
-               	movk	x17, #0x1, lsl #32
-               	eor	x1, x2, x17
+               	eor	x1, x2, x1, asr #28
                	orr	x0, x0, x1
                	cbnz	x0, <addr>
                	sub	x0, x22, #0x1
@@ -694,12 +691,11 @@ Disassembly of section .text:
                	ldrb	w2, [x23, #0x10]
                	lsr	x0, x0, #1
                	orr	x1, x0, #0x8000000000000000
-               	lsl	x0, x2, #63
-               	mov	x17, #0xcdef            // =52719
-               	movk	x17, #0x89ab, lsl #16
-               	movk	x17, #0x4567, lsl #32
-               	movk	x17, #0x123, lsl #48
-               	orr	x2, x0, x17
+               	mov	x0, #0xcdef             // =52719
+               	movk	x0, #0x89ab, lsl #16
+               	movk	x0, #0x4567, lsl #32
+               	movk	x0, #0x123, lsl #48
+               	orr	x2, x0, x2, lsl #63
                	add	x0, x1, #0x1
                	cmp	x0, x1
                	cset	x1, lo

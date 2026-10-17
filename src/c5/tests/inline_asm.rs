@@ -2907,6 +2907,11 @@ fn i_operand_that_is_not_constant_names_its_form() {
             a64,
             "non-constant immediate operand `%0`: the operand is a call result",
         ),
+        (
+            a64_imm("n * g() + n"),
+            a64,
+            "non-constant immediate operand `%0`: the operand is an arithmetic result",
+        ),
     ];
     for (src, target, want) in cases {
         let err = asm_emit(&src, target, true).err().unwrap_or_default();

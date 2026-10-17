@@ -68,16 +68,16 @@ Disassembly of section .text:
                	retq
                	movl	(%rcx), %r8d
                	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
-               	movq	%rdi, %rax
+               	movl	%edi, %eax
                	xorl	%edx, %edx
-               	divq	%r8
+               	divl	%r8d
                	xorq	$0x1, %rax
                	testl	%eax, %eax
                	jne	<addr>
                	movl	(%rsi), %esi
-               	movq	%rdi, %rax
+               	movl	%edi, %eax
                	xorl	%edx, %edx
-               	divq	%rsi
+               	divl	%esi
                	movq	%rdx, %rax
                	xorq	$0x3, %rax
                	testl	%eax, %eax

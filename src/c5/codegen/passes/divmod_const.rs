@@ -54,6 +54,7 @@ enum Key {
     Imm(i64),
     Binop(BinOp, ValueId, ValueId),
     BinopI(BinOp, ValueId, i64),
+    Extend(ValueId),
 }
 
 /// The instructions the function's sites ask for, in order. One asked
@@ -95,6 +96,7 @@ impl DivSink for Steps {
 
 /// `n op d` at tape index `at`. `imm_form` tells a `BinopI` from a
 /// `Binop` whose divisor is an `Imm`.
+#[derive(Clone, Copy)]
 struct Site {
     block: usize,
     at: ValueId,
@@ -235,12 +237,47 @@ fn run_one(func: &mut FunctionSsa, params: &[Range]) {
             steps.in_block.clear();
         }
         let first = steps.insts.len();
-        if let Some(result) = lower(&mut steps, site, range(site.n)) {
+        // A 32-bit division reads its dividend's low word: a register
+        // holding more is re-extended first.
+        let mut n = range(site.n);
+        let mut cleaned = *site;
+        if super::narrow::is_div32(&func.div32, site.at) {
+            let signed = is_signed(site.op);
+            let (kind, dirty) = if signed {
+                (LoadKind::I32, !n.fits(LoadKind::I32))
+            } else {
+                (LoadKind::U32, !n.high_word_clear())
+            };
+            if dirty {
+                cleaned.n = if signed {
+                    steps.push(
+                        Key::Extend(site.n),
+                        Inst::Extend {
+                            value: site.n,
+                            kind: LoadKind::I32,
+                            nsw: false,
+                        },
+                    )
+                } else {
+                    steps.binop_imm(BinOp::And, site.n, u32::MAX as i64)
+                };
+                n = super::value_range::extend_range(kind).unwrap_or(value_range::UNIVERSE);
+            } else if let Some(w) = super::value_range::extend_range(kind) {
+                n = n.meet(w);
+            }
+        }
+        if let Some(result) = lower(&mut steps, &cleaned, n) {
             expansions.push(Expansion {
                 at: site.at,
                 owned: first..steps.insts.len(),
                 result,
             });
+        } else {
+            // A declined site's cleaning steps go, with their dedup entries.
+            steps.insts.truncate(first);
+            steps
+                .in_block
+                .retain(|_, &mut v| (v & !STEP) < first as ValueId);
         }
     }
     // A slot ahead of its site for each step that does not take the

@@ -59,13 +59,13 @@ Disassembly of section .text:
                	pushq	%rbx
                	movl	$0x11, %edi
                	callq	<addr>
-               	movslq	%eax, %rbx
+               	movq	%rax, %rbx
                	movl	$0x5, %edi
                	callq	<addr>
-               	movslq	%eax, %rcx
-               	movq	%rbx, %rax
-               	cqto
-               	idivq	%rcx
+               	movq	%rax, %rcx
+               	movl	%ebx, %eax
+               	cltd
+               	idivl	%ecx
                	movq	%rax, %rsi
                	movq	%rsi, %rax
                	imulq	%rcx, %rax
@@ -81,13 +81,13 @@ Disassembly of section .text:
                	retq
                	movq	$-0x11, %rdi
                	callq	<addr>
-               	movslq	%eax, %rbx
+               	movq	%rax, %rbx
                	movl	$0x5, %edi
                	callq	<addr>
-               	movslq	%eax, %rsi
-               	movq	%rbx, %rax
-               	cqto
-               	idivq	%rsi
+               	movq	%rax, %rsi
+               	movl	%ebx, %eax
+               	cltd
+               	idivl	%esi
                	movq	%rax, %rcx
                	movq	%rcx, %rdx
                	imulq	%rsi, %rdx

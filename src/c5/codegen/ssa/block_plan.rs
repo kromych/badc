@@ -597,6 +597,7 @@ mod tests {
             use_counts: alloc::vec![1; n],
             last_use: alloc::vec![0; n],
             cmp32: alloc::vec![false; n],
+            div32: alloc::vec![false; n],
             count_nonzero: alloc::vec![false; n],
             sxtw_source: alloc::vec![NO_VALUE; n],
             sxtw_k: alloc::vec![0; n],

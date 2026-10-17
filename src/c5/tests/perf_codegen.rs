@@ -2646,6 +2646,102 @@ fn x64_scalar_fp_arith_picks_the_vex_three_operand_row() {
     );
 }
 
+/// A division or remainder whose operands are 32-bit values issues the
+/// 32-bit form (`idiv` / `div` on the 32-bit registers, `cdq` seeding
+/// edx), which is markedly faster on the x86-64-v3 baseline; a 64-bit
+/// operand keeps `cqo` and the REX.W form.
+#[test]
+fn x64_division_of_32_bit_operands_takes_the_32_bit_form() {
+    const SRC: &str = "int q(int a, int b) { return a / b; }\n\
+        unsigned r(unsigned a, unsigned b) { return a % b; }\n\
+        long wq(long a, long b) { return a / b; }\n";
+    let q = x64(SRC, "q");
+    let cdq = q.iter().find(|i| i.op == 0x99).expect("cdq");
+    assert_eq!(cdq.rex & 8, 0, "cdq takes no REX.W: {q:x?}");
+    let idiv = q.iter().find(|i| i.op == 0xF7).expect("idiv");
+    assert_eq!(idiv.rex & 8, 0, "the 32-bit idiv takes no REX.W: {q:x?}");
+    let r = x64(SRC, "r");
+    let div = r.iter().find(|i| i.op == 0xF7).expect("div");
+    assert_eq!(div.rex & 8, 0, "the 32-bit div takes no REX.W: {r:x?}");
+    let wq = x64(SRC, "wq");
+    let cqo = wq.iter().find(|i| i.op == 0x99).expect("cqo");
+    assert_eq!(cqo.rex & 8, 8, "cqo keeps REX.W: {wq:x?}");
+    let widiv = wq.iter().find(|i| i.op == 0xF7).expect("idiv");
+    assert_eq!(widiv.rex & 8, 8, "the 64-bit idiv keeps REX.W: {wq:x?}");
+}
+
+/// The divides of a function, true for the 64-bit form: x86-64's `div` /
+/// `idiv` (F7 /6, /7) with REX.W, aarch64's `udiv` / `sdiv` with sf set.
+fn x64_divides(insns: &[X64Insn]) -> Vec<bool> {
+    let divide = |i: &&X64Insn| i.op == 0xF7 && i.modrm.is_some_and(|m| (m >> 3) & 6 == 6);
+    insns.iter().filter(divide).map(X64Insn::rex_w).collect()
+}
+
+fn a64_divides(ws: &[u32]) -> Vec<bool> {
+    let divide = |w: &&u32| *w & 0x7FE0_F800 == 0x1AC0_0800;
+    ws.iter().filter(divide).map(|w| w >> 31 == 1).collect()
+}
+
+/// An `int` and an `unsigned` division and remainder pair each issue one
+/// 32-bit divide on both targets (C99 6.5.5p6).
+#[test]
+fn a_divmod_pair_shares_one_32_bit_divide() {
+    const SRC: &str = "int si(int a, int b, int q, int r) {\n\
+        if (a / b != q) return 1;\n\
+        if (a % b != r) return 2;\n\
+        if (a / b + a % b != q + r) return 3;\n\
+        if (a / b * b + a % b != a) return 4;\n\
+        return 0;\n}\n\
+        int ui(unsigned a, unsigned b, unsigned q, unsigned r) {\n\
+        if (a / b != q) return 1;\n\
+        if (a % b != r) return 2;\n\
+        if (a / b + a % b != q + r) return 3;\n\
+        if (a / b * b + a % b != a) return 4;\n\
+        return 0;\n}\n";
+    for name in ["si", "ui"] {
+        let insns = x64(SRC, name);
+        assert_eq!(x64_divides(&insns), [false], "x86-64 {name}: {insns:x?}");
+        let ws = a64(SRC, name);
+        assert_eq!(a64_divides(&ws), [false], "aarch64 {name}: {ws:08x?}");
+    }
+}
+
+/// A `long long` division of `int` values keeps the 64-bit `idiv`, its
+/// INT_MIN / -1 being defined (C99 6.5.5p6); an `int` one under `-fwrapv`
+/// does not.
+#[test]
+fn a_wider_division_of_int_values_keeps_the_64_bit_divide() {
+    const SRC: &str = "int q(int a, int b) { return (int)((long long)a / (long long)b); }\n\
+        int r(int a, int b) { return (int)((long long)a % (long long)b); }\n\
+        int w(int a, int b) { return a / b; }\n";
+    for name in ["q", "r"] {
+        let insns = x64(SRC, name);
+        assert_eq!(x64_divides(&insns), [true], "{name}: {insns:x?}");
+    }
+    let insns = x64_wrapv(SRC, "w");
+    assert_eq!(x64_divides(&insns), [false], "{insns:x?}");
+    let ws = a64_wrapv(SRC, "w");
+    assert_eq!(a64_divides(&ws), [false], "{ws:08x?}");
+}
+
+/// Unoptimized, an `int` quotient and remainder take no renormalization:
+/// the 64-bit divide of `int` operands leaves them in range.
+#[test]
+fn unoptimized_int_division_takes_no_renormalization() {
+    const SRC: &str = "int h(int x, int y) { return x / y + x % y; }\n";
+    let dump = ssa_dump(SRC, "h", false);
+    let divides: Vec<&str> = dump
+        .lines()
+        .filter(|l| l.contains("op=div,") || l.contains("op=mod,"))
+        .filter_map(|l| l.split_whitespace().next())
+        .collect();
+    assert_eq!(divides.len(), 2, "{dump}");
+    for v in divides {
+        let read = format!("Extend {{ value={v},");
+        assert!(!dump.contains(&read), "{v} renormalized: {dump}");
+    }
+}
+
 /// A register output of an inline asm statement into a scalar local is
 /// the statement's own value, so the local takes no frame slot: a gsbase
 /// read between two `swapgs` is `swapgs; rdgsbase %rax; swapgs; ret` and

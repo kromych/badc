@@ -71,7 +71,8 @@ fn ent_pc=4 n_params=2 variadic=false locals=0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   Binop { op=div, lhs=v1, rhs=v3 }                 -> x0
-    v8   Extend { value=v7, kind=I32 }                    -> x1
+    v8   Extend { value=v7, kind=I32, nsw }               -> x1
+    v9   Extend { value=v7, kind=I32 }                    -> x1
     terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=rem32
@@ -88,7 +89,8 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v7   Binop { op=div, lhs=v1, rhs=v3 }                 -> x0
     v8   Binop { op=mul, lhs=v7, rhs=v3 }                 -> x0
     v9   Binop { op=mod, lhs=v1, rhs=v3 }                 -> x0
-    v10  Extend { value=v9, kind=I32 }                    -> x1
+    v10  Extend { value=v9, kind=I32, nsw }               -> x1
+    v11  Extend { value=v9, kind=I32 }                    -> x1
     terminator Return(v9)   (exit_acc=v9)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=uquot32
@@ -102,7 +104,7 @@ fn ent_pc=6 n_params=2 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(4294967295)                                  -> x0
     v6   BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x1
-    v7   Binop { op=divu, lhs=v5, rhs=v6 }                -> x0
+    v7   Binop { op=divu, lhs=v5, rhs=v3 }                -> x0
     v8   BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> x1
     terminator Return(v7)   (exit_acc=v7)
 ; --- SSA dump (ok=true) ent_pc=7 ---

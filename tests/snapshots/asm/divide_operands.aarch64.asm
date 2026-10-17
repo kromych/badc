@@ -32,22 +32,17 @@ Disassembly of section .text:
                	ret
 
 <quot32>:
-               	sxtw	x0, w0
-               	sxtw	x1, w1
-               	sdiv	x0, x0, x1
+               	sdiv	w0, w0, w1
                	ret
 
 <rem32>:
-               	sxtw	x0, w0
-               	sxtw	x1, w1
-               	sdiv	x17, x0, x1
-               	msub	x0, x17, x1, x0
+               	sdiv	w17, w0, w1
+               	msub	w0, w17, w1, w0
                	ret
 
 <uquot32>:
                	mov	x0, #0xffffffff         // =4294967295
-               	mov	w1, w1
-               	udiv	x0, x0, x1
+               	udiv	w0, w0, w1
                	ret
 
 <urem32>:

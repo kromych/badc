@@ -2128,6 +2128,9 @@ pub(crate) struct FunctionSsa {
     /// that adds, removes or rewrites instructions; a shorter table is
     /// read as all-false, which is the 64-bit form.
     pub cmp32: Vec<bool>,
+    /// `cmp32`'s counterpart for divisions and remainders issued in the
+    /// 32-bit form, whose result is zero-extended.
+    pub div32: Vec<bool>,
     /// Per-block table: the block's `Bz` / `Bnz` reads only the low 32
     /// bits of its condition, which `constfold_branch::strip_zero_test_conds`
     /// took from a compare `narrow` marked 32-bit. Set immediately before
@@ -2557,6 +2560,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             extern_tls_refs: _,
             f32_values: _,
             cmp32: _,
+            div32: _,
             low_word_tests: _,
             param_fp_mask: _,
             param_widths: _,

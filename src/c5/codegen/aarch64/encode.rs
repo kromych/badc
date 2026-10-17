@@ -653,11 +653,19 @@ pub(crate) fn enc_sdiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0x9AC0_0C00, rd, rn, rm)
 }
 
+pub(crate) fn enc_sdiv_w(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x1AC0_0C00, rd, rn, rm)
+}
+
 /// `UDIV <Xd>, <Xn>, <Xm>` -- unsigned integer division. Differs from
 /// SDIV only in the opcode2 field (bit 10 cleared). Pairs with
 /// [`enc_msub`] when computing unsigned modulo.
 pub(crate) fn enc_udiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0x9AC0_0800, rd, rn, rm)
+}
+
+pub(crate) fn enc_udiv_w(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x1AC0_0800, rd, rn, rm)
 }
 
 /// Four-register multiply-accumulate encoding shared by MADD / MSUB.
@@ -670,6 +678,10 @@ fn enc_mul_acc(base: u32, rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
 /// which yields `r = a - (a/b)*b`.
 pub(crate) fn enc_msub(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
     enc_mul_acc(0x9B00_8000, rd, rn, rm, ra)
+}
+
+pub(crate) fn enc_msub_w(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
+    enc_mul_acc(0x1B00_8000, rd, rn, rm, ra)
 }
 
 /// `MADD <Xd>, <Xn>, <Xm>, <Xa>` -- `Xd = Xa + (Xn * Xm)`.

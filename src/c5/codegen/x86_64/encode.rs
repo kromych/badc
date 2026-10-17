@@ -1264,6 +1264,11 @@ pub(crate) fn emit_cqo(code: &mut Vec<u8>) {
     emit_byte(code, 0x99);
 }
 
+/// `CDQ` -- sign-extend eax into edx.
+pub(crate) fn emit_cdq(code: &mut Vec<u8>) {
+    emit_byte(code, 0x99);
+}
+
 // ---- Shifts. The `D3` opcode shifts by `cl`; `C1` shifts by an
 //      8-bit immediate. We expose both forms because the optimizer
 //      emits constant-shift IR ops (`ShlI N`, `ShrI N`) that benefit

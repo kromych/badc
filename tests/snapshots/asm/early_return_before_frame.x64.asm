@@ -219,11 +219,9 @@ Disassembly of section .text:
                	je	<addr>
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
-               	movq	%rdi, %rax
-               	cqto
-               	idivq	%rsi
+               	movl	%edi, %eax
+               	cltd
+               	idivl	%esi
                	movq	%rdx, %rax
                	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx), %rcx

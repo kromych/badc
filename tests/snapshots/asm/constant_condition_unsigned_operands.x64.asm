@@ -39,12 +39,11 @@ Disassembly of section .text:
                	cmpl	$0x1, %eax
                	jne	<addr>
                	movl	-0x10(%rbp), %ecx
-               	movl	-0x8(%rbp), %eax
-               	movl	%eax, %esi
-               	movq	%rcx, %rax
+               	movl	-0x8(%rbp), %esi
+               	movl	%ecx, %eax
                	xorl	%edx, %edx
-               	divq	%rsi
-               	cmpq	$0x1, %rdx
+               	divl	%esi
+               	cmpl	$0x1, %edx
                	je	<addr>
                	movl	$0xa, %eax
                	leave

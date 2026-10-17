@@ -965,6 +965,7 @@ mod tests {
             inst_src: alloc::vec![(0, 0); n],
             f32_values: alloc::vec![false; n],
             cmp32: Vec::new(),
+            div32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             param_widths: crate::c5::ir::ArgWidths::default(),

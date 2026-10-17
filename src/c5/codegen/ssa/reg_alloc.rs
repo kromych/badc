@@ -187,6 +187,8 @@ pub(crate) struct Allocation {
     /// issues in the 32-bit register form. Empty or out-of-range
     /// entries default to the 64-bit form.
     pub cmp32: Vec<bool>,
+    /// `FunctionSsa::div32`.
+    pub div32: Vec<bool>,
     /// Per value: an `Inst::BitCount` whose operand cannot be zero in the
     /// counted bytes, so the lowering's guard for the undefined zero case
     /// is dead. Filled on x86-64, the only target whose count
@@ -1223,6 +1225,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             high_observed: Vec::new(),
             high_clear: Vec::new(),
             cmp32: Vec::new(),
+            div32: Vec::new(),
             count_nonzero: Vec::new(),
             wide: Vec::new(),
             asm_preserve: (u32::MAX, u32::MAX),
@@ -1970,6 +1973,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         ),
         high_clear: crate::c5::codegen::passes::drop_redundant_extend::compute_high_clear(func),
         cmp32: func.cmp32.clone(),
+        div32: func.div32.clone(),
         count_nonzero: if target.is_x86_64() {
             crate::c5::codegen::passes::value_range::counts_over_nonzero(func)
         } else {
@@ -5833,6 +5837,7 @@ int main(void) { return 0; }
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
+            div32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             param_widths: crate::c5::ir::ArgWidths::default(),
@@ -5961,6 +5966,7 @@ int main(void) { return 0; }
             inst_src: alloc::vec![(0, 0); n],
             f32_values: alloc::vec![false; n],
             cmp32: Vec::new(),
+            div32: Vec::new(),
             low_word_tests: Vec::new(),
             insts,
             blocks: alloc::vec![crate::c5::ir::Block {
@@ -6075,6 +6081,7 @@ int main(void) { return 0; }
             inst_src: vec![(0, 0); n],
             f32_values: vec![false; n],
             cmp32: Vec::new(),
+            div32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             param_widths: crate::c5::ir::ArgWidths::default(),

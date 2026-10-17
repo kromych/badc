@@ -60,8 +60,10 @@ pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs.iter_mut() {
         // Decide the comparison operand widths first: a comparison
         // read at 32 bits stops observing its operands' upper half,
-        // which is what makes the renormalizations feeding it dead.
+        // which is what makes the renormalizations feeding it dead; so
+        // does a 32-bit division.
         super::narrow::mark_compares(func, true);
+        super::narrow::mark_narrow_divs(func);
         let assumed = super::value_range::iv::assumptions(func);
         run_one(func);
         drop_fitting(func, &assumed);
@@ -241,6 +243,8 @@ fn compute_high_observed_through(
                 BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::And | BinOp::Or | BinOp::Xor => {}
                 BinOp::Shl => observe(&mut hi, &mut work, *rhs),
                 _ if cmp32 => {}
+                BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu
+                    if super::narrow::is_div32(&func.div32, i as ValueId) => {}
                 _ => {
                     observe(&mut hi, &mut work, *lhs);
                     observe(&mut hi, &mut work, *rhs);
@@ -255,6 +259,8 @@ fn compute_high_observed_through(
                 | BinOp::Xor
                 | BinOp::Shl => {}
                 _ if cmp32 => {}
+                BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu
+                    if super::narrow::is_div32(&func.div32, i as ValueId) => {}
                 _ => observe(&mut hi, &mut work, *lhs),
             },
             // The 2- and 4-byte reversals and counts read only the low
@@ -1100,6 +1106,7 @@ mod tests {
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
+            div32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             param_widths: crate::c5::ir::ArgWidths::default(),

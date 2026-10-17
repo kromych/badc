@@ -73,7 +73,7 @@ impl Range {
         }
     }
 
-    fn meet(self, other: Range) -> Range {
+    pub(crate) fn meet(self, other: Range) -> Range {
         Range {
             lo: self.lo.max(other.lo),
             hi: self.hi.min(other.hi),
@@ -230,7 +230,9 @@ fn value_numbers(func: &FunctionSsa) -> Numbering {
     let mut table: BTreeMap<Key, ValueId> = BTreeMap::new();
     for i in 0..insts.len() {
         let c = |v: ValueId| canon.get(v as usize).copied().unwrap_or(v);
-        let narrow = super::narrow::is_cmp32(&func.cmp32, i as ValueId);
+        // A 32-bit compare or division is another function of its operands.
+        let narrow = super::narrow::is_cmp32(&func.cmp32, i as ValueId)
+            || super::narrow::is_narrow_div(func, i as ValueId);
         // Address-materialisation immediates (`ImmData`, `ImmCode`,
         // `ImmExtCode`, `TlsAddr`) stay on their own ids: their operand
         // is a placeholder a per-instruction fixup resolves, so equal
@@ -269,7 +271,7 @@ fn value_numbers(func: &FunctionSsa) -> Numbering {
 /// in between.
 fn key_of(func: &FunctionSsa, canon: &[ValueId], v: ValueId) -> Key {
     let c = |x: ValueId| canon.get(x as usize).copied().unwrap_or(x);
-    let narrow = super::narrow::is_cmp32(&func.cmp32, v);
+    let narrow = super::narrow::is_cmp32(&func.cmp32, v) || super::narrow::is_narrow_div(func, v);
     match func.insts.get(v as usize) {
         Some(Inst::Imm(k)) => (1, 0, 0, *k),
         Some(Inst::Extend { value, kind, .. }) => (2, c(*value), load_kind_code(*kind), 0),
@@ -511,7 +513,7 @@ fn cmp_key(canon: &[ValueId], lhs: ValueId, op: BinOp, imm: i64, narrow: bool) -
 }
 
 /// Bounds an extension's result takes from the width it reads.
-fn extend_range(kind: LoadKind) -> Option<Range> {
+pub(crate) fn extend_range(kind: LoadKind) -> Option<Range> {
     Some(match kind {
         LoadKind::I64 => return None,
         LoadKind::U8 => Range { lo: 0, hi: 0xff },
@@ -1598,14 +1600,50 @@ impl Rules<'_> {
             inst => {
                 let mut unreached = false;
                 let mut operands = assumed_imm(inst);
+                // A 32-bit division reads extended low words, zero-extends.
+                let low_word = match inst {
+                    Inst::Binop { op, .. } | Inst::BinopI { op, .. }
+                        if super::narrow::is_narrow_div(self.func, v as ValueId) =>
+                    {
+                        extend_range(match op {
+                            BinOp::Div | BinOp::Mod => LoadKind::I32,
+                            _ => LoadKind::U32,
+                        })
+                    }
+                    _ => None,
+                };
                 let r = eval(inst, self.params, |o| {
                     let r = seen(b, o).unwrap_or_else(|| {
                         unreached = true;
                         UNIVERSE
                     });
                     operands = operands.hull(r);
-                    r
+                    match low_word {
+                        Some(w) if !w.contains(r) => w,
+                        _ => r,
+                    }
                 });
+                let r = match low_word {
+                    Some(_) if r.lo < 0 => UNIVERSE,
+                    _ => r,
+                };
+                // A split remainder lies within its divisor (C99 6.5.5p6) where
+                // the quotient register holds the whole quotient.
+                let r = match split_remainder(self.func, v as ValueId) {
+                    Some((op, q, n, d)) => match (seen(b, n), seen(b, d)) {
+                        (Some(a), Some(m))
+                            if !super::narrow::is_div32(&self.func.div32, q)
+                                || op == BinOp::Modu
+                                    && a.high_word_clear()
+                                    && m.high_word_clear() =>
+                        {
+                            let k = r.meet(divmod(op, a, m));
+                            if k.lo <= k.hi { k } else { r }
+                        }
+                        _ => r,
+                    },
+                    None => r,
+                };
                 let r = match self
                     .assumed
                     .get(v)
@@ -1626,6 +1664,45 @@ impl Rules<'_> {
             }
         }
     }
+}
+
+/// `(remainder op, quotient, dividend, divisor)` when `v` is the remainder
+/// `n - (n / d) * d` the SSA builder splits, `d` folded to an immediate or not.
+fn split_remainder(func: &FunctionSsa, v: ValueId) -> Option<(BinOp, ValueId, ValueId, ValueId)> {
+    let Inst::Binop {
+        op: BinOp::Sub,
+        lhs: n,
+        rhs: t,
+    } = *func.insts.get(v as usize)?
+    else {
+        return None;
+    };
+    let (x, y) = match *func.insts.get(t as usize)? {
+        Inst::Binop {
+            op: BinOp::Mul,
+            lhs,
+            rhs,
+        } => (lhs, Ok(rhs)),
+        Inst::BinopI {
+            op: BinOp::Mul,
+            lhs,
+            rhs_imm,
+        } => (lhs, Err(rhs_imm)),
+        _ => return None,
+    };
+    let quotient = |q: ValueId, by: Result<ValueId, i64>| match *func.insts.get(q as usize)? {
+        Inst::Binop { op, lhs, rhs: d }
+            if lhs == n
+                && match by {
+                    Ok(m) => m == d,
+                    Err(k) => matches!(func.insts.get(d as usize), Some(&Inst::Imm(c)) if c == k),
+                } =>
+        {
+            Some((crate::c5::ir::remainder_op(op)?, q, n, d))
+        }
+        _ => None,
+    };
+    quotient(x, y).or_else(|| y.ok().and_then(|m| quotient(m, Ok(x))))
 }
 
 /// The immediate operand of `inst`, zero for an instruction without one.
@@ -1662,27 +1739,35 @@ fn visit_order(func: &FunctionSsa) -> Vec<ValueId> {
 /// The instructions reading `v` as an operand: `readers[starts[v]..starts[v + 1]]`.
 fn reader_table(func: &FunctionSsa) -> (Vec<u32>, Vec<ValueId>) {
     let n = func.insts.len();
+    // A split remainder's rule reads its divisor besides its operands.
+    let divisors: Vec<(ValueId, ValueId)> = (0..n as ValueId)
+        .filter_map(|v| split_remainder(func, v).map(|(_, _, _, d)| (v, d)))
+        .collect();
     let mut starts = alloc::vec![0u32; n + 1];
+    let mut count = |o: ValueId| {
+        if (o as usize) < n {
+            starts[o as usize + 1] += 1;
+        }
+    };
     for inst in &func.insts {
-        inst.for_each_operand(|o| {
-            if (o as usize) < n {
-                starts[o as usize + 1] += 1;
-            }
-        });
+        inst.for_each_operand(&mut count);
     }
+    divisors.iter().for_each(|&(_, d)| count(d));
     for i in 0..n {
         starts[i + 1] += starts[i];
     }
     let mut fill = starts.clone();
     let mut readers = alloc::vec![0; starts[n] as usize];
+    let mut add = |o: ValueId, i: ValueId| {
+        if (o as usize) < n {
+            readers[fill[o as usize] as usize] = i;
+            fill[o as usize] += 1;
+        }
+    };
     for (i, inst) in func.insts.iter().enumerate() {
-        inst.for_each_operand(|o| {
-            if (o as usize) < n {
-                readers[fill[o as usize] as usize] = i as ValueId;
-                fill[o as usize] += 1;
-            }
-        });
+        inst.for_each_operand(|o| add(o, i as ValueId));
     }
+    divisors.iter().for_each(|&(v, d)| add(d, v));
     (starts, readers)
 }
 
@@ -2836,6 +2921,7 @@ mod tests {
             inst_src: vec![(0, 0); insts.len()],
             f32_values: vec![false; insts.len()],
             cmp32,
+            div32: Vec::new(),
             insts,
             blocks: vec![
                 block(0..2, Terminator::Jmp(1)),
@@ -3568,6 +3654,163 @@ mod tests {
             matches!(f.insts[4], Inst::BinopI { op: BinOp::Lt, .. }),
             "v2 < 3 decided on the >= 2 edge: {:?}",
             f.insts[4]
+        );
+    }
+
+    /// A split remainder is bounded by its divisor but over a signed 32-bit
+    /// quotient, whose register is zero-extended.
+    /// v0 = param(I32); v1 = param; v2 = v1 & 15; v3 = v0 & 0xffff;
+    /// v4 = v2 + 1; v5 = n op v4; v6 = v5 * v4; v7 = n - v6, over a dividend n
+    #[test]
+    fn a_split_remainder_is_bounded_by_its_divisor() {
+        let bound = |op, n: ValueId, div32: bool| {
+            let mut f = fresh(
+                vec![
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: LoadKind::I32,
+                    },
+                    Inst::ParamRef {
+                        idx: 1,
+                        kind: LoadKind::I64,
+                    },
+                    Inst::BinopI {
+                        op: BinOp::And,
+                        lhs: 1,
+                        rhs_imm: 15,
+                    },
+                    Inst::BinopI {
+                        op: BinOp::And,
+                        lhs: 0,
+                        rhs_imm: 0xffff,
+                    },
+                    Inst::BinopI {
+                        op: BinOp::Add,
+                        lhs: 2,
+                        rhs_imm: 1,
+                    },
+                    Inst::Binop { op, lhs: n, rhs: 4 },
+                    Inst::Binop {
+                        op: BinOp::Mul,
+                        lhs: 5,
+                        rhs: 4,
+                    },
+                    Inst::Binop {
+                        op: BinOp::Sub,
+                        lhs: n,
+                        rhs: 6,
+                    },
+                ],
+                2,
+            );
+            f.div32 = vec![false; f.insts.len()];
+            f.div32[5] = div32;
+            def_ranges(&f, &[])[7]
+        };
+        assert!(bound(BinOp::Div, 0, false) == Range { lo: -15, hi: 15 });
+        assert!(bound(BinOp::Divu, 3, false) == Range { lo: 0, hi: 15 });
+        assert!(bound(BinOp::Divu, 3, true) == Range { lo: 0, hi: 15 });
+        assert!(!bound(BinOp::Div, 0, true).fits(LoadKind::I32));
+        assert!(!bound(BinOp::Divu, 1, true).fits(LoadKind::U32));
+    }
+
+    /// A divisor that grows around a loop revisits the split remainder.
+    /// b0: v0 = param; v1 = 1
+    /// b1: v2 = phi(v1, v3); v3 = v2 + 1; v4 = v0 / v2; v5 = v4 * v2;
+    ///     v6 = v0 - v5                                         -> b1
+    #[test]
+    fn a_split_remainder_follows_a_growing_divisor() {
+        let insts = vec![
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::I64,
+            },
+            Inst::Imm(1),
+            Inst::Phi {
+                incoming: vec![(0, 1), (1, 3)],
+                kind: LoadKind::I64,
+            },
+            Inst::BinopI {
+                op: BinOp::Add,
+                lhs: 2,
+                rhs_imm: 1,
+            },
+            Inst::Binop {
+                op: BinOp::Div,
+                lhs: 0,
+                rhs: 2,
+            },
+            Inst::Binop {
+                op: BinOp::Mul,
+                lhs: 4,
+                rhs: 2,
+            },
+            Inst::Binop {
+                op: BinOp::Sub,
+                lhs: 0,
+                rhs: 5,
+            },
+        ];
+        let block = |range: core::ops::Range<u32>| Block {
+            start_pc: 0,
+            inst_range: range,
+            terminator: Terminator::Jmp(1),
+            exit_acc: 0,
+        };
+        let mut f = fresh(insts, 1);
+        f.blocks = vec![block(0..2), block(2..7)];
+        // 11 % 6 and -11 % 6.
+        let r = def_ranges(&f, &[])[6];
+        assert!(r.contains(Range { lo: -5, hi: 5 }), "{r:?}");
+    }
+
+    /// A 32-bit division of operands whose registers lie above 2^32 bounds
+    /// the quotient by its width alone.
+    /// v1 = v0 >> 31 in [0, 2^33); v4 = (v2 & 7) + 2^32; v5 = v1 /u v4
+    #[test]
+    fn a_narrow_division_reads_its_operands_low_words() {
+        let mut f = fresh(
+            vec![
+                Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                Inst::BinopI {
+                    op: BinOp::Shru,
+                    lhs: 0,
+                    rhs_imm: 31,
+                },
+                Inst::ParamRef {
+                    idx: 1,
+                    kind: LoadKind::I64,
+                },
+                Inst::BinopI {
+                    op: BinOp::And,
+                    lhs: 2,
+                    rhs_imm: 7,
+                },
+                Inst::BinopI {
+                    op: BinOp::Add,
+                    lhs: 3,
+                    rhs_imm: 1 << 32,
+                },
+                Inst::Binop {
+                    op: BinOp::Divu,
+                    lhs: 1,
+                    rhs: 4,
+                },
+            ],
+            2,
+        );
+        f.div32 = vec![false, false, false, false, false, true];
+        // 0xffffffff / 1 for v0 = 0xffffffff << 31, v2 = 1.
+        let q = def_ranges(&f, &[])[5];
+        assert!(
+            q.contains(Range {
+                lo: 0,
+                hi: 0xffff_ffff
+            }),
+            "{q:?}"
         );
     }
 }

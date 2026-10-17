@@ -52,27 +52,22 @@ Disassembly of section .text:
                	retq
 
 <quot32>:
-               	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
-               	movq	%rdi, %rax
-               	cqto
-               	idivq	%rsi
+               	movl	%edi, %eax
+               	cltd
+               	idivl	%esi
                	retq
 
 <rem32>:
-               	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
-               	movq	%rdi, %rax
-               	cqto
-               	idivq	%rsi
+               	movl	%edi, %eax
+               	cltd
+               	idivl	%esi
                	movq	%rdx, %rax
                	retq
 
 <uquot32>:
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	%esi, %ecx
                	xorl	%edx, %edx
-               	divq	%rcx
+               	divl	%esi
                	retq
 
 <urem32>:

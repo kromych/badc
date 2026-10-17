@@ -547,16 +547,40 @@ pub(super) fn emit_binop(
             }
             None => (scratch.third(frame), false),
         };
+        let narrow = narrow_div(alloc, v);
         let divider = if matches!(op, BinOp::Mod) {
-            enc_sdiv(quot, rn, rm)
+            if narrow {
+                super::encode::enc_sdiv_w(quot, rn, rm)
+            } else {
+                enc_sdiv(quot, rn, rm)
+            }
+        } else if narrow {
+            super::encode::enc_udiv_w(quot, rn, rm)
         } else {
             enc_udiv(quot, rn, rm)
         };
         emit(code, divider);
-        emit(code, enc_msub(rd, quot, rm, rn));
+        emit(
+            code,
+            if narrow {
+                super::encode::enc_msub_w(rd, quot, rm, rn)
+            } else {
+                enc_msub(rd, quot, rm, rn)
+            },
+        );
         if borrowed {
             emit(code, enc_ldr_post(Reg(19), Reg(31), 16));
         }
+        store_spilled_int(code, frame, dst, rd);
+        return Ok(());
+    }
+    if matches!(op, BinOp::Div | BinOp::Divu) && narrow_div(alloc, v) {
+        let word = if op == BinOp::Div {
+            super::encode::enc_sdiv_w(rd, rn, rm)
+        } else {
+            super::encode::enc_udiv_w(rd, rn, rm)
+        };
+        emit(code, word);
         store_spilled_int(code, frame, dst, rd);
         return Ok(());
     }
@@ -764,6 +788,10 @@ pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64, high_dead: bool) -> bo
 /// (`passes::narrow`).
 fn narrow_cmp(alloc: &Allocation, v: super::super::ir::ValueId) -> bool {
     crate::c5::codegen::passes::narrow::is_cmp32(&alloc.cmp32, v)
+}
+
+fn narrow_div(alloc: &Allocation, v: super::super::ir::ValueId) -> bool {
+    crate::c5::codegen::passes::narrow::is_div32(&alloc.div32, v)
 }
 
 /// Encoding for the `cmp` of comparison `v`, in the operand width the

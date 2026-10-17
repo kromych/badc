@@ -183,10 +183,8 @@ Disassembly of section .text:
                	cbz	w1, <addr>
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x0, w0
-               	sxtw	x1, w1
-               	sdiv	x17, x0, x1
-               	msub	x0, x17, x1, x0
+               	sdiv	w17, w0, w1
+               	msub	w0, w17, w1, w0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	x2, [x2]

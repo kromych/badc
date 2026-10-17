@@ -4740,6 +4740,8 @@ impl Compiler {
         } else {
             self.ty = common;
             self.ast_binop(signed);
+            // INT_MIN / -1 overflows the width, as `+ - *` can.
+            self.renormalize_after(signed, common);
         }
         self.ty = common;
         Ok(())

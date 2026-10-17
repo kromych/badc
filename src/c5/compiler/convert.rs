@@ -168,16 +168,26 @@ impl Compiler {
         self.renormalize_overflow(common);
     }
 
-    /// Whether `op` in type `ty` is a `+ - *` of a signed type of `int`
-    /// rank or above, whose overflow is undefined without `-fwrapv`.
+    /// Whether `op` in type `ty` overflows undefined: a `+ - *` without
+    /// `-fwrapv`, a `/` or `%` with it too, as gcc's, on a signed type of
+    /// `int` rank or above (C99 6.5p5, C11 6.5.5p6).
     pub(super) fn overflow_undefined(&self, op: crate::c5::ir::BinOp, ty: i64) -> bool {
         use crate::c5::ir::BinOp as B;
-        !self.wrapv
-            && matches!(op, B::Add | B::Sub | B::Mul)
+        let undefined = match op {
+            B::Add | B::Sub | B::Mul => !self.wrapv,
+            B::Div | B::Mod => true,
+            _ => false,
+        };
+        undefined
             && is_integer_scalar_ty(ty)
             && !is_unsigned_ty(ty)
             && !is_bool_ty(ty)
             && self.size_of_type(ty) >= 4
+    }
+
+    /// [`Self::renormalize_to_width`] after `op`, marked per [`Self::overflow_undefined`].
+    pub(super) fn renormalize_after(&mut self, op: crate::c5::ir::BinOp, ty: i64) {
+        self.renormalize(ty, self.overflow_undefined(op, ty));
     }
 
     /// [`Self::renormalize_to_width`] after an operation whose signed

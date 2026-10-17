@@ -3472,6 +3472,7 @@ fn splice_multi_block(
         f32_values: new_f32,
         // Rebuilt by `passes::narrow` after the pipeline settles.
         cmp32: Vec::new(),
+        div32: Vec::new(),
         low_word_tests: Vec::new(),
         param_fp_mask: original.param_fp_mask,
         param_widths: original.param_widths,

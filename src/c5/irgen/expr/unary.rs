@@ -53,6 +53,18 @@ impl<'a> Walker<'a> {
             }
             UnOp::Renormalize { nsw } => {
                 let v = self.walk_expr_rvalue(b, child)?;
+                // The mark over a `/` or `%` is what `passes::narrow` reads at
+                // -O; the default level's 64-bit divide leaves it in range.
+                let divmod = matches!(
+                    self.ast.expr(child),
+                    Expr::Binary {
+                        op: BinOp::Div | BinOp::Mod,
+                        ..
+                    }
+                );
+                if nsw && divmod && !self.optimize {
+                    return Ok(v);
+                }
                 Ok(match load_kind_for(ty, self.target) {
                     kind @ (LoadKind::I8 | LoadKind::I16 | LoadKind::I32) => {
                         b.extend_marked(v, kind, nsw)

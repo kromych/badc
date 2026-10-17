@@ -2349,6 +2349,71 @@ fn sdiv_rd(words: &[u32]) -> u32 {
         & 31
 }
 
+/// The words `src`'s first division emits, its mark set by the test.
+fn div_words(src: &str, narrow: bool) -> Vec<u32> {
+    let target = Target::LinuxAarch64;
+    let (func, mut alloc, v) = func_with(src, target, |i| {
+        matches!(
+            i,
+            Inst::Binop {
+                op: BinOp::Div | BinOp::Divu,
+                ..
+            }
+        )
+    });
+    let Inst::Binop { op, lhs, rhs, .. } = func.insts[v as usize] else {
+        unreachable!()
+    };
+    alloc.div32.resize(v as usize + 1, false);
+    alloc.div32[v as usize] = narrow;
+    let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
+    let mut code = Vec::new();
+    emit_binop(
+        &mut code,
+        op,
+        v,
+        place_of(&alloc, v),
+        lhs,
+        rhs,
+        &alloc,
+        frame,
+        &ScratchPool::new(),
+    )
+    .expect("emit_binop");
+    le_words(&code)
+}
+
+/// A division of 32-bit operands issues `sdiv` / `udiv` on the W
+/// registers (SF clear; the quotient lands zero-extended in the X
+/// register); a 64-bit operand keeps the X form.
+#[test]
+fn division_of_32_bit_operands_takes_the_w_register_form() {
+    let narrow = div_words(
+        "int f(int a, int b){ return a / b; } int main(void){ return 0; }",
+        true,
+    );
+    assert!(
+        narrow.iter().any(|&w| w & 0xFFE0_FC00 == 0x1AC0_0C00),
+        "{narrow:08x?}"
+    );
+    let wide = div_words(
+        "long f(long a, long b){ return a / b; } int main(void){ return 0; }",
+        false,
+    );
+    assert!(
+        wide.iter().any(|&w| w & 0xFFE0_FC00 == 0x9AC0_0C00),
+        "{wide:08x?}"
+    );
+    let unarrow = div_words(
+        "unsigned f(unsigned a, unsigned b){ return a / b; } int main(void){ return 0; }",
+        true,
+    );
+    assert!(
+        unarrow.iter().any(|&w| w & 0xFFE0_FC00 == 0x1AC0_0800),
+        "{unarrow:08x?}"
+    );
+}
+
 /// A modulo whose dividend, divisor and result all spill leaves neither
 /// scratch free for the quotient: it takes x19, and the frame saves it.
 #[test]

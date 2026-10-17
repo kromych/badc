@@ -67,6 +67,9 @@ enum Key {
     TlsAddr(i64, u32),
     Binop(BinOp, ValueId, ValueId, bool),
     BinopI(BinOp, ValueId, i64, bool),
+    // A division read over its operands' renormalized sources.
+    NarrowDiv(BinOp, ValueId, ValueId),
+    NarrowDivI(BinOp, ValueId, i64),
     Extend(ValueId, LoadKind, bool),
     Bswap(ValueId, u8, bool),
     BitCount(BitCountOp, ValueId, u8, bool),
@@ -562,8 +565,19 @@ impl Gate<'_> {
 
 /// `sym` is the cross-unit symbol an address value binds to, `u32::MAX`
 /// for none.
-fn key_of(inst: &Inst, vn: &[ValueId], is_f32: bool, sym: u32) -> Option<Key> {
+fn key_of(
+    inst: &Inst,
+    vn: &[ValueId],
+    is_f32: bool,
+    sym: u32,
+    bare: &[(ValueId, bool)],
+    narrow_div: bool,
+) -> Option<Key> {
     let r = |v: ValueId| resolve_vn(vn, v);
+    let low = |v: ValueId| {
+        let l = r(v);
+        bare.get(l as usize).copied().unwrap_or((l, false))
+    };
     match inst {
         Inst::Imm(k) => Some(Key::Imm(*k, is_f32)),
         Inst::LocalAddr(off) => Some(Key::LocalAddr(*off, is_f32)),
@@ -571,13 +585,27 @@ fn key_of(inst: &Inst, vn: &[ValueId], is_f32: bool, sym: u32) -> Option<Key> {
         Inst::ImmCode(t) => Some(Key::ImmCode(*t, sym)),
         Inst::TlsAddr(off) => Some(Key::TlsAddr(*off, sym)),
         Inst::Binop { op, lhs, rhs } => {
+            if matches!(op, BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu) {
+                let ((a, za), (b, zb)) = (low(*lhs), low(*rhs));
+                if narrow_div || (matches!(op, BinOp::Divu | BinOp::Modu) && za && zb) {
+                    return Some(Key::NarrowDiv(*op, a, b));
+                }
+            }
             let (mut a, mut b) = (r(*lhs), r(*rhs));
             if commutative_int(*op) && a > b {
                 core::mem::swap(&mut a, &mut b);
             }
             Some(Key::Binop(*op, a, b, is_f32))
         }
-        Inst::BinopI { op, lhs, rhs_imm } => Some(Key::BinopI(*op, r(*lhs), *rhs_imm, is_f32)),
+        Inst::BinopI { op, lhs, rhs_imm } => {
+            if matches!(op, BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu) {
+                let (a, za) = low(*lhs);
+                if narrow_div || (matches!(op, BinOp::Divu | BinOp::Modu) && za) {
+                    return Some(Key::NarrowDivI(*op, a, *rhs_imm));
+                }
+            }
+            Some(Key::BinopI(*op, r(*lhs), *rhs_imm, is_f32))
+        }
         Inst::Extend { value, kind, .. } => Some(Key::Extend(r(*value), *kind, is_f32)),
         Inst::Bswap { value, width } => Some(Key::Bswap(r(*value), *width, is_f32)),
         Inst::BitCount { op, value, width } => Some(Key::BitCount(*op, r(*value), *width, is_f32)),
@@ -670,6 +698,39 @@ fn run_one(func: &mut FunctionSsa, caps: BankCapacity) {
     let depth = loop_depth(&preds, &tin, &tout);
     let use_counts = compute_use_counts(func);
     let pinned = branch_pinned(func, &use_counts);
+    // Per value, the source a renormalization keeps the low word of and
+    // whether it zero-extends: a 32-bit division keys on either.
+    let zext = |k: i64| k == u32::MAX as i64;
+    let bare: Vec<(ValueId, bool)> = func
+        .insts
+        .iter()
+        .enumerate()
+        .map(|(i, inst)| {
+            let strip = match inst {
+                Inst::BinopI {
+                    op: BinOp::And,
+                    lhs,
+                    rhs_imm,
+                } => (*rhs_imm as u32 == u32::MAX).then_some((*lhs, zext(*rhs_imm))),
+                Inst::Binop {
+                    op: BinOp::And,
+                    lhs,
+                    rhs,
+                } => match (&func.insts[*lhs as usize], &func.insts[*rhs as usize]) {
+                    (Inst::Imm(k), _) if *k as u32 == u32::MAX => Some((*rhs, zext(*k))),
+                    (_, Inst::Imm(k)) if *k as u32 == u32::MAX => Some((*lhs, zext(*k))),
+                    _ => None,
+                },
+                Inst::Extend {
+                    value,
+                    kind: LoadKind::I32,
+                    ..
+                } => Some((*value, false)),
+                _ => None,
+            };
+            strip.unwrap_or((i as ValueId, false))
+        })
+        .collect();
     let p = pressure(func, &operands_read(func, &use_counts));
     let mut gate = Gate {
         preds: &preds,
@@ -729,7 +790,9 @@ fn run_one(func: &mut FunctionSsa, caps: BankCapacity) {
                     }
                     let is_f32 = func.f32_values.get(i).copied().unwrap_or(false);
                     let sym = bound.get(&idx).copied().unwrap_or(u32::MAX);
-                    let Some(key) = key_of(&func.insts[i], &vn, is_f32, sym) else {
+                    let narrow_div = super::narrow::is_div32(&func.div32, idx);
+                    let Some(key) = key_of(&func.insts[i], &vn, is_f32, sym, &bare, narrow_div)
+                    else {
                         continue;
                     };
                     if let Some(&leader) = map.get(&key)
@@ -818,6 +881,7 @@ mod tests {
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: alloc::vec![false; insts.len()],
+            div32: alloc::vec![false; insts.len()],
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             param_widths: crate::c5::ir::ArgWidths::default(),

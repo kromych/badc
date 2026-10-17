@@ -358,67 +358,67 @@ Disassembly of section .text:
                	sub	x0, x29, #0x60
                	ldrb	w2, [sp, #0x20]
                	ldrb	w3, [sp, #0x30]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x60]
                	ldrb	w2, [sp, #0x21]
                	ldrb	w3, [sp, #0x31]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x5f]
                	ldrb	w2, [sp, #0x22]
                	ldrb	w3, [sp, #0x32]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x5e]
                	ldrb	w2, [sp, #0x23]
                	ldrb	w3, [sp, #0x33]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x5d]
                	ldrb	w2, [sp, #0x24]
                	ldrb	w3, [sp, #0x34]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x5c]
                	ldrb	w2, [sp, #0x25]
                	ldrb	w3, [sp, #0x35]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x5b]
                	ldrb	w2, [sp, #0x26]
                	ldrb	w3, [sp, #0x36]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x5a]
                	ldrb	w2, [sp, #0x27]
                	ldrb	w3, [sp, #0x37]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x59]
                	ldrb	w2, [sp, #0x28]
                	ldrb	w3, [sp, #0x38]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x58]
                	ldrb	w2, [sp, #0x29]
                	ldrb	w3, [sp, #0x39]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x57]
                	ldrb	w2, [sp, #0x2a]
                	ldrb	w3, [sp, #0x3a]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x56]
                	ldrb	w2, [sp, #0x2b]
                	ldrb	w3, [sp, #0x3b]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x55]
                	ldrb	w2, [sp, #0x2c]
                	ldrb	w3, [sp, #0x3c]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x54]
                	ldrb	w2, [sp, #0x2d]
                	ldrb	w3, [sp, #0x3d]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x53]
                	ldrb	w2, [sp, #0x2e]
                	ldrb	w3, [sp, #0x3e]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x52]
                	ldrb	w2, [sp, #0x2f]
                	ldrb	w3, [sp, #0x3f]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x51]
                	sub	x2, x29, #0x70
                	ldp	x16, x17, [x0]
@@ -426,7 +426,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldrb	w2, [x4, x0]
                	ldrb	w3, [x5, x0]
-               	sdiv	x2, x2, x3
+               	sdiv	w2, w2, w3
                	and	x2, x2, #0xff
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
@@ -447,83 +447,83 @@ Disassembly of section .text:
                	sub	x0, x29, #0x60
                	ldrb	w2, [sp, #0x20]
                	ldrb	w3, [sp, #0x30]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x60]
                	ldrb	w2, [sp, #0x21]
                	ldrb	w3, [sp, #0x31]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x5f]
                	ldrb	w2, [sp, #0x22]
                	ldrb	w3, [sp, #0x32]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x5e]
                	ldrb	w2, [sp, #0x23]
                	ldrb	w3, [sp, #0x33]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x5d]
                	ldrb	w2, [sp, #0x24]
                	ldrb	w3, [sp, #0x34]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x5c]
                	ldrb	w2, [sp, #0x25]
                	ldrb	w3, [sp, #0x35]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x5b]
                	ldrb	w2, [sp, #0x26]
                	ldrb	w3, [sp, #0x36]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x5a]
                	ldrb	w2, [sp, #0x27]
                	ldrb	w3, [sp, #0x37]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x59]
                	ldrb	w2, [sp, #0x28]
                	ldrb	w3, [sp, #0x38]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x58]
                	ldrb	w2, [sp, #0x29]
                	ldrb	w3, [sp, #0x39]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x57]
                	ldrb	w2, [sp, #0x2a]
                	ldrb	w3, [sp, #0x3a]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x56]
                	ldrb	w2, [sp, #0x2b]
                	ldrb	w3, [sp, #0x3b]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x55]
                	ldrb	w2, [sp, #0x2c]
                	ldrb	w3, [sp, #0x3c]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x54]
                	ldrb	w2, [sp, #0x2d]
                	ldrb	w3, [sp, #0x3d]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x53]
                	ldrb	w2, [sp, #0x2e]
                	ldrb	w3, [sp, #0x3e]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x52]
                	ldrb	w2, [sp, #0x2f]
                	ldrb	w3, [sp, #0x3f]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x51]
                	sub	x2, x29, #0x70
                	ldp	x16, x17, [x0]
@@ -531,8 +531,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldrb	w2, [x4, x0]
                	ldrb	w3, [x5, x0]
-               	sdiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	sdiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	and	x2, x2, #0xff
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
@@ -969,7 +969,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldrsb	x2, [x4, x0]
                	ldrsb	x3, [x5, x0]
-               	sdiv	x2, x2, x3
+               	sdiv	w2, w2, w3
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -1073,8 +1073,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldrsb	x2, [x4, x0]
                	ldrsb	x3, [x5, x0]
-               	sdiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	sdiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
@@ -1316,28 +1316,28 @@ Disassembly of section .text:
                	sub	x6, x29, #0x160
                	ldrh	w0, [sp, #0x60]
                	ldrh	w1, [sp, #0x70]
-               	udiv	x0, x0, x1
+               	udiv	w0, w0, w1
                	ldrh	w1, [sp, #0x62]
                	ldrh	w3, [sp, #0x72]
-               	udiv	x1, x1, x3
+               	udiv	w1, w1, w3
                	ldrh	w3, [sp, #0x64]
                	ldrh	w4, [sp, #0x74]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	ldrh	w4, [sp, #0x66]
                	ldrh	w7, [sp, #0x76]
-               	udiv	x4, x4, x7
+               	udiv	w4, w4, w7
                	ldrh	w7, [sp, #0x68]
                	ldrh	w8, [sp, #0x78]
-               	udiv	x7, x7, x8
+               	udiv	w7, w7, w8
                	ldrh	w8, [sp, #0x6a]
                	ldrh	w9, [sp, #0x7a]
-               	udiv	x8, x8, x9
+               	udiv	w8, w8, w9
                	ldrh	w9, [sp, #0x6c]
                	ldrh	w10, [sp, #0x7c]
-               	udiv	x9, x9, x10
+               	udiv	w9, w9, w10
                	ldrh	w10, [sp, #0x6e]
                	ldrh	w11, [sp, #0x7e]
-               	udiv	x10, x10, x11
+               	udiv	w10, w10, w11
                	sturh	w0, [x29, #-0x60]
                	sturh	w1, [x29, #-0x5e]
                	sturh	w3, [x29, #-0x5c]
@@ -1353,7 +1353,7 @@ Disassembly of section .text:
                	ldrh	w4, [x4]
                	add	x1, x6, x1
                	ldrh	w1, [x1]
-               	sdiv	x1, x4, x1
+               	sdiv	w1, w4, w1
                	and	x1, x1, #0xffff
                	strh	w1, [x3]
                	add	x0, x0, #0x1
@@ -1373,52 +1373,44 @@ Disassembly of section .text:
                	sub	x6, x29, #0x160
                	ldrh	w0, [sp, #0x60]
                	ldrh	w1, [sp, #0x70]
-               	udiv	x17, x0, x1
-               	msub	x0, x17, x1, x0
+               	udiv	w17, w0, w1
+               	msub	w0, w17, w1, w0
                	ldrh	w1, [sp, #0x62]
                	ldrh	w3, [sp, #0x72]
-               	udiv	x17, x1, x3
-               	msub	x1, x17, x3, x1
+               	udiv	w17, w1, w3
+               	msub	w1, w17, w3, w1
                	ldrh	w3, [sp, #0x64]
                	ldrh	w4, [sp, #0x74]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	ldrh	w4, [sp, #0x66]
                	ldrh	w7, [sp, #0x76]
-               	udiv	x17, x4, x7
-               	msub	x4, x17, x7, x4
+               	udiv	w17, w4, w7
+               	msub	w4, w17, w7, w4
                	ldrh	w7, [sp, #0x68]
                	ldrh	w8, [sp, #0x78]
-               	udiv	x17, x7, x8
-               	msub	x7, x17, x8, x7
+               	udiv	w17, w7, w8
+               	msub	w7, w17, w8, w7
                	ldrh	w8, [sp, #0x6a]
                	ldrh	w9, [sp, #0x7a]
-               	udiv	x17, x8, x9
-               	msub	x8, x17, x9, x8
+               	udiv	w17, w8, w9
+               	msub	w8, w17, w9, w8
                	ldrh	w9, [sp, #0x6c]
                	ldrh	w10, [sp, #0x7c]
-               	udiv	x17, x9, x10
-               	msub	x9, x17, x10, x9
+               	udiv	w17, w9, w10
+               	msub	w9, w17, w10, w9
                	ldrh	w10, [sp, #0x6e]
                	ldrh	w11, [sp, #0x7e]
-               	udiv	x17, x10, x11
-               	msub	x10, x17, x11, x10
-               	and	x0, x0, #0xffff
+               	udiv	w17, w10, w11
+               	msub	w10, w17, w11, w10
                	sturh	w0, [x29, #-0x60]
-               	and	x0, x1, #0xffff
-               	sturh	w0, [x29, #-0x5e]
-               	and	x0, x3, #0xffff
-               	sturh	w0, [x29, #-0x5c]
-               	and	x0, x4, #0xffff
-               	sturh	w0, [x29, #-0x5a]
-               	and	x0, x7, #0xffff
-               	sturh	w0, [x29, #-0x58]
-               	and	x0, x8, #0xffff
-               	sturh	w0, [x29, #-0x56]
-               	and	x0, x9, #0xffff
-               	sturh	w0, [x29, #-0x54]
-               	and	x0, x10, #0xffff
-               	sturh	w0, [x29, #-0x52]
+               	sturh	w1, [x29, #-0x5e]
+               	sturh	w3, [x29, #-0x5c]
+               	sturh	w4, [x29, #-0x5a]
+               	sturh	w7, [x29, #-0x58]
+               	sturh	w8, [x29, #-0x56]
+               	sturh	w9, [x29, #-0x54]
+               	sturh	w10, [x29, #-0x52]
                	mov	x0, #0x0                // =0
                	lsl	x1, x0, #1
                	add	x3, x2, x1
@@ -1426,8 +1418,8 @@ Disassembly of section .text:
                	ldrh	w4, [x4]
                	add	x1, x6, x1
                	ldrh	w1, [x1]
-               	sdiv	x17, x4, x1
-               	msub	x1, x17, x1, x4
+               	sdiv	w17, w4, w1
+               	msub	w1, w17, w1, w4
                	and	x1, x1, #0xffff
                	strh	w1, [x3]
                	add	x0, x0, #0x1
@@ -1684,7 +1676,7 @@ Disassembly of section .text:
                	ldrsh	x4, [x4]
                	add	x1, x6, x1
                	ldrsh	x1, [x1]
-               	sdiv	x1, x4, x1
+               	sdiv	w1, w4, w1
                	strh	w1, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
@@ -1756,8 +1748,8 @@ Disassembly of section .text:
                	ldrsh	x4, [x4]
                	add	x1, x6, x1
                	ldrsh	x1, [x1]
-               	sdiv	x17, x4, x1
-               	msub	x1, x17, x1, x4
+               	sdiv	w17, w4, w1
+               	msub	w1, w17, w1, w4
                	strh	w1, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
@@ -1896,16 +1888,16 @@ Disassembly of section .text:
                	sub	x6, x29, #0x120
                	ldr	w0, [sp, #0xa0]
                	ldr	w1, [sp, #0xb0]
-               	udiv	x0, x0, x1
+               	udiv	w0, w0, w1
                	ldr	w1, [sp, #0xa4]
                	ldr	w3, [sp, #0xb4]
-               	udiv	x1, x1, x3
+               	udiv	w1, w1, w3
                	ldr	w3, [sp, #0xa8]
                	ldr	w4, [sp, #0xb8]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	ldr	w4, [sp, #0xac]
                	ldr	w7, [sp, #0xbc]
-               	udiv	x4, x4, x7
+               	udiv	w4, w4, w7
                	stur	w0, [x29, #-0x60]
                	stur	w1, [x29, #-0x5c]
                	stur	w3, [x29, #-0x58]
@@ -1917,7 +1909,7 @@ Disassembly of section .text:
                	ldr	w4, [x4]
                	add	x1, x6, x1
                	ldr	w1, [x1]
-               	udiv	x1, x4, x1
+               	udiv	w1, w4, w1
                	str	w1, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -1936,20 +1928,20 @@ Disassembly of section .text:
                	sub	x6, x29, #0x120
                	ldr	w0, [sp, #0xa0]
                	ldr	w1, [sp, #0xb0]
-               	udiv	x17, x0, x1
-               	msub	x0, x17, x1, x0
+               	udiv	w17, w0, w1
+               	msub	w0, w17, w1, w0
                	ldr	w1, [sp, #0xa4]
                	ldr	w3, [sp, #0xb4]
-               	udiv	x17, x1, x3
-               	msub	x1, x17, x3, x1
+               	udiv	w17, w1, w3
+               	msub	w1, w17, w3, w1
                	ldr	w3, [sp, #0xa8]
                	ldr	w4, [sp, #0xb8]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	ldr	w4, [sp, #0xac]
                	ldr	w7, [sp, #0xbc]
-               	udiv	x17, x4, x7
-               	msub	x4, x17, x7, x4
+               	udiv	w17, w4, w7
+               	msub	w4, w17, w7, w4
                	stur	w0, [x29, #-0x60]
                	stur	w1, [x29, #-0x5c]
                	stur	w3, [x29, #-0x58]
@@ -1961,8 +1953,8 @@ Disassembly of section .text:
                	ldr	w4, [x4]
                	add	x1, x6, x1
                	ldr	w1, [x1]
-               	udiv	x17, x4, x1
-               	msub	x1, x17, x1, x4
+               	udiv	w17, w4, w1
+               	msub	w1, w17, w1, w4
                	str	w1, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -2122,7 +2114,7 @@ Disassembly of section .text:
                	ldrsw	x4, [x4]
                	add	x1, x6, x1
                	ldrsw	x1, [x1]
-               	sdiv	x1, x4, x1
+               	sdiv	w1, w4, w1
                	str	w1, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -2166,8 +2158,8 @@ Disassembly of section .text:
                	ldrsw	x4, [x4]
                	add	x1, x6, x1
                	ldrsw	x1, [x1]
-               	sdiv	x17, x4, x1
-               	msub	x1, x17, x1, x4
+               	sdiv	w17, w4, w1
+               	msub	w1, w17, w1, w4
                	str	w1, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -4531,52 +4523,52 @@ Disassembly of section .text:
                	sub	x4, x29, #0x1a0
                	sub	x2, x29, #0x60
                	ldrb	w3, [sp, #0x30]
-               	udiv	x3, x0, x3
+               	udiv	w3, w0, w3
                	sturb	w3, [x29, #-0x60]
                	ldrb	w3, [sp, #0x31]
-               	udiv	x3, x0, x3
+               	udiv	w3, w0, w3
                	sturb	w3, [x29, #-0x5f]
                	ldrb	w3, [sp, #0x32]
-               	udiv	x3, x0, x3
+               	udiv	w3, w0, w3
                	sturb	w3, [x29, #-0x5e]
                	ldrb	w3, [sp, #0x33]
-               	udiv	x3, x0, x3
+               	udiv	w3, w0, w3
                	sturb	w3, [x29, #-0x5d]
                	ldrb	w3, [sp, #0x34]
-               	udiv	x3, x0, x3
+               	udiv	w3, w0, w3
                	sturb	w3, [x29, #-0x5c]
                	ldrb	w3, [sp, #0x35]
-               	udiv	x3, x0, x3
+               	udiv	w3, w0, w3
                	sturb	w3, [x29, #-0x5b]
                	ldrb	w3, [sp, #0x36]
-               	udiv	x3, x0, x3
+               	udiv	w3, w0, w3
                	sturb	w3, [x29, #-0x5a]
                	ldrb	w3, [sp, #0x37]
-               	udiv	x3, x0, x3
+               	udiv	w3, w0, w3
                	sturb	w3, [x29, #-0x59]
                	ldrb	w3, [sp, #0x38]
-               	udiv	x3, x0, x3
+               	udiv	w3, w0, w3
                	sturb	w3, [x29, #-0x58]
                	ldrb	w3, [sp, #0x39]
-               	udiv	x3, x0, x3
+               	udiv	w3, w0, w3
                	sturb	w3, [x29, #-0x57]
                	ldrb	w3, [sp, #0x3a]
-               	udiv	x3, x0, x3
+               	udiv	w3, w0, w3
                	sturb	w3, [x29, #-0x56]
                	ldrb	w3, [sp, #0x3b]
-               	udiv	x3, x0, x3
+               	udiv	w3, w0, w3
                	sturb	w3, [x29, #-0x55]
                	ldrb	w3, [sp, #0x3c]
-               	udiv	x3, x0, x3
+               	udiv	w3, w0, w3
                	sturb	w3, [x29, #-0x54]
                	ldrb	w3, [sp, #0x3d]
-               	udiv	x3, x0, x3
+               	udiv	w3, w0, w3
                	sturb	w3, [x29, #-0x53]
                	ldrb	w3, [sp, #0x3e]
-               	udiv	x3, x0, x3
+               	udiv	w3, w0, w3
                	sturb	w3, [x29, #-0x52]
                	ldrb	w3, [sp, #0x3f]
-               	udiv	x0, x0, x3
+               	udiv	w0, w0, w3
                	sturb	w0, [x29, #-0x51]
                	sub	x0, x29, #0x90
                	ldp	x16, x17, [x2]
@@ -4584,7 +4576,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x2, #0xfa               // =250
                	ldrb	w3, [x4, x0]
-               	sdiv	x2, x2, x3
+               	sdiv	w2, w2, w3
                	and	x2, x2, #0xff
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
@@ -4604,68 +4596,68 @@ Disassembly of section .text:
                	sub	x4, x29, #0x1a0
                	sub	x2, x29, #0x60
                	ldrb	w3, [sp, #0x30]
-               	udiv	x17, x0, x3
-               	msub	x3, x17, x3, x0
+               	udiv	w17, w0, w3
+               	msub	w3, w17, w3, w0
                	sturb	w3, [x29, #-0x60]
                	ldrb	w3, [sp, #0x31]
-               	udiv	x17, x0, x3
-               	msub	x3, x17, x3, x0
+               	udiv	w17, w0, w3
+               	msub	w3, w17, w3, w0
                	sturb	w3, [x29, #-0x5f]
                	ldrb	w3, [sp, #0x32]
-               	udiv	x17, x0, x3
-               	msub	x3, x17, x3, x0
+               	udiv	w17, w0, w3
+               	msub	w3, w17, w3, w0
                	sturb	w3, [x29, #-0x5e]
                	ldrb	w3, [sp, #0x33]
-               	udiv	x17, x0, x3
-               	msub	x3, x17, x3, x0
+               	udiv	w17, w0, w3
+               	msub	w3, w17, w3, w0
                	sturb	w3, [x29, #-0x5d]
                	ldrb	w3, [sp, #0x34]
-               	udiv	x17, x0, x3
-               	msub	x3, x17, x3, x0
+               	udiv	w17, w0, w3
+               	msub	w3, w17, w3, w0
                	sturb	w3, [x29, #-0x5c]
                	ldrb	w3, [sp, #0x35]
-               	udiv	x17, x0, x3
-               	msub	x3, x17, x3, x0
+               	udiv	w17, w0, w3
+               	msub	w3, w17, w3, w0
                	sturb	w3, [x29, #-0x5b]
                	ldrb	w3, [sp, #0x36]
-               	udiv	x17, x0, x3
-               	msub	x3, x17, x3, x0
+               	udiv	w17, w0, w3
+               	msub	w3, w17, w3, w0
                	sturb	w3, [x29, #-0x5a]
                	ldrb	w3, [sp, #0x37]
-               	udiv	x17, x0, x3
-               	msub	x3, x17, x3, x0
+               	udiv	w17, w0, w3
+               	msub	w3, w17, w3, w0
                	sturb	w3, [x29, #-0x59]
                	ldrb	w3, [sp, #0x38]
-               	udiv	x17, x0, x3
-               	msub	x3, x17, x3, x0
+               	udiv	w17, w0, w3
+               	msub	w3, w17, w3, w0
                	sturb	w3, [x29, #-0x58]
                	ldrb	w3, [sp, #0x39]
-               	udiv	x17, x0, x3
-               	msub	x3, x17, x3, x0
+               	udiv	w17, w0, w3
+               	msub	w3, w17, w3, w0
                	sturb	w3, [x29, #-0x57]
                	ldrb	w3, [sp, #0x3a]
-               	udiv	x17, x0, x3
-               	msub	x3, x17, x3, x0
+               	udiv	w17, w0, w3
+               	msub	w3, w17, w3, w0
                	sturb	w3, [x29, #-0x56]
                	ldrb	w3, [sp, #0x3b]
-               	udiv	x17, x0, x3
-               	msub	x3, x17, x3, x0
+               	udiv	w17, w0, w3
+               	msub	w3, w17, w3, w0
                	sturb	w3, [x29, #-0x55]
                	ldrb	w3, [sp, #0x3c]
-               	udiv	x17, x0, x3
-               	msub	x3, x17, x3, x0
+               	udiv	w17, w0, w3
+               	msub	w3, w17, w3, w0
                	sturb	w3, [x29, #-0x54]
                	ldrb	w3, [sp, #0x3d]
-               	udiv	x17, x0, x3
-               	msub	x3, x17, x3, x0
+               	udiv	w17, w0, w3
+               	msub	w3, w17, w3, w0
                	sturb	w3, [x29, #-0x53]
                	ldrb	w3, [sp, #0x3e]
-               	udiv	x17, x0, x3
-               	msub	x3, x17, x3, x0
+               	udiv	w17, w0, w3
+               	msub	w3, w17, w3, w0
                	sturb	w3, [x29, #-0x52]
                	ldrb	w3, [sp, #0x3f]
-               	udiv	x17, x0, x3
-               	msub	x0, x17, x3, x0
+               	udiv	w17, w0, w3
+               	msub	w0, w17, w3, w0
                	sturb	w0, [x29, #-0x51]
                	sub	x0, x29, #0x90
                	ldp	x16, x17, [x2]
@@ -4673,8 +4665,8 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x2, #0xfa               // =250
                	ldrb	w3, [x4, x0]
-               	sdiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	sdiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	and	x2, x2, #0xff
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
@@ -4927,7 +4919,7 @@ Disassembly of section .text:
                	mov	x4, #-0x7               // =-7
                	add	x2, x5, x2
                	ldrsw	x2, [x2]
-               	sdiv	x2, x4, x2
+               	sdiv	w2, w4, w2
                	str	w2, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -4966,8 +4958,8 @@ Disassembly of section .text:
                	mov	x4, #-0x7               // =-7
                	add	x2, x5, x2
                	ldrsw	x2, [x2]
-               	sdiv	x17, x4, x2
-               	msub	x2, x17, x2, x4
+               	sdiv	w17, w4, w2
+               	msub	w2, w17, w2, w4
                	str	w2, [x3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -5873,67 +5865,67 @@ Disassembly of section .text:
                	sub	x1, x29, #0x60
                	ldrb	w2, [sp, #0x20]
                	ldrb	w3, [sp, #0x30]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x60]
                	ldrb	w2, [sp, #0x21]
                	ldrb	w3, [sp, #0x31]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x5f]
                	ldrb	w2, [sp, #0x22]
                	ldrb	w3, [sp, #0x32]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x5e]
                	ldrb	w2, [sp, #0x23]
                	ldrb	w3, [sp, #0x33]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x5d]
                	ldrb	w2, [sp, #0x24]
                	ldrb	w3, [sp, #0x34]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x5c]
                	ldrb	w2, [sp, #0x25]
                	ldrb	w3, [sp, #0x35]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x5b]
                	ldrb	w2, [sp, #0x26]
                	ldrb	w3, [sp, #0x36]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x5a]
                	ldrb	w2, [sp, #0x27]
                	ldrb	w3, [sp, #0x37]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x59]
                	ldrb	w2, [sp, #0x28]
                	ldrb	w3, [sp, #0x38]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x58]
                	ldrb	w2, [sp, #0x29]
                	ldrb	w3, [sp, #0x39]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x57]
                	ldrb	w2, [sp, #0x2a]
                	ldrb	w3, [sp, #0x3a]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x56]
                	ldrb	w2, [sp, #0x2b]
                	ldrb	w3, [sp, #0x3b]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x55]
                	ldrb	w2, [sp, #0x2c]
                	ldrb	w3, [sp, #0x3c]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x54]
                	ldrb	w2, [sp, #0x2d]
                	ldrb	w3, [sp, #0x3d]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x53]
                	ldrb	w2, [sp, #0x2e]
                	ldrb	w3, [sp, #0x3e]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x52]
                	ldrb	w2, [sp, #0x2f]
                	ldrb	w3, [sp, #0x3f]
-               	udiv	x2, x2, x3
+               	udiv	w2, w2, w3
                	sturb	w2, [x29, #-0x51]
                	sub	x2, x29, #0xb0
                	ldp	x16, x17, [x1]
@@ -5944,67 +5936,67 @@ Disassembly of section .text:
                	sub	x0, x29, #0x60
                	ldurb	w3, [x29, #-0x90]
                	ldrb	w4, [sp, #0x30]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x60]
                	ldurb	w3, [x29, #-0x8f]
                	ldrb	w4, [sp, #0x31]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x5f]
                	ldurb	w3, [x29, #-0x8e]
                	ldrb	w4, [sp, #0x32]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x5e]
                	ldurb	w3, [x29, #-0x8d]
                	ldrb	w4, [sp, #0x33]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x5d]
                	ldurb	w3, [x29, #-0x8c]
                	ldrb	w4, [sp, #0x34]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x5c]
                	ldurb	w3, [x29, #-0x8b]
                	ldrb	w4, [sp, #0x35]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x5b]
                	ldurb	w3, [x29, #-0x8a]
                	ldrb	w4, [sp, #0x36]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x5a]
                	ldurb	w3, [x29, #-0x89]
                	ldrb	w4, [sp, #0x37]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x59]
                	ldurb	w3, [x29, #-0x88]
                	ldrb	w4, [sp, #0x38]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x58]
                	ldurb	w3, [x29, #-0x87]
                	ldrb	w4, [sp, #0x39]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x57]
                	ldurb	w3, [x29, #-0x86]
                	ldrb	w4, [sp, #0x3a]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x56]
                	ldurb	w3, [x29, #-0x85]
                	ldrb	w4, [sp, #0x3b]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x55]
                	ldurb	w3, [x29, #-0x84]
                	ldrb	w4, [sp, #0x3c]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x54]
                	ldurb	w3, [x29, #-0x83]
                	ldrb	w4, [sp, #0x3d]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x53]
                	ldurb	w3, [x29, #-0x82]
                	ldrb	w4, [sp, #0x3e]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x52]
                	ldurb	w3, [x29, #-0x81]
                	ldrb	w4, [sp, #0x3f]
-               	udiv	x3, x3, x4
+               	udiv	w3, w3, w4
                	sturb	w3, [x29, #-0x51]
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
@@ -6020,83 +6012,83 @@ Disassembly of section .text:
                	sub	x1, x29, #0x60
                	ldrb	w2, [sp, #0x20]
                	ldrb	w3, [sp, #0x30]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x60]
                	ldrb	w2, [sp, #0x21]
                	ldrb	w3, [sp, #0x31]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x5f]
                	ldrb	w2, [sp, #0x22]
                	ldrb	w3, [sp, #0x32]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x5e]
                	ldrb	w2, [sp, #0x23]
                	ldrb	w3, [sp, #0x33]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x5d]
                	ldrb	w2, [sp, #0x24]
                	ldrb	w3, [sp, #0x34]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x5c]
                	ldrb	w2, [sp, #0x25]
                	ldrb	w3, [sp, #0x35]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x5b]
                	ldrb	w2, [sp, #0x26]
                	ldrb	w3, [sp, #0x36]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x5a]
                	ldrb	w2, [sp, #0x27]
                	ldrb	w3, [sp, #0x37]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x59]
                	ldrb	w2, [sp, #0x28]
                	ldrb	w3, [sp, #0x38]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x58]
                	ldrb	w2, [sp, #0x29]
                	ldrb	w3, [sp, #0x39]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x57]
                	ldrb	w2, [sp, #0x2a]
                	ldrb	w3, [sp, #0x3a]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x56]
                	ldrb	w2, [sp, #0x2b]
                	ldrb	w3, [sp, #0x3b]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x55]
                	ldrb	w2, [sp, #0x2c]
                	ldrb	w3, [sp, #0x3c]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x54]
                	ldrb	w2, [sp, #0x2d]
                	ldrb	w3, [sp, #0x3d]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x53]
                	ldrb	w2, [sp, #0x2e]
                	ldrb	w3, [sp, #0x3e]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x52]
                	ldrb	w2, [sp, #0x2f]
                	ldrb	w3, [sp, #0x3f]
-               	udiv	x17, x2, x3
-               	msub	x2, x17, x3, x2
+               	udiv	w17, w2, w3
+               	msub	w2, w17, w3, w2
                	sturb	w2, [x29, #-0x51]
                	sub	x2, x29, #0xb0
                	ldp	x16, x17, [x1]
@@ -6107,83 +6099,83 @@ Disassembly of section .text:
                	sub	x0, x29, #0x60
                	ldurb	w3, [x29, #-0x90]
                	ldrb	w4, [sp, #0x30]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	sturb	w3, [x29, #-0x60]
                	ldurb	w3, [x29, #-0x8f]
                	ldrb	w4, [sp, #0x31]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	sturb	w3, [x29, #-0x5f]
                	ldurb	w3, [x29, #-0x8e]
                	ldrb	w4, [sp, #0x32]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	sturb	w3, [x29, #-0x5e]
                	ldurb	w3, [x29, #-0x8d]
                	ldrb	w4, [sp, #0x33]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	sturb	w3, [x29, #-0x5d]
                	ldurb	w3, [x29, #-0x8c]
                	ldrb	w4, [sp, #0x34]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	sturb	w3, [x29, #-0x5c]
                	ldurb	w3, [x29, #-0x8b]
                	ldrb	w4, [sp, #0x35]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	sturb	w3, [x29, #-0x5b]
                	ldurb	w3, [x29, #-0x8a]
                	ldrb	w4, [sp, #0x36]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	sturb	w3, [x29, #-0x5a]
                	ldurb	w3, [x29, #-0x89]
                	ldrb	w4, [sp, #0x37]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	sturb	w3, [x29, #-0x59]
                	ldurb	w3, [x29, #-0x88]
                	ldrb	w4, [sp, #0x38]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	sturb	w3, [x29, #-0x58]
                	ldurb	w3, [x29, #-0x87]
                	ldrb	w4, [sp, #0x39]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	sturb	w3, [x29, #-0x57]
                	ldurb	w3, [x29, #-0x86]
                	ldrb	w4, [sp, #0x3a]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	sturb	w3, [x29, #-0x56]
                	ldurb	w3, [x29, #-0x85]
                	ldrb	w4, [sp, #0x3b]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	sturb	w3, [x29, #-0x55]
                	ldurb	w3, [x29, #-0x84]
                	ldrb	w4, [sp, #0x3c]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	sturb	w3, [x29, #-0x54]
                	ldurb	w3, [x29, #-0x83]
                	ldrb	w4, [sp, #0x3d]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	sturb	w3, [x29, #-0x53]
                	ldurb	w3, [x29, #-0x82]
                	ldrb	w4, [sp, #0x3e]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	sturb	w3, [x29, #-0x52]
                	ldurb	w3, [x29, #-0x81]
                	ldrb	w4, [sp, #0x3f]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	sturb	w3, [x29, #-0x51]
                	ldp	x16, x17, [x0]
                	stp	x16, x17, [x1]
@@ -7500,7 +7492,7 @@ Disassembly of section .text:
                	stp	x16, x17, [x5]
                	ldrb	w4, [x2, x0]
                	ldrb	w5, [x3, x0]
-               	sdiv	x4, x4, x5
+               	sdiv	w4, w4, w5
                	and	x4, x4, #0xff
                	strb	w4, [x1, x0]
                	add	x0, x0, #0x1
@@ -7589,7 +7581,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	ldrsb	x2, [x4, x0]
                	ldrsb	x3, [x5, x0]
-               	sdiv	x2, x2, x3
+               	sdiv	w2, w2, w3
                	strb	w2, [x1, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10

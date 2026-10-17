@@ -14,7 +14,9 @@
 //! source, erasing the evidence. Every drop rule preserves the low word,
 //! so a marked comparison stays correct across them.
 
-use crate::c5::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, ValueId};
+use crate::c5::ir::{
+    BinOp, BlockId, FunctionSsa, Inst, LoadKind, StoreKind, ValueId, is_divmod_op,
+};
 use alloc::vec::Vec;
 
 /// What a value's register holds above bit 31: `sign` when those bits
@@ -151,39 +153,7 @@ fn imm_ext32(imm: i64) -> Ext32 {
 /// an earlier run of the range fold already removed.
 pub(crate) fn mark_compares(func: &mut FunctionSsa, with_ranges: bool) {
     let read: &FunctionSsa = func;
-    // Ranges and the block of each instruction, built on first need.
-    let mut ranges: Option<(super::value_range::Ranges, Vec<BlockId>)> = None;
-    let mut by_range = |at: usize, v: ValueId| {
-        let (ranges, block_of) = ranges.get_or_insert_with(|| {
-            let mut block_of = alloc::vec![BlockId::MAX; read.insts.len()];
-            for (b, block) in read.blocks.iter().enumerate() {
-                for idx in block.inst_range.clone() {
-                    if let Some(slot) = block_of.get_mut(idx as usize) {
-                        *slot = b as BlockId;
-                    }
-                }
-            }
-            (super::value_range::Ranges::compute(read, &[]), block_of)
-        });
-        match block_of[at] {
-            BlockId::MAX => NONE,
-            b => {
-                let r = ranges.at(b, v);
-                Ext32 {
-                    sign: r.fits(LoadKind::I32),
-                    zero: r.high_word_clear(),
-                }
-            }
-        }
-    };
-    let mut side = |at: usize, v: ValueId| {
-        let e = ext32(read, v);
-        if e.sign || e.zero || !with_ranges {
-            e
-        } else {
-            by_range(at, v)
-        }
-    };
+    let mut side = OperandExt::new(read, with_ranges);
     let out: Vec<bool> = read
         .insts
         .iter()
@@ -202,9 +172,9 @@ pub(crate) fn mark_compares(func: &mut FunctionSsa, with_ranges: bool) {
             if is_cmp32(&read.cmp32, i as ValueId) {
                 return true;
             }
-            let a = side(i, lhs);
+            let a = side.of(i, lhs);
             let b = match rhs {
-                Ok(v) => side(i, v),
+                Ok(v) => side.of(i, v),
                 Err(imm) => imm_ext32(imm),
             };
             narrow_ok(op, a, b)
@@ -218,10 +188,163 @@ pub(crate) fn is_cmp32(cmp32: &[bool], v: ValueId) -> bool {
     cmp32.get(v as usize).copied().unwrap_or(false)
 }
 
+/// Whether `v` is marked for the 32-bit division form.
+pub(crate) fn is_div32(div32: &[bool], v: ValueId) -> bool {
+    div32.get(v as usize).copied().unwrap_or(false)
+}
+
+/// [`is_div32`] of a division or remainder, not of a slot rewritten since.
+pub(crate) fn is_narrow_div(func: &FunctionSsa, v: ValueId) -> bool {
+    matches!(func.insts.get(v as usize),
+        Some(Inst::Binop { op, .. } | Inst::BinopI { op, .. }) if is_divmod_op(*op))
+        && is_div32(&func.div32, v)
+}
+
+/// The `int` divisions (C99 6.5p5): an nsw I32 renormalization or local
+/// store reads them, or the split remainder `n - (n / d) * d` its quotient.
+fn int_divisions(func: &FunctionSsa) -> Vec<bool> {
+    let mut nsw = alloc::vec![false; func.insts.len()];
+    for inst in &func.insts {
+        let v = match *inst {
+            Inst::Extend {
+                value,
+                kind: LoadKind::I32,
+                nsw: true,
+            }
+            | Inst::StoreLocal {
+                value,
+                kind: StoreKind::I32,
+                nsw: true,
+                ..
+            } => value,
+            _ => continue,
+        };
+        if let Some(slot) = nsw.get_mut(v as usize) {
+            *slot = true;
+        }
+    }
+    let binop = |v: ValueId| match func.insts.get(v as usize) {
+        Some(&Inst::Binop { op, lhs, rhs }) => Some((op, lhs, Some(rhs))),
+        Some(&Inst::BinopI { op, lhs, .. }) => Some((op, lhs, None)),
+        _ => None,
+    };
+    let mut out = nsw.clone();
+    for (s, &marked) in nsw.iter().enumerate() {
+        let Some((BinOp::Sub, n, Some(t))) = binop(s as ValueId).filter(|_| marked) else {
+            continue;
+        };
+        let Some((BinOp::Mul, x, y)) = binop(t) else {
+            continue;
+        };
+        for q in core::iter::once(x).chain(y) {
+            if let Some((BinOp::Div, dividend, _)) = binop(q)
+                && dividend == n
+            {
+                out[q as usize] = true;
+            }
+        }
+    }
+    out
+}
+
+/// Fill `func.div32`: an unsigned division of zero-extended operands, the
+/// same at either width, and an `int` one ([`int_divisions`]) of
+/// sign-extended operands read no higher than bit 31, the 32-bit `idiv`
+/// trapping on INT_MIN / -1 and zero-extending. A constant divisor is
+/// expanded instead. A mark from an earlier run stays.
+pub(crate) fn mark_narrow_divs(func: &mut FunctionSsa) {
+    let divides = |i: &Inst| matches!(i, Inst::Binop { op, .. } if is_divmod_op(*op));
+    if !func.insts.iter().any(divides) {
+        func.div32 = Vec::new();
+        return;
+    }
+    let read: &FunctionSsa = func;
+    let mut side = OperandExt::new(read, true);
+    let hi = super::drop_redundant_extend::compute_high_observed(read);
+    let int_div = int_divisions(read);
+    let out: Vec<bool> = read
+        .insts
+        .iter()
+        .enumerate()
+        .map(|(i, inst)| {
+            let Inst::Binop { op, lhs, rhs } = *inst else {
+                return false;
+            };
+            if !is_divmod_op(op) {
+                return false;
+            }
+            if is_div32(&read.div32, i as ValueId) {
+                return true;
+            }
+            if matches!(read.insts.get(rhs as usize), Some(Inst::Imm(_))) {
+                return false;
+            }
+            let signed = matches!(op, BinOp::Div | BinOp::Mod);
+            if signed && (hi.get(i).copied().unwrap_or(true) || !int_div[i]) {
+                return false;
+            }
+            let (a, b) = (side.of(i, lhs), side.of(i, rhs));
+            if signed {
+                a.sign && b.sign
+            } else {
+                a.zero && b.zero
+            }
+        })
+        .collect();
+    func.div32 = out;
+}
+
+/// What an operand's register holds above bit 31 by its shape, else, with
+/// `with_ranges`, by its range where the instruction reads it, the ranges
+/// built on first need.
+struct OperandExt<'a> {
+    func: &'a FunctionSsa,
+    with_ranges: bool,
+    ranges: Option<(super::value_range::Ranges, Vec<BlockId>)>,
+}
+
+impl<'a> OperandExt<'a> {
+    fn new(func: &'a FunctionSsa, with_ranges: bool) -> Self {
+        OperandExt {
+            func,
+            with_ranges,
+            ranges: None,
+        }
+    }
+
+    fn of(&mut self, at: usize, v: ValueId) -> Ext32 {
+        let e = ext32(self.func, v);
+        if e.sign || e.zero || !self.with_ranges {
+            return e;
+        }
+        let func = self.func;
+        let (ranges, block_of) = self.ranges.get_or_insert_with(|| {
+            let mut block_of = alloc::vec![BlockId::MAX; func.insts.len()];
+            for (b, block) in func.blocks.iter().enumerate() {
+                for idx in block.inst_range.clone() {
+                    if let Some(slot) = block_of.get_mut(idx as usize) {
+                        *slot = b as BlockId;
+                    }
+                }
+            }
+            (super::value_range::Ranges::compute(func, &[]), block_of)
+        });
+        match block_of[at] {
+            BlockId::MAX => NONE,
+            b => {
+                let r = ranges.at(b, v);
+                Ext32 {
+                    sign: r.fits(LoadKind::I32),
+                    zero: r.high_word_clear(),
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::c5::ir::StoreKind;
 
     fn fresh(insts: alloc::vec::Vec<Inst>) -> FunctionSsa {
         FunctionSsa {
@@ -234,6 +357,157 @@ mod tests {
         let mut f = fresh(insts);
         mark_compares(&mut f, true);
         f.cmp32
+    }
+
+    fn marked_divs(insts: alloc::vec::Vec<Inst>) -> alloc::vec::Vec<bool> {
+        let mut f = fresh(insts);
+        mark_narrow_divs(&mut f);
+        f.div32
+    }
+
+    fn store(value: ValueId, kind: StoreKind) -> Inst {
+        Inst::Store {
+            addr: 0,
+            disp: 0,
+            value,
+            kind,
+            volatile: false,
+            align: 0,
+        }
+    }
+
+    fn ext(value: ValueId, kind: LoadKind, nsw: bool) -> Inst {
+        Inst::Extend { value, kind, nsw }
+    }
+
+    fn binop(op: BinOp, lhs: ValueId, rhs: ValueId) -> Inst {
+        Inst::Binop { op, lhs, rhs }
+    }
+
+    /// `v3 = op(v1, v2)` over two `int` renormalizations, its result read
+    /// by `reader(3)` and stored at 32 bits from the slot after.
+    fn int_operands(op: BinOp, reader: Inst) -> alloc::vec::Vec<Inst> {
+        alloc::vec![
+            Inst::Imm(0),
+            ext(0, LoadKind::I32, false),
+            ext(0, LoadKind::I32, false),
+            binop(op, 1, 2),
+            reader,
+            store(4, StoreKind::I32),
+        ]
+    }
+
+    #[test]
+    fn an_int_division_and_remainder_are_narrow() {
+        for op in [BinOp::Div, BinOp::Mod] {
+            let m = marked_divs(int_operands(op, ext(3, LoadKind::I32, true)));
+            assert!(m[3], "{op:?}");
+            let stored = int_operands(
+                op,
+                Inst::StoreLocal {
+                    off: -8,
+                    disp: 0,
+                    value: 3,
+                    kind: StoreKind::I32,
+                    volatile: false,
+                    nsw: true,
+                },
+            );
+            assert!(marked_divs(stored)[3], "{op:?} into a local");
+        }
+    }
+
+    #[test]
+    fn a_wider_division_converted_to_int_keeps_the_64_bit_form() {
+        // `(int)((long long)a / (long long)b)`: INT_MIN / -1 is 2^31 there,
+        // which the 32-bit idiv traps on; the conversion is not an nsw read.
+        for op in [BinOp::Div, BinOp::Mod] {
+            let m = marked_divs(int_operands(op, ext(3, LoadKind::I32, false)));
+            assert!(!m[3], "{op:?}");
+        }
+    }
+
+    #[test]
+    fn a_split_int_remainder_narrows_its_quotient() {
+        // `n - (n / d) * d`, renormalized as an `int` remainder.
+        let m = marked_divs(alloc::vec![
+            Inst::Imm(0),
+            ext(0, LoadKind::I32, false),
+            ext(0, LoadKind::I32, false),
+            binop(BinOp::Div, 1, 2),
+            binop(BinOp::Mul, 3, 2),
+            binop(BinOp::Sub, 1, 4),
+            ext(5, LoadKind::I32, true),
+            store(6, StoreKind::I32),
+        ]);
+        assert!(m[3]);
+    }
+
+    #[test]
+    fn an_unsigned_division_needs_zero_extended_operands() {
+        let m = marked_divs(alloc::vec![
+            Inst::Imm(0),
+            load(LoadKind::U32),
+            load(LoadKind::U32),
+            binop(BinOp::Divu, 1, 2),
+            store(3, StoreKind::I64),
+            ext(0, LoadKind::I32, false),
+            binop(BinOp::Divu, 5, 1),
+            store(6, StoreKind::I32),
+        ]);
+        // Two u32 loads narrow even read wide; a sign-extended operand not.
+        assert!(m[3]);
+        assert!(!m[6]);
+    }
+
+    #[test]
+    fn a_wide_operand_keeps_the_64_bit_form() {
+        let m = marked_divs(alloc::vec![
+            Inst::Imm(0),
+            ext(0, LoadKind::I32, false),
+            load(LoadKind::I64),
+            binop(BinOp::Div, 1, 2),
+            ext(3, LoadKind::I32, true),
+            store(4, StoreKind::I32),
+        ]);
+        assert!(!m[3]);
+    }
+
+    #[test]
+    fn a_signed_result_read_wide_keeps_the_64_bit_form() {
+        let mut insts = int_operands(BinOp::Div, ext(3, LoadKind::I32, true));
+        insts.push(store(3, StoreKind::I64));
+        // The 64-bit store reads the quotient's upper half.
+        assert!(!marked_divs(insts)[3]);
+    }
+
+    #[test]
+    fn a_constant_divisor_keeps_the_division_whole() {
+        // `divmod_const` expands it; no divide instruction issues.
+        let m = marked_divs(alloc::vec![
+            Inst::Imm(7),
+            ext(0, LoadKind::I32, false),
+            binop(BinOp::Div, 1, 0),
+            ext(2, LoadKind::I32, true),
+            Inst::BinopI {
+                op: BinOp::Mod,
+                lhs: 1,
+                rhs_imm: 7,
+            },
+            ext(4, LoadKind::I32, true),
+        ]);
+        assert!(!m[2] && !m[4]);
+    }
+
+    #[test]
+    fn a_marked_division_stays_narrow_across_reruns() {
+        let mut f = fresh(int_operands(BinOp::Div, ext(3, LoadKind::I32, true)));
+        mark_narrow_divs(&mut f);
+        // A rerun keeps the mark without the evidence.
+        f.insts[3] = binop(BinOp::Div, 0, 0);
+        f.insts[4] = Inst::Imm(0);
+        mark_narrow_divs(&mut f);
+        assert!(f.div32[3]);
     }
 
     fn load(kind: LoadKind) -> Inst {

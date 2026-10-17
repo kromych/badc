@@ -3686,6 +3686,25 @@ fn a_variably_modified_type_name_is_diagnosed_where_c99_forbids_it() {
 }
 
 #[test]
+fn an_unknown_size_struct_array_is_counted_without_repeating_its_diagnostics() {
+    // C99 6.7.8p22: the count comes from the fill itself, run once to
+    // measure and once for good; what it reports is reported once.
+    for decl in [
+        "struct S a[] = {300, \"abc\", 2, \"d\"};\nint main(void) { return sizeof a; }",
+        "int main(void) { static struct S a[] = {300, \"abc\", 2, \"d\"}; return sizeof a; }",
+        "int main(void) { struct S a[] = {300, \"abc\", 2, \"d\"}; return sizeof a; }",
+        "int main(void) { struct S *p = (struct S[]){300, \"abc\", 2, \"d\"}; return p->c; }",
+    ] {
+        let src = alloc::format!("struct S {{ unsigned char c; char m[2]; }};\n{decl}\n");
+        let prog = super::compile_str_bare_with_diags(&src, &["all"]);
+        for text in ["from 300 to 44", "too long for an array of 2"] {
+            let reported = prog.warnings.iter().filter(|w| w.text.contains(text));
+            assert_eq!(reported.count(), 1, "{decl}: {:?}", prog.warnings);
+        }
+    }
+}
+
+#[test]
 fn struct_array_compound_literal_counts_elements_not_leaves() {
     // C99 6.5.2.5p3: the literal is an unnamed object initialized by its
     // brace list, so an array-of-struct bound is measured in elements.

@@ -174,6 +174,19 @@ impl Sink {
         core::mem::take(&mut self.emitted)
     }
 
+    /// The point [`Self::rollback`] returns to: what was reported and the
+    /// `once` codes spent so far.
+    pub fn mark(&self) -> (usize, usize) {
+        (self.emitted.len(), self.spent.len())
+    }
+
+    /// Forget what was reported since `mark`, as for a parse that is
+    /// undone and taken again.
+    pub fn rollback(&mut self, (emitted, spent): (usize, usize)) {
+        self.truncate(emitted);
+        self.spent.truncate(spent);
+    }
+
     /// Whether a `once` pragma still allows this diagnostic through.
     fn spend_once(&mut self, code: Code, loc: Option<&Loc>) -> bool {
         let Some(offset) = loc.and_then(|l| l.offset) else {

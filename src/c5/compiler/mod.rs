@@ -2235,6 +2235,9 @@ pub struct Compiler {
     /// The function type the elements of the array being initialized lead
     /// to and their depth, for the conversion check of each element.
     array_elem_fn: Option<(crate::c5::symbol::FnType, i64)>,
+    /// An initializer fill runs only to measure what it reaches: a value
+    /// is skipped rather than evaluated, so a run-time one takes its place.
+    measuring_init: bool,
     /// The composite type and the function body of each identifier with
     /// linkage, by its spelling: every declaration of it denotes the one
     /// entity whatever slot binds it (C99 6.2.2p2).
@@ -2862,6 +2865,7 @@ impl Compiler {
             warned_string_overruns: alloc::collections::BTreeSet::new(),
             operand_start: 0,
             array_elem_fn: None,
+            measuring_init: false,
             linked_entities: hashbrown::HashMap::new(),
             target,
             next_ent_pc: 0,

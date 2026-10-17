@@ -102,18 +102,6 @@ impl Compiler {
         Ok(result.unwrap_or(fallback))
     }
 
-    /// Peek whether the first element of the array initializer at the
-    /// current `{` is an `[N]` designator, without consuming input.
-    fn array_first_element_is_designator(&mut self) -> bool {
-        let snap = self.lex.snapshot();
-        let saved_data = self.data.len();
-        let saved_pc = self.next_ent_pc;
-        let is_desig = self.next().is_ok() && self.lex.tk == Token::Brak;
-        self.rewind_speculation(snap, saved_data);
-        self.next_ent_pc = saved_pc;
-        is_desig
-    }
-
     fn designated_array_count_inner(
         &mut self,
         fallback: i64,
@@ -2396,9 +2384,10 @@ impl Compiler {
         decl_align: usize,
         was_tentative_glo: bool,
     ) -> Result<(), C5Error> {
-        self.pending.init_inner_dims = self.inner_dims_of(id_idx);
-        let elements = self.collect_array_initializer(ty, self.elem_fn_type(id_idx))?;
-        let final_size = elements.len() as i64;
+        let inner_dims = self.inner_dims_of(id_idx);
+        self.pending.init_inner_dims = inner_dims.clone();
+        let mut elements = self.collect_array_initializer(ty, self.elem_fn_type(id_idx))?;
+        let final_size = Self::deferred_array_count(&mut elements, &inner_dims);
         self.symbols[id_idx].array_size = final_size;
         // `T xs[] = {}` resolves to zero elements; keep the
         // array-ness that the scalar `array_size == 0`
@@ -2532,45 +2521,10 @@ impl Compiler {
                 "array initializer must start with `{`",
             ));
         }
-        let sid = struct_id_of(ty);
-        // Elements below the outer (deferred) dimension:
-        // for a 2D struct array `T xs[][M]` each top-level
-        // brace is a row of `inner_dim` structs. 1 for a
-        // plain `T xs[]`.
-        let inner_dim: i64 = self.symbols[id_idx]
-            .array_dims
-            .get(1..)
-            .map(|s| s.iter().product::<i64>())
-            .unwrap_or(1)
-            .max(1);
-        // C99 6.7.8p20 brace elision: when no element
-        // carries its own braces, the flat value list
-        // fills consecutive struct elements, each
-        // consuming the struct's scalar slot count.
-        let groups = self.lex.count_top_level_groups_in_array();
-        let count = if groups > 0 {
-            // Braced elements: one `{ ... }` (or `[N] = {
-            // ... }`) per element. A `[N]` designator may
-            // raise the size past the positional count
-            // (C99 6.7.8p22), so peek the designators.
-            self.designated_array_count(groups as i64, 1, None)?
-        } else {
-            // Brace-elided: the flat value list fills
-            // consecutive elements, each consuming the
-            // struct's scalar slot count.
-            let items = self.lex.count_top_level_items_in_array();
-            let slots = self.struct_flat_init_slots(sid).max(1);
-            let positional = items.div_ceil(slots) as i64;
-            // A `[N].field = v` designated element list (no
-            // braces, one element per item) raises the size
-            // to the highest designated index + 1 (C99
-            // 6.7.8p22), which the positional count misses.
-            if self.array_first_element_is_designator() {
-                self.designated_array_count(positional, 1, None)?
-            } else {
-                positional
-            }
-        };
+        // Rows below the outer (deferred) dimension: `T xs[][M]`.
+        let inner_dims = self.inner_dims_of(id_idx);
+        let inner_dim = inner_dims.iter().product::<i64>().max(1);
+        let rows = self.struct_array_init_rows(ty, &inner_dims)?;
         // C99 6.9.2: a prior tentative definition already
         // reserved storage; reuse it so references emitted
         // before this definition -- which baked in the
@@ -2579,7 +2533,7 @@ impl Compiler {
         // A deferred-size tentative (`T x[];`) reserves one
         // element, so a larger initializer takes fresh
         // storage and records the move for rebasing.
-        let needed = count * inner_dim * elem_size as i64;
+        let needed = rows * inner_dim * elem_size as i64;
         let obj_align = self.symbols[id_idx].data_align.max(1);
         let off = if was_tentative_glo
             && needed <= self.symbols[id_idx].reserved_data_bytes
@@ -2597,51 +2551,23 @@ impl Compiler {
             fresh
         };
         self.symbols[id_idx].val = off;
-        // Reserve before consuming `{`: lexing the first
-        // element token may append a string literal's
-        // bytes, whose parser-added NUL must land right
-        // after them.
-        self.next()?;
-        // `T xs[][M] = { ... }`: the pre-scan counts each top-level entry as a
-        // row, but an entry after a chained designator resumes mid-row (C99
-        // 6.7.8p17), so the walker's extent is the real outer count (p22).
-        if inner_dim > 1 {
-            let mut dims = alloc::vec::Vec::new();
-            dims.push(count);
-            dims.extend_from_slice(&self.symbols[id_idx].array_dims[1..]);
-            let high = self.collect_struct_array_entries(ty, off, &dims)?;
-            let rows = (high + inner_dim - 1) / inner_dim;
-            if rows < count && self.data.len() as i64 == off + count * inner_dim * elem_size as i64
-            {
-                self.truncate_data((off + rows * inner_dim * elem_size as i64) as usize);
-                self.symbols[id_idx].reserved_data_bytes = rows * inner_dim * elem_size as i64;
-            }
-            let total = rows * inner_dim;
-            self.symbols[id_idx].array_size = total;
-            self.symbols[id_idx].is_zero_len_array = total == 0;
-            self.reserve_zero_length_array_slot(id_idx);
-            if let Some(first) = self.symbols[id_idx].array_dims.first_mut()
-                && *first == 0
-            {
-                *first = rows;
-            }
-            while !self.data.len().is_multiple_of(8) {
-                self.data.push(0);
-            }
-            self.symbols[id_idx].has_initializer = true;
-            self.symbols[id_idx].defined_here = true;
-            return Ok(());
+        // Reserved before the walk consumes `{`: lexing the first element
+        // token may append a string literal's bytes, whose parser-added NUL
+        // must land right after them.
+        let mut dims = alloc::vec![rows];
+        dims.extend_from_slice(&inner_dims);
+        self.collect_struct_array_data(ty, off, &dims)?;
+        let total = rows * inner_dim;
+        self.symbols[id_idx].array_size = total;
+        if let Some(first) = self.symbols[id_idx].array_dims.first_mut()
+            && *first == 0
+        {
+            *first = rows;
         }
-        // Same walker the multi-dimensional case above
-        // uses, so designators read identically at either
-        // rank: `[N]`, the GCC range `[lo ... hi]`, and a
-        // `.field` continuation.
-        self.collect_struct_array_entries(ty, off, &[count])?;
-        self.symbols[id_idx].array_size = count;
         // `struct T xs[] = {}` resolves to zero elements.
         // Keep the array-ness (the `array_size == 0`
         // scalar encoding would otherwise lose it).
-        self.symbols[id_idx].is_zero_len_array = count == 0;
+        self.symbols[id_idx].is_zero_len_array = total == 0;
         self.reserve_zero_length_array_slot(id_idx);
         // Pad data to 8-byte alignment so the next
         // global doesn't land on an odd offset.

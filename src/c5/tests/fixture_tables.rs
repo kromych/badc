@@ -169,6 +169,11 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("string_literal_initializes_every_character_array.c", 0),
     ("cast_to_union_initializes_its_member.c", 0),
     ("cast_to_union_in_a_constant_initializer.c", 0),
+    ("unknown_size_array_takes_whole_rows.c", 0),
+    (
+        "unknown_size_struct_array_counts_what_its_fill_reaches.c",
+        0,
+    ),
     ("weak_thread_local_definition_by_symbol.c", 0),
     ("library_function_address_is_one_pointer.c", 0),
     ("attribute_section_placement.c", 0),
@@ -1483,6 +1488,11 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("string_literal_initializes_every_character_array.c", 0),
     ("cast_to_union_initializes_its_member.c", 0),
     ("cast_to_union_in_a_constant_initializer.c", 0),
+    ("unknown_size_array_takes_whole_rows.c", 0),
+    (
+        "unknown_size_struct_array_counts_what_its_fill_reaches.c",
+        0,
+    ),
     ("weak_thread_local_definition_by_symbol.c", 0),
     ("library_function_address_is_one_pointer.c", 0),
     ("weak_definition_not_inlined.c", 42),
@@ -2572,6 +2582,11 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("string_literal_initializes_every_character_array.c", 0),
     ("cast_to_union_initializes_its_member.c", 0),
     ("cast_to_union_in_a_constant_initializer.c", 0),
+    ("unknown_size_array_takes_whole_rows.c", 0),
+    (
+        "unknown_size_struct_array_counts_what_its_fill_reaches.c",
+        0,
+    ),
     ("weak_thread_local_definition_by_symbol.c", 0),
     ("library_function_address_is_one_pointer.c", 0),
     ("weak_definition_not_inlined.c", 42),
@@ -3455,6 +3470,11 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("string_literal_initializes_every_character_array.c", 0),
     ("cast_to_union_initializes_its_member.c", 0),
     ("cast_to_union_in_a_constant_initializer.c", 0),
+    ("unknown_size_array_takes_whole_rows.c", 0),
+    (
+        "unknown_size_struct_array_counts_what_its_fill_reaches.c",
+        0,
+    ),
     ("weak_thread_local_definition_by_symbol.c", 0),
     ("library_function_address_is_one_pointer.c", 0),
     ("anon_bitfield_reserves_bits.c", 0),
@@ -4239,6 +4259,11 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("string_literal_initializes_every_character_array.c", 0),
     ("cast_to_union_initializes_its_member.c", 0),
     ("cast_to_union_in_a_constant_initializer.c", 0),
+    ("unknown_size_array_takes_whole_rows.c", 0),
+    (
+        "unknown_size_struct_array_counts_what_its_fill_reaches.c",
+        0,
+    ),
     ("weak_thread_local_definition_by_symbol.c", 0),
     ("library_function_address_is_one_pointer.c", 0),
     ("anon_bitfield_reserves_bits.c", 0),
@@ -4946,6 +4971,11 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("string_literal_initializes_every_character_array.c", 0),
     ("cast_to_union_initializes_its_member.c", 0),
     ("cast_to_union_in_a_constant_initializer.c", 0),
+    ("unknown_size_array_takes_whole_rows.c", 0),
+    (
+        "unknown_size_struct_array_counts_what_its_fill_reaches.c",
+        0,
+    ),
     ("library_function_address_is_one_pointer.c", 0),
     // A declared `long double` object takes the target ABI's storage
     // format, and the compute path's binary64 round-trips through it.

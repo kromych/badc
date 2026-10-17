@@ -973,6 +973,21 @@ impl Compiler {
         Ok(lit.map(|l| l.elem_count(None) as i64))
     }
 
+    /// The element count of an array of unknown size whose initializer
+    /// gave `elements`: whole outer elements of `inner_dims`, the last one
+    /// zero-filled (C99 6.7.8p21, p22).
+    pub(super) fn deferred_array_count(
+        elements: &mut Vec<(i128, InitElemReloc)>,
+        inner_dims: &[i64],
+    ) -> i64 {
+        let span = inner_dims.iter().product::<i64>().max(1) as usize;
+        elements.resize(
+            elements.len().div_ceil(span) * span,
+            (0, InitElemReloc::None),
+        );
+        elements.len() as i64
+    }
+
     /// The rows of an unsized array literal of non-aggregate elements
     /// (C99 6.7.8p22), `inner_dims` its bounds below the outermost, and
     /// whether an element needs a runtime store.
@@ -1916,6 +1931,10 @@ impl Compiler {
         bits: u32,
         target_fn: &Option<(crate::c5::symbol::FnType, i64)>,
     ) -> Result<InitLeaf, C5Error> {
+        if self.measuring_init {
+            self.skip_init_element_value()?;
+            return Ok(InitLeaf::of(0, InitElemReloc::None, ty));
+        }
         let line = self.lex.line;
         let fn_checked = self.check_designator_initializer(ty, target_fn, line)?;
         let leaf = self.parse_constant_init_value()?;
@@ -2676,7 +2695,7 @@ impl Compiler {
         let rows = if elem_is_struct {
             // Brace elision folds a run of field values into one
             // aggregate element, not one per leaf (C99 6.7.8p20).
-            self.struct_array_init_elem_count(struct_id_of(elem_ty))?
+            self.struct_array_init_rows(elem_ty, &dims[1..])?
                 .max(dims[0])
         } else if dims[0] >= 0 {
             dims[0]
@@ -3070,45 +3089,6 @@ impl Compiler {
             }
         }
         Ok(())
-    }
-
-    /// Number of scalar initializer positions a struct consumes in a
-    /// brace-elided (flat) list (C99 6.7.8p20). A scalar / pointer /
-    /// bitfield field is one; an array of N elements is N times the
-    /// element type's count; a nested struct recurses; a union --
-    /// named or anonymous -- contributes its first member's count
-    /// only (6.7.8p17: one initializer, for the first named member).
-    pub(super) fn struct_flat_init_slots(&self, struct_id: usize) -> usize {
-        let is_union = self.structs[struct_id].is_union;
-        let n = self.structs[struct_id].fields.len();
-        let mut total = 0usize;
-        let mut i = 0usize;
-        while i < n {
-            // A promoted anonymous member is one member of this aggregate,
-            // however many entries it contributed, and its own type says how
-            // many slots it takes.
-            if let Some(m) = self.anon_member_starting_at(struct_id, i) {
-                total += self.struct_flat_init_slots(m.inner);
-                i = m.first as usize + m.count as usize;
-            } else {
-                let f = &self.structs[struct_id].fields[i];
-                let elem = if self.is_traversable_aggregate_ty(f.ty) {
-                    self.struct_flat_init_slots(struct_id_of(f.ty))
-                } else {
-                    1
-                };
-                total += if f.array_size > 0 {
-                    (f.array_size as usize) * elem
-                } else {
-                    elem
-                };
-                i += 1;
-            }
-            if is_union {
-                break;
-            }
-        }
-        total
     }
 
     /// The aggregate's flexible array member: a trailing `T v[]`
@@ -3656,6 +3636,9 @@ impl Compiler {
         struct_id: usize,
         here: i64,
     ) -> Result<(), C5Error> {
+        if self.measured_struct_value(struct_id)? {
+            return Ok(());
+        }
         if self.peek_element_compound_literal_sid()? == Some(struct_id) {
             self.skip_opt_compound_literal_cast()?;
             let close_parens = core::mem::take(&mut self.pending.compound_lit_close_parens);
@@ -3671,6 +3654,31 @@ impl Compiler {
             self.fill_struct_fields(struct_id, here, false)?;
         }
         Ok(())
+    }
+
+    /// Whether a measuring fill took the next value whole as an expression
+    /// of structure `sid` (C99 6.7.8p13): one begun by a name, `*` or a `(`
+    /// that does not open a compound literal, which the fill parses itself.
+    fn measured_struct_value(&mut self, sid: usize) -> Result<bool, C5Error> {
+        let starts = self.lex.tk == Token::Id || self.lex.tk == '(' || self.lex.tk == Token::MulOp;
+        if !self.measuring_init || !starts {
+            return Ok(false);
+        }
+        if self.lex.tk == '(' {
+            let snap = self.lex.snapshot();
+            self.next()?;
+            let type_name = self.lex_is_type_start();
+            self.restore_lex(snap);
+            if type_name {
+                return Ok(false);
+            }
+        }
+        let ty = self.peek_expr_type().unwrap_or(0);
+        let whole = is_struct_value_ty(ty) && struct_id_of(ty) == sid;
+        if whole {
+            self.skip_init_element_value()?;
+        }
+        Ok(whole)
     }
 
     /// The runtime twin of `init_struct_array_element`: fill one struct array
@@ -4344,7 +4352,7 @@ impl Compiler {
             let nested_sid = struct_id_of(field.ty);
             if self.lex.tk == '{' {
                 self.collect_struct_initializer(nested_sid, field_base as i64)?;
-            } else {
+            } else if !self.measured_struct_value(nested_sid)? {
                 // C99 6.7.8p20: a nested aggregate field's braces may be
                 // elided, filling its members from the surrounding flat
                 // list. Mirrors the array-of-struct element path. For a

@@ -523,7 +523,7 @@ impl Compiler {
             self.pending.fn_ptr_type = None;
             None
         } else {
-            self.take_decl_fn_type()
+            self.take_decl_fn_type()?
         };
         // Pick up the fn-pointer indirection count
         // the declarator (or its typedef base type)
@@ -1305,7 +1305,7 @@ impl Compiler {
                     let what = decl_base::ImplicitInt::Declarator(decl_idx);
                     self.report_implicit_int(what, decl_line)?;
                 }
-                let carriers = self.take_param_fn_ptr_carriers();
+                let carriers = self.take_param_fn_ptr_carriers()?;
                 let (fn_ptr_indirection, fn_ptr_ret_indirection, _) = carriers;
                 if decl_idx != usize::MAX {
                     // An array parameter is adjusted to a pointer to its

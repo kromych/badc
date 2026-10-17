@@ -18,6 +18,7 @@
 
 use alloc::format;
 
+use super::super::codegen::CallConv;
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
@@ -1485,17 +1486,15 @@ impl Compiler {
         // `ms_abi` / `sysv_abi` name the declared function's (or
         // function pointer's) calling convention. Both are inert off
         // x86_64, matching gcc, which ignores them on other targets.
-        if attrs.ms_abi || attrs.sysv_abi {
-            let conv = if attrs.ms_abi {
-                crate::c5::codegen::CallConv::Ms
-            } else {
-                crate::c5::codegen::CallConv::SysV
-            };
-            self.pending.attrs.call_conv = Some(if self.target.abi_row(conv) == self.target {
-                crate::c5::codegen::CallConv::Target
-            } else {
-                conv
-            });
+        for (on, conv) in [
+            (attrs.ms_abi, CallConv::Ms),
+            (attrs.sysv_abi, CallConv::SysV),
+        ] {
+            if on {
+                let own = self.target.abi_row(conv) == self.target;
+                let conv = Some(if own { CallConv::Target } else { conv });
+                self.pending.attrs.call_conv = self.add_conv(self.pending.attrs.call_conv, conv)?;
+            }
         }
         Ok(attrs.packed)
     }

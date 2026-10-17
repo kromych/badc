@@ -800,7 +800,7 @@ impl Compiler {
                 (ty + Ty::Ptr as i64, 1i64, Some(f), true)
             } else {
                 // An alias of a function-type typedef stays a function type.
-                let f = self.take_decl_fn_type();
+                let f = self.take_decl_fn_type()?;
                 (ty, fn_ptr_indirection, f, bare_fn_type)
             };
             // A name this scope already bound keeps its first save: a

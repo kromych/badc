@@ -115,31 +115,29 @@ fn compose(prior: DeclaredType, new: DeclaredType) -> DeclaredType {
             let bounds = a.iter().zip(&b).map(|(&x, &y)| if x < 0 { y } else { x });
             DeclaredType::Object(ty, bounds.collect())
         }
-        (DeclaredType::Function(ret, p, c), DeclaredType::Function(_, q, _))
-            if q.rank() > p.rank() =>
-        {
-            DeclaredType::Function(ret, q, c)
+        (DeclaredType::Function(ret, p, c), DeclaredType::Function(_, q, d)) => {
+            let params = if q.rank() > p.rank() { q } else { p };
+            DeclaredType::Function(ret, params, c.or(d))
         }
         (prior, _) => prior,
     }
 }
 
 impl Compiler {
-    /// The calling convention a declaration of function `idx` naming `named`
-    /// gives it, and whether a declaration of the function named one: as in
-    /// gcc and clang, the first declaration's, in any scope, which a later
-    /// one may name again or not at all; naming another is an error.
+    /// The convention a declaration of function `idx` naming `named` gives
+    /// it, and whether one of its declarations named it: the first's, in any
+    /// scope, as in gcc and clang; a later one naming another is an error.
     pub(super) fn declared_conv(
         &self,
         idx: usize,
         named: Option<CallConv>,
         line: usize,
     ) -> Result<(CallConv, bool), C5Error> {
-        let first = match self.linked_entities.get(&idx).map(|e| &e.ty) {
+        let earlier = match self.linked_entities.get(&idx).map(|e| &e.ty) {
             Some(DeclaredType::Function(.., c)) => *c,
             _ => return Ok((named.unwrap_or_default(), named.is_some())),
         };
-        let conv = first.unwrap_or_default();
+        let conv = earlier.unwrap_or_default();
         match named {
             Some(n) if n != conv => {
                 let spell = |c| match self.target.abi_row(c) {
@@ -154,7 +152,7 @@ impl Compiler {
                 );
                 Err(self.compile_err_at(Code::INVALID_DECLARATION, line, text))
             }
-            _ => Ok((conv, first.is_some())),
+            _ => Ok((conv, earlier.or(named).is_some())),
         }
     }
 

@@ -5,6 +5,7 @@
 use alloc::boxed::Box;
 
 use super::super::ast::{Expr, ExprId, UnOp};
+use super::super::codegen::CallConv;
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::ir::BinOp;
@@ -481,16 +482,33 @@ impl Compiler {
     /// The function type the entity a declarator just declared leads to,
     /// taking the carriers, on the convention the declaration's attributes
     /// name if any (GNU attribute syntax).
-    pub(super) fn take_decl_fn_type(&mut self) -> Option<FnType> {
+    pub(super) fn take_decl_fn_type(&mut self) -> Result<Option<FnType>, C5Error> {
         let ret = self.take_decl_ret_fn(false);
-        let f = self.pending.fn_ptr_type.take()?;
-        let named = self.pending.attrs.call_conv;
-        let (conv, conv_named) = (named.unwrap_or(f.conv), named.is_some() || f.conv_named);
-        Some(FnType {
-            conv,
-            conv_named,
+        let Some(f) = self.pending.fn_ptr_type.take() else {
+            return Ok(None);
+        };
+        let named = self.add_conv(f.named_conv(), self.pending.attrs.call_conv)?;
+        Ok(Some(FnType {
+            conv: named.unwrap_or_default(),
+            conv_named: named.is_some(),
             ret,
             ..f
-        })
+        }))
+    }
+
+    /// The convention a function type names once an attribute names `new`
+    /// where `prev` was named; gcc and clang reject a type naming two.
+    pub(super) fn add_conv(
+        &self,
+        prev: Option<CallConv>,
+        new: Option<CallConv>,
+    ) -> Result<Option<CallConv>, C5Error> {
+        match (prev, new) {
+            (Some(p), Some(n)) if p != n => Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "`ms_abi` and `sysv_abi` attributes are not compatible",
+            )),
+            _ => Ok(new.or(prev)),
+        }
     }
 }

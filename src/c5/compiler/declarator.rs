@@ -185,7 +185,7 @@ impl Compiler {
         if entity_level {
             self.skip_attribute_specifiers()?;
         } else if let Some(conv) = self.skip_attributes_for_conv()? {
-            self.pending.group_conv = Some(conv);
+            self.pending.group_conv = self.add_conv(self.pending.group_conv, Some(conv))?;
         }
         Ok(())
     }
@@ -227,7 +227,8 @@ impl Compiler {
         let mut conv = None;
         loop {
             if self.at_attribute_specifier() {
-                conv = self.skip_attributes_for_conv()?.or(conv);
+                let named = self.skip_attributes_for_conv()?;
+                conv = self.add_conv(conv, named)?;
                 continue;
             }
             if self.lex.tk == Token::MulOp {
@@ -595,12 +596,17 @@ impl Compiler {
             let redundant = !own_sig && inner_ptr_levels == 0 && idx != usize::MAX;
             if redundant && !param_ctx && self.lex.tk == '(' {
                 // The group's convention names the signature the caller parses.
-                let conv = if entity_start {
-                    &mut self.pending.attrs.call_conv
+                let outer = if entity_start {
+                    self.pending.attrs.call_conv
                 } else {
-                    &mut self.pending.group_conv
+                    self.pending.group_conv
                 };
-                *conv = conv.or(inner_conv);
+                let conv = self.add_conv(outer, inner_conv)?;
+                if entity_start {
+                    self.pending.attrs.call_conv = conv;
+                } else {
+                    self.pending.group_conv = conv;
+                }
                 return Ok((idx, inner_ty, inner_array_size, own_levels + group_levels));
             }
             if redundant && self.lex.tk == Token::Brak {

@@ -396,6 +396,11 @@ fn a_function_keeps_one_calling_convention() {
             "N int n(int); F int f(int); __typeof__(n) f;",
             DeclaredForeign,
         ),
+        // gcc: a convention a later declaration named stays on the type.
+        (
+            "F int f(int); int n(int); N int n(int); int n(int); __typeof__(n) f;",
+            DeclaredForeign,
+        ),
     ];
     for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
         let (f, n, foreign) = match target {
@@ -438,6 +443,59 @@ fn a_function_keeps_one_calling_convention() {
                     assert_eq!(inst.call_conv(), Some(want), "{target:?} {decls}: in {at}");
                 }
             }
+        }
+    }
+}
+
+#[test]
+fn a_function_type_names_one_calling_convention() {
+    // gcc rejects a function type naming two calling conventions: in one
+    // attribute list, the specifiers and the declarator, a declarator's
+    // group, or over a function or pointer typedef or typeof that names
+    // one. `F` names the convention foreign to the target, `N` its own.
+    let rejected = [
+        "F N int f(int);",
+        "__attribute__((ms_abi, sysv_abi)) int f(int);",
+        "F int f(int) N;",
+        "F int f(int x) N { return x; }",
+        "F int f(a) N int a; { return a; }",
+        "int (F N *p)(int);",
+        "int (F *p)(int) N;",
+        "N int (F *p)(int);",
+        "typedef int F Ft(int); N Ft f;",
+        "typedef int F Ft(int); Ft f N;",
+        "typedef int F Ft(int); void g(void) { N Ft f; }",
+        "int n(int) F; N __typeof__(n) f;",
+        "typedef int (F *Fp)(int); N Fp p;",
+        "long g(void) { return sizeof(N int (F *)(int)); }",
+        "int (*q)(int) = (N int (F *)(int))0;",
+        "int z(void) { static int (*q)(int) = (N int (F *)(int))0; return q != 0; }",
+    ];
+    let accepted = [
+        "F F int f(int);",
+        "F int (*N g(int))(int);",
+        "typedef int (*Pp)(int); F Pp p;",
+    ];
+    for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
+        let (f, n) = match target {
+            crate::Target::WindowsX64 => ("sysv_abi", "ms_abi"),
+            _ => ("ms_abi", "sysv_abi"),
+        };
+        let src = |decls: &str| {
+            alloc::format!(
+                "#define F __attribute__(({f}))\n#define N __attribute__(({n}))\n\
+                 {decls}\nint main(void) {{ return 0; }}\n"
+            )
+        };
+        for decls in rejected {
+            let compiled = Compiler::with_target(src(decls), target).compile();
+            let msg = compiled.err().map(|e| e.to_string()).unwrap_or_default();
+            let needle = "`ms_abi` and `sysv_abi` attributes are not compatible";
+            assert!(msg.contains(needle), "{target:?} {decls}: {msg:?}");
+        }
+        for decls in accepted {
+            let compiled = Compiler::with_target(src(decls), target).compile();
+            assert!(compiled.is_ok(), "{target:?} {decls}: {:?}", compiled.err());
         }
     }
 }

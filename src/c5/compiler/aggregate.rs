@@ -392,7 +392,7 @@ impl Compiler {
                 core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
             // The function type a function-pointer member leads to, its
             // convention included (`efi_status_t (__efiapi *exit)(...)`).
-            let field_fn_type = self.take_decl_fn_type().unwrap_or_default();
+            let field_fn_type = self.take_decl_fn_type()?.unwrap_or_default();
             let is_aggregate_value = is_struct_value_ty(field_ty);
             // C99 6.7.2.1: a member must have complete type, and an
             // array of an incomplete type is itself incomplete. Only a

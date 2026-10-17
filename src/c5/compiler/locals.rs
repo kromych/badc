@@ -501,7 +501,7 @@ impl Compiler {
             // Take the fn-pointer carriers before any initializer is parsed:
             // an initializer cast runs a base-type parse that clears them,
             // which would drop a variadic fn-pointer's prototype.
-            let fn_type = self.take_decl_fn_type();
+            let fn_type = self.take_decl_fn_type()?;
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
             // C99 6.7.7p3: an array typedef contributes its dimension only
@@ -814,7 +814,7 @@ impl Compiler {
             return Ok(true);
         }
         // Undo the typedef's pre-decay to pointer-to-function.
-        let named = self.pending.attrs.call_conv;
+        let conv = self.add_conv(base.named_conv(), self.pending.attrs.call_conv)?;
         let f = BlockFunction {
             ret: super::redeclaration::Spelled {
                 ty: ty.ty - Ty::Ptr as i64,
@@ -822,7 +822,7 @@ impl Compiler {
             },
             params: super::function::ParsedParams::of_type(base.params),
             ret_fn: base.ret,
-            conv: named.or(base.conv_named.then_some(base.conv)),
+            conv,
             lineage: (0, 0),
         };
         self.bind_block_function(loc_idx, f, is_static)

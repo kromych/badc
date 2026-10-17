@@ -704,6 +704,13 @@ pub(crate) struct FnType {
     pub ret: Option<(alloc::boxed::Box<FnType>, i64)>,
 }
 
+impl FnType {
+    /// The convention an attribute named for this type, if one did.
+    pub(crate) fn named_conv(&self) -> Option<crate::c5::codegen::CallConv> {
+        self.conv_named.then_some(self.conv)
+    }
+}
+
 /// Recorded initializer value of a block-scope `const` scalar arithmetic
 /// object (see `Symbol::const_object_value`). Floats carry the f64 bit
 /// pattern so the type stays `Copy + Eq` for the shadow-slot machinery.

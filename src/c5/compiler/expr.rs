@@ -5799,7 +5799,7 @@ impl Compiler {
             f.ptr_depth -= t.own_bounds;
             // A specifier's convention names the function type the type
             // leads to, as a declaration's does.
-            if let Some(conv) = self.pending.attrs.call_conv {
+            if let Some(conv) = self.add_conv(f.f.named_conv(), self.pending.attrs.call_conv)? {
                 (f.f.conv, f.f.conv_named) = (conv, true);
             }
         }

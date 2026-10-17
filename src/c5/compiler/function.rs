@@ -153,12 +153,12 @@ impl Compiler {
     /// declarator to bind it) leaks into the next declaration -- e.g. the
     /// first field of a following struct definition would record a phantom
     /// function-pointer prototype.
-    pub(super) fn take_param_fn_ptr_carriers(&mut self) -> ParamFnCarriers {
-        let f = self.take_decl_fn_type();
+    pub(super) fn take_param_fn_ptr_carriers(&mut self) -> Result<ParamFnCarriers, C5Error> {
+        let f = self.take_decl_fn_type()?;
         let indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
         let ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
         self.pending.base_is_function_type = false;
-        (indirection, ret_indirection, f)
+        Ok((indirection, ret_indirection, f))
     }
 
     /// A parameter's attributes describe that parameter, not the declarator
@@ -361,7 +361,7 @@ impl Compiler {
                 }
                 // An unnamed parameter binds no symbol to receive the
                 // fn-pointer carriers its base (a fn-pointer typedef) seeded.
-                let carriers = self.take_param_fn_ptr_carriers();
+                let carriers = self.take_param_fn_ptr_carriers()?;
                 let adjusted = !dims.is_empty();
                 if let Some((f, depth)) = param_fn_type(carriers, adjusted) {
                     fn_types.push((types.len(), f, depth));
@@ -428,7 +428,7 @@ impl Compiler {
             // populated. Drained even if the declarator didn't
             // set anything so they don't leak into the next
             // parameter or expression.
-            let carriers = self.take_param_fn_ptr_carriers();
+            let carriers = self.take_param_fn_ptr_carriers()?;
             if let Some((f, depth)) = param_fn_type(carriers.clone(), adjusted) {
                 fn_types.push((types.len(), f, depth));
             }

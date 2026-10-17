@@ -337,6 +337,13 @@ fn asm_offsets_below_the_image_base_resolve() {
     }
 }
 
+/// The init/fini arrays a writable named section precedes stay in `.data`.
+#[test]
+fn constructors_run_beside_writable_named_sections() {
+    let src = super::init_fini_beside_named_sections_source();
+    assert_exit(src, "init-fini-named", &[], 0);
+}
+
 /// C11 6.7.5: 8 and 16 KiB objects land on their boundary through the linked
 /// executable and a two-unit link.
 #[test]

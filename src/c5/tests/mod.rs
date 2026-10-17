@@ -893,6 +893,27 @@ int main(void) {
 "#
 }
 
+/// A constructor and a destructor beside writable named sections, one from C
+/// and one from file-scope asm: `main` returns 9 when the constructor ran and
+/// the sections read back, and the destructor then exits with 0.
+#[allow(dead_code)] // the image suites a Windows host compiles out
+pub fn init_fini_beside_named_sections_source() -> &'static str {
+    r#"
+#include <stdlib.h>
+static int ctor_ran;
+__attribute__((section("rgkc"))) long long gv[2] = {1, 2};
+__asm__(".section rgka,\"aw\"\n.globl ga\n.p2align 3\nga: .quad 3, 4\n.text\n");
+extern long long ga[2];
+__attribute__((constructor)) static void init(void) { ctor_ran = 1; }
+__attribute__((destructor)) static void fini(void) { _Exit(ctor_ran == 1 ? 0 : 3); }
+int main(void) {
+    if (ctor_ran != 1)
+        return 1;
+    return gv[0] + gv[1] + ga[0] + ga[1] == 10 ? 9 : 2;
+}
+"#
+}
+
 /// Inline asm naming objects at the edges of `.rodata`, relro, `.data` and
 /// `.bss` with offsets before and past them, aliases of a function and an
 /// object, and on x86-64 fields an immediate trails; `WITH_TLS` adds a

@@ -266,6 +266,12 @@ fn constructor_runs_before_main() {
 }
 
 #[test]
+fn constructors_run_beside_writable_named_sections() {
+    let src = super::init_fini_beside_named_sections_source();
+    assert_eq!(link_run_capture(src, "init-fini-named").0, 0);
+}
+
+#[test]
 fn constructor_priority_and_destructor_order() {
     // Prioritized constructors run ascending, unprioritized last, then
     // main, then the destructor via the atexit chain at exit.

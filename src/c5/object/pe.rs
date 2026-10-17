@@ -109,6 +109,27 @@ enum NamedFamily {
     Bss,
 }
 
+/// A family's `len` bytes from `start` past its last named section, such as
+/// the linker's init/fini arrays, placed `at` into `.rdata` or `.data`.
+#[derive(Default, Clone, Copy)]
+struct Tail {
+    start: u32,
+    len: u32,
+    at: u32,
+}
+
+impl Tail {
+    /// Place the run at or past `cursor` on its residue modulo `align`.
+    fn place(&mut self, cursor: u32, align: u32) -> u32 {
+        if self.len == 0 {
+            self.at = cursor;
+            return cursor;
+        }
+        self.at = cursor + (self.start % align + align - cursor % align) % align;
+        self.at + self.len
+    }
+}
+
 /// A named section given a header of its own: it leaves its family's region
 /// and takes a SectionAlignment-aligned slot past `.data`.
 struct NamedOut<'a> {
@@ -186,6 +207,10 @@ struct PeLayout<'a> {
     data_head_len: u32,
     bss_head: u32,
     bss_base_in_data: u32,
+    ro_tail: Tail,
+    relro_tail: Tail,
+    data_tail: Tail,
+    bss_tail: Tail,
     /// What `.rdata` keeps of the two read-only families once their named
     /// runs move out.
     rdata_prefix_len: u32,
@@ -377,6 +402,20 @@ impl<'a> PeWriter<'a> {
             .unwrap_or(full)
     }
 
+    /// The bytes of family `f`, spanning `[base, end)`, past its named sections.
+    fn tail_of(&self, f: NamedFamily, base: u32, end: u32) -> Tail {
+        let start = (self.build.named_sections.iter())
+            .filter(|n| self.named_family(n) == f)
+            .map(|n| (n.offset + n.size) as u32)
+            .max()
+            .map_or(end, |e| e.min(end));
+        Tail {
+            start: start - base,
+            len: end - start,
+            at: 0,
+        }
+    }
+
     /// RVA of the code body, past the entry stub.
     fn text_body_rva(&self) -> u32 {
         self.layout.text_rva + self.text_prologue_len
@@ -421,6 +460,10 @@ impl<'a> PeWriter<'a> {
         let relro_head_len = self.head_of(NamedFamily::RelRo, relro_total) - ro_len;
         let data_head_len = self.head_of(NamedFamily::Data, file_data_len) - relro_total;
         let bss_head = self.head_of(NamedFamily::Bss, build.bss_size as u32);
+        let mut ro_tail = self.tail_of(NamedFamily::RoData, 0, ro_len);
+        let mut relro_tail = self.tail_of(NamedFamily::RelRo, ro_len, relro_total);
+        let data_tail = self.tail_of(NamedFamily::Data, relro_total, file_data_len);
+        let bss_tail = self.tail_of(NamedFamily::Bss, 0, build.bss_size as u32);
         let l = &mut self.layout;
         l.ro_head = ro_head;
         l.relro_head_len = relro_head_len;
@@ -428,12 +471,15 @@ impl<'a> PeWriter<'a> {
         l.bss_head = bss_head;
         // Each data region starts on the image's alignment, keeping residues.
         l.data_align = crate::c5::layout::data_image_align(build.data_align) as u32;
+        let ro_end = ro_tail.place(ro_head, l.data_align);
         l.relro_base_in_rdata = if relro_head_len > 0 {
-            round_up(ro_head, l.data_align)
+            round_up(ro_end, l.data_align)
         } else {
-            ro_head
+            ro_end
         };
-        l.rdata_prefix_len = l.relro_base_in_rdata + relro_head_len;
+        l.rdata_prefix_len = relro_tail.place(l.relro_base_in_rdata + relro_head_len, l.data_align);
+        (l.ro_tail, l.relro_tail, l.data_tail, l.bss_tail) =
+            (ro_tail, relro_tail, data_tail, bss_tail);
         l.jt_base_in_rdata = if build.rodata.bytes.is_empty() {
             l.rdata_prefix_len
         } else {
@@ -443,7 +489,8 @@ impl<'a> PeWriter<'a> {
         l.marker_base_in_rdata = round_up(l.jt_base_in_rdata + build.rodata.bytes.len() as u32, 8);
         l.rdata_size = l.marker_base_in_rdata + l.provenance.len() as u32;
         l.rdata_present = l.rdata_size > 0;
-        l.data_present = data_head_len > 0 || !build.tls_data.is_empty() || bss_head > 0;
+        l.data_present = data_head_len + data_tail.len + bss_head + bss_tail.len > 0
+            || !build.tls_data.is_empty();
         l.reloc_present = !build.tls_data.is_empty()
             || !build.data_relocs.is_empty()
             || !build.code_relocs.is_empty()
@@ -522,15 +569,16 @@ impl<'a> PeWriter<'a> {
         } else {
             0
         };
-        l.tls = compute_tls_layout(build, l.data_head_len);
-        l.data_size = l.data_head_len + l.tls.tls_blob_size;
-        l.bss_base_in_data = if l.bss_head > 0 {
-            let bss_align = crate::c5::layout::bss_image_align(build.data_align) as u32;
+        let user_data_end = l.data_tail.place(l.data_head_len, l.data_align);
+        l.tls = compute_tls_layout(build, user_data_end);
+        l.data_size = user_data_end + l.tls.tls_blob_size;
+        let bss_align = crate::c5::layout::bss_image_align(build.data_align) as u32;
+        l.bss_base_in_data = if l.bss_head + l.bss_tail.len > 0 {
             round_up(l.data_size, bss_align)
         } else {
             l.data_size
         };
-        l.data_vsize = l.bss_base_in_data + l.bss_head;
+        l.data_vsize = (l.bss_tail).place(l.bss_base_in_data + l.bss_head, bss_align);
         l.data_rva = if l.rdata_present {
             round_up(l.rdata_rva + l.rdata_size, l.section_align)
         } else {
@@ -642,24 +690,34 @@ impl<'a> PeWriter<'a> {
     /// The data stream's family regions at their RVAs, each closed at its
     /// family's head: a group's extent is closed at both ends, so an offset
     /// at one group's end names that group, and the padding a moved run
-    /// left behind resolves to the family's end.
-    fn data_regions(&self) -> [DataRegion; 4] {
+    /// left behind resolves to the head's end. A family's tail is its own region.
+    fn data_regions(&self) -> Vec<DataRegion> {
         let l = &self.layout;
         let region = |start: u32, base: u32, len: u32| DataRegion {
             start: start as u64,
             base: base as u64,
             len: len as u64,
         };
-        [
-            region(0, l.rdata_rva, l.ro_head),
-            region(
-                l.ro_len,
-                l.rdata_rva + l.relro_base_in_rdata,
-                l.relro_head_len,
-            ),
-            region(l.relro_total, l.data_rva, l.data_head_len),
-            region(l.file_data_len, l.data_rva + l.bss_base_in_data, l.bss_head),
-        ]
+        let tail = |t: Tail, family: u32, section: u32| {
+            (t.len > 0).then(|| region(family + t.start, section + t.at, t.len))
+        };
+        let mut regions = vec![region(0, l.rdata_rva, l.ro_head)];
+        regions.extend(tail(l.ro_tail, 0, l.rdata_rva));
+        regions.push(region(
+            l.ro_len,
+            l.rdata_rva + l.relro_base_in_rdata,
+            l.relro_head_len,
+        ));
+        regions.extend(tail(l.relro_tail, l.ro_len, l.rdata_rva));
+        regions.push(region(l.relro_total, l.data_rva, l.data_head_len));
+        regions.extend(tail(l.data_tail, l.relro_total, l.data_rva));
+        regions.push(region(
+            l.file_data_len,
+            l.data_rva + l.bss_base_in_data,
+            l.bss_head,
+        ));
+        regions.extend(tail(l.bss_tail, l.file_data_len, l.data_rva));
+        regions
     }
 
     /// `.reloc` (one `IMAGE_BASE_RELOCATION` block per page holding an
@@ -1336,13 +1394,22 @@ impl<'a> PeWriter<'a> {
         pad_to(&mut out, (l.pdata_file_off + l.pdata_raw_size) as usize)?;
         out.extend_from_slice(&l.idata.bytes);
         pad_to(&mut out, (l.idata_file_off + l.idata_raw_size) as usize)?;
+        // A tail's bytes out of `bytes`, which holds its family's first byte at `base`.
+        let tail = |out: &mut Vec<u8>, t: Tail, section: u32, bytes: &[u8], base: u32| {
+            pad_to(out, (section + t.at) as usize)?;
+            let from = (base + t.start) as usize;
+            out.extend_from_slice(&bytes[from..from + t.len as usize]);
+            Ok::<(), C5Error>(())
+        };
         if l.rdata_present {
             out.extend_from_slice(&build.data[..l.ro_head as usize]);
+            tail(&mut out, l.ro_tail, l.rdata_file_off, &build.data, 0)?;
             pad_to(
                 &mut out,
                 (l.rdata_file_off + l.relro_base_in_rdata) as usize,
             )?;
             out.extend_from_slice(&data[..l.relro_head_len as usize]);
+            tail(&mut out, l.relro_tail, l.rdata_file_off, &data, 0)?;
             pad_to(&mut out, (l.rdata_file_off + l.jt_base_in_rdata) as usize)?;
             out.extend_from_slice(&self.jt_bytes);
             pad_to(
@@ -1355,6 +1422,7 @@ impl<'a> PeWriter<'a> {
         if l.data_present {
             let head = (l.relro_size + l.data_head_len) as usize;
             out.extend_from_slice(&data[l.relro_size as usize..head]);
+            tail(&mut out, l.data_tail, l.data_file_off, &data, l.relro_size)?;
             if !build.tls_data.is_empty() {
                 pad_to(
                     &mut out,
@@ -2885,6 +2953,69 @@ mod tests {
             assert_eq!(w.data_off_to_rva(16), full.rva, "{target:?}: empty_a");
             let next = round_up(full.rva + full.vsize, align);
             assert_eq!(w.data_off_to_rva(48), next, "{target:?}: empty_b");
+        }
+    }
+
+    /// A family's bytes past its named sections keep an address of their own
+    /// in the family's section, on their residue, with their bytes in the file.
+    #[test]
+    fn bytes_past_a_familys_named_sections_stay_in_its_section() {
+        use crate::Compiler;
+        for (machine, target) in [
+            (Machine::X86_64, super::super::Target::WindowsX64),
+            (Machine::Aarch64, super::super::Target::WindowsAarch64),
+        ] {
+            let src = "int main(void) { return 0; }".to_string();
+            let program = Compiler::with_target(src, target)
+                .compile()
+                .expect("compile");
+            let mut build =
+                lower_for(&program, target, super::super::NativeOptions::default()).expect("lower");
+            // Four 64-byte families: 16 head bytes, a 16-byte named section
+            // and a tail whose first byte, its end, names that section.
+            build.data = (0..192u32).map(|i| i as u8).collect();
+            (build.data_ro_len, build.data_relro_len, build.bss_size) = (64, 128, 64);
+            for (name, offset, bss) in [
+                ("ro_n", 16, false),
+                ("rel_n", 80, false),
+                ("rw_n", 144, false),
+                ("bss_n", 16, true),
+            ] {
+                build.named_sections.push(crate::c5::codegen::NamedSection {
+                    name: name.into(),
+                    offset,
+                    size: 16,
+                    align: 8,
+                    bss,
+                    write: offset >= 64 || bss,
+                });
+            }
+            let bytes = write(&program, &build, machine, target).expect("write PE");
+            let mut w = PeWriter::new(&program, &build, machine, target);
+            w.layout_code_sections().expect("code layout");
+            w.layout_data_sections().expect("data layout");
+            let l = &w.layout;
+            let mut seen = alloc::collections::BTreeSet::new();
+            for family in 0..4u32 {
+                let (rva, len, file_off) = if family < 2 {
+                    (l.rdata_rva, l.rdata_size, l.rdata_file_off)
+                } else {
+                    (l.data_rva, l.data_vsize, l.data_file_off)
+                };
+                for off in (0..16).chain(33..64).map(|o| family * 64 + o) {
+                    let at = w.data_off_to_rva(off);
+                    assert!(
+                        (rva..rva + len).contains(&at),
+                        "{target:?}: {off} at {at:#x}"
+                    );
+                    assert_eq!(at % 8, off % 8, "{target:?}: {off}'s residue");
+                    assert!(seen.insert(at), "{target:?}: {off} shares {at:#x}");
+                    if family < 3 {
+                        let byte = bytes[(file_off + at - rva) as usize];
+                        assert_eq!(byte, off as u8, "{target:?}: {off}'s byte");
+                    }
+                }
+            }
         }
     }
 

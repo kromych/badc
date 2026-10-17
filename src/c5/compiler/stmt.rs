@@ -1697,7 +1697,7 @@ impl Compiler {
         is_goto: bool,
         line: usize,
     ) -> Result<(), C5Error> {
-        use super::super::ast::{AsmBlockAst, Expr, UnOp};
+        use super::super::ast::{AsmBlockAst, Expr};
         use super::super::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
         use super::types::{Segment, segment_of_object_ty};
         let mut operands: alloc::vec::Vec<AsmOperand> = alloc::vec::Vec::new();
@@ -1859,28 +1859,7 @@ impl Compiler {
             // before the parse, since its expression is indistinguishable
             // from `__builtin_frame_address(0)` afterwards.
             let bound_reg = self.asm_operand_bound_register()?;
-            // `*(T (*)[N])p` reaches the array itself, which decays to the
-            // element pointer (C99 6.3.2.1p3): the deref emits no node and the
-            // accumulator already holds the object's address. The decay marker
-            // distinguishes that from an ordinary rvalue.
-            let saved_decay_bytes = core::mem::take(&mut self.pending.last_array_decay_bytes);
-            let saved_decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
-            let saved_decay_vla = self.pending.last_array_decay_vla.take();
-            // A memory operand designates its object, which gcc lets have
-            // incomplete type.
-            self.expr_or_void(Token::Assign as i64)?;
-            self.reject_void_value(self.ty)?;
-            let vla = core::mem::replace(&mut self.pending.last_array_decay_vla, saved_decay_vla);
-            // The dims channel also marks rows the byte channel cannot
-            // (an unspecified bound `*(T (*)[])p` has no byte size).
-            let decayed_array =
-                core::mem::replace(&mut self.pending.last_array_decay_bytes, saved_decay_bytes) > 0
-                    || !core::mem::replace(
-                        &mut self.pending.last_array_decay_dims,
-                        saved_decay_dims,
-                    )
-                    .is_empty()
-                    || vla.is_some();
+            let decayed_array = self.parse_asm_operand_expr()?;
             // A SIMD (`w`/`x`) operand records its full size so the emitter
             // can tell a 16-byte vector from a scalar double; other operands
             // live in 8-byte registers and cap there.
@@ -1982,55 +1961,16 @@ impl Compiler {
             }
             let stores_back = is_output && !is_bound;
             let is_rw = is_rw && !is_bound;
-            // Outputs pass the destination address; a memory operand (input or
-            // output) is likewise reached through its address, so it must be an
-            // lvalue. A non-lvalue (a call / cast / arithmetic result) is not
-            // directly addressable; reject it with a diagnostic rather than
-            // taking the address of an rvalue, which the walker cannot lower
-            // (it would reach `walk_expr_lvalue`'s unsupported-expression path
-            // as an internal error). Matches GCC ("... is not directly
-            // addressable" / an output operand must be an lvalue). An empty
-            // accumulator falls through to the "operand expression expected"
-            // check below.
             if (is_output || matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase))
                 && !is_bound
             {
-                let addressable = decayed_array
-                    || match self.ast_acc {
-                        Some(id) => {
-                            use super::super::ast::Expr;
-                            matches!(
-                                self.ast.expr(id),
-                                Expr::Ident { .. }
-                                    | Expr::Index { .. }
-                                    | Expr::Member { .. }
-                                    | Expr::CompoundLiteral { .. }
-                                    | Expr::Binary { .. }
-                                    | Expr::Unary {
-                                        op: UnOp::Deref,
-                                        ..
-                                    }
-                            )
-                        }
-                        None => true,
-                    };
-                if !addressable {
-                    self.truncate_data(data_base);
-                    return Err(self.compile_err(Code::ASM_SYNTAX, if stores_back {
-                        "inline asm: output operand must be an lvalue"
-                    } else {
-                        "inline asm: memory operand is not directly addressable (must be an lvalue)"
-                    }));
-                }
-                // A decayed array operand is already an address; taking it
-                // again would yield the address of the pointer value.
-                if !decayed_array {
-                    self.ty += Ty::Ptr as i64;
-                    // Only the lowering writes through a register output's address.
-                    let in_memory =
-                        matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase);
-                    self.ast_apply_addr_of(in_memory);
-                }
+                let in_memory = matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase);
+                let what = if stores_back {
+                    "inline asm: output operand must be an lvalue"
+                } else {
+                    "inline asm: memory operand is not directly addressable (must be an lvalue)"
+                };
+                self.asm_operand_address(decayed_array, in_memory, data_base, what)?;
             }
             let e = match self.ast_acc.take() {
                 Some(e) => e,
@@ -2300,6 +2240,55 @@ impl Compiler {
             i = de;
         }
         Ok(out)
+    }
+
+    /// Parse an asm operand's expression (an incomplete object type admitted, as
+    /// gcc does); whether an array lvalue decayed to its address (C99 6.3.2.1p3).
+    fn parse_asm_operand_expr(&mut self) -> Result<bool, C5Error> {
+        let saved_bytes = core::mem::take(&mut self.pending.last_array_decay_bytes);
+        let saved_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
+        let saved_vla = self.pending.last_array_decay_vla.take();
+        self.expr_or_void(Token::Assign as i64)?;
+        self.reject_void_value(self.ty)?;
+        let vla = core::mem::replace(&mut self.pending.last_array_decay_vla, saved_vla);
+        let bytes = core::mem::replace(&mut self.pending.last_array_decay_bytes, saved_bytes);
+        let dims = core::mem::replace(&mut self.pending.last_array_decay_dims, saved_dims);
+        Ok(bytes > 0 || !dims.is_empty() || vla.is_some())
+    }
+
+    /// Leave the parsed operand's address in the accumulator: a `decayed` array is
+    /// it, another lvalue takes `&`, an rvalue has none and is the error `what`.
+    fn asm_operand_address(
+        &mut self,
+        decayed: bool,
+        in_memory: bool,
+        data_base: usize,
+        what: &str,
+    ) -> Result<(), C5Error> {
+        use super::super::ast::{Expr, UnOp};
+        let addressable = decayed
+            || self.ast_acc.is_none_or(|id| {
+                matches!(
+                    self.ast.expr(id),
+                    Expr::Ident { .. }
+                        | Expr::Index { .. }
+                        | Expr::Member { .. }
+                        | Expr::CompoundLiteral { .. }
+                        | Expr::Unary {
+                            op: UnOp::Deref,
+                            ..
+                        }
+                )
+            });
+        if !addressable {
+            self.truncate_data(data_base);
+            return Err(self.compile_err(Code::ASM_SYNTAX, what));
+        }
+        if !decayed {
+            self.ty += Ty::Ptr as i64;
+            self.ast_apply_addr_of(in_memory);
+        }
+        Ok(())
     }
 
     /// Canonicalize named operand references: `%[name]` and
@@ -2919,7 +2908,7 @@ impl Compiler {
     /// intrinsic args are `[ptr, out-addrs..., in-values...]`. On entry the
     /// template is consumed and the cursor is at the first `:`.
     fn parse_atomic128_asm(&mut self, kind: super::super::op::Intrinsic) -> Result<(), C5Error> {
-        use super::super::ast::{Expr, UnOp};
+        use super::super::ast::Expr;
         use super::super::op::Intrinsic as I;
         // Role of a named operand, decided from its `[name]` spelling.
         enum Role {
@@ -3000,12 +2989,12 @@ impl Compiler {
                 ));
             }
             self.next()?; // `(`
-            self.expr(Token::Assign as i64)?;
+            let decayed = self.parse_asm_operand_expr()?;
             match role {
                 // `"m"(*ptr)` / `"+m"(*ptr)`: &*ptr is the object pointer.
                 Role::Mem => {
-                    self.ty += Ty::Ptr as i64;
-                    self.ast_apply_unary(UnOp::AddrOf);
+                    let what = "128-bit atomic asm: memory operand is not directly addressable";
+                    self.asm_operand_address(decayed, true, data_base, what)?;
                     ptr = self.ast_acc.take();
                 }
                 Role::Scratch => {
@@ -3013,8 +3002,8 @@ impl Compiler {
                 }
                 // Output register: the loaded half is stored to this lvalue.
                 Role::Reg if section == 1 => {
-                    self.ty += Ty::Ptr as i64;
-                    self.ast_apply_unary(UnOp::AddrOf);
+                    let what = "128-bit atomic asm: output operand must be an lvalue";
+                    self.asm_operand_address(decayed, false, data_base, what)?;
                     match self.ast_acc.take() {
                         Some(id) => out_addrs.push(id),
                         None => {
@@ -3050,7 +3039,6 @@ impl Compiler {
         self.asm_list_position(list_pos, data_base)?;
         self.next()?; // outer `)`
         self.consume(b';', "`;` expected after `asm(...)`")?;
-        self.truncate_data(data_base);
 
         // Expected result-address and input-value counts per shape.
         let (want_out, want_in) = match kind {

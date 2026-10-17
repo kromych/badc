@@ -543,6 +543,25 @@ fn asm_memory_operand_rvalue_is_rejected() {
 }
 
 #[test]
+fn asm_register_pair_operand_rvalue_is_rejected() {
+    // An rvalue memory operand is refused in the register-pair templates too.
+    expect_compile_error(
+        "typedef struct { long lo, hi; } pair; pair g(void); \
+         int main(void) { long lo, hi; \
+           __asm__(\"ldp %0, %1, %2\" : \"=r\"(lo), \"=r\"(hi) : \"m\"(g())); \
+           return lo + hi; }",
+        "not directly addressable",
+    );
+    for operand in ["arr[1] + 0", "x + 1"] {
+        let src = alloc::format!(
+            "long arr[4]; int main(void) {{ long v, x = 5; \
+               __asm__(\"ldr %0, %1\" : \"=r\"(v) : \"m\"({operand})); return (int)v; }}"
+        );
+        expect_compile_error(&src, "not directly addressable");
+    }
+}
+
+#[test]
 fn asm_output_operand_rvalue_is_rejected() {
     // An output operand names where the result is written, so an rvalue output
     // is likewise rejected with a diagnostic rather than an internal error.

@@ -632,23 +632,19 @@ impl Compiler {
                 // do the same, otherwise the reloc lands on the extern's
                 // permissive local fallback slot instead of the defining
                 // unit's object.
-                if let Some(sym_idx) = src_sym {
-                    let t = &self.symbols[sym_idx];
-                    let is_extern_data = t.is_extern_decl
-                        && t.linkage == crate::c5::symbol::Linkage::External
-                        && !t.has_initializer;
-                    if is_extern_data {
-                        let name: alloc::string::String = t.link_name().into();
-                        let addend = value - self.symbols[sym_idx].val;
-                        self.symbols[sym_idx].binding.was_referenced = true;
-                        self.extern_data_relocs
-                            .push(crate::c5::program::ExternDataReloc {
-                                data_offset: here as u64,
-                                symbol_name: name,
-                                addend,
-                            });
-                        return Ok(());
-                    }
+                if let Some(sym_idx) = src_sym
+                    && self.names_extern_object(sym_idx)
+                {
+                    let name: alloc::string::String = self.symbols[sym_idx].link_name().into();
+                    let addend = value - self.symbols[sym_idx].val;
+                    self.symbols[sym_idx].binding.was_referenced = true;
+                    self.extern_data_relocs
+                        .push(crate::c5::program::ExternDataReloc {
+                            data_offset: here as u64,
+                            symbol_name: name,
+                            addend,
+                        });
+                    return Ok(());
                 }
                 let anchor = match src_sym {
                     Some(sym_idx) => self.symbols[sym_idx].val,

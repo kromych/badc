@@ -24,6 +24,22 @@ fn run_without_warnings(src: &str) -> i64 {
     Vm::new(prog).run().unwrap()
 }
 
+/// C99 6.2.2p4: the object a block-scope `extern` names in a block-scope
+/// static's initializer is the unit's own when the unit defines it later,
+/// by its name or by an asm label past a typedef of the name.
+#[test]
+fn a_block_scope_extern_objects_address_binds_a_later_definition() {
+    for src in [
+        "long f(void) { extern long cell; static long *p = &cell; return *p; }\n\
+         long cell = 77;\nint main(void) { return f(); }\n",
+        "long storage __asm__(\"cell\") = 77;\ntypedef short cell;\n\
+         long f(void) { extern long cell; static long *p = &cell; return *p; }\n\
+         int main(void) { cell c = 0; return f() + c; }\n",
+    ] {
+        assert_eq!(run_without_warnings(src), 77, "{src:?}");
+    }
+}
+
 /// gcc's rule, which mingw-w64's gcc and clang for the windows-gnu triples
 /// follow on the PE targets, makes an enum with no negative enumerator
 /// compatible with `unsigned int` (C99 6.7.2.2p4), and a `mode` attribute

@@ -2113,6 +2113,57 @@ fn a_block_scope_function_outlives_a_file_scope_binding_without_linkage() {
 }
 
 #[test]
+fn a_block_scope_extern_objects_address_initializes_a_static() {
+    // C99 6.2.2p4 + 6.6p9: in a block-scope static's initializer, the address
+    // of an object a block-scope `extern` declares is the named object's,
+    // which another unit defines: the slot relocates against the symbol, in a
+    // brace list (in `.data.rel.ro` for a `const` table) and with an offset
+    // too, as with gcc and clang.
+    use crate::c5::Target;
+    use crate::c5::linker::{NativeSymSection, parse_native_elf};
+    // (source, addend of the data relocation against `cell`)
+    let rows: &[(&str, i64)] = &[
+        (
+            "long f(void) { extern long cell; static long *p = &cell; return *p; }\n",
+            0,
+        ),
+        (
+            "long f(void) { extern long cell[4]; static long *p = &cell[2]; return *p; }\n",
+            16,
+        ),
+        (
+            "long f(void) { extern long cell; static long *const t[] = { 0, &cell }; return *t[1]; }\n",
+            0,
+        ),
+        (
+            "long f(int cell) { { extern long cell; static long *p = &cell; return *p; } }\n",
+            0,
+        ),
+        (
+            "typedef short cell;\n\
+             long f(void) { extern long cell; static long *p = &cell; return *p; }\n",
+            0,
+        ),
+    ];
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        for &(src, addend) in rows {
+            let obj = parse_native_elf(&reloc_tu(src, target, false)).expect("parse");
+            let at = obj.symbols.iter().position(|s| s.name == "cell");
+            let at = at.unwrap_or_else(|| panic!("{target:?} {src:?}: no `cell`"));
+            assert!(
+                matches!(obj.symbols[at].section, NativeSymSection::Undef),
+                "{target:?} {src:?}: `cell` is defined here"
+            );
+            assert!(
+                (obj.data_relocs.iter().chain(&obj.relro_relocs))
+                    .any(|r| r.sym_idx == at && r.addend == addend),
+                "{target:?} {src:?}: no data relocation against `cell` + {addend}"
+            );
+        }
+    }
+}
+
+#[test]
 fn dead_static_fnptr_table_drops_table_and_callee() {
     // A static function referenced only from a static, itself
     // unreferenced, function-pointer table: the table's relocation is

@@ -191,6 +191,16 @@ impl Compiler {
         self.lex.tk == ';' || self.lex.tk == ',' || self.lex.tk == '}' || self.lex.tk == ')'
     }
 
+    /// Whether the object `idx` names resolves by name: an `extern` one this
+    /// unit has not defined, a block-scope one included (C99 6.2.2p4).
+    pub(super) fn names_extern_object(&self, idx: usize) -> bool {
+        let t = &self.symbols[idx];
+        t.block_extern_active
+            || t.is_extern_decl
+                && t.linkage == crate::c5::symbol::Linkage::External
+                && !t.has_initializer
+    }
+
     /// Emit the link-time relocation for a data object's address stored
     /// into the 8-byte slot at `var_offset`, where `target_offset` is the
     /// object's byte address plus any constant addend. An undefined
@@ -216,11 +226,7 @@ impl Compiler {
         if !is_thread_local {
             self.note_init_reloc(var_offset as usize);
         }
-        let t = &self.symbols[target_idx];
-        let is_extern_data = t.is_extern_decl
-            && t.linkage == crate::c5::symbol::Linkage::External
-            && !t.has_initializer;
-        if is_extern_data {
+        if self.names_extern_object(target_idx) {
             let name = self.symbols[target_idx].link_name().into();
             let reloc = crate::c5::program::ExternDataReloc {
                 data_offset: var_offset as u64,

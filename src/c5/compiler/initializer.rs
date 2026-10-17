@@ -255,7 +255,6 @@ pub(super) struct InitCheckpoint {
     data: usize,
     data_object_starts: usize,
     data_relocs: usize,
-    data_reloc_sym_idx: usize,
     code_relocs: usize,
     code_reloc_sym_idx: usize,
     extern_data_relocs: usize,
@@ -426,11 +425,13 @@ impl Compiler {
         self.tls_data[tls_off..tls_off + bytes].copy_from_slice(&self.data[stage..stage + bytes]);
         let to_tls = |off: u64| off - span.start + tls_off as u64;
         let staged = |r: &crate::c5::program::DataReloc| span.contains(&r.data_offset);
-        for (mut r, sym) in take_where(&mut self.data_relocs, &mut self.data_reloc_sym_idx, staged)
-        {
+        let (moved, kept) = core::mem::take(&mut self.data_relocs)
+            .into_iter()
+            .partition(staged);
+        self.data_relocs = kept;
+        for mut r in moved {
             r.data_offset = to_tls(r.data_offset);
             self.tls_data_relocs.push(r);
-            self.tls_data_reloc_sym_idx.push(sym);
         }
         let staged = |r: &crate::c5::program::CodeReloc| span.contains(&r.data_offset);
         for (mut r, sym) in take_where(&mut self.code_relocs, &mut self.code_reloc_sym_idx, staged)
@@ -650,8 +651,8 @@ impl Compiler {
                     data_offset: here as u64,
                     target_offset: value as u64,
                     target_anchor: anchor as u64,
+                    target_sym: src_sym.map(|i| i as u32),
                 });
-                self.data_reloc_sym_idx.push(src_sym.unwrap_or(usize::MAX));
             }
             InitElemReloc::Code(sym_idx) => {
                 self.note_init_reloc(here);
@@ -723,17 +724,7 @@ impl Compiler {
             let mut it = keep.iter();
             self.code_reloc_sym_idx.retain(|_| *it.next().unwrap());
         }
-        if self.data_relocs.iter().any(|r| hit(r.data_offset)) {
-            let keep: alloc::vec::Vec<bool> = self
-                .data_relocs
-                .iter()
-                .map(|r| !hit(r.data_offset))
-                .collect();
-            let mut it = keep.iter();
-            self.data_relocs.retain(|_| *it.next().unwrap());
-            let mut it = keep.iter();
-            self.data_reloc_sym_idx.retain(|_| *it.next().unwrap());
-        }
+        self.data_relocs.retain(|r| !hit(r.data_offset));
         if self.extern_data_relocs.iter().any(|r| hit(r.data_offset)) {
             self.extern_data_relocs.retain(|r| !hit(r.data_offset));
         }
@@ -3158,7 +3149,6 @@ impl Compiler {
             data: self.data.len(),
             data_object_starts: self.data_object_starts.len(),
             data_relocs: self.data_relocs.len(),
-            data_reloc_sym_idx: self.data_reloc_sym_idx.len(),
             code_relocs: self.code_relocs.len(),
             code_reloc_sym_idx: self.code_reloc_sym_idx.len(),
             extern_data_relocs: self.extern_data_relocs.len(),
@@ -3199,7 +3189,6 @@ impl Compiler {
         self.truncate_data(cp.data);
         self.data_object_starts.truncate(cp.data_object_starts);
         self.data_relocs.truncate(cp.data_relocs);
-        self.data_reloc_sym_idx.truncate(cp.data_reloc_sym_idx);
         self.code_relocs.truncate(cp.code_relocs);
         self.code_reloc_sym_idx.truncate(cp.code_reloc_sym_idx);
         self.extern_data_relocs.truncate(cp.extern_data_relocs);

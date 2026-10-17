@@ -390,6 +390,7 @@ impl Compiler {
         // request to export the name and outranks the inline model.
         self.resolve_inline_linkage();
         self.resolve_file_scope_asm_globl();
+        self.resolve_file_scope_asm_weak();
         self.warn_unused_static_functions();
         Ok(())
     }
@@ -2897,6 +2898,17 @@ impl Compiler {
             for s in self.symbols.iter_mut() {
                 if s.name == name && s.defined_here {
                     s.linkage = crate::c5::symbol::Linkage::External;
+                }
+            }
+        }
+    }
+
+    /// A file-scope `asm(".weak name");` binds the name weak, as the attribute does.
+    fn resolve_file_scope_asm_weak(&mut self) {
+        for name in &self.asm_weak_names {
+            for s in self.symbols.iter_mut() {
+                if s.linkage == crate::c5::symbol::Linkage::External && s.link_name() == name {
+                    s.is_weak = true;
                 }
             }
         }

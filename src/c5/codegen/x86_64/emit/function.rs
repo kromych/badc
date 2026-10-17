@@ -178,7 +178,7 @@ pub(crate) fn emit_function(
     _got_fixups: &mut Vec<GotFixup>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    extern_tls_names: &alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
     ret_tags: &alloc::collections::BTreeMap<usize, i64>,

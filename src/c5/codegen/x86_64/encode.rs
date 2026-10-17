@@ -1924,6 +1924,7 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
     // `.align` takes a byte count on x86-64 ELF.
     const FILE_ASM_ALIGN_POW2: bool = false;
     const FILE_ASM_COMMENTS: crate::c5::asm::AsmComments = crate::c5::asm::AsmComments::X86;
+    const WEAK_ADDR_PCREL: Option<i64> = Some(-4);
 
     fn late_opt_passes(
         &mut self,

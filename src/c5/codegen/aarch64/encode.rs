@@ -2245,6 +2245,7 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
     // `.align` takes a power-of-two exponent on aarch64.
     const FILE_ASM_ALIGN_POW2: bool = true;
     const FILE_ASM_COMMENTS: crate::c5::asm::AsmComments = crate::c5::asm::AsmComments::A64;
+    const WEAK_ADDR_PCREL: Option<i64> = None;
 
     /// Take a word index's widening into its access, then contract an
     /// integer multiply into the add / sub that reads it (madd / msub),

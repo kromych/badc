@@ -155,6 +155,7 @@ pub(crate) fn walk_program(
             target,
             optimize,
             jump_tables,
+            program.weak_refs_by_name,
         )
         .map_err(|e| {
             // A deliberate rejection is an ordinary diagnostic; the

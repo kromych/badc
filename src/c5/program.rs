@@ -136,6 +136,8 @@ pub struct DataReloc {
     /// Equals `target_offset` when the producer has no object
     /// identity.
     pub target_anchor: u64,
+    /// The [`Program::symbols`] entry of the object the anchor starts.
+    pub target_sym: Option<u32>,
 }
 
 /// A function-pointer initializer that needs run-time relocation.
@@ -326,6 +328,8 @@ pub struct Program {
     /// A data slot naming a trampoline names the binding's import instead: the
     /// address code takes, as C99 6.5.9p6 requires of two pointers to one function.
     pub(crate) bind_trampoline_slots: bool,
+    /// References name a weak definition by its symbol (relocatable output).
+    pub(crate) weak_refs_by_name: bool,
     /// Address-constant initializers of `_Thread_local` objects (C99
     /// 6.7.8p4). `data_offset` is a byte offset into [`Self::tls_data`],
     /// the initialization template the runtime copies per thread; the
@@ -652,6 +656,7 @@ impl DataOffsets for DataReloc {
             data_offset,
             target_offset: _, // remapped by `remap_target_offsets`
             target_anchor: _,
+            target_sym: _, // a symbol index
         } = self;
         remap_self_u64(data_offset, r);
         self.remap_target_offsets(r);
@@ -710,6 +715,7 @@ impl DataOffsets for Program {
             code_relocs,
             sys_trampolines: _,       // code address space
             bind_trampoline_slots: _, // a mode
+            weak_refs_by_name: _,     // a mode
             tls_data_relocs,
             tls_extern_data_relocs: _, // slot in `tls_data`, target by name
             tls_code_relocs: _,        // slot in `tls_data`, target in code
@@ -848,6 +854,7 @@ mod data_offset_tests {
             code_relocs: Vec::new(),
             sys_trampolines: Vec::new(),
             bind_trampoline_slots: false,
+            weak_refs_by_name: false,
             tls_data_relocs: Vec::new(),
             tls_extern_data_relocs: Vec::new(),
             tls_code_relocs: Vec::new(),
@@ -884,6 +891,7 @@ mod data_offset_tests {
             data_offset: 48,
             target_offset: 56,
             target_anchor: 56,
+            target_sym: None,
         }];
         p.code_relocs = alloc::vec![CodeReloc {
             data_offset: 64,

@@ -276,12 +276,12 @@ pub(super) fn emit_tls_addr(
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
-    // A cross-unit `extern _Thread_local` access carries the variable's
-    // name; its descriptor is keyed by symbol, not by the placeholder
-    // offset.
-    tls_extern_sym: Option<&str>,
+    // An access by symbol carries the variable's name; its descriptor is
+    // keyed by symbol, not by the placeholder offset.
+    tls_sym: Option<&crate::c5::codegen::TlsSymbolRef>,
     tls_align: usize,
 ) -> Emit {
+    let tls_extern_sym = tls_sym.map(|r| r.name.as_str());
     use super::encode::{enc_add_imm_lsl12, enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
     // A spilled destination materialises in x16; the sequences read `rd`
     // only after their last use of x16, and x17 stays free for the store.
@@ -301,27 +301,34 @@ pub(super) fn emit_tls_addr(
             // TPOFF and records an `elf_tpoff_fixups` entry at the first add for
             // the linker to rebase against the merged TLS layout.
             let tcb_reserve = 16usize.next_multiple_of(tls_align.max(1)) as i64;
-            let tpoff = (offset + tcb_reserve) as u32;
+            let tpoff = if tls_sym.is_some() {
+                0
+            } else {
+                (offset + tcb_reserve) as u32
+            };
             if tls_extern_sym.is_none() && tpoff >= (1 << 24) {
                 return fail("TlsAddr: tpoff exceeds the hi12/lo12 range");
             }
             emit(code, enc_mrs_tpidr_el0(rd));
             let field = code.len();
-            let target = match tls_extern_sym {
+            let target = match tls_sym {
                 // A cross-unit `extern _Thread_local` may live in a shared
                 // library, whose block the loader places, so its offset comes
                 // from the GOT (initial-exec, as gcc's code for an executable
                 // reads it); x17 holds the slot's address, then its value.
-                Some(name) => {
+                Some(r) if !r.defined_here => {
                     emit(code, enc_adrp(Reg(17), 0));
                     emit(code, enc_ldr_imm(Reg(17), Reg(17), 0));
                     emit(code, enc_add_reg(rd, rd, Reg(17)));
-                    super::ElfTpoffTarget::InitialExec(name.into())
+                    super::ElfTpoffTarget::InitialExec(r.name.clone())
                 }
-                None => {
+                _ => {
                     emit(code, enc_add_imm_lsl12(rd, rd, tpoff >> 12));
                     emit(code, enc_add_imm(rd, rd, tpoff & 0xFFF));
-                    super::ElfTpoffTarget::Local(offset as u64)
+                    match tls_sym {
+                        Some(r) => super::ElfTpoffTarget::Extern(r.name.clone()),
+                        None => super::ElfTpoffTarget::Local(offset as u64),
+                    }
                 }
             };
             elf_tpoff_fixups.push(super::ElfTpoffFixup {

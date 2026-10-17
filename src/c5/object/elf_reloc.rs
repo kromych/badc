@@ -980,6 +980,7 @@ struct Names<'a> {
     undef_alias_end: BTreeMap<&'a str, (&'a str, i64)>,
     user_extern_names: Vec<&'a str>,
     extern_fn_by_pc: BTreeMap<usize, &'a str>,
+    weak_fn_by_pc: BTreeMap<usize, &'a str>,
     defined_data_globals: Vec<(&'a str, i64, u64)>,
     defined_data_locals: Vec<(&'a str, i64, u64)>,
     defined_tls_globals: Vec<(&'a str, i64, u64)>,
@@ -1755,6 +1756,11 @@ impl<'a> RelocWriter<'a> {
             .map(|s| (s.link_name(), SymVisibility::Hidden))
             .chain(program.asm_visibility.iter().map(|(n, v)| (n.as_str(), *v)))
             .collect();
+        for (&ent_pc, name) in build.func_ent_pcs.iter().zip(&build.func_names) {
+            if names.weak_names.contains(name.as_str()) {
+                names.weak_fn_by_pc.insert(ent_pc, name.as_str());
+            }
+        }
         names.func_strs.reserve(build.func_ent_pcs.len());
         for (i, &ent_pc) in build.func_ent_pcs.iter().enumerate() {
             let name = build
@@ -2077,6 +2083,11 @@ impl<'a> RelocWriter<'a> {
                 if let super::ElfTpoffTarget::Extern(name)
                 | super::ElfTpoffTarget::InitialExec(name) = &f.target
                     && !self.names.extern_tls_names.contains(&name.as_str())
+                    && !self
+                        .names
+                        .defined_tls_globals
+                        .iter()
+                        .any(|(n, _, _)| n == name)
                 {
                     self.names.extern_tls_names.push(name.as_str());
                 }
@@ -2189,9 +2200,7 @@ impl<'a> RelocWriter<'a> {
         names.at.asm_global_undef = all.len();
         all.extend(names.asm_global_undef.iter().copied());
         names.at.tls_globals = all.len();
-        if self.elf_tls_interop {
-            all.extend(names.defined_tls_globals.iter().map(|(n, _, _)| *n));
-        }
+        all.extend(names.defined_tls_globals.iter().map(|(n, _, _)| *n));
         names.at.tls_locals = all.len();
         if self.elf_tls_interop {
             all.extend(names.defined_tls_locals.iter().map(|(n, _, _)| *n));
@@ -2933,21 +2942,19 @@ impl<'a> RelocWriter<'a> {
             };
             self.syms.push(sym);
         }
-        if self.elf_tls_interop {
-            for i in 0..self.names.defined_tls_globals.len() {
-                let (name, off, size) = self.names.defined_tls_globals[i];
-                let (shndx, value) = self.tls_home(off);
-                let sym = Elf64Sym {
-                    st_name: self.names.name_offs[self.names.at.tls_globals + i],
-                    st_info: pack_sym_info(STB_GLOBAL, STT_TLS),
-                    st_shndx: shndx,
-                    st_value: value as u64,
-                    st_size: size,
-                    ..Default::default()
-                };
-                let idx = self.syms.push(sym);
-                self.syms.defined_tls_symidx.insert(name, idx);
-            }
+        for i in 0..self.names.defined_tls_globals.len() {
+            let (name, off, size) = self.names.defined_tls_globals[i];
+            let (shndx, value) = self.tls_home(off);
+            let sym = Elf64Sym {
+                st_name: self.names.name_offs[self.names.at.tls_globals + i],
+                st_info: pack_sym_info(self.bind_for(name), STT_TLS),
+                st_shndx: shndx,
+                st_value: value as u64,
+                st_size: size,
+                ..Default::default()
+            };
+            let idx = self.syms.push(sym);
+            self.syms.defined_tls_symidx.insert(name, idx);
         }
         for i in 0..self.names.extern_tls_names.len() {
             let sym = Elf64Sym {
@@ -3062,6 +3069,9 @@ impl<'a> RelocWriter<'a> {
         if self.elf_tls_interop {
             let tls_init_len = self.tls_init_len();
             let extern_sym = |name: &str| {
+                if let Some(&i) = self.syms.defined_tls_symidx.get(name) {
+                    return i;
+                }
                 let pos = (self.names.extern_tls_names.iter())
                     .position(|n| *n == name)
                     .expect("extern_tls_names contains every fixup's symbol name");
@@ -3576,8 +3586,7 @@ impl<'a> RelocWriter<'a> {
             (build.data_relocs.len() + build.code_relocs.len()) * ELF64_RELA_SIZE,
         );
         for r in &build.data_relocs {
-            let (sym, addend) =
-                self.home_sym(self.layout.plan.map_ref(r.target_offset, r.target_anchor));
+            let (sym, addend) = self.data_target_ref(r);
             self.push_data_row(r.data_offset, sym, addend);
         }
         for r in &build.extern_data_relocs {
@@ -3600,6 +3609,17 @@ impl<'a> RelocWriter<'a> {
         Ok(())
     }
 
+    /// A pointer-to-data initializer's target: a weak definition by its symbol.
+    fn data_target_ref(&self, r: &crate::c5::program::DataReloc) -> (u64, i64) {
+        let target = r.target_sym.map(|i| &self.program.symbols[i as usize]);
+        if let Some(s) = target.filter(|s| s.is_weak_definition())
+            && let Some(&idx) = self.syms.defined_data_symidx.get(s.link_name())
+        {
+            return (idx, r.target_offset.wrapping_sub(r.target_anchor) as i64);
+        }
+        self.home_sym(self.layout.plan.map_ref(r.target_offset, r.target_anchor))
+    }
+
     /// A pointer-to-extern-data initializer's symbol: an assembler label of
     /// the unit, an alias's own symbol (as a call through one does), a
     /// defined object, else the UNDEF.
@@ -3619,10 +3639,13 @@ impl<'a> RelocWriter<'a> {
     }
 
     /// A function-pointer initializer's target: a cross-TU function
-    /// (placeholder `ent_pc` past `text.len()`) resolves by name with a
-    /// zero addend, a function of the unit by its native offset.
+    /// (placeholder `ent_pc` past `text.len()`) or a weak definition resolves
+    /// by name with a zero addend, a function of the unit by its native offset.
     fn code_reloc_ref(&self, ent_pc: usize) -> Result<(u64, i64), C5Error> {
-        if let Some(&name) = self.names.extern_fn_by_pc.get(&ent_pc) {
+        let names = &self.names;
+        let by_name =
+            (names.extern_fn_by_pc.get(&ent_pc)).or_else(|| names.weak_fn_by_pc.get(&ent_pc));
+        if let Some(&name) = by_name {
             return Ok(self.extern_fn_ref(name));
         }
         let Some(native_off) = self.build.native_entry(ent_pc) else {
@@ -3641,8 +3664,7 @@ impl<'a> RelocWriter<'a> {
         let rtype = self.rtype_abs64();
         let mut table: Vec<u8> = Vec::new();
         for r in &build.tls_data_relocs {
-            let (sym, addend) =
-                self.home_sym(self.layout.plan.map_ref(r.target_offset, r.target_anchor));
+            let (sym, addend) = self.data_target_ref(r);
             Self::push_rela(&mut table, r.data_offset, sym, rtype, addend);
         }
         for r in &build.tls_extern_data_relocs {
@@ -3657,17 +3679,7 @@ impl<'a> RelocWriter<'a> {
             Self::push_rela(&mut table, r.data_offset, sym_idx, rtype, base + r.addend);
         }
         for r in &build.tls_code_relocs {
-            let ent_pc = r.target_ent_pc as usize;
-            let (sym, addend) = if let Some(&name) = self.names.extern_fn_by_pc.get(&ent_pc) {
-                self.extern_fn_ref(name)
-            } else {
-                let Some(&native_off) = build.pc_to_native.get(ent_pc) else {
-                    return Err(Self::internal(format!(
-                        "elf_reloc: TLS code reloc references missing ent_pc {ent_pc}"
-                    )));
-                };
-                self.text_ref(native_off as u64)
-            };
+            let (sym, addend) = self.code_reloc_ref(r.target_ent_pc as usize)?;
             Self::push_rela(
                 &mut table,
                 r.data_offset,

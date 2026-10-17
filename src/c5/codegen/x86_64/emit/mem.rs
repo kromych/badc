@@ -11,7 +11,7 @@ pub(super) fn emit_tls_addr(
     target: Target,
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
-    extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    extern_tls_names: &alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef>,
     tls_total_size: usize,
     frame: Frame,
 ) -> Emit {
@@ -37,7 +37,8 @@ pub(super) fn emit_tls_addr(
             // comes from the GOT (initial-exec, as gcc's code for an executable
             // reads it): add rd, qword ptr [rip + disp32], REX.W=1, REX.R =
             // (rd >= 8), opcode 03, ModR/M mod=00 reg=rd.lo rm=101.
-            if let Some(name) = extern_tls_names.get(&v) {
+            let by_name = extern_tls_names.get(&v);
+            if let Some(r) = by_name.filter(|r| !r.defined_here) {
                 code.push(rex);
                 code.push(0x03);
                 code.push(0x05 | ((rd.0 & 7) << 3));
@@ -45,7 +46,7 @@ pub(super) fn emit_tls_addr(
                 code.extend_from_slice(&0i32.to_le_bytes());
                 elf_tpoff_fixups.push(super::ElfTpoffFixup {
                     imm_offset,
-                    target: super::ElfTpoffTarget::InitialExec(name.clone()),
+                    target: super::ElfTpoffTarget::InitialExec(r.name.clone()),
                 });
                 spill_dst_to_slot(code, dst, rd, frame);
                 return Ok(());
@@ -54,7 +55,11 @@ pub(super) fn emit_tls_addr(
             // fixup for the merged layout. Variant-2 TPOFF is negative (`var =
             // fs:[0] + (offset - tls_total)`); an `add` with the signed
             // immediate keeps the field patchable with the standard value.
-            let tpoff = offset - (tls_total_size as i64);
+            let tpoff = if by_name.is_some() {
+                0
+            } else {
+                offset - (tls_total_size as i64)
+            };
             if !(i32::MIN as i64..=0).contains(&tpoff) {
                 return fail("TlsAddr: tpoff out of i32 range");
             }
@@ -71,7 +76,10 @@ pub(super) fn emit_tls_addr(
             code.extend_from_slice(&(tpoff as i32).to_le_bytes());
             elf_tpoff_fixups.push(super::ElfTpoffFixup {
                 imm_offset,
-                target: super::ElfTpoffTarget::Local(offset as u64),
+                target: match by_name {
+                    Some(r) => super::ElfTpoffTarget::Extern(r.name.clone()),
+                    None => super::ElfTpoffTarget::Local(offset as u64),
+                },
             });
             spill_dst_to_slot(code, dst, rd, frame);
             Ok(())
@@ -127,7 +135,7 @@ pub(super) fn emit_tls_addr(
             //   REX.W=1, REX.R = (rd >= 8), REX.B=1 (r10 base);
             //   opcode 8D;
             //   ModR/M mod=10 (disp32), reg=rd.lo, rm=010 (r10).
-            let extern_sym = extern_tls_names.get(&v).cloned();
+            let extern_sym = extern_tls_names.get(&v).map(|r| r.name.clone());
             let disp: i64 = if extern_sym.is_some() { 0 } else { offset };
             let rex_lea = 0x49 | (if rd.0 >= 8 { 0x04 } else { 0 });
             code.push(rex_lea);

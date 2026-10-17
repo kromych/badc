@@ -1873,7 +1873,8 @@ pub(crate) struct FunctionInputs<'a> {
     /// `imm_data_extern` value id to cross-TU symbol name.
     pub(crate) extern_data_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
     /// `tls_addr_extern` value id to cross-TU symbol name.
-    pub(crate) extern_tls_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
+    pub(crate) extern_tls_names:
+        &'a alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef>,
     pub(crate) variadic_targets: &'a alloc::collections::BTreeSet<usize>,
     pub(crate) name2entpc: &'a alloc::collections::BTreeMap<alloc::string::String, usize>,
 }
@@ -1897,6 +1898,8 @@ pub(crate) trait LowerTarget {
     const FILE_ASM_ALIGN_POW2: bool;
     /// Comment syntax the file-scope asm blocks are parsed with.
     const FILE_ASM_COMMENTS: crate::c5::asm::AsmComments;
+    /// `direct_pcrel` of a code reference to a weak definition's address.
+    const WEAK_ADDR_PCREL: Option<i64>;
 
     /// Optimizer passes this target runs at the end of the -O pipeline.
     fn late_opt_passes(
@@ -2641,11 +2644,22 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             .iter()
             .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].link_name().into()))
             .collect();
-        let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
-            .extern_tls_refs
-            .iter()
-            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].link_name().into()))
-            .collect();
+        let extern_tls_names: alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef> =
+            func_ssa
+                .extern_tls_refs
+                .iter()
+                .map(|(v, sym_idx)| {
+                    let sym = &program.symbols[*sym_idx as usize];
+                    let name = sym.link_name().into();
+                    (
+                        *v,
+                        super::super::TlsSymbolRef {
+                            name,
+                            defined_here: sym.defined_here,
+                        },
+                    )
+                })
+                .collect();
         let inputs = FunctionInputs {
             program,
             extern_data_names: &extern_data_names,
@@ -2791,6 +2805,14 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 instr_offset,
                 symbol_name: (*name).into(),
                 direct_pcrel: None,
+            });
+            continue;
+        }
+        if let Some(name) = reloc_ctx.weak_target(target_ent_pc) {
+            st.user_extern_data_refs.push(super::UserExternDataRef {
+                instr_offset,
+                symbol_name: name.into(),
+                direct_pcrel: B::WEAK_ADDR_PCREL,
             });
             continue;
         }

@@ -369,6 +369,75 @@ fn a_thread_local_slot_names_another_units_function_and_a_library_function() {
     }
 }
 
+#[test]
+fn a_strong_definition_overrides_every_reference_to_a_weak_one() {
+    // ELF/SysV symbol resolution: a strong definition in another unit
+    // overrides a weak one (`weak` attribute or `.weak` directive) for each
+    // reference the weak unit makes, from code, an initializer or asm, a
+    // `_Thread_local` definition included.
+    let dir = tempdir("weak-override");
+    let a = write_source(
+        &dir,
+        "a.c",
+        "struct pair { long a, b; };\n\
+         __attribute__((weak)) long long wobj = 0;\n\
+         __attribute__((weak)) struct pair ws = {0, 0};\n\
+         __attribute__((weak)) long wf(void) { return 0; }\n\
+         __asm__(\".weak xobj\");\n\
+         long xobj = 0;\n\
+         __attribute__((weak)) _Thread_local long tw = 0;\n\
+         long rd_t(void) { return tw; }\n\
+         long *addr_t(void) { return &tw; }\n\
+         long long *pw = &wobj;\n\
+         long *const pend = &ws.b + 1;\n\
+         long (*pf)(void) = wf;\n\
+         long long rd(void) { return wobj + ws.b + xobj; }\n\
+         long *end_w(void) { return &ws.b + 1; }\n\
+         long *get_pend(void) { return pend; }\n\
+         long (*get_f(void))(void) { return wf; }\n\
+         long call_f(void) { return wf(); }\n\
+         long long rd_asm(void) {\n\
+             long long v;\n\
+         #if defined(__x86_64__)\n\
+             __asm__(\"movq %1, %0\" : \"=r\"(v) : \"m\"(wobj));\n\
+         #else\n\
+             __asm__(\"ldr %0, %1\" : \"=r\"(v) : \"m\"(wobj));\n\
+         #endif\n\
+             return v;\n\
+         }\n",
+    );
+    let b = write_source(
+        &dir,
+        "b.c",
+        "struct pair { long a, b; };\n\
+         long long wobj = 1;\n\
+         struct pair ws = {1, 2};\n\
+         long xobj = 4;\n\
+         long wf(void) { return 8; }\n\
+         _Thread_local long tw = 16;\n\
+         long rd_t(void);\n\
+         long *addr_t(void);\n\
+         extern long long *pw;\n\
+         extern long *const pend;\n\
+         extern long (*pf)(void);\n\
+         long long rd(void);\n\
+         long *end_w(void);\n\
+         long *get_pend(void);\n\
+         long (*get_f(void))(void);\n\
+         long call_f(void);\n\
+         long long rd_asm(void);\n\
+         int main(void) {\n\
+             long *end = &ws.b + 1;\n\
+             return rd() != 7 || *pw != 1 || pend != end || end_w() != end ||\n\
+                 get_pend() != end || pf() != 8 || get_f()() != 8 || call_f() != 8 ||\n\
+                 rd_asm() != 1 || rd_t() != 16 || addr_t() != &tw;\n\
+         }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        assert_eq!(link_units_and_run(&dir, opt, &[&a, &b]), Some(0), "{opt}");
+    }
+}
+
 // Gated on Linux: same end-to-end exec + native-ELF-only
 // constraint as `two_sources_compile_separately_then_link`.
 #[cfg(target_os = "linux")]
@@ -1133,6 +1202,37 @@ fn jit_runs_one_unit_and_passes_extra_inputs_as_argv() {
         "argc mismatch: stdout={:?} stderr={:?}",
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn duplicate_thread_local_definition_fails_link() {
+    // C99 6.9p5: two units each defining one `_Thread_local` object fail
+    // the link with `multiple definition`, whatever the target.
+    let dir = tempdir("dup-tls");
+    write_source(
+        &dir,
+        "a.c",
+        "_Thread_local long tz = 1;\nlong rd_z(void) { return tz; }\n",
+    );
+    write_source(
+        &dir,
+        "b.c",
+        "_Thread_local long tz = 2;\nlong rd_z(void);\n\
+         int main(void) { return (int)rd_z() + (int)tz; }\n",
+    );
+    let result = Command::new(badc())
+        .arg("-o")
+        .arg(dir.join("prog"))
+        .arg(dir.join("a.c"))
+        .arg(dir.join("b.c"))
+        .current_dir(&dir)
+        .output()
+        .expect("invoke badc");
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        !result.status.success() && stderr.contains("multiple definition of `tz`"),
+        "expected `multiple definition of `tz``, got: {stderr}"
     );
 }
 

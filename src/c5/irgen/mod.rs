@@ -317,6 +317,7 @@ struct Walker<'a> {
     /// `-fno-jump-tables`, which leaves every switch on the compare
     /// tree so the dispatch takes no indirect branch.
     jump_tables: bool,
+    weak_refs_by_name: bool,
 }
 
 impl<'a> Walker<'a> {
@@ -369,15 +370,29 @@ impl<'a> Walker<'a> {
             .map_or(crate::c5::codegen::CallConv::Target, |f| f.conv)
     }
 
+    /// [`glo_ident_addr`], a weak definition by name under `weak_refs_by_name`.
+    fn glo_addr(&self, id: ExprId, sym: u32, val: i64) -> GloAddr {
+        let weak = self
+            .symbols
+            .get(sym as usize)
+            .is_some_and(Symbol::is_weak_definition);
+        if self.weak_refs_by_name && weak {
+            return GloAddr::Extern;
+        }
+        glo_ident_addr(self.symbols, self.ast, id, sym, val)
+    }
+
     /// Address class for a `_Thread_local` access: a pure extern
     /// reference resolves by symbol against the merged TLS block at link
     /// time, and a unit-local definition by its offset within this
-    /// unit's TLS block.
+    /// unit's TLS block; a weak one, under `weak_refs_by_name`, by symbol.
     fn live_tls_addr(&self, sym: u32, fallback_val: i64) -> GloAddr {
         let idx = sym as usize;
         if idx < self.symbols.len() {
             let s = &self.symbols[idx];
-            if s.is_extern_decl && !s.defined_here {
+            if (s.is_extern_decl && !s.defined_here)
+                || (self.weak_refs_by_name && s.is_weak_definition())
+            {
                 return GloAddr::Extern;
             }
             if s.defined_here {

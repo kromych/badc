@@ -2801,11 +2801,10 @@ impl Compiler {
             return None;
         }
         let at = at as u64;
-        if let Some(i) = self.data_relocs.iter().position(|r| r.data_offset == at) {
-            let sym = *self.data_reloc_sym_idx.get(i)?;
-            return (sym != usize::MAX).then(|| ConstAddr {
-                value: self.data_relocs[i].target_offset as i64,
-                root: ConstRoot::Data(sym),
+        if let Some(r) = self.data_relocs.iter().find(|r| r.data_offset == at) {
+            return Some(ConstAddr {
+                value: r.target_offset as i64,
+                root: ConstRoot::Data(r.target_sym? as usize),
                 elem_size: 1,
                 pointee: None,
                 ty,

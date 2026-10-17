@@ -782,6 +782,18 @@ pub struct NativeSymbol {
     pub visibility: u8,
 }
 
+impl NativeSymbol {
+    /// The section a relocation resolves through: an `STB_WEAK` definition
+    /// yields to a strong one elsewhere, so it goes through the merged table.
+    pub fn reference_section(&self) -> NativeSymSection {
+        if self.binding == 2 {
+            NativeSymSection::Undef
+        } else {
+            self.section
+        }
+    }
+}
+
 /// One entry from the unit's `.rela.text`. Patched by the
 /// linker once each unit's final base offsets are known.
 #[derive(Debug, Clone, Copy)]

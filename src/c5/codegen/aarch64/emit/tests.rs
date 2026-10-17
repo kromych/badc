@@ -1367,7 +1367,7 @@ fn emit_return_42() {
     let mut user_data_refs: Vec<super::super::UserExternDataRef> = Vec::new();
     let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
         alloc::collections::BTreeMap::new();
-    let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+    let extern_tls_names: alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef> =
         alloc::collections::BTreeMap::new();
     let mut tlv_fx = Vec::new();
     let mut tlv_desc = Vec::new();
@@ -2487,7 +2487,7 @@ fn emit_return_one_plus_two() {
     let mut user_data_refs: Vec<super::super::UserExternDataRef> = Vec::new();
     let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
         alloc::collections::BTreeMap::new();
-    let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+    let extern_tls_names: alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef> =
         alloc::collections::BTreeMap::new();
     let mut tlv_fx = Vec::new();
     let mut tlv_desc = Vec::new();
@@ -2585,7 +2585,7 @@ fn emit_if_else_returns() {
     let mut user_data_refs: Vec<super::super::UserExternDataRef> = Vec::new();
     let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
         alloc::collections::BTreeMap::new();
-    let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+    let extern_tls_names: alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef> =
         alloc::collections::BTreeMap::new();
     let mut tlv_fx = Vec::new();
     let mut tlv_desc = Vec::new();

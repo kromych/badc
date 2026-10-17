@@ -204,15 +204,14 @@ impl Compiler {
             data_offset: var_offset as u64,
             target_offset: target_offset as u64,
             target_anchor: self.symbols[target_idx].val as u64,
+            target_sym: Some(target_idx as u32),
         };
         if is_thread_local {
             self.tls_data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
             self.tls_data_relocs.push(reloc);
-            self.tls_data_reloc_sym_idx.push(target_idx);
         } else {
             self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
             self.data_relocs.push(reloc);
-            self.data_reloc_sym_idx.push(target_idx);
         }
         Ok(())
     }
@@ -254,8 +253,8 @@ impl Compiler {
                         data_offset: off as u64,
                         target_offset: value as u64,
                         target_anchor: value as u64,
+                        target_sym: None,
                     });
-                    self.tls_data_reloc_sym_idx.push(usize::MAX);
                 }
             },
             InitElemReloc::Code(sym_idx) => {
@@ -491,20 +490,17 @@ impl Compiler {
                     data_offset: var_offset as u64,
                     target_offset: addr as u64,
                     target_anchor: addr as u64,
+                    target_sym: None,
                 };
-                // A string literal owns no symbol; the sentinel marks
-                // the entry intra-unit.
                 if is_thread_local {
                     self.tls_data[var_offset as usize..var_offset as usize + 8]
                         .copy_from_slice(&bytes);
                     self.note_tls_init(var_offset);
                     self.tls_data_relocs.push(reloc);
-                    self.tls_data_reloc_sym_idx.push(usize::MAX);
                 } else {
                     self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                     self.note_init_reloc(var_offset as usize);
                     self.data_relocs.push(reloc);
-                    self.data_reloc_sym_idx.push(usize::MAX);
                 }
                 return Ok(());
             }

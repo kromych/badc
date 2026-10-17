@@ -1442,17 +1442,23 @@ impl<'a> Link<'a> {
         }
         // A global definition resolves by name. Every object states its
         // own in its symbol table, where a strong definition outranks a
-        // weak one; badc's own objects list them in the note as well.
+        // weak one; one listed only in the badc note counts as strong.
         for strong in [true, false] {
             for (i, obj) in objs.iter().enumerate() {
-                let defs = obj.symbols.iter().filter(|s| {
-                    s.section == NativeSymSection::Tls
-                        && !s.name.is_empty()
-                        && s.binding == if strong { 1 } else { 2 }
-                });
-                for sym in defs {
-                    let at = self.unit_tls_offset(i, sym.value);
-                    match self.tls_symbol_offsets.entry(sym.name.as_str()) {
+                let global = |s: &NativeSymbol| {
+                    s.section == NativeSymSection::Tls && !s.name.is_empty() && s.binding != 0
+                };
+                let table = (obj.symbols.iter())
+                    .filter(|s| global(s) && s.binding == if strong { 1 } else { 2 })
+                    .map(|s| (s.name.as_str(), s.value));
+                let note_only = (obj.tls_symbols.iter())
+                    .filter(|(n, _, _)| {
+                        strong && !obj.symbols.iter().any(|s| global(s) && s.name == *n)
+                    })
+                    .map(|(n, off, _)| (n.as_str(), *off));
+                for (name, value) in table.chain(note_only) {
+                    let at = self.unit_tls_offset(i, value);
+                    match self.tls_symbol_offsets.entry(name) {
                         hashbrown::hash_map::Entry::Vacant(v) => {
                             v.insert(at);
                         }
@@ -1460,18 +1466,12 @@ impl<'a> Link<'a> {
                             return Err(link_err(
                                 Code::DUPLICATE_SYMBOL,
                                 MODULE,
-                                &format!("multiple definition of `{}`", sym.name),
+                                &format!("multiple definition of `{name}`"),
                             ));
                         }
                         hashbrown::hash_map::Entry::Occupied(_) => {}
                     }
                 }
-            }
-        }
-        for (i, obj) in objs.iter().enumerate() {
-            for (name, off, _size) in &obj.tls_symbols {
-                let at = self.unit_tls_offset(i, *off);
-                self.tls_symbol_offsets.entry(name.as_str()).or_insert(at);
             }
         }
         Ok(())
@@ -2606,11 +2606,7 @@ impl<'a> Link<'a> {
     /// link provides; see [`Self::allocate_got_slots`].
     fn needs_got_slot(&self, sym: &NativeSymbol, rtype: u32, field: usize) -> bool {
         let name = sym.name.as_str();
-        let section = if sym.binding == 2 {
-            NativeSymSection::Undef
-        } else {
-            sym.section
-        };
+        let section = sym.reference_section();
         let defined = match section {
             NativeSymSection::Text
             | NativeSymSection::RoData
@@ -2724,16 +2720,7 @@ impl<'a> Link<'a> {
                     self.admit_preempted(sym, reloc, patch_offset);
                     continue;
                 }
-                // An STB_WEAK definition is overridable: a strong
-                // definition of the same name in a sibling unit wins
-                // (ELF/SysV). Resolve it through the merged table
-                // instead of this unit's copy, which is what the UNDEF
-                // arm already does.
-                let sym_section = if sym.binding == 2 {
-                    NativeSymSection::Undef
-                } else {
-                    sym.section
-                };
+                let sym_section = sym.reference_section();
                 if let Some(&slot) = self.got_slot_sites.get(&(i, reloc.offset)) {
                     let site = origin.at(
                         self.machine,
@@ -3364,7 +3351,8 @@ impl<'a> Link<'a> {
         // A slot naming an `SHN_ABS` symbol takes `S + A` directly: the
         // value is a link-time constant, so no load-time relocation
         // carries it.
-        let abs_value = match sym.section {
+        let section = sym.reference_section();
+        let abs_value = match section {
             NativeSymSection::Abs => Some(sym.value as i64),
             NativeSymSection::Undef if !self.defined.contains_key(sym.name.as_str()) => {
                 self.absolute_defined.get(sym.name.as_str()).copied()
@@ -3383,7 +3371,7 @@ impl<'a> Link<'a> {
             });
             return Ok(());
         }
-        let resolved_section = match sym.section {
+        let resolved_section = match section {
             NativeSymSection::Undef | NativeSymSection::Common => {
                 // Common targets were coalesced into `.bss` and join
                 // `defined` with section == Bss; the lookup is the same
@@ -3452,7 +3440,7 @@ impl<'a> Link<'a> {
         };
         // The referencing unit's own definition rebases by that unit's
         // base; a resolved cross-unit one is already merged.
-        let resolved_value = match sym.section {
+        let resolved_value = match section {
             NativeSymSection::Undef | NativeSymSection::Common => self
                 .defined
                 .get(sym.name.as_str())
@@ -3562,7 +3550,7 @@ impl<'a> Link<'a> {
         in_tls: bool,
         width: u8,
     ) -> Result<(), C5Error> {
-        let (section, value) = match sym.section {
+        let (section, value) = match sym.reference_section() {
             NativeSymSection::Undef | NativeSymSection::Common => {
                 let d = self.defined.get(sym.name.as_str()).ok_or_else(|| {
                     link_err(
@@ -8033,6 +8021,52 @@ mod tests {
                 "{msg}"
             );
         }
+    }
+
+    /// A thread-local definition listed only in an object's badc note is
+    /// strong against another object's weak and strong table entries.
+    #[test]
+    fn a_note_only_thread_local_definition_is_strong() {
+        // mov %fs:0, %rax; add $0, %rax -- an access the note names.
+        let access = || {
+            let mut o = blank_object(NativeMachine::X86_64);
+            o.text = alloc::vec![0x64, 0x48, 0x8b, 0x04, 0x25, 0, 0, 0, 0, 0x48, 0x81, 0xc0];
+            o.text.extend_from_slice(&[0; 4]);
+            o.elf_tpoff_fixups = alloc::vec![(12, ElfTpoffTarget::Extern("tw".to_string()))];
+            o
+        };
+        let definer = |binding: Option<u8>| {
+            let mut o = blank_object(NativeMachine::X86_64);
+            o.tls_data = alloc::vec![0; 8];
+            o.tls_align = 8;
+            o.tls_symbols = alloc::vec![("tw".to_string(), 0, 8)];
+            if let Some(binding) = binding {
+                o.symbols = alloc::vec![NativeSymbol {
+                    name: "tw".to_string(),
+                    section: NativeSymSection::Tls,
+                    value: 0,
+                    size: 8,
+                    binding,
+                    kind: 6,
+                    visibility: 0,
+                }];
+            }
+            o
+        };
+        let tpoff = |objs: &[NativeObject]| {
+            let merged = link_native_objects(objs).expect("link");
+            i32::from_le_bytes(merged.text[12..16].try_into().unwrap())
+        };
+        // The 16-byte block ends at the thread pointer: the first definer's
+        // copy sits at -16, the second's at -8.
+        assert_eq!(tpoff(&[access(), definer(Some(2)), definer(None)]), -8);
+        assert_eq!(tpoff(&[access(), definer(None), definer(Some(2))]), -16);
+        let err = link_native_objects(&[access(), definer(Some(1)), definer(None)])
+            .expect_err("two strong definitions");
+        assert!(
+            format!("{err}").contains("multiple definition of `tw`"),
+            "{err}"
+        );
     }
 
     /// A noted thread-local access no unit defines is an undefined

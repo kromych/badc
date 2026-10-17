@@ -63,8 +63,10 @@ pub(crate) fn compile_function_to_bytes(
             let mut user_extern_data_refs: Vec<super::UserExternDataRef> = Vec::new();
             let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
                 alloc::collections::BTreeMap::new();
-            let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
-                alloc::collections::BTreeMap::new();
+            let extern_tls_names: alloc::collections::BTreeMap<
+                u32,
+                crate::c5::codegen::TlsSymbolRef,
+            > = alloc::collections::BTreeMap::new();
             let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
             let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
             let mut macho_tlv_fixups: Vec<super::MachoTlvFixup> = Vec::new();
@@ -169,8 +171,10 @@ pub(crate) fn compile_function_to_bytes(
                 alloc::collections::BTreeMap::new();
             let extern_code_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
                 alloc::collections::BTreeMap::new();
-            let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
-                alloc::collections::BTreeMap::new();
+            let extern_tls_names: alloc::collections::BTreeMap<
+                u32,
+                crate::c5::codegen::TlsSymbolRef,
+            > = alloc::collections::BTreeMap::new();
             let mut pending_func_fixups: Vec<(usize, usize)> = Vec::new();
             let mut tls_index_fixups: Vec<super::TlsIndexFixup> = Vec::new();
             // Single-unit in-memory emit: TLS accesses keep the baked

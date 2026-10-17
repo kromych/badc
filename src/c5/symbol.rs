@@ -840,6 +840,11 @@ impl Symbol {
         }
     }
 
+    /// A definition a strong one in another unit overrides at link time.
+    pub fn is_weak_definition(&self) -> bool {
+        self.is_weak && self.defined_here && self.linkage == Linkage::External
+    }
+
     /// Whether the slot denotes a function entity: a live `Token::Fun`
     /// binding, or a scoped function declaration whose name binding was
     /// unwound at scope exit (`class` back to 0) while `val`, the

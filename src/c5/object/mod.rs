@@ -975,6 +975,7 @@ fn compact_and_lower(
     use crate::c5::codegen::ssa::shadow;
     program.bind_trampoline_slots =
         target.binds_data_imports() || options.output_kind == OutputKind::Relocatable;
+    program.weak_refs_by_name = options.output_kind == OutputKind::Relocatable;
     let segregate = options.bss_segregate && !bss_segregation_disabled();
     if program.data.is_empty()
         || program.finished_functions.is_empty()
@@ -1174,6 +1175,7 @@ pub(crate) mod test_support {
             code_relocs: Vec::new(),
             sys_trampolines: Vec::new(),
             bind_trampoline_slots: false,
+            weak_refs_by_name: false,
             tls_data_relocs: Vec::new(),
             tls_extern_data_relocs: Vec::new(),
             tls_code_relocs: Vec::new(),

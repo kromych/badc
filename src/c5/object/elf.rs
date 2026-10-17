@@ -4800,6 +4800,7 @@ mod tests {
             data_offset: 0,
             target_offset: 8,
             target_anchor: 8,
+            target_sym: None,
         });
         let bytes = write(&tiny_program(), &b, Machine::Aarch64).unwrap();
         let eh: Elf64Ehdr = read_struct(&bytes, 0);
@@ -4902,6 +4903,7 @@ mod tests {
                 data_offset: 0,
                 target_offset: 8,
                 target_anchor: 8,
+                target_sym: None,
             });
             b.text_abs_relocs.push(crate::c5::codegen::TextAbsReloc {
                 site_text_offset: 0,
@@ -4981,6 +4983,7 @@ mod tests {
                     data_offset: 8,
                     target_offset: 0,
                     target_anchor: 0,
+                    target_sym: None,
                 });
                 let bytes = write(&tiny_program(), &b, machine).unwrap();
                 let (_, flags, addr, _, _) =
@@ -5021,6 +5024,7 @@ mod tests {
                 data_offset: 8 * i as u64,
                 target_offset: 0,
                 target_anchor: 0,
+                target_sym: None,
             });
         }
         b

@@ -36,7 +36,7 @@ impl<'a> Walker<'a> {
                     GloAddr::Resolved(off) => Ok(b.tls_addr(off)),
                 }
             } else {
-                match glo_ident_addr(self.symbols, self.ast, id, *sym, *val) {
+                match self.glo_addr(id, *sym, *val) {
                     GloAddr::Extern => Ok(b.imm_data_extern(*sym)),
                     GloAddr::Resolved(off) => Ok(b.imm_data(off)),
                 }
@@ -86,7 +86,7 @@ impl<'a> Walker<'a> {
         // classes carry a stable slot, data offset or constant, so the
         // node's snapshot holds.
         let glo_addr = if class == Token::Glo as i64 && !is_thread_local {
-            Some(glo_ident_addr(self.symbols, self.ast, id, _sym, val))
+            Some(self.glo_addr(id, _sym, val))
         } else {
             None
         };

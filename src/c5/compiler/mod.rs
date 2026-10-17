@@ -2146,9 +2146,6 @@ pub struct Compiler {
     /// Address-constant initializers of `_Thread_local` objects. Slots are
     /// `tls_data` offsets; see [`program::Program::tls_data_relocs`].
     pub(super) tls_data_relocs: Vec<crate::c5::program::DataReloc>,
-    /// Per-`tls_data_relocs` originating symbol index, as
-    /// [`Self::data_reloc_sym_idx`] is for `data_relocs`.
-    pub(super) tls_data_reloc_sym_idx: Vec<usize>,
     /// [`Self::extern_data_relocs`] whose slot is in `tls_data`.
     pub(super) tls_extern_data_relocs: Vec<crate::c5::program::ExternDataReloc>,
     /// [`Self::code_relocs`] whose slot is in `tls_data`.
@@ -2415,16 +2412,6 @@ pub struct Compiler {
     /// `extern_imm_data_refs` / `extern_tls_refs` channels take
     /// over resolution. Empty in single-TU compiles.
     pub(super) glo_imm_refs: alloc::vec::Vec<usize>,
-    /// Per-`data_relocs` originating symbol index. Tracks the
-    /// `Token::Glo` whose address an initializer like
-    /// `int *p = &x;` baked into the data segment. Cross-TU
-    /// link-unit assembly walks this list in parallel with
-    /// `data_relocs` to convert any entry whose `x` is an
-    /// undefined external reference into a `DataDataAbs64`
-    /// relocation. Length matches `data_relocs.len()` -- one
-    /// symbol idx per emitted reloc -- so the parallel arrays
-    /// don't drift out of sync.
-    pub(super) data_reloc_sym_idx: alloc::vec::Vec<usize>,
     /// `Program::data` offsets that currently carry an initializer
     /// relocation, so a byte write can ask whether the range it
     /// overwrites holds one and run the C99 6.7.8p19 retirement only
@@ -2956,7 +2943,6 @@ impl Compiler {
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             tls_data_relocs: Vec::new(),
-            tls_data_reloc_sym_idx: Vec::new(),
             tls_extern_data_relocs: Vec::new(),
             tls_code_relocs: Vec::new(),
             tls_code_reloc_sym_idx: Vec::new(),
@@ -3012,7 +2998,6 @@ impl Compiler {
             sys_trampolines: Vec::new(),
             decl_count: 0,
             glo_imm_refs: alloc::vec::Vec::new(),
-            data_reloc_sym_idx: alloc::vec::Vec::new(),
             init_reloc_slots: alloc::collections::BTreeSet::new(),
             next_compound_literal_id: 0,
             staged_literal_syms: Vec::new(),
@@ -3434,8 +3419,8 @@ impl Compiler {
                     data_offset: r.data_offset,
                     target_offset: target as u64,
                     target_anchor: self.symbols[sym_idx].val as u64,
+                    target_sym: Some(sym_idx as u32),
                 });
-                self.data_reloc_sym_idx.push(sym_idx);
             }
             self.extern_data_relocs = still_extern;
             // Same rewrite for a `_Thread_local` slot: only the segment the
@@ -3459,8 +3444,8 @@ impl Compiler {
                     data_offset: r.data_offset,
                     target_offset: target as u64,
                     target_anchor: self.symbols[sym_idx].val as u64,
+                    target_sym: Some(sym_idx as u32),
                 });
-                self.tls_data_reloc_sym_idx.push(sym_idx);
             }
             self.tls_extern_data_relocs = still_extern;
             self.rebase_relocated_globals();
@@ -3589,6 +3574,7 @@ impl Compiler {
             code_relocs: self.code_relocs,
             sys_trampolines: self.sys_trampolines,
             bind_trampoline_slots: false,
+            weak_refs_by_name: false,
             tls_data_relocs: self.tls_data_relocs,
             tls_extern_data_relocs: self.tls_extern_data_relocs,
             tls_code_relocs: self.tls_code_relocs,

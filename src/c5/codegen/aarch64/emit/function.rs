@@ -162,7 +162,7 @@ pub(crate) fn emit_function(
     cx: &mut super::ssa::emit_common::EmitCtx,
     fixups: &mut Vec<Fixup>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    extern_tls_names: &alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef>,
     tls_align: usize,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,

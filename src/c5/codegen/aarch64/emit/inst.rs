@@ -12,7 +12,8 @@ pub(super) struct FnCtx<'a> {
     pub(super) target: Target,
     pub(super) imports: &'a super::ResolvedImports,
     pub(super) variadic_targets: &'a alloc::collections::BTreeSet<usize>,
-    pub(super) extern_tls_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
+    pub(super) extern_tls_names:
+        &'a alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef>,
     /// Alignment of the unit's thread-local image; variant I places the
     /// block past the TCB rounded up to it.
     pub(super) tls_align: usize,
@@ -445,7 +446,7 @@ pub(super) fn emit_inst(
             macho_tlv_fixups,
             macho_tlv_descriptors,
             cx.elf_tpoff_fixups,
-            extern_tls_names.get(&v).map(|s| s.as_str()),
+            extern_tls_names.get(&v),
             tls_align,
         ),
         // The predecessor-exit moves placed the value; nothing at the phi

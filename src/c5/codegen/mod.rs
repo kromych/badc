@@ -3055,6 +3055,14 @@ pub(crate) struct ElfTpoffFixup {
     pub target: ElfTpoffTarget,
 }
 
+/// A `_Thread_local` access by symbol: local-exec when this unit defines it
+/// (a weak definition), else the GOT, as another unit may be a library.
+#[derive(Debug, Clone)]
+pub(crate) struct TlsSymbolRef {
+    pub name: alloc::string::String,
+    pub defined_here: bool,
+}
+
 /// How the link resolves an [`ElfTpoffFixup`].
 #[derive(Debug, Clone)]
 pub(crate) enum ElfTpoffTarget {
@@ -4418,6 +4426,14 @@ impl RelocCalleeCtx {
             }
         }
         Some(self.names[name_idx].as_str())
+    }
+
+    /// The weak definition at `target_pc`, which a reference names as a call does.
+    pub(crate) fn weak_target(&self, target_pc: usize) -> Option<&str> {
+        let &(_, name_idx) = self.by_pc.get(&target_pc)?;
+        self.weak
+            .contains(&target_pc)
+            .then(|| self.names[name_idx].as_str())
     }
 }
 

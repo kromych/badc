@@ -357,7 +357,7 @@ struct FnCtx<'a> {
     bulk_xmm: Option<u8>,
     imports: &'a super::ResolvedImports,
     variadic_targets: &'a alloc::collections::BTreeSet<usize>,
-    extern_tls_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
+    extern_tls_names: &'a alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef>,
     /// `Inst::ImmData` value-id -> cross-TU data symbol name, for an `i`-class
     /// inline-asm operand that names an external address, whether in a section
     /// field or via a `%a` address operand.

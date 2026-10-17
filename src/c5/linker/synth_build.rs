@@ -427,6 +427,7 @@ fn synth_program(
         code_relocs: code_relocs.to_vec(),
         sys_trampolines: Vec::new(),
         bind_trampoline_slots: false,
+        weak_refs_by_name: false,
         tls_data_relocs: Vec::new(),
         tls_extern_data_relocs: Vec::new(),
         tls_code_relocs: Vec::new(),
@@ -1443,6 +1444,7 @@ fn synth_abs_relocs(relocs: &[DataAbsReloc]) -> (Vec<DataReloc>, Vec<CodeReloc>)
                     data_offset: r.slot_offset,
                     target_offset: off as u64,
                     target_anchor: anchor as u64,
+                    target_sym: None,
                 });
             }
             MergedTarget::Text(off) => {

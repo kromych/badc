@@ -67,7 +67,7 @@ commit with `git commit --amend --no-edit`; anything else goes back to the queue
 Then close what landed and tell the queues the new head:
 
 ```
-bash .claude/skills/queue-coordinator/scripts/close_fixed.sh <round base> origin/<branch> <pr> local
+bash .claude/skills/queue-coordinator/scripts/close_fixed.sh <round base> origin/<branch> <pr>|none local
 ```
 
 ## Gating and pushing

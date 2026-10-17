@@ -3456,3 +3456,156 @@ fn asm_operands_are_separated_by_commas() {
         compile(&body).unwrap_or_else(|e| panic!("{body}: {e}"));
     }
 }
+
+/// The clobber masks of the one asm statement in `src`, compiled for
+/// `target`, or the compile error.
+fn clobber_masks(src: &str, target: crate::Target) -> Result<(u32, u32), String> {
+    let program = crate::Compiler::with_target(src.to_string(), target)
+        .compile()
+        .map_err(|e| e.to_string())?;
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    let masks = funcs
+        .iter()
+        .flat_map(|f| f.insts.iter())
+        .find_map(|i| match i {
+            crate::c5::ir::Inst::InlineAsm { asm, .. } => {
+                Some((asm.clobber_regs, asm.clobber_fp_regs))
+            }
+            _ => None,
+        });
+    Ok(masks.expect("an asm statement"))
+}
+
+/// A clobber name resolves to the registers it is part of, as gcc and clang
+/// both read it: the x86 high bytes to rax, rcx, rdx and rbx, a `ymm` or
+/// `zmm` name to its XMM register, an SVE `z` name to its SIMD register,
+/// `fp`, `lr` and gcc's `rN` to x registers, after one `%` or `#`. A decimal
+/// number names gcc's register of that number and clang's, which differ
+/// past x86-64's eighth and AArch64's 31st. Names of registers the allocator
+/// never assigns clobber nothing; a name both refuse is refused, and so is
+/// one only one of them takes that badc never accepted.
+#[test]
+fn clobber_names_resolve_to_their_registers() {
+    use crate::Target::{LinuxAarch64, LinuxX64};
+    let asm = |list: &str| {
+        alloc::format!("int main(void) {{ __asm__ volatile(\"\" ::: {list}); return 0; }}")
+    };
+    let q = |names: &[&str]| {
+        names
+            .iter()
+            .map(|n| alloc::format!("\"{n}\""))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let x = |r: u32| 1u32 << r;
+    for (target, names, gp, fp) in [
+        (LinuxX64, &["ah"][..], x(0), 0),
+        (LinuxX64, &["ch", "dh"], x(1) | x(2), 0),
+        (LinuxX64, &["%bh", "#rsi"], x(3) | x(6), 0),
+        (
+            LinuxX64,
+            &["ymm5", "zmm7", "xmm9", "#xmm3"],
+            0,
+            x(5) | x(7) | x(9) | x(3),
+        ),
+        (
+            LinuxX64,
+            &[
+                "flags", "fpsr", "dirflag", "argp", "frame", "st", "st(1)", "st(7)", "mm2", "k1",
+            ],
+            0,
+            0,
+        ),
+        (LinuxX64, &["cr8", "dr6", "%cc", "%memory", "cc"], 0, 0),
+        (LinuxX64, &["1", "6", "036"], x(2) | x(5) | x(8), 0),
+        (LinuxX64, &["38"], x(10) | x(8), 0),
+        (LinuxX64, &["22", "44"], x(14), x(2) | x(0) | x(8)),
+        (LinuxX64, &["8", "15", "010"], 0, 0),
+        (
+            LinuxAarch64,
+            &["fp", "lr", "w3", "r5", "#x0", "%x1"],
+            x(29) | x(30) | x(3) | x(5) | x(0) | x(1),
+            0,
+        ),
+        (
+            LinuxAarch64,
+            &["z5", "q6", "d7", "#v3"],
+            0,
+            x(5) | x(6) | x(7) | x(3),
+        ),
+        (
+            LinuxAarch64,
+            &["p3", "pn3", "ffr", "za", "zt0", "fpmr"],
+            0,
+            0,
+        ),
+        (LinuxAarch64, &["5", "31"], x(5) | x(31), 0),
+        (LinuxAarch64, &["32"], x(0), x(0)),
+        (
+            LinuxAarch64,
+            &["63", "64", "94"],
+            x(31),
+            x(31) | x(0) | x(30),
+        ),
+        (LinuxAarch64, &["010"], x(10) | x(8), 0),
+    ] {
+        let list = q(names);
+        assert_eq!(
+            clobber_masks(&asm(&list), target),
+            Ok((gp, fp)),
+            "{target:?} {list}"
+        );
+    }
+    for (target, name) in [
+        (LinuxX64, "foo"),
+        (LinuxX64, "eh"),
+        (LinuxX64, "xmm32"),
+        (LinuxX64, "xmm05"),
+        (LinuxX64, "RAX"),
+        (LinuxX64, "st(0)"),
+        (LinuxX64, "cr15"),
+        (LinuxX64, "db0"),
+        (LinuxX64, "db7"),
+        (LinuxX64, "es"),
+        (LinuxX64, "gs"),
+        (LinuxX64, "%%rax"),
+        (LinuxX64, ""),
+        (LinuxX64, "#cc"),
+        (LinuxX64, "#memory"),
+        (LinuxX64, "r16"),
+        (LinuxX64, "bnd0"),
+        (LinuxX64, "tmm0"),
+        (LinuxX64, "9"),
+        (LinuxX64, "52"),
+        (LinuxX64, "08"),
+        (LinuxX64, "0x3"),
+        (LinuxAarch64, "x31"),
+        (LinuxAarch64, "w31"),
+        (LinuxAarch64, "r31"),
+        (LinuxAarch64, "x05"),
+        (LinuxAarch64, "z32"),
+        (LinuxAarch64, "p16"),
+        (LinuxAarch64, "rax"),
+        (LinuxAarch64, "xzr"),
+        (LinuxAarch64, "wzr"),
+        (LinuxAarch64, "%%x0"),
+        (LinuxAarch64, ""),
+        (LinuxAarch64, "vg"),
+        (LinuxAarch64, "ffrt"),
+        (LinuxAarch64, "sfp"),
+        (LinuxAarch64, "ap"),
+        (LinuxAarch64, "sme_state"),
+        (LinuxAarch64, "95"),
+        (LinuxAarch64, "08"),
+    ] {
+        let err = clobber_masks(&asm(&alloc::format!("\"{name}\"")), target)
+            .expect_err("an unknown clobber");
+        assert!(
+            err.contains(&alloc::format!(
+                "unknown register name `{name}` in the clobber list"
+            )),
+            "{target:?} {name}: {err}"
+        );
+    }
+}

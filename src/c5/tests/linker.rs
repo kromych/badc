@@ -6436,7 +6436,7 @@ fn cpuid_partial_outputs_with_clobbers_x86_64() {
     // registers are saved around the statement and no subleaf input is
     // required.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
-    let program = Compiler::new(
+    let program = Compiler::with_target(
         "static unsigned leaf_max(void) {\n\
          unsigned m;\n\
          __asm__ volatile(\"cpuid\" : \"=a\"(m) : \"a\"(0) : \"rbx\", \"rcx\", \"rdx\");\n\
@@ -6444,6 +6444,7 @@ fn cpuid_partial_outputs_with_clobbers_x86_64() {
          }\n\
          int main(void){ return (int)(leaf_max() & 0); }\n"
             .to_string(),
+        Target::LinuxX64,
     )
     .compile()
     .expect("compile");

@@ -3561,6 +3561,37 @@ pub fn fixed_register(target: Target, name: &str) -> Result<FixedReg, String> {
     }
 }
 
+/// The `(gpr, fpr)` masks a clobber names, `None` where gcc and clang both refuse it or badc
+/// never took a one-sided name; digits name gcc's register (base 10) and clang's (C literal).
+pub(crate) fn clobber_registers(target: Target, name: &str) -> Option<(u32, u32)> {
+    if !name.is_empty() && name.bytes().all(|b| b.is_ascii_digit()) {
+        let gcc: u32 = name.parse().ok()?;
+        let clang = match name.strip_prefix('0') {
+            Some(rest) if !rest.is_empty() => u32::from_str_radix(rest, 8).ok()?,
+            _ => gcc,
+        };
+        let numbered = if target.is_aarch64() {
+            aarch64::asm::numbered_clobber
+        } else {
+            x86_64::asm::numbered_clobber
+        };
+        let ((g, f), (cg, cf)) = (numbered(gcc, false)?, numbered(clang, true)?);
+        return Some((g | cg, f | cf));
+    }
+    if target.is_aarch64() {
+        aarch64::asm::clobber_by_name(name)
+    } else {
+        x86_64::asm::clobber_by_name(name)
+    }
+}
+
+pub(crate) fn clobber_index(digits: &str) -> Option<u32> {
+    let plain = !digits.is_empty()
+        && digits.bytes().all(|b| b.is_ascii_digit())
+        && (digits == "0" || !digits.starts_with('0'));
+    plain.then(|| digits.parse().ok()).flatten()
+}
+
 /// gcc's `--param ssp-buffer-size=` default.
 pub const DEFAULT_SSP_BUFFER_SIZE: u32 = 8;
 

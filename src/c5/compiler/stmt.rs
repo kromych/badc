@@ -1800,40 +1800,28 @@ impl Compiler {
             self.truncate_data(cstart);
             let cstr = core::str::from_utf8(&cbytes).unwrap_or("");
             if section >= 3 {
-                // Clobber list: a bare register name, `"cc"`, or
-                // `"memory"`. A named register must not hold a value
-                // live across the statement; `cc` (flags) needs no
-                // action, since the compare / branch fusion window ends
-                // at an `Inst::InlineAsm` and no value is kept in flags
-                // across the statement.
-                let name = cstr.trim_start_matches('%');
-                if name == "memory" {
+                // A register after one `%` or `#`, or `cc` / `memory` after
+                // one `%`; `cc` needs nothing, no flags outlive the statement.
+                let (sigil, name) = match cstr.as_bytes().first() {
+                    Some(&c @ (b'%' | b'#')) => (Some(c), &cstr[1..]),
+                    _ => (None, cstr),
+                };
+                if name == "memory" && sigil != Some(b'#') {
                     clobber_memory = true;
-                } else if name != "cc" && !name.is_empty() {
-                    // The register-name spelling is arch-specific; badc knows the
-                    // target, so AArch64 clobbers resolve through the AArch64
-                    // names (GP and the independent SIMD/FP file), x86 through its.
-                    if self.target.is_aarch64() {
-                        if let Some((is_fp, num)) =
-                            super::super::codegen::aarch64::asm::clobber_reg_name(name)
-                        {
-                            if is_fp {
-                                clobber_fp_regs |= 1 << num;
-                            } else {
-                                clobber_regs |= 1 << num;
-                            }
+                } else if name != "cc" || sigil == Some(b'#') {
+                    match super::super::codegen::clobber_registers(self.target, name) {
+                        Some((gpr, fpr)) => {
+                            clobber_regs |= gpr;
+                            clobber_fp_regs |= fpr;
                         }
-                    } else if let Some((reg, _)) =
-                        super::super::codegen::x86_64::asm::reg_by_name(name)
-                    {
-                        // clobber_regs is the GP mask (0..15); clobber_fp_regs the
-                        // XMM mask. Other register marks (MMX/CR/DR/SEG) are not
-                        // tracked.
-                        use super::super::codegen::x86_64::asm::XMM_BASE;
-                        if reg < 16 {
-                            clobber_regs |= 1 << reg;
-                        } else if (XMM_BASE..XMM_BASE + 16).contains(&reg) {
-                            clobber_fp_regs |= 1 << (reg - XMM_BASE);
+                        None => {
+                            self.truncate_data(data_base);
+                            return Err(self.compile_err(
+                                Code::ASM_SYNTAX,
+                                alloc::format!(
+                                    "inline asm: unknown register name `{cstr}` in the clobber list"
+                                ),
+                            ));
                         }
                     }
                 }

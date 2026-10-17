@@ -816,10 +816,16 @@ pub(super) fn format_fn_type(
         } else {
             "*".repeat(depth)
         };
-        decl = if depth == 0 && decl.is_empty() {
-            alloc::format!("({params})")
-        } else {
-            alloc::format!("({stars}{decl})({params})")
+        let conv = match f.conv {
+            crate::c5::codegen::CallConv::Target => "",
+            crate::c5::codegen::CallConv::Ms => "__attribute__((ms_abi))",
+            crate::c5::codegen::CallConv::SysV => "__attribute__((sysv_abi))",
+        };
+        decl = match (depth == 0 && decl.is_empty(), conv.is_empty()) {
+            (true, true) => alloc::format!("({params})"),
+            (true, false) => alloc::format!("({params}) {conv}"),
+            (false, true) => alloc::format!("({stars}{decl})({params})"),
+            (false, false) => alloc::format!("({conv} {stars}{decl})({params})"),
         };
         level = f.ret.as_ref().map(|(r, d)| (&**r, *d));
     }

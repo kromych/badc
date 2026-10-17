@@ -395,10 +395,12 @@ impl Compiler {
 
     /// C99 6.7.5.3p15: two function types agree in their parameter
     /// information and in the function types their results point to, at
-    /// equal depths. The return types themselves ride the tags the callers
-    /// compare; the calling convention is not compared.
+    /// equal depths, and, as gcc and clang take them, in their calling
+    /// conventions. The return types themselves ride the tags the callers
+    /// compare.
     pub(super) fn fn_types_compatible(&self, a: &FnType, b: &FnType) -> bool {
-        self.fn_params_compatible(&a.params, &b.params)
+        a.conv == b.conv
+            && self.fn_params_compatible(&a.params, &b.params)
             && match (&a.ret, &b.ret) {
                 (None, None) => true,
                 (Some((ra, da)), Some((rb, db))) => da == db && self.fn_types_compatible(ra, rb),

@@ -2938,6 +2938,71 @@ fn an_incompatible_function_pointer_conversion_is_rejected() {
     }
 }
 
+/// gcc and clang take the calling convention as part of a function type:
+/// a pointer to a function on one converts to a pointer to one on another
+/// only by a cast, and `__builtin_types_compatible_p` and `_Generic` tell
+/// the two apart. Naming the target's own convention changes no type.
+#[test]
+fn function_types_on_different_conventions_are_incompatible() {
+    use crate::{Compiler, Target};
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        let (f, n) = match target {
+            Target::WindowsX64 => ("sysv_abi", "ms_abi"),
+            _ => ("ms_abi", "sysv_abi"),
+        };
+        let src = |body: &str| {
+            format!(
+                "#define F __attribute__(({f}))\n#define N __attribute__(({n}))\n\
+                 F int ff(int);\nint pf(int);\nint main(void) {{ {body} return 0; }}\n"
+            )
+        };
+        let foreign = format!("int (__attribute__(({f})) *)(int)");
+        for (body, text) in [
+            (
+                "int (*p)(int) = ff;",
+                format!("declared=`int (*)(int)`, init=`{foreign}`"),
+            ),
+            (
+                "int (F *p)(int) = pf;",
+                format!("declared=`{foreign}`, init=`int (*)(int)`"),
+            ),
+            (
+                "int (*p)(int); p = &ff;",
+                format!("lhs=`int (*)(int)`, rhs=`{foreign}`"),
+            ),
+            (
+                "static int (*q)(int) = (int (F *)(int))0;",
+                format!("declared=`int (*)(int)`, init=`{foreign}`"),
+            ),
+            (
+                "static int (*q)(int) = (int (F *)(int))pf;",
+                format!("declared=`int (*)(int)`, init=`{foreign}`"),
+            ),
+            (
+                "static int (*hp)(int); static F int (**pp)(int) = &hp;",
+                format!("declared=`int (__attribute__(({f})) **)(int)`, init=`int (**)(int)`"),
+            ),
+        ] {
+            let err = Compiler::with_target(src(body), target)
+                .compile()
+                .map(|_| ());
+            let err = err.expect_err(body).to_string();
+            assert!(err.contains(&text), "{target:?} {body}: {err}");
+        }
+        for body in [
+            "int (F *p)(int) = ff; int (N *q)(int) = pf; int (*r)(int) = (int (*)(int))ff;",
+            "void *v = (void *)ff; int (*q)(int) = v;",
+            "static int (F *q)(int) = (int (F *)(int))0; static int (*r)(int) = (int (N *)(int))pf;",
+            "_Static_assert(!__builtin_types_compatible_p(int (F *)(int), int (*)(int)), \"\");",
+            "_Static_assert(__builtin_types_compatible_p(int (N *)(int), int (*)(int)), \"\");",
+            "_Static_assert(_Generic(ff, int (*)(int): 0, default: 1), \"\");",
+        ] {
+            let compiled = Compiler::with_target(src(body), target).compile();
+            assert!(compiled.is_ok(), "{target:?} {body}: {:?}", compiled.err());
+        }
+    }
+}
+
 /// C99 6.3.2.2p1: a `void` expression has no value. Every context that
 /// reads one rejects it with the same diagnostic: an argument with or
 /// without a parameter type, an initializer, an assignment, a returned
@@ -5310,9 +5375,18 @@ fn a_qualifier_on_a_pointer_to_a_function_type_qualifies_the_pointer() {
     let warnings: alloc::vec::Vec<String> =
         program.warnings.iter().map(|w| w.to_string()).collect();
     for (line, text) in [
-        (7, "(declared=double (**)(double), init=double* const *)"),
-        (8, "(declared=double (**)(double), init=double* const *)"),
-        (10, "(declared=int (**)(int, int), init=int* const *)"),
+        (
+            7,
+            "(declared=`double (**)(double)`, init=`double (* const *)(double)`)",
+        ),
+        (
+            8,
+            "(declared=`double (**)(double)`, init=`double (* const *)(double)`)",
+        ),
+        (
+            10,
+            "(declared=`int (**)(int, int)`, init=`int (* const *)(int, int)`)",
+        ),
         (
             11,
             "(declared=`double (**)(double)`, init=`double (* const *)(double)`)",

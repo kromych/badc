@@ -17,6 +17,9 @@ use super::const_expr::ConstVal;
 use super::initializer::{InitElemReloc, InitLeaf};
 use super::types::{is_pointer_ty, strip_unsigned};
 
+/// A value's type and the function type it leads to, with its depth.
+type TypedFn = (i64, (crate::c5::symbol::FnType, i64));
+
 impl Compiler {
     /// True when the cast under the cursor applies to a
     /// relocation-bearing leaf (`&x`, a string literal, or a function /
@@ -78,43 +81,77 @@ impl Compiler {
         Ok(reloc)
     }
 
-    /// True when the identifier under the cursor is the whole
-    /// initializer. A function designator names its address only when
-    /// nothing follows it: `f(...)` is a call, whose value the constant
-    /// evaluator decides. The cursor is left where it was.
-    /// The function a scalar initializer designates when it is only `f` or
-    /// `&f`, parenthesized or not; the cursor is left where it was.
-    fn initializer_designator(&mut self) -> Result<Option<usize>, C5Error> {
-        let snap = self.lex.snapshot();
-        let mut parens = 0;
-        while self.lex.tk == '(' {
-            parens += 1;
-            self.next()?;
-        }
-        if self.lex.tk == Token::AndOp {
-            self.next()?;
-        }
-        let idx = self.lex.curr_id_idx;
-        let class = self.symbols[idx].class;
-        let mut found = None;
-        if self.lex.tk == Token::Id && (class == Token::Fun as i64 || class == Token::Sys as i64) {
-            self.next()?;
-            while parens > 0 && self.lex.tk == ')' {
-                parens -= 1;
-                self.next()?;
-            }
-            if parens == 0 && self.at_initializer_end() {
-                found = Some(idx);
-            }
-        }
-        self.restore_lex(snap);
-        Ok(found)
+    /// The type and the function type of a scalar initializer whose whole
+    /// form leads to a function: a function designator, `&` of one or of an
+    /// object leading to one, or a cast to a type leading to one of a null
+    /// pointer constant or such a designator (C99 6.5.4, 6.7.8p11), grouped
+    /// in parentheses or not. The cursor and the data are left as they were.
+    fn initializer_fn_form(&mut self) -> Result<Option<TypedFn>, C5Error> {
+        let (snap, data_snap) = (self.lex.snapshot(), self.data.len());
+        let r = self.initializer_fn_form_at();
+        self.rewind_speculation(snap, data_snap);
+        r
     }
 
-    /// A function designator initializing an object that leads to a
-    /// function compares the function types (C99 6.7.8p11, 6.5.16.1p1),
-    /// which the tags do not record. Returns whether it compared; the
-    /// cursor is left where it was.
+    fn initializer_fn_form_at(&mut self) -> Result<Option<TypedFn>, C5Error> {
+        let mut parens = 0;
+        let mut cast = None;
+        while self.lex.tk == '(' {
+            self.next()?;
+            if cast.is_none() && self.lex_is_type_start() {
+                let name = self.parse_const_type_name()?;
+                if self.lex.tk != ')' {
+                    return Ok(None);
+                }
+                self.next()?;
+                cast = Some((name.ty, name.fn_ty));
+            } else {
+                parens += 1;
+            }
+        }
+        let addr = self.lex.tk == Token::AndOp;
+        if addr {
+            self.next()?;
+        }
+        let operand = if self.lex.tk == Token::Id {
+            Some(self.lex.curr_id_idx)
+        } else if self.lex.tk == Token::Num && cast.is_some() && !addr && self.lex.ival == 0 {
+            None
+        } else {
+            return Ok(None);
+        };
+        self.next()?;
+        while parens > 0 && self.lex.tk == ')' {
+            parens -= 1;
+            self.next()?;
+        }
+        if parens != 0 || !self.at_initializer_end() {
+            return Ok(None);
+        }
+        if let Some((ty, f)) = cast {
+            return Ok(f.map(|f| (ty, f)));
+        }
+        let Some(idx) = operand else {
+            return Ok(None);
+        };
+        let s = &self.symbols[idx];
+        // A library binding's declaration approximates the platform's.
+        if s.class == Token::Sys as i64 {
+            return Ok(None);
+        }
+        let function = s.class == Token::Fun as i64;
+        let ty = s.type_ + Ty::Ptr as i64;
+        Ok(match self.symbol_fn(idx) {
+            Some((f, _)) if function => Some((ty, (f, 1))),
+            Some((f, depth)) if addr => Some((ty, (f, depth + 1))),
+            _ => None,
+        })
+    }
+
+    /// An initializer leading to a function and initializing an object
+    /// that leads to one compares the function types (C99 6.7.8p11,
+    /// 6.5.16.1p1), which the tags do not record. Returns whether it
+    /// compared; the cursor is left where it was.
     pub(super) fn check_designator_initializer(
         &mut self,
         var_ty: i64,
@@ -124,16 +161,16 @@ impl Compiler {
         if target_fn.is_none() {
             return Ok(false);
         }
-        let Some(sym) = self.initializer_designator()? else {
+        let Some((init_ty, init_fn)) = self.initializer_fn_form()? else {
             return Ok(false);
         };
-        if self.symbols[sym].class != Token::Fun as i64 {
-            return Ok(false);
-        }
-        let init_ty = self.symbols[sym].type_ + Ty::Ptr as i64;
-        let init_fn = Some((self.symbol_fn_type(sym), 1));
         let what = ("initializer", "declared", "init");
-        self.check_fn_pointer_conversion((var_ty, target_fn), (init_ty, &init_fn), line, what)?;
+        self.check_fn_pointer_conversion(
+            (var_ty, target_fn),
+            (init_ty, &Some(init_fn)),
+            line,
+            what,
+        )?;
         Ok(true)
     }
 

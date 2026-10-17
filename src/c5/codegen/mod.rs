@@ -4345,7 +4345,7 @@ pub(crate) fn lower_for_with_prebuilt(
         build.data_import_binds.push(DataImportBind {
             data_offset: r.data_offset,
             import,
-            addend: 0,
+            addend: r.addend,
         });
     }
     build.tls_data_relocs = program.tls_data_relocs.clone();

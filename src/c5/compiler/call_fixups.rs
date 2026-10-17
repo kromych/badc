@@ -31,6 +31,23 @@ use super::Compiler;
 use super::types::{is_double_ty, is_float_ty};
 
 impl Compiler {
+    /// The relocation of an 8-byte slot at `data_offset` holding `value`,
+    /// a constant address of function `sym_idx`: its entry now, which
+    /// [`Self::resolve_code_relocs`] updates, and the offset past it.
+    pub(super) fn code_reloc_at(
+        &self,
+        data_offset: u64,
+        sym_idx: usize,
+        value: i64,
+    ) -> crate::c5::program::CodeReloc {
+        let pc = self.symbols[sym_idx].val;
+        crate::c5::program::CodeReloc {
+            data_offset,
+            target_ent_pc: pc as u64,
+            addend: value.wrapping_sub(pc),
+        }
+    }
+
     /// Rewrite every `code_relocs[i].target_ent_pc` to the
     /// originating symbol's post-body `val`. Walker-tier
     /// `Inst::Call` / `Inst::ImmCode` references read the live

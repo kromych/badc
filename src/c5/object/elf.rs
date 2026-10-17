@@ -2017,7 +2017,8 @@ impl<'a> ElfImageWriter<'a> {
                 .get(r.target_ent_pc as usize)
                 .copied()
                 .unwrap_or(0);
-            sites.push(data(r.data_offset, self.text_vmaddr() + native_off as u64));
+            let at = (self.text_vmaddr() + native_off as u64).wrapping_add_signed(r.addend);
+            sites.push(data(r.data_offset, at));
         }
         for r in &build.label_relocs {
             sites.push(data(r.data_offset, self.text_vmaddr() + r.text_offset));

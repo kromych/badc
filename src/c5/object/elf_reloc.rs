@@ -3590,7 +3590,7 @@ impl<'a> RelocWriter<'a> {
         }
         for r in &build.code_relocs {
             let (sym, addend) = self.code_reloc_ref(r.target_ent_pc as usize)?;
-            self.push_data_row(r.data_offset, sym, addend);
+            self.push_data_row(r.data_offset, sym, addend.wrapping_add(r.addend));
         }
         for b in &build.data_import_binds {
             let sym = self.syms.import_sym_indices[b.import] as u64;
@@ -3673,7 +3673,13 @@ impl<'a> RelocWriter<'a> {
                 };
                 self.text_ref(native_off as u64)
             };
-            Self::push_rela(&mut table, r.data_offset, sym, rtype, addend);
+            Self::push_rela(
+                &mut table,
+                r.data_offset,
+                sym,
+                rtype,
+                addend.wrapping_add(r.addend),
+            );
         }
         self.relocs.tdata = table;
         Ok(())

@@ -175,7 +175,7 @@ impl<'a> ConstData<'a> {
                 Some(binding) => AddrConst::Import(binding),
                 None => AddrConst::Code(r.target_ent_pc as usize),
             };
-            relocs.push((r.data_offset as i64, Some(addr)));
+            relocs.push((r.data_offset as i64, (r.addend == 0).then_some(addr)));
         }
         relocs.extend(
             program

@@ -720,7 +720,7 @@ mod jit_impl {
                         "JIT: code reloc references missing ent_pc {ent_pc}"
                     )));
                 }
-                let absolute = code_vmaddr + native_off as u64;
+                let absolute = (code_vmaddr + native_off as u64).wrapping_add_signed(r.addend);
                 let off = r.data_offset as usize;
                 if off + 8 > bytes.len() {
                     return Err(C5Error::internal(format!(

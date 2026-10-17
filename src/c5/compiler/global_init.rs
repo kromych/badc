@@ -137,7 +137,7 @@ impl Compiler {
         Ok(true)
     }
 
-    fn id_ends_initializer(&mut self) -> Result<bool, C5Error> {
+    pub(super) fn id_ends_initializer(&mut self) -> Result<bool, C5Error> {
         let snap = self.lex.snapshot();
         self.next()?;
         let ends = self.at_initializer_end();
@@ -150,7 +150,7 @@ impl Compiler {
     /// `{ value }` wrapper, or the `)` of a parenthesized initializer.
     /// Anything else means the value parsed so far is a sub-operand of a
     /// larger expression.
-    fn at_initializer_end(&self) -> bool {
+    pub(super) fn at_initializer_end(&self) -> bool {
         self.lex.tk == ';' || self.lex.tk == ',' || self.lex.tk == '}' || self.lex.tk == ')'
     }
 
@@ -260,10 +260,8 @@ impl Compiler {
             },
             InitElemReloc::Code(sym_idx) => {
                 self.symbols[sym_idx].binding.was_referenced = true;
-                self.tls_code_relocs.push(crate::c5::program::CodeReloc {
-                    data_offset: off as u64,
-                    target_ent_pc: value as u64,
-                });
+                let reloc = self.code_reloc_at(off as u64, sym_idx, value as i64);
+                self.tls_code_relocs.push(reloc);
                 self.tls_code_reloc_sym_idx.push(sym_idx);
             }
             // `&&label` names a block in the function being parsed; a
@@ -413,10 +411,7 @@ impl Compiler {
                 };
             }
             let bytes = (ent_pc as u64).to_le_bytes();
-            let reloc = crate::c5::program::CodeReloc {
-                data_offset: var_offset as u64,
-                target_ent_pc: ent_pc as u64,
-            };
+            let reloc = self.code_reloc_at(var_offset as u64, sym_idx, ent_pc);
             if is_thread_local {
                 self.tls_data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                 self.note_tls_init(var_offset);
@@ -658,10 +653,7 @@ impl Compiler {
                 self.symbols[sym_idx].binding.was_referenced = true;
                 let ent_pc = self.symbols[sym_idx].val;
                 let bytes = (ent_pc as u64).to_le_bytes();
-                let reloc = crate::c5::program::CodeReloc {
-                    data_offset: var_offset as u64,
-                    target_ent_pc: ent_pc as u64,
-                };
+                let reloc = self.code_reloc_at(var_offset as u64, sym_idx, ent_pc);
                 if is_thread_local {
                     self.tls_data[var_offset as usize..var_offset as usize + 8]
                         .copy_from_slice(&bytes);

@@ -163,6 +163,8 @@ pub struct CodeReloc {
     /// `ent_pc` of the function. The codegen translates this to a
     /// native code-segment offset via `pc_to_native`.
     pub target_ent_pc: u64,
+    /// Bytes added to the function's address: `(char *)f + 4`.
+    pub addend: i64,
 }
 
 /// Compiled program ready for the VM.
@@ -661,6 +663,7 @@ impl DataOffsets for CodeReloc {
         let Self {
             data_offset,
             target_ent_pc: _, // code address space
+            addend: _,
         } = self;
         remap_self_u64(data_offset, r);
     }
@@ -885,6 +888,7 @@ mod data_offset_tests {
         p.code_relocs = alloc::vec![CodeReloc {
             data_offset: 64,
             target_ent_pc: 0,
+            addend: 0,
         }];
         p.extern_data_relocs = alloc::vec![ExternDataReloc {
             data_offset: 72,

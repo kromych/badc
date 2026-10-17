@@ -2022,10 +2022,15 @@ impl Compiler {
             ));
         }
         self.reject_automatic_compound_literal_root(d.root)?;
+        // GNU C: arithmetic on a pointer to a function counts bytes.
+        let elem_size = match d.root {
+            ConstRoot::Code(_) => 1,
+            _ => (self.size_of_type(d.ty) as i64).max(1),
+        };
         Ok(ConstAddr {
             value: d.value,
             root: d.root,
-            elem_size: (self.size_of_type(d.ty) as i64).max(1),
+            elem_size,
             pointee: Some(d.ty),
             ty: add_ptr_level(d.ty),
         })
@@ -2807,9 +2812,15 @@ impl Compiler {
             });
         }
         let i = self.code_relocs.iter().position(|r| r.data_offset == at)?;
+        let sym = *self.code_reloc_sym_idx.get(i)?;
+        // `code_reloc_at` measured the addend from the symbol's pc.
         Some(ConstAddr {
-            value: self.code_relocs[i].target_ent_pc as i64,
-            root: ConstRoot::Code(*self.code_reloc_sym_idx.get(i)?),
+            value: self
+                .symbols
+                .get(sym)?
+                .val
+                .wrapping_add(self.code_relocs[i].addend),
+            root: ConstRoot::Code(sym),
             elem_size: 1,
             pointee: None,
             ty,

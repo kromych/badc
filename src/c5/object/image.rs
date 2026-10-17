@@ -56,7 +56,7 @@ pub(crate) fn bake_data_relocs(
                 "{format}: code reloc references missing ent_pc {ent_pc}"
             )));
         }
-        let absolute = text_vmaddr + native_off as u64;
+        let absolute = (text_vmaddr + native_off as u64).wrapping_add_signed(r.addend);
         let off = slot(&data, r.data_offset, "code", 8)?;
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_DEBUG_CODE_RELOCS").is_ok() {
@@ -137,7 +137,8 @@ pub(crate) fn tls_reloc_sites(
                 "{format}: TLS code reloc references missing ent_pc {ent_pc}"
             )));
         };
-        sites.push((r.data_offset as usize, text_vmaddr + native_off as u64));
+        let absolute = (text_vmaddr + native_off as u64).wrapping_add_signed(r.addend);
+        sites.push((r.data_offset as usize, absolute));
     }
     sites.sort_unstable();
     Ok(sites)

@@ -177,7 +177,8 @@ impl<H: Host> Vm<H> {
         // slot here at VM construction time.
         for r in &program.code_relocs {
             let off = r.data_offset as usize;
-            let runtime = ssa::CODE_ADDR_TAG as u64 | r.target_ent_pc;
+            let runtime =
+                (ssa::CODE_ADDR_TAG as u64 | r.target_ent_pc).wrapping_add_signed(r.addend);
             data[off..off + 8].copy_from_slice(&runtime.to_le_bytes());
         }
         // A `&&label` initializer slot holds the value a runtime label
@@ -206,7 +207,8 @@ impl<H: Host> Vm<H> {
         // offset, which is the VM's pointer representation.
         for r in &program.tls_code_relocs {
             let off = tls_base + r.data_offset as usize;
-            let runtime = ssa::CODE_ADDR_TAG as u64 | r.target_ent_pc;
+            let runtime =
+                (ssa::CODE_ADDR_TAG as u64 | r.target_ent_pc).wrapping_add_signed(r.addend);
             data[off..off + 8].copy_from_slice(&runtime.to_le_bytes());
         }
         Self {

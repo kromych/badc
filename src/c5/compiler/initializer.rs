@@ -655,10 +655,8 @@ impl Compiler {
             }
             InitElemReloc::Code(sym_idx) => {
                 self.note_init_reloc(here);
-                self.code_relocs.push(crate::c5::program::CodeReloc {
-                    data_offset: here as u64,
-                    target_ent_pc: value as u64,
-                });
+                let reloc = self.code_reloc_at(here as u64, sym_idx, value);
+                self.code_relocs.push(reloc);
                 self.code_reloc_sym_idx.push(sym_idx);
             }
             InitElemReloc::Label(label) => {
@@ -2150,7 +2148,12 @@ impl Compiler {
                 && self.lex.tk == ')'
             {
                 self.next()?; // consume the matching `)`
-                return Ok(leaf);
+                if self.at_initializer_end() {
+                    return Ok(leaf);
+                }
+                // An operand of a trailing operator (`((char *)f) + 6`).
+                self.restore_lex(snap);
+                return self.parse_constant_init_scalar();
             }
             self.restore_lex(inner_snap);
         }
@@ -2357,6 +2360,12 @@ impl Compiler {
             }
             self.rewind_speculation(snap, data_snap);
             self.pending.const_expr_nonconst = nonconst;
+        }
+        // `f + 3`: GNU arithmetic on a function address, an evaluator operand.
+        if (class == Token::Fun as i64 || class == Token::Sys as i64)
+            && !self.id_ends_initializer()?
+        {
+            return self.parse_constant_init_scalar();
         }
         if class == Token::Fun as i64 {
             self.symbols[idx].binding.was_referenced = true;

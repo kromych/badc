@@ -147,6 +147,11 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("alias_target_assembler_name.c", 0),
     ("overflow_builtin_result_pointer_operand.c", 0),
     ("unevaluated_reference_unlowerable_static.c", 0),
+    ("code_address_plus_offset_initializer.c", 0),
+    ("code_slot_read_by_a_later_initializer.c", 0),
+    ("function_address_arithmetic_counts_bytes.c", 0),
+    ("function_address_offset_outside_the_text.c", 0),
+    ("thread_local_reads_a_code_slot.c", 0),
     ("attribute_section_placement.c", 0),
     ("inline_section_mandatory.c", 0),
     // TODO: `speculative_init_parse_data_rewind.c` is held off the host
@@ -1431,6 +1436,11 @@ pub(super) const NATIVE_ELF_FIXTURES: &[(&str, i32)] = &[
     ("alias_target_assembler_name.c", 0),
     ("overflow_builtin_result_pointer_operand.c", 0),
     ("unevaluated_reference_unlowerable_static.c", 0),
+    ("code_address_plus_offset_initializer.c", 0),
+    ("code_slot_read_by_a_later_initializer.c", 0),
+    ("function_address_arithmetic_counts_bytes.c", 0),
+    ("function_address_offset_outside_the_text.c", 0),
+    ("thread_local_reads_a_code_slot.c", 0),
     ("weak_definition_not_inlined.c", 42),
     ("weak_alias_call_not_inlined.c", 42),
     ("nested_block_decl_alignment.c", 42),
@@ -2489,6 +2499,11 @@ pub(super) const NATIVE_ELF_X64_FIXTURES: &[(&str, i32)] = &[
     ("alias_target_assembler_name.c", 0),
     ("overflow_builtin_result_pointer_operand.c", 0),
     ("unevaluated_reference_unlowerable_static.c", 0),
+    ("code_address_plus_offset_initializer.c", 0),
+    ("code_slot_read_by_a_later_initializer.c", 0),
+    ("function_address_arithmetic_counts_bytes.c", 0),
+    ("function_address_offset_outside_the_text.c", 0),
+    ("thread_local_reads_a_code_slot.c", 0),
     ("weak_definition_not_inlined.c", 42),
     ("weak_alias_call_not_inlined.c", 42),
     ("nested_block_decl_alignment.c", 42),
@@ -3338,6 +3353,11 @@ pub(super) const NATIVE_PE_X64_FIXTURES: &[(&str, i32)] = &[
     ("asm_template_names_renamed_static.c", 0),
     ("overflow_builtin_result_pointer_operand.c", 0),
     ("unevaluated_reference_unlowerable_static.c", 0),
+    ("code_address_plus_offset_initializer.c", 0),
+    ("code_slot_read_by_a_later_initializer.c", 0),
+    ("function_address_arithmetic_counts_bytes.c", 0),
+    ("function_address_offset_outside_the_text.c", 0),
+    ("thread_local_reads_a_code_slot.c", 0),
     ("anon_bitfield_reserves_bits.c", 0),
     ("attribute_mode.c", 0),
     ("transparent_union_call.c", 0),
@@ -4084,6 +4104,11 @@ pub(super) const NATIVE_PE_ARM64_FIXTURES: &[(&str, i32)] = &[
     ("asm_template_names_renamed_static.c", 0),
     ("overflow_builtin_result_pointer_operand.c", 0),
     ("unevaluated_reference_unlowerable_static.c", 0),
+    ("code_address_plus_offset_initializer.c", 0),
+    ("code_slot_read_by_a_later_initializer.c", 0),
+    ("function_address_arithmetic_counts_bytes.c", 0),
+    ("function_address_offset_outside_the_text.c", 0),
+    ("thread_local_reads_a_code_slot.c", 0),
     ("anon_bitfield_reserves_bits.c", 0),
     ("attribute_mode.c", 0),
     ("transparent_union_call.c", 0),
@@ -4765,6 +4790,10 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
     ("static_local_shadows_file_scope.c", 0),
     ("overflow_builtin_result_pointer_operand.c", 0),
     ("unevaluated_reference_unlowerable_static.c", 0),
+    ("code_address_plus_offset_initializer.c", 0),
+    ("code_slot_read_by_a_later_initializer.c", 0),
+    ("function_address_arithmetic_counts_bytes.c", 0),
+    ("function_address_offset_outside_the_text.c", 0),
     // A declared `long double` object takes the target ABI's storage
     // format, and the compute path's binary64 round-trips through it.
     ("long_double_abi_storage.c", 0),
@@ -5738,6 +5767,7 @@ pub(super) const JIT_FIXTURES: &[(&str, i32)] = &[
 /// drives them. A construct that gains JIT support moves to
 /// [`JIT_FIXTURES`] with its expected exit code.
 pub(super) const JIT_UNSUPPORTED_FIXTURES: &[(&str, &str)] = &[
+    ("thread_local_reads_a_code_slot.c", "thread-local storage"),
     // The executing thread's TLS block belongs to the host runtime, so a
     // thread-pointer-relative access has nothing to reach.
     ("block_scope_thread_local.c", "thread-local storage"),

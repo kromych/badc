@@ -1443,9 +1443,15 @@ fn synth_abs_relocs(relocs: &[DataAbsReloc]) -> (Vec<DataReloc>, Vec<CodeReloc>)
                 });
             }
             MergedTarget::Text(off) => {
+                // The symbol's text offset, and an addend that may leave the text.
+                let anchor = match r.anchor {
+                    MergedTarget::Text(a) => a,
+                    MergedTarget::Data(_) => off,
+                };
                 code_relocs.push(CodeReloc {
                     data_offset: r.slot_offset,
-                    target_ent_pc: off as u64,
+                    target_ent_pc: anchor as u64,
+                    addend: off.wrapping_sub(anchor),
                 });
             }
         }

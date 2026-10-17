@@ -311,6 +311,33 @@ fn an_asm_template_binds_its_units_renamed_static_over_an_external_namesake() {
     }
 }
 
+#[test]
+fn a_function_address_offset_outside_the_text_links() {
+    // The link places a slot at its function's address plus the offset,
+    // wherever the sum lands.
+    let dir = tempdir("code-addend-outside-text");
+    let a = write_source(
+        &dir,
+        "a.c",
+        "#include <stdint.h>\n\
+         static long f(void) { return 1; }\n\
+         static char *neg = (char *)f - 100000;\n\
+         static char *neg1 = (char *)f - 1;\n\
+         static char *mid = (char *)f + 0x10000000;\n\
+         static char *far = (char *)f + 0x100000000000;\n\
+         static _Thread_local char *tneg = (char *)f - 100000;\n\
+         int main(void) {\n\
+             uintptr_t a = (uintptr_t)f;\n\
+             return !(a - (uintptr_t)neg == 100000 && a - (uintptr_t)neg1 == 1 &&\n\
+                 (uintptr_t)mid - a == 0x10000000 && (uintptr_t)far - a == 0x100000000000 &&\n\
+                 a - (uintptr_t)tneg == 100000 && f() == 1);\n\
+         }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        assert_eq!(link_units_and_run(&dir, opt, &[&a]), Some(0), "{opt}");
+    }
+}
+
 // Gated on Linux: same end-to-end exec + native-ELF-only
 // constraint as `two_sources_compile_separately_then_link`.
 #[cfg(target_os = "linux")]

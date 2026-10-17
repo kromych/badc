@@ -1674,6 +1674,55 @@ fn inline_definition_address_is_the_same_across_tus() {
 // never defines the function fails to link, which is what gcc and clang
 // report for the same source.
 #[test]
+fn a_static_function_no_body_defines_is_an_undefined_reference() {
+    // C99 6.9p3: a used function with internal linkage needs a definition
+    // in the unit. Each use of one with none is an undefined reference at
+    // the link, as gcc and clang report it, never another function's
+    // address; a use only a dropped object holds links.
+    let dir = tempdir("static-undefined");
+    for (name, body) in [
+        (
+            "call.c",
+            "static long g(void);\nint main(void) { return g() == 0; }\n",
+        ),
+        (
+            "code.c",
+            "static long g(void);\nint main(void) { long (*p)(void) = g; return p != 0; }\n",
+        ),
+        (
+            "slot.c",
+            "static long g(void);\nstatic long (*dp)(void) = g;\nint main(void) { return dp != 0; }\n",
+        ),
+        (
+            "tls.c",
+            "static long g(void);\nstatic _Thread_local long (*tp)(void) = g;\nint main(void) { return tp != 0; }\n",
+        ),
+    ] {
+        let src = write_source(&dir, name, body);
+        let out = Command::new(badc())
+            .arg("-o")
+            .arg(dir.join("prog"))
+            .arg(&src)
+            .current_dir(&dir)
+            .output()
+            .expect("invoke badc");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && stderr.contains("undefined reference to `g`"),
+            "{name}: {stderr}"
+        );
+    }
+    let dead = write_source(
+        &dir,
+        "dead.c",
+        "static long g(void);\nstatic long (*dead)(void) = g;\nint main(void) { return 0; }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        assert_eq!(link_units_and_run(&dir, opt, &[&dead]), Some(0), "{opt}");
+    }
+}
+
+#[test]
 fn inline_definition_address_without_an_external_definition_fails_link() {
     let dir = tempdir("inline-addr-undef");
     write_source(

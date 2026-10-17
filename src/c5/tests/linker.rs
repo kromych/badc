@@ -13745,6 +13745,30 @@ fn undefined_strong_reference_in_single_tu_image_is_diagnosed() {
     }
 }
 
+/// A never-defined `static` function is undefined in a single-file image.
+#[test]
+fn a_static_function_no_body_defines_is_undefined_in_a_single_tu_image() {
+    use crate::c5::{NativeOptions, Target, emit_native_with_options};
+    for src in [
+        "static long g(void);\nint main(void) { return g() == 0; }\n",
+        "static long g(void);\nint main(void) { long (*p)(void) = g; return p != 0; }\n",
+        "static long g(void);\nstatic long (*dp)(void) = g;\nint main(void) { return dp != 0; }\n",
+    ] {
+        for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+            let program =
+                Compiler::with_options(src.to_string(), target, crate::CompileOptions::default())
+                    .compile()
+                    .expect("compile");
+            let err = emit_native_with_options(&program, target, NativeOptions::default())
+                .expect_err("an undefined static function must be diagnosed");
+            assert!(
+                format!("{err}").contains("undefined reference to `g`"),
+                "{target:?} {src}: {err}"
+            );
+        }
+    }
+}
+
 /// A function-pointer initializer naming a function no part of a single-TU
 /// image defines is an undefined reference, as the link reports it, and not
 /// the address its import placeholder happens to index.

@@ -2157,6 +2157,20 @@ fn undefined_extern_call_is_a_link_error() {
 
 /// A function-pointer initializer naming an undefined function refuses to
 /// run, as a call to one does, rather than branch through its placeholder.
+/// A never-defined `static` function refuses to run (C99 6.9p3).
+#[test]
+fn undefined_static_function_is_a_link_error() {
+    for src in [
+        "static long g(void);\nint main(void) { return g() == 0; }",
+        "static long g(void);\nstatic long (*dp)(void) = g;\nint main(void) { return dp != 0; }",
+    ] {
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let err = jit_run(&program, &["jit-undef-static".to_string()]).expect_err("must not run");
+        let msg = err.to_string();
+        assert!(msg.contains("undefined reference to `g`"), "{src}: {msg}");
+    }
+}
+
 #[test]
 fn undefined_function_in_an_initializer_is_a_link_error() {
     let program = Compiler::new(

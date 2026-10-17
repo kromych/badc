@@ -3352,13 +3352,19 @@ impl Compiler {
         // symbol's name instead of resolving in place.
         let extern_imports = {
             use crate::c5::symbol::Linkage;
+            let undefined_by_name = |sym: &crate::c5::symbol::Symbol| match sym.linkage {
+                Linkage::External => true,
+                Linkage::Internal => !sym.is_alias,
+                _ => false,
+            };
             let mut imports: alloc::vec::Vec<(usize, String)> = alloc::vec::Vec::new();
             let mut next_pc = self.next_ent_pc + 1;
             for sym in self.symbols.iter_mut() {
                 // `is_fun_entity`: a scoped function declaration keeps
                 // its entity on the slot after the name unbinds; it
                 // still needs an import placeholder for its calls.
-                if !sym.is_fun_entity() || sym.defined_here || sym.linkage != Linkage::External {
+                // So does a `static` one no body defines (C99 6.9p3).
+                if !sym.is_fun_entity() || sym.defined_here || !undefined_by_name(sym) {
                     continue;
                 }
                 imports.push((next_pc, sym.link_name().into()));
@@ -3501,7 +3507,7 @@ impl Compiler {
                 if let Some(pc) = sym.inline_addr_pc {
                     return Some(pc as u64);
                 }
-                (sym.is_fun_entity() && !sym.defined_here && sym.linkage == Linkage::External)
+                (sym.is_fun_entity() && !sym.defined_here && undefined_by_name(sym))
                     .then_some(sym.val as u64)
             };
             for (reloc, &sym_idx) in self

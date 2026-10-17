@@ -162,7 +162,7 @@ pub(crate) struct Preprocessor {
     pub(super) wchar: crate::c5::codegen::WcharType,
     /// Whether plain `char` is signed in this unit, tracking
     /// `-fsigned-char` / `-funsigned-char` through
-    /// [`Self::set_plain_char_signed`]. `#if` sign-extends a character
+    /// [`Self::set_plain_char_signed`]. `#if` types a single-character
     /// constant by it, and `__CHAR_UNSIGNED__` reports it.
     pub(super) char_signed: bool,
     fn_macros: HashMap<String, FnMacro>,

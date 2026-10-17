@@ -304,7 +304,8 @@ pub(super) fn asm_operand_regs(
 /// to any GPR), so it is picked per statement: r10 / r11, else a
 /// clobbered non-operand register, else a free allocator-visible
 /// register added to the save mask. A `-ffixed-` register is neither
-/// staged through nor saved.
+/// staged through nor saved, and neither is rsp: a template that lists it
+/// may leave it moved, and the frame follows (`Frame::dynamic_sp`).
 pub(super) fn asm_save_masks_and_stage(
     asm: &super::super::ir::AsmBlock,
     op_reg: &[Option<u8>],
@@ -349,7 +350,7 @@ pub(super) fn asm_save_masks_and_stage(
     // `preserve` names the registers that hold something across the
     // block (`Allocation::asm_preserve`); the rest hold nothing the body
     // could destroy and lose their save / restore pair.
-    used &= preserve.0;
+    used &= preserve.0 & !(1 << Reg::RSP.0);
     fp_used &= preserve.1;
     Ok((used & !fixed.gpr, fp_used & !fixed.fpr, Reg(stage)))
 }

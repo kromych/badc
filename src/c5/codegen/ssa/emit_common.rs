@@ -510,7 +510,8 @@ pub(crate) fn param_cell_written_first(
 /// return address, or holds an intrinsic whose lowering the backend states
 /// to need it (`intrinsic_keeps_frame`). A `TlsAddr` is a call where the
 /// target's TLS access is one. The frame and register-file conditions a leaf
-/// also requires are target-specific and checked by the caller.
+/// also requires are target-specific and checked by the caller. An asm
+/// statement listing sp as clobbered needs the record, as gcc's leaf has one.
 pub(crate) fn body_keeps_frame_record(
     func: &super::super::ir::FunctionSsa,
     target: super::Target,
@@ -522,6 +523,7 @@ pub(crate) fn body_keeps_frame_record(
             true
         }
         Inst::TlsAddr(_) => super::reg_alloc::tls_addr_is_call(target),
+        Inst::InlineAsm { asm, .. } => asm.clobbers_sp(target),
         // An unknown discriminant has no lowering; the emit refuses it.
         Inst::Intrinsic { kind, .. } => {
             crate::c5::op::Intrinsic::from_i64(*kind).is_none_or(&intrinsic_keeps_frame)

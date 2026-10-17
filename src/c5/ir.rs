@@ -1611,9 +1611,9 @@ impl AsmBlock {
     }
 
     /// True when the template may leave the stack pointer moved, as a stack
-    /// switch does: it names a bound output operand, or its text, with the
-    /// comments of `target`'s assembler stripped, names sp other than as a
-    /// read ([`reads_sp_token`]) or a memory base it keeps ([`keeps_sp_base`]).
+    /// switch does: it lists sp as clobbered, names a bound output operand,
+    /// or, with `target`'s assembler comments stripped, names sp other than
+    /// as a read ([`reads_sp_token`]) or a kept base ([`keeps_sp_base`]).
     pub fn may_move_sp(&self, target: crate::c5::codegen::Target) -> bool {
         use crate::c5::asm::AsmComments;
         let syntax = if target.is_aarch64() {
@@ -1624,10 +1624,16 @@ impl AsmBlock {
         let raw = alloc::string::String::from_utf8_lossy(&self.template);
         let stripped = crate::c5::asm::strip_asm_comments(&raw, syntax);
         let t = stripped.as_deref().unwrap_or(&raw).as_bytes();
-        self.names_bound_operand(true)
+        self.clobbers_sp(target)
+            || self.names_bound_operand(true)
             || sp_tokens(t).any(|(start, end)| {
                 !keeps_sp_base(t, start, end, syntax) && !reads_sp_token(t, start, end, syntax)
             })
+    }
+
+    /// True when the clobber list names `target`'s stack pointer.
+    pub fn clobbers_sp(&self, target: crate::c5::codegen::Target) -> bool {
+        self.clobber_regs & (1 << if target.is_aarch64() { 31 } else { 4 }) != 0
     }
 
     /// An operand binding a storage-less register variable, an output one

@@ -3663,3 +3663,94 @@ fn clobber_names_resolve_to_their_registers() {
         );
     }
 }
+
+/// A statement that lists sp as clobbered, under any spelling naming it, has
+/// no sp save or restore around its template, and the frame follows a move the
+/// template makes without naming sp, in a full leaf too.
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_declared_stack_pointer_clobber_moves_sp_and_the_frame_follows() {
+    const MOV_RAX_TO_RSP: [u8; 3] = [0x48, 0x89, 0xC4];
+    const RSP_TO_FRAME: [u8; 3] = [0x48, 0x89, 0x65];
+    const FRAME_TO_RSP: [u8; 3] = [0x48, 0x8B, 0x65];
+    const LEAVE_RET: [u8; 2] = [0xC9, 0xC3];
+    const MOV_SP_X29: u32 = 0x9100_03BF;
+    let text = |template: &str, name: &str, target: crate::Target, optimize: bool, tail: &str| {
+        let src = alloc::format!(
+            "extern void use(void *);\n\
+             void f(void *p) {{ __asm__ volatile(\"{template}\" : : \"r\"(p) : \"{name}\"); {tail} }}\n"
+        );
+        let bytes = asm_emit(&src, target, optimize).expect("emit");
+        let o = crate::c5::linker::relocatable::parse_et_rel(&bytes, "a.o").expect("parse");
+        let s = o
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text");
+        s.bytes.clone()
+    };
+    for name in ["rsp", "%esp", "#sp", "7"] {
+        let x64 = text(
+            "mov %0, %%rsp",
+            name,
+            crate::Target::LinuxX64,
+            false,
+            "use(p);",
+        );
+        assert!(
+            x64.windows(3).any(|w| w == MOV_RAX_TO_RSP),
+            "{name}: the template"
+        );
+        assert!(
+            !x64.windows(3)
+                .any(|w| w == RSP_TO_FRAME || w == FRAME_TO_RSP),
+            "{name}: an rsp save or restore around the template: {x64:02x?}"
+        );
+        for (optimize, tail) in [(true, "use(p);"), (false, ""), (true, "")] {
+            let pushes = text("pushq $0x77", name, crate::Target::LinuxX64, optimize, tail);
+            assert!(
+                pushes.ends_with(&LEAVE_RET),
+                "{name} {tail:?}: the return: {pushes:02x?}"
+            );
+        }
+    }
+    let sets_sp = |w: u32| w & 0xFFFF_FC1F == 0x9100_001F;
+    let call_at = |w: &[u32]| {
+        w.iter()
+            .position(|&w| w & 0xFC00_0000 == 0x9400_0000)
+            .expect("bl")
+    };
+    // `31` is sp to both compilers, `63` and the octal `077` clang's sp.
+    for name in ["sp", "#wsp", "31", "63", "077"] {
+        let words = |template, optimize, tail| {
+            let a64 = text(template, name, crate::Target::LinuxAarch64, optimize, tail);
+            let words = a64
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| u32::from_le_bytes(*c));
+            words.collect::<alloc::vec::Vec<u32>>()
+        };
+        let moves = words("mov sp, %0", false, "use(p);");
+        assert_eq!(
+            moves[..call_at(&moves)]
+                .iter()
+                .filter(|&&w| sets_sp(w))
+                .count(),
+            1,
+            "{name}: only the template writes sp ahead of the call: {moves:08x?}"
+        );
+        let nop = words("nop", true, "use(p);");
+        assert!(
+            nop[call_at(&nop)..].contains(&MOV_SP_X29),
+            "{name}: the return: {nop:08x?}"
+        );
+        for optimize in [false, true] {
+            let leaf = words("sub sp, sp, #16", optimize, "");
+            assert!(
+                leaf.contains(&MOV_SP_X29),
+                "{name}: the leaf's return: {leaf:08x?}"
+            );
+        }
+    }
+}

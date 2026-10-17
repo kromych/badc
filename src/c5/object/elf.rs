@@ -4085,7 +4085,10 @@ impl<'a> ElfImageWriter<'a> {
         }
         for r in &build.text_pcrel_relocs {
             let site_vmaddr = text_vmaddr + r.site_text_offset;
-            let value = self.data_off_to_vaddr(r.target_data_offset) as i64 - site_vmaddr as i64;
+            let target = self
+                .data_off_to_vaddr(r.target_anchor)
+                .wrapping_add(r.target_data_offset.wrapping_sub(r.target_anchor));
+            let value = target as i64 - site_vmaddr as i64;
             let file_off = code.file_at(stub_len + r.site_text_offset);
             let width = r.width as usize;
             if file_off + width > self.out.len() {
@@ -4114,7 +4117,8 @@ impl<'a> ElfImageWriter<'a> {
             let value = if r.target_in_text {
                 text_vmaddr + r.target_offset
             } else {
-                self.data_off_to_vaddr(r.target_offset)
+                self.data_off_to_vaddr(r.target_anchor)
+                    .wrapping_add(r.target_offset.wrapping_sub(r.target_anchor))
             } as i64;
             let site = (code.file_off + stub_len + r.site_text_offset) as usize;
             let truncated = |field: &str| {
@@ -4910,6 +4914,7 @@ mod tests {
             b.text_abs_relocs.push(crate::c5::codegen::TextAbsReloc {
                 site_text_offset: 0,
                 target_offset: 8,
+                target_anchor: 8,
                 target_in_text: false,
                 rtype,
             });

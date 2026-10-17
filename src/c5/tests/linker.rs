@@ -6973,6 +6973,7 @@ fn unrouted_weak_undef_resolves_to_zero() {
         binding: 0,
         kind: 0,
         visibility: 0,
+        input_section: None,
     };
     let weak_undef = || NativeSymbol {
         name: "hook".to_string(),
@@ -6982,6 +6983,7 @@ fn unrouted_weak_undef_resolves_to_zero() {
         binding: 2, // STB_WEAK
         kind: 0,
         visibility: 0,
+        input_section: None,
     };
     let mk = |machine: NativeMachine,
               text: alloc::vec::Vec<u8>,
@@ -7103,6 +7105,7 @@ fn weak_undef_binds_against_a_shared_library_export() {
         binding,
         kind: 0,
         visibility: 0,
+        input_section: None,
     };
     let obj = minimal_native_object(
         NativeMachine::X86_64,
@@ -7224,6 +7227,7 @@ fn aarch64_data_ref_object_ex(
         binding: 1,
         kind: 0,
         visibility: 0,
+        input_section: None,
     };
     crate::c5::linker::NativeObject {
         source: alloc::string::String::new(),
@@ -7257,6 +7261,7 @@ fn aarch64_data_ref_object_ex(
             binding: 0,
             kind: 0,
             visibility: 0,
+            input_section: None,
         },]
         .into_iter()
         .chain(
@@ -7553,6 +7558,7 @@ fn aarch64_pcrel_object(
         binding: 1,
         kind: 0,
         visibility: 0,
+        input_section: None,
     };
     crate::c5::linker::NativeObject {
         source: "reloc_ref.o".to_string(),
@@ -7658,6 +7664,7 @@ fn aarch64_absolute_text_relocations_take_the_image_base() {
         binding: 1,
         kind: 0,
         visibility: 0,
+        input_section: None,
     };
     let obj = crate::c5::linker::NativeObject {
         source: "abs_in_text.o".to_string(),

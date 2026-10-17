@@ -1024,6 +1024,7 @@ fn synth_fixups(
             text_pcrel.push(crate::c5::codegen::TextPcRelReloc {
                 site_text_offset: reloc.text_offset,
                 target_data_offset: reloc.addend as u64,
+                target_anchor: reloc.anchor as u64,
                 width: width as u8,
             });
             continue;
@@ -1045,6 +1046,7 @@ fn synth_fixups(
             text_abs_relocs.push(crate::c5::codegen::TextAbsReloc {
                 site_text_offset: reloc.text_offset,
                 target_offset: reloc.addend as u64,
+                target_anchor: reloc.anchor as u64,
                 target_in_text,
                 rtype: reloc.rtype,
             });
@@ -1153,8 +1155,8 @@ fn project_aarch64_pending(
         NativeSymSection::Data | NativeSymSection::Bss => {
             data_fixups.push(DataFixup {
                 instr_offset: reloc.text_offset as usize,
-                data_offset: reloc.addend as u64,
-                addend: 0,
+                data_offset: reloc.anchor as u64,
+                addend: reloc.addend - reloc.anchor,
                 part,
             });
             Ok(())
@@ -1162,8 +1164,8 @@ fn project_aarch64_pending(
         NativeSymSection::Text => {
             func_fixups.push(FuncFixup {
                 instr_offset: reloc.text_offset as usize,
-                target_native_offset: reloc.addend as usize,
-                addend: 0,
+                target_native_offset: reloc.anchor as usize,
+                addend: reloc.addend - reloc.anchor,
                 part,
             });
             Ok(())
@@ -1304,9 +1306,9 @@ fn x86_64_got_rel_field(
             | NativeSymSection::Data
             | NativeSymSection::Bss,
         ) => (
-            ImageAddr::Data(reloc.addend as u64),
+            ImageAddr::Data(reloc.anchor as u64),
             ImageAddr::GotBase,
-            0,
+            reloc.addend - reloc.anchor,
             8,
         ),
         (R_X86_64_GOTOFF64 | R_X86_64_PLTOFF64, NativeSymSection::Abs) => (
@@ -1380,8 +1382,8 @@ fn project_x86_64_pending(
         NativeSymSection::Data | NativeSymSection::Bss => {
             data_fixups.push(DataFixup {
                 instr_offset,
-                data_offset: target_byte_offset as u64,
-                addend: 0,
+                data_offset: reloc.anchor as u64,
+                addend: target_byte_offset - reloc.anchor,
                 part: AddrPart::Whole,
             });
             Ok(())
@@ -1389,8 +1391,8 @@ fn project_x86_64_pending(
         NativeSymSection::Text => {
             func_fixups.push(FuncFixup {
                 instr_offset,
-                target_native_offset: target_byte_offset as usize,
-                addend: 0,
+                target_native_offset: reloc.anchor as usize,
+                addend: target_byte_offset - reloc.anchor,
                 part: AddrPart::Whole,
             });
             Ok(())

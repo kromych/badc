@@ -571,6 +571,12 @@ impl<'a> PeWriter<'a> {
         Ok(())
     }
 
+    /// `S + A` for a target at data-stream offset `target` whose symbol `S`
+    /// sits at `anchor`: signed, since it may lie below the image base.
+    fn anchored_rva(&self, anchor: u64, target: u64) -> i64 {
+        i64::from(self.data_off_to_rva(anchor as u32)) + target.wrapping_sub(anchor) as i64
+    }
+
     /// RVA of a data-stream offset: the named section covering it, else its
     /// family's region.
     fn data_off_to_rva(&self, off: u32) -> u32 {
@@ -634,9 +640,9 @@ impl<'a> PeWriter<'a> {
                     ))
                 })?;
                 let target_rva = if r.target_in_text {
-                    text_body_rva + r.target_offset as u32
+                    i64::from(text_body_rva) + r.target_offset as i64
                 } else {
-                    self.data_off_to_rva(r.target_offset as u32)
+                    self.anchored_rva(r.target_anchor, r.target_offset)
                 };
                 Ok(AbsTextField {
                     site_off,
@@ -940,7 +946,7 @@ impl<'a> PeWriter<'a> {
         }
         for f in &build.got_fixups {
             let instr_off = (f.instr_offset as u32) + prologue;
-            let target_rva = l.idata.iat_rva_for_import[f.import_index];
+            let target_rva = i64::from(l.idata.iat_rva_for_import[f.import_index]);
             if f.is_data_load && machine == Machine::X86_64 {
                 crate::c5::codegen::require_whole_addr(f.part, "PE: IAT data load")?;
                 patch_iat_data_load(machine, &mut text, instr_off, text_rva, target_rva)?;
@@ -968,15 +974,13 @@ impl<'a> PeWriter<'a> {
         }
         for f in &build.data_fixups {
             let instr_off = (f.instr_offset as u32) + prologue;
-            let target_rva = self
-                .data_off_to_rva(f.data_offset as u32)
-                .wrapping_add_signed(f.addend as i32);
+            let target_rva = i64::from(self.data_off_to_rva(f.data_offset as u32)) + f.addend;
             patch_addr_load(machine, &mut text, instr_off, text_rva, target_rva, f.part)?;
         }
         for f in &build.func_fixups {
             let instr_off = (f.instr_offset as u32) + prologue;
-            let target_rva = (text_rva + prologue + f.target_native_offset as u32)
-                .wrapping_add_signed(f.addend as i32);
+            let target_rva =
+                i64::from(text_rva + prologue + f.target_native_offset as u32) + f.addend;
             patch_addr_load(machine, &mut text, instr_off, text_rva, target_rva, f.part)?;
         }
         for r in &build.text_pcrel_relocs {
@@ -989,7 +993,7 @@ impl<'a> PeWriter<'a> {
                 )));
             }
             let site_rva = text_rva as i64 + site as i64;
-            let value = self.data_off_to_rva(r.target_data_offset as u32) as i64 - site_rva;
+            let value = self.anchored_rva(r.target_anchor, r.target_data_offset) - site_rva;
             if width == 8 {
                 text[site..site + 8].copy_from_slice(&value.to_le_bytes());
             } else {
@@ -1010,7 +1014,7 @@ impl<'a> PeWriter<'a> {
                     text.len()
                 )));
             }
-            let value = IMAGE_BASE as i64 + f.target_rva as i64;
+            let value = IMAGE_BASE as i64 + f.target_rva;
             if !f.check.admits(value, f.width) {
                 return Err(C5Error::hard(
                     Code::RELOCATION,
@@ -1026,7 +1030,7 @@ impl<'a> PeWriter<'a> {
         let jt_rva = l.rdata_rva + l.jt_base_in_rdata;
         for f in &build.rodata.addr_fixups {
             let instr_off = (f.code_offset as u32) + prologue;
-            let target_rva = jt_rva + f.rodata_offset as u32;
+            let target_rva = i64::from(jt_rva + f.rodata_offset as u32);
             patch_addr_load(
                 machine,
                 &mut text,
@@ -1049,7 +1053,13 @@ impl<'a> PeWriter<'a> {
             let tls_index_rva = l.data_rva + l.tls.tls_index_offset_in_data;
             for f in &build.tls_index_fixups {
                 let instr_off = (f.instr_offset as u32) + prologue;
-                patch_tls_index_lookup(machine, &mut text, instr_off, text_rva, tls_index_rva)?;
+                patch_tls_index_lookup(
+                    machine,
+                    &mut text,
+                    instr_off,
+                    text_rva,
+                    tls_index_rva.into(),
+                )?;
             }
         }
         self.text_bytes = text;
@@ -1470,7 +1480,7 @@ struct AbsTextField {
     site_rva: u32,
     width: u32,
     check: AbsCheck,
-    target_rva: u32,
+    target_rva: i64,
 }
 
 /// Width and overflow rule of the field a relocation type writes `S + A`
@@ -1602,7 +1612,7 @@ fn patch_tls_index_lookup(
     text: &mut [u8],
     instr_offset_in_text: u32,
     text_section_rva: u32,
-    target_rva: u32,
+    target_rva: i64,
 ) -> Result<(), C5Error> {
     let instr_rva = text_section_rva + instr_offset_in_text;
     match machine {
@@ -1628,13 +1638,13 @@ fn patch_aarch64_adrp_ldr32(
     text: &mut [u8],
     adrp_offset_in_text: u32,
     adrp_rva: u32,
-    target_rva: u32,
+    target_rva: i64,
 ) -> Result<(), C5Error> {
     aarch64::patch::patch_slot_load(
         text,
         adrp_offset_in_text as usize,
         adrp_rva as i64,
-        target_rva as i64,
+        target_rva,
         aarch64::patch::SlotWidth::W32,
     )
     .map_err(|e| C5Error::internal(e.describe("PE: aarch64 TLS index")))
@@ -2427,7 +2437,7 @@ fn patch_iat_lookup(
     text: &mut [u8],
     instr_offset_in_text: u32,
     text_section_rva: u32,
-    target_rva: u32,
+    target_rva: i64,
     part: AddrPart,
 ) -> Result<(), C5Error> {
     let instr_rva = text_section_rva + instr_offset_in_text;
@@ -2455,7 +2465,7 @@ fn patch_iat_data_load(
     text: &mut [u8],
     instr_offset_in_text: u32,
     text_section_rva: u32,
-    target_rva: u32,
+    target_rva: i64,
 ) -> Result<(), C5Error> {
     match machine {
         Machine::X86_64 => {
@@ -2490,7 +2500,7 @@ fn patch_addr_load(
     text: &mut [u8],
     instr_offset_in_text: u32,
     text_section_rva: u32,
-    target_rva: u32,
+    target_rva: i64,
     part: AddrPart,
 ) -> Result<(), C5Error> {
     let instr_rva = text_section_rva + instr_offset_in_text;
@@ -2560,9 +2570,9 @@ fn patch_x86_64_disp32(
     text: &mut [u8],
     disp32_off: usize,
     after_rva: u32,
-    target_rva: u32,
+    target_rva: i64,
 ) -> Result<(), C5Error> {
-    let delta = target_rva as i64 - after_rva as i64;
+    let delta = target_rva - after_rva as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
         return Err(C5Error::internal(format!(
             "PE: disp32 {delta} doesn't fit in 32 bits"
@@ -2579,14 +2589,14 @@ fn patch_aarch64_adrp_ldr(
     text: &mut [u8],
     instr_offset_in_text: u32,
     instr_rva: u32,
-    target_rva: u32,
+    target_rva: i64,
     part: AddrPart,
 ) -> Result<(), C5Error> {
     aarch64::patch::patch_slot(
         text,
         instr_offset_in_text as usize,
         instr_rva as i64,
-        target_rva as i64,
+        target_rva,
         aarch64::patch::SlotWidth::W64,
         part,
     )
@@ -2599,14 +2609,14 @@ fn patch_aarch64_adrp_add(
     text: &mut [u8],
     instr_offset_in_text: u32,
     instr_rva: u32,
-    target_rva: u32,
+    target_rva: i64,
     part: AddrPart,
 ) -> Result<(), C5Error> {
     aarch64::patch::patch_addr(
         text,
         instr_offset_in_text as usize,
         instr_rva as i64,
-        target_rva as i64,
+        target_rva,
         part,
     )
     .map_err(|e| C5Error::internal(e.describe("PE: aarch64")))

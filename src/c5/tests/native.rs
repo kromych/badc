@@ -1087,6 +1087,18 @@ fn far_stack_arguments_reach_their_slots() {
     }
 }
 
+/// An offset in an inline-asm reference counts from its symbol's own address,
+/// in the single image and the linked executable.
+#[test]
+fn asm_offsets_count_from_the_symbols_own_address() {
+    let src = format!("#define WITH_TLS 1\n{}", super::asm_region_edges_source());
+    for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
+        let outcome = build_and_run_outcome_with_options(&src, "asm-edges", opts);
+        assert!(outcome.matches(0), "single image: {outcome:?}");
+    }
+    assert_eq!(link_run_capture(&src, "asm-edges-linked").0, 0, "linked");
+}
+
 /// A single-file image is the unit: inline asm naming its definitions binds to them.
 #[test]
 fn asm_pcrel_reference_binds_to_the_units_definition() {

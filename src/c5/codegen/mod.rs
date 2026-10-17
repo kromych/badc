@@ -2925,6 +2925,8 @@ pub(crate) struct TextPcRelReloc {
     /// Target byte offset within the data-byte space (zero-fill tail
     /// included), `S + A` of the source relocation.
     pub target_data_offset: u64,
+    /// `S`: the region is taken from it.
+    pub target_anchor: u64,
     /// Field width in bytes: 4 or 8.
     pub width: u8,
 }
@@ -2950,6 +2952,8 @@ pub(crate) struct TextAbsReloc {
     /// is set, else within the data-byte space (zero-fill tail
     /// included). `S + A` of the source relocation.
     pub target_offset: u64,
+    /// `S`: the region is taken from it.
+    pub target_anchor: u64,
     pub target_in_text: bool,
     /// ELF relocation type of the source site. badc's relocatable
     /// format is ELF ET_REL on every target, so this names the field's
@@ -3241,6 +3245,23 @@ pub(crate) fn unit_definitions(program: &Program, build: &Build) -> UnitDefs {
             && !name.is_empty()
         {
             defs.entry(name.clone()).or_insert(UnitDef::Text(off));
+        }
+    }
+    // An alias is its target, perhaps through another alias.
+    for s in &program.symbols {
+        if s.is_alias && s.class == Token::Glo as i64 && s.defined_here && !s.name.is_empty() {
+            defs.entry(s.link_name().to_string())
+                .or_insert(UnitDef::Data(s.val.max(0) as u64));
+        }
+    }
+    for _ in &program.function_aliases {
+        for a in &program.function_aliases {
+            if let Some(&UnitDef::Text(off)) = defs.get(a.target.as_str())
+                && !defs.contains_key(a.name.as_str())
+            {
+                let off = off.wrapping_add_signed(a.addend as isize);
+                defs.insert(a.name.clone(), UnitDef::Text(off));
+            }
         }
     }
     defs

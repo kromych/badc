@@ -271,6 +271,8 @@ struct Sect {
     flags: u32,
     family: SectionFamily,
     base: u64,
+    /// Index of the section's record in [`NativeObject::sections`].
+    record: Option<u32>,
 }
 
 impl Sect {
@@ -873,6 +875,7 @@ fn read_load_commands(bytes: &[u8]) -> Result<(NativeMachine, Vec<Sect>, SymtabC
                         flags: need_u32(bytes, p + 64, "section")?,
                         family: SectionFamily::Discard,
                         base: 0,
+                        record: None,
                     });
                 }
             }
@@ -973,6 +976,7 @@ fn concat_families(bytes: &[u8], sects: &mut [Sect]) -> Result<FamilyBlobs, C5Er
             }
         };
         s.base = base;
+        s.record = Some(blobs.sections.len() as u32);
         blobs.sections.push(InputSection {
             name: s.label(),
             family,
@@ -992,7 +996,7 @@ fn place_symbol(
     n_sect: u8,
     value: u64,
     ext: bool,
-) -> Result<(NativeSymSection, u64), C5Error> {
+) -> Result<(NativeSymSection, u64, Option<u32>), C5Error> {
     let idx = n_sect as usize;
     let s = sects
         .get(idx.wrapping_sub(1))
@@ -1014,7 +1018,7 @@ fn place_symbol(
         // inside it names no address. Assemblers put local ones there
         // (`__LD,__compact_unwind`, `__DWARF`); an external definition
         // would be a reference the merge cannot honor.
-        _ if !ext => return Ok((NativeSymSection::Abs, 0)),
+        _ if !ext => return Ok((NativeSymSection::Abs, 0, None)),
         _ => {
             return Err(link_err(
                 Code::UNSUPPORTED,
@@ -1026,7 +1030,7 @@ fn place_symbol(
             ));
         }
     };
-    Ok((sec, s.base + value.saturating_sub(s.addr)))
+    Ok((sec, s.base + value.saturating_sub(s.addr), s.record))
 }
 
 /// The symbol table in the ELF reader's model: index 0 is the null
@@ -1069,6 +1073,7 @@ fn decode_symbols(
         binding: STB_LOCAL,
         kind: STT_NOTYPE,
         visibility: STV_DEFAULT,
+        input_section: None,
     }];
     for i in 0..nsyms as usize {
         let p = symbase + i * NLIST_64_SIZE;
@@ -1084,6 +1089,7 @@ fn decode_symbols(
         let name = cstr(strtab, n_strx)?;
         let name = name.strip_prefix('_').unwrap_or(name).to_string();
         let ext = n_type & N_EXT != 0;
+        let mut input_section = None;
         let (section, value, size) = match n_type & N_TYPE {
             N_UNDF if n_value != 0 => {
                 // A common symbol carries its size in `n_value` and its
@@ -1098,7 +1104,8 @@ fn decode_symbols(
             N_UNDF => (NativeSymSection::Undef, 0, 0),
             N_ABS => (NativeSymSection::Abs, n_value, 0),
             N_SECT => {
-                let (s, v) = place_symbol(sects, n_sect, n_value, ext)?;
+                let (s, v, record) = place_symbol(sects, n_sect, n_value, ext)?;
+                input_section = record;
                 (s, v, 0)
             }
             other => {
@@ -1139,6 +1146,7 @@ fn decode_symbols(
             } else {
                 STV_DEFAULT
             },
+            input_section,
         });
     }
     let sect_sym_base = symbols.len();
@@ -1159,6 +1167,7 @@ fn decode_symbols(
             binding: STB_LOCAL,
             kind: STT_OBJECT,
             visibility: STV_DEFAULT,
+            input_section: s.record,
         });
     }
     Ok((symbols, sect_sym_base))
@@ -1915,6 +1924,30 @@ mod tests {
         assert_eq!(o.bss_size, 16);
         assert_eq!(by("tentative").kind, STT_OBJECT);
         assert_eq!(by("hidden").kind, STT_FUNC);
+    }
+
+    /// A symbol keeps the section it is defined in, so a label at one
+    /// section's end and one at the next's start, at one offset, stay apart.
+    #[test]
+    fn a_symbol_records_its_own_section() {
+        let data = Sec::new("__DATA", "__data", 0, alloc::vec![1; 16]);
+        let more = Sec::new("__DATA", "__more", 0, alloc::vec![2; 8]);
+        let o = parse_native_mach_o(&build(
+            CPU_TYPE_ARM64,
+            MH_OBJECT,
+            &[data, more],
+            &[
+                ("_data_end", N_SECT | N_EXT, 1, 0, 16),
+                ("_more", N_SECT | N_EXT, 2, 0, 16),
+            ],
+        ))
+        .expect("parse");
+        let at = |n: &str| {
+            let s = o.symbols.iter().find(|s| s.name == n).expect(n);
+            (s.value, s.input_section)
+        };
+        assert_eq!(at("data_end"), (16, Some(0)));
+        assert_eq!(at("more"), (16, Some(1)));
     }
 
     #[test]

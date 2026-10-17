@@ -580,6 +580,8 @@ pub struct PendingImportReloc {
     /// carries the target's byte offset within the merged
     /// section identified by `target_section`.
     pub addend: i64,
+    /// For a parked ref, `S` without the addend: the region a writer takes.
+    pub anchor: i64,
     /// Section the target lives in (see the type-level doc).
     pub target_section: NativeSymSection,
     /// The site reads the import's slot to obtain the symbol's address
@@ -600,8 +602,16 @@ pub struct PendingImportReloc {
 struct BlobMap {
     base: u64,
     prefix_len: u64,
-    /// `(blob offset, size, merged offset)`, ascending by blob offset.
-    moved: Vec<(u64, u64, u64)>,
+    /// The unit's sections grouped by name, in merge order.
+    moved: Vec<MovedSection>,
+}
+
+/// A section the merge moved out of its unit's blob to group it by name.
+struct MovedSection {
+    offset: u64,
+    size: u64,
+    merged: u64,
+    section: u32,
 }
 
 impl BlobMap {
@@ -613,9 +623,8 @@ impl BlobMap {
         }
     }
 
-    /// Merged-stream offset for a blob offset. An offset past the
-    /// prefix that no moved section covers keeps the prefix mapping,
-    /// which is where a blob-length offset (an end marker) belongs.
+    /// Merged-stream offset for a blob offset inside a section; a symbol
+    /// resolves through its own section instead.
     fn at(&self, off: u64) -> u64 {
         if off < self.prefix_len {
             return self.base + off;
@@ -623,10 +632,18 @@ impl BlobMap {
         match self
             .moved
             .iter()
-            .find(|&&(o, sz, _)| off >= o && off < o + sz)
+            .find(|m| off >= m.offset && off < m.offset + m.size)
         {
-            Some(&(o, _, merged)) => merged + (off - o),
+            Some(m) => m.merged + (off - m.offset),
             None => self.base + off,
+        }
+    }
+
+    /// Merged-stream offset of section `k`, at blob offset `offset`.
+    fn section_at(&self, k: u32, offset: u64) -> u64 {
+        match self.moved.iter().find(|m| m.section == k) {
+            Some(m) => m.merged,
+            None => self.base + offset,
         }
     }
 }
@@ -746,7 +763,7 @@ fn group_named_bytes(
         if s.name == EH_FRAME {
             last_eh = Some((at as usize, data.len()));
         }
-        maps[i].moved.push((s.offset, s.size, at));
+        maps[i].moved.push(moved_section(&objs[i], s, at));
         note_extent(
             extents,
             NamedExtent {
@@ -767,6 +784,16 @@ fn group_named_bytes(
     // byte, so the last group keeps a byte of slack behind it.
     if any {
         data.push(0);
+    }
+}
+
+fn moved_section(obj: &NativeObject, s: &super::object::InputSection, merged: u64) -> MovedSection {
+    let k = (obj.sections.iter()).position(|x| core::ptr::eq(x, s));
+    MovedSection {
+        offset: s.offset,
+        size: s.size,
+        merged,
+        section: k.expect("a grouped section is one of its unit's") as u32,
     }
 }
 
@@ -800,7 +827,7 @@ fn group_named_zerofill(
         *bss_size = align_usize(*bss_size, s.align.max(1) as usize);
         let at = *bss_size as u64;
         *bss_size += s.size as usize;
-        maps[i].moved.push((s.offset, s.size, at));
+        maps[i].moved.push(moved_section(&objs[i], s, at));
         note_extent(
             extents,
             NamedExtent {
@@ -1250,6 +1277,41 @@ impl<'a> Link<'a> {
         })
     }
 
+    /// The merged offset of `sym`, placed through its own section, so a
+    /// label at a section's end or in an empty one names that section.
+    fn symbol_offset(&self, unit: usize, sym: &NativeSymbol) -> Option<u64> {
+        let own = sym.input_section.and_then(|k| {
+            let s = self.objs[unit].sections.get(k as usize)?;
+            let map = match s.family {
+                SectionFamily::RoData => &self.ro_map[unit],
+                SectionFamily::RelRo => &self.relro_map[unit],
+                SectionFamily::Data => &self.rw_map[unit],
+                SectionFamily::Bss => &self.bss_map[unit],
+                _ => return None,
+            };
+            Some(map.section_at(k, s.offset) + sym.value.saturating_sub(s.offset))
+        });
+        own.or_else(|| self.unit_symbol_offset(unit, sym.section, sym.value))
+    }
+
+    /// Whether a label at the end of an unmoved `fam` section lies at `end`,
+    /// where a region the writers place apart begins: the consumers placing
+    /// an offset alone, the symbol table among them, need a byte there.
+    fn label_ends_run(&self, fam: SectionFamily, end: u64) -> bool {
+        (self.objs.iter().enumerate()).any(|(i, o)| {
+            o.symbols.iter().any(|sym| {
+                sym.input_section
+                    .and_then(|k| o.sections.get(k as usize))
+                    .is_some_and(|s| {
+                        s.family == fam
+                            && !super::object::grouped_by_name(&s.name)
+                            && sym.value == s.offset + s.size
+                            && self.symbol_offset(i, sym) == Some(end)
+                    })
+            })
+        })
+    }
+
     /// The static symbol table's rows, locals first: each unit's `STT_FILE`
     /// entry ahead of its local definitions, then the global and weak
     /// definitions the link kept. A hidden or internal one turns local, as
@@ -1277,7 +1339,7 @@ impl<'a> Link<'a> {
                 if sym.kind == STT_FILE {
                     file = Some(row(&sym.name, SymbolPlace::Abs(0), 0, 0, STT_FILE, 0));
                 } else if sym.kind != STT_SECTION
-                    && let Some(place) = self.unit_place(i, sym.section, sym.value)
+                    && let Some(place) = self.unit_place(i, sym)
                 {
                     locals.extend(file.take());
                     let r = row(&sym.name, place, sym.size, 0, sym.kind, sym.visibility);
@@ -1305,7 +1367,7 @@ impl<'a> Link<'a> {
                 };
                 if kept
                     && kept_outside.insert(sym.name.as_str())
-                    && let Some(place) = self.unit_place(i, sym.section, sym.value)
+                    && let Some(place) = self.unit_place(i, sym)
                 {
                     let r = row(
                         &sym.name,
@@ -1356,12 +1418,12 @@ impl<'a> Link<'a> {
     fn unit_place(
         &self,
         unit: usize,
-        section: NativeSymSection,
-        value: u64,
+        sym: &NativeSymbol,
     ) -> Option<crate::c5::codegen::SymbolPlace> {
         use crate::c5::codegen::SymbolPlace;
-        let at = || self.unit_symbol_offset(unit, section, value);
-        Some(match section {
+        let value = sym.value;
+        let at = || self.symbol_offset(unit, sym);
+        Some(match sym.section {
             NativeSymSection::Text => SymbolPlace::Text(at()?),
             NativeSymSection::RoData | NativeSymSection::RelRo | NativeSymSection::Data => {
                 SymbolPlace::Data(at()?)
@@ -1608,6 +1670,7 @@ impl<'a> Link<'a> {
             import_index: idx,
             rtype,
             addend,
+            anchor: addend,
             target_section: NativeSymSection::Undef,
             slot_load: true,
             sym_name: None,
@@ -1712,6 +1775,17 @@ impl<'a> Link<'a> {
     /// sections, e.g. `.rodata.cst16`). Keeping one data space means a
     /// parked data reference carries one kind of offset no matter which
     /// region it hits.
+    /// Keep a byte behind `fam`'s unmoved run when a label names its end.
+    fn keep_end_label_byte(&mut self, fam: SectionFamily) {
+        if fam == SectionFamily::Bss {
+            if self.label_ends_run(fam, self.bss_size as u64) {
+                self.bss_size += 1;
+            }
+        } else if self.label_ends_run(fam, self.data.len() as u64) {
+            self.data.push(0);
+        }
+    }
+
     fn lay_out_sections(&mut self) {
         let objs = self.objs;
         let bss_align = bss_alignment(objs);
@@ -1739,6 +1813,7 @@ impl<'a> Link<'a> {
             self.data.extend_from_slice(&obj.rodata[..keep as usize]);
             self.data_align = self.data_align.max(obj.data_align);
         }
+        self.keep_end_label_byte(SectionFamily::RoData);
         group_named_bytes(
             &mut self.data,
             objs,
@@ -1772,6 +1847,7 @@ impl<'a> Link<'a> {
                 .push(BlobMap::new(self.data.len() as u64, keep));
             self.data.extend_from_slice(&obj.relro[..keep as usize]);
         }
+        self.keep_end_label_byte(SectionFamily::RelRo);
         group_named_bytes(
             &mut self.data,
             objs,
@@ -1802,6 +1878,8 @@ impl<'a> Link<'a> {
             self.bss_map.push(BlobMap::new(self.bss_size as u64, keep));
             self.bss_size += keep as usize;
         }
+        self.keep_end_label_byte(SectionFamily::Data);
+        self.keep_end_label_byte(SectionFamily::Bss);
         group_named_bytes(
             &mut self.data,
             objs,
@@ -2016,7 +2094,7 @@ impl<'a> Link<'a> {
                 // through the TLS symbol table, a DWARF section symbol
                 // through the debug-section rebasing; neither belongs
                 // in the address-resolving table.
-                let Some(value) = self.unit_symbol_offset(i, sym.section, sym.value) else {
+                let Some(value) = self.symbol_offset(i, sym) else {
                     continue;
                 };
                 // `RoData` / `RelRo` normalise to `Data`: both payloads
@@ -2339,6 +2417,7 @@ impl<'a> Link<'a> {
             import_index,
             rtype: reloc.rtype,
             addend: reloc.addend,
+            anchor: reloc.addend,
             target_section: NativeSymSection::Undef,
             slot_load: !is_branch_reloc(self.machine, reloc.rtype),
             sym_name: None,
@@ -2575,20 +2654,18 @@ impl<'a> Link<'a> {
                 })?;
                 (d.section, d.value)
             }
-            other => {
-                let value = self
-                    .unit_symbol_offset(unit, other, sym.value)
-                    .ok_or_else(|| {
-                        link_err(
-                            Code::MALFORMED_INPUT,
-                            MODULE,
-                            &format!(
-                                "{}: an unwind table names `{}`, which no merged stream holds",
-                                objs[unit].source, sym.name
-                            ),
-                        )
-                    })?;
-                (other, value)
+            _ => {
+                let value = self.symbol_offset(unit, sym).ok_or_else(|| {
+                    link_err(
+                        Code::MALFORMED_INPUT,
+                        MODULE,
+                        &format!(
+                            "{}: an unwind table names `{}`, which no merged stream holds",
+                            objs[unit].source, sym.name
+                        ),
+                    )
+                })?;
+                (sym.section, value)
             }
         };
         Ok(
@@ -2742,7 +2819,7 @@ impl<'a> Link<'a> {
                         &mut self.pending_imports,
                         patch_offset,
                         &to_slot,
-                        target,
+                        (target, slot as i64),
                         &site,
                     )?;
                     continue;
@@ -2833,14 +2910,16 @@ impl<'a> Link<'a> {
                 &mut self.pending_imports,
                 patch_offset,
                 reloc,
-                reloc.addend,
+                (reloc.addend, reloc.addend),
                 NativeSymSection::Got,
                 site,
             );
         }
-        if let Some(at) = self.unit_symbol_offset(unit, sym_section, sym.value) {
-            let target = merged_target(sym_section, at as i64, reloc.addend, self.data.len())?;
-            return self.place_target(patch_offset, reloc, target, site);
+        if let Some(at) = (sym_section == sym.section)
+            .then(|| self.symbol_offset(unit, sym))
+            .flatten()
+        {
+            return self.place_target(patch_offset, reloc, (sym_section, at as i64), site);
         }
         match sym_section {
             NativeSymSection::Undef => {
@@ -2867,9 +2946,7 @@ impl<'a> Link<'a> {
                         sym.name,
                     ))
                 })?;
-                let target =
-                    merged_target(def.section, def.value as i64, reloc.addend, self.data.len())?;
-                self.place_target(patch_offset, reloc, target, site)
+                self.place_target(patch_offset, reloc, (def.section, def.value as i64), site)
             }
             NativeSymSection::Tls => Err(link_err(
                 Code::RELOCATION,
@@ -2922,7 +2999,7 @@ impl<'a> Link<'a> {
                 &mut self.pending_imports,
                 patch_offset,
                 reloc,
-                reloc.addend,
+                (reloc.addend, reloc.addend),
                 NativeSymSection::Got,
                 site,
             );
@@ -2933,19 +3010,17 @@ impl<'a> Link<'a> {
             // data / bss targets depend on the final-image writer's
             // `.text`-to-`.data` gap, so they park through the same
             // path that local data refs use.
-            let target =
-                merged_target(def.section, def.value as i64, reloc.addend, self.data.len())
-                    .map_err(|_| {
-                        internal_err(
-                            MODULE,
-                            &format!(
-                                "link_native_objects: defined entry for `{}` has \
-                         non-progbits section {:?}",
-                                sym.name, def.section,
-                            ),
-                        )
-                    })?;
-            return self.place_target(patch_offset, reloc, target, site);
+            if merged_target(def.section, 0, 0, 0).is_err() {
+                return Err(internal_err(
+                    MODULE,
+                    &format!(
+                        "link_native_objects: defined entry for `{}` has non-progbits \
+                     section {:?}",
+                        sym.name, def.section,
+                    ),
+                ));
+            }
+            return self.place_target(patch_offset, reloc, (def.section, def.value as i64), site);
         }
         if let Some(&value) = self.absolute_defined.get(sym.name.as_str()) {
             return apply_absolute_reloc(&mut self.text, patch_offset, value + reloc.addend, site);
@@ -3013,6 +3088,7 @@ impl<'a> Link<'a> {
                     import_index: usize::MAX,
                     rtype: reloc.rtype,
                     addend: reloc.addend,
+                    anchor: reloc.addend,
                     target_section: NativeSymSection::Abs,
                     slot_load: false,
                     sym_name: Some(name.into()),
@@ -3055,6 +3131,7 @@ impl<'a> Link<'a> {
             import_index: idx,
             rtype: reloc.rtype,
             addend: reloc.addend,
+            anchor: reloc.addend,
             target_section: NativeSymSection::Undef,
             slot_load,
             sym_name: None,
@@ -3074,21 +3151,24 @@ impl<'a> Link<'a> {
         self.record_import(sym.name.as_str())
     }
 
-    /// Apply or park a text relocation whose target is known.
+    /// Apply or park a text relocation: `S + A`, `S` the anchor a parked one takes.
     fn place_target(
         &mut self,
         patch_offset: usize,
         reloc: &NativeReloc,
-        target: MergedTarget,
+        (section, value): (NativeSymSection, i64),
         site: &RelocSite<'_>,
     ) -> Result<(), C5Error> {
+        let target = merged_target(section, value, reloc.addend, self.data.len())?;
+        let (MergedTarget::Text(anchor) | MergedTarget::Data(anchor)) =
+            merged_target(section, value, 0, self.data.len())?;
         resolve_merged_target(
             &mut self.text,
             &mut self.pending_imports,
             &mut self.applied_text_relocs,
             patch_offset,
             reloc,
-            target,
+            (target, anchor),
             site,
         )
     }
@@ -3446,10 +3526,10 @@ impl<'a> Link<'a> {
                 .get(sym.name.as_str())
                 .map(|d| d.value as i64)
                 .unwrap(),
-            NativeSymSection::RoData => self.ro_map[unit].at(sym.value) as i64,
-            NativeSymSection::RelRo => self.relro_map[unit].at(sym.value) as i64,
-            NativeSymSection::Data => self.rw_map[unit].at(sym.value) as i64,
-            NativeSymSection::Bss => self.bss_map[unit].at(sym.value) as i64,
+            NativeSymSection::RoData
+            | NativeSymSection::RelRo
+            | NativeSymSection::Data
+            | NativeSymSection::Bss => self.symbol_offset(unit, sym).unwrap_or(0) as i64,
             NativeSymSection::Text => self.text_bases[unit] as i64 + sym.value as i64,
             NativeSymSection::Tls => {
                 return Err(link_err(
@@ -3564,7 +3644,7 @@ impl<'a> Link<'a> {
                 })?;
                 (d.section, d.value as i64)
             }
-            other => match self.unit_symbol_offset(unit, other, sym.value) {
+            other => match self.symbol_offset(unit, sym) {
                 Some(v) => (other, v as i64),
                 None => {
                     return Err(internal_err(
@@ -4123,11 +4203,11 @@ impl<'a> Link<'a> {
         let mut addend_applied = false;
         let (merged_value, in_text, resolvable) = match sym.section {
             NativeSymSection::Text => (self.text_bases[unit_idx] as u64 + sym.value, true, true),
-            NativeSymSection::RoData => (self.ro_map[unit_idx].at(sym.value), false, true),
-            NativeSymSection::RelRo => (self.relro_map[unit_idx].at(sym.value), false, true),
-            NativeSymSection::Data => (self.rw_map[unit_idx].at(sym.value), false, true),
+            NativeSymSection::RoData | NativeSymSection::RelRo | NativeSymSection::Data => {
+                (self.symbol_offset(unit_idx, sym).unwrap_or(0), false, true)
+            }
             NativeSymSection::Bss => (
-                self.data.len() as u64 + self.bss_map[unit_idx].at(sym.value),
+                self.data.len() as u64 + self.symbol_offset(unit_idx, sym).unwrap_or(0),
                 false,
                 true,
             ),
@@ -4866,6 +4946,7 @@ pub fn emit_x86_64_plt(
             parked_back.push(PendingImportReloc {
                 import_index: usize::MAX,
                 addend: tramp as i64 + reloc.addend,
+                anchor: tramp as i64,
                 target_section: NativeSymSection::Text,
                 sym_name: Some(import_name(merged, reloc.import_index).into()),
                 ..reloc.clone()
@@ -4933,6 +5014,7 @@ pub fn emit_aarch64_plt(
                     import_index: usize::MAX,
                     rtype: reloc.rtype,
                     addend: tramp as i64,
+                    anchor: tramp as i64,
                     target_section: NativeSymSection::Text,
                     slot_load: false,
                     sym_name: reloc.sym_name.clone(),
@@ -5335,7 +5417,7 @@ fn park_section_ref(
     pending: &mut Vec<PendingImportReloc>,
     patch_offset: usize,
     reloc: &NativeReloc,
-    target_offset: i64,
+    (target_offset, anchor): (i64, i64),
     target_section: NativeSymSection,
     site: &RelocSite<'_>,
 ) -> Result<(), C5Error> {
@@ -5354,6 +5436,7 @@ fn park_section_ref(
         import_index: usize::MAX,
         rtype: reloc.rtype,
         addend: target_offset,
+        anchor,
         target_section,
         slot_load: false,
         // Every writer materializes the page pair and its low-12
@@ -5371,14 +5454,14 @@ fn park_data_ref(
     pending: &mut Vec<PendingImportReloc>,
     patch_offset: usize,
     reloc: &NativeReloc,
-    target_offset: i64,
+    target: (i64, i64),
     site: &RelocSite<'_>,
 ) -> Result<(), C5Error> {
     park_section_ref(
         pending,
         patch_offset,
         reloc,
-        target_offset,
+        target,
         NativeSymSection::Data,
         site,
     )
@@ -5397,7 +5480,7 @@ fn resolve_merged_target(
     applied: &mut Vec<AppliedTextReloc>,
     patch_offset: usize,
     reloc: &NativeReloc,
-    target: MergedTarget,
+    (target, anchor): (MergedTarget, i64),
     site: &RelocSite<'_>,
 ) -> Result<(), C5Error> {
     match target {
@@ -5409,7 +5492,7 @@ fn resolve_merged_target(
                     pending,
                     patch_offset,
                     reloc,
-                    off,
+                    (off, anchor),
                     NativeSymSection::Text,
                     site,
                 )?;
@@ -5423,7 +5506,7 @@ fn resolve_merged_target(
             }
         }
         MergedTarget::Data(off) => {
-            park_data_ref(pending, patch_offset, reloc, off, site)?;
+            park_data_ref(pending, patch_offset, reloc, (off, anchor), site)?;
         }
     }
     Ok(())
@@ -5511,6 +5594,7 @@ mod tests {
             binding: 1,
             kind: 2,
             visibility: 0,
+            input_section: None,
         };
         let ret4: Vec<u8> = [0xd65f_03c0u32; 4]
             .iter()
@@ -5793,6 +5877,7 @@ mod tests {
             binding: 0,
             kind,
             visibility: 0,
+            input_section: None,
         };
         let origin = RelocOrigin::in_input("t.o", &sections, SectionFamily::Text);
         for (s, want) in [
@@ -6471,6 +6556,7 @@ mod tests {
                     binding: 0,
                     kind: 0,
                     visibility: 0,
+                    input_section: None,
                 },
                 super::super::object::NativeSymbol {
                     name: "common_var".to_string(),
@@ -6480,6 +6566,7 @@ mod tests {
                     binding: 1,
                     kind: 1,
                     visibility: 0,
+                    input_section: None,
                 },
             ],
             ..blank_object(NativeMachine::X86_64)
@@ -6579,6 +6666,7 @@ mod tests {
             binding: 1,
             kind: 1,
             visibility: 0,
+            input_section: None,
         });
         let a_text_len = a.text.len();
         let merged = link_native_objects(&[a, b]).expect("link");
@@ -6637,6 +6725,7 @@ mod tests {
                     binding: 0,
                     kind: 0,
                     visibility: 0,
+                    input_section: None,
                 },
                 super::super::object::NativeSymbol {
                     name: "common_var".to_string(),
@@ -6646,6 +6735,7 @@ mod tests {
                     binding: 1,
                     kind: 1,
                     visibility: 0,
+                    input_section: None,
                 },
             ],
             text_relocs: if with_reloc {
@@ -6699,6 +6789,7 @@ mod tests {
                     binding: 0,
                     kind: 0,
                     visibility: 0,
+                    input_section: None,
                 },
                 super::super::object::NativeSymbol {
                     name: "x".to_string(),
@@ -6708,6 +6799,7 @@ mod tests {
                     binding: 1,
                     kind: 1,
                     visibility: 0,
+                    input_section: None,
                 },
             ],
             ..blank_object(NativeMachine::X86_64)
@@ -6723,6 +6815,7 @@ mod tests {
                     binding: 0,
                     kind: 0,
                     visibility: 0,
+                    input_section: None,
                 },
                 super::super::object::NativeSymbol {
                     name: "x".to_string(),
@@ -6732,6 +6825,7 @@ mod tests {
                     binding: 1,
                     kind: 1,
                     visibility: 0,
+                    input_section: None,
                 },
             ],
             ..blank_object(NativeMachine::X86_64)
@@ -6761,6 +6855,7 @@ mod tests {
             binding: 0,
             kind: 0,
             visibility: 0,
+            input_section: None,
         };
         let mk = |text: alloc::vec::Vec<u8>,
                   data: alloc::vec::Vec<u8>,
@@ -6831,6 +6926,7 @@ mod tests {
                         binding: 2,
                         kind: 2,
                         visibility: 0,
+                        input_section: None,
                     },
                 ],
                 alloc::vec::Vec::new(),
@@ -6850,6 +6946,7 @@ mod tests {
                     binding: 1,
                     kind: 0,
                     visibility: 0,
+                    input_section: None,
                 },
             ],
             alloc::vec![NativeReloc {
@@ -6880,6 +6977,7 @@ mod tests {
                         binding: 1,
                         kind: 1,
                         visibility: 0,
+                        input_section: None,
                     },
                 ],
                 alloc::vec::Vec::new(),
@@ -6968,6 +7066,7 @@ mod tests {
                     binding: 0,
                     kind: 0,
                     visibility: 0,
+                    input_section: None,
                 },
                 NativeSymbol {
                     name: "f".to_string(),
@@ -6977,6 +7076,7 @@ mod tests {
                     binding: 1,
                     kind: 0,
                     visibility: 0,
+                    input_section: None,
                 },
             ],
             text_relocs: alloc::vec![NativeReloc {
@@ -7040,6 +7140,7 @@ mod tests {
             binding: 0,
             kind: 3,
             visibility: 0,
+            input_section: None,
         };
         let reloc = |offset, sym_idx, rtype, addend| NativeReloc {
             offset,
@@ -7124,6 +7225,7 @@ mod tests {
             binding: 1,
             kind: 2,
             visibility: 0,
+            input_section: None,
         };
         // Unit B defines `ext_fn` in .text.
         let mut b = base();
@@ -7195,6 +7297,7 @@ mod tests {
                 binding: 0,
                 kind: 0,
                 visibility: 0,
+                input_section: None,
             },
             NativeSymbol {
                 name: "tl".to_string(),
@@ -7204,6 +7307,7 @@ mod tests {
                 binding: 0,
                 kind: 6,
                 visibility: 0,
+                input_section: None,
             },
         ];
         a.debug_info = alloc::vec![0xaa; 16];
@@ -7247,6 +7351,7 @@ mod tests {
                     binding: 1,
                     kind: 6,
                     visibility: 0,
+                    input_section: None,
                 })
                 .collect();
             o
@@ -7289,6 +7394,7 @@ mod tests {
             binding,
             kind: 6,
             visibility: 0,
+            input_section: None,
         };
         let reloc = |offset, sym_idx, rtype, addend| NativeReloc {
             offset,
@@ -7397,6 +7503,7 @@ mod tests {
             binding,
             kind: 2,
             visibility: 0,
+            input_section: None,
         };
         let reloc = |offset, sym_idx, rtype, addend| NativeReloc {
             offset,
@@ -7504,6 +7611,7 @@ mod tests {
             binding,
             kind,
             visibility: 0,
+            input_section: None,
         };
         let mut a = blank_object(machine);
         a.tls_data = alloc::vec![0; 16];
@@ -7983,6 +8091,7 @@ mod tests {
                     binding: 0,
                     kind: 0,
                     visibility: 0,
+                    input_section: None,
                 },
                 NativeSymbol {
                     name: "ext".to_string(),
@@ -7992,6 +8101,7 @@ mod tests {
                     binding: 1,
                     kind: 0,
                     visibility: 0,
+                    input_section: None,
                 },
             ];
             let reloc = |offset, rtype, addend| NativeReloc {
@@ -8049,6 +8159,7 @@ mod tests {
                     binding,
                     kind: 6,
                     visibility: 0,
+                    input_section: None,
                 }];
             }
             o
@@ -8132,6 +8243,7 @@ mod tests {
                     binding: 0,
                     kind: 0,
                     visibility: 0,
+                    input_section: None,
                 },
                 NativeSymbol {
                     name: "counter".to_string(),
@@ -8141,6 +8253,7 @@ mod tests {
                     binding: 1,
                     kind: 0,
                     visibility: 0,
+                    input_section: None,
                 },
             ];
             o.text_relocs = alloc::vec![NativeReloc {
@@ -8216,6 +8329,7 @@ mod tests {
                 binding: 0,
                 kind: 0,
                 visibility: 0,
+                input_section: None,
             },
             NativeSymbol {
                 name: "counter".to_string(),
@@ -8225,6 +8339,7 @@ mod tests {
                 binding: 1,
                 kind: 0,
                 visibility: 0,
+                input_section: None,
             },
         ];
         o.relro_relocs = alloc::vec![NativeReloc {

@@ -780,6 +780,9 @@ pub struct NativeSymbol {
     /// `STV_DEFAULT` keeps the definition out of the image's dynamic
     /// symbol table.
     pub visibility: u8,
+    /// Index in [`NativeObject::sections`] of the section defining the
+    /// symbol; `None` for one no input section holds.
+    pub input_section: Option<u32>,
 }
 
 impl NativeSymbol {
@@ -1151,8 +1154,10 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         )
     })?;
     let blobs = concat_families(bytes, &shdrs, &roles)?;
-    let sections = input_section_records(&shdrs, shstrtab_bytes, roles.tdata.len(), &blobs)?;
-    let (symbols, shndx_map) = decode_symbols(bytes, &shdrs, symtab_sh_i, &blobs, &roles)?;
+    let (sections, record_of) =
+        input_section_records(&shdrs, shstrtab_bytes, roles.tdata.len(), &blobs)?;
+    let (symbols, shndx_map) =
+        decode_symbols(bytes, &shdrs, symtab_sh_i, &blobs, &roles, &record_of)?;
     let relocs = decode_relocs(bytes, &shdrs, &roles.rela_sections, &shndx_map)?;
     let init_funcs = decode_init_arrays(bytes, &shdrs, &roles.init_array_sections, &symbols)?;
     let note = match roles.badc_note {
@@ -1659,15 +1664,15 @@ fn concat_families(
     })
 }
 
-/// Input-section identity records: name, family, and extent within
-/// this object's family blob, in placement order.
+/// Input-section records in placement order, and each section index's.
 fn input_section_records(
     shdrs: &[Elf64Shdr],
     shstrtab_bytes: &[u8],
     n_tdata: usize,
     blobs: &FamilyBlobs,
-) -> Result<Vec<InputSection>, C5Error> {
+) -> Result<(Vec<InputSection>, Vec<Option<u32>>), C5Error> {
     let mut sections: Vec<InputSection> = Vec::new();
+    let mut record_of = alloc::vec![None; shdrs.len()];
     for (list, family) in [
         (&blobs.text.2, SectionFamily::Text),
         (&blobs.rodata.2, SectionFamily::RoData),
@@ -1676,6 +1681,7 @@ fn input_section_records(
         (&blobs.bss_bases, SectionFamily::Bss),
     ] {
         for &(sh_i, base) in list {
+            record_of[sh_i] = Some(sections.len() as u32);
             sections.push(InputSection {
                 name: strtab_str(shstrtab_bytes, shdrs[sh_i].sh_name as usize)?.to_string(),
                 family,
@@ -1691,6 +1697,7 @@ fn input_section_records(
         } else {
             SectionFamily::Tbss
         };
+        record_of[sh_i] = Some(sections.len() as u32);
         sections.push(InputSection {
             name: strtab_str(shstrtab_bytes, shdrs[sh_i].sh_name as usize)?.to_string(),
             family,
@@ -1699,7 +1706,7 @@ fn input_section_records(
             align: shdrs[sh_i].sh_addralign.max(1),
         });
     }
-    Ok(sections)
+    Ok((sections, record_of))
 }
 
 /// Decode the symbol table, each symbol's value rebased by its
@@ -1714,6 +1721,7 @@ fn decode_symbols(
     symtab_sh_i: usize,
     blobs: &FamilyBlobs,
     roles: &SectionRoles,
+    record_of: &[Option<u32>],
 ) -> Result<(Vec<NativeSymbol>, ShndxMap), C5Error> {
     let symtab_sh = &shdrs[symtab_sh_i];
     // `.symtab` -> linked `.strtab` lives at `sh_link`.
@@ -1779,6 +1787,7 @@ fn decode_symbols(
             binding,
             kind,
             visibility: sym.st_other & 0x3,
+            input_section: record_of.get(sym.st_shndx as usize).copied().flatten(),
         });
     }
     Ok((symbols, shndx_map))

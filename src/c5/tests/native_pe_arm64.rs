@@ -322,6 +322,21 @@ fn printf_through_iat() {
     assert_exit(src, "printf", &[], 3);
 }
 
+/// An offset reaching below the image base keeps its sign through the
+/// data, read-only and function fixups.
+#[test]
+fn asm_offsets_below_the_image_base_resolve() {
+    let src = super::asm_below_image_base_source();
+    for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
+        let outcome = build_and_run_with_options(src, "below-base", &[], opts);
+        if matches!(outcome, RunOutcome::HostCannotRun) {
+            eprintln!("skip below-base: no PE runner on this host");
+            return;
+        }
+        assert!(outcome.matches(0), "wrong addresses: {outcome:?}");
+    }
+}
+
 #[test]
 fn malloc_memset_memcmp_roundtrip() {
     let src = r#"

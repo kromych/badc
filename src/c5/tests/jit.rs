@@ -140,6 +140,14 @@ fn raw_byte_inline_asm_executes() {
     assert_eq!(jit_exit(src, &["jit-raw-bytes"]), 0x25);
 }
 
+/// An offset in an inline-asm reference counts from its symbol's own address.
+#[test]
+fn asm_offsets_count_from_the_symbols_own_address() {
+    let src = super::asm_region_edges_source();
+    assert_eq!(jit_exit(src, &["asm-region-edges"]), 0);
+    assert_eq!(jit_exit_native_optimized(src, &["asm-region-edges-opt"]), 0);
+}
+
 /// The JIT image is the unit: inline asm naming its definitions binds to them.
 #[test]
 fn asm_pcrel_reference_binds_to_the_units_definition() {

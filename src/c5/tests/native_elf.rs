@@ -489,6 +489,36 @@ fn far_stack_arguments_reach_their_slots() {
     }
 }
 
+/// An offset in an inline-asm reference counts from its symbol's own address,
+/// in the single image and the linked executable, position-independent and placed.
+#[test]
+fn asm_offsets_count_from_the_symbols_own_address() {
+    let src = format!("#define WITH_TLS 1\n{}", super::asm_region_edges_source());
+    for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
+        let outcome = build_and_run_outcome_with_options(&src, "asm-edges", opts.clone());
+        assert!(outcome.matches(0), "single image: {outcome:?}");
+        let linked = format!("#define WITH_WORDS 1\n{src}");
+        let program = Compiler::with_target(super::with_prelude(&linked), Target::LinuxAarch64)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"));
+        for form in [crate::ExecForm::Pie, crate::ExecForm::Placed] {
+            let bytes = super::link_executable_with_runtime_as(
+                &program,
+                Target::LinuxAarch64,
+                opts.clone(),
+                form,
+            )
+            .unwrap_or_else(|e| panic!("link {form:?}: {e}"));
+            let path = super::unique_temp_path("badc-elf-test", "asm-edges-linked", ".bin");
+            std::fs::write(&path, &bytes).expect("write temp file");
+            set_executable(&path);
+            let output = exec_with_retry(&path).expect("exec produced binary");
+            let _ = std::fs::remove_file(&path);
+            assert_eq!(output.status.code(), Some(0), "linked {form:?}");
+        }
+    }
+}
+
 /// A single-file image is the unit: inline asm naming its definitions binds to them.
 #[test]
 fn asm_pcrel_reference_binds_to_the_units_definition() {

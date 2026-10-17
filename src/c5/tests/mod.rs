@@ -893,6 +893,110 @@ int main(void) {
 "#
 }
 
+/// Inline asm naming objects at the edges of `.rodata`, relro, `.data` and
+/// `.bss` with offsets before and past them, aliases of a function and an
+/// object, and on x86-64 fields an immediate trails; `WITH_TLS` adds a
+/// thread-local between `.data` and `.bss`, `WITH_WORDS` `.long sym - .`
+/// words in `.text`. Exits with the count of wrong addresses and values.
+#[allow(dead_code)] // the image suites a Windows host compiles out
+pub fn asm_region_edges_source() -> &'static str {
+    r#"
+#include <stdio.h>
+#include <stdint.h>
+const long ro_first[2] = {0x1111, 0x2222};
+const char *const relro_first[2] = {"p", "q"};
+long data_first[2] = {0x3333, 0x4444};
+long bss_first[2];
+static const long ro_static[2] = {5, 6};
+static long data_static[2] = {7, 8};
+static long bss_static[2];
+#ifdef WITH_TLS
+_Thread_local long tls_obj = 9;
+#endif
+#ifdef WITH_WORDS
+extern const int edge_words[2];
+__asm__(".text\n.globl edge_words\n.p2align 2\nedge_words:\n"
+        ".long ro_first-8-.\n.long bss_first+16-.\n");
+#endif
+int f(void) { return 7; }
+int wfa(void) __attribute__((weak, alias("f")));
+int sfa(void) __attribute__((alias("f")));
+long wda[2] __attribute__((weak, alias("data_first")));
+#if defined(__x86_64__)
+#define ADDR(r, sym) __asm__("lea " sym "(%%rip), %0" : "=r"(r))
+#else
+#define ADDR(r, sym) __asm__("adrp %0, " sym "\n\tadd %0, %0, :lo12:" sym : "=r"(r))
+#endif
+static int bad;
+#define AT(sym, want) do { uintptr_t u_; ADDR(u_, sym); if (u_ != (uintptr_t)(want)) bad++; } while (0)
+#define EDGES(obj) do { AT(#obj "-8", (char *)obj - 8); AT(#obj "+16", (char *)obj + 16); } while (0)
+int main(void) {
+    EDGES(ro_first);
+    EDGES(relro_first);
+    EDGES(data_first);
+    EDGES(bss_first);
+    EDGES(ro_static);
+    EDGES(data_static);
+    EDGES(bss_static);
+    AT("wfa", f);
+    AT("sfa", f);
+    AT("wda", data_first);
+#if defined(__x86_64__)
+    int r;
+    __asm__ volatile("movl $0, %0\n\tcmpq $0x1111, ro_first(%%rip)\n\tsete %b0" : "=&q"(r) :: "cc");
+    bad += r != 1;
+    __asm__ volatile("movl $0, %0\n\tcmpq $0, relro_first(%%rip)\n\tsetne %b0" : "=&q"(r) :: "cc");
+    bad += r != 1;
+    __asm__ volatile("movl $0, %0\n\tcmpq $0x3333, data_first(%%rip)\n\tsete %b0" : "=&q"(r) :: "cc");
+    bad += r != 1;
+    __asm__ volatile("movq $0x5555, bss_first(%%rip)" ::: "memory");
+    bad += bss_first[0] != 0x5555;
+    __asm__ volatile("movq $0x6666, bss_static+8(%%rip)" ::: "memory");
+    bad += bss_static[1] != 0x6666;
+#endif
+#ifdef WITH_TLS
+    bad += tls_obj != 9;
+#endif
+#ifdef WITH_WORDS
+    bad += (uintptr_t)&edge_words[0] + edge_words[0] != (uintptr_t)ro_first - 8;
+    bad += (uintptr_t)&edge_words[1] + edge_words[1] != (uintptr_t)bss_first + 16;
+#endif
+    bad += ro_first[1] + ro_static[1] + data_static[0] != 0x2222 + 6 + 7;
+    bad += relro_first[1][0] != 'q' || wfa() != 7 || sfa() != 7 || wda[1] != 0x4444;
+    return bad;
+}
+"#
+}
+
+/// Inline asm naming a data object, a read-only one and a function 32 and
+/// 64 KiB before themselves, which in a small PE image is below the image
+/// base. Exits with the count of wrong addresses.
+pub fn asm_below_image_base_source() -> &'static str {
+    r#"
+#include <stdint.h>
+long d[2] = {1, 2};
+const long r[2] = {3, 4};
+static int f(void) { return 5; }
+#if defined(__x86_64__)
+#define ADDR(p, sym) __asm__("lea " sym "(%%rip), %0" : "=r"(p))
+#else
+#define ADDR(p, sym) __asm__("adrp %0, " sym "\n\tadd %0, %0, :lo12:" sym : "=r"(p))
+#endif
+static int bad;
+#define BELOW(sym, obj, n) \
+    do { uintptr_t p_; ADDR(p_, sym "-" #n); bad += p_ + n != (uintptr_t)(obj); } while (0)
+int main(void) {
+    BELOW("d", d, 32768);
+    BELOW("d", d, 65536);
+    BELOW("r", r, 32768);
+    BELOW("r", r, 65536);
+    BELOW("f", f, 32768);
+    BELOW("f", f, 65536);
+    return bad + (f() != 5) + (d[1] + r[1] != 6);
+}
+"#
+}
+
 /// A program whose fixed and variadic calls place stack arguments past the
 /// scaled offsets of the outgoing area: a 3-byte aggregate above 4096, and
 /// an 8-byte slot, a `double` and a 12-byte aggregate above 32768. The
@@ -1047,9 +1151,20 @@ pub fn link_executable_with_runtime(
     target: crate::Target,
     opts: crate::NativeOptions,
 ) -> Result<Vec<u8>, String> {
+    link_executable_with_runtime_as(program, target, opts, crate::ExecForm::Pie)
+}
+
+/// [`link_executable_with_runtime`] for an executable of `form`.
+#[cfg(feature = "full")]
+pub fn link_executable_with_runtime_as(
+    program: &Program,
+    target: crate::Target,
+    opts: crate::NativeOptions,
+    form: crate::ExecForm,
+) -> Result<Vec<u8>, String> {
     use crate::{
-        CompileOptions, OutputKind, embedded_runtime, emit_native_with_options,
-        link_native_objects, parse_native_elf, write_native_image_from_merged,
+        CompileOptions, ImageOptions, OutputKind, embedded_runtime, emit_native_with_options,
+        link_native_objects, parse_native_elf, write_native_image_from_merged_ex,
     };
     let mut reloc = opts;
     reloc.output_kind = OutputKind::Relocatable;
@@ -1099,9 +1214,10 @@ pub fn link_executable_with_runtime(
     append_on_demand_objects(&mut objs, target, reloc)?;
 
     let mut merged = link_native_objects(&objs).map_err(|e| format!("link: {e}"))?;
-    let plt = crate::emit_plt_for(&mut merged, target, false).map_err(|e| format!("plt: {e}"))?;
+    let plt =
+        crate::emit_plt_for(&mut merged, target, form.placed()).map_err(|e| format!("plt: {e}"))?;
     let entry_name = program.entry_name.as_deref().unwrap_or("main");
-    write_native_image_from_merged(
+    write_native_image_from_merged_ex(
         &merged,
         &plt,
         entry_name,
@@ -1109,6 +1225,10 @@ pub fn link_executable_with_runtime(
         OutputKind::Executable,
         target,
         None,
+        &ImageOptions {
+            exec_form: form,
+            ..ImageOptions::default()
+        },
     )
     .map_err(|e| format!("write image: {e}"))
 }

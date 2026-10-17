@@ -438,6 +438,109 @@ fn a_strong_definition_overrides_every_reference_to_a_weak_one() {
     }
 }
 
+/// A two-quad table in `.rodata`, a read-only named section, relro, `.data`,
+/// a writable named section and `.bss`, each with a label at its end.
+const END_LABEL_TABLES: &str = "\
+.section .rodata\n.globl ro_tbl, ro_tbl_end\n.p2align 3\n\
+ro_tbl: .quad 0x1111, 0x2222\nro_tbl_end:\n\
+.section ro_named,\"a\"\n.globl rn_tbl, rn_tbl_end\n.p2align 3\n\
+rn_tbl: .quad 0x3333, 0x4444\nrn_tbl_end:\n\
+.section .data.rel.ro,\"aw\"\n.globl relro_tbl, relro_tbl_end\n.p2align 3\n\
+relro_tbl: .quad 0x5555, 0x6666\nrelro_tbl_end:\n\
+.data\n.globl rw_tbl, rw_tbl_end\n.p2align 3\n\
+rw_tbl: .quad 0x7777, 0x8888\nrw_tbl_end:\n\
+.section rw_named,\"aw\"\n.globl wn_tbl, wn_tbl_end\n.p2align 3\n\
+wn_tbl: .quad 0x9999, 0xaaaa\nwn_tbl_end:\n\
+.bss\n.globl bss_tbl, bss_tbl_end\n.p2align 3\n\
+bss_tbl: .skip 16\nbss_tbl_end:\n";
+
+/// Names each end label through inline asm, at its address and 8 bytes
+/// before, and through pointer initializers. Exits with the count of wrong
+/// addresses and values.
+const END_LABEL_USES: &str = r#"#include <stdint.h>
+extern const long long ro_tbl[], ro_tbl_end[], rn_tbl[], rn_tbl_end[];
+extern const long long relro_tbl[], relro_tbl_end[];
+extern long long rw_tbl[], rw_tbl_end[], wn_tbl[], wn_tbl_end[], bss_tbl[], bss_tbl_end[];
+const long long *const ends[] = {ro_tbl_end, rn_tbl_end, relro_tbl_end,
+                                 rw_tbl_end, wn_tbl_end, bss_tbl_end};
+const long long *const lasts[] = {ro_tbl_end - 1, rn_tbl_end - 1, relro_tbl_end - 1,
+                                  rw_tbl_end - 1, wn_tbl_end - 1, bss_tbl_end - 1};
+const long long *const starts[] = {ro_tbl, rn_tbl, relro_tbl, rw_tbl, wn_tbl, bss_tbl};
+#if defined(__x86_64__)
+#define ADDR(r, sym) __asm__("lea " sym "(%%rip), %0" : "=r"(r))
+#define LOAD(r, sym) __asm__ volatile("movq " sym "(%%rip), %0" : "=r"(r) :: "memory")
+#define SAME(r, sym, v) __asm__ volatile( \
+    "movl $0, %0\n\tcmpq $" #v ", " sym "(%%rip)\n\tsete %b0" : "=&q"(r) :: "cc", "memory")
+#else
+#define ADDR(r, sym) __asm__("adrp %0, " sym "\n\tadd %0, %0, :lo12:" sym : "=r"(r))
+#define LOAD(r, sym) \
+    __asm__ volatile("adrp %0, " sym "\n\tldr %0, [%0, :lo12:" sym "]" : "=r"(r) :: "memory")
+#define SAME(r, sym, v) (r = 1)
+#endif
+#define CHECK(t, last) do { \
+    uintptr_t u_; long long v_; int s_; \
+    ADDR(u_, #t "_tbl_end"); bad += u_ != (uintptr_t)(t##_tbl + 2); \
+    ADDR(u_, #t "_tbl_end-8"); bad += u_ != (uintptr_t)(t##_tbl + 1); \
+    LOAD(v_, #t "_tbl_end-8"); bad += v_ != last; \
+    SAME(s_, #t "_tbl_end-8", last); bad += s_ != 1; \
+    bad += t##_tbl_end - t##_tbl != 2; \
+} while (0)
+int main(void) {
+    int bad = 0;
+    bss_tbl[1] = 0x1234;
+    CHECK(ro, 0x2222);
+    CHECK(rn, 0x4444);
+    CHECK(relro, 0x6666);
+    CHECK(rw, 0x8888);
+    CHECK(wn, 0xaaaa);
+    CHECK(bss, 0x1234);
+    for (int i = 0; i < 6; i++)
+        bad += ends[i] != starts[i] + 2 || lasts[i] != starts[i] + 1 || *lasts[i] != starts[i][1];
+    return bad;
+}
+"#;
+
+#[test]
+fn a_label_at_its_sections_end_names_that_sections_end() {
+    let dir = tempdir("end-labels");
+    let tables = write_source(&dir, "tables.s", END_LABEL_TABLES);
+    let uses = write_source(&dir, "uses.c", END_LABEL_USES);
+    let (tables, uses) = (tables.as_path(), uses.as_path());
+    for opt in ["-O0", "-O"] {
+        for (order, units) in [("last", [uses, tables]), ("first", [tables, uses])] {
+            let status = link_units_and_run(&dir, opt, &units);
+            assert_eq!(status, Some(0), "{opt}, tables linked {order}");
+        }
+    }
+}
+
+/// A label in an empty named section after another empty one, and a label
+/// at the end of `.data` that the next `.data` section follows in one run.
+const SECTION_START_LABELS: &str = "\
+.section aaa_empty,\"aw\"\n\
+.section bbb_empty,\"aw\"\n.globl empty_lb\nempty_lb:\n\
+.data\n.globl adj_a, adj_a_end\n.p2align 3\nadj_a: .quad 1\nadj_a_end:\n\
+.section .data.next,\"aw\"\n.globl adj_b\n.p2align 3\nadj_b: .quad 2\n";
+
+const SECTION_START_USES: &str = "extern char empty_lb[], __start_bbb_empty[];\n\
+extern char adj_a[], adj_a_end[], adj_b[];\n\
+int main(void) {\n\
+    return (empty_lb != __start_bbb_empty) + 2 * (adj_a_end != adj_a + 8)\n\
+        + 4 * (adj_b != adj_a_end);\n\
+}\n";
+
+#[test]
+fn a_label_in_an_empty_section_names_that_section() {
+    let dir = tempdir("empty-section-labels");
+    let labels = write_source(&dir, "labels.s", SECTION_START_LABELS);
+    let uses = write_source(&dir, "uses.c", SECTION_START_USES);
+    let (labels, uses) = (labels.as_path(), uses.as_path());
+    for (order, units) in [("last", [uses, labels]), ("first", [labels, uses])] {
+        let status = link_units_and_run(&dir, "-O0", &units);
+        assert_eq!(status, Some(0), "labels linked {order}");
+    }
+}
+
 // Gated on Linux: same end-to-end exec + native-ELF-only
 // constraint as `two_sources_compile_separately_then_link`.
 #[cfg(target_os = "linux")]

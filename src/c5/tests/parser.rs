@@ -131,6 +131,58 @@ fn alignas_on_a_bit_field_is_diagnosed() {
     assert!(Compiler::new(ok.to_string()).compile().is_ok());
 }
 
+/// GNU C requires the stack pointer to hold its value across an `asm`
+/// statement: listing it as clobbered, or writing an output bound to it,
+/// warns as gcc (`-Wdeprecated`) and clang (`-Winline-asm`) do. A template
+/// that only names sp is a stack switch the frame handling covers.
+#[test]
+fn an_asm_declared_to_change_sp_warns() {
+    use crate::c5::Target;
+    let warns = |body: &str, target: Target| {
+        let src = alloc::format!("{body}\nint main(void) {{ return 0; }}\n");
+        Compiler::with_options(src, target, crate::CompileOptions::default())
+            .compile()
+            .expect("compile")
+            .warnings
+            .iter()
+            .any(|w| w.code == crate::c5::diag::Code::INLINE_ASM)
+    };
+    let (a64, x64) = (Target::LinuxAarch64, Target::LinuxX64);
+    for name in ["sp", "#wsp", "31", "63", "077"] {
+        let body = alloc::format!(
+            "void f(void) {{ __asm__ volatile(\"sub sp, sp, #64\" ::: \"{name}\"); }}"
+        );
+        assert!(warns(&body, a64), "{name}");
+    }
+    for name in ["rsp", "%esp", "7"] {
+        let body = alloc::format!(
+            "void f(void) {{ __asm__ volatile(\"subq $64, %%rsp\" ::: \"{name}\"); }}"
+        );
+        assert!(warns(&body, x64), "{name}");
+    }
+    assert!(warns(
+        "void f(void) { register void *sp __asm__(\"rsp\");\n\
+         __asm__ volatile(\"sub $16, %0\" : \"=r\"(sp)); }",
+        x64
+    ));
+    assert!(!warns(
+        "void f(void *p) { __asm__ volatile(\"mov sp, %0\" : : \"r\"(p)); }",
+        a64
+    ));
+    // The warning names the statement's first line, as gcc's does.
+    let src = "void f(void) {\n  __asm__ volatile(\"sub sp, sp, #64\"\n    \"\"\n    ::: \"sp\");\n}\n\
+               int main(void) { return 0; }\n";
+    let lines: Vec<u32> = Compiler::with_options(src.to_string(), a64, Default::default())
+        .compile()
+        .expect("compile")
+        .warnings
+        .iter()
+        .filter(|w| w.code == crate::c5::diag::Code::INLINE_ASM)
+        .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [2]);
+}
+
 #[test]
 fn overaligned_automatic_beside_a_vla_compiles() {
     // The realigned region (alignment above 16) and a variable-length array

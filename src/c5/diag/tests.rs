@@ -448,6 +448,7 @@ fn the_named_codes_match_their_rows() {
         (Code::ATTRIBUTES, "attributes"),
         (Code::IGNORED_ASM_LABEL, "ignored-asm-label"),
         (Code::SHADOWED_BINDING, "shadowed-binding"),
+        (Code::INLINE_ASM, "inline-asm"),
         (Code::INT_CONVERSION, "int-conversion"),
         (Code::EXCESS_INITIALIZERS, "excess-initializers"),
         (Code::INCOMPATIBLE_STRUCT_TYPES, "incompatible-struct-types"),

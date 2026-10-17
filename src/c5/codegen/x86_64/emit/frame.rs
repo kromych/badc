@@ -40,7 +40,8 @@ pub(crate) struct Frame {
     /// automatic object aligned above 16, or an inline asm statement may leave
     /// it moved (`AsmBlock::may_move_sp`), as a stack switch does. Spill slots
     /// are addressed through rbp and the epilogue takes rsp from rbp, ahead of
-    /// rsp-relative restores where there are any.
+    /// rsp-relative restores where there are any; a full leaf returns with rsp
+    /// where its asm left it.
     pub dynamic_sp: bool,
     /// Alignment the prologue forces on rsp for automatic objects aligned
     /// above 16 (C11 6.7.5), a power of two > 16, or 0 when none. The

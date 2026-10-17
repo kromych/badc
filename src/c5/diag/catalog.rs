@@ -122,6 +122,9 @@ catalog! {
     2011, "implicit-int", ["C4431"], Error, Controllable,
         [DEFAULT], Live,
         "a declaration or type name with no type specifier, whose type defaults to `int`";
+    2012, "inline-asm", ["deprecated"], Warning, Controllable,
+        [DEFAULT], Live,
+        "an `asm` statement that lists the stack pointer as clobbered or writes it through an output, where GNU C requires it to hold its value";
     2020, "syntax", [], Error, Hard,
         [], Live,
         "a token the grammar does not admit at its position; the parser has no resynchronisation point";
@@ -427,6 +430,7 @@ impl Code {
     pub const IGNORED_ASM_LABEL: Code = Code::new(2009);
     pub const SHADOWED_BINDING: Code = Code::new(2010);
     pub const IMPLICIT_INT: Code = Code::new(2011);
+    pub const INLINE_ASM: Code = Code::new(2012);
     pub const INT_CONVERSION: Code = Code::new(3001);
     pub const INCOMPATIBLE_STRUCT_TYPES: Code = Code::new(3002);
     pub const RETURN_TYPE: Code = Code::new(3003);

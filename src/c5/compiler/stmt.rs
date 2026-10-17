@@ -1459,12 +1459,13 @@ impl Compiler {
     /// (`pause` / `yield`, lowered to the target spin-loop hint).
     /// Operand constraints and other instructions are rejected.
     fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
+        let line = self.lex.line;
         let (template, tstart, is_volatile, is_goto) = self.parse_asm_head()?;
         // `asm goto` takes the general extended-asm path directly: the
         // operand-free template shortcuts below have no label grammar.
         if is_goto {
             self.truncate_data(tstart);
-            return self.parse_extended_asm(template, is_volatile, true);
+            return self.parse_extended_asm(template, is_volatile, true, line);
         }
         // The x87 FPU control-word forms carry exactly one memory operand.
         // Detect them from the template before the operand-rejection loop.
@@ -1649,7 +1650,7 @@ impl Compiler {
         // are dropped from the data section; the parsed block references
         // its operand expressions by AST id.
         self.truncate_data(tstart);
-        self.parse_extended_asm(template, is_volatile, false)
+        self.parse_extended_asm(template, is_volatile, false, line)
     }
 
     /// Consume the `: outputs : inputs : clobbers` region and the
@@ -1688,12 +1689,13 @@ impl Compiler {
     /// clobber is a bare string; a label is an identifier naming a C
     /// label of the enclosing function. On entry the template is
     /// consumed and the cursor is at the first `:` (or `)` when there
-    /// is no operand list).
+    /// is no operand list); `line` is the statement's first.
     fn parse_extended_asm(
         &mut self,
         template: alloc::vec::Vec<u8>,
         volatile: bool,
         is_goto: bool,
+        line: usize,
     ) -> Result<(), C5Error> {
         use super::super::ast::{AsmBlockAst, Expr, UnOp};
         use super::super::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
@@ -1705,6 +1707,9 @@ impl Compiler {
         let mut clobber_regs: u32 = 0;
         let mut clobber_fp_regs: u32 = 0;
         let mut clobber_memory = false;
+        let mut clobbers_sp = false;
+        let mut sp_outputs: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
+        let sp = if self.target.is_aarch64() { 31 } else { 4 };
         let mut n_outputs = 0usize;
         let mut label_ids: alloc::vec::Vec<super::super::ast::LabelId> = alloc::vec::Vec::new();
         let mut label_names: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
@@ -1811,6 +1816,7 @@ impl Compiler {
                 } else if name != "cc" || sigil == Some(b'#') {
                     match super::super::codegen::clobber_registers(self.target, name) {
                         Some((gpr, fpr)) => {
+                            clobbers_sp |= gpr & (1 << sp) != 0;
                             clobber_regs |= gpr;
                             clobber_fp_regs |= fpr;
                         }
@@ -1971,6 +1977,9 @@ impl Compiler {
             // rejected in the expression path, so an asm that leaves the
             // register changed is equally unsupported.
             let is_bound = matches!(constraint, AsmConstraint::Bound(_));
+            if is_output && constraint == AsmConstraint::Bound(sp) {
+                sp_outputs.push(operands.len());
+            }
             let stores_back = is_output && !is_bound;
             let is_rw = is_rw && !is_bound;
             // Outputs pass the destination address; a memory operand (input or
@@ -2182,6 +2191,12 @@ impl Compiler {
             clobber_memory,
             volatile,
         };
+        // gcc (-Wdeprecated) and clang (-Winline-asm) warn on a declared sp change.
+        if clobbers_sp || sp_outputs.iter().any(|&i| block.names_operand(i)) {
+            let text = "the stack pointer is listed as clobbered or written through an \
+                output; GNU C requires it to hold the same value after an `asm` statement";
+            self.warn_at(Code::INLINE_ASM, line, text.into());
+        }
         let idx = self.ast.asm_blocks.len() as u32;
         let cleanups = alloc::vec![alloc::vec::Vec::new(); label_ids.len()];
         self.ast.asm_blocks.push(AsmBlockAst {

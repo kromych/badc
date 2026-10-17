@@ -133,26 +133,80 @@ fn a_bound_operand_names_the_stack_pointer_only_when_the_template_names_it() {
 }
 
 /// A memory operand based on sp leaves it in place unless AArch64 writes the
-/// base back; sp as a register operand, or a named bound output operand, may
-/// be the destination.
+/// base back, and so does sp as a source operand, a compared or pushed one,
+/// or a mention in a comment or a directive; sp as the destination, an
+/// exchanged operand, or a named bound output operand may move it. Comments
+/// are each target's assembler's, labels may be glued to the mnemonic, and
+/// mnemonics and register names match without regard to case.
 #[test]
-fn a_template_may_move_the_stack_pointer_unless_sp_is_a_kept_memory_base() {
-    for (template, moves) in [
+fn a_template_may_move_the_stack_pointer_only_by_writing_it() {
+    let x86 = [
         ("lock addl $0,-4(%%rsp)", false),
         ("mov 8( %%rsp ), %0", false),
         ("mov rax, [rsp + 8]", false),
+        ("mov [rsp + 8], rax", false),
+        ("mov %0, %%rsp", true),
+        ("lea 8(%%rsp), %%rsp", true),
+        ("mov %%rsp, %0", false),
+        ("mov rax, rsp", false),
+        ("mov rsp, rax", true),
+        ("addq $8, %%rsp", true),
+        ("movb $0, %%spl", true),
+        ("pushq %%rsp\n\tpopq %0", false),
+        ("popq %%rsp", true),
+        ("cmpq %0, %%rsp", false),
+        ("lock xchgq %%rsp, %0", true),
+        ("1:xchgq %%rsp, %0", true),
+        (".Lsw%=:movq %0, %%rsp", true),
+        ("MOVQ %%RSP, %0", false),
+        ("movq %0, %%RSP", true),
+        ("XCHGQ %%rsp, %0", true),
+        ("XADDQ %%rsp, %0", true),
+        ("mulxq %0, %%rsp, %0", true),
+        ("nop # %%rsp", false),
+        ("nop // %%rsp", false),
+        ("movq %%rsp, %0 # movq %0, %%rsp", false),
+        ("/* # */ movq %0, %%rsp", true),
+        ("movq %0, %%rsp # /* ; */", true),
+        (".cfi_def_cfa_register %%rsp", false),
+        ("mov %1, %0", false),
+        ("mov %0, %2", true),
+        ("call *%0", false),
+    ];
+    let a64 = [
         ("ldr %0, [sp, #8]\n\tldr %0, [ sp ]", false),
         ("str %0, [sp, #-16]!", true),
         ("ldr %0, [sp], #16", true),
         ("mov sp, %0", true),
-        ("mov %0, %%rsp", true),
-        ("lea 8(%%rsp), %%rsp", true),
-        ("mov %%rsp, %0", true),
+        ("mov %0, sp", false),
+        ("add %0, sp, #16", false),
+        ("add sp, sp, #16", true),
+        ("1: sub sp, sp, %0", true),
+        ("1:mov sp, %0", true),
+        (".Lsw%=:mov sp, %0", true),
+        ("cmp sp, %0", false),
+        ("MOV SP, %0", true),
+        ("ADD sp, sp, #16", true),
+        ("MOV %0, SP", false),
+        ("CMP SP, %0", false),
+        ("nop // sp", false),
+        ("# sp\n\tmov %0, %0", false),
+        ("mov %0, sp // mov sp, %0", false),
+        ("/* // */ mov sp, %0", true),
         ("mov %1, %0", false),
         ("mov %0, %2", true),
-        ("call *%0", false),
+    ];
+    for (target, cases) in [
+        (crate::Target::LinuxX64, &x86[..]),
+        (crate::Target::LinuxAarch64, &a64[..]),
     ] {
-        assert_eq!(sp_block(template).may_move_sp(), moves, "{template}");
+        for &(template, moves) in cases {
+            assert_eq!(
+                sp_block(template).may_move_sp(target),
+                moves,
+                "{target:?}: {template}"
+            );
+        }
     }
 }
 

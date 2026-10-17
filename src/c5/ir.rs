@@ -1599,26 +1599,35 @@ impl AsmBlock {
         asm_operand_class(&self.operands, i)
     }
 
-    /// True when the template names the stack pointer (`rsp` / `esp` /
-    /// `sp` / `wsp` as a token). Such asm can capture or switch the stack
+    /// True when the template names the stack pointer (a token
+    /// [`sp_tokens`] finds). Such asm can capture or switch the stack
     /// -- the setjmp / longjmp / stack-switch idioms -- so an activation
     /// of the surrounding frame may stay live while later code in the
     /// same frame runs, and may be resumed afterwards. Lifetimes are then
     /// not bounded by the CFG or the C block structure, and frame-storage
     /// sharing decisions must exclude the function.
     pub fn references_sp(&self) -> bool {
-        self.names_bound_operand(false) || self.sp_tokens().next().is_some()
+        self.names_bound_operand(false) || sp_tokens(&self.template).next().is_some()
     }
 
     /// True when the template may leave the stack pointer moved, as a stack
-    /// switch does: it names sp other than as the base of a memory operand
-    /// that keeps it (x86 has no writeback; AArch64 writes the base back in
-    /// `[sp, #n]!` and `[sp], #n`), or names a bound output operand.
-    pub fn may_move_sp(&self) -> bool {
+    /// switch does: it names a bound output operand, or its text, with the
+    /// comments of `target`'s assembler stripped, names sp other than as a
+    /// read ([`reads_sp_token`]) or a memory base it keeps ([`keeps_sp_base`]).
+    pub fn may_move_sp(&self, target: crate::c5::codegen::Target) -> bool {
+        use crate::c5::asm::AsmComments;
+        let syntax = if target.is_aarch64() {
+            AsmComments::A64
+        } else {
+            AsmComments::X86
+        };
+        let raw = alloc::string::String::from_utf8_lossy(&self.template);
+        let stripped = crate::c5::asm::strip_asm_comments(&raw, syntax);
+        let t = stripped.as_deref().unwrap_or(&raw).as_bytes();
         self.names_bound_operand(true)
-            || self
-                .sp_tokens()
-                .any(|(start, end)| !keeps_sp_base(&self.template, start, end))
+            || sp_tokens(t).any(|(start, end)| {
+                !keeps_sp_base(t, start, end, syntax) && !reads_sp_token(t, start, end, syntax)
+            })
     }
 
     /// An operand binding a storage-less register variable, an output one
@@ -1631,29 +1640,6 @@ impl AsmBlock {
             matches!(o.constraint, AsmConstraint::Bound(_))
                 && (o.is_output || !output)
                 && self.names_operand(i)
-        })
-    }
-
-    /// Byte ranges of the `sp` / `wsp` / `rsp` / `esp` tokens in the template.
-    fn sp_tokens(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
-        let is_word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
-        let t = &self.template;
-        let mut i = 0;
-        core::iter::from_fn(move || {
-            while i < t.len() {
-                if !is_word(t[i]) {
-                    i += 1;
-                    continue;
-                }
-                let start = i;
-                while i < t.len() && is_word(t[i]) {
-                    i += 1;
-                }
-                if matches!(&t[start..i], b"sp" | b"wsp" | b"rsp" | b"esp") {
-                    return Some((start, i));
-                }
-            }
-            None
         })
     }
 
@@ -1697,13 +1683,132 @@ impl AsmBlock {
     }
 }
 
+/// Byte ranges of the stack-pointer register names in `t`, matched without
+/// regard to case as the assemblers match them: `rsp`, `esp`, `sp` and `spl`
+/// on x86-64, `sp` and `wsp` on AArch64.
+fn sp_tokens(t: &[u8]) -> impl Iterator<Item = (usize, usize)> + '_ {
+    const NAMES: [&[u8]; 5] = [b"sp", b"wsp", b"rsp", b"esp", b"spl"];
+    let is_word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let mut i = 0;
+    core::iter::from_fn(move || {
+        while i < t.len() {
+            if !is_word(t[i]) {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            while i < t.len() && is_word(t[i]) {
+                i += 1;
+            }
+            if NAMES.iter().any(|n| t[start..i].eq_ignore_ascii_case(n)) {
+                return Some((start, i));
+            }
+        }
+        None
+    })
+}
+
+/// Whether the sp token at `t[start..end]`, in text without comments, only reads
+/// sp: an operand other than the destination (AT&T's last, Intel's and AArch64's
+/// first) or of a compare, test or push, or a mention in a directive. An exchange
+/// and BMI2 `mulx`, which writes two, count every operand as written. Labels ahead
+/// of the mnemonic, glued to it or not, are skipped; mnemonics match in any case.
+fn reads_sp_token(t: &[u8], start: usize, end: usize, syntax: crate::c5::asm::AsmComments) -> bool {
+    let x86 = syntax == crate::c5::asm::AsmComments::X86;
+    let att = start > 0 && t[start - 1] == b'%';
+    let line_start = t[..start]
+        .iter()
+        .rposition(|&b| b == b'\n' || b == b';')
+        .map_or(0, |p| p + 1);
+    let line_end = t[end..]
+        .iter()
+        .position(|&b| b == b'\n' || b == b';')
+        .map_or(t.len(), |p| end + p);
+    let skip_blank = |at: usize| {
+        (at..start)
+            .find(|&k| !t[k].is_ascii_whitespace())
+            .unwrap_or(start)
+    };
+    let word_end = |at: usize| {
+        (at..line_end)
+            .find(|&k| t[k].is_ascii_whitespace())
+            .unwrap_or(line_end)
+    };
+    let label_byte =
+        |b: u8| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'$' | b'%' | b'=');
+    let mut at = skip_blank(line_start);
+    while let Some(colon) = (at..start)
+        .find(|&k| !label_byte(t[k]))
+        .filter(|&k| k > at && t[k] == b':')
+    {
+        at = skip_blank(colon + 1);
+    }
+    let mut ops_at = word_end(at);
+    let prefixes: [&[u8]; 6] = [b"lock", b"rep", b"repe", b"repne", b"repz", b"repnz"];
+    if x86
+        && prefixes
+            .iter()
+            .any(|p| t[at..ops_at].eq_ignore_ascii_case(p))
+    {
+        at = skip_blank(ops_at);
+        ops_at = word_end(at);
+    }
+    let mnemonic = &t[at..ops_at];
+    if mnemonic.starts_with(b".") {
+        return true;
+    }
+    if mnemonic.is_empty() || ops_at > start {
+        return false;
+    }
+    let (mut depth, mut index, mut count, mut inside) = (0i32, 0usize, 1usize, false);
+    for (k, &b) in t[ops_at..line_end].iter().enumerate() {
+        if ops_at + k == start {
+            inside = depth > 0;
+        }
+        match b {
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => depth -= 1,
+            b',' if depth == 0 => {
+                count += 1;
+                if ops_at + k < start {
+                    index += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    // A memory operand's base is a read only where `keeps_sp_base` says so.
+    if inside {
+        return false;
+    }
+    let starts = |p: &[u8]| {
+        mnemonic
+            .get(..p.len())
+            .is_some_and(|m| m.eq_ignore_ascii_case(p))
+    };
+    if starts(b"xchg") || starts(b"xadd") || starts(b"cmpxchg") || starts(b"mulx") {
+        return false;
+    }
+    let compare = if x86 {
+        starts(b"cmp") || starts(b"test") || starts(b"push")
+    } else {
+        [&b"cmp"[..], b"cmn", b"tst"]
+            .iter()
+            .any(|p| mnemonic.eq_ignore_ascii_case(p))
+    };
+    let destination = if att { count - 1 } else { 0 };
+    compare || index != destination
+}
+
 /// Whether the stack-pointer token at `t[start..end]` is the base of a
-/// memory operand that leaves sp unchanged: `disp(%rsp)`, or `[sp ...]` with
+/// memory operand that leaves sp unchanged: `disp(%rsp)` or `[rsp ...]` on
+/// x86-64, which writes no base back, and on AArch64 `[sp ...]` with
 /// neither `!` nor a post-index after the bracket.
-fn keeps_sp_base(t: &[u8], start: usize, end: usize) -> bool {
+fn keeps_sp_base(t: &[u8], start: usize, end: usize, syntax: crate::c5::asm::AsmComments) -> bool {
     let blank = |b: &u8| matches!(*b, b' ' | b'\t');
     match t[..start].iter().rev().find(|&b| !blank(b) && *b != b'%') {
         Some(b'(') => true,
+        Some(b'[') if syntax == crate::c5::asm::AsmComments::X86 => true,
         Some(b'[') => match t[end..].iter().position(|&b| b == b']' || b == b'\n') {
             Some(c) if t[end + c] == b']' => !matches!(
                 t[end + c + 1..].iter().find(|&b| !blank(b)),
@@ -2392,9 +2497,9 @@ impl FunctionSsa {
 
     /// True when an inline-asm statement in the body may leave the stack
     /// pointer moved (`AsmBlock::may_move_sp`).
-    pub fn has_sp_moving_asm(&self) -> bool {
+    pub fn has_sp_moving_asm(&self, target: crate::c5::codegen::Target) -> bool {
         self.insts.iter().any(|i| match i {
-            Inst::InlineAsm { asm, .. } => asm.may_move_sp(),
+            Inst::InlineAsm { asm, .. } => asm.may_move_sp(target),
             _ => false,
         })
     }

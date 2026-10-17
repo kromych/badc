@@ -179,7 +179,7 @@ pub(crate) fn compute_frame(
         },
     };
     // A full leaf has nothing to address and no rbp to restore rsp from.
-    frame.dynamic_sp |= func.has_sp_moving_asm() && !is_full_leaf(func, frame, alloc, abi);
+    frame.dynamic_sp |= func.has_sp_moving_asm(target) && !is_full_leaf(func, frame, alloc, abi);
     frame
 }
 

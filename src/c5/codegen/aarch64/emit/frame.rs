@@ -132,7 +132,7 @@ pub(crate) fn compute_frame(
     // pay for the register's save, restore and capture.
     let writes_third_scratch = writes_x19(func, alloc, abi);
     let local_base = !x19_overwritten(func, abi.fixed_regs)
-        && (super::ssa::emit_common::uses_dynamic_alloca(func) || func.has_sp_moving_asm())
+        && (super::ssa::emit_common::uses_dynamic_alloca(func) || func.has_sp_moving_asm(target))
         && func.frame_align <= 16
         && !abi.fixed_regs.has_gpr(19)
         && local_base_wins(func, alloc, canary_bytes, upper_bytes) >= 4;
@@ -153,7 +153,7 @@ pub(crate) fn compute_frame(
     // prologue value across the body: `alloca`/VLA, the sp realignment
     // and an inline asm statement that may move sp leave it elsewhere, and
     // a callee reads its stack arguments at the call-time sp.
-    let outgoing_bytes = if dynamic_sp || func.has_sp_moving_asm() {
+    let outgoing_bytes = if dynamic_sp || func.has_sp_moving_asm(target) {
         0
     } else {
         max_call_scratch
@@ -238,7 +238,7 @@ pub(crate) fn compute_frame(
         local_base,
     };
     // A full leaf has nothing to address and no fp to restore sp from.
-    frame.dynamic_sp |= func.has_sp_moving_asm() && !is_full_leaf(frame, alloc);
+    frame.dynamic_sp |= func.has_sp_moving_asm(target) && !is_full_leaf(frame, alloc);
     frame
 }
 

@@ -121,16 +121,15 @@ fn identifier_runs<'a>(texts: &[&'a [u8]]) -> hashbrown::HashSet<&'a [u8]> {
 
 /// Entry PCs whose function can be reached other than through the
 /// `Inst::Call` sites in `funcs`: a body materialises the address, a
-/// static initializer holds it, an alias gives it a second name, or an
-/// asm template names it. Any of those admits a call the pass cannot
-/// see the arguments of.
+/// static or `_Thread_local` initializer holds it, an alias gives it a
+/// second name, or an asm template names it. Any of those admits a call
+/// the pass cannot see the arguments of.
 pub(crate) fn escaping_functions(
     funcs: &[FunctionSsa],
     program: &crate::c5::program::Program,
 ) -> BTreeSet<usize> {
-    let mut out: BTreeSet<usize> = program
-        .code_relocs
-        .iter()
+    let mut out: BTreeSet<usize> = (program.code_relocs.iter())
+        .chain(&program.tls_code_relocs)
         .map(|r| r.target_ent_pc as usize)
         .collect();
     let mut named: BTreeSet<&str> = program

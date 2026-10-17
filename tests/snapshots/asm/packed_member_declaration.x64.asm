@@ -107,7 +107,6 @@ Disassembly of section .text:
                	cmpl	$0x1, %ecx
                	jne	<addr>
                	movl	0x1(%rax), %ecx
-               	andq	$0x3fffffff, %rcx       # imm = 0x3FFFFFFF
                	shlq	$0x22, %rcx
                	sarq	$0x22, %rcx
                	cmpl	$0xf8a432eb, %ecx       # imm = 0xF8A432EB
@@ -127,7 +126,6 @@ Disassembly of section .text:
                	cmpl	$0x1, %ecx
                	jne	<addr>
                	movl	0x1(%rax), %eax
-               	andq	$0x3fffffff, %rax       # imm = 0x3FFFFFFF
                	shlq	$0x22, %rax
                	sarq	$0x22, %rax
                	cmpl	$0x1fffffff, %eax       # imm = 0x1FFFFFFF
@@ -159,14 +157,12 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	-0x30(%rbp), %ecx
                	sarq	$0x8, %rcx
-               	andq	$0xfffff, %rcx          # imm = 0xFFFFF
                	shlq	$0x2c, %rcx
                	sarq	$0x2c, %rcx
                	cmpl	$0xfff80001, %ecx       # imm = 0xFFF80001
                	jne	<addr>
                	movl	0x3(%rax), %eax
                	sarq	$0x4, %rax
-               	andq	$0xfffff, %rax          # imm = 0xFFFFF
                	shlq	$0x2c, %rax
                	sarq	$0x2c, %rax
                	cmpl	$0x7ffff, %eax          # imm = 0x7FFFF
@@ -178,14 +174,12 @@ Disassembly of section .text:
                	movl	%ecx, 0x3(%rax)
                	movl	-0x30(%rbp), %ecx
                	sarq	$0x8, %rcx
-               	andq	$0xfffff, %rcx          # imm = 0xFFFFF
                	shlq	$0x2c, %rcx
                	sarq	$0x2c, %rcx
                	cmpl	$0xfff80001, %ecx       # imm = 0xFFF80001
                	jne	<addr>
                	movl	0x3(%rax), %eax
                	sarq	$0x4, %rax
-               	andq	$0xfffff, %rax          # imm = 0xFFFFF
                	shlq	$0x2c, %rax
                	sarq	$0x2c, %rax
                	cmpl	$-0x1, %eax
@@ -242,9 +236,8 @@ Disassembly of section .text:
                	movabsq	$0xfedcba9877, %r11     # imm = 0xFEDCBA9877
                	orq	%r11, %rcx
                	movl	%ecx, 0x1(%rax)
-               	movq	%rcx, %rax
-               	shrq	$0x20, %rax
-               	movb	%al, -0x23(%rbp)
+               	shrq	$0x20, %rcx
+               	movb	%cl, -0x23(%rbp)
                	leaq	-0x28(%rbp), %rax
                	movsbq	-0x28(%rbp), %rcx
                	cmpl	$0x5, %ecx

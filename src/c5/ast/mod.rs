@@ -86,7 +86,8 @@ pub(crate) enum UnOp {
     /// A signed integer result computed in the 64-bit register, reduced
     /// to the width of the node's type by sign-extending its low bits.
     /// `nsw` marks an operation whose overflow is undefined in this unit
-    /// (C99 6.5p5): `+ - *` and unary `-` without `-fwrapv`.
+    /// (C99 6.5p5): `+ - *` and unary `-` without `-fwrapv`, `/` and `%`
+    /// with it too.
     Renormalize { nsw: bool },
 }
 
@@ -757,6 +758,8 @@ pub(crate) enum Decl {
         size_slot: i64,
         dim: ExprId,
         fill: Option<u8>,
+        /// Alignment past the 16 an allocation gets (C11 6.7.5), else 0.
+        align: u32,
     },
     /// Block-scope `static T name [= init];` declaration. C99
     /// 6.2.4p3 (lifetime is whole program) + 6.7.8p4 (init must
@@ -1364,9 +1367,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             label_data_slots,
             name: _,
         } = self;
-        for s in label_data_slots.iter_mut() {
-            crate::c5::layout::remap_self_u64(&mut s.data_offset, r);
-        }
+        label_data_slots.retain_mut(|s| crate::c5::layout::remap_kept_u64(&mut s.data_offset, r));
         ast.remap_data_offsets(r);
     }
 }

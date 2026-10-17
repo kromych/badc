@@ -159,7 +159,7 @@ fn ent_pc=1 n_params=3 variadic=false locals=0
     v71  Phi { incoming=[b5:v61, b2:v65], kind=I64 }      -> -
     v72  Imm(0)                                           -> x0
     v73  Udiv128 { hi=v70, lo=v3, divisor=v5 }            -> x2
-    v74  Binop { op=mul, lhs=v73, rhs=v5 }                -> x1
+    v74  Binop { op=mul, lhs=v73, rhs=v5 }                -> x2
     v75  Binop { op=sub, lhs=v3, rhs=v74 }                -> x0
     v76  Imm(0)                                           -> x1
     v77  Imm(0)                                           -> x1

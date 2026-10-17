@@ -175,8 +175,8 @@ fn ent_pc=18 n_params=2 variadic=false locals=2
     v21  Imm(1000000)                                     -> x2
     v22  Imm(4835703278458516699)                         -> x6
     v23  Binop { op=mulh, lhs=v20, rhs=v22 }              -> x2
-    v24  BinopI { op=shr, lhs=v23, rhs_imm=18 }           -> x0
-    v25  BinopI { op=shru, lhs=v24, rhs_imm=63 }          -> x2
+    v24  BinopI { op=shr, lhs=v23, rhs_imm=18 }           -> x2
+    v25  BinopI { op=shru, lhs=v24, rhs_imm=63 }          -> x0
     v26  Binop { op=add, lhs=v24, rhs=v25 }               -> x0
     v27  Binop { op=add, lhs=v13, rhs=v26 }               -> x0
     v28  LifetimeEnd(-2)                                  -> -

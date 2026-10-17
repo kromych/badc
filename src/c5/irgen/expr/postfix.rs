@@ -214,7 +214,7 @@ impl<'a> Walker<'a> {
             call_fp_mask,
             conv,
         );
-        let params = Some(self.symbols[sym as usize].params.as_slice());
+        let params = Some(self.symbols[sym as usize].params());
         self.set_arg_widths(b, call, params, named, exprs, 1);
         b.set_call_out_slot(call, result_slot);
         if !arg_aggs.is_empty() {
@@ -240,7 +240,7 @@ impl<'a> Walker<'a> {
         }
         let callee_variadic = self.fun_is_variadic(sym);
         let abi = self.target.abi_for(conv);
-        // `Symbol::params` records the pre-ellipsis parameters, so the
+        // The symbol's parameter list holds the pre-ellipsis parameters, so the
         // arguments past them are the variadic ones.
         let fixed_args = if callee_variadic {
             self.fun_fixed_args(sym).min(args.exprs.len())
@@ -249,7 +249,7 @@ impl<'a> Walker<'a> {
         } else {
             args.exprs.len()
         };
-        let named = self.symbols[sym as usize].params.len();
+        let named = self.symbols[sym as usize].params().len();
         let arg_aggs = self.call_arg_aggs(b, &mut args, named, Some(sym), true);
 
         // C99 6.5.2.2p6: a variadic floating-point argument widens to
@@ -267,7 +267,7 @@ impl<'a> Walker<'a> {
             let call = emit_direct_call(
                 b, target_pc, sym, args.vals, fixed_args, fp_return, fp_mask, conv,
             );
-            let params = Some(self.symbols[sym as usize].params.as_slice());
+            let params = Some(self.symbols[sym as usize].params());
             self.set_arg_widths(b, call, params, fixed_args, args.exprs, 0);
             if !arg_aggs.is_empty() {
                 b.set_call_arg_aggs(call, arg_aggs);
@@ -301,7 +301,7 @@ impl<'a> Walker<'a> {
             call_fp_mask,
             conv,
         );
-        let params = Some(self.symbols[sym as usize].params.as_slice());
+        let params = Some(self.symbols[sym as usize].params());
         self.set_arg_widths(b, call, params, fixed_args, args.exprs, 0);
         if !arg_aggs.is_empty() {
             b.set_call_arg_aggs(call, arg_aggs);
@@ -332,7 +332,7 @@ impl<'a> Walker<'a> {
                     continue;
                 }
                 match proto {
-                    Some(sym) => Some(self.symbols[sym as usize].params[i]),
+                    Some(sym) => Some(self.symbols[sym as usize].params()[i]),
                     None => arg_value_ty(self.ast.expr(args.exprs[i])),
                 }
             } else {
@@ -560,7 +560,7 @@ impl<'a> Walker<'a> {
     /// a variadic call's.
     fn win64_unprototyped(&self, sym: u32, conv: crate::c5::codegen::CallConv) -> bool {
         self.target.abi_for(conv).position_indexed_args
-            && live_fun_sym(self.symbols, sym).is_some_and(|s| !s.prototyped)
+            && live_fun_sym(self.symbols, sym).is_some_and(|s| !s.prototyped())
     }
 
     /// C99 6.5.2.2p6: widen each variadic floating-point argument to
@@ -613,10 +613,10 @@ impl<'a> Walker<'a> {
         // System V and AAPCS64), not passed by the c5 address
         // convention.
         let mut arg_aggs: alloc::vec::Vec<Option<u32>> = alloc::vec::Vec::new();
-        let nparams = self.symbols[sym as usize].params.len();
+        let nparams = self.symbols[sym as usize].params().len();
         for i in 0..args.vals.len() {
             let arg_ty = if i < nparams {
-                self.symbols[sym as usize].params[i]
+                self.symbols[sym as usize].params()[i]
             } else {
                 match arg_value_ty(self.ast.expr(args.exprs[i])) {
                     Some(t) => t,
@@ -642,8 +642,8 @@ impl<'a> Walker<'a> {
         let ty = args.ty;
         let callee = &self.symbols[sym as usize];
         let abi = self.target.abi_for(args.conv);
-        let fp_mask = call_fp_mask(abi, callee.is_variadic, args.fp_mask.clone());
-        let params = &callee.params;
+        let fp_mask = call_fp_mask(abi, callee.is_variadic(), args.fp_mask.clone());
+        let params = callee.params();
         // System V AMD64 MEMORY class / Win64 oversize: the caller
         // allocates the result buffer and passes its address as the
         // hidden first integer argument, which shifts the FP-argument

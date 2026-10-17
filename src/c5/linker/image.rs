@@ -1352,6 +1352,7 @@ mod tests {
             data_abs_relocs: alloc::vec![],
             data_pcrel_relocs: alloc::vec![],
             data_import_refs: alloc::vec![],
+            tls_data_import_refs: alloc::vec![],
             machine: NativeMachine::X86_64,
             dylibs: alloc::vec![],
             import_dylib_map: alloc::collections::BTreeMap::new(),

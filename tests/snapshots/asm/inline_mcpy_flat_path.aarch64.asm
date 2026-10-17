@@ -20,8 +20,7 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	ldr	x3, [x1]
                	lsr	x3, x3, #62
-               	lsl	x3, x3, #2
-               	add	x2, x2, x3
+               	add	x2, x2, x3, lsl #2
                	ldrh	w16, [x2]
                	strh	w16, [x0]
                	ldrsw	x0, [x1, #0x8]

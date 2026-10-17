@@ -21,7 +21,7 @@
     all(target_os = "macos", target_arch = "aarch64"),
 ))]
 
-use super::fixture_tables::{JIT_FIXTURES, JIT_UNSUPPORTED_FIXTURES};
+use super::fixture_tables::{BADC_FIXTURES, JIT_FIXTURES, JIT_UNSUPPORTED_FIXTURES};
 use crate::{Compiler, NativeOptions, jit_run, jit_run_with_options};
 
 /// Compile `src` and run it through the JIT with `args` as argv.
@@ -138,6 +138,104 @@ fn raw_byte_inline_asm_executes() {
         }
     "#;
     assert_eq!(jit_exit(src, &["jit-raw-bytes"]), 0x25);
+}
+
+/// A unit run in process places its own data: a program a library caller
+/// compiles keeps a 64 KiB alignment, past what a Mach-O image keeps.
+#[test]
+fn a_unit_run_in_process_keeps_a_64k_alignment() {
+    let src = "#include <stdint.h>\n\
+               _Alignas(65536) unsigned char d[3] = {1};\n\
+               _Alignas(65536) unsigned char b[3];\n\
+               int main(void) {\n\
+               static _Alignas(65536) unsigned char s[3];\n\
+               uintptr_t all = (uintptr_t)d | (uintptr_t)b | (uintptr_t)s;\n\
+               return all % 65536 != 0 || d[0] + b[0] + s[0] != 1;\n\
+               }\n";
+    assert_eq!(jit_exit(src, &["align-64k"]), 0, "the JIT");
+    assert_eq!(super::run_str(src), 0, "the interpreter");
+}
+
+/// An offset in an inline-asm reference counts from its symbol's own address.
+#[test]
+fn asm_offsets_count_from_the_symbols_own_address() {
+    let src = super::asm_region_edges_source();
+    assert_eq!(jit_exit(src, &["asm-region-edges"]), 0);
+    assert_eq!(jit_exit_native_optimized(src, &["asm-region-edges-opt"]), 0);
+}
+
+/// The JIT places the unit's asm with its code: a call to a function a
+/// file-scope block defines, and the address of it, of a label in a function
+/// body and of a word in a file-scope data section, bind as in an image.
+#[test]
+fn asm_defined_names_bind_to_their_definitions() {
+    let src = super::asm_defined_names_source();
+    assert_eq!(jit_exit(src, &["asm-defined"]), 0);
+    assert_eq!(jit_exit_native_optimized(src, &["asm-defined-opt"]), 0);
+}
+
+/// A static slot naming what the unit's C does not define binds as an image's.
+#[test]
+fn a_slot_naming_what_the_unit_does_not_define_binds_to_it() {
+    let src = super::named_slots_source();
+    assert_eq!(jit_exit(src, &["named-slots"]), 0);
+    assert_eq!(jit_exit_native_optimized(src, &["named-slots-opt"]), 0);
+}
+
+/// A pointer initializer naming what the unit's asm defines binds to it, at
+/// the start and past the end of a read-only and a writable table; one
+/// naming nothing defined is an undefined reference.
+#[test]
+fn an_initializer_naming_an_asm_definition_binds_to_it() {
+    let src = r#"
+__asm__(".section .rodata\n.globl ro_t, ro_t_end\n.p2align 3\nro_t: .quad 1, 2\nro_t_end:\n"
+        ".data\n.globl rw_t, rw_t_end\n.p2align 3\nrw_t: .quad 3, 4\nrw_t_end:\n.text\n");
+extern const long long ro_t[], ro_t_end[];
+extern long long rw_t[], rw_t_end[];
+const long long *const ptrs[] = {ro_t, ro_t_end - 1, rw_t, rw_t_end - 1};
+int main(void) {
+    return (*ptrs[0] != 1) + (*ptrs[1] != 2) + (*ptrs[2] != 3) + (*ptrs[3] != 4);
+}
+"#;
+    assert_eq!(jit_exit(src, &["asm-init"]), 0);
+    let undefined =
+        "extern int nowhere_obj;\nint *p = &nowhere_obj;\nint main(void) { return *p; }\n";
+    let program = Compiler::new(super::with_prelude(undefined))
+        .compile()
+        .expect("compile failed");
+    let err = jit_run(&program, &[]).expect_err("an undefined name");
+    assert!(
+        err.to_string()
+            .contains("undefined reference to `nowhere_obj`"),
+        "{err}"
+    );
+}
+
+/// Inline asm reaches an imported object through its GOT slot, which stands
+/// in for its address alone; a load or store in place is refused.
+#[test]
+fn asm_reaches_an_imported_object_through_its_slot() {
+    let src = super::asm_library_object_source(1);
+    assert_eq!(jit_exit(&src, &["asm-import"]), 0);
+    assert_eq!(jit_exit_native_optimized(&src, &["asm-import-opt"]), 0);
+    for form in [2, 3] {
+        let src = super::with_prelude(&super::asm_library_object_source(form));
+        let program = Compiler::new(src).compile().expect("compile");
+        let err = jit_run(&program, &[]).expect_err("an in-place use");
+        assert!(
+            err.to_string()
+                .contains("uses the imported object `optind` in place"),
+            "form {form}: {err}"
+        );
+    }
+}
+
+/// The JIT image is the unit: inline asm naming its definitions binds to them.
+#[test]
+fn asm_pcrel_reference_binds_to_the_units_definition() {
+    let src = super::asm_pcrel_unit_definitions_source();
+    assert_eq!(jit_exit(src, &["asm-pcrel-defs"]), 0);
+    assert_eq!(jit_exit_native_optimized(src, &["asm-pcrel-defs-opt"]), 0);
 }
 
 #[test]
@@ -1936,6 +2034,20 @@ fn fixture_parity_native_optimized() {
     );
 }
 
+/// [`BADC_FIXTURES`], at -O0 and -O.
+#[test]
+fn badc_fixtures() {
+    for (name, expected) in BADC_FIXTURES {
+        assert_eq!(jit_fixture(name), *expected, "{name} (-O0)");
+        let src = super::load_fixture(name);
+        assert_eq!(
+            jit_exit_native_optimized(&src, &[name]),
+            *expected,
+            "{name} (-O)"
+        );
+    }
+}
+
 // ---- Standalone tests for fixtures that need argv setup the
 //      parity harness can't provide. setenv / file_io are skipped:
 //      they touch process-global state (env vars / cwd) and would
@@ -2153,6 +2265,38 @@ fn undefined_extern_call_is_a_link_error() {
     let err = jit_run(&program, &["jit-undef-call".to_string()]).expect_err("must not run");
     let msg = err.to_string();
     assert!(msg.contains("undefined reference to `bar`"), "{msg}");
+}
+
+/// A function-pointer initializer naming an undefined function refuses to
+/// run, as a call to one does, rather than branch through its placeholder.
+/// A never-defined `static` function refuses to run (C99 6.9p3).
+#[test]
+fn undefined_static_function_is_a_link_error() {
+    for src in [
+        "static long g(void);\nint main(void) { return g() == 0; }",
+        "static long g(void);\nstatic long (*dp)(void) = g;\nint main(void) { return dp != 0; }",
+    ] {
+        let program = Compiler::new(src.to_string()).compile().expect("compile");
+        let err = jit_run(&program, &["jit-undef-static".to_string()]).expect_err("must not run");
+        let msg = err.to_string();
+        assert!(msg.contains("undefined reference to `g`"), "{src}: {msg}");
+    }
+}
+
+#[test]
+fn undefined_function_in_an_initializer_is_a_link_error() {
+    let program = Compiler::new(
+        "int svd(void);\n\
+         int (*gsd)(void) = svd;\n\
+         int helper(void) { return 3; }\n\
+         int main(void) { return gsd(); }"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let err = jit_run(&program, &["jit-undef-slot".to_string()]).expect_err("must not run");
+    let msg = err.to_string();
+    assert!(msg.contains("undefined reference to `svd`"), "{msg}");
 }
 
 #[test]

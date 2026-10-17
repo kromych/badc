@@ -616,12 +616,15 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
             Some(
                 Inst::Binop { .. }
                 | Inst::BinopI { .. }
+                | Inst::MulAdd { .. }
+                | Inst::ShiftOp { .. }
+                | Inst::BitField { .. }
                 | Inst::Neg(_)
                 | Inst::Bswap { .. }
                 | Inst::BitCount { .. },
             ) => "an arithmetic result",
             Some(Inst::Udiv128 { .. }) => "an arithmetic result",
-            Some(Inst::Fneg(_) | Inst::Fma { .. } | Inst::MulAdd { .. } | Inst::FpCast { .. }) => {
+            Some(Inst::Fneg(_) | Inst::Fma { .. } | Inst::FpCast { .. }) => {
                 "a floating-point result"
             }
             Some(

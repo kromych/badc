@@ -724,6 +724,62 @@ pub(crate) fn high_byte_reg_by_name(name: &str) -> Option<u8> {
     GPR_HB.iter().position(|&r| r == name).map(|i| i as u8 + 4)
 }
 
+/// The `(gpr, fpr)` masks a clobber name overlaps, none for an x87, MMX, mask,
+/// control, debug or pseudo register ([`crate::c5::codegen::clobber_registers`]).
+pub(crate) fn clobber_by_name(name: &str) -> Option<(u32, u32)> {
+    use crate::c5::codegen::clobber_index as index;
+    if let Some(field) = high_byte_reg_by_name(name) {
+        return Some((1 << (field - 4), 0));
+    }
+    let numbered = |prefix: &str, ok: fn(u32) -> bool| {
+        name.strip_prefix(prefix).and_then(index).is_some_and(ok)
+    };
+    let st = name
+        .strip_prefix("st(")
+        .and_then(|r| r.strip_suffix(')'))
+        .and_then(index)
+        .is_some_and(|n| (1..8).contains(&n));
+    if st
+        || numbered("mm", |n| n < 8)
+        || numbered("k", |n| n < 8)
+        || numbered("cr", |n| matches!(n, 0 | 2 | 3 | 4 | 8))
+        || numbered("dr", |n| matches!(n, 0..=3 | 6 | 7))
+        || matches!(
+            name,
+            "st" | "flags" | "fpsr" | "fpcr" | "dirflag" | "argp" | "frame"
+        )
+    {
+        return Some((0, 0));
+    }
+    if let Some(rest) = ["xmm", "ymm", "zmm"]
+        .iter()
+        .find_map(|p| name.strip_prefix(p))
+    {
+        return index(rest).filter(|&n| n < 32).map(|n| (0, 1 << n));
+    }
+    match reg_by_name(name)? {
+        (reg, _) if reg < 16 => Some((1 << reg, 0)),
+        _ => None,
+    }
+}
+
+/// The masks of gcc 16's register `n` (`REGISTER_NAMES`, config/i386/i386.h; 52-91 clobber
+/// only under AVX-512 or APX) or clang 22's (`GCCRegNames`, lib/Basic/Targets/X86.cpp).
+pub(crate) fn numbered_clobber(n: u32, clang: bool) -> Option<(u32, u32)> {
+    const AX_DX_CX_BX_SI_DI_BP_SP: [u8; 8] = [0, 2, 1, 3, 6, 7, 5, 4];
+    Some(match (clang, n) {
+        (_, 0..=7) => (1 << AX_DX_CX_BX_SI_DI_BP_SP[n as usize], 0),
+        (false, 8..=19 | 28..=35) | (true, 8 | 15..=21 | 30..=37) => (0, 0),
+        (false, 20..=27) => (0, 1 << (n - 20)),
+        (false, 36..=43) => (1 << (n - 28), 0),
+        (false, 44..=51) => (0, 1 << (n - 36)),
+        (true, 22..=29) => (0, 1 << (n - 22)),
+        (true, 38..=45) => (1 << (n - 30), 0),
+        (true, 46..=51) => (0, 1 << (n - 38)),
+        _ => return None,
+    })
+}
+
 /// AT&T name (without the `%` prefix) of a GPR by architectural number and
 /// byte width, the inverse of the width tables in [`reg_by_name`]. `None` for
 /// a width other than 1/2/4/8 or a number outside 0..16.

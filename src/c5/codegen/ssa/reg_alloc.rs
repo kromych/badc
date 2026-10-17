@@ -187,6 +187,8 @@ pub(crate) struct Allocation {
     /// issues in the 32-bit register form. Empty or out-of-range
     /// entries default to the 64-bit form.
     pub cmp32: Vec<bool>,
+    /// `FunctionSsa::div32`.
+    pub div32: Vec<bool>,
     /// Per value: an `Inst::BitCount` whose operand cannot be zero in the
     /// counted bytes, so the lowering's guard for the undefined zero case
     /// is dead. Filled on x86-64, the only target whose count
@@ -506,6 +508,28 @@ fn is_shift_op(op: BinOp) -> bool {
 /// count in any register.
 fn is_cl_shift_op(op: BinOp) -> bool {
     op == BinOp::Ror
+}
+
+/// The operands x86-64 may write the result of `inst` over, in its two-address
+/// forms; an `add` takes `lea`, a shift by a register BMI2's `shlx` family.
+fn x86_two_address(inst: &Inst) -> [Option<ValueId>; 2] {
+    let (op, lhs, rhs) = match *inst {
+        Inst::Binop { op, lhs, rhs } => (op, lhs, Ok(rhs)),
+        Inst::BinopI { op, lhs, rhs_imm } => (op, lhs, Err(rhs_imm)),
+        _ => return [None; 2],
+    };
+    let fits = |k: i64| i32::try_from(k).is_ok();
+    match (op, rhs) {
+        (BinOp::And | BinOp::Or | BinOp::Xor | BinOp::Mul, Ok(r)) => [Some(lhs), Some(r)],
+        (BinOp::Sub, Ok(_)) => [Some(lhs), None],
+        (BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror, Err(k)) if (0..64).contains(&k) => {
+            [Some(lhs), None]
+        }
+        (BinOp::Or | BinOp::Xor, Err(k)) if fits(k) => [Some(lhs), None],
+        (BinOp::And, Err(k)) if fits(k) && k != 0xffff_ffff => [Some(lhs), None],
+        (BinOp::Mul, Err(k)) if k > 0 && (k as u64).is_power_of_two() => [Some(lhs), None],
+        _ => [None; 2],
+    }
 }
 
 /// A division, a remainder or a high multiply, which x86-64 computes in
@@ -1179,6 +1203,8 @@ pub(crate) fn free_fp_register(
 /// Allocate physical placements for every value in `func`. See
 /// the module docs for the algorithm.
 pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Allocation {
+    let region_base = super::emit_common::region_base(func, target, fixed);
+    let fixed = super::emit_common::fixed_with_region_base(func, target, fixed);
     let n_insts = func.insts.len();
     let mut places: Vec<Place> = vec![Place::None; n_insts];
     let mut hints: Vec<Option<u8>> = vec![None; n_insts];
@@ -1223,6 +1249,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             high_observed: Vec::new(),
             high_clear: Vec::new(),
             cmp32: Vec::new(),
+            div32: Vec::new(),
             count_nonzero: Vec::new(),
             wide: Vec::new(),
             asm_preserve: (u32::MAX, u32::MAX),
@@ -1315,6 +1342,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             forbid: 0,
             avoid: 0,
             wide: false,
+            follow: [None; 3],
         });
         entry.is_fp = produces_fp_result(inst) || fp_const[v];
         entry.wide |= wide[v];
@@ -1330,6 +1358,26 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             .chain(call_forbid.get(root))
         {
             entry.forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
+        }
+    }
+    // A two-address result and an operand dying at it follow each other.
+    if target.is_x86_64() {
+        for (v, inst) in func.insts.iter().enumerate() {
+            for (k, operand) in x86_two_address(inst).into_iter().enumerate() {
+                let Some(o) = operand.filter(|&o| last_use.get(o as usize) == Some(&(v as u32)))
+                else {
+                    continue;
+                };
+                let (a, b) = (node_of[v], node_of[o as usize]);
+                if a == b {
+                    continue;
+                }
+                for (x, y, slot) in [(a, b, 1 + k), (b, a, 0)] {
+                    if let Some(entry) = node_cons[x as usize].as_mut() {
+                        entry.follow[slot].get_or_insert(y);
+                    }
+                }
+            }
         }
     }
     let (max_gpr, max_fpr) = pool_size_limits();
@@ -1478,6 +1526,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::Neg(_)
             | Inst::Fneg(_)
             | Inst::Fma { .. }
+            | Inst::ShiftOp { .. }
+            | Inst::BitField { .. }
             | Inst::Load { .. }
             | Inst::LoadLocal { .. }
             | Inst::LoadIndexed { .. }
@@ -1486,6 +1536,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::StoreIndexed { .. }
             | Inst::SegLoad { .. }
             | Inst::SegStore { .. } => true,
+            // AArch64 `madd` / `msub` write only the result; the x86-64
+            // lowering may form the product in a multiplicand's register.
+            Inst::MulAdd { .. } => !target.is_x86_64(),
             Inst::BinopI { op, .. } => {
                 !matches!(op, BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu)
             }
@@ -1503,7 +1556,29 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                     | BinOp::Shr
                     | BinOp::Shru
             ),
-            _ => false,
+            Inst::TlsAddr(_)
+            | Inst::Udiv128 { .. }
+            | Inst::Call { .. }
+            | Inst::CallIndirect { .. }
+            | Inst::CallExt { .. }
+            | Inst::TailExt(_)
+            | Inst::Mzero { .. }
+            | Inst::Mcpy { .. }
+            | Inst::AtomicRmw { .. }
+            | Inst::AtomicCas { .. }
+            | Inst::AtomicLoad { .. }
+            | Inst::AtomicStore { .. }
+            | Inst::Intrinsic { .. }
+            | Inst::X86Simd { .. }
+            | Inst::InlineAsm { .. }
+            | Inst::AllocaInit(_)
+            | Inst::LifetimeEnd(_)
+            | Inst::ParamRef { .. }
+            | Inst::ParamPart { .. }
+            | Inst::RetPart { .. }
+            | Inst::AsmOut { .. }
+            | Inst::AggParts { .. }
+            | Inst::Phi { .. } => false,
         }
     };
     let fold_preserves_source = |shl_pc: ValueId, shr_pc: ValueId| -> bool {
@@ -1655,8 +1730,13 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                 !(is_x86 && matches!(kind, FpCastKind::UFpToInt | FpCastKind::UIntToFp))
             }
             // x86-64 `neg` sets the flags; the aarch64 `sub Xd,XZR,Xn` it
-            // lowers to does not.
-            Inst::Neg(_) | Inst::BitCount { .. } => !is_x86,
+            // lowers to does not, nor do MADD, MSUB, SBFM, UBFM and a
+            // shifted-register ADD, SUB, AND, ORR or EOR.
+            Inst::Neg(_)
+            | Inst::BitCount { .. }
+            | Inst::MulAdd { .. }
+            | Inst::ShiftOp { .. }
+            | Inst::BitField { .. } => !is_x86,
             Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
                 if is_x86 {
                     matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
@@ -1664,7 +1744,30 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                     !is_compare_op(*op)
                 }
             }
-            _ => false,
+            Inst::TlsAddr(_)
+            | Inst::SegLoad { .. }
+            | Inst::SegStore { .. }
+            | Inst::Udiv128 { .. }
+            | Inst::Bswap { .. }
+            | Inst::Call { .. }
+            | Inst::CallIndirect { .. }
+            | Inst::CallExt { .. }
+            | Inst::TailExt(_)
+            | Inst::Mzero { .. }
+            | Inst::Mcpy { .. }
+            | Inst::AtomicRmw { .. }
+            | Inst::AtomicCas { .. }
+            | Inst::AtomicLoad { .. }
+            | Inst::AtomicStore { .. }
+            | Inst::Intrinsic { .. }
+            | Inst::X86Simd { .. }
+            | Inst::InlineAsm { .. }
+            | Inst::AllocaInit(_)
+            | Inst::LifetimeEnd(_)
+            | Inst::ParamPart { .. }
+            | Inst::RetPart { .. }
+            | Inst::AsmOut { .. }
+            | Inst::AggParts { .. } => false,
         }
     };
     // Whether the edge `pred -> succ` carries an FP-classed phi income
@@ -1835,23 +1938,18 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // prologue's `str xN, [sp, ...]` sequence to exactly the
     // registers AAPCS64 / SysV / Win64 require the callee to
     // preserve.
-    // A definition on a foreign calling convention gives back whatever
-    // that convention marks non-volatile on top of the target's own set
-    // (`ms_abi` adds rsi, rdi and xmm6..xmm15 to the System V list), so
-    // the save list is the union. `conv_target == target` for a
-    // definition on the target's own convention, and the union is then
-    // the plain filter.
+    // The set is the definition's own convention's (`conv_target`).
     let conv_banks = RegBanks::new(conv_target, fixed);
     let mut gpr_used_callee: Vec<u8> = gpr_used
         .into_iter()
-        .filter(|r| banks.callee_gprs.contains(r) || conv_banks.callee_gprs.contains(r))
+        .filter(|r| conv_banks.callee_gprs.contains(r))
         .collect();
     // The x86_64 writer's fixed scratch (r10 / r11) is caller-saved, so
     // it needs no save. The aarch64 writer's callee-saved x19 is saved
     // through `Frame::uses_x19`, not this list.
     let mut fp_used_callee: Vec<u8> = fp_used
         .into_iter()
-        .filter(|r| banks.callee_fprs.contains(r) || fp_callee_saved(conv_target, *r))
+        .filter(|r| fp_callee_saved(conv_target, *r))
         .collect();
     let (call_gpr, call_fpr) = call_saves(func, target, conv_target, fixed);
     for r in 0..u32::BITS as u8 {
@@ -1870,7 +1968,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     for (i, &r) in banks.fp_scratch.iter().enumerate() {
         if demand[i]
             && r != NO_FP_SCRATCH
-            && (fp_callee_saved(target, r) || fp_callee_saved(conv_target, r))
+            && fp_callee_saved(conv_target, r)
             && !fp_used_callee.contains(&r)
         {
             fp_used_callee.push(r);
@@ -1878,8 +1976,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     }
     // A callee-saved register an inline-asm block writes joins the save
     // list, so the prologue preserves it and the epilogue restores it.
-    let (asm_gpr, asm_fpr) =
-        asm_callee_saved(func, &asm_live, &banks, &conv_banks, target, conv_target);
+    let (asm_gpr, asm_fpr) = asm_callee_saved(func, &asm_live, &conv_banks, target, conv_target);
     for r in 0..u32::BITS as u8 {
         if asm_gpr & (1 << r) != 0 && !gpr_used_callee.contains(&r) {
             gpr_used_callee.push(r);
@@ -1887,6 +1984,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         if asm_fpr & (1 << r) != 0 && !fp_used_callee.contains(&r) {
             fp_used_callee.push(r);
         }
+    }
+    if let Some(r) = region_base.filter(|r| !gpr_used_callee.contains(r)) {
+        gpr_used_callee.push(r);
     }
     #[cfg(feature = "codegen_test")]
     verify_allocation(
@@ -1899,7 +1999,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         &use_counts,
     );
 
-    let asm_preserve = asm_preserve_masks(func, target);
+    let asm_preserve = asm_preserve_masks(func, target, region_base);
     Allocation {
         places,
         spill_count,
@@ -1921,6 +2021,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         ),
         high_clear: crate::c5::codegen::passes::drop_redundant_extend::compute_high_clear(func),
         cmp32: func.cmp32.clone(),
+        div32: func.div32.clone(),
         count_nonzero: if target.is_x86_64() {
             crate::c5::codegen::passes::value_range::counts_over_nonzero(func)
         } else {
@@ -2135,7 +2236,6 @@ fn abi_reserved_gprs(target: Target) -> u32 {
 fn asm_callee_saved(
     func: &FunctionSsa,
     sites: &[AsmSite],
-    banks: &RegBanks,
     conv_banks: &RegBanks,
     target: Target,
     conv_target: Target,
@@ -2144,10 +2244,9 @@ fn asm_callee_saved(
         return (0, 0);
     }
     let mask = |regs: &[u8]| regs.iter().fold(0u32, |m, &r| m | 1 << r);
-    let callee_gpr =
-        (mask(&banks.callee_gprs) | mask(&conv_banks.callee_gprs)) & !abi_reserved_gprs(target);
+    let callee_gpr = mask(&conv_banks.callee_gprs) & !abi_reserved_gprs(target);
     let callee_fpr = (0u8..u32::BITS as u8)
-        .filter(|&r| fp_callee_saved(target, r) || fp_callee_saved(conv_target, r))
+        .filter(|&r| fp_callee_saved(conv_target, r))
         .fold(0u32, |m, r| m | 1 << r);
     let (gpr, fpr) = sites
         .iter()
@@ -2157,7 +2256,8 @@ fn asm_callee_saved(
 
 /// Registers an inline-asm statement preserves around its body, for
 /// [`Allocation::asm_preserve`]: the ABI-reserved ones, which hold what
-/// the function runs on and which no prologue save list covers.
+/// the function runs on and which no prologue save list covers, and the
+/// realigned frame's base (`emit_common::region_base`).
 ///
 /// A save at the site is restored on the statement's own exits -- the
 /// fall-through and one trampoline per `asm goto` label -- and on no
@@ -2175,11 +2275,14 @@ fn asm_callee_saved(
 /// and no frame, the compiler emits nothing around the statement that
 /// reads a register, and a save at the site would address storage that
 /// does not exist.
-fn asm_preserve_masks(func: &FunctionSsa, target: Target) -> (u32, u32) {
+fn asm_preserve_masks(func: &FunctionSsa, target: Target, region_base: Option<u8>) -> (u32, u32) {
     if func.is_naked {
         return (0, 0);
     }
-    (abi_reserved_gprs(target), 0)
+    (
+        abi_reserved_gprs(target) | region_base.map_or(0, |r| 1 << r),
+        0,
+    )
 }
 
 /// [`check_allocation`], under the `codegen_test` feature and only when
@@ -2546,6 +2649,8 @@ pub(crate) struct NodeConstraints {
     pub avoid: u64,
     /// A 128-bit value, whose spill takes two units.
     pub wide: bool,
+    /// Nodes whose register, or hint while uncolored, this one prefers next.
+    pub follow: [Option<ValueId>; 3],
 }
 
 /// Result of coloring the interference graph. Which of the colored
@@ -2644,12 +2749,13 @@ fn class_members(node_of: &[ValueId]) -> (Vec<u32>, Vec<ValueId>) {
 /// count, so the hottest values color first), ties broken by ascending
 /// node id for host-independent output; an empty `weights` slice orders
 /// by ascending id. A node takes its hint when bank-legal, free and
-/// outside its `avoid` set, otherwise a caller-saved register (to avoid a
-/// prologue save) unless it must be callee-saved -- one outside its `avoid`
-/// set and apart from its `apart` neighbours (their registers, or the hints
-/// of those not yet colored) when one is free, else its hint -- otherwise
-/// a callee-saved register, and spills when its bank offers no free
-/// register. Because the coldest
+/// outside its `avoid` set, otherwise the first in bank order of the free
+/// registers its `follow` nodes hold or are hinted to, otherwise a
+/// caller-saved register (to avoid a prologue save) unless it must be
+/// callee-saved -- one outside its `avoid` set and apart from its `apart`
+/// neighbours (their registers, or the hints of those not yet colored) when
+/// one is free, else its hint -- otherwise a callee-saved register, and
+/// spills when its bank offers no free register. Because the coldest
 /// remaining node is colored last, it is the one left to spill when a
 /// bank fills. `interference` (built from CFG liveness) is the sole
 /// source of conflicts, so a value live across a back-edge passthrough
@@ -2769,11 +2875,27 @@ pub(crate) fn color_graph(
                 _ => {}
             }
         }
-        let hint = c.hint.filter(|&h| {
-            free(h) && (callee.contains(&h) || (!c.must_callee && caller.contains(&h)))
+        let legal =
+            |r: u8| free(r) && (callee.contains(&r) || (!c.must_callee && caller.contains(&r)));
+        let hint = c.hint.filter(|&h| legal(h));
+        let followed = c.follow.iter().flatten().fold(0u64, |m, &o| {
+            let r = match (color[o as usize], constraints[o as usize]) {
+                (Place::IntReg(r), _) if !c.is_fp => Some(r),
+                (Place::FpReg(r), _) if c.is_fp => Some(r),
+                (Place::None, Some(oc)) if oc.is_fp == c.is_fp => oc.hint,
+                _ => None,
+            };
+            r.filter(|&r| legal(r) && (avoid >> r) & 1 == 0)
+                .map_or(m, |r| m | 1 << r)
         });
+        let follow = caller
+            .iter()
+            .chain(callee)
+            .copied()
+            .find(|&r| (followed >> r) & 1 != 0);
         let pick = hint
             .filter(|&h| (c.avoid >> h) & 1 == 0)
+            .or(follow)
             .or_else(|| {
                 let kept = |r: &u8| free(*r) && (avoid >> *r) & 1 == 0;
                 (!c.must_callee)
@@ -3249,7 +3371,7 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Neg(_) => ResultKind::Int,
         Fneg(_) => ResultKind::Fp,
         Fma { .. } => ResultKind::Fp,
-        MulAdd { .. } | Udiv128 { .. } => ResultKind::Int,
+        MulAdd { .. } | ShiftOp { .. } | BitField { .. } | Udiv128 { .. } => ResultKind::Int,
         Extend { .. } => ResultKind::Int,
         Bswap { .. } | BitCount { .. } => ResultKind::Int,
         FpCast { kind, .. } => match kind {
@@ -4257,6 +4379,7 @@ mod tests {
             forbid: 0,
             avoid: 0,
             wide: false,
+            follow: [None; 3],
         })
     }
 
@@ -4268,6 +4391,7 @@ mod tests {
             forbid: 0,
             avoid: 0,
             wide,
+            follow: [None; 3],
         })
     }
 
@@ -4673,8 +4797,8 @@ int main(void) { return 0; }
             alloc.fp_used
         );
         let fixed = FixedRegs {
-            gpr: 0,
             fpr: (1 << 3) | (1 << 4) | (1 << 5),
+            ..FixedRegs::NONE
         };
         let alloc = super::allocate(f, Target::WindowsX64, fixed);
         assert_eq!(alloc.fp_scratch, [15, 14, 13]);
@@ -5337,8 +5461,8 @@ int main(void) { return 0; }
             (free_fp_register(f, &alloc, target, fixed), alloc.fp_used)
         };
         let scratch_fixed = FixedRegs {
-            gpr: 0,
             fpr: 0xFF00,
+            ..FixedRegs::NONE
         };
         assert_eq!(pick(Target::LinuxX64, "plain", FixedRegs::NONE).0, Some(14));
         assert_eq!(pick(Target::LinuxX64, "fp", FixedRegs::NONE).0, Some(14));
@@ -5786,6 +5910,7 @@ int main(void) { return 0; }
             inst_src: alloc::vec![(0, 0); insts.len()],
             f32_values: alloc::vec![false; insts.len()],
             cmp32: Vec::new(),
+            div32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             param_widths: crate::c5::ir::ArgWidths::default(),
@@ -5914,6 +6039,7 @@ int main(void) { return 0; }
             inst_src: alloc::vec![(0, 0); n],
             f32_values: alloc::vec![false; n],
             cmp32: Vec::new(),
+            div32: Vec::new(),
             low_word_tests: Vec::new(),
             insts,
             blocks: alloc::vec![crate::c5::ir::Block {
@@ -6028,6 +6154,7 @@ int main(void) { return 0; }
             inst_src: vec![(0, 0); n],
             f32_values: vec![false; n],
             cmp32: Vec::new(),
+            div32: Vec::new(),
             low_word_tests: Vec::new(),
             param_fp_mask: crate::c5::ir::FpMask::EMPTY,
             param_widths: crate::c5::ir::ArgWidths::default(),

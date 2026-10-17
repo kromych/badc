@@ -17,6 +17,9 @@ use super::const_expr::ConstVal;
 use super::initializer::{InitElemReloc, InitLeaf};
 use super::types::{is_pointer_ty, strip_unsigned};
 
+/// A value's type and the function type it leads to, with its depth.
+type TypedFn = (i64, (crate::c5::symbol::FnType, i64));
+
 impl Compiler {
     /// True when the cast under the cursor applies to a
     /// relocation-bearing leaf (`&x`, a string literal, or a function /
@@ -78,43 +81,77 @@ impl Compiler {
         Ok(reloc)
     }
 
-    /// True when the identifier under the cursor is the whole
-    /// initializer. A function designator names its address only when
-    /// nothing follows it: `f(...)` is a call, whose value the constant
-    /// evaluator decides. The cursor is left where it was.
-    /// The function a scalar initializer designates when it is only `f` or
-    /// `&f`, parenthesized or not; the cursor is left where it was.
-    fn initializer_designator(&mut self) -> Result<Option<usize>, C5Error> {
-        let snap = self.lex.snapshot();
-        let mut parens = 0;
-        while self.lex.tk == '(' {
-            parens += 1;
-            self.next()?;
-        }
-        if self.lex.tk == Token::AndOp {
-            self.next()?;
-        }
-        let idx = self.lex.curr_id_idx;
-        let class = self.symbols[idx].class;
-        let mut found = None;
-        if self.lex.tk == Token::Id && (class == Token::Fun as i64 || class == Token::Sys as i64) {
-            self.next()?;
-            while parens > 0 && self.lex.tk == ')' {
-                parens -= 1;
-                self.next()?;
-            }
-            if parens == 0 && self.at_initializer_end() {
-                found = Some(idx);
-            }
-        }
-        self.restore_lex(snap);
-        Ok(found)
+    /// The type and the function type of a scalar initializer whose whole
+    /// form leads to a function: a function designator, `&` of one or of an
+    /// object leading to one, or a cast to a type leading to one of a null
+    /// pointer constant or such a designator (C99 6.5.4, 6.7.8p11), grouped
+    /// in parentheses or not. The cursor and the data are left as they were.
+    fn initializer_fn_form(&mut self) -> Result<Option<TypedFn>, C5Error> {
+        let (snap, data_snap) = (self.lex.snapshot(), self.data.len());
+        let r = self.initializer_fn_form_at();
+        self.rewind_speculation(snap, data_snap);
+        r
     }
 
-    /// A function designator initializing an object that leads to a
-    /// function compares the function types (C99 6.7.8p11, 6.5.16.1p1),
-    /// which the tags do not record. Returns whether it compared; the
-    /// cursor is left where it was.
+    fn initializer_fn_form_at(&mut self) -> Result<Option<TypedFn>, C5Error> {
+        let mut parens = 0;
+        let mut cast = None;
+        while self.lex.tk == '(' {
+            self.next()?;
+            if cast.is_none() && self.lex_is_type_start() {
+                let name = self.parse_const_type_name()?;
+                if self.lex.tk != ')' {
+                    return Ok(None);
+                }
+                self.next()?;
+                cast = Some((name.ty, name.fn_ty));
+            } else {
+                parens += 1;
+            }
+        }
+        let addr = self.lex.tk == Token::AndOp;
+        if addr {
+            self.next()?;
+        }
+        let operand = if self.lex.tk == Token::Id {
+            Some(self.lex.curr_id_idx)
+        } else if self.lex.tk == Token::Num && cast.is_some() && !addr && self.lex.ival == 0 {
+            None
+        } else {
+            return Ok(None);
+        };
+        self.next()?;
+        while parens > 0 && self.lex.tk == ')' {
+            parens -= 1;
+            self.next()?;
+        }
+        if parens != 0 || !self.at_initializer_end() {
+            return Ok(None);
+        }
+        if let Some((ty, f)) = cast {
+            return Ok(f.map(|f| (ty, f)));
+        }
+        let Some(idx) = operand else {
+            return Ok(None);
+        };
+        let s = &self.symbols[idx];
+        // A library binding's declaration approximates the platform's.
+        if s.class == Token::Sys as i64 {
+            return Ok(None);
+        }
+        let function = s.class == Token::Fun as i64;
+        let ty = s.type_ + Ty::Ptr as i64;
+        Ok(match self.symbol_fn(idx) {
+            Some((f, _)) if function => Some((ty, (f, 1))),
+            Some((f, depth)) if addr => Some((ty, (f, depth + 1))),
+            _ => None,
+        })
+    }
+
+    /// An initializer leading to a function and initializing an object
+    /// that leads to one compares the function types (C99 6.7.8p11,
+    /// 6.5.16.1p1), which the tags do not record. Returns whether it
+    /// compared; the cursor is left where it was.
     pub(super) fn check_designator_initializer(
         &mut self,
         var_ty: i64,
@@ -124,20 +161,20 @@ impl Compiler {
         if target_fn.is_none() {
             return Ok(false);
         }
-        let Some(sym) = self.initializer_designator()? else {
+        let Some((init_ty, init_fn)) = self.initializer_fn_form()? else {
             return Ok(false);
         };
-        if self.symbols[sym].class != Token::Fun as i64 {
-            return Ok(false);
-        }
-        let init_ty = self.symbols[sym].type_ + Ty::Ptr as i64;
-        let init_fn = Some((self.symbol_fn_type(sym), 1));
         let what = ("initializer", "declared", "init");
-        self.check_fn_pointer_conversion((var_ty, target_fn), (init_ty, &init_fn), line, what)?;
+        self.check_fn_pointer_conversion(
+            (var_ty, target_fn),
+            (init_ty, &Some(init_fn)),
+            line,
+            what,
+        )?;
         Ok(true)
     }
 
-    fn id_ends_initializer(&mut self) -> Result<bool, C5Error> {
+    pub(super) fn id_ends_initializer(&mut self) -> Result<bool, C5Error> {
         let snap = self.lex.snapshot();
         self.next()?;
         let ends = self.at_initializer_end();
@@ -150,8 +187,18 @@ impl Compiler {
     /// `{ value }` wrapper, or the `)` of a parenthesized initializer.
     /// Anything else means the value parsed so far is a sub-operand of a
     /// larger expression.
-    fn at_initializer_end(&self) -> bool {
+    pub(super) fn at_initializer_end(&self) -> bool {
         self.lex.tk == ';' || self.lex.tk == ',' || self.lex.tk == '}' || self.lex.tk == ')'
+    }
+
+    /// Whether the object `idx` names resolves by name: an `extern` one this
+    /// unit has not defined, a block-scope one included (C99 6.2.2p4).
+    pub(super) fn names_extern_object(&self, idx: usize) -> bool {
+        let t = &self.symbols[idx];
+        t.block_extern_active
+            || t.is_extern_decl
+                && t.linkage == crate::c5::symbol::Linkage::External
+                && !t.has_initializer
     }
 
     /// Emit the link-time relocation for a data object's address stored
@@ -173,17 +220,13 @@ impl Compiler {
         // A block-scope static's address anchors to its emission record;
         // the binding slot is restored at scope exit (see `ast_emit_ident`).
         let target_idx = self.symbols[target_idx]
-            .static_local_record
+            .entity_record
             .map_or(target_idx, |r| r as usize);
         self.symbols[target_idx].binding.was_referenced = true;
         if !is_thread_local {
             self.note_init_reloc(var_offset as usize);
         }
-        let t = &self.symbols[target_idx];
-        let is_extern_data = t.is_extern_decl
-            && t.linkage == crate::c5::symbol::Linkage::External
-            && !t.has_initializer;
-        if is_extern_data {
+        if self.names_extern_object(target_idx) {
             let name = self.symbols[target_idx].link_name().into();
             let reloc = crate::c5::program::ExternDataReloc {
                 data_offset: var_offset as u64,
@@ -204,15 +247,14 @@ impl Compiler {
             data_offset: var_offset as u64,
             target_offset: target_offset as u64,
             target_anchor: self.symbols[target_idx].val as u64,
+            target_sym: Some(target_idx as u32),
         };
         if is_thread_local {
             self.tls_data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
             self.tls_data_relocs.push(reloc);
-            self.tls_data_reloc_sym_idx.push(target_idx);
         } else {
             self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
             self.data_relocs.push(reloc);
-            self.data_reloc_sym_idx.push(target_idx);
         }
         Ok(())
     }
@@ -254,17 +296,13 @@ impl Compiler {
                         data_offset: off as u64,
                         target_offset: value as u64,
                         target_anchor: value as u64,
+                        target_sym: None,
                     });
-                    self.tls_data_reloc_sym_idx.push(usize::MAX);
                 }
             },
             InitElemReloc::Code(sym_idx) => {
                 self.symbols[sym_idx].binding.was_referenced = true;
-                self.tls_code_relocs.push(crate::c5::program::CodeReloc {
-                    data_offset: off as u64,
-                    target_ent_pc: value as u64,
-                });
-                self.tls_code_reloc_sym_idx.push(sym_idx);
+                self.push_code_reloc(true, off as u64, sym_idx, value as i64);
             }
             // `&&label` names a block in the function being parsed; a
             // file-scope `_Thread_local` has no enclosing function.
@@ -413,21 +451,14 @@ impl Compiler {
                 };
             }
             let bytes = (ent_pc as u64).to_le_bytes();
-            let reloc = crate::c5::program::CodeReloc {
-                data_offset: var_offset as u64,
-                target_ent_pc: ent_pc as u64,
-            };
             if is_thread_local {
                 self.tls_data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                 self.note_tls_init(var_offset);
-                self.tls_code_relocs.push(reloc);
-                self.tls_code_reloc_sym_idx.push(sym_idx);
             } else {
                 self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                 self.note_init_reloc(var_offset as usize);
-                self.code_relocs.push(reloc);
-                self.code_reloc_sym_idx.push(sym_idx);
             }
+            self.push_code_reloc(is_thread_local, var_offset as u64, sym_idx, ent_pc);
             return Ok(());
         }
         // C99 6.3.2.1p3: an array lvalue decays to a pointer to its
@@ -496,20 +527,17 @@ impl Compiler {
                     data_offset: var_offset as u64,
                     target_offset: addr as u64,
                     target_anchor: addr as u64,
+                    target_sym: None,
                 };
-                // A string literal owns no symbol; the sentinel marks
-                // the entry intra-unit.
                 if is_thread_local {
                     self.tls_data[var_offset as usize..var_offset as usize + 8]
                         .copy_from_slice(&bytes);
                     self.note_tls_init(var_offset);
                     self.tls_data_relocs.push(reloc);
-                    self.tls_data_reloc_sym_idx.push(usize::MAX);
                 } else {
                     self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                     self.note_init_reloc(var_offset as usize);
                     self.data_relocs.push(reloc);
-                    self.data_reloc_sym_idx.push(usize::MAX);
                 }
                 return Ok(());
             }
@@ -658,22 +686,15 @@ impl Compiler {
                 self.symbols[sym_idx].binding.was_referenced = true;
                 let ent_pc = self.symbols[sym_idx].val;
                 let bytes = (ent_pc as u64).to_le_bytes();
-                let reloc = crate::c5::program::CodeReloc {
-                    data_offset: var_offset as u64,
-                    target_ent_pc: ent_pc as u64,
-                };
                 if is_thread_local {
                     self.tls_data[var_offset as usize..var_offset as usize + 8]
                         .copy_from_slice(&bytes);
                     self.note_tls_init(var_offset);
-                    self.tls_code_relocs.push(reloc);
-                    self.tls_code_reloc_sym_idx.push(sym_idx);
                 } else {
                     self.data[var_offset as usize..var_offset as usize + 8].copy_from_slice(&bytes);
                     self.note_init_reloc(var_offset as usize);
-                    self.code_relocs.push(reloc);
-                    self.code_reloc_sym_idx.push(sym_idx);
                 }
+                self.push_code_reloc(is_thread_local, var_offset as u64, sym_idx, ent_pc);
             } else {
                 if is_thread_local {
                     self.note_tls_init(var_offset);
@@ -692,7 +713,12 @@ impl Compiler {
         // floating form to here: an `as_int` first would truncate the
         // fraction of `3 * 0.5`, and 6.3.1.2 has a `_Bool` destination
         // test the value against 0 rather than truncate it.
-        let value = if var_is_float || matches!(cv, ConstVal::Float(_)) {
+        let value = if var_is_float || cv.is_float() {
+            let cv = if var_is_float {
+                self.const_convert(cv, var_ty)
+            } else {
+                cv
+            };
             self.to_storage_bits(
                 cv.as_float().to_bits() as i128,
                 InitElemReloc::Float64Bits,

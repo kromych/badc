@@ -8,17 +8,19 @@
 //! Warnings go through `Compiler::sink` and never fail the compile
 //! at their site.
 
+use super::super::ast::expr_ty;
 use super::super::ast::{BlockItem, Expr, ExprId, Stmt, StmtId, UnOp};
 use super::super::diag::{Code, Loc};
 use super::super::error::C5Error;
 use super::super::ir::BinOp;
 use super::super::ir::imm_safe_binop;
-use super::super::irgen::fold_int_binop;
+use super::super::irgen::fold_const_int_binop;
 use super::super::token::Ty;
 use super::Compiler;
 use super::types::{
     UNSIGNED_BIT, bool_ptr_depth, is_bool_ty, is_floating_scalar, is_pointer_ty, is_struct_ty,
-    is_struct_value_ty, is_void_ty, strip_unsigned, struct_ptr_depth, unqualified_object_ty,
+    is_struct_value_ty, is_unsigned_ty, is_void_ty, narrow_const_int, strip_unsigned,
+    struct_ptr_depth, unqualified_object_ty, void_ptr_ty,
 };
 
 /// A target-vs-source type mismatch reported by
@@ -306,17 +308,27 @@ impl Compiler {
     /// naming an object -- `(void *)((long)x * 0l)` -- is correctly not
     /// a null pointer constant even though it evaluates to zero.
     pub(super) fn expr_is_null_pointer_constant(&self, e: ExprId) -> bool {
-        self.expr_const_int(e) == Some(0)
+        let e = match self.ast.expr(e) {
+            Expr::Cast { child, to_ty } if *to_ty == void_ptr_ty() => *child,
+            _ => e,
+        };
+        expr_ty(self.ast.expr(e)).is_some_and(|t| !is_pointer_ty(t) && !is_floating_scalar(t))
+            && self.expr_const_int(e) == Some(0)
     }
 
-    /// Fold a literal-rooted integer constant expression. Casts are
-    /// looked through without applying their conversion: the callers
-    /// only compare against zero, and a cast that truncates a non-zero
-    /// constant to zero is not a null pointer constant in practice.
+    /// Fold a literal-rooted integer constant expression, each value in its
+    /// own type: a cast to an integer type converts (C99 6.3.1.3).
     pub(super) fn expr_const_int(&self, e: ExprId) -> Option<i64> {
         match self.ast.expr(e) {
             Expr::IntLit { val, .. } => Some(*val),
             Expr::Sizeof(s) => Some(s.size_bytes),
+            Expr::Cast { child, to_ty }
+                if !is_pointer_ty(*to_ty) && !is_floating_scalar(*to_ty) =>
+            {
+                let v = self.expr_const_int(*child)?;
+                let (bytes, is_bool) = (self.size_of_type(*to_ty), is_bool_ty(*to_ty));
+                Some(narrow_const_int(bytes, is_unsigned_ty(*to_ty), is_bool, v as i128) as i64)
+            }
             Expr::Cast { child, .. } => self.expr_const_int(*child),
             Expr::Unary { op, child, ty } => {
                 let v = self.expr_const_int(*child)?;
@@ -331,7 +343,7 @@ impl Compiler {
                     UnOp::AddrOf | UnOp::Deref => None,
                 }
             }
-            Expr::Binary { op, lhs, rhs, .. } => {
+            Expr::Binary { op, lhs, rhs, ty } => {
                 // `/` and `%` are integer constant expressions (C99 6.6)
                 // but are not immediate-foldable, so they are admitted
                 // alongside the imm-safe set. A zero divisor is undefined
@@ -342,10 +354,7 @@ impl Compiler {
                 }
                 let l = self.expr_const_int(*lhs)?;
                 let r = self.expr_const_int(*rhs)?;
-                if divmod && r == 0 {
-                    return None;
-                }
-                Some(fold_int_binop(*op, l, r))
+                fold_const_int_binop(&self.ast, self.target, *op, *ty, (*lhs, l), (*rhs, r))
             }
             // A conditional with a constant condition folds to its selected
             // arm (C99 6.6p3 exempts the unevaluated arm), so the

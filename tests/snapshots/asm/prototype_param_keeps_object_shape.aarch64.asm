@@ -22,8 +22,7 @@ Disassembly of section .text:
                	add	x1, x0, #0x10
                	sub	x0, x1, x0
                	asr	x1, x0, #63
-               	lsr	x1, x1, #62
-               	add	x0, x0, x1
+               	add	x0, x0, x1, lsr #62
                	asr	x0, x0, #2
                	cmp	x0, #0x4
                	b.ne	<addr>
@@ -32,16 +31,14 @@ Disassembly of section .text:
                	add	x1, x0, #0x30
                	sub	x1, x1, x0
                	asr	x2, x1, #63
-               	lsr	x2, x2, #62
-               	add	x1, x1, x2
+               	add	x1, x1, x2, lsr #62
                	asr	x1, x1, #2
                	cmp	x1, #0xc
                	b.ne	<addr>
                	add	x1, x0, #0x10
                	sub	x0, x1, x0
                	asr	x1, x0, #63
-               	lsr	x1, x1, #62
-               	add	x0, x0, x1
+               	add	x0, x0, x1, lsr #62
                	asr	x0, x0, #2
                	cmp	x0, #0x4
                	b.ne	<addr>
@@ -49,8 +46,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	add	x1, x0, #0x6
                	sub	x0, x1, x0
-               	lsr	x1, x0, #63
-               	add	x0, x0, x1
+               	add	x0, x0, x0, lsr #63
                	asr	x0, x0, #1
                	cmp	x0, #0x3
                	b.ne	<addr>

@@ -118,7 +118,9 @@ fn overaligned_source() -> String {
 #[cfg(test)]
 fn overaligned_text(src: &str, target: crate::c5::Target) -> Vec<u8> {
     use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
-    let program = Compiler::new(src.to_string()).compile().expect("compile");
+    let program = Compiler::with_target(src.to_string(), target)
+        .compile()
+        .expect("compile");
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
         ..Default::default()
@@ -184,6 +186,126 @@ fn overaligned_automatic_aarch64_realigns_prologue() {
     assert!(
         bytes.windows(4).any(|w| w == [0x1F, 0xE6, 0x7A, 0x92]),
         "aarch64 realigning prologue `and sp, x16, #-64` not emitted"
+    );
+}
+
+/// An automatic object aligned above 16 beside `alloca` (C11 6.7.5): the
+/// realigned sp lands in a callee-saved base register right after the
+/// realignment, rbx on x86-64 and x20 on AArch64, and the region is
+/// addressed from it while sp moves. An inline asm statement naming rbx
+/// moves the base to r12; without `alloca` sp stays put and no base is set.
+#[test]
+fn overaligned_automatic_beside_alloca_keeps_a_region_base() {
+    use crate::c5::Target;
+    let src = |asm: &str| {
+        alloc::format!(
+            "int use(void *, void *);\n\
+             int f(int n) {{ _Alignas(64) char buf[64]; {asm}\n\
+               char *p = __builtin_alloca(n); return use(buf, p); }}\n\
+             int main(void) {{ return f(0); }}\n"
+        )
+    };
+    let follows = |text: &[u8], first: &[u8], second: &[u8]| {
+        text.windows(first.len() + second.len())
+            .any(|w| w[..first.len()] == *first && w[first.len()..] == *second)
+    };
+    let and_rsp: &[u8] = &[0x48, 0x83, 0xE4, 0xC0];
+    let x64 = overaligned_text(&src(""), Target::LinuxX64);
+    assert!(follows(&x64, and_rsp, &[0x48, 0x89, 0xE3]), "mov rbx, rsp");
+    let named = src("long r; __asm__ volatile(\"\" : \"=b\"(r)); use(&r, 0);");
+    let x64 = overaligned_text(&named, Target::LinuxX64);
+    assert!(follows(&x64, and_rsp, &[0x49, 0x89, 0xE4]), "mov r12, rsp");
+    let and_sp: &[u8] = &[0x1F, 0xE6, 0x7A, 0x92];
+    let a64 = overaligned_text(&src(""), Target::LinuxAarch64);
+    assert!(
+        follows(&a64, and_sp, &[0xF4, 0x03, 0x00, 0x91]),
+        "mov x20, sp"
+    );
+    let still = overaligned_source();
+    let x64 = overaligned_text(&still, Target::LinuxX64);
+    assert!(
+        !follows(&x64, and_rsp, &[0x48, 0x89, 0xE3]),
+        "no base without alloca"
+    );
+    // An inline asm statement that may leave rsp moved needs the base too.
+    let switch = "int use(void *, void *);\n\
+        int f(void *top) { _Alignas(64) char buf[64];\n\
+          __asm__ volatile(\"mov %0, %%rsp\" : : \"r\"(top) : \"memory\");\n\
+          return use(buf, 0); }\n\
+        int main(void) { return 0; }\n";
+    let x64 = overaligned_text(switch, Target::LinuxX64);
+    assert!(
+        follows(&x64, and_rsp, &[0x48, 0x89, 0xE3]),
+        "mov rbx, rsp past an sp switch"
+    );
+    // A template that only reads rsp leaves it in place: no base, and a
+    // statement clobbering every candidate is no obstacle.
+    let read = "int use(void *, void *);\n\
+        int f(void) { _Alignas(64) char buf[64]; long sp;\n\
+          __asm__ volatile(\"mov %%rsp, %0\" : \"=r\"(sp));\n\
+          __asm__ volatile(\"\" ::: \"rbx\", \"r12\", \"r13\", \"r14\", \"r15\");\n\
+          return use(buf, (void *)sp); }\n\
+        int main(void) { return 0; }\n";
+    let x64 = overaligned_text(read, Target::LinuxX64);
+    assert!(
+        !follows(&x64, and_rsp, &[0x48, 0x89, 0xE3]),
+        "no base for an sp read"
+    );
+}
+
+/// When every candidate is written by some asm statement, the realigned
+/// frame's base is the first one an operand leaves, and each statement that
+/// writes it saves it ahead of the template and restores it after: `mov
+/// [rbp+d], rbx` / `mov rbx, [rbp+d]` around `xor ebx, ebx` on x86-64, and
+/// `stur x20, [x29, #d]` / `ldur x20, [x29, #d]` around `mov x20, xzr` on
+/// AArch64.
+#[test]
+fn a_statement_that_writes_the_region_base_saves_it() {
+    use crate::c5::Target;
+    let src = |zero: &str, clobbers: &str| {
+        alloc::format!(
+            "int use(void *, void *);\n\
+             int f(int n) {{ _Alignas(64) char buf[64];\n\
+               char *p = __builtin_alloca(n);\n\
+               __asm__ volatile(\"{zero}\" ::: {clobbers});\n\
+               return use(buf, p); }}\n\
+             int main(void) {{ return f(0); }}\n"
+        )
+    };
+    let x64 = overaligned_text(
+        &src(
+            "xor %%ebx, %%ebx",
+            "\"rbx\", \"r12\", \"r13\", \"r14\", \"r15\"",
+        ),
+        Target::LinuxX64,
+    );
+    assert!(
+        x64.windows(10).any(|w| w[..3] == [0x48, 0x89, 0x5D]
+            && w[4..6] == [0x31, 0xDB]
+            && w[6..9] == [0x48, 0x8B, 0x5D]
+            && w[3] == w[9]),
+        "rbx saved around the template"
+    );
+    let a64 = overaligned_text(
+        &src(
+            "mov x20, xzr",
+            "\"x20\", \"x21\", \"x22\", \"x23\", \"x24\", \"x25\", \"x26\", \"x27\", \"x28\"",
+        ),
+        Target::LinuxAarch64,
+    );
+    let words: Vec<u32> = a64
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_le_bytes(*w))
+        .collect();
+    let (stur, ldur, imm) = (0xF800_03B4u32, 0xF840_03B4u32, 0x001F_F000u32);
+    assert!(
+        words.windows(3).any(|w| w[0] & !imm == stur
+            && w[1] == 0xAA1F_03F4
+            && w[2] & !imm == ldur
+            && w[0] & imm == w[2] & imm),
+        "x20 saved around the template"
     );
 }
 
@@ -1843,6 +1965,323 @@ fn noinline_binds_to_the_function_its_declaration_names() {
             !obj.windows(7).any(|w| w == b"wrapper"),
             "the next declaration must not inherit it ({target:?})"
         );
+    }
+}
+
+#[test]
+fn a_definition_and_the_declarations_in_its_body_keep_their_own_noinline() {
+    // A definition's `noinline` names that function, not one its body
+    // declares (`fnt inner;`); a `noinline` on a declaration in the body
+    // names `far_fn`, not the enclosing `wrapper`. gcc inlines and drops
+    // both `inner` and `wrapper`.
+    use crate::c5::Target;
+    let src = "\
+        static int inner(int x);\n\
+        static __attribute__((noinline)) int outer(int x) {\n\
+            typedef int fnt(int);\n\
+            fnt inner;\n\
+            return inner(x) + 1;\n\
+        }\n\
+        static int inner(int x) { return x * 2 + 1; }\n\
+        static int wrapper(int x) {\n\
+            __attribute__((noinline)) int far_fn(int);\n\
+            return far_fn(x) + 1;\n\
+        }\n\
+        int keep(int x) { return outer(x) + inner(x) + wrapper(x); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let obj = reloc_tu(src, target, true);
+        assert!(obj.windows(5).any(|w| w == b"outer"), "{target:?}");
+        assert!(!obj.windows(5).any(|w| w == b"inner"), "{target:?}");
+        assert!(!obj.windows(7).any(|w| w == b"wrapper"), "{target:?}");
+    }
+}
+
+#[test]
+fn an_attribute_after_a_declarator_binds_to_it_alone() {
+    // GNU attribute syntax: an attribute among the declaration specifiers
+    // applies to every declarator, one after a declarator to that
+    // declarator. gcc and clang bind `wv` weak and `hv` hidden, leave
+    // `helper2` and `helper3` global and default, and bind `w1` and `w2`
+    // weak.
+    use crate::c5::Target;
+    use crate::c5::linker::parse_native_elf;
+    let src = "\
+        extern int wv __attribute__((weak)), helper2(int);\n\
+        extern int hv __attribute__((visibility(\"hidden\"))), helper3(int);\n\
+        __attribute__((weak)) extern int w1, w2;\n\
+        int lists(int x) { return helper2(x) + helper3(x) + wv + hv + w1 + w2; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let obj = parse_native_elf(&reloc_tu(src, target, false)).expect("parse");
+        let sym = |name: &str| {
+            let s = obj.symbols.iter().find(|s| s.name == name);
+            s.map(|s| (s.binding, s.visibility))
+        };
+        // (STB_*, STV_*): GLOBAL 1, WEAK 2; DEFAULT 0, HIDDEN 2.
+        assert_eq!(sym("wv"), Some((2, 0)), "{target:?}");
+        assert_eq!(sym("helper2"), Some((1, 0)), "{target:?}");
+        assert_eq!(sym("hv"), Some((1, 2)), "{target:?}");
+        assert_eq!(sym("helper3"), Some((1, 0)), "{target:?}");
+        assert_eq!(sym("w1"), Some((2, 0)), "{target:?}");
+        assert_eq!(sym("w2"), Some((2, 0)), "{target:?}");
+    }
+}
+
+#[test]
+fn a_block_scope_prototype_takes_the_attributes_a_file_scope_one_does() {
+    // A block-scope function declaration names the entity a file-scope one
+    // would (C99 6.2.2p4), and gcc and clang give it the same attributes:
+    // `weak`, leading a later declarator of the list too, an asm label
+    // followed by an attribute, the hidden extent of a `#pragma GCC
+    // visibility`, and `constructor`.
+    use crate::c5::Target;
+    use crate::c5::linker::parse_native_elf;
+    let src = "\
+        int lists(void) {\n\
+            __attribute__((weak)) extern int wfn(void);\n\
+            int helper(int) __asm__(\"helper_label\") __attribute__((noinline));\n\
+            __attribute__((constructor)) void my_init(void);\n\
+            int plain(int), __attribute__((weak)) wlist(int);\n\
+            int x = 1, __attribute__((weak)) wafter(int), __attribute__((weak)) *wptr(int);\n\
+            return wfn() + helper(1) + plain(x) + wlist(2) + wafter(3) + *wptr(4);\n\
+        }\n\
+        #pragma GCC visibility push(hidden)\n\
+        int hidden_user(void) { int hidden_fn(int); return hidden_fn(0); }\n\
+        #pragma GCC visibility pop\n\
+        void my_init(void) {}\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let obj = parse_native_elf(&reloc_tu(src, target, false)).expect("parse");
+        let sym = |name: &str| {
+            let s = obj.symbols.iter().find(|s| s.name == name);
+            s.map(|s| (s.binding, s.visibility))
+        };
+        // (STB_*, STV_*): GLOBAL 1, WEAK 2; DEFAULT 0, HIDDEN 2.
+        assert_eq!(sym("wfn"), Some((2, 0)), "{target:?}");
+        assert_eq!(sym("plain"), Some((1, 0)), "{target:?}");
+        for weak in ["wlist", "wafter", "wptr"] {
+            assert_eq!(sym(weak), Some((2, 0)), "{target:?} {weak}");
+        }
+        assert_eq!(sym("helper_label"), Some((1, 0)), "{target:?}");
+        assert_eq!(sym("hidden_fn"), Some((1, 2)), "{target:?}");
+        assert_eq!(obj.init_funcs.len(), 1, "{target:?}");
+    }
+}
+
+#[test]
+fn a_block_scope_extern_object_keeps_its_attributes_past_its_scope() {
+    // A block-scope `extern` object names the entity a file-scope one would
+    // (C99 6.2.2p4), and its `weak` and `visibility` reach its symbol after
+    // the scope ends, as gcc and clang give it; a later declarator of the
+    // declaration takes no trailing attribute of an earlier one. A local of
+    // the same name around the block keeps its own binding.
+    use crate::c5::Target;
+    use crate::c5::linker::parse_native_elf;
+    let src = "\
+        int f(void) { extern int bw __attribute__((weak)); return bw; }\n\
+        int g(void) { extern int bh __attribute__((visibility(\"hidden\"))); return bh; }\n\
+        int h(void) {\n\
+            __attribute__((weak)) extern int bl;\n\
+            extern int bm __attribute__((weak)), bn;\n\
+            return bl + bm + bn;\n\
+        }\n\
+        int k(int bs) {\n\
+            { extern int bs __attribute__((weak)); bs += 0; }\n\
+            return bs;\n\
+        }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let obj = parse_native_elf(&reloc_tu(src, target, false)).expect("parse");
+        let sym = |name: &str| {
+            let s = obj.symbols.iter().find(|s| s.name == name);
+            s.map(|s| (s.binding, s.visibility))
+        };
+        // (STB_*, STV_*): GLOBAL 1, WEAK 2; DEFAULT 0, HIDDEN 2.
+        assert_eq!(sym("bw"), Some((2, 0)), "{target:?}");
+        assert_eq!(sym("bh"), Some((1, 2)), "{target:?}");
+        assert_eq!(sym("bl"), Some((2, 0)), "{target:?}");
+        assert_eq!(sym("bm"), Some((2, 0)), "{target:?}");
+        assert_eq!(sym("bn"), Some((1, 0)), "{target:?}");
+        assert_eq!(sym("bs"), Some((2, 0)), "{target:?}");
+    }
+}
+
+#[test]
+fn a_block_scope_function_outlives_a_file_scope_binding_without_linkage() {
+    // C99 6.2.1p4 + 6.2.2p4: past a file-scope typedef or enumerator of its
+    // name, which has no linkage, a block-scope function declaration names
+    // a function with external linkage, which the binding hides but does not
+    // replace, in either order. Each call, address, static initializer and
+    // cleanup relocates against the undefined function, weak and renamed as
+    // its attributes say, as with gcc and clang.
+    use crate::c5::Target;
+    use crate::c5::linker::{NativeSymSection, parse_native_elf};
+    // (source, symbol, STB_*, a `.data` relocation rather than a `.text` one)
+    let rows: &[(&str, &str, u8, bool)] = &[
+        (
+            "long f(void) { long big(int); return big(5); }\ntypedef short big;\nbig s = 1;\n",
+            "big",
+            1,
+            false,
+        ),
+        (
+            "long f(void) { long big(int); return big(5); }\nenum { big = 9 };\nint e = big;\n",
+            "big",
+            1,
+            false,
+        ),
+        (
+            "typedef short big;\nlong f(void) { long big(int); return big(5); }\nbig s = 1;\n",
+            "big",
+            1,
+            false,
+        ),
+        (
+            "enum { big = 9 };\nlong f(void) { long big(int); return big(5); }\nint e = big;\n",
+            "big",
+            1,
+            false,
+        ),
+        (
+            "long (*f(void))(int) { long big(int); return big; }\ntypedef short big;\n",
+            "big",
+            1,
+            false,
+        ),
+        (
+            "typedef short big;\nlong (*f(void))(int) { long big(int); return &big; }\n",
+            "big",
+            1,
+            false,
+        ),
+        (
+            "long f(void) { long big(int); static long (*p)(int) = big; return p(5); }\n\
+             typedef short big;\n",
+            "big",
+            1,
+            true,
+        ),
+        (
+            "typedef short big;\n\
+             long f(void) { long big(int); static long (*p)(int) = big; return p(5); }\n",
+            "big",
+            1,
+            true,
+        ),
+        (
+            "long f(void) { long big(int); return big(5); }\ntypedef short big;\n\
+             long g(void) { big s = 1; { long big(int); { long big(int); return big(s); } } }\n",
+            "big",
+            1,
+            false,
+        ),
+        (
+            "typedef short big;\n\
+             void f(void) { void big(int *); int v __attribute__((cleanup(big))) = 1; }\n",
+            "big",
+            1,
+            false,
+        ),
+        (
+            "long f(void) { long w(int) __attribute__((weak)); return &w ? w(5) : 7; }\n\
+             typedef short w;\n",
+            "w",
+            2,
+            false,
+        ),
+        (
+            "typedef short w;\n\
+             long f(void) { long w(int) __attribute__((weak)); return &w ? w(5) : 7; }\n",
+            "w",
+            2,
+            false,
+        ),
+        (
+            "long f(void) { long other(int) __asm__(\"real\"); return other(5); }\n\
+             typedef short other;\n",
+            "real",
+            1,
+            false,
+        ),
+        (
+            "typedef short other;\n\
+             long f(void) { long other(int) __asm__(\"real\"); return other(5); }\n",
+            "real",
+            1,
+            false,
+        ),
+    ];
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        for &(src, name, binding, in_data) in rows {
+            for optimize in [false, true] {
+                let obj = parse_native_elf(&reloc_tu(src, target, optimize)).expect("parse");
+                let at = obj.symbols.iter().position(|s| s.name == name);
+                let at =
+                    at.unwrap_or_else(|| panic!("{target:?} -O={optimize} {src:?}: no `{name}`"));
+                let s = &obj.symbols[at];
+                assert!(
+                    matches!(s.section, NativeSymSection::Undef) && s.binding == binding,
+                    "{target:?} -O={optimize} {src:?}: `{name}` is not undefined with binding {binding}"
+                );
+                let relocs = if in_data {
+                    &obj.data_relocs
+                } else {
+                    &obj.text_relocs
+                };
+                assert!(
+                    relocs.iter().any(|r| r.sym_idx == at),
+                    "{target:?} -O={optimize} {src:?}: no relocation against `{name}`"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_block_scope_extern_objects_address_initializes_a_static() {
+    // C99 6.2.2p4 + 6.6p9: in a block-scope static's initializer, the address
+    // of an object a block-scope `extern` declares is the named object's,
+    // which another unit defines: the slot relocates against the symbol, in a
+    // brace list (in `.data.rel.ro` for a `const` table) and with an offset
+    // too, as with gcc and clang.
+    use crate::c5::Target;
+    use crate::c5::linker::{NativeSymSection, parse_native_elf};
+    // (source, addend of the data relocation against `cell`)
+    let rows: &[(&str, i64)] = &[
+        (
+            "long f(void) { extern long cell; static long *p = &cell; return *p; }\n",
+            0,
+        ),
+        (
+            "long f(void) { extern long cell[4]; static long *p = &cell[2]; return *p; }\n",
+            16,
+        ),
+        (
+            "long f(void) { extern long cell; static long *const t[] = { 0, &cell }; return *t[1]; }\n",
+            0,
+        ),
+        (
+            "long f(int cell) { { extern long cell; static long *p = &cell; return *p; } }\n",
+            0,
+        ),
+        (
+            "typedef short cell;\n\
+             long f(void) { extern long cell; static long *p = &cell; return *p; }\n",
+            0,
+        ),
+    ];
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        for &(src, addend) in rows {
+            let obj = parse_native_elf(&reloc_tu(src, target, false)).expect("parse");
+            let at = obj.symbols.iter().position(|s| s.name == "cell");
+            let at = at.unwrap_or_else(|| panic!("{target:?} {src:?}: no `cell`"));
+            assert!(
+                matches!(obj.symbols[at].section, NativeSymSection::Undef),
+                "{target:?} {src:?}: `cell` is defined here"
+            );
+            assert!(
+                (obj.data_relocs.iter().chain(&obj.relro_relocs))
+                    .any(|r| r.sym_idx == at && r.addend == addend),
+                "{target:?} {src:?}: no data relocation against `cell` + {addend}"
+            );
+        }
     }
 }
 
@@ -4783,6 +5222,7 @@ fn a_shared_librarys_exported_definitions_bind_through_its_dynamic_symbols() {
                 preemption,
                 export_all: true,
                 export_data: true,
+                ..Default::default()
             };
             let mut merged = link_native_objects_with(&objs, &[], &opts).expect("link");
             let what = format!("{target:?} {preemption:?}");
@@ -4896,6 +5336,7 @@ fn link_defined_bounds_are_hidden_or_protected() {
                 preemption,
                 export_all: true,
                 export_data: true,
+                ..Default::default()
             };
             let mut merged = link_native_objects_with(&objs, &[], &opts).expect("link");
             assert!(merged.preemptible_imports.is_empty(), "{target:?} {kind:?}");
@@ -6301,7 +6742,7 @@ fn cpuid_partial_outputs_with_clobbers_x86_64() {
     // registers are saved around the statement and no subleaf input is
     // required.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
-    let program = Compiler::new(
+    let program = Compiler::with_target(
         "static unsigned leaf_max(void) {\n\
          unsigned m;\n\
          __asm__ volatile(\"cpuid\" : \"=a\"(m) : \"a\"(0) : \"rbx\", \"rcx\", \"rdx\");\n\
@@ -6309,6 +6750,7 @@ fn cpuid_partial_outputs_with_clobbers_x86_64() {
          }\n\
          int main(void){ return (int)(leaf_max() & 0); }\n"
             .to_string(),
+        Target::LinuxX64,
     )
     .compile()
     .expect("compile");
@@ -6655,6 +7097,7 @@ fn unrouted_weak_undef_resolves_to_zero() {
         binding: 0,
         kind: 0,
         visibility: 0,
+        input_section: None,
     };
     let weak_undef = || NativeSymbol {
         name: "hook".to_string(),
@@ -6664,6 +7107,7 @@ fn unrouted_weak_undef_resolves_to_zero() {
         binding: 2, // STB_WEAK
         kind: 0,
         visibility: 0,
+        input_section: None,
     };
     let mk = |machine: NativeMachine,
               text: alloc::vec::Vec<u8>,
@@ -6785,6 +7229,7 @@ fn weak_undef_binds_against_a_shared_library_export() {
         binding,
         kind: 0,
         visibility: 0,
+        input_section: None,
     };
     let obj = minimal_native_object(
         NativeMachine::X86_64,
@@ -6906,6 +7351,7 @@ fn aarch64_data_ref_object_ex(
         binding: 1,
         kind: 0,
         visibility: 0,
+        input_section: None,
     };
     crate::c5::linker::NativeObject {
         source: alloc::string::String::new(),
@@ -6939,6 +7385,7 @@ fn aarch64_data_ref_object_ex(
             binding: 0,
             kind: 0,
             visibility: 0,
+            input_section: None,
         },]
         .into_iter()
         .chain(
@@ -7235,6 +7682,7 @@ fn aarch64_pcrel_object(
         binding: 1,
         kind: 0,
         visibility: 0,
+        input_section: None,
     };
     crate::c5::linker::NativeObject {
         source: "reloc_ref.o".to_string(),
@@ -7340,6 +7788,7 @@ fn aarch64_absolute_text_relocations_take_the_image_base() {
         binding: 1,
         kind: 0,
         visibility: 0,
+        input_section: None,
     };
     let obj = crate::c5::linker::NativeObject {
         source: "abs_in_text.o".to_string(),
@@ -9251,6 +9700,30 @@ fn named_section_members_pack_in_declaration_order() {
     );
     assert_eq!(sections[".data"].1, 8, ".data alignment not inflated");
     assert_eq!(sections[".bss"].0, 0, "no ghost bytes in .bss");
+}
+
+#[test]
+#[cfg(feature = "native-emit")]
+fn a_named_group_starts_on_its_widest_member() {
+    // An 8-aligned and a 16384-aligned contribution, the stream short of
+    // 16384 before them: the group starts on the wider one.
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    let unit = |src: &str| parse_native_elf(&emit_reloc_for(src)).expect("parse");
+    let merged = link_native_objects(&[
+        unit("__attribute__((section(\"ngrp\"))) long a1 = 1;\n"),
+        unit("__attribute__((section(\"ngrp\"), aligned(16384))) long b1 = 2;\n"),
+        unit("long plain = 3;\n"),
+    ])
+    .expect("link");
+    let group = merged
+        .named_sections
+        .iter()
+        .find(|n| n.name == "ngrp")
+        .expect("the group");
+    assert_eq!(group.align, 16384);
+    assert_eq!(group.offset % 16384, 0, "group at {:#x}", group.offset);
+    let b1 = merged.defined["b1"].value;
+    assert_eq!((b1 - group.offset) % 16384, 0, "b1 at {b1:#x}");
 }
 
 #[test]
@@ -13682,6 +14155,57 @@ fn undefined_strong_reference_in_single_tu_image_is_diagnosed() {
             .expect_err("an undefined reference in a final image must be diagnosed");
         assert!(
             format!("{err}").contains("undefined reference to `absent`"),
+            "{target:?}: unexpected diagnostic: {err}"
+        );
+    }
+}
+
+/// A never-defined `static` function is undefined in a single-file image.
+#[test]
+fn a_static_function_no_body_defines_is_undefined_in_a_single_tu_image() {
+    use crate::c5::{NativeOptions, Target, emit_native_with_options};
+    for src in [
+        "static long g(void);\nint main(void) { return g() == 0; }\n",
+        "static long g(void);\nint main(void) { long (*p)(void) = g; return p != 0; }\n",
+        "static long g(void);\nstatic long (*dp)(void) = g;\nint main(void) { return dp != 0; }\n",
+    ] {
+        for target in [Target::LinuxX64, Target::LinuxAarch64, Target::MacOSAarch64] {
+            let program =
+                Compiler::with_options(src.to_string(), target, crate::CompileOptions::default())
+                    .compile()
+                    .expect("compile");
+            let err = emit_native_with_options(&program, target, NativeOptions::default())
+                .expect_err("an undefined static function must be diagnosed");
+            assert!(
+                format!("{err}").contains("undefined reference to `g`"),
+                "{target:?} {src}: {err}"
+            );
+        }
+    }
+}
+
+/// A function-pointer initializer naming a function no part of a single-TU
+/// image defines is an undefined reference, as the link reports it, and not
+/// the address its import placeholder happens to index.
+#[test]
+fn an_initializer_naming_an_undefined_function_in_a_single_tu_image_is_diagnosed() {
+    use crate::c5::{NativeOptions, Target, emit_native_with_options};
+    const SRC: &str = "int svd(void);\nint svx(void);\nint (*gsd)(void) = svd;\n\
+                       int helper(void) { return 3; }\nint main(void) { return gsd(); }\n";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+    ] {
+        let program =
+            Compiler::with_options(SRC.to_string(), target, crate::CompileOptions::default())
+                .compile()
+                .expect("compile");
+        let err = emit_native_with_options(&program, target, NativeOptions::default())
+            .expect_err("an undefined function in an initializer must be diagnosed");
+        assert!(
+            format!("{err}").contains("undefined reference to `svd`"),
             "{target:?}: unexpected diagnostic: {err}"
         );
     }

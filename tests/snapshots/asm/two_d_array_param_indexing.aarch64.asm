@@ -20,8 +20,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mov	x0, x1
                	sub	x2, x29, #0x400
-               	lsl	x3, x0, #2
-               	add	x2, x2, x3
+               	add	x2, x2, x0, lsl #2
                	strh	w1, [x2]
                	strh	w1, [x2, #0x2]
                	add	x0, x0, #0x1
@@ -73,8 +72,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x20
-               	lsl	x2, x0, #2
-               	add	x1, x1, x2
+               	add	x1, x1, x0, lsl #2
                	add	x2, x0, #0x41
                	strb	w2, [x1]
                	add	x3, x2, #0x1

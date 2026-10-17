@@ -26,8 +26,7 @@ Disassembly of section .text:
                	sxtw	x3, w3
                	mul	x4, x3, x6
                	asr	x4, x4, #32
-               	lsr	x7, x4, #63
-               	add	x4, x4, x7
+               	add	x4, x4, x4, lsr #63
                	mul	x4, x4, x5
                	sub	x3, x3, x4
                	cbz	w3, <addr>

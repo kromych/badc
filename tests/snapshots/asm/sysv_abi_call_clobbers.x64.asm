@@ -165,9 +165,8 @@ Disassembly of section .text:
                	movq	%r13, %rdi
                	callq	*%rbx
                	addq	%r15, %rax
-               	movq	%r12, %rcx
-               	imulq	%r13, %rcx
-               	addq	%rcx, %rax
+               	imulq	%r13, %r12
+               	addq	%r12, %rax
                	addq	%r14, %rax
                	popq	%rbx
                	popq	%r12

@@ -36,13 +36,11 @@ Disassembly of section .text:
                	mul	x6, x6, x17
                	add	x5, x5, x6
                	add	x0, x5, x0
-               	lsl	x1, x1, #1
-               	add	x0, x0, x1
+               	add	x0, x0, x1, lsl #1
                	mov	x17, #0x3               // =3
                	mul	x1, x2, x17
                	add	x0, x0, x1
-               	lsl	x1, x3, #2
-               	add	x0, x0, x1
+               	add	x0, x0, x3, lsl #2
                	mov	x17, #0x5               // =5
                	mul	x1, x4, x17
                	add	x0, x0, x1
@@ -68,21 +66,18 @@ Disassembly of section .text:
                	mul	x8, x8, x17
                	add	x7, x7, x8
                	add	x0, x7, x0
-               	lsl	x1, x1, #1
-               	add	x0, x0, x1
+               	add	x0, x0, x1, lsl #1
                	mov	x17, #0x3               // =3
                	mul	x1, x2, x17
                	add	x0, x0, x1
-               	lsl	x1, x3, #2
-               	add	x0, x0, x1
+               	add	x0, x0, x3, lsl #2
                	mov	x17, #0x5               // =5
                	mul	x1, x4, x17
                	add	x0, x0, x1
                	mov	x17, #0x6               // =6
                	mul	x1, x5, x17
                	add	x0, x0, x1
-               	lsl	x1, x6, #3
-               	add	x0, x0, x1
+               	add	x0, x0, x6, lsl #3
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -107,20 +102,17 @@ Disassembly of section .text:
                	umulh	x1, x2, x1
                	mov	x17, #0x0               // =0
                	mul	x2, x2, x17
-               	lsl	x3, x3, #1
                	add	x1, x1, x2
-               	add	x2, x1, x3
-               	asr	x3, x0, #63
+               	add	x2, x1, x3, lsl #1
                	add	x1, x5, x0
                	cmp	x1, x5
-               	cset	x0, lo
-               	add	x2, x2, x3
-               	add	x2, x2, x0
-               	asr	x3, x4, #63
+               	cset	x3, lo
+               	add	x0, x2, x0, asr #63
+               	add	x2, x0, x3
                	add	x0, x1, x4
                	cmp	x0, x1
                	cset	x1, lo
-               	add	x2, x2, x3
+               	add	x2, x2, x4, asr #63
                	add	x1, x2, x1
                	ret
 

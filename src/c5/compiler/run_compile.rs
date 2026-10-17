@@ -39,8 +39,10 @@ struct FileScopeDecl {
     base_fn_ptr_indirection: Option<i64>,
     base_fn_ptr_ret_indirection: i64,
     base_is_function_type: bool,
-    base_fn_ptr_params: Option<crate::c5::symbol::FnParams>,
-    base_fn_ptr_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
+    base_fn_type: Option<crate::c5::symbol::FnType>,
+    /// The attributes and function specifiers among the specifiers, which
+    /// each declarator starts from.
+    spec_attrs: super::DeclAttrs,
 }
 
 /// What one file-scope declarator supplied: the bound symbol, the type its
@@ -56,6 +58,8 @@ struct DeclaratorBinding {
     fn_ptr_ret_indirection: i64,
     bare_function_type: bool,
     declarator_transparent: bool,
+    /// The calling convention a bare function type's typedef names.
+    base_conv: Option<crate::c5::codegen::CallConv>,
 }
 
 /// What the symbol table held for this name before the declarator bound it.
@@ -79,16 +83,17 @@ impl Compiler {
     /// values count as one entry (a flat row of a multi-dimensional
     /// array); pass 1 to count every value. Snapshot-restored, with any
     /// data / PC the constant-fold touched rewound, so the real fill
-    /// re-parses from a clean state.
+    /// re-parses from a clean state. `string_rows` is a row a string fills.
     pub(super) fn designated_array_count(
         &mut self,
         fallback: i64,
         inner_span: i64,
+        string_rows: Option<(i64, i64)>,
     ) -> Result<i64, C5Error> {
         let snap = self.lex.snapshot();
         let saved_data = self.data.len();
         let saved_pc = self.next_ent_pc;
-        let result = self.designated_array_count_inner(fallback, inner_span);
+        let result = self.designated_array_count_inner(fallback, inner_span, string_rows);
         self.rewind_speculation(snap, saved_data);
         self.next_ent_pc = saved_pc;
         // A non-constant designator (invalid, or a shape this peek can't
@@ -97,22 +102,11 @@ impl Compiler {
         Ok(result.unwrap_or(fallback))
     }
 
-    /// Peek whether the first element of the array initializer at the
-    /// current `{` is an `[N]` designator, without consuming input.
-    fn array_first_element_is_designator(&mut self) -> bool {
-        let snap = self.lex.snapshot();
-        let saved_data = self.data.len();
-        let saved_pc = self.next_ent_pc;
-        let is_desig = self.next().is_ok() && self.lex.tk == Token::Brak;
-        self.rewind_speculation(snap, saved_data);
-        self.next_ent_pc = saved_pc;
-        is_desig
-    }
-
     fn designated_array_count_inner(
         &mut self,
         fallback: i64,
         inner_span: i64,
+        string_rows: Option<(i64, i64)>,
     ) -> Result<i64, C5Error> {
         self.next()?; // consume `{`
         let mut i: i64 = 0;
@@ -138,8 +132,17 @@ impl Compiler {
                 // matching the runtime fill's brace-elision absorption.
                 let mut used: i64 = 0;
                 loop {
-                    self.skip_init_element_value()?;
-                    used += 1;
+                    used += match string_rows {
+                        Some((t, len))
+                            if used % len == 0 && self.take_string_init(t)?.is_some() =>
+                        {
+                            len
+                        }
+                        _ => {
+                            self.skip_init_element_value()?;
+                            1
+                        }
+                    };
                     if used >= inner_span || self.lex.tk != ',' {
                         break;
                     }
@@ -349,44 +352,23 @@ impl Compiler {
         Ok(())
     }
 
+    /// Whether the declared object is itself `const` (C99 6.7.3): as spelled,
+    /// or through its type's own qualifier, which a pointer typedef carries.
+    pub(super) fn declared_object_is_const(&self, ty: i64) -> bool {
+        self.pending.declarator_outer_const
+            || (self.pending.base_is_const && !super::types::is_pointer_ty(ty))
+            || super::types::is_const_object_ty(ty)
+    }
+
     /// Clear the state one file-scope declaration owns: the `const` and
-    /// spelling carriers, the attribute results and the function-specifier
-    /// flags. `inline` matters even without a body -- an inline prototype
-    /// must not mark the following declaration as inline when the linkage
-    /// rule reads the flag.
+    /// spelling carriers, the attributes and the function specifiers.
     fn reset_file_scope_decl_state(&mut self) {
         self.pending.base_is_const = false;
         let _ = self.take_base_spelling();
-        self.pending_noreturn = false;
-        self.pending.attr_thread_local = false;
-        self.pending.attr_dllexport = false;
-        self.pending.attr_align = 0;
-        self.pending.attr_alignas = 0;
+        self.pending.attrs = super::DeclAttrs::default();
         self.pending.type_align = 0;
-        self.pending.attr_vector_size = 0;
-        self.pending.attr_constructor = false;
-        self.pending.attr_destructor = false;
-        self.pending.attr_init_priority = None;
-        self.pending.attr_cleanup = None;
-        self.pending.attr_uninitialized = false;
-        self.pending.attr_weak = false;
-        self.pending.attr_call_conv = crate::c5::codegen::CallConv::Target;
-        self.pending.attr_used = false;
-        self.pending.attr_maybe_unused = false;
-        self.pending.attr_visibility = None;
-        self.pending.attr_section = None;
-        self.pending.attr_patchable_entry = None;
-        self.pending.attr_no_instrument = false;
-        self.pending.attr_no_stack_protector = false;
-        self.pending.attr_alias = None;
         self.pending.saw_register_storage = false;
         self.pending.auto_type_single_declarator = false;
-        self.pending_is_inline = false;
-        self.pending_is_always_inline = false;
-        self.pending_saw_inline_specifier = false;
-        self.pending_is_gnu_inline = false;
-        self.pending_is_noinline = false;
-        self.pending_is_naked = false;
     }
 
     pub(super) fn run_compile(&mut self) -> Result<(), C5Error> {
@@ -416,6 +398,7 @@ impl Compiler {
         // request to export the name and outranks the inline model.
         self.resolve_inline_linkage();
         self.resolve_file_scope_asm_globl();
+        self.resolve_file_scope_asm_weak();
         self.warn_unused_static_functions();
         Ok(())
     }
@@ -448,8 +431,8 @@ impl Compiler {
             base_fn_ptr_indirection: self.pending.fn_ptr_indirection,
             base_fn_ptr_ret_indirection: self.pending.fn_ptr_ret_indirection,
             base_is_function_type: self.pending.base_is_function_type,
-            base_fn_ptr_params: self.pending.fn_ptr_params.clone(),
-            base_fn_ptr_ret_fn: self.pending.fn_ptr_ret_fn.clone(),
+            base_fn_type: self.pending.fn_ptr_type.clone(),
+            spec_attrs: self.pending.attrs.clone(),
         };
         let mut declarator_count = 0usize;
         while self.lex.tk != ';' && self.lex.tk != '}' {
@@ -479,16 +462,21 @@ impl Compiler {
             ..
         } = decl;
 
+        self.pending.attrs = decl.spec_attrs.clone();
         self.pending.fn_ptr_indirection = decl.base_fn_ptr_indirection;
         self.pending.fn_ptr_ret_indirection = decl.base_fn_ptr_ret_indirection;
         self.pending.base_is_function_type = decl.base_is_function_type;
-        self.pending.fn_ptr_params = decl.base_fn_ptr_params.clone();
-        self.pending.fn_ptr_ret_fn = decl.base_fn_ptr_ret_fn.clone();
+        self.pending.fn_ptr_type = decl.base_fn_type.clone();
         // The declarator's own line -- the name and its parameter
         // list -- for diagnostics that would otherwise point at the
         // function body's opening brace parsed further below.
         let signature_line = self.lex.line;
         let (id_idx, mut ty, mut array_size, mut zero_len_array) = self.parse_declarator(bt)?;
+        let id_idx = if is_typedef {
+            self.claim_file_scope_name(id_idx)
+        } else {
+            id_idx
+        };
         // A function declarator reports in `define_file_scope_function`.
         if decl.implicit_int
             && (is_typedef || (self.lex.tk != '(' && self.pending.fn_params.is_none()))
@@ -510,8 +498,8 @@ impl Compiler {
         // `__declspec(dllexport)` on the declarator exports the name,
         // the equivalent of `#pragma export(name)`. resolve_exports
         // validates the name resolves to a defined function.
-        if self.pending.attr_dllexport {
-            self.pending.attr_dllexport = false;
+        if self.pending.attrs.dllexport {
+            self.pending.attrs.dllexport = false;
             let name = self.symbols[id_idx].name.clone();
             if !self.pending_exports.contains(&name) {
                 self.pending_exports.push(name);
@@ -523,19 +511,28 @@ impl Compiler {
         // asm label, where it types the declarator as well.
         self.skip_attribute_specifiers()?;
         ty = self.apply_pending_type_attributes(ty)?;
-        let declarator_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
+        let declarator_transparent = core::mem::take(&mut self.pending.attrs.transparent_union);
         // Captured per declarator, before a nested parse (a later parameter
         // of function type) can overwrite it.
         let bare_function_type = self.pending.bare_function_type_declarator;
         self.pending.bare_function_type_declarator = false;
+        // The function type the entity leads to: a function declarator's list
+        // is the function path's to parse, its result's function types are
+        // taken here; any other declarator takes the carriers' whole.
+        let own_signature = self.lex.tk == '(' || self.pending.fn_params.is_some();
+        let decl_fn = if own_signature {
+            if let Some(ret) = self.take_decl_ret_fn(true) {
+                self.symbols[id_idx].fn_type.ret = Some(ret);
+            }
+            self.pending.fn_ptr_type = None;
+            None
+        } else {
+            self.take_decl_fn_type()?
+        };
         // Pick up the fn-pointer indirection count
         // the declarator (or its typedef base type)
         // recorded, and store it on the symbol so a later
         // identifier load can seed the chain-depth tracker.
-        let own_signature = self.lex.tk == '(' || self.pending.fn_params.is_some();
-        if let Some(ret) = self.take_decl_ret_fn(own_signature) {
-            self.symbols[id_idx].ret_fn = Some(ret);
-        }
         let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
         let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
         // C99 6.7.7p3: an array typedef contributes its dimension to a declarator
@@ -566,8 +563,9 @@ impl Compiler {
         }
         // A `const`-qualified plain integer scalar folds its value
         // in later constant expressions (read back from `.data`).
+        let object_const = self.declared_object_is_const(ty);
         self.symbols[id_idx].is_const_qualified =
-            self.pending.base_is_const && array_size == 0 && super::types::is_integer_scalar_ty(ty);
+            object_const && array_size == 0 && super::types::is_integer_scalar_ty(ty);
         // The declared object's own storage is const-qualified (C99
         // 6.7.3p5 then makes modifying it undefined, so its
         // initializer is its value for the whole execution). A
@@ -576,26 +574,18 @@ impl Compiler {
         // `const char *p` / `const char *t[2]` are writable. A
         // `const` after the outermost `*` qualifies the object
         // again: `char *const p`, `const char *const t[2]`.
-        self.symbols[id_idx].storage_is_const = self.pending.declarator_outer_const
-            || (self.pending.base_is_const && !super::types::is_pointer_ty(ty));
+        self.symbols[id_idx].storage_is_const = object_const;
         if fn_ptr_indirection > 0 {
             self.symbols[id_idx].fn_ptr_indirection = fn_ptr_indirection;
             self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
         }
-        // The bound declarator takes the pointee's parameter information,
-        // so an indirect call through it converts its arguments and routes
-        // a variadic tail per the host variadic ABI.
-        let mut fnptr_params = self.pending.fn_ptr_params.take();
-        // The carrier holds the pointee signature of a fn-pointer typedef, so it
-        // describes an object (`cb x;`) -- not a function whose return type is that
-        // typedef (`cb f(args)`), and not a bare function-type declarator (`extern
-        // typeof(f) f;`); both of those install a list of their own.
-        let carrier_names_object = !bare_function_type || is_typedef;
-        if self.lex.tk != '('
-            && carrier_names_object
-            && let Some(p) = fnptr_params.take()
+        // An object takes the function type it leads to; a bare function
+        // type and a typedef bind theirs below.
+        if !bare_function_type
+            && !is_typedef
+            && let Some(f) = &decl_fn
         {
-            self.symbols[id_idx].set_fn_params(p);
+            self.symbols[id_idx].fn_type = f.clone();
         }
         // Carry the bare-`void` side channel onto the
         // declarator. `pending_base_was_void` was set if
@@ -635,21 +625,24 @@ impl Compiler {
             fn_ptr_ret_indirection,
             bare_function_type,
             declarator_transparent,
+            base_conv: None,
         };
         if is_typedef {
-            return self.bind_file_scope_typedef(decl, &b, preconsumed_params);
+            return self.bind_file_scope_typedef(decl, &b, preconsumed_params, decl_fn);
         }
 
         // C99 6.9.1: an identifier declared with a bare function type (a
         // function-TYPE typedef used with no pointer) declares a function,
         // not an object. The base type was pre-decayed to a function
         // pointer; undo that level and route through the function path with
-        // the typedef's prototype, so a following definition of the same
-        // name merges as a redeclaration rather than colliding.
+        // the typedef's prototype and result, so a following definition of
+        // the same name merges as a redeclaration rather than colliding.
         if bare_function_type && preconsumed_params.is_none() && self.lex.tk != '(' {
             b.ty -= Ty::Ptr as i64;
-            let p = fnptr_params.unwrap_or_default();
-            preconsumed_params = Some(super::function::ParsedParams::of_type(p));
+            let f = decl_fn.unwrap_or_default();
+            b.base_conv = f.conv_named.then_some(f.conv);
+            self.symbols[id_idx].fn_type.ret = f.ret;
+            preconsumed_params = Some(super::function::ParsedParams::of_type(f.params));
         }
 
         let prior = self.check_file_scope_redeclaration(decl, &b, preconsumed_params.is_some())?;
@@ -668,6 +661,7 @@ impl Compiler {
         decl: &FileScopeDecl,
         b: &DeclaratorBinding,
         preconsumed_params: Option<super::function::ParsedParams>,
+        decl_fn: Option<crate::c5::symbol::FnType>,
     ) -> Result<(), C5Error> {
         let &FileScopeDecl {
             base_type_align, ..
@@ -694,6 +688,8 @@ impl Compiler {
                 for &p in &pp.indices {
                     Self::restore_shadowed_symbol(&mut self.symbols[p]);
                 }
+                // An attribute may trail the list (`typedef T f(void) a;`).
+                self.skip_attribute_specifiers()?;
                 // `typedef RET NAME(args);` -- a function TYPE.
                 // The type is pre-decayed to a function pointer
                 // (`RET` + one pointer level); the flag lets a
@@ -748,19 +744,23 @@ impl Compiler {
         self.symbols[id_idx].is_void_typedef = declarator_is_bare_void;
         self.symbols[id_idx].incomplete_enum_tag = decl.base_enum_tag;
         self.symbols[id_idx].is_function_type = typedef_is_fn_type;
-        // A function-type typedef records the calling
-        // convention its declaration named, so a declarator
-        // through the alias inherits it
+        // The function type the alias leads to, its convention included
         // (`typedef efi_status_t __efiapi f_t(void);`).
-        if self.pending.attr_call_conv != crate::c5::codegen::CallConv::Target {
-            self.symbols[id_idx].conv = self.pending.attr_call_conv;
-        }
+        self.symbols[id_idx].fn_type = match typedef_params {
+            Some(pp) => crate::c5::symbol::FnType {
+                params: pp.fn_params(),
+                conv: self.pending.attrs.call_conv.unwrap_or_default(),
+                conv_named: self.pending.attrs.call_conv.is_some(),
+                ret: self.symbols[id_idx].fn_type.ret.take(),
+            },
+            None => decl_fn.unwrap_or_default(),
+        };
         // A GNU `aligned(N)` type attribute on the typedef
         // (its own declaration's attribute, else propagated
         // from an aligned typedef base) becomes the alias's
         // type alignment.
-        let alias_align = if self.pending.attr_align > 0 {
-            self.pending.attr_align
+        let alias_align = if self.pending.attrs.align > 0 {
+            self.pending.attrs.align
         } else {
             base_type_align
         };
@@ -774,12 +774,6 @@ impl Compiler {
         if typedef_fpi > 0 {
             self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
             self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
-        }
-        // The `typedef RET NAME(args)` / `typedef RET (*NAME)(args)` spellings
-        // parse a list of their own; an alias of an existing function type
-        // took the one its carrier held.
-        if let Some(pp) = typedef_params {
-            self.symbols[id_idx].set_fn_params(pp.fn_params());
         }
         Ok(())
     }
@@ -943,10 +937,16 @@ impl Compiler {
             ..params.fn_params()
         };
         self.symbols[id_idx].set_fn_params(fn_params);
+        let named = self.pending.attrs.call_conv.or(b.base_conv);
+        let (conv, conv_named) = self.declared_conv(id_idx, named, declarator_line)?;
+        (
+            self.symbols[id_idx].fn_type.conv,
+            self.symbols[id_idx].fn_type.conv_named,
+        ) = (conv, conv_named);
         // C11 6.7.4: `_Noreturn` on any declaration marks the symbol, and the
         // reachability analysis then treats a call to it as not reaching its
         // continuation. The mark is sticky across later declarations.
-        if self.pending_noreturn {
+        if self.pending.attrs.noreturn {
             self.symbols[id_idx].is_noreturn = true;
         }
         // `weak` / `used` / `section("name")` collected for
@@ -956,7 +956,7 @@ impl Compiler {
         // Read the sticky request back so a definition follows what any
         // declaration of this name asked for, not what the preceding
         // declaration in the file happened to carry.
-        self.pending_is_noinline = self.symbols[id_idx].is_noinline;
+        self.pending.attrs.is_noinline = self.symbols[id_idx].is_noinline;
         // The `return` statement and the fall-off diagnostic read this. A prototype
         // records it too; a body that then disagrees is a C99 6.7p4 violation the
         // redeclaration check reports.
@@ -970,7 +970,7 @@ impl Compiler {
                 ty,
                 enum_tag: decl.base_enum_tag,
             };
-            let declared = DeclaredType::Function(ret, Params::of(&params, false));
+            let declared = DeclaredType::Function(ret, Params::of(&params, false), named);
             self.declare_linked(id_idx, declared, declarator_line)?;
         }
         // For Sys symbols (header-bound libc functions),
@@ -1003,9 +1003,10 @@ impl Compiler {
                 ty,
                 enum_tag: decl.base_enum_tag,
             },
+            conv: named,
             line: declarator_line,
             implicit_int,
-            extern_inline: gnu89 && extern_seen && self.pending_saw_inline_specifier,
+            extern_inline: gnu89 && extern_seen && self.pending.attrs.saw_inline_specifier,
         };
         self.parse_function_definition(id_idx, params, def)
     }
@@ -1027,7 +1028,7 @@ impl Compiler {
         // `static`-vs-external decision the inline model does not affect.
         let sym = &mut self.symbols[id_idx];
         sym.saw_static_decl |= static_seen;
-        match (self.pending_saw_inline_specifier, extern_seen) {
+        match (self.pending.attrs.saw_inline_specifier, extern_seen) {
             (false, _) => sym.saw_noninline_decl = true,
             (true, false) => sym.saw_plain_inline_decl = true,
             (true, true) => sym.saw_extern_inline_decl = true,
@@ -1096,7 +1097,7 @@ impl Compiler {
         // another object replaces it at link time -- so it
         // never binds here; the unit-end resolver keeps its
         // references symbolic.
-        if let Some(target) = self.pending.attr_alias.take() {
+        if let Some(target) = self.pending.attrs.alias.take() {
             let tgt = (!self.symbols[id_idx].is_weak)
                 .then(|| {
                     self.symbols.iter().position(|s| {
@@ -1155,6 +1156,9 @@ impl Compiler {
         mut params: super::function::ParsedParams,
         def: Definition,
     ) -> Result<(), C5Error> {
+        // The parameter declarations and the body declare with their own
+        // attributes (C99 6.9.1p6).
+        self.current_func_attrs = core::mem::take(&mut self.pending.attrs);
         // The definition's position replaces the first declaration's, so a
         // report about the function points at its body.
         self.symbols[id_idx].binding.decl_line = def.line;
@@ -1189,11 +1193,11 @@ impl Compiler {
         };
         let prototyped = self.has_prototype(id_idx, &params);
         self.symbols[id_idx].unprototyped_def = !prototyped;
-        self.symbols[id_idx].prototyped = prototyped;
+        self.symbols[id_idx].fn_type.params.prototyped = prototyped;
         self.define_linked_function(id_idx, def, Params::of(&params, true))?;
-        self.symbols[id_idx].params = arrival.clone();
-        self.symbols[id_idx].param_enum_tags = params.enum_tags.clone();
-        self.symbols[id_idx].param_fn_types = params.fn_types.clone();
+        self.symbols[id_idx].fn_type.params.types = arrival.clone();
+        self.symbols[id_idx].fn_type.params.enum_tags = params.enum_tags.clone();
+        self.symbols[id_idx].fn_type.params.fn_types = params.fn_types.clone();
 
         if self.lex.tk != '{' {
             return Err(self.compile_err(Code::SYNTAX, "bad function definition"));
@@ -1261,6 +1265,7 @@ impl Compiler {
             // name -- that is the function body.
             let mut saw_specifier = false;
             let mut qual_bits: i64 = 0;
+            self.pending.attrs = super::DeclAttrs::default();
             while self.lex.tk == Token::FuncSpec
                 || self.lex.tk == Token::Static
                 || self.lex.tk == Token::Extern
@@ -1280,9 +1285,23 @@ impl Compiler {
             };
             let base = base | qual_bits;
             let base_enum_tag = self.pending.base_enum_tag.take();
+            let spec_attrs = self.pending.attrs.clone();
+            let base_fn = (
+                self.pending.fn_ptr_indirection,
+                self.pending.fn_ptr_ret_indirection,
+                self.pending.fn_ptr_type.clone(),
+                self.pending.base_is_function_type,
+            );
             while self.lex.tk != ';' && self.lex.tk != 0 {
                 // C99 6.9.1p6: the list declares the parameters, so a bound
                 // and a function type adjust as a prototype's (6.7.5.3p7-8).
+                self.pending.attrs = spec_attrs.clone();
+                (
+                    self.pending.fn_ptr_indirection,
+                    self.pending.fn_ptr_ret_indirection,
+                    self.pending.fn_ptr_type,
+                    self.pending.base_is_function_type,
+                ) = base_fn.clone();
                 self.pending.param_decl_context = true;
                 let decl_line = self.lex.line;
                 let (decl_idx, mut decl_ty, decl_arr, _) = self.parse_declarator(base)?;
@@ -1290,8 +1309,8 @@ impl Compiler {
                     let what = decl_base::ImplicitInt::Declarator(decl_idx);
                     self.report_implicit_int(what, decl_line)?;
                 }
-                let (fn_ptr_indirection, fn_ptr_ret_indirection, fn_params, ret_fn) =
-                    self.take_param_fn_ptr_carriers();
+                let carriers = self.take_param_fn_ptr_carriers()?;
+                let (fn_ptr_indirection, fn_ptr_ret_indirection, _) = carriers;
                 if decl_idx != usize::MAX {
                     // An array parameter is adjusted to a pointer to its
                     // element type (6.7.5.3p7), a row for more than one
@@ -1314,24 +1333,13 @@ impl Compiler {
                         // The adjusted pointer is one more level above a
                         // function-pointer element.
                         let adjusted = decl_arr != 0 || typedef_array;
-                        let carriers = (
-                            fn_ptr_indirection,
-                            fn_ptr_ret_indirection,
-                            fn_params.clone(),
-                            ret_fn.clone(),
-                        );
-                        let conv = crate::c5::codegen::CallConv::Target;
-                        let fn_type = super::function::param_fn_type(carriers, conv, adjusted);
+                        let fn_type = super::function::param_fn_type(carriers, adjusted);
+                        self.symbols[decl_idx].fn_type =
+                            fn_type.as_ref().map(|(f, _)| f.clone()).unwrap_or_default();
                         params.note_fn_type(pos, fn_type);
                         self.symbols[decl_idx].fn_ptr_indirection =
                             fn_ptr_indirection + i64::from(adjusted && fn_ptr_indirection > 0);
                         self.symbols[decl_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
-                        self.symbols[decl_idx].ret_fn = ret_fn;
-                        if fn_ptr_indirection > 0
-                            && let Some(pp) = fn_params
-                        {
-                            self.symbols[decl_idx].set_fn_params(pp);
-                        }
                         params.types[pos] = decl_ty;
                         params.note_enum_tag(pos, base_enum_tag);
                     } else {
@@ -1409,9 +1417,9 @@ impl Compiler {
         self.current_func_return_ty = return_ty;
         self.current_func_returns_void = self.symbols[id_idx].returns_void;
         self.current_function_name = self.symbols[id_idx].name.clone();
-        self.current_func_conv = self.symbols[id_idx].conv;
+        self.current_func_conv = self.symbols[id_idx].fn_type.conv;
         self.current_func_is_noreturn = self.symbols[id_idx].is_noreturn;
-        self.current_func_ret_fn = self.symbols[id_idx].ret_fn.clone();
+        self.current_func_ret_fn = self.symbols[id_idx].fn_type.ret.clone();
 
         // Callers push right to left, so the i'th declared parameter sits at slot
         // i + 2 and the variadic tail follows it. A struct return through the
@@ -1460,7 +1468,7 @@ impl Compiler {
             self.symbols[id_idx].val = ent_pc as i64;
         }
         self.symbols[id_idx].defined_here = true;
-        if !self.pending_saw_inline_specifier {
+        if !self.current_func_attrs.saw_inline_specifier {
             self.symbols[id_idx].saw_noninline_def = true;
         }
         // A body trumps any earlier `extern T f();`
@@ -1583,7 +1591,7 @@ impl Compiler {
         // not collide, and a body-scope tag shadows a
         // file-scope one. Nested blocks push their own scopes
         // through parse_block_stmt.
-        self.tag_scopes.push(alloc::vec::Vec::new());
+        self.tag_scopes.push();
         // The function body's top-level block scope for
         // `__attribute__((cleanup))` variables; cleaned on
         // fall-through (below) and on every `return`.
@@ -1604,25 +1612,9 @@ impl Compiler {
                 continue;
             }
             at_block_start = false;
-            // C23 6.7.13 / 6.8: an attribute-specifier-
-            // sequence may lead either a declaration or a
-            // statement at the function-body top level.
-            // Consume it, then dispatch on the following
-            // token.
-            let (mut leading_maybe_unused, mut leading_noreturn) = (false, false);
-            if self.lex.tk == Token::Attribute
-                || (self.lex.tk == Token::Brak && self.lex.peek_after_whitespace(b'['))
-            {
-                self.pending.attr_maybe_unused = false;
-                self.pending.attr_cleanup = None;
-                self.pending.attr_uninitialized = false;
-                self.pending_noreturn = false;
-                self.skip_attribute_specifiers()?;
-                leading_maybe_unused = self.pending.attr_maybe_unused;
-                leading_noreturn = core::mem::take(&mut self.pending_noreturn);
-                if self.lex.tk == '}' {
-                    break;
-                }
+            self.parse_block_item_attributes()?;
+            if self.lex.tk == '}' {
+                break;
             }
             if self.lex.tk == Token::StaticAssert {
                 // C11 6.7.10 lets static_assert sit
@@ -1641,7 +1633,7 @@ impl Compiler {
                 self.parse_block_typedef()?;
             } else if self.lex_is_block_decl_start() {
                 let item_before = self.ast_stmts_snapshot();
-                self.parse_local_decl(leading_maybe_unused, leading_noreturn)?;
+                self.parse_local_decl()?;
                 let item_after = self.ast.stmts.len();
                 // Skip any statement-expression sub-statements
                 // interleaved by an initializer; they are
@@ -1844,9 +1836,9 @@ impl Compiler {
                     array_size,
                     decl_file: sym.binding.decl_file,
                     fn_ptr_indirection: sym.fn_ptr_indirection,
-                    params: sym.params.clone(),
-                    is_variadic: sym.is_variadic,
-                    prototyped: sym.prototyped,
+                    params: sym.params().to_vec(),
+                    is_variadic: sym.is_variadic(),
+                    prototyped: sym.prototyped(),
                     array_dims: if is_parameter {
                         Vec::new()
                     } else {
@@ -1920,20 +1912,6 @@ impl Compiler {
             }
         }
         let over_aligned = core::mem::take(&mut self.func_over_aligned);
-        // C11 6.7.5 + C99 6.7.6.2: an alignment above 16 is met by
-        // realigning sp in the prologue, which `alloca` and a
-        // variable-length array preclude (both move sp). Exactly 16
-        // is met at a static frame offset and coexists with both.
-        // Diagnosed here, where both facts are known, so the
-        // combination reads as a source-level rejection rather
-        // than reaching the walker's internal error.
-        if over_aligned.iter().any(|&(_, align, _)| align > 16) && self.uses_alloca_in_current_fn {
-            return Err(self.compile_err(
-                Code::UNSUPPORTED,
-                "an automatic object aligned above 16 cannot share a function \
-             with `alloca` or a variable-length array; use static storage",
-            ));
-        }
         if let Some(ff) = self.finished_functions.last_mut() {
             ff.multi_cell_slots = multi_cell;
             ff.array_slots = array_slots;
@@ -2061,8 +2039,10 @@ impl Compiler {
         if self.bind_object_alias(id_idx, ty)? {
             return Ok(());
         }
-        let decl_align = self.object_alignment(id_idx, ty, base_type_align, thread_local)?;
-        let was_extern_only_decl = extern_seen && self.lex.tk != Token::Assign && array_size != -1;
+        let defines = !extern_seen || self.lex.tk == Token::Assign;
+        let decl_align =
+            self.object_alignment(id_idx, ty, base_type_align, thread_local, defines)?;
+        let was_extern_only_decl = !defines && array_size != -1;
         // `extern struct S s;` whose tag has no fixed size -- incomplete, or with a
         // flexible array member whose count the defining initializer fixes (C99
         // 6.7.2.1) -- reserves nothing: C99 6.9.2 makes it a pure declaration, and
@@ -2181,7 +2161,7 @@ impl Compiler {
         // offset. It reserves no storage of its own; the
         // regular data-symbol emission picks it up with the
         // shared offset.
-        if let Some(target) = self.pending.attr_alias.take() {
+        if let Some(target) = self.pending.attrs.alias.take() {
             let tgt = self
                 .symbols
                 .iter()
@@ -2219,13 +2199,14 @@ impl Compiler {
 
     /// C11 6.7.5: the object is placed at the strictest alignment its
     /// declarations request and its type requires. Returns the alignment
-    /// the data cursor is now at.
+    /// its storage takes; a declaration that `defines` nothing places nothing.
     fn object_alignment(
         &mut self,
         id_idx: usize,
         ty: i64,
         base_type_align: i64,
         thread_local: bool,
+        defines: bool,
     ) -> Result<usize, C5Error> {
         // C11 6.7.5: a requested alignment is honored on
         // file-scope objects -- the object writer aligns the
@@ -2234,8 +2215,8 @@ impl Compiler {
         // requires a power of two (C11 6.7.5p3); anything past
         // the supported maximum is a diagnostic, never a silent
         // drop.
-        let req_align = core::mem::take(&mut self.pending.attr_align);
-        let alignas_align = core::mem::take(&mut self.pending.attr_alignas);
+        let req_align = core::mem::take(&mut self.pending.attrs.align);
+        let alignas_align = core::mem::take(&mut self.pending.attrs.alignas);
         if req_align > 8 && !(req_align as usize).is_power_of_two() {
             return Err(self.compile_err(
                 Code::INVALID_DECLARATION,
@@ -2295,20 +2276,19 @@ impl Compiler {
             req_align.max(self.align_of_type(ty) as i64)
         };
         self.symbols[id_idx].type_align = self.symbols[id_idx].type_align.max(obj_align);
-        let decl_align: usize = if want_align > 8 {
+        let decl_align = want_align.max(8);
+        if decl_align > 8 && defines {
             if thread_local {
                 self.check_thread_local_align(want_align, self.lex.line)?;
             } else {
+                self.note_static_align(want_align, self.lex.line);
                 self.data_align = self.data_align.max(want_align);
             }
-            want_align
-        } else {
-            8
-        };
+        }
         // Align the data cursor before any of the branches
         // below reserve storage, so a tentative or zero-init
         // definition starts on the object's boundary.
-        if decl_align > 8 && !thread_local {
+        if decl_align > 8 && !thread_local && defines {
             self.align_data_to(decl_align);
         }
         Ok(decl_align)
@@ -2333,6 +2313,25 @@ impl Compiler {
             ));
         }
         Ok(())
+    }
+
+    /// C11 6.7.5p3: an alignment the loaded image cannot keep violates a constraint.
+    /// The first is kept for the paths that write an image.
+    pub(super) fn note_static_align(&mut self, align: usize, line: usize) {
+        let format = self.target.binary_format();
+        let limit = self.static_align_limit();
+        if align > limit && self.image_align_error.is_none() {
+            let message = format!(
+                "alignment {align} exceeds the {limit}-byte boundary a {} image keeps at load",
+                format.name()
+            );
+            let error = self.compile_err_at(Code::LIMIT, line, message);
+            self.image_align_error = error.into_diagnostics().pop();
+        }
+    }
+
+    fn static_align_limit(&self) -> usize {
+        self.target.binary_format().max_object_align()
     }
 
     /// A deferred-size array (`T xs[]`): the initializer supplies the
@@ -2385,9 +2384,10 @@ impl Compiler {
         decl_align: usize,
         was_tentative_glo: bool,
     ) -> Result<(), C5Error> {
-        self.pending.init_inner_dims = self.inner_dims_of(id_idx);
-        let elements = self.collect_array_initializer(ty, self.elem_fn_type(id_idx))?;
-        let final_size = elements.len() as i64;
+        let inner_dims = self.inner_dims_of(id_idx);
+        self.pending.init_inner_dims = inner_dims.clone();
+        let mut elements = self.collect_array_initializer(ty, self.elem_fn_type(id_idx))?;
+        let final_size = Self::deferred_array_count(&mut elements, &inner_dims);
         self.symbols[id_idx].array_size = final_size;
         // `T xs[] = {}` resolves to zero elements; keep the
         // array-ness that the scalar `array_size == 0`
@@ -2521,45 +2521,10 @@ impl Compiler {
                 "array initializer must start with `{`",
             ));
         }
-        let sid = struct_id_of(ty);
-        // Elements below the outer (deferred) dimension:
-        // for a 2D struct array `T xs[][M]` each top-level
-        // brace is a row of `inner_dim` structs. 1 for a
-        // plain `T xs[]`.
-        let inner_dim: i64 = self.symbols[id_idx]
-            .array_dims
-            .get(1..)
-            .map(|s| s.iter().product::<i64>())
-            .unwrap_or(1)
-            .max(1);
-        // C99 6.7.8p20 brace elision: when no element
-        // carries its own braces, the flat value list
-        // fills consecutive struct elements, each
-        // consuming the struct's scalar slot count.
-        let groups = self.lex.count_top_level_groups_in_array();
-        let count = if groups > 0 {
-            // Braced elements: one `{ ... }` (or `[N] = {
-            // ... }`) per element. A `[N]` designator may
-            // raise the size past the positional count
-            // (C99 6.7.8p22), so peek the designators.
-            self.designated_array_count(groups as i64, 1)?
-        } else {
-            // Brace-elided: the flat value list fills
-            // consecutive elements, each consuming the
-            // struct's scalar slot count.
-            let items = self.lex.count_top_level_items_in_array();
-            let slots = self.struct_flat_init_slots(sid).max(1);
-            let positional = items.div_ceil(slots) as i64;
-            // A `[N].field = v` designated element list (no
-            // braces, one element per item) raises the size
-            // to the highest designated index + 1 (C99
-            // 6.7.8p22), which the positional count misses.
-            if self.array_first_element_is_designator() {
-                self.designated_array_count(positional, 1)?
-            } else {
-                positional
-            }
-        };
+        // Rows below the outer (deferred) dimension: `T xs[][M]`.
+        let inner_dims = self.inner_dims_of(id_idx);
+        let inner_dim = inner_dims.iter().product::<i64>().max(1);
+        let rows = self.struct_array_init_rows(ty, &inner_dims)?;
         // C99 6.9.2: a prior tentative definition already
         // reserved storage; reuse it so references emitted
         // before this definition -- which baked in the
@@ -2568,7 +2533,7 @@ impl Compiler {
         // A deferred-size tentative (`T x[];`) reserves one
         // element, so a larger initializer takes fresh
         // storage and records the move for rebasing.
-        let needed = count * inner_dim * elem_size as i64;
+        let needed = rows * inner_dim * elem_size as i64;
         let obj_align = self.symbols[id_idx].data_align.max(1);
         let off = if was_tentative_glo
             && needed <= self.symbols[id_idx].reserved_data_bytes
@@ -2586,51 +2551,23 @@ impl Compiler {
             fresh
         };
         self.symbols[id_idx].val = off;
-        // Reserve before consuming `{`: lexing the first
-        // element token may append a string literal's
-        // bytes, whose parser-added NUL must land right
-        // after them.
-        self.next()?;
-        // `T xs[][M] = { ... }`: the pre-scan counts each top-level entry as a
-        // row, but an entry after a chained designator resumes mid-row (C99
-        // 6.7.8p17), so the walker's extent is the real outer count (p22).
-        if inner_dim > 1 {
-            let mut dims = alloc::vec::Vec::new();
-            dims.push(count);
-            dims.extend_from_slice(&self.symbols[id_idx].array_dims[1..]);
-            let high = self.collect_struct_array_entries(ty, off, &dims)?;
-            let rows = (high + inner_dim - 1) / inner_dim;
-            if rows < count && self.data.len() as i64 == off + count * inner_dim * elem_size as i64
-            {
-                self.truncate_data((off + rows * inner_dim * elem_size as i64) as usize);
-                self.symbols[id_idx].reserved_data_bytes = rows * inner_dim * elem_size as i64;
-            }
-            let total = rows * inner_dim;
-            self.symbols[id_idx].array_size = total;
-            self.symbols[id_idx].is_zero_len_array = total == 0;
-            self.reserve_zero_length_array_slot(id_idx);
-            if let Some(first) = self.symbols[id_idx].array_dims.first_mut()
-                && *first == 0
-            {
-                *first = rows;
-            }
-            while !self.data.len().is_multiple_of(8) {
-                self.data.push(0);
-            }
-            self.symbols[id_idx].has_initializer = true;
-            self.symbols[id_idx].defined_here = true;
-            return Ok(());
+        // Reserved before the walk consumes `{`: lexing the first element
+        // token may append a string literal's bytes, whose parser-added NUL
+        // must land right after them.
+        let mut dims = alloc::vec![rows];
+        dims.extend_from_slice(&inner_dims);
+        self.collect_struct_array_data(ty, off, &dims)?;
+        let total = rows * inner_dim;
+        self.symbols[id_idx].array_size = total;
+        if let Some(first) = self.symbols[id_idx].array_dims.first_mut()
+            && *first == 0
+        {
+            *first = rows;
         }
-        // Same walker the multi-dimensional case above
-        // uses, so designators read identically at either
-        // rank: `[N]`, the GCC range `[lo ... hi]`, and a
-        // `.field` continuation.
-        self.collect_struct_array_entries(ty, off, &[count])?;
-        self.symbols[id_idx].array_size = count;
         // `struct T xs[] = {}` resolves to zero elements.
         // Keep the array-ness (the `array_size == 0`
         // scalar encoding would otherwise lose it).
-        self.symbols[id_idx].is_zero_len_array = count == 0;
+        self.symbols[id_idx].is_zero_len_array = total == 0;
         self.reserve_zero_length_array_slot(id_idx);
         // Pad data to 8-byte alignment so the next
         // global doesn't land on an odd offset.
@@ -2684,7 +2621,6 @@ impl Compiler {
         // reserved so the single-unit compile can write through the name; a
         // multi-unit build references the defining unit's bytes instead, leaving
         // this slot as the fallback.
-        let _ = was_extern_only_decl;
         // C99 6.9.2: the definition writes into the storage the tentative
         // definition reserved, and a redundant `T x;` after a definition is a
         // redeclaration of the same object, so neither takes fresh zeroed bytes.
@@ -2710,8 +2646,11 @@ impl Compiler {
         // would add a phantom per-unit copy (one TLS block
         // per object), breaking the shared-state semantics
         // and the multi-object link.
-        let extern_tls_ref = thread_local && was_extern_only_decl;
         let align = self.data_placement_align(ty, decl_align.max(obj_align as usize));
+        // Nor does an `extern` object aligned past the image's limit; it binds to a definition.
+        let extern_tls_ref = was_extern_only_decl
+            && (thread_local
+                || (!self.symbols[id_idx].defined_here && align > self.static_align_limit()));
         let var_offset = if extern_tls_ref {
             self.symbols[id_idx].is_extern_decl = true;
             self.symbols[id_idx].defined_here = false;
@@ -2936,6 +2875,17 @@ impl Compiler {
         }
     }
 
+    /// A file-scope `asm(".weak name");` binds the name weak, as the attribute does.
+    fn resolve_file_scope_asm_weak(&mut self) {
+        for name in &self.asm_weak_names {
+            for s in self.symbols.iter_mut() {
+                if s.linkage == crate::c5::symbol::Linkage::External && s.link_name() == name {
+                    s.is_weak = true;
+                }
+            }
+        }
+    }
+
     /// Bind aliases whose target had not been defined when the declarator was
     /// parsed. The target must be defined in this unit: an alias to an
     /// undefined symbol has no address to share. A weak function alias is
@@ -3124,60 +3074,53 @@ impl Compiler {
     /// `InitFunc` registration read the fields off the symbol, so an
     /// attribute written on a prototype reaches the later definition.
     pub(super) fn apply_symbol_attributes(&mut self, id_idx: usize) {
-        if self.pending.attr_weak {
+        if self.pending.attrs.weak {
             self.symbols[id_idx].is_weak = true;
         }
-        if self.pending.attr_used {
+        if self.pending.attrs.used {
             self.symbols[id_idx].is_used = true;
         }
-        if self.pending.attr_maybe_unused {
+        if self.pending.attrs.maybe_unused {
             self.symbols[id_idx].binding.maybe_unused = true;
         }
-        // `ms_abi` / `sysv_abi`: the convention of the function this
-        // symbol names, or of the function a function-pointer object
-        // points to. Sticky across declarations like the rest, so a
-        // prototype carrying it and a later definition without it agree
-        // on one convention.
-        if self.pending.attr_call_conv != crate::c5::codegen::CallConv::Target {
-            self.symbols[id_idx].conv = self.pending.attr_call_conv;
-        }
-        if self.pending.attr_constructor {
+        if self.pending.attrs.constructor {
             self.symbols[id_idx].is_constructor = true;
         }
-        if self.pending.attr_destructor {
+        if self.pending.attrs.destructor {
             self.symbols[id_idx].is_destructor = true;
         }
-        if let Some(p) = self.pending.attr_init_priority {
+        if let Some(p) = self.pending.attrs.init_priority {
             self.symbols[id_idx].init_priority = Some(p);
         }
         // Sticky like the rest: `gnu_inline` on any declaration selects
         // the GNU89 model for the name, whichever side of the declarator
         // the attribute was written on.
-        if self.pending_is_gnu_inline {
+        if self.pending.attrs.is_gnu_inline {
             self.symbols[id_idx].is_gnu_inline = true;
         }
         // An explicit `visibility` attribute states the answer; without one
         // the enclosing `#pragma GCC visibility` extent supplies it.
         let hidden = self
             .pending
-            .attr_visibility
+            .attrs
+            .visibility
             .unwrap_or_else(|| self.lex.visibility_hidden());
         if hidden {
             self.symbols[id_idx].is_hidden = true;
         }
-        if let Some(sec) = self.pending.attr_section.take() {
+        if let Some(sec) = self.pending.attrs.section.take() {
             self.symbols[id_idx].section_name = Some(sec);
         }
-        if let Some(area) = self.pending.attr_patchable_entry.take() {
+        if let Some(area) = self.pending.attrs.patchable_entry.take() {
             self.symbols[id_idx].patchable_function_entry = Some(area);
         }
-        if self.pending.attr_no_instrument {
+        if self.pending.attrs.no_instrument {
             self.symbols[id_idx].no_instrument_function = true;
         }
-        if self.pending.attr_no_stack_protector {
+        if self.pending.attrs.no_stack_protector {
             self.symbols[id_idx].no_stack_protector = true;
         }
-        if self.pending_is_noinline {
+        if self.pending.attrs.is_noinline {
             self.symbols[id_idx].is_noinline = true;
         }
     }

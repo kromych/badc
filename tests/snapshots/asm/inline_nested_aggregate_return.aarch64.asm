@@ -97,8 +97,7 @@ Disassembly of section .text:
                	bl	<addr>
                	stur	x0, [x29, #-0x10]
                	stur	x1, [x29, #-0x8]
-               	lsl	x0, x0, #1
-               	add	x0, x0, x1
+               	add	x0, x1, x0, lsl #1
                	cmp	x0, #0x1a
                	b.eq	<addr>
                	orr	x20, x20, #0x10

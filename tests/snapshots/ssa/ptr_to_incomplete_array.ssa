@@ -57,7 +57,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v8)   (exit_acc=v8)
   block 10  start_pc=0
     v55  Extend { value=v31, kind=I32 }                   -> x0
-    v56  BinopI { op=shl, lhs=v31, rhs_imm=4 }            -> x0
+    v56  BinopI { op=shl, lhs=v31, rhs_imm=4 }            -> x8
     v57  Binop { op=add, lhs=v1, rhs=v56 }                -> x0
     v58  Load { addr=v57, disp=0, kind=I32 }              -> x0
     v59  Extend { value=v58, kind=I32 }                   -> x1
@@ -115,7 +115,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     terminator Return(v12)   (exit_acc=v12)
   block 21  start_pc=0
     v87  Extend { value=v63, kind=I32 }                   -> x0
-    v88  BinopI { op=shl, lhs=v63, rhs_imm=4 }            -> x0
+    v88  BinopI { op=shl, lhs=v63, rhs_imm=4 }            -> x8
     v89  Binop { op=add, lhs=v1, rhs=v88 }                -> x0
     v90  Load { addr=v89, disp=0, kind=I32 }              -> x0
     v91  Extend { value=v90, kind=I32 }                   -> x1

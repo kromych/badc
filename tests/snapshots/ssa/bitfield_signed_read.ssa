@@ -153,8 +153,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v161 LocalAddr(-1)                                    -> x1
     v162 BinopI { op=and, lhs=v134, rhs_imm=65535 }       -> x0
     v163 BinopI { op=shr, lhs=v162, rhs_imm=12 }          -> x1
-    v164 BinopI { op=and, lhs=v163, rhs_imm=3 }           -> x1
-    v165 BinopI { op=shl, lhs=v164, rhs_imm=62 }          -> x1
+    v164 BinopI { op=and, lhs=v163, rhs_imm=3 }           -> x2
+    v165 BinopI { op=shl, lhs=v163, rhs_imm=62 }          -> x1
     v166 BinopI { op=shr, lhs=v165, rhs_imm=62 }          -> x1
     v167 BinopI { op=ne, lhs=v166, rhs_imm=-1 }           -> x1
     terminator Bz { cond=v167, target=b4, fall=b3 }   (exit_acc=v167)
@@ -182,7 +182,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v182 BinopI { op=and, lhs=v134, rhs_imm=65535 }       -> x0
     v183 BinopI { op=shr, lhs=v182, rhs_imm=12 }          -> x0
     v184 BinopI { op=and, lhs=v183, rhs_imm=3 }           -> x0
-    v185 BinopI { op=shl, lhs=v184, rhs_imm=62 }          -> x0
+    v185 BinopI { op=shl, lhs=v183, rhs_imm=62 }          -> x0
     v186 Imm(-1)                                          -> x0
     v187 Imm(0)                                           -> x0
     v188 Imm(5)                                           -> x0

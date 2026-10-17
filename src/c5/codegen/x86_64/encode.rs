@@ -1264,6 +1264,11 @@ pub(crate) fn emit_cqo(code: &mut Vec<u8>) {
     emit_byte(code, 0x99);
 }
 
+/// `CDQ` -- sign-extend eax into edx.
+pub(crate) fn emit_cdq(code: &mut Vec<u8>) {
+    emit_byte(code, 0x99);
+}
+
 // ---- Shifts. The `D3` opcode shifts by `cl`; `C1` shifts by an
 //      8-bit immediate. We expose both forms because the optimizer
 //      emits constant-shift IR ops (`ShlI N`, `ShrI N`) that benefit
@@ -1924,6 +1929,7 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
     // `.align` takes a byte count on x86-64 ELF.
     const FILE_ASM_ALIGN_POW2: bool = false;
     const FILE_ASM_COMMENTS: crate::c5::asm::AsmComments = crate::c5::asm::AsmComments::X86;
+    const WEAK_ADDR_PCREL: Option<i64> = Some(-4);
 
     fn late_opt_passes(
         &mut self,
@@ -1940,7 +1946,7 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
     /// unit, the same place the definition's would. A declaration without
     /// a prototype states no return contract a tail call could rely on.
     fn note_extern_callee(&mut self, sym: &crate::c5::symbol::Symbol) {
-        if sym.prototyped {
+        if sym.prototyped() {
             self.ret_tags.insert(sym.val as usize, sym.type_);
         }
     }
@@ -2070,6 +2076,11 @@ impl super::ssa::emit_common::LowerTarget for X64Lower<'_> {
         pc_extent: usize,
     ) -> Result<(), C5Error> {
         apply_fixups(code, fixups, pc_to_native, pc_extent)
+    }
+
+    // The writer rewrites an `is_data_load` fixup's `lea` into the `mov`.
+    fn address_to_slot_load(_code: &mut [u8], _at: usize) -> Result<(), C5Error> {
+        Ok(())
     }
 
     fn emit_plt_trampolines(

@@ -26,7 +26,7 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use super::fixture_tables::NATIVE_PE_X64_FIXTURES;
+use super::fixture_tables::{BADC_FIXTURES, NATIVE_PE_X64_FIXTURES};
 use crate::{Compiler, NativeOptions, Target};
 
 /// On Windows we run the binary directly; on macOS / Linux we go
@@ -351,6 +351,56 @@ fn printf_through_iat() {
     // platform-honest.
     let src = r#"int main() { return printf("%d\n", 42); }"#;
     assert_exit(src, "printf", &[], 3);
+}
+
+/// An offset reaching below the image base keeps its sign through the
+/// data, read-only and function fixups.
+#[test]
+fn asm_offsets_below_the_image_base_resolve() {
+    let src = super::asm_below_image_base_source();
+    for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
+        let outcome = build_and_run_with_options(src, "below-base", &[], opts);
+        if matches!(outcome, RunOutcome::HostCannotRun) {
+            eprintln!("skip below-base: no PE runner on this host");
+            return;
+        }
+        assert!(outcome.matches(0), "wrong addresses: {outcome:?}");
+    }
+}
+
+/// The init/fini arrays a writable named section precedes stay in `.data`.
+#[test]
+fn constructors_run_beside_writable_named_sections() {
+    let src = super::init_fini_beside_named_sections_source();
+    assert_exit(src, "init-fini-named", &[], 0);
+}
+
+/// C11 6.7.5: 8 and 16 KiB objects land on their boundary through the linked
+/// executable and a two-unit link.
+#[test]
+fn over_aligned_objects_keep_their_alignment() {
+    let (defs, main) = super::over_aligned_objects_units(Target::WindowsX64);
+    assert_exit(&format!("{defs}{main}"), "overaligned", &[], 0);
+    let compile = |src: &str| {
+        let opts = crate::CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::WindowsX64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&compile(main), &compile(&defs)],
+        Target::WindowsX64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link two units: {e}"));
+    let path = super::unique_temp_path("badc-pe64-test", "overaligned_two_units", ".exe");
+    std::fs::write(&path, &bytes).expect("write temp file");
+    let output = run_pe(&path, &[]);
+    let _ = std::fs::remove_file(&path);
+    match output {
+        Some(o) => assert_eq!(o.expect("run").status.code(), Some(0), "two units"),
+        None => eprintln!("skip overaligned_two_units: no PE runner on this host"),
+    }
 }
 
 #[test]
@@ -710,6 +760,26 @@ fn fixture_parity_native_optimized() {
         NATIVE_PE_X64_FIXTURES.len(),
         failures.join("\n  ")
     );
+}
+
+/// [`BADC_FIXTURES`], at -O0 and -O.
+#[test]
+fn badc_fixtures() {
+    if !host_can_run_pe() {
+        eprintln!("skip badc_fixtures: no PE runner on this host");
+        return;
+    }
+    for (opts, suffix) in [
+        (NativeOptions::default(), "-O0"),
+        (NativeOptions::new().with_optimize(), "-O"),
+    ] {
+        let failures = super::parity_failures(BADC_FIXTURES, |name, expected| {
+            let outcome = build_and_run_fixture_with_options(name, opts.clone(), suffix);
+            (!outcome.matches(*expected))
+                .then(|| format!("{name} ({suffix}): expected exit {expected}, got {outcome:?}"))
+        });
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
 }
 
 #[test]

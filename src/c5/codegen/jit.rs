@@ -136,7 +136,7 @@ mod jit_impl {
     use super::super::super::program::Program;
     use super::super::Target;
     use super::super::ssa::shadow;
-    use super::super::{AddrPart, Build, GotFixup, NativeOptions, ResolvedImport, ResolvedImports};
+    use super::super::{AddrPart, Build, NativeOptions, ResolvedImports};
     use super::super::{aarch64, x86_64};
     use super::host_target;
     use alloc::format;
@@ -562,15 +562,6 @@ mod jit_impl {
             report(d);
         }
 
-        // Undefined extern functions: the lowering partitioned each
-        // call / address site targeting a placeholder ent_pc into
-        // `user_extern_call_sites`, and there is no link step to
-        // resolve them. Executing such a site would branch to the
-        // zeroed placeholder, so refuse up front, mirroring the
-        // linker's diagnosis.
-        if let Some(site) = build.user_extern_call_sites.first() {
-            return Err(undefined_reference(&site.symbol_name));
-        }
         // A thread-pointer-relative access has no block to reach here: the
         // executing thread's TLS belongs to the host runtime, and the
         // fixups the backends record need the link step the JIT has not.
@@ -580,8 +571,51 @@ mod jit_impl {
         {
             return Err(unsupported_thread_local(program));
         }
+        // The asm the unit holds is placed with its code, and a name it
+        // defines binds ahead of the unit's C definitions, as in an image.
+        use super::super::asm_fold::{bind_label_calls, fold_asm_sections};
+        let mut defs = super::super::unit_definitions(program, &build);
+        let labels = fold_asm_sections(program, &mut build, target, &defs, "the JIT")?;
+        bind_label_calls(&mut build, &labels, target.is_aarch64());
+        defs.extend(labels.iter().map(|(name, at)| (name.clone(), at.as_def())));
+        // An extern call site left has no link step to resolve it, and would
+        // branch to the zeroed placeholder: refuse it as the linker would.
+        if let Some(site) = build.user_extern_call_sites.first() {
+            return Err(undefined_reference(&site.symbol_name));
+        }
+        bind_jit_unit_refs(&defs, &mut build);
+        resolve_jit_asm_sym_targets(&defs, &mut build);
         route_jit_data_imports(&mut build)?;
-        resolve_jit_asm_sym_targets(program, &mut build);
+
+        // One slot per import, holding what dlsym finds, read as a loader's GOT.
+        let mut got_region = GotRegion::new(build.imports.imports.len())?;
+        got_region.bind_imports(&build.imports)?;
+        // A data import's slot must resolve, as the code dereferences it.
+        for fx in &build.got_fixups {
+            if fx.is_data_load && got_region.slot_value(fx.import_index) == 0 {
+                let name = &build.imports.imports[fx.import_index].real_symbol;
+                return Err(undefined_reference(name));
+            }
+        }
+        let got_vmaddr = got_region.as_ptr() as u64;
+        // The named slots bind as in an image, a library object through dlsym.
+        crate::c5::codegen::bind_named_slots(program, &mut build, &defs, &mut |build, r| {
+            let host = (build.imports.data_bindings.iter())
+                .find(|(local, ..)| *local == r.symbol_name)
+                .map_or(r.symbol_name.as_str(), |(_, host, _)| host.as_str());
+            let addr = got_region.resolve_symbol(host);
+            let at = r.data_offset as usize;
+            match build.data.get_mut(at..at + 8) {
+                _ if addr == 0 => Ok(false),
+                Some(slot) => {
+                    slot.copy_from_slice(&addr.wrapping_add_signed(r.addend).to_le_bytes());
+                    Ok(true)
+                }
+                None => Err(C5Error::internal(format!(
+                    "JIT: extern data slot {at:#x} past the data image"
+                ))),
+            }
+        })?;
 
         // Allocate a writable data region, copy `build.data` in. The
         // page is RW (no exec permission); an attempt to execute
@@ -619,27 +653,6 @@ mod jit_impl {
         // flipped to data_vmaddr but before the code region's
         // address is known -- so we defer this loop and run it
         // again once code_vmaddr is computed.
-
-        // Allocate a "fake GOT" -- one u64 per resolved import, each
-        // holding the runtime address of the corresponding libc
-        // symbol resolved via dlsym. The codegen's adrp+ldr / call
-        // qword [rip+disp32] sequences will read through this region
-        // exactly the way the ELF loader's relocations would.
-        let mut got_region = GotRegion::new(build.imports.imports.len())?;
-        got_region.bind_imports(&build.imports)?;
-        // A data import's GOT slot must resolve: unlike a function
-        // import (whose 0 slot faults only if called), the patched
-        // code loads the slot's value as an object address and
-        // dereferences it.
-        for fx in &build.got_fixups {
-            if fx.is_data_load && got_region.slot_value(fx.import_index) == 0 {
-                return Err(C5Error::internal(format!(
-                    "JIT: unresolved extern data symbol `{}`",
-                    build.imports.imports[fx.import_index].real_symbol,
-                )));
-            }
-        }
-        let got_vmaddr = got_region.as_ptr() as u64;
 
         // Allocate the code region. Patch fixups against the mmap'd
         // addresses *before* flipping to RX -- the writes need to
@@ -710,17 +723,12 @@ mod jit_impl {
             let bytes = region.as_mut_slice(build.data.len());
             for r in &build.code_relocs {
                 let ent_pc = r.target_ent_pc as usize;
-                let native_off = build
-                    .pc_to_native
-                    .get(ent_pc)
-                    .copied()
-                    .unwrap_or(usize::MAX);
-                if native_off == usize::MAX {
+                let Some(native_off) = build.native_entry(ent_pc) else {
                     return Err(C5Error::internal(format!(
                         "JIT: code reloc references missing ent_pc {ent_pc}"
                     )));
-                }
-                let absolute = code_vmaddr + native_off as u64;
+                };
+                let absolute = (code_vmaddr + native_off as u64).wrapping_add_signed(r.addend);
                 let off = r.data_offset as usize;
                 if off + 8 > bytes.len() {
                     return Err(C5Error::internal(format!(
@@ -748,35 +756,6 @@ mod jit_impl {
                     )));
                 }
                 bytes[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
-            }
-        }
-        // Pointer-to-extern-data initializers (`int *p = &extern_g;`).
-        // Resolve each symbol's runtime address through the same loader
-        // handles the GOT uses and write it into the data slot. Unlike a
-        // missing function import (a 0 GOT slot that faults only if
-        // called), a NULL data pointer is the defect being fixed, so an
-        // unresolved symbol is a hard error.
-        if !build.extern_data_relocs.is_empty()
-            && let Some(region) = &mut data_region
-        {
-            let bytes = region.as_mut_slice(build.data.len());
-            for r in &build.extern_data_relocs {
-                let addr = got_region.resolve_symbol(&r.symbol_name);
-                if addr == 0 {
-                    return Err(C5Error::internal(format!(
-                        "JIT: unresolved extern data symbol `{}`",
-                        r.symbol_name
-                    )));
-                }
-                let off = r.data_offset as usize;
-                if off + 8 > bytes.len() {
-                    return Err(C5Error::internal(format!(
-                        "JIT: extern data reloc offset {off:#x} past end of data region ({})",
-                        bytes.len()
-                    )));
-                }
-                let value = (addr as i64 + r.addend) as u64;
-                bytes[off..off + 8].copy_from_slice(&value.to_le_bytes());
             }
         }
         apply_jit_fixups(
@@ -1081,52 +1060,39 @@ mod jit_impl {
         )
     }
 
-    /// Route `#pragma binding(data ...)` references through the fake
-    /// GOT. The emitters record each extern-data site as a named
-    /// [`super::super::UserExternDataRef`]; register the binding's host
-    /// symbol as a flat-lookup import so `bind_imports` resolves it via
-    /// the loader and `apply_jit_fixups` rewrites the site into a
-    /// GOT-slot load -- the JIT equivalent of the loader-bound data
-    /// import an AOT image gets. A leftover reference has no binding
-    /// and no definition anywhere: refuse it like the linker would.
-    fn route_jit_data_imports(build: &mut Build) -> Result<(), C5Error> {
-        if build.user_extern_data_refs.is_empty() {
-            return Ok(());
-        }
-        let hosts: alloc::collections::BTreeMap<String, (String, usize)> = build
-            .imports
-            .data_bindings
-            .iter()
-            .map(|(local, host, dylib)| (local.clone(), (host.clone(), *dylib)))
-            .collect();
-        let mut import_for: alloc::collections::BTreeMap<String, usize> =
-            alloc::collections::BTreeMap::new();
+    /// Bind each by-name reference to a definition of this unit to it, as
+    /// a single-file image does: the JIT image is the unit.
+    fn bind_jit_unit_refs(defs: &super::super::UnitDefs, build: &mut Build) {
         for r in core::mem::take(&mut build.user_extern_data_refs) {
-            let Some((host, dylib)) = hosts.get(&r.symbol_name) else {
+            match defs.get(r.symbol_name.as_str()) {
+                Some(&def) => {
+                    let addend = r.direct_pcrel.map_or(0, |a| a + 4);
+                    def.bind(build, r.instr_offset, super::super::AddrPart::Whole, addend);
+                }
+                None => build.user_extern_data_refs.push(r),
+            }
+        }
+    }
+
+    /// Route `#pragma binding(data ...)` references, asm operands included,
+    /// through flat-lookup imports in the fake GOT. A leftover reference has
+    /// no binding and no definition anywhere: refuse it like the linker would.
+    fn route_jit_data_imports(build: &mut Build) -> Result<(), C5Error> {
+        use crate::c5::asm::AsmSectionTarget;
+        let mut slots = super::super::DataImportSlots::new(build, true, "the JIT");
+        for r in core::mem::take(&mut build.user_extern_data_refs) {
+            if !slots.binds(&r.symbol_name) {
                 return Err(undefined_reference(&r.symbol_name));
-            };
-            let idx = *import_for.entry(r.symbol_name.clone()).or_insert_with(|| {
-                let i = build.imports.imports.len();
-                build.imports.imports.push(ResolvedImport {
-                    binding_idx: i as i64,
-                    local_name: r.symbol_name.clone(),
-                    real_symbol: host.clone(),
-                    dylib_index: *dylib,
-                    flat_lookup: true,
-                    kind: crate::c5::codegen::ImportKind::Function,
-                    is_variadic: false,
-                    fixed_args: 0,
-                    return_type_tag: 0,
-                    param_types: alloc::vec::Vec::new(),
-                });
-                i
-            });
-            build.got_fixups.push(GotFixup {
-                instr_offset: r.instr_offset,
-                part: AddrPart::Whole,
-                import_index: idx,
-                is_data_load: true,
-            });
+            }
+            slots.route_ref(build, &r)?;
+        }
+        for fx in core::mem::take(&mut build.asm_sym_fixups) {
+            match &fx.target {
+                AsmSectionTarget::Symbol(name) if slots.binds(name) => {
+                    slots.route_asm_operand(build, &fx, name)?
+                }
+                _ => build.asm_sym_fixups.push(fx),
+            }
         }
         Ok(())
     }
@@ -1948,7 +1914,7 @@ mod jit_impl {
                 code,
                 code_vmaddr,
                 fx.instr_offset as u64,
-                data_vmaddr + fx.data_offset,
+                (data_vmaddr + fx.data_offset).wrapping_add_signed(fx.addend),
                 fx.part,
                 "data fixup",
             )?;
@@ -1959,7 +1925,7 @@ mod jit_impl {
                 code,
                 code_vmaddr,
                 fx.instr_offset as u64,
-                code_vmaddr + fx.target_native_offset as u64,
+                (code_vmaddr + fx.target_native_offset as u64).wrapping_add_signed(fx.addend),
                 fx.part,
                 "func fixup",
             )?;
@@ -1968,36 +1934,19 @@ mod jit_impl {
         Ok(())
     }
 
-    /// Rewrite each inline-asm symbol-operand record naming a data object
-    /// this unit defines to its resolved data offset. The emitter leaves an
-    /// external-linkage name symbolic so the object keeps the symbol's
-    /// binding; the JIT has no link step to interpose it, so the local
-    /// definition is the resolution.
-    fn resolve_jit_asm_sym_targets(program: &Program, build: &mut Build) {
+    /// Rewrite each inline-asm symbol-operand record naming a definition of
+    /// this unit to its offset: with no link step to interpose the name, the
+    /// unit's definition is its resolution.
+    fn resolve_jit_asm_sym_targets(defs: &super::super::UnitDefs, build: &mut Build) {
+        use super::super::UnitDef;
         use crate::c5::asm::AsmSectionTarget;
-        use crate::c5::symbol::Linkage;
-        use crate::c5::token::Token;
-        if build.asm_sym_fixups.is_empty() {
-            return;
-        }
-        let defined_data_by_name: alloc::collections::BTreeMap<&str, i64> = program
-            .symbols
-            .iter()
-            .filter(|s| {
-                s.class == Token::Glo as i64
-                    && s.defined_here
-                    && !s.is_alias
-                    && !s.is_thread_local
-                    && !s.name.is_empty()
-                    && matches!(s.linkage, Linkage::External | Linkage::Internal)
-            })
-            .map(|s| (s.link_name(), s.val))
-            .collect();
         for r in &mut build.asm_sym_fixups {
-            if let AsmSectionTarget::Symbol(name) = &r.target
-                && let Some(&val) = defined_data_by_name.get(name.as_str())
-            {
-                r.target = AsmSectionTarget::Data(val.max(0) as u64);
+            if let AsmSectionTarget::Symbol(name) = &r.target {
+                match defs.get(name.as_str()) {
+                    Some(&UnitDef::Data(off)) => r.target = AsmSectionTarget::Data(off),
+                    Some(&UnitDef::Text(off)) => r.target = AsmSectionTarget::Text(off),
+                    None => {}
+                }
             }
         }
     }
@@ -2017,20 +1966,11 @@ mod jit_impl {
         let internal = |m: String| C5Error::internal(m);
         for r in &build.asm_sym_fixups {
             let target_vmaddr = match &r.target {
-                AsmSectionTarget::Data(off) => {
-                    data_vmaddr.wrapping_add(off.wrapping_add_signed(r.addend))
+                AsmSectionTarget::Data(off) => (data_vmaddr + off).wrapping_add_signed(r.addend),
+                AsmSectionTarget::Text(off) => {
+                    (code_vmaddr + *off as u64).wrapping_add_signed(r.addend)
                 }
-                AsmSectionTarget::Symbol(name) => {
-                    let off = build
-                        .func_names
-                        .iter()
-                        .position(|n| n == name)
-                        .and_then(|i| build.pc_to_native.get(*build.func_ent_pcs.get(i)?).copied())
-                        .ok_or_else(|| undefined_reference(name))?;
-                    code_vmaddr
-                        .wrapping_add(off as u64)
-                        .wrapping_add_signed(r.addend)
-                }
+                AsmSectionTarget::Symbol(name) => return Err(undefined_reference(name)),
                 other => {
                     return Err(internal(format!(
                         "JIT: asm operand relocation target {other:?} is not a data offset \

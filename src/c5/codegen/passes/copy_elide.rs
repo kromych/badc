@@ -682,6 +682,8 @@ fn plan_one(
                 | Inst::Fneg(_)
                 | Inst::Fma { .. }
                 | Inst::MulAdd { .. }
+                | Inst::ShiftOp { .. }
+                | Inst::BitField { .. }
                 | Inst::Udiv128 { .. }
                 | Inst::Extend { .. }
                 | Inst::Bswap { .. }

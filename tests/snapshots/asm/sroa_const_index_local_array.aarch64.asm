@@ -25,22 +25,14 @@ Disassembly of section .text:
                	sub	x9, x1, #0x1
                	cmp	w1, #0x0
                	b.le	<addr>
-               	lsl	x1, x0, #1
-               	add	x1, x8, x1
-               	lsl	x8, x8, #1
-               	add	x8, x7, x8
-               	lsl	x7, x7, #1
-               	add	x7, x6, x7
-               	lsl	x6, x6, #1
-               	add	x6, x5, x6
-               	lsl	x5, x5, #1
-               	add	x5, x4, x5
-               	lsl	x4, x4, #1
-               	add	x4, x3, x4
-               	lsl	x3, x3, #1
-               	add	x3, x2, x3
-               	lsl	x2, x2, #1
-               	eor	x2, x0, x2
+               	add	x1, x8, x0, lsl #1
+               	add	x8, x7, x8, lsl #1
+               	add	x7, x6, x7, lsl #1
+               	add	x6, x5, x6, lsl #1
+               	add	x5, x4, x5, lsl #1
+               	add	x4, x3, x4, lsl #1
+               	add	x3, x2, x3, lsl #1
+               	eor	x2, x0, x2, lsl #1
                	mov	x0, x1
                	mov	x1, x9
                	sub	x9, x1, #0x1

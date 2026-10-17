@@ -51,13 +51,9 @@ pub(crate) mod types;
 /// from the declarator or the object's type. Static objects (file-scope,
 /// block-scope static, and initialised or zero-init alike) are placed at
 /// this alignment in `.data` / `.bss`; automatic objects stay capped at
-/// `MAX_FRAME_ALIGN`. 64 KiB is the
-/// largest page size in common use (the aarch64 max-page-size) and covers
-/// cache-line, page, and page-multiple requests such as a per-CPU stack.
-/// The self-contained ELF writer raises the read-write segment `p_align`
-/// to the object's alignment so a PIE load bias preserves it, and the JIT
-/// over-aligns its data mapping the same way; both are bounded by
-/// `TEXT_VMADDR_BASE`, which fixes the structural ceiling above this.
+/// `MAX_FRAME_ALIGN`. 64 KiB is the largest page size in common use and the
+/// granularity a PE image loads at; a Mach-O image keeps less
+/// (`BinaryFormat::max_object_align`).
 pub(crate) const MAX_STATIC_ALIGN: usize = 65536;
 
 /// Maximum alignment an automatic (stack) object may request. The prologue
@@ -447,36 +443,13 @@ pub struct StructField {
     /// from it so `(*s.cb(x))(y)`-style chains decay instead of
     /// loading through the returned function pointer.
     pub fn_ptr_ret_indirection: i64,
-    /// `FnType::ret` of the function a function-pointer field points to
-    /// (mirrors `Symbol::ret_fn`).
-    pub(crate) ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
-    /// Parameter type tags of a function-pointer field, captured from
-    /// the field declarator's prototype (mirrors `Symbol::params`).
-    /// Empty for a non-function-pointer field or one declared without a
-    /// prototype. A `s.fp(args)` / `s->fp(args)` call reads this to
-    /// narrow each argument to its declared parameter type (C99
-    /// 6.5.2.2p7), matching the direct-identifier and array-element
-    /// call paths.
-    pub params: Vec<i64>,
-    /// True when the function-pointer field's prototype is variadic
-    /// (`int (*fp)(int, ...)`). Mirrors `Symbol::is_variadic`. A
-    /// `s.fp(args)` / `s->fp(args)` call reads this with `params` to
-    /// split the argument list at the fixed-parameter count for the host
-    /// variadic ABI. False for a non-function-pointer field or a
-    /// non-variadic prototype.
-    pub is_variadic: bool,
-    /// Mirrors `Symbol::prototyped`.
-    pub prototyped: bool,
-    /// Mirrors `Symbol::param_enum_tags`.
-    pub param_enum_tags: Vec<(usize, u32)>,
-    /// Mirrors `Symbol::param_fn_types`.
-    pub(crate) param_fn_types: Vec<(usize, crate::c5::symbol::FnType, i64)>,
-    /// Calling convention of the function a function-pointer field
-    /// points to (`__attribute__((ms_abi))` / `((sysv_abi))`). Mirrors
-    /// `Symbol::conv`; `CallConv::Target` for every other field. The
-    /// EFI boot- and runtime-services tables declare their members this
-    /// way, so a call through one has to marshal to that convention.
-    pub(crate) conv: crate::c5::codegen::CallConv,
+    /// The function type a function-pointer field points to, as
+    /// `Symbol::fn_type` holds one; the default for every other field. A
+    /// `s.fp(args)` / `s->fp(args)` call converts each argument to its
+    /// parameter type (C99 6.5.2.2p7), splits the list at the fixed count
+    /// for the host variadic ABI, and marshals by the convention, which
+    /// the EFI boot- and runtime-services tables declare on their members.
+    pub(crate) fn_type: crate::c5::symbol::FnType,
     /// Non-zero for a field promoted from an anonymous union (C11
     /// 6.7.2.1p13). All members of one anonymous union share the same
     /// value; the same id groups them so a brace-list initializer
@@ -1014,10 +987,11 @@ pub(in crate::c5::compiler) struct Pending {
     /// Set by a declarator frame before it parses its parenthesised inner
     /// declarator, which then continues the same entity's function types.
     pub declarator_in_group: bool,
-    /// The signatures a declarator spells past its entity's own, innermost
-    /// first, with the pointer levels from the previous result to each
-    /// (`int (*(*f)(void))(int)` spells `(int)` one level past `(void)`).
-    pub fn_ret_chain: alloc::vec::Vec<(crate::c5::symbol::FnParams, i64)>,
+    /// The function types a declarator spells past its entity's own,
+    /// innermost first, results unset, with the pointer levels from the
+    /// previous result to each (`int (*(*f)(void))(int)` spells `(int)` one
+    /// level past `(void)`).
+    pub fn_ret_chain: alloc::vec::Vec<(crate::c5::symbol::FnType, i64)>,
     /// Pointer levels of the entity's declarator the own signature and
     /// `fn_ret_chain` account for.
     pub fn_chain_levels: i64,
@@ -1149,17 +1123,15 @@ pub(in crate::c5::compiler) struct Pending {
     /// compound literal, which denotes an object (C99 6.5.2.5p4) rather
     /// than a value; `__builtin_constant_p` answers 0 for such an operand.
     pub const_expr_compound_literal: bool,
-    /// The parameter information of the function a function-pointer
-    /// declarator, or a function or function-pointer typedef or `typeof`
-    /// base, names: an indirect call through the bound variable converts
-    /// each argument to its parameter type and splits fixed from variadic
-    /// arguments per the host variadic ABI. `None` for any other base type;
+    /// The function type a function or function-pointer typedef, `typeof`
+    /// or `__auto_type` base names, which a declarator spelling its own
+    /// signature replaces with that signature's (its result's type is the
+    /// one `take_decl_ret_fn` builds). `None` for any other base type;
     /// cleared by every base-type parse.
-    pub fn_ptr_params: Option<crate::c5::symbol::FnParams>,
-    /// `FnType::ret` of the function type `fn_ptr_params` describes: a
-    /// typedef or `typeof` base's, or the signatures a declarator spells
-    /// past the declared entity's own. Taken with it.
-    pub fn_ptr_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
+    pub fn_ptr_type: Option<crate::c5::symbol::FnType>,
+    /// The convention the attributes of the declarator group being parsed
+    /// name for the signature after it (GNU attribute syntax).
+    pub group_conv: Option<crate::c5::codegen::CallConv>,
     /// Fn-pointer lineage of the return value of the function pointer an
     /// in-progress postfix call will call (`tbl[i](args)`, `(*fp)(args)`),
     /// in `Symbol::fn_ptr_ret_indirection`'s plus-1 convention. Set at the
@@ -1285,18 +1257,6 @@ pub(in crate::c5::compiler) struct Pending {
     /// Cleared with `fn_ptr_chain_depth`.
     pub fn_ptr_depth_is_array_elem: bool,
 
-    /// True when the value in hand is a function *designator* rather than
-    /// an object of function-pointer type. C99 6.3.2.1p4 pre-decays a
-    /// designator to a pointer, and c5's tag encoding keeps no separate
-    /// function type, so the two are otherwise indistinguishable -- yet
-    /// they differ under `&` (6.5.3.2p3 gives the designator the pointer
-    /// type it already carries) and under `typeof` (the designator names
-    /// a function type, so a declarator's `*` forms the pointer instead
-    /// of adding a level). Set by the function-designator load and by the
-    /// 6.5.3.2p4 `*`-on-a-function-pointer indirection; cleared with
-    /// `fn_ptr_chain_depth`.
-    pub value_is_fn_designator: bool,
-
     /// Symbol index of the Token::Loc whose value was loaded by
     /// the most recently emitted scalar load (`LoadKind::I64` /
     /// `LoadKind::U8` / `LoadKind::I16` / `LoadKind::I32`, or the fused local-load
@@ -1372,109 +1332,18 @@ pub(in crate::c5::compiler) struct Pending {
     /// literal carried no surrounding parentheses.
     pub compound_lit_close_parens: i64,
 
-    /// Side channel from `skip_attribute_specifiers`: set true when a
-    /// consumed attribute named `unused` / `maybe_unused` (C23
-    /// 6.7.12.4 `[[maybe_unused]]` or GNU `__attribute__((unused))`).
-    /// Read by `parse_block_stmt` right after the leading-attribute
-    /// skip to mark the declared locals so their unused-variable
-    /// diagnostics are suppressed.
-    pub attr_maybe_unused: bool,
-    /// Side channel from `skip_attribute_specifiers`: true when the most
-    /// recent run named `transparent_union`, false otherwise (every run
-    /// rewrites it). Consumed by the aggregate and typedef paths.
-    pub attr_transparent_union: bool,
-    /// Requested object alignment from `_Alignas(N)` /
-    /// `__attribute__((aligned(N)))` / `__declspec(align(N))`, 0 when
-    /// absent. The declaration parse takes it: file-scope objects
-    /// honor up to 16, anything larger (or an automatic object above
-    /// the 8-byte slot alignment) is a diagnostic, never silent.
-    pub attr_align: i64,
-    /// The `_Alignas(N)` share of `attr_align`, 0 when the request came
-    /// only from `__attribute__((aligned(N)))` / `__declspec(align(N))`.
-    /// C11 6.7.5 makes `_Alignas` raise-only and an alignment below the
-    /// type's a constraint violation, where a variable-level GNU
-    /// `aligned(N)` sets the object's alignment and may lower it.
-    pub attr_alignas: i64,
     /// Alignment (bytes) carried by the base type of the declaration
     /// under parse, from a typedef whose type has a GNU
-    /// `aligned(N)` attribute. Distinct from `attr_align` (an object /
+    /// `aligned(N)` attribute. Distinct from `attrs.align` (an object /
     /// member `_Alignas`, raise-only): a type attribute sets the
     /// alignment and may lower it below the natural value, so the
     /// struct-field layout uses it to replace the field's natural
     /// alignment rather than raising it. Seeded when a typedef-name
     /// resolves as a base type; 0 for a type with natural alignment.
     pub type_align: i64,
-    /// `__attribute__((packed))` seen on the declarator being parsed.
-    /// A struct member takes it to clamp that field's alignment to 1
-    /// (GCC member-level packed), independent of a struct-level `packed`.
-    /// Recorded here because the trailing member attribute is consumed
-    /// inside the declarator parse, not by the aggregate field loop.
-    pub attr_packed: bool,
-    /// `__attribute__((vector_size(N)))` byte width, 0 when absent. The base
-    /// type of the declaration is rebuilt into a GCC vector type of `N /
-    /// sizeof(element)` lanes (modeled as an N-byte aggregate).
-    pub attr_vector_size: i64,
-    /// `__attribute__((mode(M)))`: the machine mode the declaration's type
-    /// is rewritten to, as `(bytes, is_float)`. `None` when absent. GCC
-    /// applies it to the base type of an enum and to the declared type of
-    /// an object, member, or typedef alias.
-    pub attr_mode: Option<(u8, bool)>,
-    /// A consumed `__declspec(thread)`. Read by the declaration parse to mark
-    /// the declared object thread-local (the storage class `_Thread_local`
-    /// reaches the same flag through the keyword path).
-    pub attr_thread_local: bool,
-    /// A consumed `__declspec(dllexport)`. Read after the declarator to add the
-    /// declared name to the export list -- the equivalent of `#pragma export`.
-    pub attr_dllexport: bool,
-    /// A consumed `__attribute__((constructor))`. Merged onto
-    /// `Symbol::is_constructor`, which the function-body open reads to
-    /// record the function in `Compiler::init_funcs`.
-    pub attr_constructor: bool,
-    /// A consumed `__attribute__((destructor))`.
-    pub attr_destructor: bool,
-    /// Explicit priority from `constructor(N)` / `destructor(N)`; `None`
-    /// for the bare form. Applies to whichever of the two above is set.
-    pub attr_init_priority: Option<u32>,
-    /// A consumed `__attribute__((cleanup(fn)))`: the symbol index of the
-    /// cleanup function. Read where a local is bound to register a call to
-    /// `fn(&var)` at every exit from the variable's scope (C99 has no such
-    /// feature; this is the GCC/Clang extension that scope-guard and
-    /// auto-cleanup idioms rely on).
-    pub attr_cleanup: Option<usize>,
-    /// A consumed `__attribute__((uninitialized))`: the declared
-    /// automatic object is left out of `-ftrivial-auto-var-init`.
-    pub attr_uninitialized: bool,
-    /// A consumed `__attribute__((weak))`: the declared symbol binds
-    /// STB_WEAK in the object's symbol table.
-    pub attr_weak: bool,
-    /// A consumed `__attribute__((ms_abi))` / `((sysv_abi))`: the
-    /// calling convention of the function (or pointed-to function)
-    /// being declared. Already normalised against the target, so
-    /// `CallConv::Target` means "the target's own", including on a
-    /// target where the attribute is inert.
-    pub attr_call_conv: crate::c5::codegen::CallConv,
-    /// A consumed `__attribute__((used))`: keep the definition in the
-    /// object even when nothing in the unit references it.
-    pub attr_used: bool,
-    /// A consumed `__attribute__((visibility(...)))`: `Some(true)` for
-    /// `"hidden"` / `"internal"` -- the declared symbol is not preemptible,
-    /// marked STV_HIDDEN and addressed PC-relative directly rather than
-    /// through the GOT -- and `Some(false)` for the preemptible spellings.
-    /// `None` leaves the choice to the `#pragma GCC visibility` extent the
-    /// declaration sits in.
-    pub attr_visibility: Option<bool>,
-    /// A consumed `__attribute__((section("name")))`: the named object
-    /// section the declared symbol's bytes go to.
-    pub attr_section: Option<alloc::string::String>,
-    /// A consumed `__attribute__((patchable_function_entry(N, M)))`.
-    pub attr_patchable_entry: Option<(u32, u32)>,
-    /// A consumed `__attribute__((no_instrument_function))`.
-    pub attr_no_instrument: bool,
-    /// A consumed `__attribute__((no_stack_protector))`.
-    pub attr_no_stack_protector: bool,
-    /// A consumed `__attribute__((alias("target")))`: the declared name
-    /// is an additional symbol for `target`.
-    pub attr_alias: Option<alloc::string::String>,
+    /// The attributes and function specifiers of the declaration under
+    /// parse.
+    pub attrs: DeclAttrs,
     /// A consumed `register` storage-class specifier. Gates the GNU
     /// explicit-register `asm("reg")` declarator suffix; a plain
     /// `register` without the suffix stays the historical no-op hint.
@@ -1483,6 +1352,77 @@ pub(in crate::c5::compiler) struct Pending {
     /// hold exactly one declarator, so the declarator loop rejects a
     /// `,` while this is set. Cleared when the declaration ends.
     pub auto_type_single_declarator: bool,
+}
+
+/// The attributes and function specifiers a declaration names (GNU
+/// attribute syntax, C99 6.7.4). Those among the declaration specifiers
+/// apply to every declarator, those in or after a declarator to it alone,
+/// so a declaration snapshots the value after its specifiers and restores
+/// it at each declarator.
+#[derive(Clone, Debug, Default)]
+pub(super) struct DeclAttrs {
+    /// `unused` / `[[maybe_unused]]` (C23 6.7.12.4): no unused-variable
+    /// diagnostic for the declared locals.
+    pub maybe_unused: bool,
+    pub transparent_union: bool,
+    /// `_Alignas(N)` / `aligned(N)` / `__declspec(align(N))`, 0 for none.
+    pub align: i64,
+    /// The `_Alignas(N)` share of `align`: C11 6.7.5 makes it raise-only and
+    /// an alignment below the type's a constraint violation, where a GNU
+    /// `aligned(N)` on a variable sets the alignment and may lower it.
+    pub alignas: i64,
+    /// Member-level `packed`: the field's alignment is 1, whatever the
+    /// aggregate's own `packed`.
+    pub packed: bool,
+    /// `vector_size(N)` in bytes, 0 for none.
+    pub vector_size: i64,
+    /// `mode(M)` as `(bytes, is_float)`, for the base type of an enum and
+    /// the declared type of an object, member or typedef.
+    pub mode: Option<(u8, bool)>,
+    /// `__declspec(thread)`.
+    pub thread_local: bool,
+    /// `__declspec(dllexport)`: the name joins the export list, as by
+    /// `#pragma export`.
+    pub dllexport: bool,
+    pub constructor: bool,
+    pub destructor: bool,
+    /// The `N` of `constructor(N)` / `destructor(N)`.
+    pub init_priority: Option<u32>,
+    /// The symbol of `cleanup(fn)`'s function, called with the variable's
+    /// address at each exit from its scope.
+    pub cleanup: Option<usize>,
+    /// `uninitialized`: the object is left out of `-ftrivial-auto-var-init`.
+    pub uninitialized: bool,
+    pub weak: bool,
+    /// `ms_abi` / `sysv_abi`, normalised against the target: `Target` is the
+    /// target's own, including where the attribute is inert.
+    pub call_conv: Option<crate::c5::codegen::CallConv>,
+    /// `used`: the definition stays in the object unreferenced.
+    pub used: bool,
+    /// `visibility(...)`: `Some(true)` for `"hidden"` / `"internal"`,
+    /// `Some(false)` for the preemptible spellings, `None` for the
+    /// `#pragma GCC visibility` extent's choice.
+    pub visibility: Option<bool>,
+    pub section: Option<alloc::string::String>,
+    pub patchable_entry: Option<(u32, u32)>,
+    pub no_instrument: bool,
+    pub no_stack_protector: bool,
+    /// The target `alias("target")` names.
+    pub alias: Option<alloc::string::String>,
+    /// An `inline` function specifier or the request `always_inline` makes.
+    pub is_inline: bool,
+    /// `always_inline` / MSVC `__forceinline`; implies `is_inline`.
+    pub is_always_inline: bool,
+    pub is_noinline: bool,
+    /// The `inline` / `__forceinline` specifier itself, which the linkage
+    /// model reads (C99 6.7.4p6-p7) and `always_inline` does not set.
+    pub saw_inline_specifier: bool,
+    /// `gnu_inline`: the GNU89 inline model for the declared function.
+    pub is_gnu_inline: bool,
+    /// `naked`: no prologue, epilogue or implicit return.
+    pub is_naked: bool,
+    /// `_Noreturn` / `noreturn` (C11 6.7.4), the keyword or the attribute.
+    pub noreturn: bool,
 }
 
 /// The declaration-specifier carriers of an enclosing, still-open
@@ -1495,21 +1435,8 @@ pub(in crate::c5::compiler) struct Pending {
 pub(super) struct DeclSpecifiers {
     saw_register_storage: bool,
     base_is_const: bool,
-    attr_used: bool,
-    attr_weak: bool,
-    attr_call_conv: crate::c5::codegen::CallConv,
-    attr_visibility: Option<bool>,
-    attr_section: Option<alloc::string::String>,
-    attr_patchable_entry: Option<(u32, u32)>,
-    attr_no_instrument: bool,
-    attr_no_stack_protector: bool,
-    attr_cleanup: Option<usize>,
-    attr_uninitialized: bool,
-    attr_align: i64,
-    attr_alignas: i64,
     type_align: i64,
-    attr_vector_size: i64,
-    attr_mode: Option<(u8, bool)>,
+    attrs: DeclAttrs,
 }
 
 impl Pending {
@@ -1542,44 +1469,18 @@ impl Pending {
     /// any declaration does.
     pub(super) fn take_decl_specifiers(&mut self) -> DeclSpecifiers {
         DeclSpecifiers {
+            attrs: core::mem::take(&mut self.attrs),
             saw_register_storage: core::mem::take(&mut self.saw_register_storage),
             base_is_const: core::mem::take(&mut self.base_is_const),
-            attr_used: core::mem::take(&mut self.attr_used),
-            attr_weak: core::mem::take(&mut self.attr_weak),
-            attr_call_conv: core::mem::take(&mut self.attr_call_conv),
-            attr_visibility: self.attr_visibility.take(),
-            attr_section: self.attr_section.take(),
-            attr_patchable_entry: self.attr_patchable_entry.take(),
-            attr_no_instrument: core::mem::take(&mut self.attr_no_instrument),
-            attr_no_stack_protector: core::mem::take(&mut self.attr_no_stack_protector),
-            attr_cleanup: self.attr_cleanup.take(),
-            attr_uninitialized: core::mem::take(&mut self.attr_uninitialized),
-            attr_align: core::mem::take(&mut self.attr_align),
-            attr_alignas: core::mem::take(&mut self.attr_alignas),
             type_align: core::mem::take(&mut self.type_align),
-            attr_vector_size: core::mem::take(&mut self.attr_vector_size),
-            attr_mode: self.attr_mode.take(),
         }
     }
 
     pub(super) fn restore_decl_specifiers(&mut self, s: DeclSpecifiers) {
+        self.attrs = s.attrs;
         self.saw_register_storage = s.saw_register_storage;
         self.base_is_const = s.base_is_const;
-        self.attr_used = s.attr_used;
-        self.attr_weak = s.attr_weak;
-        self.attr_call_conv = s.attr_call_conv;
-        self.attr_visibility = s.attr_visibility;
-        self.attr_section = s.attr_section;
-        self.attr_patchable_entry = s.attr_patchable_entry;
-        self.attr_no_instrument = s.attr_no_instrument;
-        self.attr_no_stack_protector = s.attr_no_stack_protector;
-        self.attr_cleanup = s.attr_cleanup;
-        self.attr_uninitialized = s.attr_uninitialized;
-        self.attr_align = s.attr_align;
-        self.attr_alignas = s.attr_alignas;
         self.type_align = s.type_align;
-        self.attr_vector_size = s.attr_vector_size;
-        self.attr_mode = s.attr_mode;
     }
 
     /// Detach the declared-type carriers seeded by a base-type or
@@ -1599,8 +1500,7 @@ impl Pending {
             base_is_function_type: core::mem::take(&mut self.base_is_function_type),
             fn_ptr_indirection: self.fn_ptr_indirection.take(),
             fn_ptr_ret_indirection: core::mem::take(&mut self.fn_ptr_ret_indirection),
-            fn_ptr_params: self.fn_ptr_params.take(),
-            fn_ptr_ret_fn: self.fn_ptr_ret_fn.take(),
+            fn_ptr_type: self.fn_ptr_type.take(),
             typedef_base_array_size: core::mem::take(&mut self.typedef_base_array_size),
             typedef_base_array_dims: core::mem::take(&mut self.typedef_base_array_dims),
             typedef_base_zero_len: core::mem::take(&mut self.typedef_base_zero_len),
@@ -1619,8 +1519,7 @@ impl Pending {
         self.base_is_function_type = s.base_is_function_type;
         self.fn_ptr_indirection = s.fn_ptr_indirection;
         self.fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
-        self.fn_ptr_params = s.fn_ptr_params;
-        self.fn_ptr_ret_fn = s.fn_ptr_ret_fn;
+        self.fn_ptr_type = s.fn_ptr_type;
         self.set_base_array(
             s.typedef_base_array_size,
             s.typedef_base_array_dims,
@@ -1644,8 +1543,7 @@ pub(super) struct DeclTypeCarriers {
     base_is_function_type: bool,
     fn_ptr_indirection: Option<i64>,
     fn_ptr_ret_indirection: i64,
-    fn_ptr_params: Option<crate::c5::symbol::FnParams>,
-    fn_ptr_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
+    fn_ptr_type: Option<crate::c5::symbol::FnType>,
     typedef_base_array_size: i64,
     typedef_base_zero_len: bool,
     typedef_base_array_dims: alloc::vec::Vec<i64>,
@@ -1692,9 +1590,9 @@ impl Default for Pending {
             sizeof_vla_store: None,
             const_expr_nonconst: false,
             const_expr_compound_literal: false,
-            fn_ptr_params: None,
+            fn_ptr_type: None,
+            group_conv: None,
             indirect_callee_ret_fn_ptr: 0,
-            fn_ptr_ret_fn: None,
             parsing_fn_ptr_proto: false,
             member_decl_save: None,
             in_member_declarator: false,
@@ -1714,7 +1612,6 @@ impl Default for Pending {
             // docs above.
             fn_ptr_chain_depth: -1,
             fn_ptr_depth_is_array_elem: false,
-            value_is_fn_designator: false,
             last_loaded_local: None,
             last_loaded_local_prior_was_read: false,
             last_loaded_local_prior_pending: Vec::new(),
@@ -1723,30 +1620,8 @@ impl Default for Pending {
             last_emit_was_indirect_call: false,
             last_imm_was_zero: false,
             compound_lit_close_parens: 0,
-            attr_maybe_unused: false,
-            attr_transparent_union: false,
-            attr_align: 0,
-            attr_alignas: 0,
             type_align: 0,
-            attr_packed: false,
-            attr_vector_size: 0,
-            attr_mode: None,
-            attr_thread_local: false,
-            attr_dllexport: false,
-            attr_constructor: false,
-            attr_destructor: false,
-            attr_init_priority: None,
-            attr_cleanup: None,
-            attr_uninitialized: false,
-            attr_weak: false,
-            attr_call_conv: crate::c5::codegen::CallConv::Target,
-            attr_used: false,
-            attr_visibility: None,
-            attr_section: None,
-            attr_patchable_entry: None,
-            attr_no_instrument: false,
-            attr_no_stack_protector: false,
-            attr_alias: None,
+            attrs: DeclAttrs::default(),
             saw_register_storage: false,
             auto_type_single_declarator: false,
         }
@@ -1989,42 +1864,6 @@ pub struct Compiler {
     /// enclosing declaration is captured; cleared per function.
     stmt_expr_arena_ranges: Vec<(usize, usize)>,
 
-    /// True when the most recent decl-spec parse consumed an
-    /// `inline` / `__inline` / `__inline__` keyword. Captured at
-    /// function-symbol commit time onto `FinishedFunction::is_inline`
-    /// and reset after, so it scopes to the immediately following
-    /// declarator only.
-    pending_is_inline: bool,
-
-    /// Like [`Self::pending_is_inline`] but for a *mandatory* inline
-    /// request (`__attribute__((always_inline))` / MSVC
-    /// `__forceinline`); implies `pending_is_inline`.
-    pending_is_always_inline: bool,
-    /// `__attribute__((noinline))` seen on the declarator being emitted.
-    pending_is_noinline: bool,
-
-    /// True when the most recent decl-spec parse consumed an `inline`
-    /// function specifier -- `inline` / `__inline` / `__inline__` or
-    /// MSVC `__forceinline`. Distinct from [`Self::pending_is_inline`],
-    /// which `__attribute__((always_inline))` also sets: that is an
-    /// attribute, not a specifier, and the linkage model reads the
-    /// specifier the source spelled.
-    pending_saw_inline_specifier: bool,
-
-    /// Set by `__attribute__((gnu_inline))` on the current declaration;
-    /// selects the GNU89 inline model for the declared function.
-    pending_is_gnu_inline: bool,
-    /// Set by `__attribute__((naked))`; the next function emits no
-    /// prologue/epilogue and no implicit return -- its body is its full
-    /// machine code (inline asm).
-    pending_is_naked: bool,
-
-    /// True when the most recent decl-spec parse consumed a
-    /// `_Noreturn` / `noreturn` keyword. Captured at function-symbol
-    /// commit time onto `Symbol::is_noreturn` and reset after, so it
-    /// scopes to the immediately following declarator only.
-    pending_noreturn: bool,
-
     /// Nesting depth of operands that are not evaluated: the operands of
     /// `sizeof`, `_Alignof` and `typeof`, of `__builtin_object_size` and
     /// `__builtin_constant_p`, `_Generic`'s controlling expression, the
@@ -2170,14 +2009,10 @@ pub struct Compiler {
 
     /// Tag types and synthesized aggregates, indexed by struct id.
     pub(super) structs: Vec<StructDef>,
-    /// Per-scope tag bindings. Struct, union and enum tags share one
-    /// name space (C99 6.2.3) and have block scope (6.2.1). Each entry
-    /// is a Vec of `(tag_name, struct_id)` declared in that scope. The
-    /// first entry is the file scope; an inner block pushes an empty
-    /// scope on entry and pops it on exit, so a tag in a nested block
-    /// shadows an outer one without colliding. `self.structs` keeps the
-    /// StructDef storage reachable by id even after a scope pops.
-    pub(super) tag_scopes: Vec<Vec<(String, usize)>>,
+    /// Struct, union and enum tags share one name space (C99 6.2.3) and
+    /// have block scope (6.2.1): the file scope first, a scope per open
+    /// block. `self.structs` keeps a popped scope's tags reachable by id.
+    pub(super) tag_scopes: type_layout::TagScopes,
     /// Captured enum definitions. Populated by `parse_enum_body`
     /// when the parser sees `enum Tag { ... }`; the (tag, constants)
     /// pairs feed the DWARF emitter's enum DIEs.
@@ -2290,9 +2125,6 @@ pub struct Compiler {
     /// Address-constant initializers of `_Thread_local` objects. Slots are
     /// `tls_data` offsets; see [`program::Program::tls_data_relocs`].
     pub(super) tls_data_relocs: Vec<crate::c5::program::DataReloc>,
-    /// Per-`tls_data_relocs` originating symbol index, as
-    /// [`Self::data_reloc_sym_idx`] is for `data_relocs`.
-    pub(super) tls_data_reloc_sym_idx: Vec<usize>,
     /// [`Self::extern_data_relocs`] whose slot is in `tls_data`.
     pub(super) tls_extern_data_relocs: Vec<crate::c5::program::ExternDataReloc>,
     /// [`Self::code_relocs`] whose slot is in `tls_data`.
@@ -2363,7 +2195,11 @@ pub struct Compiler {
     /// its symbol at the opening brace. Propagated onto
     /// `FinishedFunction::conv`.
     current_func_conv: crate::c5::codegen::CallConv,
-    /// `Symbol::ret_fn` of the function body being parsed: the function
+    /// The attributes and function specifiers of the definition whose
+    /// body is being parsed, taken from the declaration before the body
+    /// so its own declarations start from none.
+    current_func_attrs: DeclAttrs,
+    /// `FnType::ret` of the function body being parsed: the function
     /// type a returned pointer to a function points to.
     current_func_ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
     /// `_Noreturn` (C11 6.7.4) on any declaration of the function whose
@@ -2389,15 +2225,23 @@ pub struct Compiler {
     /// return-type prototype (implicit int). Dedupes the diagnostic to
     /// one per callee.
     warned_implicit_ret: alloc::collections::BTreeSet<usize>,
+    /// Source offsets of the string initializers reported as longer than
+    /// their arrays: a literal read for its type and then for its value,
+    /// as `__auto_type` reads it, is reported once.
+    warned_string_overruns: alloc::collections::BTreeSet<usize>,
     /// Where the operand the precedence loop is extending begins, so a
     /// diagnostic about a call can spell the callee expression.
     operand_start: usize,
     /// The function type the elements of the array being initialized lead
     /// to and their depth, for the conversion check of each element.
     array_elem_fn: Option<(crate::c5::symbol::FnType, i64)>,
+    /// An initializer fill runs only to measure what it reaches: a value
+    /// is skipped rather than evaluated, so a run-time one takes its place.
+    measuring_init: bool,
     /// The composite type and the function body of each identifier with
-    /// linkage, by symbol index.
-    linked_entities: hashbrown::HashMap<usize, redeclaration::LinkedEntity>,
+    /// linkage, by its spelling: every declaration of it denotes the one
+    /// entity whatever slot binds it (C99 6.2.2p2).
+    linked_entities: hashbrown::HashMap<alloc::string::String, redeclaration::LinkedEntity>,
 
     /// The native target this compilation is producing for.
     /// Drives data-model picks: `long` is 8 bytes on LP64
@@ -2436,6 +2280,7 @@ pub struct Compiler {
     /// Base alignment the `.data` image requires, at least 8. Raised
     /// to 16 when a file-scope object requests `_Alignas(16)`.
     data_align: usize,
+    image_align_error: Option<crate::c5::diag::Diagnostic>,
     /// Alignment of the thread-local image, at least 8: the largest
     /// alignment among the objects reserved in it.
     tls_align: usize,
@@ -2555,16 +2400,6 @@ pub struct Compiler {
     /// `extern_imm_data_refs` / `extern_tls_refs` channels take
     /// over resolution. Empty in single-TU compiles.
     pub(super) glo_imm_refs: alloc::vec::Vec<usize>,
-    /// Per-`data_relocs` originating symbol index. Tracks the
-    /// `Token::Glo` whose address an initializer like
-    /// `int *p = &x;` baked into the data segment. Cross-TU
-    /// link-unit assembly walks this list in parallel with
-    /// `data_relocs` to convert any entry whose `x` is an
-    /// undefined external reference into a `DataDataAbs64`
-    /// relocation. Length matches `data_relocs.len()` -- one
-    /// symbol idx per emitted reloc -- so the parallel arrays
-    /// don't drift out of sync.
-    pub(super) data_reloc_sym_idx: alloc::vec::Vec<usize>,
     /// `Program::data` offsets that currently carry an initializer
     /// relocation, so a byte write can ask whether the range it
     /// overwrites holds one and run the C99 6.7.8p19 retirement only
@@ -3026,8 +2861,10 @@ impl Compiler {
             deferred_error,
             dylibs,
             warned_implicit_ret: alloc::collections::BTreeSet::new(),
+            warned_string_overruns: alloc::collections::BTreeSet::new(),
             operand_start: 0,
             array_elem_fn: None,
+            measuring_init: false,
             linked_entities: hashbrown::HashMap::new(),
             target,
             next_ent_pc: 0,
@@ -3048,13 +2885,6 @@ impl Compiler {
             uses_alloca_in_current_fn: false,
             func_vla_decls: 0,
             stmt_expr_arena_ranges: Vec::new(),
-            pending_is_inline: false,
-            pending_is_always_inline: false,
-            pending_is_noinline: false,
-            pending_saw_inline_specifier: false,
-            pending_is_gnu_inline: false,
-            pending_is_naked: false,
-            pending_noreturn: false,
             const_unevaluated: 0,
             unevaluated: 0,
             folded_builtin_lits: Vec::new(),
@@ -3079,7 +2909,7 @@ impl Compiler {
             param_sizes: Vec::new(),
             switch_defaults: Vec::new(),
             structs: Vec::new(),
-            tag_scopes: alloc::vec![alloc::vec::Vec::new()],
+            tag_scopes: type_layout::TagScopes::file_scope(),
             enums: Vec::new(),
             enum_placeholder_tags: Vec::new(),
             sink,
@@ -3103,7 +2933,6 @@ impl Compiler {
             extern_data_relocs: Vec::new(),
             code_relocs: Vec::new(),
             tls_data_relocs: Vec::new(),
-            tls_data_reloc_sym_idx: Vec::new(),
             tls_extern_data_relocs: Vec::new(),
             tls_code_relocs: Vec::new(),
             tls_code_reloc_sym_idx: Vec::new(),
@@ -3119,6 +2948,7 @@ impl Compiler {
             current_func_return_ty: 0,
             current_func_returns_void: false,
             current_func_conv: crate::c5::codegen::CallConv::Target,
+            current_func_attrs: DeclAttrs::default(),
             current_func_ret_fn: None,
             current_func_is_noreturn: false,
             pending: Pending::default(),
@@ -3126,6 +2956,7 @@ impl Compiler {
             warn_dead_store,
             no_entry_point: opts.no_entry_point,
             data_align: 8,
+            image_align_error: None,
             tls_align: crate::c5::layout::TLS_ALIGN_MIN,
             implicit_extern_fns: opts.implicit_extern_fns.clone(),
             export_all_functions: opts.export_all_functions,
@@ -3158,7 +2989,6 @@ impl Compiler {
             sys_trampolines: Vec::new(),
             decl_count: 0,
             glo_imm_refs: alloc::vec::Vec::new(),
-            data_reloc_sym_idx: alloc::vec::Vec::new(),
             init_reloc_slots: alloc::collections::BTreeSet::new(),
             next_compound_literal_id: 0,
             staged_literal_syms: Vec::new(),
@@ -3498,13 +3328,19 @@ impl Compiler {
         // symbol's name instead of resolving in place.
         let extern_imports = {
             use crate::c5::symbol::Linkage;
+            let undefined_by_name = |sym: &crate::c5::symbol::Symbol| match sym.linkage {
+                Linkage::External => true,
+                Linkage::Internal => !sym.is_alias,
+                _ => false,
+            };
             let mut imports: alloc::vec::Vec<(usize, String)> = alloc::vec::Vec::new();
             let mut next_pc = self.next_ent_pc + 1;
             for sym in self.symbols.iter_mut() {
                 // `is_fun_entity`: a scoped function declaration keeps
                 // its entity on the slot after the name unbinds; it
                 // still needs an import placeholder for its calls.
-                if !sym.is_fun_entity() || sym.defined_here || sym.linkage != Linkage::External {
+                // So does a `static` one no body defines (C99 6.9p3).
+                if !sym.is_fun_entity() || sym.defined_here || !undefined_by_name(sym) {
                     continue;
                 }
                 imports.push((next_pc, sym.link_name().into()));
@@ -3574,8 +3410,8 @@ impl Compiler {
                     data_offset: r.data_offset,
                     target_offset: target as u64,
                     target_anchor: self.symbols[sym_idx].val as u64,
+                    target_sym: Some(sym_idx as u32),
                 });
-                self.data_reloc_sym_idx.push(sym_idx);
             }
             self.extern_data_relocs = still_extern;
             // Same rewrite for a `_Thread_local` slot: only the segment the
@@ -3599,8 +3435,8 @@ impl Compiler {
                     data_offset: r.data_offset,
                     target_offset: target as u64,
                     target_anchor: self.symbols[sym_idx].val as u64,
+                    target_sym: Some(sym_idx as u32),
                 });
-                self.tls_data_reloc_sym_idx.push(sym_idx);
             }
             self.tls_extern_data_relocs = still_extern;
             self.rebase_relocated_globals();
@@ -3647,7 +3483,7 @@ impl Compiler {
                 if let Some(pc) = sym.inline_addr_pc {
                     return Some(pc as u64);
                 }
-                (sym.is_fun_entity() && !sym.defined_here && sym.linkage == Linkage::External)
+                (sym.is_fun_entity() && !sym.defined_here && undefined_by_name(sym))
                     .then_some(sym.val as u64)
             };
             for (reloc, &sym_idx) in self
@@ -3711,6 +3547,7 @@ impl Compiler {
             asm_file_names: self.asm_file_names,
             asm_idents: self.asm_idents,
             data_align: self.data_align,
+            image_align_error: self.image_align_error,
             data_ro_len: 0,
             data_relro_len: 0,
             data_object_starts: self.data_object_starts,
@@ -3729,6 +3566,7 @@ impl Compiler {
             code_relocs: self.code_relocs,
             sys_trampolines: self.sys_trampolines,
             bind_trampoline_slots: false,
+            weak_refs_by_name: false,
             tls_data_relocs: self.tls_data_relocs,
             tls_extern_data_relocs: self.tls_extern_data_relocs,
             tls_code_relocs: self.tls_code_relocs,

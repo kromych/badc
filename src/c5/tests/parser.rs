@@ -27,6 +27,77 @@ fn empty_source_has_no_main() {
     expect_compile_error("", "main() not defined");
 }
 
+/// GNU C's cast to a union takes a member of the operand's own type,
+/// signedness included, and yields a value: the union, a member of it and
+/// a structure a call returns are no lvalue (C99 6.3.2.1p1, 6.5.2.3p3).
+#[test]
+fn a_cast_to_a_union_and_a_call_result_are_values() {
+    let decls = "union IL { int i; long l; };\n\
+                 union S { unsigned u; double d; };\n\
+                 struct T { int i; };\n\
+                 struct T f(void);\n";
+    for (body, needle) in [
+        (
+            "union IL *p = &(union IL)x; return p != 0;",
+            "bad address-of",
+        ),
+        ("(union IL)x = v;", "bad lvalue in assignment"),
+        ("((union IL)x).i = 5;", "bad lvalue in assignment"),
+        ("++((union IL)x).i;", "bad lvalue in pre-increment"),
+        (
+            "int *q = &((union IL)x).i; return q != 0;",
+            "bad address-of",
+        ),
+        (
+            "union S s = (union S)x; return s.u;",
+            "invalid cast from `int` to `union S`",
+        ),
+        ("f().i = 5;", "bad lvalue in assignment"),
+        ("struct T *t = &f(); return t != 0;", "bad address-of"),
+        ("f() = f();", "bad lvalue in assignment"),
+    ] {
+        let src = format!(
+            "{decls}int main(void) {{ int x = 1; union IL v = {{0}}; (void)v; {body} return 0; }}\n"
+        );
+        expect_compile_error(&src, needle);
+    }
+}
+
+/// A member of a value is no lvalue (C99 6.5.2.3p3) for any store: a
+/// bit-field, a 128-bit integer or a vector member, and a vector a call
+/// returns, under `=`, `op=`, `++` and `--`.
+#[test]
+fn no_store_takes_a_member_of_a_value() {
+    let decls = "typedef int v4 __attribute__((vector_size(16)));\n\
+                 struct B { int m; unsigned bf : 3; __int128 w; v4 v; };\n\
+                 union U { unsigned bf : 3; int i; };\n\
+                 struct B g(void);\n\
+                 v4 fv(void);\n";
+    for (body, needle) in [
+        ("g().bf = 1;", "bad lvalue in assignment"),
+        ("g().bf += 1;", "bad lvalue in compound assignment"),
+        ("++g().bf;", "bad lvalue in pre-increment"),
+        ("g().bf--;", "bad lvalue in post-increment"),
+        ("(g().bf)++;", "bad lvalue in post-increment"),
+        ("(x ? b1 : b2).bf = 1;", "bad lvalue in assignment"),
+        ("(0, b1).bf = 1;", "bad lvalue in assignment"),
+        ("({ b1; }).bf = 1;", "bad lvalue in assignment"),
+        ("(b1 = b2).bf = 1;", "bad lvalue in assignment"),
+        ("((union U)x).bf = 1;", "bad lvalue in assignment"),
+        ("g().w += 1;", "bad lvalue in compound assignment"),
+        ("++g().w;", "bad lvalue in pre-increment"),
+        ("g().v += w4;", "bad lvalue in compound assignment"),
+        ("fv() += w4;", "bad lvalue in compound assignment"),
+        ("fv() = w4;", "bad lvalue in assignment"),
+    ] {
+        let src = format!(
+            "{decls}int main(void) {{ int x = 1; struct B b1 = {{0}}, b2 = {{0}}; \
+             v4 w4 = {{0}}; (void)w4; {body} return 0; }}\n"
+        );
+        expect_compile_error(&src, needle);
+    }
+}
+
 /// C11 6.7.5p2: no alignment specifier in the declaration of a bit-field,
 /// whether it leads the member group or names one declarator of it; gcc's
 /// `aligned` attribute on a bit-field stays accepted.
@@ -60,16 +131,71 @@ fn alignas_on_a_bit_field_is_diagnosed() {
     assert!(Compiler::new(ok.to_string()).compile().is_ok());
 }
 
+/// GNU C requires the stack pointer to hold its value across an `asm`
+/// statement: listing it as clobbered, or writing an output bound to it,
+/// warns as gcc (`-Wdeprecated`) and clang (`-Winline-asm`) do. A template
+/// that only names sp is a stack switch the frame handling covers.
 #[test]
-fn overaligned_automatic_beside_a_vla_is_diagnosed() {
+fn an_asm_declared_to_change_sp_warns() {
+    use crate::c5::Target;
+    let warns = |body: &str, target: Target| {
+        let src = alloc::format!("{body}\nint main(void) {{ return 0; }}\n");
+        Compiler::with_options(src, target, crate::CompileOptions::default())
+            .compile()
+            .expect("compile")
+            .warnings
+            .iter()
+            .any(|w| w.code == crate::c5::diag::Code::INLINE_ASM)
+    };
+    let (a64, x64) = (Target::LinuxAarch64, Target::LinuxX64);
+    for name in ["sp", "#wsp", "31", "63", "077"] {
+        let body = alloc::format!(
+            "void f(void) {{ __asm__ volatile(\"sub sp, sp, #64\" ::: \"{name}\"); }}"
+        );
+        assert!(warns(&body, a64), "{name}");
+    }
+    for name in ["rsp", "%esp", "7"] {
+        let body = alloc::format!(
+            "void f(void) {{ __asm__ volatile(\"subq $64, %%rsp\" ::: \"{name}\"); }}"
+        );
+        assert!(warns(&body, x64), "{name}");
+    }
+    assert!(warns(
+        "void f(void) { register void *sp __asm__(\"rsp\");\n\
+         __asm__ volatile(\"sub $16, %0\" : \"=r\"(sp)); }",
+        x64
+    ));
+    assert!(!warns(
+        "void f(void *p) { __asm__ volatile(\"mov sp, %0\" : : \"r\"(p)); }",
+        a64
+    ));
+    // The warning names the statement's first line, as gcc's does.
+    let src = "void f(void) {\n  __asm__ volatile(\"sub sp, sp, #64\"\n    \"\"\n    ::: \"sp\");\n}\n\
+               int main(void) { return 0; }\n";
+    let lines: Vec<u32> = Compiler::with_options(src.to_string(), a64, Default::default())
+        .compile()
+        .expect("compile")
+        .warnings
+        .iter()
+        .filter(|w| w.code == crate::c5::diag::Code::INLINE_ASM)
+        .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [2]);
+}
+
+#[test]
+fn overaligned_automatic_beside_a_vla_compiles() {
     // The realigned region (alignment above 16) and a variable-length array
-    // (C99 6.7.6.2) both move sp, so they cannot share a frame. The rejection
-    // is a source-level diagnostic, not the walker's internal error.
-    expect_compile_error(
+    // (C99 6.7.6.2) share a frame: the region is addressed from a base
+    // register while sp moves, as clang addresses it.
+    Compiler::new(
         "int use(void *, void *);\n\
-         int f(int n) { int v[n]; _Alignas(32) char c[32]; return use(v, c); }",
-        "cannot share a function with `alloca` or a variable-length array",
-    );
+         int f(int n) { int v[n]; _Alignas(32) char c[32]; return use(v, c); }\n\
+         int main(void) { return 0; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("32-aligned automatic and VLA share a frame");
     // An alignment of exactly 16 is met at a static frame offset, so it
     // coexists with a VLA; a VLA whose own element needs 16 is met by the
     // 16-byte-rounded sp carve.
@@ -82,12 +208,15 @@ fn overaligned_automatic_beside_a_vla_is_diagnosed() {
     )
     .compile()
     .expect("16-aligned automatic and VLA share a frame");
-    // An over-aligned VLA itself has no fixed extent to place in the region.
-    expect_compile_error(
+    // A VLA aligned above 16 rounds its base up within its own allocation.
+    Compiler::new(
         "int use(void *);\n\
-         int f(int n) { _Alignas(32) char v[n]; return use(v); }",
-        "over-aligned variable-length array",
-    );
+         int f(int n) { _Alignas(32) char v[n]; return use(v); }\n\
+         int main(void) { return 0; }"
+            .to_string(),
+    )
+    .compile()
+    .expect("32-aligned VLA");
 }
 
 #[test]
@@ -142,6 +271,90 @@ fn thread_local_alignment_follows_the_loader() {
             .unwrap_or_else(|e| panic!("{target:?}: {e}"));
         assert_eq!(program.tls_align, 16, "{target:?}");
     }
+}
+
+#[test]
+fn static_alignment_follows_the_loader() {
+    // C11 6.7.5p3: an alignment the loaded image cannot keep is diagnosed:
+    // past 64 KiB, and on Mach-O, which slides by 16 KiB pages, past that.
+    use crate::c5::Target;
+    let sources = |align: usize| {
+        let s = format!("struct S {{ _Alignas({align}) char c; }};\n");
+        [
+            format!("_Alignas({align}) char g[4]; int main(void) {{ return g[0]; }}"),
+            format!("{s}struct S t; int main(void) {{ return t.c; }}"),
+            format!("int main(void) {{ static _Alignas({align}) char s[4]; return s[0]; }}"),
+            format!("{s}struct S *p = &(struct S){{1}}; int main(void) {{ return p->c; }}"),
+        ]
+    };
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        for src in sources(65536) {
+            let program = Compiler::with_target(src.clone(), target)
+                .compile()
+                .unwrap_or_else(|e| panic!("{target:?}: {src}: {e}"));
+            assert_eq!(program.data_align, 65536, "{target:?}: {src}");
+            assert!(program.image_align_error.is_none(), "{target:?}: {src}");
+        }
+    }
+    for src in sources(16384) {
+        let program = Compiler::with_target(src.clone(), Target::MacOSAarch64)
+            .compile()
+            .unwrap_or_else(|e| panic!("{src}: {e}"));
+        assert_eq!(program.data_align, 16384, "{src}");
+        assert!(program.image_align_error.is_none(), "{src}");
+    }
+    for src in sources(32768) {
+        let program = Compiler::with_target(src.clone(), Target::MacOSAarch64)
+            .compile()
+            .unwrap_or_else(|e| panic!("{src}: {e}"));
+        let err = program
+            .image_align_error
+            .unwrap_or_else(|| panic!("a 32 KiB alignment must be held for an image: {src}"));
+        assert!(
+            err.to_string()
+                .contains("exceeds the 16384-byte boundary a Mach-O image keeps at load"),
+            "{src}: {err}"
+        );
+    }
+}
+
+#[test]
+fn an_extern_declaration_waits_for_the_definitions_alignment_check() {
+    // C99 6.9.2: a declaration without an initializer defines nothing, so an
+    // alignment past what the Mach-O image keeps is diagnosed at the
+    // definition and the declaration places no storage the image would hold.
+    use crate::c5::Target;
+    let s = "struct S { _Alignas(32768) char c; };\n\
+             struct T { _Alignas(32) char c; };\n";
+    for decl in [
+        "extern struct S never_defined;\nint main(void) { return 0; }",
+        "extern struct S tbl[];\nint main(void) { return 0; }",
+        "extern _Thread_local struct T tl;\nint main(void) { return 0; }",
+        "extern struct S named;\nint main(void) { return named.c; }",
+    ] {
+        let src = format!("{s}{decl}");
+        let program = Compiler::with_target(src.clone(), Target::MacOSAarch64)
+            .compile()
+            .unwrap_or_else(|e| panic!("{src}: {e}"));
+        assert!(program.data_align < 32768, "{src}: {}", program.data_align);
+        assert!(program.image_align_error.is_none(), "{src}");
+    }
+    let src = format!("{s}extern struct S x;\nstruct S x;\nint main(void) {{ return x.c; }}");
+    let program = Compiler::with_target(src.clone(), Target::MacOSAarch64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{src}: {e}"));
+    let err = program
+        .image_align_error
+        .unwrap_or_else(|| panic!("the definition must be held for an image: {src}"));
+    assert!(
+        err.to_string().contains("exceeds the 16384-byte boundary"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -327,6 +540,25 @@ fn asm_memory_operand_rvalue_is_rejected() {
          int main(void) { int r = 0; __asm__(\"mov %1, %0\" : \"=r\"(r) : \"m\"(g())); return r; }",
         "not directly addressable",
     );
+}
+
+#[test]
+fn asm_register_pair_operand_rvalue_is_rejected() {
+    // An rvalue memory operand is refused in the register-pair templates too.
+    expect_compile_error(
+        "typedef struct { long lo, hi; } pair; pair g(void); \
+         int main(void) { long lo, hi; \
+           __asm__(\"ldp %0, %1, %2\" : \"=r\"(lo), \"=r\"(hi) : \"m\"(g())); \
+           return lo + hi; }",
+        "not directly addressable",
+    );
+    for operand in ["arr[1] + 0", "x + 1"] {
+        let src = alloc::format!(
+            "long arr[4]; int main(void) {{ long v, x = 5; \
+               __asm__(\"ldr %0, %1\" : \"=r\"(v) : \"m\"({operand})); return (int)v; }}"
+        );
+        expect_compile_error(&src, "not directly addressable");
+    }
 }
 
 #[test]
@@ -3454,6 +3686,25 @@ fn a_variably_modified_type_name_is_diagnosed_where_c99_forbids_it() {
 }
 
 #[test]
+fn an_unknown_size_struct_array_is_counted_without_repeating_its_diagnostics() {
+    // C99 6.7.8p22: the count comes from the fill itself, run once to
+    // measure and once for good; what it reports is reported once.
+    for decl in [
+        "struct S a[] = {300, \"abc\", 2, \"d\"};\nint main(void) { return sizeof a; }",
+        "int main(void) { static struct S a[] = {300, \"abc\", 2, \"d\"}; return sizeof a; }",
+        "int main(void) { struct S a[] = {300, \"abc\", 2, \"d\"}; return sizeof a; }",
+        "int main(void) { struct S *p = (struct S[]){300, \"abc\", 2, \"d\"}; return p->c; }",
+    ] {
+        let src = alloc::format!("struct S {{ unsigned char c; char m[2]; }};\n{decl}\n");
+        let prog = super::compile_str_bare_with_diags(&src, &["all"]);
+        for text in ["from 300 to 44", "too long for an array of 2"] {
+            let reported = prog.warnings.iter().filter(|w| w.text.contains(text));
+            assert_eq!(reported.count(), 1, "{decl}: {:?}", prog.warnings);
+        }
+    }
+}
+
+#[test]
 fn struct_array_compound_literal_counts_elements_not_leaves() {
     // C99 6.5.2.5p3: the literal is an unnamed object initialized by its
     // brace list, so an array-of-struct bound is measured in elements.
@@ -3585,10 +3836,6 @@ fn static_local_array_initializer_over_bound_rejected() {
         "too many initializers for array `a` (4 > 1)",
     );
     expect_compile_error(
-        "int main(void) { static char c[2] = \"abcdef\"; return c[0]; }",
-        "too many initializers for array `c` (6 > 2)",
-    );
-    expect_compile_error(
         "int main(void) { static int a[1] = {1, 2}; static int b[2] = {3, 4};\n\
          return a[0] + b[0]; }",
         "too many initializers for array `a` (2 > 1)",
@@ -3604,6 +3851,85 @@ fn static_local_array_initializer_over_bound_rejected() {
     .compile()
     .expect("an exactly-filling or short static-local initializer stays legal");
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+/// C99 6.7.8p2: a string longer than the array, member or row it
+/// initializes is reported as `-Wexcess-initializers`, on by default, and
+/// truncated, as gcc and clang do, once for each literal; an exact fit
+/// leaves the terminator out silently (6.7.8p14).
+#[test]
+fn a_string_longer_than_its_array_warns_and_is_truncated() {
+    let types = "#include <wchar.h>\n\
+                 struct M { char m[2]; int n; };\n\
+                 struct D { char m[2][3]; int n; };\n";
+    for (globals, body, warned) in [
+        ("char g[2] = \"abc\";", "return g[1] != 'b';", 1),
+        ("char *q = (char[2]){\"abc\"};", "return q[1] != 'b';", 1),
+        ("", "static char a[2] = \"abc\"; return a[1] != 'b';", 1),
+        ("", "char a[2] = {\"abc\"}; return a[1] != 'b';", 1),
+        (
+            "",
+            "static struct M s = {\"abc\", 5}; return s.m[1] != 'b' || s.n != 5;",
+            1,
+        ),
+        (
+            "",
+            "int x = 7; struct M s = {\"abc\", x}; return s.m[1] != 'b' || s.n != 7;",
+            1,
+        ),
+        (
+            "",
+            "static char r[2][2] = {\"abc\", \"d\"}; return r[0][1] != 'b' || r[1][0] != 'd';",
+            1,
+        ),
+        (
+            "",
+            "int x = 7; char r[2][2] = {\"abc\", {x}}; return r[0][1] != 'b' || r[1][0] != 7;",
+            1,
+        ),
+        (
+            "",
+            "static char b[2][3] = {{\"abcd\"}, {\"e\"}}; return b[0][2] != 'c' || b[1][0] != 'e';",
+            1,
+        ),
+        (
+            "",
+            "static struct D d = {\"abcd\", \"e\"}; return d.m[0][2] != 'c' || d.m[1][0] != 'e';",
+            1,
+        ),
+        ("", "char *p = (char[2]){\"abc\"}; return p[1] != 'b';", 1),
+        (
+            "",
+            "static wchar_t w[2] = L\"abc\"; return w[1] != L'b';",
+            1,
+        ),
+        ("", "static char e[3] = \"abc\"; return e[2] != 'c';", 0),
+        (
+            "",
+            "__auto_type p = (char[2]){\"abc\"}; return p[1] != 'b';",
+            1,
+        ),
+        (
+            "",
+            "__typeof__((char[2]){\"abc\"}) t = {'x', 'y'}; return t[1] != 'y';",
+            1,
+        ),
+        ("", "return sizeof((char[2]){\"abc\"}) != 2;", 1),
+        (
+            "#define L (char[2]){\"abc\"}",
+            "__auto_type q = L; __auto_type r = L; return q[1] != r[1];",
+            2,
+        ),
+    ] {
+        let src = format!("{types}{globals}\nint main(void) {{ {body} }}\n");
+        let prog = Compiler::new(src.clone())
+            .compile()
+            .unwrap_or_else(|e| panic!("{src}: {e}"));
+        let warnings = prog.warnings.iter().map(|w| w.to_string());
+        let n = warnings.filter(|w| w.contains("[B3013]")).count();
+        assert_eq!(n, warned, "{src}");
+        assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0, "{src}");
+    }
 }
 
 #[test]

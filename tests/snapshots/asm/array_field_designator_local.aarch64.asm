@@ -33,8 +33,7 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ret
                	ldr	w1, [x0]
-               	asr	x1, x1, #8
-               	and	x1, x1, #0xff
+               	ubfx	x1, x1, #8, #8
                	cbnz	w1, <addr>
                	ldrsw	x0, [x0, #0x4]
                	cbz	w0, <addr>

@@ -442,42 +442,68 @@ fn enc_rrr(base: u32, rd: Reg, rn: Reg, rm: Reg) -> u32 {
     base | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// The shift a shifted-register operand applies (bits [23:22]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RegShift {
+    Lsl = 0,
+    Lsr = 1,
+    Asr = 2,
+}
+
+/// The shifted-register base words of the 64-bit ADD, SUB, AND, ORR, EOR
+/// and BIC.
+pub(crate) const ADD_REG: u32 = 0x8B00_0000;
+pub(crate) const SUB_REG: u32 = 0xCB00_0000;
+pub(crate) const AND_REG: u32 = 0x8A00_0000;
+pub(crate) const ORR_REG: u32 = 0xAA00_0000;
+pub(crate) const EOR_REG: u32 = 0xCA00_0000;
+pub(crate) const BIC_REG: u32 = 0x8A20_0000;
+
+/// `<base> <Xd>, <Xn>, <Xm>, <shift> #<amount>`: one of the words above
+/// with its `Xm` operand shifted by a 6-bit amount.
+pub(crate) fn enc_rrr_shifted(
+    base: u32,
+    rd: Reg,
+    rn: Reg,
+    rm: Reg,
+    shift: RegShift,
+    amount: u32,
+) -> u32 {
+    enc_rrr(base, rd, rn, rm) | ((shift as u32) << 22) | ((amount & 0x3f) << 10)
+}
+
 /// `ADD <Xd>, <Xn>, <Xm>` -- 64-bit register add, no shift.
 pub(crate) fn enc_add_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x8B00_0000, rd, rn, rm)
+    enc_rrr(ADD_REG, rd, rn, rm)
 }
 
 /// `ADD <Xd>, <Xn>, <Xm>, LSL #<shift>` -- 64-bit add of a left-shifted
 /// register. `shift` is a 6-bit amount.
 pub(crate) fn enc_add_reg_lsl(rd: Reg, rn: Reg, rm: Reg, shift: u32) -> u32 {
-    0x8B00_0000
-        | ((rm.0 as u32) << 16)
-        | ((shift & 0x3f) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rd.0 as u32)
+    enc_rrr_shifted(ADD_REG, rd, rn, rm, RegShift::Lsl, shift)
 }
 
 /// `SUB <Xd>, <Xn>, <Xm>` -- 64-bit register subtract.
 pub(crate) fn enc_sub_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0xCB00_0000, rd, rn, rm)
+    enc_rrr(SUB_REG, rd, rn, rm)
 }
 
 /// `NEG <Xd>, <Xm>` (`SUB Xd, XZR, Xm`) -- two's-complement negate.
 /// `Rn` is baked to XZR (31); the shifted-register SUB reads 31 as the
 /// zero register, not SP.
 pub(crate) fn enc_neg(rd: Reg, rm: Reg) -> u32 {
-    enc_rrr(0xCB00_0000, rd, Reg::SP, rm)
+    enc_rrr(SUB_REG, rd, Reg::SP, rm)
 }
 
 /// `AND <Xd>, <Xn>, <Xm>` -- bitwise and.
 pub(crate) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x8A00_0000, rd, rn, rm)
+    enc_rrr(AND_REG, rd, rn, rm)
 }
 
 /// `BIC <Xd>, <Xn>, <Xm>` -- bit clear: `Xn & ~Xm`. The logical
 /// shifted-register `AND` form with `N=1` (bit 21) complements `Xm`.
 pub(crate) fn enc_bic_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x8A20_0000, rd, rn, rm)
+    enc_rrr(BIC_REG, rd, rn, rm)
 }
 
 /// The logical-immediate field `N<<12 | immr<<6 | imms` (bits [22:10]) of
@@ -582,7 +608,7 @@ pub(crate) fn enc_and_align_down(rd: Reg, rn: Reg, log2_align: u32) -> u32 {
 
 /// `ORR <Xd>, <Xn>, <Xm>` -- bitwise or.
 pub(crate) fn enc_orr_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0xAA00_0000, rd, rn, rm)
+    enc_rrr(ORR_REG, rd, rn, rm)
 }
 
 /// `MOV <Wd>, <Wn>` (`ORR Wd, WZR, Wn`) -- 32-bit register move. A write
@@ -594,7 +620,7 @@ pub(crate) fn enc_mov_w_w(rd: Reg, rn: Reg) -> u32 {
 
 /// `EOR <Xd>, <Xn>, <Xm>` -- bitwise xor.
 pub(crate) fn enc_eor_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0xCA00_0000, rd, rn, rm)
+    enc_rrr(EOR_REG, rd, rn, rm)
 }
 
 /// `MVN <Xd>, <Xm>` (`ORN Xd, XZR, Xm`) -- bitwise NOT. `Rn` is baked
@@ -627,11 +653,19 @@ pub(crate) fn enc_sdiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0x9AC0_0C00, rd, rn, rm)
 }
 
+pub(crate) fn enc_sdiv_w(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x1AC0_0C00, rd, rn, rm)
+}
+
 /// `UDIV <Xd>, <Xn>, <Xm>` -- unsigned integer division. Differs from
 /// SDIV only in the opcode2 field (bit 10 cleared). Pairs with
 /// [`enc_msub`] when computing unsigned modulo.
 pub(crate) fn enc_udiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
     enc_rrr(0x9AC0_0800, rd, rn, rm)
+}
+
+pub(crate) fn enc_udiv_w(rd: Reg, rn: Reg, rm: Reg) -> u32 {
+    enc_rrr(0x1AC0_0800, rd, rn, rm)
 }
 
 /// Four-register multiply-accumulate encoding shared by MADD / MSUB.
@@ -644,6 +678,10 @@ fn enc_mul_acc(base: u32, rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
 /// which yields `r = a - (a/b)*b`.
 pub(crate) fn enc_msub(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
     enc_mul_acc(0x9B00_8000, rd, rn, rm, ra)
+}
+
+pub(crate) fn enc_msub_w(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
+    enc_mul_acc(0x1B00_8000, rd, rn, rm, ra)
 }
 
 /// `MADD <Xd>, <Xn>, <Xm>, <Xa>` -- `Xd = Xa + (Xn * Xm)`.
@@ -1954,6 +1992,18 @@ pub(crate) fn enc_lsr32_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
     0x5300_7C00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
 
+/// `SBFX` / `UBFX <Xd>, <Xn>, #lsb, #width`, the aliases of `SBFM` / `UBFM
+/// Xd, Xn, #lsb, #(lsb + width - 1)`.
+pub(crate) fn enc_bfx(signed: bool, rd: Reg, rn: Reg, lsb: u8, width: u8) -> u32 {
+    let (lsb, width) = (u32::from(lsb), u32::from(width));
+    debug_assert!(
+        (1..64).contains(&width) && lsb + width <= 64,
+        "bfx #{lsb}, #{width}"
+    );
+    let base = if signed { 0x9340_0000 } else { 0xD340_0000 };
+    base | (lsb << 16) | ((lsb + width - 1) << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+}
+
 /// `SXTW <Xd>, <Wn>` -- sign-extend low 32 bits of `Wn` into `Xd`.
 /// Alias of `SBFM Xd, Xn, #0, #31`. Used by the sxtw peephole that
 /// folds c5's `Shl 32; Shr 32` sign-narrow shape into one inst.
@@ -2207,9 +2257,12 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
     // `.align` takes a power-of-two exponent on aarch64.
     const FILE_ASM_ALIGN_POW2: bool = true;
     const FILE_ASM_COMMENTS: crate::c5::asm::AsmComments = crate::c5::asm::AsmComments::A64;
+    const WEAK_ADDR_PCREL: Option<i64> = None;
 
     /// Take a word index's widening into its access, then contract an
-    /// integer multiply into the add / sub that reads it (madd / msub).
+    /// integer multiply into the add / sub that reads it (madd / msub),
+    /// the shifts and mask of a bit-field extract into one SBFX / UBFX,
+    /// and a constant shift into its reader's shifted-register operand.
     /// After the index fold and the store forwarding, whose address
     /// matching reads the `base + index * scale` shape a fused node would
     /// hide, and after the divide pairing, which is what leaves `n - q*d`
@@ -2224,6 +2277,12 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
         });
         pipeline.run("passes::mul_add::run", funcs, |funcs| {
             crate::c5::codegen::passes::mul_add::run(funcs);
+        });
+        pipeline.run("passes::bit_field::run", funcs, |funcs| {
+            crate::c5::codegen::passes::bit_field::run(funcs);
+        });
+        pipeline.run("passes::shifted_operand::run", funcs, |funcs| {
+            crate::c5::codegen::passes::shifted_operand::run(funcs);
         });
     }
 
@@ -2342,6 +2401,17 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
         pc_extent: usize,
     ) -> Result<(), C5Error> {
         apply_fixups(code, fixups, pc_to_native, pc_extent)
+    }
+
+    fn address_to_slot_load(code: &mut [u8], at: usize) -> Result<(), C5Error> {
+        let Some(word) = code.get_mut(at + 4..at + 8) else {
+            return Err(C5Error::internal("an import address has no `add` to load"));
+        };
+        let add = u32::from_le_bytes([word[0], word[1], word[2], word[3]]);
+        let ldr = super::patch::slot_load_form(add, super::patch::SlotWidth::W64)
+            .map_err(|e| C5Error::internal(e.describe("an import address load")))?;
+        word.copy_from_slice(&ldr.to_le_bytes());
+        Ok(())
     }
 
     fn emit_plt_trampolines(
@@ -2913,6 +2983,22 @@ mod tests {
             enc_add_index(r(16), r(16), r(17), IndexExt::None, 3),
             enc_add_reg_lsl(r(16), r(16), r(17), 3)
         );
+    }
+
+    /// The shifted-register forms of the six base words, each shift kind,
+    /// and the widest amount. Verified against clang.
+    #[test]
+    fn shifted_register_forms() {
+        use RegShift::{Asr, Lsl, Lsr};
+        let f = enc_rrr_shifted;
+        assert_eq!(f(ORR_REG, r(0), r(1), r(0), Lsl, 16), 0xAA00_4020);
+        assert_eq!(f(ADD_REG, r(0), r(0), r(1), Lsl, 2), 0x8B01_0800);
+        assert_eq!(f(SUB_REG, r(0), r(0), r(1), Asr, 3), 0xCB81_0C00);
+        assert_eq!(f(EOR_REG, r(0), r(0), r(1), Lsr, 7), 0xCA41_1C00);
+        assert_eq!(f(AND_REG, r(0), r(0), r(1), Lsr, 7), 0x8A41_1C00);
+        assert_eq!(f(BIC_REG, r(13), r(13), r(13), Asr, 63), 0x8AAD_FDAD);
+        assert_eq!(f(ORR_REG, r(10), r(10), r(9), Lsr, 49), 0xAA49_C54A);
+        assert_eq!(f(ADD_REG, r(2), r(3), r(4), Asr, 63), 0x8B84_FC62);
     }
 
     /// `LDR Wt, [Xn, #imm]` -- 32-bit unsigned-offset load. The

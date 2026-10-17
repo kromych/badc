@@ -24,7 +24,10 @@ impl Compiler {
             self.next()?; // past the close paren
             ok = self.lex.tk != Token::Brak
                 && self.lex.tk != Token::Dot
-                && self.lex.tk != Token::Arrow;
+                && self.lex.tk != Token::Arrow
+                && self.lex.tk != '('
+                && self.lex.tk != Token::Inc
+                && self.lex.tk != Token::Dec;
         }
         self.restore_lex(snap);
         Ok(ok)
@@ -54,15 +57,6 @@ impl Compiler {
         }
     }
 
-    /// Whether the unevaluated operand just parsed is a function
-    /// designator rather than a pointer to one.
-    fn operand_is_function(&self) -> bool {
-        match self.ast_acc {
-            Some(id) => self.expr_fn(id).is_some_and(|(_, d)| d == 0),
-            None => self.pending.value_is_fn_designator,
-        }
-    }
-
     /// The byte count of a `sizeof` operand, the keyword consumed: a
     /// parenthesized type name, a bare identifier, or a unary-expression
     /// parsed unevaluated. `self.ty` is restored on return.
@@ -89,8 +83,10 @@ impl Compiler {
         } else if self.lex.tk == Token::Id
             && self.symbols[self.lex.curr_id_idx].class != 0
             && !self.lex.peek_after_whitespace(b'-')
+            && !self.lex.peek_after_whitespace(b'+')
             && !self.lex.peek_after_whitespace(b'.')
             && !self.lex.peek_after_whitespace(b'[')
+            && !self.lex.peek_after_whitespace(b'(')
             && (!had_paren || self.sizeof_bare_id_paren_ok()?)
         {
             // A declared identifier is looked up directly, so an array yields
@@ -160,7 +156,7 @@ impl Compiler {
             // flexible member, the pointee of `T (*)[]` -- is incomplete.
             let incomplete = self.pending.last_array_decay_dims.first() == Some(&-1);
             let expr_ty = self.ty;
-            let function = self.operand_is_function();
+            let function = self.value_is_fn_designator();
             self.next_ent_pc = saved_text_len;
             self.clear_recent_emits();
             self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
@@ -664,7 +660,7 @@ impl Compiler {
             let saved_reloc = self.code_reloc_sym_idx.len();
             self.unevaluated(|c| c.expr_or_void(Token::Inc as i64))?;
             let expr_ty = self.ty;
-            let function = self.operand_is_function();
+            let function = self.value_is_fn_designator();
             self.next_ent_pc = saved_text_len;
             self.clear_recent_emits();
             self.code_reloc_sym_idx.truncate(saved_reloc);
@@ -687,7 +683,7 @@ impl Compiler {
             let saved_reloc = self.code_reloc_sym_idx.len();
             self.unevaluated(|c| c.expr_or_void(Token::Assign as i64))?;
             let expr_ty = self.ty;
-            let function = self.operand_is_function();
+            let function = self.value_is_fn_designator();
             self.next_ent_pc = saved_text_len;
             self.clear_recent_emits();
             self.code_reloc_sym_idx.truncate(saved_reloc);

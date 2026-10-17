@@ -82,8 +82,7 @@ Disassembly of section .text:
                	mov	x1, #0xfffffffe         // =4294967294
                	mov	x3, #0x7                // =7
                	tbz	w1, #0x0, <addr>
-               	lsl	x4, x2, #1
-               	add	x0, x0, x4
+               	add	x0, x0, x2, lsl #1
                	b	<addr>
                	mul	x4, x2, x3
                	add	x0, x0, x4
@@ -443,8 +442,7 @@ Disassembly of section .text:
                	mov	x2, #0x0                // =0
                	mov	x1, x2
                	mov	x0, #0x0                // =0
-               	lsl	x3, x2, #2
-               	add	x3, x3, x0
+               	add	x3, x0, x2, lsl #2
                	sxtw	x3, w3
                	add	x1, x1, x3
                	add	x0, x0, #0x1

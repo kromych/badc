@@ -43,6 +43,7 @@ pub(crate) mod aarch64;
 // ABI; the rules + unit tests land first as a standalone unit.
 #[allow(dead_code)]
 pub(crate) mod abi_classify;
+pub(crate) mod asm_fold;
 mod jit;
 pub(crate) mod magic;
 pub(crate) mod map_syms;
@@ -141,6 +142,15 @@ impl BinaryFormat {
     /// (`libfoo.3.dylib`) rather than following it (`libfoo.so.3`).
     pub fn version_before_ext(self) -> bool {
         !matches!(self, BinaryFormat::Elf)
+    }
+
+    /// Strictest alignment a static object keeps once the image is loaded:
+    /// the kernel slides a Mach-O image by whole pages.
+    pub fn max_object_align(self) -> usize {
+        match self {
+            BinaryFormat::MachO => crate::c5::layout::MACHO_PAGE_SIZE,
+            BinaryFormat::Elf | BinaryFormat::Pe => crate::c5::compiler::MAX_STATIC_ALIGN,
+        }
     }
 }
 
@@ -2003,6 +2013,8 @@ pub(crate) struct Build {
     pub eh_frame: Vec<EhFrameBlock>,
     /// Data slots naming an import, which the loader binds (Mach-O, ELF).
     pub data_import_binds: Vec<DataImportBind>,
+    /// The same for `_Thread_local` template slots (`tls_data` offsets).
+    pub tls_data_import_binds: Vec<DataImportBind>,
     /// Imports, ascending, whose call stub code takes as a value: an ELF
     /// executable publishes it as the import's address (a canonical PLT entry).
     pub canonical_imports: Vec<usize>,
@@ -2464,6 +2476,15 @@ impl Build {
             .and_then(|&next| self.pc_to_native.get(next).copied())
             .unwrap_or(self.text.len())
     }
+
+    /// The `text` offset of the code at `ent_pc`; `None` where none starts,
+    /// including the final entry, which is the code length.
+    pub(crate) fn native_entry(&self, ent_pc: usize) -> Option<usize> {
+        let last = self.pc_to_native.len().checked_sub(1)?;
+        (ent_pc < last)
+            .then(|| self.pc_to_native[ent_pc])
+            .filter(|&o| o != usize::MAX)
+    }
 }
 
 /// A named label an inline-asm template defines in the emitted code stream
@@ -2654,6 +2675,8 @@ pub(crate) struct DataFixup {
     pub instr_offset: usize,
     /// Offset into `Build::data`.
     pub data_offset: u64,
+    /// Displacement from the object's address: `S + A`.
+    pub addend: i64,
     /// Fields of the reference this record covers.
     pub part: AddrPart,
 }
@@ -2912,6 +2935,8 @@ pub(crate) struct TextPcRelReloc {
     /// Target byte offset within the data-byte space (zero-fill tail
     /// included), `S + A` of the source relocation.
     pub target_data_offset: u64,
+    /// `S`: the region is taken from it.
+    pub target_anchor: u64,
     /// Field width in bytes: 4 or 8.
     pub width: u8,
 }
@@ -2937,6 +2962,8 @@ pub(crate) struct TextAbsReloc {
     /// is set, else within the data-byte space (zero-fill tail
     /// included). `S + A` of the source relocation.
     pub target_offset: u64,
+    /// `S`: the region is taken from it.
+    pub target_anchor: u64,
     pub target_in_text: bool,
     /// ELF relocation type of the source site. badc's relocatable
     /// format is ELF ET_REL on every target, so this names the field's
@@ -3042,6 +3069,14 @@ pub(crate) struct ElfTpoffFixup {
     /// initial-exec `adrp`.
     pub imm_offset: usize,
     pub target: ElfTpoffTarget,
+}
+
+/// A `_Thread_local` access by symbol: local-exec when this unit defines it
+/// (a weak definition), else the GOT, as another unit may be a library.
+#[derive(Debug, Clone)]
+pub(crate) struct TlsSymbolRef {
+    pub name: alloc::string::String,
+    pub defined_here: bool,
 }
 
 /// How the link resolves an [`ElfTpoffFixup`].
@@ -3160,8 +3195,220 @@ pub(crate) struct FuncFixup {
     /// instruction. Resolved by the codegen during `lower()` so the
     /// writer doesn't need to consult `pc_to_native` for this entry.
     pub target_native_offset: usize,
+    /// Displacement from the target's address: `S + A`.
+    pub addend: i64,
     /// Fields of the reference this record covers.
     pub part: AddrPart,
+}
+
+/// A name's place in the unit's own image: a data or a text offset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum UnitDef {
+    Data(u64),
+    Text(usize),
+}
+
+pub(crate) type UnitDefs = alloc::collections::BTreeMap<String, UnitDef>;
+
+impl UnitDef {
+    /// Record the fixup of `part` at `instr_offset` to this plus `addend`.
+    pub(crate) fn bind(self, build: &mut Build, instr_offset: usize, part: AddrPart, addend: i64) {
+        match self {
+            UnitDef::Data(data_offset) => build.data_fixups.push(DataFixup {
+                instr_offset,
+                data_offset,
+                addend,
+                part,
+            }),
+            UnitDef::Text(target_native_offset) => build.func_fixups.push(FuncFixup {
+                instr_offset,
+                target_native_offset,
+                addend,
+                part,
+            }),
+        }
+    }
+}
+
+/// Every data object and function a unit defines, which a by-name reference
+/// binds to ahead of a `#pragma binding` when the unit is its own image.
+pub(crate) fn unit_definitions(program: &Program, build: &Build) -> UnitDefs {
+    use crate::c5::symbol::Linkage;
+    use crate::c5::token::Token;
+    let mut defs = alloc::collections::BTreeMap::new();
+    for s in &program.symbols {
+        if s.class == Token::Glo as i64
+            && s.defined_here
+            && !s.is_alias
+            && !s.is_thread_local
+            && !s.name.is_empty()
+            && matches!(s.linkage, Linkage::External | Linkage::Internal)
+        {
+            defs.insert(
+                s.link_name().to_string(),
+                UnitDef::Data(s.val.max(0) as u64),
+            );
+        }
+    }
+    for (name, &pc) in build.func_names.iter().zip(&build.func_ent_pcs) {
+        if let Some(&off) = build.pc_to_native.get(pc)
+            && !name.is_empty()
+        {
+            defs.entry(name.clone()).or_insert(UnitDef::Text(off));
+        }
+    }
+    // An alias is its target, perhaps through another alias.
+    for s in &program.symbols {
+        if s.is_alias && s.class == Token::Glo as i64 && s.defined_here && !s.name.is_empty() {
+            defs.entry(s.link_name().to_string())
+                .or_insert(UnitDef::Data(s.val.max(0) as u64));
+        }
+    }
+    for _ in &program.function_aliases {
+        for a in &program.function_aliases {
+            if let Some(&UnitDef::Text(off)) = defs.get(a.target.as_str())
+                && !defs.contains_key(a.name.as_str())
+            {
+                let off = off.wrapping_add_signed(a.addend as isize);
+                defs.insert(a.name.clone(), UnitDef::Text(off));
+            }
+        }
+    }
+    defs
+}
+
+/// Whether the RIP-relative field at `field` is the operand of a `lea`.
+pub(crate) fn x86_64_lea_rip(code: &[u8], field: usize) -> bool {
+    field >= 2 && code[field - 2] == 0x8D && code[field - 1] & 0xC7 == 0x05
+}
+
+/// The GOT slots through which a unit's own image reaches the imported
+/// objects (`#pragma binding(data ...)`) it names, registered on first use.
+pub(crate) struct DataImportSlots {
+    hosts: alloc::collections::BTreeMap<String, (String, usize)>,
+    slots: alloc::collections::BTreeMap<String, usize>,
+    /// The loader looks each up by name alone, not in its binding's library.
+    flat: bool,
+    path: &'static str,
+}
+
+impl DataImportSlots {
+    pub(crate) fn new(build: &Build, flat: bool, path: &'static str) -> Self {
+        let hosts = (build.imports.data_bindings.iter())
+            .map(|(local, host, dylib)| (local.clone(), (host.clone(), *dylib)))
+            .collect();
+        Self {
+            hosts,
+            slots: alloc::collections::BTreeMap::new(),
+            flat,
+            path,
+        }
+    }
+
+    pub(crate) fn binds(&self, name: &str) -> bool {
+        self.hosts.contains_key(name)
+    }
+
+    /// Route `r` through its object's slot, which stands in for the address
+    /// alone: an x86-64 asm `sym(%rip)` qualifies only as a `lea` operand.
+    pub(crate) fn route_ref(
+        &mut self,
+        build: &mut Build,
+        r: &UserExternDataRef,
+    ) -> Result<(), C5Error> {
+        if let Some(addend) = r.direct_pcrel
+            && (addend != -4 || !x86_64_lea_rip(&build.text, r.instr_offset + 3))
+        {
+            return Err(self.used_in_place(&r.symbol_name));
+        }
+        let import_index = self.slot(build, &r.symbol_name);
+        build.got_fixups.push(GotFixup {
+            instr_offset: r.instr_offset,
+            part: AddrPart::Whole,
+            import_index,
+            is_data_load: true,
+        });
+        Ok(())
+    }
+
+    /// The same for an aarch64 asm `adrp` or `add :lo12:` operand.
+    pub(crate) fn route_asm_operand(
+        &mut self,
+        build: &mut Build,
+        fx: &AsmSymFixup,
+        name: &str,
+    ) -> Result<(), C5Error> {
+        use crate::c5::asm::AsmRelocKind;
+        let part = match fx.kind {
+            AsmRelocKind::A64AdrpPage21 if fx.addend == 0 => AddrPart::Page,
+            AsmRelocKind::A64AddLo12 if fx.addend == 0 => AddrPart::InPage,
+            _ => return Err(self.used_in_place(name)),
+        };
+        let import_index = self.slot(build, name);
+        build.got_fixups.push(GotFixup {
+            instr_offset: fx.instr_offset,
+            part,
+            import_index,
+            is_data_load: true,
+        });
+        Ok(())
+    }
+
+    /// Bind the data slot `r` to its object at load; false when no binding names it.
+    pub(crate) fn bind_slot(&mut self, build: &mut Build, r: &program::ExternDataReloc) -> bool {
+        if !self.binds(&r.symbol_name) {
+            return false;
+        }
+        let import = self.slot(build, &r.symbol_name);
+        build.data_import_binds.push(DataImportBind {
+            data_offset: r.data_offset,
+            import,
+            addend: r.addend,
+        });
+        true
+    }
+
+    fn slot(&mut self, build: &mut Build, name: &str) -> usize {
+        if let Some(&i) = self.slots.get(name) {
+            return i;
+        }
+        let (real_symbol, dylib_index) = self.hosts[name].clone();
+        let i = build.imports.imports.len();
+        // A data import has no call stub.
+        if build.plt_trampoline_offsets.len() == i {
+            build.plt_trampoline_offsets.push(None);
+        }
+        build.imports.imports.push(ResolvedImport {
+            binding_idx: i as i64,
+            local_name: name.into(),
+            real_symbol,
+            dylib_index,
+            flat_lookup: self.flat,
+            kind: if self.flat {
+                ImportKind::Function
+            } else {
+                ImportKind::Object
+            },
+            is_variadic: false,
+            fixed_args: 0,
+            return_type_tag: 0,
+            param_types: Vec::new(),
+        });
+        self.slots.insert(name.into(), i);
+        i
+    }
+
+    fn used_in_place(&self, name: &str) -> C5Error {
+        C5Error::hard(
+            Code::RELOCATION,
+            format!(
+                "inline asm uses the imported object `{name}` in place or at an offset; {} \
+                 reaches it only through its GOT slot, which stands in for its address alone \
+                 (`lea {name}(%rip)`, `adrp` + `add :lo12:{name}`)",
+                self.path
+            ),
+        )
+    }
 }
 
 /// Compiler-side speculative-execution mitigations, selected by the
@@ -3432,24 +3679,35 @@ pub fn stack_guard_sysreg(name: &str) -> Option<u16> {
     aarch64::asm::sysreg_field(name)
 }
 
-/// Registers `-ffixed-REG` keeps out of the allocator, one bit per
-/// architectural number: `gpr` over the general file, `fpr` over the
-/// floating-point / SIMD file. The ABI still passes arguments and
-/// results through a reserved register; only the allocator's own
-/// choices, the emitters' scratch picks and the inline-asm operand
-/// pools exclude it.
+/// Registers kept out of the allocator, one bit per architectural number:
+/// `gpr` / `fpr` the general / floating-point ones `-ffixed-REG` names,
+/// `frame` the GPRs the frame keeps for itself (`emit_common::region_base`).
+/// The ABI still passes arguments and results through a reserved register;
+/// only the allocator's own choices, the emitters' scratch picks and the
+/// inline-asm operand pools exclude it. An asm statement that writes a
+/// `frame` register saves and restores it, a `-ffixed-` one is the program's.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct FixedRegs {
     pub gpr: u32,
     pub fpr: u32,
+    pub frame: u32,
 }
 
 impl FixedRegs {
     /// No register reserved.
-    pub const NONE: Self = Self { gpr: 0, fpr: 0 };
+    pub const NONE: Self = Self {
+        gpr: 0,
+        fpr: 0,
+        frame: 0,
+    };
 
     pub const fn has_gpr(self, r: u8) -> bool {
-        r < 32 && self.gpr & (1 << r) != 0
+        r < 32 && self.kept_gpr() & (1 << r) != 0
+    }
+
+    /// Every GPR kept out: the `-ffixed-` ones and the frame's.
+    pub const fn kept_gpr(self) -> u32 {
+        self.gpr | self.frame
     }
 
     pub const fn has_fpr(self, r: u8) -> bool {
@@ -3540,6 +3798,37 @@ pub fn fixed_register(target: Target, name: &str) -> Result<FixedReg, String> {
             _ => Ok(FixedReg::Gpr(num)),
         }
     }
+}
+
+/// The `(gpr, fpr)` masks a clobber names, `None` where gcc and clang both refuse it or badc
+/// never took a one-sided name; digits name gcc's register (base 10) and clang's (C literal).
+pub(crate) fn clobber_registers(target: Target, name: &str) -> Option<(u32, u32)> {
+    if !name.is_empty() && name.bytes().all(|b| b.is_ascii_digit()) {
+        let gcc: u32 = name.parse().ok()?;
+        let clang = match name.strip_prefix('0') {
+            Some(rest) if !rest.is_empty() => u32::from_str_radix(rest, 8).ok()?,
+            _ => gcc,
+        };
+        let numbered = if target.is_aarch64() {
+            aarch64::asm::numbered_clobber
+        } else {
+            x86_64::asm::numbered_clobber
+        };
+        let ((g, f), (cg, cf)) = (numbered(gcc, false)?, numbered(clang, true)?);
+        return Some((g | cg, f | cf));
+    }
+    if target.is_aarch64() {
+        aarch64::asm::clobber_by_name(name)
+    } else {
+        x86_64::asm::clobber_by_name(name)
+    }
+}
+
+pub(crate) fn clobber_index(digits: &str) -> Option<u32> {
+    let plain = !digits.is_empty()
+        && digits.bytes().all(|b| b.is_ascii_digit())
+        && (digits == "0" || !digits.starts_with('0'));
+    plain.then(|| digits.parse().ok()).flatten()
 }
 
 /// gcc's `--param ssp-buffer-size=` default.
@@ -3710,6 +3999,8 @@ pub struct NativeOptions {
     /// A symbol's `st_size`
     /// covers its code only; the fill belongs to no function.
     pub min_function_alignment: u32,
+    /// Leave the program, the lowering and dead bodies unfreed to the process exit.
+    pub freed_by_exit: bool,
     /// `-fpatchable-function-entry=N,M`: the NOP area at every function
     /// entry. A function's own `patchable_function_entry` attribute
     /// replaces it.
@@ -4097,6 +4388,7 @@ impl NativeOptions {
             stack_protect: StackProtect::OFF,
             fixed_regs: FixedRegs::NONE,
             min_function_alignment: 1,
+            freed_by_exit: false,
             patchable_function_entry: PatchableEntry::NONE,
             profiling: Profiling::OFF,
         }
@@ -4329,28 +4621,12 @@ pub(crate) fn lower_for_with_prebuilt(
     build.abi.stack_protect = options.stack_protect;
     build.data_relocs = program.data_relocs.clone();
     build.extern_data_relocs = program.extern_data_relocs.clone();
-    build.code_relocs = Vec::with_capacity(program.code_relocs.len());
-    for r in &program.code_relocs {
-        let Some(binding) = program.bound_trampoline(r.target_ent_pc) else {
-            build.code_relocs.push(*r);
-            continue;
-        };
-        let import = (build.imports.imports.iter())
-            .position(|i| i.binding_idx == binding)
-            .ok_or_else(|| {
-                C5Error::internal(alloc::format!(
-                    "a data slot names libc binding {binding}, which no import resolves"
-                ))
-            })?;
-        build.data_import_binds.push(DataImportBind {
-            data_offset: r.data_offset,
-            import,
-            addend: 0,
-        });
-    }
+    (build.code_relocs, build.data_import_binds) =
+        split_import_slots(program, &build.imports, &program.code_relocs)?;
     build.tls_data_relocs = program.tls_data_relocs.clone();
     build.tls_extern_data_relocs = program.tls_extern_data_relocs.clone();
-    build.tls_code_relocs = program.tls_code_relocs.clone();
+    (build.tls_code_relocs, build.tls_data_import_binds) =
+        split_import_slots(program, &build.imports, &program.tls_code_relocs)?;
     if options.output_kind != OutputKind::Relocatable {
         bind_code_reloc_aliases(program, &mut build.code_relocs);
         bind_code_reloc_aliases(program, &mut build.tls_code_relocs);
@@ -4421,6 +4697,14 @@ impl RelocCalleeCtx {
         }
         Some(self.names[name_idx].as_str())
     }
+
+    /// The weak definition at `target_pc`, which a reference names as a call does.
+    pub(crate) fn weak_target(&self, target_pc: usize) -> Option<&str> {
+        let &(_, name_idx) = self.by_pc.get(&target_pc)?;
+        self.weak
+            .contains(&target_pc)
+            .then(|| self.names[name_idx].as_str())
+    }
 }
 
 /// Build the [`RelocCalleeCtx`] for the just-emitted function layout.
@@ -4485,6 +4769,37 @@ pub(crate) fn reloc_callee_ctx(
     ctx
 }
 
+/// `relocs` without the slots naming a C-library function the loader
+/// binds, and those slots' import bindings, so every slot naming one holds
+/// the import's own address (C99 6.5.9p6).
+fn split_import_slots(
+    program: &Program,
+    imports: &ResolvedImports,
+    relocs: &[crate::c5::program::CodeReloc],
+) -> Result<(Vec<crate::c5::program::CodeReloc>, Vec<DataImportBind>), C5Error> {
+    let mut kept = Vec::with_capacity(relocs.len());
+    let mut binds = Vec::new();
+    for r in relocs {
+        let Some(binding) = program.bound_trampoline(r.target_ent_pc) else {
+            kept.push(*r);
+            continue;
+        };
+        let import = (imports.imports.iter())
+            .position(|i| i.binding_idx == binding)
+            .ok_or_else(|| {
+                C5Error::internal(alloc::format!(
+                    "a data slot names libc binding {binding}, which no import resolves"
+                ))
+            })?;
+        binds.push(DataImportBind {
+            data_offset: r.data_offset,
+            import,
+            addend: r.addend,
+        });
+    }
+    Ok((kept, binds))
+}
+
 /// Bind data-slot function addresses carrying an import placeholder a
 /// function alias of this unit resolves; see
 /// [`ssa::shadow::alias_import_bindings`]. Final-image outputs only --
@@ -4502,6 +4817,116 @@ pub(crate) fn bind_code_reloc_aliases(
             r.target_ent_pc = t as u64;
         }
     }
+}
+
+/// Bind each final-image slot naming what the unit's C does not define as a
+/// link does (C99 6.7.8p4): to the definition `defs` holds, an object's else
+/// to what `import` binds; an undefined weak name holds 0 plus the offset.
+pub(crate) fn bind_named_slots(
+    program: &Program,
+    build: &mut Build,
+    defs: &UnitDefs,
+    import: &mut dyn FnMut(&mut Build, &program::ExternDataReloc) -> Result<bool, C5Error>,
+) -> Result<(), C5Error> {
+    use crate::c5::token::Token;
+    let weak = |name: &str, function: bool| {
+        (program.symbols.iter()).any(|s| {
+            s.is_weak
+                && s.link_name() == name
+                && if function {
+                    s.is_fun_entity()
+                } else {
+                    s.class == Token::Glo as i64
+                }
+        })
+    };
+    let undefined = |name: &str| {
+        C5Error::hard(
+            Code::UNDEFINED_SYMBOL,
+            format!("undefined reference to `{name}`"),
+        )
+    };
+    for r in core::mem::take(&mut build.extern_data_relocs) {
+        let at = r.data_offset as usize;
+        match defs.get(r.symbol_name.as_str()) {
+            Some(&UnitDef::Data(off)) => build.data_relocs.push(program::DataReloc {
+                data_offset: r.data_offset,
+                target_offset: off.wrapping_add_signed(r.addend),
+                target_anchor: off,
+                target_sym: None,
+            }),
+            Some(&UnitDef::Text(off)) => build.label_relocs.push(LabelReloc {
+                data_offset: r.data_offset,
+                text_offset: (off as u64).wrapping_add_signed(r.addend),
+            }),
+            None if import(build, &r)? => {}
+            None if weak(&r.symbol_name, false) => {
+                let slot = build.data.get_mut(at..at + 8).ok_or_else(|| {
+                    C5Error::internal(format!("extern data slot {at:#x} past its image"))
+                })?;
+                slot.copy_from_slice(&r.addend.to_le_bytes());
+            }
+            None => return Err(undefined(&r.symbol_name)),
+        }
+    }
+    let names: alloc::collections::BTreeMap<u64, &str> = (program.extern_function_imports.iter())
+        .map(|(pc, name)| (*pc as u64, name.as_str()))
+        .collect();
+    if names.is_empty() {
+        return Ok(());
+    }
+    let label_of = |name: &str| match defs.get(name) {
+        Some(&UnitDef::Text(off)) => Some(off as u64),
+        _ => None,
+    };
+    for tls in [false, true] {
+        let relocs = if tls {
+            core::mem::take(&mut build.tls_code_relocs)
+        } else {
+            core::mem::take(&mut build.code_relocs)
+        };
+        let mut kept = Vec::with_capacity(relocs.len());
+        for r in relocs {
+            let Some(&name) = names.get(&r.target_ent_pc) else {
+                kept.push(r);
+                continue;
+            };
+            let at = r.data_offset as usize;
+            match label_of(name) {
+                Some(off) if !tls => build.label_relocs.push(LabelReloc {
+                    data_offset: r.data_offset,
+                    text_offset: off.wrapping_add_signed(r.addend),
+                }),
+                Some(_) => {
+                    return Err(C5Error::hard(
+                        Code::UNSUPPORTED,
+                        format!(
+                            "a `_Thread_local` initializer naming the assembler label `{name}` \
+                             cannot be resolved in a single-file image; compile with `-c` and link"
+                        ),
+                    ));
+                }
+                None if weak(name, true) => {
+                    let image = if tls {
+                        &mut build.tls_data
+                    } else {
+                        &mut build.data
+                    };
+                    let slot = image.get_mut(at..at + 8).ok_or_else(|| {
+                        C5Error::internal(format!("code reloc slot {at:#x} past its image"))
+                    })?;
+                    slot.copy_from_slice(&r.addend.to_le_bytes());
+                }
+                None => return Err(undefined(name)),
+            }
+        }
+        if tls {
+            build.tls_code_relocs = kept;
+        } else {
+            build.code_relocs = kept;
+        }
+    }
+    Ok(())
 }
 
 /// Per-target ABI knobs that affect lowering, not just the final
@@ -4689,7 +5114,7 @@ impl Default for Abi {
 /// rcx/rdx/r8/r9 by position, 32 bytes of shadow space, rsi/rdi and
 /// xmm6..xmm15 callee-saved) and `SysV` is [`Target::LinuxX64`]'s. See
 /// [`Target::abi_row`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub(crate) enum CallConv {
     /// The target's own convention.
     #[default]

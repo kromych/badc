@@ -25,10 +25,8 @@ Disassembly of section .text:
                	add	x3, x3, <lo12>
                	mov	x2, #0x0                // =0
                	mov	x0, #0x0                // =0
-               	lsl	x1, x2, #4
-               	add	x1, x3, x1
-               	lsl	x4, x0, #3
-               	add	x1, x1, x4
+               	add	x1, x3, x2, lsl #4
+               	add	x1, x1, x0, lsl #3
                	ldrsw	x4, [x1]
                	cbnz	w4, <addr>
                	ldrsw	x1, [x1, #0x4]
@@ -42,10 +40,8 @@ Disassembly of section .text:
                	sub	x3, x29, #0x30
                	mov	x2, #0x0                // =0
                	mov	x0, #0x0                // =0
-               	lsl	x1, x2, #4
-               	add	x1, x3, x1
-               	lsl	x4, x0, #3
-               	add	x1, x1, x4
+               	add	x1, x3, x2, lsl #4
+               	add	x1, x1, x0, lsl #3
                	ldrsw	x4, [x1]
                	cbnz	w4, <addr>
                	ldrsw	x1, [x1, #0x4]

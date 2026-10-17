@@ -36,9 +36,8 @@ Disassembly of section .text:
 
 <f2>:
                	leaq	0x1(%rdi), %rax
-               	movq	%rdi, %rcx
-               	shlq	%rcx
-               	addq	%rax, %rcx
+               	shlq	%rdi
+               	leaq	(%rax,%rdi), %rcx
                	imulq	$0x64, %rcx, %rcx
                	addq	%rcx, %rax
                	retq

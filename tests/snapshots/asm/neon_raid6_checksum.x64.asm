@@ -68,10 +68,9 @@ Disassembly of section .text:
                	movzbq	(%rdx,%rax), %rdx
                	movq	%rdi, %rsi
                	xorq	%rdx, %rsi
-               	movq	%r8, %rdi
-               	xorq	%rdx, %rdi
-               	movq	%rsi, %r8
-               	shlq	%r8
+               	xorq	%rdx, %r8
+               	movq	%rsi, %rdi
+               	shlq	%rdi
                	testb	$-0x80, %sil
                	je	<addr>
                	movl	$0x1d, %edx
@@ -84,13 +83,13 @@ Disassembly of section .text:
                	jmp	<addr>
                	movq	%rcx, %rdi
                	jmp	<addr>
-               	xorq	%r8, %rdx
+               	xorq	%rdi, %rdx
                	movq	%rdx, %rsi
                	andq	$0xff, %rsi
                	leaq	<rip>, %rdx      # <addr>
                	movzbq	(%rdx,%rax), %rdx
                	xorq	%rdx, %rsi
-               	xorq	%rdi, %rdx
+               	xorq	%r8, %rdx
                	leaq	<rip>, %rdi      # <addr>
                	movb	%dl, (%rdi,%rax)
                	leaq	<rip>, %rdx      # <addr>

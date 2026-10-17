@@ -291,28 +291,22 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	ldrh	w1, [x22]
                	ldrb	w2, [x22, #0x2]
-               	lsl	x2, x2, #16
-               	orr	x1, x1, x2
+               	orr	x1, x1, x2, lsl #16
                	ldr	w2, [x23]
                	ldrb	w3, [x23, #0x4]
-               	lsl	x3, x3, #32
-               	orr	x2, x2, x3
+               	orr	x2, x2, x3, lsl #32
                	ldr	w3, [x24]
                	ldrh	w4, [x24, #0x4]
-               	lsl	x4, x4, #32
-               	orr	x3, x3, x4
+               	orr	x3, x3, x4, lsl #32
                	ldr	w4, [x20]
                	ldrh	w5, [x20, #0x4]
-               	lsl	x5, x5, #32
-               	orr	x4, x4, x5
+               	orr	x4, x4, x5, lsl #32
                	ldrb	w5, [x20, #0x6]
-               	lsl	x5, x5, #48
-               	orr	x4, x4, x5
+               	orr	x4, x4, x5, lsl #48
                	mov	x5, x25
                	ldrh	w6, [x5, #0x8]
                	ldrb	w16, [x5, #0xa]
-               	lsl	x16, x16, #16
-               	orr	x6, x6, x16
+               	orr	x6, x6, x16, lsl #16
                	ldr	x5, [x5]
                	bl	<addr>
                	cmp	w0, #0xc3c

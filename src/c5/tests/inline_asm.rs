@@ -133,26 +133,80 @@ fn a_bound_operand_names_the_stack_pointer_only_when_the_template_names_it() {
 }
 
 /// A memory operand based on sp leaves it in place unless AArch64 writes the
-/// base back; sp as a register operand, or a named bound output operand, may
-/// be the destination.
+/// base back, and so does sp as a source operand, a compared or pushed one,
+/// or a mention in a comment or a directive; sp as the destination, an
+/// exchanged operand, or a named bound output operand may move it. Comments
+/// are each target's assembler's, labels may be glued to the mnemonic, and
+/// mnemonics and register names match without regard to case.
 #[test]
-fn a_template_may_move_the_stack_pointer_unless_sp_is_a_kept_memory_base() {
-    for (template, moves) in [
+fn a_template_may_move_the_stack_pointer_only_by_writing_it() {
+    let x86 = [
         ("lock addl $0,-4(%%rsp)", false),
         ("mov 8( %%rsp ), %0", false),
         ("mov rax, [rsp + 8]", false),
+        ("mov [rsp + 8], rax", false),
+        ("mov %0, %%rsp", true),
+        ("lea 8(%%rsp), %%rsp", true),
+        ("mov %%rsp, %0", false),
+        ("mov rax, rsp", false),
+        ("mov rsp, rax", true),
+        ("addq $8, %%rsp", true),
+        ("movb $0, %%spl", true),
+        ("pushq %%rsp\n\tpopq %0", false),
+        ("popq %%rsp", true),
+        ("cmpq %0, %%rsp", false),
+        ("lock xchgq %%rsp, %0", true),
+        ("1:xchgq %%rsp, %0", true),
+        (".Lsw%=:movq %0, %%rsp", true),
+        ("MOVQ %%RSP, %0", false),
+        ("movq %0, %%RSP", true),
+        ("XCHGQ %%rsp, %0", true),
+        ("XADDQ %%rsp, %0", true),
+        ("mulxq %0, %%rsp, %0", true),
+        ("nop # %%rsp", false),
+        ("nop // %%rsp", false),
+        ("movq %%rsp, %0 # movq %0, %%rsp", false),
+        ("/* # */ movq %0, %%rsp", true),
+        ("movq %0, %%rsp # /* ; */", true),
+        (".cfi_def_cfa_register %%rsp", false),
+        ("mov %1, %0", false),
+        ("mov %0, %2", true),
+        ("call *%0", false),
+    ];
+    let a64 = [
         ("ldr %0, [sp, #8]\n\tldr %0, [ sp ]", false),
         ("str %0, [sp, #-16]!", true),
         ("ldr %0, [sp], #16", true),
         ("mov sp, %0", true),
-        ("mov %0, %%rsp", true),
-        ("lea 8(%%rsp), %%rsp", true),
-        ("mov %%rsp, %0", true),
+        ("mov %0, sp", false),
+        ("add %0, sp, #16", false),
+        ("add sp, sp, #16", true),
+        ("1: sub sp, sp, %0", true),
+        ("1:mov sp, %0", true),
+        (".Lsw%=:mov sp, %0", true),
+        ("cmp sp, %0", false),
+        ("MOV SP, %0", true),
+        ("ADD sp, sp, #16", true),
+        ("MOV %0, SP", false),
+        ("CMP SP, %0", false),
+        ("nop // sp", false),
+        ("# sp\n\tmov %0, %0", false),
+        ("mov %0, sp // mov sp, %0", false),
+        ("/* // */ mov sp, %0", true),
         ("mov %1, %0", false),
         ("mov %0, %2", true),
-        ("call *%0", false),
+    ];
+    for (target, cases) in [
+        (crate::Target::LinuxX64, &x86[..]),
+        (crate::Target::LinuxAarch64, &a64[..]),
     ] {
-        assert_eq!(sp_block(template).may_move_sp(), moves, "{template}");
+        for &(template, moves) in cases {
+            assert_eq!(
+                sp_block(template).may_move_sp(target),
+                moves,
+                "{target:?}: {template}"
+            );
+        }
     }
 }
 
@@ -2907,6 +2961,11 @@ fn i_operand_that_is_not_constant_names_its_form() {
             a64,
             "non-constant immediate operand `%0`: the operand is a call result",
         ),
+        (
+            a64_imm("n * g() + n"),
+            a64,
+            "non-constant immediate operand `%0`: the operand is an arithmetic result",
+        ),
     ];
     for (src, target, want) in cases {
         let err = asm_emit(&src, target, true).err().unwrap_or_default();
@@ -3449,5 +3508,249 @@ fn asm_operands_are_separated_by_commas() {
             .to_string(),
     ] {
         compile(&body).unwrap_or_else(|e| panic!("{body}: {e}"));
+    }
+}
+
+/// The clobber masks of the one asm statement in `src`, compiled for
+/// `target`, or the compile error.
+fn clobber_masks(src: &str, target: crate::Target) -> Result<(u32, u32), String> {
+    let program = crate::Compiler::with_target(src.to_string(), target)
+        .compile()
+        .map_err(|e| e.to_string())?;
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    let masks = funcs
+        .iter()
+        .flat_map(|f| f.insts.iter())
+        .find_map(|i| match i {
+            crate::c5::ir::Inst::InlineAsm { asm, .. } => {
+                Some((asm.clobber_regs, asm.clobber_fp_regs))
+            }
+            _ => None,
+        });
+    Ok(masks.expect("an asm statement"))
+}
+
+/// A clobber name resolves to the registers it is part of, as gcc and clang
+/// both read it: the x86 high bytes to rax, rcx, rdx and rbx, a `ymm` or
+/// `zmm` name to its XMM register, an SVE `z` name to its SIMD register,
+/// `fp`, `lr` and gcc's `rN` to x registers, after one `%` or `#`. A decimal
+/// number names gcc's register of that number and clang's, which differ
+/// past x86-64's eighth and AArch64's 31st. Names of registers the allocator
+/// never assigns clobber nothing; a name both refuse is refused, and so is
+/// one only one of them takes that badc never accepted.
+#[test]
+fn clobber_names_resolve_to_their_registers() {
+    use crate::Target::{LinuxAarch64, LinuxX64};
+    let asm = |list: &str| {
+        alloc::format!("int main(void) {{ __asm__ volatile(\"\" ::: {list}); return 0; }}")
+    };
+    let q = |names: &[&str]| {
+        names
+            .iter()
+            .map(|n| alloc::format!("\"{n}\""))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let x = |r: u32| 1u32 << r;
+    for (target, names, gp, fp) in [
+        (LinuxX64, &["ah"][..], x(0), 0),
+        (LinuxX64, &["ch", "dh"], x(1) | x(2), 0),
+        (LinuxX64, &["%bh", "#rsi"], x(3) | x(6), 0),
+        (
+            LinuxX64,
+            &["ymm5", "zmm7", "xmm9", "#xmm3"],
+            0,
+            x(5) | x(7) | x(9) | x(3),
+        ),
+        (
+            LinuxX64,
+            &[
+                "flags", "fpsr", "dirflag", "argp", "frame", "st", "st(1)", "st(7)", "mm2", "k1",
+            ],
+            0,
+            0,
+        ),
+        (LinuxX64, &["cr8", "dr6", "%cc", "%memory", "cc"], 0, 0),
+        (LinuxX64, &["1", "6", "036"], x(2) | x(5) | x(8), 0),
+        (LinuxX64, &["38"], x(10) | x(8), 0),
+        (LinuxX64, &["22", "44"], x(14), x(2) | x(0) | x(8)),
+        (LinuxX64, &["8", "15", "010"], 0, 0),
+        (
+            LinuxAarch64,
+            &["fp", "lr", "w3", "r5", "#x0", "%x1"],
+            x(29) | x(30) | x(3) | x(5) | x(0) | x(1),
+            0,
+        ),
+        (
+            LinuxAarch64,
+            &["z5", "q6", "d7", "#v3"],
+            0,
+            x(5) | x(6) | x(7) | x(3),
+        ),
+        (
+            LinuxAarch64,
+            &["p3", "pn3", "ffr", "za", "zt0", "fpmr"],
+            0,
+            0,
+        ),
+        (LinuxAarch64, &["5", "31"], x(5) | x(31), 0),
+        (LinuxAarch64, &["32"], x(0), x(0)),
+        (
+            LinuxAarch64,
+            &["63", "64", "94"],
+            x(31),
+            x(31) | x(0) | x(30),
+        ),
+        (LinuxAarch64, &["010"], x(10) | x(8), 0),
+    ] {
+        let list = q(names);
+        assert_eq!(
+            clobber_masks(&asm(&list), target),
+            Ok((gp, fp)),
+            "{target:?} {list}"
+        );
+    }
+    for (target, name) in [
+        (LinuxX64, "foo"),
+        (LinuxX64, "eh"),
+        (LinuxX64, "xmm32"),
+        (LinuxX64, "xmm05"),
+        (LinuxX64, "RAX"),
+        (LinuxX64, "st(0)"),
+        (LinuxX64, "cr15"),
+        (LinuxX64, "db0"),
+        (LinuxX64, "db7"),
+        (LinuxX64, "es"),
+        (LinuxX64, "gs"),
+        (LinuxX64, "%%rax"),
+        (LinuxX64, ""),
+        (LinuxX64, "#cc"),
+        (LinuxX64, "#memory"),
+        (LinuxX64, "r16"),
+        (LinuxX64, "bnd0"),
+        (LinuxX64, "tmm0"),
+        (LinuxX64, "9"),
+        (LinuxX64, "52"),
+        (LinuxX64, "08"),
+        (LinuxX64, "0x3"),
+        (LinuxAarch64, "x31"),
+        (LinuxAarch64, "w31"),
+        (LinuxAarch64, "r31"),
+        (LinuxAarch64, "x05"),
+        (LinuxAarch64, "z32"),
+        (LinuxAarch64, "p16"),
+        (LinuxAarch64, "rax"),
+        (LinuxAarch64, "xzr"),
+        (LinuxAarch64, "wzr"),
+        (LinuxAarch64, "%%x0"),
+        (LinuxAarch64, ""),
+        (LinuxAarch64, "vg"),
+        (LinuxAarch64, "ffrt"),
+        (LinuxAarch64, "sfp"),
+        (LinuxAarch64, "ap"),
+        (LinuxAarch64, "sme_state"),
+        (LinuxAarch64, "95"),
+        (LinuxAarch64, "08"),
+    ] {
+        let err = clobber_masks(&asm(&alloc::format!("\"{name}\"")), target)
+            .expect_err("an unknown clobber");
+        assert!(
+            err.contains(&alloc::format!(
+                "unknown register name `{name}` in the clobber list"
+            )),
+            "{target:?} {name}: {err}"
+        );
+    }
+}
+
+/// A statement that lists sp as clobbered, under any spelling naming it, has
+/// no sp save or restore around its template, and the frame follows a move the
+/// template makes without naming sp, in a full leaf too.
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_declared_stack_pointer_clobber_moves_sp_and_the_frame_follows() {
+    const MOV_RAX_TO_RSP: [u8; 3] = [0x48, 0x89, 0xC4];
+    const RSP_TO_FRAME: [u8; 3] = [0x48, 0x89, 0x65];
+    const FRAME_TO_RSP: [u8; 3] = [0x48, 0x8B, 0x65];
+    const LEAVE_RET: [u8; 2] = [0xC9, 0xC3];
+    const MOV_SP_X29: u32 = 0x9100_03BF;
+    let text = |template: &str, name: &str, target: crate::Target, optimize: bool, tail: &str| {
+        let src = alloc::format!(
+            "extern void use(void *);\n\
+             void f(void *p) {{ __asm__ volatile(\"{template}\" : : \"r\"(p) : \"{name}\"); {tail} }}\n"
+        );
+        let bytes = asm_emit(&src, target, optimize).expect("emit");
+        let o = crate::c5::linker::relocatable::parse_et_rel(&bytes, "a.o").expect("parse");
+        let s = o
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text");
+        s.bytes.clone()
+    };
+    for name in ["rsp", "%esp", "#sp", "7"] {
+        let x64 = text(
+            "mov %0, %%rsp",
+            name,
+            crate::Target::LinuxX64,
+            false,
+            "use(p);",
+        );
+        assert!(
+            x64.windows(3).any(|w| w == MOV_RAX_TO_RSP),
+            "{name}: the template"
+        );
+        assert!(
+            !x64.windows(3)
+                .any(|w| w == RSP_TO_FRAME || w == FRAME_TO_RSP),
+            "{name}: an rsp save or restore around the template: {x64:02x?}"
+        );
+        for (optimize, tail) in [(true, "use(p);"), (false, ""), (true, "")] {
+            let pushes = text("pushq $0x77", name, crate::Target::LinuxX64, optimize, tail);
+            assert!(
+                pushes.ends_with(&LEAVE_RET),
+                "{name} {tail:?}: the return: {pushes:02x?}"
+            );
+        }
+    }
+    let sets_sp = |w: u32| w & 0xFFFF_FC1F == 0x9100_001F;
+    let call_at = |w: &[u32]| {
+        w.iter()
+            .position(|&w| w & 0xFC00_0000 == 0x9400_0000)
+            .expect("bl")
+    };
+    // `31` is sp to both compilers, `63` and the octal `077` clang's sp.
+    for name in ["sp", "#wsp", "31", "63", "077"] {
+        let words = |template, optimize, tail| {
+            let a64 = text(template, name, crate::Target::LinuxAarch64, optimize, tail);
+            let words = a64
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| u32::from_le_bytes(*c));
+            words.collect::<alloc::vec::Vec<u32>>()
+        };
+        let moves = words("mov sp, %0", false, "use(p);");
+        assert_eq!(
+            moves[..call_at(&moves)]
+                .iter()
+                .filter(|&&w| sets_sp(w))
+                .count(),
+            1,
+            "{name}: only the template writes sp ahead of the call: {moves:08x?}"
+        );
+        let nop = words("nop", true, "use(p);");
+        assert!(
+            nop[call_at(&nop)..].contains(&MOV_SP_X29),
+            "{name}: the return: {nop:08x?}"
+        );
+        for optimize in [false, true] {
+            let leaf = words("sub sp, sp, #16", optimize, "");
+            assert!(
+                leaf.contains(&MOV_SP_X29),
+                "{name}: the leaf's return: {leaf:08x?}"
+            );
+        }
     }
 }

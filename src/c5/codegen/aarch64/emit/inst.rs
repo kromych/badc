@@ -12,7 +12,8 @@ pub(super) struct FnCtx<'a> {
     pub(super) target: Target,
     pub(super) imports: &'a super::ResolvedImports,
     pub(super) variadic_targets: &'a alloc::collections::BTreeSet<usize>,
-    pub(super) extern_tls_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
+    pub(super) extern_tls_names:
+        &'a alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef>,
     /// Alignment of the unit's thread-local image; variant I places the
     /// block past the TCB rounded up to it.
     pub(super) tls_align: usize,
@@ -96,6 +97,7 @@ pub(super) fn emit_inst(
             cx.data_fixups.push(DataFixup {
                 instr_offset,
                 data_offset: *offset as u64,
+                addend: 0,
                 part: AddrPart::Whole,
             });
             store_spilled_int(code, frame, dst, rd);
@@ -239,6 +241,23 @@ pub(super) fn emit_inst(
             c,
             neg_product,
         } => emit_mul_add(code, dst, *a, *b, *c, *neg_product, alloc, frame, scratch),
+        Inst::ShiftOp {
+            op,
+            lhs,
+            rhs,
+            shift,
+            amount,
+        } => emit_shift_op(
+            code, dst, *op, *lhs, *rhs, *shift, *amount, alloc, frame, scratch,
+        ),
+        Inst::BitField {
+            value,
+            lsb,
+            width,
+            signed,
+        } => emit_bit_field(
+            code, dst, *value, *lsb, *width, *signed, alloc, frame, scratch,
+        ),
         Inst::BinopI { op, lhs, rhs_imm } => {
             emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame, scratch)
         }
@@ -428,7 +447,7 @@ pub(super) fn emit_inst(
             macho_tlv_fixups,
             macho_tlv_descriptors,
             cx.elf_tpoff_fixups,
-            extern_tls_names.get(&v).map(|s| s.as_str()),
+            extern_tls_names.get(&v),
             tls_align,
         ),
         // The predecessor-exit moves placed the value; nothing at the phi

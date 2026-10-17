@@ -167,10 +167,9 @@ Disassembly of section .text:
                	subq	%rdx, %rax
                	movabsq	$0x431bde82d7b634db, %rsi # imm = 0x431BDE82D7B634DB
                	imulq	%rsi
+               	sarq	$0x12, %rdx
                	movq	%rdx, %rax
-               	sarq	$0x12, %rax
-               	movq	%rax, %rdx
-               	shrq	$0x3f, %rdx
+               	shrq	$0x3f, %rax
                	addq	%rdx, %rax
                	addq	%rcx, %rax
                	popq	%rbx

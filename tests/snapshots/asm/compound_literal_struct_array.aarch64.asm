@@ -423,8 +423,7 @@ Disassembly of section .text:
                	mov	x4, #0xa                // =10
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	lsl	x2, x0, #3
-               	add	x2, x3, x2
+               	add	x2, x3, x0, lsl #3
                	ldrsw	x5, [x2]
                	mul	x5, x5, x4
                	ldrsw	x2, [x2, #0x4]
@@ -449,8 +448,7 @@ Disassembly of section .text:
                	mov	x4, #0xa                // =10
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	lsl	x2, x0, #3
-               	add	x2, x3, x2
+               	add	x2, x3, x0, lsl #3
                	ldrsw	x5, [x2]
                	mul	x5, x5, x4
                	ldrsw	x2, [x2, #0x4]

@@ -25,8 +25,7 @@ Disassembly of section .text:
                	mov	x3, #0xa                // =10
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	lsl	x1, x0, #4
-               	add	x1, x4, x1
+               	add	x1, x4, x0, lsl #4
                	mul	x5, x0, x3
                	sxtw	x5, w5
                	str	x5, [x1]

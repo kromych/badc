@@ -38,8 +38,7 @@ Disassembly of section .text:
                	mov	x0, x22
                	bl	<addr>
                	add	x0, x26, x0
-               	lsl	x0, x0, #1
-               	add	x0, x0, x20
+               	add	x0, x20, x0, lsl #1
                	add	x0, x0, x21
                	add	x0, x0, x22
                	and	x1, x23, #0xff

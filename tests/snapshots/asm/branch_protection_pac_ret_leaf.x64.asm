@@ -26,9 +26,8 @@ Disassembly of section .text:
                	int3
 
 <leaf>:
-               	movq	%rdi, %rax
-               	shlq	%rax
-               	addq	%rsi, %rax
+               	shlq	%rdi
+               	leaq	(%rdi,%rsi), %rax
                	retq
 
 <main>:

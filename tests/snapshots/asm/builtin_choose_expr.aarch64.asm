@@ -37,8 +37,7 @@ Disassembly of section .text:
                	strb	wzr, [x0, #0x38]
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x80
-               	lsl	x2, x0, #3
-               	add	x1, x1, x2
+               	add	x1, x1, x0, lsl #3
                	mov	x2, #-0x1               // =-1
                	str	x2, [x1]
                	add	x0, x0, #0x1

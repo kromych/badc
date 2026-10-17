@@ -727,8 +727,8 @@ impl<'a> IfExprParser<'a> {
     /// first character most significant, the implementation-defined
     /// value of 6.4.4.4p10 that gcc and clang also produce. Both
     /// mirror the lexer, so a constant means the same inside a `#if`
-    /// and outside one.
-    fn parse_char_constant(&mut self, wide: bool) -> Result<IfValue, C5Error> {
+    /// and outside one, and evaluates in uintmax_t when its type is unsigned.
+    fn parse_char_constant(&mut self, wide: Option<(usize, bool)>) -> Result<IfValue, C5Error> {
         let bytes = self.src.as_bytes();
         let mut packed: i64 = 0;
         let mut last: i64 = 0;
@@ -736,25 +736,18 @@ impl<'a> IfExprParser<'a> {
         while let Some(b) = self.peek_byte() {
             if b == b'\'' {
                 self.pos += 1;
-                if wide {
-                    // `L'...'` has type `wchar_t` (C11 6.4.4.4p2),
-                    // whose signedness the target ABI fixes.
-                    return Ok(IfValue::with_sign(last, !self.pp.wchar.signed));
-                }
-                // A single-character constant keeps its char's own
-                // value, sign-extended on signed-plain-char targets.
-                let v = if count == 1 {
-                    if self.pp.char_signed && (0..=0xFF).contains(&last) {
-                        last as u8 as i8 as i64
-                    } else {
-                        last
-                    }
-                } else {
-                    packed
+                let (v, bits, signed) = match wide {
+                    Some((bits, signed)) => (last, bits, signed),
+                    None if count == 1 => (last, 8, self.pp.char_signed),
+                    None => (packed, 32, true),
                 };
-                // The constant has type `int`, so it narrows to that
-                // width before the 6.10.1p4 intmax_t evaluation.
-                return Ok(IfValue::signed(v as i32 as i64));
+                let shift = 64 - bits as u32;
+                let v = if signed {
+                    (v << shift) >> shift
+                } else {
+                    ((v as u64) << shift >> shift) as i64
+                };
+                return Ok(IfValue::with_sign(v, !signed));
             }
             if b == b'\\' && self.pos + 1 < bytes.len() {
                 self.pos += 2;
@@ -771,7 +764,7 @@ impl<'a> IfExprParser<'a> {
                             ),
                         ));
                     };
-                    if wide {
+                    if wide.is_some() {
                         last = cp as i64;
                         continue;
                     }
@@ -830,7 +823,7 @@ impl<'a> IfExprParser<'a> {
                     }
                     other => other as i64,
                 };
-                if wide {
+                if wide.is_some() {
                     last = ch;
                 } else {
                     count += 1;
@@ -839,7 +832,7 @@ impl<'a> IfExprParser<'a> {
                 }
                 continue;
             }
-            if wide {
+            if wide.is_some() {
                 // A prefixed constant's element is a code point, so
                 // the source's UTF-8 is decoded rather than taken byte
                 // by byte.
@@ -879,15 +872,22 @@ impl<'a> IfExprParser<'a> {
         // C99 6.4.4.4 / 6.4.5: a character constant or string literal may
         // carry an encoding prefix. It selects how a character constant
         // reads; a string operand compares by text either way.
-        let prefix = literal_prefix_len(self.src.as_bytes(), self.pos);
-        if let Some(plen) = prefix {
+        let bytes = self.src.as_bytes();
+        let prefix = literal_prefix_len(bytes, self.pos).map(|plen| {
             self.pos += plen;
-        }
+            bytes[self.pos - plen]
+        });
         if self.eat_byte(b'"') {
             return self.parse_string_literal();
         }
         if self.eat_byte(b'\'') {
-            return self.parse_char_constant(prefix.is_some());
+            let wchar = self.pp.wchar;
+            let wide = prefix.map(|p| match p {
+                b'L' => (wchar.bytes * 8, wchar.signed),
+                b'u' => (16, false),
+                _ => (32, false),
+            });
+            return self.parse_char_constant(wide);
         }
         // Integer literal? Decimal, hex (0x...), or octal (0...).
         if let Some(b) = self.peek_byte() {

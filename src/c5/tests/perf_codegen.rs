@@ -55,6 +55,33 @@ fn object_with(
     .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"))
 }
 
+/// The `-O` object of `src` under the `-ffixed-` reservations `names`.
+fn object_fixed(src: &str, target: Target, names: &[&str]) -> Vec<u8> {
+    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
+    let mut fixed = crate::FixedRegs::NONE;
+    for name in names {
+        fixed.insert(crate::fixed_register(target, name).unwrap_or_else(|e| panic!("{e}")));
+    }
+    let program = Compiler::with_options(
+        src.to_string(),
+        target,
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true),
+    )
+    .compile()
+    .unwrap_or_else(|e| panic!("compile ({target:?}): {e}"));
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        fixed_regs: fixed,
+        ..NativeOptions::new().with_optimize()
+    };
+    crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(usize::MAX, usize::MAX, || {
+        emit_native_with_options(&program, target, opts)
+    })
+    .unwrap_or_else(|e| panic!("emit ({target:?}): {e}"))
+}
+
 pub(super) fn a64_at(src: &str, name: &str, optimize: bool) -> Vec<u32> {
     function_words(&object_at(src, Target::LinuxAarch64, optimize), name)
 }
@@ -380,6 +407,11 @@ pub(super) fn a64_branch(w: u32, i: usize) -> Option<(i64, bool)> {
 /// `sxtw xd, wn`.
 fn a64_is_sxtw(w: u32) -> bool {
     w & 0xFFFF_FC00 == 0x9340_7C00
+}
+
+/// `cset`: CSINC with both sources the zero register.
+fn a64_is_cset(w: u32) -> bool {
+    w & 0x7FFF_0FE0 == 0x1A9F_07E0
 }
 
 /// `sxtw`, or an access that sign-extends its index word.
@@ -1649,27 +1681,20 @@ fn signed_halving_reads_the_sign_bit_once() {
     m.finish();
 }
 
-/// The base case of `fib` reaches its `ret` without building the frame: the
-/// test comes ahead of the frame and the return it branches to touches no
+/// The words of the return a function's first conditional branch takes,
+/// when that branch comes ahead of the frame and the return touches no
 /// memory.
-#[test]
-fn early_return_precedes_the_frame() {
-    let mut m = Misses::default();
-    let ws = a64(FIB, "fib");
+fn a64_early_return(ws: &[u32]) -> Option<&[u32]> {
     let guard = ws
         .iter()
         .enumerate()
-        .position(|(i, &w)| matches!(a64_branch(w, i), Some((_, false))));
-    let bare = guard.and_then(|g| {
-        let (t, _) = a64_branch(ws[g], g)?;
-        let t = usize::try_from(t).ok()?;
-        let r = t + ws.get(t..)?.iter().position(|&w| w == 0xD65F_03C0)?;
-        // Loads and stores have op0 bits 27 and 25 as 1 and 0.
-        Some(!ws[t..r].iter().any(|&w| (w >> 25) & 0b101 == 0b100))
-    });
-    m.expect(bare == Some(true), || {
-        format!("aarch64: the test's target is no bare return: {ws:08x?}")
-    });
+        .position(|(i, &w)| matches!(a64_branch(w, i), Some((_, false))))?;
+    let t = usize::try_from(a64_branch(ws[guard], guard)?.0).ok()?;
+    let r = t + ws.get(t..)?.iter().position(|&w| w == 0xD65F_03C0)?;
+    // Loads and stores have op0 bits 27 and 25 as 1 and 0.
+    if ws[t..r].iter().any(|&w| (w >> 25) & 0b101 == 0b100) {
+        return None;
+    }
     // A pre-indexed store or pair through sp, or `sub sp, sp, #imm`.
     let moves_sp = |w: u32| {
         let rn_sp = (w >> 5) & 31 == 31;
@@ -1678,8 +1703,18 @@ fn early_return_precedes_the_frame() {
             || w & 0xFF80_03FF == 0xD100_03FF
     };
     let frame = ws.iter().position(|&w| moves_sp(w));
-    m.expect(guard.is_some_and(|g| frame.is_none_or(|f| g < f)), || {
-        format!("aarch64: the frame precedes the guard: {ws:08x?}")
+    frame.is_none_or(|f| guard < f).then(|| &ws[t..=r])
+}
+
+/// The base case of `fib` reaches its `ret` without building the frame: the
+/// test comes ahead of the frame and the return it branches to touches no
+/// memory.
+#[test]
+fn early_return_precedes_the_frame() {
+    let mut m = Misses::default();
+    let ws = a64(FIB, "fib");
+    m.expect(a64_early_return(&ws).is_some(), || {
+        format!("aarch64: no bare return ahead of the frame: {ws:08x?}")
     });
     let insns = x64(FIB, "fib");
     let guard = insns.iter().position(X64Insn::is_jcc);
@@ -2609,6 +2644,127 @@ fn x64_scalar_fp_arith_picks_the_vex_three_operand_row() {
         !add.vex && add.len == 4,
         "not the two-operand row: {acc:x?}"
     );
+}
+
+/// A division or remainder whose operands are 32-bit values issues the
+/// 32-bit form (`idiv` / `div` on the 32-bit registers, `cdq` seeding
+/// edx), which is markedly faster on the x86-64-v3 baseline; a 64-bit
+/// operand keeps `cqo` and the REX.W form.
+#[test]
+fn x64_division_of_32_bit_operands_takes_the_32_bit_form() {
+    const SRC: &str = "int q(int a, int b) { return a / b; }\n\
+        unsigned r(unsigned a, unsigned b) { return a % b; }\n\
+        long wq(long a, long b) { return a / b; }\n";
+    let q = x64(SRC, "q");
+    let cdq = q.iter().find(|i| i.op == 0x99).expect("cdq");
+    assert_eq!(cdq.rex & 8, 0, "cdq takes no REX.W: {q:x?}");
+    let idiv = q.iter().find(|i| i.op == 0xF7).expect("idiv");
+    assert_eq!(idiv.rex & 8, 0, "the 32-bit idiv takes no REX.W: {q:x?}");
+    let r = x64(SRC, "r");
+    let div = r.iter().find(|i| i.op == 0xF7).expect("div");
+    assert_eq!(div.rex & 8, 0, "the 32-bit div takes no REX.W: {r:x?}");
+    let wq = x64(SRC, "wq");
+    let cqo = wq.iter().find(|i| i.op == 0x99).expect("cqo");
+    assert_eq!(cqo.rex & 8, 8, "cqo keeps REX.W: {wq:x?}");
+    let widiv = wq.iter().find(|i| i.op == 0xF7).expect("idiv");
+    assert_eq!(widiv.rex & 8, 8, "the 64-bit idiv keeps REX.W: {wq:x?}");
+}
+
+/// The divides of a function, true for the 64-bit form: x86-64's `div` /
+/// `idiv` (F7 /6, /7) with REX.W, aarch64's `udiv` / `sdiv` with sf set.
+fn x64_divides(insns: &[X64Insn]) -> Vec<bool> {
+    let divide = |i: &&X64Insn| i.op == 0xF7 && i.modrm.is_some_and(|m| (m >> 3) & 6 == 6);
+    insns.iter().filter(divide).map(X64Insn::rex_w).collect()
+}
+
+fn a64_divides(ws: &[u32]) -> Vec<bool> {
+    let divide = |w: &&u32| *w & 0x7FE0_F800 == 0x1AC0_0800;
+    ws.iter().filter(divide).map(|w| w >> 31 == 1).collect()
+}
+
+/// An `int` and an `unsigned` division and remainder pair each issue one
+/// 32-bit divide on both targets (C99 6.5.5p6).
+#[test]
+fn a_divmod_pair_shares_one_32_bit_divide() {
+    const SRC: &str = "int si(int a, int b, int q, int r) {\n\
+        if (a / b != q) return 1;\n\
+        if (a % b != r) return 2;\n\
+        if (a / b + a % b != q + r) return 3;\n\
+        if (a / b * b + a % b != a) return 4;\n\
+        return 0;\n}\n\
+        int ui(unsigned a, unsigned b, unsigned q, unsigned r) {\n\
+        if (a / b != q) return 1;\n\
+        if (a % b != r) return 2;\n\
+        if (a / b + a % b != q + r) return 3;\n\
+        if (a / b * b + a % b != a) return 4;\n\
+        return 0;\n}\n";
+    for name in ["si", "ui"] {
+        let insns = x64(SRC, name);
+        assert_eq!(x64_divides(&insns), [false], "x86-64 {name}: {insns:x?}");
+        let ws = a64(SRC, name);
+        assert_eq!(a64_divides(&ws), [false], "aarch64 {name}: {ws:08x?}");
+    }
+}
+
+/// A `long long` division of `int` values keeps the 64-bit `idiv`, its
+/// INT_MIN / -1 being defined (C99 6.5.5p6); an `int` one under `-fwrapv`
+/// does not.
+#[test]
+fn a_wider_division_of_int_values_keeps_the_64_bit_divide() {
+    const SRC: &str = "int q(int a, int b) { return (int)((long long)a / (long long)b); }\n\
+        int r(int a, int b) { return (int)((long long)a % (long long)b); }\n\
+        int w(int a, int b) { return a / b; }\n";
+    for name in ["q", "r"] {
+        let insns = x64(SRC, name);
+        assert_eq!(x64_divides(&insns), [true], "{name}: {insns:x?}");
+    }
+    let insns = x64_wrapv(SRC, "w");
+    assert_eq!(x64_divides(&insns), [false], "{insns:x?}");
+    let ws = a64_wrapv(SRC, "w");
+    assert_eq!(a64_divides(&ws), [false], "{ws:08x?}");
+}
+
+/// Unoptimized, an `int` quotient and remainder take no renormalization:
+/// the 64-bit divide of `int` operands leaves them in range.
+#[test]
+fn unoptimized_int_division_takes_no_renormalization() {
+    const SRC: &str = "int h(int x, int y) { return x / y + x % y; }\n";
+    let dump = ssa_dump(SRC, "h", false);
+    let divides: Vec<&str> = dump
+        .lines()
+        .filter(|l| l.contains("op=div,") || l.contains("op=mod,"))
+        .filter_map(|l| l.split_whitespace().next())
+        .collect();
+    assert_eq!(divides.len(), 2, "{dump}");
+    for v in divides {
+        let read = format!("Extend {{ value={v},");
+        assert!(!dump.contains(&read), "{v} renormalized: {dump}");
+    }
+}
+
+/// An x86-64 two-address result takes the register of an operand that dies
+/// at it, so no copy stages the operand: the timestamp halves pack with
+/// `shl $32, %rdx; or %rdx, %rax`, and a chain whose operands die keeps one
+/// copy, for the value read twice.
+#[test]
+fn x64_two_address_result_takes_a_dying_operand_register() {
+    const SRC: &str = "unsigned long tick(void) {\n\
+        unsigned long lo, hi;\n\
+        __asm__ volatile(\"rdtsc\" : \"=a\"(lo), \"=d\"(hi));\n\
+        return lo | (hi << 32);\n}\n\
+        unsigned long mix(unsigned long a, unsigned long b, unsigned long c) {\n\
+        unsigned long t = (a ^ b) * c;\n\
+        return (t >> 7) ^ (t & 0xff);\n}\n";
+    let copies = |insns: &[X64Insn]| {
+        insns
+            .iter()
+            .filter(|i| matches!(i.op, 0x89 | 0x8B) && i.reg_form())
+            .count()
+    };
+    let tick = x64(SRC, "tick");
+    assert_eq!(copies(&tick), 0, "{tick:x?}");
+    let mix = x64(SRC, "mix");
+    assert_eq!(copies(&mix), 1, "{mix:x?}");
 }
 
 /// A register output of an inline asm statement into a scalar local is
@@ -4546,6 +4702,303 @@ fn a64_binary128_borrow_saves_live_values() {
     };
     let live: Vec<u32> = (9..=14).filter(|&x| written(x) && read(x)).collect();
     assert_eq!(live, (9..=14).collect::<Vec<u32>>(), "{ws:08x?}");
+}
+
+/// A constant shift whose one reader adds, subtracts or combines it is that
+/// reader's shifted-register operand: the pieces of a bit-field straddling
+/// a packed unit combine in one `orr .., lsl #16`, and `a - (b >> 3)`,
+/// `a ^ (b >> 7)` and `a + b * 8` take one instruction each. A shift read
+/// twice stays a shift.
+#[test]
+fn a64_a_single_use_shift_is_its_readers_operand() {
+    const SRC: &str = "#pragma pack(push, 1)\n\
+        struct T3 { int f:22; };\n\
+        #pragma pack(pop)\n\
+        int read_t3(struct T3 *p) { return p->f; }\n\
+        long long sub_shr(long long a, long long b) { return a - (b >> 3); }\n\
+        unsigned long long xor_lsr(unsigned long long a, unsigned long long b) {\n\
+            return a ^ (b >> 7);\n\
+        }\n\
+        long long add_scaled(long long a, long long b) { return a + b * 8; }\n\
+        unsigned long long two_uses(unsigned long long a, unsigned long long b) {\n\
+            unsigned long long s = b << 4;\n\
+            return (a | s) + s;\n\
+        }\n";
+    // The 64-bit shifted-register form of `base`: shift type (LSL 0, LSR 1,
+    // ASR 2) at [23:22], amount at [15:10].
+    let shifted = |w: u32, base: u32, kind: u32, amount: u32| {
+        w & 0xFF20_0000 == base && (w >> 22) & 3 == kind && (w >> 10) & 0x3f == amount
+    };
+    let mut m = Misses::default();
+    let ws = a64(SRC, "read_t3");
+    m.expect(ws.iter().any(|&w| shifted(w, 0xAA00_0000, 0, 16)), || {
+        format!("read_t3: no orr .., lsl #16: {ws:08x?}")
+    });
+    for (name, base, kind, amount) in [
+        ("sub_shr", 0xCB00_0000, 2, 3),
+        ("xor_lsr", 0xCA00_0000, 1, 7),
+        ("add_scaled", 0x8B00_0000, 0, 3),
+    ] {
+        let ws = a64(SRC, name);
+        m.expect(ws.len() == 2 && shifted(ws[0], base, kind, amount), || {
+            format!("{name}: not one shifted-register instruction: {ws:08x?}")
+        });
+    }
+    let ws = a64(SRC, "two_uses");
+    let lsl4 = |w: u32| w & 0xFFC0_0000 == 0xD340_0000 && (w >> 16) & 0x3f == 60;
+    m.expect(ws.iter().any(|&w| lsl4(w)), || {
+        format!("two_uses: the shared shift is not computed once: {ws:08x?}")
+    });
+    m.finish();
+}
+
+/// A shift whose one reader combines it with an immediate the emit builds
+/// into a register is that reader's shifted operand over the built
+/// immediate; an immediate the instruction encodes keeps the shift.
+#[test]
+fn a64_a_shift_beside_a_built_immediate_is_its_readers_operand() {
+    const SRC: &str = "unsigned long orimm(unsigned long x) { return (x << 32) | 0x181c; }\n\
+        unsigned long addimm(unsigned long x) { return (x << 3) + 0x123456789; }\n\
+        unsigned long keep(unsigned long x) { return (x << 32) | 0xff; }\n";
+    // The 64-bit shifted-register form of `base`, LSL by `amount`.
+    let lsl = |w: u32, base: u32, amount: u32| {
+        w & 0xFFE0_0000 == base && (w >> 22) & 3 == 0 && (w >> 10) & 0x3f == amount
+    };
+    let mut m = Misses::default();
+    for (name, base, amount) in [("orimm", 0xAA00_0000, 32), ("addimm", 0x8B00_0000, 3)] {
+        let ws = a64(SRC, name);
+        let at = ws.len().saturating_sub(2);
+        m.expect(lsl(ws[at], base, amount) && ws[..at].iter().all(|&w| w & 0x1F80_0000 == 0x1280_0000), || {
+            format!("{name}: not the built immediate and one shifted-register instruction: {ws:08x?}")
+        });
+    }
+    let ws = a64(SRC, "keep");
+    let lsl32 = |w: u32| w & 0xFFC0_0000 == 0xD340_0000 && (w >> 16) & 0x3f == 32;
+    m.expect(ws.iter().any(|&w| lsl32(w)), || {
+        format!("keep: the encodable immediate lost its shift: {ws:08x?}")
+    });
+    m.finish();
+}
+
+/// A fused shift keeps what the shift and its reader allowed apart: the
+/// return ahead of the frame when the entry computes one (`g`), returns
+/// one (`h`) or tests one (`k`); the compare's flags for a branch across
+/// one (`f`); and the `sxtw` of a sign-narrowing shift pair around one
+/// (`sx`). The test ahead of the frame shifts in place on either side of
+/// a commutative op, also for a shift read twice that stays unfused (`q`).
+#[test]
+fn a64_a_fused_shift_keeps_the_early_return_the_flags_and_sxtw() {
+    const SRC: &str = "extern long foo(long);\n\
+        long g(long *p, long a, long b) {\n\
+            long t = a + (b << 3);\n\
+            if (p == 0) return 0;\n\
+            long r = 0;\n\
+            for (int i = 0; i < 10; i++) r += foo(p[i] + t);\n\
+            return r;\n\
+        }\n\
+        long h(long *p, long a, long b) {\n\
+            if (p == 0) return a + (b << 3);\n\
+            long r = 0;\n\
+            for (int i = 0; i < 10; i++) r += foo(p[i]);\n\
+            return r;\n\
+        }\n\
+        long k(long a, long b, long *p) {\n\
+            long t = a ^ (b >> 3);\n\
+            if (t == 0) return 0;\n\
+            return foo(t) + foo(p[0]);\n\
+        }\n\
+        long f(long a, long b, long x, long y, long *p) {\n\
+            int c = a < b;\n\
+            long t = x + (y << 3);\n\
+            if (c) return t + p[1];\n\
+            return p[0] - t;\n\
+        }\n\
+        long g1, g2;\n\
+        void sx(long x, long a, long b) {\n\
+            long t = (long)((unsigned long)x << 32);\n\
+            long u = a + (b << 3);\n\
+            long v = t >> 32;\n\
+            g1 = v;\n\
+            g2 = u;\n\
+        }\n\
+        long q(long a, long b, long *p) {\n\
+            long s = b << 3;\n\
+            if (s + a == 0) return s;\n\
+            return foo(s) + foo(p[0]);\n\
+        }\n";
+    // ADD or EOR (shifted register), 64-bit, as `(base, shift type, amount)`.
+    let shifted = |w: u32, base: u32, kind: u32, amount: u32| {
+        w & 0xFF20_0000 == base && (w >> 22) & 3 == kind && (w >> 10) & 0x3f == amount
+    };
+    let mut m = Misses::default();
+    for name in ["g", "h", "k", "q"] {
+        let ws = a64(SRC, name);
+        m.expect(a64_early_return(&ws).is_some(), || {
+            format!("{name}: no bare return ahead of the frame: {ws:08x?}")
+        });
+    }
+    let ws = a64(SRC, "h");
+    let ret = a64_early_return(&ws).unwrap_or_default();
+    m.expect(ret.iter().any(|&w| shifted(w, 0x8B00_0000, 0, 3)), || {
+        format!("h: the early return is not one `add .., lsl #3`: {ws:08x?}")
+    });
+    for (name, base, kind) in [("k", 0xCA00_0000, 2), ("q", 0x8B00_0000, 0)] {
+        let ws = a64(SRC, name);
+        m.expect(shifted(ws[0], base, kind, 3), || {
+            format!("{name}: the entry test does not shift in place: {ws:08x?}")
+        });
+    }
+    let ws = a64(SRC, "f");
+    m.expect(!ws.iter().any(|&w| a64_is_cset(w)), || {
+        format!("f: the compare's flags are materialised: {ws:08x?}")
+    });
+    let ws = a64(SRC, "sx");
+    m.expect(ws.iter().any(|&w| a64_is_sxtw(w)), || {
+        format!("sx: the shift pair is no sxtw: {ws:08x?}")
+    });
+    m.finish();
+}
+
+/// The return ahead of the frame computes in temporaries outside the
+/// `-ffixed-` set: with x9 or rax reserved the entry test takes the next
+/// temporary and still precedes the frame, and with all of x9..x15
+/// reserved the AArch64 function builds its frame first.
+#[test]
+fn early_return_temporaries_skip_reserved_registers() {
+    const SRC: &str = "extern long foo(long);\n\
+        long k(long a, long b, long *p) {\n\
+            long t = a ^ (b >> 3);\n\
+            if (t == 0) return 0;\n\
+            return foo(t) + foo(p[0]);\n\
+        }\n";
+    let mut m = Misses::default();
+    let a64_k =
+        |names: &[&str]| function_words(&object_fixed(SRC, Target::LinuxAarch64, names), "k");
+    let ws = a64_k(&[]);
+    m.expect(a64_early_return(&ws).is_some() && ws[0] & 31 == 9, || {
+        format!("aarch64: the test is not in x9 ahead of the frame: {ws:08x?}")
+    });
+    let ws = a64_k(&["x9"]);
+    m.expect(a64_early_return(&ws).is_some() && ws[0] & 31 == 10, || {
+        format!("aarch64 -ffixed-x9: the test is not in x10 ahead of the frame: {ws:08x?}")
+    });
+    let ws = a64_k(&["x9", "x10", "x11", "x12", "x13", "x14", "x15"]);
+    m.expect(a64_early_return(&ws).is_none(), || {
+        format!("aarch64 -ffixed-x9..x15: a test ahead of the frame: {ws:08x?}")
+    });
+    // The early test: the instructions ahead of the first `jcc`.
+    let x64_test = |names: &[&str]| {
+        let insns = x64_insns(&function_bytes(
+            &object_fixed(SRC, Target::LinuxX64, names),
+            "k",
+        ));
+        let g = insns.iter().position(X64Insn::is_jcc).unwrap_or(0);
+        insns[..g].to_vec()
+    };
+    let names_rax = |i: &X64Insn| i.reg_form() && (i.regs().0 == 0 || i.regs().1 == 0);
+    let plain = x64_test(&[]);
+    m.expect(plain.iter().any(names_rax), || {
+        format!("x86-64: the test does not use rax: {plain:x?}")
+    });
+    let fixed = x64_test(&["rax"]);
+    m.expect(!fixed.is_empty() && !fixed.iter().any(names_rax), || {
+        format!("x86-64 -ffixed-rax: the test uses rax: {fixed:x?}")
+    });
+    m.finish();
+}
+
+/// A bit-field read is one SBFX / UBFX after its load: signed at bit 0 and
+/// above it, unsigned above bit 0, in the first and the second word. So
+/// are the shift pairs and the masked shift that extract a field from a
+/// register.
+#[test]
+fn a64_a_bit_field_extract_is_one_instruction() {
+    const SRC: &str = "struct S { int a : 22; unsigned b : 7; int c : 3;\n\
+            long long d : 40; unsigned long long e : 20; };\n\
+        long get_a(struct S *s) { return s->a; }\n\
+        long get_b(struct S *s) { return s->b; }\n\
+        long get_c(struct S *s) { return s->c; }\n\
+        long long get_d(struct S *s) { return s->d; }\n\
+        unsigned long long get_e(struct S *s) { return s->e; }\n\
+        long field(long x) { return (x << 20) >> 40; }\n\
+        unsigned long ufield(unsigned long x) { return (x << 20) >> 40; }\n\
+        unsigned long masked(unsigned long x) { return (x >> 7) & 0x3ff; }\n";
+    // 64-bit SBFM / UBFM with immr = lsb and imms = lsb + width - 1.
+    let bfx = |w: u32, signed: bool, lsb: u32, width: u32| {
+        let base = if signed { 0x9340_0000 } else { 0xD340_0000 };
+        w & 0xFFC0_0000 == base && (w >> 16) & 63 == lsb && (w >> 10) & 63 == lsb + width - 1
+    };
+    let mut m = Misses::default();
+    for (name, len, signed, lsb, width) in [
+        ("get_a", 3, true, 0, 22),
+        ("get_b", 3, false, 22, 7),
+        ("get_c", 3, true, 29, 3),
+        ("get_d", 3, true, 0, 40),
+        ("get_e", 3, false, 40, 20),
+        ("field", 2, true, 20, 24),
+        ("ufield", 2, false, 20, 24),
+        ("masked", 2, false, 7, 10),
+    ] {
+        let ws = a64(SRC, name);
+        m.expect(
+            ws.len() == len && bfx(ws[len - 2], signed, lsb, width),
+            || format!("{name}: not one {signed} extract #{lsb}, #{width}: {ws:08x?}"),
+        );
+    }
+    m.finish();
+}
+
+/// A multiply-add contracted into `madd` keeps what the multiply and the
+/// add allowed apart: the return ahead of the frame when the entry
+/// computes one (`gm`), the compare's flags for a branch across one
+/// (`fm`), and the `sxtw` of a sign-narrowing shift pair around one
+/// (`sxm`).
+#[test]
+fn a64_a_multiply_add_keeps_the_early_return_the_flags_and_sxtw() {
+    const SRC: &str = "extern long foo(long);\n\
+        long gm(long *p, long a, long b, long c) {\n\
+            long t = a * b + c;\n\
+            if (p == 0) return 0;\n\
+            long r = 0;\n\
+            for (int i = 0; i < 10; i++) r += foo(p[i] + t);\n\
+            return r;\n\
+        }\n\
+        long fm(long a, long b, long x, long y, long *p) {\n\
+            int c = a < b;\n\
+            long t = x * y + a;\n\
+            if (c) return t + p[1];\n\
+            return p[0] - t;\n\
+        }\n\
+        long g1, g2;\n\
+        void sxm(long x, long a, long b, long c) {\n\
+            long t = (long)((unsigned long)x << 32);\n\
+            long u = a * b + c;\n\
+            long v = t >> 32;\n\
+            g1 = v;\n\
+            g2 = u;\n\
+        }\n";
+    // 64-bit MADD.
+    let madd = |w: u32| w & 0xFFE0_8000 == 0x9B00_0000;
+    let mut m = Misses::default();
+    for name in ["gm", "fm", "sxm"] {
+        let ws = a64(SRC, name);
+        m.expect(ws.iter().any(|&w| madd(w)), || {
+            format!("{name}: no madd: {ws:08x?}")
+        });
+    }
+    let ws = a64(SRC, "gm");
+    m.expect(a64_early_return(&ws).is_some(), || {
+        format!("gm: no bare return ahead of the frame: {ws:08x?}")
+    });
+    let ws = a64(SRC, "fm");
+    m.expect(!ws.iter().any(|&w| a64_is_cset(w)), || {
+        format!("fm: the compare's flags are materialised: {ws:08x?}")
+    });
+    let ws = a64(SRC, "sxm");
+    m.expect(ws.iter().any(|&w| a64_is_sxtw(w)), || {
+        format!("sxm: the shift pair is no sxtw: {ws:08x?}")
+    });
+    m.finish();
 }
 
 /// A field of a local struct whose address escapes is one `ldr` / `str`

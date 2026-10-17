@@ -252,6 +252,88 @@ fn link_units_and_run(dir: &Path, opt: &str, sources: &[&Path]) -> Option<i32> {
     Command::new(&exe).output().expect("run prog").status.code()
 }
 
+/// Inline asm naming the C library's `optind`: `T` 1 takes its address, 2
+/// loads it in place, 3 stores 7 to it in place. Exits 0 when each access
+/// reaches the library's object.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+const ASM_LIBRARY_OBJECT: &str = r#"#include <unistd.h>
+int main(void) {
+#if defined(__x86_64__)
+#if T == 1
+    int *p;
+    __asm__("lea optind(%%rip), %0" : "=r"(p));
+    return p != &optind || *p != optind;
+#elif T == 2
+    int v;
+    __asm__("movl optind(%%rip), %0" : "=r"(v));
+    return v != optind;
+#elif T == 3
+    __asm__ volatile("movl $7, optind(%%rip)" ::: "memory");
+    return optind != 7;
+#else
+    char *p;
+    __asm__("lea optind+4(%%rip), %0" : "=r"(p));
+    return p != (char *)&optind + 4;
+#endif
+#else
+#if T == 1
+    int *p;
+    __asm__("adrp %0, optind\n\tadd %0, %0, :lo12:optind" : "=r"(p));
+    return p != &optind || *p != optind;
+#elif T == 2
+    long v;
+    __asm__("adrp %0, optind\n\tldr %w0, [%0, :lo12:optind]" : "=r"(v));
+    return (int)v != optind;
+#elif T == 3
+    long t;
+    __asm__ volatile("mov w1, #7\n\tadrp %0, optind\n\tstr w1, [%0, :lo12:optind]"
+                     : "=&r"(t) :: "x1", "memory");
+    return optind != 7;
+#else
+    char *p;
+    __asm__("adrp %0, optind+4\n\tadd %0, %0, :lo12:optind+4" : "=r"(p));
+    return p != (char *)&optind + 4;
+#endif
+#endif
+}
+"#;
+
+// Inline asm loading or storing a C library object in place reaches the
+// object's own bytes in an ELF executable, which holds a copy bound to the
+// library's by a copy relocation, as GNU ld gives it. Mach-O has no copy
+// relocation, so the link refuses the use. Taking the address loads the
+// object's GOT slot on both.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn an_asm_use_of_a_library_object_in_place_reaches_its_bytes() {
+    let dir = tempdir("asm-library-object");
+    let src = write_source(&dir, "optind.c", ASM_LIBRARY_OBJECT);
+    for form in 1..=4 {
+        for opt in ["-O0", "-O"] {
+            let exe = dir.join(format!("optind-{form}{opt}"));
+            let out = Command::new(badc())
+                .arg(opt)
+                .arg(format!("-DT={form}"))
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src)
+                .output()
+                .expect("run badc");
+            let err = String::from_utf8_lossy(&out.stderr);
+            if cfg!(target_os = "macos") && form > 1 {
+                assert!(
+                    !out.status.success() && err.contains("uses it in place or at an offset"),
+                    "form {form} {opt}: {err}"
+                );
+                continue;
+            }
+            assert!(out.status.success(), "form {form} {opt}: {err}");
+            let status = Command::new(&exe).status().expect("run the image");
+            assert_eq!(status.code(), Some(0), "form {form} {opt}");
+        }
+    }
+}
+
 #[test]
 fn a_weak_alias_spelling_a_renamed_static_reaches_it_from_another_unit() {
     // `alias` names its target by assembler name, so the alias of a static
@@ -308,6 +390,236 @@ fn an_asm_template_binds_its_units_renamed_static_over_an_external_namesake() {
     );
     for opt in ["-O0", "-O"] {
         assert_eq!(link_units_and_run(&dir, opt, &[&a, &b]), Some(7), "{opt}");
+    }
+}
+
+#[test]
+fn a_function_address_offset_outside_the_text_links() {
+    // The link places a slot at its function's address plus the offset,
+    // wherever the sum lands.
+    let dir = tempdir("code-addend-outside-text");
+    let a = write_source(
+        &dir,
+        "a.c",
+        "#include <stdint.h>\n\
+         static long f(void) { return 1; }\n\
+         static char *neg = (char *)f - 100000;\n\
+         static char *neg1 = (char *)f - 1;\n\
+         static char *mid = (char *)f + 0x10000000;\n\
+         static char *far = (char *)f + 0x100000000000;\n\
+         static _Thread_local char *tneg = (char *)f - 100000;\n\
+         int main(void) {\n\
+             uintptr_t a = (uintptr_t)f;\n\
+             return !(a - (uintptr_t)neg == 100000 && a - (uintptr_t)neg1 == 1 &&\n\
+                 (uintptr_t)mid - a == 0x10000000 && (uintptr_t)far - a == 0x100000000000 &&\n\
+                 a - (uintptr_t)tneg == 100000 && f() == 1);\n\
+         }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        assert_eq!(link_units_and_run(&dir, opt, &[&a]), Some(0), "{opt}");
+    }
+}
+
+#[test]
+fn a_thread_local_slot_names_another_units_function_and_a_library_function() {
+    // C11 6.7.9p4: a `_Thread_local` initializer's address constant may name
+    // another unit's function, an inline definition's external one, or a
+    // C-library function, whose slot holds what a `.data` slot holds
+    // (C99 6.5.9p6).
+    let dir = tempdir("tls-extern-function");
+    let a = write_source(
+        &dir,
+        "a.c",
+        "long ext_b(void) { return 7; }\nlong inl(void) { return 5; }\n",
+    );
+    let b = write_source(
+        &dir,
+        "b.c",
+        "#include <string.h>\n\
+         typedef long (*fn)(void);\n\
+         typedef size_t (*lenfn)(const char *);\n\
+         long ext_b(void);\n\
+         inline long inl(void) { return 5; }\n\
+         _Thread_local fn ta = ext_b;\n\
+         _Thread_local fn ti = inl;\n\
+         static _Thread_local lenfn t = strlen;\n\
+         static lenfn s = strlen;\n\
+         int main(void) { return ta() + ti() == 12 && t == s && t(\"abc\") == 3 ? 0 : 1; }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        assert_eq!(link_units_and_run(&dir, opt, &[&a, &b]), Some(0), "{opt}");
+    }
+}
+
+#[test]
+fn a_strong_definition_overrides_every_reference_to_a_weak_one() {
+    // ELF/SysV symbol resolution: a strong definition in another unit
+    // overrides a weak one (`weak` attribute or `.weak` directive) for each
+    // reference the weak unit makes, from code, an initializer or asm, a
+    // `_Thread_local` definition included.
+    let dir = tempdir("weak-override");
+    let a = write_source(
+        &dir,
+        "a.c",
+        "struct pair { long a, b; };\n\
+         __attribute__((weak)) long long wobj = 0;\n\
+         __attribute__((weak)) struct pair ws = {0, 0};\n\
+         __attribute__((weak)) long wf(void) { return 0; }\n\
+         __asm__(\".weak xobj\");\n\
+         long xobj = 0;\n\
+         __attribute__((weak)) _Thread_local long tw = 0;\n\
+         long rd_t(void) { return tw; }\n\
+         long *addr_t(void) { return &tw; }\n\
+         long long *pw = &wobj;\n\
+         long *const pend = &ws.b + 1;\n\
+         long (*pf)(void) = wf;\n\
+         long long rd(void) { return wobj + ws.b + xobj; }\n\
+         long *end_w(void) { return &ws.b + 1; }\n\
+         long *get_pend(void) { return pend; }\n\
+         long (*get_f(void))(void) { return wf; }\n\
+         long call_f(void) { return wf(); }\n\
+         long long rd_asm(void) {\n\
+             long long v;\n\
+         #if defined(__x86_64__)\n\
+             __asm__(\"movq %1, %0\" : \"=r\"(v) : \"m\"(wobj));\n\
+         #else\n\
+             __asm__(\"ldr %0, %1\" : \"=r\"(v) : \"m\"(wobj));\n\
+         #endif\n\
+             return v;\n\
+         }\n",
+    );
+    let b = write_source(
+        &dir,
+        "b.c",
+        "struct pair { long a, b; };\n\
+         long long wobj = 1;\n\
+         struct pair ws = {1, 2};\n\
+         long xobj = 4;\n\
+         long wf(void) { return 8; }\n\
+         _Thread_local long tw = 16;\n\
+         long rd_t(void);\n\
+         long *addr_t(void);\n\
+         extern long long *pw;\n\
+         extern long *const pend;\n\
+         extern long (*pf)(void);\n\
+         long long rd(void);\n\
+         long *end_w(void);\n\
+         long *get_pend(void);\n\
+         long (*get_f(void))(void);\n\
+         long call_f(void);\n\
+         long long rd_asm(void);\n\
+         int main(void) {\n\
+             long *end = &ws.b + 1;\n\
+             return rd() != 7 || *pw != 1 || pend != end || end_w() != end ||\n\
+                 get_pend() != end || pf() != 8 || get_f()() != 8 || call_f() != 8 ||\n\
+                 rd_asm() != 1 || rd_t() != 16 || addr_t() != &tw;\n\
+         }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        assert_eq!(link_units_and_run(&dir, opt, &[&a, &b]), Some(0), "{opt}");
+    }
+}
+
+/// A two-quad table in `.rodata`, a read-only named section, relro, `.data`,
+/// a writable named section and `.bss`, each with a label at its end.
+const END_LABEL_TABLES: &str = "\
+.section .rodata\n.globl ro_tbl, ro_tbl_end\n.p2align 3\n\
+ro_tbl: .quad 0x1111, 0x2222\nro_tbl_end:\n\
+.section ro_named,\"a\"\n.globl rn_tbl, rn_tbl_end\n.p2align 3\n\
+rn_tbl: .quad 0x3333, 0x4444\nrn_tbl_end:\n\
+.section .data.rel.ro,\"aw\"\n.globl relro_tbl, relro_tbl_end\n.p2align 3\n\
+relro_tbl: .quad 0x5555, 0x6666\nrelro_tbl_end:\n\
+.data\n.globl rw_tbl, rw_tbl_end\n.p2align 3\n\
+rw_tbl: .quad 0x7777, 0x8888\nrw_tbl_end:\n\
+.section rw_named,\"aw\"\n.globl wn_tbl, wn_tbl_end\n.p2align 3\n\
+wn_tbl: .quad 0x9999, 0xaaaa\nwn_tbl_end:\n\
+.bss\n.globl bss_tbl, bss_tbl_end\n.p2align 3\n\
+bss_tbl: .skip 16\nbss_tbl_end:\n";
+
+/// Names each end label through inline asm, at its address and 8 bytes
+/// before, and through pointer initializers. Exits with the count of wrong
+/// addresses and values.
+const END_LABEL_USES: &str = r#"#include <stdint.h>
+extern const long long ro_tbl[], ro_tbl_end[], rn_tbl[], rn_tbl_end[];
+extern const long long relro_tbl[], relro_tbl_end[];
+extern long long rw_tbl[], rw_tbl_end[], wn_tbl[], wn_tbl_end[], bss_tbl[], bss_tbl_end[];
+const long long *const ends[] = {ro_tbl_end, rn_tbl_end, relro_tbl_end,
+                                 rw_tbl_end, wn_tbl_end, bss_tbl_end};
+const long long *const lasts[] = {ro_tbl_end - 1, rn_tbl_end - 1, relro_tbl_end - 1,
+                                  rw_tbl_end - 1, wn_tbl_end - 1, bss_tbl_end - 1};
+const long long *const starts[] = {ro_tbl, rn_tbl, relro_tbl, rw_tbl, wn_tbl, bss_tbl};
+#if defined(__x86_64__)
+#define ADDR(r, sym) __asm__("lea " sym "(%%rip), %0" : "=r"(r))
+#define LOAD(r, sym) __asm__ volatile("movq " sym "(%%rip), %0" : "=r"(r) :: "memory")
+#define SAME(r, sym, v) __asm__ volatile( \
+    "movl $0, %0\n\tcmpq $" #v ", " sym "(%%rip)\n\tsete %b0" : "=&q"(r) :: "cc", "memory")
+#else
+#define ADDR(r, sym) __asm__("adrp %0, " sym "\n\tadd %0, %0, :lo12:" sym : "=r"(r))
+#define LOAD(r, sym) \
+    __asm__ volatile("adrp %0, " sym "\n\tldr %0, [%0, :lo12:" sym "]" : "=r"(r) :: "memory")
+#define SAME(r, sym, v) (r = 1)
+#endif
+#define CHECK(t, last) do { \
+    uintptr_t u_; long long v_; int s_; \
+    ADDR(u_, #t "_tbl_end"); bad += u_ != (uintptr_t)(t##_tbl + 2); \
+    ADDR(u_, #t "_tbl_end-8"); bad += u_ != (uintptr_t)(t##_tbl + 1); \
+    LOAD(v_, #t "_tbl_end-8"); bad += v_ != last; \
+    SAME(s_, #t "_tbl_end-8", last); bad += s_ != 1; \
+    bad += t##_tbl_end - t##_tbl != 2; \
+} while (0)
+int main(void) {
+    int bad = 0;
+    bss_tbl[1] = 0x1234;
+    CHECK(ro, 0x2222);
+    CHECK(rn, 0x4444);
+    CHECK(relro, 0x6666);
+    CHECK(rw, 0x8888);
+    CHECK(wn, 0xaaaa);
+    CHECK(bss, 0x1234);
+    for (int i = 0; i < 6; i++)
+        bad += ends[i] != starts[i] + 2 || lasts[i] != starts[i] + 1 || *lasts[i] != starts[i][1];
+    return bad;
+}
+"#;
+
+#[test]
+fn a_label_at_its_sections_end_names_that_sections_end() {
+    let dir = tempdir("end-labels");
+    let tables = write_source(&dir, "tables.s", END_LABEL_TABLES);
+    let uses = write_source(&dir, "uses.c", END_LABEL_USES);
+    let (tables, uses) = (tables.as_path(), uses.as_path());
+    for opt in ["-O0", "-O"] {
+        for (order, units) in [("last", [uses, tables]), ("first", [tables, uses])] {
+            let status = link_units_and_run(&dir, opt, &units);
+            assert_eq!(status, Some(0), "{opt}, tables linked {order}");
+        }
+    }
+}
+
+/// A label in an empty named section after another empty one, and a label
+/// at the end of `.data` that the next `.data` section follows in one run.
+const SECTION_START_LABELS: &str = "\
+.section aaa_empty,\"aw\"\n\
+.section bbb_empty,\"aw\"\n.globl empty_lb\nempty_lb:\n\
+.data\n.globl adj_a, adj_a_end\n.p2align 3\nadj_a: .quad 1\nadj_a_end:\n\
+.section .data.next,\"aw\"\n.globl adj_b\n.p2align 3\nadj_b: .quad 2\n";
+
+const SECTION_START_USES: &str = "extern char empty_lb[], __start_bbb_empty[];\n\
+extern char adj_a[], adj_a_end[], adj_b[];\n\
+int main(void) {\n\
+    return (empty_lb != __start_bbb_empty) + 2 * (adj_a_end != adj_a + 8)\n\
+        + 4 * (adj_b != adj_a_end);\n\
+}\n";
+
+#[test]
+fn a_label_in_an_empty_section_names_that_section() {
+    let dir = tempdir("empty-section-labels");
+    let labels = write_source(&dir, "labels.s", SECTION_START_LABELS);
+    let uses = write_source(&dir, "uses.c", SECTION_START_USES);
+    let (labels, uses) = (labels.as_path(), uses.as_path());
+    for (order, units) in [("last", [uses, labels]), ("first", [labels, uses])] {
+        let status = link_units_and_run(&dir, "-O0", &units);
+        assert_eq!(status, Some(0), "labels linked {order}");
     }
 }
 
@@ -812,6 +1124,53 @@ fn freestanding_entry_defined_in_object_links() {
     assert!(bin.exists(), "freestanding image was not produced");
 }
 
+// A slot may name the label that ends the text, or a function whose last
+// byte ends it: the code length closes the link's pc map, as it closes the
+// lowering's. Freestanding, so nothing follows the unit's code; linked for
+// linux-x64 on every host and run there.
+#[test]
+fn a_slot_naming_the_end_of_the_text_links() {
+    let dir = tempdir("text-end-slot");
+    let pad = "__asm__(\".text\\n.p2align 4\\n.globl pad16\\npad16:\\n\"\n\
+               \".byte 0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90,0x90\\n\"\n";
+    let exit = "__asm__ volatile(\"syscall\" : : \"a\"(60L), \"D\"(code) : \"rcx\", \"r11\", \"memory\");\n\
+                for (;;) {\n}\n";
+    let end = write_source(
+        &dir,
+        "end.c",
+        &format!(
+            "{pad}\".byte 0xc3\\n.globl text_end_mark\\ntext_end_mark:\\n\");\n\
+             extern char text_end_mark[];\nextern char pad16[];\n\
+             static char *end_p = text_end_mark;\n\
+             void __c5_entry(void) {{\nlong code = end_p - pad16;\n{exit}}}\n"
+        ),
+    );
+    let last = write_source(
+        &dir,
+        "last.c",
+        &format!(
+            "{pad}\".globl one_byte_ret\\none_byte_ret:\\n.byte 0xc3\\n\");\n\
+             void one_byte_ret(void);\nstatic void (*fp)(void) = one_byte_ret;\n\
+             void __c5_entry(void) {{\nlong code = 7;\nfp();\n{exit}}}\n"
+        ),
+    );
+    for (src, want) in [(&end, 16), (&last, 7)] {
+        let bin = src.with_extension("bin");
+        run(
+            Command::new(badc())
+                .args(["--freestanding", "--target=linux-x64", "-o"])
+                .arg(&bin)
+                .arg(src)
+                .current_dir(&dir),
+            "freestanding link",
+        );
+        if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            let out = Command::new(&bin).output().expect("run image");
+            assert_eq!(out.status.code(), Some(want), "{}", src.display());
+        }
+    }
+}
+
 // The freestanding entry is a link root: an archive member that only
 // defines the entry must be pulled so the image links.
 #[cfg(target_os = "linux")]
@@ -1028,6 +1387,37 @@ fn jit_runs_one_unit_and_passes_extra_inputs_as_argv() {
         "argc mismatch: stdout={:?} stderr={:?}",
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn duplicate_thread_local_definition_fails_link() {
+    // C99 6.9p5: two units each defining one `_Thread_local` object fail
+    // the link with `multiple definition`, whatever the target.
+    let dir = tempdir("dup-tls");
+    write_source(
+        &dir,
+        "a.c",
+        "_Thread_local long tz = 1;\nlong rd_z(void) { return tz; }\n",
+    );
+    write_source(
+        &dir,
+        "b.c",
+        "_Thread_local long tz = 2;\nlong rd_z(void);\n\
+         int main(void) { return (int)rd_z() + (int)tz; }\n",
+    );
+    let result = Command::new(badc())
+        .arg("-o")
+        .arg(dir.join("prog"))
+        .arg(dir.join("a.c"))
+        .arg(dir.join("b.c"))
+        .current_dir(&dir)
+        .output()
+        .expect("invoke badc");
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        !result.status.success() && stderr.contains("multiple definition of `tz`"),
+        "expected `multiple definition of `tz``, got: {stderr}"
     );
 }
 
@@ -1568,6 +1958,55 @@ fn inline_definition_address_is_the_same_across_tus() {
 // The address escaping as an external reference means a program that
 // never defines the function fails to link, which is what gcc and clang
 // report for the same source.
+#[test]
+fn a_static_function_no_body_defines_is_an_undefined_reference() {
+    // C99 6.9p3: a used function with internal linkage needs a definition
+    // in the unit. Each use of one with none is an undefined reference at
+    // the link, as gcc and clang report it, never another function's
+    // address; a use only a dropped object holds links.
+    let dir = tempdir("static-undefined");
+    for (name, body) in [
+        (
+            "call.c",
+            "static long g(void);\nint main(void) { return g() == 0; }\n",
+        ),
+        (
+            "code.c",
+            "static long g(void);\nint main(void) { long (*p)(void) = g; return p != 0; }\n",
+        ),
+        (
+            "slot.c",
+            "static long g(void);\nstatic long (*dp)(void) = g;\nint main(void) { return dp != 0; }\n",
+        ),
+        (
+            "tls.c",
+            "static long g(void);\nstatic _Thread_local long (*tp)(void) = g;\nint main(void) { return tp != 0; }\n",
+        ),
+    ] {
+        let src = write_source(&dir, name, body);
+        let out = Command::new(badc())
+            .arg("-o")
+            .arg(dir.join("prog"))
+            .arg(&src)
+            .current_dir(&dir)
+            .output()
+            .expect("invoke badc");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success() && stderr.contains("undefined reference to `g`"),
+            "{name}: {stderr}"
+        );
+    }
+    let dead = write_source(
+        &dir,
+        "dead.c",
+        "static long g(void);\nstatic long (*dead)(void) = g;\nint main(void) { return 0; }\n",
+    );
+    for opt in ["-O0", "-O"] {
+        assert_eq!(link_units_and_run(&dir, opt, &[&dead]), Some(0), "{opt}");
+    }
+}
+
 #[test]
 fn inline_definition_address_without_an_external_definition_fails_link() {
     let dir = tempdir("inline-addr-undef");
@@ -6904,6 +7343,58 @@ fn align16_arguments_cross_the_system_compiler_boundary() {
              (stderr {:?})",
             String::from_utf8_lossy(&out.stderr)
         );
+    }
+}
+
+// C99 6.5.9p6: a C-library function's address is one pointer from a data
+// slot, a `_Thread_local` slot and code when the system linker links the
+// object, as a fixed and as a position-independent executable. A weak
+// declaration of a function a header declares is a weak reference, null
+// where no library linked defines it, as in gcc's objects.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_library_function_address_is_one_pointer_under_the_system_linker() {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping a_library_function_address_is_one_pointer: no system C compiler");
+        return;
+    };
+    let dir = tempdir("lib-fn-address");
+    let imp = "#include <string.h>\n\
+               typedef size_t (*lenfn)(const char *);\n\
+               static lenfn s = strlen;\n\
+               static _Thread_local lenfn t = strlen;\n\
+               int main(void) {\n\
+                   lenfn d = strlen;\n\
+                   return (s != d) + 2 * (t != d) + 4 * (s(\"ab\") != 2);\n\
+               }\n";
+    let weak = "#include <math.h>\n\
+                extern double cbrt(double) __attribute__((weak));\n\
+                int main(void) { return cbrt ? (int)cbrt(27.0) : 3; }\n";
+    for (name, text, want) in [("imp", imp, 0), ("weak", weak, 3)] {
+        let src = write_source(&dir, &format!("{name}.c"), text);
+        let obj = dir.join(format!("{name}.o"));
+        run(
+            Command::new(badc())
+                .args(["-c", "-o"])
+                .arg(&obj)
+                .arg(&src)
+                .current_dir(&dir),
+            "compile",
+        );
+        for pie in ["-no-pie", "-pie"] {
+            let exe = dir.join(format!("{name}{pie}"));
+            run(
+                Command::new(&cc)
+                    .arg(pie)
+                    .arg("-o")
+                    .arg(&exe)
+                    .arg(&obj)
+                    .current_dir(&dir),
+                "system link",
+            );
+            let out = Command::new(&exe).output().expect("run");
+            assert_eq!(out.status.code(), Some(want), "{name}{pie}");
+        }
     }
 }
 

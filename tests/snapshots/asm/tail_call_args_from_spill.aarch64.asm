@@ -44,13 +44,11 @@ Disassembly of section .text:
                	cbnz	w0, <addr>
                	mov	x0, #-0x1               // =-1
                	ret
-               	lsl	x0, x6, #1
-               	add	x0, x3, x0
+               	add	x0, x3, x6, lsl #1
                	mov	x17, #0x3               // =3
                	mul	x1, x1, x17
                	add	x0, x0, x1
-               	lsl	x1, x13, #2
-               	add	x0, x0, x1
+               	add	x0, x0, x13, lsl #2
                	ret
 
 <main>:

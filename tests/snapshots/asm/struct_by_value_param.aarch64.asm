@@ -14,8 +14,7 @@ Disassembly of section .text:
                	brk	#0x1
 
 <sum_pair>:
-               	lsr	x1, x0, #32
-               	add	x0, x0, x1
+               	add	x0, x0, x0, lsr #32
                	ret
 
 <main>:

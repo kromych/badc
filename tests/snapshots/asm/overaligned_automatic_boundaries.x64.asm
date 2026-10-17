@@ -72,9 +72,8 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	%rdx, %rax
-               	andq	$0x1f, %rax
-               	testl	%eax, %eax
+               	andq	$0x1f, %rdx
+               	testl	%edx, %edx
                	sete	%al
                	movzbq	%al, %rax
                	testq	%rax, %rax

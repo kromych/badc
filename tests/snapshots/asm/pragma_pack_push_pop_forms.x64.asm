@@ -42,7 +42,6 @@ Disassembly of section .text:
                	jb	<addr>
                	leaq	<rip>, %rax      # <addr>
                	movl	(%rax), %ecx
-               	andq	$0x1fffff, %rcx         # imm = 0x1FFFFF
                	shlq	$0x2b, %rcx
                	sarq	$0x2b, %rcx
                	testl	%ecx, %ecx

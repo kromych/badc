@@ -91,11 +91,51 @@ fn pure(inst: &Inst) -> bool {
         | Inst::Undef
         | Inst::Extend { .. }
         | Inst::Phi { .. }
-        | Inst::LifetimeEnd(_) => true,
+        | Inst::LifetimeEnd(_)
+        | Inst::MulAdd { .. }
+        | Inst::ShiftOp { .. }
+        | Inst::BitField { .. } => true,
         Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
             !matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu)
         }
-        _ => false,
+        Inst::ImmData(_)
+        | Inst::ImmCode(_)
+        | Inst::ImmExtCode(_)
+        | Inst::BlockAddr(_)
+        | Inst::LocalAddr(_)
+        | Inst::TlsAddr(_)
+        | Inst::Load { .. }
+        | Inst::Store { .. }
+        | Inst::LoadLocal { .. }
+        | Inst::StoreLocal { .. }
+        | Inst::LoadIndexed { .. }
+        | Inst::StoreIndexed { .. }
+        | Inst::SegLoad { .. }
+        | Inst::SegStore { .. }
+        | Inst::Neg(_)
+        | Inst::Fneg(_)
+        | Inst::Fma { .. }
+        | Inst::Udiv128 { .. }
+        | Inst::Bswap { .. }
+        | Inst::BitCount { .. }
+        | Inst::Copy { .. }
+        | Inst::FpCast { .. }
+        | Inst::Call { .. }
+        | Inst::CallIndirect { .. }
+        | Inst::CallExt { .. }
+        | Inst::TailExt(_)
+        | Inst::Mzero { .. }
+        | Inst::Mcpy { .. }
+        | Inst::AtomicRmw { .. }
+        | Inst::AtomicCas { .. }
+        | Inst::AtomicLoad { .. }
+        | Inst::AtomicStore { .. }
+        | Inst::Intrinsic { .. }
+        | Inst::X86Simd { .. }
+        | Inst::InlineAsm { .. }
+        | Inst::RetPart { .. }
+        | Inst::AsmOut { .. }
+        | Inst::AggParts { .. } => false,
     }
 }
 
@@ -301,6 +341,35 @@ impl Cone<'_> {
                 op: *op,
                 lhs: Box::new(self.expr(*lhs)?),
                 rhs: Box::new(self.expr(*rhs)?),
+            },
+            Inst::ShiftOp {
+                op,
+                lhs,
+                rhs,
+                shift,
+                amount,
+            } if shadow_op(*op) && shadow_op(*shift) => ShadowExpr::Binop {
+                op: *op,
+                lhs: Box::new(self.expr(*lhs)?),
+                rhs: Box::new(ShadowExpr::Binop {
+                    op: *shift,
+                    lhs: Box::new(self.expr(*rhs)?),
+                    rhs: Box::new(ShadowExpr::Imm(i64::from(*amount))),
+                }),
+            },
+            Inst::BitField {
+                value,
+                lsb,
+                width,
+                signed,
+            } => ShadowExpr::Binop {
+                op: if *signed { BinOp::Shr } else { BinOp::Shru },
+                lhs: Box::new(ShadowExpr::Binop {
+                    op: BinOp::Shl,
+                    lhs: Box::new(self.expr(*value)?),
+                    rhs: Box::new(ShadowExpr::Imm(i64::from(64 - lsb - width))),
+                }),
+                rhs: Box::new(ShadowExpr::Imm(i64::from(64 - width))),
             },
             _ => return None,
         })

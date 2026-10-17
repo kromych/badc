@@ -152,7 +152,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
     v128 Imm(0)                                           -> x2
     v129 Imm(0)                                           -> x2
     v130 Binop { op=ult, lhs=v86, rhs=v99 }               -> x0
-    v131 Binop { op=sub, lhs=v88, rhs=v130 }              -> x2
+    v131 Binop { op=sub, lhs=v88, rhs=v130 }              -> x14
     v132 Imm(0)                                           -> x0
     v133 Imm(0)                                           -> x0
     v134 Imm(0)                                           -> x0
@@ -417,14 +417,14 @@ fn ent_pc=10 n_params=0 variadic=false locals=2
     v373 Imm(0)                                           -> x1
     v374 Imm(0)                                           -> x1
     v375 Imm(0)                                           -> x1
-    v376 BinopI { op=shru, lhs=v357, rhs_imm=4 }          -> x1
-    v377 Imm(0)                                           -> x2
-    v378 Imm(0)                                           -> x2
-    v379 Imm(0)                                           -> x2
-    v380 Imm(64)                                          -> x2
-    v381 Imm(60)                                          -> x2
-    v382 Imm(60)                                          -> x2
-    v383 BinopI { op=shl, lhs=v359, rhs_imm=60 }          -> x2
+    v376 BinopI { op=shru, lhs=v357, rhs_imm=4 }          -> x13
+    v377 Imm(0)                                           -> x1
+    v378 Imm(0)                                           -> x1
+    v379 Imm(0)                                           -> x1
+    v380 Imm(64)                                          -> x1
+    v381 Imm(60)                                          -> x1
+    v382 Imm(60)                                          -> x1
+    v383 BinopI { op=shl, lhs=v359, rhs_imm=60 }          -> x1
     v384 Binop { op=or, lhs=v376, rhs=v383 }              -> x1
     v385 Imm(0)                                           -> x2
     v386 Imm(0)                                           -> x2

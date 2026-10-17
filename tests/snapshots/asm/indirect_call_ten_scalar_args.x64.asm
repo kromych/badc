@@ -47,18 +47,16 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	leaq	(%rdx,%rdx,2), %rcx
                	addq	%rcx, %rax
-               	movq	%rsi, %rcx
-               	shlq	$0x2, %rcx
-               	addq	%rcx, %rax
+               	shlq	$0x2, %rsi
+               	addq	%rsi, %rax
                	leaq	(%rdi,%rdi,4), %rcx
                	addq	%rcx, %rax
                	imulq	$0x6, %r8, %rcx
                	addq	%rcx, %rax
                	imulq	$0x7, %r9, %rcx
                	addq	%rcx, %rax
-               	movq	%rbx, %rcx
-               	shlq	$0x3, %rcx
-               	addq	%rcx, %rax
+               	shlq	$0x3, %rbx
+               	addq	%rbx, %rax
                	leaq	(%r12,%r12,8), %rcx
                	addq	%rcx, %rax
                	imulq	$0xa, %r13, %rcx

@@ -162,7 +162,7 @@ pub(crate) fn emit_function(
     cx: &mut super::ssa::emit_common::EmitCtx,
     fixups: &mut Vec<Fixup>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    extern_tls_names: &alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef>,
     tls_align: usize,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
@@ -203,6 +203,9 @@ pub(crate) fn emit_function(
     if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch) {
         return fail(why);
     }
+    if super::ssa::emit_common::needs_region_base(func, target) && frame.region_base.is_none() {
+        return fail(super::ssa::emit_common::NO_REGION_BASE);
+    }
     if frame.canary_bytes > 0 {
         cx.canary_frame_bytes
             .insert(func.ent_pc, frame.canary_bytes);
@@ -234,8 +237,8 @@ pub(crate) fn emit_function(
     // more temporaries than it has.
     let early_exit = if repeat_tests && !is_full_leaf(frame, alloc) {
         super::ssa::early_exit::early_exit(func, alloc, &param_plan).filter(|exit| {
-            emit_early_test(&mut Vec::new(), exit, false).is_some()
-                && emit_early_return(&mut Vec::new(), exit)
+            emit_early_test(&mut Vec::new(), exit, false, frame.fixed_regs).is_some()
+                && emit_early_return(&mut Vec::new(), exit, frame.fixed_regs)
         })
     } else {
         None
@@ -363,7 +366,7 @@ impl FunctionEmitter<'_, '_> {
             exit_at,
             self.cx.ssa_line_rows,
         );
-        let emitted = emit_early_return(self.cx.code, exit);
+        let emitted = emit_early_return(self.cx.code, exit, self.fcx.frame.fixed_regs);
         debug_assert!(emitted, "the return fit its temporaries at planning");
         let (site, frame) = self.early_site;
         if !patch_early_branch(self.cx.code, site, exit_at, self.early_far) {
@@ -566,7 +569,12 @@ impl FunctionEmitter<'_, '_> {
                 self.cx.code.len(),
                 self.cx.ssa_line_rows,
             );
-            let site = emit_early_test(self.cx.code, exit, self.early_far);
+            let site = emit_early_test(
+                self.cx.code,
+                exit,
+                self.early_far,
+                self.fcx.frame.fixed_regs,
+            );
             debug_assert!(site.is_some(), "the test fit its temporaries at planning");
             self.early_site = (site.unwrap_or(0), self.cx.code.len());
         }
@@ -1505,6 +1513,9 @@ fn emit_prologue(
     emit_canary_store(code, frame, abi, extern_data_refs);
     if frame.realign_align > 0 {
         emit_realign_sp(code, frame);
+    }
+    if let Some(r) = frame.region_base {
+        emit(code, enc_add_imm(Reg(r), Reg(31), 0));
     }
     // A variadic callee reads its named parameters from the save area.
     if !variadic {

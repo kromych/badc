@@ -6238,8 +6238,8 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v18  ImmData(64)                                      -> x1
     v19  Imm(3)                                           -> x1
     v20  AtomicRmw { op=Sub, addr=v3, value=v7, width=1, order=Acquire } -> x1
-    v21  BinopI { op=and, lhs=v20, rhs_imm=255 }          -> x0
-    v22  Imm(250)                                         -> x1
+    v21  BinopI { op=and, lhs=v20, rhs_imm=255 }          -> x1
+    v22  Imm(250)                                         -> x0
     v23  BinopI { op=eq, lhs=v21, rhs_imm=250 }           -> x0
     v24  Imm(0)                                           -> x1
     v25  Imm(0)                                           -> x1
@@ -6414,7 +6414,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v158 ImmData(64)                                      -> x1
     v159 Imm(3)                                           -> x1
     v160 AtomicRmw { op=Sub, addr=v130, value=v134, width=1, order=Acquire } -> x1
-    v161 BinopI { op=and, lhs=v160, rhs_imm=255 }         -> x0
+    v161 BinopI { op=and, lhs=v160, rhs_imm=255 }         -> x1
     v162 BinopI { op=sub, lhs=v161, rhs_imm=3 }           -> x0
     v163 BinopI { op=and, lhs=v162, rhs_imm=255 }         -> x0
     v164 Imm(247)                                         -> x1
@@ -8160,8 +8160,8 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v18  ImmData(96)                                      -> x1
     v19  Imm(3)                                           -> x1
     v20  AtomicRmw { op=Sub, addr=v3, value=v7, width=2, order=AcqRel } -> x1
-    v21  BinopI { op=and, lhs=v20, rhs_imm=65535 }        -> x0
-    v22  Imm(65000)                                       -> x1
+    v21  BinopI { op=and, lhs=v20, rhs_imm=65535 }        -> x1
+    v22  Imm(65000)                                       -> x0
     v23  BinopI { op=eq, lhs=v21, rhs_imm=65000 }         -> x0
     v24  Imm(0)                                           -> x1
     v25  Imm(0)                                           -> x1
@@ -8336,7 +8336,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v158 ImmData(96)                                      -> x1
     v159 Imm(3)                                           -> x1
     v160 AtomicRmw { op=Sub, addr=v130, value=v134, width=2, order=AcqRel } -> x1
-    v161 BinopI { op=and, lhs=v160, rhs_imm=65535 }       -> x0
+    v161 BinopI { op=and, lhs=v160, rhs_imm=65535 }       -> x1
     v162 BinopI { op=sub, lhs=v161, rhs_imm=3 }           -> x0
     v163 BinopI { op=and, lhs=v162, rhs_imm=65535 }       -> x0
     v164 Imm(64997)                                       -> x1

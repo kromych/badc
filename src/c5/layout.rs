@@ -77,6 +77,9 @@ pub(crate) const DATA_ALIGN_MIN: usize = 8;
 /// packed base. Covers `_Alignas(16)` and 16-byte aggregates.
 pub(crate) const BSS_ALIGN_MIN: usize = 16;
 
+/// Page size of an arm64 Mach-O image, the unit the kernel slides it by.
+pub(crate) const MACHO_PAGE_SIZE: usize = 0x4000;
+
 /// Alignment the `.data` image is placed at, given a unit's declared
 /// requirement.
 pub(crate) fn data_image_align(declared: usize) -> usize {
@@ -275,6 +278,16 @@ pub(crate) fn remap_self_u64(off: &mut u64, r: &dyn DataRemap) {
     let mut v = *off as i64;
     remap_self(&mut v, r);
     *off = v as u64;
+}
+
+/// Remap a self-anchored offset that goes with its object: `false` once the
+/// object is dropped, rather than a record left on the NULL guard.
+pub(crate) fn remap_kept_u64(off: &mut u64, r: &dyn DataRemap) -> bool {
+    let v = *off as i64;
+    if !r.in_data(v) {
+        return true;
+    }
+    r.remap(v, v).map(|new| *off = new as u64).is_some()
 }
 
 #[cfg(test)]

@@ -69,9 +69,8 @@ Disassembly of section .text:
 
 <bitfield_copy>:
                	and	x3, x1, #0xfff
-               	lsl	x3, x3, #8
-               	mov	x17, #0x8d              // =141
-               	orr	x3, x3, x17
+               	mov	x4, #0x8d               // =141
+               	orr	x3, x4, x3, lsl #8
                	str	w3, [x0]
                	str	wzr, [x0, #0x4]
                	str	x1, [x0, #0x8]
@@ -512,9 +511,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x280
-               	lsl	x1, x20, #32
-               	mov	x17, #0x9               // =9
-               	orr	x1, x1, x17
+               	mov	x1, #0x9                // =9
+               	orr	x1, x1, x20, lsl #32
                	bl	<addr>
                	cmp	x0, #0x5
                	b.ne	<addr>
@@ -534,13 +532,11 @@ Disassembly of section .text:
                	cmp	w0, #0x5
                	b.ne	<addr>
                	ldr	w0, [sp, #0x38]
-               	asr	x0, x0, #3
-               	and	x0, x0, #0x1f
+               	ubfx	x0, x0, #3, #5
                	cmp	w0, #0x11
                	b.ne	<addr>
                	ldr	w0, [sp, #0x38]
-               	asr	x0, x0, #8
-               	and	x0, x0, #0xfff
+               	ubfx	x0, x0, #8, #12
                	and	x1, x20, #0xfff
                	cmp	w0, w1
                	b.ne	<addr>

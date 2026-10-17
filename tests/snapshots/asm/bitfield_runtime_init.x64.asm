@@ -26,13 +26,12 @@ Disassembly of section .text:
                	int3
 
 <build_packed>:
-               	movq	%rdi, %rax
-               	andq	$0xf, %rax
-               	movq	%rsi, %rdi
                	andq	$0xf, %rdi
-               	movq	%rdi, %rsi
+               	movq	%rsi, %rax
+               	andq	$0xf, %rax
+               	movq	%rax, %rsi
                	shlq	$0x4, %rsi
-               	orq	%rax, %rsi
+               	orq	%rdi, %rsi
                	movq	%rdx, %r8
                	andq	$0x1f, %r8
                	andq	$-0x1f01, %rsi          # imm = 0xE0FF
@@ -42,14 +41,14 @@ Disassembly of section .text:
                	andq	$0xfffff, %r8           # imm = 0xFFFFF
                	movq	%rsi, %rcx
                	andq	$0xf, %rcx
-               	xorq	%rcx, %rax
+               	xorq	%rcx, %rdi
                	xorl	%ecx, %ecx
-               	testl	%eax, %eax
+               	testl	%edi, %edi
                	jne	<addr>
-               	movl	%esi, %eax
-               	sarq	$0x4, %rax
-               	andq	$0xf, %rax
-               	xorq	%rdi, %rax
+               	movl	%esi, %ecx
+               	sarq	$0x4, %rcx
+               	andq	$0xf, %rcx
+               	xorq	%rcx, %rax
                	testl	%eax, %eax
                	sete	%cl
                	movzbq	%cl, %rcx
@@ -58,7 +57,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	%esi, %ecx
                	sarq	$0x8, %rcx
-               	andq	$0x1f, %rcx
                	shlq	$0x3b, %rcx
                	sarq	$0x3b, %rcx
                	cmpl	%edx, %ecx

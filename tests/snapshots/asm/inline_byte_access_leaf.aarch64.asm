@@ -178,53 +178,45 @@ Disassembly of section .text:
                	mul	x4, x0, x1
                	add	x4, x4, #0x1
                	and	x4, x4, #0xff
-               	lsl	x4, x4, #8
                	add	x5, x0, #0x1
                	mul	x5, x5, x1
                	add	x5, x5, #0x1
                	and	x5, x5, #0xff
-               	orr	x4, x4, x5
-               	lsl	x4, x4, #8
+               	orr	x4, x5, x4, lsl #8
                	add	x5, x0, #0x2
                	mul	x5, x5, x1
                	add	x5, x5, #0x1
                	and	x5, x5, #0xff
-               	orr	x4, x4, x5
-               	lsl	x4, x4, #8
+               	orr	x4, x5, x4, lsl #8
                	add	x5, x0, #0x3
                	mul	x5, x5, x1
                	add	x5, x5, #0x1
                	and	x5, x5, #0xff
-               	orr	x4, x4, x5
-               	lsl	x4, x4, #8
+               	orr	x4, x5, x4, lsl #8
                	add	x5, x0, #0x4
                	mul	x5, x5, x1
                	add	x5, x5, #0x1
                	and	x5, x5, #0xff
-               	orr	x4, x4, x5
-               	lsl	x4, x4, #8
+               	orr	x4, x5, x4, lsl #8
                	add	x5, x0, #0x5
                	mul	x5, x5, x1
                	add	x5, x5, #0x1
                	and	x5, x5, #0xff
-               	orr	x4, x4, x5
-               	lsl	x4, x4, #8
+               	orr	x4, x5, x4, lsl #8
                	add	x5, x0, #0x6
                	mul	x5, x5, x1
                	add	x5, x5, #0x1
                	and	x5, x5, #0xff
-               	orr	x4, x4, x5
-               	lsl	x4, x4, #8
+               	orr	x4, x5, x4, lsl #8
                	add	x5, x0, #0x7
                	mul	x5, x5, x1
                	add	x5, x5, #0x1
                	and	x5, x5, #0xff
-               	orr	x4, x4, x5
+               	orr	x4, x5, x4, lsl #8
                	add	x5, x20, x0
                	ldr	x5, [x5]
                	rev	x5, x5
-               	lsl	x6, x2, #2
-               	add	x6, x20, x6
+               	add	x6, x20, x2, lsl #2
                	ldr	w6, [x6]
                	add	x0, x3, x0
                	ldr	x0, [x0]

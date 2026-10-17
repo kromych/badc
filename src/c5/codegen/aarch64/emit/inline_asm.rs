@@ -1168,6 +1168,7 @@ fn form_static(
                         None => out.data_fixups.push(DataFixup {
                             instr_offset,
                             data_offset: *data_offset as u64,
+                            addend: 0,
                             part: AddrPart::Whole,
                         }),
                     }

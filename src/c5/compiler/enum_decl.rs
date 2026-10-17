@@ -56,11 +56,16 @@ impl EnumCompletion {
         self.list(&mut p.types, &mut p.enum_tags);
     }
 
+    /// A function type and the ones a returned pointer leads to.
+    pub(super) fn fn_type(&self, f: &mut FnType) {
+        self.params(&mut f.params);
+        self.chain(&mut f.ret);
+    }
+
     /// The function types a returned pointer leads to.
     pub(super) fn chain(&self, ret: &mut Option<(alloc::boxed::Box<FnType>, i64)>) {
         if let Some((f, _)) = ret {
-            self.params(&mut f.params);
-            self.chain(&mut f.ret);
+            self.fn_type(f);
         }
     }
 }
@@ -146,8 +151,8 @@ impl Compiler {
             // (`enum E { ... } __attribute__((packed))`), the position GCC
             // and Clang accept most often.
             packed = self.skip_attribute_specifiers()? || packed;
-            self.pending.attr_transparent_union = false;
-            let underlying = if let Some(m) = self.pending.attr_mode.take() {
+            self.pending.attrs.transparent_union = false;
+            let underlying = if let Some(m) = self.pending.attrs.mode.take() {
                 // `mode(M)` fixes the enum's width outright; the
                 // enumerators must fit, as GCC requires.
                 let base = enum_compatible_ty(min, max, self.enum_wide_ty());
@@ -239,18 +244,15 @@ impl Compiler {
         for s in &mut self.symbols {
             c.ty(&mut s.type_, &mut s.incomplete_enum_tag);
             c.ty(&mut s.h_type, &mut s.h_incomplete_enum_tag);
-            c.list(&mut s.params, &mut s.param_enum_tags);
-            c.list(&mut s.h_params, &mut s.h_param_enum_tags);
-            c.chain(&mut s.ret_fn);
-            c.chain(&mut s.h_ret_fn);
+            c.fn_type(&mut s.fn_type);
+            c.fn_type(&mut s.h_fn_type);
         }
         for b in self.block_scopes.iter_mut().flatten() {
             b.complete_enum(&c);
         }
         for f in self.structs.iter_mut().flat_map(|s| s.fields.iter_mut()) {
             c.ty(&mut f.ty, &mut f.enum_tag);
-            c.list(&mut f.params, &mut f.param_enum_tags);
-            c.chain(&mut f.ret_fn);
+            c.fn_type(&mut f.fn_type);
         }
     }
 
@@ -321,6 +323,7 @@ impl Compiler {
             // redeclaration (6.7p3); otherwise the outer binding is
             // saved and restored at scope exit. File scope binds
             // permanently.
+            let idx = self.claim_file_scope_name(idx);
             self.rebind_scoped(idx)?;
             self.symbols[idx].class = Token::Num as i64;
             self.symbols[idx].incomplete_enum_tag = None;

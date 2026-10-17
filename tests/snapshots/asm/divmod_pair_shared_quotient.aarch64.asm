@@ -14,31 +14,28 @@ Disassembly of section .text:
                	brk	#0x1
 
 <check_uint>:
-               	mov	w0, w0
-               	mov	w4, w1
-               	udiv	x1, x0, x4
-               	cmp	w1, w2
+               	udiv	w4, w0, w1
+               	cmp	w4, w2
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	mul	x5, x1, x4
-               	sub	x4, x0, x5
-               	mov	w6, w3
-               	cmp	x4, x6
+               	mul	x5, x4, x1
+               	sub	x1, x0, x5
+               	cmp	w1, w3
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ret
-               	add	x1, x1, x4
+               	add	x4, x4, x1
                	add	x2, x2, x3
-               	cmp	w1, w2
+               	cmp	w4, w2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ret
-               	cmp	w1, w2
+               	cmp	w4, w2
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	add	x1, x5, x4
+               	add	x1, x5, x1
                	cmp	w1, w0
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
@@ -53,21 +50,20 @@ Disassembly of section .text:
                	adrp	x8, <addr>
                	add	x8, x8, <lo12>
                	mov	x1, x4
-               	lsl	x0, x1, #4
-               	add	x0, x8, x0
+               	add	x0, x8, x1, lsl #4
                	ldrsw	x2, [x0]
                	ldrsw	x3, [x0, #0x4]
                	ldrsw	x5, [x0, #0x8]
                	ldrsw	x6, [x0, #0xc]
-               	sdiv	x0, x2, x3
-               	cmp	x0, x5
+               	sdiv	w0, w2, w3
+               	cmp	w0, w5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	cbz	x0, <addr>
                	b	<addr>
                	mul	x7, x0, x3
                	sub	x3, x2, x7
-               	cmp	x3, x6
+               	cmp	w3, w6
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	b	<addr>
@@ -141,8 +137,6 @@ Disassembly of section .text:
                	mul	x2, x0, x4
                	lsr	x2, x2, #32
                	msub	x0, x2, x3, x0
-               	cmp	w0, #0x64
-               	b.gt	<addr>
                	add	x1, x1, x0
                	mov	x0, x2
                	cmp	w0, #0x0

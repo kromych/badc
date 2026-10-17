@@ -106,8 +106,8 @@ Disassembly of section .text:
                	movq	%r10, 0x38(%rsp)
                	xorl	%eax, %eax
                	leaq	(%rcx,%rax), %r12
-               	xorq	%r12, %rbx
-               	leaq	(%rcx,%rcx,2), %r12
+               	xorq	%rbx, %r12
+               	leaq	(%rcx,%rcx,2), %rbx
                	addq	%r12, %rbx
                	movq	%rbx, %r12
                	shrq	$0x3, %r12
@@ -156,21 +156,21 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x64, %eax
                	jb	<addr>
+               	xorq	%rdx, %rcx
+               	xorq	%rsi, %rcx
+               	xorq	%r8, %rcx
+               	xorq	%r9, %rcx
+               	xorq	%rdi, %rcx
+               	xorq	%r13, %rcx
+               	xorq	%r14, %rcx
+               	xorq	%r15, %rcx
+               	xorq	0x68(%rsp), %rcx
+               	xorq	0x60(%rsp), %rcx
+               	xorq	0x58(%rsp), %rcx
+               	xorq	0x50(%rsp), %rcx
+               	xorq	0x48(%rsp), %rcx
+               	xorq	0x40(%rsp), %rcx
                	movq	%rcx, %rax
-               	xorq	%rdx, %rax
-               	xorq	%rsi, %rax
-               	xorq	%r8, %rax
-               	xorq	%r9, %rax
-               	xorq	%rdi, %rax
-               	xorq	%r13, %rax
-               	xorq	%r14, %rax
-               	xorq	%r15, %rax
-               	xorq	0x68(%rsp), %rax
-               	xorq	0x60(%rsp), %rax
-               	xorq	0x58(%rsp), %rax
-               	xorq	0x50(%rsp), %rax
-               	xorq	0x48(%rsp), %rax
-               	xorq	0x40(%rsp), %rax
                	xorq	0x38(%rsp), %rax
                	xorq	%rbx, %rax
                	popq	%rbx
@@ -330,13 +330,11 @@ Disassembly of section .text:
                	addq	%r15, %rcx
                	xorq	%rdx, %rcx
                	leaq	(%r15,%r15,2), %rdx
-               	addq	%rdx, %rcx
-               	movq	%rcx, %rdx
-               	shrq	$0x3, %rdx
-               	movq	%r15, %rsi
-               	xorq	%rdx, %rsi
-               	movq	%rcx, %rdx
-               	subq	%rsi, %rdx
+               	addq	%rcx, %rdx
+               	movq	%rdx, %rcx
+               	shrq	$0x3, %rcx
+               	xorq	%r15, %rcx
+               	subq	%rcx, %rdx
                	jmp	<addr>
                	movq	%r12, %rax
                	xorq	%r13, %rax

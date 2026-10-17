@@ -100,11 +100,10 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x16, %eax
                	retq
-               	movq	%rcx, %rax
-               	andq	$0x3f, %rax
-               	testl	%eax, %eax
+               	andq	$0x3f, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
-               	testl	%eax, %eax
+               	testl	%ecx, %ecx
                	jne	<addr>
                	leaq	<rip>, %rax      # <addr>
                	leaq	0x80(%rax), %rcx

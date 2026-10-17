@@ -1179,8 +1179,8 @@ pub(super) fn emit_tail_call(
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
 ) -> Emit {
-    // The argument-register window is disjoint from `alloc.gpr_used`, so the
-    // restores below cannot clobber the marshalled values.
+    // The restores below write only registers the shared convention keeps,
+    // none of which carries an argument.
     let mut plan = super::plan_call_args(args.len(), args.len(), fp_arg_mask, abi);
     // `detect_tail_call` rejects a call with a stack argument.
     if plan

@@ -326,6 +326,86 @@ pub(super) fn emit_mul_add(
     Ok(())
 }
 
+/// `Inst::BitField`: one SBFX / UBFX; a spilled operand reloads into a scratch.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_bit_field(
+    code: &mut Vec<u8>,
+    dst: Place,
+    value: u32,
+    lsb: u8,
+    width: u8,
+    signed: bool,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+        return fail("BitField: dst not int reg / spill");
+    };
+    let Some(rn) = materialize_int(code, place_of(alloc, value), scratch.primary, frame) else {
+        return fail("BitField: value not int reg / spill");
+    };
+    emit(code, super::encode::enc_bfx(signed, rd, rn, lsb, width));
+    store_spilled_int(code, frame, dst, rd);
+    Ok(())
+}
+
+/// The 64-bit ADD, SUB, AND, ORR or EOR (shifted register) base word for
+/// `op` and the LSL, LSR or ASR that applies `shift` (Arm ARM C6.2).
+pub(super) fn shifted_reg_form(op: BinOp, shift: BinOp) -> Option<(u32, super::encode::RegShift)> {
+    use super::encode::{ADD_REG, AND_REG, EOR_REG, ORR_REG, RegShift, SUB_REG};
+    let base = match op {
+        BinOp::Add => ADD_REG,
+        BinOp::Sub => SUB_REG,
+        BinOp::And => AND_REG,
+        BinOp::Or => ORR_REG,
+        BinOp::Xor => EOR_REG,
+        _ => return None,
+    };
+    let kind = match shift {
+        BinOp::Shl => RegShift::Lsl,
+        BinOp::Shru => RegShift::Lsr,
+        BinOp::Shr => RegShift::Asr,
+        _ => return None,
+    };
+    Some((base, kind))
+}
+
+/// `Inst::ShiftOp`: one shifted-register instruction, which reads both
+/// sources before writing `rd`; a spilled operand reloads into a scratch.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_shift_op(
+    code: &mut Vec<u8>,
+    dst: Place,
+    op: BinOp,
+    lhs: u32,
+    rhs: u32,
+    shift: BinOp,
+    amount: u8,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    let Some((base, shift)) = shifted_reg_form(op, shift) else {
+        return fail("ShiftOp: no shifted-register form");
+    };
+    let Some(rd) = int_or_spill_scratch(dst, scratch) else {
+        return fail("ShiftOp: dst not int reg / spill");
+    };
+    let (Some(rn), Some(rm)) = (
+        materialize_int(code, place_of(alloc, lhs), scratch.primary, frame),
+        materialize_int(code, place_of(alloc, rhs), scratch.secondary, frame),
+    ) else {
+        return fail("ShiftOp: operand not int reg / spill");
+    };
+    emit(
+        code,
+        super::encode::enc_rrr_shifted(base, rd, rn, rm, shift, u32::from(amount)),
+    );
+    store_spilled_int(code, frame, dst, rd);
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_binop(
     code: &mut Vec<u8>,
@@ -467,16 +547,40 @@ pub(super) fn emit_binop(
             }
             None => (scratch.third(frame), false),
         };
+        let narrow = narrow_div(alloc, v);
         let divider = if matches!(op, BinOp::Mod) {
-            enc_sdiv(quot, rn, rm)
+            if narrow {
+                super::encode::enc_sdiv_w(quot, rn, rm)
+            } else {
+                enc_sdiv(quot, rn, rm)
+            }
+        } else if narrow {
+            super::encode::enc_udiv_w(quot, rn, rm)
         } else {
             enc_udiv(quot, rn, rm)
         };
         emit(code, divider);
-        emit(code, enc_msub(rd, quot, rm, rn));
+        emit(
+            code,
+            if narrow {
+                super::encode::enc_msub_w(rd, quot, rm, rn)
+            } else {
+                enc_msub(rd, quot, rm, rn)
+            },
+        );
         if borrowed {
             emit(code, enc_ldr_post(Reg(19), Reg(31), 16));
         }
+        store_spilled_int(code, frame, dst, rd);
+        return Ok(());
+    }
+    if matches!(op, BinOp::Div | BinOp::Divu) && narrow_div(alloc, v) {
+        let word = if op == BinOp::Div {
+            super::encode::enc_sdiv_w(rd, rn, rm)
+        } else {
+            super::encode::enc_udiv_w(rd, rn, rm)
+        };
+        emit(code, word);
         store_spilled_int(code, frame, dst, rd);
         return Ok(());
     }
@@ -684,6 +788,10 @@ pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64, high_dead: bool) -> bo
 /// (`passes::narrow`).
 fn narrow_cmp(alloc: &Allocation, v: super::super::ir::ValueId) -> bool {
     crate::c5::codegen::passes::narrow::is_cmp32(&alloc.cmp32, v)
+}
+
+fn narrow_div(alloc: &Allocation, v: super::super::ir::ValueId) -> bool {
+    crate::c5::codegen::passes::narrow::is_div32(&alloc.div32, v)
 }
 
 /// Encoding for the `cmp` of comparison `v`, in the operand width the

@@ -1,24 +1,49 @@
 //! The return a function takes ahead of its frame (`ssa::early_exit`): the
 //! test at the entry and the return it branches to, after the body, both
-//! evaluated from the argument registers. Temporaries are x9..x15:
-//! caller-saved, and neither an argument nor the indirect-result register,
-//! so the frame path finds every argument where the caller left it.
+//! evaluated from the argument registers. Temporaries are x9..x15 less
+//! the `-ffixed-` ones: caller-saved, and neither an argument nor the
+//! indirect-result register, so the frame path finds every argument where
+//! the caller left it.
 
 use super::super::ssa::early_exit::{EarlyExit, ShadowExpr, ShadowTest};
+use super::encode::{RegShift, enc_rrr_shifted};
 use super::*;
 
 const TEMPS: [u8; 7] = [9, 10, 11, 12, 13, 14, 15];
 
+/// `e` as the shifted second source of `op`: the shifted-register base
+/// word, the shift, the shifted value and the amount.
+fn shifted_operand(op: BinOp, e: &ShadowExpr) -> Option<(u32, RegShift, &ShadowExpr, u32)> {
+    let ShadowExpr::Binop {
+        op: shift,
+        lhs,
+        rhs,
+    } = e
+    else {
+        return None;
+    };
+    let ShadowExpr::Imm(k @ 1..=63) = **rhs else {
+        return None;
+    };
+    let (base, kind) = shifted_reg_form(op, *shift)?;
+    Some((base, kind, lhs, k as u32))
+}
+
 struct Shadow<'a> {
     code: &'a mut Vec<u8>,
     next: usize,
+    fixed: FixedRegs,
 }
 
 impl Shadow<'_> {
     fn temp(&mut self) -> Option<Reg> {
-        let r = *TEMPS.get(self.next)?;
-        self.next += 1;
-        Some(Reg(r))
+        while let Some(&r) = TEMPS.get(self.next) {
+            self.next += 1;
+            if !self.fixed.has_gpr(r) {
+                return Some(Reg(r));
+            }
+        }
+        None
     }
 
     /// The register a node computed from `rn` writes: `dst` when given, else
@@ -61,8 +86,18 @@ impl Shadow<'_> {
                 rd
             }
             ShadowExpr::Binop { op, lhs, rhs } => {
+                let commutes = matches!(op, BinOp::Add | BinOp::And | BinOp::Or | BinOp::Xor);
+                let (lhs, rhs) = match (shifted_operand(*op, lhs), shifted_operand(*op, rhs)) {
+                    (Some(_), None) if commutes => (rhs, lhs),
+                    _ => (lhs, rhs),
+                };
                 let rn = self.reg(lhs)?;
                 let rd = self.result_of(rn, dst)?;
+                if let Some((base, kind, x, k)) = shifted_operand(*op, rhs) {
+                    let rm = self.reg(x)?;
+                    emit(self.code, enc_rrr_shifted(base, rd, rn, rm, kind, k));
+                    return Some(rd);
+                }
                 let word = match **rhs {
                     ShadowExpr::Imm(k) => binop_imm_peephole(*op, k, false, rd, rn),
                     _ => None,
@@ -167,9 +202,19 @@ impl Shadow<'_> {
 /// The entry's test of `exit`, branching to the early return, through a `B`
 /// when `far`. The branch's offset, or `None`, with nothing emitted, where
 /// the test needs more temporaries than it has.
-pub(super) fn emit_early_test(code: &mut Vec<u8>, exit: &EarlyExit, far: bool) -> Option<usize> {
+pub(super) fn emit_early_test(
+    code: &mut Vec<u8>,
+    exit: &EarlyExit,
+    far: bool,
+    fixed: FixedRegs,
+) -> Option<usize> {
     let start = code.len();
-    let site = Shadow { code, next: 0 }.test(exit, far);
+    let site = Shadow {
+        code,
+        next: 0,
+        fixed,
+    }
+    .test(exit, far);
     if site.is_none() {
         code.truncate(start);
     }
@@ -178,9 +223,13 @@ pub(super) fn emit_early_test(code: &mut Vec<u8>, exit: &EarlyExit, far: bool) -
 
 /// The early return of `exit`: the returned value into x0, then `ret`.
 /// `false`, with nothing emitted, where it needs more temporaries than it has.
-pub(super) fn emit_early_return(code: &mut Vec<u8>, exit: &EarlyExit) -> bool {
+pub(super) fn emit_early_return(code: &mut Vec<u8>, exit: &EarlyExit, fixed: FixedRegs) -> bool {
     let start = code.len();
-    let mut sh = Shadow { code, next: 0 };
+    let mut sh = Shadow {
+        code,
+        next: 0,
+        fixed,
+    };
     if let Some(ret) = &exit.ret
         && sh.eval(ret, Some(Reg(0))).is_none()
     {

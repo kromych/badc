@@ -5,6 +5,7 @@
 use alloc::boxed::Box;
 
 use super::super::ast::{Expr, ExprId, UnOp};
+use super::super::codegen::CallConv;
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::ir::BinOp;
@@ -45,12 +46,7 @@ impl Compiler {
     /// The function type symbol `idx` names, or a function pointer
     /// object's pointee has.
     pub(super) fn symbol_fn_type(&self, idx: usize) -> FnType {
-        let s = &self.symbols[idx];
-        FnType {
-            params: s.fn_params(),
-            conv: s.conv,
-            ret: s.ret_fn.clone(),
-        }
+        self.symbols[idx].fn_type.clone()
     }
 
     /// The function type object `idx` leads to and its depth, when it is a
@@ -203,21 +199,10 @@ impl Compiler {
     /// The function type a member leads to and its depth, each array
     /// dimension a level its value decays through.
     pub(super) fn field_fn_type(&self, field: &super::StructField) -> Option<(FnType, i64)> {
-        if field.fn_ptr_indirection <= 0 && field.params.is_empty() {
+        if field.fn_ptr_indirection <= 0 && field.fn_type.params.types.is_empty() {
             return None;
         }
-        let params = FnParams {
-            types: field.params.clone(),
-            variadic: field.is_variadic,
-            prototyped: field.prototyped,
-            enum_tags: field.param_enum_tags.clone(),
-            fn_types: field.param_fn_types.clone(),
-        };
-        let f = FnType {
-            params,
-            conv: field.conv,
-            ret: field.ret_fn.clone(),
-        };
+        let f = field.fn_type.clone();
         let dims = if field.array_size == 0 {
             0
         } else {
@@ -256,6 +241,11 @@ impl Compiler {
     /// levels above it: 0 for a function, 1 for a pointer to one.
     pub(super) fn set_expr_fn(&mut self, id: ExprId, f: FnType, depth: i64) {
         self.expr_fns.insert(id, (f, depth));
+    }
+
+    /// Whether the value in hand is a function designator: its recorded depth is 0.
+    pub(super) fn value_is_fn_designator(&self) -> bool {
+        (self.ast_acc.and_then(|id| self.expr_fn(id))).is_some_and(|(_, d)| d == 0)
     }
 
     /// Re-record the value in hand at the depth `to` gives: `*` and `&`
@@ -321,10 +311,15 @@ impl Compiler {
     /// pointer object's, or an array's of them, whose value decays one
     /// level further per dimension.
     pub(super) fn record_ident_fn(&mut self, id: ExprId, idx: usize) {
-        if let Some(depth) = self.symbol_fn_depth(idx) {
-            let f = self.symbol_fn_type(idx);
+        if let Some((f, depth)) = self.symbol_fn(idx) {
             self.set_expr_fn(id, f, depth);
         }
+    }
+
+    /// The function type symbol `idx` leads to and its depth, if any.
+    pub(super) fn symbol_fn(&self, idx: usize) -> Option<(FnType, i64)> {
+        let depth = self.symbol_fn_depth(idx)?;
+        Some((self.symbol_fn_type(idx), depth))
     }
 
     /// The function type of expression `id` and its depth, through the
@@ -405,10 +400,12 @@ impl Compiler {
 
     /// C99 6.7.5.3p15: two function types agree in their parameter
     /// information and in the function types their results point to, at
-    /// equal depths. The return types themselves ride the tags the callers
-    /// compare; the calling convention is not compared.
+    /// equal depths, and, as gcc and clang take them, in their calling
+    /// conventions. The return types themselves ride the tags the callers
+    /// compare.
     pub(super) fn fn_types_compatible(&self, a: &FnType, b: &FnType) -> bool {
-        self.fn_params_compatible(&a.params, &b.params)
+        a.conv == b.conv
+            && self.fn_params_compatible(&a.params, &b.params)
             && match (&a.ret, &b.ret) {
                 (None, None) => true,
                 (Some((ra, da)), Some((rb, db))) => da == db && self.fn_types_compatible(ra, rb),
@@ -461,12 +458,7 @@ impl Compiler {
     pub(super) fn carriers_fn_type(&self) -> Option<(FnType, i64)> {
         let p = &self.pending;
         let depth = p.fn_ptr_indirection?;
-        let f = FnType {
-            params: p.fn_ptr_params.clone().unwrap_or_default(),
-            conv: p.attr_call_conv,
-            ret: p.fn_ptr_ret_fn.clone(),
-        };
-        Some((f, depth))
+        Some((p.fn_ptr_type.clone().unwrap_or_default(), depth))
     }
 
     /// `FnType::ret` of the entity a declarator just declared, taking the
@@ -477,18 +469,53 @@ impl Compiler {
     pub(super) fn take_decl_ret_fn(&mut self, own: bool) -> Option<(Box<FnType>, i64)> {
         let chain = core::mem::take(&mut self.pending.fn_ret_chain);
         let base = self.pending.fn_decl_base.take();
-        let carrier = self.pending.fn_ptr_ret_fn.take();
         self.pending.fn_chain_levels = 0;
         let levels = core::mem::take(&mut self.pending.fn_base_levels)
             + core::mem::take(&mut self.pending.fn_chain_array_levels);
         if !core::mem::take(&mut self.pending.fn_own_sig) && !own {
-            return carrier;
+            return self
+                .pending
+                .fn_ptr_type
+                .as_ref()
+                .and_then(|f| f.ret.clone());
         }
         let mut ret = base.map(|(f, d)| (Box::new(f), d + levels));
-        for (params, depth) in chain.into_iter().rev() {
-            let conv = crate::c5::codegen::CallConv::Target;
-            ret = Some((Box::new(FnType { params, conv, ret }), depth));
+        for (f, depth) in chain.into_iter().rev() {
+            ret = Some((Box::new(FnType { ret, ..f }), depth));
         }
         ret
+    }
+
+    /// The function type the entity a declarator just declared leads to,
+    /// taking the carriers, on the convention the declaration's attributes
+    /// name if any (GNU attribute syntax).
+    pub(super) fn take_decl_fn_type(&mut self) -> Result<Option<FnType>, C5Error> {
+        let ret = self.take_decl_ret_fn(false);
+        let Some(f) = self.pending.fn_ptr_type.take() else {
+            return Ok(None);
+        };
+        let named = self.add_conv(f.named_conv(), self.pending.attrs.call_conv)?;
+        Ok(Some(FnType {
+            conv: named.unwrap_or_default(),
+            conv_named: named.is_some(),
+            ret,
+            ..f
+        }))
+    }
+
+    /// The convention a function type names once an attribute names `new`
+    /// where `prev` was named; gcc and clang reject a type naming two.
+    pub(super) fn add_conv(
+        &self,
+        prev: Option<CallConv>,
+        new: Option<CallConv>,
+    ) -> Result<Option<CallConv>, C5Error> {
+        match (prev, new) {
+            (Some(p), Some(n)) if p != n => Err(self.compile_err(
+                Code::INVALID_DECLARATION,
+                "`ms_abi` and `sysv_abi` attributes are not compatible",
+            )),
+            _ => Ok(new.or(prev)),
+        }
     }
 }

@@ -407,9 +407,8 @@ Disassembly of section .text:
                	leave
                	retq
                	movq	-0x1028(%rbp), %rax
-               	movq	%rbx, %rcx
-               	shlq	%rcx
-               	addq	$0xb, %rcx
+               	shlq	%rbx
+               	leaq	0xb(%rbx), %rcx
                	movslq	%ecx, %rcx
                	cmpq	%rcx, %rax
                	je	<addr>

@@ -97,8 +97,8 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v17  Imm(0)                                           -> x1
     v18  LifetimeEnd(0)                                   -> -
     v19  BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x1
-    v20  BinopI { op=and, lhs=v12, rhs_imm=4294967295 }   -> x0
-    v21  BinopI { op=shl, lhs=v20, rhs_imm=32 }           -> x0
+    v20  BinopI { op=and, lhs=v12, rhs_imm=4294967295 }   -> x2
+    v21  BinopI { op=shl, lhs=v12, rhs_imm=32 }           -> x0
     v22  Binop { op=or, lhs=v19, rhs=v21 }                -> x0
     v23  AggParts { desc=0, parts=[v22], fp_mask=0x0 }    -> -
     terminator Return(v23)   (exit_acc=v17)

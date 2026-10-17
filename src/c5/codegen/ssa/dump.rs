@@ -226,6 +226,23 @@ fn fmt_inst(inst: &Inst) -> String {
             c,
             neg_product,
         } => format!("MulAdd {{ a=v{a}, b=v{b}, c=v{c}, neg_product={neg_product} }}"),
+        ShiftOp {
+            op,
+            lhs,
+            rhs,
+            shift,
+            amount,
+        } => format!(
+            "ShiftOp {{ op={}, lhs=v{lhs}, rhs=v{rhs}, shift={}, amount={amount} }}",
+            fmt_binop(*op),
+            fmt_binop(*shift)
+        ),
+        BitField {
+            value,
+            lsb,
+            width,
+            signed,
+        } => format!("BitField {{ value=v{value}, lsb={lsb}, width={width}, signed={signed} }}"),
         Extend { value, kind, nsw } => {
             let mark = if *nsw { ", nsw" } else { "" };
             format!(

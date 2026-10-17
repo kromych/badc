@@ -427,6 +427,25 @@ pub(crate) fn eval_value(
         Inst::Binop { op, lhs, rhs } => eval_value(func, *lhs, state, cache, depth + 1, cmp32)
             .zip(eval_value(func, *rhs, state, cache, depth + 1, cmp32))
             .and_then(|(l, r)| fold_at_width(*op, l, r, narrow)),
+        Inst::ShiftOp {
+            op,
+            lhs,
+            rhs,
+            shift,
+            amount,
+        } => eval_value(func, *lhs, state, cache, depth + 1, cmp32)
+            .zip(eval_value(func, *rhs, state, cache, depth + 1, cmp32))
+            .and_then(|(l, r)| {
+                let shifted = fold_at_width(*shift, r, i64::from(*amount), false)?;
+                fold_at_width(*op, l, shifted, false)
+            }),
+        Inst::BitField {
+            value,
+            lsb,
+            width,
+            signed,
+        } => eval_value(func, *value, state, cache, depth + 1, cmp32)
+            .map(|x| crate::c5::ir::eval_bit_field(x, *lsb, *width, *signed)),
         _ => None,
     };
     cache.insert(v, r);

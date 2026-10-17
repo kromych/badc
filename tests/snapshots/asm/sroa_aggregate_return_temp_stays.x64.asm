@@ -46,7 +46,7 @@ Disassembly of section .text:
                	jae	<addr>
                	incq	%rax
                	movl	%eax, %eax
-               	movl	%edx, %ecx
+               	movq	%rdx, %rcx
                	shlq	$0x20, %rcx
                	orq	%rcx, %rax
                	leave
@@ -73,7 +73,7 @@ Disassembly of section .text:
                	jae	<addr>
                	incq	%rax
                	movl	%eax, %eax
-               	movl	%edx, %ecx
+               	movq	%rdx, %rcx
                	shlq	$0x20, %rcx
                	orq	%rcx, %rax
                	leave

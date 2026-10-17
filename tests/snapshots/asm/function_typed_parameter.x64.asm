@@ -60,9 +60,8 @@ Disassembly of section .text:
 <take_slot>:
                	movslq	%edi, %rdi
                	leaq	<rip>, %rax      # <addr>
-               	movq	%rdi, %rcx
-               	shlq	$0x2, %rcx
-               	addq	%rcx, %rax
+               	shlq	$0x2, %rdi
+               	addq	%rdi, %rax
                	retq
 
 <plain_func>:

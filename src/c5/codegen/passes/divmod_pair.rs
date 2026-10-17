@@ -72,6 +72,13 @@ fn run_one(func: &mut FunctionSsa) {
     let single_use = |v: ValueId| counts.get(v as usize).copied() == Some(1);
     let ranges: alloc::vec::Vec<core::ops::Range<u32>> =
         func.blocks.iter().map(|b| b.inst_range.clone()).collect();
+    // A rebuilt modulo keeps the 32-bit form where the subtract's upper
+    // half is unread.
+    let hi = func
+        .div32
+        .iter()
+        .any(|&b| b)
+        .then(|| super::drop_redundant_extend::compute_high_observed(func));
     for range in ranges {
         for v in range.clone() {
             let Some((n, t)) = as_binop(func, v, BinOp::Sub) else {
@@ -99,6 +106,14 @@ fn run_one(func: &mut FunctionSsa) {
             }
             if let Some(op) = remainder_op(div) {
                 func.insts[v as usize] = Inst::Binop { op, lhs: n, rhs: d };
+                if super::narrow::is_div32(&func.div32, q)
+                    && hi
+                        .as_ref()
+                        .is_some_and(|h| !h.get(v as usize).copied().unwrap_or(true))
+                    && let Some(slot) = func.div32.get_mut(v as usize)
+                {
+                    *slot = true;
+                }
             }
         }
     }

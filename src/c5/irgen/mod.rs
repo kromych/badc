@@ -45,6 +45,8 @@ mod types;
 mod vector;
 
 pub(crate) use function::walk_function;
+pub(crate) use types::fold_const_int_binop;
+#[cfg(test)]
 pub(crate) use types::fold_int_binop;
 
 /// The low and high 64-bit halves of a 128-bit value, in that order.
@@ -317,6 +319,7 @@ struct Walker<'a> {
     /// `-fno-jump-tables`, which leaves every switch on the compare
     /// tree so the dispatch takes no indirect branch.
     jump_tables: bool,
+    weak_refs_by_name: bool,
 }
 
 impl<'a> Walker<'a> {
@@ -325,15 +328,15 @@ impl<'a> Walker<'a> {
     /// shape, so its floating-point arguments ride the integer
     /// register class as widened doubles rather than the FP bank.
     fn fun_is_variadic(&self, sym: u32) -> bool {
-        live_fun_sym(self.symbols, sym).is_some_and(|s| s.is_variadic)
+        live_fun_sym(self.symbols, sym).is_some_and(|s| s.is_variadic())
     }
 
     /// Count of named (pre-ellipsis) parameters the symbol declares,
-    /// from `Symbol::params`. A variadic callee's arguments past this
+    /// from `Symbol::fn_type`. A variadic callee's arguments past this
     /// count are the variadic tail, which the macOS arm64 ABI places on
     /// the host stack rather than in the register banks.
     fn fun_fixed_args(&self, sym: u32) -> usize {
-        live_fun_sym(self.symbols, sym).map_or(0, |s| s.params.len())
+        live_fun_sym(self.symbols, sym).map_or(0, |s| s.params().len())
     }
 
     /// An indirect call's `(is_variadic, fixed_arg_count)`, from the
@@ -346,38 +349,40 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// Calling convention the callee of a call expression follows,
-    /// directly or through a pointer. Every ABI question the call site
+    /// Calling convention the callee of a call expression follows, directly
+    /// or through a pointer: that of the callee expression's function type
+    /// the parse recorded (C99 6.5.2.2). Every ABI question the call site
     /// asks is asked of this, not of the target's own convention.
     fn callee_conv(&self, callee: ExprId) -> crate::c5::codegen::CallConv {
-        if let Expr::Ident { sym, class, .. } = self.ast.expr(callee)
-            && (*class == Token::Fun as i64 || binding_defined_here(self.symbols, *sym, *class))
-            && let Some(s) = self.symbols.get(*sym as usize)
-            && s.conv != crate::c5::codegen::CallConv::Target
-        {
-            return s.conv;
-        }
-        self.indirect_callee_conv(callee)
-    }
-
-    /// Calling convention the pointed-to function of an indirect call
-    /// follows, from the callee's function type the parse recorded.
-    fn indirect_callee_conv(&self, callee: ExprId) -> crate::c5::codegen::CallConv {
         self.ast
             .callee_types
             .get(&callee)
             .map_or(crate::c5::codegen::CallConv::Target, |f| f.conv)
     }
 
+    /// [`glo_ident_addr`], a weak definition by name under `weak_refs_by_name`.
+    fn glo_addr(&self, id: ExprId, sym: u32, val: i64) -> GloAddr {
+        let weak = self
+            .symbols
+            .get(sym as usize)
+            .is_some_and(Symbol::is_weak_definition);
+        if self.weak_refs_by_name && weak {
+            return GloAddr::Extern;
+        }
+        glo_ident_addr(self.symbols, self.ast, id, sym, val)
+    }
+
     /// Address class for a `_Thread_local` access: a pure extern
     /// reference resolves by symbol against the merged TLS block at link
     /// time, and a unit-local definition by its offset within this
-    /// unit's TLS block.
+    /// unit's TLS block; a weak one, under `weak_refs_by_name`, by symbol.
     fn live_tls_addr(&self, sym: u32, fallback_val: i64) -> GloAddr {
         let idx = sym as usize;
         if idx < self.symbols.len() {
             let s = &self.symbols[idx];
-            if s.is_extern_decl && !s.defined_here {
+            if (s.is_extern_decl && !s.defined_here)
+                || (self.weak_refs_by_name && s.is_weak_definition())
+            {
                 return GloAddr::Extern;
             }
             if s.defined_here {

@@ -120,10 +120,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=2
     v90  AsmOut(1, kind=U8)                               -> x1
     v91  BinopI { op=and, lhs=v90, rhs_imm=255 }          -> x0
     v92  BinopI { op=and, lhs=v90, rhs_imm=255 }          -> x0
-    v93  BinopI { op=xor, lhs=v90, rhs_imm=1 }            -> x0
-    v94  BinopI { op=and, lhs=v93, rhs_imm=4294967295 }   -> x1
-    v95  BinopI { op=ne, lhs=v93, rhs_imm=0 }             -> x1
-    v96  Imm(0)                                           -> x1
+    v93  BinopI { op=xor, lhs=v90, rhs_imm=1 }            -> x1
+    v94  BinopI { op=and, lhs=v93, rhs_imm=4294967295 }   -> x0
+    v95  BinopI { op=ne, lhs=v93, rhs_imm=0 }             -> x0
+    v96  Imm(0)                                           -> x0
     terminator Bnz { cond=v93, target=b14, fall=b13 }   (low word)   (exit_acc=v95)
   block 13  start_pc=0
     v97  Imm(1)                                           -> x0

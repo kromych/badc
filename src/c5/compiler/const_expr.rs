@@ -36,9 +36,10 @@ use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::diag::Category;
 use super::types::{
-    UNSIGNED_BIT, add_ptr_level, integer_promote, is_floating_ty, is_long_double_ty, is_pointer_ty,
-    is_struct_ty, is_struct_value_ty, is_unsigned_ty, narrow_const_int, pointee_ty, strip_unsigned,
-    struct_id_of, struct_ptr_depth, unqualified_version_ty,
+    LONG_DOUBLE_BIT, UNSIGNED_BIT, add_ptr_level, integer_promote, is_floating_scalar,
+    is_floating_ty, is_long_double_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty,
+    is_unsigned_ty, narrow_const_int, pointee_ty, strip_unsigned, struct_id_of, struct_ptr_depth,
+    unqualified_version_ty,
 };
 
 /// Compile-time arithmetic value of a constant expression. Integer
@@ -63,7 +64,11 @@ pub(super) enum ConstVal {
         val: i128,
         ty: i64,
     },
-    Float(f64),
+    /// A value of `float`, `double` or `long double`, held rounded to it.
+    Float {
+        val: f64,
+        ty: i64,
+    },
     /// A symbol-relative address constant (C99 6.6p9): a function or
     /// object designator that has not been reduced to an integer. It
     /// participates in pointer equality / relational folding and in the
@@ -115,15 +120,16 @@ pub(super) enum ConstRoot {
 /// compound literal's type.
 pub(super) struct ConstTypeName {
     pub ty: i64,
-    /// An array typedef's dimensions, when no pointer derivation absorbed
-    /// them into a pointee.
-    pub base_dims: alloc::vec::Vec<i64>,
+    /// The bounds of an array type, outermost first.
+    pub dims: alloc::vec::Vec<i64>,
     /// The named object's own storage is const-qualified (C99 6.7.3): a
     /// `const` among the specifiers of a non-pointer type, or one after
     /// the outermost `*`.
     pub object_is_const: bool,
     /// The function type the named type leads to, and its depth.
     pub fn_ty: Option<(crate::c5::symbol::FnType, i64)>,
+    /// The named type is a function type.
+    pub is_function: bool,
 }
 
 impl ConstRoot {
@@ -219,7 +225,7 @@ impl ConstVal {
     pub(super) fn as_i128(self) -> i128 {
         match self {
             ConstVal::Int { val, .. } => val,
-            ConstVal::Float(v) => v as i128,
+            ConstVal::Float { val, .. } => val as i128,
             ConstVal::Addr(a) => a.value as i128,
         }
     }
@@ -229,19 +235,83 @@ impl ConstVal {
     fn int_ty(self) -> i64 {
         match self {
             ConstVal::Int { ty, .. } => ty,
-            ConstVal::Float(_) => Ty::Int as i64,
+            ConstVal::Float { .. } => Ty::Int as i64,
             ConstVal::Addr(_) => Ty::Ptr as i64,
         }
     }
 
-    /// The type of the folded expression: an integer's own, `double` for a
-    /// floating value, an address constant's (see [`ConstAddr::ty`]).
+    /// The type of the folded expression.
     pub(super) fn expr_ty(self) -> i64 {
         match self {
-            ConstVal::Int { ty, .. } => ty,
-            ConstVal::Float(_) => Ty::Double as i64,
+            ConstVal::Int { ty, .. } | ConstVal::Float { ty, .. } => ty,
             ConstVal::Addr(a) => a.ty,
         }
+    }
+
+    /// A value of the floating type `ty`, rounded to it.
+    pub(super) fn float(val: f64, ty: i64) -> Self {
+        let ty = if strip_unsigned(ty) == Ty::Float as i64 {
+            Ty::Float as i64
+        } else if is_long_double_ty(ty) {
+            Ty::Double as i64 | LONG_DOUBLE_BIT
+        } else {
+            Ty::Double as i64
+        };
+        let val = if ty == Ty::Float as i64 {
+            val as f32 as f64
+        } else {
+            val
+        };
+        ConstVal::Float { val, ty }
+    }
+
+    /// The value converted to the floating type `ty` with one rounding
+    /// (C99 6.3.1.4p2, 6.3.1.5p1).
+    fn to_floating(self, ty: i64) -> Self {
+        let single = strip_unsigned(ty) == Ty::Float as i64;
+        let val = match self {
+            ConstVal::Int { val, ty: from } if is_unsigned_ty(from) && single => {
+                val as u128 as f32 as f64
+            }
+            ConstVal::Int { val, ty: from } if is_unsigned_ty(from) => val as u128 as f64,
+            ConstVal::Int { val, .. } if single => val as f32 as f64,
+            ConstVal::Int { val, .. } => val as f64,
+            ConstVal::Float { val, .. } => val,
+            ConstVal::Addr(a) => a.value as f64,
+        };
+        ConstVal::float(val, ty)
+    }
+
+    /// C99 6.3.1.8p1: the floating type two operands convert to when one
+    /// is floating, the higher-ranked floating operand's.
+    fn floating_common_ty(self, other: ConstVal) -> i64 {
+        let rank = |v: ConstVal| match v {
+            ConstVal::Float { ty, .. } if is_long_double_ty(ty) => (3, ty),
+            ConstVal::Float { ty, .. } if ty == Ty::Double as i64 => (2, ty),
+            ConstVal::Float { ty, .. } => (1, ty),
+            _ => (0, Ty::Double as i64),
+        };
+        rank(self).max(rank(other)).1
+    }
+
+    /// `f` over two operands, one floating, in their common floating type.
+    fn float_arith(self, r: ConstVal, f: impl Fn(f64, f64) -> f64) -> Self {
+        let ty = self.floating_common_ty(r);
+        let (a, b) = (
+            self.to_floating(ty).as_float(),
+            r.to_floating(ty).as_float(),
+        );
+        ConstVal::float(f(a, b), ty)
+    }
+
+    /// The comparison `f` in the operands' common floating type, as an `int`.
+    fn float_cmp(self, r: ConstVal, f: impl Fn(f64, f64) -> bool) -> Self {
+        let ty = self.floating_common_ty(r);
+        let (a, b) = (
+            self.to_floating(ty).as_float(),
+            r.to_floating(ty).as_float(),
+        );
+        ConstVal::int(i64::from(f(a, b)))
     }
 
     /// Coerce to an `f64`. Integer values widen exactly for any value
@@ -250,13 +320,13 @@ impl ConstVal {
     pub(super) fn as_float(self) -> f64 {
         match self {
             ConstVal::Int { val, .. } => val as f64,
-            ConstVal::Float(v) => v,
+            ConstVal::Float { val, .. } => val,
             ConstVal::Addr(a) => a.value as f64,
         }
     }
 
-    fn is_float(self) -> bool {
-        matches!(self, ConstVal::Float(_))
+    pub(super) fn is_float(self) -> bool {
+        matches!(self, ConstVal::Float { .. })
     }
 
     /// True for a symbol-relative address constant (never null) or a
@@ -279,7 +349,7 @@ impl ConstVal {
     fn is_truthy(self) -> bool {
         match self {
             ConstVal::Int { val, .. } => val != 0,
-            ConstVal::Float(v) => v != 0.0,
+            ConstVal::Float { val, .. } => val != 0.0,
             // A symbol's address is never null; a sym-less address is
             // truthy iff its byte value is non-zero.
             ConstVal::Addr(a) => a.root.is_symbolic() || a.value != 0,
@@ -574,17 +644,10 @@ impl Compiler {
         r
     }
 
-    /// An initializer's arithmetic constant (C99 6.6p7), which may have
-    /// floating type, keeping all 128 bits for a 16-byte integer destination.
-    pub(super) fn parse_constant_i128(&mut self) -> Result<i128, C5Error> {
-        let v = self.parse_const_expr_cond_val()?;
-        Ok(self.reject_symbolic_addr(v)?.as_i128())
-    }
-
     /// C99 6.6p6: an integer constant expression has integer type, so
     /// neither a floating result nor an address is one.
     pub(super) fn require_integer_const(&self, v: ConstVal) -> Result<ConstVal, C5Error> {
-        if let ConstVal::Float(_) = v {
+        if v.is_float() {
             return Err(self.compile_err(
                 Code::CONSTANT_EXPRESSION,
                 "integer constant expression has floating type",
@@ -1061,10 +1124,56 @@ impl Compiler {
             }
             self.next()?;
             let else_val = self.parse_const_unevaluated(taken, Self::parse_const_expr_cond_val)?;
-            Ok(if taken { then_val } else { else_val })
+            Ok(self.const_cond_result(taken, then_val, else_val))
         } else {
             Ok(cond)
         }
+    }
+
+    /// The value of `?:` with `taken` selecting between its arms, in the
+    /// arms' common arithmetic type (C99 6.5.15p5).
+    pub(super) fn const_cond_result(
+        &self,
+        taken: bool,
+        then: ConstVal,
+        other: ConstVal,
+    ) -> ConstVal {
+        let selected = if taken { then } else { other };
+        match self.arith_result_ty(then, other) {
+            Some(ty) => self.const_convert(selected, ty),
+            None => selected,
+        }
+    }
+
+    /// C99 6.3.1.8: the type the usual arithmetic conversions give two
+    /// arithmetic operands; `None` when either is an address or a pointer.
+    fn arith_result_ty(&self, a: ConstVal, b: ConstVal) -> Option<i64> {
+        match (a, b) {
+            (ConstVal::Addr(_), _) | (_, ConstVal::Addr(_)) => None,
+            (ConstVal::Int { ty: x, .. }, ConstVal::Int { ty: y, .. }) => {
+                (!is_pointer_ty(x) && !is_pointer_ty(y)).then(|| self.arith_common_ty(x, y))
+            }
+            (x, y) => (!is_pointer_ty(x.expr_ty()) && !is_pointer_ty(y.expr_ty()))
+                .then(|| x.floating_common_ty(y)),
+        }
+    }
+
+    /// `v` converted to the arithmetic type `ty` (C99 6.3.1.2-6.3.1.5); a
+    /// symbol's address stays as it is.
+    pub(super) fn const_convert(&self, v: ConstVal, ty: i64) -> ConstVal {
+        if v.is_symbolic_addr() {
+            return v;
+        }
+        if is_floating_scalar(ty) {
+            return v.to_floating(ty);
+        }
+        let is_bool = strip_unsigned(ty) == Ty::Bool as i64;
+        let val = match v {
+            ConstVal::Float { val, .. } if is_bool => i128::from(val != 0.0),
+            v => v.as_i128(),
+        };
+        let val = narrow_const_int(self.size_of_type(ty), is_unsigned_ty(ty), is_bool, val);
+        ConstVal::Int { val, ty }
     }
 
     /// Run `rule` with the unevaluated-operand depth raised when
@@ -1192,8 +1301,7 @@ impl Compiler {
             self.next()?;
             let r = self.parse_const_expr_rel_val()?;
             left = if left.is_float() || r.is_float() {
-                let eq = left.as_float() == r.as_float();
-                ConstVal::int((if op == ConstBinOp::Eq { eq } else { !eq }) as i64)
+                left.float_cmp(r, |a, b| (a == b) == (op == ConstBinOp::Eq))
             } else {
                 self.const_int_binop(op, left, r)?
             };
@@ -1223,15 +1331,12 @@ impl Compiler {
             self.next()?;
             let r = self.parse_const_expr_shift_val()?;
             left = if left.is_float() || r.is_float() {
-                let lf = left.as_float();
-                let rf = r.as_float();
-                let b = match op {
-                    ConstBinOp::Lt => lf < rf,
-                    ConstBinOp::Le => lf <= rf,
-                    ConstBinOp::Gt => lf > rf,
-                    _ => lf >= rf,
-                };
-                ConstVal::int(b as i64)
+                left.float_cmp(r, |a, b| match op {
+                    ConstBinOp::Lt => a < b,
+                    ConstBinOp::Le => a <= b,
+                    ConstBinOp::Gt => a > b,
+                    _ => a >= b,
+                })
             } else {
                 self.const_int_binop(op, left, r)?
             };
@@ -1280,7 +1385,7 @@ impl Compiler {
                 self.next()?;
                 let r = self.parse_const_expr_mul_val()?;
                 left = if left.is_float() || r.is_float() {
-                    ConstVal::Float(left.as_float() + r.as_float())
+                    left.float_arith(r, |a, b| a + b)
                 } else {
                     self.const_int_binop(ConstBinOp::Add, left, r)?
                 };
@@ -1288,7 +1393,7 @@ impl Compiler {
                 self.next()?;
                 let r = self.parse_const_expr_mul_val()?;
                 left = if left.is_float() || r.is_float() {
-                    ConstVal::Float(left.as_float() - r.as_float())
+                    left.float_arith(r, |a, b| a - b)
                 } else {
                     self.const_int_binop(ConstBinOp::Sub, left, r)?
                 };
@@ -1310,7 +1415,7 @@ impl Compiler {
                 self.next()?;
                 let r = self.parse_const_expr_unary_val()?;
                 left = if left.is_float() || r.is_float() {
-                    ConstVal::Float(left.as_float() * r.as_float())
+                    left.float_arith(r, |a, b| a * b)
                 } else {
                     self.const_int_binop(ConstBinOp::Mul, left, r)?
                 };
@@ -1321,7 +1426,7 @@ impl Compiler {
                     // C99 Annex F / IEEE 754: floating division by zero
                     // yields +/-infinity for a non-zero numerator and NaN
                     // for 0.0/0.0, not a fold to zero.
-                    ConstVal::Float(left.as_float() / r.as_float())
+                    left.float_arith(r, |a, b| a / b)
                 } else {
                     self.const_int_binop(ConstBinOp::Div, left, r)?
                 };
@@ -1356,6 +1461,21 @@ impl Compiler {
         }
     }
 
+    /// The floating constant at the cursor, of the type its suffix names
+    /// (C99 6.4.4.2p4).
+    pub(super) fn const_float_literal(&mut self) -> Result<ConstVal, C5Error> {
+        let ty = if self.lex.float_suffix_f32 {
+            Ty::Float as i64
+        } else if self.lex.float_suffix_long {
+            Ty::Double as i64 | LONG_DOUBLE_BIT
+        } else {
+            Ty::Double as i64
+        };
+        let v = ConstVal::float(f64::from_bits(self.lex.ival as u64), ty);
+        self.next()?;
+        Ok(v)
+    }
+
     pub(super) fn parse_const_expr_unary_val(&mut self) -> Result<ConstVal, C5Error> {
         // Every recursive cycle in the constant-expression grammar
         // (parentheses, ternary arms, unary chains) passes through
@@ -1367,7 +1487,7 @@ impl Compiler {
         if self.lex.tk == Token::SubOp {
             self.next()?;
             return Ok(match self.parse_const_expr_unary_val()? {
-                ConstVal::Float(v) => ConstVal::Float(-v),
+                ConstVal::Float { val, ty } => ConstVal::Float { val: -val, ty },
                 v => self.const_unary_promoted(v.as_i128().wrapping_neg(), v.int_ty()),
             });
         }
@@ -1902,10 +2022,15 @@ impl Compiler {
             ));
         }
         self.reject_automatic_compound_literal_root(d.root)?;
+        // GNU C: arithmetic on a pointer to a function counts bytes.
+        let elem_size = match d.root {
+            ConstRoot::Code(_) => 1,
+            _ => (self.size_of_type(d.ty) as i64).max(1),
+        };
         Ok(ConstAddr {
             value: d.value,
             root: d.root,
-            elem_size: (self.size_of_type(d.ty) as i64).max(1),
+            elem_size,
             pointee: Some(d.ty),
             ty: add_ptr_level(d.ty),
         })
@@ -2074,6 +2199,32 @@ impl Compiler {
         (ty, (self.size_of_type(ty) as i64).max(1))
     }
 
+    /// The address of the row at `level` of array literal `sym` at `base`.
+    pub(super) fn literal_row_addr(
+        &mut self,
+        sym: usize,
+        base: i64,
+        elem_ty: i64,
+        dims: &[i64],
+        level: usize,
+    ) -> ConstVal {
+        let elem_size = (self.size_of_type(elem_ty) as i64).max(1);
+        let span: i64 = dims[level + 1..].iter().product::<i64>().max(1);
+        let innermost = level + 1 == dims.len();
+        let row = if innermost {
+            elem_ty
+        } else {
+            self.array_agg_type(elem_ty, &dims[level + 1..])
+        };
+        ConstVal::Addr(ConstAddr {
+            value: base,
+            root: ConstRoot::Data(sym),
+            elem_size: span * elem_size,
+            pointee: innermost.then_some(elem_ty),
+            ty: add_ptr_level(row),
+        })
+    }
+
     fn reject_automatic_compound_literal_root(&self, root: ConstRoot) -> Result<(), C5Error> {
         match root {
             ConstRoot::Data(sym) => self.reject_automatic_compound_literal(sym),
@@ -2088,8 +2239,18 @@ impl Compiler {
     /// initialized.
     pub(super) fn parse_const_type_name(&mut self) -> Result<ConstTypeName, C5Error> {
         let outer = self.pending.take_decl_type_carriers();
-        let r = self.parse_const_type_name_inner();
+        let outer_conv = core::mem::take(&mut self.pending.attrs.call_conv);
+        let mut r = self.parse_const_type_name_inner();
+        let conv = core::mem::replace(&mut self.pending.attrs.call_conv, outer_conv);
         self.pending.restore_decl_type_carriers(outer);
+        if let Ok(ConstTypeName {
+            fn_ty: Some((f, _)),
+            ..
+        }) = &mut r
+            && let Some(conv) = self.add_conv(f.named_conv(), conv)?
+        {
+            (f.conv, f.conv_named) = (conv, true);
+        }
         r
     }
 
@@ -2104,7 +2265,8 @@ impl Compiler {
         let ptr_levels = ptr.levels;
         // The first `*` on a function-type typedef forms the pointer to the
         // function, as in a declarator.
-        let absorbed = core::mem::take(&mut self.pending.base_is_function_type) && ptr_levels > 0;
+        let base_is_fn = core::mem::take(&mut self.pending.base_is_function_type);
+        let absorbed = base_is_fn && ptr_levels > 0;
         let ty = if absorbed {
             super::types::absorb_function_level(ptr.ty, super::types::ptr_depth_of(ty))
         } else {
@@ -2116,23 +2278,26 @@ impl Compiler {
         while self.lex.tk == Token::TypeQual {
             self.next()?;
         }
-        let base_dims = self.take_typedef_literal_dims(ptr_levels);
+        let dims = self.take_typedef_literal_dims(ptr_levels);
+        let is_function = base_is_fn && !absorbed;
+        if self.lex.tk == '(' {
+            return self.derive_const_declarator(ty, dims, (fn_ty, is_function));
+        }
         Ok(ConstTypeName {
             ty,
-            base_dims,
-            object_is_const: outer_const || (base_is_const && ptr_levels == 0),
+            dims,
+            object_is_const: outer_const
+                || (base_is_const && ptr_levels == 0)
+                || super::types::is_const_object_ty(ty),
             fn_ty,
+            is_function,
         })
     }
 
-    /// On the `)` closing a type name an array typedef completed: whether
-    /// a `{` follows, which makes it a compound literal of the array type
-    /// rather than a cast. The lexer position is unchanged on return.
-    pub(super) fn at_typedef_array_literal(
-        &mut self,
-        name: &ConstTypeName,
-    ) -> Result<bool, C5Error> {
-        if name.base_dims.is_empty() || self.lex.tk != ')' {
+    /// On the `)` closing an array type name: whether a `{` follows (a
+    /// compound literal, not a cast); the lexer does not move.
+    pub(super) fn at_array_type_literal(&mut self, name: &ConstTypeName) -> Result<bool, C5Error> {
+        if name.dims.is_empty() || self.lex.tk != ')' {
             return Ok(false);
         }
         let snap = self.lex.snapshot();
@@ -2202,10 +2367,10 @@ impl Compiler {
                 // following `[i].member` chain designates -- typed by the
                 // element for one dimension, by the array-aggregate tag for
                 // more so each subscript strides by its row.
-                if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
+                if self.lex.tk == Token::Brak || self.at_array_type_literal(&name)? {
                     let elem = (ty, name.fn_ty.clone());
                     let (off, sym, dims) =
-                        self.emit_array_compound_literal_body(elem, &name.base_dims)?;
+                        self.emit_array_compound_literal_body(elem, &name.dims)?;
                     self.symbols[sym].storage_is_const = name.object_is_const;
                     let count = dims.first().copied().unwrap_or(0);
                     let desig_ty = self.array_desig_ty(ty, &dims, count);
@@ -2223,6 +2388,7 @@ impl Compiler {
                         "close paren expected after cast type in constant expression",
                     ));
                 }
+                self.reject_cast_type(!name.dims.is_empty(), name.is_function)?;
                 self.next()?;
                 // C99 6.5.2.5 compound literal `(T){ ... }`: an anonymous
                 // static object, an lvalue whose address is the constant. A
@@ -2461,16 +2627,11 @@ impl Compiler {
                 .any(|r| hit(r.data_offset))
     }
 
-    /// An integer constant of type `ty` whose `i128` is the value the type
-    /// represents: the low bits of `v` at the type's width, zero-extended
-    /// for an unsigned type. A 64-bit literal or object read arrives as
-    /// sign-extended `i64` bits, which read as negative in a conversion to
-    /// a floating type (C99 6.3.1.4p2).
     /// C99 6.6p9: an integer constant converted to pointer type `ty` is an
     /// address constant with no symbol, whose arithmetic strides by the
-    /// pointee (6.5.6p8) -- `array_pointee` when it points to an array.
-    fn const_pointer_of(&self, v: i128, ty: i64, array_pointee: Option<i64>) -> ConstVal {
-        let pointee = array_pointee.unwrap_or_else(|| pointee_ty(ty));
+    /// pointee (6.5.6p8).
+    fn const_pointer_of(&self, v: i128, ty: i64) -> ConstVal {
+        let pointee = pointee_ty(ty);
         ConstVal::Addr(ConstAddr {
             value: v as i64,
             root: ConstRoot::None,
@@ -2480,6 +2641,8 @@ impl Compiler {
         })
     }
 
+    /// An integer constant of type `ty`: the low bits of `v` at its width,
+    /// zero-extended for an unsigned type.
     pub(super) fn const_int_of(&self, v: i128, ty: i64) -> ConstVal {
         let bytes = self.size_of_type(ty);
         let is_bool = strip_unsigned(ty) == Ty::Bool as i64;
@@ -2503,7 +2666,7 @@ impl Compiler {
         let s = &self.symbols[idx];
         // A block-scope static is complete at its declaration; a file-scope
         // object without an initializer yet may still receive one.
-        let initialized = s.has_initializer || s.static_local_record.is_some();
+        let initialized = s.has_initializer || s.entity_record.is_some();
         if s.class != Token::Glo as i64
             || !s.storage_is_const
             || !initialized
@@ -2615,10 +2778,10 @@ impl Compiler {
             return Some(ConstVal::Addr(a));
         }
         let bits = read_image_int(self.object_image(tls), at, size, ty);
-        Some(match (is_floating_ty(ty), size) {
-            (true, 4) => ConstVal::Float(f32::from_bits(bits as u32) as f64),
-            (true, _) => ConstVal::Float(f64::from_bits(bits as u64)),
-            _ if is_pointer_ty(ty) => self.const_pointer_of(bits, ty, None),
+        Some(match (is_floating_scalar(ty), size) {
+            (true, 4) => ConstVal::float(f32::from_bits(bits as u32) as f64, ty),
+            (true, _) => ConstVal::float(f64::from_bits(bits as u64), ty),
+            _ if is_pointer_ty(ty) => self.const_pointer_of(bits, ty),
             (false, _) => self.const_int_of(bits, ty),
         })
     }
@@ -2667,20 +2830,25 @@ impl Compiler {
             return None;
         }
         let at = at as u64;
-        if let Some(i) = self.data_relocs.iter().position(|r| r.data_offset == at) {
-            let sym = *self.data_reloc_sym_idx.get(i)?;
-            return (sym != usize::MAX).then(|| ConstAddr {
-                value: self.data_relocs[i].target_offset as i64,
-                root: ConstRoot::Data(sym),
+        if let Some(r) = self.data_relocs.iter().find(|r| r.data_offset == at) {
+            return Some(ConstAddr {
+                value: r.target_offset as i64,
+                root: ConstRoot::Data(r.target_sym? as usize),
                 elem_size: 1,
                 pointee: None,
                 ty,
             });
         }
         let i = self.code_relocs.iter().position(|r| r.data_offset == at)?;
+        let sym = *self.code_reloc_sym_idx.get(i)?;
+        // `code_reloc_at` measured the addend from the symbol's pc.
         Some(ConstAddr {
-            value: self.code_relocs[i].target_ent_pc as i64,
-            root: ConstRoot::Code(*self.code_reloc_sym_idx.get(i)?),
+            value: self
+                .symbols
+                .get(sym)?
+                .val
+                .wrapping_add(self.code_relocs[i].addend),
+            root: ConstRoot::Code(sym),
             elem_size: 1,
             pointee: None,
             ty,
@@ -2742,16 +2910,16 @@ impl Compiler {
             // the cast clamps it back to integer per C99 6.3.1.4.
             if self.lex_is_type_start() {
                 let name = self.parse_const_type_name()?;
-                let mut target_ty = name.ty;
+                let target_ty = name.ty;
                 // C99 6.5.2.5 array-typed compound literal `(T[]){...}` in a
                 // value context: the literal decays to the address of its
                 // anonymous static object. A subscript chain selects a row
                 // per leading index; the final index reads the staged
                 // element back as the constant value.
-                if self.lex.tk == Token::Brak || self.at_typedef_array_literal(&name)? {
+                if self.lex.tk == Token::Brak || self.at_array_type_literal(&name)? {
                     let elem = (target_ty, name.fn_ty.clone());
                     let (off, sym, dims) =
-                        self.emit_array_compound_literal_body(elem, &name.base_dims)?;
+                        self.emit_array_compound_literal_body(elem, &name.dims)?;
                     self.pending.const_expr_compound_literal = true;
                     self.symbols[sym].storage_is_const = name.object_is_const;
                     let elem_size = (self.size_of_type(target_ty) as i64).max(1);
@@ -2776,46 +2944,13 @@ impl Compiler {
                     }
                     // Fewer subscripts than dimensions: the address of a
                     // row, whose pointer strides by the remaining span.
-                    let root = ConstRoot::Data(sym);
-                    self.reject_automatic_compound_literal_root(root)?;
-                    let span: i64 = dims[level + 1..].iter().product::<i64>().max(1);
-                    let row = if level + 1 == dims.len() {
-                        target_ty
-                    } else {
-                        self.array_agg_type(target_ty, &dims[level + 1..])
-                    };
-                    return Ok(ConstVal::Addr(ConstAddr {
-                        value: base,
-                        root,
-                        elem_size: span * elem_size,
-                        pointee: (level + 1 == dims.len()).then_some(target_ty),
-                        ty: add_ptr_level(row),
-                    }));
-                }
-                // Parenthesized abstract declarator: `(*)(args)` (function
-                // pointer) or `(*)[N]` (pointer to array). The shared helper
-                // returns the pointer level and a pointed-to array's
-                // dimensions (C99 6.7.7).
-                let mut array_pointee = None;
-                if self.lex.tk == '(' {
-                    let abs = self.parse_abstract_ptr_declarator(false)?;
-                    let levels = abs.pointer_levels() * Ty::Ptr as i64;
-                    match abs.pointee_dims().filter(|d| d.iter().all(|&d| d > 0)) {
-                        // The pointer to the array, which arithmetic strides
-                        // by (C99 6.5.6p8) and the value keeps as its type.
-                        Some(dims) => {
-                            target_ty = self.array_agg_type(target_ty, &dims) + levels;
-                            array_pointee = Some(pointee_ty(target_ty));
-                        }
-                        None => target_ty += levels,
-                    }
-                    while self.lex.tk == Token::TypeQual {
-                        self.next()?;
-                    }
+                    self.reject_automatic_compound_literal(sym)?;
+                    return Ok(self.literal_row_addr(sym, base, target_ty, &dims, level));
                 }
                 if self.lex.tk != ')' {
                     return Err(self.compile_err(Code::SYNTAX, "close paren expected after cast"));
                 }
+                self.reject_cast_type(!name.dims.is_empty(), name.is_function)?;
                 self.next()?;
                 self.reject_void_value(target_ty)?;
                 // C99 6.5.2.5 scalar-typed compound literal `(T){ v }`: the
@@ -2872,42 +3007,20 @@ impl Compiler {
                     let ptr_target = is_pointer_ty(target_ty)
                         || (is_struct_ty(target_ty) && struct_ptr_depth(target_ty) > 0);
                     a.ty = target_ty;
-                    a.pointee = match array_pointee {
-                        Some(arr) => Some(arr),
-                        None => ptr_target.then(|| pointee_ty(target_ty)),
-                    };
+                    a.pointee = ptr_target.then(|| pointee_ty(target_ty));
                     a.elem_size = a
                         .pointee
                         .map_or(1, |p| (self.size_of_type(p) as i64).max(1));
                     return Ok(ConstVal::Addr(a));
                 }
-                if !is_floating_ty(target_ty) && !matches!(v, ConstVal::Float(_)) {
+                if !v.is_float() {
                     let ptr_target = is_pointer_ty(target_ty)
                         || (is_struct_ty(target_ty) && struct_ptr_depth(target_ty) > 0);
                     if ptr_target {
-                        return Ok(self.const_pointer_of(v.as_i128(), target_ty, array_pointee));
+                        return Ok(self.const_pointer_of(v.as_i128(), target_ty));
                     }
                 }
-                return Ok(if is_floating_ty(target_ty) {
-                    ConstVal::Float(v.as_float())
-                } else {
-                    // C99 6.3.1.3: a cast to an integer type narrows
-                    // the operand to the target width and re-interprets
-                    // it by the target's signedness, so `(int)UINT_MAX`
-                    // folds to -1 rather than 0xFFFFFFFF. Pointer
-                    // targets are 8 bytes and keep the full value.
-                    let bytes = self.size_of_type(target_ty);
-                    let is_bool = strip_unsigned(target_ty) == Ty::Bool as i64;
-                    ConstVal::Int {
-                        val: narrow_const_int(
-                            bytes,
-                            is_unsigned_ty(target_ty),
-                            is_bool,
-                            v.as_i128(),
-                        ),
-                        ty: target_ty,
-                    }
-                });
+                return Ok(self.const_convert(v, target_ty));
             }
             let v = self.parse_const_expr_cond_val()?;
             if self.lex.tk != ')' {
@@ -2942,9 +3055,7 @@ impl Compiler {
             // expression and truncate at the integer boundary. We
             // match the lenient interpretation: surface the f64 and
             // let the chain decide whether it survives.
-            let v = f64::from_bits(self.lex.ival as u64);
-            self.next()?;
-            return Ok(ConstVal::Float(v));
+            return self.const_float_literal();
         }
         if self.lex.tk == Token::Id && self.symbols[self.lex.curr_id_idx].class == Token::Num as i64
         {
@@ -2976,7 +3087,7 @@ impl Compiler {
                 return Ok(match v {
                     crate::c5::symbol::ConstObjectValue::Int(i) => self.const_int_of(i as i128, ty),
                     crate::c5::symbol::ConstObjectValue::FloatBits(b) => {
-                        ConstVal::Float(f64::from_bits(b))
+                        ConstVal::float(f64::from_bits(b), ty)
                     }
                 });
             }

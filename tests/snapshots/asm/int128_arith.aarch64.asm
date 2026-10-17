@@ -157,8 +157,7 @@ Disassembly of section .text:
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	ldr	x0, [x3]
-               	lsl	x0, x0, #63
-               	orr	x0, x2, x0
+               	orr	x0, x2, x0, lsl #63
                	mov	x17, #0x6677            // =26231
                	movk	x17, #0x4455, lsl #16
                	movk	x17, #0x2233, lsl #32
@@ -254,8 +253,7 @@ Disassembly of section .text:
                	mov	x17, #0x5               // =5
                	orr	x3, x3, x17
                	ldr	x1, [x1]
-               	lsl	x1, x1, #63
-               	eor	x1, x2, x1
+               	eor	x1, x2, x1, lsl #63
                	mov	x17, #0x5505            // =21765
                	movk	x17, #0x1133, lsl #16
                	movk	x17, #0xccef, lsl #32

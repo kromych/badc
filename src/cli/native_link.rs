@@ -619,8 +619,12 @@ struct Selection {
 impl Selection {
     /// A global or weak definition satisfies references; only a strong
     /// (STB_GLOBAL) undefined reference pulls a member, matching ELF
-    /// archive practice.
+    /// archive practice. An import the object routes to a library is
+    /// resolved at load time.
     fn account(&mut self, o: &badc::NativeObject) {
+        for (name, _) in &o.import_dylib_map {
+            self.shared.insert(name.clone());
+        }
         for s in &o.symbols {
             if s.binding == 0 {
                 continue;
@@ -782,10 +786,13 @@ fn select_archive_members(
                 }
             }
         }
-        // An object from another compiler reads a C library data object
-        // directly, so the image holds a copy of it, defined with the
-        // type the header declares.
-        let wanted = badc::copy_candidates(&native_objs, core::slice::from_ref(lib.library()));
+        // An object reading a C library data object in place has an ELF image
+        // hold a copy of it, defined with the type the header declares.
+        let wanted = if embedded.cli.target.binary_format() == badc::BinaryFormat::Elf {
+            badc::copy_candidates(&native_objs, core::slice::from_ref(lib.library()))
+        } else {
+            Default::default()
+        };
         if let Some(src) = lib.copy_definitions(&wanted) {
             let label = "<copies>";
             let object = embedded
@@ -888,6 +895,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         preemption: cli.preemption(),
         export_all: cli.link.export_all,
         export_data: cli.link.export_data,
+        no_copy_relocs: cli.target.binary_format() != badc::BinaryFormat::Elf,
     };
     let mut merged = match badc::link_native_objects_with(image.objs, image.shared_libs, &opts) {
         Ok(m) => m,

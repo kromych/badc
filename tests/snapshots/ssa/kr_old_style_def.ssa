@@ -12,8 +12,8 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
-    v9   Binop { op=sub, lhs=v1, rhs=v5 }                 -> x0
-    v10  Imm(0)                                           -> x1
+    v9   Binop { op=sub, lhs=v1, rhs=v5 }                 -> x7
+    v10  Imm(0)                                           -> x0
     v11  Binop { op=add, lhs=v9, rhs=v3 }                 -> x0
     v12  Extend { value=v11, kind=I32 }                   -> x1
     terminator Return(v11)   (exit_acc=v11)

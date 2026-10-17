@@ -16,29 +16,23 @@ Disassembly of section .text:
 <build_packed>:
                	and	x0, x0, #0xf
                	and	x4, x1, #0xf
-               	lsl	x1, x4, #4
-               	orr	x1, x0, x1
+               	orr	x1, x0, x4, lsl #4
                	and	x5, x2, #0x1f
                	and	x1, x1, #0xffffffffffffe0ff
-               	lsl	x5, x5, #8
-               	orr	x1, x1, x5
+               	orr	x1, x1, x5, lsl #8
                	and	x3, x3, #0xfffff
                	and	x5, x1, #0xf
                	eor	x5, x5, x0
                	mov	x0, #0x0                // =0
                	cbnz	w5, <addr>
                	mov	w5, w1
-               	asr	x5, x5, #4
-               	and	x5, x5, #0xf
+               	ubfx	x5, x5, #4, #4
                	eor	x4, x5, x4
                	cmp	w4, #0x0
                	cset	x4, eq
                	cbz	x4, <addr>
                	mov	w1, w1
-               	asr	x1, x1, #8
-               	and	x1, x1, #0x1f
-               	lsl	x1, x1, #59
-               	asr	x1, x1, #59
+               	sbfx	x1, x1, #8, #5
                	cmp	w1, w2
                	cset	x1, eq
                	cbz	x1, <addr>
@@ -62,13 +56,11 @@ Disassembly of section .text:
                	and	x5, x1, #0x7
                	ldur	w1, [x29, #-0x10]
                	and	x1, x1, #0xfffffffffff8ffff
-               	lsl	x6, x5, #16
-               	orr	x1, x1, x6
+               	orr	x1, x1, x5, lsl #16
                	stur	w1, [x29, #-0x10]
                	and	x6, x2, #0x3ff
                	and	x1, x1, #0xffffffffe007ffff
-               	lsl	x2, x6, #19
-               	orr	x1, x1, x2
+               	orr	x1, x1, x6, lsl #19
                	stur	w1, [x29, #-0x10]
                	and	x2, x3, #0x7ffff
                	stur	w2, [x29, #-0xc]
@@ -79,15 +71,13 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	b.ne	<addr>
                	mov	w3, w1
-               	asr	x3, x3, #16
-               	and	x3, x3, #0x7
+               	ubfx	x3, x3, #16, #3
                	eor	x3, x3, x5
                	cmp	w3, #0x0
                	cset	x3, eq
                	cbz	x3, <addr>
                	mov	w1, w1
-               	asr	x1, x1, #19
-               	and	x1, x1, #0x3ff
+               	ubfx	x1, x1, #19, #10
                	eor	x1, x1, x6
                	cmp	w1, #0x0
                	cset	x1, eq

@@ -36,8 +36,7 @@ Disassembly of section .text:
                	ldr	w4, [x0, x3, lsl #2]
                	add	x3, x1, #0x1
                	madd	x2, x4, x3, x2
-               	lsl	x4, x2, #1
-               	eor	x2, x2, x4
+               	eor	x2, x2, x2, lsl #1
                	add	x2, x2, x1
                	mov	x1, x3
                	cmp	w1, #0x3e8

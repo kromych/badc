@@ -69,23 +69,22 @@ Disassembly of section .text:
                	movq	%rax, %r9
                	subq	%rdx, %r9
                	xorq	%r9, %rdx
-               	movslq	%edx, %r9
-               	leaq	<rip>, %rdx       # <addr>
-               	addq	%r8, %rdx
-               	movslq	0x10(%rdx), %r8
-               	movq	%rsi, %rdx
-               	imulq	%rdi, %rdx
-               	movslq	%edx, %rsi
-               	xorq	%r8, %rsi
-               	cmpq	%rsi, %r9
+               	movslq	%edx, %rdx
+               	leaq	<rip>, %r9        # <addr>
+               	addq	%r9, %r8
+               	movslq	0x10(%r8), %r8
+               	imulq	%rdi, %rsi
+               	movslq	%esi, %rdi
+               	xorq	%r8, %rdi
+               	cmpq	%rdi, %rdx
                	jne	<addr>
-               	movq	%rax, %rsi
-               	subq	%rdx, %rsi
-               	leaq	<rip>, %rdx       # <addr>
+               	movq	%rax, %rdx
+               	subq	%rsi, %rdx
+               	leaq	<rip>, %rsi       # <addr>
                	imulq	$0x18, %rcx, %rdi
-               	addq	%rdi, %rdx
-               	movl	0x10(%rdx), %edx
-               	cmpl	%edx, %esi
+               	addq	%rdi, %rsi
+               	movl	0x10(%rsi), %esi
+               	cmpl	%esi, %edx
                	jne	<addr>
                	cmpl	%eax, %eax
                	jne	<addr>

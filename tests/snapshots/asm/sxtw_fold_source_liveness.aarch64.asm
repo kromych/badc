@@ -14,10 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <f>:
-               	lsl	x2, x0, #32
-               	add	x0, x0, x1
-               	asr	x2, x2, #32
-               	add	x0, x2, x0
+               	add	x2, x0, x1
+               	sxtw	x0, w0
+               	add	x0, x0, x2
                	add	x0, x0, x1
                	ret
 

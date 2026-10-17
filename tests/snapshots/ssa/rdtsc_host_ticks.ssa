@@ -6,14 +6,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   InlineAsm { template="rdtsc", ops=2, args=[-, -] } -> x0
     v2   AsmOut(1, kind=I64)                              -> x2
-    v3   BinopI { op=and, lhs=v2, rhs_imm=4294967295 }    -> x0
-    v4   BinopI { op=shl, lhs=v2, rhs_imm=32 }            -> x0
-    v5   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x0
-    v6   Binop { op=or, lhs=v4, rhs=v1 }                  -> x0
+    v3   BinopI { op=shl, lhs=v2, rhs_imm=32 }            -> x0
+    v4   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> x0
+    v5   Binop { op=or, lhs=v3, rhs=v1 }                  -> x0
+    v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
-    v9   Imm(0)                                           -> x0
-    terminator Return(v9)   (exit_acc=v9)
+    terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

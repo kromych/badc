@@ -16,9 +16,6 @@ Disassembly of section .text:
 <sum>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	lsr	x1, x0, #8
-               	lsr	x2, x0, #16
-               	lsr	x3, x0, #24
                	ldr	s19, [x29, #0x10]
                	fadd	s0, s0, s1
                	fadd	s0, s0, s2
@@ -28,13 +25,13 @@ Disassembly of section .text:
                	fadd	s0, s0, s6
                	fadd	s0, s0, s7
                	fadd	s0, s0, s19
-               	and	x0, x0, #0xff
-               	and	x1, x1, #0xff
-               	add	x0, x0, x1
-               	and	x1, x2, #0xff
-               	add	x0, x0, x1
-               	and	x1, x3, #0xff
-               	add	x0, x0, x1
+               	and	x1, x0, #0xff
+               	ubfx	x2, x0, #8, #8
+               	add	x1, x1, x2
+               	ubfx	x2, x0, #16, #8
+               	add	x1, x1, x2
+               	ubfx	x0, x0, #24, #8
+               	add	x0, x1, x0
                	scvtf	s1, x0
                	fadd	s0, s0, s1
                	ldp	x29, x30, [sp], #0x10

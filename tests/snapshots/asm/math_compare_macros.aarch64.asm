@@ -81,8 +81,7 @@ Disassembly of section .text:
                	ret
                	stur	d1, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
-               	lsr	x1, x0, #52
-               	and	x1, x1, #0x7ff
+               	ubfx	x1, x0, #52, #11
                	and	x0, x0, #0xfffffffffffff
                	cbnz	w1, <addr>
                	cbnz	x0, <addr>
@@ -91,8 +90,7 @@ Disassembly of section .text:
                	fmov	d0, #1.00000000
                	stur	d0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
-               	lsr	x1, x0, #52
-               	and	x1, x1, #0x7ff
+               	ubfx	x1, x0, #52, #11
                	and	x0, x0, #0xfffffffffffff
                	cbnz	w1, <addr>
                	cbnz	x0, <addr>
@@ -101,8 +99,7 @@ Disassembly of section .text:
                	fmov	d0, #1.00000000
                	stur	d0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
-               	lsr	x1, x0, #52
-               	and	x1, x1, #0x7ff
+               	ubfx	x1, x0, #52, #11
                	and	x0, x0, #0xfffffffffffff
                	cbnz	w1, <addr>
                	cbnz	x0, <addr>
@@ -110,8 +107,7 @@ Disassembly of section .text:
                	cbz	w0, <addr>
                	stur	d1, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
-               	lsr	x1, x0, #52
-               	and	x1, x1, #0x7ff
+               	ubfx	x1, x0, #52, #11
                	and	x0, x0, #0xfffffffffffff
                	cbnz	w1, <addr>
                	cbnz	x0, <addr>
@@ -119,8 +115,7 @@ Disassembly of section .text:
                	cbnz	w0, <addr>
                	stur	d0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
-               	lsr	x1, x0, #52
-               	and	x1, x1, #0x7ff
+               	ubfx	x1, x0, #52, #11
                	and	x0, x0, #0xfffffffffffff
                	cbnz	w1, <addr>
                	cbnz	x0, <addr>
@@ -129,8 +124,7 @@ Disassembly of section .text:
                	fmov	d0, #2.00000000
                	stur	d0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
-               	lsr	x1, x0, #52
-               	and	x1, x1, #0x7ff
+               	ubfx	x1, x0, #52, #11
                	and	x0, x0, #0xfffffffffffff
                	cbnz	w1, <addr>
                	cbnz	x0, <addr>

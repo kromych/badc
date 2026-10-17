@@ -139,13 +139,11 @@ Disassembly of section .text:
                	movk	x17, #0x5555, lsl #16
                	mul	x0, x20, x17
                	asr	x0, x0, #32
-               	lsr	x2, x0, #63
-               	add	x0, x0, x2
+               	add	x0, x0, x0, lsr #63
                	mov	x17, #0x3               // =3
                	mul	x0, x0, x17
                	sub	x0, x20, x0
-               	lsl	x0, x0, #3
-               	add	x0, x1, x0
+               	add	x0, x1, x0, lsl #3
                	str	x20, [x0]
                	mov	x0, x20
                	bl	<addr>
@@ -160,13 +158,11 @@ Disassembly of section .text:
                	movk	x17, #0x5555, lsl #16
                	mul	x0, x20, x17
                	asr	x0, x0, #32
-               	lsr	x2, x0, #63
-               	add	x0, x0, x2
+               	add	x0, x0, x0, lsr #63
                	mov	x17, #0x3               // =3
                	mul	x0, x0, x17
                	sub	x0, x20, x0
-               	lsl	x0, x0, #3
-               	add	x0, x1, x0
+               	add	x0, x1, x0, lsl #3
                	ldr	x0, [x0]
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40

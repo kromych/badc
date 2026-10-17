@@ -341,9 +341,8 @@ impl<'a> LdsLinker<'a> {
         note_runs
     }
 
-    /// Segment alignment once membership is known: a `PT_LOAD` pages
-    /// unless `-n` asked otherwise, and every other segment takes the
-    /// strongest alignment among its sections, as bfd's does.
+    /// Segment alignment: a `PT_LOAD` pages, raised to its widest section
+    /// (that alone under `-n`); any other takes its widest, as bfd's does.
     fn set_phdr_alignments(&self, segs: &mut [(Elf64Phdr, Vec<usize>)]) {
         for (ph, members) in segs.iter_mut() {
             let member_align = members
@@ -352,9 +351,11 @@ impl<'a> LdsLinker<'a> {
                 .max()
                 .unwrap_or(0);
             if ph.p_type == PT_LOAD {
-                if self.opts.nmagic {
-                    ph.p_align = member_align.max(1);
-                }
+                ph.p_align = if self.opts.nmagic {
+                    member_align.max(1)
+                } else {
+                    ph.p_align.max(member_align)
+                };
             } else if member_align != 0 {
                 ph.p_align = member_align;
             }

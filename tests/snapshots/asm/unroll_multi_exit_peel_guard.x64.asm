@@ -847,9 +847,8 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x3, %eax
                	jle	<addr>
-               	movq	%rcx, %rax
-               	shlq	%rax
-               	cmpq	$0x8ae, %rax            # imm = 0x8AE
+               	shlq	%rcx
+               	cmpq	$0x8ae, %rcx            # imm = 0x8AE
                	je	<addr>
                	movl	$0xc, %eax
                	popq	%rbx

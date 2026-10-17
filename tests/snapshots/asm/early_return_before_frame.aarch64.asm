@@ -45,8 +45,7 @@ Disassembly of section .text:
                	mov	x22, x2
                	add	x0, x1, x22
                	sxtw	x0, w0
-               	lsr	x2, x0, #63
-               	add	x0, x0, x2
+               	add	x0, x0, x0, lsr #63
                	asr	x0, x0, #1
                	ldr	x0, [x21, x0, lsl #3]
                	mov	x2, x22
@@ -135,8 +134,7 @@ Disassembly of section .text:
                	eor	x0, x0, #0x1
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	lsl	x9, x0, #2
-               	add	x9, x9, x1
+               	add	x9, x1, x0, lsl #2
                	mov	w0, w9
                	ret
 
@@ -185,10 +183,8 @@ Disassembly of section .text:
                	cbz	w1, <addr>
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sxtw	x0, w0
-               	sxtw	x1, w1
-               	sdiv	x17, x0, x1
-               	msub	x0, x17, x1, x0
+               	sdiv	w17, w0, w1
+               	msub	w0, w17, w1, w0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldr	x2, [x2]
@@ -305,13 +301,11 @@ Disassembly of section .text:
                	ldr	x16, [sp, #0x60]
                	add	x0, x16, x0
                	add	x0, x0, x20
-               	lsl	x1, x21, #1
-               	add	x0, x0, x1
+               	add	x0, x0, x21, lsl #1
                	mov	x17, #0x3               // =3
                	mul	x1, x22, x17
                	add	x0, x0, x1
-               	lsl	x1, x23, #2
-               	add	x0, x0, x1
+               	add	x0, x0, x23, lsl #2
                	mov	x17, #0x5               // =5
                	mul	x1, x24, x17
                	add	x0, x0, x1
@@ -321,8 +315,7 @@ Disassembly of section .text:
                	mov	x17, #0x7               // =7
                	mul	x1, x26, x17
                	add	x0, x0, x1
-               	lsl	x1, x27, #3
-               	add	x0, x0, x1
+               	add	x0, x0, x27, lsl #3
                	mov	x17, #0x9               // =9
                	mul	x1, x28, x17
                	add	x0, x0, x1

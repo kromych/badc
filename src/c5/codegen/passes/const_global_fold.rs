@@ -34,7 +34,7 @@ use crate::c5::token::Token;
 pub(crate) enum AddrConst {
     /// `disp` bytes past the object at `base` in this unit's data.
     Data { base: i64, disp: i64 },
-    /// `disp` bytes past another unit's data symbol, by symbol index.
+    /// `disp` bytes past a data symbol the link resolves, by symbol index.
     Extern { sym: u32, disp: i64 },
     /// A function, by entry pc.
     Code(usize),
@@ -155,10 +155,16 @@ impl<'a> ConstData<'a> {
         let mut relocs: Vec<(i64, Option<AddrConst>)> = Vec::new();
         for r in &program.data_relocs {
             let (base, target) = (r.target_anchor as i64, r.target_offset as i64);
-            let addr = (0..data_len).contains(&base).then_some(AddrConst::Data {
-                base,
-                disp: target.wrapping_sub(base),
+            let disp = target.wrapping_sub(base);
+            let by_symbol = r.target_sym.filter(|&i| {
+                program.weak_refs_by_name && program.symbols[i as usize].is_weak_definition()
             });
+            let addr = match by_symbol {
+                Some(sym) => Some(AddrConst::Extern { sym, disp }),
+                None => (0..data_len)
+                    .contains(&base)
+                    .then_some(AddrConst::Data { base, disp }),
+            };
             relocs.push((r.data_offset as i64, addr));
         }
         for r in &program.extern_data_relocs {
@@ -175,7 +181,7 @@ impl<'a> ConstData<'a> {
                 Some(binding) => AddrConst::Import(binding),
                 None => AddrConst::Code(r.target_ent_pc as usize),
             };
-            relocs.push((r.data_offset as i64, Some(addr)));
+            relocs.push((r.data_offset as i64, (r.addend == 0).then_some(addr)));
         }
         relocs.extend(
             program
@@ -649,6 +655,8 @@ fn walk_block(
             | Inst::Fneg(_)
             | Inst::Fma { .. }
             | Inst::MulAdd { .. }
+            | Inst::ShiftOp { .. }
+            | Inst::BitField { .. }
             | Inst::Udiv128 { .. }
             | Inst::Extend { .. }
             | Inst::Bswap { .. }

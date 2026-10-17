@@ -22,9 +22,7 @@ Disassembly of section .text:
 
 <swapq>:
                	lsr	x1, x0, #32
-               	mov	w0, w0
-               	lsl	x0, x0, #32
-               	orr	x0, x1, x0
+               	orr	x0, x1, x0, lsl #32
                	ret
 
 <tail>:
@@ -35,21 +33,17 @@ Disassembly of section .text:
                	ret
 
 <bytes>:
-               	lsr	x1, x0, #8
-               	lsr	x2, x0, #16
-               	and	x0, x0, #0xff
-               	add	x0, x0, #0x1
+               	and	x1, x0, #0xff
+               	add	x1, x1, #0x1
+               	ubfx	x2, x0, #8, #8
+               	add	x2, x2, #0x2
+               	ubfx	x0, x0, #16, #8
+               	add	x0, x0, #0x3
                	and	x1, x1, #0xff
-               	add	x1, x1, #0x2
                	and	x2, x2, #0xff
-               	add	x2, x2, #0x3
+               	orr	x1, x1, x2, lsl #8
                	and	x0, x0, #0xff
-               	and	x1, x1, #0xff
-               	lsl	x1, x1, #8
-               	orr	x0, x0, x1
-               	and	x1, x2, #0xff
-               	lsl	x1, x1, #16
-               	orr	x0, x0, x1
+               	orr	x0, x1, x0, lsl #16
                	ret
 
 <mixed>:
@@ -65,11 +59,8 @@ Disassembly of section .text:
                	sxtw	x2, w2
                	add	x1, x1, x2
                	and	x0, x0, #0xffff
-               	lsl	x0, x0, #16
-               	orr	x0, x4, x0
-               	mov	w2, w3
-               	lsl	x2, x2, #32
-               	orr	x0, x0, x2
+               	orr	x0, x4, x0, lsl #16
+               	orr	x0, x0, x3, lsl #32
                	ret
 
 <dsum>:
@@ -170,9 +161,7 @@ Disassembly of section .text:
                	lsr	x2, x0, #32
                	sxtw	x3, w0
                	add	x1, x1, x3
-               	mov	w0, w0
-               	lsl	x0, x0, #32
-               	orr	x0, x2, x0
+               	orr	x0, x2, x0, lsl #32
                	ret
 
 <pp>:
@@ -734,8 +723,7 @@ Disassembly of section .text:
                	sub	x0, x29, #0xf8
                	ldrh	w16, [x0]
                	ldrb	w17, [x0, #0x2]
-               	lsl	x17, x17, #16
-               	orr	x16, x16, x17
+               	orr	x16, x16, x17, lsl #16
                	mov	x0, x16
                	bl	<addr>
                	sturh	w0, [x29, #-0x20]

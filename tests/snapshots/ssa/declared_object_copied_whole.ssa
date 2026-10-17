@@ -11,21 +11,21 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
     v7   Imm(0)                                           -> x0
-    v8   BinopI { op=and, lhs=v1, rhs_imm=1 }             -> x1
+    v8   BinopI { op=and, lhs=v1, rhs_imm=1 }             -> x7
     v9   Imm(0)                                           -> x0
     v10  Imm(0)                                           -> x0
     v11  BinopI { op=or, lhs=v8, rhs_imm=0 }              -> x0
     v12  Imm(0)                                           -> x0
     v13  ImmData(48)                                      -> x0
     v14  Mzero { dst=v13, size=1, align=8 }               -> -
-    v15  ImmData(56)                                      -> x2
-    v16  ImmData(48)                                      -> x6
-    v17  ImmData(48)                                      -> x6
-    v18  Imm(0)                                           -> x6
-    v19  Imm(0)                                           -> x6
-    v20  BinopI { op=and, lhs=v8, rhs_imm=255 }           -> x6
+    v15  ImmData(56)                                      -> x1
+    v16  ImmData(48)                                      -> x2
+    v17  ImmData(48)                                      -> x2
+    v18  Imm(0)                                           -> x2
+    v19  Imm(0)                                           -> x2
+    v20  BinopI { op=and, lhs=v8, rhs_imm=255 }           -> x2
     v21  Store { addr=v13, disp=0, value=v8, kind=I8 }    -> -
-    v22  Copy { value=v13, fp=false }                     -> x1
+    v22  Copy { value=v13, fp=false }                     -> x2
     v23  Mcpy { dst=v15, src=v13, size=1, align=1 }       -> -
     v24  LifetimeEnd(0)                                   -> -
     terminator Return

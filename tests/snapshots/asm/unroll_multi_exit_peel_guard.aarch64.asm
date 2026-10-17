@@ -190,8 +190,7 @@ Disassembly of section .text:
                	mov	x3, x1
                	ldr	x3, [x4, x3, lsl #3]
                	mul	x3, x6, x3
-               	lsl	x3, x3, #1
-               	add	x2, x2, x3
+               	add	x2, x2, x3, lsl #1
                	ldr	x3, [x5, x1, lsl #3]
                	cmp	x3, #0x0
                	b.ge	<addr>
@@ -480,8 +479,7 @@ Disassembly of section .text:
                	mov	x3, x1
                	ldr	x3, [x4, x3, lsl #3]
                	mul	x3, x7, x3
-               	lsl	x3, x3, #1
-               	add	x2, x2, x3
+               	add	x2, x2, x3, lsl #1
                	ldr	x3, [x6, x1, lsl #3]
                	cmp	x3, #0x0
                	b.ge	<addr>
@@ -770,8 +768,7 @@ Disassembly of section .text:
                	mov	x3, x1
                	ldr	x3, [x4, x3, lsl #3]
                	mul	x3, x7, x3
-               	lsl	x3, x3, #1
-               	add	x2, x2, x3
+               	add	x2, x2, x3, lsl #1
                	ldr	x3, [x6, x1, lsl #3]
                	cmp	x3, #0x0
                	b.ge	<addr>

@@ -11,7 +11,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
-use super::fixture_tables::NATIVE_FIXTURES;
+use super::fixture_tables::{BADC_FIXTURES, NATIVE_FIXTURES};
 use crate::{Compiler, NativeOptions, Target, emit_native, emit_native_with_options};
 
 /// Outcome of compiling-and-running a native binary. The fine-grained
@@ -83,7 +83,7 @@ fn emit_sign_run(program: &crate::c5::Program, stem: &str, opts: NativeOptions) 
     set_executable(&path);
     codesign(&path);
 
-    let output = super::output_when_not_busy(|| Command::new(&path));
+    let output = super::output_when_not_busy(|| super::image_command(&path));
     let _ = std::fs::remove_file(&path);
     if let Some(code) = output.status.code() {
         RunOutcome::Exit(code)
@@ -245,7 +245,7 @@ fn link_run_capture(src: &str, stem: &str) -> (i32, String) {
     }
     set_executable(&path);
     codesign(&path);
-    let output = super::output_when_not_busy(|| Command::new(&path));
+    let output = super::output_when_not_busy(|| super::image_command(&path));
     let _ = std::fs::remove_file(&path);
     let code = output.status.code().unwrap_or(-1);
     (code, String::from_utf8_lossy(&output.stdout).into_owned())
@@ -263,6 +263,12 @@ fn constructor_runs_before_main() {
         "mac-ctor",
     );
     assert_eq!(code, 42, "constructor must run before main");
+}
+
+#[test]
+fn constructors_run_beside_writable_named_sections() {
+    let src = super::init_fini_beside_named_sections_source();
+    assert_eq!(link_run_capture(src, "init-fini-named").0, 0);
 }
 
 #[test]
@@ -423,10 +429,7 @@ fn faulting_fixture_dies_with_the_fault_signal_blocked() {
     codesign(&path);
 
     let saved = super::signals::block_on_this_thread(super::signals::STORE_TO_READ_ONLY);
-    let spawned = super::image_command(&path)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn();
+    let spawned = super::image_command(&path).spawn();
     super::signals::set_thread_mask(&saved);
 
     let mut child = spawned.expect("spawn the produced binary");
@@ -472,9 +475,56 @@ int main(void) { return *third == 30 ? 0 : 1; }\n";
     }
     set_executable(&path);
     codesign(&path);
-    let output = super::output_when_not_busy(|| Command::new(&path));
+    let output = super::output_when_not_busy(|| super::image_command(&path));
     let _ = std::fs::remove_file(&path);
     assert_eq!(output.status.code(), Some(0));
+}
+
+/// C11 6.7.5: 8 and 16 KiB objects, the widest a Mach-O image keeps, land on
+/// their boundary through the single image, the executable and two units.
+#[test]
+fn over_aligned_objects_keep_their_alignment() {
+    use crate::CompileOptions;
+    let (defs, main) = super::over_aligned_objects_units(Target::MacOSAarch64);
+    let one = format!("{defs}{main}");
+    let got = build_and_run_outcome(&one, "over_aligned_single");
+    assert!(got.matches(0), "single image: {got:?}");
+    assert_eq!(link_run_capture(&one, "over_aligned_linked").0, 0, "linked");
+    let compile = |src: &str| {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::MacOSAarch64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&compile(main), &compile(&defs)],
+        Target::MacOSAarch64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link two units: {e}"));
+    let path = super::unique_temp_path("badc-test", "over_aligned_two_units", ".bin");
+    std::fs::write(&path, &bytes).expect("write temp file");
+    set_executable(&path);
+    codesign(&path);
+    let output = super::output_when_not_busy(|| super::image_command(&path));
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(output.status.code(), Some(0), "two units");
+}
+
+/// An `extern` declaration of an object aligned past what the image keeps
+/// places nothing, so an image that never defines it builds.
+#[test]
+fn an_extern_declaration_past_the_images_alignment_builds() {
+    let src = "struct big { _Alignas(32768) char c; };\n\
+               extern struct big never_defined;\n\
+               int main(void) { return 0; }\n";
+    let got = build_and_run_outcome(src, "extern_past_limit_single");
+    assert!(got.matches(0), "single image: {got:?}");
+    assert_eq!(
+        link_run_capture(src, "extern_past_limit_linked").0,
+        0,
+        "linked"
+    );
 }
 
 #[test]
@@ -913,7 +963,7 @@ where
 
     let args: Vec<String> = args.into_iter().map(|s| s.as_ref().to_string()).collect();
     let output = super::output_when_not_busy(|| {
-        let mut cmd = Command::new(&bin_path);
+        let mut cmd = super::image_command(&bin_path);
         cmd.args(&args);
         cmd
     });
@@ -949,7 +999,7 @@ fn file_io_natively() {
     codesign(&bin_path);
 
     let output = super::output_when_not_busy(|| {
-        let mut cmd = Command::new(&bin_path);
+        let mut cmd = super::image_command(&bin_path);
         cmd.current_dir(&cwd);
         cmd
     });
@@ -979,7 +1029,7 @@ fn getenv_value_natively() {
     codesign(&bin_path);
 
     let output = super::output_when_not_busy(|| {
-        let mut cmd = Command::new(&bin_path);
+        let mut cmd = super::image_command(&bin_path);
         cmd.env("C4RS_TEST_GETENV", "Vox");
         cmd
     });
@@ -1034,7 +1084,7 @@ fn string_extensions_join_the_macos_link() {
     std::fs::write(&path, &bytes).expect("write temp file");
     set_executable(&path);
     codesign(&path);
-    let output = super::output_when_not_busy(|| Command::new(&path));
+    let output = super::output_when_not_busy(|| super::image_command(&path));
     let _ = std::fs::remove_file(&path);
     assert_eq!(
         output.status.code(),
@@ -1065,7 +1115,7 @@ fn unistd_extensions_join_the_macos_link() {
     std::fs::write(&path, &bytes).expect("write temp file");
     set_executable(&path);
     codesign(&path);
-    let output = super::output_when_not_busy(|| Command::new(&path));
+    let output = super::output_when_not_busy(|| super::image_command(&path));
     let _ = std::fs::remove_file(&path);
     assert_eq!(
         output.status.code(),
@@ -1087,6 +1137,78 @@ fn far_stack_arguments_reach_their_slots() {
     ] {
         let outcome = build_and_run_outcome_with_options(&src, stem, opts);
         assert!(outcome.matches(42), "{stem}: {outcome:?}");
+    }
+}
+
+/// An offset in an inline-asm reference counts from its symbol's own address,
+/// in the single image and the linked executable.
+#[test]
+fn asm_offsets_count_from_the_symbols_own_address() {
+    let src = format!("#define WITH_TLS 1\n{}", super::asm_region_edges_source());
+    for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
+        let outcome = build_and_run_outcome_with_options(&src, "asm-edges", opts);
+        assert!(outcome.matches(0), "single image: {outcome:?}");
+    }
+    assert_eq!(link_run_capture(&src, "asm-edges-linked").0, 0, "linked");
+}
+
+/// A single-file image places the unit's asm: a call to a function a
+/// file-scope block defines, and the address of it, of a label in a function
+/// body and of a word in a file-scope data section, bind to them.
+#[test]
+fn asm_defined_names_bind_to_their_definitions() {
+    let src = super::asm_defined_names_source();
+    for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
+        let outcome = build_and_run_outcome_with_options(src, "asm-defined", opts);
+        assert!(outcome.matches(0), "{outcome:?}");
+    }
+}
+
+/// A static slot naming what the unit's C does not define binds as a link binds it.
+#[test]
+fn a_slot_naming_what_the_unit_does_not_define_binds_to_it() {
+    let src = super::named_slots_source();
+    for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
+        let outcome = build_and_run_outcome_with_options(src, "named-slots", opts);
+        assert!(outcome.matches(0), "{outcome:?}");
+    }
+    assert_eq!(link_run_capture(src, "named-slots-linked").0, 0, "linked");
+}
+
+/// A single-file image reaches an imported object through its GOT slot, a C
+/// read and an inline-asm address alike; an asm load or store in place is
+/// refused, as the slot stands in for the object's address alone.
+#[test]
+fn asm_reaches_an_imported_object_through_its_slot() {
+    for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
+        let src = super::asm_library_object_source(1);
+        let outcome = build_and_run_outcome_with_options(&src, "asm-import", opts.clone());
+        assert!(outcome.matches(0), "{outcome:?}");
+        for form in [2, 3] {
+            let src = super::asm_library_object_source(form);
+            let outcome = build_and_run_outcome_with_options(&src, "asm-import", opts.clone());
+            assert!(
+                matches!(&outcome, RunOutcome::BuildError(m)
+                    if m.contains("uses the imported object `optind` in place")),
+                "form {form}: {outcome:?}"
+            );
+        }
+    }
+}
+
+/// A single-file image is the unit: inline asm naming its definitions binds to them.
+#[test]
+fn asm_pcrel_reference_binds_to_the_units_definition() {
+    let src = format!(
+        "#define ASM_DATA_END 1\n{}",
+        super::asm_pcrel_unit_definitions_source()
+    );
+    for (opts, stem) in [
+        (NativeOptions::default(), "asm-pcrel-defs"),
+        (NativeOptions::new().with_optimize(), "asm-pcrel-defs-O"),
+    ] {
+        let outcome = build_and_run_outcome_with_options(&src, stem, opts);
+        assert!(outcome.matches(0), "{stem}: {outcome:?}");
     }
 }
 
@@ -1161,6 +1283,22 @@ fn fixture_parity_native_optimized() {
         NATIVE_FIXTURES.len(),
         failures.join("\n  ")
     );
+}
+
+/// [`BADC_FIXTURES`], at -O0 and -O.
+#[test]
+fn badc_fixtures() {
+    for (opts, suffix) in [
+        (NativeOptions::default(), "-O0"),
+        (NativeOptions::new().with_optimize(), "-O"),
+    ] {
+        let failures = super::parity_failures(BADC_FIXTURES, |name, expected| {
+            let outcome = build_and_run_fixture_with_options(name, opts.clone(), suffix);
+            (!outcome.matches(*expected))
+                .then(|| format!("{name} ({suffix}): expected exit {expected}, got {outcome:?}"))
+        });
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
 }
 
 /// A `static __always_inline` `asm goto` whose `"i"` operand is a

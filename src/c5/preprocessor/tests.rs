@@ -1041,6 +1041,27 @@ fn named_rest_variadic_macro_paste_elides_comma() {
     assert!(out.contains("g(1, 2);"), "non-empty tail: {out:?}");
 }
 
+// GNU `, ## __VA_ARGS__` keeps the comma before a written, empty argument (gcc, clang).
+#[test]
+fn comma_paste_keeps_the_comma_before_an_empty_written_tail() {
+    let out = process(
+        "#define H(a, ...) h(a, ## __VA_ARGS__)\n#define N(a, rest...) n(a, ## rest)\n\
+         #define G(...) g(x, ## __VA_ARGS__)\n#define E(a, ...) e(a, ## __VA_ARGS__ end)\n\
+         H(1); H(1,); H(); H(,); N(1); N(1,); G(); E(1); E(1,);\n",
+    );
+    let words: alloc::string::String = out
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .collect::<alloc::vec::Vec<_>>()
+        .join(" ")
+        .split_whitespace()
+        .collect();
+    assert_eq!(
+        words, "h(1);h(1,);h();h(,);n(1);n(1,);g(x);e(1end);e(1,end);",
+        "got: {out:?}"
+    );
+}
+
 #[test]
 fn named_rest_variadic_macro_stringize() {
     let out = process("#define S(rest...) #rest\nconst char *s = S(a, b);\n");
@@ -1797,6 +1818,53 @@ fn if_prefixed_character_constant_holds_a_code_point() {
     ] {
         let out = process(&format!("#if {e}\nTAKEN\n#else\nNOT\n#endif\n"));
         assert!(out.contains("TAKEN"), "{e}: {out}");
+    }
+}
+
+/// C99 6.10.1p4: a character constant evaluates at its type's signedness, as gcc 16.2.1 does.
+#[test]
+fn if_character_constant_takes_the_signedness_of_its_type() {
+    let take = |t: Target, char_signed: Option<bool>, e: &str| {
+        let mut pp = Preprocessor::new(t.id_str(), t, "0.1.0");
+        if let Some(signed) = char_signed {
+            pp.set_plain_char_signed(signed);
+        }
+        let out = pp.process(&format!("#if {e}\nTAKEN\n#endif\n"));
+        out.expect("preprocessor failed").contains("TAKEN")
+    };
+    // (expression, taken with signed plain char, with unsigned)
+    for (e, signed, unsigned) in [
+        ("(~'a') <= 1ll", true, false),
+        ("-'a' < 0", true, false),
+        ("'a' - 98 < 0", true, false),
+        ("'a' / -1 < 0", true, false),
+        ("(-'a' >> 63) == 1", false, true),
+        ("(1 ? -1 : 'a') < 0", true, false),
+        (r"'\xff' < 0", true, false),
+        (r"'\377' == 255", false, true),
+        ("'ab' - 0x6163 < 0", true, true),
+        (r"'\xff\xff\xff\xff' < 0", true, true),
+        ("u'a' - 98 < 0", false, false),
+        ("U'a' - 98 < 0", false, false),
+    ] {
+        for t in [Target::LinuxX64, Target::LinuxAarch64] {
+            let default = t.plain_char_signed();
+            assert_eq!(
+                take(t, None, e),
+                if default { signed } else { unsigned },
+                "{t:?} {e}"
+            );
+            assert_eq!(take(t, Some(true), e), signed, "{t:?} -fsigned-char {e}");
+            assert_eq!(
+                take(t, Some(false), e),
+                unsigned,
+                "{t:?} -funsigned-char {e}"
+            );
+        }
+    }
+    for e in [r"L'\xffffffff' == -1", "L'a' - 98 < 0"] {
+        assert!(take(Target::LinuxX64, None, e), "{e}");
+        assert!(!take(Target::LinuxAarch64, None, e), "{e}");
     }
 }
 

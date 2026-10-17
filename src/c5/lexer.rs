@@ -628,12 +628,27 @@ impl SymbolIndex {
     /// the old linear scan did; in practice no caller zeroes `token`
     /// today, but the check is cheap and keeps behaviour identical.
     pub fn lookup(&self, symbols: &[Symbol], hash: i64, name: &[u8]) -> Option<usize> {
+        self.find(symbols, hash, name, |s| s.token != 0 && !s.detached)
+    }
+
+    /// The most recent [`Symbol::detached`] slot of the name.
+    pub fn lookup_detached(&self, symbols: &[Symbol], hash: i64, name: &[u8]) -> Option<usize> {
+        self.find(symbols, hash, name, |s| s.detached)
+    }
+
+    fn find(
+        &self,
+        symbols: &[Symbol],
+        hash: i64,
+        name: &[u8],
+        accept: impl Fn(&Symbol) -> bool,
+    ) -> Option<usize> {
         let mut cur = self.buckets[(hash as u32 & self.mask) as usize];
         while cur != u32::MAX {
             let i = cur as usize;
             if self.hashes[i] == hash {
                 let s = &symbols[i];
-                if s.token != 0 && s.name.as_bytes() == name {
+                if s.name.as_bytes() == name && accept(s) {
                     return Some(i);
                 }
             }
@@ -1503,88 +1518,10 @@ impl Lexer {
         self.src[p] == b'.' && p + 1 < self.src.len() && self.src[p + 1].is_ascii_digit()
     }
 
-    /// Count the number of comma-separated top-level groups
-    /// (`{...}`) that follow the current lex position before the
-    /// matching `}` at depth 0. The current token must already be
-    /// the array initializer's outer `{`. Used by the struct-
-    /// array initializer path to pre-allocate storage for every
-    /// element before any inner string-literal lex landing
-    /// re-orders the data segment. Returns 0 if the source ends
-    /// before the matching `}` (the parser then surfaces a normal
-    /// "}" expected error).
-    ///
-    /// String literals are skipped without expansion; comments
-    /// (`/*...*/` and `//`) are also stepped over so a comment
-    /// containing `{` doesn't bump the count.
-    pub fn count_top_level_groups_in_array(&self) -> usize {
-        let bytes = &self.src;
-        // We're positioned just past the outer `{`. Walk forward,
-        // tracking brace depth. Top-level (depth 1) `{` opens a
-        // new group; the matching `}` at depth 1 closes it. The
-        // depth-0 `}` ends the scan.
-        let mut p = self.pos;
-        let mut depth: i32 = 1;
-        let mut count: usize = 0;
-        let mut in_group = false;
-        while p < bytes.len() && depth > 0 {
-            let c = bytes[p];
-            if c == b'/' && p + 1 < bytes.len() && bytes[p + 1] == b'*' {
-                p += 2;
-                while p + 1 < bytes.len() && !(bytes[p] == b'*' && bytes[p + 1] == b'/') {
-                    p += 1;
-                }
-                p = (p + 2).min(bytes.len());
-                continue;
-            }
-            if c == b'/' && p + 1 < bytes.len() && bytes[p + 1] == b'/' {
-                while p < bytes.len() && bytes[p] != b'\n' {
-                    p += 1;
-                }
-                continue;
-            }
-            if c == b'"' || c == b'\'' {
-                let q = c;
-                p += 1;
-                while p < bytes.len() && bytes[p] != q {
-                    if bytes[p] == b'\\' && p + 1 < bytes.len() {
-                        p += 2;
-                    } else {
-                        p += 1;
-                    }
-                }
-                if p < bytes.len() {
-                    p += 1;
-                }
-                continue;
-            }
-            if c == b'{' {
-                if depth == 1 && !in_group {
-                    in_group = true;
-                    count += 1;
-                }
-                depth += 1;
-                p += 1;
-                continue;
-            }
-            if c == b'}' {
-                depth -= 1;
-                if depth == 1 {
-                    in_group = false;
-                }
-                p += 1;
-                continue;
-            }
-            p += 1;
-        }
-        count
-    }
-
     /// Count top-level comma-separated items in a brace list, starting
-    /// just past the outer `{`. Used to size a brace-elided array of
-    /// structs (C99 6.7.8p20): the number of items divided by the per-
-    /// element initializer slot count gives the array length. Returns
-    /// the item count (0 for an empty `{ }`). Trailing commas do not
-    /// inflate the count.
+    /// just past the outer `{`: no more elements than items initialize an
+    /// array (C99 6.7.8p20). Returns the item count (0 for an empty
+    /// `{ }`). Trailing commas do not inflate the count.
     pub fn count_top_level_items_in_array(&self) -> usize {
         let bytes = &self.src;
         let mut p = self.pos;

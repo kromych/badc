@@ -65,14 +65,12 @@ Disassembly of section .text:
                	leaq	<rip>, %rax      # <addr>
                	movq	%rcx, (%rax)
                	movl	(%rax), %ecx
-               	andq	$0x1fffffff, %rcx       # imm = 0x1FFFFFFF
                	shlq	$0x23, %rcx
                	sarq	$0x23, %rcx
                	cmpl	$-0x5, %ecx
                	jne	<addr>
                	movq	(%rax), %rax
                	sarq	$0x1d, %rax
-               	andq	$0x3fffffff, %rax       # imm = 0x3FFFFFFF
                	shlq	$0x22, %rax
                	sarq	$0x22, %rax
                	cmpl	$0x4d, %eax

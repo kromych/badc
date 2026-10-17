@@ -50,8 +50,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	lsl	x1, x0, #4
-               	add	x1, x2, x1
+               	add	x1, x2, x0, lsl #4
                	ldrsw	x3, [x1]
                	cmp	w3, #0xd
                	b.ne	<addr>
@@ -113,8 +112,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1
-               	lsl	x1, x0, #4
-               	add	x1, x2, x1
+               	add	x1, x2, x0, lsl #4
                	ldrsw	x3, [x1]
                	cmp	w3, #0xd
                	b.ne	<addr>
@@ -246,8 +244,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	lsl	x1, x0, #3
-               	add	x1, x2, x1
+               	add	x1, x2, x0, lsl #3
                	ldrsw	x3, [x1]
                	cmp	w3, #0x1d
                	b.ne	<addr>

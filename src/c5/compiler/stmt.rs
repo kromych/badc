@@ -53,6 +53,7 @@ pub(super) struct CleanupVar {
     is_thread_local: bool,
     array_size: i64,
     fn_ty: i64,
+    fn_binding: super::emit::CalleeBinding,
 }
 
 /// The case labels of one `switch` body.
@@ -73,8 +74,7 @@ pub(super) struct BlockShadow {
     val: i64,
     fn_ptr_indirection: i64,
     fn_ptr_ret_indirection: i64,
-    ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
-    params: crate::c5::symbol::FnParams,
+    fn_type: crate::c5::symbol::FnType,
     array_size: i64,
     type_align: i64,
     inner_array_size: i64,
@@ -94,16 +94,54 @@ pub(super) struct BlockShadow {
     asm_register: Option<crate::c5::symbol::AsmRegister>,
     is_global_register: bool,
     const_object_value: Option<crate::c5::symbol::ConstObjectValue>,
-    static_local_record: Option<u32>,
+    entity_record: Option<u32>,
     binding: crate::c5::symbol::BindingInfo,
+}
+
+/// The fields of a name's slot that make it a function entity.
+#[derive(Clone)]
+pub(super) struct FnEntity {
+    pub(super) class: i64,
+    pub(super) type_: i64,
+    pub(super) incomplete_enum_tag: Option<u32>,
+    pub(super) val: i64,
+    pub(super) fn_type: crate::c5::symbol::FnType,
+    pub(super) lineage: (i64, i64),
+    pub(super) is_extern_decl: bool,
 }
 
 impl BlockShadow {
     /// Rewrite the saved binding's types an enum definition completes.
     pub(super) fn complete_enum(&mut self, c: &super::enum_decl::EnumCompletion) {
         c.ty(&mut self.type_, &mut self.incomplete_enum_tag);
-        c.params(&mut self.params);
-        c.chain(&mut self.ret_fn);
+        c.fn_type(&mut self.fn_type);
+    }
+
+    /// The saved binding's class, and whether it is a global register.
+    pub(super) fn class(&self) -> (i64, bool) {
+        (self.class, self.is_global_register)
+    }
+
+    pub(super) fn fn_entity(&self) -> FnEntity {
+        FnEntity {
+            class: self.class,
+            type_: self.type_,
+            incomplete_enum_tag: self.incomplete_enum_tag,
+            val: self.val,
+            fn_type: self.fn_type.clone(),
+            lineage: (self.fn_ptr_indirection, self.fn_ptr_ret_indirection),
+            is_extern_decl: self.is_extern_decl,
+        }
+    }
+
+    pub(super) fn set_fn_entity(&mut self, e: &FnEntity) {
+        self.class = e.class;
+        self.type_ = e.type_;
+        self.incomplete_enum_tag = e.incomplete_enum_tag;
+        self.val = e.val;
+        self.fn_type = e.fn_type.clone();
+        (self.fn_ptr_indirection, self.fn_ptr_ret_indirection) = e.lineage;
+        self.is_extern_decl = e.is_extern_decl;
     }
 }
 
@@ -127,8 +165,7 @@ impl Compiler {
             val: s.val,
             fn_ptr_indirection: s.fn_ptr_indirection,
             fn_ptr_ret_indirection: s.fn_ptr_ret_indirection,
-            ret_fn: s.ret_fn.clone(),
-            params: s.fn_params(),
+            fn_type: s.fn_type.clone(),
             array_size: s.array_size,
             type_align: s.type_align,
             inner_array_size,
@@ -148,12 +185,12 @@ impl Compiler {
             asm_register: s.asm_register,
             is_global_register: s.is_global_register,
             const_object_value: s.const_object_value,
-            static_local_record: s.static_local_record,
+            entity_record: s.entity_record,
             binding,
         };
-        // The inner binding is not (yet) a block-scope static; its own
-        // promotion re-sets the record. Its type records its own enum tag.
-        self.symbols[idx].static_local_record = None;
+        // The inner binding denotes no record yet; its declaration sets
+        // its own. Its type records its own enum tag.
+        self.symbols[idx].entity_record = None;
         self.symbols[idx].incomplete_enum_tag = None;
         shadow
     }
@@ -169,7 +206,7 @@ impl Compiler {
         if s.scoped_fn_decl && s.class == Token::Fun as i64 && b.class == 0 {
             s.class = 0;
             s.block_extern_active = false;
-            s.static_local_record = b.static_local_record;
+            s.entity_record = b.entity_record;
             return;
         }
         let same_function = s.class == Token::Fun as i64 && b.class == Token::Fun as i64;
@@ -180,8 +217,7 @@ impl Compiler {
         s.val = b.val;
         s.fn_ptr_indirection = b.fn_ptr_indirection;
         s.fn_ptr_ret_indirection = b.fn_ptr_ret_indirection;
-        s.ret_fn = b.ret_fn;
-        s.set_fn_params(b.params);
+        s.fn_type = b.fn_type;
         s.array_size = b.array_size;
         s.type_align = b.type_align;
         s.inner_array_size = b.inner_array_size;
@@ -201,7 +237,7 @@ impl Compiler {
         s.asm_register = b.asm_register;
         s.is_global_register = b.is_global_register;
         s.const_object_value = b.const_object_value;
-        s.static_local_record = b.static_local_record;
+        s.entity_record = b.entity_record;
         s.block_extern_active = false;
     }
 
@@ -233,9 +269,9 @@ impl Compiler {
                         array_size: sym.array_size.max(0) as u32,
                         decl_file: sym.binding.decl_file,
                         fn_ptr_indirection: sym.fn_ptr_indirection,
-                        params: sym.params.clone(),
-                        is_variadic: sym.is_variadic,
-                        prototyped: sym.prototyped,
+                        params: sym.params().to_vec(),
+                        is_variadic: sym.is_variadic(),
+                        prototyped: sym.prototyped(),
                         array_dims: sym.array_dims.clone(),
                         decl_spelling: sym.binding.decl_spelling,
                     });
@@ -365,7 +401,8 @@ impl Compiler {
             // and the declared counter never reaches the
             // SSA prologue.
             let init_before = self.ast_stmts_snapshot();
-            self.parse_local_decl(false, false)?;
+            self.pending.attrs = super::DeclAttrs::default();
+            self.parse_local_decl()?;
             let init_after = self.ast.stmts.len();
             // C99 6.7p1: a declaration's init-declarator-list may name
             // several declarators (`for (int i = 0, l = n; ...)`).
@@ -683,6 +720,15 @@ impl Compiler {
         Ok(Some((a, b)))
     }
 
+    /// The attribute-specifier-sequence a block item may lead with, before a
+    /// declaration or a statement (C23 6.7.13, 6.8). The item starts from
+    /// these alone: none an earlier item or the enclosing definition named.
+    pub(super) fn parse_block_item_attributes(&mut self) -> Result<(), C5Error> {
+        self.pending.attrs = super::DeclAttrs::default();
+        self.skip_attribute_specifiers()?;
+        Ok(())
+    }
+
     /// Parse a `typedef` declaration at function/block scope (C99
     /// 6.7.7, 6.2.1), routed here so block-local typedefs (e.g.
     /// `typedef void(*LOGFUNC_t)(...)` inside a switch case) bind
@@ -693,14 +739,26 @@ impl Compiler {
     /// cleanup.
     pub(super) fn parse_block_typedef(&mut self) -> Result<(), C5Error> {
         self.next()?; // consume `typedef`
-        // Scope the object-alignment carrier to this typedef so a prior
-        // statement's `_Alignas` does not leak onto the alias.
-        self.pending.attr_align = 0;
-        self.pending.attr_alignas = 0;
         let lbt = self.parse_decl_base_type()?;
         let implicit_int = core::mem::take(&mut self.pending.base_implicit_int);
         let base_enum_tag = self.pending.base_enum_tag.take();
+        let spec_attrs = self.pending.attrs.clone();
+        // A function-pointer typedef base contributes its function type to
+        // every declarator (`typedef fn_t A, B;`).
+        let base_fn = (
+            self.pending.fn_ptr_indirection,
+            self.pending.fn_ptr_ret_indirection,
+            self.pending.fn_ptr_type.clone(),
+            self.pending.base_is_function_type,
+        );
         while self.lex.tk != ';' {
+            self.pending.attrs = spec_attrs.clone();
+            (
+                self.pending.fn_ptr_indirection,
+                self.pending.fn_ptr_ret_indirection,
+                self.pending.fn_ptr_type,
+                self.pending.base_is_function_type,
+            ) = base_fn.clone();
             let declarator_line = self.lex.line;
             let (id_idx, ty, mut td_array, mut td_zero_len) = self.parse_declarator(lbt)?;
             if id_idx == usize::MAX {
@@ -710,33 +768,41 @@ impl Compiler {
                 let what = super::decl_base::ImplicitInt::Declarator(id_idx);
                 self.report_implicit_int(what, declarator_line)?;
             }
-            let declarator_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
+            let declarator_transparent = core::mem::take(&mut self.pending.attrs.transparent_union);
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
-            let ret_fn = self.take_decl_ret_fn(self.lex.tk == '(');
             let bare_fn_type = core::mem::take(&mut self.pending.bare_function_type_declarator);
             // C99 function-type typedef: `typedef RET NAME(args);`
             // declared at block scope. Same handling as run_compile's
             // file-scope branch -- parse the `(args)` and bind the
             // typedef as a function-pointer alias.
-            let (typedef_ty, typedef_fpi, typedef_params, typedef_is_fn_type) =
-                if self.lex.tk == '(' {
-                    self.next()?; // consume `(`
-                    // C99 6.2.1p4: the parameter names of this function-type
-                    // typedef have no scope. Record their types without binding
-                    // the names, so one matching an enclosing local is not
-                    // shadowed (which would corrupt the single-slot shadow the
-                    // enclosing scope restores from at exit).
-                    let saved = self.pending.parsing_fn_ptr_proto;
-                    self.pending.parsing_fn_ptr_proto = true;
-                    let pp = self.parse_function_params()?;
-                    self.pending.parsing_fn_ptr_proto = saved;
-                    let fty = ty + Ty::Ptr as i64;
-                    (fty, 1i64, Some(pp), true)
-                } else {
-                    // An alias of a function-type typedef stays a function type.
-                    (ty, fn_ptr_indirection, None, bare_fn_type)
+            let (typedef_ty, typedef_fpi, typedef_fn, typedef_is_fn_type) = if self.lex.tk == '(' {
+                let ret = self.take_decl_ret_fn(true);
+                self.pending.fn_ptr_type = None;
+                self.next()?; // consume `(`
+                // C99 6.2.1p4: the parameter names of this function-type
+                // typedef have no scope. Record their types without binding
+                // the names, so one matching an enclosing local is not
+                // shadowed (which would corrupt the single-slot shadow the
+                // enclosing scope restores from at exit).
+                let saved = self.pending.parsing_fn_ptr_proto;
+                self.pending.parsing_fn_ptr_proto = true;
+                let pp = self.parse_function_params()?;
+                self.pending.parsing_fn_ptr_proto = saved;
+                // An attribute may trail the list (`typedef T f(void) a;`).
+                self.skip_attribute_specifiers()?;
+                let f = crate::c5::symbol::FnType {
+                    params: pp.fn_params(),
+                    conv: self.pending.attrs.call_conv.unwrap_or_default(),
+                    conv_named: self.pending.attrs.call_conv.is_some(),
+                    ret,
                 };
+                (ty + Ty::Ptr as i64, 1i64, Some(f), true)
+            } else {
+                // An alias of a function-type typedef stays a function type.
+                let f = self.take_decl_fn_type()?;
+                (ty, fn_ptr_indirection, f, bare_fn_type)
+            };
             // A name this scope already bound keeps its first save: a
             // second one would overwrite the outer binding with the
             // scope's own. C11 6.7p3 admits only a typedef redeclared
@@ -760,7 +826,8 @@ impl Compiler {
             self.symbols[id_idx].class = Token::Typedef as i64;
             self.symbols[id_idx].type_ = typedef_ty;
             self.symbols[id_idx].val = 0;
-            self.symbols[id_idx].ret_fn = ret_fn;
+            // The function type the alias leads to, its convention included.
+            self.symbols[id_idx].fn_type = typedef_fn.unwrap_or_default();
             self.symbols[id_idx].incomplete_enum_tag = base_enum_tag;
             // A declarator-position `transparent_union` binds to the
             // aliased union, as at file scope.
@@ -769,8 +836,8 @@ impl Compiler {
             }
             // GNU `aligned(N)` type attribute on the alias (its own
             // attribute, else propagated from an aligned typedef base).
-            let alias_align = if self.pending.attr_align > 0 {
-                self.pending.attr_align
+            let alias_align = if self.pending.attrs.align > 0 {
+                self.pending.attrs.align
             } else {
                 self.pending.type_align
             };
@@ -801,34 +868,13 @@ impl Compiler {
             // A zero-length alias shares the `-1` count of one of unknown size.
             self.symbols[id_idx].is_zero_len_array = td_array < 0 && td_zero_len;
             self.symbols[id_idx].is_function_type = typedef_is_fn_type;
-            // A function-type typedef records the calling convention its
-            // declaration named, so a declarator through the alias
-            // inherits it (`typedef efi_status_t __efiapi f_t(void);`).
-            if self.pending.attr_call_conv != crate::c5::codegen::CallConv::Target {
-                self.symbols[id_idx].conv = self.pending.attr_call_conv;
-            }
-            if typedef_fpi > 0 {
-                self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
-                self.symbols[id_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
-            }
-            if let Some(pp) = typedef_params {
-                self.symbols[id_idx].set_fn_params(pp.fn_params());
-            } else if let Some(p) = self.pending.fn_ptr_params.take() {
-                // `typedef RET (*NAME)(args)` at block scope: the
-                // declarator captured the pointee's parameter list. Record
-                // it as the file-scope branch does, so an indirect call
-                // through a variable of this typedef narrows arguments
-                // and routes a variadic tail per the host ABI.
-                self.symbols[id_idx].set_fn_params(p);
-            }
+            self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
+            self.symbols[id_idx].fn_ptr_ret_indirection =
+                fn_ptr_ret_indirection * i64::from(typedef_fpi > 0);
             self.accept_declarator_separator()?;
         }
         self.next()?; // consume `;`
-        // Clear the alignment carriers so this typedef's attribute does
-        // not leak onto a following block declaration; the file-scope
-        // loop resets them per declaration, the block path does not.
-        self.pending.attr_align = 0;
-        self.pending.attr_alignas = 0;
+        // A typedef base's alignment does not reach a following declaration.
         self.pending.type_align = 0;
         Ok(())
     }
@@ -847,7 +893,7 @@ impl Compiler {
         let s = &self.symbols[var_sym];
         let cv = CleanupVar {
             var_sym,
-            fn_sym,
+            fn_sym: self.fn_entity_of(fn_sym),
             class: s.class,
             ty: s.type_,
             val: s.val,
@@ -858,6 +904,7 @@ impl Compiler {
                 s.array_size
             },
             fn_ty: self.symbols[fn_sym].type_,
+            fn_binding: self.callee_binding(fn_sym),
         };
         if let Some(scope) = self.cleanup_scopes.last_mut() {
             scope.vars.push(cv);
@@ -901,7 +948,7 @@ impl Compiler {
             },
             pos,
         );
-        let callee = self.ast_synthesize_callee(cv.fn_sym as u32, cv.fn_ty);
+        let callee = self.ast_callee_ident(cv.fn_sym as u32, cv.fn_ty, cv.fn_binding.clone());
         let call = self.ast.push_expr(
             Expr::Call {
                 callee,
@@ -1062,7 +1109,7 @@ impl Compiler {
         // union, and enum tags. Tag bindings declared in this block
         // shadow same-named tags in any enclosing scope and go out of
         // scope when the block exits.
-        self.tag_scopes.push(alloc::vec::Vec::new());
+        self.tag_scopes.push();
         // GCC local labels declared by this block; see
         // `Compiler::resolve_label_name`.
         self.local_label_scopes.open();
@@ -1086,24 +1133,9 @@ impl Compiler {
                 continue;
             }
             at_block_start = false;
-            // C23 6.7.13 / 6.8: an attribute-specifier-sequence may
-            // lead either a declaration or a statement at block scope.
-            // Consume it, then dispatch on the following token.
-            let (mut leading_maybe_unused, mut leading_noreturn) = (false, false);
-            if self.at_attribute_specifier() {
-                self.pending.attr_maybe_unused = false;
-                // Clear per-item so a `cleanup` attribute leading a
-                // statement (not a declaration) cannot leak onto the next
-                // declaration; the declaration path re-reads it after this.
-                self.pending.attr_cleanup = None;
-                self.pending.attr_uninitialized = false;
-                self.pending_noreturn = false;
-                self.skip_attribute_specifiers()?;
-                leading_maybe_unused = self.pending.attr_maybe_unused;
-                leading_noreturn = core::mem::take(&mut self.pending_noreturn);
-                if self.lex.tk == '}' {
-                    break;
-                }
+            self.parse_block_item_attributes()?;
+            if self.lex.tk == '}' {
+                break;
             }
             if self.lex.tk == Token::Typedef {
                 self.parse_block_typedef()?;
@@ -1114,7 +1146,7 @@ impl Compiler {
             } else if self.lex_is_block_decl_start() {
                 let item_before = self.ast_stmts_snapshot();
                 let vla_before = self.func_vla_decls;
-                self.parse_local_decl(leading_maybe_unused, leading_noreturn)?;
+                self.parse_local_decl()?;
                 if self.func_vla_decls > vla_before && first_vla_item.is_none() {
                     first_vla_item = Some(top_level_ids.len());
                 }
@@ -1427,12 +1459,13 @@ impl Compiler {
     /// (`pause` / `yield`, lowered to the target spin-loop hint).
     /// Operand constraints and other instructions are rejected.
     fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
+        let line = self.lex.line;
         let (template, tstart, is_volatile, is_goto) = self.parse_asm_head()?;
         // `asm goto` takes the general extended-asm path directly: the
         // operand-free template shortcuts below have no label grammar.
         if is_goto {
             self.truncate_data(tstart);
-            return self.parse_extended_asm(template, is_volatile, true);
+            return self.parse_extended_asm(template, is_volatile, true, line);
         }
         // The x87 FPU control-word forms carry exactly one memory operand.
         // Detect them from the template before the operand-rejection loop.
@@ -1617,7 +1650,7 @@ impl Compiler {
         // are dropped from the data section; the parsed block references
         // its operand expressions by AST id.
         self.truncate_data(tstart);
-        self.parse_extended_asm(template, is_volatile, false)
+        self.parse_extended_asm(template, is_volatile, false, line)
     }
 
     /// Consume the `: outputs : inputs : clobbers` region and the
@@ -1656,14 +1689,15 @@ impl Compiler {
     /// clobber is a bare string; a label is an identifier naming a C
     /// label of the enclosing function. On entry the template is
     /// consumed and the cursor is at the first `:` (or `)` when there
-    /// is no operand list).
+    /// is no operand list); `line` is the statement's first.
     fn parse_extended_asm(
         &mut self,
         template: alloc::vec::Vec<u8>,
         volatile: bool,
         is_goto: bool,
+        line: usize,
     ) -> Result<(), C5Error> {
-        use super::super::ast::{AsmBlockAst, Expr, UnOp};
+        use super::super::ast::{AsmBlockAst, Expr};
         use super::super::ir::{AsmBlock, AsmConstraint, AsmOperand, AsmSeg};
         use super::types::{Segment, segment_of_object_ty};
         let mut operands: alloc::vec::Vec<AsmOperand> = alloc::vec::Vec::new();
@@ -1673,6 +1707,9 @@ impl Compiler {
         let mut clobber_regs: u32 = 0;
         let mut clobber_fp_regs: u32 = 0;
         let mut clobber_memory = false;
+        let mut clobbers_sp = false;
+        let mut sp_outputs: alloc::vec::Vec<usize> = alloc::vec::Vec::new();
+        let sp = if self.target.is_aarch64() { 31 } else { 4 };
         let mut n_outputs = 0usize;
         let mut label_ids: alloc::vec::Vec<super::super::ast::LabelId> = alloc::vec::Vec::new();
         let mut label_names: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
@@ -1768,40 +1805,29 @@ impl Compiler {
             self.truncate_data(cstart);
             let cstr = core::str::from_utf8(&cbytes).unwrap_or("");
             if section >= 3 {
-                // Clobber list: a bare register name, `"cc"`, or
-                // `"memory"`. A named register must not hold a value
-                // live across the statement; `cc` (flags) needs no
-                // action, since the compare / branch fusion window ends
-                // at an `Inst::InlineAsm` and no value is kept in flags
-                // across the statement.
-                let name = cstr.trim_start_matches('%');
-                if name == "memory" {
+                // A register after one `%` or `#`, or `cc` / `memory` after
+                // one `%`; `cc` needs nothing, no flags outlive the statement.
+                let (sigil, name) = match cstr.as_bytes().first() {
+                    Some(&c @ (b'%' | b'#')) => (Some(c), &cstr[1..]),
+                    _ => (None, cstr),
+                };
+                if name == "memory" && sigil != Some(b'#') {
                     clobber_memory = true;
-                } else if name != "cc" && !name.is_empty() {
-                    // The register-name spelling is arch-specific; badc knows the
-                    // target, so AArch64 clobbers resolve through the AArch64
-                    // names (GP and the independent SIMD/FP file), x86 through its.
-                    if self.target.is_aarch64() {
-                        if let Some((is_fp, num)) =
-                            super::super::codegen::aarch64::asm::clobber_reg_name(name)
-                        {
-                            if is_fp {
-                                clobber_fp_regs |= 1 << num;
-                            } else {
-                                clobber_regs |= 1 << num;
-                            }
+                } else if name != "cc" || sigil == Some(b'#') {
+                    match super::super::codegen::clobber_registers(self.target, name) {
+                        Some((gpr, fpr)) => {
+                            clobbers_sp |= gpr & (1 << sp) != 0;
+                            clobber_regs |= gpr;
+                            clobber_fp_regs |= fpr;
                         }
-                    } else if let Some((reg, _)) =
-                        super::super::codegen::x86_64::asm::reg_by_name(name)
-                    {
-                        // clobber_regs is the GP mask (0..15); clobber_fp_regs the
-                        // XMM mask. Other register marks (MMX/CR/DR/SEG) are not
-                        // tracked.
-                        use super::super::codegen::x86_64::asm::XMM_BASE;
-                        if reg < 16 {
-                            clobber_regs |= 1 << reg;
-                        } else if (XMM_BASE..XMM_BASE + 16).contains(&reg) {
-                            clobber_fp_regs |= 1 << (reg - XMM_BASE);
+                        None => {
+                            self.truncate_data(data_base);
+                            return Err(self.compile_err(
+                                Code::ASM_SYNTAX,
+                                alloc::format!(
+                                    "inline asm: unknown register name `{cstr}` in the clobber list"
+                                ),
+                            ));
                         }
                     }
                 }
@@ -1833,28 +1859,7 @@ impl Compiler {
             // before the parse, since its expression is indistinguishable
             // from `__builtin_frame_address(0)` afterwards.
             let bound_reg = self.asm_operand_bound_register()?;
-            // `*(T (*)[N])p` reaches the array itself, which decays to the
-            // element pointer (C99 6.3.2.1p3): the deref emits no node and the
-            // accumulator already holds the object's address. The decay marker
-            // distinguishes that from an ordinary rvalue.
-            let saved_decay_bytes = core::mem::take(&mut self.pending.last_array_decay_bytes);
-            let saved_decay_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
-            let saved_decay_vla = self.pending.last_array_decay_vla.take();
-            // A memory operand designates its object, which gcc lets have
-            // incomplete type.
-            self.expr_or_void(Token::Assign as i64)?;
-            self.reject_void_value(self.ty)?;
-            let vla = core::mem::replace(&mut self.pending.last_array_decay_vla, saved_decay_vla);
-            // The dims channel also marks rows the byte channel cannot
-            // (an unspecified bound `*(T (*)[])p` has no byte size).
-            let decayed_array =
-                core::mem::replace(&mut self.pending.last_array_decay_bytes, saved_decay_bytes) > 0
-                    || !core::mem::replace(
-                        &mut self.pending.last_array_decay_dims,
-                        saved_decay_dims,
-                    )
-                    .is_empty()
-                    || vla.is_some();
+            let decayed_array = self.parse_asm_operand_expr()?;
             // A SIMD (`w`/`x`) operand records its full size so the emitter
             // can tell a 16-byte vector from a scalar double; other operands
             // live in 8-byte registers and cap there.
@@ -1951,57 +1956,21 @@ impl Compiler {
             // rejected in the expression path, so an asm that leaves the
             // register changed is equally unsupported.
             let is_bound = matches!(constraint, AsmConstraint::Bound(_));
+            if is_output && constraint == AsmConstraint::Bound(sp) {
+                sp_outputs.push(operands.len());
+            }
             let stores_back = is_output && !is_bound;
             let is_rw = is_rw && !is_bound;
-            // Outputs pass the destination address; a memory operand (input or
-            // output) is likewise reached through its address, so it must be an
-            // lvalue. A non-lvalue (a call / cast / arithmetic result) is not
-            // directly addressable; reject it with a diagnostic rather than
-            // taking the address of an rvalue, which the walker cannot lower
-            // (it would reach `walk_expr_lvalue`'s unsupported-expression path
-            // as an internal error). Matches GCC ("... is not directly
-            // addressable" / an output operand must be an lvalue). An empty
-            // accumulator falls through to the "operand expression expected"
-            // check below.
             if (is_output || matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase))
                 && !is_bound
             {
-                let addressable = decayed_array
-                    || match self.ast_acc {
-                        Some(id) => {
-                            use super::super::ast::Expr;
-                            matches!(
-                                self.ast.expr(id),
-                                Expr::Ident { .. }
-                                    | Expr::Index { .. }
-                                    | Expr::Member { .. }
-                                    | Expr::CompoundLiteral { .. }
-                                    | Expr::Binary { .. }
-                                    | Expr::Unary {
-                                        op: UnOp::Deref,
-                                        ..
-                                    }
-                            )
-                        }
-                        None => true,
-                    };
-                if !addressable {
-                    self.truncate_data(data_base);
-                    return Err(self.compile_err(Code::ASM_SYNTAX, if stores_back {
-                        "inline asm: output operand must be an lvalue"
-                    } else {
-                        "inline asm: memory operand is not directly addressable (must be an lvalue)"
-                    }));
-                }
-                // A decayed array operand is already an address; taking it
-                // again would yield the address of the pointer value.
-                if !decayed_array {
-                    self.ty += Ty::Ptr as i64;
-                    // Only the lowering writes through a register output's address.
-                    let in_memory =
-                        matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase);
-                    self.ast_apply_addr_of(in_memory);
-                }
+                let in_memory = matches!(constraint, AsmConstraint::Mem | AsmConstraint::MemBase);
+                let what = if stores_back {
+                    "inline asm: output operand must be an lvalue"
+                } else {
+                    "inline asm: memory operand is not directly addressable (must be an lvalue)"
+                };
+                self.asm_operand_address(decayed_array, in_memory, data_base, what)?;
             }
             let e = match self.ast_acc.take() {
                 Some(e) => e,
@@ -2162,6 +2131,12 @@ impl Compiler {
             clobber_memory,
             volatile,
         };
+        // gcc (-Wdeprecated) and clang (-Winline-asm) warn on a declared sp change.
+        if clobbers_sp || sp_outputs.iter().any(|&i| block.names_operand(i)) {
+            let text = "the stack pointer is listed as clobbered or written through an \
+                output; GNU C requires it to hold the same value after an `asm` statement";
+            self.warn_at(Code::INLINE_ASM, line, text.into());
+        }
         let idx = self.ast.asm_blocks.len() as u32;
         let cleanups = alloc::vec![alloc::vec::Vec::new(); label_ids.len()];
         self.ast.asm_blocks.push(AsmBlockAst {
@@ -2265,6 +2240,55 @@ impl Compiler {
             i = de;
         }
         Ok(out)
+    }
+
+    /// Parse an asm operand's expression (an incomplete object type admitted, as
+    /// gcc does); whether an array lvalue decayed to its address (C99 6.3.2.1p3).
+    fn parse_asm_operand_expr(&mut self) -> Result<bool, C5Error> {
+        let saved_bytes = core::mem::take(&mut self.pending.last_array_decay_bytes);
+        let saved_dims = core::mem::take(&mut self.pending.last_array_decay_dims);
+        let saved_vla = self.pending.last_array_decay_vla.take();
+        self.expr_or_void(Token::Assign as i64)?;
+        self.reject_void_value(self.ty)?;
+        let vla = core::mem::replace(&mut self.pending.last_array_decay_vla, saved_vla);
+        let bytes = core::mem::replace(&mut self.pending.last_array_decay_bytes, saved_bytes);
+        let dims = core::mem::replace(&mut self.pending.last_array_decay_dims, saved_dims);
+        Ok(bytes > 0 || !dims.is_empty() || vla.is_some())
+    }
+
+    /// Leave the parsed operand's address in the accumulator: a `decayed` array is
+    /// it, another lvalue takes `&`, an rvalue has none and is the error `what`.
+    fn asm_operand_address(
+        &mut self,
+        decayed: bool,
+        in_memory: bool,
+        data_base: usize,
+        what: &str,
+    ) -> Result<(), C5Error> {
+        use super::super::ast::{Expr, UnOp};
+        let addressable = decayed
+            || self.ast_acc.is_none_or(|id| {
+                matches!(
+                    self.ast.expr(id),
+                    Expr::Ident { .. }
+                        | Expr::Index { .. }
+                        | Expr::Member { .. }
+                        | Expr::CompoundLiteral { .. }
+                        | Expr::Unary {
+                            op: UnOp::Deref,
+                            ..
+                        }
+                )
+            });
+        if !addressable {
+            self.truncate_data(data_base);
+            return Err(self.compile_err(Code::ASM_SYNTAX, what));
+        }
+        if !decayed {
+            self.ty += Ty::Ptr as i64;
+            self.ast_apply_addr_of(in_memory);
+        }
+        Ok(())
     }
 
     /// Canonicalize named operand references: `%[name]` and
@@ -2884,7 +2908,7 @@ impl Compiler {
     /// intrinsic args are `[ptr, out-addrs..., in-values...]`. On entry the
     /// template is consumed and the cursor is at the first `:`.
     fn parse_atomic128_asm(&mut self, kind: super::super::op::Intrinsic) -> Result<(), C5Error> {
-        use super::super::ast::{Expr, UnOp};
+        use super::super::ast::Expr;
         use super::super::op::Intrinsic as I;
         // Role of a named operand, decided from its `[name]` spelling.
         enum Role {
@@ -2965,12 +2989,12 @@ impl Compiler {
                 ));
             }
             self.next()?; // `(`
-            self.expr(Token::Assign as i64)?;
+            let decayed = self.parse_asm_operand_expr()?;
             match role {
                 // `"m"(*ptr)` / `"+m"(*ptr)`: &*ptr is the object pointer.
                 Role::Mem => {
-                    self.ty += Ty::Ptr as i64;
-                    self.ast_apply_unary(UnOp::AddrOf);
+                    let what = "128-bit atomic asm: memory operand is not directly addressable";
+                    self.asm_operand_address(decayed, true, data_base, what)?;
                     ptr = self.ast_acc.take();
                 }
                 Role::Scratch => {
@@ -2978,8 +3002,8 @@ impl Compiler {
                 }
                 // Output register: the loaded half is stored to this lvalue.
                 Role::Reg if section == 1 => {
-                    self.ty += Ty::Ptr as i64;
-                    self.ast_apply_unary(UnOp::AddrOf);
+                    let what = "128-bit atomic asm: output operand must be an lvalue";
+                    self.asm_operand_address(decayed, false, data_base, what)?;
                     match self.ast_acc.take() {
                         Some(id) => out_addrs.push(id),
                         None => {
@@ -3015,7 +3039,6 @@ impl Compiler {
         self.asm_list_position(list_pos, data_base)?;
         self.next()?; // outer `)`
         self.consume(b';', "`;` expected after `asm(...)`")?;
-        self.truncate_data(data_base);
 
         // Expected result-address and input-value counts per shape.
         let (want_out, want_in) = match kind {
@@ -3171,7 +3194,6 @@ impl Compiler {
         // load an assignment lvalue needs.
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
-        self.pending.value_is_fn_designator = false;
         // GNU statement attributes: an attribute specifier at statement
         // position appertains to the statement that follows, and
         // `__attribute__((fallthrough));` -- what `<linux/compiler_attributes.h>`

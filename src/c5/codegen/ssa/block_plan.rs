@@ -289,7 +289,12 @@ impl BlockPlan {
             emits_nothing(inst, v, alloc)
                 || matches!(
                     inst,
-                    Inst::Imm(_) | Inst::Binop { .. } | Inst::BinopI { .. } | Inst::Extend { .. }
+                    Inst::Imm(_)
+                        | Inst::Binop { .. }
+                        | Inst::BinopI { .. }
+                        | Inst::ShiftOp { .. }
+                        | Inst::BitField { .. }
+                        | Inst::Extend { .. }
                 )
         };
         if !range.clone().all(computes) {
@@ -490,6 +495,8 @@ fn repeatable_arms(
             Inst::Imm(_)
                 | Inst::Binop { .. }
                 | Inst::BinopI { .. }
+                | Inst::ShiftOp { .. }
+                | Inst::BitField { .. }
                 | Inst::Extend { .. }
                 | Inst::Copy { .. }
                 | Inst::Load {
@@ -590,6 +597,7 @@ mod tests {
             use_counts: alloc::vec![1; n],
             last_use: alloc::vec![0; n],
             cmp32: alloc::vec![false; n],
+            div32: alloc::vec![false; n],
             count_nonzero: alloc::vec![false; n],
             sxtw_source: alloc::vec![NO_VALUE; n],
             sxtw_k: alloc::vec![0; n],

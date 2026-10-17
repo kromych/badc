@@ -1367,7 +1367,7 @@ fn emit_return_42() {
     let mut user_data_refs: Vec<super::super::UserExternDataRef> = Vec::new();
     let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
         alloc::collections::BTreeMap::new();
-    let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+    let extern_tls_names: alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef> =
         alloc::collections::BTreeMap::new();
     let mut tlv_fx = Vec::new();
     let mut tlv_desc = Vec::new();
@@ -2100,6 +2100,183 @@ fn mul_add_spilled_result_falls_back_to_mul_sub() {
     assert_ne!((sub >> 5) & 0x1f, product, "the addend is the left operand");
 }
 
+/// `a | (b << 16)` folded into one shifted-register `orr`, with both
+/// operands spilled and the result placed at `dst`. Returns the words.
+fn try_emit_spilled_shift_op(dst: Place) -> Result<Vec<u32>, Unsupported> {
+    let target = Target::MacOSAarch64;
+    let program = Compiler::with_target(
+        "long long f(long long a, long long b){ return a | (b << 16); } \
+         int main(void){ return 0; }"
+            .into(),
+        target,
+    )
+    .compile()
+    .expect("compile");
+    let mut funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+            .expect("ssa");
+    crate::c5::codegen::passes::shifted_operand::run(&mut funcs);
+    let (func, v, op, lhs, rhs, shift, amount) = funcs
+        .into_iter()
+        .find_map(|f| {
+            let found = f.insts.iter().enumerate().find_map(|(v, i)| match *i {
+                Inst::ShiftOp {
+                    op,
+                    lhs,
+                    rhs,
+                    shift,
+                    amount,
+                } => Some((v as crate::c5::ir::ValueId, op, lhs, rhs, shift, amount)),
+                _ => None,
+            })?;
+            Some((f, found.0, found.1, found.2, found.3, found.4, found.5))
+        })
+        .expect("a function with a ShiftOp");
+    let mut alloc =
+        super::super::ssa::reg_alloc::allocate(&func, target, crate::c5::codegen::FixedRegs::NONE);
+    alloc.places[lhs as usize] = Place::Spill(0);
+    alloc.places[rhs as usize] = Place::Spill(1);
+    alloc.places[v as usize] = dst;
+    alloc.spill_count = alloc.spill_count.max(3);
+    let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
+    let scratch = ScratchPool::new();
+    let mut code = Vec::new();
+    emit_shift_op(
+        &mut code, dst, op, lhs, rhs, shift, amount, &alloc, frame, &scratch,
+    )?;
+    Ok(code
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect())
+}
+
+/// The 64-bit `orr` (shifted register) word among `words`, as `(rd, rn,
+/// rm, shift type, amount)`.
+fn shifted_orr(words: &[u32]) -> (u32, u32, u32, u32, u32) {
+    let w = words
+        .iter()
+        .copied()
+        .find(|w| w & 0xFF20_0000 == 0xAA00_0000)
+        .expect("an ORR (shifted register) word");
+    (
+        w & 0x1f,
+        (w >> 5) & 0x1f,
+        (w >> 16) & 0x1f,
+        (w >> 22) & 3,
+        (w >> 10) & 0x3f,
+    )
+}
+
+/// Two spilled operands reload into two scratch registers, and the `orr`
+/// shifts the second by 16 into the result register.
+#[test]
+fn shift_op_spilled_operands_reload_into_two_registers() {
+    let words = try_emit_spilled_shift_op(Place::IntReg(5)).expect("emit_shift_op bailed");
+    let (rd, rn, rm, kind, amount) = shifted_orr(&words);
+    assert_eq!((rd, kind, amount), (5, 0, 16), "{words:08x?}");
+    assert_ne!(rn, rm, "reloads collided: {words:08x?}");
+}
+
+/// A spilled result is computed in a scratch register and stored back.
+#[test]
+fn shift_op_spilled_result_is_stored() {
+    let words = try_emit_spilled_shift_op(Place::Spill(2)).expect("emit_shift_op bailed");
+    let (rd, ..) = shifted_orr(&words);
+    let at = words
+        .iter()
+        .position(|w| w & 0xFF20_0000 == 0xAA00_0000)
+        .unwrap();
+    let last = *words.last().unwrap();
+    assert!(at + 1 < words.len(), "no store after the orr: {words:08x?}");
+    assert_eq!(
+        last & 0x1f,
+        rd,
+        "the store writes the orr's result: {words:08x?}"
+    );
+}
+
+/// A result the integer form cannot hold is refused with the form named.
+#[test]
+fn shift_op_fp_result_names_the_refused_form() {
+    let e = try_emit_spilled_shift_op(Place::FpReg(0)).expect_err("an FP result has no ShiftOp");
+    assert_eq!(e.reason(), "ShiftOp: dst not int reg / spill");
+}
+
+/// `(x << 20) >> 40` folded into one `sbfx`, with its operand spilled and
+/// the result placed at `dst`. Returns the words.
+fn try_emit_spilled_bit_field(dst: Place) -> Result<Vec<u32>, Unsupported> {
+    let target = Target::MacOSAarch64;
+    let program = Compiler::with_target(
+        "long long f(long long x){ return (x << 20) >> 40; } int main(void){ return 0; }".into(),
+        target,
+    )
+    .compile()
+    .expect("compile");
+    let mut funcs =
+        crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+            .expect("ssa");
+    crate::c5::codegen::passes::bit_field::run(&mut funcs);
+    let (func, v, value, lsb, width, signed) = funcs
+        .into_iter()
+        .find_map(|f| {
+            let found = f.insts.iter().enumerate().find_map(|(v, i)| match *i {
+                Inst::BitField {
+                    value,
+                    lsb,
+                    width,
+                    signed,
+                } => Some((v as crate::c5::ir::ValueId, value, lsb, width, signed)),
+                _ => None,
+            })?;
+            Some((f, found.0, found.1, found.2, found.3, found.4))
+        })
+        .expect("a function with a BitField");
+    let mut alloc =
+        super::super::ssa::reg_alloc::allocate(&func, target, crate::c5::codegen::FixedRegs::NONE);
+    alloc.places[value as usize] = Place::Spill(0);
+    alloc.places[v as usize] = dst;
+    alloc.spill_count = alloc.spill_count.max(2);
+    let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
+    let scratch = ScratchPool::new();
+    let mut code = Vec::new();
+    emit_bit_field(
+        &mut code, dst, value, lsb, width, signed, &alloc, frame, &scratch,
+    )?;
+    Ok(code
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect())
+}
+
+/// A spilled operand reloads into a scratch, the `sbfx` takes bits 20..44
+/// into the result register, and a spilled result is stored after it.
+#[test]
+fn bit_field_spilled_operand_and_result() {
+    // 64-bit SBFM with immr = 20, imms = 43.
+    let is_sbfx = |w: u32| w & 0xFFFF_FC00 == 0x9354_AC00;
+    let words = try_emit_spilled_bit_field(Place::IntReg(5)).expect("emit_bit_field bailed");
+    let at = words.iter().position(|&w| is_sbfx(w)).expect("an sbfx");
+    assert!(at > 0, "no reload ahead of the sbfx: {words:08x?}");
+    assert_eq!(words[at] & 0x1f, 5, "{words:08x?}");
+    let words = try_emit_spilled_bit_field(Place::Spill(1)).expect("emit_bit_field bailed");
+    let at = words.iter().position(|&w| is_sbfx(w)).expect("an sbfx");
+    assert!(
+        at + 1 < words.len(),
+        "no store after the sbfx: {words:08x?}"
+    );
+    assert_eq!(
+        words[words.len() - 1] & 0x1f,
+        words[at] & 0x1f,
+        "{words:08x?}"
+    );
+    let e = try_emit_spilled_bit_field(Place::FpReg(0)).expect_err("an FP result has no field");
+    assert_eq!(e.reason(), "BitField: dst not int reg / spill");
+}
+
 /// The first function of `src` holding an instruction `pick` accepts, its
 /// allocation over the full pool, and that instruction's value.
 fn func_with(
@@ -2170,6 +2347,71 @@ fn sdiv_rd(words: &[u32]) -> u32 {
         .find(|&&w| w & 0xFFE0_FC00 == 0x9AC0_0C00)
         .expect("an SDIV word")
         & 31
+}
+
+/// The words `src`'s first division emits, its mark set by the test.
+fn div_words(src: &str, narrow: bool) -> Vec<u32> {
+    let target = Target::LinuxAarch64;
+    let (func, mut alloc, v) = func_with(src, target, |i| {
+        matches!(
+            i,
+            Inst::Binop {
+                op: BinOp::Div | BinOp::Divu,
+                ..
+            }
+        )
+    });
+    let Inst::Binop { op, lhs, rhs, .. } = func.insts[v as usize] else {
+        unreachable!()
+    };
+    alloc.div32.resize(v as usize + 1, false);
+    alloc.div32[v as usize] = narrow;
+    let frame = compute_frame(&func, &alloc, target.abi(), target, 0);
+    let mut code = Vec::new();
+    emit_binop(
+        &mut code,
+        op,
+        v,
+        place_of(&alloc, v),
+        lhs,
+        rhs,
+        &alloc,
+        frame,
+        &ScratchPool::new(),
+    )
+    .expect("emit_binop");
+    le_words(&code)
+}
+
+/// A division of 32-bit operands issues `sdiv` / `udiv` on the W
+/// registers (SF clear; the quotient lands zero-extended in the X
+/// register); a 64-bit operand keeps the X form.
+#[test]
+fn division_of_32_bit_operands_takes_the_w_register_form() {
+    let narrow = div_words(
+        "int f(int a, int b){ return a / b; } int main(void){ return 0; }",
+        true,
+    );
+    assert!(
+        narrow.iter().any(|&w| w & 0xFFE0_FC00 == 0x1AC0_0C00),
+        "{narrow:08x?}"
+    );
+    let wide = div_words(
+        "long f(long a, long b){ return a / b; } int main(void){ return 0; }",
+        false,
+    );
+    assert!(
+        wide.iter().any(|&w| w & 0xFFE0_FC00 == 0x9AC0_0C00),
+        "{wide:08x?}"
+    );
+    let unarrow = div_words(
+        "unsigned f(unsigned a, unsigned b){ return a / b; } int main(void){ return 0; }",
+        true,
+    );
+    assert!(
+        unarrow.iter().any(|&w| w & 0xFFE0_FC00 == 0x1AC0_0800),
+        "{unarrow:08x?}"
+    );
 }
 
 /// A modulo whose dividend, divisor and result all spill leaves neither
@@ -2310,7 +2552,7 @@ fn emit_return_one_plus_two() {
     let mut user_data_refs: Vec<super::super::UserExternDataRef> = Vec::new();
     let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
         alloc::collections::BTreeMap::new();
-    let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+    let extern_tls_names: alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef> =
         alloc::collections::BTreeMap::new();
     let mut tlv_fx = Vec::new();
     let mut tlv_desc = Vec::new();
@@ -2408,7 +2650,7 @@ fn emit_if_else_returns() {
     let mut user_data_refs: Vec<super::super::UserExternDataRef> = Vec::new();
     let extern_data_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
         alloc::collections::BTreeMap::new();
-    let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> =
+    let extern_tls_names: alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef> =
         alloc::collections::BTreeMap::new();
     let mut tlv_fx = Vec::new();
     let mut tlv_desc = Vec::new();

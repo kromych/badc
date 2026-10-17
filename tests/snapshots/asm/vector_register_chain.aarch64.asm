@@ -148,42 +148,39 @@ Disassembly of section .text:
                	ldrb	w3, [x3, x0]
                	add	x4, x1, #0x60
                	ldrb	w5, [x4, x0]
-               	eor	x5, x3, x5
-               	lsl	x6, x3, #1
+               	eor	x6, x3, x5
                	tbz	w3, #0x7, <addr>
-               	mov	x3, #0x1d               // =29
-               	eor	x3, x6, x3
+               	mov	x5, #0x1d               // =29
+               	eor	x3, x5, x3, lsl #1
                	and	x3, x3, #0xff
                	ldrb	w4, [x4, x0]
                	eor	x3, x3, x4
                	add	x4, x1, #0x30
-               	ldrb	w6, [x4, x0]
-               	eor	x5, x5, x6
-               	lsl	x6, x3, #1
+               	ldrb	w5, [x4, x0]
+               	eor	x6, x6, x5
                	tbz	w3, #0x7, <addr>
-               	mov	x3, #0x1d               // =29
-               	eor	x3, x6, x3
+               	mov	x5, #0x1d               // =29
+               	eor	x3, x5, x3, lsl #1
                	and	x3, x3, #0xff
                	ldrb	w4, [x4, x0]
                	eor	x3, x3, x4
                	ldrb	w4, [x1, x0]
-               	eor	x4, x5, x4
-               	lsl	x5, x3, #1
+               	eor	x5, x6, x4
                	tbz	w3, #0x7, <addr>
-               	mov	x3, #0x1d               // =29
+               	mov	x4, #0x1d               // =29
                	b	<addr>
-               	mov	x3, x2
+               	mov	x4, x2
                	b	<addr>
-               	mov	x3, x2
+               	mov	x5, x2
                	b	<addr>
-               	mov	x3, x2
+               	mov	x5, x2
                	b	<addr>
-               	eor	x3, x5, x3
+               	eor	x3, x4, x3, lsl #1
                	and	x3, x3, #0xff
-               	ldrb	w5, [x1, x0]
-               	eor	x3, x3, x5
-               	sub	x5, x29, #0x60
-               	strb	w4, [x5, x0]
+               	ldrb	w4, [x1, x0]
+               	eor	x3, x3, x4
+               	sub	x4, x29, #0x60
+               	strb	w5, [x4, x0]
                	sub	x4, x29, #0x30
                	strb	w3, [x4, x0]
                	add	x0, x0, #0x1

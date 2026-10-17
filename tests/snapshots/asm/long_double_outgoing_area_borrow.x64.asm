@@ -28,9 +28,8 @@ Disassembly of section .text:
 <weigh10>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	%rsi, %rax
-               	shlq	%rax
-               	addq	%rdi, %rax
+               	shlq	%rsi
+               	leaq	(%rdi,%rsi), %rax
                	leaq	(%rdx,%rdx,2), %rdx
                	addq	%rdx, %rax
                	shlq	$0x2, %rcx
@@ -344,16 +343,14 @@ Disassembly of section .text:
                	movq	%r15, %r10
                	movq	0x58(%rsp), %r15
                	addq	%r10, %r15
-               	negq	%r14
-               	addq	%r15, %r14
-               	addq	%r14, %r13
+               	subq	%r14, %r15
+               	addq	%r15, %r13
                	shlq	%rcx
                	addq	%rcx, %rax
                	leaq	(%rdx,%rdx,2), %rcx
                	addq	%rcx, %rax
-               	movq	%r8, %rcx
-               	shlq	$0x2, %rcx
-               	addq	%rcx, %rax
+               	shlq	$0x2, %r8
+               	addq	%r8, %rax
                	leaq	(%r9,%r9,4), %rcx
                	addq	%rcx, %rax
                	imulq	$0x6, %rbx, %rcx

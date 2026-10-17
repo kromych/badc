@@ -50,7 +50,7 @@ fn code_position_block(position: i64) -> usize {
 /// routes a call through an imported-function address (`&strcmp`)
 /// to the libc dispatch by binding index rather than looking up a
 /// c5 function body. The low bits hold the binding index.
-const IMPORT_ADDR_TAG: i64 = 0x2000_0000_0000_0000;
+pub(super) const IMPORT_ADDR_TAG: i64 = 0x2000_0000_0000_0000;
 
 /// Byte-addressed memory backing the SSA-VM. Layout:
 ///
@@ -1354,6 +1354,28 @@ fn run_inst<H: Host>(
             } else {
                 c.wrapping_add(product)
             };
+            return Ok(());
+        }
+        Inst::ShiftOp {
+            op,
+            lhs,
+            rhs,
+            shift,
+            amount,
+        } => {
+            let eval = |op, a, b| crate::c5::ir::eval_int_binop(op, a, b).unwrap_or(0);
+            let shifted = eval(*shift, frame.regs[*rhs as usize], i64::from(*amount));
+            frame.regs[v as usize] = eval(*op, frame.regs[*lhs as usize], shifted);
+            return Ok(());
+        }
+        Inst::BitField {
+            value,
+            lsb,
+            width,
+            signed,
+        } => {
+            let x = frame.regs[*value as usize];
+            frame.regs[v as usize] = crate::c5::ir::eval_bit_field(x, *lsb, *width, *signed);
             return Ok(());
         }
         Inst::Extend { value, kind, .. } => {

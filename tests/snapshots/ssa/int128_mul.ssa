@@ -432,7 +432,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v366 Binop { op=mul, lhs=v16, rhs=v364 }              -> x7
     v367 Binop { op=mulhu, lhs=v16, rhs=v364 }            -> x2
     v368 BinopI { op=mul, lhs=v16, rhs_imm=0 }            -> x0
-    v369 Binop { op=mul, lhs=v21, rhs=v364 }              -> x1
+    v369 Binop { op=mul, lhs=v21, rhs=v364 }              -> x6
     v370 Binop { op=add, lhs=v367, rhs=v368 }             -> x0
     v371 Binop { op=add, lhs=v370, rhs=v369 }             -> x0
     v372 Imm(0)                                           -> x1

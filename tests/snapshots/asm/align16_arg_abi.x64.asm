@@ -118,10 +118,9 @@ Disassembly of section .text:
                	movq	%rsi, %rax
                	mulq	%r10
                	imulq	$0x0, %rsi, %rax
-               	movq	%r9, %rsi
-               	shlq	%rsi
+               	shlq	%r9
                	addq	%rdx, %rax
-               	addq	%rsi, %rax
+               	addq	%r9, %rax
                	movq	%rdi, %rsi
                	sarq	$0x3f, %rsi
                	leaq	(%r8,%rdi), %rdx
@@ -485,9 +484,8 @@ Disassembly of section .text:
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
                	xorq	$0x19, %rax
-               	movq	%rdx, %rcx
-               	xorq	$0xa, %rcx
-               	orq	%rcx, %rax
+               	xorq	$0xa, %rdx
+               	orq	%rdx, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xa, %eax
@@ -505,9 +503,8 @@ Disassembly of section .text:
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
                	xorq	$0x51, %rax
-               	movq	%rdx, %rcx
-               	xorq	$-0x4, %rcx
-               	orq	%rcx, %rax
+               	xorq	$-0x4, %rdx
+               	orq	%rdx, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0xb, %eax

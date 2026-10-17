@@ -26,9 +26,8 @@ Disassembly of section .text:
                	int3
 
 <mix>:
-               	movq	%rdi, %rax
-               	shlq	%rax
-               	incq	%rax
+               	shlq	%rdi
+               	leaq	0x1(%rdi), %rax
                	retq
 
 <on_other_stack>:
@@ -82,14 +81,12 @@ Disassembly of section .text:
                	movq	%rsp, (%rax)
                	movq	%rcx, %rsp
                	callq	<addr>
-               	movq	%r12, %rcx
-               	shlq	%rcx
-               	addq	%rbx, %rcx
+               	shlq	%r12
+               	leaq	(%rbx,%r12), %rcx
                	leaq	(%r13,%r13,2), %rdx
                	addq	%rdx, %rcx
-               	movq	%r14, %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rdx, %rcx
+               	shlq	$0x2, %r14
+               	addq	%r14, %rcx
                	leaq	(%r15,%r15,4), %rdx
                	addq	%rdx, %rcx
                	movq	-0x8(%rbp), %rdx
@@ -184,14 +181,12 @@ Disassembly of section .text:
                	leaq	0x3(%rax), %r10
                	movq	%r10, 0x38(%rsp)
                	callq	<addr>
-               	movq	%r12, %rcx
-               	shlq	%rcx
-               	addq	%rbx, %rcx
+               	shlq	%r12
+               	leaq	(%rbx,%r12), %rcx
                	leaq	(%r13,%r13,2), %rdx
                	addq	%rdx, %rcx
-               	movq	%r14, %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rdx, %rcx
+               	shlq	$0x2, %r14
+               	addq	%r14, %rcx
                	leaq	(%r15,%r15,4), %rdx
                	addq	%rdx, %rcx
                	movq	0x88(%rsp), %rdx

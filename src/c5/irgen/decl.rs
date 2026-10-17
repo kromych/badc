@@ -31,16 +31,19 @@ impl<'a> Walker<'a> {
                 size_slot,
                 dim,
                 fill,
+                align,
                 ..
             } => {
-                // C99 6.7.6.2: allocate `count * sizeof(elem)` bytes
-                // from the stack via the alloca intrinsic, store the
-                // base pointer for decay and the byte count for `sizeof`.
+                // C99 6.7.6.2: allocate `count * sizeof(elem)` bytes from the
+                // stack via the alloca intrinsic, with room to round the base
+                // up to `align` (C11 6.7.5), store the base pointer for decay
+                // and the byte count for `sizeof`.
                 let elem_size = *elem_size;
                 let ptr_slot = *ptr_slot;
                 let size_slot = *size_slot;
                 let dim = *dim;
                 let fill = *fill;
+                let align = i64::from(*align);
                 let n = self.walk_expr_rvalue(b, dim)?;
                 let bytes = if elem_size == 1 {
                     n
@@ -48,7 +51,14 @@ impl<'a> Walker<'a> {
                     b.binop_imm(BinOp::Mul, n, elem_size)
                 };
                 b.store_local(size_slot, bytes, StoreKind::I64);
-                let ptr = b.intrinsic(Intrinsic::Alloca as i64, alloc::vec![bytes]);
+                let ptr = if align > 16 {
+                    let padded = b.binop_imm(BinOp::Add, bytes, align - 16);
+                    let raw = b.intrinsic(Intrinsic::Alloca as i64, alloc::vec![padded]);
+                    let up = b.binop_imm(BinOp::Add, raw, align - 1);
+                    b.binop_imm(BinOp::And, up, -align)
+                } else {
+                    b.intrinsic(Intrinsic::Alloca as i64, alloc::vec![bytes])
+                };
                 b.store_local(ptr_slot, ptr, StoreKind::I64);
                 if let Some(byte) = fill {
                     self.fill_loop(b, ptr, bytes, byte, false);

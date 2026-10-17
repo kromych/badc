@@ -3,6 +3,7 @@
 //! drivers run a selection of them before instruction selection.
 
 pub(crate) mod agg_parts;
+pub(crate) mod bit_field;
 pub(crate) mod byteload;
 pub(crate) mod const_global_fold;
 pub(crate) mod constfold;
@@ -26,6 +27,7 @@ pub(crate) mod noreturn;
 pub(crate) mod prune_unreachable;
 pub(crate) mod remap_blocks;
 pub(crate) mod rotate;
+pub(crate) mod shifted_operand;
 pub(crate) mod simplify_branches;
 pub(crate) mod split_crit_edges;
 pub(crate) mod sroa;

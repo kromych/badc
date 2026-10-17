@@ -4229,9 +4229,8 @@ Disassembly of section .text:
                	andq	%r11, %rcx
                	orq	%rdi, %rax
                	movq	%rax, -0x40(%rbp)
-               	movq	%rsi, %rax
-               	orq	%rcx, %rax
-               	movq	%rax, -0x38(%rbp)
+               	orq	%rsi, %rcx
+               	movq	%rcx, -0x38(%rbp)
                	movl	-0x40(%rbp), %eax
                	movl	-0x3c(%rbp), %ecx
                	movl	-0x38(%rbp), %edx

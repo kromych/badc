@@ -34,6 +34,7 @@ pub(crate) fn compile_objects(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
     // `--export-all` widens an image's dynamic symbol table; a
     // relocatable object exports what its source declares.
     cfg.export_all = false;
+    cfg.reloc_opts.freed_by_exit = source_count == 1;
     if let Some(out) = cli.output_path.as_deref() {
         if source_count != 1 {
             eprintln!(

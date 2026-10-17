@@ -31,14 +31,10 @@ Disassembly of section .text:
                	ldr	x3, [x0, #0x10]
                	ldr	x4, [x0, #0x18]
                	ldr	x0, [x0, #0x20]
-               	lsl	x2, x2, #1
-               	add	x1, x1, x2
-               	lsl	x2, x3, #2
-               	add	x1, x1, x2
-               	lsl	x2, x4, #3
-               	add	x1, x1, x2
-               	lsl	x0, x0, #4
-               	add	x0, x1, x0
+               	add	x1, x1, x2, lsl #1
+               	add	x1, x1, x3, lsl #2
+               	add	x1, x1, x4, lsl #3
+               	add	x0, x1, x0, lsl #4
                	ret
 
 <use_forward>:

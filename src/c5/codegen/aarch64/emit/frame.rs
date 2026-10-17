@@ -50,12 +50,15 @@ pub(crate) struct Frame {
     /// time (`alloca`, C99 6.7.6.2 VLA), the prologue realigns it, or an
     /// inline asm statement may leave it moved (`AsmBlock::may_move_sp`), as
     /// a stack switch does. Spill slots and locals are addressed through fp,
-    /// and each return's teardown takes sp from fp.
+    /// and each return's teardown takes sp from fp; a full leaf returns with
+    /// sp where its asm left it.
     pub dynamic_sp: bool,
     /// Alignment the prologue forces on sp for automatic objects aligned
     /// above 16 (C11 6.7.5), or 0. The realigned region sits below the static
     /// frame; the objects live at `[sp + region_off]`.
     pub realign_align: u32,
+    /// The register holding the realigned sp in its place where sp moves.
+    pub region_base: Option<u8>,
     /// Byte size of the realigned region, a multiple of 16.
     pub realign_region_bytes: u32,
     /// fp-relative offset (negative) of the over-aligned region when its
@@ -130,9 +133,11 @@ pub(crate) fn compute_frame(
     // prologue-end sp is a constant distance from fp (no realignment),
     // nothing in the body overwrites x19, and the one-instruction forms
     // pay for the register's save, restore and capture.
+    let region_base = super::ssa::emit_common::region_base(func, target, abi.fixed_regs);
+    let fixed_regs = super::ssa::emit_common::fixed_with_region_base(func, target, abi.fixed_regs);
     let writes_third_scratch = writes_x19(func, alloc, abi);
-    let local_base = !x19_overwritten(func, abi.fixed_regs)
-        && (super::ssa::emit_common::uses_dynamic_alloca(func) || func.has_sp_moving_asm())
+    let local_base = !x19_overwritten(func, fixed_regs)
+        && (super::ssa::emit_common::uses_dynamic_alloca(func) || func.has_sp_moving_asm(target))
         && func.frame_align <= 16
         && !abi.fixed_regs.has_gpr(19)
         && local_base_wins(func, alloc, canary_bytes, upper_bytes) >= 4;
@@ -147,13 +152,13 @@ pub(crate) fn compute_frame(
     let asm_bytes = if func.is_naked {
         0
     } else {
-        asm_scratch_bytes(func, alloc, abi.fixed_regs)
+        asm_scratch_bytes(func, alloc, fixed_regs)
     };
     // The outgoing area joins the static frame only while sp keeps its
     // prologue value across the body: `alloca`/VLA, the sp realignment
     // and an inline asm statement that may move sp leave it elsewhere, and
     // a callee reads its stack arguments at the call-time sp.
-    let outgoing_bytes = if dynamic_sp || func.has_sp_moving_asm() {
+    let outgoing_bytes = if dynamic_sp || func.has_sp_moving_asm(target) {
         0
     } else {
         max_call_scratch
@@ -189,7 +194,7 @@ pub(crate) fn compute_frame(
         keeps_record: super::ssa::emit_common::body_keeps_frame_record(func, target, |i| {
             intrinsic_keeps_frame(i, abi)
         }),
-        fixed_regs: abi.fixed_regs,
+        fixed_regs,
         fp_scratch: alloc.fp_scratch,
         count_fp: count_fp_register(func, alloc, abi, target),
         parts: super::ssa::emit_common::FrameStack {
@@ -219,6 +224,7 @@ pub(crate) fn compute_frame(
         } else {
             0
         },
+        region_base,
         realign_region_bytes: if func.frame_align > 16 {
             region_bytes
         } else {
@@ -238,7 +244,7 @@ pub(crate) fn compute_frame(
         local_base,
     };
     // A full leaf has nothing to address and no fp to restore sp from.
-    frame.dynamic_sp |= func.has_sp_moving_asm() && !is_full_leaf(frame, alloc);
+    frame.dynamic_sp |= func.has_sp_moving_asm(target) && !is_full_leaf(frame, alloc);
     frame
 }
 
@@ -569,7 +575,7 @@ pub(super) fn asm_operand_regs(
 ) -> Result<alloc::vec::Vec<Option<u8>>, alloc::string::String> {
     super::asm::assign_operand_regs(
         &asm.operands,
-        asm.clobber_regs | fixed.gpr,
+        asm.clobber_regs | fixed.kept_gpr(),
         asm.clobber_fp_regs | fixed.fpr,
         &|i| {
             args.get(i)
@@ -651,9 +657,12 @@ pub(crate) fn asm_binds_directly(
     fixed: super::FixedRegs,
 ) -> bool {
     use super::super::ir::AsmConstraint as C;
-    // x18, x19, x29, x30 and sp: saved around the template when named.
+    // x18, x19, x29, x30, sp, the frame's own: saved around the template.
     const RESERVED: u32 = (1 << 18) | (1 << 19) | (1 << 29) | (1 << 30) | (1 << 31);
-    if func.is_naked || func.has_sp_asm() || asm.references_sp() || asm.clobber_regs & RESERVED != 0
+    if func.is_naked
+        || func.has_sp_asm()
+        || asm.references_sp()
+        || asm.clobber_regs & (RESERVED | fixed.frame) != 0
     {
         return false;
     }

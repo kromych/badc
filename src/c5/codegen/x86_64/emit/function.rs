@@ -178,7 +178,7 @@ pub(crate) fn emit_function(
     _got_fixups: &mut Vec<GotFixup>,
     extern_data_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
     extern_code_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
-    extern_tls_names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    extern_tls_names: &alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef>,
     imports: &super::ResolvedImports,
     variadic_targets: &alloc::collections::BTreeSet<usize>,
     ret_tags: &alloc::collections::BTreeMap<usize, i64>,
@@ -219,6 +219,9 @@ pub(crate) fn emit_function(
     let frame = compute_frame(func, alloc, abi, target);
     if let Some(why) = super::ssa::reg_alloc::fp_scratch_shortfall(func, frame.fp_scratch) {
         return fail(why);
+    }
+    if super::ssa::emit_common::needs_region_base(func, target) && frame.region_base.is_none() {
+        return fail(super::ssa::emit_common::NO_REGION_BASE);
     }
     if frame.canary_bytes > 0 {
         cx.canary_frame_bytes
@@ -274,8 +277,14 @@ pub(crate) fn emit_function(
     let mcount_frame = entry.profile.is_some_and(|call| call.after_prologue);
     let early_exit = if repeat_tests && !mcount_frame && !is_full_leaf(func, frame, alloc, abi) {
         super::ssa::early_exit::early_exit(func, alloc, &param_plan).filter(|exit| {
-            emit_early_test(&mut Vec::new(), exit).is_some()
-                && emit_early_return(&mut Vec::new(), exit, abi, &mut Vec::new())
+            emit_early_test(&mut Vec::new(), exit, frame.fixed_regs).is_some()
+                && emit_early_return(
+                    &mut Vec::new(),
+                    exit,
+                    abi,
+                    frame.fixed_regs,
+                    &mut Vec::new(),
+                )
         })
     } else {
         None
@@ -458,7 +467,7 @@ impl FnEmit<'_, '_> {
                 code.len(),
                 self.out.cx.ssa_line_rows,
             );
-            let site = emit_early_test(code, exit);
+            let site = emit_early_test(code, exit, self.fcx.frame.fixed_regs);
             debug_assert!(site.is_some(), "the test fit its temporaries at planning");
             self.early_site = (site.unwrap_or(0), code.len());
         }
@@ -487,8 +496,13 @@ impl FnEmit<'_, '_> {
             exit_at,
             self.out.cx.ssa_line_rows,
         );
-        let emitted =
-            emit_early_return(code, exit, self.fcx.abi, self.out.cx.asm_extern_call_sites);
+        let emitted = emit_early_return(
+            code,
+            exit,
+            self.fcx.abi,
+            self.fcx.frame.fixed_regs,
+            self.out.cx.asm_extern_call_sites,
+        );
         debug_assert!(emitted, "the return fit its temporaries at planning");
         let (site, frame) = self.early_site;
         patch_early_branch(code, site, exit_at);
@@ -1387,6 +1401,9 @@ fn emit_prologue(
     // places a copy aligned above the slot in the realigned region.
     if frame.realign_align > 0 {
         emit_realign_rsp(code, frame);
+    }
+    if let Some(r) = frame.region_base {
+        emit_mov_rr(code, Reg(r), Reg::RSP);
     }
     emit_param_homes(code, func, alloc, frame, abi);
     emit_struct_param_scatter(code, func, frame, abi);

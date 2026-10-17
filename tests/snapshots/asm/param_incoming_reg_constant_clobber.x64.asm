@@ -41,31 +41,17 @@ Disassembly of section .text:
                	retq
 
 <func_10>:
-               	movl	$0x5, %esi
                	movq	%rdx, %rdi
-               	leaq	<rip>, %rax      # <addr>
-               	movq	(%rax), %rcx
-               	movzwq	(%rcx), %rcx
-               	movsbq	%cl, %rcx
-               	testl	%ecx, %ecx
-               	jl	<addr>
-               	cmpl	$0x1, %ecx
                	leaq	<rip>, %rcx      # <addr>
-               	movslq	(%rcx), %rcx
-               	orq	%rsi, %rcx
-               	movq	%rcx, %rdx
-               	shrq	$0x2, %rdx
-               	shlq	$0x2, %rdx
-               	subq	%rdx, %rcx
-               	movq	(%rax), %rax
-               	movzwq	(%rax), %rdx
-               	movswq	%cx, %rax
-               	movswq	%dx, %rcx
-               	testl	%ecx, %ecx
-               	je	<addr>
-               	cmpl	$0xffff8000, %eax       # imm = 0xFFFF8000
-               	jne	<addr>
-               	cmpl	$-0x1, %ecx
+               	movq	(%rcx), %rax
+               	movzwq	(%rax), %rax
+               	movsbq	%al, %rax
+               	testl	%eax, %eax
+               	jl	<addr>
+               	cmpl	$0x1, %eax
+               	movq	(%rcx), %rax
+               	movzwq	(%rax), %rax
+               	movswq	%ax, %rcx
                	leaq	<rip>, %rsi      # <addr>
                	leaq	<rip>, %rcx      # <addr>
                	movl	(%rsi), %eax

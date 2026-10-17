@@ -280,20 +280,20 @@ fn ent_pc=14 n_params=0 variadic=false locals=5
     v126 Imm(0)                                           -> x0
     v127 Imm(0)                                           -> x0
     v128 Imm(0)                                           -> x0
-    v129 Load { addr=v12, disp=0, kind=U16, align=1 }     -> x0
-    v130 BinopI { op=add, lhs=v12, rhs_imm=2 }            -> x1
-    v131 Load { addr=v12, disp=2, kind=U8 }               -> x1
-    v132 BinopI { op=shl, lhs=v131, rhs_imm=16 }          -> x1
+    v129 Load { addr=v12, disp=0, kind=U16, align=1 }     -> x6
+    v130 BinopI { op=add, lhs=v12, rhs_imm=2 }            -> x0
+    v131 Load { addr=v12, disp=2, kind=U8 }               -> x0
+    v132 BinopI { op=shl, lhs=v131, rhs_imm=16 }          -> x0
     v133 Binop { op=or, lhs=v129, rhs=v132 }              -> x6
-    v134 Load { addr=v14, disp=0, kind=U32, align=1 }     -> x0
-    v135 BinopI { op=add, lhs=v14, rhs_imm=4 }            -> x1
-    v136 Load { addr=v14, disp=4, kind=U8 }               -> x1
-    v137 BinopI { op=shl, lhs=v136, rhs_imm=32 }          -> x1
+    v134 Load { addr=v14, disp=0, kind=U32, align=1 }     -> x2
+    v135 BinopI { op=add, lhs=v14, rhs_imm=4 }            -> x0
+    v136 Load { addr=v14, disp=4, kind=U8 }               -> x0
+    v137 BinopI { op=shl, lhs=v136, rhs_imm=32 }          -> x0
     v138 Binop { op=or, lhs=v134, rhs=v137 }              -> x2
-    v139 Load { addr=v16, disp=0, kind=U32, align=2 }     -> x0
-    v140 BinopI { op=add, lhs=v16, rhs_imm=4 }            -> x1
-    v141 Load { addr=v16, disp=4, kind=U16 }              -> x1
-    v142 BinopI { op=shl, lhs=v141, rhs_imm=32 }          -> x1
+    v139 Load { addr=v16, disp=0, kind=U32, align=2 }     -> x1
+    v140 BinopI { op=add, lhs=v16, rhs_imm=4 }            -> x0
+    v141 Load { addr=v16, disp=4, kind=U16 }              -> x0
+    v142 BinopI { op=shl, lhs=v141, rhs_imm=32 }          -> x0
     v143 Binop { op=or, lhs=v139, rhs=v142 }              -> x1
     v144 Load { addr=v18, disp=0, kind=U32, align=1 }     -> x0
     v145 BinopI { op=add, lhs=v18, rhs_imm=4 }            -> x8

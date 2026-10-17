@@ -1084,6 +1084,50 @@ fn jit_exits_with_the_status_exit_was_given() {
     }
 }
 
+// A unit run in process keeps a 64 KiB alignment; a Mach-O image refuses it.
+#[test]
+fn in_process_runs_keep_a_64k_alignment() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-align-64k");
+    let src = dir.join("a64k.c");
+    std::fs::write(
+        &src,
+        "#include <stdint.h>\n\
+         _Alignas(65536) unsigned char d[3] = {1};\n\
+         _Alignas(65536) unsigned char b[3];\n\
+         static _Alignas(65536) const unsigned char r[3] = {2};\n\
+         int main(void) {\n\
+         static _Alignas(65536) unsigned char s[3];\n\
+         uintptr_t all = (uintptr_t)d | (uintptr_t)b | (uintptr_t)r | (uintptr_t)s;\n\
+         return all % 65536 != 0 || d[0] + r[0] + b[0] + s[0] != 3;\n\
+         }\n",
+    )
+    .expect("write source");
+    for mode in ["--jit", "--interp"] {
+        let out = Command::new(badc)
+            .arg(mode)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(0), "{mode}: {err}");
+    }
+    if cfg!(target_os = "macos") {
+        let out = Command::new(badc)
+            .arg("-o")
+            .arg(dir.join("a64k"))
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !out.status.success()
+                && err.contains("exceeds the 16384-byte boundary a Mach-O image keeps at load"),
+            "{err}"
+        );
+    }
+}
+
 // `--install <dir>` writes every embedded header under <dir>/include
 // (recreating subdirectories) and the runtime source under <dir>/lib.
 #[test]
@@ -2446,6 +2490,169 @@ fn ffixed_keeps_the_register_out_of_the_emitted_code() {
     }
     if measured == 0 {
         eprintln!("ffixed: no disassembler on PATH; the emitted-code check was skipped");
+    }
+}
+
+/// Functions whose AArch64 lowering borrows a register for a sequence of
+/// its own: a binary128 `long double` load and store, a `-mstrict-align`
+/// access split to its alignment, a 16-byte atomic load, `va_copy` and
+/// `va_arg`; and two that keep argument values live across one.
+const FIXED_BORROW_SRC: &str = "\
+#include <stdarg.h>
+struct __attribute__((packed)) P { char c; long v; };
+double ld_load(long double *p) { return (double)p[0]; }
+void ld_store(long double *p, double d) { p[1] = d; }
+long narrow_load(struct P *p) { return p->v; }
+void narrow_store(struct P *p, long v) { p->v = v; }
+typedef struct { unsigned long long lo, hi; } u128;
+void load16(const u128 *p, unsigned long long *l, unsigned long long *h) {
+    unsigned long long a, b;
+    __asm__(\"ldp %[l], %[h], %[mem]\" : [l] \"=r\"(a), [h] \"=r\"(b) : [mem] \"m\"(*p));
+    *l = a;
+    *h = b;
+}
+int second(int n, ...) {
+    va_list a, b;
+    va_start(a, n);
+    va_copy(b, a);
+    int r = va_arg(b, int);
+    r += va_arg(b, int);
+    va_end(b);
+    va_end(a);
+    return r;
+}
+long live_load(long double *p, long a, long b, long c, long d, long e, long f, long g) {
+    double v = (double)p[0];
+    return a + 2 * b + 3 * c + 4 * d + 5 * e + 6 * f + 7 * g + (long)v;
+}
+long live_store(struct P *p, long v, long a, long b) {
+    p->v = v;
+    return a - b;
+}
+";
+
+/// A `main` over [`FIXED_BORROW_SRC`] that exits 0 when every function
+/// returns what C says it does.
+const FIXED_BORROW_MAIN: &str = "\
+int main(void) {
+    long double ld[2] = {1.5L, 0};
+    struct P p = {1, 0x1122334455667788};
+    u128 q = {7, 9};
+    unsigned long long l = 0, h = 0;
+    int bad = 0;
+    if (ld_load(ld) != 1.5) bad |= 1;
+    ld_store(ld, 2.25);
+    if (ld[1] != 2.25L) bad |= 2;
+    if (narrow_load(&p) != 0x1122334455667788) bad |= 4;
+    narrow_store(&p, -5);
+    if (p.v != -5) bad |= 8;
+    load16(&q, &l, &h);
+    if (l != 7 || h != 9) bad |= 16;
+    if (second(2, 40, 2) != 42) bad |= 32;
+    if (live_load(ld, 1, 2, 3, 4, 5, 6, 7) != 140 + 1) bad |= 64;
+    if (live_store(&p, 3, 50, 8) != 42 || p.v != 3) bad |= 128;
+    return bad;
+}
+";
+
+/// `-ffixed-REG` keeps the register out of every sequence that borrows
+/// one: under `-ffixed-x9` none names x9, which each takes first without
+/// the flag, and with x9..x15 all reserved none names any of them.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn ffixed_keeps_the_register_out_of_borrowing_sequences() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = TempDir::new("badc-ffixed-borrow");
+    let src = root.join("borrow.c");
+    std::fs::write(&src, FIXED_BORROW_SRC).expect("write source");
+    let compile = |flags: &[&str], obj: &std::path::Path| {
+        let out = Command::new(badc)
+            .args(["--target=linux-aarch64", "-O", "-mstrict-align", "-c", "-o"])
+            .arg(obj)
+            .args(flags)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "{flags:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    };
+    let funcs = [
+        "ld_load",
+        "ld_store",
+        "narrow_load",
+        "narrow_store",
+        "load16",
+        "second",
+        "live_load",
+        "live_store",
+    ];
+    let plain = root.join("plain.o");
+    compile(&[], &plain);
+    let Some(control) = disassemble_marked(&plain, "<ld_load>:") else {
+        eprintln!("ffixed borrow: no disassembler decodes the object; the check was skipped");
+        return;
+    };
+    let x9: &[&str] = &["x9", "w9"];
+    for func in funcs {
+        let (n, used) = register_mentions(&control, func, x9);
+        assert!(
+            n > 0 && used > 0,
+            "`{func}` does not use x9 without the flag"
+        );
+    }
+    let all: Vec<String> = (9..=15)
+        .flat_map(|r| [format!("x{r}"), format!("w{r}")])
+        .collect();
+    let all: Vec<&str> = all.iter().map(String::as_str).collect();
+    let flags_all: Vec<String> = (9..=15).map(|r| format!("-ffixed-x{r}")).collect();
+    let flags_all: Vec<&str> = flags_all.iter().map(String::as_str).collect();
+    for (flags, names) in [(&["-ffixed-x9"][..], x9), (&flags_all[..], &all[..])] {
+        let obj = root.join("fixed.o");
+        compile(flags, &obj);
+        let text = disassemble_marked(&obj, "<ld_load>:").expect("decodes like the control");
+        for func in funcs {
+            let (n, left) = register_mentions(&text, func, names);
+            assert!(n > 0, "`{func}` missing under {flags:?}");
+            assert_eq!(left, 0, "`{func}` names {names:?} under {flags:?}");
+        }
+    }
+}
+
+/// With x9..x15 reserved the borrowing sequences take argument registers,
+/// some holding values live across them, and the image computes what C
+/// says at both optimization levels.
+#[test]
+fn ffixed_borrowing_sequences_keep_live_values() {
+    let Some(target) = host_native_target().filter(|t| t.ends_with("aarch64")) else {
+        return;
+    };
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let root = TempDir::new("badc-ffixed-borrow-run");
+    let src = root.join("run.c");
+    std::fs::write(&src, format!("{FIXED_BORROW_SRC}{FIXED_BORROW_MAIN}")).expect("write");
+    let fixed: Vec<String> = (9..=15).map(|r| format!("-ffixed-x{r}")).collect();
+    for opt in [&[][..], &["-O"][..]] {
+        let bin = root.join("run");
+        let built = Command::new(badc)
+            .arg(format!("--target={target}"))
+            .args(opt)
+            .arg("-mstrict-align")
+            .args(&fixed)
+            .arg("-o")
+            .arg(&bin)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{opt:?}: build failed -- {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let run = Command::new(&bin).output().expect("run the image");
+        assert_eq!(run.status.code(), Some(0), "{opt:?}: a result disagreed");
     }
 }
 

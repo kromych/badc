@@ -25,7 +25,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=2
     v19  Imm(0)                                           -> x2
     v20  StoreLocal { off=-9, disp=8, value=v13, kind=I64 } -> -
     v21  LocalAddr(-9)                                    -> x2
-    v22  BinopI { op=and, lhs=v16, rhs_imm=15 }           -> x2
+    v22  BinopI { op=and, lhs=v16, rhs_imm=15 }           -> x7
     terminator Bz { cond=v22, target=b2, fall=b1 }   (exit_acc=v22)
   block 1  start_pc=0
     v23  ImmData(16)                                      -> x2

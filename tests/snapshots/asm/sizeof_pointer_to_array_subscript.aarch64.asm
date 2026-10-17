@@ -319,8 +319,7 @@ Disassembly of section .text:
                	mov	x17, #0xc               // =12
                	mul	x1, x5, x17
                	add	x1, x1, #0x6e
-               	lsl	x0, x0, #2
-               	add	x0, x1, x0
+               	add	x0, x1, x0, lsl #2
                	add	x0, x0, x6
                	ret
                	mov	x6, x9
@@ -331,8 +330,7 @@ Disassembly of section .text:
                	mov	x17, #0xc               // =12
                	mul	x1, x5, x17
                	add	x1, x1, #0x50
-               	lsl	x0, x0, #2
-               	add	x0, x1, x0
+               	add	x0, x1, x0, lsl #2
                	add	x0, x0, x6
                	ret
                	mov	x6, x9

@@ -60,12 +60,12 @@ Disassembly of section .text:
                	ret
                	ldr	w4, [x1]
                	mov	x3, #0xffffffff         // =4294967295
-               	udiv	x4, x3, x4
+               	udiv	w4, w3, w4
                	eor	x4, x4, #0x1
                	cbnz	w4, <addr>
                	ldr	w4, [x2]
-               	udiv	x17, x3, x4
-               	msub	x3, x17, x4, x3
+               	udiv	w17, w3, w4
+               	msub	w3, w17, w4, w3
                	eor	x3, x3, #0x3
                	cbz	w3, <addr>
                	mov	x0, #0x4                // =4

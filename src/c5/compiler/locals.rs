@@ -46,13 +46,26 @@ pub(super) struct DeclAlign {
 }
 
 /// A block-scope function declaration: its result type, parameters, the
-/// function type its result leads to, and that result's fn-pointer lineage
-/// (`Symbol::fn_ptr_indirection`, `Symbol::fn_ptr_ret_indirection`).
-struct BlockFunction {
-    ret: super::redeclaration::Spelled,
-    params: super::function::ParsedParams,
-    ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
-    lineage: (i64, i64),
+/// function type its result leads to, the calling convention its type
+/// names, and its result's fn-pointer lineage (`Symbol::fn_ptr_indirection`,
+/// `Symbol::fn_ptr_ret_indirection`).
+pub(super) struct BlockFunction {
+    pub(super) ret: super::redeclaration::Spelled,
+    pub(super) params: super::function::ParsedParams,
+    pub(super) ret_fn: Option<(alloc::boxed::Box<crate::c5::symbol::FnType>, i64)>,
+    pub(super) conv: Option<crate::c5::codegen::CallConv>,
+    pub(super) lineage: (i64, i64),
+}
+
+/// Where a name's binding from outside the current function is kept.
+#[derive(Clone, Copy)]
+enum SavedAt {
+    /// The function-top save, `h_*` on the slot.
+    Top,
+    /// The outermost block's save: level, position.
+    Block(usize, usize),
+    /// The slot itself: no scope of the function binds the name.
+    Current,
 }
 
 /// One block-scope declarator as its binding step sees it: the symbol and
@@ -68,10 +81,9 @@ struct LocalDeclarator {
     is_static: bool,
     is_extern: bool,
     is_thread_local: bool,
-    /// A block-scope `extern` that names the file-scope entity rather than
-    /// shadowing an in-scope binding of the same name.
+    /// A block-scope `extern` that rebinds the name for its scope: no
+    /// file-scope object or function of the name is visible.
     convert_extern: bool,
-    extern_shadows_binding: bool,
     /// The declarator carries `__attribute__((uninitialized))`, which opts
     /// the object out of `-ftrivial-auto-var-init`.
     uninitialized: bool,
@@ -172,7 +184,7 @@ impl Compiler {
     /// function-body-top and inside-block declaration paths. A static
     /// local's `.data` slot honors the request like a file-scope object; an
     /// automatic object lives in 8-byte frame slots, so a wider requirement
-    /// goes to the over-aligned frame region. Consumes `pending.attr_align`
+    /// goes to the over-aligned frame region. Consumes `pending.attrs.align`
     /// either way, so a request cannot leak onto the next declarator.
     pub(super) fn resolve_decl_align(
         &mut self,
@@ -180,8 +192,8 @@ impl Compiler {
         is_static: bool,
         base_type_align: i64,
     ) -> Result<DeclAlign, C5Error> {
-        let req_align = core::mem::take(&mut self.pending.attr_align);
-        let alignas_align = core::mem::take(&mut self.pending.attr_alignas);
+        let req_align = core::mem::take(&mut self.pending.attrs.align);
+        let alignas_align = core::mem::take(&mut self.pending.attrs.alignas);
         if req_align > 8 && !(req_align as usize).is_power_of_two() {
             return Err(self.compile_err(
                 Code::INVALID_DECLARATION,
@@ -300,6 +312,7 @@ impl Compiler {
         };
         self.symbols[loc_idx].data_align = want_align.max(1) as i64;
         if want_align > 8 {
+            self.note_static_align(want_align, self.lex.line);
             self.data_align = self.data_align.max(want_align);
         }
     }
@@ -314,9 +327,8 @@ impl Compiler {
 
     /// Record an over-aligned automatic object's frame slot so it is placed
     /// in the over-aligned frame region. A variable-length array's storage is
-    /// carved by a 16-byte-rounded sp move, so an element alignment up to 16
-    /// is already met and needs no record; above 16 the storage cannot be
-    /// placed and is rejected.
+    /// carved by a 16-byte-rounded sp move, so an alignment up to 16 is
+    /// already met; above it the `Decl::Vla` just pushed carries it.
     pub(super) fn record_over_aligned_local(
         &mut self,
         loc_idx: usize,
@@ -324,14 +336,16 @@ impl Compiler {
         auto_align: i64,
     ) -> Result<(), C5Error> {
         if self.symbols[loc_idx].is_vla {
-            if auto_align <= 16 {
-                return Ok(());
+            let vla = self.ast.decls.iter_mut().rev().find_map(|d| match d {
+                super::super::ast::Decl::Vla { sym, align, .. } if *sym as usize == loc_idx => {
+                    Some(align)
+                }
+                _ => None,
+            });
+            if let Some(align) = vla.filter(|_| auto_align > 16) {
+                *align = auto_align as u32;
             }
-            return Err(self.compile_err(
-                Code::UNSUPPORTED,
-                "an over-aligned variable-length array is not supported; \
-                 use static storage or a fixed size",
-            ));
+            return Ok(());
         }
         let slot = self.symbols[loc_idx].val;
         let asz = self.symbols[loc_idx].array_size;
@@ -379,35 +393,17 @@ impl Compiler {
     /// when a nested block or `for`-init level is open, the
     /// function-body scope (shared with the parameters, C99 6.2.1p4)
     /// otherwise -- receives the bindings and the saved outer state its
-    /// exit restores.
-    pub(super) fn parse_local_decl(
-        &mut self,
-        maybe_unused: bool,
-        leading_noreturn: bool,
-    ) -> Result<(), C5Error> {
+    /// exit restores. The attributes the item led with are already on
+    /// `pending.attrs`.
+    pub(super) fn parse_local_decl(&mut self) -> Result<(), C5Error> {
         let mut is_static = false;
         let mut is_extern = false;
         let mut is_thread_local = false;
         let mut saw_specifier = false;
         let mut qual_bits: i64 = 0;
-        // Reset the per-declaration carriers; a stale one from the
-        // enclosing function would bleed onto a static's emission record.
-        self.pending_noreturn = leading_noreturn;
-        self.pending.attr_maybe_unused = false;
         self.pending.base_is_const = false;
         let _ = self.take_base_spelling();
         self.pending.saw_register_storage = false;
-        self.pending.attr_used = false;
-        self.pending.attr_section = None;
-        self.pending.attr_patchable_entry = None;
-        self.pending.attr_no_instrument = false;
-        self.pending.attr_no_stack_protector = false;
-        self.pending.attr_weak = false;
-        self.pending.attr_call_conv = crate::c5::codegen::CallConv::Target;
-        self.pending.attr_visibility = None;
-        self.pending.attr_constructor = false;
-        self.pending.attr_destructor = false;
-        self.pending.attr_init_priority = None;
         saw_specifier |= self.consume_local_decl_specifiers(
             &mut is_static,
             &mut is_extern,
@@ -449,24 +445,14 @@ impl Compiler {
         let base_fn_ptr_indirection = self.pending.fn_ptr_indirection;
         let base_fn_ptr_ret_indirection = self.pending.fn_ptr_ret_indirection;
         let base_is_function_type = self.pending.base_is_function_type;
-        let base_fn_ptr_params = self.pending.fn_ptr_params.clone();
-        let base_fn_ptr_ret_fn = self.pending.fn_ptr_ret_fn.clone();
-        // A leading `cleanup(fn)` or `uninitialized` applies to every
-        // declarator; one written after a declarator applies to it alone.
-        let leading_cleanup = self.pending.attr_cleanup.take();
-        let leading_uninitialized = core::mem::take(&mut self.pending.attr_uninitialized);
-        // `noreturn` and `unused` among the specifiers apply to every
-        // declarator; after one, to that declarator alone.
-        let base_noreturn = self.pending_noreturn;
-        let base_maybe_unused = maybe_unused || self.pending.attr_maybe_unused;
+        let base_fn_type = self.pending.fn_ptr_type.clone();
+        let spec_attrs = self.pending.attrs.clone();
         while self.lex.tk != ';' {
-            self.pending_noreturn = base_noreturn;
-            self.pending.attr_maybe_unused = base_maybe_unused;
+            self.pending.attrs = spec_attrs.clone();
             self.pending.fn_ptr_indirection = base_fn_ptr_indirection;
             self.pending.fn_ptr_ret_indirection = base_fn_ptr_ret_indirection;
             self.pending.base_is_function_type = base_is_function_type;
-            self.pending.fn_ptr_params = base_fn_ptr_params.clone();
-            self.pending.fn_ptr_ret_fn = base_fn_ptr_ret_fn.clone();
+            self.pending.fn_ptr_type = base_fn_type.clone();
             // Any declarator of the list may declare a function (C99 6.7p1).
             let base = super::redeclaration::Spelled {
                 ty: lbt,
@@ -495,7 +481,7 @@ impl Compiler {
                 let what = super::decl_base::ImplicitInt::Declarator(loc_idx);
                 self.report_implicit_int(what, declarator_line)?;
             }
-            self.pending.attr_transparent_union = false;
+            self.pending.attrs.transparent_union = false;
             // C99 6.7.1p5 + 6.9.1: a declarator of bare function type (a
             // function-TYPE typedef with no pointer level) declares a
             // function, not an object; classifying it as data would make a
@@ -511,17 +497,14 @@ impl Compiler {
                 continue;
             }
             let asm_reg = self.parse_register_asm_binding(loc_idx, is_static, is_extern)?;
-            // Trailing cleanup wins for this declarator; else the leading one.
-            let cleanup_fn = self.pending.attr_cleanup.take().or(leading_cleanup);
-            let uninitialized =
-                core::mem::take(&mut self.pending.attr_uninitialized) || leading_uninitialized;
+            let cleanup_fn = self.pending.attrs.cleanup.take();
+            let uninitialized = core::mem::take(&mut self.pending.attrs.uninitialized);
             // Take the fn-pointer carriers before any initializer is parsed:
             // an initializer cast runs a base-type parse that clears them,
             // which would drop a variadic fn-pointer's prototype.
-            let ret_fn = self.take_decl_ret_fn(false);
+            let fn_type = self.take_decl_fn_type()?;
             let fn_ptr_indirection = self.pending.fn_ptr_indirection.take().unwrap_or(0);
             let fn_ptr_ret_indirection = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
-            let fnptr_params = self.pending.fn_ptr_params.take();
             // C99 6.7.7p3: an array typedef contributes its dimension only
             // when no derivation of the declarator applied to it; `A *p`
             // points to the array. Peek without clearing so the rest of the
@@ -537,16 +520,13 @@ impl Compiler {
             self.ty = ty;
 
             // C99 6.2.1p4 / 6.2.2p4: a block-scope `extern` names the
-            // file-scope entity. Three prior states differ -- an existing
-            // `Glo`/`Fun` binding is that entity already; a never-declared
-            // name (`Id`) is converted and left bound past the scope, since
-            // this is its only binding; any other bound name (local,
-            // parameter, enum constant, typedef) must be saved and restored,
-            // with in-scope references routed through `block_extern_refs`.
+            // file-scope entity. An existing `Glo`/`Fun` binding is that
+            // entity already; any other state of the name (unbound, local,
+            // parameter, enum constant, typedef) is saved and restored, with
+            // in-scope references routed through `block_extern_refs`.
             let prior_class = self.symbols[loc_idx].class;
             let convert_extern =
                 is_extern && prior_class != Token::Glo as i64 && prior_class != Token::Fun as i64;
-            let extern_shadows_binding = convert_extern && prior_class != Token::Id as i64;
 
             // An extern naming an existing entity declares nothing new, so
             // none of the per-declarator writes below apply to it.
@@ -559,14 +539,12 @@ impl Compiler {
                     self.compile_err(Code::INVALID_DECLARATION, "duplicate local definition")
                 );
             }
-            // Save the outer binding of any name this declarator rebinds.
-            // The two exempt cases both leave nothing to restore: an extern
-            // naming an existing entity writes nothing, and one naming a
-            // never-declared name is deliberately left bound past the scope.
-            if !is_extern || extern_shadows_binding {
+            // Save the outer binding of any name this declarator rebinds; an
+            // extern naming an existing entity writes nothing to restore.
+            if rebinds_slot {
                 self.save_scope_binding(loc_idx);
             }
-            if self.pending.attr_maybe_unused {
+            if self.pending.attrs.maybe_unused {
                 self.symbols[loc_idx].binding.maybe_unused = true;
             }
 
@@ -605,10 +583,7 @@ impl Compiler {
             if rebinds_slot {
                 self.symbols[loc_idx].fn_ptr_indirection = fn_ptr_indirection;
                 self.symbols[loc_idx].fn_ptr_ret_indirection = fn_ptr_ret_indirection;
-                self.symbols[loc_idx].ret_fn = ret_fn;
-                if let Some(p) = fnptr_params {
-                    self.symbols[loc_idx].set_fn_params(p);
-                }
+                self.symbols[loc_idx].fn_type = fn_type.unwrap_or_default();
             }
             self.bind_local_declarator(&LocalDeclarator {
                 loc_idx,
@@ -620,7 +595,6 @@ impl Compiler {
                 is_extern,
                 is_thread_local,
                 convert_extern,
-                extern_shadows_binding,
                 uninitialized,
                 asm_reg,
                 base_spelling,
@@ -653,8 +627,6 @@ impl Compiler {
         }
         self.next()?;
         self.pending.auto_type_single_declarator = false;
-        self.pending_noreturn = false;
-        self.pending.attr_maybe_unused = false;
         Ok(())
     }
 
@@ -687,25 +659,15 @@ impl Compiler {
                 // at file scope: an incomplete array still decays to a
                 // pointer, while 0 would read the name as a scalar.
                 self.symbols[d.loc_idx].array_size = d.array_size;
-                if d.extern_shadows_binding {
-                    // Carry no in-unit offset and leave `is_extern_decl`
-                    // / `linkage` untouched so the restore is exact.
-                    self.symbols[d.loc_idx].val = 0;
-                    self.symbols[d.loc_idx].block_extern_active = true;
-                } else {
-                    // External linkage routes `&name` to a name-keyed
-                    // relocation; without it every block-scope extern
-                    // collapses onto the same `.data` base.
-                    self.symbols[d.loc_idx].is_extern_decl = true;
-                    self.symbols[d.loc_idx].linkage = crate::c5::symbol::Linkage::External;
-                }
+                // Carry no in-unit offset and leave `is_extern_decl` /
+                // `linkage` untouched so the restore is exact.
+                self.symbols[d.loc_idx].val = 0;
+                self.symbols[d.loc_idx].block_extern_active = true;
+                self.symbols[d.loc_idx].scoped_obj_decl = true;
             }
             // `weak` / `visibility("hidden")` are not part of the shadow
-            // snapshot, so they persist to the object symbol table. A
-            // shadowed bound name never reaches it, so skip that case.
-            if !d.extern_shadows_binding {
-                self.apply_symbol_attributes(d.loc_idx);
-            }
+            // snapshot, so they reach the symbol table past the scope.
+            self.apply_symbol_attributes(d.loc_idx);
         } else if d.is_static {
             self.symbols[d.loc_idx].class = Token::Glo as i64;
             self.symbols[d.loc_idx].type_ = d.ty;
@@ -726,11 +688,10 @@ impl Compiler {
             // fixed array rather than a VLA. Static storage plus a const
             // object type also makes the initializer the value for the
             // whole execution, as at file scope.
-            self.symbols[d.loc_idx].is_const_qualified = self.pending.base_is_const
-                && d.array_size == 0
-                && super::types::is_integer_scalar_ty(d.ty);
-            self.symbols[d.loc_idx].storage_is_const = self.pending.declarator_outer_const
-                || (self.pending.base_is_const && !super::types::is_pointer_ty(d.ty));
+            let object_const = self.declared_object_is_const(d.ty);
+            self.symbols[d.loc_idx].is_const_qualified =
+                object_const && d.array_size == 0 && super::types::is_integer_scalar_ty(d.ty);
+            self.symbols[d.loc_idx].storage_is_const = object_const;
             if let Some(a) = &d.decl_align {
                 self.apply_static_local_align(d.loc_idx, d.ty, a);
                 // Declared object alignment for `__alignof__` on the
@@ -778,7 +739,7 @@ impl Compiler {
             // Unconditional write so a reused slot leaks no stale
             // value from an outer binding.
             self.symbols[d.loc_idx].const_object_value = None;
-            if self.pending.base_is_const
+            if self.declared_object_is_const(d.ty)
                 && d.array_size == 0
                 && d.asm_reg.is_none()
                 && !super::types::is_volatile_ty(d.ty)
@@ -830,7 +791,7 @@ impl Compiler {
         if !core::mem::take(&mut self.pending.bare_function_type_declarator) {
             return Ok(false);
         }
-        let params = self.pending.fn_ptr_params.take().unwrap_or_default();
+        let base = self.pending.fn_ptr_type.take().unwrap_or_default();
         self.pending.fn_ptr_indirection = None;
         self.pending.fn_ptr_ret_indirection = 0;
         if loc_idx == usize::MAX {
@@ -838,13 +799,15 @@ impl Compiler {
             return Ok(true);
         }
         // Undo the typedef's pre-decay to pointer-to-function.
+        let conv = self.add_conv(base.named_conv(), self.pending.attrs.call_conv)?;
         let f = BlockFunction {
             ret: super::redeclaration::Spelled {
                 ty: ty.ty - Ty::Ptr as i64,
                 ..ty
             },
-            params: super::function::ParsedParams::of_type(params),
-            ret_fn: None,
+            params: super::function::ParsedParams::of_type(base.params),
+            ret_fn: base.ret,
+            conv,
             lineage: (0, 0),
         };
         self.bind_block_function(loc_idx, f, is_static)
@@ -870,62 +833,305 @@ impl Compiler {
         let ret_fn = self.take_decl_ret_fn(true);
         let fpi = self.pending.fn_ptr_indirection.take().unwrap_or(0);
         let fpri = core::mem::take(&mut self.pending.fn_ptr_ret_indirection);
-        self.pending.fn_ptr_params = None;
-        self.pending.fn_ptr_ret_fn = None;
+        self.pending.fn_ptr_type = None;
         let f = BlockFunction {
             ret: ty,
             params,
             ret_fn,
+            conv: self.pending.attrs.call_conv,
             lineage: (fpi, fpri),
         };
         self.bind_block_function(loc_idx, f, is_static)
     }
 
-    /// Bind a block-scope function declaration: the name has block scope and
-    /// the entity external linkage, or internal under `static` (C99 6.2.2).
+    /// Bind a block-scope function declaration and consume its separator.
     fn bind_block_function(
         &mut self,
         loc_idx: usize,
         f: BlockFunction,
         is_static: bool,
     ) -> Result<bool, C5Error> {
-        let listed = super::redeclaration::Params::of(&f.params, false);
-        let declared = super::redeclaration::DeclaredType::Function(f.ret, listed);
-        self.declare_linked(loc_idx, declared, self.lex.line)?;
-        let c = self.symbols[loc_idx].class;
-        let known = c == Token::Sys as i64
-            || c == Token::Fun as i64
-            || c == Token::Glo as i64
-            || c == Token::Loc as i64;
-        if !known {
-            // The name has block scope (C99 6.2.1p4); the
-            // declared entity survives the unbind on the slot.
-            self.rebind_scoped(loc_idx)?;
-            let sym = &mut self.symbols[loc_idx];
-            sym.class = Token::Fun as i64;
-            sym.scoped_fn_decl = true;
-            sym.type_ = f.ret.ty;
-            sym.incomplete_enum_tag = f.ret.enum_tag;
-            sym.set_fn_params(f.params.fn_params());
-            sym.ret_fn = f.ret_fn;
-            (sym.fn_ptr_indirection, sym.fn_ptr_ret_indirection) = f.lineage;
-            sym.is_extern_decl = true;
-            sym.linkage = if is_static {
-                crate::c5::symbol::Linkage::Internal
-            } else {
-                crate::c5::symbol::Linkage::External
-            };
-        }
-        // The declaration names the file-scope entity unless it
-        // shadows a local; attributes (`weak`, visibility) attach
-        // to that entity, as on the extern-object path, and so does
-        // `noreturn` (C11 6.7.4).
-        if c != Token::Loc as i64 {
-            self.symbols[loc_idx].is_noreturn |= self.pending_noreturn;
-            self.apply_symbol_attributes(loc_idx);
-        }
+        self.bind_block_function_decl(loc_idx, f, is_static, None)?;
         self.accept_declarator_separator()?;
         Ok(true)
+    }
+
+    /// Bind a block-scope function declaration (C99 6.2.1p4): in the block the
+    /// name denotes the function, whatever binding it hides, with the
+    /// composite type of the visible declarations (6.2.7p4). The function is
+    /// the entity a file-scope binding of the name denotes, a library one
+    /// included; with none the declaration starts one, which the scope exits
+    /// leave on the slot for the rest of the unit (6.2.2p4), or past a
+    /// file-scope binding without linkage hold apart (`entity_record`).
+    pub(super) fn bind_block_function_decl(
+        &mut self,
+        idx: usize,
+        f: BlockFunction,
+        is_static: bool,
+        label: Option<alloc::string::String>,
+    ) -> Result<(), C5Error> {
+        let c = self.symbols[idx].class;
+        let apart = self.names_fn_apart(idx, c);
+        let ent = if apart {
+            self.detached_fn_slot(idx)
+        } else {
+            self.fn_entity_of(idx)
+        };
+        let (conv, conv_named) = self.declared_conv(ent, f.conv, self.lex.line)?;
+        let listed = super::redeclaration::Params::of(&f.params, false);
+        let declared = super::redeclaration::DeclaredType::Function(f.ret, listed, f.conv);
+        self.declare_linked(ent, declared, self.lex.line)?;
+        let prototyped = f.params.form == super::function::ParamForm::Prototype;
+        let fresh = super::stmt::FnEntity {
+            class: Token::Fun as i64,
+            type_: f.ret.ty,
+            incomplete_enum_tag: f.ret.enum_tag,
+            val: 0,
+            fn_type: crate::c5::symbol::FnType {
+                params: f.params.fn_params(),
+                conv,
+                conv_named,
+                ret: f.ret_fn,
+            },
+            lineage: f.lineage,
+            is_extern_decl: true,
+        };
+        let mut keep_at = None;
+        if apart {
+            if !self.symbols[ent].scoped_fn_decl {
+                self.set_fn_entity(ent, &fresh, is_static);
+                self.symbols[ent].class = 0;
+            }
+            let held = self.live_fn_entity(ent);
+            self.rebind_scoped(idx)?;
+            self.adopt_fn_entity(idx, held);
+            self.symbols[idx].entity_record = Some(ent as u32);
+        } else if c == Token::Fun as i64 {
+            if !self.binds_in_current_scope(idx) {
+                let outer_record = self.symbols[idx].entity_record;
+                self.rebind_scoped(idx)?;
+                self.symbols[idx].entity_record = outer_record;
+            }
+        } else if c == 0 {
+            self.rebind_scoped(idx)?;
+            self.set_fn_entity(idx, &fresh, is_static);
+            keep_at = Some(self.file_scope_state(idx));
+        } else if c != Token::Sys as i64 {
+            // Hiding a binding of another kind: the entity is the file-scope one.
+            let at = self.file_scope_state(idx);
+            let outer = self.saved_fn_entity(idx, at);
+            self.rebind_scoped(idx)?;
+            match outer {
+                Some(Some(e)) => self.adopt_fn_entity(idx, e),
+                Some(None) => {
+                    self.set_fn_entity(idx, &fresh, is_static);
+                    keep_at = Some(at);
+                }
+                None => {
+                    let name = &self.symbols[idx].name;
+                    let msg = format!("`{name}` redeclared as a function");
+                    return Err(self.compile_err(Code::INVALID_DECLARATION, msg));
+                }
+            }
+        }
+        let slots = if ent == idx {
+            &[idx][..]
+        } else {
+            &[ent, idx][..]
+        };
+        for &slot in slots {
+            let sym = &mut self.symbols[slot];
+            if c != 0 && c != Token::Sys as i64 && prototyped && !sym.fn_type.params.prototyped {
+                sym.fn_type.params = fresh.fn_type.params.clone();
+            }
+            if sym.is_fun_entity() {
+                (sym.fn_type.conv, sym.fn_type.conv_named) = (conv, conv_named);
+            }
+            sym.is_noreturn |= self.pending.attrs.noreturn;
+        }
+        self.apply_symbol_attributes(ent);
+        if let Some(label) = label {
+            self.set_asm_label(ent, label)?;
+        }
+        if let Some(at) = keep_at {
+            self.keep_fn_entity(idx, at, &fresh);
+        }
+        Ok(())
+    }
+
+    /// Whether a block-scope declaration of function `idx`, bound now as
+    /// `class`, follows a file-scope typedef or enumerator, which has no
+    /// linkage (C99 6.2.2p4, p6).
+    fn names_fn_apart(&self, idx: usize, class: i64) -> bool {
+        let not_fn = class != 0 && class != Token::Fun as i64 && class != Token::Sys as i64;
+        let outer = match self.file_scope_state(idx) {
+            SavedAt::Top => self.symbols[idx].h_class,
+            SavedAt::Block(level, at) => self.block_scopes[level][at].class().0,
+            SavedAt::Current => class,
+        };
+        not_fn && (outer == Token::Typedef as i64 || outer == Token::Num as i64)
+    }
+
+    /// The name's detached function slot: an earlier declaration's, or new.
+    fn detached_fn_slot(&mut self, idx: usize) -> usize {
+        let name = self.symbols[idx].name.clone();
+        let hash = crate::c5::lexer::hash_name(name.as_bytes());
+        if let Some(home) = self
+            .symbol_index
+            .lookup_detached(&self.symbols, hash, name.as_bytes())
+        {
+            return home;
+        }
+        let home = self.fresh_name_slot(idx);
+        self.symbols[home].detached = true;
+        home
+    }
+
+    /// The slot a file-scope typedef or enumerator binds for the name of
+    /// `idx`: a fresh one, with the declarator's shape, when `idx` holds a
+    /// block-scope declaration's function past its scope (C99 6.2.2p4).
+    pub(super) fn claim_file_scope_name(&mut self, idx: usize) -> usize {
+        let s = &self.symbols[idx];
+        if self.in_function_body() || s.class != 0 || !s.scoped_fn_decl {
+            return idx;
+        }
+        let fresh = self.fresh_name_slot(idx);
+        let held = &mut self.symbols[idx];
+        held.detached = true;
+        let shape = (held.inner_array_size, core::mem::take(&mut held.array_dims));
+        (
+            self.symbols[fresh].inner_array_size,
+            self.symbols[fresh].array_dims,
+        ) = shape;
+        fresh
+    }
+
+    fn fresh_name_slot(&mut self, idx: usize) -> usize {
+        let name = self.symbols[idx].name.clone();
+        let hash = crate::c5::lexer::hash_name(name.as_bytes());
+        self.symbols.push(crate::c5::symbol::Symbol {
+            name,
+            token: Token::Id as i64,
+            ..Default::default()
+        });
+        self.symbol_index.record(hash);
+        self.symbols.len() - 1
+    }
+
+    fn live_fn_entity(&self, idx: usize) -> super::stmt::FnEntity {
+        let s = &self.symbols[idx];
+        super::stmt::FnEntity {
+            class: s.class,
+            type_: s.type_,
+            incomplete_enum_tag: s.incomplete_enum_tag,
+            val: s.val,
+            fn_type: s.fn_type.clone(),
+            lineage: (s.fn_ptr_indirection, s.fn_ptr_ret_indirection),
+            is_extern_decl: s.is_extern_decl,
+        }
+    }
+
+    fn set_fn_entity(&mut self, idx: usize, e: &super::stmt::FnEntity, is_static: bool) {
+        self.adopt_fn_entity(idx, e.clone());
+        let sym = &mut self.symbols[idx];
+        sym.scoped_fn_decl = true;
+        sym.linkage = if is_static {
+            crate::c5::symbol::Linkage::Internal
+        } else {
+            crate::c5::symbol::Linkage::External
+        };
+    }
+
+    /// Bind `idx` to the function entity `e`; its val is the entity's entry.
+    fn adopt_fn_entity(&mut self, idx: usize, e: super::stmt::FnEntity) {
+        let sym = &mut self.symbols[idx];
+        sym.class = if e.class == 0 {
+            Token::Fun as i64
+        } else {
+            e.class
+        };
+        sym.type_ = e.type_;
+        sym.incomplete_enum_tag = e.incomplete_enum_tag;
+        sym.val = e.val;
+        sym.fn_type = e.fn_type;
+        (sym.fn_ptr_indirection, sym.fn_ptr_ret_indirection) = e.lineage;
+        sym.is_extern_decl = e.is_extern_decl;
+    }
+
+    /// Where the binding `idx` had outside the current function is kept.
+    fn file_scope_state(&self, idx: usize) -> SavedAt {
+        let s = &self.symbols[idx];
+        let outer = self
+            .block_scopes
+            .iter()
+            .enumerate()
+            .find_map(|(level, saves)| {
+                saves
+                    .iter()
+                    .position(|b| b.idx == idx)
+                    .map(|at| (level, at))
+            });
+        let (class, global_register) = match outer {
+            Some((level, at)) => self.block_scopes[level][at].class(),
+            None => (s.class, s.is_global_register),
+        };
+        let top = (class == Token::Loc as i64 && !global_register) || s.is_scope_bound;
+        match outer {
+            _ if top => SavedAt::Top,
+            Some((level, at)) => SavedAt::Block(level, at),
+            None => SavedAt::Current,
+        }
+    }
+
+    /// The binding saved at `at`: `Some(Some(entity))` for a function or
+    /// library binding, `Some(None)` for none, `None` for another kind.
+    fn saved_fn_entity(&self, idx: usize, at: SavedAt) -> Option<Option<super::stmt::FnEntity>> {
+        let s = &self.symbols[idx];
+        let e = match at {
+            SavedAt::Top => super::stmt::FnEntity {
+                class: s.h_class,
+                type_: s.h_type,
+                incomplete_enum_tag: s.h_incomplete_enum_tag,
+                val: s.h_val,
+                fn_type: s.h_fn_type.clone(),
+                lineage: (s.h_fn_ptr_indirection, s.h_fn_ptr_ret_indirection),
+                is_extern_decl: s.h_is_extern_decl,
+            },
+            SavedAt::Block(level, at) => self.block_scopes[level][at].fn_entity(),
+            SavedAt::Current => return None,
+        };
+        if e.class == Token::Fun as i64
+            || e.class == Token::Sys as i64
+            || (e.class == 0 && s.scoped_fn_decl)
+        {
+            Some(Some(e))
+        } else if e.class == 0 {
+            Some(None)
+        } else {
+            None
+        }
+    }
+
+    /// Leave the function entity `e` started by a declaration that hid
+    /// another binding in the state the scope exits restore at `at`.
+    fn keep_fn_entity(&mut self, idx: usize, at: SavedAt, e: &super::stmt::FnEntity) {
+        let unbound = super::stmt::FnEntity {
+            class: 0,
+            ..e.clone()
+        };
+        match at {
+            SavedAt::Top => {
+                let s = &mut self.symbols[idx];
+                s.h_type = unbound.type_;
+                s.h_incomplete_enum_tag = unbound.incomplete_enum_tag;
+                s.h_fn_type = unbound.fn_type;
+                (s.h_fn_ptr_indirection, s.h_fn_ptr_ret_indirection) = unbound.lineage;
+                s.h_is_extern_decl = unbound.is_extern_decl;
+                s.h_asm_name = s.asm_name.clone();
+            }
+            SavedAt::Block(level, at) => self.block_scopes[level][at].set_fn_entity(&unbound),
+            SavedAt::Current => {}
+        }
     }
 
     /// Consume a run of storage-class specifiers, function specifiers and
@@ -949,7 +1155,7 @@ impl Compiler {
             || self.lex.tk == Token::TypeQual
         {
             if self.lex.tk == Token::Noreturn {
-                self.pending_noreturn = true;
+                self.pending.attrs.noreturn = true;
             }
             if self.lex.tk == Token::Static {
                 *is_static = true;
@@ -1024,8 +1230,14 @@ impl Compiler {
             storage_is_const: src.storage_is_const,
             // Declaration shape and debug facts, so an `Expr::Ident`
             // routed to the record reads what the binding declared.
-            params: src.params.clone(),
-            is_variadic: src.is_variadic,
+            fn_type: crate::c5::symbol::FnType {
+                params: crate::c5::symbol::FnParams {
+                    types: src.params().to_vec(),
+                    variadic: src.is_variadic(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
             fn_ptr_indirection: src.fn_ptr_indirection,
             fn_ptr_ret_indirection: src.fn_ptr_ret_indirection,
             inner_array_size: src.inner_array_size,
@@ -1042,7 +1254,7 @@ impl Compiler {
             },
             ..Default::default()
         });
-        self.symbols[loc_idx].static_local_record = Some(record_idx as u32);
+        self.symbols[loc_idx].entity_record = Some(record_idx as u32);
         self.symbol_index.record(hash);
         self.apply_symbol_attributes(record_idx);
         self.pending_block_static_syms.push(record_idx);
@@ -1163,104 +1375,36 @@ impl Compiler {
                         "array initializer must start with `{`",
                     ));
                 }
-                let sid = struct_id_of(ty);
-                // Elements below the outer (deferred) dimension: for a 2D
-                // struct array `T xs[][M]` each top-level brace is a row of
-                // `inner_dim` structs. 1 for a plain `T xs[]`.
-                let inner_dim: i64 = self.symbols[loc_idx]
-                    .array_dims
-                    .get(1..)
-                    .map(|s| s.iter().product::<i64>())
-                    .unwrap_or(1)
-                    .max(1);
-                // C99 6.7.8p20 brace elision: with no per-element
-                // braces the flat value list fills consecutive struct
-                // elements, each consuming the struct's slot count.
-                let groups = self.lex.count_top_level_groups_in_array();
-                let count = if groups > 0 {
-                    // `[N]` designators can push the size past the
-                    // positional group count (C99 6.7.8p22).
-                    self.designated_array_count(groups as i64, 1)?
-                } else {
-                    let items = self.lex.count_top_level_items_in_array();
-                    let slots = self.struct_flat_init_slots(sid).max(1);
-                    items.div_ceil(slots) as i64
-                };
+                // Rows below the outer (deferred) dimension: `T xs[][M]`.
+                let inner_dims = self.inner_dims_of(loc_idx);
+                let inner_dim = inner_dims.iter().product::<i64>().max(1);
+                let rows = self.struct_array_init_rows(ty, &inner_dims)?;
                 // Reserve before consuming `{`: lexing the first element
                 // token may append a string literal's bytes, whose
                 // parser-added NUL must land right after them.
-                let reserved = count * inner_dim * elem_size as i64;
+                let reserved = rows * inner_dim * elem_size as i64;
                 let align = self.static_local_placement_align(loc_idx, ty);
                 let off = self.reserve_data_bytes(DataStore::Static, align, reserved as usize);
                 self.symbols[loc_idx].val = off;
                 self.symbols[loc_idx].reserved_data_bytes = reserved;
-                self.next()?;
-                // Multi-dimensional struct array: fill the rows below the
-                // deferred outer dimension through the shared struct-array
-                // walker (designators at every level). The pre-scan counts
-                // each top-level entry as a row, but an entry after a
-                // chained designator resumes mid-row (C99 6.7.8p17), so
-                // the walker's extent is the real outer count (p22).
-                if inner_dim > 1 {
-                    let mut dims = alloc::vec::Vec::new();
-                    dims.push(count);
-                    dims.extend_from_slice(&self.symbols[loc_idx].array_dims[1..]);
-                    let high = self.collect_struct_array_entries(ty, off, &dims)?;
-                    let rows = (high + inner_dim - 1) / inner_dim;
-                    if rows < count
-                        && self.data.len() as i64 == off + count * inner_dim * elem_size as i64
-                    {
-                        self.truncate_data((off + rows * inner_dim * elem_size as i64) as usize);
-                        self.symbols[loc_idx].reserved_data_bytes =
-                            rows * inner_dim * elem_size as i64;
-                    }
-                    self.set_deferred_static_local_count(loc_idx, rows * inner_dim);
-                    if let Some(first) = self.symbols[loc_idx].array_dims.first_mut()
-                        && *first == 0
-                    {
-                        *first = rows;
-                    }
-                    while !self.data.len().is_multiple_of(8) {
-                        self.data.push(0);
-                    }
-                    return Ok(());
+                let mut dims = alloc::vec![rows];
+                dims.extend_from_slice(&inner_dims);
+                self.collect_struct_array_data(ty, off, &dims)?;
+                self.set_deferred_static_local_count(loc_idx, rows * inner_dim);
+                if let Some(first) = self.symbols[loc_idx].array_dims.first_mut()
+                    && *first == 0
+                {
+                    *first = rows;
                 }
-                let mut i: i64 = 0;
-                while self.lex.tk != '}' {
-                    // C99 6.7.8p7 `[N] =` (or GNU `[lo ... hi] =`)
-                    // designator jumps the cursor; `[N].field... =`
-                    // initializes one member of each designated element.
-                    if let Some((lo, hi, chain)) = self.take_array_element_designator(count)? {
-                        if chain || hi > lo {
-                            self.fill_element_range(
-                                sid,
-                                ty,
-                                off,
-                                elem_size as i64,
-                                lo..=hi,
-                                chain,
-                            )?;
-                            i = hi + 1;
-                            self.list_separator('}', "initializer")?;
-                            continue;
-                        }
-                        i = lo;
-                    }
-                    let here = off + i * elem_size as i64;
-                    self.init_struct_array_element(sid, here)?;
-                    i += 1;
-                    self.list_separator('}', "initializer")?;
-                }
-                self.next()?;
-                self.set_deferred_static_local_count(loc_idx, count);
                 while !self.data.len().is_multiple_of(8) {
                     self.data.push(0);
                 }
                 return Ok(());
             }
-            self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
-            let elements = self.collect_array_initializer(ty, self.elem_fn_type(loc_idx))?;
-            let final_size = elements.len() as i64;
+            let inner_dims = self.inner_dims_of(loc_idx);
+            self.pending.init_inner_dims = inner_dims.clone();
+            let mut elements = self.collect_array_initializer(ty, self.elem_fn_type(loc_idx))?;
+            let final_size = Self::deferred_array_count(&mut elements, &inner_dims);
             let total_bytes = (self.size_of_type(ty) as i64) * final_size;
             let aligned = ((total_bytes + 7) / 8) * 8;
             let align = self.static_local_placement_align(loc_idx, ty);
@@ -1590,94 +1734,44 @@ impl Compiler {
             size_slot,
             dim,
             fill,
+            align: 0,
         });
         Ok(())
     }
 
-    /// Count the elements the brace list at the current `{` holds for
-    /// a struct array, walking entry types the same way the fill loop
-    /// does: an expression of the element type is one element (C99
-    /// 6.7.8p13); other values flat-fill fields, one element per
-    /// `struct_flat_init_slots` run (6.7.8p20). Restores the lexer.
-    /// `None` when a designator or brace entry appears -- those lists
-    /// keep the caller's group- or slot-based estimate.
-    fn count_struct_array_init_elems(&mut self, sid: usize) -> Result<Option<i64>, C5Error> {
-        debug_assert!(self.lex.tk == '{');
-        let snap = self.lex.snapshot();
-        // The token walk appends string-literal bytes to `data`; rewind
-        // them on exit as `designated_array_count` does.
-        let saved_data = self.data.len();
-        let saved_pc = self.next_ent_pc;
-        let slots = self.struct_flat_init_slots(sid).max(1) as i64;
-        self.next()?; // `{`
-        let mut elems: i64 = 0;
-        let mut fields: i64 = 0;
-        let mut walked = Some(());
-        while self.lex.tk != '}' && self.lex.tk != 0 {
-            if self.lex.tk == '{' || self.lex.tk == Token::Brak || self.lex.tk == Token::Dot {
-                walked = None;
-                break;
-            }
-            let is_elem = match self.peek_expr_type() {
-                Ok(t) => is_struct_value_ty(t) && struct_id_of(t) == sid,
-                Err(_) => false,
-            };
-            if is_elem {
-                if fields > 0 {
-                    elems += 1;
-                    fields = 0;
-                }
-                elems += 1;
-            } else {
-                fields += 1;
-                if fields == slots {
-                    elems += 1;
-                    fields = 0;
-                }
-            }
-            self.skip_init_element_value()?;
-            if self.lex.tk == ',' {
-                self.next()?;
-            }
-        }
-        if fields > 0 {
-            elems += 1;
-        }
-        self.truncate_data(saved_data);
-        self.next_ent_pc = saved_pc;
-        self.restore_lex(snap);
-        Ok(walked.map(|_| elems))
-    }
-
-    /// Positional element count the brace list at the current `{`
-    /// supplies for an array of `sid`: one per brace group, one per entry
-    /// already of the element type (C99 6.7.8p13), one per
-    /// `struct_flat_init_slots` run of elided field values (6.7.8p20).
-    pub(super) fn struct_array_positional_elem_count(
+    /// The rows of `inner_dims` an array of unknown size of `elem_ty` takes
+    /// from the brace list at the current `{`: as many as its fill reaches
+    /// (C99 6.7.8p20-p22). The fill skips the values over a scratch data
+    /// tail with a row for each entry and is rolled back with what it
+    /// reported and the literals it named; a list it rejects keeps that bound.
+    pub(super) fn struct_array_init_rows(
         &mut self,
-        sid: usize,
+        elem_ty: i64,
+        inner_dims: &[i64],
     ) -> Result<i64, C5Error> {
         debug_assert!(self.lex.tk == '{');
-        let groups = self.lex.count_top_level_groups_in_array();
-        if groups > 0 {
-            return Ok(groups as i64);
-        }
-        if let Some(n) = self.count_struct_array_init_elems(sid)? {
-            return Ok(n);
-        }
-        let items = self.lex.count_top_level_items_in_array();
-        Ok(items.div_ceil(self.struct_flat_init_slots(sid).max(1)) as i64)
-    }
-
-    /// [`Self::struct_array_positional_elem_count`] extended by an `[N]`
-    /// designator reaching past the positional entries, which sizes a
-    /// deferred outer dimension (C99 6.7.8p22).
-    pub(super) fn struct_array_init_elem_count(&mut self, sid: usize) -> Result<i64, C5Error> {
-        let positional = self.struct_array_positional_elem_count(sid)?;
-        if self.lex.count_top_level_groups_in_array() > 0 {
-            return self.designated_array_count(positional, 1);
-        }
-        Ok(positional)
+        let items = self.lex.count_top_level_items_in_array() as i64;
+        let bound = self.designated_array_count(items, 1, None)?.max(items);
+        let span = inner_dims.iter().product::<i64>().max(1);
+        let (cp, reported) = (self.init_checkpoint(), self.sink.mark());
+        let (literals, overruns) = (
+            self.next_compound_literal_id,
+            self.warned_string_overruns.clone(),
+        );
+        let measuring = core::mem::replace(&mut self.measuring_init, true);
+        let scratch = self.data.len();
+        let bytes = (bound * span) as usize * self.size_of_type(elem_ty);
+        self.data.resize(scratch + bytes, 0);
+        let mut dims = alloc::vec![bound];
+        dims.extend_from_slice(inner_dims);
+        let reached = self
+            .next()
+            .and_then(|()| self.collect_struct_array_entries(elem_ty, scratch as i64, &dims));
+        self.measuring_init = measuring;
+        self.restore_init_checkpoint(cp);
+        self.sink.rollback(reported);
+        (self.next_compound_literal_id, self.warned_string_overruns) = (literals, overruns);
+        Ok(reached.map_or(bound, |high| (high + span - 1) / span))
     }
 
     /// Stage the constant image of an array-of-aggregate compound literal
@@ -1701,34 +1795,6 @@ impl Compiler {
         self.collect_struct_array_data(elem_ty, staged as i64, &dims)?;
         self.emit_local_array_init(slot, staged, bytes);
         Ok(())
-    }
-
-    /// If the next brace-list entry is an array designator `[N]` or a
-    /// GNU range `[lo ... hi]`, consume it and return `(lo, hi, chain)`
-    /// (`hi == lo` for the single form). A following `= value` consumes
-    /// the `=` and returns `chain == false`; a C99 6.7.8p7 designator
-    /// list continuing into the element (`[N].field... =`) leaves the
-    /// cursor on the `.`/`[` and returns `chain == true` for the caller
-    /// to resolve. Shared by the deferred-local struct-array fill loops
-    /// -- the file-scope path carries the same logic inline.
-    fn take_array_element_designator(
-        &mut self,
-        count: i64,
-    ) -> Result<Option<(i64, i64, bool)>, C5Error> {
-        if self.lex.tk != Token::Brak {
-            return Ok(None);
-        }
-        let DesignatorSubscript { lo: idx, hi, .. } =
-            self.take_designator_subscript(DesignatorRule::Extent(count))?;
-        self.expect_designator_close()?;
-        if self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
-            return Ok(Some((idx, hi, true)));
-        }
-        if self.lex.tk != Token::Assign {
-            return Err(self.compile_err(Code::SYNTAX, "`=` expected after `[N]` designator"));
-        }
-        self.next()?; // `=`
-        Ok(Some((idx, hi, false)))
     }
 
     /// Fill elements `lo..=hi` of a struct array staged in `self.data`
@@ -1799,7 +1865,7 @@ impl Compiler {
                 // An `Int` carrying a pointer type is a staged address
                 // (a string literal's data offset), not a value.
                 ConstVal::Int { ty: vty, .. } if is_pointer_ty(vty) => None,
-                ConstVal::Int { .. } | ConstVal::Float(_) => {
+                ConstVal::Int { .. } | ConstVal::Float { .. } => {
                     if super::types::is_floating_scalar(ty) {
                         let f = val.as_float();
                         let f = if self.size_of_type(ty) == 4 {
@@ -2021,8 +2087,6 @@ impl Compiler {
             // field doesn't shift the next element off its
             // expected offset.
             let elem_size = self.size_of_type(ty);
-            let sid = struct_id_of(ty);
-            let count = self.struct_array_init_elem_count(sid)?;
             // C99 6.7.8p13: an automatic-storage struct array may
             // carry non-constant element initializers (`&local`, a
             // call, an indexed read). The constant stage-into-data +
@@ -2030,18 +2094,18 @@ impl Compiler {
             // per-element runtime store path the known-size branch
             // uses. Mirrors the `struct V xs[N] = { ... }` handling.
             // Elements below a deferred outer dimension: for `T xs[][M]`
-            // each counted top-level group is a row of `inner_dim`
-            // elements (C99 6.7.8p22 sizes the outer dimension from the
-            // group count).
+            // the list fills rows of `inner_dim` elements, as many as it
+            // reaches (C99 6.7.8p22), within the storage of a bound.
             let inner_dims: alloc::vec::Vec<i64> = self.symbols[loc_idx]
                 .array_dims
                 .get(1..)
                 .map(|s| s.to_vec())
                 .unwrap_or_default();
             let inner_dim: i64 = inner_dims.iter().product::<i64>().max(1);
-            let total = count * inner_dim;
+            let bound = self.struct_array_init_rows(ty, &inner_dims)?;
+            let total = bound * inner_dim;
+            let rows_of = |reached: i64| (reached + inner_dim - 1) / inner_dim;
             if self.struct_init_needs_runtime()? {
-                self.symbols[loc_idx].array_size = total;
                 self.symbols[loc_idx].val = self.reserve_slots(self.local_storage_slots(ty, total));
                 let local_val = self.symbols[loc_idx].val;
                 let var_name = self.symbols[loc_idx].name.clone();
@@ -2050,7 +2114,7 @@ impl Compiler {
                 // the shared runtime walker.
                 let zero_off = self.stage_template_bytes(total as usize * elem_size);
                 self.emit_local_array_init(local_val, zero_off, total as usize * elem_size);
-                self.emit_local_array_init_runtime(
+                let reached = self.emit_local_array_init_runtime(
                     local_val,
                     0,
                     (ty, None),
@@ -2058,10 +2122,12 @@ impl Compiler {
                     &inner_dims,
                     &var_name,
                 )?;
+                let rows = rows_of(reached);
+                self.symbols[loc_idx].array_size = rows * inner_dim;
                 if let Some(first) = self.symbols[loc_idx].array_dims.first_mut()
                     && *first == 0
                 {
-                    *first = count;
+                    *first = rows;
                 }
                 return Ok(());
             }
@@ -2071,9 +2137,11 @@ impl Compiler {
             // inside or past the block.
             let staged_off = self.stage_template_bytes((total * elem_size as i64) as usize);
             let mut dims = alloc::vec::Vec::with_capacity(inner_dims.len() + 1);
-            dims.push(count);
+            dims.push(bound);
             dims.extend_from_slice(&inner_dims);
-            self.collect_struct_array_data(ty, staged_off as i64, &dims)?;
+            self.consume(b'{', "array initializer must start with `{`")?;
+            let rows = rows_of(self.collect_struct_array_entries(ty, staged_off as i64, &dims)?);
+            let total = rows * inner_dim;
             self.symbols[loc_idx].array_size = total;
             self.symbols[loc_idx].val = self.reserve_slots(self.local_storage_slots(ty, total));
             let local_val = self.symbols[loc_idx].val;
@@ -2081,7 +2149,7 @@ impl Compiler {
             if let Some(first) = self.symbols[loc_idx].array_dims.first_mut()
                 && *first == 0
             {
-                *first = count;
+                *first = rows;
             }
             return Ok(());
         }
@@ -2103,7 +2171,8 @@ impl Compiler {
                 let inner = self.inner_dims_of(loc_idx);
                 let inner_span: i64 = inner.iter().product::<i64>().max(1);
                 let fallback = if inner_span > 1 { 0 } else { scan_count };
-                let rows = self.designated_array_count(fallback, inner_span)?;
+                let string_rows = self.string_rows(ty, &inner);
+                let rows = self.designated_array_count(fallback, inner_span, string_rows)?;
                 let final_size = rows * inner_span;
                 self.symbols[loc_idx].array_size = final_size;
                 self.symbols[loc_idx].val =
@@ -2133,9 +2202,10 @@ impl Compiler {
             // identical to before this fix when no runtime
             // expressions are present.
         }
-        self.pending.init_inner_dims = self.inner_dims_of(loc_idx);
-        let elements = self.collect_array_initializer(ty, self.elem_fn_type(loc_idx))?;
-        let final_size = elements.len() as i64;
+        let inner_dims = self.inner_dims_of(loc_idx);
+        self.pending.init_inner_dims = inner_dims.clone();
+        let mut elements = self.collect_array_initializer(ty, self.elem_fn_type(loc_idx))?;
+        let final_size = Self::deferred_array_count(&mut elements, &inner_dims);
         self.symbols[loc_idx].array_size = final_size;
         self.symbols[loc_idx].val = self.reserve_slots(self.local_storage_slots(ty, final_size));
         let local_val = self.symbols[loc_idx].val;
@@ -2457,26 +2527,18 @@ impl Compiler {
             // type takes the declaration's struct-array walk, which counts
             // and fills by element rather than by scalar leaf.
             let elem_is_aggregate = self.is_traversable_aggregate_ty(elem_ty);
-            let count;
-            let rows;
+            let mut count;
+            let mut rows;
             if array_dims[0] == -1 {
                 if self.lex.tk != '{' {
                     return Err(self.compile_err(Code::SYNTAX, "`{` expected in compound literal"));
                 }
                 let needs_runtime;
                 if elem_is_aggregate {
-                    rows = self.struct_array_init_elem_count(struct_id_of(elem_ty))?;
+                    rows = self.struct_array_init_rows(elem_ty, inner_dims)?;
                     needs_runtime = self.struct_init_needs_runtime()?;
                 } else {
-                    let (scan_count, scan_runtime) = self.scan_array_init()?;
-                    // C99 6.7.8p22: designators can push the size past the
-                    // positional entry count; brace elision folds a flat run
-                    // into one row of the inner span. The scan count tallies
-                    // leaves, not rows, so it is no floor for a multi-dim
-                    // literal.
-                    let fallback = if inner_span > 1 { 0 } else { scan_count };
-                    rows = self.designated_array_count(fallback, inner_span)?;
-                    needs_runtime = scan_runtime;
+                    (rows, needs_runtime) = self.array_literal_rows(elem_ty, inner_dims)?;
                 }
                 count = rows * inner_span;
                 slot =
@@ -2485,7 +2547,7 @@ impl Compiler {
                 if needs_runtime {
                     let zero_off = self.stage_template_bytes(full);
                     self.emit_local_array_init(slot, zero_off, full);
-                    self.emit_local_array_init_runtime(
+                    let reached = self.emit_local_array_init_runtime(
                         slot,
                         0,
                         (elem_ty, elem_fn.clone()),
@@ -2493,23 +2555,16 @@ impl Compiler {
                         inner_dims,
                         "<compound literal>",
                     )?;
+                    if elem_is_aggregate {
+                        rows = (reached + inner_span - 1) / inner_span;
+                        count = rows * inner_span;
+                    }
                 } else if elem_is_aggregate {
                     self.stage_struct_array_literal(slot, elem_ty, rows, inner_dims, full)?;
                 } else {
                     self.pending.init_inner_dims = inner_dims.to_vec();
                     let elements = self.collect_array_initializer(elem_ty, elem_fn.clone())?;
-                    let (start, packed) = self.pack_initializer_into_data(elem_ty, &elements)?;
-                    // C99 6.7.8p21: positions the list leaves out are
-                    // zero; pad so the single Mcpy covers the object.
-                    let total = if packed < full {
-                        for _ in 0..(full - packed) {
-                            self.data.push(0);
-                        }
-                        full
-                    } else {
-                        packed
-                    };
-                    self.emit_local_array_init(slot, start, total);
+                    self.store_literal_elements(slot, elem_ty, &elements, count, full)?;
                 }
             } else {
                 rows = array_dims[0];
@@ -2535,10 +2590,11 @@ impl Compiler {
                         "<compound literal>",
                     )?;
                 } else if elem_is_aggregate {
-                    if self.lex.tk == '{' {
-                        let supplied = self
-                            .struct_array_positional_elem_count(struct_id_of(elem_ty))?
-                            * inner_span;
+                    // A designator past the bound is the fill's to report.
+                    let items = self.lex.count_top_level_items_in_array() as i64;
+                    if self.lex.tk == '{' && self.designated_array_count(items, 1, None)? <= items {
+                        let supplied =
+                            self.struct_array_init_rows(elem_ty, inner_dims)? * inner_span;
                         if supplied > count {
                             return Err(self.compile_err(Code::INVALID_INITIALIZER, format!(
                                 "too many initializers for compound literal ({supplied} > {count})"
@@ -2550,25 +2606,7 @@ impl Compiler {
                     self.pending.init_target_array_size = count;
                     self.pending.init_inner_dims = inner_dims.to_vec();
                     let elements = self.collect_array_initializer(elem_ty, elem_fn.clone())?;
-                    if elements.len() as i64 > count {
-                        return Err(self.compile_err(
-                            Code::INVALID_INITIALIZER,
-                            format!(
-                                "too many initializers for compound literal ({} > {count})",
-                                elements.len()
-                            ),
-                        ));
-                    }
-                    let (start, packed) = self.pack_initializer_into_data(elem_ty, &elements)?;
-                    let total = if packed < full {
-                        for _ in 0..(full - packed) {
-                            self.data.push(0);
-                        }
-                        full
-                    } else {
-                        packed
-                    };
-                    self.emit_local_array_init(slot, start, total);
+                    self.store_literal_elements(slot, elem_ty, &elements, count, full)?;
                 }
             }
             final_array_size = count;
@@ -2652,8 +2690,75 @@ impl Compiler {
             } else {
                 -1
             };
+        } else {
+            // A non-array literal is no decayed array, whatever it was initialized from.
+            self.drop_operand_array_decay();
         }
         self.ty = value_ty;
+        Ok(())
+    }
+
+    /// Copy a constant array literal's `elements` into its `count`-element
+    /// slot at `slot`, zero-padded to `full` bytes (C99 6.7.8p21).
+    fn store_literal_elements(
+        &mut self,
+        slot: i64,
+        elem_ty: i64,
+        elements: &[(i128, super::initializer::InitElemReloc)],
+        count: i64,
+        full: usize,
+    ) -> Result<(), C5Error> {
+        if elements.len() as i64 > count {
+            let n = elements.len();
+            let text = format!("too many initializers for compound literal ({n} > {count})");
+            return Err(self.compile_err(Code::INVALID_INITIALIZER, text));
+        }
+        let (start, packed) = self.pack_initializer_into_data(elem_ty, elements)?;
+        if packed < full {
+            self.data.resize(self.data.len() + full - packed, 0);
+        }
+        self.emit_local_array_init(slot, start, packed.max(full));
+        Ok(())
+    }
+
+    /// GNU C cast to a union, `(union U)v`: the compound literal `(union
+    /// U){ .m = v }` of the member `m` of `v`'s type, the operand just parsed.
+    pub(super) fn union_cast_literal(
+        &mut self,
+        t: i64,
+        m: super::StructField,
+    ) -> Result<(), C5Error> {
+        use super::super::ast::{
+            LocalInit, LocalInitPrelude, RuntimeInitElement, RuntimeInitValue,
+        };
+        let slots = self.slots_of_type(t);
+        let slot = self.reserve_object_slots(t, slots)?;
+        self.record_multi_cell_temp(slot, slots.max(1), t);
+        self.convert_assign_rhs(m.ty);
+        let Some(value) = self.ast_acc else {
+            return Err(self.compile_err(Code::INTERNAL, "cast to a union has no operand"));
+        };
+        let element = RuntimeInitElement {
+            offset: m.offset as i64,
+            value: RuntimeInitValue::Expr(value),
+            ty: m.ty,
+            bitfield: None,
+        };
+        let size_bytes = self.size_of_type(t) as i64;
+        let init = LocalInit::Runtime {
+            zero_init: Some(LocalInitPrelude::Fill {
+                byte: 0,
+                size_bytes,
+            }),
+            elements: alloc::vec![element],
+        };
+        self.commit_block_slot(slot);
+        self.ast_emit_compound_literal(slot, t, 0, init);
+        // A cast yields a value, which no lvalue path takes.
+        self.ast_apply_assign_conv(t);
+        self.drop_operand_array_decay();
+        self.pending.object_ref = None;
+        self.ty = t;
         Ok(())
     }
 
@@ -2882,7 +2987,7 @@ impl Compiler {
     /// entry the current token is `{`; on return it's the token
     /// after the matching `}`.
     /// `elem` is the element type and the function type an element leads
-    /// to, if any.
+    /// to, if any. Returns the elements the list reached.
     pub(super) fn emit_local_array_init_runtime(
         &mut self,
         local_val: i64,
@@ -2891,7 +2996,7 @@ impl Compiler {
         total_count: i64,
         inner_dims: &[i64],
         var_name: &str,
-    ) -> Result<(), C5Error> {
+    ) -> Result<i64, C5Error> {
         let (ty, elem_fn) = elem;
         let elem_size = self.size_of_type(ty) as i64;
         // Build the full dimension list, outermost first. `inner_dims`
@@ -2929,7 +3034,7 @@ impl Compiler {
         ty: i64,
         elem_size: i64,
         var_name: &str,
-    ) -> Result<(), C5Error> {
+    ) -> Result<i64, C5Error> {
         debug_assert!(self.lex.tk == '{');
         self.next()?; // consume `{`
         let child = &dims[1..];
@@ -2937,6 +3042,7 @@ impl Compiler {
         // Flat element cursor; designators and entries move it the same
         // way as in `collect_array_initializer`.
         let mut cursor: i64 = 0;
+        let mut reached: i64 = 0;
         while self.lex.tk != '}' {
             let desig = self.take_chained_array_designator(child)?;
             let mut range_end: i64 = 0;
@@ -2997,15 +3103,25 @@ impl Compiler {
                     )?;
                 }
                 cursor = end;
+                reached = reached.max(cursor);
                 self.list_separator('}', "initializer")?;
                 continue;
             }
             let off = base + cursor * elem_size;
             if level < child.len() {
-                if self.lex.tk == '{' {
+                let string = match sub {
+                    [row] => self.take_string_init(ty)?.map(|lit| (lit, *row as usize)),
+                    _ => None,
+                };
+                if let Some((lit, row)) = string {
+                    // C99 6.7.8p14: a string literal fills the row.
+                    self.warn_string_overrun(&lit, row);
+                    self.push_string_init_stores(off, &lit, row, ty);
+                } else if self.lex.tk == '{' {
                     self.fill_array_init_runtime(local_val, off, sub, ty, elem_size, var_name)?;
                 } else {
-                    self.fill_array_leaves_runtime(local_val, off, span, ty, elem_size)?;
+                    let rows = sub.last().copied();
+                    self.fill_array_leaves_runtime(local_val, off, (span, rows), ty, elem_size)?;
                 }
             } else if self.is_traversable_aggregate_ty(ty) {
                 // Array-of-struct element (C99 6.7.8p17): recurse into the
@@ -3041,10 +3157,11 @@ impl Compiler {
                 );
             }
             cursor = end;
+            reached = reached.max(cursor);
             self.list_separator('}', "initializer")?;
         }
         self.next()?; // consume `}`
-        Ok(())
+        Ok(reached)
     }
 
     /// Append `extra` copy elements replicating the `span`-byte span at
@@ -3075,11 +3192,12 @@ impl Compiler {
     /// Fill up to `n` scalar leaves at consecutive offsets from `base`
     /// (a brace-elided sub-array). Stops early at `}` -- the omitted
     /// trailing positions keep the caller's zero seed (C99 6.7.8p21).
+    /// A string at a boundary of its `rows` fills that row (6.7.8p14).
     pub(super) fn fill_array_leaves_runtime(
         &mut self,
         local_val: i64,
         base: i64,
-        n: i64,
+        (n, rows): (i64, Option<i64>),
         ty: i64,
         elem_size: i64,
     ) -> Result<(), C5Error> {
@@ -3090,13 +3208,21 @@ impl Compiler {
             }
             // An aggregate element takes its own members from the same list
             // (C99 6.7.8p20), its braces elided too.
+            let row = rows.filter(|&r| r > 0 && k % r == 0);
             if self.is_traversable_aggregate_ty(ty) {
                 let sid = super::types::struct_id_of(ty);
                 self.emit_struct_array_element_runtime(local_val, base + k * elem_size, sid)?;
+                k += 1;
+            } else if let Some(row) = row
+                && let Some(lit) = self.take_string_init(ty)?
+            {
+                self.warn_string_overrun(&lit, row as usize);
+                self.push_string_init_stores(base + k * elem_size, &lit, row as usize, ty);
+                k += row;
             } else {
                 self.emit_array_leaf_runtime(local_val, base + k * elem_size, ty)?;
+                k += 1;
             }
-            k += 1;
             if !self.initializer_separator(k >= n)? {
                 break;
             }

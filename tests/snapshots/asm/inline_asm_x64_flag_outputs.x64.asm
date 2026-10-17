@@ -96,9 +96,8 @@ Disassembly of section .text:
                	addq	%rdx, %rax
                	seto	%cl
                	movzbq	%cl, %rcx
-               	movq	%rcx, %rax
-               	xorq	$0x1, %rax
-               	testl	%eax, %eax
+               	xorq	$0x1, %rcx
+               	testl	%ecx, %ecx
                	jne	<addr>
                	movl	$0x1, %eax
                	movl	$0x1, %edx

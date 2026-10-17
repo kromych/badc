@@ -66,40 +66,19 @@ pub(crate) struct Symbol {
     pub h_val: i64,
 
     // ---- Function-only metadata ----
-    /// For `Token::Fun` and `Token::Sys` symbols, the declared parameter
-    /// types in source order. Empty for non-functions.
-    pub params: Vec<i64>,
-    /// True if the function accepts trailing varargs (e.g. `printf`).
-    /// Type-checking only verifies the fixed parameters.
-    pub is_variadic: bool,
-    /// `FnParams::prototyped` of the function type `params` belongs to.
-    pub prototyped: bool,
-    /// `FnParams::enum_tags` of the function type `params` belongs to.
-    pub param_enum_tags: Vec<(usize, u32)>,
-    /// `FnParams::fn_types` of the function type `params` belongs to.
-    pub param_fn_types: Vec<(usize, FnType, i64)>,
-
-    /// Shadow slots for `params` / `is_variadic` / `prototyped` /
-    /// `param_enum_tags` / `param_fn_types`. See `h_array_size`:
-    /// a function-pointer parameter, block-scope local, or block-scope
-    /// typedef that reuses an outer function name writes its own
-    /// prototype onto the shared symbol slot; without the save the
-    /// outer signature is permanently replaced (C99 6.2.1p4), which
-    /// breaks later call type-checks and can flip a variadic call's
-    /// ABI.
-    pub h_params: Vec<i64>,
-    pub h_is_variadic: bool,
-    pub h_prototyped: bool,
-    pub h_param_enum_tags: Vec<(usize, u32)>,
-    pub h_param_fn_types: Vec<(usize, FnType, i64)>,
-    /// Calling convention of the function this symbol names, or of the
-    /// function a function-pointer object points to
-    /// (`__attribute__((ms_abi))` / `((sysv_abi))`). Already normalised
-    /// against the target, so `CallConv::Target` covers both "no
-    /// attribute" and "the attribute is inert here".
-    pub conv: crate::c5::codegen::CallConv,
-    /// Shadow slot for `conv` (see `h_is_variadic`).
-    pub h_conv: crate::c5::codegen::CallConv,
+    /// The function type this symbol names, or the one a function-pointer
+    /// object or typedef leads to: the parameters (for `Token::Fun` and
+    /// `Token::Sys` symbols the declared ones in source order), the calling
+    /// convention and the function type a call's result points to. The
+    /// `i64` tag holds only the return type.
+    pub fn_type: FnType,
+    /// Shadow slot for `fn_type`. See `h_array_size`: a function-pointer
+    /// parameter, block-scope local, or block-scope typedef that reuses an
+    /// outer function name writes its own type onto the shared symbol slot;
+    /// without the save the outer one is permanently replaced (C99
+    /// 6.2.1p4), which breaks later call type-checks and can flip a
+    /// variadic call's ABI.
+    pub h_fn_type: FnType,
 
     /// True while the function's return type is the implicit `int`
     /// default rather than a declared type: a `#pragma binding` seen
@@ -398,11 +377,6 @@ pub(crate) struct Symbol {
     pub fn_ptr_ret_indirection: i64,
     /// Scope-restore shadow for `fn_ptr_ret_indirection`.
     pub h_fn_ptr_ret_indirection: i64,
-    /// `FnType::ret` of the function this symbol names or points to: the
-    /// function type a call's result points to.
-    pub ret_fn: Option<(alloc::boxed::Box<FnType>, i64)>,
-    /// Scope-restore shadow for `ret_fn`.
-    pub h_ret_fn: Option<(alloc::boxed::Box<FnType>, i64)>,
     /// True for a typedef of a function TYPE (`typedef RET F(args)`),
     /// as opposed to a function POINTER (`typedef RET (*F)(args)`). The
     /// type encoding pre-decays both to a function pointer (`RET` plus
@@ -558,6 +532,15 @@ pub(crate) struct Symbol {
     /// same function). Never cleared.
     pub scoped_fn_decl: bool,
 
+    /// True for a slot name lookup skips: it holds a function of block-scope
+    /// declarations past a file-scope binding without linkage. Never cleared.
+    pub detached: bool,
+
+    /// True once a block-scope `extern` declared an object of this name.
+    /// Scope exit restores the binding, but the declared attributes (weak,
+    /// visibility) stay for the symbol table. Never cleared.
+    pub scoped_obj_decl: bool,
+
     /// ent_pc of the enclosing function for a block-scope static's
     /// emission record (the persistent `name.N` symbol; the scoped
     /// binding itself is restored at function exit). A block-scope
@@ -566,14 +549,14 @@ pub(crate) struct Symbol {
     /// owner survives. `None` for file-scope symbols.
     pub owner_ent_pc: Option<u64>,
 
-    /// Index of the emission record while this slot's live binding is a
-    /// block-scope static. Reference-capture sites resolve the name to
-    /// the record, whose state outlives the scope-exit restore of the
-    /// slot (which may bring back a same-named file-scope `extern`).
-    /// Set at the promotion, cleared when the binding's scope exits.
-    pub static_local_record: Option<u32>,
-    /// Shadow slot for `static_local_record` at function-body scope.
-    pub h_static_local_record: Option<u32>,
+    /// Index of the symbol holding the entity this slot's live binding
+    /// denotes when it is not the slot: a block-scope static's emission
+    /// record, or a function held apart from its name. Reference-capture
+    /// sites resolve the name to it, whose state outlives the scope-exit
+    /// restore of the slot. Set at the declaration, cleared at scope exit.
+    pub entity_record: Option<u32>,
+    /// Shadow slot for `entity_record` at function-body scope.
+    pub h_entity_record: Option<u32>,
 
     /// True for the synthetic internal symbol of an anonymous compound
     /// literal staged in the data segment. Its initializer bytes are
@@ -690,7 +673,7 @@ impl BindingInfo {
 }
 
 /// A function type's parameter information (C99 6.7.5.3p14).
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct FnParams {
     /// Parameter types, empty when the type declares none.
     pub types: Vec<i64>,
@@ -718,13 +701,23 @@ impl FnParams {
 /// The part of a function type its `i64` tag, the return type's, leaves
 /// out: what a call converts its arguments to (C99 6.5.2.2p7) and passes
 /// them by, and the function type a returned pointer points to.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct FnType {
     pub params: FnParams,
     pub conv: crate::c5::codegen::CallConv,
+    /// An attribute named `conv`; a declaration of a type naming none takes
+    /// the function's convention.
+    pub conv_named: bool,
     /// The function type the returned value points to, and the pointer
     /// levels from the value down to it (1 for a pointer to function).
     pub ret: Option<(alloc::boxed::Box<FnType>, i64)>,
+}
+
+impl FnType {
+    /// The convention an attribute named for this type, if one did.
+    pub(crate) fn named_conv(&self) -> Option<crate::c5::codegen::CallConv> {
+        self.conv_named.then_some(self.conv)
+    }
 }
 
 /// Recorded initializer value of a block-scope `const` scalar arithmetic
@@ -821,24 +814,28 @@ pub fn inline_definition(sym: &Symbol, model: InlineModel) -> bool {
 }
 
 impl Symbol {
+    /// The declared parameter types of the function type this symbol names
+    /// or points to.
+    pub(crate) fn params(&self) -> &[i64] {
+        &self.fn_type.params.types
+    }
+
+    pub(crate) fn is_variadic(&self) -> bool {
+        self.fn_type.params.variadic
+    }
+
+    pub(crate) fn prototyped(&self) -> bool {
+        self.fn_type.params.prototyped
+    }
+
     /// The parameter information of the function type this symbol names or
     /// points to.
     pub(crate) fn fn_params(&self) -> FnParams {
-        FnParams {
-            types: self.params.clone(),
-            variadic: self.is_variadic,
-            prototyped: self.prototyped,
-            enum_tags: self.param_enum_tags.clone(),
-            fn_types: self.param_fn_types.clone(),
-        }
+        self.fn_type.params.clone()
     }
 
     pub(crate) fn set_fn_params(&mut self, p: FnParams) {
-        self.params = p.types;
-        self.is_variadic = p.variadic;
-        self.prototyped = p.prototyped;
-        self.param_enum_tags = p.enum_tags;
-        self.param_fn_types = p.fn_types;
+        self.fn_type.params = p;
     }
 
     /// Assembler symbol name: the GNU asm label when the declaration
@@ -862,6 +859,11 @@ impl Symbol {
         }
     }
 
+    /// A definition a strong one in another unit overrides at link time.
+    pub fn is_weak_definition(&self) -> bool {
+        self.is_weak && self.defined_here && self.linkage == Linkage::External
+    }
+
     /// Whether the slot denotes a function entity: a live `Token::Fun`
     /// binding, or a scoped function declaration whose name binding was
     /// unwound at scope exit (`class` back to 0) while `val`, the
@@ -871,6 +873,15 @@ impl Symbol {
     pub fn is_fun_entity(&self) -> bool {
         self.class == crate::c5::token::Token::Fun as i64
             || (self.class == 0 && self.scoped_fn_decl)
+    }
+
+    /// Whether the slot's name has a symbol of this unit's symbol table: a
+    /// function entity, a file-scope object, or an object a block-scope
+    /// `extern` declared, whatever binds the name now.
+    pub fn is_link_entity(&self) -> bool {
+        self.is_fun_entity()
+            || self.class == crate::c5::token::Token::Glo as i64
+            || self.scoped_obj_decl
     }
 }
 
@@ -895,18 +906,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_class: _,
             h_type: _,
             h_val: _, // scope-restore shadow; every scope is unwound before a `Program` exists
-            params: _,
-            is_variadic: _,
-            prototyped: _,
-            param_enum_tags: _,
-            param_fn_types: _,
-            h_params: _,
-            h_is_variadic: _,
-            h_prototyped: _,
-            h_param_enum_tags: _,
-            h_param_fn_types: _,
-            conv: _,
-            h_conv: _,
+            fn_type: _,
+            h_fn_type: _,
             implicit_return_int: _,
             is_noreturn: _,
             is_thread_local,
@@ -958,8 +959,6 @@ impl crate::c5::layout::DataOffsets for Symbol {
             h_fn_ptr_indirection: _,
             fn_ptr_ret_indirection: _,
             h_fn_ptr_ret_indirection: _,
-            ret_fn: _,
-            h_ret_fn: _,
             is_function_type: _,
             returns_void: _,
             unprototyped_def: _,
@@ -985,9 +984,11 @@ impl crate::c5::layout::DataOffsets for Symbol {
             block_extern_active: _,
             is_scope_bound: _,
             scoped_fn_decl: _,
+            detached: _,
+            scoped_obj_decl: _,
             owner_ent_pc: _, // code address space
-            static_local_record: _,
-            h_static_local_record: _, // scope-restore shadow
+            entity_record: _,
+            h_entity_record: _, // scope-restore shadow
             is_compound_literal: _,
             is_string_literal: _,
             binding: _, // declaration site and uses, not an offset

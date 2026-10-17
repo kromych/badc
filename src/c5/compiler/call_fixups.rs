@@ -4,7 +4,7 @@
 //!
 //!   * [`Compiler::resolve_code_relocs`] rewrites every recorded
 //!     static-initializer function-pointer slot
-//!     (`code_relocs[i].target_ent_pc`) to the originating
+//!     (`code_relocs` and `tls_code_relocs`) to the originating
 //!     symbol's post-body `Symbol::val` using the parallel
 //!     `code_reloc_sym_idx` shadow. The native writers walk
 //!     `Program::code_relocs` to lay down the per-target dynamic
@@ -31,6 +31,43 @@ use super::Compiler;
 use super::types::{is_double_ty, is_float_ty};
 
 impl Compiler {
+    /// The relocation of an 8-byte slot at `data_offset` holding `value`,
+    /// a constant address of function `sym_idx`: its entry now, which
+    /// [`Self::resolve_code_relocs`] updates, and the offset past it.
+    fn code_reloc_at(
+        &self,
+        data_offset: u64,
+        sym_idx: usize,
+        value: i64,
+    ) -> crate::c5::program::CodeReloc {
+        let pc = self.symbols[sym_idx].val;
+        crate::c5::program::CodeReloc {
+            data_offset,
+            target_ent_pc: pc as u64,
+            addend: value.wrapping_sub(pc),
+        }
+    }
+
+    /// Record the relocation of a static slot holding the address of the
+    /// function the binding `sym_idx` denotes.
+    pub(super) fn push_code_reloc(
+        &mut self,
+        tls: bool,
+        data_offset: u64,
+        sym_idx: usize,
+        value: i64,
+    ) {
+        let sym_idx = self.fn_entity_of(sym_idx);
+        let reloc = self.code_reloc_at(data_offset, sym_idx, value);
+        let (relocs, syms) = if tls {
+            (&mut self.tls_code_relocs, &mut self.tls_code_reloc_sym_idx)
+        } else {
+            (&mut self.code_relocs, &mut self.code_reloc_sym_idx)
+        };
+        relocs.push(reloc);
+        syms.push(sym_idx);
+    }
+
     /// Rewrite every `code_relocs[i].target_ent_pc` to the
     /// originating symbol's post-body `val`. Walker-tier
     /// `Inst::Call` / `Inst::ImmCode` references read the live
@@ -38,30 +75,36 @@ impl Compiler {
     /// post-parse fixup; only the data-segment function-pointer
     /// initializers reach this pass.
     pub(super) fn resolve_code_relocs(&mut self) -> Result<(), C5Error> {
-        // The two arrays must be the same length (one symbol idx
-        // per code reloc); a length mismatch is a bug in a
-        // CodeReloc-emitting site that forgot to record its sym
-        // idx.
-        if self.code_relocs.len() != self.code_reloc_sym_idx.len() {
-            return Err(C5Error::internal(format!(
-                "code_relocs ({}) and code_reloc_sym_idx ({}) length mismatch \
-                 -- a CodeReloc emitter forgot to record its symbol idx",
-                self.code_relocs.len(),
-                self.code_reloc_sym_idx.len()
-            )));
-        }
-        for (reloc, &sym_idx) in self
-            .code_relocs
-            .iter_mut()
-            .zip(self.code_reloc_sym_idx.iter())
-        {
+        let symbols = &self.symbols;
+        for (relocs, syms, what) in [
+            (
+                &mut self.code_relocs,
+                &self.code_reloc_sym_idx,
+                "code_relocs",
+            ),
+            (
+                &mut self.tls_code_relocs,
+                &self.tls_code_reloc_sym_idx,
+                "tls_code_relocs",
+            ),
+        ] {
+            if relocs.len() != syms.len() {
+                return Err(C5Error::internal(format!(
+                    "{what} ({}) and its symbol idx list ({}) length mismatch \
+                     -- a CodeReloc emitter forgot to record its symbol idx",
+                    relocs.len(),
+                    syms.len()
+                )));
+            }
             // The placeholder bytes in `self.data` stay
             // unmodified: the VM and per-target writers walk
             // `code_relocs` and lay down their own bias
             // (`CODE_BASE + target_ent_pc` for the VM; native VA
             // for ELF / Mach-O / PE). They read
             // `target_ent_pc`, not the data bytes.
-            reloc.target_ent_pc = self.symbols[sym_idx].val as u64;
+            for (reloc, &sym_idx) in relocs.iter_mut().zip(syms) {
+                reloc.target_ent_pc = symbols[sym_idx].val as u64;
+            }
         }
         // A function-pointer initializer (`fp tbl[] = { name };`) may name
         // a function declared `static` and never defined in this unit.
@@ -71,7 +114,11 @@ impl Compiler {
         // linkage is left alone: a prototype satisfies C99 6.7p7 and the
         // definition may live in another unit.
         let mut undeclared: Vec<usize> = Vec::new();
-        for &sym_idx in &self.code_reloc_sym_idx {
+        for &sym_idx in self
+            .code_reloc_sym_idx
+            .iter()
+            .chain(&self.tls_code_reloc_sym_idx)
+        {
             let s = &self.symbols[sym_idx];
             if s.class == Token::Fun as i64
                 && !s.defined_here
@@ -123,8 +170,14 @@ impl Compiler {
             token: Token::Id as i64,
             class: Token::Fun as i64,
             type_: self.symbols[sys_sym_idx].type_,
-            params: self.symbols[sys_sym_idx].params.clone(),
-            is_variadic: self.symbols[sys_sym_idx].is_variadic,
+            fn_type: crate::c5::symbol::FnType {
+                params: crate::c5::symbol::FnParams {
+                    types: self.symbols[sys_sym_idx].params().to_vec(),
+                    variadic: self.symbols[sys_sym_idx].is_variadic(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
             val: 0,
             ..Default::default()
         };
@@ -200,8 +253,8 @@ impl Compiler {
             // body at the post-link ent_pc.
             self.symbols[tr_idx].defined_here = true;
 
-            let fixed_nargs = self.symbols[sys_idx].params.len();
-            let is_variadic = self.symbols[sys_idx].is_variadic;
+            let fixed_nargs = self.symbols[sys_idx].params().len();
+            let is_variadic = self.symbols[sys_idx].is_variadic();
             let binding_idx = self.symbols[sys_idx].val;
 
             // A trampoline whose libc callee takes or returns a
@@ -230,7 +283,7 @@ impl Compiler {
             let touches_fp = is_float_ty(ret_ty)
                 || is_double_ty(ret_ty)
                 || self.symbols[sys_idx]
-                    .params
+                    .params()
                     .iter()
                     .any(|&p| is_float_ty(p) || is_double_ty(p));
             if is_variadic || touches_fp {

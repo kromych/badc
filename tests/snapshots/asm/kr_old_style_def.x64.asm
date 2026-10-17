@@ -27,9 +27,8 @@ Disassembly of section .text:
 
 <mix>:
                	movsbq	%sil, %rsi
-               	movq	%rdi, %rax
-               	subq	%rdx, %rax
-               	addq	%rsi, %rax
+               	subq	%rdx, %rdi
+               	leaq	(%rdi,%rsi), %rax
                	retq
 
 <first>:

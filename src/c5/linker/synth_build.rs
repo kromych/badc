@@ -155,16 +155,16 @@ fn synth_program_and_build(
     let imports = synth_imports(merged, target)?;
     // Slots the PLT pass left unresolved for the loader to bind.
     let data_import_binds = merged.data_import_refs.clone();
+    let tls_data_import_binds = merged.tls_data_import_refs.clone();
     let placed = output_kind != OutputKind::SharedLibrary && opts.exec_form.placed();
-    if !data_import_binds.is_empty()
-        && super::DataImportSlots::of(target, placed) != super::DataImportSlots::Bind
+    let unresolved = data_import_binds.len() + tls_data_import_binds.len();
+    if unresolved != 0 && super::DataImportSlots::of(target, placed) != super::DataImportSlots::Bind
     {
         return Err(internal_err(
             MODULE,
             &alloc::format!(
-                "{} data slot(s) naming an import reached a {target:?} image unresolved; it \
-                 binds none",
-                data_import_binds.len()
+                "{unresolved} data slot(s) naming an import reached a {target:?} image \
+                 unresolved; it binds none",
             ),
         ));
     }
@@ -251,6 +251,7 @@ fn synth_program_and_build(
         compact_unwind: merged.compact_unwind.clone(),
         eh_frame: merged.eh_frame.clone(),
         data_import_binds,
+        tls_data_import_binds,
         canonical_imports,
         preemptible_imports: merged.preemptible_imports.iter().copied().collect(),
         data_liveness: None,
@@ -409,6 +410,7 @@ fn synth_program(
         asm_file_names: Vec::new(),
         asm_idents: Vec::new(),
         data_align: 8,
+        image_align_error: None,
         data_ro_len: 0,
         data_relro_len: 0,
         data_object_starts: Vec::new(),
@@ -426,6 +428,7 @@ fn synth_program(
         code_relocs: code_relocs.to_vec(),
         sys_trampolines: Vec::new(),
         bind_trampoline_slots: false,
+        weak_refs_by_name: false,
         tls_data_relocs: Vec::new(),
         tls_extern_data_relocs: Vec::new(),
         tls_code_relocs: Vec::new(),
@@ -497,6 +500,8 @@ fn function_table(merged: &MergedNative, pc_to_native: Vec<usize>) -> FunctionTa
     for (name, offset) in &merged.local_funcs {
         table.note(merged, name, *offset as usize);
     }
+    // The code length ends the map, as the lowering's does (Build::native_entry).
+    table.pc_to_native.push(merged.text.len());
     table
 }
 
@@ -1020,6 +1025,7 @@ fn synth_fixups(
             text_pcrel.push(crate::c5::codegen::TextPcRelReloc {
                 site_text_offset: reloc.text_offset,
                 target_data_offset: reloc.addend as u64,
+                target_anchor: reloc.anchor as u64,
                 width: width as u8,
             });
             continue;
@@ -1041,6 +1047,7 @@ fn synth_fixups(
             text_abs_relocs.push(crate::c5::codegen::TextAbsReloc {
                 site_text_offset: reloc.text_offset,
                 target_offset: reloc.addend as u64,
+                target_anchor: reloc.anchor as u64,
                 target_in_text,
                 rtype: reloc.rtype,
             });
@@ -1149,7 +1156,8 @@ fn project_aarch64_pending(
         NativeSymSection::Data | NativeSymSection::Bss => {
             data_fixups.push(DataFixup {
                 instr_offset: reloc.text_offset as usize,
-                data_offset: reloc.addend as u64,
+                data_offset: reloc.anchor as u64,
+                addend: reloc.addend - reloc.anchor,
                 part,
             });
             Ok(())
@@ -1157,7 +1165,8 @@ fn project_aarch64_pending(
         NativeSymSection::Text => {
             func_fixups.push(FuncFixup {
                 instr_offset: reloc.text_offset as usize,
-                target_native_offset: reloc.addend as usize,
+                target_native_offset: reloc.anchor as usize,
+                addend: reloc.addend - reloc.anchor,
                 part,
             });
             Ok(())
@@ -1298,9 +1307,9 @@ fn x86_64_got_rel_field(
             | NativeSymSection::Data
             | NativeSymSection::Bss,
         ) => (
-            ImageAddr::Data(reloc.addend as u64),
+            ImageAddr::Data(reloc.anchor as u64),
             ImageAddr::GotBase,
-            0,
+            reloc.addend - reloc.anchor,
             8,
         ),
         (R_X86_64_GOTOFF64 | R_X86_64_PLTOFF64, NativeSymSection::Abs) => (
@@ -1374,7 +1383,8 @@ fn project_x86_64_pending(
         NativeSymSection::Data | NativeSymSection::Bss => {
             data_fixups.push(DataFixup {
                 instr_offset,
-                data_offset: target_byte_offset as u64,
+                data_offset: reloc.anchor as u64,
+                addend: target_byte_offset - reloc.anchor,
                 part: AddrPart::Whole,
             });
             Ok(())
@@ -1382,7 +1392,8 @@ fn project_x86_64_pending(
         NativeSymSection::Text => {
             func_fixups.push(FuncFixup {
                 instr_offset,
-                target_native_offset: target_byte_offset as usize,
+                target_native_offset: reloc.anchor as usize,
+                addend: target_byte_offset - reloc.anchor,
                 part: AddrPart::Whole,
             });
             Ok(())
@@ -1440,12 +1451,19 @@ fn synth_abs_relocs(relocs: &[DataAbsReloc]) -> (Vec<DataReloc>, Vec<CodeReloc>)
                     data_offset: r.slot_offset,
                     target_offset: off as u64,
                     target_anchor: anchor as u64,
+                    target_sym: None,
                 });
             }
             MergedTarget::Text(off) => {
+                // The symbol's text offset, and an addend that may leave the text.
+                let anchor = match r.anchor {
+                    MergedTarget::Text(a) => a,
+                    MergedTarget::Data(_) => off,
+                };
                 code_relocs.push(CodeReloc {
                     data_offset: r.slot_offset,
-                    target_ent_pc: off as u64,
+                    target_ent_pc: anchor as u64,
+                    addend: off.wrapping_sub(anchor),
                 });
             }
         }
@@ -1609,6 +1627,7 @@ mod tests {
             data_abs_relocs: alloc::vec![],
             data_pcrel_relocs: alloc::vec![],
             data_import_refs: alloc::vec![],
+            tls_data_import_refs: alloc::vec![],
             machine: NativeMachine::Aarch64,
             import_dylib_map: alloc::collections::BTreeMap::new(),
             import_symbols: alloc::collections::BTreeMap::new(),

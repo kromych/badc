@@ -163,9 +163,8 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx), %rcx
-               	movq	%rsi, %rdx
-               	subq	%rcx, %rdx
-               	cmpq	$0x4, %rdx
+               	subq	%rcx, %rsi
+               	cmpq	$0x4, %rsi
                	je	<addr>
                	movl	$0x14, %eax
                	retq

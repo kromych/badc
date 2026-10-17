@@ -94,8 +94,7 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ldr	w16, [x1]
                	ldrb	w17, [x1, #0x4]
-               	lsl	x17, x17, #32
-               	orr	x16, x16, x17
+               	orr	x16, x16, x17, lsl #32
                	mov	x1, x16
                	bl	<addr>
                	cmp	x0, #0xdd6
@@ -108,8 +107,7 @@ Disassembly of section .text:
                	mov	x1, #0x3                // =3
                	ldr	w16, [x0]
                	ldrh	w17, [x0, #0x4]
-               	lsl	x17, x17, #32
-               	orr	x16, x16, x17
+               	orr	x16, x16, x17, lsl #32
                	mov	x0, x16
                	bl	<addr>
                	cmp	x0, #0x82d
@@ -122,8 +120,7 @@ Disassembly of section .text:
                	mov	x1, #0x3                // =3
                	ldr	w16, [x0]
                	ldrh	w17, [x0, #0x4]
-               	lsl	x17, x17, #32
-               	orr	x16, x16, x17
+               	orr	x16, x16, x17, lsl #32
                	mov	x0, x16
                	bl	<addr>
                	cmp	x0, #0xfdf

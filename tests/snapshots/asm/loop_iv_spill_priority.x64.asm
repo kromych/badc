@@ -66,13 +66,13 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x3e8, %eax            # imm = 0x3E8
                	jb	<addr>
+               	xorq	%r8, %rcx
+               	xorq	%r9, %rcx
+               	xorq	%rbx, %rcx
+               	xorq	%r12, %rcx
+               	xorq	%r13, %rcx
+               	xorq	%r14, %rcx
                	movq	%rcx, %rax
-               	xorq	%r8, %rax
-               	xorq	%r9, %rax
-               	xorq	%rbx, %rax
-               	xorq	%r12, %rax
-               	xorq	%r13, %rax
-               	xorq	%r14, %rax
                	xorq	%r15, %rax
                	xorq	0x38(%rsp), %rax
                	popq	%rbx

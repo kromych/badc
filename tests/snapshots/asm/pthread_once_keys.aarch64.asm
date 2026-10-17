@@ -249,8 +249,7 @@ Disassembly of section .text:
                	mov	x21, #0x0               // =0
                	mov	x20, x21
                	sub	x0, x29, #0x40
-               	lsl	x1, x20, #3
-               	add	x0, x0, x1
+               	add	x0, x0, x20, lsl #3
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	mov	x1, x21
@@ -416,12 +415,10 @@ Disassembly of section .text:
                	mov	x21, #0x0               // =0
                	mov	x20, x21
                	sub	x0, x29, #0x40
-               	lsl	x1, x20, #3
-               	add	x0, x0, x1
+               	add	x0, x0, x20, lsl #3
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	lsl	x1, x20, #2
-               	add	x3, x22, x1
+               	add	x3, x22, x20, lsl #2
                	mov	x1, x21
                	bl	<addr>
                	sxtw	x0, w0

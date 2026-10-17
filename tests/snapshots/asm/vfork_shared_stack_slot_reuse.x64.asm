@@ -385,8 +385,7 @@ Disassembly of section .text:
                	addq	0x2b8(%rsp), %rcx
                	addq	0x2a0(%rsp), %rcx
                	addq	0x288(%rsp), %rcx
-               	addq	%rcx, %rax
-               	movq	%rax, %rdi
+               	leaq	(%rcx,%rax), %rdi
                	andq	$0x7f, %rdi
                	xorl	%eax, %eax
                	callq	<addr>

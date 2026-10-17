@@ -18,14 +18,12 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
                	mov	x1, x0
-               	lsl	x3, x0, #4
-               	add	x3, x2, x3
+               	add	x3, x2, x0, lsl #4
                	ldr	x3, [x3]
                	cbz	x3, <addr>
                	add	x1, x1, #0x1
                	add	x0, x0, #0x1
-               	lsl	x3, x0, #4
-               	add	x3, x2, x3
+               	add	x3, x2, x0, lsl #4
                	ldr	x3, [x3]
                	cbnz	x3, <addr>
                	cmp	w1, #0x3

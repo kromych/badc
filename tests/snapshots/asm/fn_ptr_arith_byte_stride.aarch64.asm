@@ -121,8 +121,7 @@ Disassembly of section .text:
                	ret
                	sub	x2, x0, x1
                	asr	x3, x2, #63
-               	lsr	x3, x3, #61
-               	add	x2, x2, x3
+               	add	x2, x2, x3, lsr #61
                	asr	x2, x2, #3
                	cmp	x2, #0x2
                	b.eq	<addr>
@@ -161,8 +160,7 @@ Disassembly of section .text:
                	add	x2, x0, #0xc
                	sub	x1, x2, x0
                	asr	x3, x1, #63
-               	lsr	x3, x3, #62
-               	add	x3, x1, x3
+               	add	x3, x1, x3, lsr #62
                	asr	x3, x3, #2
                	cmp	x3, #0x3
                	b.eq	<addr>

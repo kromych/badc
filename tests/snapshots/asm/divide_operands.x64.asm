@@ -52,27 +52,22 @@ Disassembly of section .text:
                	retq
 
 <quot32>:
-               	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
-               	movq	%rdi, %rax
-               	cqto
-               	idivq	%rsi
+               	movl	%edi, %eax
+               	cltd
+               	idivl	%esi
                	retq
 
 <rem32>:
-               	movslq	%edi, %rdi
-               	movslq	%esi, %rsi
-               	movq	%rdi, %rax
-               	cqto
-               	idivq	%rsi
+               	movl	%edi, %eax
+               	cltd
+               	idivl	%esi
                	movq	%rdx, %rax
                	retq
 
 <uquot32>:
                	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
-               	movl	%esi, %ecx
                	xorl	%edx, %edx
-               	divq	%rcx
+               	divl	%esi
                	retq
 
 <urem32>:
@@ -97,9 +92,8 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	cqto
                	idivq	%rsi
-               	movq	%rdi, %rcx
-               	shlq	%rcx
-               	addq	%rcx, %rax
+               	shlq	%rdi
+               	addq	%rdi, %rax
                	leaq	(%rsi,%rsi,2), %rcx
                	addq	%rcx, %rax
                	addq	$0x5, %rax
@@ -120,17 +114,15 @@ Disassembly of section .text:
                	movabsq	$0x6666666666666667, %rdx # imm = 0x6666666666666667
                	movq	%rdx, %r10
                	mulq	%r10
+               	shrq	%rdx
                	movq	%rdx, %rax
-               	shrq	%rax
-               	movq	%rax, %rdx
-               	imulq	%r9, %rdx
-               	subq	%rdx, %rdi
-               	movq	%rdi, %rdx
-               	imulq	%rsi, %rdx
-               	addq	%rdx, %r8
+               	imulq	%r9, %rax
+               	subq	%rax, %rdi
+               	imulq	%rsi, %rdi
+               	addq	%rdi, %r8
                	incq	%rcx
                	incq	%rsi
-               	movq	%rax, %rdi
+               	movq	%rdx, %rdi
                	testq	%rdi, %rdi
                	jne	<addr>
                	imulq	$0x64, %r8, %rax
@@ -155,23 +147,20 @@ Disassembly of section .text:
                	movabsq	$0x4924924924924925, %rcx # imm = 0x4924924924924925
                	movq	%rdi, %rax
                	imulq	%rcx
+               	sarq	%rdx
                	movq	%rdx, %rax
-               	sarq	%rax
-               	movq	%rax, %rcx
-               	shrq	$0x3f, %rcx
-               	addq	%rax, %rcx
+               	shrq	$0x3f, %rax
+               	leaq	(%rdx,%rax), %rcx
                	movabsq	$0x6666666666666667, %rsi # imm = 0x6666666666666667
                	movq	%rdi, %rax
                	imulq	%rsi
+               	sarq	$0x2, %rdx
                	movq	%rdx, %rax
-               	sarq	$0x2, %rax
-               	movq	%rax, %rdx
-               	shrq	$0x3f, %rdx
+               	shrq	$0x3f, %rax
                	addq	%rdx, %rax
                	imulq	$0xa, %rax, %rax
-               	movq	%rdi, %rdx
-               	subq	%rax, %rdx
-               	leaq	(%rcx,%rdx), %rax
+               	subq	%rax, %rdi
+               	leaq	(%rcx,%rdi), %rax
                	retq
 
 <wide_quot>:
@@ -207,12 +196,11 @@ Disassembly of section .text:
                	movq	%rax, %r11
                	movq	%rbx, %rax
                	divq	%r11
-               	shrxq	%r9, %rax, %rax
-               	testq	%rax, %rax
-               	setne	%dl
-               	movzbq	%dl, %rdx
-               	movq	%rax, %r9
-               	subq	%rdx, %r9
+               	shrxq	%r9, %rax, %r9
+               	testq	%r9, %r9
+               	setne	%al
+               	movzbq	%al, %rax
+               	subq	%rax, %r9
                	movq	%r9, %rax
                	mulq	%r8
                	movq	%r9, %rbx

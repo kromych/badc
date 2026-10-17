@@ -97,32 +97,29 @@ Disassembly of section .text:
                	subq	%rcx, %rax
                	movabsq	$0x2aaaaaaaaaaaaaab, %rsi # imm = 0x2AAAAAAAAAAAAAAB
                	imulq	%rsi
+               	sarq	%rdx
                	movq	%rdx, %rax
-               	sarq	%rax
-               	movq	%rax, %rdx
-               	shrq	$0x3f, %rdx
+               	shrq	$0x3f, %rax
                	addq	%rdx, %rax
                	cmpq	$0x1, %rax
                	jne	<addr>
                	leaq	0x18(%rcx), %rax
                	subq	%rcx, %rax
                	imulq	%rsi
+               	sarq	%rdx
                	movq	%rdx, %rax
-               	sarq	%rax
-               	movq	%rax, %rcx
-               	shrq	$0x3f, %rcx
-               	addq	%rcx, %rax
+               	shrq	$0x3f, %rax
+               	addq	%rdx, %rax
                	cmpq	$0x2, %rax
                	jne	<addr>
                	leaq	<rip>, %rcx      # <addr>
                	leaq	0x30(%rcx), %rax
                	subq	%rcx, %rax
                	imulq	%rsi
+               	sarq	$0x3, %rdx
                	movq	%rdx, %rax
-               	sarq	$0x3, %rax
-               	movq	%rax, %rcx
-               	shrq	$0x3f, %rcx
-               	addq	%rcx, %rax
+               	shrq	$0x3f, %rax
+               	addq	%rdx, %rax
                	cmpq	$0x1, %rax
                	je	<addr>
                	movl	$0xe, %eax
@@ -136,10 +133,9 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	subq	%rdx, %rax
                	imulq	%rsi
+               	sarq	%rdx
                	movq	%rdx, %rax
-               	sarq	%rax
-               	movq	%rax, %rdx
-               	shrq	$0x3f, %rdx
+               	shrq	$0x3f, %rax
                	addq	%rdx, %rax
                	cmpq	$0x1, %rax
                	jne	<addr>

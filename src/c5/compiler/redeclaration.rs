@@ -6,6 +6,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use super::super::codegen::CallConv;
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::Ty;
@@ -61,16 +62,18 @@ impl Params {
 }
 
 /// The type one declaration gives an identifier with linkage: an object's
-/// type and bounds (outermost first, `-1` unspecified), or a function's.
+/// type and bounds (outermost first, `-1` unspecified), or a function's, with
+/// the calling convention an attribute named.
 #[derive(Clone, Debug)]
 pub(super) enum DeclaredType {
     Object(Spelled, Vec<i64>),
-    Function(Spelled, Params),
+    Function(Spelled, Params, Option<CallConv>),
 }
 
 /// What a function definition adds to its type: its line and its GNU forms.
 pub(super) struct Definition {
     pub(super) ret: Spelled,
+    pub(super) conv: Option<CallConv>,
     pub(super) line: usize,
     pub(super) implicit_int: bool,
     pub(super) extern_inline: bool,
@@ -112,14 +115,47 @@ fn compose(prior: DeclaredType, new: DeclaredType) -> DeclaredType {
             let bounds = a.iter().zip(&b).map(|(&x, &y)| if x < 0 { y } else { x });
             DeclaredType::Object(ty, bounds.collect())
         }
-        (DeclaredType::Function(ret, p), DeclaredType::Function(_, q)) if q.rank() > p.rank() => {
-            DeclaredType::Function(ret, q)
+        (DeclaredType::Function(ret, p, c), DeclaredType::Function(_, q, d)) => {
+            let params = if q.rank() > p.rank() { q } else { p };
+            DeclaredType::Function(ret, params, c.or(d))
         }
         (prior, _) => prior,
     }
 }
 
 impl Compiler {
+    /// The convention a declaration of function `idx` naming `named` gives
+    /// it, and whether one of its declarations named it: the first's, in any
+    /// scope, as in gcc and clang; a later one naming another is an error.
+    pub(super) fn declared_conv(
+        &self,
+        idx: usize,
+        named: Option<CallConv>,
+        line: usize,
+    ) -> Result<(CallConv, bool), C5Error> {
+        let earlier = match self.linked(idx).map(|e| &e.ty) {
+            Some(DeclaredType::Function(.., c)) => *c,
+            _ => return Ok((named.unwrap_or_default(), named.is_some())),
+        };
+        let conv = earlier.unwrap_or_default();
+        match named {
+            Some(n) if n != conv => {
+                let spell = |c| match self.target.abi_row(c) {
+                    crate::Target::WindowsX64 => "ms_abi",
+                    _ => "sysv_abi",
+                };
+                let text = format!(
+                    "conflicting calling conventions for `{}`: declared `{}`, now `{}`",
+                    self.symbols[idx].name,
+                    spell(conv),
+                    spell(n)
+                );
+                Err(self.compile_err_at(Code::INVALID_DECLARATION, line, text))
+            }
+            _ => Ok((conv, earlier.or(named).is_some())),
+        }
+    }
+
     /// Check a declaration of `idx` against the earlier ones and fold it in.
     pub(super) fn declare_linked(
         &mut self,
@@ -138,14 +174,14 @@ impl Compiler {
         def: Definition,
         params: Params,
     ) -> Result<(), C5Error> {
-        let new = DeclaredType::Function(def.ret, params);
+        let new = DeclaredType::Function(def.ret, params, def.conv);
         self.fold_linked(idx, new, def.line, def.implicit_int)?;
         // GNU: the implicit `int` keeps the declared return type.
         if def.implicit_int
             && let Some(LinkedEntity {
-                ty: DeclaredType::Function(ret, _),
+                ty: DeclaredType::Function(ret, ..),
                 ..
-            }) = self.linked_entities.get(&idx)
+            }) = self.linked(idx)
         {
             let ret = self.resolve_spelling(*ret);
             self.symbols[idx].type_ = ret.ty;
@@ -154,7 +190,7 @@ impl Compiler {
         let at = (def.line, self.intern_source_file());
         let prior = self
             .linked_entities
-            .get_mut(&idx)
+            .get_mut(self.symbols[idx].name.as_str())
             .and_then(|e| e.body.replace((at, def.extern_inline)));
         match prior {
             Some(((line, file), extern_inline)) if !extern_inline || def.extern_inline => Err(self
@@ -175,8 +211,8 @@ impl Compiler {
     /// prototype (6.7.5.3p15), else the declared types after the default
     /// argument promotions (6.5.2.2p6).
     pub(super) fn old_style_arrival_tys(&self, idx: usize, declared: &[i64]) -> Vec<i64> {
-        match self.linked_entities.get(&idx).map(|e| &e.ty) {
-            Some(DeclaredType::Function(_, Params::Prototype(t, false)))
+        match self.linked(idx).map(|e| &e.ty) {
+            Some(DeclaredType::Function(_, Params::Prototype(t, false), _))
                 if t.len() == declared.len() =>
             {
                 t.iter().map(|s| self.spelled_ty(*s)).collect()
@@ -190,8 +226,8 @@ impl Compiler {
     pub(super) fn has_prototype(&self, idx: usize, params: &ParsedParams) -> bool {
         !matches!(params.form, ParamForm::Empty | ParamForm::IdentifierList)
             || matches!(
-                self.linked_entities.get(&idx).map(|e| &e.ty),
-                Some(DeclaredType::Function(_, Params::Prototype(..)))
+                self.linked(idx).map(|e| &e.ty),
+                Some(DeclaredType::Function(_, Params::Prototype(..), _))
             )
     }
 
@@ -204,7 +240,9 @@ impl Compiler {
         if let Some(LinkedEntity {
             ty: DeclaredType::Object(_, bounds),
             ..
-        }) = self.linked_entities.get_mut(&idx)
+        }) = self
+            .linked_entities
+            .get_mut(self.symbols[idx].name.as_str())
             && let Some(outer) = bounds.first_mut().filter(|b| **b < 0)
         {
             *outer = count;
@@ -250,13 +288,14 @@ impl Compiler {
         implicit_int: bool,
     ) -> Result<(), C5Error> {
         let at = (line, self.intern_source_file());
-        let Some(prior) = self.linked_entities.remove(&idx) else {
+        let key = self.symbols[idx].name.clone();
+        let Some(prior) = self.linked_entities.remove(&key) else {
             let entity = LinkedEntity {
                 ty: new,
                 at,
                 body: None,
             };
-            self.linked_entities.insert(idx, entity);
+            self.linked_entities.insert(key, entity);
             return Ok(());
         };
         let verdict = match (&prior.ty, &new) {
@@ -269,7 +308,7 @@ impl Compiler {
                     Verdict::Conflict
                 }
             }
-            (DeclaredType::Function(ra, pa), DeclaredType::Function(rb, pb)) => {
+            (DeclaredType::Function(ra, pa, _), DeclaredType::Function(rb, pb, _)) => {
                 // GNU: an implicit `int` definition of a function declared `void`.
                 let gnu_void = implicit_int && is_void_ty(ra.ty);
                 let rb = if gnu_void { *ra } else { *rb };
@@ -286,13 +325,17 @@ impl Compiler {
             if verdict == Verdict::Conflict {
                 let (prior_line, file) = prior.at;
                 let file = &self.source_files[file as usize];
+                let what = match (&prior.ty, &new) {
+                    (DeclaredType::Object(..), DeclaredType::Object(..))
+                    | (DeclaredType::Function(..), DeclaredType::Function(..)) => {
+                        format!("conflicting types for `{name}`")
+                    }
+                    _ => format!("`{name}` redeclared as a different kind of symbol"),
+                };
                 return Err(self.compile_err_at(
                     Code::INVALID_DECLARATION,
                     line,
-                    format!(
-                        "conflicting types for `{name}`\n  previous: {was} ({file}:{prior_line})\n  \
-                         now:      {now}"
-                    ),
+                    format!("{what}\n  previous: {was} ({file}:{prior_line})\n  now:      {now}"),
                 ));
             }
             self.warn_at(
@@ -306,8 +349,13 @@ impl Compiler {
         }
         let ty = compose(prior.ty, new);
         self.linked_entities
-            .insert(idx, LinkedEntity { ty, ..prior });
+            .insert(key, LinkedEntity { ty, ..prior });
         Ok(())
+    }
+
+    /// What the declarations of `idx`'s identifier with linkage gave it.
+    fn linked(&self, idx: usize) -> Option<&LinkedEntity> {
+        self.linked_entities.get(self.symbols[idx].name.as_str())
     }
 
     fn function_verdict(
@@ -395,8 +443,8 @@ impl Compiler {
                 };
                 format!("{} {}", name(t), bounds.iter().map(dim).collect::<String>())
             }
-            DeclaredType::Function(ret, Params::Unspecified) => format!("{} ()", name(ret)),
-            DeclaredType::Function(ret, Params::IdentifierList(t)) => {
+            DeclaredType::Function(ret, Params::Unspecified, _) => format!("{} ()", name(ret)),
+            DeclaredType::Function(ret, Params::IdentifierList(t), _) => {
                 let list: Vec<String> = t.iter().map(name).collect();
                 format!(
                     "{} ({}) in an old-style definition",
@@ -404,7 +452,7 @@ impl Compiler {
                     list.join(", ")
                 )
             }
-            DeclaredType::Function(ret, Params::Prototype(t, v)) => {
+            DeclaredType::Function(ret, Params::Prototype(t, v), _) => {
                 let types: Vec<i64> = t.iter().map(|s| self.spelled_ty(*s)).collect();
                 format_signature(self.spelled_ty(*ret), &types, *v, &self.structs)
             }

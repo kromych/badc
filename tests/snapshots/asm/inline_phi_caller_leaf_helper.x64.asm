@@ -43,20 +43,20 @@ Disassembly of section .text:
                	andq	%rdx, %r8
                	movq	%rcx, %r9
                	xorq	$-0x1, %r9
-               	andq	%r9, %rsi
-               	xorq	%r8, %rsi
-               	movl	(%rdi,%rax,4), %r8d
+               	andq	%rsi, %r9
+               	xorq	%r9, %r8
+               	movl	(%rdi,%rax,4), %esi
                	addq	%r8, %rsi
                	incq	%rax
                	xchgq	%rdx, %rsi
                	xchgq	%rcx, %rdx
                	cmpl	$0x8, %eax
                	jl	<addr>
-               	movq	%rcx, %rax
-               	xorq	%rdx, %rax
-               	xorq	%rsi, %rax
+               	xorq	%rdx, %rcx
+               	xorq	%rsi, %rcx
                	movl	$0xff6fffef, %r11d      # imm = 0xFF6FFFEF
-               	cmpl	%r11d, %eax
+               	movq	%rcx, %rax
+               	cmpl	%r11d, %ecx
                	jne	<addr>
                	xorl	%eax, %eax
                	leave

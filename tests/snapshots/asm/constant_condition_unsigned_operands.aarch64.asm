@@ -29,10 +29,9 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldur	w0, [x29, #-0x10]
                	ldursw	x1, [x29, #-0x8]
-               	mov	w1, w1
-               	udiv	x17, x0, x1
-               	msub	x0, x17, x1, x0
-               	cmp	x0, #0x1
+               	udiv	w17, w0, w1
+               	msub	w0, w17, w1, w0
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	add	sp, sp, #0x10

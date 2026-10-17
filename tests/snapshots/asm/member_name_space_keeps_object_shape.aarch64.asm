@@ -103,8 +103,7 @@ Disassembly of section .text:
                	ret
                	sub	x1, x2, x1
                	asr	x2, x1, #63
-               	lsr	x2, x2, #62
-               	add	x1, x1, x2
+               	add	x1, x1, x2, lsr #62
                	asr	x1, x1, #2
                	cmp	x1, #0x4
                	b.ne	<addr>

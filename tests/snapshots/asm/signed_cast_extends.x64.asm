@@ -172,9 +172,8 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%rbp
                	retq
-               	movq	%r12, %rax
-               	orq	$-0x100, %rax
-               	cmpl	$0xffffff42, %eax       # imm = 0xFFFFFF42
+               	orq	$-0x100, %r12
+               	cmpl	$0xffffff42, %r12d      # imm = 0xFFFFFF42
                	je	<addr>
                	movl	$0xd, %eax
                	popq	%rbx

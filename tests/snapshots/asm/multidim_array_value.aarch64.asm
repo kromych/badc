@@ -95,24 +95,21 @@ Disassembly of section .text:
                	movk	x1, #0x2aaa, lsl #48
                	smulh	x4, x4, x1
                	asr	x4, x4, #1
-               	lsr	x5, x4, #63
-               	add	x4, x4, x5
+               	add	x4, x4, x4, lsr #63
                	cmp	x4, #0x1
                	b.ne	<addr>
                	add	x4, x0, #0x18
                	sub	x0, x4, x0
                	smulh	x0, x0, x1
                	asr	x0, x0, #1
-               	lsr	x4, x0, #63
-               	add	x0, x0, x4
+               	add	x0, x0, x0, lsr #63
                	cmp	x0, #0x2
                	b.ne	<addr>
                	add	x0, x2, #0x30
                	sub	x0, x0, x2
                	smulh	x0, x0, x1
                	asr	x0, x0, #3
-               	lsr	x2, x0, #63
-               	add	x0, x0, x2
+               	add	x0, x0, x0, lsr #63
                	cmp	x0, #0x1
                	b.eq	<addr>
                	mov	x0, #0xe                // =14
@@ -126,8 +123,7 @@ Disassembly of section .text:
                	sub	x2, x0, x3
                	smulh	x1, x2, x1
                	asr	x1, x1, #1
-               	lsr	x2, x1, #63
-               	add	x1, x1, x2
+               	add	x1, x1, x1, lsr #63
                	cmp	x1, #0x1
                	b.ne	<addr>
                	cmp	x0, x0

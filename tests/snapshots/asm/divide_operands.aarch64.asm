@@ -32,22 +32,17 @@ Disassembly of section .text:
                	ret
 
 <quot32>:
-               	sxtw	x0, w0
-               	sxtw	x1, w1
-               	sdiv	x0, x0, x1
+               	sdiv	w0, w0, w1
                	ret
 
 <rem32>:
-               	sxtw	x0, w0
-               	sxtw	x1, w1
-               	sdiv	x17, x0, x1
-               	msub	x0, x17, x1, x0
+               	sdiv	w17, w0, w1
+               	msub	w0, w17, w1, w0
                	ret
 
 <uquot32>:
                	mov	x0, #0xffffffff         // =4294967295
-               	mov	w1, w1
-               	udiv	x0, x0, x1
+               	udiv	w0, w0, w1
                	ret
 
 <urem32>:
@@ -68,8 +63,7 @@ Disassembly of section .text:
 
 <six>:
                	sdiv	x2, x0, x1
-               	lsl	x0, x0, #1
-               	add	x0, x2, x0
+               	add	x0, x2, x0, lsl #1
                	mov	x17, #0x3               // =3
                	mul	x1, x1, x17
                	add	x0, x0, x1
@@ -120,16 +114,14 @@ Disassembly of section .text:
                	movk	x1, #0x4924, lsl #48
                	smulh	x1, x0, x1
                	asr	x1, x1, #1
-               	lsr	x2, x1, #63
-               	add	x2, x1, x2
+               	add	x2, x1, x1, lsr #63
                	mov	x1, #0x6667             // =26215
                	movk	x1, #0x6666, lsl #16
                	movk	x1, #0x6666, lsl #32
                	movk	x1, #0x6666, lsl #48
                	smulh	x1, x0, x1
                	asr	x1, x1, #2
-               	lsr	x3, x1, #63
-               	add	x1, x1, x3
+               	add	x1, x1, x1, lsr #63
                	mov	x17, #0xa               // =10
                	mul	x1, x1, x17
                	sub	x0, x0, x1
@@ -148,8 +140,7 @@ Disassembly of section .text:
                	orr	x5, x4, x5
                	lsr	x9, x1, #1
                	lsr	x4, x0, #1
-               	lsl	x6, x1, #63
-               	orr	x6, x4, x6
+               	orr	x6, x4, x1, lsl #63
                	clz	x4, x5
                	lsl	x12, x5, x4
                	lsr	x7, x12, #32
@@ -167,32 +158,28 @@ Disassembly of section .text:
                	lsr	x10, x4, #32
                	cbnz	x10, <addr>
                	mul	x10, x4, x8
-               	lsl	x11, x5, #32
-               	orr	x11, x11, x6
+               	orr	x11, x6, x5, lsl #32
                	cmp	x10, x11
                	b.ls	<addr>
                	sub	x4, x4, #0x1
                	add	x5, x5, x7
                	lsr	x10, x5, #32
                	cbz	x10, <addr>
-               	lsl	x5, x13, #32
-               	orr	x5, x5, x6
+               	orr	x5, x6, x13, lsl #32
                	msub	x6, x4, x12, x5
                	udiv	x5, x6, x7
                	msub	x6, x5, x7, x6
                	lsr	x10, x5, #32
                	cbnz	x10, <addr>
                	mul	x10, x5, x8
-               	lsl	x11, x6, #32
-               	orr	x11, x11, x9
+               	orr	x11, x9, x6, lsl #32
                	cmp	x10, x11
                	b.ls	<addr>
                	sub	x5, x5, #0x1
                	add	x6, x6, x7
                	lsr	x10, x6, #32
                	cbz	x10, <addr>
-               	lsl	x4, x4, #32
-               	orr	x4, x4, x5
+               	orr	x4, x5, x4, lsl #32
                	lsr	x4, x4, x14
                	cmp	x4, #0x0
                	cset	x5, ne
@@ -240,32 +227,28 @@ Disassembly of section .text:
                	lsr	x7, x0, #32
                	cbnz	x7, <addr>
                	mul	x7, x0, x5
-               	lsl	x8, x2, #32
-               	orr	x8, x8, x3
+               	orr	x8, x3, x2, lsl #32
                	cmp	x7, x8
                	b.ls	<addr>
                	sub	x0, x0, #0x1
                	add	x2, x2, x4
                	lsr	x7, x2, #32
                	cbz	x7, <addr>
-               	lsl	x1, x1, #32
-               	orr	x1, x1, x3
+               	orr	x1, x3, x1, lsl #32
                	msub	x1, x0, x10, x1
                	udiv	x2, x1, x4
                	msub	x3, x2, x4, x1
                	lsr	x7, x2, #32
                	cbnz	x7, <addr>
                	mul	x7, x2, x5
-               	lsl	x8, x3, #32
-               	orr	x8, x8, x6
+               	orr	x8, x6, x3, lsl #32
                	cmp	x7, x8
                	b.ls	<addr>
                	sub	x2, x2, #0x1
                	add	x3, x3, x4
                	lsr	x7, x3, #32
                	cbz	x7, <addr>
-               	lsl	x0, x0, #32
-               	orr	x0, x0, x2
+               	orr	x0, x2, x0, lsl #32
                	b	<addr>
                	udiv	x0, x0, x2
                	mov	x1, #0x0                // =0

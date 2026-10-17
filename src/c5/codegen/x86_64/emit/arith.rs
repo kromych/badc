@@ -1200,6 +1200,7 @@ fn emit_binop_rdx_rax(
     // The high half of the product lands in rdx, as the remainder does.
     let want_rdx = is_mulh || matches!(op, BinOp::Mod | BinOp::Modu);
     let is_unsigned = matches!(op, BinOp::Divu | BinOp::Modu | BinOp::Mulhu);
+    let narrow32 = !is_mulh && crate::c5::codegen::passes::narrow::is_div32(&alloc.div32, v);
 
     // rax receives the lhs and the quotient / low half, rdx the high half and
     // the remainder; a register rd overwrites anyway is not saved.
@@ -1242,14 +1243,21 @@ fn emit_binop_rdx_rax(
     }
     // rax := lhs (dividend low half, or multiplicand).
     if rn.0 != Reg::RAX.0 {
-        emit_mov_rr(code, Reg::RAX, rn);
+        if narrow32 {
+            super::encode::emit_mov_r32_r32(code, Reg::RAX, rn);
+        } else {
+            emit_mov_rr(code, Reg::RAX, rn);
+        }
     }
     // A divide needs rdx seeded with the dividend's high half: signed
     // uses CQO to sign-extend rax, unsigned zero-extends with
-    // `xor edx, edx`. A multiply reads only rax and overwrites rdx.
+    // `xor edx, edx`, the 32-bit form CDQ. A multiply reads only rax and
+    // overwrites rdx.
     if !is_mulh {
         if is_unsigned {
             super::encode::emit_zero_r(code, Reg::RDX);
+        } else if narrow32 {
+            super::encode::emit_cdq(code);
         } else {
             super::encode::emit_cqo(code);
         }
@@ -1260,9 +1268,10 @@ fn emit_binop_rdx_rax(
         (false, true) => Mnem::Div,
         (false, false) => Mnem::Idiv,
     };
+    let width = if narrow32 { 4 } else { 8 };
     match rm_operand {
-        RmOperand::Reg(r) => super::encode::emit_unary_r(code, mnem, 8, r),
-        RmOperand::Mem(sb, off) => super::encode::emit_unary_m(code, mnem, 8, sb, off),
+        RmOperand::Reg(r) => super::encode::emit_unary_r(code, mnem, width, r),
+        RmOperand::Mem(sb, off) => super::encode::emit_unary_m(code, mnem, width, sb, off),
     }
     // Capture result into rd before restoring rdx / rax.
     let result_src = if want_rdx { Reg::RDX } else { Reg::RAX };

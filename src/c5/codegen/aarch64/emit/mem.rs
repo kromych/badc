@@ -260,16 +260,6 @@ pub(super) fn fp_or_spill_dst(dst: Place, frame: Frame) -> Option<u8> {
     }
 }
 
-/// An address register the binary128 sequences can hold across their
-/// borrow of the narrow-access pool.
-fn addr_outside_borrows(code: &mut Vec<u8>, rn: Reg, scratch: &ScratchPool) -> Reg {
-    if !NARROW_BORROW.contains(&rn.0) {
-        return rn;
-    }
-    emit_mov_reg(code, scratch.primary, rn);
-    scratch.primary
-}
-
 /// `Inst::TlsAddr`: the per-target TLS access -- Linux variant 1
 /// (TPIDR_EL0 + TCB + offset), Windows through the TEB's TLS array and
 /// `_tls_index`, macOS through the TLV descriptor and its getter. The
@@ -286,12 +276,12 @@ pub(super) fn emit_tls_addr(
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
     elf_tpoff_fixups: &mut Vec<super::ElfTpoffFixup>,
-    // A cross-unit `extern _Thread_local` access carries the variable's
-    // name; its descriptor is keyed by symbol, not by the placeholder
-    // offset.
-    tls_extern_sym: Option<&str>,
+    // An access by symbol carries the variable's name; its descriptor is
+    // keyed by symbol, not by the placeholder offset.
+    tls_sym: Option<&crate::c5::codegen::TlsSymbolRef>,
     tls_align: usize,
 ) -> Emit {
+    let tls_extern_sym = tls_sym.map(|r| r.name.as_str());
     use super::encode::{enc_add_imm_lsl12, enc_blr, enc_ldr_reg_lsl3, enc_mrs_tpidr_el0};
     // A spilled destination materialises in x16; the sequences read `rd`
     // only after their last use of x16, and x17 stays free for the store.
@@ -311,27 +301,34 @@ pub(super) fn emit_tls_addr(
             // TPOFF and records an `elf_tpoff_fixups` entry at the first add for
             // the linker to rebase against the merged TLS layout.
             let tcb_reserve = 16usize.next_multiple_of(tls_align.max(1)) as i64;
-            let tpoff = (offset + tcb_reserve) as u32;
+            let tpoff = if tls_sym.is_some() {
+                0
+            } else {
+                (offset + tcb_reserve) as u32
+            };
             if tls_extern_sym.is_none() && tpoff >= (1 << 24) {
                 return fail("TlsAddr: tpoff exceeds the hi12/lo12 range");
             }
             emit(code, enc_mrs_tpidr_el0(rd));
             let field = code.len();
-            let target = match tls_extern_sym {
+            let target = match tls_sym {
                 // A cross-unit `extern _Thread_local` may live in a shared
                 // library, whose block the loader places, so its offset comes
                 // from the GOT (initial-exec, as gcc's code for an executable
                 // reads it); x17 holds the slot's address, then its value.
-                Some(name) => {
+                Some(r) if !r.defined_here => {
                     emit(code, enc_adrp(Reg(17), 0));
                     emit(code, enc_ldr_imm(Reg(17), Reg(17), 0));
                     emit(code, enc_add_reg(rd, rd, Reg(17)));
-                    super::ElfTpoffTarget::InitialExec(name.into())
+                    super::ElfTpoffTarget::InitialExec(r.name.clone())
                 }
-                None => {
+                _ => {
                     emit(code, enc_add_imm_lsl12(rd, rd, tpoff >> 12));
                     emit(code, enc_add_imm(rd, rd, tpoff & 0xFFF));
-                    super::ElfTpoffTarget::Local(offset as u64)
+                    match tls_sym {
+                        Some(r) => super::ElfTpoffTarget::Extern(r.name.clone()),
+                        None => super::ElfTpoffTarget::Local(offset as u64),
+                    }
                 }
             };
             elf_tpoff_fixups.push(super::ElfTpoffFixup {
@@ -620,11 +617,12 @@ pub(crate) fn emit_agg_load_int(
         }
         debug_assert!(dst.0 != base.0 && tmp.0 != base.0 && tmp.0 != dst.0);
         emit(code, enc_load_unit(w, tmp, base, o));
+        let lsl = super::encode::RegShift::Lsl;
+        let orr = super::encode::ORR_REG;
         emit(
             code,
-            super::encode::enc_lsl_imm(tmp, tmp, ((o - off) * 8) as u8),
+            super::encode::enc_rrr_shifted(orr, dst, dst, tmp, lsl, (o - off) * 8),
         );
-        emit(code, super::encode::enc_orr_reg(dst, dst, tmp));
     }
 }
 
@@ -719,26 +717,32 @@ pub(crate) fn enc_store_unit(width: u32, rt: Reg, base: Reg, off: u32) -> u32 {
     enc_mem(st, rt.0, base, st.scaled(off))
 }
 
-/// Registers a narrowed scalar access borrows for its accumulator and
-/// piece temp, saved and restored across the sequence; nothing between
-/// the save and the restore addresses sp.
-pub(crate) const NARROW_BORROW: [u8; 7] = [9, 10, 11, 12, 13, 14, 15];
+/// Registers a sequence borrows, in the order taken: the AAPCS64
+/// temporaries, then the argument registers. A sequence that continues
+/// into the code after it saves each below sp and restores it. All are
+/// caller-saved, so no unwinder restores a caller's value from a borrow.
+const BORROW_ORDER: [u8; 16] = [9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8];
 
-/// The first `N` borrow registers not in `avoid`.
-fn narrow_borrows<const N: usize>(avoid: &[u8]) -> [Reg; N] {
+/// The first `N` registers of [`BORROW_ORDER`] outside `avoid` and the
+/// `-ffixed-` set; `what` names the borrowing sequence in the refusal.
+pub(crate) fn borrow_regs<const N: usize>(
+    avoid: &[u8],
+    fixed: super::FixedRegs,
+    what: &str,
+) -> Emit<[Reg; N]> {
+    let mut free = BORROW_ORDER
+        .into_iter()
+        .filter(|r| !avoid.contains(r) && !fixed.has_gpr(*r));
     let mut out = [Reg(0); N];
-    let mut n = 0;
-    for cand in NARROW_BORROW {
-        if n == N {
-            break;
-        }
-        if !avoid.contains(&cand) {
-            out[n] = Reg(cand);
-            n += 1;
-        }
+    for r in &mut out {
+        let Some(n) = free.next() else {
+            return fail(alloc::format!(
+                "{what} needs {N} of x0..x15 besides its operands; `-ffixed-` leaves fewer"
+            ));
+        };
+        *r = Reg(n);
     }
-    debug_assert_eq!(n, N, "narrow access: no free borrow register");
-    out
+    Ok(out)
 }
 
 /// Byte width of an integer load kind, and whether it sign-extends.
@@ -760,9 +764,17 @@ fn int_load_shape(kind: LoadKind) -> (u32, bool) {
 /// Lower an integer load at `[rn + disp]` whose address is proven only
 /// `align`-aligned into accesses no wider than that, into `rd`. The
 /// pieces compose zero-extended; a signed kind is sign-extended after.
-fn emit_narrow_load(code: &mut Vec<u8>, rd: Reg, rn: Reg, disp: u32, kind: LoadKind, align: u32) {
+fn emit_narrow_load(
+    code: &mut Vec<u8>,
+    rd: Reg,
+    rn: Reg,
+    disp: u32,
+    kind: LoadKind,
+    align: u32,
+    fixed: super::FixedRegs,
+) -> Emit {
     let (width, signed) = int_load_shape(kind);
-    let [acc, tmp] = narrow_borrows::<2>(&[rn.0, rd.0]);
+    let [acc, tmp] = borrow_regs::<2>(&[rn.0, rd.0], fixed, "a load split to its alignment")?;
     emit(code, enc_str_pre(acc, Reg(31), -16));
     emit(code, enc_str_pre(tmp, Reg(31), -16));
     emit_agg_load_int(code, acc, rn, disp, width, align, true, tmp);
@@ -774,13 +786,22 @@ fn emit_narrow_load(code: &mut Vec<u8>, rd: Reg, rn: Reg, disp: u32, kind: LoadK
     }
     emit(code, enc_ldr_post(tmp, Reg(31), 16));
     emit(code, enc_ldr_post(acc, Reg(31), 16));
+    Ok(())
 }
 
 /// Store companion to [`emit_narrow_load`]: write the low `width`
 /// bytes of `rs` to `[rn + disp]` in `align`-wide pieces, most
 /// significant last.
-fn emit_narrow_store(code: &mut Vec<u8>, rs: Reg, rn: Reg, disp: u32, width: u32, align: u32) {
-    let [tmp] = narrow_borrows::<1>(&[rn.0, rs.0]);
+fn emit_narrow_store(
+    code: &mut Vec<u8>,
+    rs: Reg,
+    rn: Reg,
+    disp: u32,
+    width: u32,
+    align: u32,
+    fixed: super::FixedRegs,
+) -> Emit {
+    let [tmp] = borrow_regs::<1>(&[rn.0, rs.0], fixed, "a store split to its alignment")?;
     emit(code, enc_str_pre(tmp, Reg(31), -16));
     for (i, (o, w)) in super::super::access_pieces(disp, width, align, true).enumerate() {
         let src = if i == 0 {
@@ -795,6 +816,7 @@ fn emit_narrow_store(code: &mut Vec<u8>, rs: Reg, rn: Reg, disp: u32, width: u32
         emit(code, enc_store_unit(w, src, rn, o));
     }
     emit(code, enc_ldr_post(tmp, Reg(31), 16));
+    Ok(())
 }
 
 use super::ssa::emit_common::c5_slot_to_fp_offset;
@@ -888,14 +910,14 @@ pub(super) fn emit_agg_store_fp_at(
     emit_agg_store_fp(code, src, base, off, width, align, strict_align, tmp);
 }
 
-/// A frame byte's displacements from fp in the static layout, from x19
-/// where it holds the frame bottom ([`Frame::local_base`]), and from sp
-/// where sp keeps its prologue value (not `Frame::dynamic_sp`). An
-/// object in the realigned region (C11 6.7.5) has no fp form.
+/// A frame byte's displacements from fp in the static layout, from a base
+/// register ([`Frame::local_base`], [`Frame::region_base`]), and from sp
+/// where sp keeps its prologue value (not `Frame::dynamic_sp`). An object
+/// in the realigned region (C11 6.7.5) has no fp form.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct FrameLoc {
     fp: Option<i64>,
-    x19: Option<i64>,
+    base: Option<(Reg, i64)>,
     sp: Option<i64>,
 }
 
@@ -903,12 +925,12 @@ impl FrameLoc {
     /// The byte at `fp + disp` in the static layout.
     pub(super) fn at_fp(frame: Frame, disp: i64) -> Self {
         let sp = (!frame.dynamic_sp).then(|| disp + i64::from(frame.frame_bytes));
-        let x19 = frame
+        let base = frame
             .local_base
-            .then(|| disp + i64::from(frame.frame_bytes));
+            .then(|| (Reg(19), disp + i64::from(frame.frame_bytes)));
         Self {
             fp: Some(disp),
-            x19,
+            base,
             sp,
         }
     }
@@ -927,16 +949,17 @@ impl FrameLoc {
         let d = i64::from(disp);
         Self {
             fp: self.fp.map(|x| x + d),
-            x19: self.x19.map(|x| x + d),
+            base: self.base.map(|(r, x)| (r, x + d)),
             sp: self.sp.map(|x| x + d),
         }
     }
 
     /// The form whose base costs the fewest instructions ([`base_len`]), fp on a tie.
     fn pick(self, fits: impl Fn(i64) -> bool) -> (Reg, i64) {
-        [(Reg(29), self.fp), (Reg(19), self.x19), (Reg(31), self.sp)]
+        let (fp, sp) = (self.fp.map(|d| (Reg(29), d)), self.sp.map(|d| (Reg(31), d)));
+        [fp, self.base, sp]
             .into_iter()
-            .filter_map(|(base, disp)| Some((base, disp?)))
+            .flatten()
             .min_by_key(|&(_, disp)| base_len(disp, &fits))
             .expect("a frame location has an address")
     }
@@ -971,10 +994,17 @@ pub(super) fn local_slot(off: i64, func: &FunctionSsa, frame: Frame) -> FrameLoc
         Some(region_off) if frame.align_region_off != 0 => {
             FrameLoc::at_fp(frame, frame.align_region_off + region_off)
         }
-        Some(region_off) => FrameLoc {
-            fp: None,
-            x19: None,
-            sp: Some(region_off.max(0)),
+        Some(region_off) => match frame.region_base {
+            Some(r) => FrameLoc {
+                fp: None,
+                base: Some((Reg(r), region_off)),
+                sp: None,
+            },
+            None => FrameLoc {
+                fp: None,
+                base: None,
+                sp: Some(region_off.max(0)),
+            },
         },
     }
 }
@@ -1150,6 +1180,7 @@ fn int_store_source(
 
 /// Store the low bytes of `rs` at `[rn + disp]` through `op`, in aligned
 /// pieces under `bound`.
+#[allow(clippy::too_many_arguments)]
 fn emit_int_store(
     code: &mut Vec<u8>,
     op: MemOp,
@@ -1158,16 +1189,18 @@ fn emit_int_store(
     disp: i64,
     bound: Option<u32>,
     scratch: &ScratchPool,
-) {
+    fixed: super::FixedRegs,
+) -> Emit {
     let t = scratch_other(scratch, rn);
     match bound {
         Some(a) => {
             let (base, off) = bound_base(code, rn, disp, op.size(), op.size(), a, t);
-            emit_narrow_store(code, rs, base, off, op.size(), a);
+            emit_narrow_store(code, rs, base, off, op.size(), a, fixed)
         }
         None => {
             let (base, off) = mem_base(code, op, rn, disp, t);
             emit(code, enc_mem(op, rs.0, base, off));
+            Ok(())
         }
     }
 }
@@ -1223,8 +1256,7 @@ pub(super) fn emit_load(
         let Some(dd) = fp_or_spill_dst(dst, frame) else {
             return fail("Load F128: dst not fp reg / spill");
         };
-        let base = addr_outside_borrows(code, rn, scratch);
-        super::binary128::emit_narrow_load(code, dd, base, disp, bound, frame);
+        super::binary128::emit_narrow_load(code, dd, rn, disp, bound, frame)?;
         store_spilled_fp(code, frame, dst, dd);
         return Ok(());
     }
@@ -1247,7 +1279,7 @@ pub(super) fn emit_load(
     match bound {
         Some(a) => {
             let (base, off) = bound_base(code, rn, disp, op.size(), op.size(), a, t);
-            emit_narrow_load(code, rd, base, off, kind, a);
+            emit_narrow_load(code, rd, base, off, kind, a, frame.fixed_regs)?;
         }
         None => emit_mem(code, op, rd.0, rn, disp, t),
     }
@@ -1308,7 +1340,7 @@ pub(super) fn emit_load_local(
             return fail("LoadLocal F128: dst not fp reg / spill");
         };
         let (base, disp) = binary128_base(code, loc, t);
-        super::binary128::emit_narrow_load(code, dd, base, disp, None, frame);
+        super::binary128::emit_narrow_load(code, dd, base, disp, None, frame)?;
         store_spilled_fp(code, frame, dst, dd);
         return Ok(());
     }
@@ -1378,7 +1410,7 @@ pub(super) fn emit_store_local(
             emit_frame_mem(code, STR_D, dn, loc, t);
         } else {
             let (base, disp) = binary128_base(code, loc, t);
-            super::binary128::emit_widen_store(code, dn, base, disp, None, frame);
+            super::binary128::emit_widen_store(code, dn, base, disp, None, frame)?;
         }
         propagate_fp(code, frame, dst, dn);
         return Ok(());
@@ -1667,7 +1699,7 @@ pub(super) fn emit_store(
         return fail("Store: addr not int reg / spill");
     };
     if let Some((op, rs)) = int_store_source(v, kind, value, dst, alloc) {
-        emit_int_store(code, op, rs, rn, disp, bound, scratch);
+        emit_int_store(code, op, rs, rn, disp, bound, scratch, frame.fixed_regs)?;
         return propagate_int(code, frame, dst, rs);
     }
     let fp_value = |code: &mut Vec<u8>, single: bool| {
@@ -1689,7 +1721,7 @@ pub(super) fn emit_store(
             let Some(sn) = fp_value(code, true) else {
                 return fail("Store F32: value not fp reg / spill");
             };
-            emit_fp_store(code, STR_S, sn, rn, disp, bound, scratch);
+            emit_fp_store(code, STR_S, sn, rn, disp, bound, scratch, frame.fixed_regs)?;
             // Propagate the f32 accumulator to `dst` if parked elsewhere.
             if let Some(rd) = fp_reg(dst) {
                 if rd != sn {
@@ -1717,7 +1749,16 @@ pub(super) fn emit_store(
         // register, so it targets the second FP scratch, not an allocator-held
         // `dn`.
         emit(code, enc_fcvt_s_d(frame.fp_scratch[1], dn));
-        emit_fp_store(code, STR_S, frame.fp_scratch[1], rn, disp, bound, scratch);
+        emit_fp_store(
+            code,
+            STR_S,
+            frame.fp_scratch[1],
+            rn,
+            disp,
+            bound,
+            scratch,
+            frame.fixed_regs,
+        )?;
         if let Some(rd) = fp_reg(dst) {
             if rd != dn {
                 emit(code, enc_fmov_d_to_x(scratch.primary, dn));
@@ -1751,10 +1792,9 @@ pub(super) fn emit_store(
             });
         };
         if let StoreKind::F64 = kind {
-            emit_fp_store(code, STR_D, dn, rn, disp, bound, scratch);
+            emit_fp_store(code, STR_D, dn, rn, disp, bound, scratch, frame.fixed_regs)?;
         } else {
-            let base = addr_outside_borrows(code, rn, scratch);
-            super::binary128::emit_widen_store(code, dn, base, disp, bound, frame);
+            super::binary128::emit_widen_store(code, dn, rn, disp, bound, frame)?;
         }
         if let Some(rd) = fp_reg(dst) {
             if rd != dn {
@@ -1777,7 +1817,7 @@ pub(super) fn emit_store(
             let Some(rs) = int_store_value(code, kind, value_place, vs, frame) else {
                 return fail("Store: value not int reg / spill");
             };
-            emit_narrow_store(code, rs, base, off, op.size(), a);
+            emit_narrow_store(code, rs, base, off, op.size(), a, frame.fixed_regs)?;
             rs
         }
         None => {
@@ -1817,6 +1857,7 @@ fn int_store_value(
 }
 
 /// Store FP register `vt`; under `bound` its bit pattern goes in GPR pieces.
+#[allow(clippy::too_many_arguments)]
 fn emit_fp_store(
     code: &mut Vec<u8>,
     op: MemOp,
@@ -1825,16 +1866,17 @@ fn emit_fp_store(
     disp: i64,
     bound: Option<u32>,
     scratch: &ScratchPool,
-) {
+    fixed: super::FixedRegs,
+) -> Emit {
     let t = scratch_other(scratch, rn);
     let Some(a) = bound else {
         emit_mem(code, op, vt, rn, disp, t);
-        return;
+        return Ok(());
     };
     let (base, off) = bound_base(code, rn, disp, op.size(), op.size(), a, t);
     let vs = scratch_other(scratch, base);
     emit(code, enc_fmov_d_to_x(vs, vt));
-    emit_narrow_store(code, vs, base, off, op.size(), a);
+    emit_narrow_store(code, vs, base, off, op.size(), a, fixed)
 }
 
 /// A value's `Place` as a register operand: a spill reloads into

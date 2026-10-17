@@ -54,9 +54,8 @@ Disassembly of section .text:
                	shrq	$0x8, %rax
                	andq	$0xff, %rax
                	movb	%al, 0x1(%rdi)
-               	movq	%rsi, %rax
-               	andq	$0xff, %rax
-               	movb	%al, 0x2(%rdi)
+               	andq	$0xff, %rsi
+               	movb	%sil, 0x2(%rdi)
                	retq
 
 <main>:

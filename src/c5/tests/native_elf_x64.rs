@@ -13,7 +13,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
-use super::fixture_tables::NATIVE_ELF_X64_FIXTURES;
+use super::fixture_tables::{BADC_FIXTURES, NATIVE_ELF_X64_FIXTURES};
 use crate::{Compiler, NativeOptions, Target, emit_native, emit_native_with_options};
 
 #[derive(Debug)]
@@ -85,13 +85,9 @@ fn exec_with_retry(path: &Path) -> std::io::Result<std::process::Output> {
 /// (environment, working directory). The closure is called afresh per
 /// attempt because `Command` is consumed by `output`.
 fn exec_with_retry_cmd(
-    mut build: impl FnMut() -> Command,
+    mut build: impl FnMut() -> super::ImageCommand,
 ) -> std::io::Result<std::process::Output> {
-    let mut run = || {
-        let mut cmd = build();
-        super::with_default_signals(&mut cmd);
-        cmd.output()
-    };
+    let mut run = || build().output();
     for attempt in 0..10 {
         match run() {
             Ok(o) => return Ok(o),
@@ -619,6 +615,22 @@ fn fixture_parity_native_optimized() {
     );
 }
 
+/// [`BADC_FIXTURES`], at -O0 and -O.
+#[test]
+fn badc_fixtures() {
+    for (opts, suffix) in [
+        (NativeOptions::default(), "-O0"),
+        (NativeOptions::new().with_optimize(), "-O"),
+    ] {
+        let failures = super::parity_failures(BADC_FIXTURES, |name, expected| {
+            let outcome = build_and_run_fixture_with_options(name, opts.clone(), suffix);
+            (!outcome.matches(*expected))
+                .then(|| format!("{name} ({suffix}): expected exit {expected}, got {outcome:?}"))
+        });
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+}
+
 /// A `%c` RIP-relative operand whose `i`-class value arrives through an
 /// always_inline helper's parameter resolves only under -O: the inliner
 /// relocates the parameter cell into the caller and store-forwarding
@@ -635,6 +647,92 @@ fn riprel_param_fixture_runs_under_optimize() {
         matches!(outcome, RunOutcome::Exit(42)),
         "expected exit 42, got {outcome:?}"
     );
+}
+
+/// An offset in an inline-asm reference counts from its symbol's own address,
+/// in the single image and the linked executable, position-independent and placed.
+#[test]
+fn asm_offsets_count_from_the_symbols_own_address() {
+    let src = format!("#define WITH_TLS 1\n{}", super::asm_region_edges_source());
+    for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
+        let outcome = build_and_run_outcome_with_options(&src, "asm-edges", opts.clone());
+        assert!(outcome.matches(0), "single image: {outcome:?}");
+        let linked = format!("#define WITH_WORDS 1\n{src}");
+        let program = Compiler::with_target(super::with_prelude(&linked), Target::LinuxX64)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"));
+        for form in [crate::ExecForm::Pie, crate::ExecForm::Placed] {
+            let bytes = super::link_executable_with_runtime_as(
+                &program,
+                Target::LinuxX64,
+                opts.clone(),
+                form,
+            )
+            .unwrap_or_else(|e| panic!("link {form:?}: {e}"));
+            let path = super::unique_temp_path("badc-elf64-test", "asm-edges-linked", ".bin");
+            std::fs::write(&path, &bytes).expect("write temp file");
+            set_executable(&path);
+            let output = exec_with_retry(&path).expect("exec produced binary");
+            let _ = std::fs::remove_file(&path);
+            assert_eq!(output.status.code(), Some(0), "linked {form:?}");
+        }
+    }
+}
+
+/// A single-file image places the unit's asm: a call to a function a
+/// file-scope block defines, and the address of it, of a label in a function
+/// body and of a word in a file-scope data section, bind to them.
+#[test]
+fn asm_defined_names_bind_to_their_definitions() {
+    let src = super::asm_defined_names_source();
+    for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
+        let outcome = build_and_run_outcome_with_options(src, "asm-defined", opts);
+        assert!(outcome.matches(0), "{outcome:?}");
+    }
+}
+
+/// A static slot naming what the unit's C does not define binds as a link binds it.
+#[test]
+fn a_slot_naming_what_the_unit_does_not_define_binds_to_it() {
+    let src = super::named_slots_source();
+    for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
+        let outcome = build_and_run_outcome_with_options(src, "named-slots", opts);
+        assert!(outcome.matches(0), "{outcome:?}");
+    }
+}
+
+/// A single-file image reaches an imported object through its GOT slot, a C
+/// read and an inline-asm address alike; an asm load or store in place is
+/// refused, as the slot stands in for the object's address alone.
+#[test]
+fn asm_reaches_an_imported_object_through_its_slot() {
+    for opts in [NativeOptions::new(), NativeOptions::new().with_optimize()] {
+        let src = super::asm_library_object_source(1);
+        let outcome = build_and_run_outcome_with_options(&src, "asm-import", opts.clone());
+        assert!(outcome.matches(0), "{outcome:?}");
+        for form in [2, 3] {
+            let src = super::asm_library_object_source(form);
+            let outcome = build_and_run_outcome_with_options(&src, "asm-import", opts.clone());
+            assert!(
+                matches!(&outcome, RunOutcome::BuildError(m)
+                    if m.contains("uses the imported object `optind` in place")),
+                "form {form}: {outcome:?}"
+            );
+        }
+    }
+}
+
+/// A single-file image is the unit: inline asm naming its definitions binds to them.
+#[test]
+fn asm_pcrel_reference_binds_to_the_units_definition() {
+    let src = format!(
+        "#define FILE_SCOPE_ASM 1\n#define ASM_DATA_END 1\n{}",
+        super::asm_pcrel_unit_definitions_source()
+    );
+    assert_eq!(build_and_run(&src, "asm-pcrel-defs"), 0);
+    let opts = NativeOptions::new().with_optimize();
+    let outcome = build_and_run_outcome_with_options(&src, "asm-pcrel-defs-opt", opts);
+    assert!(outcome.matches(0), "{outcome:?}");
 }
 
 // ---- Standalone tests for fixtures that need argv / env / CWD
@@ -826,6 +924,49 @@ int check_other(void) {\n\
         "over-aligned thread-locals across units: failure mask {:?}",
         output.status.code()
     );
+}
+
+/// C11 6.7.5: 8 and 16 KiB objects land on their boundary through the single
+/// image, the linked executable (PIE and placed) and a two-unit link.
+#[test]
+fn over_aligned_objects_keep_their_alignment() {
+    use crate::{CompileOptions, ExecForm};
+    let run = |bytes: Vec<u8>, stem: &str| -> Option<i32> {
+        let path = super::unique_temp_path("badc-elf64-overaligned", stem, ".bin");
+        std::fs::write(&path, &bytes).expect("write temp file");
+        set_executable(&path);
+        let output = exec_with_retry(&path).expect("exec produced binary");
+        let _ = std::fs::remove_file(&path);
+        output.status.code()
+    };
+    let (defs, main) = super::over_aligned_objects_units(Target::LinuxX64);
+    let one = format!("{defs}{main}");
+    let got = build_and_run_outcome(&one, "over_aligned_single");
+    assert!(got.matches(0), "single image: {got:?}");
+    let compile = |src: &str| {
+        let opts = CompileOptions::default().with_no_entry_point(true);
+        Compiler::with_options(src.to_string(), Target::LinuxX64, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile: {e}"))
+    };
+    let program = compile(&one);
+    for form in [ExecForm::Pie, ExecForm::Placed] {
+        let bytes = super::link_executable_with_runtime_as(
+            &program,
+            Target::LinuxX64,
+            NativeOptions::default(),
+            form,
+        )
+        .unwrap_or_else(|e| panic!("link {form:?}: {e}"));
+        assert_eq!(run(bytes, "over_aligned_linked"), Some(0), "{form:?}");
+    }
+    let bytes = super::link_executable_with_runtime_multi(
+        &[&compile(main), &compile(&defs)],
+        Target::LinuxX64,
+        NativeOptions::default(),
+    )
+    .unwrap_or_else(|e| panic!("link two units: {e}"));
+    assert_eq!(run(bytes, "over_aligned_two_units"), Some(0), "two units");
 }
 
 /// Cross-unit `extern _Thread_local` on Linux/x86_64. Two translation
@@ -1206,7 +1347,7 @@ fn badc_caller_oversize_struct_return_from_foreign() {
     // ETXTBSY: the image was just written, and a concurrent test in
     // this process may still hold a writable handle to its own output.
     let output = exec_with_retry_cmd(|| {
-        let mut c = Command::new(&exe_path);
+        let mut c = super::image_command(&exe_path);
         c.env("LD_LIBRARY_PATH", &dir);
         c
     })

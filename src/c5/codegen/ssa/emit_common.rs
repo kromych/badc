@@ -510,7 +510,8 @@ pub(crate) fn param_cell_written_first(
 /// return address, or holds an intrinsic whose lowering the backend states
 /// to need it (`intrinsic_keeps_frame`). A `TlsAddr` is a call where the
 /// target's TLS access is one. The frame and register-file conditions a leaf
-/// also requires are target-specific and checked by the caller.
+/// also requires are target-specific and checked by the caller. An asm
+/// statement listing sp as clobbered needs the record, as gcc's leaf has one.
 pub(crate) fn body_keeps_frame_record(
     func: &super::super::ir::FunctionSsa,
     target: super::Target,
@@ -522,6 +523,7 @@ pub(crate) fn body_keeps_frame_record(
             true
         }
         Inst::TlsAddr(_) => super::reg_alloc::tls_addr_is_call(target),
+        Inst::InlineAsm { asm, .. } => asm.clobbers_sp(target),
         // An unknown discriminant has no lowering; the emit refuses it.
         Inst::Intrinsic { kind, .. } => {
             crate::c5::op::Intrinsic::from_i64(*kind).is_none_or(&intrinsic_keeps_frame)
@@ -1461,6 +1463,77 @@ pub(crate) fn uses_dynamic_alloca(func: &super::super::ir::FunctionSsa) -> bool 
         .any(|i| matches!(i, super::super::ir::Inst::AllocaInit(slot) if *slot != 0))
 }
 
+/// The prologue realigns sp (C11 6.7.5) and sp moves during the body: the
+/// realigned region needs a base register, as clang's base pointer.
+pub(crate) fn needs_region_base(
+    func: &super::super::ir::FunctionSsa,
+    target: super::Target,
+) -> bool {
+    func.frame_align > 16
+        && !func.is_naked
+        && (uses_dynamic_alloca(func) || func.has_sp_moving_asm(target))
+}
+
+/// That register: the first of rbx, r12..r15 or x20..x28 (x19 is a scratch
+/// and the locals base) that `-ffixed-` and every asm operand leave, one no
+/// clobber names where there is one; a statement that clobbers it saves it
+/// (`Allocation::asm_preserve`).
+pub(crate) fn region_base(
+    func: &super::super::ir::FunctionSsa,
+    target: super::Target,
+    fixed: super::super::FixedRegs,
+) -> Option<u8> {
+    use super::super::ir::{AsmConstraint, Inst};
+    if !needs_region_base(func, target) {
+        return None;
+    }
+    let (mut operands, mut clobbers) = (0u32, 0u32);
+    for inst in &func.insts {
+        let Inst::InlineAsm { asm, .. } = inst else {
+            continue;
+        };
+        clobbers |= asm.clobber_regs;
+        for op in &asm.operands {
+            if let AsmConstraint::Fixed(r)
+            | AsmConstraint::Bound(r)
+            | AsmConstraint::RegOrImm { reg: Some(r), .. } = op.constraint
+            {
+                operands |= 1 << r;
+            }
+        }
+    }
+    let candidates: &[u8] = if target.is_aarch64() {
+        &[20, 21, 22, 23, 24, 25, 26, 27, 28]
+    } else {
+        &[3, 12, 13, 14, 15]
+    };
+    let free = || {
+        candidates
+            .iter()
+            .copied()
+            .filter(|&r| !fixed.has_gpr(r) && operands & (1 << r) == 0)
+    };
+    free()
+        .find(|&r| clobbers & (1 << r) == 0)
+        .or_else(|| free().next())
+}
+
+/// Why a function that [`needs_region_base`] got none.
+pub(crate) const NO_REGION_BASE: &str = "no callee-saved register is left to address the \
+    realigned frame: -ffixed- reserves or an inline asm operand names every candidate";
+
+/// `fixed` with the register [`region_base`] picks for `func` added.
+pub(crate) fn fixed_with_region_base(
+    func: &super::super::ir::FunctionSsa,
+    target: super::Target,
+    mut fixed: super::super::FixedRegs,
+) -> super::super::FixedRegs {
+    if let Some(r) = region_base(func, target, fixed) {
+        fixed.frame |= 1 << r;
+    }
+    fixed
+}
+
 /// Record a `.debug_line` row for the instruction `v`. The
 /// walker stamps each SSA inst with the source position of the
 /// statement that produced it (`FunctionSsa::inst_src`); the
@@ -1606,8 +1679,8 @@ pub(crate) fn extern_fn_targets(
             } else {
                 None
             };
-            t.is_variadic = sym.is_variadic;
-            t.conv = sym.conv;
+            t.is_variadic = sym.is_variadic();
+            t.conv = sym.fn_type.conv;
         }
     }
     out
@@ -1873,7 +1946,8 @@ pub(crate) struct FunctionInputs<'a> {
     /// `imm_data_extern` value id to cross-TU symbol name.
     pub(crate) extern_data_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
     /// `tls_addr_extern` value id to cross-TU symbol name.
-    pub(crate) extern_tls_names: &'a alloc::collections::BTreeMap<u32, alloc::string::String>,
+    pub(crate) extern_tls_names:
+        &'a alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef>,
     pub(crate) variadic_targets: &'a alloc::collections::BTreeSet<usize>,
     pub(crate) name2entpc: &'a alloc::collections::BTreeMap<alloc::string::String, usize>,
 }
@@ -1897,6 +1971,8 @@ pub(crate) trait LowerTarget {
     const FILE_ASM_ALIGN_POW2: bool;
     /// Comment syntax the file-scope asm blocks are parsed with.
     const FILE_ASM_COMMENTS: crate::c5::asm::AsmComments;
+    /// `direct_pcrel` of a code reference to a weak definition's address.
+    const WEAK_ADDR_PCREL: Option<i64>;
 
     /// Optimizer passes this target runs at the end of the -O pipeline.
     fn late_opt_passes(
@@ -1973,6 +2049,9 @@ pub(crate) trait LowerTarget {
         pc_to_native: &[usize],
         pc_extent: usize,
     ) -> Result<(), crate::c5::error::C5Error>;
+
+    /// The address materialization at `at` as a load of the slot it addresses.
+    fn address_to_slot_load(code: &mut [u8], at: usize) -> Result<(), crate::c5::error::C5Error>;
 
     /// Append one PLT trampoline per import; returns their code offsets.
     fn emit_plt_trampolines(
@@ -2072,6 +2151,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // post-inline bodies directly; the walk and the -O passes that produced
     // them are skipped, the rest of the pipeline runs unchanged.
     let walked = prebuilt.is_none();
+    let graph_cell = core::cell::OnceCell::new();
+    let graph = || graph_cell.get_or_init(|| super::shadow::ReachGraph::new(program));
     let pipeline = Pipeline {
         arch: B::ARCH,
         verify: cfg!(debug_assertions) || native.verify_ssa,
@@ -2085,8 +2166,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         ),
         None => (
             time_pass_arch("ssa::produce_ssa_funcs", B::ARCH, || {
-                super::shadow::produce_ssa_funcs(
-                    program,
+                super::shadow::produce_ssa_funcs_on(
+                    graph(),
                     target,
                     native.optimize,
                     native.jump_tables,
@@ -2412,7 +2493,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             |funcs| {
                 super::shadow::drop_unreachable_statics(
                     funcs,
-                    program,
+                    graph(),
                     &reachable_owners,
                     mode == super::LowerMode::DataLivenessProbe,
                 )
@@ -2538,7 +2619,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     let pc_extent = super::pc_extent_for_lowering(program, &ssa_funcs);
     st.pc_to_native = alloc::vec![usize::MAX; pc_extent + 1];
     // Per-callee variadic flag, derived from `FunctionSsa::is_variadic` for
-    // locally-defined callees and from `Symbol::is_variadic` for cross-TU
+    // locally-defined callees and from `Symbol::fn_type` for cross-TU
     // extern-declared callees. Each call site reads it to pick the host-ABI
     // vs c5-stack arg passing shape for the callee. Without the extern
     // entries here, a cross-TU call to a variadic function emits a
@@ -2562,7 +2643,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             {
                 continue;
             }
-            if sym.linkage == Linkage::External && sym.is_variadic {
+            if sym.linkage == Linkage::External && sym.is_variadic() {
                 variadic_targets.insert(sym.val as usize);
             }
             b.note_extern_callee(sym);
@@ -2639,11 +2720,22 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             .iter()
             .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].link_name().into()))
             .collect();
-        let extern_tls_names: alloc::collections::BTreeMap<u32, alloc::string::String> = func_ssa
-            .extern_tls_refs
-            .iter()
-            .map(|(v, sym_idx)| (*v, program.symbols[*sym_idx as usize].link_name().into()))
-            .collect();
+        let extern_tls_names: alloc::collections::BTreeMap<u32, crate::c5::codegen::TlsSymbolRef> =
+            func_ssa
+                .extern_tls_refs
+                .iter()
+                .map(|(v, sym_idx)| {
+                    let sym = &program.symbols[*sym_idx as usize];
+                    let name = sym.link_name().into();
+                    (
+                        *v,
+                        super::super::TlsSymbolRef {
+                            name,
+                            defined_here: sym.defined_here,
+                        },
+                    )
+                })
+                .collect();
         let inputs = FunctionInputs {
             program,
             extern_data_names: &extern_data_names,
@@ -2792,6 +2884,14 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             });
             continue;
         }
+        if let Some(name) = reloc_ctx.weak_target(target_ent_pc) {
+            st.user_extern_data_refs.push(super::UserExternDataRef {
+                instr_offset,
+                symbol_name: name.into(),
+                direct_pcrel: B::WEAK_ADDR_PCREL,
+            });
+            continue;
+        }
         if target_ent_pc > pc_extent {
             return Err(C5Error::internal(alloc::format!(
                 "native codegen{tag}: function pointer target {target_ent_pc} past end of PC space",
@@ -2808,25 +2908,41 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         func_fixups.push(super::FuncFixup {
             instr_offset,
             target_native_offset: target,
+            addend: 0,
             part: super::AddrPart::Whole,
         });
     }
 
-    // Address-of-import sites (`&strcmp`, `Inst::ImmExtCode`) in the
-    // local-image path resolve to the import's PLT trampoline, the same stub
-    // a call to the import reaches. A `FuncFixup` routes the address pair
-    // through the writer's func-fixup pass exactly like a function-pointer
-    // literal. Relocatable output (empty `plt_trampoline_offsets`) emits the
-    // reloc via `reloc_call_sites` instead.
+    // `&strcmp` (`Inst::ImmExtCode`) takes the address a data slot naming the
+    // import holds (C99 6.5.9p6): the import from the GOT where the loader
+    // binds slots, else the slots' trampoline, else the PLT stub.
     if native.output_kind != super::OutputKind::Relocatable {
-        for fx in &st.plt_call_fixups {
-            if fx.is_addr {
-                func_fixups.push(super::FuncFixup {
+        let slot_trampolines: alloc::collections::BTreeMap<i64, usize> =
+            (program.sys_trampolines.iter())
+                .filter_map(|&(pc, binding)| {
+                    let at = *st.pc_to_native.get(pc as usize)?;
+                    (at != usize::MAX).then_some((binding, at))
+                })
+                .collect();
+        for fx in st.plt_call_fixups.iter().filter(|fx| fx.is_addr) {
+            if program.bind_trampoline_slots {
+                B::address_to_slot_load(&mut st.code, fx.instr_offset)?;
+                st.got_fixups.push(super::GotFixup {
                     instr_offset: fx.instr_offset,
-                    target_native_offset: plt_trampoline_offsets[fx.import_index],
                     part: super::AddrPart::Whole,
+                    import_index: fx.import_index,
+                    is_data_load: true,
                 });
+                continue;
             }
+            let binding = imports.imports[fx.import_index].binding_idx;
+            func_fixups.push(super::FuncFixup {
+                instr_offset: fx.instr_offset,
+                target_native_offset: (slot_trampolines.get(&binding).copied())
+                    .unwrap_or(plt_trampoline_offsets[fx.import_index]),
+                addend: 0,
+                part: super::AddrPart::Whole,
+            });
         }
     }
 
@@ -2864,6 +2980,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         compact_unwind: alloc::vec::Vec::new(),
         eh_frame: alloc::vec::Vec::new(),
         data_import_binds: alloc::vec::Vec::new(),
+        tls_data_import_binds: alloc::vec::Vec::new(),
         canonical_imports: alloc::vec::Vec::new(),
         preemptible_imports: alloc::vec::Vec::new(),
         // The GOT base is a cross-unit link fact; the single-TU emit

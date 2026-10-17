@@ -88,12 +88,7 @@ impl Compiler {
     /// enum tags share one name space (6.2.3), so an inner tag of any
     /// kind shadows an outer one declared at a wider scope.
     pub(super) fn find_tag(&self, name: &str) -> Option<usize> {
-        for scope in self.tag_scopes.iter().rev() {
-            if let Some((_, id)) = scope.iter().rev().find(|(n, _)| n == name) {
-                return Some(*id);
-            }
-        }
-        None
+        self.tag_scopes.find(name)
     }
 
     /// The visible struct or union tag `name`; an enum tag hides it.
@@ -105,13 +100,7 @@ impl Compiler {
     /// uses this to decide whether the tag is a redefinition (same scope)
     /// or a fresh declaration shadowing an outer one.
     pub(super) fn find_tag_in_current_scope(&self, name: &str) -> Option<usize> {
-        self.tag_scopes.last().and_then(|scope| {
-            scope
-                .iter()
-                .rev()
-                .find(|(n, _)| n == name)
-                .map(|(_, id)| *id)
-        })
+        self.tag_scopes.find_in_current(name)
     }
 
     /// C99 6.7.2.3p2: every declaration of a tag uses the keyword that
@@ -137,9 +126,7 @@ impl Compiler {
         self.structs
             .push(StructDef::incomplete_tag(name, is_union, is_enum));
         let id = self.structs.len() - 1;
-        if let Some(scope) = self.tag_scopes.last_mut() {
-            scope.push((name.to_string(), id));
-        }
+        self.tag_scopes.bind(name, id);
         id
     }
 
@@ -233,14 +220,8 @@ impl Compiler {
             bit_unit_size: 0,
             fn_ptr_indirection: 0,
             fn_ptr_ret_indirection: 0,
-            ret_fn: None,
-            params: alloc::vec::Vec::new(),
-            is_variadic: false,
-            prototyped: false,
-            param_enum_tags: alloc::vec::Vec::new(),
-            param_fn_types: alloc::vec::Vec::new(),
+            fn_type: crate::c5::symbol::FnType::default(),
             enum_tag: None,
-            conv: crate::c5::codegen::CallConv::Target,
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
@@ -341,14 +322,8 @@ impl Compiler {
             bit_unit_size: 0,
             fn_ptr_indirection: 0,
             fn_ptr_ret_indirection: 0,
-            ret_fn: None,
-            params: Vec::new(),
-            is_variadic: false,
-            prototyped: false,
-            param_enum_tags: alloc::vec::Vec::new(),
-            param_fn_types: alloc::vec::Vec::new(),
+            fn_type: crate::c5::symbol::FnType::default(),
             enum_tag: None,
-            conv: crate::c5::codegen::CallConv::Target,
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
@@ -429,7 +404,7 @@ impl Compiler {
     /// derivations; the element is an integer type other than `_Bool`, or a
     /// floating type.
     pub(super) fn apply_pending_vector_size(&mut self, ty: i64) -> Result<i64, C5Error> {
-        let n = core::mem::take(&mut self.pending.attr_vector_size);
+        let n = core::mem::take(&mut self.pending.attrs.vector_size);
         if n <= 0 {
             return Ok(ty);
         }
@@ -478,7 +453,7 @@ impl Compiler {
     /// `ty` with the pending `vector_size` and then `mode` attribute applied.
     pub(super) fn apply_pending_type_attributes(&mut self, ty: i64) -> Result<i64, C5Error> {
         let ty = self.apply_pending_vector_size(ty)?;
-        match self.pending.attr_mode.take() {
+        match self.pending.attrs.mode.take() {
             Some(m) => self.apply_mode_to_type(ty, m),
             None => Ok(ty),
         }
@@ -492,7 +467,7 @@ impl Compiler {
         &mut self,
         ret: i64,
     ) -> Result<i64, C5Error> {
-        if self.pending.attr_mode.take().is_some() {
+        if self.pending.attrs.mode.take().is_some() {
             return Err(self.compile_err(
                 Code::INVALID_DECLARATION,
                 "`mode` applied to an inappropriate type",
@@ -533,14 +508,8 @@ impl Compiler {
             bit_unit_size: 0,
             fn_ptr_indirection: 0,
             fn_ptr_ret_indirection: 0,
-            ret_fn: None,
-            params: alloc::vec::Vec::new(),
-            is_variadic: false,
-            prototyped: false,
-            param_enum_tags: alloc::vec::Vec::new(),
-            param_fn_types: alloc::vec::Vec::new(),
+            fn_type: crate::c5::symbol::FnType::default(),
             enum_tag: None,
-            conv: crate::c5::codegen::CallConv::Target,
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
@@ -623,14 +592,8 @@ impl Compiler {
             bit_unit_size: 0,
             fn_ptr_indirection: 0,
             fn_ptr_ret_indirection: 0,
-            ret_fn: None,
-            params: alloc::vec::Vec::new(),
-            is_variadic: false,
-            prototyped: false,
-            param_enum_tags: alloc::vec::Vec::new(),
-            param_fn_types: alloc::vec::Vec::new(),
+            fn_type: crate::c5::symbol::FnType::default(),
             enum_tag: None,
-            conv: crate::c5::codegen::CallConv::Target,
             anon_union_group: 0,
             anon_struct_group: 0,
             explicit_align: 0,
@@ -1620,5 +1583,63 @@ pub(crate) fn struct_return_abi_conv(
         // AAPCS64: > 16 bytes returns through the x8 indirect-result
         // register.
         StructReturnAbi::Indirect(desc)
+    }
+}
+
+/// The tag bindings of the open scopes, by name: each name's bindings,
+/// innermost last, and the names each scope bound, which its exit unbinds.
+pub(crate) struct TagScopes {
+    by_name: hashbrown::HashMap<alloc::string::String, Vec<(u32, usize)>>,
+    scopes: Vec<Vec<alloc::string::String>>,
+}
+
+impl TagScopes {
+    pub(super) fn file_scope() -> Self {
+        TagScopes {
+            by_name: hashbrown::HashMap::new(),
+            scopes: alloc::vec![Vec::new()],
+        }
+    }
+
+    pub(super) fn push(&mut self) {
+        self.scopes.push(Vec::new());
+    }
+
+    pub(super) fn pop(&mut self) {
+        let depth = self.scopes.len() as u32 - 1;
+        for name in self.scopes.pop().unwrap_or_default() {
+            if let Some(ids) = self.by_name.get_mut(&name) {
+                while ids.last().is_some_and(|&(d, _)| d == depth) {
+                    ids.pop();
+                }
+                if ids.is_empty() {
+                    self.by_name.remove(&name);
+                }
+            }
+        }
+    }
+
+    pub(super) fn bind(&mut self, name: &str, id: usize) {
+        let depth = self.scopes.len() as u32 - 1;
+        match self.by_name.get_mut(name) {
+            Some(ids) => ids.push((depth, id)),
+            None => {
+                self.by_name
+                    .insert(name.to_string(), alloc::vec![(depth, id)]);
+            }
+        }
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.push(name.to_string());
+        }
+    }
+
+    pub(super) fn find(&self, name: &str) -> Option<usize> {
+        self.by_name.get(name)?.last().map(|&(_, id)| id)
+    }
+
+    pub(super) fn find_in_current(&self, name: &str) -> Option<usize> {
+        let depth = self.scopes.len() as u32 - 1;
+        let &(d, id) = self.by_name.get(name)?.last()?;
+        (d == depth).then_some(id)
     }
 }

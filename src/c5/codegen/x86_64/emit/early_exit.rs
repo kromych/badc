@@ -1,8 +1,9 @@
 //! The return a function takes ahead of its frame (`ssa::early_exit`): the
 //! test at the entry and the return it branches to, after the body, both
-//! evaluated from the argument registers. Temporaries are rax, r10 and r11:
-//! caller-saved and no argument register under either convention, so the
-//! frame path finds every argument where the caller left it.
+//! evaluated from the argument registers. Temporaries are rax, r10 and r11
+//! less the `-ffixed-` ones: caller-saved and no argument register under
+//! either convention, so the frame path finds every argument where the
+//! caller left it.
 
 use super::super::ssa::early_exit::{EarlyExit, ShadowExpr, ShadowTest};
 use super::*;
@@ -12,13 +13,18 @@ const TEMPS: [Reg; 3] = [Reg(0), SCRATCH_R10, SCRATCH_R11];
 struct Shadow<'a> {
     code: &'a mut Vec<u8>,
     next: usize,
+    fixed: FixedRegs,
 }
 
 impl Shadow<'_> {
     fn temp(&mut self) -> Option<Reg> {
-        let r = *TEMPS.get(self.next)?;
-        self.next += 1;
-        Some(r)
+        while let Some(&r) = TEMPS.get(self.next) {
+            self.next += 1;
+            if !self.fixed.has_gpr(r.0) {
+                return Some(r);
+            }
+        }
+        None
     }
 
     /// The register a node computed from `rn` writes: `rn` itself when it
@@ -196,9 +202,18 @@ impl Shadow<'_> {
 /// The entry's test of `exit`, branching to the early return. The offset of
 /// the branch's displacement, or `None`, with nothing emitted, where the
 /// test needs more temporaries than it has.
-pub(super) fn emit_early_test(code: &mut Vec<u8>, exit: &EarlyExit) -> Option<usize> {
+pub(super) fn emit_early_test(
+    code: &mut Vec<u8>,
+    exit: &EarlyExit,
+    fixed: FixedRegs,
+) -> Option<usize> {
     let start = code.len();
-    let site = Shadow { code, next: 0 }.test(exit);
+    let site = Shadow {
+        code,
+        next: 0,
+        fixed,
+    }
+    .test(exit);
     if site.is_none() {
         code.truncate(start);
     }
@@ -211,10 +226,15 @@ pub(super) fn emit_early_return(
     code: &mut Vec<u8>,
     exit: &EarlyExit,
     abi: super::Abi,
+    fixed: FixedRegs,
     extern_sites: &mut Vec<super::UserExternCallSite>,
 ) -> bool {
     let start = code.len();
-    let mut sh = Shadow { code, next: 0 };
+    let mut sh = Shadow {
+        code,
+        next: 0,
+        fixed,
+    };
     if let Some(ret) = &exit.ret
         && sh.result(ret).is_none()
     {

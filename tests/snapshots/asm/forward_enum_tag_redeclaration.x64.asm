@@ -28,9 +28,8 @@ Disassembly of section .text:
 <get_subrequest>:
                	movq	%rdi, %rax
                	movl	(%rax), %ecx
-               	movq	%rsi, %rdx
-               	andq	$0xff, %rdx
-               	incq	%rdx
+               	andq	$0xff, %rsi
+               	leaq	0x1(%rsi), %rdx
                	addq	%rdx, %rcx
                	movl	%ecx, (%rax)
                	retq

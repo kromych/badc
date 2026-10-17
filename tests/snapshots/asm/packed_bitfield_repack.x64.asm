@@ -42,14 +42,12 @@ Disassembly of section .text:
                	movl	$0x9, %eax
                	movb	%al, -0x4(%rbp)
                	movl	(%rcx), %esi
-               	andq	$0x1ffff, %rsi          # imm = 0x1FFFF
                	shlq	$0x2f, %rsi
                	sarq	$0x2f, %rsi
                	cmpl	$0xfde8, %esi           # imm = 0xFDE8
                	jne	<addr>
                	andq	$0xffff, %rdx           # imm = 0xFFFF
                	sarq	%rdx
-               	andq	$0x3ff, %rdx            # imm = 0x3FF
                	shlq	$0x36, %rdx
                	sarq	$0x36, %rdx
                	cmpl	$0x1f4, %edx            # imm = 0x1F4
@@ -65,14 +63,12 @@ Disassembly of section .text:
                	movb	$0x4, -0x6(%rbp)
                	leaq	-0x8(%rbp), %rcx
                	movzbq	-0x8(%rbp), %rsi
-               	andq	$0x7, %rsi
                	shlq	$0x3d, %rsi
                	sarq	$0x3d, %rsi
                	cmpl	$0x3, %esi
                	jne	<addr>
                	andq	$0xffff, %rdx           # imm = 0xFFFF
                	sarq	$0x3, %rdx
-               	andq	$0x7f, %rdx
                	shlq	$0x39, %rdx
                	sarq	$0x39, %rdx
                	cmpl	$0x3c, %edx

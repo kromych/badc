@@ -63,9 +63,8 @@ Disassembly of section .text:
                	movq	%rdx, %rax
                	andq	$0xff, %rax
                	imulq	$0x186a0, %rax, %rax    # imm = 0x186A0
-               	movq	%rdx, %rcx
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	addq	%rcx, %rax
+               	andq	$0xffff, %rdx           # imm = 0xFFFF
+               	addq	%rdx, %rax
                	cmpl	$0x696c65, %eax         # imm = 0x696C65
                	je	<addr>
                	movl	$0x2, %eax

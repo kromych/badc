@@ -102,8 +102,7 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x10]
                	stur	d0, [x29, #-0x10]
                	ldur	x1, [x29, #-0x10]
-               	lsr	x2, x1, #52
-               	and	x2, x2, #0x7ff
+               	ubfx	x2, x1, #52, #11
                	and	x1, x1, #0xfffffffffffff
                	cbnz	w2, <addr>
                	mov	x0, #0x8                // =8
@@ -119,8 +118,7 @@ Disassembly of section .text:
                	fmul	d0, d0, d1
                	stur	d0, [x29, #-0x10]
                	ldur	x1, [x29, #-0x10]
-               	lsr	x2, x1, #52
-               	and	x2, x2, #0x7ff
+               	ubfx	x2, x1, #52, #11
                	and	x1, x1, #0xfffffffffffff
                	cbnz	w2, <addr>
                	cbnz	x1, <addr>
@@ -136,8 +134,7 @@ Disassembly of section .text:
                	fdiv	d0, d16, d17
                	stur	d0, [x29, #-0x10]
                	ldur	x1, [x29, #-0x10]
-               	lsr	x2, x1, #52
-               	and	x2, x2, #0x7ff
+               	ubfx	x2, x1, #52, #11
                	and	x1, x1, #0xfffffffffffff
                	cbnz	w2, <addr>
                	cbnz	x1, <addr>
@@ -151,8 +148,7 @@ Disassembly of section .text:
                	ldr	d0, [x16, #0x8]
                	stur	d0, [x29, #-0x10]
                	ldur	x0, [x29, #-0x10]
-               	lsr	x1, x0, #52
-               	and	x1, x1, #0x7ff
+               	ubfx	x1, x0, #52, #11
                	and	x0, x0, #0xfffffffffffff
                	cbnz	w1, <addr>
                	cbnz	x0, <addr>

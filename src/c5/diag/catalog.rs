@@ -122,6 +122,9 @@ catalog! {
     2011, "implicit-int", ["C4431"], Error, Controllable,
         [DEFAULT], Live,
         "a declaration or type name with no type specifier, whose type defaults to `int`";
+    2012, "inline-asm", ["deprecated"], Warning, Controllable,
+        [DEFAULT], Live,
+        "an `asm` statement that lists the stack pointer as clobbered or writes it through an output, where GNU C requires it to hold its value";
     2020, "syntax", [], Error, Hard,
         [], Live,
         "a token the grammar does not admit at its position; the parser has no resynchronisation point";
@@ -173,6 +176,9 @@ catalog! {
     3012, "switch-bool", [], Warning, Controllable,
         [DEFAULT], Live,
         "a `switch` on a boolean value with a case label outside 0 and 1, or with a `default` beside labels covering both";
+    3013, "excess-initializers", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a string literal longer than the array, member or row it initializes, a terminator aside; the characters past the bound are dropped";
     3020, "invalid-operands", [], Error, Hard,
         [], Live,
         "an operator applied to operands its constraints reject, or a non-lvalue where an lvalue is required";
@@ -424,6 +430,7 @@ impl Code {
     pub const IGNORED_ASM_LABEL: Code = Code::new(2009);
     pub const SHADOWED_BINDING: Code = Code::new(2010);
     pub const IMPLICIT_INT: Code = Code::new(2011);
+    pub const INLINE_ASM: Code = Code::new(2012);
     pub const INT_CONVERSION: Code = Code::new(3001);
     pub const INCOMPATIBLE_STRUCT_TYPES: Code = Code::new(3002);
     pub const RETURN_TYPE: Code = Code::new(3003);
@@ -436,6 +443,7 @@ impl Code {
     pub const CONSTANT_CONVERSION: Code = Code::new(3010);
     pub const NESTED_QUALIFIERS: Code = Code::new(3011);
     pub const SWITCH_BOOL: Code = Code::new(3012);
+    pub const EXCESS_INITIALIZERS: Code = Code::new(3013);
     pub const LINK_PRAGMA_IGNORED: Code = Code::new(7008);
     pub const FREESTANDING_IMPORT: Code = Code::new(7010);
     pub const DWARF_OUTPUT: Code = Code::new(7011);

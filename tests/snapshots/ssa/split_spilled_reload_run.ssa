@@ -105,10 +105,10 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v94  Imm(0)                                           -> x12
     v95  BinopI { op=and, lhs=v88, rhs_imm=4294967295 }   -> x12
     v96  Binop { op=add, lhs=v8, rhs=v88 }                -> x12
-    v97  Binop { op=xor, lhs=v89, rhs=v96 }               -> x3
-    v98  Imm(0)                                           -> x12
-    v99  Imm(0)                                           -> x12
-    v100 BinopI { op=mul, lhs=v8, rhs_imm=3 }             -> x12
+    v97  Binop { op=xor, lhs=v89, rhs=v96 }               -> x12
+    v98  Imm(0)                                           -> x3
+    v99  Imm(0)                                           -> x3
+    v100 BinopI { op=mul, lhs=v8, rhs_imm=3 }             -> x3
     v101 Binop { op=add, lhs=v97, rhs=v100 }              -> x3
     v102 Imm(0)                                           -> x12
     v103 Imm(0)                                           -> x12
@@ -201,34 +201,34 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v181 Imm(0)                                           -> x0
     v182 Imm(0)                                           -> x0
     v183 Imm(0)                                           -> x0
-    v184 Binop { op=xor, lhs=v8, rhs=v13 }                -> x0
-    v185 Imm(0)                                           -> x1
-    v186 Binop { op=xor, lhs=v184, rhs=v18 }              -> x0
-    v187 Imm(0)                                           -> x1
-    v188 Binop { op=xor, lhs=v186, rhs=v23 }              -> x0
-    v189 Imm(0)                                           -> x1
-    v190 Binop { op=xor, lhs=v188, rhs=v28 }              -> x0
-    v191 Imm(0)                                           -> x1
-    v192 Binop { op=xor, lhs=v190, rhs=v33 }              -> x0
-    v193 Imm(0)                                           -> x1
-    v194 Binop { op=xor, lhs=v192, rhs=v38 }              -> x0
-    v195 Imm(0)                                           -> x1
-    v196 Binop { op=xor, lhs=v194, rhs=v43 }              -> x0
-    v197 Imm(0)                                           -> x1
-    v198 Binop { op=xor, lhs=v196, rhs=v47 }              -> x0
-    v199 Imm(0)                                           -> x1
-    v200 Binop { op=xor, lhs=v198, rhs=v51 }              -> x0
-    v201 Imm(0)                                           -> x1
-    v202 Binop { op=xor, lhs=v200, rhs=v55 }              -> x0
-    v203 Imm(0)                                           -> x1
-    v204 Binop { op=xor, lhs=v202, rhs=v59 }              -> x0
-    v205 Imm(0)                                           -> x1
-    v206 Binop { op=xor, lhs=v204, rhs=v63 }              -> x0
-    v207 Imm(0)                                           -> x1
-    v208 Binop { op=xor, lhs=v206, rhs=v67 }              -> x0
-    v209 Imm(0)                                           -> x1
-    v210 Binop { op=xor, lhs=v208, rhs=v71 }              -> x0
-    v211 Imm(0)                                           -> x1
+    v184 Binop { op=xor, lhs=v8, rhs=v13 }                -> x1
+    v185 Imm(0)                                           -> x0
+    v186 Binop { op=xor, lhs=v184, rhs=v18 }              -> x1
+    v187 Imm(0)                                           -> x0
+    v188 Binop { op=xor, lhs=v186, rhs=v23 }              -> x1
+    v189 Imm(0)                                           -> x0
+    v190 Binop { op=xor, lhs=v188, rhs=v28 }              -> x1
+    v191 Imm(0)                                           -> x0
+    v192 Binop { op=xor, lhs=v190, rhs=v33 }              -> x1
+    v193 Imm(0)                                           -> x0
+    v194 Binop { op=xor, lhs=v192, rhs=v38 }              -> x1
+    v195 Imm(0)                                           -> x0
+    v196 Binop { op=xor, lhs=v194, rhs=v43 }              -> x1
+    v197 Imm(0)                                           -> x0
+    v198 Binop { op=xor, lhs=v196, rhs=v47 }              -> x1
+    v199 Imm(0)                                           -> x0
+    v200 Binop { op=xor, lhs=v198, rhs=v51 }              -> x1
+    v201 Imm(0)                                           -> x0
+    v202 Binop { op=xor, lhs=v200, rhs=v55 }              -> x1
+    v203 Imm(0)                                           -> x0
+    v204 Binop { op=xor, lhs=v202, rhs=v59 }              -> x1
+    v205 Imm(0)                                           -> x0
+    v206 Binop { op=xor, lhs=v204, rhs=v63 }              -> x1
+    v207 Imm(0)                                           -> x0
+    v208 Binop { op=xor, lhs=v206, rhs=v67 }              -> x1
+    v209 Imm(0)                                           -> x0
+    v210 Binop { op=xor, lhs=v208, rhs=v71 }              -> x1
+    v211 Imm(0)                                           -> x0
     v212 Binop { op=xor, lhs=v210, rhs=v75 }              -> x0
     v213 Binop { op=xor, lhs=v89, rhs=v212 }              -> x0
     terminator Return(v213)   (exit_acc=v213)
@@ -467,11 +467,11 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v215 Imm(0)                                           -> x2
     v216 Imm(0)                                           -> x2
     v217 BinopI { op=mul, lhs=v23, rhs_imm=3 }            -> x2
-    v218 Binop { op=add, lhs=v214, rhs=v217 }             -> x1
-    v219 Imm(0)                                           -> x2
-    v220 Imm(0)                                           -> x2
-    v221 BinopI { op=shru, lhs=v218, rhs_imm=3 }          -> x2
-    v222 Binop { op=xor, lhs=v23, rhs=v221 }              -> x6
+    v218 Binop { op=add, lhs=v214, rhs=v217 }             -> x2
+    v219 Imm(0)                                           -> x1
+    v220 Imm(0)                                           -> x1
+    v221 BinopI { op=shru, lhs=v218, rhs_imm=3 }          -> x1
+    v222 Binop { op=xor, lhs=v23, rhs=v221 }              -> x1
     v223 Binop { op=sub, lhs=v218, rhs=v222 }             -> x2
     v224 Imm(0)                                           -> x1
     terminator Jmp(b5)   (exit_acc=v223)

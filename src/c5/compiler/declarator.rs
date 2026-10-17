@@ -41,8 +41,12 @@ pub(super) enum Derivation {
     Array(i64),
     /// A variable-length array whose bound this expression computes.
     RuntimeArray(super::super::ast::ExprId),
-    /// A function with its parameters, when captured.
-    Function(Option<super::function::ParsedParams>),
+    /// A function with its parameters, when captured, and the calling
+    /// convention the attributes of the group before it name.
+    Function(
+        Option<super::function::ParsedParams>,
+        Option<crate::c5::codegen::CallConv>,
+    ),
 }
 
 /// An abstract declarator in a type name (C99 6.7.6): its derivations from
@@ -51,31 +55,6 @@ pub(super) enum Derivation {
 #[derive(Default)]
 pub(super) struct AbstractDecl {
     pub(super) derivations: alloc::vec::Vec<Derivation>,
-}
-
-impl AbstractDecl {
-    pub(super) fn pointer_levels(&self) -> i64 {
-        let pointers = self.derivations.iter();
-        pointers
-            .filter(|d| matches!(d, Derivation::Pointer(_)))
-            .count() as i64
-    }
-
-    /// The bounds of the array a pointer to an array (`T (*)[M1]...[Mn]`)
-    /// points to, or `None` for any other type.
-    pub(super) fn pointee_dims(&self) -> Option<alloc::vec::Vec<i64>> {
-        let [Derivation::Pointer(_), rest @ ..] = self.derivations.as_slice() else {
-            return None;
-        };
-        let bound = |d: &Derivation| match d {
-            Derivation::Array(n) => Some(*n),
-            _ => None,
-        };
-        rest.iter()
-            .map(bound)
-            .collect::<Option<_>>()
-            .filter(|b: &alloc::vec::Vec<i64>| !b.is_empty())
-    }
 }
 
 impl Compiler {
@@ -103,15 +82,41 @@ impl Compiler {
         // declaration with multiple declarators (`int *p, *q;`) keeps
         // its leading `*` for the caller's declarator loop.
         let proto_snap = self.lex.snapshot();
+        let attrs_snap = self.pending.attrs.clone();
         let base_fn = self.carriers_fn_type();
+        // Attributes may begin a declarator and describe its entity.
+        self.skip_attribute_specifiers()?;
         let mut ret_ptr_levels: i64 = 0;
         while self.lex.tk == Token::MulOp {
             ret_ptr_levels += 1;
             self.next()?;
         }
-        if self.lex.tk == Token::Id && self.lex.peek_after_whitespace(b'(') {
+        // C99 6.7.5p6: `(name)` declares `name`; a group's attributes name
+        // the convention of the signature after it, as at file scope.
+        let (mut groups, mut group_conv) = (0, None);
+        while self.lex.tk == '(' && !self.paren_opens_param_type_list() {
+            self.next()?;
+            groups += 1;
+            let named = self.skip_attributes_for_conv()?;
+            group_conv = self.add_conv(group_conv, named)?;
+        }
+        let named_here = self.lex.tk == Token::Id
+            && self
+                .lex
+                .peek_after_whitespace(if groups == 0 { b'(' } else { b')' });
+        if named_here {
             let id_idx = self.lex.curr_id_idx;
             self.next()?; // consume name
+            let mut closed = 0;
+            while closed < groups && self.lex.tk == ')' {
+                self.next()?;
+                closed += 1;
+            }
+            if closed < groups || self.lex.tk != '(' {
+                self.restore_lex(proto_snap);
+                self.pending.attrs = attrs_snap;
+                return Ok(None);
+            }
             self.next()?; // consume `(`
             // C99 6.7.6.3: a prototype's parameter names have no linkage
             // and no scope past the declaration. Parse them in no-bind
@@ -121,58 +126,35 @@ impl Compiler {
             let params = self.parse_function_params();
             self.pending.parsing_fn_ptr_proto = saved_proto;
             let params = params?;
-            // A type attribute trailing the prototype applies to its return
-            // type, so none is left pending for the next declaration.
+            // Attributes and a GNU asm-label rename may trail the prototype,
+            // as at file scope.
             self.skip_attribute_specifiers()?;
+            let label = if self.lex.tk == Token::Asm {
+                let label = self.parse_asm_register_suffix()?;
+                self.skip_attribute_specifiers()?;
+                Some(label)
+            } else {
+                None
+            };
+            // A type attribute among them applies to the return type.
             let ret = lbt + ret_ptr_levels * Ty::Ptr as i64;
             let ret = self.apply_function_declarator_attributes(ret)?;
-            let declared = super::redeclaration::Params::of(&params, false);
-            let spelled = super::redeclaration::Spelled {
-                ty: ret,
-                enum_tag: base.enum_tag,
-            };
-            let declared = super::redeclaration::DeclaredType::Function(spelled, declared);
-            self.declare_linked(id_idx, declared, self.lex.line)?;
-            // Bind only an as-yet-undeclared name; one already bound to a
-            // libc binding, a function, or a variable is the same entity.
-            let c = self.symbols[id_idx].class;
-            let known = c == Token::Sys as i64
-                || c == Token::Fun as i64
-                || c == Token::Glo as i64
-                || c == Token::Loc as i64;
-            if !known {
-                // The name has block scope (C99 6.2.1p4): save it for
-                // the scope-exit restore. The declared entity survives
-                // on the slot past the unbind for call resolution.
-                self.rebind_scoped(id_idx)?;
-                let sym = &mut self.symbols[id_idx];
-                sym.class = Token::Fun as i64;
-                sym.scoped_fn_decl = true;
-                sym.type_ = ret;
-                sym.incomplete_enum_tag = base.enum_tag;
-                sym.set_fn_params(params.fn_params());
+            let f = super::locals::BlockFunction {
+                ret: super::redeclaration::Spelled {
+                    ty: ret,
+                    enum_tag: base.enum_tag,
+                },
+                params,
                 // A function-pointer base is the result's function type.
-                sym.ret_fn = base_fn.map(|(f, d)| (alloc::boxed::Box::new(f), d + ret_ptr_levels));
-                sym.is_extern_decl = true;
-                sym.linkage = if is_static {
-                    crate::c5::symbol::Linkage::Internal
-                } else {
-                    crate::c5::symbol::Linkage::External
-                };
-            }
-            // C11 6.7.4: `noreturn` on any declaration marks the function.
-            if c != Token::Loc as i64 {
-                self.symbols[id_idx].is_noreturn |= self.pending_noreturn;
-            }
-            // A block-scope prototype takes the same GNU asm-label rename a
-            // file-scope one does; the declared entity has external linkage
-            // either way (C99 6.2.2p4).
-            if self.lex.tk == Token::Asm {
-                self.parse_declarator_asm_label(id_idx)?;
-            }
+                ret_fn: base_fn.map(|(f, d)| (alloc::boxed::Box::new(f), d + ret_ptr_levels)),
+                conv: self.add_conv(group_conv, self.pending.attrs.call_conv)?,
+                lineage: (0, 0),
+            };
+            self.bind_block_function_decl(id_idx, f, is_static, label)?;
             return Ok(Some(id_idx));
         }
         self.restore_lex(proto_snap);
+        self.pending.attrs = attrs_snap;
         Ok(None)
     }
 
@@ -182,20 +164,57 @@ impl Compiler {
     /// declarator (`T (name)` / `T (*name)`). A type-start (including a
     /// typedef-name) or an empty list marks the function-type form. The
     /// lexer snapshot keeps the peek from consuming the paren.
-    fn paren_opens_param_type_list(&mut self) -> bool {
+    pub(super) fn paren_opens_param_type_list(&mut self) -> bool {
         let snap = self.lex.snapshot();
         let mut ok = self.next().is_ok(); // past `(`
         // A parenthesized declarator may lead with calling-convention /
         // qualifier tokens (`(__stdcall *fp)`, `(__cdecl name)`), which also
         // start a type. Skip them; a `*` after them is a declarator, while a
         // type-start or `)` is a parameter-type list.
+        // An attribute is skipped whole; a type specifier makes a list.
+        let mut specifier = false;
         while ok && is_decl_modifier(self.lex.tk) {
+            let tk = self.lex.tk;
+            specifier |= tk == Token::IntMod
+                || tk == Token::Signed
+                || tk == Token::Unsigned
+                || tk == Token::Long
+                || tk == Token::Short;
+            let attribute = self.lex.tk == Token::Attribute;
             ok = self.next().is_ok();
+            if attribute && ok && self.lex.tk == '(' {
+                ok = self.next().is_ok() && self.skip_balanced_parens_after_open().is_ok();
+            }
         }
-        let is_param_list =
-            ok && self.lex.tk != Token::MulOp && (self.lex.tk == ')' || self.lex_is_type_start());
+        let is_param_list = ok
+            && (specifier
+                || (self.lex.tk != Token::MulOp
+                    && (self.lex.tk == ')' || self.lex_is_type_start())));
         self.restore_lex(snap);
         is_param_list
+    }
+
+    /// The calling convention the attributes at the cursor name, which the
+    /// declaration's own attributes do not take.
+    fn skip_attributes_for_conv(
+        &mut self,
+    ) -> Result<Option<crate::c5::codegen::CallConv>, C5Error> {
+        let outer = self.pending.attrs.call_conv.take();
+        self.skip_attribute_specifiers()?;
+        Ok(core::mem::replace(&mut self.pending.attrs.call_conv, outer))
+    }
+
+    /// Attributes in a declarator: at the declared entity's own level they
+    /// are the declarator's; inside a parenthesized group a calling
+    /// convention among them names the function type the signature after
+    /// the group spells (GNU attribute syntax), recorded on `group_conv`.
+    fn skip_declarator_attributes(&mut self, entity_level: bool) -> Result<(), C5Error> {
+        if entity_level {
+            self.skip_attribute_specifiers()?;
+        } else if let Some(conv) = self.skip_attributes_for_conv()? {
+            self.pending.group_conv = self.add_conv(self.pending.group_conv, Some(conv))?;
+        }
+        Ok(())
     }
 
     /// A declarator, abstract or not, begins with `*`, `(`, `[` or an
@@ -231,9 +250,18 @@ impl Compiler {
     fn parse_abstract_group(&mut self, capture_proto: bool) -> Result<AbstractDecl, C5Error> {
         // Each `*` and the qualifiers of that pointer (C99 6.7.5.1p1).
         let mut ptrs: alloc::vec::Vec<i64> = alloc::vec::Vec::new();
-        while self.lex.tk == Token::MulOp || self.lex.tk == Token::TypeQual {
+        // The convention the group's attributes name for the signature after it.
+        let mut conv = None;
+        loop {
+            if self.at_attribute_specifier() {
+                let named = self.skip_attributes_for_conv()?;
+                conv = self.add_conv(conv, named)?;
+                continue;
+            }
             if self.lex.tk == Token::MulOp {
                 ptrs.push(0);
+            } else if self.lex.tk != Token::TypeQual {
+                break;
             } else if let Some(quals) = ptrs.last_mut() {
                 *quals |= self.lex_qualifier_bits();
             } else {
@@ -247,7 +275,7 @@ impl Compiler {
         } else {
             AbstractDecl::default()
         };
-        self.parse_abstract_suffixes(capture_proto, &mut d)?;
+        self.parse_abstract_suffixes(capture_proto, &mut d, None)?;
         if self.lex.tk != ')' {
             return Err(self.compile_err(Code::SYNTAX, "close paren expected in type name"));
         }
@@ -255,24 +283,26 @@ impl Compiler {
         // The rightmost `*` is the derivation nearest the omitted identifier.
         d.derivations
             .extend(ptrs.into_iter().rev().map(Derivation::Pointer));
-        self.parse_abstract_suffixes(capture_proto, &mut d)?;
+        self.parse_abstract_suffixes(capture_proto, &mut d, conv)?;
         Ok(d)
     }
 
-    /// The function and array suffixes of an abstract declarator. With
-    /// `capture_proto` a parameter list is parsed, else skipped. An
-    /// unspecified bound records `-1` (C99 6.7.5.2p4).
+    /// The function and array suffixes of an abstract declarator, the first
+    /// signature taking `conv`. With `capture_proto` a parameter list is
+    /// parsed, else skipped. An unspecified bound records `-1` (C99
+    /// 6.7.5.2p4).
     fn parse_abstract_suffixes(
         &mut self,
         capture_proto: bool,
         d: &mut AbstractDecl,
+        mut conv: Option<crate::c5::codegen::CallConv>,
     ) -> Result<(), C5Error> {
         loop {
             let step = if self.lex.tk == '(' {
                 self.next()?;
                 if !capture_proto {
                     self.skip_balanced_parens_after_open()?;
-                    Derivation::Function(None)
+                    Derivation::Function(None, conv.take())
                 } else {
                     // C99 6.2.1p4: the parameter names of a function
                     // declarator that is not part of a function definition
@@ -282,7 +312,7 @@ impl Compiler {
                     self.pending.parsing_fn_ptr_proto = true;
                     let pp = self.parse_function_params();
                     self.pending.parsing_fn_ptr_proto = saved;
-                    Derivation::Function(Some(pp?))
+                    Derivation::Function(Some(pp?), conv.take())
                 }
             } else if self.lex.tk == Token::Brak {
                 self.next()?;
@@ -367,6 +397,7 @@ impl Compiler {
             self.pending.fn_own_sig = false;
             self.pending.fn_decl_base = self.carriers_fn_type();
             self.pending.base_array_taken = false;
+            self.pending.group_conv = None;
         }
         let mut ty = base;
         // A calling-convention decoration may precede the declarator
@@ -381,7 +412,7 @@ impl Compiler {
                 self.reject_leading_qualifier()?;
                 self.next()?;
             } else if self.at_attribute_specifier() {
-                self.skip_attribute_specifiers()?;
+                self.skip_declarator_attributes(entity_start)?;
             } else {
                 break;
             }
@@ -410,7 +441,7 @@ impl Compiler {
                     ty = apply_qual_bits(ty, self.lex_qualifier_bits());
                     self.next()?;
                 } else if self.at_attribute_specifier() {
-                    self.skip_attribute_specifiers()?;
+                    self.skip_declarator_attributes(entity_start)?;
                 } else {
                     break;
                 }
@@ -530,8 +561,10 @@ impl Compiler {
             core::mem::take(&mut self.pending.fn_ptr_group_resolved);
             self.pending.declarator_in_group = true;
             self.pending.declarator_path_levels = path_levels;
+            let frame_conv = self.pending.group_conv.take();
             let (idx, mut inner_ty, inner_array_size, inner_ptr_levels) =
                 self.parse_declarator_levels(ty)?;
+            let mut inner_conv = core::mem::replace(&mut self.pending.group_conv, frame_conv);
             let inner_resolved = core::mem::take(&mut self.pending.fn_ptr_group_resolved);
             // Pending count right after the inner declarator: a fn-pointer
             // typedef base seeded it and the inner leading `*`s added to
@@ -589,6 +622,18 @@ impl Compiler {
             // definition.
             let redundant = !own_sig && inner_ptr_levels == 0 && idx != usize::MAX;
             if redundant && !param_ctx && self.lex.tk == '(' {
+                // The group's convention names the signature the caller parses.
+                let outer = if entity_start {
+                    self.pending.attrs.call_conv
+                } else {
+                    self.pending.group_conv
+                };
+                let conv = self.add_conv(outer, inner_conv)?;
+                if entity_start {
+                    self.pending.attrs.call_conv = conv;
+                } else {
+                    self.pending.group_conv = conv;
+                }
                 return Ok((idx, inner_ty, inner_array_size, own_levels + group_levels));
             }
             if redundant && self.lex.tk == Token::Brak {
@@ -664,7 +709,13 @@ impl Compiler {
                         for &pidx in &pp.indices {
                             Self::restore_shadowed_symbol(&mut self.symbols[pidx]);
                         }
-                        self.pending.fn_ptr_params = Some(pp.fn_params());
+                        let conv = inner_conv.take();
+                        self.pending.fn_ptr_type = Some(crate::c5::symbol::FnType {
+                            params: pp.fn_params(),
+                            conv: conv.unwrap_or_default(),
+                            conv_named: conv.is_some(),
+                            ret: None,
+                        });
                         self.pending.fn_own_sig = true;
                         self.pending.fn_chain_levels = inner_ptr_levels;
                         self.pending.fn_chain_array_levels = 0;
@@ -681,7 +732,14 @@ impl Compiler {
                         let depth = inner_ptr_levels - self.pending.fn_chain_levels
                             + core::mem::take(&mut self.pending.fn_chain_array_levels);
                         self.pending.fn_chain_levels = inner_ptr_levels;
-                        self.pending.fn_ret_chain.push((pp.fn_params(), depth));
+                        let conv = inner_conv.take();
+                        let f = crate::c5::symbol::FnType {
+                            params: pp.fn_params(),
+                            conv: conv.unwrap_or_default(),
+                            conv_named: conv.is_some(),
+                            ret: None,
+                        };
+                        self.pending.fn_ret_chain.push((f, depth));
                     }
                     self.pending.fn_base_levels = path_levels;
                     after_sig = true;
@@ -820,7 +878,10 @@ impl Compiler {
             for &pidx in &pp.indices {
                 Self::restore_shadowed_symbol(&mut self.symbols[pidx]);
             }
-            self.pending.fn_ptr_params = Some(pp.fn_params());
+            self.pending.fn_ptr_type = Some(crate::c5::symbol::FnType {
+                params: pp.fn_params(),
+                ..Default::default()
+            });
             self.pending.fn_ptr_indirection = Some(1);
             self.pending.fn_own_sig = true;
             return Ok((idx, ty + Ty::Ptr as i64, 0, own_levels + 1));

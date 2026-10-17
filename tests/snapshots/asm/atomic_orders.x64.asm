@@ -3346,9 +3346,8 @@ Disassembly of section .text:
                	negq	%rcx
                	lock
                	xaddb	%cl, (%rax)
-               	movq	%rcx, %rax
-               	andq	$0xff, %rax
-               	cmpl	$0xfa, %eax
+               	andq	$0xff, %rcx
+               	cmpl	$0xfa, %ecx
                	jne	<addr>
                	leaq	<rip>, %rax      # <addr>
                	movzbq	(%rax), %rax
@@ -3439,9 +3438,8 @@ Disassembly of section .text:
                	negq	%rcx
                	lock
                	xaddb	%cl, (%rax)
-               	movq	%rcx, %rax
-               	andq	$0xff, %rax
-               	subq	$0x3, %rax
+               	andq	$0xff, %rcx
+               	leaq	-0x3(%rcx), %rax
                	andq	$0xff, %rax
                	cmpl	$0xf7, %eax
                	jne	<addr>
@@ -4287,9 +4285,8 @@ Disassembly of section .text:
                	negq	%rcx
                	lock
                	xaddw	%cx, (%rax)
-               	movq	%rcx, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	cmpl	$0xfde8, %eax           # imm = 0xFDE8
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
+               	cmpl	$0xfde8, %ecx           # imm = 0xFDE8
                	jne	<addr>
                	leaq	<rip>, %rax      # <addr>
                	movzwq	(%rax), %rax
@@ -4379,9 +4376,8 @@ Disassembly of section .text:
                	negq	%rcx
                	lock
                	xaddw	%cx, (%rax)
-               	movq	%rcx, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	subq	$0x3, %rax
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
+               	leaq	-0x3(%rcx), %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	cmpl	$0xfde5, %eax           # imm = 0xFDE5
                	jne	<addr>

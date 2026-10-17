@@ -406,3 +406,52 @@ fn no_fp_scratch_left_is_a_diagnostic() {
     );
     text_under(int_only, x64, reserve(x64, &names)).unwrap_or_else(|e| panic!("{e}"));
 }
+
+/// An AArch64 sequence that saves and restores the registers it borrows
+/// takes them from x0..x15 outside its operands and the reservations, and
+/// is refused by name when fewer remain: a binary128 load borrows seven
+/// beside its address in x0.
+#[test]
+fn too_few_registers_to_borrow_is_a_diagnostic() {
+    let src = "double ld_load(long double *p) { return (double)p[0]; }\n\
+               int main(void) { return 0; }\n";
+    let a64 = Target::LinuxAarch64;
+    let from = |first: u8| -> Vec<String> { (first..=15).map(|n| format!("x{n}")).collect() };
+    let eight = from(8);
+    let names: Vec<&str> = eight.iter().map(String::as_str).collect();
+    text_under(src, a64, reserve(a64, &names)).unwrap_or_else(|e| panic!("{e}"));
+    let nine = from(7);
+    let names: Vec<&str> = nine.iter().map(String::as_str).collect();
+    let err = text_under(src, a64, reserve(a64, &names)).expect_err("six left for seven");
+    assert!(
+        err.contains("needs 7 of x0..x15") && err.contains("ld_load"),
+        "{err}"
+    );
+}
+
+/// A realigned frame whose sp moves addresses its over-aligned objects
+/// through a callee-saved base register (C11 6.7.5): with every candidate
+/// reserved the function is refused with the cause, and the last one left
+/// is taken.
+#[test]
+fn a_realigned_moving_frame_needs_a_free_base_register() {
+    let src = "int use(void *, void *);\n\
+               int f(int n) { _Alignas(64) char b[64]; return use(b, __builtin_alloca(n)); }\n\
+               int main(void) { return 0; }\n";
+    let x64 = ["rbx", "r12", "r13", "r14", "r15"];
+    let a64 = [
+        "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28",
+    ];
+    for (target, names) in [
+        (Target::LinuxX64, &x64[..]),
+        (Target::LinuxAarch64, &a64[..]),
+    ] {
+        let err = text_under(src, target, reserve(target, names)).expect_err("no base register");
+        assert!(
+            err.contains("no callee-saved register is left"),
+            "{target:?}: {err}"
+        );
+        let all_but_last = reserve(target, &names[..names.len() - 1]);
+        text_under(src, target, all_but_last).unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    }
+}

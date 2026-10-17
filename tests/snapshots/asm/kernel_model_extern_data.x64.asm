@@ -33,9 +33,8 @@ Disassembly of section .text:
                	retq
 
 <char_class>:
-               	movq	%rdi, %rax
-               	andq	$0xff, %rax
-               	movzbq	(,%rax), %rax
+               	andq	$0xff, %rdi
+               	movzbq	(,%rdi), %rax
 		R_X86_64_32S	class_tab
                	retq
 

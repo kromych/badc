@@ -17,8 +17,7 @@ Disassembly of section .text:
                	sxtw	x2, w2
                	add	x3, x2, #0x7
                	sxtw	x3, w3
-               	lsr	x4, x3, #61
-               	add	x3, x3, x4
+               	add	x3, x3, x3, lsr #61
                	asr	x3, x3, #3
                	lsr	x4, x2, #61
                	add	x2, x2, x4

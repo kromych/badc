@@ -25,14 +25,14 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
     v31  BinopI { op=xor, lhs=v22, rhs_imm=-1 }           -> x9
     v32  BinopI { op=and, lhs=v31, rhs_imm=4294967295 }   -> x3
     v33  BinopI { op=and, lhs=v20, rhs_imm=4294967295 }   -> x3
-    v34  Binop { op=and, lhs=v31, rhs=v20 }               -> x6
-    v35  Binop { op=xor, lhs=v30, rhs=v34 }               -> x6
-    v36  BinopI { op=and, lhs=v35, rhs_imm=4294967295 }   -> x8
-    v37  BinopI { op=and, lhs=v35, rhs_imm=4294967295 }   -> x8
-    v38  Extend { value=v19, kind=I32 }                   -> x8
-    v39  BinopI { op=shl, lhs=v19, rhs_imm=2 }            -> x8
-    v40  Binop { op=add, lhs=v1, rhs=v39 }                -> x8
-    v41  LoadIndexed { base=v1, index=v19, scale=4, kind=U32 } -> x8
+    v34  Binop { op=and, lhs=v31, rhs=v20 }               -> x9
+    v35  Binop { op=xor, lhs=v30, rhs=v34 }               -> x8
+    v36  BinopI { op=and, lhs=v35, rhs_imm=4294967295 }   -> x6
+    v37  BinopI { op=and, lhs=v35, rhs_imm=4294967295 }   -> x6
+    v38  Extend { value=v19, kind=I32 }                   -> x6
+    v39  BinopI { op=shl, lhs=v19, rhs_imm=2 }            -> x6
+    v40  Binop { op=add, lhs=v1, rhs=v39 }                -> x6
+    v41  LoadIndexed { base=v1, index=v19, scale=4, kind=U32 } -> x6
     v42  Binop { op=add, lhs=v35, rhs=v41 }               -> x6
     v43  BinopI { op=and, lhs=v42, rhs_imm=4294967295 }   -> x8
     v44  BinopI { op=and, lhs=v21, rhs_imm=4294967295 }   -> x8
@@ -53,11 +53,11 @@ fn ent_pc=2 n_params=0 variadic=false locals=4
   block 3  start_pc=0
     v50  BinopI { op=and, lhs=v22, rhs_imm=4294967295 }   -> x0
     v51  BinopI { op=and, lhs=v21, rhs_imm=4294967295 }   -> x0
-    v52  Binop { op=xor, lhs=v22, rhs=v21 }               -> x0
-    v53  BinopI { op=and, lhs=v20, rhs_imm=4294967295 }   -> x1
-    v54  Binop { op=xor, lhs=v52, rhs=v20 }               -> x0
-    v55  BinopI { op=and, lhs=v54, rhs_imm=4294967295 }   -> x1
-    v56  BinopI { op=and, lhs=v54, rhs_imm=4294967295 }   -> x1
+    v52  Binop { op=xor, lhs=v22, rhs=v21 }               -> x1
+    v53  BinopI { op=and, lhs=v20, rhs_imm=4294967295 }   -> x0
+    v54  Binop { op=xor, lhs=v52, rhs=v20 }               -> x1
+    v55  BinopI { op=and, lhs=v54, rhs_imm=4294967295 }   -> x0
+    v56  BinopI { op=and, lhs=v54, rhs_imm=4294967295 }   -> x0
     v57  BinopI { op=eq, lhs=v54, rhs_imm=4285530095 }    -> x0
     terminator Bz { cond=v57, target=b6, fall=b4 }   (exit_acc=v57)
   block 4  start_pc=0

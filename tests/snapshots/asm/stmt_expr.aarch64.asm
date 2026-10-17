@@ -35,8 +35,7 @@ Disassembly of section .text:
                	mov	x3, x2
                	add	x2, x2, #0x1
                	str	w2, [x0]
-               	lsl	x2, x2, #1
-               	add	x2, x3, x2
+               	add	x2, x3, x2, lsl #1
                	cmp	w2, #0x8
                	b.ne	<addr>
                	ldrsw	x2, [x0]

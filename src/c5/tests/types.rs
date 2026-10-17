@@ -2938,6 +2938,71 @@ fn an_incompatible_function_pointer_conversion_is_rejected() {
     }
 }
 
+/// gcc and clang take the calling convention as part of a function type:
+/// a pointer to a function on one converts to a pointer to one on another
+/// only by a cast, and `__builtin_types_compatible_p` and `_Generic` tell
+/// the two apart. Naming the target's own convention changes no type.
+#[test]
+fn function_types_on_different_conventions_are_incompatible() {
+    use crate::{Compiler, Target};
+    for target in [Target::LinuxX64, Target::WindowsX64] {
+        let (f, n) = match target {
+            Target::WindowsX64 => ("sysv_abi", "ms_abi"),
+            _ => ("ms_abi", "sysv_abi"),
+        };
+        let src = |body: &str| {
+            format!(
+                "#define F __attribute__(({f}))\n#define N __attribute__(({n}))\n\
+                 F int ff(int);\nint pf(int);\nint main(void) {{ {body} return 0; }}\n"
+            )
+        };
+        let foreign = format!("int (__attribute__(({f})) *)(int)");
+        for (body, text) in [
+            (
+                "int (*p)(int) = ff;",
+                format!("declared=`int (*)(int)`, init=`{foreign}`"),
+            ),
+            (
+                "int (F *p)(int) = pf;",
+                format!("declared=`{foreign}`, init=`int (*)(int)`"),
+            ),
+            (
+                "int (*p)(int); p = &ff;",
+                format!("lhs=`int (*)(int)`, rhs=`{foreign}`"),
+            ),
+            (
+                "static int (*q)(int) = (int (F *)(int))0;",
+                format!("declared=`int (*)(int)`, init=`{foreign}`"),
+            ),
+            (
+                "static int (*q)(int) = (int (F *)(int))pf;",
+                format!("declared=`int (*)(int)`, init=`{foreign}`"),
+            ),
+            (
+                "static int (*hp)(int); static F int (**pp)(int) = &hp;",
+                format!("declared=`int (__attribute__(({f})) **)(int)`, init=`int (**)(int)`"),
+            ),
+        ] {
+            let err = Compiler::with_target(src(body), target)
+                .compile()
+                .map(|_| ());
+            let err = err.expect_err(body).to_string();
+            assert!(err.contains(&text), "{target:?} {body}: {err}");
+        }
+        for body in [
+            "int (F *p)(int) = ff; int (N *q)(int) = pf; int (*r)(int) = (int (*)(int))ff;",
+            "void *v = (void *)ff; int (*q)(int) = v;",
+            "static int (F *q)(int) = (int (F *)(int))0; static int (*r)(int) = (int (N *)(int))pf;",
+            "_Static_assert(!__builtin_types_compatible_p(int (F *)(int), int (*)(int)), \"\");",
+            "_Static_assert(__builtin_types_compatible_p(int (N *)(int), int (*)(int)), \"\");",
+            "_Static_assert(_Generic(ff, int (*)(int): 0, default: 1), \"\");",
+        ] {
+            let compiled = Compiler::with_target(src(body), target).compile();
+            assert!(compiled.is_ok(), "{target:?} {body}: {:?}", compiled.err());
+        }
+    }
+}
+
 /// C99 6.3.2.2p1: a `void` expression has no value. Every context that
 /// reads one rejects it with the same diagnostic: an argument with or
 /// without a parameter type, an initializer, an assignment, a returned
@@ -3217,6 +3282,63 @@ fn an_operand_inside_its_c99_category_is_accepted() {
         let src = format!("{body}\nint main(void) {{ return 0; }}\n");
         Compiler::new(src.clone()).compile().expect(&src);
     }
+}
+
+/// C99 6.5.4p2: a cast names `void` or a scalar type, at block and file scope.
+#[test]
+fn a_cast_to_an_array_or_function_type_is_rejected() {
+    use crate::Compiler;
+    let array = "cast specifies array type [B3020]";
+    let function = "cast specifies function type [B3020]";
+    let decls = "typedef int (*FP)(void);\ntypedef int A[2];\nint f(void);\n";
+    for (body, text) in [
+        ("int t(void) { void *v = (FP[2])0; return v != 0; }", array),
+        ("int t(void) { void *v = (A)0; return v != 0; }", array),
+        ("unsigned long t(void) { return sizeof((int[2])0); }", array),
+        (
+            "int t(int n) { void *v = (int[n])0; return v != 0; }",
+            array,
+        ),
+        ("long t(void) { return (long)(int (void))f; }", function),
+        ("void *v = (FP[2])0;", array),
+        ("void *v = (A)0;", array),
+        ("long x = (long)(int[2])0;", array),
+        ("int n = sizeof((FP[2])0);", array),
+        ("long y = (long)(int (void))f;", function),
+        ("void *w = (int (void))f;", function),
+    ] {
+        let src = format!("{decls}{body}\nint main(void) {{ return 0; }}\n");
+        let err = Compiler::new(src.clone()).compile().expect_err(&src);
+        assert!(err.to_string().contains(text), "{src}{err}");
+    }
+    for body in [
+        "int t(void) { FP *p = (FP[2]){f, 0}; int *q = (A){1, 2}; return q[1] + (p[1] == 0); }",
+        "FP *p = (FP[2]){f, 0};\nint *q = (A){1, 2};",
+    ] {
+        let src = format!("{decls}{body}\nint main(void) {{ return 0; }}\n");
+        Compiler::new(src.clone()).compile().expect(&src);
+    }
+}
+
+/// C99 6.3.2.3p3, 6.5.15p6: a null pointer constant is valued in its operands' types.
+#[test]
+fn a_null_pointer_constant_is_valued_in_its_operands_types() {
+    use crate::Compiler;
+    let src = "extern int *ip;\n\
+               #define TYPE_OF(e) __typeof__(1 ? ip : (void *)(e))\n\
+               #define IS(t, e, n) _Static_assert(__builtin_types_compatible_p(TYPE_OF(e), t), n);\n\
+               IS(void *, -2 < 0xffffffffu, \"1\")\n\
+               IS(int *, -4 / 2u - 2147483646u, \"2\")\n\
+               IS(int *, -2 < 1u, \"3\")\n\
+               IS(int *, (unsigned char)256, \"4\")\n\
+               IS(void *, (long long)(unsigned)-1 + 1, \"5\")\n\
+               IS(void *, (char *)0, \"6\")\n\
+               IS(int *, 0, \"7\")\n\
+               _Static_assert(__builtin_types_compatible_p(__typeof__(1 ? (int *)0 : (void *)0), int *), \"8\");\n\
+               int main(void) { return 0; }\n";
+    Compiler::new(src.to_string())
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
 }
 
 #[test]
@@ -5274,9 +5396,18 @@ fn a_qualifier_on_a_pointer_to_a_function_type_qualifies_the_pointer() {
     let warnings: alloc::vec::Vec<String> =
         program.warnings.iter().map(|w| w.to_string()).collect();
     for (line, text) in [
-        (7, "(declared=double (**)(double), init=double* const *)"),
-        (8, "(declared=double (**)(double), init=double* const *)"),
-        (10, "(declared=int (**)(int, int), init=int* const *)"),
+        (
+            7,
+            "(declared=`double (**)(double)`, init=`double (* const *)(double)`)",
+        ),
+        (
+            8,
+            "(declared=`double (**)(double)`, init=`double (* const *)(double)`)",
+        ),
+        (
+            10,
+            "(declared=`int (**)(int, int)`, init=`int (* const *)(int, int)`)",
+        ),
         (
             11,
             "(declared=`double (**)(double)`, init=`double (* const *)(double)`)",

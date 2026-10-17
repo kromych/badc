@@ -10,11 +10,11 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Load { addr=v3, disp=0, kind=I64 }               -> x1
-    v8   Binop { op=sub, lhs=v1, rhs=v7 }                 -> x0
-    v9   Imm(4)                                           -> x1
-    v10  BinopI { op=shr, lhs=v8, rhs_imm=63 }            -> x1
-    v11  BinopI { op=shru, lhs=v10, rhs_imm=62 }          -> x1
+    v7   Load { addr=v3, disp=0, kind=I64 }               -> x0
+    v8   Binop { op=sub, lhs=v1, rhs=v7 }                 -> x7
+    v9   Imm(4)                                           -> x0
+    v10  BinopI { op=shr, lhs=v8, rhs_imm=63 }            -> x0
+    v11  BinopI { op=shru, lhs=v10, rhs_imm=62 }          -> x0
     v12  Binop { op=add, lhs=v8, rhs=v11 }                -> x0
     v13  BinopI { op=shr, lhs=v12, rhs_imm=2 }            -> x0
     v14  BinopI { op=sub, lhs=v13, rhs_imm=1 }            -> x0
@@ -31,10 +31,10 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Binop { op=sub, lhs=v1, rhs=v3 }                 -> x0
-    v8   Imm(4)                                           -> x1
-    v9   BinopI { op=shr, lhs=v7, rhs_imm=63 }            -> x1
-    v10  BinopI { op=shru, lhs=v9, rhs_imm=62 }           -> x1
+    v7   Binop { op=sub, lhs=v1, rhs=v3 }                 -> x7
+    v8   Imm(4)                                           -> x0
+    v9   BinopI { op=shr, lhs=v7, rhs_imm=63 }            -> x0
+    v10  BinopI { op=shru, lhs=v9, rhs_imm=62 }           -> x0
     v11  Binop { op=add, lhs=v7, rhs=v10 }                -> x0
     v12  BinopI { op=shr, lhs=v11, rhs_imm=2 }            -> x0
     terminator Return(v12)   (exit_acc=v12)
@@ -64,10 +64,10 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   Binop { op=sub, lhs=v1, rhs=v3 }                 -> x0
-    v8   Imm(8)                                           -> x1
-    v9   BinopI { op=shr, lhs=v7, rhs_imm=63 }            -> x1
-    v10  BinopI { op=shru, lhs=v9, rhs_imm=61 }           -> x1
+    v7   Binop { op=sub, lhs=v1, rhs=v3 }                 -> x7
+    v8   Imm(8)                                           -> x0
+    v9   BinopI { op=shr, lhs=v7, rhs_imm=63 }            -> x0
+    v10  BinopI { op=shru, lhs=v9, rhs_imm=61 }           -> x0
     v11  Binop { op=add, lhs=v7, rhs=v10 }                -> x0
     v12  BinopI { op=shr, lhs=v11, rhs_imm=3 }            -> x0
     terminator Return(v12)   (exit_acc=v12)
@@ -83,7 +83,7 @@ fn ent_pc=4 n_params=2 variadic=false locals=0
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
-    v7   BinopI { op=shl, lhs=v3, rhs_imm=2 }             -> x1
+    v7   BinopI { op=shl, lhs=v3, rhs_imm=2 }             -> x6
     v8   Binop { op=sub, lhs=v1, rhs=v7 }                 -> x0
     terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=5 ---

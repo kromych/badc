@@ -35,9 +35,8 @@ Disassembly of section .text:
                	rdtsc
                	movq	%rax, -0x10(%rbp)
                	movq	%rdx, -0x8(%rbp)
-               	movq	%rdx, %rcx
-               	shlq	$0x20, %rcx
-               	orq	%rcx, %rax
+               	shlq	$0x20, %rdx
+               	orq	%rdx, %rax
                	movq	%rax, (%rdi)
                	movq	-0x10(%rbp), %rax
                	movq	%rax, %rcx
@@ -55,10 +54,9 @@ Disassembly of section .text:
 
 <tick_int_halves>:
                	rdtsc
-               	movl	%edx, %ecx
-               	shlq	$0x20, %rcx
+               	shlq	$0x20, %rdx
                	movl	%eax, %eax
-               	orq	%rcx, %rax
+               	orq	%rdx, %rax
                	retq
 
 <long_output_fills_all_bytes>:

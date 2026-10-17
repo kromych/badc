@@ -198,9 +198,8 @@ Disassembly of section .text:
                	movl	$0x12, %eax
                	leave
                	retq
-               	movq	%rdx, %rax
-               	xorq	$0x63, %rax
-               	testl	%eax, %eax
+               	xorq	$0x63, %rdx
+               	testl	%edx, %edx
                	je	<addr>
                	movl	$0x13, %eax
                	leave
@@ -210,10 +209,9 @@ Disassembly of section .text:
                	movl	$0x64, %ecx
                	lock
                	xaddb	%cl, (%rax)
-               	movq	%rcx, %rax
-               	andq	$0xff, %rax
-               	xorq	$0xc8, %rax
-               	testl	%eax, %eax
+               	andq	$0xff, %rcx
+               	xorq	$0xc8, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x14, %eax
                	leave
@@ -229,10 +227,9 @@ Disassembly of section .text:
                	movl	$0x7530, %ecx           # imm = 0x7530
                	lock
                	xaddw	%cx, (%rax)
-               	movq	%rcx, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	xorq	$0x9c40, %rax           # imm = 0x9C40
-               	testl	%eax, %eax
+               	andq	$0xffff, %rcx           # imm = 0xFFFF
+               	xorq	$0x9c40, %rcx           # imm = 0x9C40
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x16, %eax
                	leave

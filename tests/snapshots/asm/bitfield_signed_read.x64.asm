@@ -51,7 +51,6 @@ Disassembly of section .text:
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	movq	%rax, %rcx
                	sarq	$0xc, %rcx
-               	andq	$0x3, %rcx
                	shlq	$0x3e, %rcx
                	sarq	$0x3e, %rcx
                	cmpl	$-0x1, %ecx

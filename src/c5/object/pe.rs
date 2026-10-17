@@ -18,6 +18,8 @@ use crate::c5::program::Program;
 
 const IMAGE_BASE: u64 = 0x1_4000_0000;
 const SECTION_ALIGNMENT: u32 = 0x1000;
+/// The allocation granularity an image loads at, which an RVA's alignment keeps.
+const MAX_SECTION_ALIGNMENT: u32 = 0x1_0000;
 const FILE_ALIGNMENT: u32 = 0x200;
 
 const IMAGE_FILE_MACHINE_AMD64: u16 = 0x8664;
@@ -107,6 +109,27 @@ enum NamedFamily {
     Bss,
 }
 
+/// A family's `len` bytes from `start` past its last named section, such as
+/// the linker's init/fini arrays, placed `at` into `.rdata` or `.data`.
+#[derive(Default, Clone, Copy)]
+struct Tail {
+    start: u32,
+    len: u32,
+    at: u32,
+}
+
+impl Tail {
+    /// Place the run at or past `cursor` on its residue modulo `align`.
+    fn place(&mut self, cursor: u32, align: u32) -> u32 {
+        if self.len == 0 {
+            self.at = cursor;
+            return cursor;
+        }
+        self.at = cursor + (self.start % align + align - cursor % align) % align;
+        self.at + self.len
+    }
+}
+
 /// A named section given a header of its own: it leaves its family's region
 /// and takes a SectionAlignment-aligned slot past `.data`.
 struct NamedOut<'a> {
@@ -171,14 +194,23 @@ struct DwarfPeSlot {
 /// byte is written.
 #[derive(Default)]
 struct PeLayout<'a> {
+    /// `SectionAlignment`, covering every section's strictest content.
+    section_align: u32,
+    data_align: u32,
     ro_len: u32,
     relro_total: u32,
     relro_size: u32,
     file_data_len: u32,
     ro_head: u32,
     relro_head_len: u32,
+    relro_base_in_rdata: u32,
     data_head_len: u32,
     bss_head: u32,
+    bss_base_in_data: u32,
+    ro_tail: Tail,
+    relro_tail: Tail,
+    data_tail: Tail,
+    bss_tail: Tail,
     /// What `.rdata` keeps of the two read-only families once their named
     /// runs move out.
     rdata_prefix_len: u32,
@@ -257,8 +289,8 @@ struct PeWriter<'a> {
     imports: Vec<(String, String)>,
     dlls: Vec<DllGroup>,
     /// The stub occupies a span rounded up to the alignment `build.text`'s
-    /// own input sections claim; the section starts at SECTION_ALIGNMENT,
-    /// so the span places `build.text[0]` on that alignment absolutely.
+    /// own input sections claim; SectionAlignment covers it, so the span
+    /// places `build.text[0]` on that alignment absolutely.
     text_prologue_len: u32,
     layout: PeLayout<'a>,
     text_bytes: Vec<u8>,
@@ -370,6 +402,20 @@ impl<'a> PeWriter<'a> {
             .unwrap_or(full)
     }
 
+    /// The bytes of family `f`, spanning `[base, end)`, past its named sections.
+    fn tail_of(&self, f: NamedFamily, base: u32, end: u32) -> Tail {
+        let start = (self.build.named_sections.iter())
+            .filter(|n| self.named_family(n) == f)
+            .map(|n| (n.offset + n.size) as u32)
+            .max()
+            .map_or(end, |e| e.min(end));
+        Tail {
+            start: start - base,
+            len: end - start,
+            at: 0,
+        }
+    }
+
     /// RVA of the code body, past the entry stub.
     fn text_body_rva(&self) -> u32 {
         self.layout.text_rva + self.text_prologue_len
@@ -382,7 +428,27 @@ impl<'a> PeWriter<'a> {
     /// `.pdata` and `.idata`.
     fn layout_code_sections(&mut self) -> Result<(), C5Error> {
         let (program, build) = (self.program, self.build);
+        let section_align = build
+            .named_sections
+            .iter()
+            .map(|n| n.align as usize)
+            .chain([
+                build.text_align,
+                crate::c5::layout::bss_image_align(build.data_align),
+            ])
+            .fold(SECTION_ALIGNMENT as usize, usize::max)
+            .next_power_of_two();
+        if section_align > MAX_SECTION_ALIGNMENT as usize {
+            return Err(C5Error::hard(
+                Code::LIMIT,
+                format!(
+                    "PE: section alignment {section_align} exceeds the {MAX_SECTION_ALIGNMENT} \
+                     bytes the loader places an image on"
+                ),
+            ));
+        }
         let l = &mut self.layout;
+        l.section_align = section_align as u32;
         l.ro_len = build.data_ro_len.min(build.data.len()) as u32;
         l.relro_total = build
             .data_relro_len
@@ -394,12 +460,26 @@ impl<'a> PeWriter<'a> {
         let relro_head_len = self.head_of(NamedFamily::RelRo, relro_total) - ro_len;
         let data_head_len = self.head_of(NamedFamily::Data, file_data_len) - relro_total;
         let bss_head = self.head_of(NamedFamily::Bss, build.bss_size as u32);
+        let mut ro_tail = self.tail_of(NamedFamily::RoData, 0, ro_len);
+        let mut relro_tail = self.tail_of(NamedFamily::RelRo, ro_len, relro_total);
+        let data_tail = self.tail_of(NamedFamily::Data, relro_total, file_data_len);
+        let bss_tail = self.tail_of(NamedFamily::Bss, 0, build.bss_size as u32);
         let l = &mut self.layout;
         l.ro_head = ro_head;
         l.relro_head_len = relro_head_len;
         l.data_head_len = data_head_len;
         l.bss_head = bss_head;
-        l.rdata_prefix_len = ro_head + relro_head_len;
+        // Each data region starts on the image's alignment, keeping residues.
+        l.data_align = crate::c5::layout::data_image_align(build.data_align) as u32;
+        let ro_end = ro_tail.place(ro_head, l.data_align);
+        l.relro_base_in_rdata = if relro_head_len > 0 {
+            round_up(ro_end, l.data_align)
+        } else {
+            ro_end
+        };
+        l.rdata_prefix_len = relro_tail.place(l.relro_base_in_rdata + relro_head_len, l.data_align);
+        (l.ro_tail, l.relro_tail, l.data_tail, l.bss_tail) =
+            (ro_tail, relro_tail, data_tail, bss_tail);
         l.jt_base_in_rdata = if build.rodata.bytes.is_empty() {
             l.rdata_prefix_len
         } else {
@@ -409,7 +489,8 @@ impl<'a> PeWriter<'a> {
         l.marker_base_in_rdata = round_up(l.jt_base_in_rdata + build.rodata.bytes.len() as u32, 8);
         l.rdata_size = l.marker_base_in_rdata + l.provenance.len() as u32;
         l.rdata_present = l.rdata_size > 0;
-        l.data_present = data_head_len > 0 || !build.tls_data.is_empty() || bss_head > 0;
+        l.data_present = data_head_len + data_tail.len + bss_head + bss_tail.len > 0
+            || !build.tls_data.is_empty();
         l.reloc_present = !build.tls_data.is_empty()
             || !build.data_relocs.is_empty()
             || !build.code_relocs.is_empty()
@@ -417,7 +498,7 @@ impl<'a> PeWriter<'a> {
             || !build.text_abs_relocs.is_empty();
         l.edata_present = !build.exports.is_empty() || !build.dynamic_exports.is_empty();
         l.dwarf_present = build.debug_info;
-        l.text_rva = SECTION_ALIGNMENT;
+        l.text_rva = l.section_align;
         let text_vmaddr = IMAGE_BASE + (l.text_rva + self.text_prologue_len) as u64;
         let raw = image::image_dwarf(program, build, self.target, text_vmaddr, None, None)?;
         l.dwarf_blobs = [
@@ -446,13 +527,13 @@ impl<'a> PeWriter<'a> {
             reloc: l.reloc_present,
             edata: l.edata_present,
             dwarf: dwarf_section_count,
-            named: build.named_sections.len(),
+            named: build.named_sections.iter().filter(|n| n.size > 0).count(),
         };
         l.headers_size = headers_raw_size(&l.plan) as u32;
         l.text_file_off = l.headers_size;
         l.text_size = self.text_prologue_len + build.text.len() as u32;
         l.text_raw_size = round_up(l.text_size, FILE_ALIGNMENT);
-        l.pdata_rva = round_up(l.text_rva + l.text_size, SECTION_ALIGNMENT);
+        l.pdata_rva = round_up(l.text_rva + l.text_size, l.section_align);
         l.pdata_file_off = l.text_file_off + l.text_raw_size;
         let pdata = build_pdata(
             self.machine,
@@ -465,7 +546,7 @@ impl<'a> PeWriter<'a> {
         );
         l.pdata_directory_size = pdata.directory_size;
         l.pdata_raw_size = round_up(pdata.bytes.len() as u32, FILE_ALIGNMENT);
-        l.idata_rva = round_up(l.pdata_rva + pdata.bytes.len() as u32, SECTION_ALIGNMENT);
+        l.idata_rva = round_up(l.pdata_rva + pdata.bytes.len() as u32, l.section_align);
         l.pdata_bytes = pdata.bytes;
         l.idata_file_off = l.pdata_file_off + l.pdata_raw_size;
         l.idata = plan_idata(&self.dlls, &self.imports, l.idata_rva);
@@ -475,24 +556,31 @@ impl<'a> PeWriter<'a> {
 
     /// `.rdata`, `.data` (the writable head, then under TLS the 4-byte
     /// `_tls_index` slot, the 40-byte `IMAGE_TLS_DIRECTORY64` and the TLS
-    /// template) and the named sections, each on its own RVA page past
-    /// `.data` since a PE section RVA is SectionAlignment-aligned and
-    /// cannot sit inside its family's range.
+    /// template, then the zero-fill tail) and the named sections, each on
+    /// its own RVA past `.data` since a PE section RVA is
+    /// SectionAlignment-aligned and cannot sit inside its family's range.
     fn layout_data_sections(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let l = &mut self.layout;
-        l.rdata_rva = round_up(l.idata_rva + l.idata.bytes.len() as u32, SECTION_ALIGNMENT);
+        l.rdata_rva = round_up(l.idata_rva + l.idata.bytes.len() as u32, l.section_align);
         l.rdata_file_off = l.idata_file_off + l.idata_raw_size;
         l.rdata_raw_size = if l.rdata_present {
             round_up(l.rdata_size, FILE_ALIGNMENT)
         } else {
             0
         };
-        l.tls = compute_tls_layout(build, l.data_head_len);
-        l.data_size = l.data_head_len + l.tls.tls_blob_size;
-        l.data_vsize = l.data_size + l.bss_head;
+        let user_data_end = l.data_tail.place(l.data_head_len, l.data_align);
+        l.tls = compute_tls_layout(build, user_data_end);
+        l.data_size = user_data_end + l.tls.tls_blob_size;
+        let bss_align = crate::c5::layout::bss_image_align(build.data_align) as u32;
+        l.bss_base_in_data = if l.bss_head + l.bss_tail.len > 0 {
+            round_up(l.data_size, bss_align)
+        } else {
+            l.data_size
+        };
+        l.data_vsize = (l.bss_tail).place(l.bss_base_in_data + l.bss_head, bss_align);
         l.data_rva = if l.rdata_present {
-            round_up(l.rdata_rva + l.rdata_size, SECTION_ALIGNMENT)
+            round_up(l.rdata_rva + l.rdata_size, l.section_align)
         } else {
             l.rdata_rva
         };
@@ -503,7 +591,7 @@ impl<'a> PeWriter<'a> {
             0
         };
         let mut rva = if l.data_present {
-            round_up(l.data_rva + l.data_vsize, SECTION_ALIGNMENT)
+            round_up(l.data_rva + l.data_vsize, l.section_align)
         } else {
             l.data_rva
         };
@@ -537,16 +625,21 @@ impl<'a> PeWriter<'a> {
                     file_off: if raw_size > 0 { file_off } else { 0 },
                     raw_size,
                 };
-                rva = round_up(rva + size.max(1), SECTION_ALIGNMENT);
+                // An empty section takes no header, as the loader maps the
+                // sections back to back; its bounds name where the next starts.
+                if size > 0 {
+                    rva = round_up(rva + size, l.section_align);
+                }
                 file_off += raw_size;
                 out
             })
             .collect();
         l.named_file_end =
             l.data_file_off + l.data_raw_size + named_out.iter().map(|n| n.raw_size).sum::<u32>();
-        l.named_rva_end = match named_out.last() {
-            Some(n) => round_up(n.rva + n.size.max(1), SECTION_ALIGNMENT),
-            None => l.data_rva + l.data_vsize,
+        l.named_rva_end = if named_out.is_empty() {
+            l.data_rva + l.data_vsize
+        } else {
+            rva
         };
         l.named_out = named_out;
         if let Some(md) = &build.merged_dwarf {
@@ -564,6 +657,12 @@ impl<'a> PeWriter<'a> {
             }
         }
         Ok(())
+    }
+
+    /// `S + A` for a target at data-stream offset `target` whose symbol `S`
+    /// sits at `anchor`: signed, since it may lie below the image base.
+    fn anchored_rva(&self, anchor: u64, target: u64) -> i64 {
+        i64::from(self.data_off_to_rva(anchor as u32)) + target.wrapping_sub(anchor) as i64
     }
 
     /// RVA of a data-stream offset: the named section covering it, else its
@@ -591,20 +690,34 @@ impl<'a> PeWriter<'a> {
     /// The data stream's family regions at their RVAs, each closed at its
     /// family's head: a group's extent is closed at both ends, so an offset
     /// at one group's end names that group, and the padding a moved run
-    /// left behind resolves to the family's end.
-    fn data_regions(&self) -> [DataRegion; 4] {
+    /// left behind resolves to the head's end. A family's tail is its own region.
+    fn data_regions(&self) -> Vec<DataRegion> {
         let l = &self.layout;
         let region = |start: u32, base: u32, len: u32| DataRegion {
             start: start as u64,
             base: base as u64,
             len: len as u64,
         };
-        [
-            region(0, l.rdata_rva, l.ro_head),
-            region(l.ro_len, l.rdata_rva + l.ro_head, l.relro_head_len),
-            region(l.relro_total, l.data_rva, l.data_head_len),
-            region(l.file_data_len, l.data_rva + l.data_size, l.bss_head),
-        ]
+        let tail = |t: Tail, family: u32, section: u32| {
+            (t.len > 0).then(|| region(family + t.start, section + t.at, t.len))
+        };
+        let mut regions = vec![region(0, l.rdata_rva, l.ro_head)];
+        regions.extend(tail(l.ro_tail, 0, l.rdata_rva));
+        regions.push(region(
+            l.ro_len,
+            l.rdata_rva + l.relro_base_in_rdata,
+            l.relro_head_len,
+        ));
+        regions.extend(tail(l.relro_tail, l.ro_len, l.rdata_rva));
+        regions.push(region(l.relro_total, l.data_rva, l.data_head_len));
+        regions.extend(tail(l.data_tail, l.relro_total, l.data_rva));
+        regions.push(region(
+            l.file_data_len,
+            l.data_rva + l.bss_base_in_data,
+            l.bss_head,
+        ));
+        regions.extend(tail(l.bss_tail, l.file_data_len, l.data_rva));
+        regions
     }
 
     /// `.reloc` (one `IMAGE_BASE_RELOCATION` block per page holding an
@@ -629,9 +742,9 @@ impl<'a> PeWriter<'a> {
                     ))
                 })?;
                 let target_rva = if r.target_in_text {
-                    text_body_rva + r.target_offset as u32
+                    i64::from(text_body_rva) + r.target_offset as i64
                 } else {
-                    self.data_off_to_rva(r.target_offset as u32)
+                    self.anchored_rva(r.target_anchor, r.target_offset)
                 };
                 Ok(AbsTextField {
                     site_off,
@@ -651,10 +764,7 @@ impl<'a> PeWriter<'a> {
         let l = &self.layout;
         let reloc_present = l.reloc_present;
         let (reloc_rva, reloc_file_off) = if reloc_present {
-            (
-                round_up(l.named_rva_end, SECTION_ALIGNMENT),
-                l.named_file_end,
-            )
+            (round_up(l.named_rva_end, l.section_align), l.named_file_end)
         } else {
             (0, 0)
         };
@@ -691,7 +801,7 @@ impl<'a> PeWriter<'a> {
                 } else {
                     l.idata_rva + l.idata.bytes.len() as u32
                 },
-                SECTION_ALIGNMENT,
+                l.section_align,
             )
         } else {
             0
@@ -804,7 +914,7 @@ impl<'a> PeWriter<'a> {
         }
         let mut dwarf_sections: Vec<DwarfPeSlot> = Vec::new();
         if l.dwarf_present {
-            let mut next_rva = round_up(l.pre_dwarf_end_rva, SECTION_ALIGNMENT);
+            let mut next_rva = round_up(l.pre_dwarf_end_rva, l.section_align);
             let mut next_file_off = l.pre_dwarf_end_file_off;
             for (long_name, bytes) in l.dwarf_blobs.iter() {
                 if bytes.is_empty() {
@@ -824,7 +934,7 @@ impl<'a> PeWriter<'a> {
                     file_off: next_file_off,
                     bytes: bytes.clone(),
                 });
-                next_rva = round_up(next_rva + raw_size, SECTION_ALIGNMENT);
+                next_rva = round_up(next_rva + raw_size, l.section_align);
                 next_file_off += raw_size;
             }
         }
@@ -834,7 +944,7 @@ impl<'a> PeWriter<'a> {
             .unwrap_or(l.pre_dwarf_end_file_off);
         l.dwarf_end_rva = dwarf_sections
             .last()
-            .map(|s| round_up(s.rva + s.bytes.len() as u32, SECTION_ALIGNMENT))
+            .map(|s| round_up(s.rva + s.bytes.len() as u32, l.section_align))
             .unwrap_or(l.pre_dwarf_end_rva);
         l.dwarf_sections = dwarf_sections;
         // One `IMAGE_SYMBOL` per trampoline, `IMAGE_SYM_CLASS_EXTERNAL` so
@@ -890,15 +1000,15 @@ impl<'a> PeWriter<'a> {
         l.image_size = if l.dwarf_present {
             l.dwarf_end_rva
         } else if l.edata_present {
-            round_up(l.edata_rva + l.edata_bytes.len() as u32, SECTION_ALIGNMENT)
+            round_up(l.edata_rva + l.edata_bytes.len() as u32, l.section_align)
         } else if l.reloc_present {
-            round_up(l.reloc_rva + l.reloc_bytes.len() as u32, SECTION_ALIGNMENT)
+            round_up(l.reloc_rva + l.reloc_bytes.len() as u32, l.section_align)
         } else if l.data_present || !l.named_out.is_empty() {
-            round_up(l.named_rva_end, SECTION_ALIGNMENT)
+            round_up(l.named_rva_end, l.section_align)
         } else if l.rdata_present {
-            round_up(l.rdata_rva + l.rdata_size, SECTION_ALIGNMENT)
+            round_up(l.rdata_rva + l.rdata_size, l.section_align)
         } else {
-            round_up(l.idata_rva + l.idata.bytes.len() as u32, SECTION_ALIGNMENT)
+            round_up(l.idata_rva + l.idata.bytes.len() as u32, l.section_align)
         };
         l.coff_strtab = coff_strtab;
         l.coff_symbols = coff_symbols;
@@ -935,7 +1045,7 @@ impl<'a> PeWriter<'a> {
         }
         for f in &build.got_fixups {
             let instr_off = (f.instr_offset as u32) + prologue;
-            let target_rva = l.idata.iat_rva_for_import[f.import_index];
+            let target_rva = i64::from(l.idata.iat_rva_for_import[f.import_index]);
             if f.is_data_load && machine == Machine::X86_64 {
                 crate::c5::codegen::require_whole_addr(f.part, "PE: IAT data load")?;
                 patch_iat_data_load(machine, &mut text, instr_off, text_rva, target_rva)?;
@@ -963,12 +1073,13 @@ impl<'a> PeWriter<'a> {
         }
         for f in &build.data_fixups {
             let instr_off = (f.instr_offset as u32) + prologue;
-            let target_rva = self.data_off_to_rva(f.data_offset as u32);
+            let target_rva = i64::from(self.data_off_to_rva(f.data_offset as u32)) + f.addend;
             patch_addr_load(machine, &mut text, instr_off, text_rva, target_rva, f.part)?;
         }
         for f in &build.func_fixups {
             let instr_off = (f.instr_offset as u32) + prologue;
-            let target_rva = text_rva + prologue + f.target_native_offset as u32;
+            let target_rva =
+                i64::from(text_rva + prologue + f.target_native_offset as u32) + f.addend;
             patch_addr_load(machine, &mut text, instr_off, text_rva, target_rva, f.part)?;
         }
         for r in &build.text_pcrel_relocs {
@@ -981,7 +1092,7 @@ impl<'a> PeWriter<'a> {
                 )));
             }
             let site_rva = text_rva as i64 + site as i64;
-            let value = self.data_off_to_rva(r.target_data_offset as u32) as i64 - site_rva;
+            let value = self.anchored_rva(r.target_anchor, r.target_data_offset) - site_rva;
             if width == 8 {
                 text[site..site + 8].copy_from_slice(&value.to_le_bytes());
             } else {
@@ -1002,7 +1113,7 @@ impl<'a> PeWriter<'a> {
                     text.len()
                 )));
             }
-            let value = IMAGE_BASE as i64 + f.target_rva as i64;
+            let value = IMAGE_BASE as i64 + f.target_rva;
             if !f.check.admits(value, f.width) {
                 return Err(C5Error::hard(
                     Code::RELOCATION,
@@ -1018,7 +1129,7 @@ impl<'a> PeWriter<'a> {
         let jt_rva = l.rdata_rva + l.jt_base_in_rdata;
         for f in &build.rodata.addr_fixups {
             let instr_off = (f.code_offset as u32) + prologue;
-            let target_rva = jt_rva + f.rodata_offset as u32;
+            let target_rva = i64::from(jt_rva + f.rodata_offset as u32);
             patch_addr_load(
                 machine,
                 &mut text,
@@ -1041,7 +1152,13 @@ impl<'a> PeWriter<'a> {
             let tls_index_rva = l.data_rva + l.tls.tls_index_offset_in_data;
             for f in &build.tls_index_fixups {
                 let instr_off = (f.instr_offset as u32) + prologue;
-                patch_tls_index_lookup(machine, &mut text, instr_off, text_rva, tls_index_rva)?;
+                patch_tls_index_lookup(
+                    machine,
+                    &mut text,
+                    instr_off,
+                    text_rva,
+                    tls_index_rva.into(),
+                )?;
             }
         }
         self.text_bytes = text;
@@ -1105,6 +1222,7 @@ impl<'a> PeWriter<'a> {
             OptionalHeaderInputs {
                 entry_rva,
                 base_of_code: l.text_rva,
+                section_alignment: l.section_align,
                 size_of_code: l.text_size,
                 size_of_initialized_data: l.idata.bytes.len() as u32
                     + l.rdata_size
@@ -1187,7 +1305,7 @@ impl<'a> PeWriter<'a> {
         }
         // Read-only families keep `.rdata`'s protection, the writable ones
         // `.data`'s.
-        for n in &l.named_out {
+        for n in l.named_out.iter().filter(|n| n.size > 0) {
             let mut name = [0u8; 8];
             let bytes = n.name.as_bytes();
             name[..bytes.len().min(8)].copy_from_slice(&bytes[..bytes.len().min(8)]);
@@ -1276,9 +1394,22 @@ impl<'a> PeWriter<'a> {
         pad_to(&mut out, (l.pdata_file_off + l.pdata_raw_size) as usize)?;
         out.extend_from_slice(&l.idata.bytes);
         pad_to(&mut out, (l.idata_file_off + l.idata_raw_size) as usize)?;
+        // A tail's bytes out of `bytes`, which holds its family's first byte at `base`.
+        let tail = |out: &mut Vec<u8>, t: Tail, section: u32, bytes: &[u8], base: u32| {
+            pad_to(out, (section + t.at) as usize)?;
+            let from = (base + t.start) as usize;
+            out.extend_from_slice(&bytes[from..from + t.len as usize]);
+            Ok::<(), C5Error>(())
+        };
         if l.rdata_present {
             out.extend_from_slice(&build.data[..l.ro_head as usize]);
+            tail(&mut out, l.ro_tail, l.rdata_file_off, &build.data, 0)?;
+            pad_to(
+                &mut out,
+                (l.rdata_file_off + l.relro_base_in_rdata) as usize,
+            )?;
             out.extend_from_slice(&data[..l.relro_head_len as usize]);
+            tail(&mut out, l.relro_tail, l.rdata_file_off, &data, 0)?;
             pad_to(&mut out, (l.rdata_file_off + l.jt_base_in_rdata) as usize)?;
             out.extend_from_slice(&self.jt_bytes);
             pad_to(
@@ -1291,6 +1422,7 @@ impl<'a> PeWriter<'a> {
         if l.data_present {
             let head = (l.relro_size + l.data_head_len) as usize;
             out.extend_from_slice(&data[l.relro_size as usize..head]);
+            tail(&mut out, l.data_tail, l.data_file_off, &data, l.relro_size)?;
             if !build.tls_data.is_empty() {
                 pad_to(
                     &mut out,
@@ -1462,7 +1594,7 @@ struct AbsTextField {
     site_rva: u32,
     width: u32,
     check: AbsCheck,
-    target_rva: u32,
+    target_rva: i64,
 }
 
 /// Width and overflow rule of the field a relocation type writes `S + A`
@@ -1594,7 +1726,7 @@ fn patch_tls_index_lookup(
     text: &mut [u8],
     instr_offset_in_text: u32,
     text_section_rva: u32,
-    target_rva: u32,
+    target_rva: i64,
 ) -> Result<(), C5Error> {
     let instr_rva = text_section_rva + instr_offset_in_text;
     match machine {
@@ -1620,13 +1752,13 @@ fn patch_aarch64_adrp_ldr32(
     text: &mut [u8],
     adrp_offset_in_text: u32,
     adrp_rva: u32,
-    target_rva: u32,
+    target_rva: i64,
 ) -> Result<(), C5Error> {
     aarch64::patch::patch_slot_load(
         text,
         adrp_offset_in_text as usize,
         adrp_rva as i64,
-        target_rva as i64,
+        target_rva,
         aarch64::patch::SlotWidth::W32,
     )
     .map_err(|e| C5Error::internal(e.describe("PE: aarch64 TLS index")))
@@ -1779,6 +1911,7 @@ fn write_coff_header(
 struct OptionalHeaderInputs {
     entry_rva: u32,
     base_of_code: u32,
+    section_alignment: u32,
     size_of_code: u32,
     size_of_initialized_data: u32,
     size_of_image: u32,
@@ -1846,7 +1979,7 @@ fn write_optional_header(out: &mut Vec<u8>, inp: OptionalHeaderInputs) {
             address_of_entry_point: inp.entry_rva,
             base_of_code: inp.base_of_code,
             image_base: IMAGE_BASE,
-            section_alignment: SECTION_ALIGNMENT,
+            section_alignment: inp.section_alignment,
             file_alignment: FILE_ALIGNMENT,
             // Windows 6.0 (Vista) is the earliest version that supports the
             // modern PE security characteristics this image opts into
@@ -2419,7 +2552,7 @@ fn patch_iat_lookup(
     text: &mut [u8],
     instr_offset_in_text: u32,
     text_section_rva: u32,
-    target_rva: u32,
+    target_rva: i64,
     part: AddrPart,
 ) -> Result<(), C5Error> {
     let instr_rva = text_section_rva + instr_offset_in_text;
@@ -2447,7 +2580,7 @@ fn patch_iat_data_load(
     text: &mut [u8],
     instr_offset_in_text: u32,
     text_section_rva: u32,
-    target_rva: u32,
+    target_rva: i64,
 ) -> Result<(), C5Error> {
     match machine {
         Machine::X86_64 => {
@@ -2482,7 +2615,7 @@ fn patch_addr_load(
     text: &mut [u8],
     instr_offset_in_text: u32,
     text_section_rva: u32,
-    target_rva: u32,
+    target_rva: i64,
     part: AddrPart,
 ) -> Result<(), C5Error> {
     let instr_rva = text_section_rva + instr_offset_in_text;
@@ -2552,9 +2685,9 @@ fn patch_x86_64_disp32(
     text: &mut [u8],
     disp32_off: usize,
     after_rva: u32,
-    target_rva: u32,
+    target_rva: i64,
 ) -> Result<(), C5Error> {
-    let delta = target_rva as i64 - after_rva as i64;
+    let delta = target_rva - after_rva as i64;
     if !(i32::MIN as i64..=i32::MAX as i64).contains(&delta) {
         return Err(C5Error::internal(format!(
             "PE: disp32 {delta} doesn't fit in 32 bits"
@@ -2571,14 +2704,14 @@ fn patch_aarch64_adrp_ldr(
     text: &mut [u8],
     instr_offset_in_text: u32,
     instr_rva: u32,
-    target_rva: u32,
+    target_rva: i64,
     part: AddrPart,
 ) -> Result<(), C5Error> {
     aarch64::patch::patch_slot(
         text,
         instr_offset_in_text as usize,
         instr_rva as i64,
-        target_rva as i64,
+        target_rva,
         aarch64::patch::SlotWidth::W64,
         part,
     )
@@ -2591,14 +2724,14 @@ fn patch_aarch64_adrp_add(
     text: &mut [u8],
     instr_offset_in_text: u32,
     instr_rva: u32,
-    target_rva: u32,
+    target_rva: i64,
     part: AddrPart,
 ) -> Result<(), C5Error> {
     aarch64::patch::patch_addr(
         text,
         instr_offset_in_text as usize,
         instr_rva as i64,
-        target_rva as i64,
+        target_rva,
         part,
     )
     .map_err(|e| C5Error::internal(e.describe("PE: aarch64")))
@@ -2739,6 +2872,213 @@ mod tests {
         let rva = u32::from_le_bytes(bytes[entry_off..entry_off + 4].try_into().unwrap());
         let size = u32::from_le_bytes(bytes[entry_off + 4..entry_off + 8].try_into().unwrap());
         (rva, size)
+    }
+
+    struct Header {
+        name: [u8; 8],
+        vsize: u32,
+        rva: u32,
+    }
+
+    /// Each section's header, the SectionAlignment and the SizeOfImage.
+    fn section_table(bytes: &[u8]) -> (Vec<Header>, u32, u32) {
+        let word = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+        let coff_off = word(60) as usize + 4;
+        let optional_off = coff_off + COFF_HEADER_SIZE;
+        let n = u16::from_le_bytes([bytes[coff_off + 2], bytes[coff_off + 3]]) as usize;
+        let optional_size =
+            u16::from_le_bytes([bytes[coff_off + 16], bytes[coff_off + 17]]) as usize;
+        let headers = (0..n)
+            .map(|i| {
+                let h = optional_off + optional_size + i * SECTION_HEADER_SIZE;
+                Header {
+                    name: bytes[h..h + 8].try_into().unwrap(),
+                    vsize: word(h + 8),
+                    rva: word(h + 12),
+                }
+            })
+            .collect();
+        (headers, word(optional_off + 32), word(optional_off + 56))
+    }
+
+    /// An empty named section takes no header, and its bounds name where the next starts.
+    #[test]
+    fn an_empty_named_section_takes_no_header() {
+        use crate::Compiler;
+        for (machine, target) in [
+            (Machine::X86_64, super::super::Target::WindowsX64),
+            (Machine::Aarch64, super::super::Target::WindowsAarch64),
+        ] {
+            let src = "int main(void) { return 0; }".to_string();
+            let program = Compiler::with_target(src, target)
+                .compile()
+                .expect("compile");
+            let mut build =
+                lower_for(&program, target, super::super::NativeOptions::default()).expect("lower");
+            build.data = vec![1; 64];
+            for (name, offset, size) in [("empty_a", 16, 0), ("full", 24, 16), ("empty_b", 48, 0)] {
+                build.named_sections.push(crate::c5::codegen::NamedSection {
+                    name: name.into(),
+                    offset,
+                    size,
+                    align: 8,
+                    bss: false,
+                    write: true,
+                });
+            }
+            let bytes = write(&program, &build, machine, target).expect("write PE");
+            let (headers, align, image_size) = section_table(&bytes);
+            assert!(
+                !headers.iter().any(|h| h.name.starts_with(b"empty")),
+                "{target:?}"
+            );
+            for pair in headers.windows(2) {
+                let end = round_up(pair[0].rva + pair[0].vsize, align);
+                let name = pair[1].name;
+                assert_eq!(pair[1].rva, end, "{target:?}: a gap before {name:?}");
+            }
+            let last = headers.last().expect("sections");
+            assert_eq!(
+                image_size,
+                round_up(last.rva + last.vsize, align),
+                "{target:?}"
+            );
+            let full = headers
+                .iter()
+                .find(|h| h.name.starts_with(b"full\0"))
+                .expect("full");
+            let mut w = PeWriter::new(&program, &build, machine, target);
+            w.layout_code_sections().expect("code layout");
+            w.layout_data_sections().expect("data layout");
+            assert_eq!(w.data_off_to_rva(16), full.rva, "{target:?}: empty_a");
+            let next = round_up(full.rva + full.vsize, align);
+            assert_eq!(w.data_off_to_rva(48), next, "{target:?}: empty_b");
+        }
+    }
+
+    /// A family's bytes past its named sections keep an address of their own
+    /// in the family's section, on their residue, with their bytes in the file.
+    #[test]
+    fn bytes_past_a_familys_named_sections_stay_in_its_section() {
+        use crate::Compiler;
+        for (machine, target) in [
+            (Machine::X86_64, super::super::Target::WindowsX64),
+            (Machine::Aarch64, super::super::Target::WindowsAarch64),
+        ] {
+            let src = "int main(void) { return 0; }".to_string();
+            let program = Compiler::with_target(src, target)
+                .compile()
+                .expect("compile");
+            let mut build =
+                lower_for(&program, target, super::super::NativeOptions::default()).expect("lower");
+            // Four 64-byte families: 16 head bytes, a 16-byte named section
+            // and a tail whose first byte, its end, names that section.
+            build.data = (0..192u32).map(|i| i as u8).collect();
+            (build.data_ro_len, build.data_relro_len, build.bss_size) = (64, 128, 64);
+            for (name, offset, bss) in [
+                ("ro_n", 16, false),
+                ("rel_n", 80, false),
+                ("rw_n", 144, false),
+                ("bss_n", 16, true),
+            ] {
+                build.named_sections.push(crate::c5::codegen::NamedSection {
+                    name: name.into(),
+                    offset,
+                    size: 16,
+                    align: 8,
+                    bss,
+                    write: offset >= 64 || bss,
+                });
+            }
+            let bytes = write(&program, &build, machine, target).expect("write PE");
+            let mut w = PeWriter::new(&program, &build, machine, target);
+            w.layout_code_sections().expect("code layout");
+            w.layout_data_sections().expect("data layout");
+            let l = &w.layout;
+            let mut seen = alloc::collections::BTreeSet::new();
+            for family in 0..4u32 {
+                let (rva, len, file_off) = if family < 2 {
+                    (l.rdata_rva, l.rdata_size, l.rdata_file_off)
+                } else {
+                    (l.data_rva, l.data_vsize, l.data_file_off)
+                };
+                for off in (0..16).chain(33..64).map(|o| family * 64 + o) {
+                    let at = w.data_off_to_rva(off);
+                    assert!(
+                        (rva..rva + len).contains(&at),
+                        "{target:?}: {off} at {at:#x}"
+                    );
+                    assert_eq!(at % 8, off % 8, "{target:?}: {off}'s residue");
+                    assert!(seen.insert(at), "{target:?}: {off} shares {at:#x}");
+                    if family < 3 {
+                        let byte = bytes[(file_off + at - rva) as usize];
+                        assert_eq!(byte, off as u8, "{target:?}: {off}'s byte");
+                    }
+                }
+            }
+        }
+    }
+
+    /// C11 6.7.5: SectionAlignment covers data aligned past the page, and so
+    /// do the relro head past a moved-out named run and `.bss` past the TLS.
+    #[test]
+    fn section_alignment_covers_the_data_it_holds() {
+        use crate::Compiler;
+        const ALIGN: u32 = 0x4000;
+        for (machine, target) in [
+            (Machine::X86_64, super::super::Target::WindowsX64),
+            (Machine::Aarch64, super::super::Target::WindowsAarch64),
+        ] {
+            let src = "int main(void) { return 0; }";
+            let program = Compiler::with_target(src.to_string(), target)
+                .compile()
+                .expect("compile");
+            let mut build =
+                lower_for(&program, target, super::super::NativeOptions::default()).expect("lower");
+            build.data = vec![1; 3 * ALIGN as usize];
+            build.data_ro_len = ALIGN as usize;
+            build.data_relro_len = 2 * ALIGN as usize;
+            build.data_align = ALIGN as usize;
+            build.bss_size = 16;
+            build.tls_data = vec![7; 12];
+            build.tls_init_size = 12;
+            build.named_sections.push(crate::c5::codegen::NamedSection {
+                name: ".rdovr".into(),
+                offset: (ALIGN - 64) as u64,
+                size: 64,
+                align: 8,
+                bss: false,
+                write: false,
+            });
+            let bytes = write(&program, &build, machine, target).expect("write PE");
+            let pe_off = u32::from_le_bytes(bytes[60..64].try_into().unwrap()) as usize;
+            let coff_off = pe_off + 4;
+            let optional_off = coff_off + COFF_HEADER_SIZE;
+            let section_alignment = u32::from_le_bytes(
+                bytes[optional_off + 32..optional_off + 36]
+                    .try_into()
+                    .unwrap(),
+            );
+            assert_eq!(section_alignment, ALIGN, "{target:?}");
+            let n = u16::from_le_bytes([bytes[coff_off + 2], bytes[coff_off + 3]]) as usize;
+            let optional_size =
+                u16::from_le_bytes([bytes[coff_off + 16], bytes[coff_off + 17]]) as usize;
+            for i in 0..n {
+                let h = optional_off + optional_size + i * SECTION_HEADER_SIZE;
+                let rva = u32::from_le_bytes(bytes[h + 12..h + 16].try_into().unwrap());
+                assert_eq!(rva % ALIGN, 0, "{target:?}: section {i} at {rva:#x}");
+            }
+            let mut w = PeWriter::new(&program, &build, machine, target);
+            w.layout_code_sections().expect("code layout");
+            w.layout_data_sections().expect("data layout");
+            for (what, off) in [("relro head", ALIGN + 8), ("zero-fill tail", 3 * ALIGN + 8)] {
+                let rva = w.data_off_to_rva(off);
+                assert_eq!(rva % ALIGN, 8, "{target:?}: {what} at {rva:#x}");
+            }
+            build.data_align = 0x2_0000;
+            let err = write(&program, &build, machine, target).expect_err("past 64 KiB");
+            assert!(err.to_string().contains("exceeds the 65536 bytes"), "{err}");
+        }
     }
 
     /// PE without `_Thread_local`: TLS directory entry must be zero so the

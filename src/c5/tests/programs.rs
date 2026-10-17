@@ -978,7 +978,7 @@ fn post_inline_dead_data_repack() {
 #[test]
 fn a_narrower_live_set_never_grows_the_packed_image() {
     use crate::c5::codegen::ssa::shadow::{
-        LiveSets, apply_data_liveness, compute_live_sets, produce_ssa_funcs,
+        LiveSets, ReachGraph, apply_data_liveness, compute_live_sets, produce_ssa_funcs,
     };
     let src = "_Alignas(4096) long page[512] = {1}; \
                static long unused_mid[100] = {5}; \
@@ -992,7 +992,8 @@ fn a_narrower_live_set_never_grows_the_packed_image() {
         .compile()
         .expect("compile");
     let funcs = produce_ssa_funcs(&program, crate::Target::LinuxX64, false, true).expect("ssa");
-    let sets = compute_live_sets(&funcs, &Default::default(), &program, false, None);
+    let graph = ReachGraph::new(&program);
+    let sets = compute_live_sets(&funcs, &Default::default(), &graph, false, None);
     let addr = |out: &crate::c5::program::Program, name: &str| {
         out.symbols
             .iter()
@@ -1135,10 +1136,9 @@ fn section_attr_flexible_array_tail() {
 
 #[test]
 fn max_alignment_placement() {
-    // The widest static alignment badc honors (64 KiB) lands on its
-    // boundary for bare, initialised, and block-scope-static storage. Off
-    // the Mach-O list: macOS slides a PIE by whole pages, so a wider
-    // boundary is not guaranteed at run time (clang rejects it likewise).
+    // The widest static alignment badc honors for the target -- 64 KiB, 16 KiB
+    // on Mach-O -- lands on its boundary for bare, initialised, and
+    // block-scope-static storage.
     assert_eq!(run_fixture("max_alignment_placement.c"), 0);
 }
 
@@ -1171,6 +1171,13 @@ fn overaligned_automatic_beside_vla() {
     // A 16-aligned automatic coexists with a VLA (the region needs no sp
     // move), and a VLA of a 16-aligned element type lands on 16.
     assert_eq!(run_fixture("overaligned_vla_int128.c"), 0);
+}
+
+#[test]
+fn overaligned_vla() {
+    // A VLA aligned above 16 by its element type or its declaration lands on
+    // its alignment within its own allocation (C11 6.7.5, C99 6.7.6.2).
+    assert_eq!(run_fixture("overaligned_vla.c"), 0);
 }
 
 #[test]
@@ -8134,4 +8141,13 @@ fn a_pragma_operator_keeps_the_lines_after_it_numbered() {
         .filter_map(|d| d.loc.as_ref().map(|l| l.line))
         .collect();
     assert_eq!(lines, [4], "{err}");
+}
+
+#[test]
+fn a_library_function_slot_holds_the_address_code_takes_under_the_vm() {
+    let src = "typedef size_t (*lenfn)(const char *);\n\
+               static _Thread_local lenfn t = strlen;\n\
+               static lenfn s = strlen;\n\
+               int main(void) { lenfn d = strlen; return (t == s) * 4 + (s == d) * 2 + (t == d); }\n";
+    assert_eq!(super::run_str(src), 7);
 }

@@ -171,8 +171,7 @@ Disassembly of section .text:
                	cmp	w0, w5
                	b.ge	<addr>
                	ldrsw	x5, [x3, x0, lsl #2]
-               	lsl	x5, x5, #8
-               	add	x1, x1, x5
+               	add	x1, x1, x5, lsl #8
                	add	x0, x0, #0x1
                	ldrsw	x5, [x4]
                	cmp	w0, w5

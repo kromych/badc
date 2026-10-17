@@ -18,6 +18,7 @@
 
 use alloc::format;
 
+use super::super::codegen::CallConv;
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
@@ -242,7 +243,7 @@ impl Compiler {
         // An attribute may sit between the keyword and the tag
         // (`struct __attribute__((packed)) name`).
         let packed = self.skip_attribute_specifiers()?;
-        let head_transparent = core::mem::take(&mut self.pending.attr_transparent_union);
+        let head_transparent = core::mem::take(&mut self.pending.attrs.transparent_union);
         let mut anonymous = false;
         let name = if self.lex.tk == Token::Id {
             let n = self.symbols[self.lex.curr_id_idx].name.clone();
@@ -352,8 +353,7 @@ impl Compiler {
             self.pending.fn_ptr_indirection = name.fn_ptr_indirection;
             self.pending.fn_ptr_ret_indirection = f.ret.as_ref().map_or(0, |r| r.1);
             self.pending.base_is_function_type = name.names_function();
-            self.pending.fn_ptr_params = Some(f.params.clone());
-            self.pending.fn_ptr_ret_fn = f.ret.clone();
+            self.pending.fn_ptr_type = Some(f.clone());
         }
         Ok(())
     }
@@ -401,8 +401,7 @@ impl Compiler {
                 self.pending.fn_ptr_indirection = Some(1);
                 self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.base_is_function_type = true;
-                self.pending.fn_ptr_params = Some(self.symbols[idx].fn_params());
-                self.pending.fn_ptr_ret_fn = self.symbols[idx].ret_fn.clone();
+                self.pending.fn_ptr_type = Some(self.symbols[idx].fn_type.clone());
                 self.next()?; // identifier
                 self.next()?; // )
                 return Ok(finish(fty));
@@ -434,13 +433,14 @@ impl Compiler {
         } else {
             // The conservative volatile marker a dereference leaves on the
             // operand describes its accesses, not its type.
-            let mut inner = types::exact_volatile_ty(self.parse_unevaluated_expr_ty(true)?);
+            let (operand_ty, designator) = self.parse_unevaluated_expr_ty(true)?;
+            let mut inner = types::exact_volatile_ty(operand_ty);
             // C99 6.5.3.2p4: `*` on a pointer to a function designates the
             // function, so `typeof(*p)` names a function type. Route it
             // through the function-TYPE carrier a `typedef RET F(args)`
             // base uses, so a `*` in a declarator through the specifier
             // forms the pointer to that function instead of adding a level.
-            if self.pending.value_is_fn_designator {
+            if designator {
                 self.pending.base_is_function_type = true;
                 if self.pending.fn_ptr_indirection.is_none() {
                     self.pending.fn_ptr_indirection = Some(1);
@@ -483,7 +483,8 @@ impl Compiler {
                 } else {
                     -1
                 };
-                self.pending.set_base_array(size, dims, false);
+                let zero_len = dims.first() == Some(&0);
+                self.pending.set_base_array(size, dims, zero_len);
             } else if n != 0 && inner >= Ty::Ptr as i64 {
                 inner -= Ty::Ptr as i64;
                 self.pending
@@ -514,7 +515,7 @@ impl Compiler {
     /// a trailing comma operator whose last term gives the type
     /// (`typeof`'s operand grammar); a declarator initializer stops at
     /// the comma. Sets `pending.typeof_operand_was_array` when the
-    /// operand's value decayed from an array.
+    /// operand's value decayed from an array; the flag returned marks a designator.
     /// The symbol index of the function whose address the accumulated
     /// expression takes (`&f`), if that is its whole shape.
     fn addressed_function_symbol(&self) -> Option<usize> {
@@ -537,7 +538,7 @@ impl Compiler {
         (*class == Token::Fun as i64 || *class == Token::Sys as i64).then_some(*sym as usize)
     }
 
-    fn parse_unevaluated_expr_ty(&mut self, comma_operands: bool) -> Result<i64, C5Error> {
+    fn parse_unevaluated_expr_ty(&mut self, comma_operands: bool) -> Result<(i64, bool), C5Error> {
         let saved_text_len = self.next_ent_pc;
         let saved_code_reloc_sym_idx = self.code_reloc_sym_idx.len();
         let saved_ast_acc = self.ast_acc;
@@ -568,6 +569,7 @@ impl Compiler {
             }
             Ok(())
         })?;
+        let designator = self.value_is_fn_designator();
         // `&f` where `f` names a function: the operand is a pointer to
         // `f`'s function type. Route the same pending carriers the
         // function-typedef and `typeof(f)` bases use, so the prototype
@@ -578,8 +580,7 @@ impl Compiler {
                 self.pending.fn_ptr_indirection = Some(1);
                 self.pending.fn_ptr_ret_indirection = 0;
                 self.pending.base_is_function_type = false;
-                self.pending.fn_ptr_params = Some(self.symbols[idx].fn_params());
-                self.pending.fn_ptr_ret_fn = self.symbols[idx].ret_fn.clone();
+                self.pending.fn_ptr_type = Some(self.symbols[idx].fn_type.clone());
                 self.symbols[idx].type_ + Ty::Ptr as i64
             }
             None => {
@@ -591,8 +592,7 @@ impl Compiler {
                     self.pending.fn_ptr_indirection = Some(depth.max(1));
                     self.pending.fn_ptr_ret_indirection = f.ret.as_ref().map_or(0, |r| r.1);
                     self.pending.base_is_function_type = false;
-                    self.pending.fn_ptr_params = Some(f.params);
-                    self.pending.fn_ptr_ret_fn = f.ret;
+                    self.pending.fn_ptr_type = Some(f);
                 }
                 self.ty
             }
@@ -622,7 +622,7 @@ impl Compiler {
         self.code_reloc_sym_idx.truncate(saved_code_reloc_sym_idx);
         self.ast_acc = saved_ast_acc;
         self.ast_vstack.truncate(saved_vstack);
-        Ok(expr_ty)
+        Ok((expr_ty, designator))
     }
 
     /// `asm ( "reg" )` after a block-scope declarator: a GNU
@@ -783,8 +783,10 @@ impl Compiler {
                 "file-scope register variables are supported for the stack and frame pointer only",
             ));
         }
+        // A function block-scope declarations left on the slot is a prior
+        // declaration too.
         let prior_class = self.symbols[id_idx].class;
-        if prior_class != 0 {
+        if prior_class != 0 || self.symbols[id_idx].is_fun_entity() {
             let same =
                 prior_class == Token::Loc as i64 && self.symbols[id_idx].asm_register == Some(reg);
             if !same {
@@ -958,7 +960,7 @@ impl Compiler {
                 "`__auto_type` initializer must be a single expression",
             ));
         }
-        let ty = self.parse_unevaluated_expr_ty(false)?;
+        let (ty, _) = self.parse_unevaluated_expr_ty(false)?;
         // The initializer decayed any array to a pointer; the declared
         // variable is that pointer, never an array.
         self.pending.typeof_operand_was_array = false;
@@ -1058,7 +1060,7 @@ impl Compiler {
     /// `__attribute__ (( ... ))` / `__declspec ( ... )` / `_Alignas
     /// ( ... )` and C23 `[[ ... ]]` -- if any. Returns true when one
     /// names the `packed` attribute, which sets an aggregate's layout;
-    /// `maybe_unused` / `unused` is recorded on `pending.attr_maybe_unused`.
+    /// `maybe_unused` / `unused` is recorded on `pending.attrs.maybe_unused`.
     /// Every other decorator is an advisory hint the dialect does not act
     /// on and is discarded. The payload is matched by balance, so any
     /// parenthesis depth and content -- nested calls, string literals,
@@ -1252,7 +1254,7 @@ impl Compiler {
                             // GCC `mode(M)`: the declared type becomes the
                             // integer or floating type of machine mode `M`.
                             self.next()?; // `(`
-                            self.pending.attr_mode = Some(self.parse_machine_mode()?);
+                            self.pending.attrs.mode = Some(self.parse_machine_mode()?);
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err(
                                     Code::SYNTAX,
@@ -1265,7 +1267,7 @@ impl Compiler {
                             // symbol's bytes in the named object section.
                             self.next()?; // `(`
                             let name = self.parse_attribute_string_operand("section")?;
-                            self.pending.attr_section = Some(name);
+                            self.pending.attrs.section = Some(name);
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err(
                                     Code::SYNTAX,
@@ -1290,7 +1292,7 @@ impl Compiler {
                                     "`patchable_function_entry` takes N >= M >= 0",
                                 ));
                             }
-                            self.pending.attr_patchable_entry = Some((n as u32, m as u32));
+                            self.pending.attrs.patchable_entry = Some((n as u32, m as u32));
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err(
                                     Code::SYNTAX,
@@ -1304,7 +1306,7 @@ impl Compiler {
                             // defined in this unit.
                             self.next()?; // `(`
                             let name = self.parse_attribute_string_operand("alias")?;
-                            self.pending.attr_alias = Some(name);
+                            self.pending.attrs.alias = Some(name);
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err(
                                     Code::SYNTAX,
@@ -1321,7 +1323,7 @@ impl Compiler {
                             // enclosing `#pragma GCC visibility` extent.
                             self.next()?; // `(`
                             let vis = self.parse_attribute_string_operand("visibility")?;
-                            self.pending.attr_visibility =
+                            self.pending.attrs.visibility =
                                 Some(vis == "hidden" || vis == "internal");
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err(
@@ -1341,7 +1343,7 @@ impl Compiler {
                                     "`cleanup` operand must be a function name",
                                 ));
                             }
-                            self.pending.attr_cleanup = Some(self.lex.curr_id_idx);
+                            self.pending.attrs.cleanup = Some(self.lex.curr_id_idx);
                             self.next()?; // function name
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err(
@@ -1420,86 +1422,84 @@ impl Compiler {
             }
         }
         if attrs.maybe_unused {
-            self.pending.attr_maybe_unused = true;
+            self.pending.attrs.maybe_unused = true;
         }
         if attrs.thread_local {
-            self.pending.attr_thread_local = true;
+            self.pending.attrs.thread_local = true;
         }
         if attrs.noreturn {
-            self.pending_noreturn = true;
+            self.pending.attrs.noreturn = true;
         }
         if attrs.dllexport {
-            self.pending.attr_dllexport = true;
+            self.pending.attrs.dllexport = true;
         }
         if align > 0 {
-            self.pending.attr_align = self.pending.attr_align.max(align);
+            self.pending.attrs.align = self.pending.attrs.align.max(align);
         }
         if alignas_align > 0 {
-            self.pending.attr_alignas = self.pending.attr_alignas.max(alignas_align);
+            self.pending.attrs.alignas = self.pending.attrs.alignas.max(alignas_align);
         }
         if attrs.packed {
-            self.pending.attr_packed = true;
+            self.pending.attrs.packed = true;
         }
         if attrs.transparent_union {
-            self.pending.attr_transparent_union = true;
+            self.pending.attrs.transparent_union = true;
         }
         if vector_size > 0 {
-            self.pending.attr_vector_size = vector_size;
+            self.pending.attrs.vector_size = vector_size;
         }
         if attrs.constructor {
-            self.pending.attr_constructor = true;
+            self.pending.attrs.constructor = true;
         }
         if attrs.destructor {
-            self.pending.attr_destructor = true;
+            self.pending.attrs.destructor = true;
         }
         if attrs.always_inline {
             // A mandatory inline request implies `inline` for the
             // inliner; it is not the `inline` specifier, so the linkage
             // model does not see it.
-            self.pending_is_inline = true;
-            self.pending_is_always_inline = true;
+            self.pending.attrs.is_inline = true;
+            self.pending.attrs.is_always_inline = true;
         }
         if attrs.noinline {
-            self.pending_is_noinline = true;
+            self.pending.attrs.is_noinline = true;
         }
         if attrs.gnu_inline {
-            self.pending_is_gnu_inline = true;
+            self.pending.attrs.is_gnu_inline = true;
         }
         if attrs.naked {
-            self.pending_is_naked = true;
+            self.pending.attrs.is_naked = true;
         }
         if attrs.no_instrument_function {
-            self.pending.attr_no_instrument = true;
+            self.pending.attrs.no_instrument = true;
         }
         if attrs.no_stack_protector {
-            self.pending.attr_no_stack_protector = true;
+            self.pending.attrs.no_stack_protector = true;
         }
         if let Some(p) = init_priority {
-            self.pending.attr_init_priority = Some(p);
+            self.pending.attrs.init_priority = Some(p);
         }
         if attrs.weak {
-            self.pending.attr_weak = true;
+            self.pending.attrs.weak = true;
         }
         if attrs.used {
-            self.pending.attr_used = true;
+            self.pending.attrs.used = true;
         }
         if attrs.uninitialized {
-            self.pending.attr_uninitialized = true;
+            self.pending.attrs.uninitialized = true;
         }
         // `ms_abi` / `sysv_abi` name the declared function's (or
         // function pointer's) calling convention. Both are inert off
         // x86_64, matching gcc, which ignores them on other targets.
-        if attrs.ms_abi || attrs.sysv_abi {
-            let conv = if attrs.ms_abi {
-                crate::c5::codegen::CallConv::Ms
-            } else {
-                crate::c5::codegen::CallConv::SysV
-            };
-            self.pending.attr_call_conv = if self.target.abi_row(conv) == self.target {
-                crate::c5::codegen::CallConv::Target
-            } else {
-                conv
-            };
+        for (on, conv) in [
+            (attrs.ms_abi, CallConv::Ms),
+            (attrs.sysv_abi, CallConv::SysV),
+        ] {
+            if on {
+                let own = self.target.abi_row(conv) == self.target;
+                let conv = Some(if own { CallConv::Target } else { conv });
+                self.pending.attrs.call_conv = self.add_conv(self.pending.attrs.call_conv, conv)?;
+            }
         }
         Ok(attrs.packed)
     }
@@ -1917,8 +1917,7 @@ impl Compiler {
         self.pending.base_enum_tag = None;
         self.pending.clear_base_array();
         self.pending.type_align = 0;
-        self.pending.fn_ptr_params = None;
-        self.pending.fn_ptr_ret_fn = None;
+        self.pending.fn_ptr_type = None;
     }
 
     /// Consume a storage-class or linkage keyword into `storage`. Returns
@@ -1949,7 +1948,7 @@ impl Compiler {
     /// `__declspec(thread)` among the declaration specifiers is the MSVC
     /// spelling of `_Thread_local`.
     fn adopt_declspec_thread_local(&mut self, storage: Option<&mut DeclStorage>) {
-        if !core::mem::take(&mut self.pending.attr_thread_local) {
+        if !core::mem::take(&mut self.pending.attrs.thread_local) {
             return;
         }
         if let Some(s) = storage {
@@ -1962,14 +1961,14 @@ impl Compiler {
     /// by the caller's modifier run.
     fn note_decl_specifier_flags(&mut self) {
         if self.lex.tk == Token::Inline || self.lex.tk == Token::ForceInline {
-            self.pending_is_inline = true;
-            self.pending_saw_inline_specifier = true;
+            self.pending.attrs.is_inline = true;
+            self.pending.attrs.saw_inline_specifier = true;
             if self.lex.tk == Token::ForceInline {
-                self.pending_is_always_inline = true;
+                self.pending.attrs.is_always_inline = true;
             }
         }
         if self.lex.tk == Token::Noreturn {
-            self.pending_noreturn = true;
+            self.pending.attrs.noreturn = true;
         }
         if self.lex_is_register_storage() {
             self.pending.saw_register_storage = true;
@@ -2057,25 +2056,14 @@ impl Compiler {
         // would otherwise be lost; DWARF 4 5.3 names it with a
         // DW_TAG_typedef DIE.
         self.pending.spell_base_typedef = Some(idx as u32);
-        // A function / function-pointer typedef carries the pointed-to
-        // function's calling convention; a declarator through the alias
-        // inherits it unless the declaration names one of its own.
-        if self.symbols[idx].conv != crate::c5::codegen::CallConv::Target
-            && self.pending.attr_call_conv == crate::c5::codegen::CallConv::Target
-        {
-            self.pending.attr_call_conv = self.symbols[idx].conv;
-        }
         let typedef_fpi = self.symbols[idx].fn_ptr_indirection;
         if typedef_fpi > 0 {
             self.pending.fn_ptr_indirection = Some(typedef_fpi);
             self.pending.fn_ptr_ret_indirection = self.symbols[idx].fn_ptr_ret_indirection;
             self.pending.base_is_function_type = self.symbols[idx].is_function_type;
-            // The pointed-to function's prototype travels to the bound
-            // declarator so an indirect call through the variable narrows
-            // each argument to its declared parameter type and splits fixed
-            // from variadic arguments per the host variadic ABI.
-            self.pending.fn_ptr_params = Some(self.symbols[idx].fn_params());
-            self.pending.fn_ptr_ret_fn = self.symbols[idx].ret_fn.clone();
+            // The function type the alias leads to, its convention included,
+            // is that of what a declarator through the alias leads to.
+            self.pending.fn_ptr_type = Some(self.symbols[idx].fn_type.clone());
         }
         // `(VOID)` in parameter position is the no-parameter idiom.
         if self.symbols[idx].is_void_typedef {

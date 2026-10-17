@@ -38,17 +38,15 @@ Disassembly of section .text:
 <swapq>:
                	movq	%rdi, %rax
                	shrq	$0x20, %rax
-               	movl	%edi, %ecx
-               	shlq	$0x20, %rcx
-               	orq	%rcx, %rax
+               	shlq	$0x20, %rdi
+               	orq	%rdi, %rax
                	retq
 
 <tail>:
                	movslq	%esi, %rax
                	addq	%rdi, %rax
-               	movq	%rsi, %rcx
-               	shlq	%rcx
-               	movl	%ecx, %edx
+               	shlq	%rsi
+               	movl	%esi, %edx
                	retq
 
 <bytes>:
@@ -85,14 +83,13 @@ Disassembly of section .text:
                	leaq	(%rax,%rdx), %r8
                	movslq	%eax, %rax
                	leaq	(%rsi,%rax), %rdx
-               	movq	%rdi, %rax
-               	andq	$0xff, %rax
+               	andq	$0xff, %rdi
                	andq	$0xffff, %rcx           # imm = 0xFFFF
                	shlq	$0x10, %rcx
+               	movq	%rdi, %rax
                	orq	%rcx, %rax
-               	movl	%r8d, %ecx
-               	shlq	$0x20, %rcx
-               	orq	%rcx, %rax
+               	shlq	$0x20, %r8
+               	orq	%r8, %rax
                	retq
 
 <dsum>:
@@ -192,9 +189,8 @@ Disassembly of section .text:
                	shrq	$0x20, %rax
                	movslq	%edi, %rcx
                	leaq	(%rsi,%rcx), %rdx
-               	movl	%edi, %ecx
-               	shlq	$0x20, %rcx
-               	orq	%rcx, %rax
+               	shlq	$0x20, %rdi
+               	orq	%rdi, %rax
                	retq
 
 <pp>:

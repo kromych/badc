@@ -58,6 +58,7 @@ regenerates.
 | B2009 | `ignored-asm-label` | warning | controllable | default | an assembler name on a declaration that has no symbol to rename |
 | B2010 | `shadowed-binding` | warning | controllable | default | a `#pragma binding` for a name an earlier binding already claimed |
 | B2011 | `implicit-int` | error | controllable | default | a declaration or type name with no type specifier, whose type defaults to `int` |
+| B2012 | `inline-asm` | warning | controllable | default | an `asm` statement that lists the stack pointer as clobbered or writes it through an output, where GNU C requires it to hold its value |
 | B2020 | `syntax` | error | hard | - | a token the grammar does not admit at its position; the parser has no resynchronisation point |
 | B2021 | `invalid-declaration` | error | hard | - | a declaration a C99 constraint rejects: a redefinition, conflicting types, an incomplete object, a bit-field width or an alignment out of range |
 | B2022 | `undeclared-identifier` | error | hard | - | a name no declaration in scope introduces |
@@ -75,6 +76,7 @@ regenerates.
 | B3010 | `constant-conversion` | warning | controllable | default | an integer constant converted implicitly to an integer type or a bit-field whose width holds the value at neither signedness |
 | B3011 | `incompatible-pointer-types-discards-qualifiers` | warning | controllable | default | a pointer assigned, initialized, passed or returned as a pointer to a type that differs from the one it points to only in the qualifiers of a type further down: `T **` as `const T **` |
 | B3012 | `switch-bool` | warning | controllable | default | a `switch` on a boolean value with a case label outside 0 and 1, or with a `default` beside labels covering both |
+| B3013 | `excess-initializers` | warning | controllable | default | a string literal longer than the array, member or row it initializes, a terminator aside; the characters past the bound are dropped |
 | B3020 | `invalid-operands` | error | hard | - | an operator applied to operands its constraints reject, or a non-lvalue where an lvalue is required |
 | B3021 | `constant-expression` | error | hard | - | an expression that must be constant and is not, or one the compiler cannot evaluate at translation time |
 | B3022 | `invalid-initializer` | error | hard | - | an initializer C99 6.7.8 rejects: a mismatched brace form, a designator naming nothing, an index out of range |

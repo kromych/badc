@@ -484,6 +484,45 @@ pub(crate) fn clobber_reg_name(name: &str) -> Option<(bool, u8)> {
     None
 }
 
+/// The `(gpr, fpr)` masks a clobber name names, none for an SVE predicate, FFR,
+/// ZA, ZT0 or FPMR ([`crate::c5::codegen::clobber_registers`]).
+pub(crate) fn clobber_by_name(name: &str) -> Option<(u32, u32)> {
+    use crate::c5::codegen::clobber_index as index;
+    let numbered = |prefixes: &[&str], max: u32| {
+        prefixes
+            .iter()
+            .find_map(|p| name.strip_prefix(p).and_then(index))
+            .filter(|&n| n <= max)
+    };
+    match name {
+        "sp" | "wsp" => return Some((1 << 31, 0)),
+        "fp" => return Some((1 << 29, 0)),
+        "lr" => return Some((1 << 30, 0)),
+        "ffr" | "za" | "zt0" | "fpmr" => return Some((0, 0)),
+        _ => {}
+    }
+    if let Some(n) = numbered(&["x", "w", "r"], 30) {
+        return Some((1 << n, 0));
+    }
+    if let Some(n) = numbered(&["v", "q", "d", "s", "h", "b", "z"], 31) {
+        return Some((0, 1 << n));
+    }
+    numbered(&["pn", "p"], 15).map(|_| (0, 0))
+}
+
+/// The masks of gcc 16's register `n` (`REGISTER_NAMES`, config/aarch64/aarch64.h)
+/// or clang 22's (`GCCRegNames`, lib/Basic/Targets/AArch64.cpp).
+pub(crate) fn numbered_clobber(n: u32, clang: bool) -> Option<(u32, u32)> {
+    Some(match (clang, n) {
+        (_, 0..=31) => (1 << n, 0),
+        (false, 32..=63) => (0, 1 << (n - 32)),
+        (false, 64..=94) | (true, 192..=225) => (0, 0),
+        (true, 32..=63) => (1 << (n - 32), 0),
+        (true, 64..=191) => (0, 1 << (n % 32)),
+        _ => return None,
+    })
+}
+
 /// Parse a decimal floating-point immediate (e.g. `1.5`, `-2.0`) to its 8-bit
 /// VFP encoding, or None if the value is not one of the representable
 /// +/-(16+m)/16 * 2^e forms (m in 0..=15, e in -3..=4). Uses exact rational

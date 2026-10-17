@@ -136,6 +136,8 @@ pub struct DataReloc {
     /// Equals `target_offset` when the producer has no object
     /// identity.
     pub target_anchor: u64,
+    /// The [`Program::symbols`] entry of the object the anchor starts.
+    pub target_sym: Option<u32>,
 }
 
 /// A function-pointer initializer that needs run-time relocation.
@@ -163,6 +165,8 @@ pub struct CodeReloc {
     /// `ent_pc` of the function. The codegen translates this to a
     /// native code-segment offset via `pc_to_native`.
     pub target_ent_pc: u64,
+    /// Bytes added to the function's address: `(char *)f + 4`.
+    pub addend: i64,
 }
 
 /// Compiled program ready for the VM.
@@ -218,6 +222,8 @@ pub struct Program {
     /// (or the attribute equivalents). The native writers place the
     /// data section at a multiple of it.
     pub data_align: usize,
+    /// C11 6.7.5p3: the first static object aligned past what an image keeps.
+    pub image_align_error: Option<crate::c5::diag::Diagnostic>,
     /// Length of the read-only prefix of `data`: `const`-qualified
     /// storage with no relocated slot, packed to the front by the
     /// native data compaction so the image writers can map it without
@@ -324,6 +330,8 @@ pub struct Program {
     /// A data slot naming a trampoline names the binding's import instead: the
     /// address code takes, as C99 6.5.9p6 requires of two pointers to one function.
     pub(crate) bind_trampoline_slots: bool,
+    /// References name a weak definition by its symbol (relocatable output).
+    pub(crate) weak_refs_by_name: bool,
     /// Address-constant initializers of `_Thread_local` objects (C99
     /// 6.7.8p4). `data_offset` is a byte offset into [`Self::tls_data`],
     /// the initialization template the runtime copies per thread; the
@@ -607,7 +615,7 @@ pub struct VariableInfo {
     pub params: Vec<i64>,
     /// True when the prototype ends in `, ...`.
     pub is_variadic: bool,
-    /// Mirrors `Symbol::prototyped`.
+    /// Mirrors `FnParams::prototyped`.
     pub prototyped: bool,
     /// Dimension list of a multidimensional local array, outermost
     /// first (mirrors `Symbol::array_dims`). Empty for a scalar or a
@@ -650,6 +658,7 @@ impl DataOffsets for DataReloc {
             data_offset,
             target_offset: _, // remapped by `remap_target_offsets`
             target_anchor: _,
+            target_sym: _, // a symbol index
         } = self;
         remap_self_u64(data_offset, r);
         self.remap_target_offsets(r);
@@ -661,6 +670,7 @@ impl DataOffsets for CodeReloc {
         let Self {
             data_offset,
             target_ent_pc: _, // code address space
+            addend: _,
         } = self;
         remap_self_u64(data_offset, r);
     }
@@ -690,6 +700,7 @@ impl DataOffsets for Program {
             asm_file_names: _,
             asm_idents: _,
             data_align: _, // an alignment, not an offset
+            image_align_error: _,
             data_ro_len,
             data_relro_len,
             data_object_starts,
@@ -707,6 +718,7 @@ impl DataOffsets for Program {
             code_relocs,
             sys_trampolines: _,       // code address space
             bind_trampoline_slots: _, // a mode
+            weak_refs_by_name: _,     // a mode
             tls_data_relocs,
             tls_extern_data_relocs: _, // slot in `tls_data`, target by name
             tls_code_relocs: _,        // slot in `tls_data`, target in code
@@ -845,6 +857,7 @@ mod data_offset_tests {
             code_relocs: Vec::new(),
             sys_trampolines: Vec::new(),
             bind_trampoline_slots: false,
+            weak_refs_by_name: false,
             tls_data_relocs: Vec::new(),
             tls_extern_data_relocs: Vec::new(),
             tls_code_relocs: Vec::new(),
@@ -860,6 +873,7 @@ mod data_offset_tests {
             entry_pragma: None,
             auto_includes: Vec::new(),
             data_align: 8,
+            image_align_error: None,
             subsystem: None,
             finished_functions: Vec::new(),
             symbols: Vec::new(),
@@ -881,10 +895,12 @@ mod data_offset_tests {
             data_offset: 48,
             target_offset: 56,
             target_anchor: 56,
+            target_sym: None,
         }];
         p.code_relocs = alloc::vec![CodeReloc {
             data_offset: 64,
             target_ent_pc: 0,
+            addend: 0,
         }];
         p.extern_data_relocs = alloc::vec![ExternDataReloc {
             data_offset: 72,

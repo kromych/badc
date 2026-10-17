@@ -67,7 +67,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> x0
     v3   ImmData(16)                                      -> x0
     v4   Imm(0)                                           -> x1
-    v5   BinopI { op=shl, lhs=v1, rhs_imm=2 }             -> x1
+    v5   BinopI { op=shl, lhs=v1, rhs_imm=2 }             -> x7
     v6   Binop { op=add, lhs=v3, rhs=v5 }                 -> x0
     terminator Return(v6)   (exit_acc=v6)
 ; --- SSA dump (ok=true) ent_pc=5 ---

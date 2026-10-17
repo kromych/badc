@@ -28,9 +28,8 @@ Disassembly of section .text:
 <dispatch>:
                	movl	$0x5, %eax
                	leaq	<rip>, %rcx      # <addr>
-               	movq	%rdi, %rdx
-               	andq	$0x3, %rdx
-               	movq	(%rcx,%rdx,8), %rcx
+               	andq	$0x3, %rdi
+               	movq	(%rcx,%rdi,8), %rcx
                	jmpq	*%rcx
                	movl	$0x6, %eax
                	retq
@@ -478,9 +477,8 @@ Disassembly of section .text:
                	incq	%rcx
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	%rcx, %rax
-               	xorq	$0x8, %rax
-               	testl	%eax, %eax
+               	xorq	$0x8, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x2d, %eax
                	popq	%rbp

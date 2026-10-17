@@ -155,6 +155,7 @@ pub(crate) fn walk_program(
             target,
             optimize,
             jump_tables,
+            program.weak_refs_by_name,
         )
         .map_err(|e| {
             // A deliberate rejection is an ordinary diagnostic; the
@@ -286,14 +287,14 @@ pub(crate) struct DataLiveness {
 /// `false`, and `None` then means the image is exactly the reachable set.
 pub(crate) fn drop_unreachable_statics(
     funcs: &mut Vec<FunctionSsa>,
-    program: &Program,
+    graph: &ReachGraph,
     reachable_owners: &alloc::collections::BTreeSet<usize>,
     force: bool,
 ) -> Option<LiveSets> {
     let live = compute_live_sets(
         funcs,
         &Default::default(),
-        program,
+        graph,
         true,
         Some(reachable_owners),
     )
@@ -313,7 +314,7 @@ pub(crate) fn drop_unreachable_statics(
     let sets = compute_live_sets(
         funcs,
         &Default::default(),
-        program,
+        graph,
         false,
         Some(reachable_owners),
     );
@@ -342,6 +343,17 @@ pub(crate) fn produce_ssa_funcs(
     optimize: bool,
     jump_tables: bool,
 ) -> Result<Vec<FunctionSsa>, C5Error> {
+    produce_ssa_funcs_on(&ReachGraph::new(program), target, optimize, jump_tables)
+}
+
+/// [`produce_ssa_funcs`] over the graph a lowering builds once.
+pub(crate) fn produce_ssa_funcs_on(
+    graph: &ReachGraph,
+    target: Target,
+    optimize: bool,
+    jump_tables: bool,
+) -> Result<Vec<FunctionSsa>, C5Error> {
+    let program = graph.program;
     if !program.finished_functions.is_empty() {
         // The AST-level pass mirrors compute_live_sets and drops the
         // unit's dead functions before the walk, so the walk -- and the
@@ -349,14 +361,16 @@ pub(crate) fn produce_ssa_funcs(
         // below re-derives the set from the walked bodies; the assertion
         // catches an AST pass that dropped a function the SSA pass
         // keeps (a walked body still naming it).
-        let reachable = super::ast_reach::reachable_functions(program);
+        // Every object stays under the knob, and so must what one names.
+        let all_data = data_dce_disabled();
+        let reachable = super::ast_reach::reachable_functions(graph, all_data);
         let (mut funcs, failed) = walk_program(program, target, optimize, jump_tables, &reachable);
         // C99 6.2.2: a function with internal linkage that no reachable
         // code or data references is unobservable; drop it before codegen
         // so the unused `static inline` helpers headers pull into every
         // unit do not reach the image.
         let unwalked = failed.iter().map(|&(pc, _)| pc).collect();
-        let live = compute_live_sets(&funcs, &unwalked, program, false, None).func_pcs;
+        let live = compute_live_sets(&funcs, &unwalked, graph, all_data, None).func_pcs;
         // The AST set also holds functions only an unevaluated operand or a
         // folded arm names, so a failed walk is an error only once live.
         if let Some((_, e)) = failed.into_iter().find(|(pc, _)| live.contains(pc)) {
@@ -372,7 +386,7 @@ pub(crate) fn produce_ssa_funcs(
         }
         funcs.retain(|f| live.contains(&f.ent_pc));
         #[cfg(feature = "codegen_test")]
-        measure_dead_data(&funcs, program);
+        measure_dead_data(&funcs, graph);
         return Ok(order_by_section(funcs, program));
     }
     if !program.user_ssa_funcs.is_empty() || !program.synthetic_ssa_funcs.is_empty() {
@@ -549,10 +563,10 @@ pub(crate) fn data_object_starts(program: &Program) -> Vec<i64> {
 /// Function and data reachability of a unit (C99 6.2.2: an unreferenced internal
 /// definition is dropped, as by gcc -O); a pass adds each function's own edges.
 pub(crate) struct ReachGraph<'p> {
-    program: &'p Program,
+    pub(crate) program: &'p Program,
     data_len: i64,
     starts: Vec<i64>,
-    /// Assembler names of the defined objects and finished functions.
+    /// Assembler names of the defined objects and of every function.
     named: alloc::collections::BTreeMap<&'p str, Node>,
     code_edges: Vec<Vec<usize>>,
     data_edges: Vec<Vec<usize>>,
@@ -562,8 +576,9 @@ pub(crate) struct ReachGraph<'p> {
 }
 
 impl<'p> ReachGraph<'p> {
-    /// `funcs` add the names of the bodies with no AST.
-    pub(crate) fn new(program: &'p Program, funcs: &'p [FunctionSsa]) -> Self {
+    /// It holds no body's own edges, so one serves a lowering before and after
+    /// the -O pipeline, which adds and renames no function.
+    pub(crate) fn new(program: &'p Program) -> Self {
         use crate::c5::symbol::Linkage;
         use crate::c5::token::Token;
         let starts = data_object_starts(program);
@@ -606,7 +621,11 @@ impl<'p> ReachGraph<'p> {
                     .insert(emitted_name(&renamed, f), Node::Func(f.ent_pc));
             }
         }
-        for f in funcs {
+        for f in program
+            .synthetic_ssa_funcs
+            .iter()
+            .chain(&program.user_ssa_funcs)
+        {
             if !f.name.is_empty() {
                 graph.named.insert(f.name.as_str(), Node::Func(f.ent_pc));
             }
@@ -772,12 +791,11 @@ impl<'p> ReachGraph<'p> {
 pub(crate) fn compute_live_sets(
     funcs: &[FunctionSsa],
     unwalked: &alloc::collections::BTreeSet<usize>,
-    program: &Program,
+    graph: &ReachGraph,
     assume_data_live: bool,
     reachable_owners: Option<&alloc::collections::BTreeSet<usize>>,
 ) -> LiveSets {
     use crate::c5::ir::Inst;
-    let graph = ReachGraph::new(program, funcs);
     let by_ent: alloc::collections::BTreeMap<usize, &FunctionSsa> =
         funcs.iter().map(|f| (f.ent_pc, f)).collect();
     let defined = by_ent.keys().chain(unwalked).copied().collect();
@@ -821,7 +839,7 @@ pub(crate) fn compute_live_sets(
         });
     LiveSets {
         func_pcs,
-        starts: graph.starts,
+        starts: graph.starts.clone(),
         data_live,
     }
 }
@@ -1072,13 +1090,14 @@ pub(crate) fn compact_program_data(
     // form reaches the same set either way.
     // `[nested]`: inside `object::compact_program_data`, so the pass report
     // lists it without adding it to a phase total twice.
+    let graph = ReachGraph::new(program);
     let funcs =
         super::emit_common::time_pass("object::compact_program_data ssa build [nested]", || {
-            produce_ssa_funcs(program, target, optimize, true)
+            produce_ssa_funcs_on(&graph, target, optimize, true)
         })?;
     let live_func_pcs: alloc::collections::BTreeSet<usize> =
         funcs.iter().map(|f| f.ent_pc).collect();
-    let sets = compute_live_sets(&funcs, &Default::default(), program, false, None);
+    let sets = compute_live_sets(&funcs, &Default::default(), &graph, false, None);
     let (out, bss_size, _map) =
         apply_data_liveness(program.clone(), &sets, &live_func_pcs, segregate, None);
     Ok(Compaction {
@@ -1432,8 +1451,9 @@ pub(crate) fn apply_data_liveness(
 /// object-boundary model and the achievable `.data` reduction. Read
 /// under the `codegen_test` feature only, as every environment knob is.
 #[cfg(feature = "codegen_test")]
-fn measure_dead_data(funcs: &[FunctionSsa], program: &Program) {
+fn measure_dead_data(funcs: &[FunctionSsa], graph: &ReachGraph) {
     use std::io::Write;
+    let program = graph.program;
 
     let Ok(log_path) = std::env::var("BADC_DATA_DCE_LOG") else {
         return;
@@ -1442,7 +1462,7 @@ fn measure_dead_data(funcs: &[FunctionSsa], program: &Program) {
     if data_len == 0 {
         return;
     }
-    let sets = compute_live_sets(funcs, &Default::default(), program, false, None);
+    let sets = compute_live_sets(funcs, &Default::default(), graph, false, None);
     let (starts, live) = (sets.starts, sets.data_live);
     let n = starts.len();
 
@@ -1550,6 +1570,38 @@ mod tests {
                 .any(|r| r.target_offset >= data_len),
             "the &g[3] initializer must target a byte in the bss region"
         );
+    }
+
+    // A dropped label table's slots go with it rather than land on the NULL guard.
+    #[test]
+    fn a_dropped_label_table_takes_its_slots_along() {
+        let target = Target::LinuxX64;
+        let src = "static const char text[] = \"read only\";\n\
+                   static int run(int x) {\n\
+                       static void *const unread[] = { &&one, &&two };\n\
+                       static void *const read[] = { &&one, &&two };\n\
+                       goto *read[x != 0];\n\
+                   one: return 1;\n\
+                   two: return 2;\n\
+                   }\n\
+                   int main(void) { return run(1) + text[0]; }\n";
+        let program = compile(src, target);
+        assert_eq!(program.label_data_slots().count(), 4);
+        let c = compact_program_data(&program, target, true, false).expect("compact");
+        let slots: alloc::vec::Vec<(u64, usize)> = c.program.label_data_slots().collect();
+        assert_eq!(
+            slots.len(),
+            2,
+            "only the read table's slots remain: {slots:?}"
+        );
+        let ro = c.program.data_ro_len as i64;
+        assert!(ro > 0, "the literal forms a read-only prefix");
+        for off in c.program.data_reloc_offsets() {
+            assert!(
+                off >= ro,
+                "relocated slot {off:#x} below the prefix {ro:#x}"
+            );
+        }
     }
 
     // File-backed objects pack into three regions bounded by

@@ -34,7 +34,8 @@ with `--against REV` diffs that against the snapshots committed at REV.
 
 `--budget` reports the corpus access ratios and fails when the
 callee-saved entry/exit traffic per function is over its ceiling; a
-`--check` run ends with the same test.
+`--check` run ends with the same test. A fixture with a
+`// snapshot-budget: exempt` line is left out of the ratios.
 """
 
 from __future__ import annotations
@@ -684,11 +685,21 @@ def access_counts(text: str, arch: str) -> tuple[int, int, int, int]:
 # x86_64.
 #
 # A ceiling moves only deliberately: regenerate, read `--budget`, and
-# change the number in the commit that spends it.
+# change the number in the commit that spends it. A fixture marked
+# `// snapshot-budget: exempt`, whose functions keep values live across
+# calls by design, takes no part; its own snapshots pin its code.
 SAVED_PER_FUNCTION: dict[str, float] = {
     "aarch64": 0.292,
     "x64": 0.536,
 }
+
+BUDGET_EXEMPT_RE = re.compile(r"^//\s*snapshot-budget:\s*exempt\b", re.MULTILINE)
+
+
+def budget_exempt(root: Path, snapshot: Path) -> bool:
+    """Whether the fixture behind asm `snapshot` opts out of the budget."""
+    src = root / "tests" / "fixtures" / "c" / (snapshot.name.split(".")[0] + ".c")
+    return src.exists() and BUDGET_EXEMPT_RE.search(src.read_text(errors="replace")) is not None
 
 
 def corpus_access(root: Path) -> dict[str, tuple[int, int, int, int]]:
@@ -696,6 +707,8 @@ def corpus_access(root: Path) -> dict[str, tuple[int, int, int, int]]:
     asm = root / "tests" / "snapshots" / "asm"
     out: dict[str, list[int]] = {suffix: [0, 0, 0, 0] for suffix, _ in TARGETS}
     for path in sorted(asm.glob("*.asm")):
+        if budget_exempt(root, path):
+            continue
         arch = snapshot_arch(path.name)
         for i, v in enumerate(access_counts(path.read_text(errors="replace"), arch)):
             out[arch][i] += v

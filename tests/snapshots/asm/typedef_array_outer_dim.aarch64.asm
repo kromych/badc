@@ -72,8 +72,7 @@ Disassembly of section .text:
                	lsl	x2, x0, #4
                	add	x4, x2, #0xd
                	str	x4, [x3, #0x68]
-               	lsl	x3, x0, #7
-               	add	x3, x1, x3
+               	add	x3, x1, x0, lsl #7
                	ldr	x4, [x3, #0x68]
                	add	x5, x5, x4
                	add	x4, x2, #0xe

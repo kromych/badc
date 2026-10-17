@@ -15,46 +15,50 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v9   Imm(0)                                           -> x0
     v10  Imm(7)                                           -> x0
     v11  Imm(14)                                          -> x0
-    v12  Imm(0)                                           -> x0
+    v12  Imm(14)                                          -> x0
     v13  Imm(0)                                           -> x0
-    v14  Imm(7)                                           -> x0
-    v15  Imm(0)                                           -> x0
-    v16  Imm(0)                                           -> x0
-    v17  Imm(3)                                           -> x0
+    v14  Imm(0)                                           -> x0
+    v15  Imm(7)                                           -> x0
+    v16  Imm(7)                                           -> x0
+    v17  Imm(0)                                           -> x0
     v18  Imm(0)                                           -> x0
-    v19  Imm(0)                                           -> x0
-    v20  Imm(1)                                           -> x0
+    v19  Imm(3)                                           -> x0
+    v20  Imm(3)                                           -> x0
     v21  Imm(0)                                           -> x0
-    v22  Imm(14)                                          -> x0
-    v23  Imm(7)                                           -> x0
-    v24  Imm(21)                                          -> x0
-    v25  Imm(21)                                          -> x0
-    v26  Imm(3)                                           -> x0
-    v27  Imm(24)                                          -> x0
-    v28  Imm(24)                                          -> x0
-    v29  Imm(1)                                           -> x0
-    v30  Imm(25)                                          -> x0
-    v31  Imm(25)                                          -> x0
-    v32  Imm(125)                                         -> x0
-    v33  Imm(125)                                         -> x0
-    v34  Imm(175)                                         -> x0
-    v35  Imm(175)                                         -> x0
-    v36  Imm(200)                                         -> x0
-    v37  Imm(200)                                         -> x0
-    v38  Imm(212)                                         -> x0
-    v39  Imm(212)                                         -> x6
-    v40  Imm(0)                                           -> x0
-    v41  ImmData(12)                                      -> x7
-    v42  Imm(0)                                           -> x0
-    v43  CallExt { binding_idx=0, args=[v41, v39], fp_arg_mask=0x0 } -> x0
+    v22  Imm(0)                                           -> x0
+    v23  Imm(1)                                           -> x0
+    v24  Imm(1)                                           -> x0
+    v25  Imm(0)                                           -> x0
+    v26  Imm(0)                                           -> x0
+    v27  Imm(0)                                           -> x0
+    v28  Imm(21)                                          -> x0
+    v29  Imm(21)                                          -> x0
+    v30  Imm(0)                                           -> x0
+    v31  Imm(24)                                          -> x0
+    v32  Imm(24)                                          -> x0
+    v33  Imm(0)                                           -> x0
+    v34  Imm(25)                                          -> x0
+    v35  Imm(25)                                          -> x0
+    v36  Imm(125)                                         -> x0
+    v37  Imm(125)                                         -> x0
+    v38  Imm(175)                                         -> x0
+    v39  Imm(175)                                         -> x0
+    v40  Imm(200)                                         -> x0
+    v41  Imm(200)                                         -> x0
+    v42  Imm(212)                                         -> x0
+    v43  Imm(212)                                         -> x6
     v44  Imm(0)                                           -> x0
-    v45  Imm(1)                                           -> x0
+    v45  ImmData(12)                                      -> x7
     v46  Imm(0)                                           -> x0
-    v47  Imm(0)                                           -> x0
+    v47  CallExt { binding_idx=0, args=[v45, v43], fp_arg_mask=0x0 } -> x0
     v48  Imm(0)                                           -> x0
-    v49  Imm(0)                                           -> x0
+    v49  Imm(1)                                           -> x0
     v50  Imm(0)                                           -> x0
-    terminator Return(v50)   (exit_acc=v50)
+    v51  Imm(0)                                           -> x0
+    v52  Imm(0)                                           -> x0
+    v53  Imm(0)                                           -> x0
+    v54  Imm(0)                                           -> x0
+    terminator Return(v54)   (exit_acc=v54)
 ; --- SSA dump (ok=true) ent_pc=0 ---
 ; name=__c5_exit
 fn ent_pc=0 n_params=1 variadic=false locals=0

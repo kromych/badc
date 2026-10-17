@@ -51,7 +51,6 @@ Disassembly of section .text:
                	movq	%rdi, %rax
                	negq	%rax
                	movl	%edi, %ecx
-               	movl	%eax, %eax
                	shlq	$0x20, %rax
                	orq	%rcx, %rax
                	retq

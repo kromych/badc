@@ -118,9 +118,7 @@ Disassembly of section .text:
                	eor	x1, x1, #0x1
                	cbnz	w1, <addr>
                	ldur	w1, [x0, #0x1]
-               	and	x1, x1, #0x3fffffff
-               	lsl	x1, x1, #34
-               	asr	x1, x1, #34
+               	sbfx	x1, x1, #0, #30
                	mov	x17, #-0xcd15           // =-52501
                	movk	x17, #0xf8a4, lsl #16
                	cmp	w1, w17
@@ -140,9 +138,7 @@ Disassembly of section .text:
                	eor	x1, x1, #0x1
                	cbnz	w1, <addr>
                	ldur	w0, [x0, #0x1]
-               	and	x0, x0, #0x3fffffff
-               	lsl	x0, x0, #34
-               	asr	x0, x0, #34
+               	sbfx	x0, x0, #0, #30
                	mov	x17, #0x1fffffff        // =536870911
                	cmp	w0, w17
                	b.ne	<addr>
@@ -176,18 +172,12 @@ Disassembly of section .text:
                	eor	x1, x1, #0x3
                	cbnz	w1, <addr>
                	ldur	w1, [x29, #-0x30]
-               	asr	x1, x1, #8
-               	and	x1, x1, #0xfffff
-               	lsl	x1, x1, #44
-               	asr	x1, x1, #44
+               	sbfx	x1, x1, #8, #20
                	mov	x17, #-0x7ffff          // =-524287
                	cmp	w1, w17
                	b.ne	<addr>
                	ldur	w1, [x0, #0x3]
-               	asr	x1, x1, #4
-               	and	x1, x1, #0xfffff
-               	lsl	x1, x1, #44
-               	asr	x1, x1, #44
+               	sbfx	x1, x1, #4, #20
                	mov	x17, #0x7ffff           // =524287
                	cmp	w1, w17
                	b.ne	<addr>
@@ -203,18 +193,12 @@ Disassembly of section .text:
                	orr	x1, x1, #0xfffff0
                	stur	w1, [x0, #0x3]
                	ldur	w1, [x29, #-0x30]
-               	asr	x1, x1, #8
-               	and	x1, x1, #0xfffff
-               	lsl	x1, x1, #44
-               	asr	x1, x1, #44
+               	sbfx	x1, x1, #8, #20
                	mov	x17, #-0x7ffff          // =-524287
                	cmp	w1, w17
                	b.ne	<addr>
                	ldur	w0, [x0, #0x3]
-               	asr	x0, x0, #4
-               	and	x0, x0, #0xfffff
-               	lsl	x0, x0, #44
-               	asr	x0, x0, #44
+               	sbfx	x0, x0, #4, #20
                	mov	x17, #-0x1              // =-1
                	cmp	w0, w17
                	b.ne	<addr>
@@ -236,8 +220,7 @@ Disassembly of section .text:
                	sturb	w1, [x29, #-0x22]
                	ldur	w1, [x0, #0x1]
                	ldurb	w2, [x29, #-0x23]
-               	lsl	x2, x2, #32
-               	orr	x1, x1, x2
+               	orr	x1, x1, x2, lsl #32
                	and	x1, x1, #0xffffff0000000000
                	orr	x1, x1, #0x7fffffffff
                	stur	w1, [x0, #0x1]
@@ -249,10 +232,8 @@ Disassembly of section .text:
                	cbnz	w1, <addr>
                	ldur	w1, [x0, #0x1]
                	ldurb	w2, [x29, #-0x23]
-               	lsl	x2, x2, #32
-               	orr	x1, x1, x2
-               	lsl	x1, x1, #24
-               	asr	x1, x1, #24
+               	orr	x1, x1, x2, lsl #32
+               	sbfx	x1, x1, #0, #40
                	mov	x17, #0x7fffffffff      // =549755813887
                	cmp	x1, x17
                	b.ne	<addr>
@@ -265,8 +246,7 @@ Disassembly of section .text:
                	ret
                	ldur	w1, [x0, #0x1]
                	ldurb	w2, [x29, #-0x23]
-               	lsl	x2, x2, #32
-               	orr	x1, x1, x2
+               	orr	x1, x1, x2, lsl #32
                	and	x1, x1, #0xffffff0000000000
                	mov	x17, #0x9877            // =39031
                	movk	x17, #0xdcba, lsl #16
@@ -281,10 +261,8 @@ Disassembly of section .text:
                	cbnz	w1, <addr>
                	ldur	w0, [x0, #0x1]
                	ldurb	w1, [x29, #-0x23]
-               	lsl	x1, x1, #32
-               	orr	x0, x0, x1
-               	lsl	x0, x0, #24
-               	asr	x0, x0, #24
+               	orr	x0, x0, x1, lsl #32
+               	sbfx	x0, x0, #0, #40
                	mov	x17, #-0x6789           // =-26505
                	movk	x17, #0xdcba, lsl #16
                	movk	x17, #0xfffe, lsl #32

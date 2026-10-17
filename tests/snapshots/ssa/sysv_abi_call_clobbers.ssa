@@ -198,7 +198,7 @@ fn ent_pc=6 n_params=4 variadic=false locals=0
     v19  Binop { op=add, lhs=v11, rhs=v15 }               -> x0
     v20  Imm(0)                                           -> x1
     v21  Imm(0)                                           -> x1
-    v22  Binop { op=mul, lhs=v3, rhs=v5 }                 -> x1
+    v22  Binop { op=mul, lhs=v3, rhs=v5 }                 -> x12
     v23  Binop { op=add, lhs=v19, rhs=v22 }               -> x0
     v24  Imm(0)                                           -> x1
     v25  Binop { op=add, lhs=v23, rhs=v7 }                -> x0

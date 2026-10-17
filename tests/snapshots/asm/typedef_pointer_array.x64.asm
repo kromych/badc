@@ -42,37 +42,6 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	leaq	<rip>, %rax      # <addr>
-               	movq	(%rax), %rcx
-               	movsbq	(%rcx), %rcx
-               	cmpl	$0x61, %ecx
-               	jne	<addr>
-               	movq	0x10(%rax), %rcx
-               	movsbq	(%rcx), %rcx
-               	cmpl	$0x63, %ecx
-               	je	<addr>
-               	movl	$0x1, %eax
-               	popq	%rbp
-               	retq
-               	cmpq	$0x0, 0x8(%rax)
-               	jne	<addr>
-               	cmpq	$0x0, 0x18(%rax)
-               	je	<addr>
-               	movl	$0x2, %eax
-               	popq	%rbp
-               	retq
-               	leaq	<rip>, %rax      # <addr>
-               	movq	(%rax), %rcx
-               	movsbq	(%rcx), %rcx
-               	cmpl	$0x77, %ecx
-               	jne	<addr>
-               	movq	0x18(%rax), %rax
-               	movsbq	(%rax), %rax
-               	cmpl	$0x7a, %eax
-               	je	<addr>
-               	movl	$0x3, %eax
-               	popq	%rbp
-               	retq
-               	leaq	<rip>, %rax      # <addr>
                	leaq	<rip>, %rcx      # <addr>
                	movl	(%rax), %eax
                	cmpl	$0x1, %eax

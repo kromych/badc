@@ -4,7 +4,9 @@
 // move and reloaded after it; a frame whose sp does not keep its prologue
 // value reaches them through the frame pointer. The other stack is parked
 // below a guard area that reads as zero. Exits 0 when every value
-// survives, a distinct code per failure.
+// survives, a distinct code per failure. GNU C requires each asm
+// statement to leave sp as it found it; a switch spanning statements is
+// behavior badc defines.
 
 static struct {
     _Alignas(16) unsigned char stack[65536];

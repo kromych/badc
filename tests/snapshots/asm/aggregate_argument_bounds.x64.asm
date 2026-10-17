@@ -284,19 +284,17 @@ Disassembly of section .text:
                	leave
                	retq
                	movl	$0x1, %edi
-               	movzwq	(%r13), %rax
-               	movzbq	0x2(%r13), %rcx
-               	shlq	$0x10, %rcx
-               	movq	%rax, %rsi
-               	orq	%rcx, %rsi
-               	movl	(%r14), %eax
-               	movzbq	0x4(%r14), %rcx
-               	shlq	$0x20, %rcx
-               	movq	%rax, %rdx
-               	orq	%rcx, %rdx
-               	movl	(%r15), %eax
-               	movzwq	0x4(%r15), %rcx
-               	shlq	$0x20, %rcx
+               	movzwq	(%r13), %rsi
+               	movzbq	0x2(%r13), %rax
+               	shlq	$0x10, %rax
+               	orq	%rax, %rsi
+               	movl	(%r14), %edx
+               	movzbq	0x4(%r14), %rax
+               	shlq	$0x20, %rax
+               	orq	%rax, %rdx
+               	movl	(%r15), %ecx
+               	movzwq	0x4(%r15), %rax
+               	shlq	$0x20, %rax
                	orq	%rax, %rcx
                	movl	(%rbx), %eax
                	movzwq	0x4(%rbx), %r8

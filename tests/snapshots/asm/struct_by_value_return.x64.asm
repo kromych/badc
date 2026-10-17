@@ -36,9 +36,8 @@ Disassembly of section .text:
 
 <make_pair>:
                	movl	%edi, %eax
-               	movl	%esi, %ecx
-               	shlq	$0x20, %rcx
-               	orq	%rcx, %rax
+               	shlq	$0x20, %rsi
+               	orq	%rsi, %rax
                	retq
 
 <clobber>:
@@ -53,7 +52,6 @@ Disassembly of section .text:
                	leaq	(%rdi,%rsi), %rdx
                	addq	%rcx, %rax
                	movl	%edx, %ecx
-               	movl	%eax, %eax
                	shlq	$0x20, %rax
                	orq	%rcx, %rax
                	retq

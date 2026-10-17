@@ -30,30 +30,27 @@ Disassembly of section .text:
                	subq	%rsi, %rax
                	movabsq	$0x2aaaaaaaaaaaaaab, %rcx # imm = 0x2AAAAAAAAAAAAAAB
                	imulq	%rcx
+               	sarq	%rdx
                	movq	%rdx, %rax
-               	sarq	%rax
-               	movq	%rax, %rcx
-               	shrq	$0x3f, %rcx
-               	addq	%rcx, %rax
+               	shrq	$0x3f, %rax
+               	addq	%rdx, %rax
                	retq
 
 <d16>:
+               	subq	%rsi, %rdi
                	movq	%rdi, %rax
-               	subq	%rsi, %rax
-               	movq	%rax, %rcx
-               	sarq	$0x3f, %rcx
-               	shrq	$0x3c, %rcx
-               	addq	%rcx, %rax
+               	sarq	$0x3f, %rax
+               	shrq	$0x3c, %rax
+               	addq	%rdi, %rax
                	sarq	$0x4, %rax
                	retq
 
 <d4>:
+               	subq	%rsi, %rdi
                	movq	%rdi, %rax
-               	subq	%rsi, %rax
-               	movq	%rax, %rcx
-               	sarq	$0x3f, %rcx
-               	shrq	$0x3e, %rcx
-               	addq	%rcx, %rax
+               	sarq	$0x3f, %rax
+               	shrq	$0x3e, %rax
+               	addq	%rdi, %rax
                	sarq	$0x2, %rax
                	retq
 
@@ -79,10 +76,9 @@ Disassembly of section .text:
                	subq	%rcx, %rax
                	movabsq	$0x2aaaaaaaaaaaaaab, %rsi # imm = 0x2AAAAAAAAAAAAAAB
                	imulq	%rsi
+               	sarq	%rdx
                	movq	%rdx, %rax
-               	sarq	%rax
-               	movq	%rax, %rdx
-               	shrq	$0x3f, %rdx
+               	shrq	$0x3f, %rax
                	addq	%rdx, %rax
                	cmpq	$0x3, %rax
                	je	<addr>
@@ -98,11 +94,10 @@ Disassembly of section .text:
                	movq	%rcx, %rax
                	subq	%rdx, %rax
                	imulq	%rsi
+               	sarq	%rdx
                	movq	%rdx, %rax
-               	sarq	%rax
-               	movq	%rax, %rcx
-               	shrq	$0x3f, %rcx
-               	addq	%rcx, %rax
+               	shrq	$0x3f, %rax
+               	addq	%rdx, %rax
                	cmpq	$-0x3, %rax
                	je	<addr>
                	movl	$0x4, %eax

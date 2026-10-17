@@ -17,9 +17,13 @@ fn unsupported_inline_asm_reports_the_specific_form() {
     // reason, not the generic "op outside the implemented subset" fallback that
     // reads like an internal compiler error. `add` with too many registers has
     // no encoding -- a stable trigger, since no `add` form ever takes five.
-    let program = super::compile_str(
-        "int main(void){ __asm__ volatile(\"add x0, x1, x2, x3, x5\" ::: \"x0\"); return 0; }",
-    );
+    let program = crate::Compiler::with_target(
+        "int main(void){ __asm__ volatile(\"add x0, x1, x2, x3, x5\" ::: \"x0\"); return 0; }"
+            .into(),
+        Target::LinuxAarch64,
+    )
+    .compile()
+    .expect("compile");
     let err = crate::c5::object::emit_native_single_tu_for_test(
         &program,
         Target::LinuxAarch64,
@@ -39,9 +43,13 @@ fn unsupported_inline_asm_reports_the_specific_form_x86_64() {
     use crate::{NativeOptions, Target};
     // The x86_64 counterpart of the case above: `add` takes two operands,
     // so a three-operand spelling has no encoding.
-    let program = super::compile_str(
-        "int main(void){ __asm__ volatile(\"add %rax, %rbx, %rcx\" ::: \"rax\"); return 0; }",
-    );
+    let program = crate::Compiler::with_target(
+        "int main(void){ __asm__ volatile(\"add %rax, %rbx, %rcx\" ::: \"rax\"); return 0; }"
+            .into(),
+        Target::LinuxX64,
+    )
+    .compile()
+    .expect("compile");
     let err = crate::c5::object::emit_native_single_tu_for_test(
         &program,
         Target::LinuxX64,
@@ -52,6 +60,39 @@ fn unsupported_inline_asm_reports_the_specific_form_x86_64() {
         format!("{err}"),
         "error: inline asm: unsupported instruction `Add` (x86_64, function `main`) [B4001] [unsupported]"
     );
+}
+
+/// A single-file image refuses a static slot naming nothing, and on PE one
+/// naming an imported object, whose address the loader writes elsewhere.
+#[test]
+fn an_unbound_static_slot_in_a_single_image_is_reported() {
+    use crate::{Compiler, NativeOptions, Target};
+    let emit = |src: &str, target: Target| {
+        let program = Compiler::with_target(super::with_prelude(src), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("compile {target:?}: {e}"));
+        crate::emit_native_with_options(&program, target, NativeOptions::default())
+            .expect_err("the slot has no binding")
+            .to_string()
+    };
+    let undefined = "extern int nowhere_obj;\nint *p = &nowhere_obj;\n\
+                     int main(void) { return *p; }\n";
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+    ] {
+        let err = emit(undefined, target);
+        assert!(
+            err.contains("undefined reference to `nowhere_obj`"),
+            "{target:?}: {err}"
+        );
+    }
+    let environ = "#include <stdlib.h>\nchar ***pe = &_environ;\n\
+                   int main(void) { return *pe != _environ; }\n";
+    let err = emit(environ, Target::WindowsX64);
+    assert!(err.contains("import address table"), "{err}");
 }
 
 #[test]
@@ -13075,7 +13116,7 @@ fn scoped_fn_declaration_keeps_its_entity_for_the_link() {
         .expect("symbol");
     assert_eq!(sym.class, 0, "the name must unbind at scope exit");
     assert!(
-        sym.is_fun_entity() && sym.is_variadic,
+        sym.is_fun_entity() && sym.is_variadic(),
         "the entity and its prototype must survive the unbind"
     );
     assert!(
@@ -16293,4 +16334,35 @@ fn loop_conditions_and_steps_take_their_own_lines() {
         )
     };
     assert_eq!(lines_of("g", &step), [15], "for step");
+}
+
+/// A block-scope typedef binds its type within its block only (C99
+/// 6.2.1p4): after the block the outer typedef's function type holds again,
+/// its calling convention included.
+#[test]
+fn a_block_typedef_leaves_the_outer_convention_after_its_block() {
+    use crate::c5::codegen::CallConv;
+    use crate::c5::ir::Inst;
+    let src = "typedef long long ll;\n\
+               typedef ll (*T)(ll, ll);\n\
+               void shadow(void) {\n\
+                   { typedef ll (__attribute__((sysv_abi)) *T)(ll, ll); }\n\
+               }\n\
+               T g;\n\
+               ll call(void) { return g(4, 3); }\n\
+               int main(void) { return 0; }\n";
+    let target = crate::Target::WindowsX64;
+    let program = crate::Compiler::with_target(src.to_string(), target)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+        .expect("ssa");
+    let call = funcs.iter().find(|f| f.name == "call").expect("call");
+    let convs: alloc::vec::Vec<CallConv> = call
+        .insts
+        .iter()
+        .filter(|i| matches!(i, Inst::CallIndirect { .. }))
+        .filter_map(Inst::call_conv)
+        .collect();
+    assert_eq!(convs, [CallConv::Target]);
 }

@@ -15,14 +15,16 @@
 //! through `current_scalar_load_kind` and converting the trailing
 //! rvalue load into a stack push or address producer.
 
-use super::super::ast::{Expr, ExprId, SrcPos, UnOp};
+use super::super::ast::{Expr, ExprId, SrcPos, UnOp, expr_ty};
 use super::super::diag::Code;
 use super::super::error::C5Error;
 use super::super::ir::LoadKind;
 use super::super::symbol::{BindingInfo, Symbol};
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::types::{is_bool_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, load_op_for};
+use super::types::{
+    is_bool_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty, is_unsigned_ty, load_op_for,
+};
 
 #[cfg(test)]
 thread_local! {
@@ -51,6 +53,17 @@ fn pop_tail_past<T>(v: &mut alloc::vec::Vec<T>, past: impl Fn(&T) -> bool) -> us
         v.pop();
     }
     len - v.len() + usize::from(!v.is_empty())
+}
+
+/// The binding fields a callee `Ident` records, and the function type the
+/// name led to with them.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct CalleeBinding {
+    class: i64,
+    val: i64,
+    is_thread_local: bool,
+    array_size: i64,
+    fn_type: Option<(crate::c5::symbol::FnType, i64)>,
 }
 
 impl Compiler {
@@ -231,7 +244,6 @@ impl Compiler {
     pub(super) fn mark_emit_scalar_load(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
-        self.pending.value_is_fn_designator = false;
         self.pending.last_loaded_local = None;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
@@ -243,7 +255,6 @@ impl Compiler {
     pub(super) fn ast_psh(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
-        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
         self.ast_vstack.push(self.ast_acc.take());
@@ -256,7 +267,6 @@ impl Compiler {
     pub(super) fn ast_binop(&mut self, binop: super::super::ir::BinOp) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
-        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
         self.ast_apply_binop(binop);
@@ -268,7 +278,6 @@ impl Compiler {
     pub(super) fn ast_neg(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
-        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
         self.ast_apply_unary(super::super::ast::UnOp::Neg);
@@ -293,7 +302,6 @@ impl Compiler {
     pub(super) fn mark_emit_other(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
-        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
     }
@@ -306,7 +314,6 @@ impl Compiler {
     pub(super) fn ast_assign(&mut self) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
-        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         self.pending.last_imm_was_zero = false;
         self.ast_apply_assign();
@@ -350,7 +357,6 @@ impl Compiler {
     pub(super) fn emit_imm(&mut self, val: i64) {
         self.pending.fn_ptr_chain_depth = -1;
         self.pending.fn_ptr_depth_is_array_elem = false;
-        self.pending.value_is_fn_designator = false;
         self.pending.last_emit_was_indirect_call = false;
         // Only literal-zero immediates set the peek flag; every
         // other immediate clears it.
@@ -443,6 +449,36 @@ impl Compiler {
         self.pending.last_imm_was_zero
     }
 
+    /// Whether the value in hand designates an object (C99 6.3.2.1p1), not
+    /// a structure a call, `?:`, comma, assignment, `({...})` or cast yields.
+    pub(super) fn value_designates_object(&self) -> bool {
+        self.ast_acc.is_none_or(|id| self.designates_object(id))
+    }
+
+    /// The node in hand as an lvalue: absent where it designates no object.
+    pub(super) fn object_lvalue(&self) -> Option<ExprId> {
+        self.ast_acc.filter(|&id| self.designates_object(id))
+    }
+
+    fn designates_object(&self, id: ExprId) -> bool {
+        match self.ast.expr(id) {
+            Expr::Call { .. }
+            | Expr::Ternary { .. }
+            | Expr::Comma { .. }
+            | Expr::Assign { .. }
+            | Expr::StmtExpr { .. }
+            | Expr::Cast { .. } => false,
+            Expr::Member { obj, .. } => self.member_designates_object(*obj),
+            _ => true,
+        }
+    }
+
+    /// Whether a member of `obj`, reached by `.` or `->`, is an object
+    /// (C99 6.5.2.3p3-4).
+    pub(super) fn member_designates_object(&self, obj: ExprId) -> bool {
+        expr_ty(self.ast.expr(obj)).is_some_and(is_pointer_ty) || self.designates_object(obj)
+    }
+
     /// Inspect `ast_acc` for the load kind the current expression
     /// just produced. Returns `Some(kind)` when the topmost
     /// `Expr` produces a scalar value via a single load
@@ -518,7 +554,9 @@ impl Compiler {
     /// The pattern shows up in pre/post-increment, plain
     /// assignment, and compound assignment.
     pub(super) fn rewrite_trailing_load_as_psh(&mut self) -> Option<LoadKind> {
-        let load_op = self.current_scalar_load_kind()?;
+        let load_op = self
+            .current_scalar_load_kind()
+            .filter(|_| self.value_designates_object())?;
         // The address producer's value moves to the c5 stack;
         // push the current `ast_acc` slot onto the parser vstack
         // and clear the accumulator.
@@ -566,7 +604,7 @@ impl Compiler {
     /// success. Used by `&expr` to convert an rvalue load chain
     /// into an lvalue-address chain.
     pub(super) fn pop_trailing_scalar_load(&mut self) -> bool {
-        if self.current_scalar_load_kind().is_none() {
+        if self.current_scalar_load_kind().is_none() || !self.value_designates_object() {
             return false;
         }
         // The load is gone -- the symbol's value never gets
@@ -737,15 +775,9 @@ impl Compiler {
         s.h_val = s.val;
         s.h_fn_ptr_indirection = s.fn_ptr_indirection;
         s.h_fn_ptr_ret_indirection = s.fn_ptr_ret_indirection;
-        s.h_ret_fn = s.ret_fn.clone();
-        s.h_params = s.params.clone();
-        s.h_is_variadic = s.is_variadic;
-        s.h_prototyped = s.prototyped;
-        s.h_param_enum_tags = s.param_enum_tags.clone();
-        s.h_param_fn_types = s.param_fn_types.clone();
+        s.h_fn_type = s.fn_type.clone();
         // The inner binding's type records its own enum tag.
         s.h_incomplete_enum_tag = s.incomplete_enum_tag.take();
-        s.h_conv = s.conv;
         s.h_array_size = s.array_size;
         s.h_type_align = s.type_align;
         // Clone rather than `mem::take`: the inner-scope binding
@@ -789,8 +821,8 @@ impl Compiler {
         // The inner binding records its own folded const value, if any.
         s.h_const_object_value = s.const_object_value;
         s.const_object_value = None;
-        s.h_static_local_record = s.static_local_record;
-        s.static_local_record = None;
+        s.h_entity_record = s.entity_record;
+        s.entity_record = None;
         s.h_binding = Self::save_binding(&mut s.binding);
     }
 
@@ -808,7 +840,7 @@ impl Compiler {
             sym.class = 0;
             sym.is_scope_bound = false;
             sym.block_extern_active = false;
-            sym.static_local_record = sym.h_static_local_record;
+            sym.entity_record = sym.h_entity_record;
             return;
         }
         let same_function = sym.class == Token::Fun as i64 && sym.h_class == Token::Fun as i64;
@@ -818,14 +850,8 @@ impl Compiler {
         sym.val = sym.h_val;
         sym.fn_ptr_indirection = sym.h_fn_ptr_indirection;
         sym.fn_ptr_ret_indirection = sym.h_fn_ptr_ret_indirection;
-        sym.ret_fn = sym.h_ret_fn.take();
-        sym.params = core::mem::take(&mut sym.h_params);
-        sym.is_variadic = sym.h_is_variadic;
-        sym.prototyped = sym.h_prototyped;
-        sym.param_enum_tags = core::mem::take(&mut sym.h_param_enum_tags);
-        sym.param_fn_types = core::mem::take(&mut sym.h_param_fn_types);
+        sym.fn_type = core::mem::take(&mut sym.h_fn_type);
         sym.incomplete_enum_tag = sym.h_incomplete_enum_tag.take();
-        sym.conv = sym.h_conv;
         sym.array_size = sym.h_array_size;
         sym.type_align = sym.h_type_align;
         sym.inner_array_size = sym.h_inner_array_size;
@@ -846,7 +872,7 @@ impl Compiler {
         sym.is_global_register = sym.h_is_global_register;
         sym.asm_name = sym.h_asm_name.take();
         sym.const_object_value = sym.h_const_object_value;
-        sym.static_local_record = sym.h_static_local_record;
+        sym.entity_record = sym.h_entity_record;
         sym.is_scope_bound = false;
         sym.block_extern_active = false;
         // The register-asm binding belongs to the block-scope local
@@ -881,14 +907,8 @@ impl Compiler {
             && sym.val == sym.h_val
             && sym.fn_ptr_indirection == sym.h_fn_ptr_indirection
             && sym.fn_ptr_ret_indirection == sym.h_fn_ptr_ret_indirection
-            && sym.ret_fn == sym.h_ret_fn
-            && sym.params == sym.h_params
-            && sym.is_variadic == sym.h_is_variadic
-            && sym.prototyped == sym.h_prototyped
-            && sym.param_enum_tags == sym.h_param_enum_tags
-            && sym.param_fn_types == sym.h_param_fn_types
+            && sym.fn_type == sym.h_fn_type
             && sym.incomplete_enum_tag == sym.h_incomplete_enum_tag
-            && sym.conv == sym.h_conv
             && sym.array_size == sym.h_array_size
             && sym.type_align == sym.h_type_align
             && sym.inner_array_size == sym.h_inner_array_size
@@ -909,7 +929,7 @@ impl Compiler {
             && sym.is_global_register == sym.h_is_global_register
             && sym.asm_name == sym.h_asm_name
             && sym.const_object_value == sym.h_const_object_value
-            && sym.static_local_record == sym.h_static_local_record
+            && sym.entity_record == sym.h_entity_record
             && !sym.is_scope_bound
             && !sym.block_extern_active
     }
@@ -1084,10 +1104,10 @@ impl Compiler {
             end_pc: self.next_ent_pc,
             n_params,
             is_variadic,
-            is_inline: self.pending_is_inline,
-            is_always_inline: self.pending_is_always_inline,
-            is_noinline: self.pending_is_noinline,
-            is_naked: self.pending_is_naked,
+            is_inline: self.current_func_attrs.is_inline,
+            is_always_inline: self.current_func_attrs.is_always_inline,
+            is_noinline: self.current_func_attrs.is_noinline,
+            is_naked: self.current_func_attrs.is_naked,
             is_noreturn: self.current_func_is_noreturn,
             conv: self.current_func_conv,
             n_locals: self.max_loc_offs,
@@ -1109,10 +1129,7 @@ impl Compiler {
             label_data_slots: core::mem::take(&mut self.pending_label_relocs),
         };
         self.in_function_body = false;
-        self.pending_is_inline = false;
-        self.pending_is_always_inline = false;
-        self.pending_is_noinline = false;
-        self.pending_is_naked = false;
+        self.current_func_attrs = super::DeclAttrs::default();
         self.current_func_conv = crate::c5::codegen::CallConv::Target;
         self.current_func_is_noreturn = false;
         self.finished_functions.push(finished);
@@ -1193,12 +1210,12 @@ impl Compiler {
         // by name / same-TU offset regardless of the class restored at
         // block exit. Record it for the walker.
         let block_extern = class == Token::Glo as i64 && s.block_extern_active;
-        // A reference to a block-scope static resolves against its
-        // emission record: the slot's binding is restored at scope exit,
-        // so walk-time re-resolution through the slot would see whatever
-        // file-scope binding the name has (C99 6.2.1p4 shadowing).
-        let sym = match s.static_local_record {
+        // A reference to a block-scope static, or to a function held apart
+        // from its name, resolves against the entity's record: the slot's
+        // binding is restored at scope exit (C99 6.2.1p4 shadowing).
+        let sym = match s.entity_record {
             Some(r) if class == Token::Glo as i64 && !s.block_extern_active => r,
+            Some(r) if class == Token::Fun as i64 => r,
             _ => sym,
         };
         let id = self.ast.push_expr(
@@ -1559,24 +1576,52 @@ impl Compiler {
     /// a matching Ident node so [`Self::ast_emit_call`] can fill
     /// the `callee` field without re-running symbol resolution.
     pub(super) fn ast_synthesize_callee(&mut self, sym: u32, ty: i64) -> ExprId {
+        let binding = self.callee_binding(sym as usize);
+        let entity = self.fn_entity_of(sym as usize);
+        self.ast_callee_ident(entity as u32, ty, binding)
+    }
+
+    /// The slot holding the function a `Token::Fun` binding of `idx` denotes.
+    pub(super) fn fn_entity_of(&self, idx: usize) -> usize {
+        let s = &self.symbols[idx];
+        match s.entity_record {
+            Some(r) if s.class == Token::Fun as i64 => r as usize,
+            _ => idx,
+        }
+    }
+
+    pub(super) fn callee_binding(&self, sym: usize) -> CalleeBinding {
+        let s = &self.symbols[sym];
+        CalleeBinding {
+            class: s.class,
+            val: s.val,
+            is_thread_local: s.is_thread_local,
+            array_size: s.array_size,
+            fn_type: self.symbol_fn(sym),
+        }
+    }
+
+    pub(super) fn ast_callee_ident(&mut self, sym: u32, ty: i64, b: CalleeBinding) -> ExprId {
         let pos = self.ast_src_pos();
-        let s = &self.symbols[sym as usize];
-        let class = s.class;
-        let val = s.val;
-        let is_thread_local = s.is_thread_local;
-        let array_size = s.array_size;
         let id = self.ast.push_expr(
             Expr::Ident {
                 sym,
                 ty,
-                class,
-                val,
-                is_thread_local,
-                array_size,
+                class: b.class,
+                val: b.val,
+                is_thread_local: b.is_thread_local,
+                array_size: b.array_size,
             },
             pos,
         );
-        self.record_ident_fn(id, sym as usize);
+        if let Some((f, depth)) = b.fn_type {
+            self.set_expr_fn(id, f, depth);
+        }
+        // The call follows its callee's type here (C99 6.5.2.2); the walker
+        // runs after the scope ends.
+        if let Some(f) = self.callee_fn(Some(id)) {
+            self.ast.callee_types.insert(id, f);
+        }
         id
     }
 

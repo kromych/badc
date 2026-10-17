@@ -35,9 +35,8 @@ Disassembly of section .text:
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
                	movl	%esi, 0x200(%rdi)
-               	movq	%rsi, %rax
-               	xorq	$-0x1, %rax
-               	movl	%eax, 0x204(%rdi)
+               	xorq	$-0x1, %rsi
+               	movl	%esi, 0x204(%rdi)
                	leaq	<rip>, %rax      # <addr>
                	movl	(%rax), %ecx
                	incq	%rcx
@@ -63,9 +62,8 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	0x204(%rdi), %eax
-               	movq	%rsi, %rcx
-               	xorq	$-0x1, %rcx
-               	cmpl	%ecx, %eax
+               	xorq	$-0x1, %rsi
+               	cmpl	%esi, %eax
                	sete	%al
                	movzbq	%al, %rax
                	retq

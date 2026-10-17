@@ -32,43 +32,6 @@ Disassembly of section .text:
                	mov	x29, sp
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x1, [x0]
-               	ldrb	w1, [x1]
-               	mov	x17, #0x61              // =97
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
-               	ldr	x1, [x0, #0x10]
-               	ldrb	w1, [x1]
-               	mov	x17, #0x63              // =99
-               	eor	x1, x1, x17
-               	cbz	w1, <addr>
-               	mov	x0, #0x1                // =1
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	ldr	x1, [x0, #0x8]
-               	cbnz	x1, <addr>
-               	ldr	x0, [x0, #0x18]
-               	cbz	x0, <addr>
-               	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x1, [x0]
-               	ldrb	w1, [x1]
-               	mov	x17, #0x77              // =119
-               	eor	x1, x1, x17
-               	cbnz	w1, <addr>
-               	ldr	x0, [x0, #0x18]
-               	ldrb	w0, [x0]
-               	mov	x17, #0x7a              // =122
-               	eor	x0, x0, x17
-               	cbz	w0, <addr>
-               	mov	x0, #0x3                // =3
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrsw	x0, [x0]

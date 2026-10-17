@@ -118,8 +118,7 @@ Disassembly of section .text:
                	add	x1, x2, #0x2
                	add	x2, x2, #0x18
                	sub	x1, x2, x1
-               	lsr	x2, x1, #63
-               	add	x1, x1, x2
+               	add	x1, x1, x1, lsr #63
                	asr	x1, x1, #1
                	cmp	x1, #0xb
                	b.eq	<addr>

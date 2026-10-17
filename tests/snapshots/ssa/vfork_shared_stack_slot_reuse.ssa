@@ -735,8 +735,8 @@ fn ent_pc=8 n_params=0 variadic=false locals=1
     v368 Binop { op=add, lhs=v365, rhs=v284 }             -> x1
     v369 Extend { value=v368, kind=I32, nsw }             -> x2
     v370 Extend { value=v292, kind=I32 }                  -> x2
-    v371 Binop { op=add, lhs=v368, rhs=v292 }             -> x0
-    v372 Extend { value=v371, kind=I32, nsw }             -> x1
+    v371 Binop { op=add, lhs=v368, rhs=v292 }             -> x7
+    v372 Extend { value=v371, kind=I32, nsw }             -> x0
     v373 BinopI { op=and, lhs=v371, rhs_imm=127 }         -> x7
     v374 Extend { value=v373, kind=I32 }                  -> x0
     v375 Extend { value=v373, kind=I32 }                  -> x0

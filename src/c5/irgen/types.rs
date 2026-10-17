@@ -176,6 +176,76 @@ pub(crate) fn arg_value_ty(e: &Expr) -> Option<i64> {
     }
 }
 
+/// The width in bits `op` divides at, the widest of `ty` and the operands';
+/// `None` for no divide or a type wider than a register.
+pub(super) fn divmod_operand_width(
+    ast: &Ast,
+    target: Target,
+    op: BinOp,
+    ty: i64,
+    (lhs, rhs): (ExprId, ExprId),
+) -> Option<u32> {
+    if !matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu) {
+        return None;
+    }
+    let sz = |id: ExprId| expr_ty(ast.expr(id)).map_or(8, |t| type_size_bytes(t, target));
+    match type_size_bytes(ty, target).max(sz(lhs)).max(sz(rhs)) {
+        0..=4 => Some(32),
+        5..=8 => Some(64),
+        _ => None,
+    }
+}
+
+/// The mask an unsigned 32-bit compare, divide or modulo applies to its
+/// operands, or 0: C99 6.3.1.8 converts a signed one to the unsigned type,
+/// dropping the sign-extended high bits its register holds.
+pub(super) fn const_operand_mask(
+    ast: &Ast,
+    target: Target,
+    op: BinOp,
+    ty: i64,
+    (lhs, rhs): (ExprId, ExprId),
+) -> i64 {
+    if matches!(op, BinOp::Divu | BinOp::Modu) {
+        return match divmod_operand_width(ast, target, op, ty, (lhs, rhs)) {
+            Some(32) => 0xffff_ffff,
+            _ => 0,
+        };
+    }
+    if !matches!(op, BinOp::Ult | BinOp::Ugt | BinOp::Ule | BinOp::Uge) {
+        return 0;
+    }
+    let needs = |id: ExprId| -> (bool, usize) {
+        let e = ast.expr(id);
+        let ty = expr_ty(e);
+        let sz = ty.map_or(8, |t| type_size_bytes(t, target));
+        let signed = ty.is_some_and(|t| t & UNSIGNED_BIT == 0);
+        let nonneg_lit = matches!(e, Expr::IntLit { val, .. } if *val >= 0);
+        (signed && !nonneg_lit, sz)
+    };
+    let (l_needs, lsz) = needs(lhs);
+    let (r_needs, rsz) = needs(rhs);
+    if lsz <= 4 && rsz <= 4 && (l_needs || r_needs) {
+        0xffff_ffffi64
+    } else {
+        0
+    }
+}
+
+/// Integer `op` at type `ty` over operand constants read as `op` reads them.
+pub(crate) fn fold_const_int_binop(
+    ast: &Ast,
+    target: Target,
+    op: BinOp,
+    ty: i64,
+    (lhs, l): (ExprId, i64),
+    (rhs, r): (ExprId, i64),
+) -> Option<i64> {
+    let m = const_operand_mask(ast, target, op, ty, (lhs, rhs));
+    let (l, r) = if m == 0 { (l, r) } else { (l & m, r & m) };
+    crate::c5::ir::eval_int_binop(op, l, r).ok()
+}
+
 /// Byte size of a C type tag at the active target, mirroring
 /// `compiler::types::size_of_type` over the scalar, pointer and FP
 /// cases. Zero for a width the walker does not compute -- a struct or

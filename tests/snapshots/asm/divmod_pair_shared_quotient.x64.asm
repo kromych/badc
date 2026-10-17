@@ -68,11 +68,10 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movq	%r8, %rax
-               	imulq	%rsi, %rax
-               	movq	%rdi, %rcx
-               	subq	%rax, %rcx
-               	addq	%rcx, %rax
+               	imulq	%r8, %rsi
+               	movq	%rdi, %rax
+               	subq	%rsi, %rax
+               	addq	%rsi, %rax
                	cmpl	%edi, %eax
                	je	<addr>
                	movl	$0x5, %eax

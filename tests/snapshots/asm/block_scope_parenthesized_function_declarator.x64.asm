@@ -26,9 +26,8 @@ Disassembly of section .text:
                	int3
 
 <calls>:
-               	movq	%rdi, %rax
-               	subq	%rsi, %rax
-               	imulq	$0x3e8, %rax, %rax      # imm = 0x3E8
+               	subq	%rsi, %rdi
+               	imulq	$0x3e8, %rdi, %rax      # imm = 0x3E8
                	addq	$0xc8, %rax
                	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx), %rcx

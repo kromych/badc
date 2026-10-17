@@ -460,7 +460,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=7
     v175 BinopI { op=add, lhs=v169, rhs_imm=8 }           -> x0
     v176 Imm(0)                                           -> x0
     v177 LoadLocal { off=-63, disp=8, kind=I64 }          -> x0
-    v178 Binop { op=xor, lhs=v166, rhs=v165 }             -> x0
+    v178 Binop { op=xor, lhs=v166, rhs=v165 }             -> x1
     v179 StoreLocal { off=-72, disp=8, value=v178, kind=I64 } -> -
     v180 Imm(0)                                           -> x0
     v181 LocalAddr(-62)                                   -> x7

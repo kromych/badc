@@ -126,7 +126,7 @@ fn ent_pc=1 n_params=9 variadic=false locals=6
     v50  StoreLocal { off=-2, disp=8, value=v47, kind=I64 } -> -
     v51  LocalAddr(-2)                                    -> x0
     v52  Imm(0)                                           -> x0
-    v53  BinopI { op=shl, lhs=v5, rhs_imm=1 }             -> x0
+    v53  BinopI { op=shl, lhs=v5, rhs_imm=1 }             -> x6
     v54  BinopI { op=add, lhs=v53, rhs_imm=5 }            -> x0
     v55  BinopI { op=and, lhs=v54, rhs_imm=4294967295 }   -> x6
     v56  Imm(79020)                                       -> x6

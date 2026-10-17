@@ -36,22 +36,19 @@ Disassembly of section .text:
                	retq
 
 <plainf>:
-               	movq	%rdi, %rax
-               	shlq	%rax
-               	addq	%rsi, %rax
+               	shlq	%rdi
+               	leaq	(%rdi,%rsi), %rax
                	retq
 
 <msf6>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	%rdx, %rax
-               	shlq	%rax
-               	addq	%rcx, %rax
+               	shlq	%rdx
+               	leaq	(%rcx,%rdx), %rax
                	leaq	(%r8,%r8,2), %rcx
                	addq	%rcx, %rax
-               	movq	%r9, %rcx
-               	shlq	$0x2, %rcx
-               	addq	%rcx, %rax
+               	shlq	$0x2, %r9
+               	addq	%r9, %rax
                	movq	0x30(%rbp), %rcx
                	leaq	(%rcx,%rcx,4), %rcx
                	addq	%rcx, %rax
@@ -62,12 +59,10 @@ Disassembly of section .text:
                	retq
 
 <svf6>:
-               	movq	%rsi, %rax
-               	shlq	%rax
-               	movq	%rdi, %rsi
-               	subq	%rax, %rsi
+               	shlq	%rsi
+               	subq	%rsi, %rdi
                	leaq	(%rdx,%rdx,2), %rax
-               	addq	%rsi, %rax
+               	addq	%rdi, %rax
                	shlq	$0x2, %rcx
                	subq	%rcx, %rax
                	leaq	(%r8,%r8,4), %rcx

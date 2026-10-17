@@ -75,9 +75,8 @@ Disassembly of section .text:
                	popq	%r15
                	leave
                	retq
-               	movq	%r9, %rcx
-               	shlq	%rcx
-               	addq	%rdx, %rcx
+               	shlq	%r9
+               	leaq	(%rdx,%r9), %rcx
                	leaq	(%rax,%rax,2), %rax
                	addq	%rcx, %rax
                	movq	0x50(%rsp), %rcx

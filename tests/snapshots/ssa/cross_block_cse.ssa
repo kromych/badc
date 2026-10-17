@@ -547,7 +547,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=6
     v560 LoadIndexed { base=v539, index=v549, scale=8, kind=I64 } -> x7
     v561 BinopI { op=mul, lhs=v549, rhs_imm=3 }           -> x8
     v562 BinopI { op=add, lhs=v552, rhs_imm=1 }           -> x8
-    v563 Binop { op=mul, lhs=v560, rhs=v553 }             -> x6
+    v563 Binop { op=mul, lhs=v560, rhs=v553 }             -> x7
     v564 Binop { op=add, lhs=v550, rhs=v563 }             -> x1
     terminator Jmp(b31)   (exit_acc=v564)
   block 30  start_pc=0

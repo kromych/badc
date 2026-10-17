@@ -151,9 +151,8 @@ Disassembly of section .text:
                	retq
 
 <diff_zero>:
-               	movq	%rdi, %rax
-               	subq	%rsi, %rax
-               	testl	%eax, %eax
+               	subq	%rsi, %rdi
+               	testl	%edi, %edi
                	jne	<addr>
                	movl	$0x7, %eax
                	retq

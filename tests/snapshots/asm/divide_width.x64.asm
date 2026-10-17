@@ -61,10 +61,9 @@ Disassembly of section .text:
 <low_words>:
                	movq	%rdi, %rax
                	shrq	$0x1f, %rax
-               	movq	%rsi, %rcx
-               	andq	$0x7, %rcx
-               	movabsq	$0x100000000, %r11      # imm = 0x100000000
-               	addq	%r11, %rcx
+               	andq	$0x7, %rsi
+               	movabsq	$0x100000000, %rcx      # imm = 0x100000000
+               	addq	%rsi, %rcx
                	xorl	%edx, %edx
                	divl	%ecx
                	movl	$0xaaaaaaab, %ecx       # imm = 0xAAAAAAAB
@@ -233,8 +232,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	leaq	<rip>, %rax      # <addr>
-               	movl	0xc(%rax), %ecx
-               	movq	%rcx, %rdi
+               	movl	0xc(%rax), %edi
                	shlq	%rdi
                	movl	0x8(%rax), %eax
                	leaq	-0xa(%rax), %rsi

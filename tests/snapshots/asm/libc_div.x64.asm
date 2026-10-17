@@ -67,13 +67,11 @@ Disassembly of section .text:
                	cltd
                	idivl	%ecx
                	movq	%rax, %rsi
-               	movq	%rsi, %rax
-               	imulq	%rcx, %rax
-               	movq	%rbx, %rcx
-               	subq	%rax, %rcx
+               	imulq	%rsi, %rcx
+               	subq	%rcx, %rbx
                	cmpl	$0x3, %esi
                	jne	<addr>
-               	cmpl	$0x2, %ecx
+               	cmpl	$0x2, %ebx
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
@@ -89,20 +87,18 @@ Disassembly of section .text:
                	cltd
                	idivl	%esi
                	movq	%rax, %rcx
-               	movq	%rcx, %rdx
-               	imulq	%rsi, %rdx
-               	movq	%rbx, %rax
-               	subq	%rdx, %rax
+               	imulq	%rcx, %rsi
+               	subq	%rsi, %rbx
                	cmpl	$-0x3, %ecx
                	jne	<addr>
-               	cmpl	$-0x2, %eax
+               	cmpl	$-0x2, %ebx
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
                	leave
                	retq
-               	leaq	(%rcx,%rcx,4), %rcx
-               	addq	%rcx, %rax
+               	leaq	(%rcx,%rcx,4), %rax
+               	addq	%rbx, %rax
                	cmpl	$-0x11, %eax
                	je	<addr>
                	movl	$0x3, %eax
@@ -119,13 +115,11 @@ Disassembly of section .text:
                	cqto
                	idivq	%rcx
                	movq	%rax, %rsi
-               	movq	%rsi, %rax
-               	imulq	%rcx, %rax
-               	movq	%rbx, %rcx
-               	subq	%rax, %rcx
+               	imulq	%rsi, %rcx
+               	subq	%rcx, %rbx
                	cmpq	$0xe, %rsi
                	jne	<addr>
-               	cmpq	$0x2, %rcx
+               	cmpq	$0x2, %rbx
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx
@@ -141,13 +135,11 @@ Disassembly of section .text:
                	cqto
                	idivq	%rcx
                	movq	%rax, %rsi
-               	movq	%rsi, %rax
-               	imulq	%rcx, %rax
-               	movq	%rbx, %rcx
-               	subq	%rax, %rcx
+               	imulq	%rsi, %rcx
+               	subq	%rcx, %rbx
                	cmpq	$0x14d, %rsi            # imm = 0x14D
                	jne	<addr>
-               	cmpq	$0x1, %rcx
+               	cmpq	$0x1, %rbx
                	je	<addr>
                	movl	$0x5, %eax
                	popq	%rbx

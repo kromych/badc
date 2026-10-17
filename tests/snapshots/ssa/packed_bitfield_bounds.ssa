@@ -665,7 +665,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v572 BinopI { op=shl, lhs=v561, rhs_imm=16 }          -> x1
     v573 Binop { op=or, lhs=v559, rhs=v572 }              -> x0
     v574 BinopI { op=and, lhs=v573, rhs_imm=-16777201 }   -> x0
-    v575 BinopI { op=shl, lhs=v569, rhs_imm=4 }           -> x1
+    v575 BinopI { op=shl, lhs=v569, rhs_imm=4 }           -> x2
     v576 Binop { op=or, lhs=v574, rhs=v575 }              -> x0
     v577 Store { addr=v7, disp=0, value=v576, kind=I16, align=1 } -> -
     v578 BinopI { op=shru, lhs=v576, rhs_imm=16 }         -> x0
@@ -1113,7 +1113,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v995 Imm(0)                                           -> x7
     v996 Imm(0)                                           -> x7
     v997 Binop { op=xor, lhs=v990, rhs=v937 }             -> x1
-    v998 BinopI { op=xor, lhs=v987, rhs_imm=-1 }          -> x2
+    v998 BinopI { op=xor, lhs=v987, rhs_imm=-1 }          -> x6
     v999 Binop { op=or, lhs=v997, rhs=v998 }              -> x1
     v1000 BinopI { op=ne, lhs=v999, rhs_imm=0 }            -> x2
     v1001 Imm(1)                                           -> x2
@@ -1408,7 +1408,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v1264 BinopI { op=shru, lhs=v1245, rhs_imm=1 }         -> x0
     v1265 Imm(-9223372036854775808)                        -> x1
     v1266 BinopI { op=or, lhs=v1264, rhs_imm=-9223372036854775808 } -> x1
-    v1267 BinopI { op=shl, lhs=v1262, rhs_imm=63 }         -> x0
+    v1267 BinopI { op=shl, lhs=v1262, rhs_imm=63 }         -> x2
     v1268 BinopI { op=or, lhs=v1267, rhs_imm=81985529216486895 } -> x2
     v1269 BinopI { op=add, lhs=v1266, rhs_imm=1 }          -> x0
     v1270 Binop { op=ult, lhs=v1269, rhs=v1266 }           -> x1
@@ -1427,7 +1427,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v1283 Store { addr=v22, disp=0, value=v1281, kind=I64, align=1 } -> -
     v1284 Store { addr=v22, disp=8, value=v1276, kind=I64, align=1 } -> -
     v1285 BinopI { op=shru, lhs=v1272, rhs_imm=63 }        -> x1
-    v1286 BinopI { op=and, lhs=v1279, rhs_imm=-2 }         -> x6
+    v1286 BinopI { op=and, lhs=v1279, rhs_imm=-2 }         -> x7
     v1287 Binop { op=or, lhs=v1286, rhs=v1285 }            -> x1
     v1288 Store { addr=v22, disp=16, value=v1287, kind=I8 } -> -
     v1289 Imm(0)                                           -> x1

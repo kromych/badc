@@ -33,9 +33,8 @@ Disassembly of section .text:
                	retq
 
 <f2>:
-               	movq	%rdi, %rax
-               	imulq	%rsi, %rax
-               	addq	%rdx, %rax
+               	imulq	%rdi, %rsi
+               	leaq	(%rsi,%rdx), %rax
                	addq	%rcx, %rax
                	addq	%r8, %rax
                	retq

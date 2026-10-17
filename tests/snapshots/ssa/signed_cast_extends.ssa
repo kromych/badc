@@ -234,10 +234,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v168 Imm(1)                                           -> x0
     v169 Imm(0)                                           -> x0
     v170 BinopI { op=and, lhs=v141, rhs_imm=255 }         -> x0
-    v171 BinopI { op=or, lhs=v141, rhs_imm=-256 }         -> x0
-    v172 Imm(0)                                           -> x1
-    v173 Extend { value=v171, kind=I32 }                  -> x1
-    v174 Imm(-190)                                        -> x1
+    v171 BinopI { op=or, lhs=v141, rhs_imm=-256 }         -> x12
+    v172 Imm(0)                                           -> x0
+    v173 Extend { value=v171, kind=I32 }                  -> x0
+    v174 Imm(-190)                                        -> x0
     v175 BinopI { op=ne, lhs=v171, rhs_imm=-190 }         -> x0
     terminator Bz { cond=v175, target=b26, fall=b25 }   (exit_acc=v175)
   block 25  start_pc=0

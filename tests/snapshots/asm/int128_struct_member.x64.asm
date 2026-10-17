@@ -96,10 +96,9 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	incq	%rdx
                	addq	%rdx, %rcx
-               	movq	%rsi, %rdx
-               	xorq	$0x7, %rdx
+               	xorq	$0x7, %rsi
                	xorq	$0xa, %rcx
-               	orq	%rdx, %rcx
+               	orq	%rsi, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0xb, %eax

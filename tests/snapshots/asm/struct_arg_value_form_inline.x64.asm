@@ -34,11 +34,10 @@ Disassembly of section .text:
                	shrq	$0x8, %rax
                	movq	%rdi, %rcx
                	shrq	$0x10, %rcx
-               	movq	%rdi, %rdx
-               	andq	$0xff, %rdx
+               	andq	$0xff, %rdi
                	andq	$0xff, %rax
                	shlq	$0x8, %rax
-               	orq	%rdx, %rax
+               	orq	%rdi, %rax
                	andq	$0xff, %rcx
                	shlq	$0x10, %rcx
                	orq	%rcx, %rax

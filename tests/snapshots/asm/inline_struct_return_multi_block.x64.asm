@@ -30,9 +30,8 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	$-0x1, %rax
                	retq
-               	movq	%rsi, %rax
-               	andq	$0x3, %rax
-               	movl	(%rdi,%rax,4), %eax
+               	andq	$0x3, %rsi
+               	movl	(%rdi,%rsi,4), %eax
                	jmp	<addr>
 
 <main>:

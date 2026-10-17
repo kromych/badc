@@ -39,8 +39,8 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
-    v6   BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x0
-    v7   Imm(0)                                           -> x1
+    v6   BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x7
+    v7   Imm(0)                                           -> x0
     v8   Binop { op=add, lhs=v6, rhs=v3 }                 -> x0
     terminator Return(v8)   (exit_acc=v8)
 ; --- SSA dump (ok=true) ent_pc=3 ---
@@ -60,7 +60,7 @@ fn ent_pc=3 n_params=6 variadic=false locals=0
     v9   Imm(0)                                           -> x0
     v10  Imm(2)                                           -> x0
     v11  Imm(0)                                           -> x0
-    v12  BinopI { op=shl, lhs=v3, rhs_imm=1 }             -> x0
+    v12  BinopI { op=shl, lhs=v3, rhs_imm=1 }             -> x2
     v13  Binop { op=add, lhs=v1, rhs=v12 }                -> x0
     v14  Imm(3)                                           -> x1
     v15  Imm(0)                                           -> x1
@@ -68,7 +68,7 @@ fn ent_pc=3 n_params=6 variadic=false locals=0
     v17  Binop { op=add, lhs=v13, rhs=v16 }               -> x0
     v18  Imm(4)                                           -> x1
     v19  Imm(0)                                           -> x1
-    v20  BinopI { op=shl, lhs=v7, rhs_imm=2 }             -> x1
+    v20  BinopI { op=shl, lhs=v7, rhs_imm=2 }             -> x9
     v21  Binop { op=add, lhs=v17, rhs=v20 }               -> x0
     v22  Imm(5)                                           -> x1
     v23  LoadLocal { off=6, kind=I64 }                    -> x1
@@ -100,8 +100,8 @@ fn ent_pc=4 n_params=6 variadic=false locals=0
     v13  Imm(0)                                           -> x0
     v14  Imm(2)                                           -> x0
     v15  Imm(0)                                           -> x0
-    v16  BinopI { op=shl, lhs=v3, rhs_imm=1 }             -> x0
-    v17  Binop { op=sub, lhs=v1, rhs=v16 }                -> x6
+    v16  BinopI { op=shl, lhs=v3, rhs_imm=1 }             -> x6
+    v17  Binop { op=sub, lhs=v1, rhs=v16 }                -> x7
     v18  Imm(3)                                           -> x0
     v19  Imm(0)                                           -> x0
     v20  BinopI { op=mul, lhs=v5, rhs_imm=3 }             -> x0

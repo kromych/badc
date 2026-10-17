@@ -36,9 +36,8 @@ Disassembly of section .text:
                	retq
 
 <plainf>:
-               	movq	%rdi, %rax
-               	shlq	%rax
-               	addq	%rsi, %rax
+               	shlq	%rdi
+               	leaq	(%rdi,%rsi), %rax
                	retq
 
 <depths>:

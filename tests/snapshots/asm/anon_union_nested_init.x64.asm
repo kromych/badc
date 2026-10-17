@@ -63,10 +63,9 @@ Disassembly of section .text:
                	cmpl	%edx, %ecx
                	jne	<addr>
                	movzbq	0x3(%rax), %rax
-               	movq	%rbx, %rcx
-               	imulq	%r12, %rcx
-               	andq	$0xff, %rcx
-               	cmpl	%ecx, %eax
+               	imulq	%rbx, %r12
+               	andq	$0xff, %r12
+               	cmpl	%r12d, %eax
                	je	<addr>
                	movl	$0xa, %eax
                	popq	%rbx

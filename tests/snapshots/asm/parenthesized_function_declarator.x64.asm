@@ -31,9 +31,8 @@ Disassembly of section .text:
 
 <two>:
                	leaq	<rip>, %rax      # <addr>
-               	movq	%rdi, %rcx
-               	shlq	%rcx
-               	movl	%ecx, (%rax)
+               	shlq	%rdi
+               	movl	%edi, (%rax)
                	retq
 
 <main>:

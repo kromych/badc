@@ -97,10 +97,10 @@ fn ent_pc=1 n_params=1 variadic=false locals=513
     v73  Imm(0)                                           -> x0
     v74  Imm(0)                                           -> x0
     v75  Imm(0)                                           -> x0
-    v76  Binop { op=mul, lhs=v7, rhs=v9 }                 -> x0
-    v77  Imm(0)                                           -> x1
-    v78  Imm(0)                                           -> x1
-    v79  Binop { op=mul, lhs=v11, rhs=v13 }               -> x1
+    v76  Binop { op=mul, lhs=v7, rhs=v9 }                 -> x12
+    v77  Imm(0)                                           -> x0
+    v78  Imm(0)                                           -> x0
+    v79  Binop { op=mul, lhs=v11, rhs=v13 }               -> x14
     v80  Binop { op=add, lhs=v76, rhs=v79 }               -> x0
     v81  Imm(0)                                           -> x1
     v82  Imm(0)                                           -> x1
@@ -415,7 +415,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v271 BinopI { op=add, lhs=v262, rhs_imm=24 }          -> x1
     v272 Imm(11)                                          -> x1
     v273 BinopI { op=mul, lhs=v1, rhs_imm=11 }            -> x1
-    v274 Binop { op=mul, lhs=v45, rhs=v60 }               -> x1
+    v274 Binop { op=mul, lhs=v45, rhs=v60 }               -> x2
     v275 Binop { op=add, lhs=v252, rhs=v274 }             -> x0
     v276 Imm(0)                                           -> x1
     v277 Imm(2)                                           -> x1
@@ -438,7 +438,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v294 BinopI { op=add, lhs=v285, rhs_imm=40 }          -> x1
     v295 Imm(17)                                          -> x1
     v296 BinopI { op=mul, lhs=v1, rhs_imm=17 }            -> x1
-    v297 Binop { op=mul, lhs=v75, rhs=v90 }               -> x1
+    v297 Binop { op=mul, lhs=v75, rhs=v90 }               -> x8
     v298 Binop { op=add, lhs=v275, rhs=v297 }             -> x0
     v299 Imm(0)                                           -> x1
     v300 Imm(4)                                           -> x1
@@ -461,7 +461,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v317 BinopI { op=add, lhs=v308, rhs_imm=56 }          -> x1
     v318 Imm(23)                                          -> x1
     v319 BinopI { op=mul, lhs=v1, rhs_imm=23 }            -> x1
-    v320 Binop { op=mul, lhs=v105, rhs=v120 }             -> x1
+    v320 Binop { op=mul, lhs=v105, rhs=v120 }             -> x3
     v321 Binop { op=add, lhs=v298, rhs=v320 }             -> x0
     v322 Imm(0)                                           -> x1
     v323 Imm(6)                                           -> x1

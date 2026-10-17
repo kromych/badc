@@ -39,8 +39,8 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v27  Imm(0)                                           -> x0
     v28  BinopI { op=add, lhs=v1, rhs_imm=516 }           -> x0
     v29  BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x0
-    v30  BinopI { op=xor, lhs=v3, rhs_imm=-1 }            -> x0
-    v31  BinopI { op=and, lhs=v30, rhs_imm=4294967295 }   -> x1
+    v30  BinopI { op=xor, lhs=v3, rhs_imm=-1 }            -> x6
+    v31  BinopI { op=and, lhs=v30, rhs_imm=4294967295 }   -> x0
     v32  Store { addr=v1, disp=516, value=v30, kind=I32 } -> -
     v33  ImmData(16)                                      -> x0
     v34  Load { addr=v33, disp=0, kind=U32, volatile }    -> x1
@@ -97,8 +97,8 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v33  BinopI { op=add, lhs=v1, rhs_imm=516 }           -> x0
     v34  Load { addr=v1, disp=516, kind=U32 }             -> x0
     v35  BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> x1
-    v36  BinopI { op=xor, lhs=v3, rhs_imm=-1 }            -> x1
-    v37  BinopI { op=and, lhs=v36, rhs_imm=4294967295 }   -> x2
+    v36  BinopI { op=xor, lhs=v3, rhs_imm=-1 }            -> x6
+    v37  BinopI { op=and, lhs=v36, rhs_imm=4294967295 }   -> x1
     v38  Binop { op=eq, lhs=v34, rhs=v36 }                -> x0
     v39  BinopI { op=ne, lhs=v38, rhs_imm=0 }             -> x1
     v40  Imm(0)                                           -> x1

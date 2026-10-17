@@ -83,14 +83,12 @@ Disassembly of section .text:
                	movq	%rax, %r15
                	movl	$0x6, %edi
                	callq	<addr>
-               	movq	%r12, %rcx
-               	shlq	%rcx
-               	addq	%rbx, %rcx
+               	shlq	%r12
+               	leaq	(%rbx,%r12), %rcx
                	leaq	(%r13,%r13,2), %rdx
                	addq	%rdx, %rcx
-               	movq	%r14, %rdx
-               	shlq	$0x2, %rdx
-               	addq	%rdx, %rcx
+               	shlq	$0x2, %r14
+               	addq	%r14, %rcx
                	leaq	(%r15,%r15,4), %rdx
                	addq	%rdx, %rcx
                	imulq	$0x6, %rax, %rax

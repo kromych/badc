@@ -26,9 +26,8 @@ Disassembly of section .text:
                	int3
 
 <narrow32>:
-               	movq	%rdi, %rax
-               	shlq	$0x20, %rax
-               	incq	%rax
+               	shlq	$0x20, %rdi
+               	leaq	0x1(%rdi), %rax
                	retq
 
 <narrow48>:

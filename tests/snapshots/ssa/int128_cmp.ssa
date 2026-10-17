@@ -8,7 +8,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v2   Load { addr=v1, disp=0, kind=I64, volatile }     -> x0
     v3   Imm(0)                                           -> x1
     v4   Imm(0)                                           -> x1
-    v5   Imm(0)                                           -> x6
+    v5   Imm(0)                                           -> x3
     v6   Imm(0)                                           -> x1
     v7   Imm(0)                                           -> x1
     v8   Imm(0)                                           -> x1
@@ -20,7 +20,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v14  Imm(0)                                           -> x1
     v15  Imm(0)                                           -> x1
     v16  Imm(0)                                           -> x1
-    v17  ImmData(8)                                       -> x8
+    v17  ImmData(8)                                       -> x6
     v18  Load { addr=v17, disp=0, kind=I64, volatile }    -> x1
     v19  Binop { op=or, lhs=v5, rhs=v18 }                 -> x1
     v20  Binop { op=or, lhs=v2, rhs=v5 }                  -> x7
@@ -45,7 +45,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v39  Imm(0)                                           -> x2
     v40  Load { addr=v17, disp=0, kind=I64, volatile }    -> x2
     v41  ImmData(24)                                      -> x8
-    v42  Load { addr=v41, disp=0, kind=I64, volatile }    -> x9
+    v42  Load { addr=v41, disp=0, kind=I64, volatile }    -> x6
     v43  Binop { op=add, lhs=v40, rhs=v42 }               -> x2
     v44  Binop { op=or, lhs=v5, rhs=v43 }                 -> x3
     v45  Binop { op=or, lhs=v27, rhs=v5 }                 -> x2

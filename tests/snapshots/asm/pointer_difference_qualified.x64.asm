@@ -26,24 +26,22 @@ Disassembly of section .text:
                	int3
 
 <pc_relative>:
-               	movq	(%rsi), %rcx
+               	movq	(%rsi), %rax
+               	subq	%rax, %rdi
                	movq	%rdi, %rax
-               	subq	%rcx, %rax
-               	movq	%rax, %rcx
-               	sarq	$0x3f, %rcx
-               	shrq	$0x3e, %rcx
-               	addq	%rcx, %rax
+               	sarq	$0x3f, %rax
+               	shrq	$0x3e, %rax
+               	addq	%rdi, %rax
                	sarq	$0x2, %rax
                	decq	%rax
                	retq
 
 <unqualified_left>:
+               	subq	%rsi, %rdi
                	movq	%rdi, %rax
-               	subq	%rsi, %rax
-               	movq	%rax, %rcx
-               	sarq	$0x3f, %rcx
-               	shrq	$0x3e, %rcx
-               	addq	%rcx, %rax
+               	sarq	$0x3f, %rax
+               	shrq	$0x3e, %rax
+               	addq	%rdi, %rax
                	sarq	$0x2, %rax
                	retq
 
@@ -53,20 +51,18 @@ Disassembly of section .text:
                	retq
 
 <wide_elements>:
+               	subq	%rsi, %rdi
                	movq	%rdi, %rax
-               	subq	%rsi, %rax
-               	movq	%rax, %rcx
-               	sarq	$0x3f, %rcx
-               	shrq	$0x3d, %rcx
-               	addq	%rcx, %rax
+               	sarq	$0x3f, %rax
+               	shrq	$0x3d, %rax
+               	addq	%rdi, %rax
                	sarq	$0x3, %rax
                	retq
 
 <back>:
-               	movq	%rsi, %rcx
-               	shlq	$0x2, %rcx
+               	shlq	$0x2, %rsi
                	movq	%rdi, %rax
-               	subq	%rcx, %rax
+               	subq	%rsi, %rax
                	retq
 
 <main>:

@@ -196,9 +196,8 @@ Disassembly of section .text:
                	leaq	-0x60(%rbp), %r9
                	xorq	%rdx, %rax
                	movq	%rax, -0x60(%rbp)
-               	movq	%rsi, %rax
-               	xorq	%rcx, %rax
-               	movq	%rax, -0x58(%rbp)
+               	xorq	%rsi, %rcx
+               	movq	%rcx, -0x58(%rbp)
                	leaq	-0x80(%rbp), %rdi
                	movq	%r9, %r10
                	movups	(%r10), %xmm0

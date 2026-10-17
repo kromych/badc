@@ -102,11 +102,9 @@ Disassembly of section .text:
                	leaq	-0x1008(%rbp), %rdi
                	movq	%rbx, %rsi
                	callq	<addr>
-               	movq	%r12, %rax
-               	imulq	%r13, %rax
-               	movq	%r14, %rcx
-               	imulq	%r15, %rcx
-               	addq	%rcx, %rax
+               	imulq	%r13, %r12
+               	imulq	%r15, %r14
+               	leaq	(%r12,%r14), %rax
                	movq	-0x1018(%rbp), %rcx
                	imulq	-0x1020(%rbp), %rcx
                	addq	%rcx, %rax
@@ -177,15 +175,12 @@ Disassembly of section .text:
                	addq	%r14, %r13
                	imulq	%rcx, %rax
                	addq	%r13, %rax
-               	movq	%rdx, %rcx
-               	imulq	%rsi, %rcx
-               	addq	%rcx, %rax
-               	movq	%r8, %rcx
-               	imulq	%r9, %rcx
-               	addq	%rcx, %rax
-               	movq	%rbx, %rcx
-               	imulq	%r12, %rcx
-               	addq	%rcx, %rax
+               	imulq	%rsi, %rdx
+               	addq	%rdx, %rax
+               	imulq	%r9, %r8
+               	addq	%r8, %rax
+               	imulq	%r12, %rbx
+               	addq	%rbx, %rax
                	imulq	$0x1d, %rdi, %rcx
                	imulq	$0x1f, %rdi, %rdx
                	imulq	%rdx, %rcx

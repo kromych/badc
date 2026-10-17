@@ -7077,7 +7077,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=5
     v7437 BinopI { op=add, lhs=v7432, rhs_imm=8 }          -> x0
     v7438 Imm(0)                                           -> x0
     v7439 Imm(0)                                           -> x0
-    v7440 Binop { op=or, lhs=v7398, rhs=v7430 }            -> x0
+    v7440 Binop { op=or, lhs=v7398, rhs=v7430 }            -> x1
     v7441 StoreLocal { off=-693, disp=8, value=v7440, kind=I64 } -> -
     v7442 Imm(0)                                           -> x0
     v7443 LoadLocal { off=-693, kind=U32 }                 -> x0

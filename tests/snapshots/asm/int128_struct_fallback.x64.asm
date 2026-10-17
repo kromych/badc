@@ -75,11 +75,10 @@ Disassembly of section .text:
                	cmpq	%rax, %r13
                	setb	%al
                	movzbq	%al, %rax
-               	movq	%r14, %rdx
-               	subq	%rax, %rdx
+               	subq	%rax, %r14
                	cmpq	$-0x1, %rcx
                	jne	<addr>
-               	testq	%rdx, %rdx
+               	testq	%r14, %r14
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
@@ -146,11 +145,10 @@ Disassembly of section .text:
                	movq	%rax, %r13
                	movabsq	$-0x8000000000000000, %rdi # imm = 0x8000000000000000
                	callq	<addr>
-               	movq	%r13, %rcx
-               	shrq	$0x4, %rcx
-               	movq	%rax, %rdx
-               	shlq	$0x3c, %rdx
-               	orq	%rdx, %rcx
+               	shrq	$0x4, %r13
+               	movq	%rax, %rcx
+               	shlq	$0x3c, %rcx
+               	orq	%r13, %rcx
                	sarq	$0x4, %rax
                	leaq	-0x10(%rbp), %rdx
                	xorps	%xmm14, %xmm14

@@ -28,10 +28,9 @@ Disassembly of section .text:
 <ch>:
                	movq	%rdi, %rax
                	andq	%rsi, %rax
-               	movq	%rdi, %rcx
-               	xorq	$-0x1, %rcx
-               	andq	%rdx, %rcx
-               	xorq	%rcx, %rax
+               	xorq	$-0x1, %rdi
+               	andq	%rdi, %rdx
+               	xorq	%rdx, %rax
                	retq
 
 <bs1>:
@@ -40,9 +39,8 @@ Disassembly of section .text:
                	movq	%rdi, %rcx
                	rorq	$0x12, %rcx
                	xorq	%rcx, %rax
-               	movq	%rdi, %rcx
-               	rorq	$0x29, %rcx
-               	xorq	%rcx, %rax
+               	rorq	$0x29, %rdi
+               	xorq	%rdi, %rax
                	retq
 
 <main>:

@@ -2742,6 +2742,31 @@ fn unoptimized_int_division_takes_no_renormalization() {
     }
 }
 
+/// An x86-64 two-address result takes the register of an operand that dies
+/// at it, so no copy stages the operand: the timestamp halves pack with
+/// `shl $32, %rdx; or %rdx, %rax`, and a chain whose operands die keeps one
+/// copy, for the value read twice.
+#[test]
+fn x64_two_address_result_takes_a_dying_operand_register() {
+    const SRC: &str = "unsigned long tick(void) {\n\
+        unsigned long lo, hi;\n\
+        __asm__ volatile(\"rdtsc\" : \"=a\"(lo), \"=d\"(hi));\n\
+        return lo | (hi << 32);\n}\n\
+        unsigned long mix(unsigned long a, unsigned long b, unsigned long c) {\n\
+        unsigned long t = (a ^ b) * c;\n\
+        return (t >> 7) ^ (t & 0xff);\n}\n";
+    let copies = |insns: &[X64Insn]| {
+        insns
+            .iter()
+            .filter(|i| matches!(i.op, 0x89 | 0x8B) && i.reg_form())
+            .count()
+    };
+    let tick = x64(SRC, "tick");
+    assert_eq!(copies(&tick), 0, "{tick:x?}");
+    let mix = x64(SRC, "mix");
+    assert_eq!(copies(&mix), 1, "{mix:x?}");
+}
+
 /// A register output of an inline asm statement into a scalar local is
 /// the statement's own value, so the local takes no frame slot: a gsbase
 /// read between two `swapgs` is `swapgs; rdgsbase %rax; swapgs; ret` and

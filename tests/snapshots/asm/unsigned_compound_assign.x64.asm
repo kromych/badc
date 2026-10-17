@@ -95,8 +95,7 @@ Disassembly of section .text:
                	movl	$0xc8, %edi
                	callq	<addr>
                	andq	$0xff, %rax
-               	addq	$0x3c, %rax
-               	movq	%rax, %rsi
+               	leaq	0x3c(%rax), %rsi
                	andq	$0xff, %rsi
                	movq	%rsi, %rax
                	xorq	$0x4, %rax

@@ -123,14 +123,13 @@ Disassembly of section .text:
                	movq	%r12, %rsi
                	xorl	%eax, %eax
                	callq	<addr>
-               	movl	%r13d, %ecx
+               	movl	%r13d, %r13d
                	movl	$0xaaaaaaab, %eax       # imm = 0xAAAAAAAB
-               	imulq	%rcx, %rax
+               	imulq	%r13, %rax
                	shrq	$0x21, %rax
                	leaq	(%rax,%rax,2), %rax
                	addq	%rax, %rbx
                	addq	%rax, %r12
-               	movq	%rcx, %r13
                	subq	%rax, %r13
                	testl	%r13d, %r13d
                	je	<addr>

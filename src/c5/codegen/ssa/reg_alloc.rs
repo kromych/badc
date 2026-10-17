@@ -510,6 +510,28 @@ fn is_cl_shift_op(op: BinOp) -> bool {
     op == BinOp::Ror
 }
 
+/// The operands x86-64 may write the result of `inst` over, in its two-address
+/// forms; an `add` takes `lea`, a shift by a register BMI2's `shlx` family.
+fn x86_two_address(inst: &Inst) -> [Option<ValueId>; 2] {
+    let (op, lhs, rhs) = match *inst {
+        Inst::Binop { op, lhs, rhs } => (op, lhs, Ok(rhs)),
+        Inst::BinopI { op, lhs, rhs_imm } => (op, lhs, Err(rhs_imm)),
+        _ => return [None; 2],
+    };
+    let fits = |k: i64| i32::try_from(k).is_ok();
+    match (op, rhs) {
+        (BinOp::And | BinOp::Or | BinOp::Xor | BinOp::Mul, Ok(r)) => [Some(lhs), Some(r)],
+        (BinOp::Sub, Ok(_)) => [Some(lhs), None],
+        (BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror, Err(k)) if (0..64).contains(&k) => {
+            [Some(lhs), None]
+        }
+        (BinOp::Or | BinOp::Xor, Err(k)) if fits(k) => [Some(lhs), None],
+        (BinOp::And, Err(k)) if fits(k) && k != 0xffff_ffff => [Some(lhs), None],
+        (BinOp::Mul, Err(k)) if k > 0 && (k as u64).is_power_of_two() => [Some(lhs), None],
+        _ => [None; 2],
+    }
+}
+
 /// A division, a remainder or a high multiply, which x86-64 computes in
 /// rdx:rax.
 fn is_rdx_rax_op(op: BinOp) -> bool {
@@ -1318,6 +1340,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             forbid: 0,
             avoid: 0,
             wide: false,
+            follow: [None; 3],
         });
         entry.is_fp = produces_fp_result(inst) || fp_const[v];
         entry.wide |= wide[v];
@@ -1333,6 +1356,26 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             .chain(call_forbid.get(root))
         {
             entry.forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
+        }
+    }
+    // A two-address result and an operand dying at it follow each other.
+    if target.is_x86_64() {
+        for (v, inst) in func.insts.iter().enumerate() {
+            for (k, operand) in x86_two_address(inst).into_iter().enumerate() {
+                let Some(o) = operand.filter(|&o| last_use.get(o as usize) == Some(&(v as u32)))
+                else {
+                    continue;
+                };
+                let (a, b) = (node_of[v], node_of[o as usize]);
+                if a == b {
+                    continue;
+                }
+                for (x, y, slot) in [(a, b, 1 + k), (b, a, 0)] {
+                    if let Some(entry) = node_cons[x as usize].as_mut() {
+                        entry.follow[slot].get_or_insert(y);
+                    }
+                }
+            }
         }
     }
     let (max_gpr, max_fpr) = pool_size_limits();
@@ -2597,6 +2640,8 @@ pub(crate) struct NodeConstraints {
     pub avoid: u64,
     /// A 128-bit value, whose spill takes two units.
     pub wide: bool,
+    /// Nodes whose register, or hint while uncolored, this one prefers next.
+    pub follow: [Option<ValueId>; 3],
 }
 
 /// Result of coloring the interference graph. Which of the colored
@@ -2695,12 +2740,13 @@ fn class_members(node_of: &[ValueId]) -> (Vec<u32>, Vec<ValueId>) {
 /// count, so the hottest values color first), ties broken by ascending
 /// node id for host-independent output; an empty `weights` slice orders
 /// by ascending id. A node takes its hint when bank-legal, free and
-/// outside its `avoid` set, otherwise a caller-saved register (to avoid a
-/// prologue save) unless it must be callee-saved -- one outside its `avoid`
-/// set and apart from its `apart` neighbours (their registers, or the hints
-/// of those not yet colored) when one is free, else its hint -- otherwise
-/// a callee-saved register, and spills when its bank offers no free
-/// register. Because the coldest
+/// outside its `avoid` set, otherwise the first in bank order of the free
+/// registers its `follow` nodes hold or are hinted to, otherwise a
+/// caller-saved register (to avoid a prologue save) unless it must be
+/// callee-saved -- one outside its `avoid` set and apart from its `apart`
+/// neighbours (their registers, or the hints of those not yet colored) when
+/// one is free, else its hint -- otherwise a callee-saved register, and
+/// spills when its bank offers no free register. Because the coldest
 /// remaining node is colored last, it is the one left to spill when a
 /// bank fills. `interference` (built from CFG liveness) is the sole
 /// source of conflicts, so a value live across a back-edge passthrough
@@ -2820,11 +2866,27 @@ pub(crate) fn color_graph(
                 _ => {}
             }
         }
-        let hint = c.hint.filter(|&h| {
-            free(h) && (callee.contains(&h) || (!c.must_callee && caller.contains(&h)))
+        let legal =
+            |r: u8| free(r) && (callee.contains(&r) || (!c.must_callee && caller.contains(&r)));
+        let hint = c.hint.filter(|&h| legal(h));
+        let followed = c.follow.iter().flatten().fold(0u64, |m, &o| {
+            let r = match (color[o as usize], constraints[o as usize]) {
+                (Place::IntReg(r), _) if !c.is_fp => Some(r),
+                (Place::FpReg(r), _) if c.is_fp => Some(r),
+                (Place::None, Some(oc)) if oc.is_fp == c.is_fp => oc.hint,
+                _ => None,
+            };
+            r.filter(|&r| legal(r) && (avoid >> r) & 1 == 0)
+                .map_or(m, |r| m | 1 << r)
         });
+        let follow = caller
+            .iter()
+            .chain(callee)
+            .copied()
+            .find(|&r| (followed >> r) & 1 != 0);
         let pick = hint
             .filter(|&h| (c.avoid >> h) & 1 == 0)
+            .or(follow)
             .or_else(|| {
                 let kept = |r: &u8| free(*r) && (avoid >> *r) & 1 == 0;
                 (!c.must_callee)
@@ -4308,6 +4370,7 @@ mod tests {
             forbid: 0,
             avoid: 0,
             wide: false,
+            follow: [None; 3],
         })
     }
 
@@ -4319,6 +4382,7 @@ mod tests {
             forbid: 0,
             avoid: 0,
             wide,
+            follow: [None; 3],
         })
     }
 

@@ -225,10 +225,9 @@ Disassembly of section .text:
                	movl	$0x10, %ecx
                	movq	%rbx, %rdx
                	callq	<addr>
-               	movq	%r12, %rcx
-               	andq	%rax, %rcx
+               	andq	%rax, %r12
                	xorl	%eax, %eax
-               	testq	%rcx, %rcx
+               	testq	%r12, %r12
                	je	<addr>
                	leaq	-0x420(%rbp), %rdi
                	movl	$0x210, %esi            # imm = 0x210

@@ -93,30 +93,27 @@ Disassembly of section .text:
                	pushq	%rbx
                	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rbx
-               	xorl	%eax, %eax
-               	leaq	<rip>, %rcx      # <addr>
-               	movq	(%rcx), %rcx
-               	movq	%rax, %r12
-               	orq	%rcx, %r12
-               	leaq	<rip>, %rcx      # <addr>
-               	movq	(%rcx), %r13
-               	leaq	<rip>, %rcx      # <addr>
-               	movq	(%rcx), %rcx
-               	movq	%rax, %r14
-               	orq	%rcx, %r14
+               	xorl	%r14d, %r14d
+               	leaq	<rip>, %rax      # <addr>
+               	movq	(%rax), %r12
+               	orq	%r14, %r12
+               	leaq	<rip>, %rax      # <addr>
+               	movq	(%rax), %r13
+               	leaq	<rip>, %rax      # <addr>
+               	movq	(%rax), %rax
+               	orq	%rax, %r14
                	movl	$0x2, %edi
                	cmpq	%rbx, %r13
-               	setb	%al
-               	movzbq	%al, %rax
+               	setb	%sil
+               	movzbq	%sil, %rsi
                	cmpq	%rbx, %r13
-               	sete	%cl
-               	movzbq	%cl, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
                	cmpq	%r12, %r14
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	andq	%rdx, %rcx
-               	movq	%rax, %rsi
-               	orq	%rcx, %rsi
+               	setb	%cl
+               	movzbq	%cl, %rcx
+               	andq	%rcx, %rax
+               	orq	%rax, %rsi
                	movl	$0x4d, %edx
                	movb	$0x0, %al
                	callq	<addr>
@@ -135,17 +132,16 @@ Disassembly of section .text:
                	retq
                	movl	$0x2, %edi
                	cmpq	%r13, %rbx
-               	setb	%al
-               	movzbq	%al, %rax
+               	setb	%sil
+               	movzbq	%sil, %rsi
                	cmpq	%r13, %rbx
-               	sete	%cl
-               	movzbq	%cl, %rcx
+               	sete	%al
+               	movzbq	%al, %rax
                	cmpq	%r14, %r12
-               	setb	%dl
-               	movzbq	%dl, %rdx
-               	andq	%rdx, %rcx
-               	movq	%rax, %rsi
-               	orq	%rcx, %rsi
+               	setb	%cl
+               	movzbq	%cl, %rcx
+               	andq	%rcx, %rax
+               	orq	%rax, %rsi
                	movl	$0x4d, %edx
                	movb	$0x0, %al
                	callq	<addr>

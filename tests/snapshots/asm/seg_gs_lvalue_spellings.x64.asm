@@ -63,17 +63,15 @@ Disassembly of section .text:
 
 <rd_index>:
                	movslq	%esi, %rsi
-               	movq	%rsi, %rax
-               	shlq	$0x2, %rax
-               	addq	%rdi, %rax
+               	shlq	$0x2, %rsi
+               	leaq	(%rdi,%rsi), %rax
                	movl	%gs:(%rax), %eax
                	retq
 
 <wr_index>:
                	movslq	%esi, %rsi
-               	movq	%rsi, %rax
-               	shlq	$0x2, %rax
-               	addq	%rdi, %rax
+               	shlq	$0x2, %rsi
+               	leaq	(%rdi,%rsi), %rax
                	movl	%edx, %gs:(%rax)
                	retq
 
@@ -175,13 +173,11 @@ Disassembly of section .text:
                	popq	%rbx
                	leave
                	retq
-               	movq	%r8, %rax
-               	xorq	$0x9, %rax
-               	testl	%eax, %eax
+               	xorq	$0x9, %r8
+               	testl	%r8d, %r8d
                	jne	<addr>
-               	movq	%r9, %rax
-               	xorq	$0x9, %rax
-               	testl	%eax, %eax
+               	xorq	$0x9, %r9
+               	testl	%r9d, %r9d
                	jne	<addr>
                	testq	%rbx, %rbx
                	je	<addr>

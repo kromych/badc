@@ -26,14 +26,13 @@ Disassembly of section .text:
                	int3
 
 <chain>:
-               	movq	%rdi, %rcx
-               	andq	$0x1, %rcx
+               	andq	$0x1, %rdi
                	leaq	<rip>, %rax      # <addr>
                	movb	$0x0, (%rax)
-               	leaq	<rip>, %rdx      # <addr>
-               	movb	%cl, (%rax)
+               	leaq	<rip>, %rcx      # <addr>
+               	movb	%dil, (%rax)
                	movzbq	(%rax), %r10
-               	movb	%r10b, (%rdx)
+               	movb	%r10b, (%rcx)
                	retq
 
 <to_global>:

@@ -289,7 +289,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v100 Binop { op=sub, lhs=v1, rhs=v3 }                 -> x1
     v101 BinopI { op=mul, lhs=v100, rhs_imm=10 }          -> x1
     v102 Binop { op=add, lhs=v99, rhs=v101 }              -> x0
-    v103 Binop { op=mul, lhs=v1, rhs=v3 }                 -> x1
+    v103 Binop { op=mul, lhs=v1, rhs=v3 }                 -> x6
     v104 BinopI { op=mul, lhs=v103, rhs_imm=11 }          -> x1
     v105 Binop { op=add, lhs=v102, rhs=v104 }             -> x0
     v106 BinopI { op=add, lhs=v1, rhs_imm=11 }            -> x1

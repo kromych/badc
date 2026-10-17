@@ -19,7 +19,7 @@ fn ent_pc=0 n_params=17 variadic=false locals=0
     v13  Imm(0)                                           -> x0
     v14  Imm(2)                                           -> x0
     v15  Imm(0)                                           -> x0
-    v16  BinopI { op=shl, lhs=v3, rhs_imm=1 }             -> x0
+    v16  BinopI { op=shl, lhs=v3, rhs_imm=1 }             -> x6
     v17  Binop { op=add, lhs=v1, rhs=v16 }                -> x0
     v18  Imm(3)                                           -> x6
     v19  Imm(0)                                           -> x6

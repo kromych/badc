@@ -78,9 +78,8 @@ Disassembly of section .text:
                	movl	%edi, %eax
                	xorl	%edx, %edx
                	divl	%esi
-               	movq	%rdx, %rax
-               	xorq	$0x3, %rax
-               	testl	%eax, %eax
+               	xorq	$0x3, %rdx
+               	testl	%edx, %edx
                	je	<addr>
                	movl	$0x4, %eax
                	leave

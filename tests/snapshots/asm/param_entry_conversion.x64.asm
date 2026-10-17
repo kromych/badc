@@ -61,9 +61,8 @@ Disassembly of section .text:
                	addq	%rbx, %rax
                	addq	%r12, %rax
                	addq	%r13, %rax
-               	movq	%r14, %rcx
-               	andq	$0xff, %rcx
-               	addq	%rcx, %rax
+               	andq	$0xff, %r14
+               	addq	%r14, %rax
                	addq	%r15, %rax
                	movq	0x38(%rsp), %rcx
                	andq	$0xffff, %rcx           # imm = 0xFFFF
@@ -126,9 +125,8 @@ Disassembly of section .text:
                	retq
 
 <low>:
-               	movq	%rdi, %rax
-               	imulq	%rsi, %rax
-               	incq	%rax
+               	imulq	%rdi, %rsi
+               	leaq	0x1(%rsi), %rax
                	retq
 
 <main>:

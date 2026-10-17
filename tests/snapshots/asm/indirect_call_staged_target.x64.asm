@@ -28,9 +28,8 @@ Disassembly of section .text:
 <weigh17>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	movq	%rsi, %rax
-               	shlq	%rax
-               	addq	%rdi, %rax
+               	shlq	%rsi
+               	leaq	(%rdi,%rsi), %rax
                	leaq	(%rdx,%rdx,2), %rdx
                	addq	%rdx, %rax
                	shlq	$0x2, %rcx

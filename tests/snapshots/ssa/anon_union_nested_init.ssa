@@ -183,9 +183,9 @@ fn ent_pc=2 n_params=2 variadic=false locals=3
     v41  Load { addr=v29, disp=3, kind=U8 }               -> x0
     v42  Imm(0)                                           -> x1
     v43  Imm(0)                                           -> x1
-    v44  Binop { op=mul, lhs=v1, rhs=v3 }                 -> x1
-    v45  Extend { value=v44, kind=I32, nsw }              -> x2
-    v46  BinopI { op=and, lhs=v44, rhs_imm=255 }          -> x1
+    v44  Binop { op=mul, lhs=v1, rhs=v3 }                 -> x12
+    v45  Extend { value=v44, kind=I32, nsw }              -> x1
+    v46  BinopI { op=and, lhs=v44, rhs_imm=255 }          -> x12
     v47  Binop { op=ne, lhs=v41, rhs=v46 }                -> x0
     v48  Imm(0)                                           -> x1
     v49  Imm(0)                                           -> x1

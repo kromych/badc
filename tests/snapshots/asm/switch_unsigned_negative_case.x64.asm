@@ -46,11 +46,10 @@ Disassembly of section .text:
                	retq
 
 <u16>:
-               	movq	%rdi, %rax
-               	andq	$0xffff, %rax           # imm = 0xFFFF
-               	cmpl	$0x7, %eax
+               	andq	$0xffff, %rdi           # imm = 0xFFFF
+               	cmpl	$0x7, %edi
                	jl	<addr>
-               	cmpl	$0x7, %eax
+               	cmpl	$0x7, %edi
                	je	<addr>
                	movl	$0x3e7, %eax            # imm = 0x3E7
                	retq
@@ -58,11 +57,10 @@ Disassembly of section .text:
                	retq
 
 <u8>:
-               	movq	%rdi, %rax
-               	andq	$0xff, %rax
-               	cmpl	$0x3, %eax
+               	andq	$0xff, %rdi
+               	cmpl	$0x3, %edi
                	jl	<addr>
-               	cmpl	$0x3, %eax
+               	cmpl	$0x3, %edi
                	je	<addr>
                	movl	$0x3e7, %eax            # imm = 0x3E7
                	retq

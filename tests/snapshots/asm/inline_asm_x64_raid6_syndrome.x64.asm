@@ -396,10 +396,9 @@ Disassembly of section .text:
                	je	<addr>
                	testl	$0x40000000, %ebx       # imm = 0x40000000
                	je	<addr>
-               	movq	%rsi, %rax
-               	andq	$0xe0, %rax
-               	xorq	$0xe0, %rax
-               	testl	%eax, %eax
+               	andq	$0xe0, %rsi
+               	xorq	$0xe0, %rsi
+               	testl	%esi, %esi
                	jne	<addr>
                	movl	$0x2, %eax
                	popq	%rbx

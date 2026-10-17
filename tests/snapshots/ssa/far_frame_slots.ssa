@@ -631,8 +631,8 @@ fn ent_pc=6 n_params=1 variadic=false locals=517
   block 6  start_pc=0
     v88  LoadLocal { off=-517, kind=I64 }                 -> x0
     v89  Imm(0)                                           -> x1
-    v90  BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x1
-    v91  Extend { value=v90, kind=I32, nsw }              -> x2
+    v90  BinopI { op=shl, lhs=v1, rhs_imm=1 }             -> x3
+    v91  Extend { value=v90, kind=I32, nsw }              -> x1
     v92  BinopI { op=add, lhs=v90, rhs_imm=11 }           -> x1
     v93  Extend { value=v92, kind=I32, nsw }              -> x1
     v94  Binop { op=ne, lhs=v88, rhs=v93 }                -> x0

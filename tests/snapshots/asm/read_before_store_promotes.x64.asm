@@ -97,25 +97,24 @@ Disassembly of section .text:
                	retq
 
 <probe>:
-               	leaq	<rip>, %rdi      # <addr>
+               	leaq	<rip>, %rcx      # <addr>
                	movl	%edx, %eax
-               	movzwq	(%rdi,%rax,2), %rcx
-               	testl	%ecx, %ecx
+               	movzwq	(%rcx,%rax,2), %rdx
+               	testl	%edx, %edx
                	je	<addr>
                	movl	$0x14, %eax
-               	subq	%rcx, %rax
+               	subq	%rdx, %rax
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	cmpl	%esi, %eax
                	ja	<addr>
-               	movq	%rcx, %rdx
                	andq	$0xf, %rdx
-               	movq	%rdx, %rcx
-               	xorq	$0x9, %rcx
-               	testl	%ecx, %ecx
+               	movq	%rdx, %rdi
+               	xorq	$0x9, %rdi
+               	testl	%edi, %edi
                	je	<addr>
                	movl	%edx, %eax
-               	movzwq	(%rdi,%rax,2), %rcx
-               	testl	%ecx, %ecx
+               	movzwq	(%rcx,%rax,2), %rdx
+               	testl	%edx, %edx
                	jne	<addr>
                	xorl	%eax, %eax
                	retq

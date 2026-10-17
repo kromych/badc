@@ -52,9 +52,8 @@ Disassembly of section .text:
                	andq	$0xf, %rcx
                	andq	$0xf, %rdx
                	orq	%rdx, %rcx
-               	movq	%rsi, %rdx
-               	andq	$0xf, %rdx
-               	orq	%rdx, %rcx
+               	andq	$0xf, %rsi
+               	orq	%rsi, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
                	leaq	<rip>, %rcx      # <addr>
@@ -67,9 +66,8 @@ Disassembly of section .text:
                	movq	-0x20(%rbp), %rcx
                	movq	-0x18(%rbp), %rdx
                	addq	%rdx, %rcx
-               	movq	%rdi, %rdx
-               	shlq	%rdx
-               	addq	$0x3, %rdx
+               	shlq	%rdi
+               	leaq	0x3(%rdi), %rdx
                	movslq	%edx, %rdx
                	cmpq	%rdx, %rcx
                	jne	<addr>
@@ -109,14 +107,12 @@ Disassembly of section .text:
                	sarq	$0x3f, %r8
                	movq	%rax, -0x20(%rbp)
                	movq	%r8, -0x18(%rbp)
-               	movq	%rdx, %rax
-               	andq	$0xf, %rax
+               	andq	$0xf, %rdx
                	andq	$0xf, %rcx
-               	orq	%rcx, %rax
-               	movq	%rsi, %rcx
-               	andq	$0xf, %rcx
-               	orq	%rcx, %rax
-               	testq	%rax, %rax
+               	orq	%rdx, %rcx
+               	andq	$0xf, %rsi
+               	orq	%rsi, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	leaq	<rip>, %rax      # <addr>
                	movl	(%rax), %ecx
@@ -161,9 +157,8 @@ Disassembly of section .text:
                	leaq	(%rax,%rax,2), %rax
                	movq	%rbx, %rdx
                	subq	%rax, %rdx
-               	movq	%rdx, %rax
-               	shlq	$0x3, %rax
-               	addq	%rcx, %rax
+               	shlq	$0x3, %rdx
+               	leaq	(%rcx,%rdx), %rax
                	movq	%rbx, (%rax)
                	movq	%rbx, %rdi
                	callq	<addr>
@@ -180,11 +175,9 @@ Disassembly of section .text:
                	shrq	$0x3f, %rdx
                	addq	%rdx, %rax
                	leaq	(%rax,%rax,2), %rax
-               	movq	%rbx, %rdx
-               	subq	%rax, %rdx
-               	movq	%rdx, %rax
-               	shlq	$0x3, %rax
-               	addq	%rcx, %rax
+               	subq	%rax, %rbx
+               	shlq	$0x3, %rbx
+               	leaq	(%rcx,%rbx), %rax
                	movq	(%rax), %rax
                	popq	%rbx
                	leave

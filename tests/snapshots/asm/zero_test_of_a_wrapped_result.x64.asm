@@ -35,9 +35,8 @@ Disassembly of section .text:
                	retq
 
 <sub_z>:
-               	movq	%rdi, %rax
-               	subq	%rsi, %rax
-               	testl	%eax, %eax
+               	subq	%rsi, %rdi
+               	testl	%edi, %edi
                	jne	<addr>
                	movl	$0x1, %eax
                	retq
@@ -45,9 +44,8 @@ Disassembly of section .text:
                	retq
 
 <mul_nz>:
-               	movq	%rdi, %rax
-               	imulq	%rsi, %rax
-               	testl	%eax, %eax
+               	imulq	%rdi, %rsi
+               	testl	%esi, %esi
                	je	<addr>
                	movl	$0x1, %eax
                	retq
@@ -64,9 +62,8 @@ Disassembly of section .text:
                	retq
 
 <umul_z>:
-               	movq	%rdi, %rax
-               	imulq	%rsi, %rax
-               	testl	%eax, %eax
+               	imulq	%rdi, %rsi
+               	testl	%esi, %esi
                	jne	<addr>
                	movl	$0x1, %eax
                	retq

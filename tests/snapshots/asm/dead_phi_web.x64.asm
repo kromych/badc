@@ -58,9 +58,9 @@ Disassembly of section .text:
                	movq	%rsi, %rax
                	divq	%rcx
                	movq	%rax, %rdx
-               	imulq	%rdx, %rcx
+               	imulq	%rcx, %rdx
                	movq	%rsi, %rax
-               	subq	%rcx, %rax
+               	subq	%rdx, %rax
                	retq
                	movq	%rsi, %rax
                	xorl	%edx, %edx

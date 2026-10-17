@@ -254,14 +254,14 @@ Disassembly of section .text:
                	subq	%rcx, %rsi
                	movq	%rdx, %rcx
                	subq	%r8, %rcx
-               	movq	%rsi, %rdx
-               	andq	$-0x100, %rdx
-               	orq	$0x5, %rdx
-               	movq	(%rdi), %rsi
-               	shlq	$0x3f, %rsi
-               	xorq	%rsi, %rcx
+               	andq	$-0x100, %rsi
+               	orq	$0x5, %rsi
+               	movq	(%rdi), %rdx
+               	shlq	$0x3f, %rdx
+               	xorq	%rdx, %rcx
                	movabsq	$-0x77553310eeccaafb, %r11 # imm = 0x88AACCEF11335505
-               	cmpq	%r11, %rdx
+               	movq	%rsi, %rdx
+               	cmpq	%r11, %rsi
                	jne	<addr>
                	movabsq	$0x8aaccef11335576, %r11 # imm = 0x8AACCEF11335576
                	cmpq	%r11, %rcx

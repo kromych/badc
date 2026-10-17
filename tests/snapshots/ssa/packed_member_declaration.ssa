@@ -542,7 +542,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=7
     v486 BinopI { op=and, lhs=v485, rhs_imm=-1099511627776 } -> x1
     v487 BinopI { op=or, lhs=v486, rhs_imm=1094624909431 } -> x1
     v488 Store { addr=v422, disp=1, value=v487, kind=I32, align=1 } -> -
-    v489 BinopI { op=shru, lhs=v487, rhs_imm=32 }         -> x0
+    v489 BinopI { op=shru, lhs=v487, rhs_imm=32 }         -> x1
     v490 StoreLocal { off=-5, disp=5, value=v489, kind=I8 } -> -
     v491 Imm(-81985529205227520)                          -> x0
     v492 LocalAddr(-5)                                    -> x0

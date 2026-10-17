@@ -96,18 +96,18 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
   block 3  start_pc=0
     v85  BinopI { op=and, lhs=v56, rhs_imm=4294967295 }   -> x0
     v86  BinopI { op=and, lhs=v8, rhs_imm=4294967295 }    -> x0
-    v87  Binop { op=xor, lhs=v56, rhs=v8 }                -> x0
-    v88  BinopI { op=and, lhs=v14, rhs_imm=4294967295 }   -> x1
-    v89  Binop { op=xor, lhs=v87, rhs=v14 }               -> x0
-    v90  BinopI { op=and, lhs=v20, rhs_imm=4294967295 }   -> x1
-    v91  Binop { op=xor, lhs=v89, rhs=v20 }               -> x0
-    v92  BinopI { op=and, lhs=v26, rhs_imm=4294967295 }   -> x1
-    v93  Binop { op=xor, lhs=v91, rhs=v26 }               -> x0
-    v94  BinopI { op=and, lhs=v32, rhs_imm=4294967295 }   -> x1
-    v95  Binop { op=xor, lhs=v93, rhs=v32 }               -> x0
-    v96  BinopI { op=and, lhs=v38, rhs_imm=4294967295 }   -> x1
-    v97  Binop { op=xor, lhs=v95, rhs=v38 }               -> x0
-    v98  BinopI { op=and, lhs=v44, rhs_imm=4294967295 }   -> x1
+    v87  Binop { op=xor, lhs=v56, rhs=v8 }                -> x1
+    v88  BinopI { op=and, lhs=v14, rhs_imm=4294967295 }   -> x0
+    v89  Binop { op=xor, lhs=v87, rhs=v14 }               -> x1
+    v90  BinopI { op=and, lhs=v20, rhs_imm=4294967295 }   -> x0
+    v91  Binop { op=xor, lhs=v89, rhs=v20 }               -> x1
+    v92  BinopI { op=and, lhs=v26, rhs_imm=4294967295 }   -> x0
+    v93  Binop { op=xor, lhs=v91, rhs=v26 }               -> x1
+    v94  BinopI { op=and, lhs=v32, rhs_imm=4294967295 }   -> x0
+    v95  Binop { op=xor, lhs=v93, rhs=v32 }               -> x1
+    v96  BinopI { op=and, lhs=v38, rhs_imm=4294967295 }   -> x0
+    v97  Binop { op=xor, lhs=v95, rhs=v38 }               -> x1
+    v98  BinopI { op=and, lhs=v44, rhs_imm=4294967295 }   -> x0
     v99  Binop { op=xor, lhs=v97, rhs=v44 }               -> x0
     v100 BinopI { op=and, lhs=v50, rhs_imm=4294967295 }   -> x1
     v101 Binop { op=xor, lhs=v99, rhs=v50 }               -> x0

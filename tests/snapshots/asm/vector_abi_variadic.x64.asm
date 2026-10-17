@@ -356,9 +356,8 @@ Disassembly of section .text:
                	addq	$0xe, %rcx
                	andq	$0xff, %rcx
                	movb	%cl, -0x2(%rbp)
-               	movq	%rdi, %rcx
-               	andq	$0xff, %rcx
-               	addq	$0xf, %rcx
+               	andq	$0xff, %rdi
+               	leaq	0xf(%rdi), %rcx
                	andq	$0xff, %rcx
                	movb	%cl, -0x1(%rbp)
                	movq	%rax, %rcx

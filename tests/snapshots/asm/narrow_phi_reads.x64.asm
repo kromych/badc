@@ -56,14 +56,13 @@ Disassembly of section .text:
                	movq	%rbx, %r12
                	movq	%rbx, %rdi
                	callq	<addr>
-               	addq	%r12, %rax
-               	movq	%rax, %r12
+               	addq	%rax, %r12
                	andq	$0xff, %r12
                	incq	%rbx
                	cmpl	%r13d, %ebx
                	jl	<addr>
+               	xorq	$0x2a, %r12
                	movq	%r12, %rax
-               	xorq	$0x2a, %rax
                	popq	%rbx
                	popq	%r12
                	popq	%r13

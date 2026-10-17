@@ -68,20 +68,19 @@ Disassembly of section .text:
                	movl	$0x4, %eax
                	leave
                	retq
+               	andq	$0xff, %rcx
                	movq	%rcx, %rax
-               	andq	$0xff, %rax
-               	movq	%rax, %rcx
-               	sarq	$0x6, %rcx
-               	cmpl	$0x3, %ecx
+               	sarq	$0x6, %rax
+               	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x5, %eax
                	leave
                	retq
-               	movl	-0x10(%rbp), %ecx
-               	andq	$-0x80000000, %rcx      # imm = 0x80000000
-               	movl	%ecx, -0x10(%rbp)
-               	andq	$-0xc1, %rax
-               	movb	%al, -0x9(%rbp)
+               	movl	-0x10(%rbp), %eax
+               	andq	$-0x80000000, %rax      # imm = 0x80000000
+               	movl	%eax, -0x10(%rbp)
+               	andq	$-0xc1, %rcx
+               	movb	%cl, -0x9(%rbp)
                	xorl	%eax, %eax
                	leave
                	retq

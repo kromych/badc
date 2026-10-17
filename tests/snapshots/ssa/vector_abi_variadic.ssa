@@ -439,7 +439,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v202 LocalAddr(-4)                                    -> x1
     v203 Imm(15)                                          -> x1
     v204 BinopI { op=add, lhs=v189, rhs_imm=15 }          -> x1
-    v205 BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x1
+    v205 BinopI { op=and, lhs=v1, rhs_imm=255 }           -> x7
     v206 BinopI { op=add, lhs=v205, rhs_imm=15 }          -> x1
     v207 Extend { value=v206, kind=I32, nsw }             -> x2
     v208 BinopI { op=and, lhs=v206, rhs_imm=255 }         -> x1

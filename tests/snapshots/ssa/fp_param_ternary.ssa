@@ -9,7 +9,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v3   ParamRef(1, kind=F32)                            -> d0 [f32]
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
-    v6   BinopI { op=and, lhs=v1, rhs_imm=1 }             -> x0
+    v6   BinopI { op=and, lhs=v1, rhs_imm=1 }             -> x7
     terminator Bz { cond=v6, target=b3, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
     v7   Imm(0)                                           -> x0 [f32]
@@ -48,7 +48,7 @@ fn ent_pc=2 n_params=3 variadic=false locals=0
     v15  Imm(0)                                           -> x0 [f32]
     v16  Imm(0)                                           -> x0
     v17  Imm(0)                                           -> x0
-    v18  BinopI { op=and, lhs=v1, rhs_imm=2 }             -> x0
+    v18  BinopI { op=and, lhs=v1, rhs_imm=2 }             -> x7
     terminator Bz { cond=v18, target=b5, fall=b3 }   (exit_acc=v18)
   block 3  start_pc=0
     v19  Imm(0)                                           -> x0 [f32]

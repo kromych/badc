@@ -108,8 +108,8 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v98  Extend { value=v30, kind=I32 }                   -> x1
     v99  Extend { value=v42, kind=I32 }                   -> x1
     v100 Extend { value=v9, kind=I32, nsw }               -> x1
-    v101 BinopI { op=shl, lhs=v18, rhs_imm=1 }            -> x1
-    v102 Extend { value=v101, kind=I32, nsw }             -> x6
+    v101 BinopI { op=shl, lhs=v18, rhs_imm=1 }            -> x9
+    v102 Extend { value=v101, kind=I32, nsw }             -> x1
     v103 Binop { op=add, lhs=v9, rhs=v101 }               -> x1
     v104 Extend { value=v103, kind=I32, nsw }             -> x2
     v105 BinopI { op=mul, lhs=v30, rhs_imm=3 }            -> x0

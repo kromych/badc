@@ -104,14 +104,12 @@ Disassembly of section .text:
                	addq	$0x20, %rsp
                	movslq	%eax, %rax
                	addq	%rbx, %rax
-               	movq	%r12, %rcx
-               	shlq	%rcx
-               	addq	%rcx, %rax
+               	shlq	%r12
+               	addq	%r12, %rax
                	leaq	(%r13,%r13,2), %rcx
                	addq	%rcx, %rax
-               	movq	%r14, %rcx
-               	shlq	$0x2, %rcx
-               	addq	%rcx, %rax
+               	shlq	$0x2, %r14
+               	addq	%r14, %rax
                	leaq	(%r15,%r15,4), %rcx
                	addq	%rcx, %rax
                	movq	0x48(%rsp), %rcx

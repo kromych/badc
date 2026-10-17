@@ -275,9 +275,8 @@ Disassembly of section .text:
                	subq	%rsi, %rcx
                	imulq	$0xa, %rcx, %rcx
                	addq	%rcx, %rax
-               	movq	%rdi, %rcx
-               	imulq	%rsi, %rcx
-               	imulq	$0xb, %rcx, %rcx
+               	imulq	%rdi, %rsi
+               	imulq	$0xb, %rsi, %rcx
                	addq	%rcx, %rax
                	leaq	0xb(%rdi), %rcx
                	imulq	$0xc, %rcx, %rcx

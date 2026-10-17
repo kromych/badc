@@ -173,9 +173,8 @@ Disassembly of section .text:
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
                	movq	%rsi, -0x10(%rbp)
-               	movq	%rsi, %rax
-               	shlq	%rax
-               	movq	%rax, -0x8(%rbp)
+               	shlq	%rsi
+               	movq	%rsi, -0x8(%rbp)
                	movups	(%rdi), %xmm14
                	movups	%xmm14, (%rbx)
                	callq	<addr>
@@ -513,9 +512,8 @@ Disassembly of section .text:
                	leave
                	retq
                	leaq	-0x298(%rbp), %rdi
-               	movq	%rbx, %rax
-               	shlq	$0x20, %rax
-               	movq	%rax, %rsi
+               	movq	%rbx, %rsi
+               	shlq	$0x20, %rsi
                	orq	$0x9, %rsi
                	callq	<addr>
                	cmpq	$0x5, %rax

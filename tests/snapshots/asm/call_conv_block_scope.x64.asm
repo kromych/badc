@@ -36,9 +36,8 @@ Disassembly of section .text:
                	retq
 
 <plainf>:
-               	movq	%rdi, %rax
-               	shlq	%rax
-               	addq	%rsi, %rax
+               	shlq	%rdi
+               	leaq	(%rdi,%rsi), %rax
                	retq
 
 <via_typedef>:
@@ -421,6 +420,7 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	popq	%rbp
                	retq
+               	addb	%al, (%rax)
                	addb	%cl, -0x73(%rax)
 
 <ms_ext>:

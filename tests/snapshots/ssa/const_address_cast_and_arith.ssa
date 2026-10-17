@@ -218,7 +218,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v134 ImmData(272)                                     -> x1
     v135 ImmData(104)                                     -> x1
     v136 Load { addr=v135, disp=0, kind=I64 }             -> x1
-    v137 Binop { op=sub, lhs=v88, rhs=v136 }              -> x2
+    v137 Binop { op=sub, lhs=v88, rhs=v136 }              -> x6
     v138 BinopI { op=ne, lhs=v137, rhs_imm=4 }            -> x1
     terminator Bz { cond=v138, target=b41, fall=b40 }   (exit_acc=v138)
   block 40  start_pc=0

@@ -170,8 +170,8 @@ Disassembly of section .text:
                	testq	%rdi, %rdi
                	jle	<addr>
                	movq	(%rdx,%rax,8), %rdi
-               	imulq	%rdi, %rsi
-               	addq	%rsi, %rcx
+               	imulq	%rsi, %rdi
+               	addq	%rdi, %rcx
                	jmp	<addr>
                	subq	%rsi, %rcx
                	incq	%rax

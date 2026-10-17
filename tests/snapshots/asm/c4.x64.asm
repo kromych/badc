@@ -43,10 +43,9 @@ Disassembly of section .text:
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rcx      # <addr>
                	movq	(%rcx), %rsi
-               	movq	(%rax), %rax
+               	movq	(%rax), %rdx
                	leaq	<rip>, %rbx      # <addr>
                	movq	(%rbx), %rcx
-               	movq	%rax, %rdx
                	subq	%rcx, %rdx
                	movb	$0x0, %al
                	callq	<addr>
@@ -644,8 +643,7 @@ Disassembly of section .text:
                	movq	(%rax), %rax
                	movq	0x10(%rax), %rdi
                	leaq	<rip>, %rax      # <addr>
-               	movq	(%rax), %rax
-               	movq	%rax, %rdx
+               	movq	(%rax), %rdx
                	subq	%rbx, %rdx
                	movq	%rbx, %rsi
                	xorl	%eax, %eax

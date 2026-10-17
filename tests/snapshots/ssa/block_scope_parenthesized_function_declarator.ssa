@@ -25,7 +25,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v19  Imm(0)                                           -> x0
     v20  Imm(0)                                           -> x0
     v21  Imm(0)                                           -> x0
-    v22  Binop { op=sub, lhs=v1, rhs=v3 }                 -> x0
+    v22  Binop { op=sub, lhs=v1, rhs=v3 }                 -> x7
     v23  BinopI { op=mul, lhs=v22, rhs_imm=1000 }         -> x0
     v24  Imm(0)                                           -> x1
     v25  Imm(8)                                           -> x1

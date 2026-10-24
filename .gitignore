@@ -303,6 +303,20 @@ demos/qemu/*
 !demos/qemu/README.md
 !demos/qemu/shim/
 
+# simplevisor -- badc builds Alex Ionescu's VT-x hypervisor as a .sys.
+# `setup.py` fetches the upstream VMX core into src/ from the vendor mirror;
+# the build writes into .build/. Only the demo-local OS layer, the translated
+# assembly, the shim headers, the harness, the runner scripts and the README
+# are committed.
+demos/simplevisor/*
+!demos/simplevisor/setup.py
+!demos/simplevisor/smoke.py
+!demos/simplevisor/README.md
+!demos/simplevisor/shvos_badc.c
+!demos/simplevisor/shvasm_x64.c
+!demos/simplevisor/include/
+!demos/simplevisor/harness/
+
 # linux -- the kernel TU sweep. `setup.py` fetches and configures the pinned
 # release under `.cache/` and the sweep writes per-unit objects and reports
 # under `.work/`; only the runner scripts, the vendored minimal configs and

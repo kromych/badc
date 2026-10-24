@@ -321,6 +321,17 @@ SOURCES = [
         upstream_sha="3bc15301f35addac9acde1da64da0976dbeafe1264e904c25a3cdc831e347303",
         sha_kind="tarball-sha256",
     ),
+    Source(
+        # SimpleVisor -- Alex Ionescu's Intel VT-x hypervisor. No
+        # versioned releases; pinned to the master head, author-date
+        # version. The asset is the upstream GitHub archive of the commit.
+        name="simplevisor",
+        version="20181209",
+        url="https://github.com/ionescu007/SimpleVisor/archive/989d33b1bc6569965d7aad3bd50a8d35fa4c359e.zip",
+        ext=".zip",
+        upstream_sha="989d33b1bc6569965d7aad3bd50a8d35fa4c359e",
+        sha_kind="git",
+    ),
     # Distribution kernel configurations, one per (distribution, architecture)
     # cloud image pinned in demos/linux/packages.py. They are not published
     # anywhere upstream: each is /boot/config-$(uname -r) taken out of the

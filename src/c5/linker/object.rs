@@ -239,6 +239,9 @@ pub struct SharedLibrary {
     /// tables, and for a description with no file behind it -- there
     /// the target's manifest states the requirement.
     pub export_versions: alloc::collections::BTreeMap<String, String>,
+    /// The names the library's dynamic symbols reference and do not define,
+    /// which an executable defining one exports (GNU ld's `ref_dynamic`).
+    pub references: alloc::collections::BTreeSet<String>,
     /// Whether this record was read from a library image. A description
     /// the target supplies instead -- the C library its headers describe
     /// -- carries no version data of its own, so the link must not read
@@ -270,6 +273,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
     let mut data_exports = alloc::collections::BTreeSet::new();
     let mut tls_exports = alloc::collections::BTreeSet::new();
     let mut object_sizes = alloc::collections::BTreeMap::new();
+    let mut references = alloc::collections::BTreeSet::new();
     for i in 0..ehdr.e_shnum as usize {
         let sh = shdr(i)?;
         if sh.sh_type == SHT_DYNSYM {
@@ -280,15 +284,19 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
             }
             for j in 0..(sh.sh_size as usize / entsize) {
                 let sym: Elf64Sym = read_struct(bytes, sh.sh_offset as usize + j * entsize)?;
-                // SHN_UNDEF (0) is an import, not an export; STB_LOCAL (0)
-                // has no external linkage. Keep STB_GLOBAL (1) / STB_WEAK (2)
-                // definitions.
+                // STB_LOCAL (0) has no external linkage. Of the STB_GLOBAL
+                // (1) / STB_WEAK (2) entries, SHN_UNDEF (0) is a reference
+                // and the rest are definitions.
                 let bind = sym.st_info >> 4;
-                if sym.st_shndx == 0 || (bind != 1 && bind != 2) {
+                if bind != 1 && bind != 2 {
                     continue;
                 }
                 let name = read_cstr(strtab.sh_offset as usize + sym.st_name as usize);
                 if name.is_empty() {
+                    continue;
+                }
+                if sym.st_shndx == 0 {
+                    references.insert(name);
                     continue;
                 }
                 // STT_OBJECT (1) is a data object; a reference to it must
@@ -336,6 +344,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         export_symbols: alloc::collections::BTreeMap::new(),
         export_versions: crate::c5::object::so_versions::parse_export_versions(bytes),
         from_image: true,
+        references,
     })
 }
 

@@ -9660,6 +9660,59 @@ fn a_data_initializer_holds_a_library_functions_address() {
     }
 }
 
+// An executable exports its definition of a name a linked shared library
+// references and does not define, so the loader binds the library's
+// reference to it (GNU ld's `ref_dynamic`), with no option asking for the
+// export: a callback the library calls and an object it reads.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_librarys_reference_binds_to_the_executables_definition() {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping a_librarys_reference_binds_to_the_executables_definition: no cc");
+        return;
+    };
+    let dir = tempdir("ref-dynamic");
+    let lib = write_source(
+        &dir,
+        "cb.c",
+        "int callback(int);\nextern int host_value;\n\
+         int run_callback(int x) { return callback(x) + host_value; }\n",
+    );
+    run(
+        Command::new(&cc)
+            .args(["-shared", "-fPIC", "-o"])
+            .arg(dir.join("libcb.so"))
+            .arg(&lib),
+        "build the shared library",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "int host_value = 40;\nint callback(int x) { return x * 2; }\n\
+         int run_callback(int);\nint main(void) { return run_callback(1); }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-q")
+            .arg(&main)
+            .arg(format!("-L{}", dir.display()))
+            .args(["-lcb", "-o"])
+            .arg(&exe),
+        "link the executable",
+    );
+    let out = Command::new(&exe)
+        .env("LD_LIBRARY_PATH", &dir)
+        .output()
+        .expect("run");
+    assert_eq!(
+        out.status.code(),
+        Some(42),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
 // A shared library reaches the functions and objects it exports through its
 // PLT and GOT, so the executable's definitions of those names preempt the
 // library's own (System V gABI, symbol visibility): the library's calls,
@@ -9740,10 +9793,12 @@ fn an_executables_definitions_preempt_a_shared_librarys_own() {
            return 0;\n\
          }\n",
     );
+    // The executable exports its definitions of the names the library
+    // defines with no option asking for it, as GNU ld does.
     let exe = dir.join("prog");
     run(
         Command::new(badc())
-            .args(["-q", "--export-all", "--export-data"])
+            .arg("-q")
             .arg(&main)
             .arg(format!("-L{}", dir.join("default").display()))
             .args(["-lpreempt", "-o"])

@@ -83,6 +83,7 @@ impl TargetCLibrary {
                 export_symbols: BTreeMap::new(),
                 export_versions: BTreeMap::new(),
                 from_image: false,
+                references: Default::default(),
             },
             scanned: BTreeSet::new(),
             data_headers: BTreeMap::new(),

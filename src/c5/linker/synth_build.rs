@@ -600,7 +600,10 @@ fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRe
 /// executable through the Mach-O symtab. ELF and PE split the same
 /// coverage across two flags matching the toolchain's `-rdynamic`:
 /// `--export-all` adds functions, `--export-data` adds data globals.
-/// Both gate the export because it widens the global symbol scope.
+/// Both gate the export because it widens the global symbol scope. An
+/// ELF executable also exports each definition of a name a linked shared
+/// library defines or references, so the library binds to it, as GNU ld
+/// does; a copy-relocated one is exported by its copy relocation.
 /// A shared library exports functions through `exports`; an ELF one data here.
 fn synth_dynamic_exports(
     merged: &MergedNative,
@@ -619,15 +622,22 @@ fn synth_dynamic_exports(
         && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
     let export_funcs = macos_exec || (flagged_exec && export_all);
     let export_data_globals = macos_exec || ((flagged_exec || elf_library) && export_data);
-    if !export_funcs && !export_data_globals {
+    let elf_exec = is_exec && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
+    let linked = |name: &str| {
+        elf_exec
+            && merged.shared_names.contains(name)
+            && !merged.copy_relocs.iter().any(|(local, _)| local == name)
+    };
+    if !export_funcs && !export_data_globals && (!elf_exec || merged.shared_names.is_empty()) {
         return Vec::new();
     }
     merged
         .defined
         .iter()
         .filter_map(|(name, sym)| {
-            if name.is_empty() || !exports_definition(sym, false, export_funcs, export_data_globals)
-            {
+            let exported = exports_definition(sym, false, export_funcs, export_data_globals)
+                || linked(name) && exports_definition(sym, true, false, true);
+            if name.is_empty() || !exported {
                 return None;
             }
             // A `.bss` definition rides the same data-byte offset
@@ -1636,6 +1646,7 @@ mod tests {
             import_versions: Default::default(),
             flat_imports: alloc::collections::BTreeSet::new(),
             exports: alloc::vec![],
+            shared_names: Default::default(),
             tls_index_fixups: alloc::vec![],
             macho_tlv_descriptors: alloc::vec![],
             macho_tlv_fixups: alloc::vec![],

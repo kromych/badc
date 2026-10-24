@@ -4544,6 +4544,7 @@ fn an_extern_thread_local_is_read_from_a_got_slot_unless_the_link_defines_it() {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            references: Default::default(),
         };
         let merged =
             link_native_objects_with_shared_libs(core::slice::from_ref(&reader), false, &[lib])
@@ -5532,6 +5533,7 @@ fn an_import_only_addressed_keeps_its_function_type() {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            references: Default::default(),
         };
         let merged = link_native_objects_with_shared_libs(&[obj], false, &[lib]).expect("link");
         for exec_form in [ExecForm::Pie, ExecForm::Placed] {
@@ -7283,6 +7285,7 @@ fn weak_undef_binds_against_a_shared_library_export() {
         export_symbols: Default::default(),
         export_versions: Default::default(),
         from_image: true,
+        references: Default::default(),
     };
     let merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
         .expect("weak ref against a shared library links");
@@ -14072,6 +14075,7 @@ fn imported_function_called_and_address_taken_links_through_own_linker() {
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
+            references: Default::default(),
         };
         let mut merged = link_native_objects_with_shared_libs(&objs, false, &[lib])
             .expect("link resolves the function against the shared library");

@@ -221,6 +221,9 @@ pub struct MergedNative {
     /// writer promotes each to the export table when emitting a
     /// shared library (resolving the name through [`Self::defined`]).
     pub exports: Vec<String>,
+    /// The names a linked shared library defines or references, which an
+    /// ELF executable defining one exports so the library binds to it.
+    pub shared_names: BTreeSet<String>,
     /// Win64 `_tls_index` fixup offsets, rebased into the merged
     /// `.text`. The PE writer patches each with the `_tls_index` slot
     /// address. Empty on non-Windows links and Windows links without
@@ -4462,6 +4465,10 @@ impl<'a> Link<'a> {
             import_versions: merged_dylibs.import_versions,
             flat_imports,
             exports,
+            shared_names: (self.shared_libs.iter())
+                .flat_map(|l| l.exports.iter().chain(&l.references))
+                .cloned()
+                .collect(),
             tls_index_fixups,
             macho_tlv_descriptors: tlv.descriptors,
             macho_tlv_fixups: tlv.fixups,
@@ -6239,6 +6246,7 @@ mod tests {
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
+            references: Default::default(),
         };
         let merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
             .expect("link resolves the data object against the shared library");
@@ -6350,6 +6358,7 @@ mod tests {
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
+            references: Default::default(),
         };
         let merged = link_native_objects_with_shared_libs(&[caller], false, &[lib])
             .expect("link resolves ext_fn against the shared library");
@@ -6389,6 +6398,7 @@ mod tests {
             export_symbols: alloc::collections::BTreeMap::new(),
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
+            references: Default::default(),
         };
         let mut merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
             .expect("a data reference to a shared-library import must link");
@@ -7933,6 +7943,7 @@ mod tests {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            references: Default::default(),
         }
     }
 
@@ -8324,6 +8335,7 @@ mod tests {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            references: Default::default(),
         };
         // `movl counter(%rip), %eax`, or `leaq counter(%rip), %rax`.
         let reader = |routed: bool, text: &[u8]| {
@@ -8423,6 +8435,7 @@ mod tests {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            references: Default::default(),
         };
         let mut o = blank_object(NativeMachine::X86_64);
         // `int *const counter_addr = &counter;`

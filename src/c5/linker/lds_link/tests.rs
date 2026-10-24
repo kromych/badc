@@ -2690,6 +2690,7 @@ fn shared_input(soname: &str, funcs: &[&str], data: &[&str]) -> SharedInput {
             export_symbols: Default::default(),
             export_versions: Default::default(),
             from_image: true,
+            references: Default::default(),
         },
         as_needed: false,
     }

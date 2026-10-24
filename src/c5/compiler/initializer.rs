@@ -17,7 +17,7 @@ use alloc::format;
 use alloc::vec::Vec;
 
 use super::super::error::C5Error;
-use super::super::lexer::LexerSnapshot;
+use super::super::lexer::{InitEntry, LexerSnapshot};
 use super::super::token::{Token, Ty};
 use super::AnonMember;
 use super::Compiler;
@@ -218,12 +218,52 @@ pub(super) enum InitTarget {
 /// The sub-object a C99 6.7.8p7 designator list resolves to: its byte
 /// offset and field record, plus the run a GNU `[lo ... hi]` step selects
 /// (`extra` sub-objects after the first, `stride` bytes apart), which the
-/// caller fills by re-parsing the entry value once per index.
+/// caller fills by re-parsing the entry value once per index. `steps`
+/// holds the list's steps, the range's at index `range_step`.
 pub(super) struct DesignatedSubobject {
     pub offset: i64,
     pub field: super::StructField,
     pub extra: i64,
     pub stride: i64,
+    steps: Vec<DesignatorStep>,
+    range_step: usize,
+}
+
+/// One step of a designator list: the subobject it names within the
+/// object the step before it named, placed at `base`.
+#[derive(Clone)]
+enum DesignatorStep {
+    /// Member `idx` of structure or union `sid`.
+    Member { sid: usize, idx: usize, base: i64 },
+    /// Element `index` of the array member `array`.
+    Element {
+        array: alloc::boxed::Box<super::StructField>,
+        index: i64,
+        base: i64,
+    },
+}
+
+impl DesignatedSubobject {
+    /// The steps naming the last sub-object of a range, after which
+    /// initialization resumes (the GNU range extension, as gcc and clang).
+    fn last_steps(&self) -> Vec<DesignatorStep> {
+        let shift = self.extra * self.stride;
+        let mut steps = self.steps.clone();
+        for (k, step) in steps.iter_mut().enumerate() {
+            match step {
+                DesignatorStep::Element { index, .. } if k == self.range_step => {
+                    *index += self.extra
+                }
+                DesignatorStep::Member { base, .. } | DesignatorStep::Element { base, .. }
+                    if k > self.range_step =>
+                {
+                    *base += shift
+                }
+                _ => {}
+            }
+        }
+        steps
+    }
 }
 
 impl InitTarget {
@@ -1086,13 +1126,86 @@ impl Compiler {
     }
 
     /// [`Self::list_separator`] after an initializer. A brace-elided list
-    /// ends once `complete` and leaves the `,` to the enclosing list (C99
-    /// 6.7.8p20).
-    pub(super) fn initializer_separator(&mut self, complete: bool) -> Result<bool, C5Error> {
-        if complete {
+    /// (`elided`) ends once `complete`, and before a designator, which
+    /// names a subobject of the braced list's object; it leaves the `,` to
+    /// the enclosing list (C99 6.7.8p17, p20).
+    pub(super) fn initializer_separator(
+        &mut self,
+        elided: bool,
+        complete: bool,
+    ) -> Result<bool, C5Error> {
+        if elided
+            && (complete
+                || self.lex.tk == ',' && self.lex.peek_initializer_entry() == InitEntry::Designator)
+        {
             return Ok(false);
         }
         self.list_separator('}', "initializer")
+    }
+
+    /// Consume the `,` before a positional entry of the current list;
+    /// false at its `}` or before a designator.
+    fn take_positional_entry(&mut self) -> Result<bool, C5Error> {
+        if self.lex.tk != ',' || self.lex.peek_initializer_entry() != InitEntry::Value {
+            return Ok(false);
+        }
+        self.next()?;
+        Ok(true)
+    }
+
+    /// C99 6.7.8p17: after a designated initializer, initialization goes
+    /// on in order from the subobject after the designated one, through
+    /// each object the designator list descended into, innermost first
+    /// and with its braces elided (p20).
+    fn resume_after_designation(
+        &mut self,
+        struct_id: usize,
+        steps: &[DesignatorStep],
+        target: InitTarget,
+    ) -> Result<(), C5Error> {
+        for step in steps.iter().rev() {
+            match step {
+                &DesignatorStep::Member { sid, idx, base } => {
+                    let start = self.positional_next(sid, idx);
+                    if start < self.structs[sid].fields.len() && self.take_positional_entry()? {
+                        self.fill_struct_fields_from(sid, target.rebased(base), false, start)?;
+                    }
+                }
+                DesignatorStep::Element { array, index, base } => {
+                    let (elem, count, step_bytes) = self.array_member_element(array);
+                    for j in index + 1..count {
+                        if !self.take_positional_entry()? {
+                            break;
+                        }
+                        let at = (base + j * step_bytes) as usize;
+                        self.fill_member_value_t(struct_id, &elem, target, at, false)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The field record of an element of array member `arr` (one rank
+    /// dropped; a scalar leaf for the last rank), its element count and
+    /// the bytes between its elements.
+    fn array_member_element(&self, arr: &super::StructField) -> (super::StructField, i64, i64) {
+        let dims: Vec<i64> = if arr.array_dims.len() >= 2 {
+            arr.array_dims.clone()
+        } else {
+            alloc::vec![arr.array_size]
+        };
+        let inner: i64 = dims[1..].iter().product::<i64>().max(1);
+        let mut elem = arr.clone();
+        elem.array_size = if dims.len() >= 2 { inner } else { 0 };
+        elem.inner_array_size = if dims.len() >= 3 { dims[2] } else { 0 };
+        elem.array_dims = if dims.len() >= 3 {
+            dims[1..].to_vec()
+        } else {
+            Vec::new()
+        };
+        let step = inner * self.size_of_type(arr.ty) as i64;
+        (elem, dims[0], step)
     }
 
     /// Consume `depth` closing parentheses after a parenthesized string
@@ -2857,7 +2970,8 @@ impl Compiler {
         // where `.member` was read before this call). A `.member` step
         // overwrites it.
         let mut last: Option<super::StructField> = entry_field;
-        let mut took_step = false;
+        let mut steps: Vec<DesignatorStep> = Vec::new();
+        let mut range_step = usize::MAX;
         let mut extra: i64 = 0;
         let mut stride: i64 = 0;
         while self.lex.tk == Token::Dot || self.lex.tk == Token::Brak {
@@ -2889,6 +3003,11 @@ impl Compiler {
                         )
                     })?;
                 let sub = self.structs[sid].fields[sub_idx].clone();
+                steps.push(DesignatorStep::Member {
+                    sid,
+                    idx: sub_idx,
+                    base: cur_offset,
+                });
                 cur_offset += sub.offset as i64;
                 cur_ty = sub.ty;
                 last = Some(sub);
@@ -2908,12 +3027,10 @@ impl Compiler {
                         ));
                     }
                 };
-                let dims: Vec<i64> = if arr.array_dims.len() >= 2 {
-                    arr.array_dims.clone()
-                } else {
-                    alloc::vec![arr.array_size]
-                };
-                let inner: i64 = dims[1..].iter().product::<i64>().max(1);
+                // Drop the indexed rank: the remaining dims describe the
+                // selected row, and a scalar leaf clears the array shape so
+                // the value fill writes a single element.
+                let (elem, count, step) = self.array_member_element(&arr);
                 // A GNU range designator `[lo ... hi]` has one entry value
                 // fill every index in the range. A later step adds a
                 // constant offset to each, so the run is carried as
@@ -2926,35 +3043,28 @@ impl Compiler {
                         "two `[lo ... hi]` designators in one designator list",
                     ));
                 }
-                self.check_designator_extent(m, hi, dims[0])?;
+                self.check_designator_extent(m, hi, count)?;
                 if self.lex.tk != ']' {
                     return Err(
                         self.compile_err(Code::SYNTAX, "`]` expected after sub-designator index")
                     );
                 }
                 self.next()?;
-                let step = inner * self.size_of_type(cur_ty) as i64;
-                cur_offset += m * step;
                 if hi > m {
                     extra = hi - m;
                     stride = step;
+                    range_step = steps.len();
                 }
-                // Drop the indexed rank: the remaining dims describe the
-                // selected row, and a scalar leaf clears the array shape so
-                // the value fill writes a single element.
-                let mut elem = arr;
-                elem.array_size = if dims.len() >= 2 { inner } else { 0 };
-                elem.inner_array_size = if dims.len() >= 3 { dims[2] } else { 0 };
-                elem.array_dims = if dims.len() >= 3 {
-                    dims[1..].to_vec()
-                } else {
-                    Vec::new()
-                };
+                steps.push(DesignatorStep::Element {
+                    array: alloc::boxed::Box::new(arr),
+                    index: m,
+                    base: cur_offset,
+                });
+                cur_offset += m * step;
                 last = Some(elem);
             }
-            took_step = true;
         }
-        if !took_step {
+        if steps.is_empty() {
             return Err(self.compile_err(
                 Code::INVALID_INITIALIZER,
                 "empty designator chain after `.field`",
@@ -2971,6 +3081,8 @@ impl Compiler {
             field,
             extra,
             stride,
+            steps,
+            range_step,
         })
     }
 
@@ -3020,7 +3132,7 @@ impl Compiler {
                 self.accept(')')?;
             }
         }
-        Ok(())
+        self.resume_after_designation(struct_id, &d.last_steps(), target)
     }
 
     /// A compound array-element designator `[N].field... = v` in a struct
@@ -3034,6 +3146,7 @@ impl Compiler {
         struct_id: usize,
         elem_ty: i64,
         elem_base: i64,
+        resume: bool,
     ) -> Result<(), C5Error> {
         self.fill_element_field_designator_t(
             struct_id,
@@ -3042,18 +3155,22 @@ impl Compiler {
             InitTarget::Data {
                 base: elem_base as usize,
             },
+            resume,
         )
     }
 
     /// [`Self::fill_element_field_designator`] against either target: an
     /// array whose element values are not all constant stages nothing, so
-    /// the chain writes through the runtime store path instead.
+    /// the chain writes through the runtime store path instead. `resume`
+    /// goes on past the designated member (C99 6.7.8p17); a range resumes
+    /// after its last element only.
     pub(super) fn fill_element_field_designator_t(
         &mut self,
         struct_id: usize,
         elem_ty: i64,
         elem_base: i64,
         target: InitTarget,
+        resume: bool,
     ) -> Result<(), C5Error> {
         let d = self.resolve_nested_designator_chain(elem_base, elem_ty, None)?;
         if self.lex.tk != Token::Assign {
@@ -3088,7 +3205,10 @@ impl Compiler {
                 self.accept(')')?;
             }
         }
-        Ok(())
+        if !resume {
+            return Ok(());
+        }
+        self.resume_after_designation(struct_id, &d.last_steps(), target)
     }
 
     /// The aggregate's flexible array member: a trailing `T v[]`
@@ -3420,7 +3540,12 @@ impl Compiler {
                     }
                     for e in lo..=hi {
                         let snap = self.lex.snapshot();
-                        self.fill_element_field_designator(sid, elem_ty, base + e * stride)?;
+                        self.fill_element_field_designator(
+                            sid,
+                            elem_ty,
+                            base + e * stride,
+                            e == hi,
+                        )?;
                         if e < hi {
                             self.restore_lex(snap);
                         }
@@ -3454,7 +3579,7 @@ impl Compiler {
                     cursor = (lo + 1) * child_span;
                 }
                 high = high.max(cursor);
-                if !self.initializer_separator(!braced && cursor >= total)? {
+                if !self.initializer_separator(!braced, cursor >= total)? {
                     break;
                 }
                 continue;
@@ -3484,7 +3609,7 @@ impl Compiler {
             }
             cursor += sub.iter().product::<i64>().max(1);
             high = high.max(cursor);
-            if !self.initializer_separator(!braced && cursor >= total)? {
+            if !self.initializer_separator(!braced, cursor >= total)? {
                 break;
             }
         }
@@ -3564,7 +3689,7 @@ impl Compiler {
                     "`.field` designator requires indexing down to one element",
                 ));
             }
-            self.fill_element_field_designator(sid, elem_ty, at)?;
+            self.fill_element_field_designator(sid, elem_ty, at, true)?;
             return Ok(at + elem_size);
         }
         if self.lex.tk != Token::Assign {
@@ -3970,15 +4095,26 @@ impl Compiler {
         target: InitTarget,
         braced: bool,
     ) -> Result<(), C5Error> {
-        let var_offset = target.base();
         if let InitTarget::Data { base } = target
             && !braced
             && self.take_union_cast_init(struct_id, base)?
         {
             return Ok(());
         }
+        self.fill_struct_fields_from(struct_id, target, braced, 0)
+    }
+
+    /// [`Self::fill_struct_fields_t`] from member `start` on.
+    fn fill_struct_fields_from(
+        &mut self,
+        struct_id: usize,
+        target: InitTarget,
+        braced: bool,
+        start: usize,
+    ) -> Result<(), C5Error> {
+        let var_offset = target.base();
         let n_fields = self.structs[struct_id].fields.len();
-        let mut pos: usize = 0;
+        let mut pos: usize = start;
         let mut items = 0usize;
         while self.lex.tk != '}' && (braced || pos < n_fields) {
             // Designator?
@@ -4029,8 +4165,8 @@ impl Compiler {
                     let outer = self.structs[struct_id].fields[outer_idx].clone();
                     let chain_base = (var_offset as usize) + outer.offset;
                     self.fill_member_designator_chain_t(struct_id, &outer, chain_base, target)?;
-                    pos = outer_idx + 1;
-                    if !self.initializer_separator(!braced && pos >= n_fields)? {
+                    pos = self.positional_next(struct_id, outer_idx);
+                    if !self.initializer_separator(!braced, pos >= n_fields)? {
                         break;
                     }
                     continue;
@@ -4095,7 +4231,7 @@ impl Compiler {
                 for _ in 0..close_parens {
                     self.accept(')')?;
                 }
-                if !self.initializer_separator(!braced && pos >= n_fields)? {
+                if !self.initializer_separator(!braced, pos >= n_fields)? {
                     break;
                 }
                 continue;
@@ -4114,7 +4250,7 @@ impl Compiler {
                     self.accept(')')?;
                 }
                 pos = field_idx + 1;
-                if !self.initializer_separator(!braced && pos >= n_fields)? {
+                if !self.initializer_separator(!braced, pos >= n_fields)? {
                     break;
                 }
                 continue;
@@ -4144,7 +4280,7 @@ impl Compiler {
                 let elem = (field.ty, self.field_elem_fn_type(&field));
                 self.fill_flexible_array_member(field_base, elem, &inner_dims)?;
                 pos = field_idx + 1;
-                if !self.initializer_separator(!braced && pos >= n_fields)? {
+                if !self.initializer_separator(!braced, pos >= n_fields)? {
                     break;
                 }
                 continue;
@@ -4168,8 +4304,8 @@ impl Compiler {
             // initializer, for its first named member; in a brace-elided
             // context stop there rather than consuming values meant for
             // the surrounding aggregate's next members.
-            let complete = !braced && (self.structs[struct_id].is_union || pos >= n_fields);
-            if !self.initializer_separator(complete)? {
+            let complete = self.structs[struct_id].is_union || pos >= n_fields;
+            if !self.initializer_separator(!braced, complete)? {
                 break;
             }
         }
@@ -4344,7 +4480,7 @@ impl Compiler {
                     self.write_init_value(here, elem_size, value, reloc, field.ty)?;
                     idx += 1;
                 }
-                if !self.initializer_separator(idx as i64 >= field.array_size)? {
+                if !self.initializer_separator(true, idx as i64 >= field.array_size)? {
                     break;
                 }
             }

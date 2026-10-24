@@ -4138,6 +4138,14 @@ fn struct_array_designator_resume() {
 }
 
 #[test]
+fn designator_resumes_in_subobject() {
+    // C99 6.7.8p17: a positional entry after `[i].m`, `.m.x` or `.a[i]`
+    // takes the next subobject of the designated one's enclosing object;
+    // a designator after a brace-elided value belongs to the braced list.
+    assert_eq!(run_fixture("designator_resumes_in_subobject.c"), 0);
+}
+
+#[test]
 fn packed_anon_union_layout() {
     // A trailing `__attribute__((packed))` repacks the fields; the promoted
     // members of an anonymous union must keep overlapping (and a nested

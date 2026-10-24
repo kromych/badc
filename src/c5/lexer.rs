@@ -172,6 +172,14 @@ pub enum StrPrefix {
     Char32,
 }
 
+/// What an initializer list holds after a `,` (C99 6.7.8p1).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum InitEntry {
+    Close,
+    Designator,
+    Value,
+}
+
 impl StrPrefix {
     fn spelling(self) -> &'static [u8] {
         match self {
@@ -1516,6 +1524,46 @@ impl Lexer {
             return true;
         }
         self.src[p] == b'.' && p + 1 < self.src.len() && self.src[p + 1].is_ascii_digit()
+    }
+
+    /// The entry after the current position, which follows a `,` of an
+    /// initializer list: its `}`, a designator (`[`, or `.` and a member
+    /// name), or a value.
+    pub fn peek_initializer_entry(&self) -> InitEntry {
+        let p = self.skip_trivia(self.pos);
+        match self.src.get(p) {
+            Some(b'}') => InitEntry::Close,
+            Some(b'[') => InitEntry::Designator,
+            Some(b'.') if ident::ident_len(&self.src, self.skip_trivia(p + 1)) > 0 => {
+                InitEntry::Designator
+            }
+            _ => InitEntry::Value,
+        }
+    }
+
+    /// The offset of the first byte at or after `p` that is not white
+    /// space, a comment or a `#` line (a line marker or a pragma).
+    fn skip_trivia(&self, mut p: usize) -> usize {
+        let src = &self.src;
+        loop {
+            while p < src.len() && src[p].is_ascii_whitespace() {
+                p += 1;
+            }
+            let rest = &src[p.min(src.len())..];
+            if rest.starts_with(b"/*") {
+                p = rest[2..]
+                    .windows(2)
+                    .position(|w| w == b"*/")
+                    .map_or(src.len(), |k| p + k + 4);
+            } else if rest.starts_with(b"//") || rest.first() == Some(&b'#') {
+                p = rest
+                    .iter()
+                    .position(|&b| b == b'\n')
+                    .map_or(src.len(), |k| p + k);
+            } else {
+                return p;
+            }
+        }
     }
 
     /// Count top-level comma-separated items in a brace list, starting

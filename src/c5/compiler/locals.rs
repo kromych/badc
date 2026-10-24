@@ -15,7 +15,7 @@ use alloc::format;
 use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
-use super::initializer::{DataStore, DesignatorRule, DesignatorSubscript, InitTarget};
+use super::initializer::{DataStore, DesignatorRule, InitTarget};
 use super::types::{
     apply_qual_bits, is_float_ty, is_floating_scalar, is_long_double_ty, is_pointer_ty,
     is_struct_value_ty, is_vector_ty, struct_id_of,
@@ -1797,36 +1797,6 @@ impl Compiler {
         Ok(())
     }
 
-    /// Fill elements `lo..=hi` of a struct array staged in `self.data`
-    /// from one source-level entry, re-parsing the entry per element
-    /// through a lexer snapshot. `chain` selects the designator-chain
-    /// form (`.field... = v`, cursor on the `.`) over the plain value
-    /// form (`{ ... }` or a flat field list, cursor on the value).
-    fn fill_element_range(
-        &mut self,
-        sid: usize,
-        ty: i64,
-        base: i64,
-        elem_size: i64,
-        range: core::ops::RangeInclusive<i64>,
-        chain: bool,
-    ) -> Result<(), C5Error> {
-        let hi = *range.end();
-        for e in range {
-            let snap = self.lex.snapshot();
-            let here = base + e * elem_size;
-            if chain {
-                self.fill_element_field_designator(sid, ty, here)?;
-            } else {
-                self.init_struct_array_element(sid, here)?;
-            }
-            if e < hi {
-                self.restore_lex(snap);
-            }
-        }
-        Ok(())
-    }
-
     /// Try to fold a `const` scalar arithmetic auto local's initializer
     /// to a constant of the declared type, mirroring the value GCC's
     /// case-label / `static_assert` fold reads. The lexer is at the `=`;
@@ -2228,7 +2198,6 @@ impl Compiler {
         var_name: &str,
     ) -> Result<(), C5Error> {
         let elem_size = self.size_of_type(ty);
-        let sid = struct_id_of(ty);
         // Pre-scan each element's brace list: if any
         // value isn't a compile-time constant, take
         // the per-field runtime store path. Mirrors
@@ -2264,149 +2233,14 @@ impl Compiler {
             )?;
             return Ok(());
         }
-        // A multi-dimensional array's top-level groups are
-        // inner sub-arrays, not single structs; each spans the
-        // product of the inner dimensions (C99 6.7.8). Mirror
-        // the static-local path: recurse per inner dimension.
-        let inner_dims = self.inner_dims_of(loc_idx);
-        let inner_product: i64 = inner_dims.iter().product::<i64>().max(1);
-        let group_stride = elem_size as i64 * inner_product;
-        let group_count = declared_array_size / inner_product;
+        // The constant image goes through the static walker: a
+        // multi-dimensional array's dimensions, designators and brace
+        // elision are laid out as for a static object (C99 6.7.8).
+        let mut dims = self.inner_dims_of(loc_idx);
+        let inner_product: i64 = dims.iter().product::<i64>().max(1);
+        dims.insert(0, declared_array_size / inner_product);
         self.next()?; // consume outer `{`
-        let mut i: i64 = 0;
-        while self.lex.tk != '}' {
-            // C99 6.7.8p6/p7 array designator. A single `[N] =`
-            // jumps the outer cursor and fills a whole row; a
-            // multi-dimensional `[i][j]... = { ... }` indexes every
-            // dimension down to a single struct element.
-            if self.lex.tk == Token::Brak {
-                let DesignatorSubscript {
-                    lo: desig,
-                    hi: desig_hi,
-                    ..
-                } = self.take_designator_subscript(DesignatorRule::Deferred)?;
-                self.expect_designator_close()?;
-                self.check_designator_extent(desig, desig_hi, group_count)?;
-                if self.lex.tk == Token::Brak && desig_hi == desig {
-                    // Each inner subscript scales by the product of
-                    // the dimensions below it; the outer `desig`
-                    // scales by the whole inner product.
-                    let mut elem = desig * inner_product;
-                    let mut d = 0usize;
-                    while self.lex.tk == Token::Brak {
-                        let n = self
-                            .take_designator_subscript(DesignatorRule::SingleIndex)?
-                            .lo;
-                        self.expect_designator_close()?;
-                        // Past the last dimension the sub-object is a struct
-                        // element, which takes a `.field` step, not a
-                        // subscript; the file-scope walker reports the same.
-                        if d >= inner_dims.len() {
-                            return Err(self.compile_err(
-                                Code::INVALID_INITIALIZER,
-                                "`[` designator on a non-array element",
-                            ));
-                        }
-                        self.check_designator_extent(n, n, inner_dims[d])?;
-                        let scale: i64 = inner_dims.iter().skip(d + 1).product::<i64>().max(1);
-                        elem += n * scale;
-                        d += 1;
-                    }
-                    if d != inner_dims.len() {
-                        return Err(self.compile_err(
-                            Code::INVALID_INITIALIZER,
-                            "multi-dimensional `[i][j]` designator must index every dimension",
-                        ));
-                    }
-                    // C99 6.7.8p7: the designator list may continue
-                    // into the element (`[i][j].field... = v`).
-                    if self.lex.tk == Token::Dot {
-                        let here = staged_off as i64 + elem * elem_size as i64;
-                        self.fill_element_field_designator(sid, ty, here)?;
-                        i = desig + 1;
-                        self.list_separator('}', "initializer")?;
-                        continue;
-                    }
-                    if self.lex.tk != Token::Assign {
-                        return Err(self
-                            .compile_err(Code::SYNTAX, "`=` expected after `[i][j]` designator"));
-                    }
-                    self.next()?; // `=`
-                    let here = staged_off as i64 + elem * elem_size as i64;
-                    self.init_struct_array_element(sid, here)?;
-                    i = desig + 1;
-                    self.list_separator('}', "initializer")?;
-                    continue;
-                }
-                // C99 6.7.8p7 member chain on the designated
-                // element(s) (`[N].field... = v`; 1-D elements
-                // only, a row of a multi-dimensional array is
-                // not a struct object).
-                if self.lex.tk == Token::Dot && inner_dims.is_empty() {
-                    self.fill_element_range(
-                        sid,
-                        ty,
-                        staged_off as i64,
-                        group_stride,
-                        desig..=desig_hi,
-                        true,
-                    )?;
-                    i = desig_hi + 1;
-                    self.list_separator('}', "initializer")?;
-                    continue;
-                }
-                if self.lex.tk != Token::Assign {
-                    return Err(
-                        self.compile_err(Code::SYNTAX, "`=` expected after `[N]` designator")
-                    );
-                }
-                self.next()?; // `=`
-                // A range fills each designated element from the
-                // same re-parsed entry.
-                if desig_hi > desig && inner_dims.is_empty() {
-                    self.fill_element_range(
-                        sid,
-                        ty,
-                        staged_off as i64,
-                        group_stride,
-                        desig..=desig_hi,
-                        false,
-                    )?;
-                    i = desig_hi + 1;
-                    self.list_separator('}', "initializer")?;
-                    continue;
-                }
-                i = desig;
-            }
-            if i >= group_count {
-                return Err(self.compile_err(
-                    Code::INVALID_INITIALIZER,
-                    format!(
-                        "too many initializers for array `{}` ({} > {})",
-                        var_name,
-                        i + 1,
-                        group_count
-                    ),
-                ));
-            }
-            let here = staged_off as i64 + i * group_stride;
-            // C99 6.7.8p20: a struct element's braces may be
-            // elided, filling its fields from the flat list.
-            if !inner_dims.is_empty() {
-                if self.lex.tk == '{' {
-                    self.collect_struct_array_data(ty, here, &inner_dims)?;
-                } else {
-                    // C99 6.7.9p20: a row whose braces are elided takes
-                    // its elements from this list and leaves the rest.
-                    self.collect_struct_array_entries_braced(ty, here, &inner_dims, false)?;
-                }
-            } else {
-                self.init_struct_array_element(sid, here)?;
-            }
-            i += 1;
-            self.list_separator('}', "initializer")?;
-        }
-        self.next()?; // consume `}`
+        self.collect_struct_array_entries(ty, staged_off as i64, &dims)?;
         self.emit_local_array_init(
             local_val,
             staged_off,
@@ -3100,6 +2934,7 @@ impl Compiler {
                             local_val,
                             base: here,
                         },
+                        e + 1 == end,
                     )?;
                 }
                 cursor = end;
@@ -3223,7 +3058,7 @@ impl Compiler {
                 self.emit_array_leaf_runtime(local_val, base + k * elem_size, ty)?;
                 k += 1;
             }
-            if !self.initializer_separator(k >= n)? {
+            if !self.initializer_separator(true, k >= n)? {
                 break;
             }
         }

@@ -2,9 +2,9 @@
 
 ## Compile the Linux kernel
 
-Every C translation unit of a Linux 7.1.10
-`defconfig` kernel on x86_64 and aarch64 is built by `badc` in the CI, this is 2921 and
-4434 units for the kernel image, 2953 and 10489
+Every C translation unit of a Linux 7.2.9
+`defconfig` kernel on x86_64 and aarch64 is built by `badc` in the CI, this is 2942 and
+4283 units for the kernel image; at the previous pin, 7.1.10, it was 2953 and 10489
 with the modules. Both kernels boot, checked by boot markers plus in-kernel
 procfs/sysfs self-checks. All
 `defconfig` modules build and load, with per-module verdicts identical to a

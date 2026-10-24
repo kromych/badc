@@ -8,7 +8,7 @@ error signature, producing a ranked work list for kernel support.
 
 ## Pinned kernel
 
-One pin, 7.1.10, for both architectures and every consumer: the sweep, the
+One pin, 7.2.9, for both architectures and every consumer: the sweep, the
 link-and-boot gate, and the package gate. `setup.py` carries the tarball
 sha256 and configures the tree with its own `make defconfig`, so the pin alone
 reproduces the corpus and a version bump is one edit. CI's `kernel` job and
@@ -542,7 +542,7 @@ resolved on that PATH, so the system's GNU Make 3.81 is not the one used.
 
 ```sh
 python3 demos/linux/packages.py --arch aarch64 [--distro fedora] \
-    --linker badc --tarball <linux-7.1.10.tar.xz>
+    --linker badc --tarball <linux-7.2.9.tar.xz>
 ```
 
 It selects `hvf`, which is what makes the gate usable on a Mac: booting the
@@ -647,7 +647,7 @@ into the tree.
 
 Two parameters depend on the corpus rather than the architecture and have to
 be passed. `--expect-units` is a floor on the unit count of the configuration
-under test: at defconfig the sweep tree measures 2921 (x86_64) and 4434
+under test: at defconfig the sweep tree measures 2942 (x86_64) and 4283
 (aarch64), so set it just under the count of what is being built. `--rdinit`
 is whatever the initramfs installs, `/init` by default.
 
@@ -750,10 +750,10 @@ what follows it: the SRSO alignment gap of the x86_64 linker script made
 `srso_alias_return_thunk`, 7 bytes, read as 1031925, and arm64's EFI stub
 symbols, which the map leaves out, made `no_hash_pointers_enable`, 36
 bytes, read as 57368. `scripts/function_sizes.py` reports the same
-distribution as two ratios over an object set. The badc-built 7.1.10
-defconfig images measure 88347 functions on aarch64, largest 22680 bytes
-(`ma35d1_clocks_probe`) and 88 over 4 KiB, and 158778 on x86_64, largest
-44352 (`hidinput_configure_usage`) and 114 over 4 KiB; the budgets are
+distribution as two ratios over an object set. The badc-built 7.2.9
+defconfig images measure 82825 functions on aarch64, largest 20956 bytes
+(`ma35d1_clocks_probe`) and 85 over 4 KiB, and 160115 on x86_64, largest
+49267 (`hidinput_configure_usage`) and 117 over 4 KiB; the budgets are
 29696 and 103, and 57344 and 133.
 
 ### KASLR displacements
@@ -1338,7 +1338,7 @@ installs.
 
 ```sh
 python3 demos/linux/packages.py --arch x86_64 \
-    --tarball-url https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.1.10.tar.xz \
+    --tarball-url https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.9.tar.xz \
     --tarball-sha256 <sha256> \
     --config /boot/config-$(uname -r) --pkg deb,rpm \
     --phases tree,build,package --keep-going \

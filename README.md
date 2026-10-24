@@ -41,7 +41,7 @@ thousand tests, and fuzzing jobs run daily.
   single-source EFI application, its PE subsystem selected by
   `#pragma subsystem`. [`kernel`](./demos/kernel/) is a freestanding preemptive
   multitasking kernel on both architectures, timer interrupts and context
-  switches included, [`Linux`](./demos/linux/) is the Linux kernel `7.1.10`.
+  switches included, [`Linux`](./demos/linux/) is the Linux kernel `7.2.9`.
 * _Cryptography and compression_: [`TweetNaCl`](./demos/tweetnacl/),
   [`Monocypher`](./demos/monocypher/), [`BearSSL`](./demos/bearssl/),
   [`miniz`](./demos/miniz/), [`bzip2`](./demos/bzip2/).

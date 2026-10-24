@@ -2013,12 +2013,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Measured on the pinned sweep release at defconfig: 4434 (aarch64)
-          # and 2921 (x86_64) units, 0 fallbacks, 0 undefined refs, every boot
+          # Measured on the pinned sweep release at defconfig: 4283 (aarch64)
+          # and 2942 (x86_64) units, 0 fallbacks, 0 undefined refs, every boot
           # reaching the marker. Each floor sits just under its count, so a
           # unit silently dropping out of the build fails the gate.
-          - { os: ubuntu-24.04-arm, label: ubuntu-arm64, arch: aarch64, floor: 4400 }
-          - { os: ubuntu-24.04,     label: ubuntu-x64,   arch: x86_64,  floor: 2900 }
+          - { os: ubuntu-24.04-arm, label: ubuntu-arm64, arch: aarch64, floor: 4250 }
+          - { os: ubuntu-24.04,     label: ubuntu-x64,   arch: x86_64,  floor: 2920 }
     runs-on: ${{ matrix.os }}
     # Measured on four 3.2 GHz aarch64 cores: fetch + configure 44 s, clean
     # defconfig build 20 min (4177 units, 2153 CPU-s). Scaled by this runner's
@@ -2027,7 +2027,7 @@ jobs:
     # four-core runner that is 15-20 min. The boot phase is four boots plus a
     # displacement probe per distinct displacement: 25 s on aarch64 (eight
     # emulator starts), 50 s on x86_64 (five, one probe covering them all).
-    # The sweep release since bumped to 4434 / 2921 units, within these caps.
+    # The sweep release since moved to 4283 / 2942 units, within these caps.
     # Linking with badc costs a second or so of the build on either
     # architecture (table above), so the caps carry over unchanged.
     # The caps are hang backstops just above that, not slack; tighten them once

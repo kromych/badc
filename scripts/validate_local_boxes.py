@@ -221,7 +221,7 @@ KERNEL_CACHE = "~/.cache/badc-kernel-gate"
 # Per-architecture unit floors, the same values as the `kernel` job's matrix in
 # .github/workflows/ci.yml. A count below the floor means units dropped out of
 # the build. Update both together.
-KERNEL_FLOORS = {"aarch64": 4400, "x86_64": 2900}
+KERNEL_FLOORS = {"aarch64": 4250, "x86_64": 2920}
 
 # Seconds a single boot may take before it is abandoned, the same cap CI's
 # kernel job passes. It bounds the phase when the image does not boot at all:

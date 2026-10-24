@@ -17,7 +17,7 @@ crypto implementations and the kunit suites run on every boot, and
 stress, which cost minutes.
 
     python3 demos/linux/packages.py --arch x86_64 --distro fedora \
-        --tarball <linux-7.1.10.tar.xz> --config vendor \
+        --tarball <linux-7.2.9.tar.xz> --config vendor \
         --report packages-x86_64.json
 
 Phases (--phases selects a subset; each is idempotent): config, tree, build,

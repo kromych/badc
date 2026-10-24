@@ -77,6 +77,7 @@ B6002  missing-entry                                   warning  controllable  de
 B6003  merged-section-access                           warning  controllable  default            live     a relocation reaches past the end of the merged section it names
 B6004  execstack                                       warning  controllable  default            live     the image's stack is executable because an input's `.note.GNU-stack` asks for it, or because `-z execstack` does under `--warn-execstack`
 B6005  rwx-segment                                     warning  controllable  default            live     a segment the image loads is readable, writable and executable, or its thread-local segment executable
+B6006  local-import                                    warning  controllable  default            live     a reference to the import-address slot `__imp_X` of a symbol `X` the link defines, which resolves to the definition
 B6010  undefined-symbol                                error    hard          -                  live     a reference no input object, archive or shared library defines
 B6011  duplicate-symbol                                error    hard          -                  live     more than one input defines the same symbol
 B6012  relocation                                      error    hard          -                  live     a relocation the linker cannot apply, or a value its field cannot hold

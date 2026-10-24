@@ -68,10 +68,15 @@ impl<'a> Walker<'a> {
         ty: i64,
     ) -> Result<ValueId, WalkError> {
         let callee_conv = self.callee_conv(callee);
+        // A dllimport function is called through the address its import
+        // slot holds.
+        let through_slot = matches!(self.ast.expr(callee), Expr::Ident { sym, .. }
+            if self.symbols.get(*sym as usize).is_some_and(|s| s.dllimport));
         // A host-ABI aggregate return carries no hidden argument and
         // takes the normal path below, which tags the call's `ret_agg` /
         // `ret_slot` instead.
         if self.returns_through_out_ptr(callee_conv, ty)
+            && !through_slot
             && let Expr::Ident {
                 sym, class, val, ..
             } = self.ast.expr(callee)
@@ -112,6 +117,7 @@ impl<'a> Walker<'a> {
         if let Expr::Ident {
             sym, class, val, ..
         } = self.ast.expr(callee)
+            && !through_slot
         {
             if *class == Token::Fun as i64 || binding_defined_here(self.symbols, *sym, *class) {
                 return self.call_direct(b, *sym, *val, call_args);

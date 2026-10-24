@@ -1367,6 +1367,8 @@ mod tests {
             copy_relocs: alloc::vec![],
             object_imports: alloc::collections::BTreeSet::new(),
             stub_address_imports: alloc::collections::BTreeSet::new(),
+            slot_reads: Default::default(),
+            warnings: Default::default(),
             preemptible_imports: alloc::collections::BTreeSet::new(),
             tls_imports: alloc::collections::BTreeSet::new(),
             tls_got: Vec::new(),

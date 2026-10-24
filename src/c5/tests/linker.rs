@@ -5405,6 +5405,102 @@ fn link_defined_bounds_are_hidden_or_protected() {
     }
 }
 
+/// A dllimport reference reads the import-address slot `__imp_X`, as MSVC,
+/// mingw-w64 gcc and clang emit it: a call goes through the loaded address,
+/// and a static initializer names the thunk. The PE link keeps the slot at
+/// those sites, and resolves the slot of a name it defines to the definition,
+/// with a warning.
+#[cfg(feature = "native-emit")]
+#[test]
+fn a_dllimport_reference_reads_the_import_address_slot() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{emit_plt_for, link_native_objects, parse_native_elf};
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_LDST64_ABS_LO12_NC, R_X86_64_PC32,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let unit = |src: &str, target: Target| {
+        let options = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(src.to_string(), target, options)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        parse_native_elf(&bytes).expect("parse")
+    };
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let user = unit(
+            "#include <stdio.h>\n\
+             __declspec(dllimport) int puts(const char *);\n\
+             __declspec(dllimport) int f(int);\n\
+             __declspec(dllimport) extern int obj;\n\
+             int (*fp)(int) = f;\n\
+             int main(void) { return f(obj) + puts(\"\") + (fp == f); }\n",
+            target,
+        );
+        let text_refs = |name: &str| -> Vec<u32> {
+            (user.text_relocs.iter())
+                .filter(|r| user.symbols[r.sym_idx].name == name)
+                .map(|r| r.rtype)
+                .collect()
+        };
+        let slot_read: &[u32] = match target {
+            Target::WindowsX64 => &[R_X86_64_PC32],
+            _ => &[R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_LDST64_ABS_LO12_NC],
+        };
+        for name in ["__imp_f", "__imp_obj", "__imp_puts"] {
+            let refs = text_refs(name);
+            assert!(
+                !refs.is_empty() && refs.iter().all(|t| slot_read.contains(t)),
+                "{target:?} {name}: {refs:?}"
+            );
+        }
+        for name in ["f", "obj", "puts"] {
+            assert!(text_refs(name).is_empty(), "{target:?} {name}");
+        }
+        assert!(
+            (user.data_relocs.iter()).any(|r| user.symbols[r.sym_idx].name == "f"),
+            "{target:?}: the initializer names the thunk"
+        );
+        let defs = unit("int obj = 5;\nint f(int x) { return x + 1; }\n", target);
+        let mut merged = link_native_objects(&[user.clone(), defs]).expect("link");
+        let warned = |name: &str| {
+            (merged.warnings.iter()).any(|(c, t)| {
+                *c == crate::c5::diag::Code::LOCAL_IMPORT && t.contains(&format!("`__imp_{name}`"))
+            })
+        };
+        assert!(
+            warned("f") && warned("obj") && !warned("puts"),
+            "{target:?}: {:?}",
+            merged.warnings
+        );
+        assert!(
+            !merged.imports.iter().any(|n| n == "f" || n == "obj"),
+            "{target:?}: {:?}",
+            merged.imports
+        );
+        let puts = merged
+            .imports
+            .iter()
+            .position(|n| n == "puts")
+            .expect("import");
+        let stubs = emit_plt_for(&mut merged, target, false).expect("plt");
+        let reads: Vec<_> = (merged.pending_imports.iter())
+            .filter(|r| r.import_index == puts)
+            .collect();
+        assert!(
+            !stubs.iter().any(|t| t.import_index == puts)
+                && !reads.is_empty()
+                && (reads.iter())
+                    .all(|r| r.slot_load && merged.slot_reads.contains(&r.text_offset)),
+            "{target:?}: the slot reads of `puts` keep its slot"
+        );
+    }
+}
+
 /// Within a PE image a function import's address is its stub: the data slot
 /// holds it, and a slot load of the address is rewritten to take it.
 #[cfg(feature = "native-emit")]

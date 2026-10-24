@@ -147,6 +147,10 @@ pub(crate) struct Symbol {
     /// reference links to address 0 instead of failing).
     pub is_weak: bool,
 
+    /// `dllimport` on the declarations so far: references go through the
+    /// import-address slot `__imp_<name>`.
+    pub dllimport: bool,
+
     /// `__attribute__((used))`: keep the definition in the object even
     /// when nothing in the unit references it.
     pub is_used: bool,
@@ -945,6 +949,7 @@ impl crate::c5::layout::DataOffsets for Symbol {
             asm_name: _,   // an assembler symbol name, not an offset
             h_asm_name: _, // scope-restore shadow
             is_weak: _,
+            dllimport: _,
             is_used,
             visibility: _,
             section_name,

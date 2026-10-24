@@ -287,6 +287,9 @@ catalog! {
     6005, "rwx-segment", [], Warning, Controllable,
         [DEFAULT], Live,
         "a segment the image loads is readable, writable and executable, or its thread-local segment executable";
+    6006, "local-import", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a reference to the import-address slot `__imp_X` of a symbol `X` the link defines, which resolves to the definition";
     6010, "undefined-symbol", [], Error, Hard,
         [], Live,
         "a reference no input object, archive or shared library defines";
@@ -359,6 +362,7 @@ impl Code {
     pub const MERGED_SECTION_ACCESS: Code = Code::new(6003);
     pub const EXEC_STACK: Code = Code::new(6004);
     pub const RWX_SEGMENT: Code = Code::new(6005);
+    pub const LOCAL_IMPORT: Code = Code::new(6006);
     pub const UNDEFINED_SYMBOL: Code = Code::new(6010);
     pub const DUPLICATE_SYMBOL: Code = Code::new(6011);
     pub const RELOCATION: Code = Code::new(6012);

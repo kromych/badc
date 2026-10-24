@@ -1815,6 +1815,14 @@ impl<'a> RelocWriter<'a> {
 
     /// A hidden name is not preemptible, so the direct page-relative pair
     /// is correct and keeps the GOT empty.
+    fn ref_form(&self, r: &crate::c5::codegen::UserExternDataRef) -> ExternAddrForm {
+        if r.import_slot {
+            ExternAddrForm::ImportSlot
+        } else {
+            self.extern_addr_form(&r.symbol_name)
+        }
+    }
+
     fn extern_addr_form(&self, name: &str) -> ExternAddrForm {
         if self
             .names
@@ -3271,7 +3279,7 @@ impl<'a> RelocWriter<'a> {
         let mut table = core::mem::take(&mut self.relocs.text);
         for r in &build.user_extern_data_refs {
             let name = r.symbol_name.as_str();
-            let form = self.extern_addr_form(name);
+            let form = self.ref_form(r);
             // An alias name resolves against its defined (weak) symbol; the
             // reference form stays symbolic so the linker's binding decides
             // which definition the address names.
@@ -3316,6 +3324,9 @@ impl<'a> RelocWriter<'a> {
             match form {
                 ExternAddrForm::Got => {
                     emit_got_ref_relocs(machine, &mut table, r.instr_offset as u64, sym_idx)
+                }
+                ExternAddrForm::ImportSlot => {
+                    emit_import_slot_relocs(machine, &mut table, r.instr_offset as u64, sym_idx)
                 }
                 ExternAddrForm::Abs32 => {
                     emit_abs32_ref_reloc(&mut table, r.instr_offset as u64, sym_idx, base)
@@ -4129,8 +4140,8 @@ impl<'a> RelocWriter<'a> {
             if r.direct_pcrel.is_some() {
                 continue;
             }
-            match self.extern_addr_form(r.symbol_name.as_str()) {
-                ExternAddrForm::Got => got_sites.push(r.instr_offset),
+            match self.ref_form(r) {
+                ExternAddrForm::Got | ExternAddrForm::ImportSlot => got_sites.push(r.instr_offset),
                 ExternAddrForm::Abs32 => abs_sites.push(r.instr_offset),
                 ExternAddrForm::Direct => {}
             }
@@ -5077,6 +5088,9 @@ fn emit_page_load_relocs(out: &mut Vec<u8>, at: u64, sym_idx: u64, addend: i64, 
 /// object; chosen per symbol by [`RelocWriter::extern_addr_form`].
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ExternAddrForm {
+    /// A load from the PE import-address slot the symbol names; text
+    /// rewritten as for [`Self::Got`], relocs from [`emit_import_slot_relocs`].
+    ImportSlot,
     /// The codegen's direct page-relative / RIP-relative pair, kept as-is;
     /// relocs from [`emit_addr_fixup_relocs`].
     Direct,
@@ -5118,6 +5132,34 @@ fn emit_got_ref_relocs(machine: Machine, out: &mut Vec<u8>, instr_offset: u64, s
             };
             write_struct(out, &rela);
         }
+    }
+}
+
+/// The relocs of a load from an import-address slot: `R_X86_64_PC32` at the
+/// `mov`'s disp32, `R_AARCH64_ADR_PREL_PG_HI21` and
+/// `R_AARCH64_LDST64_ABS_LO12_NC` at the `adrp` + `ldr` pair.
+fn emit_import_slot_relocs(machine: Machine, out: &mut Vec<u8>, instr_offset: u64, sym_idx: u64) {
+    let (rtype, at, addend) = match machine {
+        Machine::Aarch64 => (R_AARCH64_ADR_PREL_PG_HI21, instr_offset, 0),
+        Machine::X86_64 => (R_X86_64_PC32, instr_offset + 3, -4),
+    };
+    write_struct(
+        out,
+        &Elf64Rela {
+            r_offset: at,
+            r_info: (sym_idx << 32) | rtype as u64,
+            r_addend: addend,
+        },
+    );
+    if machine == Machine::Aarch64 {
+        write_struct(
+            out,
+            &Elf64Rela {
+                r_offset: instr_offset + 4,
+                r_info: (sym_idx << 32) | R_AARCH64_LDST64_ABS_LO12_NC as u64,
+                r_addend: 0,
+            },
+        );
     }
 }
 

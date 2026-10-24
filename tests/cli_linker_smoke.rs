@@ -9242,6 +9242,135 @@ fn variadic_fp_arguments_cross_the_windows_compiler_boundary() {
     );
 }
 
+// An import-address slot `__imp_X` no input defines asks for `X`, so the
+// archive member defining it is pulled, as lld pulls it.
+#[test]
+fn an_import_slot_reference_pulls_the_archive_member_defining_its_name() {
+    let dir = tempdir("pe-imp-archive");
+    write_source(
+        &dir,
+        "user.c",
+        "__declspec(dllimport) int f(int);\nint main(void) { return f(1); }\n",
+    );
+    write_source(&dir, "defs.c", "int f(int x) { return x + 1; }\n");
+    for target in ["--target=windows-x64", "--target=windows-arm64"] {
+        run(
+            Command::new(badc())
+                .args(["-q", target, "-c", "defs.c", "-o", "defs.o"])
+                .current_dir(&dir),
+            "compile the definition",
+        );
+        run(
+            Command::new(badc())
+                .args(["--ar", "-o", "libdefs.a", "defs.o"])
+                .current_dir(&dir),
+            "archive it",
+        );
+        let out = run(
+            Command::new(badc())
+                .args(["-q", target, "user.c", "libdefs.a", "-o", "user.exe"])
+                .current_dir(&dir),
+            "link against the archive",
+        );
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(stderr.contains("`__imp_f` in"), "{target}: {stderr}");
+    }
+}
+
+// A dllimport function's address is the one its DLL exports and a dllimport
+// object is the DLL's own, both read from the import-address slot, while a
+// static initializer takes the image's thunk (MSVC, mingw-w64 gcc, clang). A
+// slot whose name the image itself defines resolves to the definition, with
+// the warning lld gives (LNK4217).
+#[cfg(windows)]
+#[test]
+fn dllimport_references_read_the_import_address_slot() {
+    let dir = tempdir("win-dllimport");
+    let lib = write_source(
+        &dir,
+        "slotlib.c",
+        "__declspec(dllexport) int lib_obj = 41;\n\
+         __declspec(dllexport) int lib_add(int x) { return x + lib_obj; }\n",
+    );
+    let host = write_source(
+        &dir,
+        "host.c",
+        "#include <windows.h>\n\
+         #pragma dylib(slotlib, \"slotlib.dll\")\n\
+         #pragma binding(slotlib::lib_add, \"lib_add\")\n\
+         #pragma binding(slotlib::lib_obj, \"lib_obj\")\n\
+         __declspec(dllimport) int lib_add(int);\n\
+         __declspec(dllimport) extern int lib_obj;\n\
+         __declspec(dllimport) DWORD WINAPI GetCurrentProcessId(void);\n\
+         int (*thunk)(int) = lib_add;\n\
+         int main(void)\n\
+         { HMODULE h = GetModuleHandleA(\"slotlib.dll\");\n\
+           HMODULE k = GetModuleHandleA(\"kernel32.dll\");\n\
+           if (!h || !k) return 1;\n\
+           if ((void *)lib_add != (void *)GetProcAddress(h, \"lib_add\")) return 2;\n\
+           if (&lib_obj != (int *)GetProcAddress(h, \"lib_obj\")) return 3;\n\
+           if ((void *)GetCurrentProcessId != (void *)GetProcAddress(k, \"GetCurrentProcessId\"))\n\
+             return 4;\n\
+           lib_obj = 1;\n\
+           if (lib_add(2) != 3 || thunk(3) != 4 || (void *)thunk == (void *)lib_add) return 5;\n\
+           return 0; }\n",
+    );
+    let user = write_source(
+        &dir,
+        "user.c",
+        "__declspec(dllimport) int f(int);\n\
+         __declspec(dllimport) extern int obj;\n\
+         int main(void) { int (*p)(int) = f; return f(obj) + (p == 0); }\n",
+    );
+    let defs = write_source(
+        &dir,
+        "defs.c",
+        "int obj = 5;\nint f(int x) { return x + 1; }\n",
+    );
+    run(
+        Command::new(badc())
+            .args(["-shared", "-o", "slotlib.dll"])
+            .arg(&lib)
+            .current_dir(&dir),
+        "build the DLL",
+    );
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("host{opt}.exe"));
+        run(
+            Command::new(badc())
+                .arg(opt)
+                .arg("-o")
+                .arg(&exe)
+                .arg(&host)
+                .current_dir(&dir),
+            "link the host",
+        );
+        let out = Command::new(&exe)
+            .current_dir(&dir)
+            .output()
+            .expect("run the host");
+        assert_eq!(out.status.code(), Some(0), "host{opt}");
+        let exe = dir.join(format!("local{opt}.exe"));
+        let link = Command::new(badc())
+            .arg(opt)
+            .arg("-o")
+            .arg(&exe)
+            .args([&user, &defs])
+            .current_dir(&dir)
+            .output()
+            .expect("link the local definitions");
+        let stderr = String::from_utf8_lossy(&link.stderr);
+        assert!(
+            link.status.success()
+                && stderr.contains("`__imp_f` in")
+                && stderr.contains("[-Wlocal-import]"),
+            "local{opt}: {stderr}"
+        );
+        let out = Command::new(&exe).output().expect("run");
+        assert_eq!(out.status.code(), Some(6), "local{opt}");
+    }
+}
+
 // A variadic function of a library the program binds by `#pragma binding`
 // reads its arguments where a variadic callee of the program does: on arm64
 // every one in the integer bank, a named `float` as its 32 bits, a named

@@ -273,6 +273,7 @@ pub(super) fn name_extern_data_ref(
             instr_offset: popped.instr_offset,
             symbol_name: name.clone(),
             direct_pcrel: None,
+            import_slot: false,
         });
     }
 }

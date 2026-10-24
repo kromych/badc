@@ -216,7 +216,7 @@ impl Compiler {
         is_thread_local: bool,
     ) -> Result<(), C5Error> {
         // `is_thread_local` is the slot's storage, not the target's.
-        self.reject_thread_local_addr_const(target_idx)?;
+        self.reject_load_time_addr_const(target_idx)?;
         // A block-scope static's address anchors to its emission record;
         // the binding slot is restored at scope exit (see `ast_emit_ident`).
         let target_idx = self.symbols[target_idx]

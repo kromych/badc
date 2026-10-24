@@ -39,6 +39,7 @@ struct AttrFlags {
     thread_local: bool,
     noreturn: bool,
     dllexport: bool,
+    dllimport: bool,
     aligned: bool,
     constructor: bool,
     destructor: bool,
@@ -67,6 +68,7 @@ impl AttrFlags {
         self.thread_local |= other.thread_local;
         self.noreturn |= other.noreturn;
         self.dllexport |= other.dllexport;
+        self.dllimport |= other.dllimport;
         self.always_inline |= other.always_inline;
         self.noinline |= other.noinline;
         self.gnu_inline |= other.gnu_inline;
@@ -244,7 +246,9 @@ impl Compiler {
         self.next()?;
         // An attribute may sit between the keyword and the tag
         // (`struct __attribute__((packed)) name`).
+        let leading_dllimport = self.pending.attrs.dllimport;
         let packed = self.skip_attribute_specifiers()?;
+        self.dllimport_on_type(leading_dllimport);
         let head_transparent = core::mem::take(&mut self.pending.attrs.transparent_union);
         let head_designated = core::mem::take(&mut self.pending.attrs.designated_init);
         let mut anonymous = false;
@@ -1002,6 +1006,8 @@ impl Compiler {
                 // MSVC `__declspec(dllexport)`: export the symbol, the
                 // equivalent of `#pragma export(name)`.
                 f.dllexport = true;
+            } else if n == "dllimport" || n == "__dllimport__" {
+                f.dllimport = true;
             } else if n == "aligned" || n == "__aligned__" || n == "align" {
                 // GNU `aligned(N)` / MSVC `__declspec(align(N))`.
                 f.aligned = true;
@@ -1446,6 +1452,9 @@ impl Compiler {
         }
         if attrs.dllexport {
             self.pending.attrs.dllexport = true;
+        }
+        if attrs.dllimport {
+            self.pending.attrs.dllimport = true;
         }
         if align > 0 {
             self.pending.attrs.align = self.pending.attrs.align.max(align);

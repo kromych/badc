@@ -1269,7 +1269,7 @@ type HasOperator = (&'static str, fn(&str, Target) -> bool);
 
 const HAS_OPERATORS: [HasOperator; 2] = [
     ("__has_builtin", builtins::has_builtin),
-    ("__has_attribute", |name, _| is_known_attribute(name)),
+    ("__has_attribute", has_attribute),
 ];
 
 /// Resolve a `__has_*` operator at `i`, appending `1` or `0` to `out`.
@@ -1285,6 +1285,14 @@ fn resolve_has_operator(s: &str, i: usize, target: Target, out: &mut String) -> 
     None
 }
 
+/// `__has_attribute(NAME)` on `target`: `dllimport` / `dllexport` are known
+/// on the PE targets only, as under gcc.
+pub(super) fn has_attribute(name: &str, target: Target) -> bool {
+    is_known_attribute(name)
+        || target.binary_format() == crate::c5::codegen::BinaryFormat::Pe
+            && matches!(name.trim_matches('_'), "dllimport" | "dllexport")
+}
+
 /// True when badc recognizes the GCC/Clang attribute NAME, so
 /// `__has_attribute(NAME)` reports 1. The name may be spelled bare or
 /// wrapped in `__` (`cleanup` / `__cleanup__`). badc parses every
@@ -1292,7 +1300,7 @@ fn resolve_has_operator(s: &str, i: usize, target: Target, out: &mut String) -> 
 /// `unused`, `noreturn`, `cleanup`, `alias`, `naked`); the rest are
 /// accepted and ignored, so reporting 1 lets feature-testing headers
 /// take their attribute path.
-pub(super) fn is_known_attribute(name: &str) -> bool {
+fn is_known_attribute(name: &str) -> bool {
     let core = name.trim_matches('_');
     matches!(
         core,

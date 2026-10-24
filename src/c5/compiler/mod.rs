@@ -20,6 +20,7 @@ mod convert;
 mod decl_base;
 mod declarator;
 mod diag;
+mod dllimport;
 mod emit;
 mod enum_decl;
 mod expr;
@@ -1414,6 +1415,8 @@ pub(super) struct DeclAttrs {
     /// `__declspec(dllexport)`: the name joins the export list, as by
     /// `#pragma export`.
     pub dllexport: bool,
+    /// `__declspec(dllimport)`, see [`dllimport`].
+    pub dllimport: bool,
     pub constructor: bool,
     pub destructor: bool,
     /// The `N` of `constructor(N)` / `destructor(N)`.

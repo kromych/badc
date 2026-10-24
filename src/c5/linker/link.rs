@@ -265,6 +265,12 @@ pub struct MergedNative {
     /// Indices into [`Self::imports`] whose call stub code takes as a value,
     /// not as a branch target; filled by the PLT pass.
     pub stub_address_imports: alloc::collections::BTreeSet<usize>,
+    /// The `.text` offsets of the sites that read an import-address slot by
+    /// its name (`__imp_X`): the slot keeps the import's address, which the
+    /// PE thunk does not replace.
+    pub slot_reads: alloc::collections::BTreeSet<u64>,
+    /// The link's warnings, for the driver to report.
+    pub warnings: Vec<(Code, String)>,
     /// Indices into [`Self::imports`] the image defines; see [`Preemption`].
     pub preemptible_imports: alloc::collections::BTreeSet<usize>,
     /// Indices into [`Self::imports`] of shared-library thread-locals,
@@ -990,9 +996,16 @@ pub fn link_native_objects_with<'a>(
     shared_libs: &'a [SharedLibrary],
     opts: &LinkOptions,
 ) -> Result<MergedNative, C5Error> {
+    let slot_reads = super::import_slots::bind_slot_reads(objs)?;
+    let objs = slot_reads.as_ref().map_or(objs, |s| &s.objs[..]);
     let mut link = Link::new(objs, opts, shared_libs)?;
     link.lay_out_tls()?;
     link.lay_out_sections();
+    if let Some(s) = &slot_reads {
+        let at = |&(unit, offset): &(usize, u64)| link.text_bases[unit] as u64 + offset;
+        link.slot_reads = s.sites.iter().map(at).collect();
+        link.warnings.extend(s.warnings.iter().cloned());
+    }
     link.lay_out_init_fini_arrays();
     link.collect_definitions()?;
     link.collect_prologue_anchors();
@@ -1215,6 +1228,9 @@ struct Link<'a> {
     branch_imports: BTreeSet<usize>,
     /// Import indices of shared-library thread-locals.
     tls_imports: BTreeSet<usize>,
+    /// See [`MergedNative::slot_reads`].
+    slot_reads: BTreeSet<u64>,
+    warnings: Vec<(Code, String)>,
     shared: bool,
     tls_got: Vec<crate::c5::codegen::TlsGotEntry>,
     tls_got_fields: Vec<crate::c5::codegen::TlsGotField>,
@@ -1318,6 +1334,8 @@ impl<'a> Link<'a> {
             object_imports: BTreeSet::new(),
             branch_imports: BTreeSet::new(),
             tls_imports: BTreeSet::new(),
+            slot_reads: BTreeSet::new(),
+            warnings: Vec::new(),
             shared: opts.shared,
             tls_got: Vec::new(),
             tls_got_fields: Vec::new(),
@@ -4666,6 +4684,8 @@ impl<'a> Link<'a> {
             copy_relocs,
             object_imports: self.object_imports,
             stub_address_imports: BTreeSet::new(),
+            slot_reads: self.slot_reads,
+            warnings: self.warnings,
             preemptible_imports,
             tls_imports: self.tls_imports,
             tls_got: self.tls_got,
@@ -5105,6 +5125,7 @@ fn emit_plt(
                 && (!r.slot_load
                     || slots == DataImportSlots::Thunk
                         && !is_data_import(merged, r.import_index)
+                        && !merged.slot_reads.contains(&r.text_offset)
                         && slot_load_relaxes(merged, r))
         })
         .collect();

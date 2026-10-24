@@ -1744,10 +1744,16 @@ impl ResolvedImports {
         // when the final ELF image defines the local symbol zero-filled
         // (the runtime supplies `environ` for every hosted image, so the
         // binding binds it to the host's data object).
+        // A binding naming a dllimport object is one too: a PE import
+        // table does not tell data from functions.
+        let dllimport_objects: alloc::collections::BTreeSet<&str> = (program.symbols.iter())
+            .filter(|s| s.dllimport && s.class == crate::c5::token::Token::Glo as i64)
+            .map(|s| s.name.as_str())
+            .collect();
         let mut data_bindings: Vec<(String, String, usize)> = Vec::new();
         for spec in &program.dylibs {
             for b in &spec.bindings {
-                if !b.is_data {
+                if !b.is_data && !dllimport_objects.contains(b.local_name.as_str()) {
                     continue;
                 }
                 let dylib_index = match dylibs.iter().position(|d| d.name == spec.name) {
@@ -3277,6 +3283,49 @@ pub(crate) struct UserExternDataRef {
     /// would be wrong. `addend` is the operand's constant offset less the
     /// 4-byte PC-relative end skew.
     pub direct_pcrel: Option<i64>,
+    /// `symbol_name` is a dllimport entity's import-address slot
+    /// `__imp_<name>`, which the reference reads instead of a GOT entry.
+    pub import_slot: bool,
+}
+
+/// A PE image reaches a dllimport entity through its import-address slot
+/// `__imp_<name>`: each address reference reads the slot. The address of a
+/// header-bound import becomes such a reference too.
+pub(crate) fn read_import_slots(
+    program: &crate::c5::program::Program,
+    imports: &ResolvedImports,
+    call_sites: &mut Vec<RelocCallSite>,
+    data_refs: &mut Vec<UserExternDataRef>,
+) {
+    use crate::c5::token::Token;
+    let imported = |s: &&crate::c5::symbol::Symbol| s.dllimport && !s.defined_here;
+    let named: alloc::collections::BTreeSet<&str> = (program.symbols.iter())
+        .filter(|s| imported(s) && s.class != Token::Sys as i64)
+        .map(|s| s.link_name())
+        .collect();
+    let bound: alloc::collections::BTreeSet<i64> = (program.symbols.iter())
+        .filter(|s| imported(s) && s.class == Token::Sys as i64)
+        .map(|s| s.val)
+        .collect();
+    for r in data_refs.iter_mut() {
+        if r.direct_pcrel.is_none() && named.contains(r.symbol_name.as_str()) {
+            r.symbol_name = alloc::format!("__imp_{}", r.symbol_name);
+            r.import_slot = true;
+        }
+    }
+    call_sites.retain(|s| {
+        let import = &imports.imports[s.import_index];
+        if !s.is_addr || !bound.contains(&import.binding_idx) {
+            return true;
+        }
+        data_refs.push(UserExternDataRef {
+            instr_offset: s.instr_offset,
+            symbol_name: alloc::format!("__imp_{}", import.real_symbol),
+            direct_pcrel: None,
+            import_slot: true,
+        });
+        false
+    });
 }
 
 /// Relocation for a function-pointer literal (`Inst::ImmCode`).

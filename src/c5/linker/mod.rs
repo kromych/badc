@@ -47,6 +47,7 @@ pub(crate) mod gnu_property;
 mod got_relax;
 #[cfg(feature = "std")]
 mod image;
+mod import_slots;
 pub(crate) mod ld_driver;
 #[cfg(feature = "std")]
 pub(crate) mod lds;

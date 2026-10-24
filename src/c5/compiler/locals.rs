@@ -432,6 +432,13 @@ impl Compiler {
         if is_thread_local && !is_extern {
             is_static = true;
         }
+        // A dllimport object is declared, never defined, here.
+        if self.pending.attrs.dllimport
+            && !is_static
+            && self.target.binary_format() == crate::c5::codegen::BinaryFormat::Pe
+        {
+            is_extern = true;
+        }
         let lbt = apply_qual_bits(base, qual_bits);
         let base_spelling = self.take_base_spelling();
         let base_enum_tag = self.pending.base_enum_tag.take();
@@ -674,7 +681,13 @@ impl Compiler {
             // `weak` / `visibility("hidden")` are not part of the shadow
             // snapshot, so they reach the symbol table past the scope.
             self.apply_symbol_attributes(d.loc_idx);
+            self.apply_dllimport(d.loc_idx, Default::default())?;
         } else if d.is_static {
+            let internal = super::dllimport::DllImportDecl {
+                internal: true,
+                ..Default::default()
+            };
+            self.apply_dllimport(d.loc_idx, internal)?;
             self.symbols[d.loc_idx].class = Token::Glo as i64;
             self.symbols[d.loc_idx].type_ = d.ty;
             self.symbols[d.loc_idx].incomplete_enum_tag = d.enum_tag;
@@ -957,6 +970,7 @@ impl Compiler {
             sym.is_noreturn |= self.pending.attrs.noreturn;
         }
         self.apply_symbol_attributes(ent);
+        self.apply_dllimport(ent, Default::default())?;
         if let Some(label) = label {
             self.set_asm_label(ent, label)?;
         }

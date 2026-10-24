@@ -697,6 +697,7 @@ impl Compiler {
             base_conv: None,
         };
         if is_typedef {
+            self.dllimport_on_type(false);
             return self.bind_file_scope_typedef(decl, &b, preconsumed_params, decl_fn);
         }
 
@@ -1022,6 +1023,12 @@ impl Compiler {
         // this declarator (leading or trailing) mark the
         // symbol; the object writers read them off it.
         self.apply_symbol_attributes(id_idx);
+        let dll = super::dllimport::DllImportDecl {
+            definition: is_defining_declarator,
+            inline: self.pending.attrs.saw_inline_specifier,
+            internal: self.symbols[id_idx].saw_static_decl,
+        };
+        self.apply_dllimport(id_idx, dll)?;
         let align = core::mem::take(&mut self.pending.attrs.align).max(0) as u32;
         self.symbols[id_idx].code_align = self.symbols[id_idx].code_align.max(align);
         // Read the sticky request back so a definition follows what any
@@ -2144,6 +2151,10 @@ impl Compiler {
             base_type_align,
             ..
         } = decl;
+        // A dllimport object is declared, never defined, here.
+        let extern_seen = extern_seen
+            || self.pending.attrs.dllimport
+                && self.target.binary_format() == crate::c5::codegen::BinaryFormat::Pe;
         let &DeclaratorBinding {
             id_idx,
             ty,
@@ -2168,6 +2179,12 @@ impl Compiler {
             thread_local,
         )?;
         self.record_object_declaration(id_idx, static_seen, thread_local, was_tentative_glo);
+        let dll = super::dllimport::DllImportDecl {
+            definition: self.lex.tk == Token::Assign,
+            inline: false,
+            internal: self.symbols[id_idx].linkage == crate::c5::symbol::Linkage::Internal,
+        };
+        self.apply_dllimport(id_idx, dll)?;
         if self.bind_object_alias(id_idx, ty)? {
             return Ok(());
         }

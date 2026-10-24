@@ -802,7 +802,7 @@ impl<'a> Exp<'a> {
     fn has_operator(&mut self, tok: Tok, rest: &mut Vec<Tok>, out: &mut Vec<Tok>) -> bool {
         let known: fn(&str, Target) -> bool = match self.text(tok) {
             "__has_builtin" => super::builtins::has_builtin,
-            "__has_attribute" => |name, _| super::cond::is_known_attribute(name),
+            "__has_attribute" => super::cond::has_attribute,
             _ => return false,
         };
         let n = rest.len();

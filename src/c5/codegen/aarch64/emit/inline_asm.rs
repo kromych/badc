@@ -1164,6 +1164,7 @@ fn form_static(
                             instr_offset,
                             symbol_name: name.clone(),
                             direct_pcrel: None,
+                            import_slot: false,
                         }),
                         None => out.data_fixups.push(DataFixup {
                             instr_offset,

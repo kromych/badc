@@ -3519,6 +3519,7 @@ impl AsmPass<'_> {
                         instr_offset,
                         symbol_name: name,
                         direct_pcrel: Some(offset + disp - 4 - trailing),
+                        import_slot: false,
                     });
                 }
                 AsmRipSym::Local { data_offset } => {

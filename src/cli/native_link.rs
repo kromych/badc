@@ -642,6 +642,15 @@ impl Selection {
                 self.undefined
                     .entry(s.name.clone())
                     .or_insert_with(|| o.source.clone());
+                // The import-address slot `__imp_X` no input defines reads
+                // `X`'s, so it also asks for `X`, as under lld.
+                if let Some(target) = s.name.strip_prefix("__imp_")
+                    && !self.defined.contains(target)
+                {
+                    self.undefined
+                        .entry(target.to_string())
+                        .or_insert_with(|| o.source.clone());
+                }
             }
         }
     }
@@ -909,6 +918,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         }
     };
     stats.mark("merge");
+    emit_link_warnings(cli, core::mem::take(&mut merged.warnings));
     warn_freestanding_imports(cli, &merged);
     let (exec_stack, stack_warning) = badc::resolve_exec_stack(
         cli.link.z.exec_stack(),

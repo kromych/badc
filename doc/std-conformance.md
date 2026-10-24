@@ -556,12 +556,15 @@ registers under either compiler.
   `unused` / `maybe_unused`, `vector_size(N)` (modeled as an aggregate),
   `transparent_union`, `no_instrument_function`, `uninitialized`,
   `patchable_function_entry`, and the MSVC `__declspec(thread)` /
-  `dllexport`. Other attributes -- `format`, `pure` / `const`,
+  `dllexport` / `dllimport` (on the PE targets a dllimport reference reads
+  the import-address slot `__imp_<name>`, as MSVC, mingw-w64 gcc and clang
+  emit it; elsewhere the attribute is ignored with a warning). Other attributes -- `format`, `pure` / `const`,
   `deprecated`, `fallthrough` and the rest -- are parsed and silently
   discarded; there is no "attribute ignored" diagnostic. Two asymmetries:
   `__has_attribute` answers 1 for a fixed list of GCC attribute names wider
   than the honored set
-  (and 0 for the honored `vector_size` / `dllexport`), and the C23
+  (and 0 for the honored `vector_size`, and for `dllexport` / `dllimport`
+  off the PE targets, as gcc answers), and the C23
   `[[...]]` syntax honors only the bare names plus `aligned`,
   `constructor` and `destructor`, so `[[gnu::section("x")]]` parses and is
   dropped while `__attribute__((section("x")))` takes effect.

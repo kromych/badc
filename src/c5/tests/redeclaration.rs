@@ -833,3 +833,118 @@ fn matching_redeclaration_is_silent() {
     );
     assert_eq!(Vm::new(prog).run().unwrap(), 7);
 }
+
+/// `dllimport` follows gcc on the PE targets: a redeclaration without it
+/// drops it, a type or an inline function ignores it, dllexport overrides
+/// it, and a definition, internal linkage or an address constant is an
+/// error. Elsewhere the attribute is ignored.
+#[test]
+fn dllimport_follows_gcc_on_redeclarations_and_misuse() {
+    let src = "typedef __declspec(dllimport) int ti;\n\
+               struct __declspec(dllimport) st { int a; };\n\
+               __declspec(dllexport) int both(void);\n\
+               __declspec(dllimport) int both(void);\n\
+               __declspec(dllimport) int both2(void);\n\
+               __declspec(dllexport) int both2(void);\n\
+               __declspec(dllimport) inline int inl(void) { return 1; }\n\
+               void g(void) { __declspec(dllimport) int loc; (void)loc; }\n\
+               __declspec(dllimport) int used(void);\n\
+               int *pu(void) { return (int *)used; }\n\
+               int used(void);\n\
+               __declspec(dllimport) int tent;\n\
+               int tent;\n\
+               __attribute__((dllimport)) int kept(void);\n\
+               int both(void) { return 0; }\nint both2(void) { return 0; }\n\
+               #if !__has_attribute(dllimport) || !__has_attribute(__dllexport__)\n\
+               #error the PE targets know the attributes\n\
+               #endif\n";
+    let expected = [
+        (1, "`dllimport` attribute ignored on a type"),
+        (2, "`dllimport` attribute ignored on a type"),
+        (
+            4,
+            "`both` already declared with dllexport attribute: dllimport ignored",
+        ),
+        (
+            6,
+            "`both2` redeclared without dllimport attribute: previous dllimport ignored",
+        ),
+        (
+            7,
+            "inline function `inl` declared as dllimport: attribute ignored",
+        ),
+        (
+            11,
+            "`used` redeclared without dllimport attribute after being referenced",
+        ),
+        (
+            13,
+            "`tent` redeclared without dllimport attribute: previous dllimport ignored",
+        ),
+    ];
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        let prog = Compiler::with_target(src.to_string(), target)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+        let got: alloc::vec::Vec<(u32, alloc::string::String)> = (prog.warnings.iter())
+            .filter(|w| w.code == Code::ATTRIBUTES)
+            .map(|w| (w.loc.as_ref().map_or(0, |l| l.line), w.to_string()))
+            .collect();
+        assert_eq!(got.len(), expected.len(), "{target:?}: {got:?}");
+        for ((line, text), (want_line, want)) in got.iter().zip(expected) {
+            assert!(
+                *line == want_line && text.contains(want),
+                "{target:?}: {got:?}"
+            );
+        }
+        let imported: alloc::vec::Vec<&str> = (prog.symbols.iter())
+            .filter(|s| s.dllimport)
+            .map(|s| s.name.as_str())
+            .collect();
+        assert_eq!(imported, ["loc", "kept"], "{target:?}");
+        for (src, needle) in [
+            (
+                "__declspec(dllimport) static int s(int);",
+                "external linkage required for symbol `s`",
+            ),
+            (
+                "void f(void) { static __declspec(dllimport) int q; }",
+                "external linkage required for symbol `q`",
+            ),
+            (
+                "__declspec(dllimport) int d(void) { return 0; }",
+                "function `d` definition is marked dllimport",
+            ),
+            (
+                "__declspec(dllimport) int iv = 3;",
+                "variable `iv` definition is marked dllimport",
+            ),
+            (
+                "__declspec(dllimport) extern int obj;\nint *p = &obj;",
+                "address of dllimport object `obj`",
+            ),
+        ] {
+            let msg = match Compiler::with_target(src.to_string(), target).compile() {
+                Err(e) => e.to_string(),
+                Ok(_) => panic!("{target:?}: expected an error for {src:?}"),
+            };
+            assert!(msg.contains(needle), "{target:?} {src:?}: {msg}");
+        }
+    }
+    let prog = Compiler::with_target(
+        "#if __has_attribute(dllimport)\n#error only the PE targets know it\n#endif\n\
+         __declspec(dllimport) int f(void);\nint main(void) { return f(); }\n"
+            .to_string(),
+        crate::Target::LinuxX64,
+    )
+    .compile()
+    .expect("compile");
+    assert!(
+        prog.warnings.iter().any(|w| w
+            .to_string()
+            .contains("`dllimport` attribute ignored: ELF images have no import table"))
+            && !prog.symbols.iter().any(|s| s.dllimport),
+        "{:?}",
+        prog.warnings
+    );
+}

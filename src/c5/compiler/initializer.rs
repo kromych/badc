@@ -657,7 +657,7 @@ impl Compiler {
             InitElemReloc::None | InitElemReloc::Float64Bits => {}
             InitElemReloc::Data(src_sym) => {
                 if let Some(sym_idx) = src_sym {
-                    self.reject_thread_local_addr_const(sym_idx)?;
+                    self.reject_load_time_addr_const(sym_idx)?;
                 }
                 // A block-scope static's address anchors to its emission
                 // record (see `emit_addr_reloc`).

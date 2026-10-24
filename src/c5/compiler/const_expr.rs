@@ -685,8 +685,19 @@ impl Compiler {
     /// one -- it has no value until a thread's block is materialized, which
     /// is after image relocation. Keyed on the object whose address is
     /// taken, so a thread-local initialized with an ordinary object's
-    /// address stays accepted.
-    pub(super) fn reject_thread_local_addr_const(&self, target: usize) -> Result<(), C5Error> {
+    /// address stays accepted. Nor is a dllimport object's, which its
+    /// import slot holds once the loader binds it.
+    pub(super) fn reject_load_time_addr_const(&self, target: usize) -> Result<(), C5Error> {
+        let sym = &self.symbols[target];
+        if sym.dllimport && sym.class == crate::c5::token::Token::Glo as i64 {
+            return Err(self.compile_err(
+                Code::CONSTANT_EXPRESSION,
+                alloc::format!(
+                    "address of dllimport object `{}` is not a constant expression",
+                    sym.name
+                ),
+            ));
+        }
         if self.symbols[target].is_thread_local {
             return Err(self.compile_err(
                 Code::CONSTANT_EXPRESSION,

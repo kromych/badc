@@ -1671,6 +1671,11 @@ pub(crate) fn extern_fn_targets(
         if !sym.is_fun_entity() || sym.defined_here {
             continue;
         }
+        // A dllimport function is called through its import slot.
+        if sym.dllimport {
+            out.remove(&(sym.val as usize));
+            continue;
+        }
         if let Some(t) = out.get_mut(&(sym.val as usize)) {
             // Two symbols naming one import would leave the reference
             // ambiguous; the entry then identifies neither.
@@ -2871,7 +2876,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // to emit a by-name call relocation against each import's external
     // symbol; final-image writers ignore the list and rely on the
     // trampolines below.
-    let reloc_call_sites: alloc::vec::Vec<super::RelocCallSite> = st
+    let mut reloc_call_sites: alloc::vec::Vec<super::RelocCallSite> = st
         .plt_call_fixups
         .iter()
         .map(|f| super::RelocCallSite {
@@ -2916,6 +2921,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 instr_offset,
                 symbol_name: (*name).into(),
                 direct_pcrel: None,
+                import_slot: false,
             });
             continue;
         }
@@ -2924,6 +2930,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 instr_offset,
                 symbol_name: name.into(),
                 direct_pcrel: B::WEAK_ADDR_PCREL,
+                import_slot: false,
             });
             continue;
         }
@@ -2932,6 +2939,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 instr_offset,
                 symbol_name: name.into(),
                 direct_pcrel: None,
+                import_slot: false,
             });
             continue;
         }
@@ -2989,6 +2997,16 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         }
     }
 
+    if native.output_kind == super::OutputKind::Relocatable
+        && target.binary_format() == super::BinaryFormat::Pe
+    {
+        super::read_import_slots(
+            program,
+            imports,
+            &mut reloc_call_sites,
+            &mut st.user_extern_data_refs,
+        );
+    }
     let entry_offset = if native.output_kind == super::OutputKind::Relocatable {
         // Relocatable objects carry no entry point; the linker picks it once
         // every TU is merged. `entry_pc` may legitimately be 0 here

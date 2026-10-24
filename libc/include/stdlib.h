@@ -437,8 +437,9 @@ char *_fullpath(char *absPath, char *relPath, int maxLength);
 #endif
 int mkstemp(char *templ);
 char *mkdtemp(char *templ);
-char *mktemp(char *templ);
 #ifndef _WIN32
+// mingw-w64 declares mktemp in <io.h>.
+char *mktemp(char *templ);
 int mkstemps(char *templ, int suffixlen);
 long random(void);
 void srandom(unsigned int seed);

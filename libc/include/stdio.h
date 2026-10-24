@@ -370,7 +370,12 @@ typedef struct __c5_fpos_t fpos_t;
 // MSVC CRT does so.
 #pragma binding(msvcrt::fgetws,         "fgetws")
 #pragma binding(msvcrt::fputws,         "fputws")
+// The legacy arm64 msvcrt.dll does not export `_getws`; UCRT does.
+#if defined(__aarch64__)
+#pragma binding(ucrtbase::_getws,       "_getws")
+#else
 #pragma binding(msvcrt::_getws,         "_getws")
+#endif
 #pragma binding(msvcrt::_putws,         "_putws")
 #pragma binding(msvcrt::_wgetenv,       "_wgetenv")
 #pragma binding(msvcrt::_wputenv,       "_wputenv")

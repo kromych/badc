@@ -11,10 +11,14 @@ typedef int wint_t;
 
 // `wctype_t`/`wctrans_t` hold the opaque property and mapping handles
 // returned by wctype()/wctrans(). The width matches the host because
-// the value is passed back to the libc iswctype()/towctrans().
+// the value is passed back to the libc iswctype()/towctrans(); the
+// Windows C runtimes return both as `unsigned short`.
 #ifdef __APPLE__
 typedef unsigned long wctype_t;
 typedef int wctrans_t;
+#elif defined(_WIN32)
+typedef unsigned short wctype_t;
+typedef unsigned short wctrans_t;
 #else
 typedef unsigned long wctype_t;
 typedef const int *wctrans_t;
@@ -79,6 +83,14 @@ typedef const int *wctrans_t;
 #pragma binding(msvcrt::iswxdigit, "iswxdigit")
 #pragma binding(msvcrt::towlower,  "towlower")
 #pragma binding(msvcrt::towupper,  "towupper")
+#pragma binding(msvcrt::iswctype,  "iswctype")
+// msvcrt.dll exports neither iswblank nor the property and mapping
+// lookups; ucrtbase.dll does, with msvcrt's class bits.
+#pragma dylib(ucrtbase, "ucrtbase.dll")
+#pragma binding(ucrtbase::iswblank,  "iswblank")
+#pragma binding(ucrtbase::wctype,    "wctype")
+#pragma binding(ucrtbase::wctrans,   "wctrans")
+#pragma binding(ucrtbase::towctrans, "towctrans")
 #endif
 
 // Classification (C99 7.25.2.1). Each returns nonzero when `wc` belongs

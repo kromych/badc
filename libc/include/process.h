@@ -43,4 +43,18 @@ int _spawnl(int mode, char *cmdname, char *arg0, ...);
 #define WAIT_GRANDCHILD   1
 #pragma binding(msvcrt::_cwait, "_cwait")
 int _cwait(int *termstat, int handle, int action);
+// The exec family under its POSIX names, as mingw-w64 declares it here for
+// gcc: the result is `int`, since a successful call does not return.
+#pragma binding(msvcrt::execl,  "_execl")
+#pragma binding(msvcrt::execle, "_execle")
+#pragma binding(msvcrt::execlp, "_execlp")
+#pragma binding(msvcrt::execv,  "_execv")
+#pragma binding(msvcrt::execve, "_execve")
+#pragma binding(msvcrt::execvp, "_execvp")
+int execl(const char *path, const char *arg, ...);
+int execle(const char *path, const char *arg, ...);
+int execlp(const char *file, const char *arg, ...);
+int execv(const char *path, char *const argv[]);
+int execve(const char *path, char *const argv[], char *const envp[]);
+int execvp(const char *file, char *const argv[]);
 #endif

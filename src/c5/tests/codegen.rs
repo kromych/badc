@@ -1341,40 +1341,99 @@ fn windows_pthread_declarations_link() {
     }
 }
 
+/// Links a unit that takes the address of each `(name, ..)` after `headers`
+/// for `target` and checks that each is imported as `symbol` from `dll`.
+fn assert_windows_imports(target: crate::Target, headers: &str, imports: &[(&str, &str, &str)]) {
+    use crate::{Compiler, NativeOptions};
+    let mut src =
+        alloc::format!("{headers}typedef void (*fn)(void);\nstatic const fn used[] = {{\n");
+    for (name, ..) in imports {
+        src += &alloc::format!("    (fn){name},\n");
+    }
+    src += "};\nint main(void) { return used[0] == 0; }\n";
+    let program = Compiler::with_target(src, target)
+        .compile()
+        .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    let image = super::link_executable_with_runtime(&program, target, NativeOptions::default())
+        .unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    for (name, symbol, dll) in imports {
+        assert_eq!(
+            pe_import_dll_of(&image, symbol).as_deref(),
+            Some(*dll),
+            "{target:?}: {name} as {symbol}"
+        );
+    }
+}
+
 /// The user32, gdi32, opengl32 and advapi32 functions `<windows.h>`
 /// declares are imported from the DLL whose import library defines them in
 /// mingw-w64, with no binding of the program's own.
 #[test]
 fn windows_h_imports_its_win32_functions_from_their_dlls() {
-    use crate::{Compiler, NativeOptions, Target};
-    const IMPORTS: &[(&str, &str)] = &[
-        ("ShowWindow", "user32.dll"),
-        ("CreateWindowExW", "user32.dll"),
-        ("BitBlt", "gdi32.dll"),
-        ("SwapBuffers", "gdi32.dll"),
-        ("wglMakeCurrent", "opengl32.dll"),
-        ("RegGetValueW", "advapi32.dll"),
-    ];
-    let mut src = alloc::string::String::from(
-        "#include <windows.h>\ntypedef void (*fn)(void);\nstatic const fn used[] = {\n",
-    );
-    for (name, _) in IMPORTS {
-        src += &alloc::format!("    (fn){name},\n");
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        assert_windows_imports(
+            target,
+            "#include <windows.h>\n",
+            &[
+                ("ShowWindow", "ShowWindow", "user32.dll"),
+                ("CreateWindowExW", "CreateWindowExW", "user32.dll"),
+                ("BitBlt", "BitBlt", "gdi32.dll"),
+                ("SwapBuffers", "SwapBuffers", "gdi32.dll"),
+                ("wglMakeCurrent", "wglMakeCurrent", "opengl32.dll"),
+                ("RegGetValueW", "RegGetValueW", "advapi32.dll"),
+            ],
+        );
     }
-    src += "};\nint main(void) { return used[0] == 0; }\n";
-    for target in [Target::WindowsX64, Target::WindowsAarch64] {
-        let program = Compiler::with_target(src.clone(), target)
-            .compile()
-            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
-        let image = super::link_executable_with_runtime(&program, target, NativeOptions::default())
-            .unwrap_or_else(|e| panic!("{target:?}: {e}"));
-        for (name, dll) in IMPORTS {
-            assert_eq!(
-                pe_import_dll_of(&image, name).as_deref(),
-                Some(*dll),
-                "{target:?}: {name}"
-            );
-        }
+}
+
+/// The C runtime functions mingw-w64's `<io.h>`, `<process.h>`, `<wchar.h>`
+/// and `<wctype.h>` declare under their POSIX and C99 names import an entry
+/// point the DLL exports: msvcrt.dll's, or ucrtbase.dll's for what the
+/// target's msvcrt.dll lacks. `<unistd.h>` binds the exec family as
+/// `<process.h>` does.
+#[test]
+fn windows_crt_names_import_the_entry_points_their_dlls_export() {
+    use crate::Target;
+    const M: &str = "msvcrt.dll";
+    const U: &str = "ucrtbase.dll";
+    const HEADERS: &str = "#include <io.h>\n#include <process.h>\n#include <wchar.h>\n\
+        #include <wctype.h>\n#include <stdio.h>\n#include <setjmp.h>\n";
+    let common = [
+        ("chmod", "_chmod", M),
+        ("mktemp", "_mktemp", M),
+        ("execl", "_execl", M),
+        ("execle", "_execle", M),
+        ("execlp", "_execlp", M),
+        ("execv", "_execv", M),
+        ("execve", "_execve", M),
+        ("execvp", "_execvp", M),
+        ("btowc", "btowc", M),
+        ("wctob", "wctob", M),
+        ("mbrtowc", "mbrtowc", M),
+        ("wcrtomb", "wcrtomb", M),
+        ("iswctype", "iswctype", M),
+        ("iswblank", "iswblank", U),
+        ("wctype", "wctype", U),
+        ("wctrans", "wctrans", U),
+        ("towctrans", "towctrans", U),
+    ];
+    for (target, own) in [
+        (
+            Target::WindowsX64,
+            [("_getws", "_getws", M), ("setjmp", "_setjmp", M)],
+        ),
+        (
+            Target::WindowsAarch64,
+            [("_getws", "_getws", U), ("setjmp", "_setjmpex", M)],
+        ),
+    ] {
+        let imports: alloc::vec::Vec<_> = common.iter().chain(own.iter()).copied().collect();
+        assert_windows_imports(target, HEADERS, &imports);
+        assert_windows_imports(
+            target,
+            "#include <unistd.h>\n",
+            &[("execv", "_execv", M), ("execvp", "_execvp", M)],
+        );
     }
 }
 

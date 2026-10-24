@@ -16,7 +16,7 @@
 ** width-sensitive ones live in `<sys/types.h>` already. */
 #include <sys/types.h>
 // `stat` / `lstat` / `fstat` are declared by <sys/stat.h> (POSIX), and on
-// Windows `open` / `lseek` by <io.h>, as the CRT does.
+// Windows `open`, `lseek` and `chmod` by <io.h>, as the CRT does.
 #include <sys/stat.h>
 #ifdef _WIN32
 #include <io.h>
@@ -354,6 +354,15 @@ extern char **environ;
 #endif
 #endif
 #pragma binding(msvcrt::umask,  "_umask")
+// mingw-w64's <unistd.h> declares the exec family by including <process.h>,
+// whose bare `P_WAIT`-style constants would rename a program's identifiers;
+// the declarations below bind as that header's do.
+#pragma binding(msvcrt::execl,  "_execl")
+#pragma binding(msvcrt::execle, "_execle")
+#pragma binding(msvcrt::execlp, "_execlp")
+#pragma binding(msvcrt::execv,  "_execv")
+#pragma binding(msvcrt::execve, "_execve")
+#pragma binding(msvcrt::execvp, "_execvp")
 #endif
 
 #ifndef _WIN32
@@ -502,8 +511,8 @@ int futimes(int fd, char *times);
 int lutimes(char *path, char *times);
 #endif
 mode_t umask(mode_t mode);
-int chmod(const char *path, mode_t mode);
 #ifndef _WIN32
+int chmod(const char *path, mode_t mode);
 int chown(const char *path, uid_t uid, gid_t gid);
 #endif
 int truncate(const char *path, off_t len);

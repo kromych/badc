@@ -54,8 +54,9 @@ typedef long long jmp_buf[32];
 // addresses on AArch64 still crashes because msvcrt's longjmp
 // routes through SEH; the supported path is the function-like
 // macros below, which inline the CRT-free intrinsic at each
-// call site.
-#pragma binding(msvcrt::setjmp, "_setjmp")
+// call site. The arm64 msvcrt.dll exports `_setjmpex` and no
+// `_setjmp`.
+#pragma binding(msvcrt::setjmp, "_setjmpex")
 #pragma binding(msvcrt::longjmp, "longjmp")
 int setjmp(long long *env);
 _Noreturn void longjmp(long long *env, int val);

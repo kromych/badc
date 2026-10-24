@@ -113,6 +113,10 @@ int wcscat_s(wchar_t *dst, size_t dstsz, const wchar_t *src);
 #pragma binding(msvcrt::wcsftime, "wcsftime")
 #pragma binding(msvcrt::wcsrtombs, "wcsrtombs")
 #pragma binding(msvcrt::mbsrtowcs, "mbsrtowcs")
+#pragma binding(msvcrt::mbrtowc,   "mbrtowc")
+#pragma binding(msvcrt::wcrtomb,   "wcrtomb")
+#pragma binding(msvcrt::btowc,     "btowc")
+#pragma binding(msvcrt::wctob,     "wctob")
 
 // Neither msvcrt.dll nor ucrtbase.dll exports the C99 wide-array
 // functions (7.24.4.4 / 7.24.4.5), count-based swprintf (7.24.2.3), or

@@ -1365,6 +1365,14 @@ impl Preprocessor {
         self.asm_source = on;
     }
 
+    /// What follows the `#`, or its digraph `%:`, that opens a directive
+    /// line (C99 6.10p2); `None` for a text line.
+    fn directive_text<'l>(&self, line: &'l str) -> Option<&'l str> {
+        let line = line.trim_start();
+        line.strip_prefix('#')
+            .or_else(|| line.strip_prefix("%:").filter(|_| !self.asm_source))
+    }
+
     /// Override the filename label used for the top-level translation
     /// unit's leading line marker. Default is `"<source>"`; the CLI
     /// passes the argv path so error messages name the file the user
@@ -2028,7 +2036,7 @@ impl<'p, 's> LinePass<'p, 's> {
                 }
                 continue;
             }
-            let hash = line.trim_start().strip_prefix('#').map(|rest| {
+            let hash = self.pp.directive_text(line).map(|rest| {
                 let spelling = rest.trim_start();
                 (spelling, parse_directive(spelling, self.pp.asm_source))
             });
@@ -2099,7 +2107,7 @@ impl<'p, 's> LinePass<'p, 's> {
     /// unit, `#define` / `#undef` as a blank, and any other directive an
     /// error.
     fn preprocessed_line(&mut self, line: &str, line_no: usize) -> Result<(), C5Error> {
-        let Some(spelling) = line.trim_start().strip_prefix('#').map(str::trim_start) else {
+        let Some(spelling) = self.pp.directive_text(line).map(str::trim_start) else {
             self.out.push_str(line);
             self.blank();
             self.idx += 1;
@@ -2499,7 +2507,7 @@ impl<'p, 's> LinePass<'p, 's> {
             let cont = self.lines[self.idx + *consumed];
             *consumed += 1;
             let dline = self.presumed + *consumed - 1;
-            if let Some(rest) = cont.trim_start().strip_prefix('#') {
+            if let Some(rest) = self.pp.directive_text(cont) {
                 let parsed = parse_directive(rest.trim_start(), self.pp.asm_source);
                 // TODO: `#include`, `#line` and `#pragma` inside an
                 // argument list are consumed without effect; their

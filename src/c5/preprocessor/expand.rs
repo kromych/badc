@@ -69,26 +69,30 @@ pub(super) struct CachedBody {
     has_paste: bool,
 }
 
-/// The C99 6.4.6 punctuators badc lexes, longest first. `punct_len` and
+/// The C99 6.4.6 punctuators badc lexes, longest first, but for the one
+/// of four bytes, `%:%:`, which `punct_len` tests first. `punct_len` and
 /// the serializer's adjacency test both read this table, so a punctuator
 /// added here cannot be missed by either.
 const PUNCT3: [&[u8]; 3] = [b"<<=", b">>=", b"..."];
-const PUNCT2: [&[u8]; 20] = [
+const PUNCT2: [&[u8]; 25] = [
     b"##", b"->", b"++", b"--", b"<<", b">>", b"<=", b">=", b"==", b"!=", b"&&", b"||", b"+=",
-    b"-=", b"*=", b"/=", b"%=", b"&=", b"^=", b"|=",
+    b"-=", b"*=", b"/=", b"%=", b"&=", b"^=", b"|=", b"<:", b":>", b"<%", b"%>", b"%:",
 ];
 const PUNCT1: &[u8] = b"()[]{},;:?~!%^&*-+=<>|/.#";
 
-/// Byte pairs that are not badc punctuators yet still re-lex as one
-/// token when written adjacent: the C99 6.4.6 digraphs, the two comment
-/// openers (6.4.9), and the first two bytes of `...`. The serializer
-/// separates them; nothing else consults the set.
-const MERGE_ONLY2: [&[u8]; 8] = [b"<:", b":>", b"<%", b"%>", b"%:", b"//", b"/*", b".."];
+/// Byte pairs that are not punctuators yet still re-lex as one token
+/// when written adjacent: the two comment openers (6.4.9) and the first
+/// two bytes of `...`. The serializer separates them; nothing else
+/// consults the set.
+const MERGE_ONLY2: [&[u8]; 3] = [b"//", b"/*", b".."];
 
 /// Length of the punctuator starting at `at`, longest match first
 /// (C99 6.4.6), or 0.
 pub(super) fn punct_len(bytes: &[u8], at: usize) -> usize {
     let rest = &bytes[at..];
+    if rest.starts_with(b"%:%:") {
+        return 4;
+    }
     if PUNCT3.iter().any(|p| rest.starts_with(p)) {
         return 3;
     }
@@ -261,7 +265,7 @@ impl<'a> Exp<'a> {
     }
 
     fn is_punct(&self, t: Tok, s: &str) -> bool {
-        t.kind == TokKind::Punct && self.text(t) == s
+        t.kind == TokKind::Punct && self.pp.primary_spelling(self.text(t)) == s
     }
 
     fn add_buf(&mut self, buf: Rc<str>) -> u32 {
@@ -1101,6 +1105,22 @@ impl<'a> Exp<'a> {
 }
 
 impl Preprocessor {
+    /// The spelling a punctuator behaves as: a C99 6.4.6p3 digraph's
+    /// counterpart, any other punctuator itself. Assembler input has no
+    /// digraphs, following GNU cpp.
+    pub(super) fn primary_spelling<'s>(&self, p: &'s str) -> &'s str {
+        match p {
+            _ if self.asm_source => p,
+            "<:" => "[",
+            ":>" => "]",
+            "<%" => "{",
+            "%>" => "}",
+            "%:" => "#",
+            "%:%:" => "##",
+            _ => p,
+        }
+    }
+
     /// The body's buffer and token list, lexed on first use per
     /// definition (token `buf` ids are 0; callers remap into their
     /// arena).
@@ -1114,9 +1134,10 @@ impl Preprocessor {
         let buf: Rc<str> = Rc::from(body);
         let mut toks = Vec::new();
         lex_into(&buf, 0, &mut toks);
-        let has_paste = toks
-            .iter()
-            .any(|t| t.kind == TokKind::Punct && &buf[t.start as usize..t.end as usize] == "##");
+        let has_paste = toks.iter().any(|t| {
+            t.kind == TokKind::Punct
+                && self.primary_spelling(&buf[t.start as usize..t.end as usize]) == "##"
+        });
         let toks = Rc::new(toks);
         cache.insert(
             name.to_string(),
@@ -1279,9 +1300,8 @@ impl Preprocessor {
 
     /// C99 6.10.3.3p1: `##` shall not occur at the beginning or at the
     /// end of a replacement list, for either form of macro definition.
-    /// A leading `##` spells `##` and a trailing one ends in `#`, so
-    /// the two text tests are necessary conditions and only a body
-    /// passing one of them is lexed.
+    /// Such a list opens or closes with `##` or `%:%:`, so only a body
+    /// passing that text test is lexed.
     pub(super) fn check_paste_placement(
         &self,
         name: &str,
@@ -1289,14 +1309,16 @@ impl Preprocessor {
         filename: &str,
         line_no: usize,
     ) {
-        if !body.starts_with("##") && !body.ends_with('#') {
+        let ends = |p: &str| body.starts_with(p) || body.ends_with(p);
+        if !ends("##") && !ends("%:%:") {
             return;
         }
         let mut toks = Vec::new();
         lex_into(body, 0, &mut toks);
         let is_paste = |t: Option<&Tok>| {
             t.is_some_and(|t| {
-                t.kind == TokKind::Punct && &body[t.start as usize..t.end as usize] == "##"
+                t.kind == TokKind::Punct
+                    && self.primary_spelling(&body[t.start as usize..t.end as usize]) == "##"
             })
         };
         if !is_paste(toks.first()) && !is_paste(toks.last()) {

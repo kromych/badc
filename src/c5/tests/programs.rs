@@ -4152,6 +4152,13 @@ fn array_typedef_pointer_casts() {
 }
 
 #[test]
+fn digraphs_spell_their_punctuators() {
+    // C99 6.4.6p3: the six digraphs behave as `[` `]` `{` `}` `#` `##` in
+    // directives, replacement lists and code; `#` keeps their spelling.
+    assert_eq!(run_fixture("digraphs_spell_their_punctuators.c"), 0);
+}
+
+#[test]
 fn designator_resumes_in_subobject() {
     // C99 6.7.8p17: a positional entry after `[i].m`, `.m.x` or `.a[i]`
     // takes the next subobject of the designated one's enclosing object;

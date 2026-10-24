@@ -1251,6 +1251,27 @@ fn hash_is_not_stringize_in_object_like_body() {
     );
 }
 
+// C99 6.4.6p3: `%:` and `%:%:` behave as `#` and `##` in directives and
+// replacement lists; the output keeps every digraph's spelling.
+#[test]
+fn digraphs_open_directives_and_operate_in_replacement_lists() {
+    let out = process(
+        "%:define S(x) %:x\n  %: define C(a, b) a %:%: b\n%:ifdef S\n\
+         const char *s = S(<: %>);\nint C(x, y)<:2:> = <% 1 %>;\n%:endif\n",
+    );
+    assert!(out.contains("const char *s = \"<: %>\";"), "{out}");
+    assert!(out.contains("int xy<:2:> = <% 1 %>;"), "{out}");
+    let e = process_err("%:define T(a) a %:%:\n");
+    assert!(e.contains("`##` cannot appear at either end"), "{e}");
+}
+
+// GNU cpp reads assembler input without digraphs: a `%:` line is text.
+#[test]
+fn asm_source_has_no_digraphs() {
+    let out = process_asm("%:define X 1\nX\n");
+    assert!(out.contains("%:define X 1\nX\n"), "{out}");
+}
+
 // C99 6.10.3.3p1 constraint, stated for either form of definition.
 #[test]
 fn paste_at_replacement_list_end_is_an_error() {

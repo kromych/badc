@@ -705,10 +705,62 @@ impl Default for SymbolIndex {
     }
 }
 
+/// Respell the C99 6.4.6p3 digraphs `<:` `:>` `<%` `%>` as the
+/// punctuators they behave as, padded with a space so offsets hold.
+/// Literals and comments keep their bytes. `%:` and `%:%:` spell `#` and
+/// `##`, which are not tokens of translation phase 7, and stay.
+fn respell_digraphs(src: &mut [u8]) {
+    let mut i = 0;
+    while i + 1 < src.len() {
+        let swap = match [src[i], src[i + 1]] {
+            [b'<', b':'] => b'[',
+            [b':', b'>'] => b']',
+            [b'<', b'%'] => b'{',
+            [b'%', b'>'] => b'}',
+            // Longer punctuators sharing a first byte (C99 6.4p4).
+            [b'<', b'<' | b'='] | [b'%', b':' | b'='] => {
+                i += 2;
+                continue;
+            }
+            [q @ (b'"' | b'\''), _] => {
+                i += 1;
+                while i < src.len() && src[i] != q && src[i] != b'\n' {
+                    i += if src[i] == b'\\' { 2 } else { 1 };
+                }
+                i += 1;
+                continue;
+            }
+            [b'/', b'/'] => {
+                i += src[i..]
+                    .iter()
+                    .position(|&b| b == b'\n')
+                    .unwrap_or(src.len() - i);
+                continue;
+            }
+            [b'/', b'*'] => {
+                i += 2 + src[i + 2..]
+                    .windows(2)
+                    .position(|w| w == b"*/")
+                    .map_or(src.len() - i - 2, |k| k + 2);
+                continue;
+            }
+            _ => {
+                i += 1;
+                continue;
+            }
+        };
+        src[i] = swap;
+        src[i + 1] = b' ';
+        i += 2;
+    }
+}
+
 impl Lexer {
     pub fn new(source: String) -> Self {
+        let mut src = source.into_bytes();
+        respell_digraphs(&mut src);
         Self {
-            src: source.into_bytes(),
+            src,
             line_index: core::cell::OnceCell::new(),
             pos: 0,
             tok_start: 0,
@@ -2869,6 +2921,19 @@ mod tests {
         lex.next(&mut symbols, &mut index, &mut data).unwrap();
         assert_eq!(lex.tk, Token::Num as i64);
         lex.ival
+    }
+
+    // C99 6.4p4: each digraph is the longest punctuator at its offset, and
+    // literals and comments hold the bytes as they are.
+    #[test]
+    fn digraphs_respell_as_the_punctuators_they_behave_as() {
+        let lex = Lexer::new(
+            "a<:1:> <%x%> %:>  <<: <=% %=> \"<:\" '%>' /* <% */ // :>\n<::>".to_string(),
+        );
+        assert_eq!(
+            core::str::from_utf8(&lex.src).unwrap(),
+            "a[ 1]  { x}  %:>  <<: <=% %=> \"<:\" '%>' /* <% */ // :>\n[ ] "
+        );
     }
 
     /// Drive the lexer over `src` until EOF or the first error.

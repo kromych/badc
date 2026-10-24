@@ -38,6 +38,24 @@
 #pragma binding(libc::sem_unlink,  "_sem_unlink")
 #endif
 
+#ifdef _WIN32
+// winpthreads' declarations, which libc/lib/semaphore_ext.c defines: sem_t
+// points to the semaphore's record, and sem_open takes all four arguments.
+#include <sys/types.h>
+typedef void *sem_t;
+#define SEM_VALUE_MAX 0x7fffffff
+#define SEM_FAILED ((sem_t *) 0)
+int sem_init(sem_t *sem, int pshared, unsigned int value);
+int sem_destroy(sem_t *sem);
+int sem_wait(sem_t *sem);
+int sem_trywait(sem_t *sem);
+int sem_timedwait(sem_t *sem, const struct timespec *abs_timeout);
+int sem_post(sem_t *sem);
+int sem_getvalue(sem_t *sem, int *sval);
+sem_t *sem_open(const char *name, int oflag, mode_t mode, unsigned int value);
+int sem_close(sem_t *sem);
+int sem_unlink(const char *name);
+#else
 // On Linux, sem_t is 32 bytes (8-byte aligned) on x86_64 and aarch64; the
 // leading word keeps the alignment and the buffer covers the rest.
 struct __c5_sem { long __align; char __opaque[24]; };
@@ -62,3 +80,4 @@ int sem_getvalue(sem_t *sem, int *sval);
 sem_t *sem_open(const char *name, int oflag, ...);
 int sem_close(sem_t *sem);
 int sem_unlink(const char *name);
+#endif

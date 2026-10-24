@@ -1836,6 +1836,15 @@ impl<'a> RelocWriter<'a> {
             Machine::X86_64 if self.kernel_abs => ExternAddrForm::Abs32,
             Machine::X86_64 => ExternAddrForm::Got,
             Machine::Aarch64 if self.names.weak_names.contains(name) => ExternAddrForm::Got,
+            // A position-independent ELF object reaches a name that may bind
+            // elsewhere through its GOT slot, the form any AAELF64 link takes
+            // in a shared object; badc's link relaxes it where it defines it.
+            Machine::Aarch64
+                if self.build.pic_link
+                    && self.target.binary_format() == crate::c5::codegen::BinaryFormat::Elf =>
+            {
+                ExternAddrForm::Got
+            }
             Machine::Aarch64 => ExternAddrForm::Direct,
         }
     }

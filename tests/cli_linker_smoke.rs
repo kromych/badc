@@ -9320,6 +9320,49 @@ fn an_import_slot_reference_pulls_the_archive_member_defining_its_name() {
     }
 }
 
+// GNU ld takes a badc aarch64 -fPIC object into a shared library: a
+// reference to an object the library does not define reads its GOT slot
+// (AAELF64), which ld refuses as a page pair ("recompile with -fPIC").
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+#[test]
+fn gnu_ld_links_a_badc_pic_object_into_a_shared_library() {
+    let Some(cc) = host_cc() else {
+        eprintln!("skipping gnu_ld_links_a_badc_pic_object_into_a_shared_library: no host cc");
+        return;
+    };
+    let dir = tempdir("aarch64-pic-gnu-ld");
+    write_source(
+        &dir,
+        "lib.c",
+        "extern int ext;\nint g = 5;\nint get(void) { return ext + g; }\n",
+    );
+    write_source(
+        &dir,
+        "main.c",
+        "int ext = 37;\nint get(void);\nint main(void) { return get() != 42; }\n",
+    );
+    run(
+        Command::new(badc())
+            .args(["-q", "-fPIC", "-c", "lib.c", "-o", "lib.o"])
+            .current_dir(&dir),
+        "compile the library unit",
+    );
+    run(
+        Command::new(&cc)
+            .args(["-shared", "-o", "libpic.so", "lib.o"])
+            .current_dir(&dir),
+        "link the shared library with GNU ld",
+    );
+    run(
+        Command::new(&cc)
+            .args(["-o", "main", "main.c", "-L.", "-lpic", "-Wl,-rpath,$ORIGIN"])
+            .current_dir(&dir),
+        "link the program",
+    );
+    let out = Command::new(dir.join("main")).output().expect("run");
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+}
+
 // An import-address slot whose name a header binds is resolved by the
 // binding, so it does not call for the on-demand runtime sources: a link
 // whose `-I` path shadows a header those sources include still succeeds.

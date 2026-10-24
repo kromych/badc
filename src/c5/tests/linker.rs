@@ -14370,6 +14370,46 @@ fn weak_extern_data_ref_is_got_pair_aarch64() {
     assert!(relocs.iter().any(|r| r.rtype == 312));
 }
 
+/// A position-independent aarch64 ELF object reaches a name that may bind
+/// elsewhere through its GOT slot, the AAELF64 pair gcc -fPIC emits and GNU
+/// ld requires in a shared object; a position-dependent one, and a Mach-O
+/// target's, keep the page pair badc's link reads from its note.
+#[test]
+fn a_pic_aarch64_elf_object_reaches_external_data_through_the_got() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::parse_native_elf;
+    use crate::c5::object::elf_reloc_types::{
+        R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE, R_AARCH64_ADR_PREL_PG_HI21,
+        R_AARCH64_LD64_GOT_LO12_NC,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    let src =
+        "extern int ext;\nint get_ext(void) { return ext; }\nint *addr(void) { return &ext; }\n";
+    let forms = |target: Target, pic_link: bool| -> alloc::collections::BTreeSet<u32> {
+        let options = CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(src.to_string(), target, options)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            pic_link,
+            ..Default::default()
+        };
+        let obj =
+            parse_native_elf(&emit_native_with_options(&program, target, opts).expect("emit"))
+                .expect("parse");
+        (obj.text_relocs.iter())
+            .filter(|r| obj.symbols[r.sym_idx].name == "ext")
+            .map(|r| r.rtype)
+            .collect()
+    };
+    let got = [R_AARCH64_ADR_GOT_PAGE, R_AARCH64_LD64_GOT_LO12_NC].into();
+    let pair = [R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_ADD_ABS_LO12_NC].into();
+    assert_eq!(forms(Target::LinuxAarch64, true), got);
+    assert_eq!(forms(Target::LinuxAarch64, false), pair);
+    assert_eq!(forms(Target::MacOSAarch64, true), pair);
+}
+
 #[test]
 fn import_address_keeps_got_pair_aarch64() {
     // Address-taking a dylib-routed import stays GOT-indirect: the

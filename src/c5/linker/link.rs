@@ -181,6 +181,9 @@ pub struct MergedNative {
     /// `data_vaddr + target_data_offset` once the final-image
     /// writer commits a layout.
     pub data_abs_relocs: Vec<DataAbsReloc>,
+    /// Slots naming `__ImageBase` in [`Self::data`] and [`Self::tls_data`].
+    pub(crate) image_base_slots: Vec<crate::c5::codegen::ImageBaseSlot>,
+    pub(crate) tls_image_base_slots: Vec<crate::c5::codegen::ImageBaseSlot>,
     /// PC-relative 4-byte slots in [`Self::data`] targeting `.text`
     /// (switch dispatch tables from folded `.rodata`); see
     /// [`DataPcRel`].
@@ -1256,6 +1259,8 @@ struct Link<'a> {
     pending_imports: Vec<PendingImportReloc>,
     applied_text_relocs: Vec<AppliedTextReloc>,
     data_abs_relocs: Vec<DataAbsReloc>,
+    image_base_slots: Vec<crate::c5::codegen::ImageBaseSlot>,
+    tls_image_base_slots: Vec<crate::c5::codegen::ImageBaseSlot>,
     data_pcrel_relocs: Vec<DataPcRel>,
     /// Data slots that name an import; see [`MergedNative::data_import_refs`].
     data_import_refs: Vec<DataImportBind>,
@@ -1363,6 +1368,8 @@ impl<'a> Link<'a> {
             pending_imports: Vec::new(),
             applied_text_relocs: Vec::new(),
             data_abs_relocs: Vec::new(),
+            image_base_slots: Vec::new(),
+            tls_image_base_slots: Vec::new(),
             data_pcrel_relocs: Vec::new(),
             data_import_refs: Vec::new(),
             tls_data_import_refs: Vec::new(),
@@ -3994,6 +4001,19 @@ impl<'a> Link<'a> {
             }
             other => other,
         };
+        // The image base is in neither merged stream; the PE writer places it.
+        if resolved_section == NativeSymSection::ImageBase {
+            let slot = crate::c5::codegen::ImageBaseSlot {
+                data_offset: slot_offset,
+                addend: reloc.addend,
+            };
+            if in_tls {
+                self.tls_image_base_slots.push(slot);
+            } else {
+                self.image_base_slots.push(slot);
+            }
+            return Ok(());
+        }
         // The referencing unit's own definition rebases by that unit's
         // base; a resolved cross-unit one is already merged.
         let resolved_value = match section {
@@ -4028,23 +4048,11 @@ impl<'a> Link<'a> {
                     ),
                 ));
             }
-            NativeSymSection::ImageBase => {
-                return Err(link_err(
-                    Code::UNSUPPORTED,
-                    MODULE,
-                    &format!(
-                        "a data initializer holds the absolute address of `{}`, the image \
-                         base; the merge places it only as an image-relative or \
-                         PC-relative distance",
-                        sym.name,
-                    ),
-                ));
-            }
-            NativeSymSection::Got => {
+            NativeSymSection::Got | NativeSymSection::ImageBase => {
                 return Err(internal_err(
                     MODULE,
                     &format!(
-                        "link_native_objects: input symbol `{}` carries the GOT section",
+                        "link_native_objects: input symbol `{}` carries the {section:?} section",
                         sym.name,
                     ),
                 ));
@@ -4897,6 +4905,8 @@ impl<'a> Link<'a> {
             pending_imports: self.pending_imports,
             applied_text_relocs: self.applied_text_relocs,
             data_abs_relocs: self.data_abs_relocs,
+            image_base_slots: self.image_base_slots,
+            tls_image_base_slots: self.tls_image_base_slots,
             data_pcrel_relocs: self.data_pcrel_relocs,
             data_import_refs: self.data_import_refs,
             tls_data_import_refs: self.tls_data_import_refs,

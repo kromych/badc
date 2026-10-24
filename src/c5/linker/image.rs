@@ -1358,6 +1358,8 @@ mod tests {
             imports: alloc::vec![],
             pending_imports: alloc::vec![],
             data_abs_relocs: alloc::vec![],
+            image_base_slots: alloc::vec![],
+            tls_image_base_slots: alloc::vec![],
             data_pcrel_relocs: alloc::vec![],
             data_import_refs: alloc::vec![],
             tls_data_import_refs: alloc::vec![],

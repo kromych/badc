@@ -269,15 +269,12 @@ fn resolve_single_image_asm_sym_fixups(
             (Some(part), Loc::Def(def)) => def.bind(build, r.instr_offset, part, r.addend),
             // The GOT's address is the writer's to decide, so the site
             // takes the same record the link path parks for it.
-            (Some(part), Loc::GotBase) => {
-                build
-                    .got_base_fixups
-                    .push(crate::c5::codegen::GotBaseFixup {
-                        instr_offset: r.instr_offset,
-                        got_offset: r.addend,
-                        part,
-                    })
-            }
+            (Some(part), Loc::GotBase) => build.base_fixups.push(crate::c5::codegen::BaseFixup {
+                instr_offset: r.instr_offset,
+                base: crate::c5::codegen::ImageAddr::GotBase,
+                offset: r.addend,
+                part,
+            }),
             // An undefined weak name resolves to address 0, as the linkers
             // resolve it: the `adrp` becomes `movz rd, #0`, the `add` keeps
             // the zero base, and a load/store keeps its zero immediate over
@@ -385,13 +382,12 @@ fn resolve_single_tu_extern_refs(
         if r.symbol_name == crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL
             && let Some(addend) = r.direct_pcrel
         {
-            build
-                .got_base_fixups
-                .push(crate::c5::codegen::GotBaseFixup {
-                    instr_offset: r.instr_offset,
-                    got_offset: addend + 4,
-                    part: AddrPart::Whole,
-                });
+            build.base_fixups.push(crate::c5::codegen::BaseFixup {
+                instr_offset: r.instr_offset,
+                base: crate::c5::codegen::ImageAddr::GotBase,
+                offset: addend + 4,
+                part: AddrPart::Whole,
+            });
             continue;
         }
         if !weak_names.contains(r.symbol_name.as_str()) {
@@ -817,7 +813,7 @@ pub(crate) mod test_support {
             tls_data_import_binds: Vec::new(),
             canonical_imports: Vec::new(),
             preemptible_imports: Vec::new(),
-            got_base_fixups: Vec::new(),
+            base_fixups: Vec::new(),
             image_rel_fields: Vec::new(),
             got_pcrel_fixups: Vec::new(),
             text_align: 16,
@@ -890,6 +886,8 @@ pub(crate) mod test_support {
             tls_extern_data_relocs: Vec::new(),
             tls_code_relocs: Vec::new(),
             label_relocs: Vec::new(),
+            image_base_slots: Vec::new(),
+            tls_image_base_slots: Vec::new(),
             exports: Vec::new(),
             dynamic_exports: Vec::new(),
             protected_exports: Default::default(),

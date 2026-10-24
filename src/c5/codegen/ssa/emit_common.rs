@@ -3047,7 +3047,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         preemptible_imports: alloc::vec::Vec::new(),
         // The GOT base is a cross-unit link fact; the single-TU emit
         // has no table to name.
-        got_base_fixups: alloc::vec::Vec::new(),
+        base_fixups: alloc::vec::Vec::new(),
         image_rel_fields: alloc::vec::Vec::new(),
         got_pcrel_fixups: alloc::vec::Vec::new(),
         asm_sections: asm_section_list,
@@ -3119,6 +3119,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         tls_extern_data_relocs: alloc::vec::Vec::new(),
         tls_code_relocs: alloc::vec::Vec::new(),
         label_relocs: st.label_relocs,
+        image_base_slots: alloc::vec::Vec::new(),
+        tls_image_base_slots: alloc::vec::Vec::new(),
         exports: alloc::vec::Vec::new(),
         dynamic_exports: alloc::vec::Vec::new(),
         protected_exports: Default::default(),

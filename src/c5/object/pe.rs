@@ -507,7 +507,8 @@ impl<'a> PeWriter<'a> {
             || !build.data_relocs.is_empty()
             || !build.code_relocs.is_empty()
             || !build.label_relocs.is_empty()
-            || !build.text_abs_relocs.is_empty();
+            || !build.text_abs_relocs.is_empty()
+            || !build.image_base_slots.is_empty();
         l.edata_present = !build.exports.is_empty() || !build.dynamic_exports.is_empty();
         l.dwarf_present = build.debug_info;
         l.text_rva = l.section_align;
@@ -774,6 +775,7 @@ impl<'a> PeWriter<'a> {
             build,
             &|off| IMAGE_BASE + self.data_off_to_rva(off as u32) as u64,
             IMAGE_BASE + text_body_rva as u64,
+            Some(IMAGE_BASE),
         )?;
         let l = &self.layout;
         let reloc_present = l.reloc_present;
@@ -791,6 +793,7 @@ impl<'a> PeWriter<'a> {
                 &build.data_relocs,
                 &build.code_relocs,
                 &build.label_relocs,
+                &build.image_base_slots,
                 &text_abs_fields,
                 &tls_sites,
             )
@@ -1089,11 +1092,21 @@ impl<'a> PeWriter<'a> {
         let names_got = |f: &crate::c5::codegen::ImageRelField| {
             f.to == ImageAddr::GotBase || f.from == ImageAddr::GotBase
         };
-        if !build.got_base_fixups.is_empty() || build.image_rel_fields.iter().any(names_got) {
+        if build
+            .base_fixups
+            .iter()
+            .any(|f| f.base != ImageAddr::ImageBase)
+            || build.image_rel_fields.iter().any(names_got)
+        {
             return Err(C5Error::hard(
                 Code::OBJECT_FORMAT,
                 "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a PE image has no GOT",
             ));
+        }
+        // `__ImageBase` is at RVA 0.
+        for f in &build.base_fixups {
+            let instr_off = f.instr_offset as u32 + prologue;
+            patch_addr_load(machine, &mut text, instr_off, text_rva, f.offset, f.part)?;
         }
         for f in &build.image_rel_fields {
             let site = f.site_text_offset as usize + prologue as usize;
@@ -1673,6 +1686,7 @@ fn build_reloc_section(
     data_relocs: &[crate::c5::program::DataReloc],
     code_relocs: &[crate::c5::program::CodeReloc],
     label_relocs: &[crate::c5::codegen::LabelReloc],
+    image_base_slots: &[crate::c5::codegen::ImageBaseSlot],
     text_abs_fields: &[AbsTextField],
     tls_sites: &[(usize, u64)],
 ) -> Vec<u8> {
@@ -1702,10 +1716,12 @@ fn build_reloc_section(
     for r in code_relocs {
         add(data_off_to_rva(r.data_offset as u32), IMAGE_REL_BASED_DIR64);
     }
-    // `&&label` initializers hold a code pointer in the data stream, so
-    // they take the same DIR64 entry.
-    for r in label_relocs {
-        add(data_off_to_rva(r.data_offset as u32), IMAGE_REL_BASED_DIR64);
+    // `&&label` initializers hold a code pointer in the data stream, and
+    // `&__ImageBase` the image's own address, so they take the same entry.
+    for off in (label_relocs.iter().map(|r| r.data_offset))
+        .chain(image_base_slots.iter().map(|s| s.data_offset))
+    {
+        add(data_off_to_rva(off as u32), IMAGE_REL_BASED_DIR64);
     }
     // Absolute fields in the code section. `.reloc` covers every section,
     // so the loader rebases these like a data pointer; the entry type

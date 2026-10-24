@@ -2114,11 +2114,8 @@ pub(crate) struct Build {
     /// left for a load-of-data-address sequence. The writer patches it
     /// with the page-relative address of `__data + data_offset`.
     pub data_fixups: Vec<DataFixup>,
-    /// Sites naming the GOT base. Populated only by the multi-object
-    /// synthesizer, from a reference to `_GLOBAL_OFFSET_TABLE_`; the
-    /// ELF writer resolves them against the `.got` it lays out and the
-    /// other container writers reject them.
-    pub got_base_fixups: Vec<GotBaseFixup>,
+    /// Sites naming the GOT base (ELF) or `__ImageBase` (PE).
+    pub base_fixups: Vec<BaseFixup>,
     /// Fields holding the distance between two image addresses; see [`ImageRelField`].
     pub image_rel_fields: Vec<ImageRelField>,
     /// Object-linked PC-relative fields that read an import's slot.
@@ -2308,6 +2305,9 @@ pub(crate) struct Build {
     /// Data slots holding a `&&label` address, filled by native emit
     /// once each owning function's block layout is final.
     pub label_relocs: Vec<LabelReloc>,
+    /// `.data` and `_Thread_local` template slots naming `__ImageBase`.
+    pub image_base_slots: Vec<ImageBaseSlot>,
+    pub tls_image_base_slots: Vec<ImageBaseSlot>,
     /// `#pragma export(<name>)`-declared functions. Mirror of
     /// [`Program::exports`]. Empty for executable output;
     /// populated for shared-library output, when the
@@ -2721,17 +2721,25 @@ pub(crate) enum TlsGotForm {
     A64Lo12,
 }
 
-/// A site holding the GOT base plus `got_offset`, the value
-/// `_GLOBAL_OFFSET_TABLE_` names. Same encoding shapes as
-/// [`DataFixup`]; the writer supplies the table's runtime address.
+/// A site holding a link-defined base plus `offset`: the GOT base
+/// `_GLOBAL_OFFSET_TABLE_` names, or PE's `__ImageBase`. Same encoding
+/// shapes as [`DataFixup`]; the writer supplies the base's address.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct GotBaseFixup {
+pub(crate) struct BaseFixup {
     /// Byte offset within `Build::text` of the relocated instruction.
     pub instr_offset: usize,
-    /// Byte offset from the table's base.
-    pub got_offset: i64,
+    /// [`ImageAddr::GotBase`] or [`ImageAddr::ImageBase`].
+    pub base: ImageAddr,
+    pub offset: i64,
     /// Fields of the reference this record covers.
     pub part: AddrPart,
+}
+
+/// A pointer-sized data slot holding PE's `__ImageBase` plus `addend`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ImageBaseSlot {
+    pub data_offset: u64,
+    pub addend: i64,
 }
 
 /// A 32-bit PC-relative field of an object-linked x86-64 instruction

@@ -188,7 +188,7 @@ fn synth_program_and_build(
     }
     let SynthFixups {
         got: got_fixups,
-        got_base: got_base_fixups,
+        base: base_fixups,
         got_rel: image_rel_fields,
         got_pcrel: got_pcrel_fixups,
         data: data_fixups,
@@ -297,7 +297,7 @@ fn synth_program_and_build(
         init_fini_arrays: merged.init_fini_arrays,
         entry_offset,
         got_fixups,
-        got_base_fixups,
+        base_fixups,
         image_rel_fields,
         got_pcrel_fixups,
         data_fixups,
@@ -381,6 +381,8 @@ fn synth_program_and_build(
         // A synthesized link image resolves every label address at
         // write time; no unresolved label slot survives into the Build.
         label_relocs: Vec::new(),
+        image_base_slots: merged.image_base_slots.clone(),
+        tls_image_base_slots: merged.tls_image_base_slots.clone(),
         exports: exports.clone(),
         output_kind,
         shared_lib_name: if output_kind == OutputKind::SharedLibrary {
@@ -1029,7 +1031,7 @@ fn dylib_name_from_path(path: &str) -> String {
 /// function-pointer / data reference site.
 struct SynthFixups {
     got: Vec<GotFixup>,
-    got_base: Vec<crate::c5::codegen::GotBaseFixup>,
+    base: Vec<crate::c5::codegen::BaseFixup>,
     got_rel: Vec<crate::c5::codegen::ImageRelField>,
     got_pcrel: Vec<crate::c5::codegen::GotPcRelFixup>,
     data: Vec<DataFixup>,
@@ -1044,7 +1046,7 @@ fn synth_fixups(
     text_abs: TextAbsolute,
 ) -> Result<SynthFixups, C5Error> {
     let mut got_fixups: Vec<GotFixup> = Vec::new();
-    let mut got_base_fixups: Vec<crate::c5::codegen::GotBaseFixup> = Vec::new();
+    let mut base_fixups: Vec<crate::c5::codegen::BaseFixup> = Vec::new();
     let mut got_rel: Vec<crate::c5::codegen::ImageRelField> = Vec::new();
     let mut got_pcrel: Vec<crate::c5::codegen::GotPcRelFixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
@@ -1139,7 +1141,7 @@ fn synth_fixups(
                     reloc,
                     text_abs,
                     &mut got_fixups,
-                    &mut got_base_fixups,
+                    &mut base_fixups,
                     &mut data_fixups,
                     &mut func_fixups,
                 )?;
@@ -1150,7 +1152,7 @@ fn synth_fixups(
                     reloc,
                     text_abs,
                     &mut got_fixups,
-                    &mut got_base_fixups,
+                    &mut base_fixups,
                     &mut data_fixups,
                     &mut func_fixups,
                 )?;
@@ -1160,7 +1162,7 @@ fn synth_fixups(
 
     Ok(SynthFixups {
         got: got_fixups,
-        got_base: got_base_fixups,
+        base: base_fixups,
         got_rel,
         got_pcrel,
         data: data_fixups,
@@ -1175,7 +1177,7 @@ fn project_aarch64_pending(
     reloc: &super::link::PendingImportReloc,
     text_abs: TextAbsolute,
     got_fixups: &mut Vec<GotFixup>,
-    got_base_fixups: &mut Vec<crate::c5::codegen::GotBaseFixup>,
+    base_fixups: &mut Vec<crate::c5::codegen::BaseFixup>,
     data_fixups: &mut Vec<DataFixup>,
     func_fixups: &mut Vec<FuncFixup>,
 ) -> Result<(), C5Error> {
@@ -1227,10 +1229,15 @@ fn project_aarch64_pending(
             });
             Ok(())
         }
-        NativeSymSection::Got => {
-            got_base_fixups.push(crate::c5::codegen::GotBaseFixup {
+        section @ (NativeSymSection::Got | NativeSymSection::ImageBase) => {
+            base_fixups.push(crate::c5::codegen::BaseFixup {
                 instr_offset: reloc.text_offset as usize,
-                got_offset: reloc.addend,
+                base: if section == NativeSymSection::Got {
+                    crate::c5::codegen::ImageAddr::GotBase
+                } else {
+                    crate::c5::codegen::ImageAddr::ImageBase
+                },
+                offset: reloc.addend,
                 part,
             });
             Ok(())
@@ -1331,16 +1338,29 @@ fn declined_reloc(
     }
 }
 
+/// An arm64 relocation naming the page or the in-page offset of an address.
+fn aarch64_addr_part(rtype: u32) -> bool {
+    matches!(
+        rtype,
+        R_AARCH64_ADR_PREL_PG_HI21 | R_AARCH64_ADD_ABS_LO12_NC
+    ) || aarch64_ldst_lo12_scale(rtype).is_some()
+}
+
 /// The field a parked reference holds when it is measured from or to the
 /// PE image base: an image-relative address (`IMAGE_REL_*_ADDR32NB`), or
 /// the x86-64 RIP-relative distance to `__ImageBase`. `None` for any
-/// other form.
+/// other form; an arm64 `adrp` / in-page pair naming `__ImageBase` takes
+/// a [`crate::c5::codegen::BaseFixup`].
 fn image_base_field(
     merged: &MergedNative,
     reloc: &super::link::PendingImportReloc,
 ) -> Result<Option<crate::c5::codegen::ImageRelField>, C5Error> {
     use crate::c5::codegen::{ImageAddr, ImageRelField};
     let x86 = merged.machine == NativeMachine::X86_64;
+    if !x86 && reloc.target_section == NativeSymSection::ImageBase && aarch64_addr_part(reloc.rtype)
+    {
+        return Ok(None);
+    }
     let (to, from, addend) = match (reloc.rtype, reloc.target_section) {
         (R_X86_64_PC32 | R_X86_64_PLT32, NativeSymSection::ImageBase) if x86 => {
             (ImageAddr::ImageBase, ImageAddr::Site, reloc.addend)
@@ -1453,7 +1473,7 @@ fn project_x86_64_pending(
     reloc: &super::link::PendingImportReloc,
     text_abs: TextAbsolute,
     got_fixups: &mut Vec<GotFixup>,
-    got_base_fixups: &mut Vec<crate::c5::codegen::GotBaseFixup>,
+    base_fixups: &mut Vec<crate::c5::codegen::BaseFixup>,
     data_fixups: &mut Vec<DataFixup>,
     func_fixups: &mut Vec<FuncFixup>,
 ) -> Result<(), C5Error> {
@@ -1507,9 +1527,10 @@ fn project_x86_64_pending(
             Ok(())
         }
         NativeSymSection::Got => {
-            got_base_fixups.push(crate::c5::codegen::GotBaseFixup {
+            base_fixups.push(crate::c5::codegen::BaseFixup {
                 instr_offset,
-                got_offset: target_byte_offset,
+                base: crate::c5::codegen::ImageAddr::GotBase,
+                offset: target_byte_offset,
                 part: AddrPart::Whole,
             });
             Ok(())
@@ -1734,6 +1755,8 @@ mod tests {
             imports: alloc::vec![],
             pending_imports: alloc::vec![],
             data_abs_relocs: alloc::vec![],
+            image_base_slots: alloc::vec![],
+            tls_image_base_slots: alloc::vec![],
             data_pcrel_relocs: alloc::vec![],
             data_import_refs: alloc::vec![],
             tls_data_import_refs: alloc::vec![],

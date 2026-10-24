@@ -117,7 +117,27 @@ pub(crate) fn bake_data_relocs(
         };
         data[off..off + 4].copy_from_slice(&v.to_le_bytes());
     }
+    for s in &build.image_base_slots {
+        let absolute = image_base_value(format, image_base, s)?;
+        let off = slot(&data, s.data_offset, "image base", 8)?;
+        data[off..off + 8].copy_from_slice(&absolute.to_le_bytes());
+    }
     Ok(data)
+}
+
+/// The link-time value of an `__ImageBase` slot, which only a PE image has.
+fn image_base_value(
+    format: &str,
+    image_base: Option<u64>,
+    s: &crate::c5::codegen::ImageBaseSlot,
+) -> Result<u64, C5Error> {
+    let Some(base) = image_base else {
+        return Err(C5Error::hard(
+            Code::OBJECT_FORMAT,
+            format!("`__ImageBase` names a PE construct; a {format} image has none"),
+        ));
+    };
+    Ok(base.wrapping_add_signed(s.addend))
 }
 
 /// Address-constant initializers of `_Thread_local` objects, as `(offset
@@ -127,6 +147,7 @@ pub(crate) fn tls_reloc_sites(
     build: &Build,
     data_off_to_vaddr: &dyn Fn(u64) -> u64,
     text_vmaddr: u64,
+    image_base: Option<u64>,
 ) -> Result<Vec<(usize, u64)>, C5Error> {
     if let Some(r) = build.tls_extern_data_relocs.first() {
         return Err(C5Error::hard(
@@ -153,6 +174,12 @@ pub(crate) fn tls_reloc_sites(
         };
         let absolute = (text_vmaddr + native_off as u64).wrapping_add_signed(r.addend);
         sites.push((r.data_offset as usize, absolute));
+    }
+    for s in &build.tls_image_base_slots {
+        sites.push((
+            s.data_offset as usize,
+            image_base_value(format, image_base, s)?,
+        ));
     }
     sites.sort_unstable();
     Ok(sites)

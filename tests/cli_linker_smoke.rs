@@ -7264,6 +7264,159 @@ fn absolute_text_reloc_links_and_rebases_in_a_pe() {
     assert!(found, "no DIR64 base relocation covering rva {want:#x}");
 }
 
+/// A PE image's preferred base, its sections as `(rva, file offset, raw
+/// size)`, and the RVAs its `IMAGE_REL_BASED_DIR64` entries cover.
+fn pe_layout(image: &[u8]) -> (u64, Vec<(u32, usize, usize)>, Vec<u32>) {
+    let u16le = |o: usize| u16::from_le_bytes(image[o..o + 2].try_into().unwrap()) as usize;
+    let u32le = |o: usize| u32::from_le_bytes(image[o..o + 4].try_into().unwrap());
+    let pe = u32le(0x3c) as usize;
+    let opt = pe + 24;
+    let base = u64::from_le_bytes(image[opt + 24..opt + 32].try_into().unwrap());
+    let table = opt + u16le(pe + 20);
+    let secs: Vec<(u32, usize, usize)> = (0..u16le(pe + 6))
+        .map(|i| table + i * 40)
+        .map(|o| {
+            (
+                u32le(o + 12),
+                u32le(o + 20) as usize,
+                u32le(o + 16) as usize,
+            )
+        })
+        .collect();
+    let (reloc_rva, reloc_size) = (u32le(opt + 152), u32le(opt + 156) as usize);
+    let mut dir64 = Vec::new();
+    if let Some(&(rva, at, _)) = secs.iter().find(|s| s.0 == reloc_rva && reloc_size != 0) {
+        let at = at + (reloc_rva - rva) as usize;
+        let mut off = 0;
+        while off + 8 <= reloc_size {
+            let (page, size) = (u32le(at + off), u32le(at + off + 4) as usize);
+            for j in 0..(size - 8) / 2 {
+                let e = u16le(at + off + 8 + j * 2) as u32;
+                if e >> 12 == 10 {
+                    dir64.push(page + (e & 0xfff));
+                }
+            }
+            off += size;
+        }
+    }
+    (base, secs, dir64)
+}
+
+/// `__ImageBase` is the image's own address, its DOS header, as link.exe
+/// and lld-link define it: an address constant naming it holds the
+/// preferred base plus its addend under a DIR64 entry, and an arm64
+/// `adrp` / `add` pair names RVA 0 plus its addend.
+#[test]
+fn the_image_base_is_the_dos_headers_address_in_code_and_data() {
+    let dir = tempdir("pe-image-base");
+    const TAG: u64 = 0x6573_6162_6567_616d;
+    let src = write_source(
+        &dir,
+        "ib.c",
+        "extern char __ImageBase;\n\
+         struct { unsigned long long tag; char *base, *third; } slots = {\n\
+         0x657361626567616dULL, &__ImageBase, &__ImageBase + 2 };\n\
+         _Thread_local char *second = &__ImageBase + 1;\n\
+         int main(void) {\n\
+         char *r = &__ImageBase;\n\
+         return r[0] == 'M' && r[1] == 'Z' && slots.base == r && slots.third == r + 2\n\
+         && second == r + 1 ? 0 : 1;\n\
+         }\n",
+    );
+    const MARKER: u64 = 0x3631_6573_6162_6761;
+    let asm = write_source(
+        &dir,
+        "a64.s",
+        "\t.text\n\t.globl image_base_16\nimage_base_16:\n\
+         \tadrp\tx0, __ImageBase+16\n\
+         \tadd\tx0, x0, #:lo12:__ImageBase+16\n\
+         \tret\n\
+         \t.quad\t0x3631657361626761\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let obj = dir.join(format!("ib-{target}.o"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .args(["-c", "-o"])
+                .args([&obj, &src]),
+            "compile the unit",
+        );
+        // The unit compiled in the link, its object, and on arm64 the unit
+        // with an assembler `adrp` / `add` pair.
+        let mut links = vec![vec![src.clone()], vec![obj]];
+        if target == "windows-arm64" {
+            links.push(vec![src.clone(), asm.clone()]);
+        }
+        for (k, inputs) in links.iter().enumerate() {
+            let exe = dir.join(format!("ib-{target}-{k}.exe"));
+            run(
+                Command::new(badc())
+                    .arg(format!("--target={target}"))
+                    .arg("-o")
+                    .arg(&exe)
+                    .args(inputs),
+                "link the image",
+            );
+            let image = std::fs::read(&exe).expect("read the PE");
+            let (base, secs, dir64) = pe_layout(&image);
+            let rva_of = |off: usize| {
+                let &(rva, at, _) = secs
+                    .iter()
+                    .find(|s| (s.1..s.1 + s.2).contains(&off))
+                    .expect("the offset is in a section");
+                rva + (off - at) as u32
+            };
+            let word = |o: usize| u64::from_le_bytes(image[o..o + 8].try_into().unwrap());
+            let at = image
+                .windows(8)
+                .position(|w| w == TAG.to_le_bytes())
+                .expect("the tagged slots are in the image");
+            assert_eq!(
+                (word(at + 8), word(at + 16)),
+                (base, base + 2),
+                "{target} input {k}"
+            );
+            for slot in [at + 8, at + 16] {
+                assert!(
+                    dir64.contains(&rva_of(slot)),
+                    "{target} input {k}: no DIR64 entry for the slot at rva {:#x}",
+                    rva_of(slot)
+                );
+            }
+            if inputs.len() == 1 {
+                continue;
+            }
+            let words = words_before_marker(&image, MARKER, 3);
+            let site = image
+                .windows(8)
+                .position(|w| w == MARKER.to_le_bytes())
+                .unwrap()
+                - 12;
+            let (adrp, add) = (words[0], words[1]);
+            let imm21 = (((adrp >> 5) & 0x7ffff) << 2) | ((adrp >> 29) & 3);
+            let page = (i64::from(imm21) << 43) >> 31;
+            let reached =
+                (i64::from(rva_of(site)) & !0xfff) + page + i64::from((add >> 10) & 0xfff);
+            assert_eq!(reached, 16, "adrp / add of `__ImageBase+16`");
+        }
+    }
+    #[cfg(windows)]
+    {
+        let exe = dir.join("ib-host.exe");
+        run(
+            Command::new(badc()).arg("-o").arg(&exe).arg(&src),
+            "link for the host",
+        );
+        let status = Command::new(&exe).status().expect("run the image");
+        assert_eq!(
+            status.code(),
+            Some(0),
+            "the program reads `MZ` at `__ImageBase`"
+        );
+    }
+}
+
 // Gated on Linux: the read-only data page only exists on the native ELF
 // link path, and the test exec's the produced binary.
 //

@@ -1172,6 +1172,11 @@ impl Compiler {
                 "parameter name omitted in a function definition",
             ));
         }
+        // The function's block, from the parameter list's tags (C99 6.2.1p4).
+        self.tag_scopes.push();
+        for (name, id) in core::mem::take(&mut params.tags) {
+            self.tag_scopes.bind(&name, id);
+        }
         self.parse_kr_parameter_declarations(&mut params, def.line)?;
         self.check_complete_parameters(&params, def.line)?;
         // C99 6.9.1p3: a definition returns void or a complete object type.
@@ -1207,6 +1212,7 @@ impl Compiler {
         let ent_pc = self.open_function_body(id_idx, &params);
         self.copy_by_value_parameters(&params)?;
         self.parse_function_body_items(&params)?;
+        self.tag_scopes.pop();
         self.finish_function_body(ent_pc, &params, arrival)?;
         // The capture runs before the scope unwind restores the outer bindings.
         // DWARF 5 3.3.4 groups the DIEs by the subprogram's entry pc and locates
@@ -1584,14 +1590,6 @@ impl Compiler {
         // frame, or parses a statement.
         let mut top_level_ids = self.evaluate_parameter_sizes(params)?;
         self.stmt_expr_arena_ranges.clear();
-        // C99 6.2.1: a tag declared in a function body has
-        // block scope. Push a tag scope so a struct / union /
-        // enum defined at the body top level is local to this
-        // function -- two functions defining the same tag do
-        // not collide, and a body-scope tag shadows a
-        // file-scope one. Nested blocks push their own scopes
-        // through parse_block_stmt.
-        self.tag_scopes.push();
         // The function body's top-level block scope for
         // `__attribute__((cleanup))` variables; cleaned on
         // fall-through (below) and on every `return`.
@@ -1672,7 +1670,6 @@ impl Compiler {
         }
         self.resolve_jumps()?;
         self.cleanup_scopes.pop();
-        self.tag_scopes.pop();
         self.local_label_scopes.close();
         // The body's own objects end with it, as a nested block's do.
         let mut slots: alloc::vec::Vec<i64> = self

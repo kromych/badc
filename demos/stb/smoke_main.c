@@ -107,6 +107,9 @@
 
 #include "stb_easy_font.h"
 
+/* The header names `struct stbhw__process` first in a callback typedef's
+ * parameter list, whose scope ends with the list (C99 6.2.1p4). */
+struct stbhw__process;
 #define STB_HERRINGBONE_WANG_TILE_IMPLEMENTATION
 #include "stb_herringbone_wang_tile.h"
 

@@ -421,6 +421,7 @@ int sigsuspend(const sigset_t *mask);
 int sigwait(const sigset_t *set, int *sig);
 int siginterrupt(int sig, int flag);
 #ifdef __linux__
+struct timespec;
 int sigwaitinfo(const sigset_t *set, siginfo_t *info);
 int sigtimedwait(const sigset_t *set, siginfo_t *info,
                  const struct timespec *timeout);

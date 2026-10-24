@@ -1059,6 +1059,41 @@ fn interp_exits_with_the_program_status() {
     assert_eq!(run("--jit").status.code(), Some(3));
 }
 
+// The address constants a function designator builds keep their offsets in
+// the image `-o` writes, under `--jit` and under `--interp`.
+#[test]
+fn function_designator_address_constants_keep_their_offsets() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let src = fixtures_dir().join("function_designator_address_constants.c");
+    let dir = TempDir::new("badc-fn-address-constants");
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("p{opt}{}", std::env::consts::EXE_SUFFIX));
+        let out = Command::new(badc)
+            .arg(opt)
+            .arg(&src)
+            .arg("-o")
+            .arg(&exe)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "-o {opt}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let run = Command::new(&exe).output().expect("run image");
+        assert_eq!(run.status.code(), Some(0), "-o {opt}");
+        for mode in ["--jit", "--interp"] {
+            let out = Command::new(badc)
+                .arg(mode)
+                .arg(opt)
+                .arg(&src)
+                .output()
+                .expect("run badc");
+            assert_eq!(out.status.code(), Some(0), "{mode} {opt}");
+        }
+    }
+}
+
 // `--jit` exits with the status a program passes to `exit` from a nested
 // call, after the output the program wrote (C99 7.20.4.3).
 #[test]

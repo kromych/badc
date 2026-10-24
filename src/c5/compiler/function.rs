@@ -44,6 +44,8 @@ pub(super) struct ParsedParams {
     pub(super) fn_types: Vec<(usize, crate::c5::symbol::FnType, i64)>,
     /// The array size expressions of the parameters, in declaration order.
     pub(super) sizes: Vec<ParamSize>,
+    /// The tags the list declared; a definition's block continues their scope.
+    pub(super) tags: Vec<(alloc::string::String, usize)>,
 }
 
 /// A parameter's array size expression, which a definition evaluates on
@@ -106,6 +108,7 @@ impl ParsedParams {
             enum_tags: p.enum_tags,
             fn_types: p.fn_types,
             sizes: Vec::new(),
+            tags: Vec::new(),
         }
     }
 
@@ -187,10 +190,23 @@ impl Compiler {
         // that name's binding restores; the parameters record their own.
         let outer_prior = p.declarator_prior_shape.take();
         let outer_sizes = core::mem::take(&mut self.param_sizes);
+        self.tag_scopes.push();
         let mut r = self.parse_function_params_inner();
+        let tags = self.tag_scopes.pop();
+        for (name, id) in &tags {
+            if !self.structs[*id].is_anonymous {
+                let keyword = self.structs[*id].keyword();
+                let text = alloc::format!(
+                    "`{keyword} {name}` declared inside parameter list will not be visible \
+                     outside of this definition or declaration"
+                );
+                self.warn_at(Code::VISIBILITY, self.lex.line, text);
+            }
+        }
         let sizes = core::mem::replace(&mut self.param_sizes, outer_sizes);
         if let Ok(params) = &mut r {
             params.sizes = sizes;
+            params.tags = tags;
         }
         let p = &mut self.pending;
         p.declarator_prior_shape = outer_prior;
@@ -525,6 +541,7 @@ impl Compiler {
             enum_tags,
             fn_types,
             sizes: Vec::new(),
+            tags: Vec::new(),
         })
     }
 

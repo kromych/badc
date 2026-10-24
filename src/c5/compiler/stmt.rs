@@ -369,6 +369,34 @@ impl Compiler {
         self.require_category(self.ty, category, Code::CONTROLLING_EXPRESSION, &what)
     }
 
+    /// Open the scope of a selection or iteration statement or of its
+    /// substatement, each a block (C99 6.8.4p3, 6.8.5p5).
+    fn open_statement_scope(&mut self) {
+        self.tag_scopes.push();
+        self.block_scopes.push(Vec::new());
+    }
+
+    fn close_statement_scope(&mut self) {
+        self.tag_scopes.pop();
+        for b in self
+            .block_scopes
+            .pop()
+            .unwrap_or_default()
+            .into_iter()
+            .rev()
+        {
+            self.restore_block_shadow(b);
+        }
+    }
+
+    /// A substatement, in its own scope.
+    fn scoped_stmt(&mut self) -> Result<(), C5Error> {
+        self.open_statement_scope();
+        self.stmt()?;
+        self.close_statement_scope();
+        Ok(())
+    }
+
     pub(super) fn parse_for_stmt(&mut self) -> Result<(), C5Error> {
         let for_pos = self.ast_src_pos();
         self.next()?;
@@ -388,6 +416,7 @@ impl Compiler {
         // consumes its own trailing `;`; the expression branch
         // does it explicitly.
         self.block_scopes.push(Vec::new());
+        self.tag_scopes.push();
         let mut init_ast: Option<super::super::ast::BlockItem> = None;
         if self.lex.tk == ';' {
             self.next()?;
@@ -481,7 +510,7 @@ impl Compiler {
 
         self.enter_loop();
         let body_before = self.ast_stmts_snapshot();
-        self.stmt()?;
+        self.scoped_stmt()?;
         let body_s = self.ast_wrap_stmts_since(body_before);
 
         self.close_loop_continues();
@@ -513,6 +542,7 @@ impl Compiler {
         // C99 6.8.5p5: the for statement is a block, whose end ends the
         // lifetimes of the objects its init clause declared.
         let for_init_symbols = self.block_scopes.pop().unwrap();
+        self.tag_scopes.pop();
         let slots = self.block_lifetime_slots(&for_init_symbols, &[], None);
         if !slots.is_empty() {
             let pos = self.ast_src_pos();
@@ -543,6 +573,7 @@ impl Compiler {
     pub(super) fn parse_switch_stmt(&mut self) -> Result<(), C5Error> {
         let line = self.lex.line;
         self.next()?;
+        self.open_statement_scope();
         self.consume(b'(', "open paren expected")?;
         self.parse_controlling_expr("switch", Category::Integer)?;
         let disc_ast = self.ast_acc;
@@ -565,9 +596,10 @@ impl Compiler {
         self.enter_switch_body();
 
         let body_before = self.ast_stmts_snapshot();
-        self.stmt()?;
+        self.scoped_stmt()?;
         let body_s = self.ast_wrap_stmts_since(body_before);
         self.leave_switch_body();
+        self.close_statement_scope();
 
         // Same conservative drop at the body-exit boundary.
         self.flush_pending_stores();
@@ -3263,30 +3295,33 @@ impl Compiler {
             // with the lexer.
             let if_pos = self.ast_src_pos();
             self.next()?;
+            self.open_statement_scope();
             self.consume(b'(', "open paren expected")?;
             self.parse_controlling_expr("if", Category::Scalar)?;
             let cond_id = self.ast_acc;
             self.consume(b')', "close paren expected")?;
             self.flush_pending_stores();
             let then_before = self.ast_stmts_snapshot();
-            self.stmt()?;
+            self.scoped_stmt()?;
             let then_s = self.ast_wrap_stmts_since(then_before);
             let else_s = if self.lex.tk == Token::Else {
                 self.flush_pending_stores();
                 self.next()?;
                 let else_before = self.ast_stmts_snapshot();
-                self.stmt()?;
+                self.scoped_stmt()?;
                 let id = self.ast_wrap_stmts_since(else_before);
                 Some(id)
             } else {
                 None
             };
+            self.close_statement_scope();
             if let Some(cond) = cond_id {
                 self.ast_emit_if(cond, then_s, else_s, if_pos);
             }
         } else if self.lex.tk == Token::While {
             let while_pos = self.ast_src_pos();
             self.next()?;
+            self.open_statement_scope();
             self.consume(b'(', "open paren expected")?;
             self.parse_controlling_expr("while", Category::Scalar)?;
             let cond_id = self.ast_acc;
@@ -3295,8 +3330,9 @@ impl Compiler {
 
             self.enter_loop();
             let body_before = self.ast_stmts_snapshot();
-            self.stmt()?;
+            self.scoped_stmt()?;
             let body_s = self.ast_wrap_stmts_since(body_before);
+            self.close_statement_scope();
             self.close_loop_continues();
 
             self.flush_pending_stores();
@@ -3307,10 +3343,11 @@ impl Compiler {
             }
         } else if self.lex.tk == Token::Do {
             self.next()?;
+            self.open_statement_scope();
 
             self.enter_loop();
             let body_before = self.ast_stmts_snapshot();
-            self.stmt()?;
+            self.scoped_stmt()?;
             let body_s = self.ast_wrap_stmts_since(body_before);
 
             let while_pos = self.ast_src_pos();
@@ -3330,6 +3367,7 @@ impl Compiler {
             self.flush_pending_stores();
 
             self.consume(b';', "semicolon expected after do-while")?;
+            self.close_statement_scope();
 
             self.close_loop_breaks();
             if let Some(cond) = cond_id {

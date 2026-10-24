@@ -1605,18 +1605,26 @@ impl TagScopes {
         self.scopes.push(Vec::new());
     }
 
-    pub(super) fn pop(&mut self) {
+    /// Close the innermost scope; its bindings, in binding order.
+    pub(super) fn pop(&mut self) -> Vec<(alloc::string::String, usize)> {
         let depth = self.scopes.len() as u32 - 1;
-        for name in self.scopes.pop().unwrap_or_default() {
-            if let Some(ids) = self.by_name.get_mut(&name) {
-                while ids.last().is_some_and(|&(d, _)| d == depth) {
-                    ids.pop();
-                }
+        let mut bound = Vec::new();
+        for name in self.scopes.pop().unwrap_or_default().into_iter().rev() {
+            let Some(ids) = self.by_name.get_mut(&name) else {
+                continue;
+            };
+            if let Some(&(d, id)) = ids.last()
+                && d == depth
+            {
+                ids.pop();
                 if ids.is_empty() {
                     self.by_name.remove(&name);
                 }
+                bound.push((name, id));
             }
         }
+        bound.reverse();
+        bound
     }
 
     pub(super) fn bind(&mut self, name: &str, id: usize) {

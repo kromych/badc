@@ -1854,6 +1854,47 @@ fn a_switch_on_a_boolean_value_warns_for_a_label_it_cannot_take() {
     );
 }
 
+/// C99 6.2.1p4; a K&R declaration list's tags join the block, as gcc's do.
+#[test]
+fn a_definitions_parameter_tags_are_in_its_block() {
+    use crate::Target;
+    expect_compile_error(
+        "struct s { char c; }; \
+         int f(struct s { int a; } *p) { struct s { int b; } x; return p->a + x.b; } \
+         int main(void) { return 0; }",
+        "struct `s` already defined",
+    );
+    let src = "struct v { char c; };\n\
+               int kr(p) struct v { int x, y; } *p; { struct v w = { 3, 4 }; return p->x + w.y; }\n\
+               int main(void) { return sizeof(struct v) - 1; }\n";
+    Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+}
+
+/// As gcc does, and clang under -Wvisibility.
+#[test]
+fn a_tag_declared_in_a_parameter_list_is_reported() {
+    use crate::Target;
+    use crate::diag::Code;
+    let src = "struct t { char c; };\n\
+               void p(struct t { int a; } *);\n\
+               void q(struct u *);\n\
+               int r(struct v { int x; } *pv) { return pv->x; }\n\
+               void s(struct t *, struct { int y; } *);\n\
+               int main(void) { return 0; }\n";
+    let program = Compiler::with_target(src.to_string(), Target::LinuxX64)
+        .compile()
+        .unwrap_or_else(|e| panic!("{e}"));
+    let lines: Vec<u32> = program
+        .warnings
+        .iter()
+        .filter(|w| w.code == Code::VISIBILITY)
+        .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [2, 3, 4], "{:?}", program.warnings);
+}
+
 #[test]
 fn duplicate_case_value_in_inner_switch_only() {
     // Distinct values across nested switches are fine; the duplicate is

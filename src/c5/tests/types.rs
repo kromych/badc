@@ -2179,6 +2179,37 @@ fn enums_take_the_types_gcc_gives_on_every_target() {
     }
 }
 
+/// `__builtin_va_list` is `char *` where the ABI makes `va_list` a single
+/// cursor (Microsoft x64 and ARM64, Apple arm64), so a header's own
+/// `typedef char *va_list;` (MSVC's `vadefs.h`) redeclares `<stdarg.h>`'s
+/// with the same type. clang 22 accepts the unit for both windows-msvc
+/// triples and Apple clang 21 on macOS.
+#[test]
+fn va_list_is_a_char_pointer_where_the_abi_makes_it_a_cursor() {
+    use crate::{Compiler, Target};
+    const SRC: &str = "typedef char *va_list;\n\
+        #include <stdarg.h>\n\
+        _Static_assert(__builtin_types_compatible_p(__builtin_va_list, char *), \"char *\");\n\
+        _Static_assert(_Generic((va_list)0, char *: 1, default: 0), \"generic\");\n\
+        int sum(int n, ...) {\n\
+          va_list ap, aq; int s = 0;\n\
+          va_start(ap, n); va_copy(aq, ap);\n\
+          while (n--) s += va_arg(ap, int);\n\
+          s += va_arg(aq, int);\n\
+          va_end(aq); va_end(ap); return s; }\n\
+        int main(void) { return sum(3, 1, 2, 3) != 7; }\n";
+    for t in [
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ] {
+        let program = Compiler::with_target(SRC.to_string(), t)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+}
+
 /// Once its list ends, every constant of an enumeration with a value outside
 /// `int` has the enumerated type (C23 6.7.2.2, gcc's `finish_enum` in every
 /// mode), so `U0 - 1` is unsigned and `_Generic` selects `enum U`; inside the

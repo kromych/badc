@@ -272,7 +272,8 @@ impl Compiler {
     ///     (System V AMD64 ABI 3.5.7) as an array of one element.
     ///   * AAPCS64 (Linux aarch64): the `__va_list` record (AAPCS64
     ///     Appendix B) as an array of one element.
-    ///   * Every other target: a single `void *` cursor.
+    ///   * Every other target: a `char *` cursor, the type Microsoft's
+    ///     x64 and ARM64 conventions and Apple's arm64 ABI give it.
     ///
     /// The record is registered once, on first use; the one-element
     /// array dimension rides `pending.typedef_base_array_size`, the
@@ -300,7 +301,7 @@ impl Compiler {
                 ],
                 32,
             ),
-            _ => return ptr,
+            _ => return super::types::plain_char_ty(self.lex.char_signed) + Ty::Ptr as i64,
         };
         self.pending.set_base_array(1, Vec::new(), false);
         if let Some(id) = self

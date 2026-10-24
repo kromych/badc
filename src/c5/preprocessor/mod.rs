@@ -748,6 +748,7 @@ fn install_data_model(
     // `<stddef.h>` typedef that keys on `__WCHAR_TYPE__` cannot disagree.
     let wchar = target.wchar_type(short_wchar);
     macros.insert("__SIZEOF_WCHAR_T__".to_string(), wchar.bytes.to_string());
+    macros.insert("__WCHAR_WIDTH__".to_string(), (8 * wchar.bytes).to_string());
     macros.insert(
         "__WCHAR_TYPE__".to_string(),
         wchar.spelling(ilp32).to_string(),
@@ -843,6 +844,36 @@ fn install_stdint_model(macros: &mut HashMap<String, String>, target: Target, il
     let (max, umax) = limits(intptr);
     macros.insert("__PTRDIFF_MAX__".to_string(), max);
     macros.insert("__SIZE_MAX__".to_string(), umax);
+    // gcc's `__<T>_WIDTH__`, each the width of the type predefined for `T`.
+    let bits = |ty: &str| match ty {
+        "short" => 16,
+        "int" => 32,
+        "long" if !lp64 => 32,
+        _ => 64,
+    };
+    for (name, width) in [
+        ("SCHAR", 8),
+        ("SHRT", 16),
+        ("INT", 32),
+        ("LONG", bits("long")),
+        ("LONG_LONG", 64),
+        ("INTMAX", bits(intmax)),
+        ("INTPTR", bits(intptr)),
+        ("PTRDIFF", bits(intptr)),
+        ("SIZE", bits(intptr)),
+        ("INT_LEAST8", 8),
+        ("INT_LEAST16", 16),
+        ("INT_LEAST32", 32),
+        ("INT_LEAST64", 64),
+        ("INT_FAST8", 8),
+        ("INT_FAST16", bits(fast16)),
+        ("INT_FAST32", bits(fast32)),
+        ("INT_FAST64", 64),
+        ("SIG_ATOMIC", 32),
+        ("WINT", 32),
+    ] {
+        macros.insert(format!("__{name}_WIDTH__"), width.to_string());
+    }
 }
 
 /// The targets one predefine row covers.

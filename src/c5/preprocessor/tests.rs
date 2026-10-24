@@ -5474,3 +5474,41 @@ fn undef_reports_each_evaluated_identifier() {
     let asked = format!("#pragma GCC diagnostic warning \"-Wundef\"\n{src}");
     assert_eq!(lines(&asked), vec![2, 12, 12, 15, 17, 27, 30]);
 }
+
+/// gcc's `__<T>_WIDTH__` predefines, each the width of the target's type
+/// for `T`: gcc 16 on linux-x64 (also -m32) and linux-aarch64, Apple clang
+/// 21's on macos-aarch64 (which omits the SCHAR and LONG_LONG rows), and on
+/// Windows the widths of badc's own LLP64 types.
+#[test]
+fn width_predefines_follow_the_targets_types() {
+    use crate::c5::{CodeModel, ElfClass};
+    let probe = concat!(
+        "w __SCHAR_WIDTH__ __SHRT_WIDTH__ __INT_WIDTH__ __LONG_WIDTH__ __LONG_LONG_WIDTH__ ",
+        "__INTMAX_WIDTH__ __INTPTR_WIDTH__ __PTRDIFF_WIDTH__ __SIZE_WIDTH__ ",
+        "__INT_LEAST8_WIDTH__ __INT_LEAST16_WIDTH__ __INT_LEAST32_WIDTH__ __INT_LEAST64_WIDTH__ ",
+        "__INT_FAST8_WIDTH__ __INT_FAST16_WIDTH__ __INT_FAST32_WIDTH__ __INT_FAST64_WIDTH__ ",
+        "__SIG_ATOMIC_WIDTH__ __WCHAR_WIDTH__ __WINT_WIDTH__\n",
+    );
+    let lp64 = "w 8 16 32 64 64 64 64 64 64 8 16 32 64 8 64 64 64 32 32 32";
+    for (target, want) in [
+        (Target::LinuxX64, lp64),
+        (Target::LinuxAarch64, lp64),
+        (
+            Target::MacOSAarch64,
+            "w 8 16 32 64 64 64 64 64 64 8 16 32 64 8 16 32 64 32 32 32",
+        ),
+        (
+            Target::WindowsX64,
+            "w 8 16 32 32 64 64 64 64 64 8 16 32 64 8 32 32 64 32 16 32",
+        ),
+    ] {
+        let mut pp = Preprocessor::new(target.id_str(), target, "0.1.0");
+        let out = pp.process(probe).expect("preprocessor failed");
+        assert!(out.contains(want), "{target:?}: {out}");
+    }
+    let mut pp = Preprocessor::new(Target::LinuxX64.id_str(), Target::LinuxX64, "0.1.0");
+    pp.set_unit_model(ElfClass::Elf32, CodeModel::Small, false);
+    let out = pp.process(probe).expect("preprocessor failed");
+    let ilp32 = "w 8 16 32 32 64 64 32 32 32 8 16 32 64 8 32 32 64 32 32 32";
+    assert!(out.contains(ilp32), "ILP32: {out}");
+}

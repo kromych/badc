@@ -420,6 +420,12 @@ pub(super) fn emit_inst(
         } => emit_atomic_cas(
             code, v, dst, *addr, *expected, *desired, *width, alloc, frame,
         ),
+        Inst::AtomicCas16 {
+            addr,
+            expected,
+            desired,
+            ..
+        } => emit_atomic_cas16(code, v, dst, *addr, *expected, *desired, alloc, frame),
         Inst::AtomicLoad { addr, width, .. } => {
             emit_atomic_load(code, dst, *addr, *width, alloc, frame)
         }

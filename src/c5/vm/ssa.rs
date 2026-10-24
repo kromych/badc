@@ -1254,6 +1254,41 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = cur;
             return Ok(());
         }
+        Inst::AtomicCas16 {
+            addr,
+            expected,
+            desired,
+            ..
+        } => {
+            // C11 7.17.7.4 on 16 bytes, single-threaded: compare the object
+            // with the comparand, store the replacement on a match, else
+            // write the prior contents over the comparand.
+            let a = frame.regs[*addr as usize];
+            let (e, d) = (
+                frame.regs[*expected as usize],
+                frame.regs[*desired as usize],
+            );
+            atomic_addr_check(a, "AtomicCas16")?;
+            let pair = |mem: &mut Memory, at: i64| -> Result<[i64; 2], C5Error> {
+                Ok([
+                    load_from_memory(mem, at as usize, LoadKind::I64)?,
+                    load_from_memory(mem, at as usize + 8, LoadKind::I64)?,
+                ])
+            };
+            mem.check_data_access(a as usize, 16, AccessKind::Read)?;
+            mem.check_data_access(a as usize, 16, AccessKind::Write)?;
+            let cur = pair(mem, a)?;
+            let matched = cur == pair(mem, e)?;
+            let (to, val) = if matched {
+                (a, pair(mem, d)?)
+            } else {
+                (e, cur)
+            };
+            store_to_memory(mem, to as usize, val[0], StoreKind::I64)?;
+            store_to_memory(mem, to as usize + 8, val[1], StoreKind::I64)?;
+            frame.regs[v as usize] = i64::from(matched);
+            return Ok(());
+        }
         // C11 7.17.7.1 / 7.17.7.2. The order has no effect in the
         // single-threaded interpreter; the load zero-extends as the
         // native access does.

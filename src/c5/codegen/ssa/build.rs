@@ -1573,6 +1573,26 @@ impl SsaBuilder {
         })
     }
 
+    /// `Inst::AtomicCas16` on the 16-byte object at `addr`, comparand and
+    /// replacement at the addresses `expected` and `desired`. Its value is
+    /// whether it matched. Writes through `addr` and `expected`, so the CSE
+    /// cache is invalidated.
+    pub(crate) fn atomic_cas16(
+        &mut self,
+        addr: ValueId,
+        expected: ValueId,
+        desired: ValueId,
+        order: MemOrder,
+    ) -> ValueId {
+        self.local_cache.clear();
+        self.push(Inst::AtomicCas16 {
+            addr,
+            expected,
+            desired,
+            order,
+        })
+    }
+
     /// `Inst::Intrinsic` -- compiler-builtin (alloca / setjmp /
     /// longjmp / va_*). The `kind` is the discriminant from
     /// `crate::c5::op::Intrinsic`; the per-arch SSA emit reads it

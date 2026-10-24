@@ -710,6 +710,51 @@ fn dead_branch_calls_are_eliminated_under_optimize() {
     }
 }
 
+// A 16-byte read-modify-write is atomic under contention: four threads
+// adding to one `unsigned __int128` whose sum carries into the high half
+// lose no update, at -O0 and -O.
+#[cfg(unix)]
+#[test]
+fn int128_atomics_hold_under_contention() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-atomic128");
+    let src = dir.join("a.c");
+    std::fs::write(
+        &src,
+        "#include <pthread.h>\ntypedef unsigned __int128 u128;\n\
+         static u128 counter = ((u128)1 << 64) - 100000;\n\
+         static void *work(void *arg) {\n\
+           (void)arg;\n\
+           for (int i = 0; i < 100000; i++) __atomic_fetch_add(&counter, 1, __ATOMIC_SEQ_CST);\n\
+           return 0;\n\
+         }\n\
+         int main(void) {\n\
+           pthread_t t[4];\n\
+           for (int i = 0; i < 4; i++) pthread_create(&t[i], 0, work, 0);\n\
+           for (int i = 0; i < 4; i++) pthread_join(t[i], 0);\n\
+           return counter == ((u128)1 << 64) + 300000 ? 0 : 1;\n\
+         }\n",
+    )
+    .expect("write a.c");
+    let exe = dir.join("a");
+    for level in ["-O0", "-O"] {
+        let out = Command::new(badc)
+            .args(["-q", level])
+            .arg(&src)
+            .arg("-o")
+            .arg(&exe)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "{level}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let run = Command::new(&exe).output().expect("run program");
+        assert_eq!(run.status.code(), Some(0), "{level}: an update was lost");
+    }
+}
+
 // `-ffp-contract=` selects where `-O` contracts a product with the add or
 // subtract using it (C99 6.5p8): `on`, the default, within one
 // expression; `fast` across statements too; `off` nowhere. With a = 1 +

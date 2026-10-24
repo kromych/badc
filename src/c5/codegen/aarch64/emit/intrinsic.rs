@@ -1033,6 +1033,71 @@ pub(super) fn emit_atomic_cas(
     Ok(())
 }
 
+/// C11 7.17.7.4 on 16 bytes as the LSE `CASP` (ARM ARM C6.2), the order
+/// setting its acquire and release bits: the comparand and the
+/// replacement load into two even register pairs from their objects, the
+/// first pair leaves with the prior contents, and a mismatch writes them
+/// over the comparand's object. The value is whether it matched.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_atomic_cas16(
+    code: &mut Vec<u8>,
+    dst: Place,
+    addr: super::super::ir::ValueId,
+    expected: super::super::ir::ValueId,
+    desired: super::super::ir::ValueId,
+    order: super::super::ir::MemOrder,
+    alloc: &Allocation,
+    frame: Frame,
+    scratch: &ScratchPool,
+) -> Emit {
+    use super::encode::{Cond, enc_casp, enc_ccmp, enc_cset, enc_ldp_off, enc_stp_off};
+    let w = atomic128_save_working(code, frame)?;
+    let Some((s, t)) = even_pairs(&w) else {
+        return fail("AtomicCas16: no two even register pairs among x0..x15");
+    };
+    let rest: alloc::vec::Vec<Reg> = (w.iter().copied())
+        .filter(|r| ![s, s + 1, t, t + 1].contains(&r.0))
+        .collect();
+    let (ptr, ep, dp) = (rest[0], rest[1], rest[2]);
+    for (value, r) in [(addr, ptr), (expected, ep), (desired, dp)] {
+        if !atomic128_operand_into(code, value, r, &w, frame, alloc) {
+            return fail("AtomicCas16: operand not int reg / spill");
+        }
+    }
+    let (s, t) = (Reg(s), Reg(t));
+    let (s1, t1) = (Reg(s.0 + 1), Reg(t.0 + 1));
+    emit(code, enc_ldp_off(s, s1, ep, 0));
+    emit(code, enc_ldp_off(t, t1, dp, 0));
+    emit(
+        code,
+        enc_casp(order.acquires(), order.releases(), s, t, ptr),
+    );
+    emit(code, enc_ldp_off(t, t1, ep, 0));
+    emit(code, enc_cmp_reg(s, t));
+    emit(code, enc_ccmp(s1, t1, 0, Cond::Eq));
+    let flag = scratch.primary;
+    emit(code, enc_cset(flag, Cond::Eq));
+    emit(code, enc_b_cond(Cond::Eq, 2));
+    emit(code, enc_stp_off(s, s1, ep, 0));
+    atomic128_restore_working(code, &w);
+    super::ssa::emit_common::write_atomic_result(
+        &super::ssa::emit_common::Aarch64Backend::default(),
+        code,
+        dst,
+        flag.0,
+        frame,
+    );
+    Ok(())
+}
+
+/// Two even register pairs among the working registers, by first number,
+/// leaving three of them besides.
+fn even_pairs(w: &Work) -> Option<(u8, u8)> {
+    let has = |r: u8| w.iter().any(|x| x.0 == r);
+    let mut pairs = (0..15u8).step_by(2).filter(|&r| has(r) && has(r + 1));
+    Some((pairs.next()?, pairs.next()?))
+}
+
 /// The save area of the seven borrowed working registers.
 const ATOMIC128_SAVE_BYTES: u32 = 64;
 

@@ -44,22 +44,15 @@ impl<'a> Walker<'a> {
         let load_kind = load_kind_for(elem_ty, self.target);
         let store_kind = store_kind_for(elem_ty, self.target);
         let width = type_size_bytes(elem_ty, self.target) as u8;
-        // Every atomic form acts on a 1/2/4/8-byte scalar object, the
-        // widths `__GCC_HAVE_SYNC_COMPARE_AND_SWAP_*` and
-        // `__atomic_is_lock_free` report. A 16-byte object needs the
-        // paired compare-exchange, which the emit does not have, and
-        // two 8-byte accesses would tear, so it is rejected rather than
-        // lowered.
-        // TODO: 16-byte objects via the paired compare-exchange.
+        // An atomic form acts on a 1/2/4/8-byte scalar object, or on a
+        // 16-byte integer through the paired compare-exchange.
+        if self.is_int128_value_ty(elem_ty) && segment_of_object_ty(elem_ty).is_none() {
+            return self.walk_atomic16(b, kind, args, order);
+        }
         if !matches!(width, 1 | 2 | 4 | 8) {
             return Err(WalkError::UnsupportedExpr {
                 id: args[0],
-                kind: if self.is_int128_value_ty(elem_ty) {
-                    "16-byte atomic object needs a paired compare-exchange, \
-                     which this target's emit does not provide"
-                } else {
-                    "atomic operation requires a 1/2/4/8-byte scalar object"
-                },
+                kind: "atomic operation requires a 1/2/4/8-byte scalar object",
             });
         }
         // The atomic instructions carry no segment operand; an atomic
@@ -187,6 +180,135 @@ impl<'a> Walker<'a> {
                 }
             }
         }
+    }
+
+    /// C11 7.17.7 on a 16-byte integer object, through the 16-byte
+    /// compare-exchange: a load is the exchange of zero for zero, which
+    /// leaves the object as it was; a store, an exchange and the
+    /// read-modify-writes retry until the exchange of the prior contents
+    /// for the new value matches. Each value is a 16-byte object's address.
+    fn walk_atomic16(
+        &mut self,
+        b: &mut SsaBuilder,
+        kind: AtomicKind,
+        args: &[ExprId],
+        order: MemOrder,
+    ) -> Result<ValueId, WalkError> {
+        let addr = self.walk_expr_rvalue(b, args[0])?;
+        let zero = |b: &mut SsaBuilder| (b.imm(0), b.imm(0));
+        match kind {
+            AtomicKind::Load | AtomicKind::LoadInto => {
+                let prior = if matches!(kind, AtomicKind::Load) {
+                    let z = zero(b);
+                    self.int128_materialize(b, z)
+                } else {
+                    let ret = self.walk_expr_rvalue(b, args[1])?;
+                    let z = zero(b);
+                    self.int128_store(b, ret, z);
+                    ret
+                };
+                let z = zero(b);
+                let desired = self.int128_materialize(b, z);
+                b.atomic_cas16(addr, prior, desired, order);
+                Ok(if matches!(kind, AtomicKind::Load) {
+                    prior
+                } else {
+                    b.imm(0)
+                })
+            }
+            AtomicKind::Store | AtomicKind::StoreFrom | AtomicKind::Exchange => {
+                let value = if matches!(kind, AtomicKind::StoreFrom) {
+                    let at = self.walk_expr_rvalue(b, args[1])?;
+                    self.int128_load(b, at)
+                } else {
+                    self.int128_operand(b, args[1])?
+                };
+                let (prior, _) = self.cas16_retry(b, addr, order, |_, _, _| value);
+                Ok(if matches!(kind, AtomicKind::Exchange) {
+                    prior
+                } else {
+                    b.imm(0)
+                })
+            }
+            AtomicKind::FetchAdd
+            | AtomicKind::FetchSub
+            | AtomicKind::FetchAnd
+            | AtomicKind::FetchOr
+            | AtomicKind::FetchXor
+            | AtomicKind::AddFetch
+            | AtomicKind::SubFetch
+            | AtomicKind::AndFetch
+            | AtomicKind::OrFetch
+            | AtomicKind::XorFetch => {
+                let value = self.int128_operand(b, args[1])?;
+                let halves = |b: &mut SsaBuilder, op, x: Halves, y: Halves| {
+                    (b.binop(op, x.0, y.0), b.binop(op, x.1, y.1))
+                };
+                let (prior, new) = self.cas16_retry(b, addr, order, |_, b, old| match kind {
+                    AtomicKind::FetchAdd | AtomicKind::AddFetch => Self::int128_add(b, old, value),
+                    AtomicKind::FetchSub | AtomicKind::SubFetch => Self::int128_sub(b, old, value),
+                    AtomicKind::FetchAnd | AtomicKind::AndFetch => {
+                        halves(b, BinOp::And, old, value)
+                    }
+                    AtomicKind::FetchOr | AtomicKind::OrFetch => halves(b, BinOp::Or, old, value),
+                    _ => halves(b, BinOp::Xor, old, value),
+                });
+                let post = matches!(
+                    kind,
+                    AtomicKind::AddFetch
+                        | AtomicKind::SubFetch
+                        | AtomicKind::AndFetch
+                        | AtomicKind::OrFetch
+                        | AtomicKind::XorFetch
+                );
+                Ok(if post { new } else { prior })
+            }
+            AtomicKind::CompareExchangeStrong => {
+                let expected = self.walk_expr_rvalue(b, args[1])?;
+                let desired = self.int128_operand(b, args[2])?;
+                let desired = self.int128_materialize(b, desired);
+                Ok(b.atomic_cas16(addr, expected, desired, order))
+            }
+            AtomicKind::SyncCasVal | AtomicKind::SyncCasBool => {
+                let old = self.int128_operand(b, args[1])?;
+                let prior = self.int128_materialize(b, old);
+                let new = self.int128_operand(b, args[2])?;
+                let desired = self.int128_materialize(b, new);
+                let ok = b.atomic_cas16(addr, prior, desired, order);
+                Ok(if matches!(kind, AtomicKind::SyncCasBool) {
+                    ok
+                } else {
+                    prior
+                })
+            }
+        }
+    }
+
+    /// Exchange the 16-byte object at `addr` for `next(prior)`, retrying
+    /// until the exchange matches; the prior contents and the value stored,
+    /// as 16-byte objects. The first comparand is an unsynchronised read,
+    /// which the exchange checks.
+    fn cas16_retry(
+        &mut self,
+        b: &mut SsaBuilder,
+        addr: ValueId,
+        order: MemOrder,
+        next: impl Fn(&mut Self, &mut SsaBuilder, Halves) -> Halves,
+    ) -> (ValueId, ValueId) {
+        let first = self.int128_load(b, addr);
+        let prior = self.int128_materialize(b, first);
+        let slot = b.alloc_synthetic_struct(16, 16);
+        let desired = b.local_addr(slot);
+        let (retry, done) = (b.new_block(), b.new_block());
+        b.jmp(retry);
+        b.switch_to(retry);
+        let old = self.int128_load(b, prior);
+        let new = next(self, b, old);
+        self.int128_store(b, desired, new);
+        let ok = b.atomic_cas16(addr, prior, desired, order);
+        b.branch_zero(ok, retry, done);
+        b.switch_to(done);
+        (prior, desired)
     }
 
     /// The object a compare-exchange's `expected` operand points to, as a

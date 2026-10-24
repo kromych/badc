@@ -4191,6 +4191,12 @@ fn fp_contract_stays_within_an_expression() {
 }
 
 #[test]
+fn atomic_int128_operations() {
+    // C11 7.17.7 on a 16-byte integer through the paired compare-exchange.
+    assert_eq!(run_fixture("atomic_int128_operations.c"), 0);
+}
+
+#[test]
 fn packed_anon_union_layout() {
     // A trailing `__attribute__((packed))` repacks the fields; the promoted
     // members of an anonymous union must keep overlapping (and a nested

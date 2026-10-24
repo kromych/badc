@@ -510,6 +510,19 @@ pub(crate) enum Inst {
         width: u8,
         order: MemOrder,
     },
+    /// Atomic compare-and-exchange on the 16-byte object at `addr` (C11
+    /// 7.17.7.4): `expected` and `desired` are the addresses of 16-byte
+    /// objects holding the comparand and the replacement. On a mismatch
+    /// the prior contents are written to the object at `expected`. The
+    /// defined value is 1 on a match, else 0. `LOCK CMPXCHG16B` on
+    /// x86_64, `CASP` with the order's acquire and release bits on
+    /// aarch64 (LSE).
+    AtomicCas16 {
+        addr: ValueId,
+        expected: ValueId,
+        desired: ValueId,
+        order: MemOrder,
+    },
     /// Atomic load of the `width`-byte object at `addr` (C11 7.17.7.2),
     /// zero-extended. `order` selects the access: on aarch64 a plain
     /// load for relaxed, the RCpc `ldapr` for acquire and `ldar` for
@@ -764,6 +777,7 @@ impl Inst {
             Inst::Mzero { .. } => "Mzero",
             Inst::AtomicRmw { .. } => "AtomicRmw",
             Inst::AtomicCas { .. } => "AtomicCas",
+            Inst::AtomicCas16 { .. } => "AtomicCas16",
             Inst::AtomicLoad { .. } => "AtomicLoad",
             Inst::AtomicStore { .. } => "AtomicStore",
             Inst::Intrinsic { .. } => "Intrinsic",
@@ -885,6 +899,12 @@ impl Inst {
                 expected,
                 desired,
                 ..
+            }
+            | Inst::AtomicCas16 {
+                addr,
+                expected,
+                desired,
+                ..
             } => {
                 f(*addr);
                 f(*expected);
@@ -992,6 +1012,12 @@ impl Inst {
             }
             Inst::AtomicLoad { addr, .. } => f(addr),
             Inst::AtomicCas {
+                addr,
+                expected,
+                desired,
+                ..
+            }
+            | Inst::AtomicCas16 {
                 addr,
                 expected,
                 desired,
@@ -2634,6 +2660,7 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::Mzero { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
+            | Inst::AtomicCas16 { .. }
             | Inst::AtomicLoad { .. }
             | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }

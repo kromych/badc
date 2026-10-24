@@ -1436,7 +1436,10 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let site_regs = |inst: &Inst| -> u32 {
         if matches!(
             inst,
-            Inst::Mcpy { .. } | Inst::AtomicRmw { .. } | Inst::AtomicCas { .. }
+            Inst::Mcpy { .. }
+                | Inst::AtomicRmw { .. }
+                | Inst::AtomicCas { .. }
+                | Inst::AtomicCas16 { .. }
         ) {
             u32::MAX
         } else if target.is_x86_64() {
@@ -1566,6 +1569,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::Mcpy { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
+            | Inst::AtomicCas16 { .. }
             | Inst::AtomicLoad { .. }
             | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
@@ -1757,6 +1761,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::Mcpy { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
+            | Inst::AtomicCas16 { .. }
             | Inst::AtomicLoad { .. }
             | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
@@ -1894,6 +1899,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                     | Inst::Mcpy { .. }
                     | Inst::AtomicRmw { .. }
                     | Inst::AtomicCas { .. }
+                    | Inst::AtomicCas16 { .. }
                     | Inst::Phi { .. }
             )
         {
@@ -3406,7 +3412,9 @@ fn result_kind(inst: &Inst) -> ResultKind {
         Mzero { .. } => ResultKind::None,
         // C11 7.17.7: the prior value (RMW) / boolean success (CAS) is
         // an integer scalar.
-        AtomicRmw { .. } | AtomicCas { .. } | AtomicLoad { .. } => ResultKind::Int,
+        AtomicRmw { .. } | AtomicCas { .. } | AtomicCas16 { .. } | AtomicLoad { .. } => {
+            ResultKind::Int
+        }
         AtomicStore { .. } => ResultKind::None,
         Intrinsic { kind, .. } => {
             use super::super::op::Intrinsic as I;
@@ -5554,6 +5562,7 @@ int main(void) { return 0; }
                             | Inst::Mcpy { .. }
                             | Inst::AtomicRmw { .. }
                             | Inst::AtomicCas { .. }
+                            | Inst::AtomicCas16 { .. }
                             | Inst::Phi { .. }
                     );
                 match kind {

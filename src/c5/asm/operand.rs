@@ -480,6 +480,9 @@ fn may_write_slot(func: &FunctionSsa, inst: &Inst, off: i64, exposed: bool) -> b
             exposed || names_slot(*addr)
         }
         Inst::AtomicCas { addr, .. } => exposed || names_slot(*addr),
+        Inst::AtomicCas16 { addr, expected, .. } => {
+            exposed || names_slot(*addr) || names_slot(*expected)
+        }
         Inst::InlineAsm { asm, args } => {
             // An asm that neither clobbers memory nor writes an output
             // operand writes nothing.
@@ -523,6 +526,9 @@ fn slot_exposed(func: &FunctionSsa, off: i64) -> bool {
                 desired,
                 ..
             } => *addr == v && *expected != v && *desired != v,
+            // Each operand is a 16-byte object the exchange reads or
+            // writes in place.
+            Inst::AtomicCas16 { .. } => true,
             Inst::InlineAsm { asm, args } => {
                 args.len() == asm.operands.len()
                     && args.iter().zip(&asm.operands).all(|(&a, o)| {
@@ -635,9 +641,12 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
             ) => "a call result",
             Some(Inst::Intrinsic { .. }) => "an intrinsic result",
             Some(Inst::X86Simd { .. }) => "a vector result",
-            Some(Inst::AtomicRmw { .. } | Inst::AtomicCas { .. } | Inst::AtomicLoad { .. }) => {
-                "an atomic result"
-            }
+            Some(
+                Inst::AtomicRmw { .. }
+                | Inst::AtomicCas { .. }
+                | Inst::AtomicCas16 { .. }
+                | Inst::AtomicLoad { .. },
+            ) => "an atomic result",
             Some(Inst::AtomicStore { .. }) => "an atomic store",
             Some(Inst::Mcpy { .. }) => "a block copy",
             Some(Inst::Mzero { .. }) => "a block zero fill",

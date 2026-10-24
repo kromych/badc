@@ -1288,9 +1288,9 @@ impl Preprocessor {
             ),
         );
         // The `__sync_*` builtins lower for these widths, so the
-        // capability macros a lock-free path tests are honest. 16 stays
-        // undefined: a 16-byte compare-exchange has no lowering.
-        for w in [1u32, 2, 4, 8] {
+        // capability macros a lock-free path tests are honest; 16 through
+        // the paired compare-exchange, as gcc and clang define it there.
+        for w in [1u32, 2, 4, 8, 16] {
             self.macros.insert(
                 alloc::format!("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_{w}"),
                 "1".to_string(),

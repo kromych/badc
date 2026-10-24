@@ -337,6 +337,16 @@ fn compute_high_observed_through(
                     observe(&mut hi, &mut work, *desired);
                 }
             }
+            Inst::AtomicCas16 {
+                addr,
+                expected,
+                desired,
+                ..
+            } => {
+                for a in [addr, expected, desired] {
+                    observe(&mut hi, &mut work, *a);
+                }
+            }
             Inst::Phi { .. } => {}
         }
     }

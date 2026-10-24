@@ -102,15 +102,15 @@ fn deliberate_walker_rejection_is_not_an_internal_error() {
     // around, so it reads as an ordinary error; the `internal compiler
     // error` marker stays reserved for a broken invariant.
     let program = super::compile_str(
-        "_Atomic __int128 g;\n\
-         int main(void){ __atomic_store_n(&g, (__int128)1, __ATOMIC_SEQ_CST); return 0; }",
+        "struct T { char c[3]; } g, r;\n\
+         int main(void){ __atomic_load(&g, &r, __ATOMIC_SEQ_CST); return 0; }",
     );
     let err = crate::c5::object::emit_native_single_tu_for_test(
         &program,
         Target::LinuxAarch64,
         NativeOptions::default(),
     )
-    .expect_err("a 16-byte atomic object has no lowering");
+    .expect_err("a 3-byte atomic object has no lowering");
     let msg = format!("{err}");
     assert!(
         !msg.contains("internal compiler error"),
@@ -118,7 +118,7 @@ fn deliberate_walker_rejection_is_not_an_internal_error() {
     );
     assert!(msg.starts_with("error: "), "normal error prefix: {msg}");
     assert!(
-        msg.contains("paired compare-exchange"),
+        msg.contains("1/2/4/8-byte scalar object"),
         "names the missing lowering: {msg}"
     );
     assert!(
@@ -2778,16 +2778,12 @@ fn atomic_compare_exchange_emits_cmpxchg_x86_64() {
     );
 }
 
-/// No atomic form on a 16-byte object lowers: the paired
-/// compare-exchange (x86-64 `cmpxchg16b`, aarch64 `casp` / `ldxp`-`stxp`)
-/// is not emitted, and two 8-byte accesses would tear. Every form must
-/// be rejected with that diagnostic rather than lowered through the
-/// zero-width access `type_size_bytes` yields for the struct-backed
-/// __int128. `__atomic_is_lock_free` reports the same limit, so a
-/// caller can test for it (`atomic_lock_free_widths.c`).
-/// TODO: lower 16-byte objects via the paired compare-exchange.
+/// Every atomic form on a 16-byte object lowers through the paired
+/// compare-exchange: `LOCK CMPXCHG16B` on x86-64 and `CASP` on aarch64,
+/// never two 8-byte accesses, which would tear. The runtime behavior is
+/// `atomic_int128_operations.c`.
 #[test]
-fn atomic128_is_rejected_not_miscompiled() {
+fn atomic128_lowers_to_the_paired_compare_exchange() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     let bodies = [
         "return __atomic_compare_exchange_n(p, e, n, 0, 5, 5);",
@@ -2803,11 +2799,24 @@ fn atomic128_is_rejected_not_miscompiled() {
              int main(){{ return 0; }}"
         );
         let program = super::compile_str_bare(&src);
-        let err = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
-            .unwrap_err();
+        let x64 = emit_native_with_options(&program, Target::LinuxX64, NativeOptions::default())
+            .expect("x86-64");
+        // `F0 REX.W 0F C7` with the /1 operand.
         assert!(
-            err.to_string().contains("16-byte atomic object"),
-            "expected the wide-atomic rejection for `{body}`, got: {err}",
+            x64.windows(5).any(|w| w[0] == 0xF0
+                && w[1] & 0xF8 == 0x48
+                && w[2..4] == [0x0F, 0xC7]
+                && (w[4] >> 3) & 7 == 1),
+            "`{body}`: no CMPXCHG16B"
+        );
+        let a64 =
+            emit_native_with_options(&program, Target::LinuxAarch64, NativeOptions::default())
+                .expect("aarch64");
+        assert!(
+            a64.chunks(4).any(
+                |w| u32::from_le_bytes(w.try_into().unwrap_or([0; 4])) & 0xFFA0_7C00 == 0x4820_7C00
+            ),
+            "`{body}`: no CASP"
         );
     }
 }

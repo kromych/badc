@@ -296,6 +296,7 @@ fn gnu_predefine_set_is_locked() {
         ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1", "1"),
         ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2", "1"),
         ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4", "1"),
+        ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_16", "1"),
         ("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8", "1"),
         ("__GNUC_STDC_INLINE__", "1"),
         ("__STRICT_ANSI__", "1"),
@@ -316,12 +317,6 @@ fn gnu_predefine_set_is_locked() {
     ));
     want.sort();
     assert_eq!(added, want, "the --gnu predefine set changed");
-    // A 16-byte compare-exchange has no lowering, so the width the
-    // `__sync_*` family does not cover stays unclaimed.
-    assert!(
-        !gnu.macros
-            .contains_key("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_16")
-    );
     // `-std=gnu*` drops the ISO-conformance macro and nothing else.
     let mut gnu_dialect = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
     gnu_dialect.enable_gnu(false, false);

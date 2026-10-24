@@ -1816,6 +1816,19 @@ pub(crate) fn enc_cas(acq: bool, rel: bool, rs: Reg, rt: Reg, rn: Reg, width: u8
         | (rt.0 as u32)
 }
 
+/// `CASP{A}{L} <Xs>, <X(s+1)>, <Xt>, <X(t+1)>, [<Xn|SP>]` -- compare and
+/// swap a pair of 64-bit registers (LSE): `rs` and `rt` are even, the
+/// pair at `rs` the comparand and then the prior contents, the pair at
+/// `rt` the replacement.
+pub(crate) fn enc_casp(acq: bool, rel: bool, rs: Reg, rt: Reg, rn: Reg) -> u32 {
+    0x4820_7C00
+        | (u32::from(acq) << 22)
+        | (u32::from(rel) << 15)
+        | ((rs.0 as u32) << 16)
+        | ((rn.0 as u32) << 5)
+        | (rt.0 as u32)
+}
+
 /// `LDAPR{B,H} <Wt>, [<Xn|SP>]` / `LDAPR <Xt>, [<Xn|SP>]` -- load-acquire
 /// RCpc register of `width` bytes, zero-extended (FEAT_LRCPC).
 pub(crate) fn enc_ldapr(rt: Reg, rn: Reg, width: u8) -> u32 {

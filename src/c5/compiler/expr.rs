@@ -804,12 +804,13 @@ impl Compiler {
 
         // `__atomic_is_lock_free(size, ptr)` / `__atomic_always_lock_free`
         // (C11 7.17.5): a compile-time predicate, true for the widths that
-        // lower to a lock-free instruction. A size that is not a constant,
-        // or one with no such form, reports false -- the caller then takes
-        // its locked path, which is correct for every width.
+        // lower to a lock-free instruction, 16 through the paired
+        // compare-exchange as clang reports it. A size that is not a
+        // constant, or one with no such form, reports false -- the caller
+        // then takes its locked path, which is correct for every width.
         if matches!(name, "__atomic_is_lock_free" | "__atomic_always_lock_free") {
             let size = args.first().and_then(|a| self.expr_const_int(*a));
-            let val = matches!(size, Some(1 | 2 | 4 | 8)) as i64;
+            let val = matches!(size, Some(1 | 2 | 4 | 8 | 16)) as i64;
             let pos = self.ast_src_pos();
             let id = self.ast.push_expr(Expr::IntLit { val, ty: int_ty }, pos);
             self.ty = int_ty;

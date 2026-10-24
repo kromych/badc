@@ -429,6 +429,7 @@ fn writes_memory(inst: &Inst) -> bool {
             | Inst::Mzero { .. }
             | Inst::AtomicRmw { .. }
             | Inst::AtomicCas { .. }
+            | Inst::AtomicCas16 { .. }
             | Inst::AtomicLoad { .. }
             | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
@@ -1037,6 +1038,8 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
         Inst::Load { kind, .. } | Inst::LoadLocal { disp: 0, kind, .. } => {
             extend_range(*kind).unwrap_or(UNIVERSE)
         }
+        // A 16-byte exchange yields whether it matched.
+        Inst::AtomicCas16 { .. } => extend_range(LoadKind::U8).unwrap_or(UNIVERSE),
         Inst::AtomicLoad { width, .. } | Inst::AtomicCas { width, .. } => {
             let kind = match width {
                 1 => LoadKind::U8,

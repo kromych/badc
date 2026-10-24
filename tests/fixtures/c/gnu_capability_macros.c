@@ -24,14 +24,12 @@ _Static_assert(__GCC_ATOMIC_LONG_LOCK_FREE == 2, "long");
 _Static_assert(__GCC_ATOMIC_LLONG_LOCK_FREE == 2, "long long");
 _Static_assert(__GCC_ATOMIC_POINTER_LOCK_FREE == 2, "pointer");
 
-// The widths the __sync_* family covers, and the one it does not.
+// The widths the __sync_* family covers.
 _Static_assert(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_1 == 1, "sync 1");
 _Static_assert(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2 == 1, "sync 2");
 _Static_assert(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4 == 1, "sync 4");
 _Static_assert(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8 == 1, "sync 8");
-#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_16
-#error "a 16-byte compare-exchange has no lowering"
-#endif
+_Static_assert(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_16 == 1, "sync 16");
 
 // C11 6.10.8.2 encoding of the u/U literal prefixes.
 _Static_assert(__STDC_UTF_16__ == 1, "utf-16");
@@ -57,8 +55,8 @@ int main(void) {
         || !__atomic_always_lock_free(sizeof(void *), 0)) {
         return 1;
     }
-    // ... and one the macros do not name.
-    if (__atomic_always_lock_free(16, 0)) {
+    // ... and 16, through the paired compare-exchange.
+    if (!__atomic_always_lock_free(16, 0)) {
         return 2;
     }
     // The value __atomic_test_and_set writes is the one the macro states.
@@ -91,6 +89,10 @@ int main(void) {
         return 9;
     }
     if (!__sync_bool_compare_and_swap(&l, 1, 2) || l != 2) {
+        return 10;
+    }
+    unsigned __int128 q = 1;
+    if (!__sync_bool_compare_and_swap(&q, 1, 2) || q != 2) {
         return 10;
     }
     // The 4.3 byte-swap builtins the version claim covers.

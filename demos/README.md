@@ -344,6 +344,14 @@ stoppable via `sc stop`. Build-only; loading needs admin and
 test-signing on the target. Same compiler plumbing as
 `nt_hello`; differs only in entry signature.
 
+## simplevisor/
+
+[SimpleVisor](https://github.com/ionescu007/SimpleVisor), an Intel VT-x
+hypervisor, built from its upstream sources into a `windows-x64`
+native-subsystem `.sys` whose image and ntoskrnl imports the smoke checks;
+a user-mode harness runs its descriptor and MSR decode logic. The driver is
+never loaded. See [`simplevisor/README.md`](./simplevisor/README.md).
+
 ## nt_loader/
 
 Launches user-mode NT-native programs (e.g. `nt_hello`) through a transacted

@@ -109,6 +109,22 @@ __asm__(".text\n"
 
 #endif // _WIN32 && __x86_64__
 
+#if defined(_WIN32) && defined(__aarch64__)
+
+__asm__(".text\n"
+        ".globl __chkstk\n"
+        "__chkstk:\n"
+        "  lsl x16, x15, #4\n"
+        "  mov x17, sp\n"
+        "1:\n"
+        "  sub x17, x17, #4096\n"
+        "  subs x16, x16, #4096\n"
+        "  ldr xzr, [x17]\n"
+        "  b.gt 1b\n"
+        "  ret\n");
+
+#endif // _WIN32 && __aarch64__
+
 #ifdef __linux__
 
 // The shared-library entry points behind the libc_nonshared.a wrappers, bound

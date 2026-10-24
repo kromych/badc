@@ -134,6 +134,11 @@ pub(crate) const R_AARCH64_TLSLE_MOVW_TPREL_G0_NC: u32 = 548;
 pub(crate) const R_AARCH64_TLSLE_ADD_TPREL_HI12: u32 = 549;
 pub(crate) const R_AARCH64_TLSLE_ADD_TPREL_LO12: u32 = 550;
 pub(crate) const R_AARCH64_TLSLE_ADD_TPREL_LO12_NC: u32 = 551;
+pub(crate) const R_AARCH64_TLSLE_LDST8_TPREL_LO12_NC: u32 = 553;
+pub(crate) const R_AARCH64_TLSLE_LDST16_TPREL_LO12_NC: u32 = 555;
+pub(crate) const R_AARCH64_TLSLE_LDST32_TPREL_LO12_NC: u32 = 557;
+pub(crate) const R_AARCH64_TLSLE_LDST64_TPREL_LO12_NC: u32 = 559;
+pub(crate) const R_AARCH64_TLSLE_LDST128_TPREL_LO12_NC: u32 = 571;
 pub(crate) const R_AARCH64_TLSDESC_ADR_PAGE21: u32 = 562;
 pub(crate) const R_AARCH64_TLSDESC_LD64_LO12: u32 = 563;
 pub(crate) const R_AARCH64_TLSDESC_ADD_LO12: u32 = 564;
@@ -146,6 +151,42 @@ pub(crate) const R_AARCH64_TLS_DTPMOD64: u32 = 1028;
 pub(crate) const R_AARCH64_TLS_DTPREL64: u32 = 1029;
 pub(crate) const R_AARCH64_TLS_TPREL64: u32 = 1030;
 pub(crate) const R_AARCH64_TLSDESC: u32 = 1031;
+
+/// The AAELF64 type of an in-page offset in `insn`: `ADD` for an `add`
+/// immediate, `LDST<n>` of an unsigned-offset load / store's access size
+/// (thread-pointer-relative when `tprel`), `None` for another instruction.
+pub(crate) fn aarch64_lo12_rtype(insn: u32, tprel: bool) -> Option<u32> {
+    if insn & 0x7F80_0000 == 0x1100_0000 {
+        return Some(if tprel {
+            R_AARCH64_TLSLE_ADD_TPREL_LO12_NC
+        } else {
+            R_AARCH64_ADD_ABS_LO12_NC
+        });
+    }
+    if insn & 0x3B00_0000 != 0x3900_0000 {
+        return None;
+    }
+    let size = insn >> 30;
+    let vector = (insn >> 26) & 1 != 0;
+    let opc = (insn >> 22) & 3;
+    // A vector access with `size == 0` and `opc<1>` set is 128-bit.
+    let log2 = match (size, vector && opc & 2 != 0) {
+        (0, true) => 4,
+        (s, _) => s,
+    };
+    Some(match (log2, tprel) {
+        (0, false) => R_AARCH64_LDST8_ABS_LO12_NC,
+        (1, false) => R_AARCH64_LDST16_ABS_LO12_NC,
+        (2, false) => R_AARCH64_LDST32_ABS_LO12_NC,
+        (3, false) => R_AARCH64_LDST64_ABS_LO12_NC,
+        (_, false) => R_AARCH64_LDST128_ABS_LO12_NC,
+        (0, true) => R_AARCH64_TLSLE_LDST8_TPREL_LO12_NC,
+        (1, true) => R_AARCH64_TLSLE_LDST16_TPREL_LO12_NC,
+        (2, true) => R_AARCH64_TLSLE_LDST32_TPREL_LO12_NC,
+        (3, true) => R_AARCH64_TLSLE_LDST64_TPREL_LO12_NC,
+        (_, true) => R_AARCH64_TLSLE_LDST128_TPREL_LO12_NC,
+    })
+}
 
 /// Access size in bytes that an `R_AARCH64_LDST<n>_ABS_LO12_NC`
 /// relocation scales its immediate by, or `None` for any other type.
@@ -231,6 +272,8 @@ pub(crate) enum TprelField {
     Add { hi: bool, check: bool },
     /// A MOVW group, as [`aarch64_movw_field`] describes one.
     Movw(u8, bool, Option<u32>),
+    /// An unsigned-offset load / store, bits `[11:0]` scaled by the access size.
+    Ldst(u32),
 }
 
 /// [`TprelField`] of an aarch64 local-exec relocation type. The checked
@@ -250,6 +293,11 @@ pub(crate) fn aarch64_tprel_field(rtype: u32) -> Option<TprelField> {
             hi: false,
             check: false,
         },
+        R_AARCH64_TLSLE_LDST8_TPREL_LO12_NC => TprelField::Ldst(1),
+        R_AARCH64_TLSLE_LDST16_TPREL_LO12_NC => TprelField::Ldst(2),
+        R_AARCH64_TLSLE_LDST32_TPREL_LO12_NC => TprelField::Ldst(4),
+        R_AARCH64_TLSLE_LDST64_TPREL_LO12_NC => TprelField::Ldst(8),
+        R_AARCH64_TLSLE_LDST128_TPREL_LO12_NC => TprelField::Ldst(16),
         R_AARCH64_TLSLE_MOVW_TPREL_G2 => signed(2),
         R_AARCH64_TLSLE_MOVW_TPREL_G1 => signed(1),
         R_AARCH64_TLSLE_MOVW_TPREL_G0 => signed(0),
@@ -788,6 +836,26 @@ mod tests {
         a(
             R_AARCH64_TLSLE_ADD_TPREL_LO12_NC,
             "R_AARCH64_TLSLE_ADD_TPREL_LO12_NC",
+        );
+        a(
+            R_AARCH64_TLSLE_LDST8_TPREL_LO12_NC,
+            "R_AARCH64_TLSLE_LDST8_TPREL_LO12_NC",
+        );
+        a(
+            R_AARCH64_TLSLE_LDST16_TPREL_LO12_NC,
+            "R_AARCH64_TLSLE_LDST16_TPREL_LO12_NC",
+        );
+        a(
+            R_AARCH64_TLSLE_LDST32_TPREL_LO12_NC,
+            "R_AARCH64_TLSLE_LDST32_TPREL_LO12_NC",
+        );
+        a(
+            R_AARCH64_TLSLE_LDST64_TPREL_LO12_NC,
+            "R_AARCH64_TLSLE_LDST64_TPREL_LO12_NC",
+        );
+        a(
+            R_AARCH64_TLSLE_LDST128_TPREL_LO12_NC,
+            "R_AARCH64_TLSLE_LDST128_TPREL_LO12_NC",
         );
         a(R_AARCH64_COPY, "R_AARCH64_COPY");
         a(R_AARCH64_GLOB_DAT, "R_AARCH64_GLOB_DAT");

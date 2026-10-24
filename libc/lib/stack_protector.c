@@ -61,4 +61,45 @@ __asm__(".text\n"
         "  movl $2, %ecx\n"
         "  int $0x29\n");
 
+#elif defined(_WIN32) && defined(__aarch64__)
+
+// MSVC's arm64 `/GS`: `__security_push_cookie` reserves 16 bytes holding sp
+// minus the cookie, `__security_pop_cookie` checks and releases them. Both run
+// with the arguments or the return value live and use x16 and x17 only; a
+// mismatch goes to `__security_check_cookie`.
+unsigned long long __security_cookie = 0x00002B992DDFA232ULL;
+
+__asm__(".text\n"
+        ".globl __security_push_cookie\n"
+        "__security_push_cookie:\n"
+        "  sub sp, sp, #16\n"
+        "  adrp x17, __security_cookie\n"
+        "  ldr x17, [x17, :lo12:__security_cookie]\n"
+        "  sub x17, sp, x17\n"
+        "  str x17, [sp, #8]\n"
+        "  ret\n"
+        ".globl __security_pop_cookie\n"
+        "__security_pop_cookie:\n"
+        "  adrp x17, __security_cookie\n"
+        "  ldr x16, [sp, #8]\n"
+        "  ldr x17, [x17, :lo12:__security_cookie]\n"
+        "  sub x16, sp, x16\n"
+        "  cmp x16, x17\n"
+        "  b.ne 1f\n"
+        "  add sp, sp, #16\n"
+        "  ret\n"
+        "1:\n"
+        "  mov x0, x16\n"
+        "  b __security_check_cookie\n"
+        ".globl __security_check_cookie\n"
+        "__security_check_cookie:\n"
+        "  adrp x17, __security_cookie\n"
+        "  ldr x17, [x17, :lo12:__security_cookie]\n"
+        "  cmp x0, x17\n"
+        "  b.ne 2f\n"
+        "  ret\n"
+        "2:\n"
+        "  mov w0, #2\n"
+        "  brk #0xf003\n");
+
 #endif // __linux__ / __APPLE__ / _WIN32

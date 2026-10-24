@@ -17,7 +17,11 @@ use super::object::{
 use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 use crate::c5::object::elf_reloc_types::{
-    R_PE_ADDR32NB, R_X86_64_32, R_X86_64_64, R_X86_64_PC32, R_X86_64_TPOFF32,
+    R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_PREL_LO21,
+    R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_CONDBR19, R_AARCH64_JUMP26,
+    R_AARCH64_LD_PREL_LO19, R_AARCH64_PREL32, R_AARCH64_TLSLE_ADD_TPREL_HI12,
+    R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_AARCH64_TSTBR14, R_PE_ADDR32NB, R_X86_64_32, R_X86_64_64,
+    R_X86_64_PC32, R_X86_64_TPOFF32, aarch64_lo12_rtype,
 };
 
 const MODULE: &str = "linker::coff_object";
@@ -66,6 +70,22 @@ const IMAGE_REL_AMD64_ADDR32NB: u16 = 0x3;
 const IMAGE_REL_AMD64_REL32: u16 = 0x4;
 const IMAGE_REL_AMD64_REL32_5: u16 = 0x9;
 const IMAGE_REL_AMD64_SECREL: u16 = 0xB;
+
+const IMAGE_REL_ARM64_ABSOLUTE: u16 = 0x0;
+const IMAGE_REL_ARM64_ADDR32: u16 = 0x1;
+const IMAGE_REL_ARM64_ADDR32NB: u16 = 0x2;
+const IMAGE_REL_ARM64_BRANCH26: u16 = 0x3;
+const IMAGE_REL_ARM64_PAGEBASE_REL21: u16 = 0x4;
+const IMAGE_REL_ARM64_REL21: u16 = 0x5;
+const IMAGE_REL_ARM64_PAGEOFFSET_12A: u16 = 0x6;
+const IMAGE_REL_ARM64_PAGEOFFSET_12L: u16 = 0x7;
+const IMAGE_REL_ARM64_SECREL_LOW12A: u16 = 0x9;
+const IMAGE_REL_ARM64_SECREL_HIGH12A: u16 = 0xA;
+const IMAGE_REL_ARM64_SECREL_LOW12L: u16 = 0xB;
+const IMAGE_REL_ARM64_ADDR64: u16 = 0xE;
+const IMAGE_REL_ARM64_BRANCH19: u16 = 0xF;
+const IMAGE_REL_ARM64_BRANCH14: u16 = 0x10;
+const IMAGE_REL_ARM64_REL32: u16 = 0x11;
 
 const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
@@ -765,19 +785,49 @@ fn decode_symbols(
 /// thread-local, or nothing.
 enum Mapped {
     Reloc(u32, i64),
-    SecRel(i64),
+    /// The local-exec form the offset in the TLS block takes.
+    SecRel(u32, i64),
     Skip,
 }
 
-fn amd64_reloc_name(t: u16) -> String {
-    const NAMES: [&str; 17] = [
+/// `IMAGE_REL_<machine>_<NAME>`, for diagnostics.
+fn reloc_name(machine: u16, t: u16) -> String {
+    const AMD64: [&str; 17] = [
         "ABSOLUTE", "ADDR64", "ADDR32", "ADDR32NB", "REL32", "REL32_1", "REL32_2", "REL32_3",
         "REL32_4", "REL32_5", "SECTION", "SECREL", "SECREL7", "TOKEN", "SREL32", "PAIR", "SSPAN32",
     ];
-    match NAMES.get(t as usize) {
-        Some(n) => format!("IMAGE_REL_AMD64_{n}"),
+    const ARM64: [&str; 18] = [
+        "ABSOLUTE",
+        "ADDR32",
+        "ADDR32NB",
+        "BRANCH26",
+        "PAGEBASE_REL21",
+        "REL21",
+        "PAGEOFFSET_12A",
+        "PAGEOFFSET_12L",
+        "SECREL",
+        "SECREL_LOW12A",
+        "SECREL_HIGH12A",
+        "SECREL_LOW12L",
+        "TOKEN",
+        "SECTION",
+        "ADDR64",
+        "BRANCH19",
+        "BRANCH14",
+        "REL32",
+    ];
+    let (prefix, names) = match machine {
+        IMAGE_FILE_MACHINE_AMD64 => ("AMD64", &AMD64[..]),
+        _ => ("ARM64", &ARM64[..]),
+    };
+    match names.get(t as usize) {
+        Some(n) => format!("IMAGE_REL_{prefix}_{n}"),
         None => format!("relocation type {t:#x}"),
     }
+}
+
+fn sign_extend(v: u32, bits: u32) -> i64 {
+    ((v as i64) << (64 - bits)) >> (64 - bits)
 }
 
 /// An `IMAGE_REL_AMD64_*` relocation, its addend read from `field`.
@@ -802,11 +852,104 @@ fn map_amd64(t: u16, field: &[u8], target: &str, site: &str) -> Result<Mapped, C
             let past = (t - IMAGE_REL_AMD64_REL32) as i64;
             Mapped::Reloc(R_X86_64_PC32, i32_at()? - 4 - past)
         }
-        IMAGE_REL_AMD64_SECREL => Mapped::SecRel(i32_at()?),
+        IMAGE_REL_AMD64_SECREL => Mapped::SecRel(R_X86_64_TPOFF32, i32_at()?),
         other => {
             return Err(unsupported(&format!(
                 "{site}: {} against `{target}` is not a relocation the linker translates",
-                amd64_reloc_name(other)
+                reloc_name(IMAGE_FILE_MACHINE_AMD64, other)
+            )));
+        }
+    })
+}
+
+/// An `IMAGE_REL_ARM64_*` relocation. A data form's addend is its field;
+/// an instruction form's is the immediate the instruction holds, in bytes
+/// (an `adrp`'s too, as lld and link.exe read it), and the instruction
+/// names the access size of an in-page offset.
+fn map_arm64(t: u16, field: &[u8], target: &str, site: &str) -> Result<Mapped, C5Error> {
+    let short = || {
+        bad(&format!(
+            "{site}: relocation field runs past section content"
+        ))
+    };
+    let word = || -> Result<u32, C5Error> {
+        Ok(u32::from_le_bytes(
+            field.get(..4).ok_or_else(short)?.try_into().unwrap(),
+        ))
+    };
+    let imm12 = |w: u32| ((w >> 10) & 0xFFF) as i64;
+    let in_page = |w: u32, tprel: bool| -> Result<(u32, i64), C5Error> {
+        let rtype = aarch64_lo12_rtype(w, tprel).ok_or_else(|| {
+            bad(&format!(
+                "{site}: {} patches instruction {w:#010x}, which is neither an `add` \
+                 immediate nor a load / store",
+                reloc_name(IMAGE_FILE_MACHINE_ARM64, t)
+            ))
+        })?;
+        let scale = crate::c5::codegen::aarch64::patch::lo12_access_size(w).unwrap_or(1);
+        Ok((rtype, imm12(w) * scale as i64))
+    };
+    Ok(match t {
+        IMAGE_REL_ARM64_ABSOLUTE => Mapped::Skip,
+        IMAGE_REL_ARM64_ADDR32 => Mapped::Reloc(R_AARCH64_ABS32, word()? as i64),
+        IMAGE_REL_ARM64_ADDR32NB => Mapped::Reloc(R_PE_ADDR32NB, word()? as i32 as i64),
+        IMAGE_REL_ARM64_ADDR64 => {
+            let v = u64::from_le_bytes(field.get(..8).ok_or_else(short)?.try_into().unwrap());
+            Mapped::Reloc(R_AARCH64_ABS64, v as i64)
+        }
+        IMAGE_REL_ARM64_REL32 => Mapped::Reloc(R_AARCH64_PREL32, word()? as i32 as i64 - 4),
+        IMAGE_REL_ARM64_BRANCH26 => {
+            let w = word()?;
+            let rtype = if w & 0x8000_0000 != 0 {
+                R_AARCH64_CALL26
+            } else {
+                R_AARCH64_JUMP26
+            };
+            Mapped::Reloc(rtype, sign_extend(w & 0x03FF_FFFF, 26) << 2)
+        }
+        IMAGE_REL_ARM64_BRANCH19 => {
+            let w = word()?;
+            // `ldr` (literal) shares the field with `b.cond`, `cbz` and `cbnz`.
+            let rtype = if w & 0x3B00_0000 == 0x1800_0000 {
+                R_AARCH64_LD_PREL_LO19
+            } else {
+                R_AARCH64_CONDBR19
+            };
+            Mapped::Reloc(rtype, sign_extend((w >> 5) & 0x7_FFFF, 19) << 2)
+        }
+        IMAGE_REL_ARM64_BRANCH14 => {
+            let w = word()?;
+            Mapped::Reloc(R_AARCH64_TSTBR14, sign_extend((w >> 5) & 0x3FFF, 14) << 2)
+        }
+        IMAGE_REL_ARM64_PAGEBASE_REL21 | IMAGE_REL_ARM64_REL21 => {
+            let w = word()?;
+            let imm = sign_extend(((w >> 3) & 0x1F_FFFC) | ((w >> 29) & 3), 21);
+            let rtype = if t == IMAGE_REL_ARM64_REL21 {
+                R_AARCH64_ADR_PREL_LO21
+            } else {
+                R_AARCH64_ADR_PREL_PG_HI21
+            };
+            Mapped::Reloc(rtype, imm)
+        }
+        IMAGE_REL_ARM64_PAGEOFFSET_12A => Mapped::Reloc(R_AARCH64_ADD_ABS_LO12_NC, imm12(word()?)),
+        IMAGE_REL_ARM64_PAGEOFFSET_12L => {
+            let (rtype, addend) = in_page(word()?, false)?;
+            Mapped::Reloc(rtype, addend)
+        }
+        IMAGE_REL_ARM64_SECREL_HIGH12A => {
+            Mapped::SecRel(R_AARCH64_TLSLE_ADD_TPREL_HI12, imm12(word()?) << 12)
+        }
+        IMAGE_REL_ARM64_SECREL_LOW12A => {
+            Mapped::SecRel(R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, imm12(word()?))
+        }
+        IMAGE_REL_ARM64_SECREL_LOW12L => {
+            let (rtype, addend) = in_page(word()?, true)?;
+            Mapped::SecRel(rtype, addend)
+        }
+        other => {
+            return Err(unsupported(&format!(
+                "{site}: {} against `{target}` is not a relocation the linker translates",
+                reloc_name(IMAGE_FILE_MACHINE_ARM64, other)
             )));
         }
     })
@@ -863,36 +1006,34 @@ fn translate_relocs(
             let field = content.get(at as usize..).unwrap_or(&[]);
             let mapped = match machine {
                 IMAGE_FILE_MACHINE_AMD64 => map_amd64(t, field, target_name, &site)?,
-                _ => {
-                    return Err(unsupported(&format!(
-                        "{site}: arm64 COFF relocations are not translated"
-                    )));
-                }
+                _ => map_arm64(t, field, target_name, &site)?,
             };
             let offset = s.base + at as u64;
             let (rtype, addend) = match mapped {
                 Mapped::Skip => continue,
                 Mapped::Reloc(rtype, addend) => (rtype, addend),
-                Mapped::SecRel(addend)
+                // The variable's offset in the TLS block, which the TEB
+                // sequence adds to the block's base: its local-exec offset.
+                Mapped::SecRel(rtype, addend)
                     if s.family == SectionFamily::Text
                         && matches!(
                             target.section,
                             NativeSymSection::Tls | NativeSymSection::Undef
                         ) =>
                 {
-                    // The variable's offset in the TLS block, which the TEB
-                    // sequence adds to the block's base: its local-exec offset.
-                    (R_X86_64_TPOFF32, addend)
+                    (rtype, addend)
                 }
-                Mapped::SecRel(_) => {
+                Mapped::SecRel(..) => {
                     return Err(unsupported(&format!(
                         "{site}: {} against `{target_name}` is not a thread-local access in code",
-                        amd64_reloc_name(t)
+                        reloc_name(machine, t)
                     )));
                 }
             };
             if s.init.is_some() {
-                if rtype != R_X86_64_64 || target.section != NativeSymSection::Text {
+                if !matches!(rtype, R_X86_64_64 | R_AARCH64_ABS64)
+                    || target.section != NativeSymSection::Text
+                {
                     return Err(unsupported(&format!(
                         "{site}: a constructor table entry must be the address of a function \
                          this object defines"
@@ -1482,6 +1623,69 @@ mod tests {
         assert!(err.contains("COFF machine 0x014c"), "{err}");
         assert!(!is_coff_object(&object(0x014C, &[], &[])));
         assert!(is_coff_object(&object(AMD64, &[], &[])));
+    }
+
+    /// arm64 keeps an instruction form's addend in its immediate, in bytes
+    /// (an `adrp`'s too); a branch's form follows its opcode, an in-page
+    /// offset's its access size, and `SECREL` of a thread-local takes the
+    /// local-exec form.
+    #[test]
+    fn each_arm64_form_reads_its_addend_from_the_instruction() {
+        let words: [u32; 10] = [
+            0x9400_0002,                        // bl .+8: BRANCH26
+            0x1400_0000,                        // b: BRANCH26
+            0x9000_0008 | (2 << 29) | (1 << 5), // adrp x8, sym+6
+            0xF940_0508,                        // ldr x8, [x8, #8]: PAGEOFFSET_12L
+            0x3940_0508,                        // ldrb w8, [x8, #1]
+            0x5400_0040,                        // b.eq .+8: BRANCH19
+            0x3600_0040,                        // tbz w0, #0, .+8: BRANCH14
+            0x9140_0108,                        // add x8, x8, #0, lsl #12: SECREL_HIGH12A
+            0xB940_0109,                        // ldr w9, [x8, #0]: SECREL_LOW12L
+            0,                                  // REL32
+        ];
+        let code: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+        let relocs = [
+            (0, 0, 0x3),
+            (4, 0, 0x3),
+            (8, 0, 0x4),
+            (12, 0, 0x7),
+            (16, 0, 0x7),
+            (20, 0, 0xF),
+            (24, 0, 0x10),
+            (28, 1, 0xA),
+            (32, 1, 0xB),
+            (36, 0, 0x11),
+        ];
+        let tls = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_WRITE | 0x0030_0000;
+        let o = parse_native_coff(&object(
+            IMAGE_FILE_MACHINE_ARM64,
+            &[
+                with(sec(".text", TEXT, &code), &relocs),
+                sec(".tls$", tls, &[0; 4]),
+            ],
+            &[
+                sym("f", 0, 0, IMAGE_SYM_CLASS_EXTERNAL),
+                sym("t", 0, 2, IMAGE_SYM_CLASS_EXTERNAL),
+            ],
+        ))
+        .unwrap();
+        use crate::c5::object::elf_reloc_types::*;
+        let got: Vec<_> = o.text_relocs.iter().map(|r| (r.rtype, r.addend)).collect();
+        assert_eq!(
+            got,
+            [
+                (R_AARCH64_CALL26, 8),
+                (R_AARCH64_JUMP26, 0),
+                (R_AARCH64_ADR_PREL_PG_HI21, 6),
+                (R_AARCH64_LDST64_ABS_LO12_NC, 8),
+                (R_AARCH64_LDST8_ABS_LO12_NC, 1),
+                (R_AARCH64_CONDBR19, 8),
+                (R_AARCH64_TSTBR14, 8),
+                (R_AARCH64_TLSLE_ADD_TPREL_HI12, 0),
+                (R_AARCH64_TLSLE_LDST32_TPREL_LO12_NC, 0),
+                (R_AARCH64_PREL32, -4),
+            ]
+        );
     }
 
     /// A section name past eight bytes is a `/<offset>` into the string

@@ -5712,6 +5712,13 @@ fn apply_tprel_reloc(
             }
             patch::movw_word(word, group, signed, value)
         }
+        TprelField::Ldst(scale) => {
+            let in_page = value & 0xfff;
+            if in_page % scale as i64 != 0 {
+                return Err(site.misaligned(in_page, scale));
+            }
+            (word & !(0xfff << 10)) | (((in_page / scale as i64) as u32) << 10)
+        }
     };
     text[patch_offset..patch_offset + 4].copy_from_slice(&word.to_le_bytes());
     Ok(())
@@ -6201,6 +6208,25 @@ mod tests {
                 reloc_desc(NativeMachine::Aarch64, rtype),
             );
         }
+    }
+
+    /// A local-exec load / store takes its offset's bits `[11:0]` scaled by the
+    /// access size (AAELF64 `TLSLE_LDST<n>_TPREL_LO12_NC`); a misaligned one fails.
+    #[test]
+    fn aarch64_tprel_load_store_scales_its_offset() {
+        use crate::c5::object::elf_reloc_types::R_AARCH64_TLSLE_LDST32_TPREL_LO12_NC;
+        let ldr = 0xB940_0109u32; // ldr w9, [x8]
+        let s = site(
+            NativeMachine::Aarch64,
+            R_AARCH64_TLSLE_LDST32_TPREL_LO12_NC,
+            0,
+        );
+        let mut text = ldr.to_le_bytes().to_vec();
+        apply_tprel_reloc(&mut text, 0, 0x1234, &s).expect("aligned offset");
+        let word = u32::from_le_bytes(text[..4].try_into().unwrap());
+        assert_eq!(word, ldr | ((0x234 / 4) << 10));
+        let mut text = ldr.to_le_bytes().to_vec();
+        assert!(apply_tprel_reloc(&mut text, 0, 0x1236, &s).is_err());
     }
 
     /// `R_AARCH64_ADR_PREL_LO21` splits its displacement across immlo

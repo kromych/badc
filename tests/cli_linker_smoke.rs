@@ -8591,9 +8591,13 @@ fn windows_clang() -> Option<std::ffi::OsString> {
 
 /// mingw-w64 gcc for x86-64: on the path, else in an msys2 installation's
 /// `mingw64` / `ucrt64` environment at a drive's root. Its `bin` directory
-/// joins the path its tools run with, as msys2's shell sets.
-#[cfg(all(windows, target_arch = "x86_64"))]
+/// joins the path its tools run with, as msys2's shell sets. msys2 builds
+/// no gcc targeting arm64.
+#[cfg(windows)]
 fn mingw_gcc() -> Option<(PathBuf, std::ffi::OsString)> {
+    if !cfg!(target_arch = "x86_64") {
+        return None;
+    }
     let installed = ('C'..='Z').flat_map(|d| {
         ["mingw64", "ucrt64"].map(|env| PathBuf::from(format!(r"{d}:\msys64\{env}\bin\gcc.exe")))
     });
@@ -9444,7 +9448,7 @@ fn dllimport_references_read_the_import_address_slot() {
 // cookie), and, from GNU compilers, a constructor and a weak definition
 // badc's strong one overrides. `main` exits with the number of the first
 // check that fails.
-#[cfg(all(windows, target_arch = "x86_64"))]
+#[cfg(windows)]
 const COFF_PEER_SRC: &str = r#"
 extern int badc_counter;
 extern int badc_twice(int);
@@ -9509,7 +9513,7 @@ int peer_overridden(void);
 int peer_call_overridden(void) { return peer_overridden(); }
 "#;
 
-#[cfg(all(windows, target_arch = "x86_64"))]
+#[cfg(windows)]
 const COFF_MAIN_SRC: &str = r#"
 #include <string.h>
 int badc_counter = 1;
@@ -9563,7 +9567,7 @@ int main(void)
 /// A badc `main` links with a COFF object from each Windows compiler the
 /// host has -- clang for the msvc and gnu triples, MSVC's `cl`, mingw-w64 gcc
 /// -- at their unoptimized and optimized levels, and the program runs.
-#[cfg(all(windows, target_arch = "x86_64"))]
+#[cfg(windows)]
 #[test]
 fn coff_objects_from_the_windows_compilers_link_with_a_badc_main() {
     let dir = tempdir("coff-interop");

@@ -75,16 +75,10 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         reloc_opts,
         pool_loaded: false,
     };
-    // `#pragma entrypoint(<name>)` overrides the default
-    // `main`. The pragma is per-TU; the first TU that
-    // surfaces a non-default entry wins. C99 leaves the
-    // hosted-environment entry-point name to implementations
-    // (5.1.2.2.1), so the standard doesn't pick between
-    // multi-TU pragmas.
+    // `#pragma entrypoint(<name>)` names the entry function (C99 5.1.2.2.1), the
+    // first unit's winning; without one `program_entry` chooses.
     // A CLI `--entry=` / `--subsystem=` seeds the override and wins
     // over any per-TU pragma (the loop below only fills a `None`).
-    // This is also the sole source of an entry / subsystem when the
-    // inputs are precompiled `.o` files with no source pragma.
     let mut entry_override: Option<String> = cli.link.entry.clone();
     // `#pragma subsystem(<kind>)` selects the Windows PE subsystem.
     // Like the entry pragma it is per-TU; the first TU that names
@@ -143,12 +137,8 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
             .unwrap_or("__c5_entry")
             .to_string()
     });
-    // gcc's order: the startup runtime where crt1.o stands, then the
-    // inputs as the command line gives them.
-    let mut runtime = Vec::new();
-    embedded.push_runtime(entry_override.as_deref(), subsystem_override, &mut runtime);
-    let mut slots = vec![Slot::Fixed(runtime)];
-    stats.mark("runtime");
+    // gcc's order: the startup runtime where crt1.o stands, then the inputs.
+    let mut slots = vec![Slot::Fixed(Vec::new())];
     let mut source_slots = vec![0; sources.len()];
     for input in ordered {
         let slot = match input {
@@ -175,6 +165,13 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         slots.push(slot);
     }
     stats.mark("parse");
+    if entry_override.is_none() && cli.mode != Mode::SharedLibrary {
+        entry_override = program_entry(&slots, cli.target).map(str::to_string);
+    }
+    let mut runtime = Vec::new();
+    embedded.push_runtime(entry_override.as_deref(), subsystem_override, &mut runtime);
+    slots[0] = Slot::Fixed(runtime);
+    stats.mark("runtime");
     rebind_auto_includes(
         &cfg,
         &mut embedded,
@@ -559,6 +556,35 @@ impl Slot {
             pulled: Vec::new(),
         }
     }
+
+    /// The objects the slot holds or may pull.
+    fn objects(&self) -> impl Iterator<Item = &badc::NativeObject> {
+        let (fixed, members): (&[_], &[_]) = match self {
+            Slot::Fixed(objs) => (objs, &[]),
+            Slot::Lazy { members, .. } => (&[], members),
+            Slot::Shared(_) | Slot::Group(_) => (&[], &[]),
+        };
+        fixed.iter().chain(members.iter().flatten())
+    }
+}
+
+/// A PE program's entry function as link.exe chooses it: `main`, else `wmain`,
+/// `WinMain`, `wWinMain`, defined by any input; `None` is `main`.
+fn program_entry(slots: &[Slot], target: badc::Target) -> Option<&'static str> {
+    if target.binary_format() != badc::BinaryFormat::Pe {
+        return None;
+    }
+    let defines = |name: &str| {
+        (slots.iter().flat_map(Slot::objects)).any(|o| {
+            o.symbols.iter().any(|s| {
+                s.name == name && s.binding != 0 && s.section == badc::NativeSymSection::Text
+            })
+        })
+    };
+    ["main", "wmain", "WinMain", "wWinMain"]
+        .into_iter()
+        .find(|n| defines(n))
+        .filter(|&n| n != "main")
 }
 
 /// C89 6.3.2.2 link semantics: a definition anywhere in the link set

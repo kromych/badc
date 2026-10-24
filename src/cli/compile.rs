@@ -369,14 +369,8 @@ pub(crate) fn compile_native_tu(
         Ok(p) => p,
         Err(()) => return (log, Err(())),
     };
-    // Prefer the literal `#pragma entrypoint(<name>)` over the
-    // in-TU-resolved `entry_name`: in a multi-TU freestanding link the
-    // named entry is often defined in a different TU, so `entry_name` is
-    // `None` here while the pragma still fixes the image entry.
-    let entry = program
-        .entry_pragma
-        .clone()
-        .or_else(|| program.entry_name.clone());
+    // A unit names the entry by `#pragma entrypoint` alone; the link picks the default.
+    let entry = program.entry_pragma.clone();
     let subsystem = program.subsystem;
     let auto_includes = program.auto_includes.clone();
     match badc::emit_native_reporting(program, cfg.target, cfg.reloc_opts.clone(), None) {

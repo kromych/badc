@@ -1341,6 +1341,82 @@ fn compile_only_warns_when_link_pragmas_are_dropped() {
     assert!(!plain.contains("warning"), "stderr: {plain}");
 }
 
+/// A PE program's entry function is the first of `main`, `wmain`, `WinMain`
+/// and `wWinMain` its source, object or archive member defines, as link.exe
+/// chooses; the ELF startup calls `main` alone, as glibc's does.
+#[test]
+fn a_pe_programs_entry_function_is_the_one_its_inputs_define() {
+    let dir = tempdir("pe-entry-function");
+    let units = [
+        (
+            "wm",
+            "#include <wchar.h>\n\
+             int __cdecl wmain(int argc, wchar_t *argv[])\n\
+             { return argc == 1 && argv[0][0] != 0 ? 0 : 1; }\n",
+        ),
+        (
+            "winm",
+            "#include <windows.h>\n\
+             int WINAPI WinMain(HINSTANCE h, HINSTANCE p, LPSTR cmd, int show)\n\
+             { return h != 0 && p == 0 && cmd != 0 ? 0 : 1; }\n",
+        ),
+        (
+            "wwinm",
+            "#include <windows.h>\n\
+             int WINAPI wWinMain(HINSTANCE h, HINSTANCE p, LPWSTR cmd, int show)\n\
+             { return h != 0 && p == 0 && cmd != 0 ? 0 : 1; }\n",
+        ),
+    ];
+    let host = if cfg!(target_arch = "x86_64") {
+        "windows-x64"
+    } else {
+        "windows-arm64"
+    };
+    for target in ["windows-x64", "windows-arm64"] {
+        for (name, body) in units {
+            let src = write_source(&dir, &format!("{name}.c"), body);
+            let obj = dir.join(format!("{name}-{target}.o"));
+            let lib = dir.join(format!("lib{name}-{target}.a"));
+            let badc_for = || {
+                let mut c = Command::new(badc());
+                c.arg(format!("--target={target}")).current_dir(&dir);
+                c
+            };
+            run(
+                badc_for().arg("-c").arg(&src).arg("-o").arg(&obj),
+                "compile -c",
+            );
+            run(
+                badc_for().arg("--ar").arg("-o").arg(&lib).arg(&obj),
+                "archive",
+            );
+            let inputs: [&[&str]; 3] = [
+                &[&format!("{name}.c")],
+                &[&format!("{name}-{target}.o")],
+                &["-L.", &format!("-l{name}-{target}")],
+            ];
+            for (k, args) in inputs.iter().enumerate() {
+                let exe = dir.join(format!("{name}-{target}-{k}.exe"));
+                run(badc_for().args(*args).arg("-o").arg(&exe), "link");
+                if cfg!(windows) && target == host {
+                    let status = Command::new(&exe).status().expect("run the image");
+                    assert_eq!(status.code(), Some(0), "{name} {target} input {k}");
+                }
+            }
+        }
+    }
+    let out = Command::new(badc())
+        .args(["--target=linux-x64", "wm.c", "-o", "wm"])
+        .current_dir(&dir)
+        .output()
+        .expect("run badc");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success() && err.contains("undefined reference to `main`"),
+        "{err}"
+    );
+}
+
 #[test]
 fn unresolved_extern_function_fails_link() {
     let dir = tempdir("unresolved");

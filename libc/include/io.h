@@ -10,6 +10,10 @@
 #pragma dylib(msvcrt, "msvcrt.dll")
 #pragma binding(msvcrt::_open,    "_open")
 #pragma binding(msvcrt::_wopen,   "_wopen")
+#pragma binding(msvcrt::_sopen,   "_sopen")
+#pragma binding(msvcrt::_wsopen,  "_wsopen")
+#pragma binding(msvcrt::_sopen_s, "_sopen_s")
+#pragma binding(msvcrt::_wsopen_s, "_wsopen_s")
 #pragma binding(msvcrt::_close,   "_close")
 #pragma binding(msvcrt::_read,    "_read")
 #pragma binding(msvcrt::_write,   "_write")
@@ -35,6 +39,10 @@
 // The mode is read only with _O_CREAT.
 int       _open(const char *path, int oflag, ...);
 int       _wopen(const wchar_t *path, int oflag, ...);
+int       _sopen(const char *path, int oflag, int shflag, ...);
+int       _wsopen(const wchar_t *path, int oflag, int shflag, ...);
+int       _sopen_s(int *pfh, const char *path, int oflag, int shflag, int pmode);
+int       _wsopen_s(int *pfh, const wchar_t *path, int oflag, int shflag, int pmode);
 int       _close(int fd);
 int       _read(int fd, void *buf, unsigned int count);
 int       _write(int fd, void *buf, unsigned int count);

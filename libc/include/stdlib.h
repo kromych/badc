@@ -220,6 +220,12 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(msvcrt::wctomb,    "wctomb")
 #pragma binding(msvcrt::mbstowcs,  "mbstowcs")
 #pragma binding(msvcrt::wcstombs,  "wcstombs")
+#pragma binding(msvcrt::mbstowcs_s, "mbstowcs_s")
+#pragma binding(msvcrt::wcstombs_s, "wcstombs_s")
+int mbstowcs_s(size_t *pconverted, wchar_t *dst, size_t dstsz, const char *src,
+               size_t count);
+int wcstombs_s(size_t *pconverted, char *dst, size_t dstsz, const wchar_t *src,
+               size_t count);
 // CRT data exports: the system error table and the wide / narrow
 // process environment blocks.
 #pragma binding(data msvcrt::_sys_nerr,    "_sys_nerr")

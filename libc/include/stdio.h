@@ -338,6 +338,10 @@ typedef struct __c5_fpos_t fpos_t;
 // MultiByteToWideChar and then calls _wfopen. The Windows CRT
 // spells the entry point with the leading underscore.
 #pragma binding(msvcrt::_wfopen,   "_wfopen")
+#pragma binding(msvcrt::_fsopen,   "_fsopen")
+#pragma binding(msvcrt::_wfsopen,  "_wfsopen")
+#pragma binding(msvcrt::freopen_s, "freopen_s")
+#pragma binding(msvcrt::_wfreopen_s, "_wfreopen_s")
 // `_wpopen` / `_pclose` drive a command pipe whose command line
 // needs UTF-16. The Windows CRT spells the popen entry point with a
 // leading underscore on both the byte-string and wide-string
@@ -610,6 +614,10 @@ int dprintf(int fd, const char *fmt, ...);
 int vdprintf(int fd, const char *fmt, __builtin_va_list ap);
 #ifdef _WIN32
 FILE *_wfopen(unsigned short *path, unsigned short *mode);
+FILE *_fsopen(const char *path, const char *mode, int shflag);
+FILE *_wfsopen(const wchar_t *path, const wchar_t *mode, int shflag);
+int   freopen_s(FILE **pfile, const char *path, const char *mode, FILE *stream);
+int   _wfreopen_s(FILE **pfile, const wchar_t *path, const wchar_t *mode, FILE *stream);
 FILE *_wpopen(unsigned short *cmd, unsigned short *mode);
 FILE *_popen(char *cmd, char *mode);
 int   _pclose(FILE *stream);

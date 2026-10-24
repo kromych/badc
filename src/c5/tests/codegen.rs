@@ -1559,6 +1559,51 @@ fn windows_generic_names_follow_unicode() {
     }
 }
 
+/// `<share.h>`'s sharing modes, the sharing opens `_sopen_s` / `_fsopen`,
+/// `freopen_s` and the checked `mbstowcs_s` / `wcstombs_s` are declared in
+/// the headers mingw-w64 declares them in, with its types and values, and
+/// import msvcrt.dll's entry points; the generic `FindFirstFile` /
+/// `WIN32_FIND_DATA` and `_TEXT` compile beside them.
+#[test]
+fn windows_sharing_opens_and_checked_conversions_import_msvcrt() {
+    const SRC: &str = "#include <windows.h>\n#include <tchar.h>\n#include <share.h>\n\
+        #include <stdio.h>\n#include <stdlib.h>\n#include <io.h>\n\
+        _Static_assert(_SH_COMPAT == 0 && _SH_DENYRW == 0x10 && _SH_DENYWR == 0x20 &&\n\
+            _SH_DENYRD == 0x30 && _SH_DENYNO == 0x40 && _SH_SECURE == 0x80 &&\n\
+            SH_DENYNO == _SH_DENYNO, \"\");\n\
+        int main(void)\n{\n\
+            WIN32_FIND_DATA fd;\n\
+            HANDLE h = FindFirstFile(_TEXT(\"*\"), &fd);\n\
+            wchar_t w[8];\n\
+            char c[8];\n\
+            size_t n;\n\
+            int fh;\n\
+            FILE *f, *g;\n\
+            if (h != INVALID_HANDLE_VALUE)\n\
+                FindClose(h);\n\
+            mbstowcs_s(&n, w, 8, \"abc\", 3);\n\
+            wcstombs_s(&n, c, 8, w, 3);\n\
+            _sopen_s(&fh, \"nul\", 0, _SH_DENYNO, 0);\n\
+            f = _fsopen(\"nul\", \"r\", _SH_DENYNO);\n\
+            return f && freopen_s(&g, \"nul\", \"r\", f) ? 0 : 1;\n\
+        }\n";
+    const M: &str = "msvcrt.dll";
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        assert_windows_unit_imports(
+            target,
+            SRC,
+            &[
+                ("FindFirstFileA", "kernel32.dll"),
+                ("mbstowcs_s", M),
+                ("wcstombs_s", M),
+                ("_sopen_s", M),
+                ("_fsopen", M),
+                ("freopen_s", M),
+            ],
+        );
+    }
+}
+
 /// `<stringapiset.h>` included alone declares the string comparison,
 /// folding, classification and conversion calls mingw-w64's declares, and
 /// the A forms its `<winnls.h>` adds, each imported from kernel32.dll; the

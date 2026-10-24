@@ -9,12 +9,13 @@ use alloc::vec::Vec;
 use hashbrown::{HashMap, HashSet};
 
 use super::got::{PLT_ENTRY_SIZE, index_map};
+use super::symtab::most_constraining;
 use super::{
     Att, DynReloc, EM_386, EM_AARCH64, LdsEmit, LdsLinker, SHF_ALLOC, SHF_WRITE, SHN_ABS,
     SHN_UNDEF, SHT_REL, SHT_RELA, STB_GLOBAL, STB_LOCAL, STT_NOTYPE, STT_OBJECT, STV_DEFAULT,
-    SYNTH_DYNAMIC, SYNTH_DYNSTR, SYNTH_DYNSYM, SYNTH_GNU_HASH, SYNTH_GOT, SYNTH_HASH, SYNTH_PLT,
-    SYNTH_REL, SYNTH_RELA, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM, ScriptSym, SecFate,
-    machine_uses_rela,
+    STV_HIDDEN, STV_INTERNAL, SYNTH_DYNAMIC, SYNTH_DYNSTR, SYNTH_DYNSYM, SYNTH_GNU_HASH, SYNTH_GOT,
+    SYNTH_HASH, SYNTH_PLT, SYNTH_REL, SYNTH_RELA, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM,
+    ScriptSym, SecFate, machine_uses_rela,
 };
 
 impl<'a> LdsLinker<'a> {
@@ -312,9 +313,10 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// Defined symbols a loader may resolve against, as bfd selects
-    /// them: global or weak, not hidden, and kept by the version
-    /// script. Each version definition also contributes a symbol
-    /// naming itself.
+    /// them: global or weak, neither hidden nor internal by any input's
+    /// entry, and kept by the version script. A protected one carries
+    /// its visibility. Each version definition also contributes a
+    /// symbol naming itself.
     fn collect_dyn_exports(&self, out_shndx: &dyn Fn(usize) -> u16) -> Vec<DynSym> {
         // Imports come first and in their own order: a dynamic
         // relocation names one by the index that ordering fixes.
@@ -338,7 +340,8 @@ impl<'a> LdsLinker<'a> {
                 continue;
             }
             let (obj_i, sym_i) = self.globals[name];
-            if self.objects[obj_i].symbols[sym_i].other & 0x3 != STV_DEFAULT {
+            let vis = self.visibility_of(name);
+            if matches!(vis, STV_INTERNAL | STV_HIDDEN) {
                 continue;
             }
             let Some(v) = self.version_of(name) else {
@@ -348,7 +351,7 @@ impl<'a> LdsLinker<'a> {
                 out.push(DynSym {
                     name: fs.name,
                     info: fs.info,
-                    other: fs.other,
+                    other: (fs.other & !0x3) | vis,
                     shndx: fs.shndx,
                     value: fs.value,
                     size: fs.size,
@@ -359,7 +362,8 @@ impl<'a> LdsLinker<'a> {
         let mut script_syms: Vec<(&String, &ScriptSym)> = self.script_now.iter().collect();
         script_syms.sort_by(|a, b| a.0.cmp(b.0));
         for (name, s) in script_syms {
-            if s.hidden {
+            let vis = most_constraining(self.visibility_of(name), s.vis.unwrap_or(STV_DEFAULT));
+            if s.hidden || matches!(vis, STV_INTERNAL | STV_HIDDEN) {
                 continue;
             }
             let Some(v) = self.version_of(name) else {
@@ -373,7 +377,7 @@ impl<'a> LdsLinker<'a> {
             out.push(DynSym {
                 name: name.clone(),
                 info: (STB_GLOBAL << 4) | s.kind,
-                other: STV_DEFAULT,
+                other: vis,
                 shndx,
                 value: s.val.v,
                 size: 0,

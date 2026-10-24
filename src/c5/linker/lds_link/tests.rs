@@ -5085,3 +5085,125 @@ fn an_elf32_group_parses_and_deduplicates() {
         "one thunk body: {text:02x?}"
     );
 }
+
+// ------------------------------------- shared-object symbol binding
+
+/// A `-shared` layout naming every dynamic table, the PLT and the GOT,
+/// with symbols the script defines, plain, provided and hidden.
+const SHARED_SCRIPT: &str = r#"
+SECTIONS {
+  . = SIZEOF_HEADERS;
+  .hash : { *(.hash) }
+  .gnu.hash : { *(.gnu.hash) }
+  .dynsym : { *(.dynsym) }
+  .dynstr : { *(.dynstr) }
+  .rela.dyn : { *(.rela.*) }
+  .plt : { *(.plt) *(.plt.*) }
+  .text : { *(.text*) }
+  .rodata : { *(.rodata*) }
+  . = ALIGN(0x10000);
+  .dynamic : { *(.dynamic) }
+  .got : { *(.got) *(.igot) }
+  .got.plt : { *(.got.plt) *(.igot.plt) }
+  .data : { *(.data*) }
+  mysec : { *(mysec) }
+  .bss : { *(.bss*) }
+  script_sym = .;
+  hid_ref_sym = .;
+  prot_ref_sym = .;
+  PROVIDE(prov_sym = .);
+  HIDDEN(hid_sym = .);
+}
+"#;
+
+fn shared_opts(machine: u16) -> LdsOptions {
+    LdsOptions {
+        emit: LdsEmit::Dyn,
+        shared: true,
+        max_page_size: if machine == EM_AARCH64 {
+            0x10000
+        } else {
+            0x1000
+        },
+        ..Default::default()
+    }
+}
+
+/// `.dynsym` as `(name, st_info, st_other)`, in table order.
+fn dynsym_entries(image: &[u8]) -> Vec<(String, u8, u8)> {
+    let (_, syms) = image_section(image, ".dynsym");
+    let (_, strtab) = image_section(image, ".dynstr");
+    syms.as_chunks::<24>()
+        .0
+        .iter()
+        .map(|e| {
+            let name = u32::from_le_bytes(e[..4].try_into().unwrap()) as usize;
+            (strz(&strtab, name), e[4], e[5])
+        })
+        .collect()
+}
+
+/// System V gABI, symbol visibility: a global takes the most
+/// constraining visibility among its definition and its references.
+/// Measured against GNU ld 2.46.1 `-shared -T`: a definition one
+/// reference declares hidden stays out of `.dynsym`, one a reference
+/// or its definition declares protected is exported as protected, and
+/// so are the `__start_` / `__stop_` bounds; a script symbol follows
+/// its references the same way.
+#[test]
+fn a_dynamic_symbol_takes_the_most_constraining_visibility() {
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let defs = TestObj::new()
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0xc3; 16],
+        )
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[1; 8])
+        .sec("mysec", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[1; 8])
+        .sym("func", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+        .sym("pfunc", STB_GLOBAL, STT_FUNC, 0, 4, 1)
+        .vis(STV_PROTECTED)
+        .sym("u", STB_GLOBAL, STT_FUNC, 0, 8, 1)
+        .sym("data", STB_GLOBAL, STT_OBJECT, 1, 0, 8)
+        .build(EM_X86_64);
+    let names = [
+        ("data", STV_HIDDEN),
+        ("func", STV_PROTECTED),
+        ("__start_mysec", STV_DEFAULT),
+        ("hid_ref_sym", STV_HIDDEN),
+        ("prot_ref_sym", STV_PROTECTED),
+        ("script_sym", STV_DEFAULT),
+    ];
+    let mut refs = TestObj::new().sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 48]);
+    for (k, (name, vis)) in names.iter().enumerate() {
+        // Symtab: null(0), the section(1), then the names in order.
+        refs = refs
+            .sym(name, STB_GLOBAL, STT_NOTYPE, usize::MAX, 0, 0)
+            .vis(*vis)
+            .reloc(0, 8 * k as u64, 2 + k as u32, rt::R_X86_64_64, 0);
+    }
+    let objs = alloc::vec![
+        parse_lds_object("defs.o", defs).expect("parses"),
+        parse_lds_object("refs.o", refs.build(EM_X86_64)).expect("parses"),
+    ];
+    let res = link_with_script(&script, objs, &shared_opts(EM_X86_64)).expect("links");
+    let dynsym = dynsym_entries(&res.image);
+    let vis = |name: &str| dynsym.iter().find(|e| e.0 == name).map(|e| e.2 & 0x3);
+    for (name, want) in [
+        ("func", Some(STV_PROTECTED)),
+        ("pfunc", Some(STV_PROTECTED)),
+        ("u", Some(STV_DEFAULT)),
+        ("data", None),
+        ("__start_mysec", Some(STV_PROTECTED)),
+        ("hid_ref_sym", None),
+        ("prot_ref_sym", Some(STV_PROTECTED)),
+        ("script_sym", Some(STV_DEFAULT)),
+        ("prov_sym", None),
+        ("hid_sym", None),
+    ] {
+        assert_eq!(vis(name), want, "{name}");
+    }
+}

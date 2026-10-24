@@ -11,7 +11,8 @@ use hashbrown::{HashMap, HashSet};
 use super::inputs::RawReloc;
 use super::{
     Att, EM_386, EM_AARCH64, EM_X86_64, LdsEmit, LdsLinker, Piece, SHN_ABS, SHN_COMMON, SHN_UNDEF,
-    STB_LOCAL, STB_WEAK, STT_SECTION, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_PLT, SecFate, Stmt,
+    STB_LOCAL, STB_WEAK, STT_SECTION, STV_DEFAULT, SYNTH_GOT, SYNTH_GOTPLT, SYNTH_PLT, SecFate,
+    Stmt,
 };
 
 /// A relocation writing a whole load address into a field narrower
@@ -232,8 +233,8 @@ impl<'a> LdsLinker<'a> {
         let sym = &self.objects[oi].symbols[si];
         sym.shndx as u16 == SHN_UNDEF
             && sym.binding() == STB_WEAK
-            && sym.other & 0x3 == 0
             && !sym.name.is_empty()
+            && self.visibility_of(&sym.name) == STV_DEFAULT
             && !self.globals.contains_key(&sym.name)
             // During sizing the current pass's script table is swapped
             // out; the previous pass's values match at convergence.

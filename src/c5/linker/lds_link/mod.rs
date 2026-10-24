@@ -157,6 +157,8 @@ const STT_COMMON: u8 = 5;
 
 const STV_DEFAULT: u8 = 0;
 
+const STV_INTERNAL: u8 = 1;
+
 const STV_HIDDEN: u8 = 2;
 
 const STV_PROTECTED: u8 = 3;
@@ -684,6 +686,9 @@ pub struct LdsLinker<'a> {
     /// outranks a synthesized section bound whatever order the two
     /// reach the symbol table in.
     script_assigned: HashSet<String>,
+    /// Global names some input entry, definition or reference, gives a
+    /// visibility other than default: the most constraining of them.
+    visibility: HashMap<String, u8>,
 
     // Per-pass state.
     placements: Vec<Placement>,
@@ -988,6 +993,7 @@ impl<'a> LdsLinker<'a> {
             globals: HashMap::new(),
             commons: HashMap::new(),
             script_assigned: HashSet::new(),
+            visibility: HashMap::new(),
             placements: Vec::new(),
             script_now: HashMap::new(),
             script_prev: HashMap::new(),
@@ -1022,6 +1028,7 @@ impl<'a> LdsLinker<'a> {
         };
         linker.dedup_groups();
         linker.resolve_globals()?;
+        linker.collect_visibility();
         linker.synthesize_sections();
         linker.flatten_inputs();
         linker.build_statements()?;

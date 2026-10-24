@@ -13,8 +13,8 @@ use hashbrown::HashMap;
 use super::{
     Att, EM_AARCH64, EmittedReloc, FinalSym, LdsEmit, LdsLinker, MODULE, Piece, SHF_EXECINSTR,
     SHF_MERGE, SHN_ABS, SHN_COMMON, SHN_UNDEF, STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_FILE, STT_FUNC,
-    STT_NOTYPE, STT_OBJECT, STT_SECTION, STV_DEFAULT, STV_HIDDEN, ScriptSym, SecFate, SymIndex,
-    machine_uses_rela,
+    STT_NOTYPE, STT_OBJECT, STT_SECTION, STV_DEFAULT, STV_HIDDEN, STV_INTERNAL, ScriptSym, SecFate,
+    SymIndex, machine_uses_rela,
 };
 
 /// Name bfd gives a synthesized file symbol: the input's base name,
@@ -27,7 +27,37 @@ fn file_sym_name(source: &str) -> String {
         .to_string()
 }
 
+/// The more constraining of two visibilities: internal, then hidden,
+/// then protected, then default.
+pub(super) fn most_constraining(a: u8, b: u8) -> u8 {
+    match (a, b) {
+        (STV_DEFAULT, v) | (v, STV_DEFAULT) => v,
+        _ => a.min(b),
+    }
+}
+
 impl<'a> LdsLinker<'a> {
+    /// A global takes the most constraining visibility among every
+    /// input's entry for it, references included (System V gABI,
+    /// symbol visibility).
+    pub(super) fn collect_visibility(&mut self) {
+        let mut out: HashMap<String, u8> = HashMap::new();
+        for sym in self.objects.iter().flat_map(|o| &o.symbols) {
+            let vis = sym.other & 0x3;
+            if sym.binding() == STB_LOCAL || sym.name.is_empty() || vis == STV_DEFAULT {
+                continue;
+            }
+            let e = out.entry(sym.name.clone()).or_insert(vis);
+            *e = most_constraining(*e, vis);
+        }
+        self.visibility = out;
+    }
+
+    /// The visibility the output gives the global `name`.
+    pub(super) fn visibility_of(&self, name: &str) -> u8 {
+        self.visibility.get(name).copied().unwrap_or(STV_DEFAULT)
+    }
+
     pub(super) fn default_entry(&self, emit_order: &[usize]) -> u64 {
         for &oi in emit_order {
             let o = &self.outs[oi];
@@ -183,25 +213,15 @@ impl<'a> LdsLinker<'a> {
                 size: 8,
             });
         }
-        // A symbol's visibility aggregates over every reference and
-        // definition; hidden or internal globals cannot be preempted
-        // and are emitted with local binding. bfd applies the forcing
-        // from the dynamic-symbol adjustment, so only links with
-        // dynamic sections see it.
-        let mut forced_vis: HashMap<&str, u8> = HashMap::new();
-        if self.opts.emit == LdsEmit::Dyn {
-            for o in &self.objects {
-                for sym in &o.symbols {
-                    let vis = sym.other & 0x3;
-                    if sym.binding() == STB_LOCAL || sym.name.is_empty() || vis == 0 || vis == 3 {
-                        continue;
-                    }
-                    let e = forced_vis.entry(sym.name.as_str()).or_insert(vis);
-                    // INTERNAL(1) constrains more than HIDDEN(2).
-                    *e = (*e).min(vis);
-                }
-            }
-        }
+        // Hidden or internal globals cannot be preempted and are
+        // emitted with local binding. bfd applies the forcing from the
+        // dynamic-symbol adjustment, so only links with dynamic
+        // sections see it.
+        let forced = |name: &str| {
+            let vis = self.visibility_of(name);
+            (self.opts.emit == LdsEmit::Dyn && matches!(vis, STV_INTERNAL | STV_HIDDEN))
+                .then_some(vis)
+        };
         // Resolved global definitions, name order (the table order is
         // not part of the contract; nm sorts).
         let mut global_defs: Vec<(&String, (usize, usize))> =
@@ -212,7 +232,7 @@ impl<'a> LdsLinker<'a> {
                 continue; // script assignment overrides
             }
             if let Some(mut fs) = self.finalize_sym(obj_i, sym_i, out_shndx) {
-                if let Some(&vis) = forced_vis.get(name.as_str()) {
+                if let Some(vis) = forced(name) {
                     fs.info = (STB_LOCAL << 4) | (fs.info & 0xf);
                     fs.other = vis;
                 }
@@ -231,10 +251,7 @@ impl<'a> LdsLinker<'a> {
                 (_, Some(oi)) => out_shndx(oi),
                 (_, None) => SHN_ABS,
             };
-            let vis = forced_vis
-                .get(name.as_str())
-                .copied()
-                .or(s.hidden.then_some(STV_HIDDEN));
+            let vis = forced(name).or(s.hidden.then_some(STV_HIDDEN));
             if track {
                 index.by_name.insert(name.clone(), syms.len());
             }

@@ -4742,6 +4742,7 @@ fn preprocessor_codes_are_live_catalogue_rows() {
         PRAGMA_SYNTAX,
         PRAGMA_POP_WITHOUT_PUSH,
         IGNORED_PRAGMA_INTRINSIC,
+        DATE_TIME,
         UNKNOWN_WARNING_OPTION,
         crate::c5::diag::Code::UNIMPLEMENTED_WARNING_OPTION,
     ] {
@@ -5410,4 +5411,30 @@ fn line_in_an_invocation_spanning_lines_is_its_own_tokens_line() {
         ],
         "{out}"
     );
+}
+
+/// gcc's `-Wdate-time`: each expansion of `__DATE__` or `__TIME__`,
+/// through another macro too, at the line of the name expanded; a test of
+/// whether one is defined expands nothing. Off unless asked for.
+#[test]
+fn date_time_reports_each_expansion() {
+    let src = "const char *d = __DATE__;\n\
+               #ifdef __DATE__\n\
+               #endif\n\
+               #if defined(__TIME__)\n\
+               #endif\n\
+               #define STAMP __TIME__\n\
+               const char *t = STAMP;\n";
+    let lines = |src: &str| -> Vec<(u32, Code)> {
+        let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+        let _ = pp.process(src).expect("preprocessor failed");
+        pp.sink
+            .diagnostics()
+            .iter()
+            .map(|d| (d.loc.as_ref().unwrap().line, d.code))
+            .collect()
+    };
+    assert_eq!(lines(src), vec![]);
+    let asked = format!("#pragma GCC diagnostic warning \"-Wdate-time\"\n{src}");
+    assert_eq!(lines(&asked), vec![(2, DATE_TIME), (8, DATE_TIME)]);
 }

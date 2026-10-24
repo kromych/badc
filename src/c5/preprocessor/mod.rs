@@ -292,6 +292,9 @@ pub(crate) struct Preprocessor {
     /// returns a `String`, so the error is parked here and drained by the
     /// Result-returning caller (`process_named`, `eval_condition`).
     pending_error: RefCell<Option<C5Error>>,
+    /// Warnings a substitution pass raised, with the buffer and line they
+    /// point at, emitted once the line's output position is known.
+    pending_warnings: RefCell<Vec<(Code, String, usize, String)>>,
     /// Lexed-body cache for the expansion engine, keyed by macro
     /// name and validated against the current body text, so a
     /// redefinition never serves stale tokens.
@@ -1203,6 +1206,7 @@ impl Preprocessor {
             subsystem: None,
             counter: Cell::new(0),
             pending_error: RefCell::new(None),
+            pending_warnings: RefCell::new(Vec::new()),
             body_toks: RefCell::new(hashbrown::HashMap::new()),
             hs_names: RefCell::new(hashbrown::HashMap::new()),
             exp_scratch: RefCell::new(expand::ExpScratch::default()),
@@ -1914,6 +1918,24 @@ impl Preprocessor {
         }
     }
 
+    fn park_warning(&self, code: Code, file: &str, line: usize, text: String) {
+        self.pending_warnings
+            .borrow_mut()
+            .push((code, file.to_string(), line, text));
+    }
+
+    /// Emit the parked warnings at output position `offset`.
+    fn emit_parked_warnings(&mut self, offset: u32) {
+        for (code, file, line, text) in self.pending_warnings.take() {
+            let site = Site {
+                file: &file,
+                line,
+                offset,
+            };
+            self.warn(code, site, text);
+        }
+    }
+
     /// Drain any parked macro-expansion diagnostic.
     fn take_pending_error(&self) -> Result<(), C5Error> {
         match self.pending_error.borrow_mut().take() {
@@ -1932,6 +1954,7 @@ pub(crate) const UNKNOWN_PRAGMA: Code = Code::new(1004);
 pub(crate) const PRAGMA_SYNTAX: Code = Code::new(1005);
 pub(crate) const PRAGMA_POP_WITHOUT_PUSH: Code = Code::new(1006);
 pub(crate) const IGNORED_PRAGMA_INTRINSIC: Code = Code::new(1007);
+pub(crate) const DATE_TIME: Code = Code::new(1008);
 pub(crate) const UNKNOWN_WARNING_OPTION: Code = Code::new(7002);
 
 /// Where a diagnostic from this pass points: the buffer's name and the
@@ -2052,6 +2075,8 @@ impl<'p, 's> LinePass<'p, 's> {
                     self.content(line)?;
                 }
             }
+            let end = self.out.len() as u32;
+            self.pp.emit_parked_warnings(end);
             if closing {
                 let end = self.out.len() as u32;
                 self.pp.sink.control_mut().close_suppress(end);

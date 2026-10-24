@@ -690,6 +690,11 @@ impl<'a> Exp<'a> {
                 out.push(tok);
                 continue;
             }
+            if is_obj && matches!(name, "__DATE__" | "__TIME__") {
+                let line = self.src_line();
+                let text = format!("macro `{name}` might prevent reproducible builds");
+                pp.park_warning(super::DATE_TIME, self.filename, line, text);
+            }
             if is_fn {
                 let def = pp.fn_macros.get(name).unwrap();
                 // Function-like: an invocation only when `(` follows
@@ -746,17 +751,20 @@ impl<'a> Exp<'a> {
     /// Its name set is `is_dynamic_predefine`, which the pre-scan in
     /// `line_mentions_macro` shares -- a name in one and not the other
     /// would never reach the expander.
+    /// The line of the source token the expansion is at.
+    fn src_line(&self) -> usize {
+        let line = &self.ar.bufs[LINE_BUF as usize];
+        self.line_no + line[..self.src_pos as usize].matches('\n').count()
+    }
+
     fn dynamic_predefine(&mut self, tok: Tok, out: &mut Vec<Tok>) -> bool {
-        let (line_no, filename) = (self.line_no, self.filename);
+        let filename = self.filename;
         if !is_dynamic_predefine(self.text(tok)) {
             return false;
         }
         match self.text(tok) {
-            // The line of the source token the expansion is at.
             "__LINE__" => {
-                let line = &self.ar.bufs[LINE_BUF as usize];
-                let line_no = line_no + line[..self.src_pos as usize].matches('\n').count();
-                let t = self.synth(format!("{line_no}"), TokKind::Number, tok.space);
+                let t = self.synth(format!("{}", self.src_line()), TokKind::Number, tok.space);
                 out.push(t);
             }
             "__FILE__" => {

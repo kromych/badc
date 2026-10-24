@@ -74,6 +74,9 @@ catalog! {
     1007, "ignored-pragma-intrinsic", ["C4163"], Warning, Controllable,
         [DEFAULT], Live,
         "a `#pragma intrinsic` naming a function badc has no intrinsic for; the name stays an ordinary call";
+    1008, "date-time", [], Ignore, Controllable,
+        [], Live,
+        "a use of `__DATE__` or `__TIME__`, whose expansion changes from one build to the next";
     1010, "directive", [], Error, Hard,
         [], Live,
         "a directive whose operand the preprocessor cannot process, a directive preprocessed input does not take, or a conditional directive with no `#if` to match";

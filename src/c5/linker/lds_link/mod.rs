@@ -677,6 +677,9 @@ pub struct LdsLinker<'a> {
     /// symbol-named dynamic relocations carry.
     imports: Vec<String>,
     import_of: HashMap<String, usize>,
+    /// The imports every reference names weakly: their `.dynsym` rows bind
+    /// STB_WEAK.
+    weak_imports: HashSet<String>,
     /// The definitions of a shared object the loader may preempt; see
     /// the `preempt` module.
     preemptible: HashSet<String>,
@@ -1004,6 +1007,7 @@ impl<'a> LdsLinker<'a> {
             eh_frames: Vec::new(),
             imports: Vec::new(),
             import_of: HashMap::new(),
+            weak_imports: HashSet::new(),
             preemptible: HashSet::new(),
             noted_data: Vec::new(),
             plt_syms: Vec::new(),

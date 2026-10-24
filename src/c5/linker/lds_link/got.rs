@@ -105,7 +105,7 @@ impl<'a> LdsLinker<'a> {
     /// one as well.
     pub(super) fn build_imports(&mut self) {
         self.prune_preemptible();
-        if !self.opts.shared_libs.is_empty() {
+        if !self.opts.shared_libs.is_empty() || self.opts.shared {
             self.bind_shared_libraries();
         }
         let reached = self.reached_by(Reach::Plt);
@@ -116,7 +116,9 @@ impl<'a> LdsLinker<'a> {
         self.plt_of = index_map(&self.plt_syms);
     }
 
-    /// The imports, and the ones a call reaches.
+    /// The imports, and the ones a call reaches. A shared object also
+    /// imports a default-visibility weak reference nothing defines, as bfd
+    /// does: the loader writes 0 or another component's definition.
     fn bind_shared_libraries(&mut self) {
         // The script's own definitions satisfy a reference on their
         // own, whether or not a library exports the same name.
@@ -138,23 +140,28 @@ impl<'a> LdsLinker<'a> {
             .filter(|s| *s != ".")
             .collect();
         let mut names: BTreeSet<&str> = BTreeSet::new();
-        for o in &self.objects {
-            for s in &o.symbols {
+        let mut strong: BTreeSet<&str> = BTreeSet::new();
+        for (oi, o) in self.objects.iter().enumerate() {
+            for (si, s) in o.symbols.iter().enumerate() {
                 if s.binding() != STB_LOCAL
                     && s.shndx as u16 == SHN_UNDEF
                     && !s.name.is_empty()
                     && !self.globals.contains_key(&s.name)
                     && !script_defined.contains(s.name.as_str())
-                    && self
-                        .opts
-                        .shared_libs
-                        .iter()
-                        .any(|l| l.lib.exports.contains(&s.name))
+                    && (self.opts.shared_libs.iter()).any(|l| l.lib.exports.contains(&s.name))
+                    || self.opts.shared && self.undefweak_dynamic(oi, si)
                 {
                     names.insert(&s.name);
+                    if s.binding() != STB_WEAK {
+                        strong.insert(&s.name);
+                    }
                 }
             }
         }
+        self.weak_imports = (names.iter())
+            .filter(|n| !strong.contains(*n))
+            .map(|n| String::from(*n))
+            .collect();
         let mut called: BTreeSet<&str> = BTreeSet::new();
         for o in &self.objects {
             for sec in &o.sections {

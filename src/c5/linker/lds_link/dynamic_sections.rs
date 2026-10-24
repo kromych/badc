@@ -13,10 +13,10 @@ use super::preempt::Reach;
 use super::symtab::most_constraining;
 use super::{
     Att, DynReloc, EM_386, EM_AARCH64, LdsEmit, LdsLinker, SHF_ALLOC, SHF_WRITE, SHN_ABS,
-    SHN_UNDEF, SHT_REL, SHT_RELA, STB_GLOBAL, STB_LOCAL, STT_NOTYPE, STT_OBJECT, STV_DEFAULT,
-    STV_HIDDEN, STV_INTERNAL, SYNTH_DYNAMIC, SYNTH_DYNSTR, SYNTH_DYNSYM, SYNTH_GNU_HASH, SYNTH_GOT,
-    SYNTH_HASH, SYNTH_PLT, SYNTH_REL, SYNTH_RELA, SYNTH_RELR, SYNTH_VERDEF, SYNTH_VERSYM,
-    ScriptSym, SecFate, machine_uses_rela,
+    SHN_UNDEF, SHT_REL, SHT_RELA, STB_GLOBAL, STB_LOCAL, STB_WEAK, STT_NOTYPE, STT_OBJECT,
+    STV_DEFAULT, STV_HIDDEN, STV_INTERNAL, SYNTH_DYNAMIC, SYNTH_DYNSTR, SYNTH_DYNSYM,
+    SYNTH_GNU_HASH, SYNTH_GOT, SYNTH_HASH, SYNTH_PLT, SYNTH_REL, SYNTH_RELA, SYNTH_RELR,
+    SYNTH_VERDEF, SYNTH_VERSYM, ScriptSym, SecFate, machine_uses_rela,
 };
 
 impl<'a> LdsLinker<'a> {
@@ -63,7 +63,7 @@ impl<'a> LdsLinker<'a> {
     /// Relocation types the dynamic tables are built from: the
     /// address-width absolute form the input uses, and the load-time
     /// forms bfd rewrites it to.
-    fn dyn_reloc_types(&self) -> (u32, u32, u32) {
+    pub(super) fn dyn_reloc_types(&self) -> (u32, u32, u32) {
         match self.machine {
             EM_AARCH64 => (
                 rt::R_AARCH64_ABS64,
@@ -166,8 +166,10 @@ impl<'a> LdsLinker<'a> {
                 // keeps a symbol-based entry, as bfd leaves its
                 // resolution to load time.
                 if !self.reloc_is_relative(id.obj, r.sym as usize) {
-                    if self.undefweak_dynamic(id.obj, r.sym as usize) {
-                        let name = &self.objects[id.obj].symbols[r.sym as usize].name;
+                    let name = &self.objects[id.obj].symbols[r.sym as usize].name;
+                    if self.undefweak_dynamic(id.obj, r.sym as usize)
+                        || self.import_of.contains_key(name)
+                    {
                         sym_relas.push(DynReloc {
                             offset: base + r.offset,
                             rtype: abs_addr,
@@ -342,7 +344,12 @@ impl<'a> LdsLinker<'a> {
             .iter()
             .map(|name| DynSym {
                 name: name.clone(),
-                info: (STB_GLOBAL << 4) | STT_NOTYPE,
+                info: (if self.weak_imports.contains(name) {
+                    STB_WEAK
+                } else {
+                    STB_GLOBAL
+                } << 4)
+                    | STT_NOTYPE,
                 other: STV_DEFAULT,
                 shndx: SHN_UNDEF,
                 value: 0,

@@ -14,8 +14,8 @@ use super::inputs::RawReloc;
 use super::preempt::Reach;
 use super::sections::{is_debug_section, is_unwind_section};
 use super::{
-    EM_386, EM_AARCH64, EM_X86_64, EmittedReloc, LdsLinker, MODULE, R_NONE, SHN_ABS, SHN_COMMON,
-    SHN_UNDEF, SHT_NOBITS, STB_LOCAL, STB_WEAK, SecFate,
+    EM_386, EM_AARCH64, EM_X86_64, EmittedReloc, LdsEmit, LdsLinker, MODULE, R_NONE, SHN_ABS,
+    SHN_COMMON, SHN_UNDEF, SHT_NOBITS, STB_LOCAL, STB_WEAK, SecFate,
 };
 use crate::c5::linker::link_err;
 
@@ -194,6 +194,11 @@ impl<'a> LdsLinker<'a> {
             if self.import_of.contains_key(&sym.name) {
                 if let Some(v) = self.import_target(&sym.name, r.rtype) {
                     return Some(v.wrapping_add(r.addend as u64));
+                }
+                // An address-width field of a dynamic image takes a dynamic
+                // relocation against the import; the field holds the addend.
+                if self.opts.emit == LdsEmit::Dyn && r.rtype == self.dyn_reloc_types().0 {
+                    return Some(r.addend as u64);
                 }
                 errors.push(format!(
                     "{}: {} against `{}' cannot reach a shared library; \

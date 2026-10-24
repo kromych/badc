@@ -5245,6 +5245,45 @@ fn a_dynamic_symbol_takes_the_most_constraining_visibility() {
     }
 }
 
+/// A shared object imports a default-visibility weak reference nothing
+/// defines, as GNU ld 2.46.1 does: a WEAK UND `.dynsym` row named by the GOT
+/// slot's GLOB_DAT and the address field's R_X86_64_64, so the loader writes
+/// 0 or another component's definition rather than the load base.
+#[test]
+fn a_shared_object_imports_an_undefined_weak_reference() {
+    let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
+    let a = TestObj::new()
+        // mov w@GOTPCREL(%rip), %rax; ret
+        .sec(
+            ".text",
+            SHT_PROGBITS,
+            SHF_ALLOC | SHF_EXECINSTR,
+            16,
+            &[0x48, 0x8b, 0x05, 0, 0, 0, 0, 0xc3],
+        )
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8, &[0; 8])
+        .sym("w", STB_WEAK, STT_NOTYPE, usize::MAX, 0, 0)
+        // Symtab: null(0), sections(1, 2), w(3).
+        .reloc(0, 3, 3, rt::R_X86_64_REX_GOTPCRELX, -4)
+        .reloc(1, 0, 3, rt::R_X86_64_64, 0)
+        .build(EM_X86_64);
+    let objs = alloc::vec![parse_lds_object("w.o", a).expect("parses")];
+    let res = link_with_script(&script, objs, &shared_opts(EM_X86_64)).expect("links");
+    let row = dynsym_entries(&res.image).into_iter().find(|e| e.0 == "w");
+    assert_eq!(
+        row.map(|e| (e.1, e.2)),
+        Some(((STB_WEAK << 4) | STT_NOTYPE, STV_DEFAULT))
+    );
+    let named: Vec<u32> = (dyn_relocs(&res.image).into_iter())
+        .filter(|r| r.2 == "w")
+        .map(|r| r.1)
+        .collect();
+    assert!(
+        named.contains(&rt::R_X86_64_GLOB_DAT) && named.contains(&rt::R_X86_64_64),
+        "{named:?}"
+    );
+}
+
 /// `.symtab` as `(name, st_info, st_other)`, in table order.
 fn symtab_entries(image: &[u8]) -> Vec<(String, u8, u8)> {
     let (_, syms) = image_section(image, ".symtab");

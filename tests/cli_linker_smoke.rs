@@ -1391,6 +1391,35 @@ fn jit_runs_one_unit_and_passes_extra_inputs_as_argv() {
 }
 
 #[test]
+fn a_block_scope_extern_thread_local_reaches_the_other_units_definition() {
+    // C11 6.7.1p3: an object declared `extern _Thread_local` only at block
+    // scope is the thread-local object another unit defines.
+    let dir = tempdir("block-extern-tls");
+    write_source(
+        &dir,
+        "a.c",
+        "long get(void) { extern __thread long tv; return tv; }\n",
+    );
+    write_source(
+        &dir,
+        "b.c",
+        "__thread long tv = 5;\nint main(void) { long get(void); return get() != 5; }\n",
+    );
+    let exe = dir.join(format!("prog{}", std::env::consts::EXE_SUFFIX));
+    run(
+        Command::new(badc())
+            .arg("-o")
+            .arg(&exe)
+            .arg(dir.join("a.c"))
+            .arg(dir.join("b.c"))
+            .current_dir(&dir),
+        "link block-scope extern thread-local",
+    );
+    let out = Command::new(&exe).output().expect("run");
+    assert_eq!(out.status.code(), Some(0));
+}
+
+#[test]
 fn duplicate_thread_local_definition_fails_link() {
     // C99 6.9p5: two units each defining one `_Thread_local` object fail
     // the link with `multiple definition`, whatever the target.

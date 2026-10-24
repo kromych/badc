@@ -372,12 +372,20 @@ impl<'a> Walker<'a> {
         glo_ident_addr(self.symbols, self.ast, id, sym, val)
     }
 
-    /// Address class for a `_Thread_local` access: a pure extern
+    /// Address class for the `_Thread_local` access `id`: a pure extern
     /// reference resolves by symbol against the merged TLS block at link
     /// time, and a unit-local definition by its offset within this
     /// unit's TLS block; a weak one, under `weak_refs_by_name`, by symbol.
-    fn live_tls_addr(&self, sym: u32, fallback_val: i64) -> GloAddr {
+    /// A block-scope `extern` resolves as [`glo_ident_addr`] resolves it.
+    fn live_tls_addr(&self, id: ExprId, sym: u32, fallback_val: i64) -> GloAddr {
         let idx = sym as usize;
+        let weak = self
+            .symbols
+            .get(idx)
+            .is_some_and(Symbol::is_weak_definition);
+        if self.ast.block_extern_refs.contains(&id) && !(self.weak_refs_by_name && weak) {
+            return block_extern_glo_addr(self.symbols, sym);
+        }
         if idx < self.symbols.len() {
             let s = &self.symbols[idx];
             if (s.is_extern_decl && !s.defined_here)

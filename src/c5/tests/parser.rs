@@ -3823,6 +3823,39 @@ fn address_of_a_thread_local_is_not_a_constant_expression() {
 }
 
 #[test]
+fn thread_local_is_in_every_declaration_of_an_object_or_in_none() {
+    // C11 6.7.1p3, at file and block scope, in either order.
+    for (src, needle) in [
+        (
+            "long tv; extern __thread long tv;",
+            "thread-local declaration of `tv` follows non-thread-local declaration",
+        ),
+        (
+            "__thread long tv; extern long tv;",
+            "non-thread-local declaration of `tv` follows thread-local declaration",
+        ),
+        (
+            "long tv; long f(void) { extern __thread long tv; return tv; }",
+            "thread-local declaration of `tv` follows non-thread-local declaration",
+        ),
+        (
+            "long f(void) { extern __thread long tv; return tv; } long tv;",
+            "non-thread-local declaration of `tv` follows thread-local declaration",
+        ),
+    ] {
+        expect_compile_error(&format!("{src} int main(void) {{ return 0; }}"), needle);
+    }
+    let prog = Compiler::new(
+        "__thread long tv; extern __thread long tv;\n\
+         long f(void) { extern __thread long tv; return tv; }\n\
+         __thread long tv = 3;\nint main(void) { return f() != 3; }\n"
+            .to_string(),
+    )
+    .compile();
+    assert!(prog.is_ok(), "{:?}", prog.err());
+}
+
+#[test]
 fn static_local_array_initializer_over_bound_rejected() {
     // C99 6.7.8p2: an initializer may not provide a value for an object
     // outside the entity being initialized. The static-local allocator

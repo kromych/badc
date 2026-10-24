@@ -79,11 +79,13 @@ pub(super) struct Definition {
     pub(super) extern_inline: bool,
 }
 
-/// Composite type, first declaration, and body position with its `extern inline`.
+/// Composite type, first declaration, body position with its `extern inline`,
+/// and whether the declarations name a thread-local object.
 pub(super) struct LinkedEntity {
     ty: DeclaredType,
     at: (usize, u16),
     body: Option<((usize, u16), bool)>,
+    thread_local: bool,
 }
 
 /// `Extension`: incompatible under C99, accepted by existing practice.
@@ -162,8 +164,9 @@ impl Compiler {
         idx: usize,
         new: DeclaredType,
         line: usize,
+        thread_local: bool,
     ) -> Result<(), C5Error> {
-        self.fold_linked(idx, new, line, false)
+        self.fold_linked(idx, new, line, false, thread_local)
     }
 
     /// A function definition: its type, then the one body 6.9p3 and 6.9p5 admit;
@@ -175,7 +178,7 @@ impl Compiler {
         params: Params,
     ) -> Result<(), C5Error> {
         let new = DeclaredType::Function(def.ret, params, def.conv);
-        self.fold_linked(idx, new, def.line, def.implicit_int)?;
+        self.fold_linked(idx, new, def.line, def.implicit_int, false)?;
         // GNU: the implicit `int` keeps the declared return type.
         if def.implicit_int
             && let Some(LinkedEntity {
@@ -286,6 +289,7 @@ impl Compiler {
         new: DeclaredType,
         line: usize,
         implicit_int: bool,
+        thread_local: bool,
     ) -> Result<(), C5Error> {
         let at = (line, self.intern_source_file());
         let key = self.symbols[idx].name.clone();
@@ -294,10 +298,35 @@ impl Compiler {
                 ty: new,
                 at,
                 body: None,
+                thread_local,
             };
             self.linked_entities.insert(key, entity);
             return Ok(());
         };
+        // C11 6.7.1p3: `_Thread_local` is in every declaration of an object
+        // or in none of them.
+        if prior.thread_local != thread_local
+            && matches!(
+                (&prior.ty, &new),
+                (DeclaredType::Object(..), DeclaredType::Object(..))
+            )
+        {
+            let (now, was) = if thread_local {
+                ("thread-local", "non-thread-local")
+            } else {
+                ("non-thread-local", "thread-local")
+            };
+            let (prior_line, file) = prior.at;
+            let file = &self.source_files[file as usize];
+            return Err(self.compile_err_at(
+                Code::INVALID_DECLARATION,
+                line,
+                format!(
+                    "{now} declaration of `{}` follows {was} declaration\n  previous: {file}:{prior_line}",
+                    self.symbols[idx].name
+                ),
+            ));
+        }
         let verdict = match (&prior.ty, &new) {
             (DeclaredType::Object(ta, da), DeclaredType::Object(tb, db)) => {
                 let bounds = da.len() == db.len()

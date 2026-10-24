@@ -567,7 +567,7 @@ impl Compiler {
                     enum_tag: base_enum_tag,
                 };
                 let declared = super::redeclaration::DeclaredType::Object(spelled, bounds);
-                self.declare_linked(loc_idx, declared, self.lex.line)?;
+                self.declare_linked(loc_idx, declared, self.lex.line, is_thread_local)?;
             }
             // A block-scope `extern` allocates no storage (C11 6.7.5).
             let decl_align = if is_extern {
@@ -664,6 +664,7 @@ impl Compiler {
                 self.symbols[d.loc_idx].val = 0;
                 self.symbols[d.loc_idx].block_extern_active = true;
                 self.symbols[d.loc_idx].scoped_obj_decl = true;
+                self.symbols[d.loc_idx].is_thread_local = d.is_thread_local;
             }
             // `weak` / `visibility("hidden")` are not part of the shadow
             // snapshot, so they reach the symbol table past the scope.
@@ -880,7 +881,7 @@ impl Compiler {
         let (conv, conv_named) = self.declared_conv(ent, f.conv, self.lex.line)?;
         let listed = super::redeclaration::Params::of(&f.params, false);
         let declared = super::redeclaration::DeclaredType::Function(f.ret, listed, f.conv);
-        self.declare_linked(ent, declared, self.lex.line)?;
+        self.declare_linked(ent, declared, self.lex.line, false)?;
         let prototyped = f.params.form == super::function::ParamForm::Prototype;
         let fresh = super::stmt::FnEntity {
             class: Token::Fun as i64,

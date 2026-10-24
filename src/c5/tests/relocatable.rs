@@ -470,6 +470,36 @@ fn a_zero_length_object_ends_the_objects_of_its_own_section() {
 }
 
 #[test]
+fn a_block_scope_extern_thread_local_is_referenced_as_one() {
+    // C11 6.7.1p3: `_Thread_local` belongs to the object a block-scope
+    // `extern` declaration names, which another unit defines. Its access
+    // takes the thread-local relocations a file-scope declaration gives,
+    // against an undefined `STT_TLS` symbol -- not data relocations, nor
+    // a local-exec offset into this unit's empty block.
+    let src = "long get(void) { extern __thread long tv; return tv; }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let a = parse_et_rel(&compile_bytes(src, target), "a.o").expect("parse");
+        let tv = a.symbols.iter().position(|s| s.name == "tv").expect("tv");
+        assert_eq!(a.symbols[tv].kind, 6, "{target:?}: STT_TLS");
+        let text = a
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text");
+        let types: Vec<u32> = (text.relocs.iter())
+            .filter(|r| r.sym as usize == tv)
+            .map(|r| r.rtype)
+            .collect();
+        // R_X86_64_GOTTPOFF; R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21 and _LD64_GOTTPREL_LO12_NC.
+        let want: &[u32] = match target {
+            Target::LinuxX64 => &[22],
+            _ => &[541, 542],
+        };
+        assert_eq!(types, want, "{target:?}");
+    }
+}
+
+#[test]
 fn duplicate_strong_definitions_are_rejected() {
     let a = compile_obj("int dup_val = 1;\n", "a.o");
     let b = compile_obj("int dup_val = 2;\n", "b.o");

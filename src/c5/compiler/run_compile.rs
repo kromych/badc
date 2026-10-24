@@ -971,7 +971,7 @@ impl Compiler {
                 enum_tag: decl.base_enum_tag,
             };
             let declared = DeclaredType::Function(ret, Params::of(&params, false), named);
-            self.declare_linked(id_idx, declared, declarator_line)?;
+            self.declare_linked(id_idx, declared, declarator_line, false)?;
         }
         // For Sys symbols (header-bound libc functions),
         // also fold the variadic flag onto the matching
@@ -2034,6 +2034,7 @@ impl Compiler {
             id_idx,
             DeclaredType::Object(spelled, bounds),
             signature_line,
+            thread_local,
         )?;
         self.record_object_declaration(id_idx, static_seen, thread_local, was_tentative_glo);
         if self.bind_object_alias(id_idx, ty)? {

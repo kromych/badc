@@ -370,6 +370,8 @@ pub struct MergedNative {
     /// The Mach-O inputs' unwind tables, placed in the merged streams.
     pub compact_unwind: Vec<CompactUnwind>,
     pub eh_frame: Vec<EhFrameBlock>,
+    /// The COFF inputs' `.pdata` entries, placed in the merged streams.
+    pub(crate) pe_unwind: Vec<crate::c5::codegen::PeUnwindRange>,
     /// C-identifier-named sections grouped across units, in the order
     /// their bytes sit in the merged streams. A writer able to carry a
     /// variable section list gives each its own output section; the
@@ -1027,6 +1029,7 @@ pub fn link_native_objects_with<'a>(
     link.collect_preemptible();
     link.allocate_got_slots();
     link.place_unwind_tables()?;
+    link.place_pe_unwind()?;
     link.resolve_text_relocs()?;
     link.resolve_tls_fixups()?;
     link.resolve_data_relocs()?;
@@ -1235,6 +1238,7 @@ struct Link<'a> {
     unwind_slots: BTreeMap<(usize, SymRef), u64>,
     compact_unwind: Vec<CompactUnwind>,
     eh_frame: Vec<EhFrameBlock>,
+    pe_unwind: Vec<crate::c5::codegen::PeUnwindRange>,
     /// Import indices the note channel names as data references, and
     /// those some site branches to; a branch makes the import code.
     object_imports: BTreeSet<usize>,
@@ -1346,6 +1350,7 @@ impl<'a> Link<'a> {
             unwind_slots: BTreeMap::new(),
             compact_unwind: Vec::new(),
             eh_frame: Vec::new(),
+            pe_unwind: Vec::new(),
             object_imports: BTreeSet::new(),
             branch_imports: BTreeSet::new(),
             tls_imports: BTreeSet::new(),
@@ -2957,6 +2962,76 @@ impl<'a> Link<'a> {
                 fdes,
             });
         }
+        Ok(())
+    }
+
+    /// Each COFF input's `RUNTIME_FUNCTION` at its function's merged offsets,
+    /// but a displaced COMDAT copy's; arm64's end is in its unwind data.
+    fn place_pe_unwind(&mut self) -> Result<(), C5Error> {
+        use super::object::PeUnwindData;
+        use crate::c5::codegen::{PeUnwindRange, PeUnwindRef};
+        let objs = self.objs;
+        let mut placed = Vec::new();
+        for (i, obj) in objs.iter().enumerate() {
+            let bad = |what: &str| {
+                link_err(
+                    Code::MALFORMED_INPUT,
+                    MODULE,
+                    &format!("{}: a `.pdata` entry {what}", obj.source),
+                )
+            };
+            let text = |(idx, addend): SymRef| -> Result<u64, C5Error> {
+                let sym = unwind_symbol(obj, idx)?;
+                if sym.section != NativeSymSection::Text {
+                    return Err(bad(&format!("names `{}`, which is not code", sym.name)));
+                }
+                Ok((self.text_bases[i] as i64 + sym.value as i64 + addend) as u64)
+            };
+            for e in &obj.pe_unwind {
+                let begin_sym = unwind_symbol(obj, e.begin.0)?;
+                if (begin_sym.input_section).is_some_and(|k| self.comdats.dropped.contains(&(i, k)))
+                {
+                    continue;
+                }
+                let begin = text(e.begin)?;
+                let (data, length) = match e.data {
+                    PeUnwindData::Packed(word) => {
+                        (PeUnwindRef::Packed(word), ((word >> 2) & 0x7FF) * 4)
+                    }
+                    PeUnwindData::Info((idx, addend)) => {
+                        let sym = unwind_symbol(obj, idx)?;
+                        let at = self
+                            .symbol_offset(i, sym)
+                            .filter(|_| {
+                                matches!(
+                                    sym.section,
+                                    NativeSymSection::RoData | NativeSymSection::RelRo
+                                )
+                            })
+                            .ok_or_else(|| {
+                                bad(&format!(
+                                    "names `{}`, which is not read-only data",
+                                    sym.name
+                                ))
+                            })? as i64
+                            + addend;
+                        let word = (self.data.get(at as usize..at as usize + 4))
+                            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+                            .ok_or_else(|| bad("names unwind data past the merged data"))?;
+                        (PeUnwindRef::Info(at as u64), (word & 0x3_FFFF) * 4)
+                    }
+                };
+                let end = match e.end {
+                    Some(end) => text(end)?,
+                    None => begin + length as u64,
+                };
+                if end < begin || end as usize > self.text.len() {
+                    return Err(bad("ends past the image's code"));
+                }
+                placed.push(PeUnwindRange { begin, end, data });
+            }
+        }
+        self.pe_unwind = placed;
         Ok(())
     }
 
@@ -4890,6 +4965,7 @@ impl<'a> Link<'a> {
             exec_stack_input,
             compact_unwind: self.compact_unwind,
             eh_frame: self.eh_frame,
+            pe_unwind: self.pe_unwind,
         })
     }
 }
@@ -6063,6 +6139,7 @@ mod tests {
             debug_other: Vec::new(),
             compact_unwind: Vec::new(),
             eh_frame: None,
+            pe_unwind: Vec::new(),
         }
     }
 
@@ -7427,6 +7504,7 @@ mod tests {
                 debug_other: alloc::vec::Vec::new(),
                 compact_unwind: alloc::vec::Vec::new(),
                 eh_frame: None,
+                pe_unwind: alloc::vec::Vec::new(),
             }
         };
         // Weak definition of `weak_target` in `.text`.

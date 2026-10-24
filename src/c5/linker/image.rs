@@ -1411,6 +1411,7 @@ mod tests {
             exec_stack_input: None,
             compact_unwind: Vec::new(),
             eh_frame: Vec::new(),
+            pe_unwind: Vec::new(),
         }
     }
 

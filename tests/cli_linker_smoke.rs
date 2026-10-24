@@ -9914,6 +9914,129 @@ fn coff_directives_and_import_libraries_reach_their_targets() {
     }
 }
 
+// A COFF function with a frame, which calls back into the badc unit, so a
+// stack walk from the callback crosses it.
+#[cfg(windows)]
+const COFF_UNWIND_PEER_SRC: &str = r#"
+int peer_walk(int (*cb)(void))
+{
+    volatile int pad[64];
+    for (int i = 0; i < 64; i++)
+        pad[i] = i;
+    return cb() + pad[63] - 63;
+}
+"#;
+
+/// The exception directory of an image holding a COFF object's functions
+/// takes the object's own entries: `RtlLookupFunctionEntry` finds the entry
+/// that begins at the foreign function, and `RtlCaptureStackBackTrace` from a
+/// badc callback lists the foreign frame, on x86-64 through to `main`.
+#[cfg(windows)]
+#[test]
+fn a_stack_walk_crosses_a_coff_objects_frame() {
+    let dir = tempdir("coff-unwind");
+    let peer = write_source(&dir, "peer.c", COFF_UNWIND_PEER_SRC);
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#pragma dylib(k32, \"kernel32.dll\")\n\
+         #pragma binding(k32::RtlCaptureStackBackTrace, \"RtlCaptureStackBackTrace\")\n\
+         #pragma binding(k32::RtlLookupFunctionEntry, \"RtlLookupFunctionEntry\")\n\
+         unsigned short __stdcall RtlCaptureStackBackTrace(unsigned long, unsigned long,\n\
+                                                           void **, unsigned long *);\n\
+         unsigned *__stdcall RtlLookupFunctionEntry(unsigned long long, unsigned long long *,\n\
+                                                    void *);\n\
+         int peer_walk(int (*)(void));\n\
+         int main(void);\n\
+         // The start of the function `pc` lies in, by the exception directory.\n\
+         static char *function_of(void *pc)\n\
+         { unsigned long long base = 0;\n\
+           unsigned *f = RtlLookupFunctionEntry((unsigned long long)pc, &base, 0);\n\
+           return f ? (char *)base + f[0] : 0; }\n\
+         static int callback(void)\n\
+         { void *frames[16];\n\
+           unsigned short n = RtlCaptureStackBackTrace(0, 16, frames, 0);\n\
+           int peer = 0, top = 0;\n\
+           for (unsigned short k = 0; k < n; k++) {\n\
+             peer |= function_of(frames[k]) == (char *)peer_walk;\n\
+             top |= function_of(frames[k]) == (char *)main;\n\
+           }\n\
+           return peer && (top || !REACHES_MAIN) ? 0 : 10; }\n\
+         int main(void)\n\
+         { if (function_of((char *)peer_walk + 4) != (char *)peer_walk) return 1;\n\
+           return peer_walk(callback); }\n",
+    );
+    let arch = if cfg!(target_arch = "aarch64") {
+        "aarch64"
+    } else {
+        "x86_64"
+    };
+    let mut objects: Vec<(String, PathBuf)> = Vec::new();
+    if let Some(clang) = windows_clang() {
+        for triple in ["pc-windows-msvc", "w64-windows-gnu"] {
+            let obj = dir.join(format!("peer-{triple}.obj"));
+            run(
+                Command::new(&clang)
+                    .args([&format!("--target={arch}-{triple}"), "-O2", "-c", "-o"])
+                    .arg(&obj)
+                    .arg(&peer)
+                    .current_dir(&dir),
+                &format!("compile the peer for {triple}"),
+            );
+            objects.push((format!("clang-{triple}"), obj));
+        }
+    }
+    if let Some(WindowsCc::Msvc { cl, env }) = msvc_cl() {
+        for opt in ["/Od", "/O2"] {
+            let obj = dir.join(format!("peer-cl{}.obj", &opt[1..]));
+            run(
+                Command::new(&cl)
+                    .envs(env.iter().map(|(k, v)| (k, v)))
+                    .args(["/nologo", "/c", opt])
+                    .arg(format!("/Fo{}", obj.display()))
+                    .arg(&peer)
+                    .current_dir(&dir),
+                "compile the peer with cl",
+            );
+            objects.push((format!("cl{}", &opt[1..]), obj));
+        }
+    }
+    if let Some((gcc, path)) = mingw_gcc() {
+        let obj = dir.join("peer-gcc.obj");
+        run(
+            Command::new(&gcc)
+                .env("PATH", &path)
+                .args(["-O2", "-c", "-o"])
+                .arg(&obj)
+                .arg(&peer)
+                .current_dir(&dir),
+            "compile the peer with gcc",
+        );
+        objects.push(("gcc".to_string(), obj));
+    }
+    // TODO: #1687 badc's own arm64 code takes packed leaf entries laid from the
+    // start of `.text`, so a pc in `main` resolves to no function start.
+    let reaches_main = u8::from(cfg!(target_arch = "x86_64"));
+    for (label, obj) in &objects {
+        for opt in ["-O0", "-O"] {
+            let exe = dir.join(format!("{label}{opt}.exe"));
+            run(
+                Command::new(badc())
+                    .arg(opt)
+                    .arg(format!("-DREACHES_MAIN={reaches_main}"))
+                    .arg("-o")
+                    .arg(&exe)
+                    .arg(&main)
+                    .arg(obj)
+                    .current_dir(&dir),
+                &format!("link with the {label} object"),
+            );
+            let out = Command::new(&exe).output().expect("run the program");
+            assert_eq!(out.status.code(), Some(0), "{label}, badc {opt}");
+        }
+    }
+}
+
 /// An object the linker reads but the link cannot take is refused by name:
 /// another architecture's, and a COFF object outside a PE image.
 #[test]

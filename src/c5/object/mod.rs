@@ -68,8 +68,8 @@ pub(crate) use crate::c5::codegen::lower_for;
 pub(crate) use crate::c5::codegen::{
     Abi, AddrPart, Build, CopyRelocReq, DataFixup, DwarfTextReloc, DynamicExportSection,
     EarlyReturn, ElfTpoffFixup, ElfTpoffTarget, ExecForm, FnUnwind, FuncFixup, GotFixup, Machine,
-    MachoTlvDescriptor, MachoTlvFixup, NativeOptions, OutputKind, ResolvedImport, ResolvedImports,
-    Target, TlsIndexFixup, UnitDef, UnitDefs, aarch64, x86_64,
+    MachoTlvDescriptor, MachoTlvFixup, NativeOptions, OutputKind, PeUnwindRange, PeUnwindRef,
+    ResolvedImport, ResolvedImports, Target, TlsIndexFixup, UnitDef, UnitDefs, aarch64, x86_64,
 };
 
 /// Write the runtime address of a text-targeting DWARF placeholder over its
@@ -877,6 +877,7 @@ pub(crate) mod test_support {
             tls_align: 8,
             tls_index_fixups: Vec::new(),
             tls_index_slot: None,
+            pe_unwind: Vec::new(),
             tls_got: Vec::new(),
             tls_got_fields: Vec::new(),
             static_tls: false,

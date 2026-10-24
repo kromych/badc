@@ -326,6 +326,7 @@ fn synth_program_and_build(
         region_frame_offsets: alloc::collections::BTreeMap::new(),
         coalesced_slot_remap: alloc::collections::BTreeMap::new(),
         fn_unwind,
+        pe_unwind: merged.pe_unwind.clone(),
         reloc_call_sites: Vec::new(),
         user_extern_call_sites: Vec::new(),
         user_extern_data_refs: Vec::new(),
@@ -535,12 +536,18 @@ fn x86_64_unwind(
         return Vec::new();
     }
     let mut begins: Vec<u32> = functions.ent_pcs.iter().map(|&p| p as u32).collect();
+    // Code an input's own unwind table describes takes its entry from it;
+    // its end still bounds the function before it.
+    begins.extend(merged.pe_unwind.iter().map(|r| r.end as u32));
     begins.sort_unstable();
     begins.dedup();
+    let foreign =
+        |b: u32| (merged.pe_unwind.iter()).any(|r| (r.begin..r.end).contains(&(b as u64)));
     let text_len = merged.text.len() as u32;
     begins
         .iter()
         .enumerate()
+        .filter(|&(_, &begin)| begin < text_len && !foreign(begin))
         .map(|(i, &begin)| {
             let end = begins.get(i + 1).copied().unwrap_or(text_len);
             // No anchor (synthetic trampoline / no standard prologue)
@@ -1780,6 +1787,7 @@ mod tests {
             exec_stack_input: None,
             compact_unwind: Vec::new(),
             eh_frame: Vec::new(),
+            pe_unwind: Vec::new(),
         }
     }
 

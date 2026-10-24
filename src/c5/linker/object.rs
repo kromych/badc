@@ -1100,6 +1100,24 @@ pub struct NativeObject {
     /// A Mach-O object's `__LD,__compact_unwind` and `__TEXT,__eh_frame`.
     pub compact_unwind: Vec<CompactUnwindEntry>,
     pub eh_frame: Option<EhFrameInput>,
+    /// A COFF object's `.pdata` entries, which replace the writer's.
+    pub pe_unwind: Vec<PeUnwindEntry>,
+}
+
+/// A `.pdata` `RUNTIME_FUNCTION` (PE/COFF specification 5.5); `end` is x86-64's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PeUnwindEntry {
+    pub begin: SymRef,
+    pub end: Option<SymRef>,
+    pub data: PeUnwindData,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PeUnwindData {
+    /// The `UNWIND_INFO` / `.xdata` record the entry names.
+    Info(SymRef),
+    /// An arm64 entry's packed unwind word.
+    Packed(u32),
 }
 
 /// A COFF COMDAT group (PE/COFF specification 5.5.6).
@@ -1289,6 +1307,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         debug_other: debug.other,
         compact_unwind: Vec::new(),
         eh_frame: None,
+        pe_unwind: Vec::new(),
     })
 }
 

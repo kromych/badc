@@ -7283,6 +7283,7 @@ fn minimal_native_object(
         debug_other: alloc::vec::Vec::new(),
         compact_unwind: alloc::vec::Vec::new(),
         eh_frame: None,
+        pe_unwind: alloc::vec::Vec::new(),
     }
 }
 
@@ -7626,6 +7627,7 @@ fn aarch64_data_ref_object_ex(
         debug_other: alloc::vec::Vec::new(),
         compact_unwind: alloc::vec::Vec::new(),
         eh_frame: None,
+        pe_unwind: alloc::vec::Vec::new(),
     }
 }
 
@@ -7874,6 +7876,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         debug_other: alloc::vec::Vec::new(),
         compact_unwind: alloc::vec::Vec::new(),
         eh_frame: None,
+        pe_unwind: alloc::vec::Vec::new(),
     }
 }
 
@@ -12108,6 +12111,106 @@ fn every_reference_reaches_the_comdat_copy_the_link_keeps() {
         })
         .collect();
     assert_eq!(targets, [shared, shared]);
+}
+
+/// A COFF input's `.pdata` entry joins the image's exception directory as
+/// it is -- its function's extent and its `.xdata` record, at their RVAs --
+/// and no entry of the writer's covers that function; a function the input
+/// describes no unwind data for takes one of the writer's.
+#[test]
+fn a_coff_inputs_unwind_entries_join_the_exception_directory() {
+    use crate::c5::linker::coff_object::build::{object, sec, section_aux, sym};
+    use crate::c5::linker::{
+        LinkOptions, link_native_objects_with, parse_native_coff, write_native_image_from_merged,
+    };
+    use crate::c5::{OutputKind, Target};
+    let (addr32nb, external, stat) = (3u16, 2u8, 3u8);
+    // `f`: a marker and a `ret`, 16 bytes; `g` after it, with no entry.
+    let mut code = b"UnWiNdMk".to_vec();
+    code.extend_from_slice(&[0x90; 7]);
+    code.push(0xC3);
+    code.extend_from_slice(&[0x55, 0x48, 0x89, 0xE5, 0x5D, 0xC3]);
+    let mut xdata = b"XdAtAmRk".to_vec();
+    xdata.extend_from_slice(&[0x01, 0x04, 0x01, 0x00, 0x04, 0x42, 0, 0]);
+    let mut text_def = sym(".text", 0, 1, stat);
+    text_def.aux.push(section_aux(code.len() as u32, 0, 0));
+    let mut xdata_def = sym(".xdata", 0, 2, stat);
+    xdata_def.aux.push(section_aux(xdata.len() as u32, 0, 0));
+    let mut pdata = sec(
+        ".pdata",
+        0x4030_0040,
+        &[0, 0, 0, 0, 16, 0, 0, 0, 8, 0, 0, 0],
+    );
+    // Symbols: 0 `.text` (+aux), 2 `.xdata` (+aux), 4 `f`, 5 `g`.
+    pdata.relocs = alloc::vec![(0, 0, addr32nb), (4, 0, addr32nb), (8, 2, addr32nb)];
+    let coff = object(
+        0x8664,
+        &[
+            sec(".text", 0x6050_0020, &code),
+            sec(".xdata", 0x4030_0040, &xdata),
+            pdata,
+        ],
+        &[
+            text_def,
+            xdata_def,
+            sym("f", 0, 1, external),
+            sym("g", 16, 1, external),
+        ],
+    );
+    let obj = parse_native_coff(&coff).expect("parse the COFF object");
+    let opts = LinkOptions {
+        allow_undefined: true,
+        shared: true,
+        pe_image: true,
+        ..Default::default()
+    };
+    let mut merged = link_native_objects_with(&[obj], &[], &opts).expect("link");
+    let plt = crate::emit_plt_for(&mut merged, Target::WindowsX64, false).expect("plt");
+    let image = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::SharedLibrary,
+        Target::WindowsX64,
+        Some("unwind.dll"),
+    )
+    .expect("write the PE image");
+    let pe = PeImage::parse(&image);
+    let (text_rva, text) = pe.section(".text");
+    let f = text_rva
+        + text
+            .windows(8)
+            .position(|w| w == b"UnWiNdMk")
+            .expect("code") as u32;
+    let (rdata_rva, rdata) = pe.section(".rdata");
+    let info = rdata_rva
+        + rdata
+            .windows(8)
+            .position(|w| w == b"XdAtAmRk")
+            .expect("xdata") as u32
+        + 8;
+    let (_, pdata) = pe.section(".pdata");
+    let entries: alloc::vec::Vec<[u32; 3]> = (pdata.as_chunks::<12>().0.iter())
+        .map(|e| {
+            core::array::from_fn(|k| u32::from_le_bytes(e[4 * k..4 * k + 4].try_into().unwrap()))
+        })
+        .take_while(|e| (text_rva..text_rva + text.len() as u32).contains(&e[0]) && e[1] > e[0])
+        .collect();
+    assert!(
+        entries.contains(&[f, f + 16, info]),
+        "the input's entry: {entries:x?}"
+    );
+    assert!(
+        !entries
+            .iter()
+            .any(|e| e[0] < f + 16 && e[1] > f && e[0] != f),
+        "no other entry covers `f`: {entries:x?}"
+    );
+    assert!(
+        entries.iter().any(|e| e[0] == f + 16),
+        "`g` takes the writer's: {entries:x?}"
+    );
 }
 
 /// An x86-64 COFF object's image-relative addresses (`ADDR32NB`) in code,

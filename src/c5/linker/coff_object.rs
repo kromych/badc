@@ -12,8 +12,8 @@ use alloc::vec::Vec;
 use super::link_err;
 use super::object::{
     Comdat, InputSection, NativeInitFunc, NativeMachine, NativeObject, NativeReloc,
-    NativeSymSection, NativeSymbol, STT_FUNC, STT_NOTYPE, STT_OBJECT, SectionFamily,
-    grouped_by_name,
+    NativeSymSection, NativeSymbol, PeUnwindData, PeUnwindEntry, STT_FUNC, STT_NOTYPE, STT_OBJECT,
+    SectionFamily, SymRef, grouped_by_name,
 };
 use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
@@ -346,6 +346,87 @@ fn init_table(name: &str) -> Option<(bool, Option<u32>)> {
     }
 }
 
+/// `.pdata`, and gcc's `.pdata.<suffix>` beside `.text.<suffix>`.
+fn is_pdata(name: &str) -> bool {
+    name == ".pdata" || name.starts_with(".pdata$") || name.starts_with(".pdata.")
+}
+
+/// The `RUNTIME_FUNCTION`s of every kept `.pdata`: x86-64's begin, end and
+/// `UNWIND_INFO`; arm64's begin and `.xdata` or, flagged in its low bits, a
+/// packed word.
+fn read_unwind(
+    bytes: &[u8],
+    machine: u16,
+    sects: &[Sect],
+    raw: &[Option<RawSym>],
+) -> Result<Vec<PeUnwindEntry>, C5Error> {
+    let mut out = Vec::new();
+    for s in sects.iter().filter(|s| is_pdata(&s.name)) {
+        let content = s.content(bytes)?;
+        let mut at: BTreeMap<u32, SymRef> = BTreeMap::new();
+        for k in 0..s.nrelocs as usize {
+            let p = s.reloc_off as usize + k * RELOCATION_SIZE;
+            let (off, sym, t) = (
+                need_u32(bytes, p, "relocation")?,
+                need_u32(bytes, p + 4, "relocation")? as usize,
+                need_u16(bytes, p + 8, "relocation")?,
+            );
+            let nb = match machine {
+                IMAGE_FILE_MACHINE_AMD64 => IMAGE_REL_AMD64_ADDR32NB,
+                _ => IMAGE_REL_ARM64_ADDR32NB,
+            };
+            let stored = u32le(content, off as usize).ok_or_else(|| {
+                bad(&format!(
+                    "section `{}`: relocation past its content",
+                    s.name
+                ))
+            })?;
+            if t != nb || raw.get(sym).is_none_or(Option::is_none) {
+                return Err(bad(&format!(
+                    "section `{}` offset {off:#x}: a `.pdata` field takes an image-relative \
+                     address of a symbol",
+                    s.name
+                )));
+            }
+            at.insert(off, (sym + 1, stored as i32 as i64));
+        }
+        let field = |off: u32| {
+            at.get(&off).copied().ok_or_else(|| {
+                bad(&format!(
+                    "section `{}` offset {off:#x}: a `.pdata` field no relocation names",
+                    s.name
+                ))
+            })
+        };
+        let size = if machine == IMAGE_FILE_MACHINE_AMD64 {
+            12
+        } else {
+            8
+        };
+        for e in (0..content.len() as u32 / size).map(|i| i * size) {
+            out.push(if size == 12 {
+                PeUnwindEntry {
+                    begin: field(e)?,
+                    end: Some(field(e + 4)?),
+                    data: PeUnwindData::Info(field(e + 8)?),
+                }
+            } else {
+                let word = u32le(content, e as usize + 4).unwrap();
+                PeUnwindEntry {
+                    begin: field(e)?,
+                    end: None,
+                    data: if word & 3 != 0 {
+                        PeUnwindData::Packed(word)
+                    } else {
+                        PeUnwindData::Info(field(e + 4)?)
+                    },
+                }
+            });
+        }
+    }
+    Ok(out)
+}
+
 fn is_tls(name: &str) -> bool {
     name == ".tls" || name.starts_with(".tls$")
 }
@@ -354,13 +435,11 @@ fn is_tls(name: &str) -> bool {
 /// joins the relro stream, as the ELF reader places one.
 fn classify(s: &Sect) -> Result<SectionFamily, C5Error> {
     let f = s.flags;
-    // Unwind tables are rebuilt by the image writer from the merged code.
-    // GNU as gives `.drectve` data flags, not LNK_INFO.
+    // `.pdata` is read by `read_unwind`. GNU as gives `.drectve` data flags, not LNK_INFO.
     if f & (IMAGE_SCN_LNK_REMOVE | IMAGE_SCN_LNK_INFO | IMAGE_SCN_MEM_DISCARDABLE) != 0
         || s.name == ".drectve"
         || s.name.starts_with(".debug")
-        || s.name.starts_with(".pdata")
-        || s.name.starts_with(".xdata")
+        || is_pdata(&s.name)
     {
         return Ok(SectionFamily::Discard);
     }
@@ -1326,6 +1405,7 @@ pub fn parse_native_coff(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     let mut alternate_names = directives.alternate_names.clone();
     let mut symbols = decode_symbols(&raw, &sects, &directives, &mut alternate_names)?;
     let relocs = translate_relocs(bytes, h.machine, &sects, &raw, &symbols)?;
+    let pe_unwind = read_unwind(bytes, h.machine, &sects, &raw)?;
     // A forced reference archive selection resolves, as `ld -u` does.
     for name in &directives.includes {
         symbols.push(NativeSymbol {
@@ -1389,6 +1469,7 @@ pub fn parse_native_coff(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         debug_other: Vec::new(),
         compact_unwind: Vec::new(),
         eh_frame: None,
+        pe_unwind,
     })
 }
 
@@ -1832,8 +1913,9 @@ mod tests {
         assert!(o.data.is_empty() && o.relro.is_empty());
     }
 
-    /// Debug and unwind tables, link-time metadata and an associative
-    /// section whose parent is dropped carry nothing into the merged image.
+    /// Debug tables, `.pdata`, link-time metadata and an associative section
+    /// whose parent is dropped carry nothing into the merged image; `.xdata`
+    /// joins the read-only data its entries name.
     #[test]
     fn metadata_and_unwind_sections_are_dropped() {
         let comdat = RDATA | IMAGE_SCN_LNK_COMDAT;
@@ -1843,7 +1925,7 @@ mod tests {
         assoc.name = ".rdata";
         assoc
             .aux
-            .push(section_aux(4, 3, IMAGE_COMDAT_SELECT_ASSOCIATIVE));
+            .push(section_aux(4, 2, IMAGE_COMDAT_SELECT_ASSOCIATIVE));
         let o = parse(
             &[
                 sec(".debug$S", RDATA | IMAGE_SCN_MEM_DISCARDABLE, &[1; 4]),
@@ -1856,11 +1938,8 @@ mod tests {
         )
         .unwrap();
         let dropped: Vec<_> = o.discarded.iter().map(|(n, _)| n.as_str()).collect();
-        assert_eq!(
-            dropped,
-            [".debug$S", ".pdata", ".xdata", ".rdata", ".llvm_addrsig"]
-        );
-        assert!(o.rodata.is_empty() && o.sections.is_empty());
+        assert_eq!(dropped, [".debug$S", ".pdata", ".rdata", ".llvm_addrsig"]);
+        assert_eq!(o.rodata, [3; 4]);
     }
 
     /// A form the linker has no translation for, and a machine it does not
@@ -1987,6 +2066,63 @@ mod tests {
             [
                 ("f", 1, 4, alloc::vec![0]),
                 ("__real@1", 2, 8, alloc::vec![1, 3])
+            ]
+        );
+    }
+
+    /// `.pdata` entries name their function and their unwind data or arm64
+    /// packed word.
+    #[test]
+    fn pdata_entries_name_their_function_and_unwind_data() {
+        let pdata = |relocs: &[(u32, u32, u16)], content: &[u8]| {
+            with(sec(".pdata", RDATA, content), relocs)
+        };
+        let o = parse(
+            &[
+                sec(".text", TEXT, &[0xC3; 16]),
+                sec(".xdata", RDATA, &[1, 0, 0, 0]),
+                pdata(
+                    &[(0, 0, 3), (4, 0, 3), (8, 1, 3)],
+                    &[0, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0],
+                ),
+            ],
+            &[
+                sym("f", 0, 1, IMAGE_SYM_CLASS_EXTERNAL),
+                sym("$x", 0, 2, IMAGE_SYM_CLASS_STATIC),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            o.pe_unwind,
+            [PeUnwindEntry {
+                begin: (1, 0),
+                end: Some((1, 16)),
+                data: PeUnwindData::Info((2, 0)),
+            }]
+        );
+        let packed = 0x0020_0019u32.to_le_bytes();
+        let mut words = alloc::vec![0u8; 8];
+        words.extend_from_slice(&[0, 0, 0, 0]);
+        words.extend_from_slice(&packed);
+        let o = parse_native_coff(&object(
+            IMAGE_FILE_MACHINE_ARM64,
+            &[
+                sec(".text", TEXT, &[0; 16]),
+                sec(".xdata", RDATA, &[4, 0, 0, 0]),
+                pdata(&[(0, 0, 2), (4, 1, 2), (8, 0, 2)], &words),
+            ],
+            &[
+                sym("f", 0, 1, IMAGE_SYM_CLASS_EXTERNAL),
+                sym("$x", 0, 2, IMAGE_SYM_CLASS_STATIC),
+            ],
+        ))
+        .unwrap();
+        let data: Vec<_> = o.pe_unwind.iter().map(|e| e.data).collect();
+        assert_eq!(
+            data,
+            [
+                PeUnwindData::Info((2, 0)),
+                PeUnwindData::Packed(0x0020_0019)
             ]
         );
     }

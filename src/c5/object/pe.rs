@@ -233,6 +233,9 @@ struct PeLayout<'a> {
     pdata_rva: u32,
     pdata_file_off: u32,
     pdata_bytes: Vec<u8>,
+    /// `(byte offset in .pdata, data-byte offset)` of each input entry's
+    /// unwind-data address, written once the data is placed.
+    pdata_info_slots: Vec<(usize, u64)>,
     pdata_directory_size: u32,
     pdata_raw_size: u32,
     idata_rva: u32,
@@ -552,8 +555,10 @@ impl<'a> PeWriter<'a> {
             self.text_prologue_len,
             &build.fn_unwind,
             &build.early_returns,
+            &build.pe_unwind,
         );
         l.pdata_directory_size = pdata.directory_size;
+        l.pdata_info_slots = pdata.info_slots;
         l.pdata_raw_size = round_up(pdata.bytes.len() as u32, FILE_ALIGNMENT);
         l.idata_rva = round_up(l.pdata_rva + pdata.bytes.len() as u32, l.section_align);
         l.pdata_bytes = pdata.bytes;
@@ -1437,7 +1442,12 @@ impl<'a> PeWriter<'a> {
         pad_to(&mut out, l.text_file_off as usize)?;
         out.extend_from_slice(&self.text_bytes);
         pad_to(&mut out, (l.text_file_off + l.text_raw_size) as usize)?;
+        let at = out.len();
         out.extend_from_slice(&l.pdata_bytes);
+        for &(slot, off) in &l.pdata_info_slots {
+            let rva = self.data_off_to_rva(off as u32);
+            out[at + slot..at + slot + 4].copy_from_slice(&rva.to_le_bytes());
+        }
         pad_to(&mut out, (l.pdata_file_off + l.pdata_raw_size) as usize)?;
         out.extend_from_slice(&l.idata.bytes);
         pad_to(&mut out, (l.idata_file_off + l.idata_raw_size) as usize)?;
@@ -2364,9 +2374,14 @@ fn build_entry_adapter(machine: Machine) -> EntryStub {
 struct Pdata {
     bytes: Vec<u8>,
     directory_size: u32,
+    /// Where an input entry's unwind-data RVA goes, and its data offset.
+    info_slots: Vec<(usize, u64)>,
 }
 
-/// `.pdata` Exception Directory dispatcher.
+/// `.pdata` Exception Directory dispatcher. `foreign` are the functions
+/// the inputs' own `.pdata` describes: their entries join the table as
+/// they are, and no entry of the writer's covers them.
+#[allow(clippy::too_many_arguments)]
 fn build_pdata(
     machine: Machine,
     text_rva: u32,
@@ -2375,6 +2390,7 @@ fn build_pdata(
     text_prologue_len: u32,
     fn_unwind: &[super::FnUnwind],
     early_returns: &[super::EarlyReturn],
+    foreign: &[super::PeUnwindRange],
 ) -> Pdata {
     match machine {
         Machine::X86_64 => build_x86_64_pdata(
@@ -2384,8 +2400,9 @@ fn build_pdata(
             text_prologue_len,
             fn_unwind,
             early_returns,
+            foreign,
         ),
-        Machine::Aarch64 => build_aarch64_pdata(text_rva, text_size),
+        Machine::Aarch64 => build_aarch64_pdata(text_rva, text_size, text_prologue_len, foreign),
     }
 }
 
@@ -2496,9 +2513,10 @@ fn build_x86_64_pdata(
     text_prologue_len: u32,
     fn_unwind: &[super::FnUnwind],
     early_returns: &[super::EarlyReturn],
+    foreign: &[super::PeUnwindRange],
 ) -> Pdata {
     const RUNTIME_FUNCTION_SIZE: u32 = 12;
-    if fn_unwind.is_empty() {
+    if fn_unwind.is_empty() && foreign.is_empty() {
         let mut bytes = Vec::with_capacity(16);
         let unwind_info_rva = pdata_rva + RUNTIME_FUNCTION_SIZE;
         bytes.extend_from_slice(&text_rva.to_le_bytes());
@@ -2508,6 +2526,7 @@ fn build_x86_64_pdata(
         return Pdata {
             bytes,
             directory_size: RUNTIME_FUNCTION_SIZE,
+            info_slots: Vec::new(),
         };
     }
 
@@ -2531,7 +2550,7 @@ fn build_x86_64_pdata(
                 })
         })
         .collect();
-    let array_size = entries.len() as u32 * RUNTIME_FUNCTION_SIZE;
+    let array_size = (entries.len() + foreign.len()) as u32 * RUNTIME_FUNCTION_SIZE;
     let blobs_rva = round_up(pdata_rva + array_size, 4);
     let mut blobs: Vec<u8> = Vec::new();
     let mut info_rvas: Vec<u32> = Vec::with_capacity(entries.len());
@@ -2551,13 +2570,29 @@ fn build_x86_64_pdata(
         }
     }
 
+    // The loader binary-searches the array, so the inputs' entries take
+    // their places among the writer's by start.
+    let body = text_rva + text_prologue_len;
+    let mut rows: Vec<(u32, u32, u32, Option<u64>)> = (spans.iter().zip(&info_rvas))
+        .map(|(&(begin, end), &info)| (body + begin, body + end, info, None))
+        .collect();
+    rows.extend(foreign.iter().map(|r| {
+        let info = match r.data {
+            super::PeUnwindRef::Info(off) => Some(off),
+            super::PeUnwindRef::Packed(_) => None,
+        };
+        (body + r.begin as u32, body + r.end as u32, 0, info)
+    }));
+    rows.sort_by_key(|r| r.0);
     let mut bytes = Vec::with_capacity((array_size + blobs.len() as u32) as usize);
-    for (i, &(begin, end)) in spans.iter().enumerate() {
-        let begin = text_rva + text_prologue_len + begin;
-        let end = text_rva + text_prologue_len + end;
+    let mut info_slots = Vec::new();
+    for (begin, end, info, foreign_info) in rows {
         bytes.extend_from_slice(&begin.to_le_bytes());
         bytes.extend_from_slice(&end.to_le_bytes());
-        bytes.extend_from_slice(&info_rvas[i].to_le_bytes());
+        if let Some(off) = foreign_info {
+            info_slots.push((bytes.len(), off));
+        }
+        bytes.extend_from_slice(&info.to_le_bytes());
     }
     while pdata_rva + bytes.len() as u32 != blobs_rva {
         bytes.push(0);
@@ -2566,28 +2601,53 @@ fn build_x86_64_pdata(
     Pdata {
         bytes,
         directory_size: array_size,
+        info_slots,
     }
 }
 
-/// AArch64 `.pdata` builder.
-fn build_aarch64_pdata(text_rva: u32, text_size: u32) -> Pdata {
+/// AArch64 `.pdata` builder: packed leaf entries over the code the inputs'
+/// own entries do not describe, theirs over the rest.
+fn build_aarch64_pdata(
+    text_rva: u32,
+    text_size: u32,
+    text_prologue_len: u32,
+    foreign: &[super::PeUnwindRange],
+) -> Pdata {
+    let mut ranges: Vec<&super::PeUnwindRange> = foreign.iter().collect();
+    ranges.sort_by_key(|r| r.begin);
     let mut bytes = Vec::new();
+    let mut info_slots = Vec::new();
+    let leaf = |bytes: &mut Vec<u8>, from: u32, to: u32| {
+        let mut covered = from;
+        while covered < to {
+            let chunk = (to - covered).min(ARM64_PACKED_FUNCTION_MAX_BYTES);
+            let function_length = (chunk / 4) & 0x7FF; // 11 bits
+            let unwind_data: u32 = (function_length << 2) | 0b01; // Flag=1
+            bytes.extend_from_slice(&(text_rva + covered).to_le_bytes());
+            bytes.extend_from_slice(&unwind_data.to_le_bytes());
+            covered += chunk;
+        }
+    };
     let mut covered = 0u32;
-    while covered < text_size {
-        let remaining = text_size - covered;
-        let chunk = remaining.min(ARM64_PACKED_FUNCTION_MAX_BYTES);
-        let chunk_words = chunk / 4;
-        let function_length = chunk_words & 0x7FF; // 11 bits
-        let unwind_data: u32 = (function_length << 2) | 0b01; // Flag=1
-        let begin_address = text_rva + covered;
-        bytes.extend_from_slice(&begin_address.to_le_bytes());
-        bytes.extend_from_slice(&unwind_data.to_le_bytes());
-        covered += chunk;
+    for r in ranges {
+        let begin = text_prologue_len + r.begin as u32;
+        leaf(&mut bytes, covered, begin);
+        bytes.extend_from_slice(&(text_rva + begin).to_le_bytes());
+        match r.data {
+            super::PeUnwindRef::Packed(word) => bytes.extend_from_slice(&word.to_le_bytes()),
+            super::PeUnwindRef::Info(off) => {
+                info_slots.push((bytes.len(), off));
+                bytes.extend_from_slice(&[0; 4]);
+            }
+        }
+        covered = text_prologue_len + r.end as u32;
     }
+    leaf(&mut bytes, covered, text_size);
     let directory_size = bytes.len() as u32;
     Pdata {
         bytes,
         directory_size,
+        info_slots,
     }
 }
 
@@ -2873,7 +2933,7 @@ mod tests {
     #[test]
     fn aarch64_pdata_packs_chunks_under_function_length_limit() {
         let text_size = 2047 * 4 + 4 + 4;
-        let p = build_aarch64_pdata(0x1000, text_size);
+        let p = build_aarch64_pdata(0x1000, text_size, 0, &[]);
         assert_eq!(p.bytes.len() % 8, 0);
         for entry in p.bytes.as_chunks::<8>().0.iter() {
             let unwind_data = u32::from_le_bytes([entry[4], entry[5], entry[6], entry[7]]);

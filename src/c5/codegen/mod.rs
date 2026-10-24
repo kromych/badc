@@ -2475,6 +2475,8 @@ pub(crate) struct Build {
     /// then falls back to the coarse whole-`.text` entry and the DWARF
     /// builder to the post-prologue rule.
     pub fn_unwind: Vec<FnUnwind>,
+    /// Functions the inputs' own unwind tables describe.
+    pub pe_unwind: Vec<PeUnwindRange>,
     /// Inline-asm main-stream references to labels defined in the template's
     /// pushed sections. The relocatable ELF writer emits one PC-relative
     /// reloc per entry against the target section's symbol.
@@ -2580,6 +2582,22 @@ pub(crate) struct FnUnwind {
     /// Offset (from `begin`) past `sub rsp,N`. Set only when
     /// `frame_bytes > 0`.
     pub frame_alloc_end: u32,
+}
+
+/// An input's `RUNTIME_FUNCTION`: `[begin, end)` in `Build::text`, and its unwind data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PeUnwindRange {
+    pub begin: u64,
+    pub end: u64,
+    pub data: PeUnwindRef,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PeUnwindRef {
+    /// The `UNWIND_INFO` record at this data-byte offset.
+    Info(u64),
+    /// An arm64 packed unwind word.
+    Packed(u32),
 }
 
 /// A function whose entry test branches to a return placed after the body,

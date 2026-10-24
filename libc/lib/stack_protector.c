@@ -103,3 +103,14 @@ __asm__(".text\n"
         "  brk #0xf003\n");
 
 #endif // __linux__ / __APPLE__ / _WIN32
+
+#ifdef _WIN32
+
+// The handler a `/GS` frame's unwind data names. The epilogue checks the
+// cookie, so a dispatch reaching it goes on (`ExceptionContinueSearch`, 1).
+int __GSHandlerCheck(void *record, void *frame, void *context, void *dispatcher) {
+    (void)record, (void)frame, (void)context, (void)dispatcher;
+    return 1;
+}
+
+#endif // _WIN32

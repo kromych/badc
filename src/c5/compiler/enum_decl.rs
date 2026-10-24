@@ -70,10 +70,10 @@ impl EnumCompletion {
     }
 }
 
-/// `(min, max, constants)` from a parsed enum body: the enumerator value
-/// range that drives the packed underlying-type choice, plus the captured
-/// name/value pairs the caller records for DWARF.
-type EnumBody = (i64, i64, alloc::vec::Vec<(String, i64)>);
+/// `(min, max, constants, symbols)` from a parsed enum body: the enumerator
+/// value range that drives the packed underlying-type choice, the captured
+/// name/value pairs the caller records for DWARF, and the constants' symbols.
+type EnumBody = (i64, i64, alloc::vec::Vec<(String, i64)>, Vec<usize>);
 
 /// The integer type compatible with an enum whose values span
 /// `[min, max]`. C99 6.7.2.2p4 leaves the choice to the
@@ -95,17 +95,13 @@ fn enum_compatible_ty(min: i64, max: i64, wide: i64) -> i64 {
     }
 }
 
-/// The type of one enumerator constant. Within a 32-bit enum GCC
-/// types each constant by its own value -- `int` when it fits (C99
-/// 6.7.2.2p3), `unsigned int` for the wider extension values -- while
-/// every constant of an enum needing a 64-bit type takes that type.
-fn enumerator_constant_ty(v: i64, enum_ty: i64) -> i64 {
-    if (enum_ty & !UNSIGNED_BIT) != Ty::Int as i64 {
-        enum_ty
-    } else if v >= i32::MIN as i64 && v <= i32::MAX as i64 {
+/// The type of an enumerator constant while its list is parsed: `int` when
+/// the value fits (C99 6.7.2.2p3), otherwise the value's own type.
+fn enumerator_constant_ty(v: i64, wide: i64) -> i64 {
+    if v >= i32::MIN as i64 && v <= i32::MAX as i64 {
         Ty::Int as i64
     } else {
-        Ty::Int as i64 | UNSIGNED_BIT
+        enum_compatible_ty(v, v, wide)
     }
 }
 
@@ -146,7 +142,7 @@ impl Compiler {
                     self.structs.len() - 1
                 }
             };
-            let (min, max, captured) = self.parse_enum_body(id)?;
+            let (min, max, captured, constants) = self.parse_enum_body(id)?;
             // An attribute after the closing brace binds to the enum type
             // (`enum E { ... } __attribute__((packed))`), the position GCC
             // and Clang accept most often.
@@ -182,9 +178,17 @@ impl Compiler {
                     underlying_ty: underlying,
                 });
             }
+            // Once the list ends, every constant of an enumeration with a
+            // value outside `int` has the enumerated type (C23 6.7.2.2,
+            // gcc's `finish_enum` in every mode); the others are `int`.
+            let ty = enum_ty(underlying, id);
+            let wider_than_int = min < i32::MIN as i64 || max > i32::MAX as i64;
+            for idx in constants {
+                self.symbols[idx].type_ = if wider_than_int { ty } else { Ty::Int as i64 };
+            }
             self.structs[id].enum_underlying = Some(underlying);
             self.complete_enum_placeholders(id as u32, underlying);
-            return Ok((enum_ty(underlying, id), None));
+            return Ok((ty, None));
         }
         let Some(name) = tag_name else {
             return Err(self.compile_err(Code::SYNTAX, "enum name or `{` expected"));
@@ -335,9 +339,8 @@ impl Compiler {
             self.symbols[idx].enumeration = None;
             // During the body the constant carries its value's own type
             // so a reference from a later enumerator converts correctly;
-            // the whole list is restamped below once the range is known.
-            self.symbols[idx].type_ =
-                enumerator_constant_ty(i, enum_compatible_ty(i, i, self.enum_wide_ty()));
+            // `parse_enum_decl` restamps the list once the type is known.
+            self.symbols[idx].type_ = enumerator_constant_ty(i, self.enum_wide_ty());
             self.symbols[idx].val = i;
             captured.push((name, i));
             sym_indexes.push(idx);
@@ -349,15 +352,9 @@ impl Compiler {
         // caller records the resulting EnumDef once packedness is known.
         let min = captured.iter().map(|&(_, v)| v).min().unwrap_or(0);
         let max = captured.iter().map(|&(_, v)| v).max().unwrap_or(0);
-        // On completion each constant is restamped against the whole
-        // range: per-value within a 32-bit enum, the enum's own 64-bit
-        // type otherwise (GCC). `packed` narrows only the enum type,
-        // never the constants.
-        let compatible = enum_compatible_ty(min, max, self.enum_wide_ty());
-        for (&idx, &(_, v)) in sym_indexes.iter().zip(&captured) {
-            self.symbols[idx].type_ = enumerator_constant_ty(v, compatible);
+        for &idx in &sym_indexes {
             self.symbols[idx].enumeration = Some(id as u32);
         }
-        Ok((min, max, captured))
+        Ok((min, max, captured, sym_indexes))
     }
 }

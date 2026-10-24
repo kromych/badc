@@ -2179,6 +2179,52 @@ fn enums_take_the_types_gcc_gives_on_every_target() {
     }
 }
 
+/// Once its list ends, every constant of an enumeration with a value outside
+/// `int` has the enumerated type (C23 6.7.2.2, gcc's `finish_enum` in every
+/// mode), so `U0 - 1` is unsigned and `_Generic` selects `enum U`; inside the
+/// list a constant has its value's type. The other constants stay `int`. gcc
+/// 16.2.1 (`-std=gnu99`) and clang 22 accept the unit, and both report the
+/// `-Wenum-conversion` of lines 6 and 7 alone.
+#[test]
+fn constants_of_an_enum_wider_than_int_have_the_enumerated_type() {
+    use crate::{Compiler, Target};
+    const SRC: &str = "enum U { U0, U1 = 0x80000000 };\n\
+        enum B { B0, B1 = 0x100000000LL };\n\
+        enum S { S0 = -1, S1 = 0x80000000 };\n\
+        enum D { D0 = 0x80000000, D1 = -D0, D2 = sizeof(D0) };\n\
+        enum N { N0 = -1, N1 };\n\
+        enum N n = U0;\n\
+        void f(void) { enum N a = U1; enum N b = N1; (void)a; (void)b; }\n\
+        _Static_assert(U0 - 1 > 0, \"U0 - 1\");\n\
+        _Static_assert(_Generic(U0, enum U: 1, default: 0), \"U0\");\n\
+        _Static_assert(_Generic(B0, enum B: 1, default: 0) && sizeof(B0) == 8, \"B0\");\n\
+        _Static_assert(_Generic(S0, enum S: 1, default: 0) && sizeof(S0) == 8, \"S0\");\n\
+        _Static_assert(D1 == 0x80000000u && D2 == 4, \"D1 and D2\");\n\
+        _Static_assert(_Generic(N0, int: 1, default: 0), \"N0\");\n\
+        int main(void) { return U0 - 1 > 0 && -U1 == 0x80000000u ? 0 : 1; }\n";
+    for t in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let opts =
+            crate::CompileOptions::default().with_diag(super::diag_config(&["enum-conversion"]));
+        let program = Compiler::with_options(SRC.to_string(), t, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{t:?}: {e}"));
+        let lines: Vec<u32> = program
+            .warnings
+            .iter()
+            .filter(|w| w.code == crate::c5::diag::Code::ENUM_CONVERSION)
+            .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+            .collect();
+        assert_eq!(lines, [6, 7], "{t:?}");
+        assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+}
+
 /// A bit-field of an enum with no negative enumerator reads unsigned on the PE
 /// targets, as mingw-w64's gcc and clang for the windows-gnu triples read it:
 /// the field is masked and nothing sign-extends it. `_Generic` selects

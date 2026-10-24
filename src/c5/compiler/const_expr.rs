@@ -3215,10 +3215,10 @@ impl Compiler {
         if self.lex.tk == Token::Id && self.symbols[self.lex.curr_id_idx].class == Token::Num as i64
         {
             // Enumeration constants carry the type stamped at their
-            // registration: `int` (C99 6.7.2.2p3) normally, unsigned /
-            // wider for values past `int`'s range (GCC extension). The
-            // type drives the fold's signedness, e.g. shifts and
-            // divides.
+            // registration: `int` (C99 6.7.2.2p3) normally, the enumerated
+            // type of an enumeration with a value past `int`'s range (C23
+            // 6.7.2.2). The type drives the fold's signedness, e.g. shifts
+            // and divides.
             let idx = self.lex.curr_id_idx;
             let (v, ty) = (self.symbols[idx].val, self.symbols[idx].type_);
             self.next()?;

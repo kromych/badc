@@ -2626,8 +2626,8 @@ impl Compiler {
 
     fn parse_enum_constant(&mut self, id_idx: usize) -> Result<(), C5Error> {
         let val = self.symbols[id_idx].val;
-        // The registration typed the constant: `int`, or wider / unsigned for
-        // an enumerator outside `int`'s range (GCC extension).
+        // The registration typed the constant: `int`, or the enumerated type
+        // of an enumeration with a value outside `int` (C23 6.7.2.2).
         let ty = self.symbols[id_idx].type_;
         self.emit_int_constant(val, ty);
         if let Some(e) = self.enumeration_of_constant(id_idx) {

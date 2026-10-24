@@ -1437,6 +1437,150 @@ fn windows_crt_names_import_the_entry_points_their_dlls_export() {
     }
 }
 
+/// The external functions and objects the startup runtime, the compiler
+/// runtime and the C-library sources the link offers define for `target`.
+fn link_definitions(target: crate::Target) -> alloc::collections::BTreeSet<String> {
+    use crate::c5::symbol::Linkage;
+    use crate::c5::token::Token;
+    use crate::{CompileOptions, Compiler};
+    let crt = alloc::vec![
+        ("__BADC_C5_CRT__".to_string(), "1".to_string()),
+        ("__BADC_C5_START__".to_string(), "1".to_string()),
+    ];
+    let mut defined = alloc::collections::BTreeSet::new();
+    let sources = crate::embedded_runtime().iter();
+    for (name, body) in sources
+        .chain(crate::embedded_compiler_rt())
+        .chain(crate::embedded_libc())
+    {
+        let opts = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_defines(crt.clone());
+        let program = Compiler::with_options(body.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?} {name}: {e}"));
+        for s in &program.symbols {
+            let entity = s.is_fun_entity() || s.class == Token::Glo as i64;
+            if entity && s.defined_here && s.linkage == Linkage::External {
+                defined.insert(s.link_name().to_string());
+            }
+        }
+    }
+    defined
+}
+
+/// Every function and object a bundled header declares for a Windows target
+/// resolves at link: it is bound to a DLL, defined by the header, an
+/// intrinsic, in the target's C library export set, or defined by the
+/// startup runtime or a C-library source the link offers like an archive
+/// member, which a unit naming all of those then links against. A name
+/// mingw-w64 does not declare is left undeclared instead
+/// (`native-compilation.md` states the rule). Each header is compiled alone
+/// with the feature macros that widen its surface; one that stops at an
+/// `#error` serves the other architecture.
+#[test]
+fn windows_header_declarations_resolve_at_link() {
+    use crate::c5::preprocessor::Preprocessor;
+    use crate::c5::symbol::Linkage;
+    use crate::c5::token::Token;
+    use crate::{CompileOptions, Compiler, NativeOptions, Target, TargetCLibrary};
+    const MACROS: &str = "#define _GNU_SOURCE 1\n#define _POSIX_C_SOURCE 200809L\n";
+    for target in [Target::WindowsX64, Target::WindowsAarch64] {
+        let defined = link_definitions(target);
+        let mut library = TargetCLibrary::new(target);
+        let mut unresolved = alloc::vec::Vec::new();
+        let mut from_sources = alloc::collections::BTreeMap::new();
+        for (header, _) in crate::embedded_headers() {
+            let src = alloc::format!("{MACROS}#include <{header}>\n");
+            let opts = CompileOptions::default().with_no_entry_point(true);
+            let program = match Compiler::with_options(src.clone(), target, opts).compile() {
+                Ok(program) => program,
+                Err(e) => {
+                    let text = alloc::format!("{e}");
+                    assert!(
+                        text.contains("[error-directive]"),
+                        "{target:?} <{header}>: {text}"
+                    );
+                    continue;
+                }
+            };
+            let mut pp = Preprocessor::new(target.id_str(), target, "0");
+            pp.process(&src).expect("the unit compiled");
+            let bound = |name: &str| {
+                (pp.dylibs.iter()).any(|d| d.bindings.iter().any(|b| b.local_name == name))
+            };
+            for s in &program.symbols {
+                let object = s.class == Token::Glo as i64 && s.declares_no_storage();
+                let function = s.is_fun_entity() && !s.defined_here;
+                let name = s.link_name();
+                if !(object || function) || s.linkage != Linkage::External || bound(name) {
+                    continue;
+                }
+                if pp.intrinsics.contains_key(name) || library.admit(name) {
+                    continue;
+                }
+                if defined.contains(name) {
+                    from_sources.insert(name.to_string(), object);
+                } else {
+                    unresolved.push(alloc::format!("<{header}> {name}"));
+                }
+            }
+        }
+        unresolved.sort();
+        unresolved.dedup();
+        assert!(
+            unresolved.is_empty(),
+            "{target:?}: declared with no definition:\n  {}",
+            unresolved.join("\n  ")
+        );
+        let mut unit = alloc::string::String::new();
+        for (name, object) in &from_sources {
+            unit += &if *object {
+                alloc::format!("extern char {name};\n")
+            } else {
+                alloc::format!("void {name}(void);\n")
+            };
+        }
+        unit += "static void *const used[] = {\n";
+        for name in from_sources.keys() {
+            unit += &alloc::format!("    (void *)&{name},\n");
+        }
+        unit += "};\nint main(void) { return used[0] == 0; }\n";
+        let program = crate::c5::tests::compile_str_bare_for(&unit, target);
+        if let Err(e) =
+            super::link_executable_with_runtime(&program, target, NativeOptions::default())
+        {
+            panic!("{target:?}: {e}");
+        }
+    }
+}
+
+/// On a Windows host, every binding the bundled headers state for the host's
+/// target names an export of its DLL, so an image importing it loads.
+#[cfg(windows)]
+#[test]
+fn windows_bindings_name_exports_of_their_dlls() {
+    use crate::c5::host::Host;
+    let target = if cfg!(target_arch = "aarch64") {
+        crate::Target::WindowsAarch64
+    } else {
+        crate::Target::WindowsX64
+    };
+    let mut host = crate::StdHost::default();
+    let mut missing = alloc::vec::Vec::new();
+    for (dll, symbol) in crate::c5::linker::library_bindings(target) {
+        let handle = host.dlopen(Some(&dll), 0);
+        if handle == 0 || host.dlsym(handle, &symbol) == 0 {
+            missing.push(alloc::format!("{dll} {symbol}"));
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "{target:?}: not exported:\n  {}",
+        missing.join("\n  ")
+    );
+}
+
 /// A `#pragma binding(data lib::sym, ...)` import on the Windows
 /// x86-64 PE target must lower the data reference as a load of the
 /// import's IAT slot, not as the address of a `jmp [IAT]` call

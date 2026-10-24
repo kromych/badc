@@ -422,7 +422,17 @@ registers under either compiler.
   thread-specific data and creation attributes over kernel32; a destructor
   also runs when a thread CreateThread started exits, and none at process
   exit. Cancellation, `pthread_kill` and the scheduling setters of a running
-  thread are not declared there. `native-compilation.md` states the rule the
+  thread are not declared there. `<semaphore.h>` is winpthreads': unnamed
+  semaphores over kernel32, `sem_open` / `sem_close` / `sem_unlink` failing
+  with ENOSYS. libmingwex's `getopt` / `getopt_long` / `getopt_long_only`
+  and their state (`getopt` stops at the first operand, the long forms
+  permute), `basename` / `dirname` (with `\` and drive designators),
+  `ftw`, `mkstemp` / `mkdtemp`, `sleep` / `usleep`, `ftruncate` /
+  `truncate` and `feraiseexcept` are defined over msvcrt and kernel32; the
+  CRT's `chmod`, `mktemp` and exec family are bound under their POSIX
+  names, and `iswblank`, `wctype`, `wctrans` and `towctrans`, which
+  msvcrt.dll lacks, to ucrtbase.dll. The POSIX names mingw-w64 does not
+  declare are not declared. `native-compilation.md` states the rule the
   Windows headers follow.
 
 ### GCC

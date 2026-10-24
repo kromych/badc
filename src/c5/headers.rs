@@ -209,6 +209,10 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("sys/uio.h", include_str!("../../libc/include/sys/uio.h")),
     ("sys/ipc.h", include_str!("../../libc/include/sys/ipc.h")),
     ("sys/shm.h", include_str!("../../libc/include/sys/shm.h")),
+    (
+        "sys/queue.h",
+        include_str!("../../libc/include/sys/queue.h"),
+    ),
     ("sys/un.h", include_str!("../../libc/include/sys/un.h")),
     ("net/if.h", include_str!("../../libc/include/net/if.h")),
     (

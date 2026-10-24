@@ -370,6 +370,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("libc_math_special.c", 0),
     ("libc_math_nextafter.c", 0),
     ("libc_math_logb_lgamma_remquo_nexttoward.c", 0),
+    ("macos_getattrlist_name_and_reuseport.c", 0),
     ("long_double_libc_return.c", 0),
     ("variadic_via_fnptr.c", 0),
     ("pragma_entrypoint.c", 23),

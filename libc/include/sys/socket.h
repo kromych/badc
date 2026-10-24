@@ -196,6 +196,7 @@ int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
 #define SO_REUSEADDR  0x0004
 #define SO_KEEPALIVE  0x0008
 #define SO_BROADCAST  0x0020
+#define SO_REUSEPORT  0x0200
 #define SO_NOSIGPIPE  0x1022  // suppress SIGPIPE on writes to a broken socket
 #define SHUT_RD       0
 #define SHUT_WR       1

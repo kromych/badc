@@ -18,7 +18,10 @@
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
 #pragma binding(libc::dirname,  "dirname")
-#pragma binding(libc::basename, "basename")
+// glibc's <libgen.h> maps basename to the POSIX function; its plain
+// `basename` export is the GNU one <string.h> declares under _GNU_SOURCE,
+// which returns "" after a trailing separator.
+#pragma binding(libc::basename, "__xpg_basename")
 #endif
 
 #ifdef _WIN32

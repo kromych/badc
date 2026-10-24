@@ -37,20 +37,12 @@ int main(void) {
     for (i = 0; i < sizeof cases / sizeof cases[0]; i++) {
         if (!splits_to(cases[i].path, dirname, cases[i].dir))
             return 1 + 2 * (int)i;
-#ifdef __linux__
-        // TODO(#1676): the binding names glibc's GNU basename, which returns
-        // "" after a trailing separator and takes no null path.
-        if (cases[i].path[strlen(cases[i].path) - 1] == '/')
-            continue;
-#endif
         if (!splits_to(cases[i].path, basename, cases[i].base))
             return 2 + 2 * (int)i;
     }
     if (strcmp(dirname(empty), ".") || strcmp(dirname(0), "."))
         return 100;
-#ifndef __linux__
     if (strcmp(basename(0), "."))
         return 101;
-#endif
     return 0;
 }

@@ -25,6 +25,7 @@ __errno_location                         GLIBC_2.17
 __getpagesize                            GLIBC_2.17
 __h_errno_location                       GLIBC_2.17
 __register_atfork                        GLIBC_2.17
+__xpg_basename                           GLIBC_2.17
 _exit                                    GLIBC_2.17
 abort                                    GLIBC_2.17
 abs                                      GLIBC_2.17
@@ -41,7 +42,6 @@ atoll                                    GLIBC_2.17
 backtrace                                GLIBC_2.17
 backtrace_symbols                        GLIBC_2.17
 backtrace_symbols_fd                     GLIBC_2.17
-basename                                 GLIBC_2.17
 bcmp                                     GLIBC_2.17
 bcopy                                    GLIBC_2.17
 bind                                     GLIBC_2.17

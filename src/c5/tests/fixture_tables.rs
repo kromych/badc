@@ -375,6 +375,7 @@ pub(super) const NATIVE_FIXTURES: &[(&str, i32)] = &[
     ("shm_ipc_segment_round_trip.c", 0),
     ("ipv6_v6only_round_trip.c", 0),
     ("macos_getattrlist_name_and_reuseport.c", 0),
+    ("macos_chflags_file_flags.c", 0),
     ("long_double_libc_return.c", 0),
     ("variadic_via_fnptr.c", 0),
     ("pragma_entrypoint.c", 23),

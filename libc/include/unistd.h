@@ -562,9 +562,9 @@ int setregid(gid_t rgid, gid_t egid);
 int lchown(const char *path, uid_t owner, gid_t group);
 int lchmod(const char *path, mode_t mode);
 #ifdef __APPLE__
-// BSD per-file flags (macOS).
-int chflags(char *path, unsigned long flags);
-int lchflags(char *path, unsigned long flags);
+// BSD per-file flags (macOS), with the SDK's <sys/stat.h> types.
+int chflags(const char *path, unsigned int flags);
+int lchflags(const char *path, unsigned int flags);
 #endif
 // Process groups, sessions, and controlling-terminal foreground (POSIX).
 int getpgid(int pid);

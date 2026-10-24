@@ -100,7 +100,7 @@ struct stat {
     long            st_size;           /* offset 96, 8 bytes */
     long            st_blocks;         /* offset 104, 8 bytes */
     int             st_blksize;        /* offset 112, 4 bytes */
-    int             st_flags;          /* offset 116, 4 bytes */
+    unsigned int    st_flags;          /* offset 116, 4 bytes */
     int             st_gen;            /* offset 120, 4 bytes */
     int             st_lspare;         /* offset 124, 4 bytes */
     long            st_qspare0;        /* offset 128, 8 bytes */
@@ -221,6 +221,39 @@ int stat(const char *path, struct stat *buf);
 int lstat(const char *path, struct stat *buf);
 #endif
 int fstat(int fd, struct stat *buf);
+
+#ifdef __APPLE__
+// The SDK's st_flags bits: the owner's (UF_*) and the superuser's (SF_*),
+// which chflags(2) sets.
+#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
+#define UF_SETTABLE   0x0000ffff
+#define UF_NODUMP     0x00000001
+#define UF_IMMUTABLE  0x00000002
+#define UF_APPEND     0x00000004
+#define UF_OPAQUE     0x00000008
+#define UF_COMPRESSED 0x00000020
+#define UF_TRACKED    0x00000040
+#define UF_DATAVAULT  0x00000080
+#define UF_HIDDEN     0x00008000
+#define SF_SUPPORTED  0x009f0000
+#define SF_SETTABLE   0x3fff0000
+#define SF_SYNTHETIC  0xc0000000
+#define SF_ARCHIVED   0x00010000
+#define SF_IMMUTABLE  0x00020000
+#define SF_APPEND     0x00040000
+#define SF_RESTRICTED 0x00080000
+#define SF_NOUNLINK   0x00100000
+#define SF_FIRMLINK   0x00800000
+#define SF_DATALESS   0x40000000
+
+#pragma binding(libc::chflags,  "_chflags")
+#pragma binding(libc::lchflags, "_lchflags")
+#pragma binding(libc::fchflags, "_fchflags")
+int chflags(const char *path, unsigned int flags);
+int lchflags(const char *path, unsigned int flags);
+int fchflags(int fd, unsigned int flags);
+#endif
+#endif
 
 // Mode bits
 #define S_IFMT  0170000

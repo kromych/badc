@@ -43,7 +43,12 @@
 #ifdef __linux__
 #define IPPROTO_MPTCP 262 // Multipath TCP (Linux)
 #endif
-#define IPV6_V6ONLY  26 // Linux value; macOS=27 -- set via setsockopt only
+// The Linux number, and the BSD one macOS and Winsock share.
+#ifdef __linux__
+#define IPV6_V6ONLY  26
+#else
+#define IPV6_V6ONLY  27
+#endif
 
 // IP / IPv6 per-packet class-of-service option names for setsockopt. The
 // numbering is BSD-derived on macOS and distinct on Linux.

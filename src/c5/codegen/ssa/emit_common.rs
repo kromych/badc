@@ -522,7 +522,7 @@ pub(crate) fn body_keeps_frame_record(
         Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } | Inst::TailExt(_) => {
             true
         }
-        Inst::TlsAddr(_) => super::reg_alloc::tls_addr_is_call(target),
+        Inst::TlsAddr(_) => super::reg_alloc::tls_addr_is_call(target, func),
         Inst::InlineAsm { asm, .. } => asm.clobbers_sp(target),
         // An unknown discriminant has no lowering; the emit refuses it.
         Inst::Intrinsic { kind, .. } => {
@@ -2679,6 +2679,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             super::super::passes::index_fold::mark_abs_bases(f, extern_abs);
         }
         f.general_regs_only = native.no_fp_regs;
+        f.tls_dynamic = native.pic
+            && matches!(
+                target,
+                super::Target::LinuxX64 | super::Target::LinuxAarch64
+            );
     }
     // At -O the operand-free values are set again past the calls they
     // would otherwise cross, then each function is allocated and
@@ -3083,6 +3088,9 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         tls_init_size: program.tls_init_size,
         tls_align: program.tls_align,
         tls_index_fixups: st.tls_index_fixups,
+        tls_got: alloc::vec::Vec::new(),
+        tls_got_fields: alloc::vec::Vec::new(),
+        static_tls: false,
         data_relocs: alloc::vec::Vec::new(),
         extern_data_relocs: alloc::vec::Vec::new(),
         code_relocs: alloc::vec::Vec::new(),

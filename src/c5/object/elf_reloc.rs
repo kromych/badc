@@ -39,11 +39,14 @@ use super::elf_reloc_types::{
     R_AARCH64_MOVW_SABS_G2, R_AARCH64_MOVW_UABS_G0, R_AARCH64_MOVW_UABS_G0_NC,
     R_AARCH64_MOVW_UABS_G1, R_AARCH64_MOVW_UABS_G1_NC, R_AARCH64_MOVW_UABS_G2,
     R_AARCH64_MOVW_UABS_G2_NC, R_AARCH64_MOVW_UABS_G3, R_AARCH64_PREL32, R_AARCH64_PREL64,
-    R_AARCH64_TLS_DTPREL64, R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21,
-    R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, R_AARCH64_TLSLE_ADD_TPREL_HI12,
+    R_AARCH64_TLS_DTPREL64, R_AARCH64_TLSDESC_ADD_LO12, R_AARCH64_TLSDESC_ADR_PAGE21,
+    R_AARCH64_TLSDESC_CALL, R_AARCH64_TLSDESC_LD64_LO12, R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21,
+    R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, R_AARCH64_TLSLD_ADD_DTPREL_HI12,
+    R_AARCH64_TLSLD_ADD_DTPREL_LO12_NC, R_AARCH64_TLSLE_ADD_TPREL_HI12,
     R_AARCH64_TLSLE_ADD_TPREL_LO12_NC, R_AARCH64_TSTBR14, R_X86_64_8, R_X86_64_16, R_X86_64_32,
-    R_X86_64_32S, R_X86_64_64, R_X86_64_DTPOFF64, R_X86_64_GOTTPOFF, R_X86_64_PC8, R_X86_64_PC16,
-    R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_REX_GOTPCRELX, R_X86_64_TPOFF32,
+    R_X86_64_32S, R_X86_64_64, R_X86_64_DTPOFF32, R_X86_64_DTPOFF64, R_X86_64_GOTPC32_TLSDESC,
+    R_X86_64_GOTTPOFF, R_X86_64_PC8, R_X86_64_PC16, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32,
+    R_X86_64_REX_GOTPCRELX, R_X86_64_TLSDESC_CALL, R_X86_64_TPOFF32, TLS_MODULE_BASE,
     i386_field_width, i386_reloc_desc,
 };
 
@@ -2092,16 +2095,21 @@ impl<'a> RelocWriter<'a> {
         let build = self.build;
         if self.elf_tls_interop {
             for f in &build.elf_tpoff_fixups {
-                if let super::ElfTpoffTarget::Extern(name)
-                | super::ElfTpoffTarget::InitialExec(name) = &f.target
-                    && !self.names.extern_tls_names.contains(&name.as_str())
+                let name = match &f.target {
+                    super::ElfTpoffTarget::Extern(name)
+                    | super::ElfTpoffTarget::InitialExec(name)
+                    | super::ElfTpoffTarget::Descriptor(name) => name.as_str(),
+                    super::ElfTpoffTarget::ModuleDescriptor(_) => TLS_MODULE_BASE,
+                    super::ElfTpoffTarget::Local(_) => continue,
+                };
+                if !self.names.extern_tls_names.contains(&name)
                     && !self
                         .names
                         .defined_tls_globals
                         .iter()
-                        .any(|(n, _, _)| n == name)
+                        .any(|(n, _, _)| *n == name)
                 {
-                    self.names.extern_tls_names.push(name.as_str());
+                    self.names.extern_tls_names.push(name);
                 }
             }
         }
@@ -3095,20 +3103,65 @@ impl<'a> RelocWriter<'a> {
                     .expect("extern_tls_names contains every fixup's symbol name");
                 self.syms.extern_tls_sym_idx[pos] as u64
             };
+            let section_sym = |off: u64| {
+                let off = off as i64;
+                if off >= tls_init_len {
+                    (self.syms.tbss_sec_sym, off - tls_init_len)
+                } else {
+                    (self.syms.tdata_sec_sym, off)
+                }
+            };
             for f in &build.elf_tpoff_fixups {
+                let at = f.imm_offset as u64;
+                // A descriptor sequence is relocated against its variable or
+                // the module base, then, for the module base, the variable's
+                // offset in the block against its section.
+                let (desc_sym, block_offset) = match &f.target {
+                    super::ElfTpoffTarget::Descriptor(name) => (Some(extern_sym(name)), None),
+                    super::ElfTpoffTarget::ModuleDescriptor(off) => {
+                        (Some(extern_sym(TLS_MODULE_BASE)), Some(section_sym(*off)))
+                    }
+                    _ => (None, None),
+                };
+                if let Some(sym_idx) = desc_sym {
+                    let call: &[(u64, u32, i64)] = match machine {
+                        Machine::X86_64 => &[
+                            (at + 3, R_X86_64_GOTPC32_TLSDESC, -4),
+                            (at + 7, R_X86_64_TLSDESC_CALL, 0),
+                        ],
+                        Machine::Aarch64 => &[
+                            (at, R_AARCH64_TLSDESC_ADR_PAGE21, 0),
+                            (at + 4, R_AARCH64_TLSDESC_LD64_LO12, 0),
+                            (at + 8, R_AARCH64_TLSDESC_ADD_LO12, 0),
+                            (at + 12, R_AARCH64_TLSDESC_CALL, 0),
+                        ],
+                    };
+                    let dtp: &[(u64, u32)] = match machine {
+                        Machine::X86_64 => &[(at + 21, R_X86_64_DTPOFF32)],
+                        Machine::Aarch64 => &[
+                            (at + 24, R_AARCH64_TLSLD_ADD_DTPREL_HI12),
+                            (at + 28, R_AARCH64_TLSLD_ADD_DTPREL_LO12_NC),
+                        ],
+                    };
+                    for &(r_offset, rtype, addend) in call {
+                        Self::push_rela(&mut table, r_offset, sym_idx, rtype, addend);
+                    }
+                    if let Some((sec, addend)) = block_offset {
+                        for &(r_offset, rtype) in dtp {
+                            Self::push_rela(&mut table, r_offset, sec, rtype, addend);
+                        }
+                    }
+                    continue;
+                }
                 let (sym_idx, r_addend, initial_exec) = match &f.target {
                     super::ElfTpoffTarget::Extern(name) => (extern_sym(name), 0i64, false),
                     super::ElfTpoffTarget::InitialExec(name) => (extern_sym(name), 0i64, true),
                     super::ElfTpoffTarget::Local(off) => {
-                        let off = *off as i64;
-                        if off >= tls_init_len {
-                            (self.syms.tbss_sec_sym, off - tls_init_len, false)
-                        } else {
-                            (self.syms.tdata_sec_sym, off, false)
-                        }
+                        let (sec, off) = section_sym(*off);
+                        (sec, off, false)
                     }
+                    _ => unreachable!("descriptor sites are relocated above"),
                 };
-                let at = f.imm_offset as u64;
                 let relocs: &[(u64, u32, i64)] = match (machine, initial_exec) {
                     (Machine::X86_64, false) => &[(at, R_X86_64_TPOFF32, r_addend)],
                     (Machine::X86_64, true) => &[(at, R_X86_64_GOTTPOFF, -4)],
@@ -4789,13 +4842,15 @@ fn build_badc_note(
         push_note_record(&mut out, NT_BADC_MACHO_TLV_DESC_SYM, &desc);
     }
 
-    // An initial-exec site is stated by its relocations alone.
+    // An initial-exec or descriptor site is stated by its relocations alone.
     let mut desc: Vec<u8> = Vec::new();
     for f in elf_tpoff_fixups {
         let (kind, payload) = match &f.target {
             super::ElfTpoffTarget::Local(off) => (0u8, off.to_le_bytes().to_vec()),
             super::ElfTpoffTarget::Extern(sym_name) => (1, [sym_name.as_bytes(), &[0]].concat()),
-            super::ElfTpoffTarget::InitialExec(_) => continue,
+            super::ElfTpoffTarget::InitialExec(_)
+            | super::ElfTpoffTarget::Descriptor(_)
+            | super::ElfTpoffTarget::ModuleDescriptor(_) => continue,
         };
         desc.extend_from_slice(&(f.imm_offset as u64).to_le_bytes());
         desc.push(kind);

@@ -895,6 +895,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
     // load-time import instead of a link error, unless `--no-undefined`.
     let opts = badc::LinkOptions {
         allow_undefined: cli.mode == Mode::SharedLibrary && cli.link.z.defs() != Some(true),
+        shared: cli.mode == Mode::SharedLibrary,
         preemption: cli.preemption(),
         export_all: cli.link.export_all,
         export_data: cli.link.export_data,

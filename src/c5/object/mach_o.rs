@@ -2332,6 +2332,12 @@ impl<'a> MachOWriter<'a> {
                     self.data_off_to_vaddr(d.offset),
                     self.data_off_sect_index(d.offset),
                 ),
+                crate::c5::codegen::DynamicExportSection::Tls => {
+                    return Err(Self::internal(format!(
+                        "Mach-O: thread-local export `{}` has no symbol form",
+                        d.name
+                    )));
+                }
             };
             symtab.extend_from_slice(&nlist_defined(n_strx, n_value, n_sect, d.weak));
             export_trie_entries.push((

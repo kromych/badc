@@ -621,6 +621,17 @@ impl RelocSite<'_> {
         ))
     }
 
+    /// A thread-local form naming an offset from the thread pointer or
+    /// into the executable's block, which a shared object does not know.
+    pub(crate) fn tls_in_shared_object(&self) -> C5Error {
+        self.located(&format!(
+            "{} against symbol `{}` cannot be used when making a shared object; recompile \
+             with -fPIC",
+            reloc_desc(self.machine, self.rtype),
+            self.symbol,
+        ))
+    }
+
     /// An absolute relocation in an image the loader places at an
     /// address of its choosing. See [`absolute_in_pie_body`].
     pub(crate) fn absolute_in_pie(&self, shared: bool) -> C5Error {

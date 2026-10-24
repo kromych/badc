@@ -335,6 +335,9 @@ fn synth_program_and_build(
         tls_data: merged.tls_data.clone(),
         tls_init_size: merged.tls_init_size,
         tls_align: merged.tls_align,
+        tls_got: merged.tls_got.clone(),
+        tls_got_fields: merged.tls_got_fields.clone(),
+        static_tls: merged.static_tls,
         tls_index_fixups: merged
             .tls_index_fixups
             .iter()
@@ -648,18 +651,24 @@ fn synth_dynamic_exports(
     merged
         .defined
         .iter()
+        .chain(&merged.tls_defined)
         .filter_map(|(name, sym)| {
             let named_object =
                 sym.section != NativeSymSection::Text && named.contains(name.as_str());
             let exported = exports_definition(sym, named_object, export_funcs, export_data_globals)
                 || linked(name) && exports_definition(sym, true, false, true);
-            if name.is_empty() || !exported {
+            // An ELF symbol of a thread-local is its offset in the TLS
+            // template; the other formats publish none.
+            let tls_format = target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
+            if name.is_empty() || !exported || (sym.section == NativeSymSection::Tls && !tls_format)
+            {
                 return None;
             }
             // A `.bss` definition rides the same data-byte offset
             // space as `.data`, biased past the file image.
             let (section, offset) = match sym.section {
                 NativeSymSection::Text => (DynamicExportSection::Text, sym.value),
+                NativeSymSection::Tls => (DynamicExportSection::Tls, sym.value),
                 NativeSymSection::Bss => (
                     DynamicExportSection::Data,
                     merged.data.len() as u64 + sym.value,
@@ -1672,6 +1681,10 @@ mod tests {
             stub_address_imports: alloc::collections::BTreeSet::new(),
             preemptible_imports: alloc::collections::BTreeSet::new(),
             tls_imports: alloc::collections::BTreeSet::new(),
+            tls_got: Vec::new(),
+            tls_got_fields: Vec::new(),
+            static_tls: false,
+            tls_defined: Default::default(),
             dylibs: alloc::vec![],
             debug_info: alloc::vec![],
             debug_abbrev: alloc::vec![],

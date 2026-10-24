@@ -1976,6 +1976,7 @@ mod tests {
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             general_regs_only: false,
+            tls_dynamic: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,

@@ -271,7 +271,7 @@ pub(super) fn emit_tls_addr(
     dst: Place,
     frame: Frame,
     offset: i64,
-    target: Target,
+    (target, dynamic): (Target, bool),
     tls_index_fixups: &mut Vec<super::TlsIndexFixup>,
     macho_tlv_fixups: &mut Vec<super::MachoTlvFixup>,
     macho_tlv_descriptors: &mut Vec<super::MachoTlvDescriptor>,
@@ -293,6 +293,31 @@ pub(super) fn emit_tls_addr(
         }
     };
     let emitted = match target {
+        Target::LinuxAarch64 if dynamic => {
+            // The TLS descriptor form (AAELF64): x0 comes back as the offset
+            // from the thread pointer of the named variable or of the
+            // module's block, which `:dtprel:` then advances to the variable.
+            let start = code.len();
+            emit(code, enc_adrp(Reg(0), 0));
+            emit(code, enc_ldr_imm(Reg(1), Reg(0), 0));
+            emit(code, enc_add_imm(Reg(0), Reg(0), 0));
+            emit(code, enc_blr(Reg(1)));
+            emit(code, enc_mrs_tpidr_el0(Reg(1)));
+            emit(code, enc_add_reg(rd, Reg(1), Reg(0)));
+            let target = match tls_sym {
+                Some(r) => super::ElfTpoffTarget::Descriptor(r.name.clone()),
+                None => {
+                    emit(code, enc_add_imm_lsl12(rd, rd, 0));
+                    emit(code, enc_add_imm(rd, rd, 0));
+                    super::ElfTpoffTarget::ModuleDescriptor(offset as u64)
+                }
+            };
+            elf_tpoff_fixups.push(super::ElfTpoffFixup {
+                imm_offset: start,
+                target,
+            });
+            Ok(())
+        }
         Target::LinuxAarch64 => {
             // Variant 1: the static TLS block sits above the thread pointer past
             // the 16-byte TCB rounded up to the block's alignment, so the

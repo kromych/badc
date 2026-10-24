@@ -2578,7 +2578,7 @@ fn check_allocation(
 
     // Result-register read: a `RetPart` follows a call in its block, and
     // nothing between them sits in or implicitly writes its register.
-    let tls_call = tls_addr_is_call(target);
+    let tls_call = tls_addr_is_call(target, func);
     for block in &func.blocks {
         for v in block.inst_range.clone() {
             let Some((fp, reg)) = ret_part_reg(target, &func.insts[v as usize]) else {
@@ -3670,7 +3670,7 @@ fn populate_return_hints(
     //     control flow means there is no back-edge / phi-merge gap
     //     that the broader per-value relaxation otherwise surfaces
     //     as a regression, absent in straight-line shapes.
-    let call = |inst: &Inst| is_call_site(inst, tls_addr_is_call(target));
+    let call = |inst: &Inst| is_call_site(inst, tls_addr_is_call(target, func));
     let has_call = func.insts.iter().any(call);
     let single_block = func.blocks.len() == 1;
     if has_call && !single_block {
@@ -3869,7 +3869,7 @@ fn compute_param_incoming_forbid(
     }
     // A `RetPart` reads its call's result register, which stays live from
     // the call to the part: a value defined between them stays off it.
-    let tls_call = tls_addr_is_call(target);
+    let tls_call = tls_addr_is_call(target, func);
     for block in &func.blocks {
         for v in block.inst_range.clone() {
             let Some((fp, reg)) = ret_part_reg(target, &func.insts[v as usize]) else {
@@ -4313,13 +4313,14 @@ fn compute_calls_after_def(
     // order: a value live across a call only on a branch or back-edge
     // path has that call outside its `[def, last_use]` pc interval, so
     // a pc-interval test misses it.
-    liveness.values_live_across_calls(func, tls_addr_is_call(target))
+    liveness.values_live_across_calls(func, tls_addr_is_call(target, func))
 }
 
-/// Whether the target's `Inst::TlsAddr` lowering issues a call: Mach-O
-/// invokes the TLV descriptor's routine through `blr`.
-pub(crate) fn tls_addr_is_call(target: Target) -> bool {
-    matches!(target, Target::MacOSAarch64)
+/// Whether `func`'s `Inst::TlsAddr` lowering issues a call: Mach-O invokes
+/// the TLV descriptor's routine through `blr`, and Linux `-fPIC` code its
+/// TLS descriptor's.
+pub(crate) fn tls_addr_is_call(target: Target, func: &FunctionSsa) -> bool {
+    matches!(target, Target::MacOSAarch64) || func.tls_dynamic
 }
 
 /// Promote each phi class's `calls_after_def` flag so every member
@@ -5911,6 +5912,7 @@ int main(void) { return 0; }
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             general_regs_only: false,
+            tls_dynamic: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,
@@ -6155,6 +6157,7 @@ int main(void) { return 0; }
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             general_regs_only: false,
+            tls_dynamic: false,
             section: None,
             patchable_entry: None,
             no_instrument: false,

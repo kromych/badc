@@ -13,8 +13,9 @@ use super::super::error::C5Error;
 use super::super::program::Program;
 use super::elf_reloc_types::{
     R_AARCH64_ABS64, R_AARCH64_COPY, R_AARCH64_GLOB_DAT, R_AARCH64_JUMP_SLOT, R_AARCH64_RELATIVE,
-    R_AARCH64_TLS_TPREL64, R_X86_64_64, R_X86_64_COPY, R_X86_64_GLOB_DAT, R_X86_64_JUMP_SLOT,
-    R_X86_64_RELATIVE, R_X86_64_TPOFF64,
+    R_AARCH64_TLS_DTPMOD64, R_AARCH64_TLS_DTPREL64, R_AARCH64_TLS_TPREL64, R_AARCH64_TLSDESC,
+    R_X86_64_64, R_X86_64_COPY, R_X86_64_DTPMOD64, R_X86_64_DTPOFF64, R_X86_64_GLOB_DAT,
+    R_X86_64_JUMP_SLOT, R_X86_64_RELATIVE, R_X86_64_TLSDESC, R_X86_64_TPOFF64,
 };
 use super::{Abi, AddrPart, Build, DataRegion, ExecForm, Machine, data_region_addr};
 use super::{aarch64, dwarf, eh_frame, image, x86_64};
@@ -77,6 +78,7 @@ const DT_RELRENT: u64 = 37;
 
 const DF_SYMBOLIC: u64 = 0x2;
 const DF_BIND_NOW: u64 = 0x8;
+const DF_STATIC_TLS: u64 = 0x10;
 const DF_1_PIE: u64 = 0x0800_0000;
 
 const VER_NDX_GLOBAL: u16 = 1;
@@ -988,9 +990,17 @@ fn name_bytes(strtab: &[u8], offset: usize) -> &[u8] {
 }
 
 /// Build .rela.dyn -- one relocation per import filling its GOT slot.
-fn build_rela_dyn(got_vmaddr: u64, import_kinds: &[ImportKind], machine: Machine) -> Vec<u8> {
+fn build_rela_dyn(
+    got_vmaddr: u64,
+    import_kinds: &[ImportKind],
+    machine: Machine,
+    shared: bool,
+) -> Vec<u8> {
     let mut out = Vec::with_capacity(import_kinds.len() * ELF64_RELA_SIZE as usize);
     for (i, &kind) in import_kinds.iter().enumerate() {
+        if !import_slot_relocated(kind, shared) {
+            continue;
+        }
         let sym_idx = (i as u64) + 1;
         write_struct(
             &mut out,
@@ -1002,6 +1012,16 @@ fn build_rela_dyn(got_vmaddr: u64, import_kinds: &[ImportKind], machine: Machine
         );
     }
     out
+}
+
+/// The thread-local `.got` entries' `(word, r_info, r_addend)` relocations
+/// and `(word, value)` words the link writes.
+type TlsGotFill = (Vec<(usize, u64, i64)>, Vec<(usize, u64)>);
+
+/// Whether an import's own `.got` slot takes a relocation: a shared
+/// object reaches a thread-local import only through its TLS entries.
+fn import_slot_relocated(kind: ImportKind, shared: bool) -> bool {
+    !(shared && kind == ImportKind::ThreadLocal)
 }
 
 /// Build .dynamic -- the table the loader walks to find every other
@@ -1031,12 +1051,13 @@ fn build_dynamic(lib_strtab_offsets: &[u32], info: DynamicInfo) -> Vec<u8> {
         entries.push((DT_SYMBOLIC, 0));
     }
     let symbolic = if info.symbolic { DF_SYMBOLIC } else { 0 };
+    let static_tls = if info.static_tls { DF_STATIC_TLS } else { 0 };
     entries.extend([
         (DT_RELA, info.rela_vmaddr),
         (DT_RELASZ, info.rela_size),
         (DT_RELAENT, ELF64_RELA_SIZE),
         (DT_BIND_NOW, 0),
-        (DT_FLAGS, DF_BIND_NOW | symbolic),
+        (DT_FLAGS, DF_BIND_NOW | symbolic | static_tls),
     ]);
     if info.pie {
         entries.push((DT_FLAGS_1, DF_1_PIE));
@@ -1088,6 +1109,8 @@ struct DynamicInfo {
     pie: bool,
     /// `-Bsymbolic`: `DT_SYMBOLIC` and `DF_SYMBOLIC`.
     symbolic: bool,
+    /// An initial-exec thread-local access: `DF_STATIC_TLS`.
+    static_tls: bool,
     /// `.relr.dyn`'s address and size: `DT_RELR`.
     relr: Option<(u64, u64)>,
 }
@@ -1604,17 +1627,6 @@ pub(super) fn write(
 impl<'a> ElfImageWriter<'a> {
     fn new(program: &'a Program, build: &'a Build, machine: Machine) -> Result<Self, C5Error> {
         let is_shared = build.output_kind == super::OutputKind::SharedLibrary;
-        // Both backends lower `_Thread_local` access with the local-exec
-        // model, whose TP-relative offsets are valid only in the
-        // executable's static TLS block. TODO: the general-dynamic model
-        // for shared-library output.
-        if is_shared && !build.tls_data.is_empty() {
-            return Err(C5Error::hard(
-                Code::OBJECT_FORMAT,
-                "_Thread_local data is not supported in ELF shared-library output: \
-                 only the executable-model (local-exec) TLS sequence is implemented",
-            ));
-        }
         // A freestanding image supplies its own entry and is reached at
         // it. Otherwise the image needs a prologue that turns the
         // kernel's process-entry state into a C call and does not return:
@@ -1684,6 +1696,60 @@ impl<'a> ElfImageWriter<'a> {
     /// `.got` slots: one per import, then one per canonical import's stub.
     fn n_got_slots(&self) -> usize {
         self.n_imports + self.build.canonical_imports.len()
+    }
+
+    /// The `.got` word a thread-local entry starts at, past the import slots.
+    fn tls_got_word(&self, entry: usize) -> usize {
+        let before = self.build.tls_got[..entry].iter();
+        self.n_got_slots() + before.map(|e| e.kind.words()).sum::<usize>()
+    }
+
+    fn n_tls_got_words(&self) -> usize {
+        self.tls_got_word(self.build.tls_got.len()) - self.n_got_slots()
+    }
+
+    /// The TLS dynamic relocations filling the thread-local entries, and the
+    /// words the link fills: a general-dynamic entry's offset into this
+    /// module's block. A variable of this module takes symbol 0, which the
+    /// loader resolves against the module itself.
+    fn tls_got_relocs(&self) -> TlsGotFill {
+        use crate::c5::codegen::{TlsGotKind as K, TlsGotTarget as T};
+        let (dtpmod, dtpoff, tpoff, desc): (u32, u32, u32, u32) = match self.machine {
+            Machine::X86_64 => (
+                R_X86_64_DTPMOD64,
+                R_X86_64_DTPOFF64,
+                R_X86_64_TPOFF64,
+                R_X86_64_TLSDESC,
+            ),
+            Machine::Aarch64 => (
+                R_AARCH64_TLS_DTPMOD64,
+                R_AARCH64_TLS_DTPREL64,
+                R_AARCH64_TLS_TPREL64,
+                R_AARCH64_TLSDESC,
+            ),
+        };
+        let (mut relocs, mut words) = (Vec::new(), Vec::new());
+        for (i, e) in self.build.tls_got.iter().enumerate() {
+            let w = self.tls_got_word(i);
+            let (sym, off) = match e.target {
+                T::Local(off) => (0u64, off),
+                T::Import(idx) => (idx as u64 + 1, 0),
+            };
+            let info = |rtype: u32| (sym << 32) | u64::from(rtype);
+            match e.kind {
+                K::Descriptor => relocs.push((w, info(desc), off as i64)),
+                K::TpOffset => relocs.push((w, info(tpoff), off as i64)),
+                K::Module => relocs.push((w, u64::from(dtpmod), 0)),
+                K::ModuleOffset => {
+                    relocs.push((w, info(dtpmod), 0));
+                    match e.target {
+                        T::Local(_) => words.push((w + 1, off)),
+                        T::Import(_) => relocs.push((w + 1, info(dtpoff), 0)),
+                    }
+                }
+            }
+        }
+        (relocs, words)
     }
 
     /// The `.got` slot index the site at `fx` reads: a canonical import's
@@ -2065,6 +2131,7 @@ impl<'a> ElfImageWriter<'a> {
         };
         let relr_size = self.relr_words.len() as u64 * 8;
         let n_got_slots = self.n_got_slots() as u64;
+        let n_tls_relocs = self.tls_got_relocs().0.len() as u64;
         let dynamic = &self.dynamic;
         let seg = &mut self.seg;
         seg.has_tls = !build.tls_data.is_empty();
@@ -2125,7 +2192,12 @@ impl<'a> ElfImageWriter<'a> {
         } else {
             after_hash
         };
-        seg.rela_size = (n_got_slots
+        let shared = build.output_kind == super::OutputKind::SharedLibrary;
+        let unrelocated = (dynamic.import_kinds.iter())
+            .filter(|&&k| !import_slot_relocated(k, shared))
+            .count() as u64;
+        seg.rela_size = (n_got_slots - unrelocated
+            + n_tls_relocs
             + n_relative as u64
             + build.copy_relocs.len() as u64
             + build.data_import_binds.len() as u64
@@ -2188,6 +2260,7 @@ impl<'a> ElfImageWriter<'a> {
             0
         };
         let n_got_slots = self.n_got_slots() as u64;
+        let n_tls_got_words = self.n_tls_got_words() as u64;
         let text_align = self.text_align;
         let seg = &mut self.seg;
         seg.data_align = crate::c5::layout::data_image_align(build.data_align) as u64;
@@ -2240,7 +2313,7 @@ impl<'a> ElfImageWriter<'a> {
         seg.dynamic_off = seg.segment2_off;
         seg.dynamic_size = dynamic_size;
         seg.got_off = seg.dynamic_off + seg.dynamic_size;
-        seg.got_size = n_got_slots * 8;
+        seg.got_size = (n_got_slots + n_tls_got_words) * 8;
         let got_end = seg.got_off + seg.got_size;
         // The rw load's relro part: `.dynamic`, `.got` and, in a
         // position-independent image, the relro region.
@@ -3060,9 +3133,22 @@ impl<'a> ElfImageWriter<'a> {
                 let addr = self.data_off_to_vaddr(e.offset);
                 (addr, self.data_addr_shndx(addr, e.offset))
             }
+            super::DynamicExportSection::Tls => {
+                let plan = &self.tail.plan;
+                let sec = if (e.offset as usize) < self.build.tls_init_size {
+                    Sec::Tdata
+                } else {
+                    Sec::Tbss
+                };
+                (e.offset, plan.index_of(sec))
+            }
         };
         let binding = if e.weak { STB_WEAK } else { STB_GLOBAL };
-        let st_type = if e.is_object { STT_OBJECT } else { STT_FUNC };
+        let st_type = match e.section {
+            super::DynamicExportSection::Tls => STT_TLS,
+            _ if e.is_object => STT_OBJECT,
+            _ => STT_FUNC,
+        };
         let protected = self.build.protected_exports.contains(&e.name);
         DynsymExport {
             name_off,
@@ -3135,7 +3221,8 @@ impl<'a> ElfImageWriter<'a> {
             },
         );
         debug_assert_eq!(final_dynsym.len(), dynamic.dynsym.len());
-        let mut rela = build_rela_dyn(self.va(seg.got_off), &dynamic.import_kinds, machine);
+        let shared = build.output_kind == super::OutputKind::SharedLibrary;
+        let mut rela = build_rela_dyn(self.va(seg.got_off), &dynamic.import_kinds, machine, shared);
         let r_type = r_relative(machine);
         for site in self.relative_sites()? {
             if !self.in_relr(&site) {
@@ -3196,6 +3283,16 @@ impl<'a> ElfImageWriter<'a> {
                     r_offset: tdata_vmaddr + b.data_offset,
                     r_info: ((b.import as u64 + 1) << 32) | r_abs,
                     r_addend: b.addend,
+                },
+            );
+        }
+        for (word, r_info, r_addend) in self.tls_got_relocs().0 {
+            write_struct(
+                &mut rela,
+                &Elf64Rela {
+                    r_offset: got_vmaddr + word as u64 * 8,
+                    r_info,
+                    r_addend,
                 },
             );
         }
@@ -3348,6 +3445,7 @@ impl<'a> ElfImageWriter<'a> {
                 executable: build.output_kind != super::OutputKind::SharedLibrary,
                 pie: self.emit_dyn && build.output_kind != super::OutputKind::SharedLibrary,
                 symbolic: build.elf.symbolic,
+                static_tls: build.static_tls,
                 relr: self.relr.then(|| (va(seg.relr_off), seg.relr_size)),
             },
         )
@@ -3400,7 +3498,12 @@ impl<'a> ElfImageWriter<'a> {
             out[at..at + relro.len()].copy_from_slice(relro);
         }
         out.extend_from_slice(&dynamic);
-        out.extend(vec![0u8; seg.got_size as usize]);
+        let mut got = vec![0u8; seg.got_size as usize];
+        for (word, value) in self.tls_got_relocs().1 {
+            got[word * 8..word * 8 + 8].copy_from_slice(&value.to_le_bytes());
+        }
+        let out = &mut self.out;
+        out.extend_from_slice(&got);
         if !placed {
             out.resize(seg.relro_off as usize, 0);
             debug_assert_eq!(out.len() as u64, seg.relro_off);
@@ -4033,6 +4136,46 @@ impl<'a> ElfImageWriter<'a> {
                     fx.part,
                     "GOT fixup",
                 )?;
+            }
+        }
+        for fx in &build.tls_got_fields {
+            let site = stub_len + fx.site_text_offset;
+            let entry_vmaddr = got_vmaddr + self.tls_got_word(fx.entry) as u64 * 8;
+            let at = code.file_at(site);
+            let pc = code.vmaddr_at(site) as i64;
+            let patched = match fx.form {
+                crate::c5::codegen::TlsGotForm::Pc32 => {
+                    let value = entry_vmaddr as i64 + fx.addend - pc;
+                    match (i32::try_from(value), self.out.get_mut(at..at + 4)) {
+                        (Ok(disp), Some(field)) => {
+                            field.copy_from_slice(&disp.to_le_bytes());
+                            Ok(())
+                        }
+                        _ => Err(format!("cannot take {value}")),
+                    }
+                }
+                crate::c5::codegen::TlsGotForm::A64Page => {
+                    crate::c5::codegen::aarch64::patch::patch_adrp(
+                        &mut self.out,
+                        at,
+                        pc,
+                        entry_vmaddr as i64,
+                    )
+                    .map_err(|e| e.describe("thread-local GOT page"))
+                }
+                crate::c5::codegen::TlsGotForm::A64Lo12 => {
+                    crate::c5::codegen::aarch64::patch::patch_lo12(
+                        &mut self.out,
+                        at,
+                        entry_vmaddr as i64,
+                    )
+                    .map_err(|e| e.describe("thread-local GOT offset"))
+                }
+            };
+            if let Err(why) = patched {
+                return Err(Self::internal(format!(
+                    "ELF: thread-local GOT field at file+{at:#x}: {why}"
+                )));
             }
         }
         for fx in &build.got_pcrel_fixups {
@@ -4898,6 +5041,85 @@ mod tests {
                     (got, 1 << 32 | u64::from(glob_dat), 0),
                     (got + 8, 2 << 32 | u64::from(tpoff), 0)
                 ),
+                "{machine:?}"
+            );
+        }
+    }
+
+    /// A shared library's thread-local GOT entries follow the imports' slots,
+    /// each filled by its TLS dynamic relocation; the module's own variables
+    /// take symbol 0, and an initial-exec entry marks it `DF_STATIC_TLS`.
+    #[test]
+    fn a_shared_librarys_thread_local_entries_take_the_tls_relocations() {
+        use super::super::elf_reloc_types::{
+            R_AARCH64_TLS_DTPMOD64, R_AARCH64_TLSDESC, R_X86_64_DTPMOD64, R_X86_64_TLSDESC,
+        };
+        use crate::c5::codegen::{TlsGotEntry, TlsGotKind as K, TlsGotTarget as T};
+        for (machine, target, desc, dtpmod, tpoff) in [
+            (
+                Machine::X86_64,
+                super::super::Target::LinuxX64,
+                R_X86_64_TLSDESC,
+                R_X86_64_DTPMOD64,
+                R_X86_64_TPOFF64,
+            ),
+            (
+                Machine::Aarch64,
+                super::super::Target::LinuxAarch64,
+                R_AARCH64_TLSDESC,
+                R_AARCH64_TLS_DTPMOD64,
+                R_AARCH64_TLS_TPREL64,
+            ),
+        ] {
+            let mut b = tiny_build();
+            b.abi = target.abi();
+            b.output_kind = super::super::OutputKind::SharedLibrary;
+            b.tls_data = alloc::vec![0; 32];
+            b.tls_init_size = 32;
+            b.tls_align = 8;
+            b.tls_got = [
+                (K::Descriptor, 8),
+                (K::ModuleOffset, 16),
+                (K::Module, 0),
+                (K::TpOffset, 24),
+            ]
+            .map(|(kind, off)| TlsGotEntry {
+                kind,
+                target: T::Local(off),
+            })
+            .to_vec();
+            b.static_tls = true;
+            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let (_, _, got, _, _) = find_section(&bytes, ".got").expect(".got");
+            let n_imports = b.imports.imports.len() as u64;
+            let base = got + n_imports * 8;
+            let tls: Vec<(u64, u64, i64)> = rela_dyn(&bytes)
+                .into_iter()
+                .filter(|&(at, _, _)| at >= base)
+                .collect();
+            assert_eq!(
+                tls,
+                [
+                    (base, u64::from(desc), 8),
+                    (base + 16, u64::from(dtpmod), 0),
+                    (base + 32, u64::from(dtpmod), 0),
+                    (base + 48, u64::from(tpoff), 24),
+                ],
+                "{machine:?}"
+            );
+            let got_off = section_file_off(&bytes, ".got").expect(".got") as usize;
+            let word = |i: u64| {
+                let at = got_off + ((n_imports + i) * 8) as usize;
+                u64::from_le_bytes(bytes[at..at + 8].try_into().unwrap())
+            };
+            assert_eq!(word(3), 16, "{machine:?}: the general-dynamic offset word");
+            let flags = dynamic_tags(&bytes)
+                .into_iter()
+                .find(|&(t, _)| t == DT_FLAGS)
+                .map(|(_, v)| v);
+            assert_eq!(
+                flags.map(|f| f & DF_STATIC_TLS),
+                Some(DF_STATIC_TLS),
                 "{machine:?}"
             );
         }

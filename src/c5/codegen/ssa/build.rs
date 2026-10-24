@@ -181,6 +181,7 @@ impl SsaBuilder {
             is_noreturn: false,
             conv: crate::c5::codegen::CallConv::Target,
             general_regs_only: false,
+            tls_dynamic: false,
             is_weak: false,
             is_internal: false,
             section: None,

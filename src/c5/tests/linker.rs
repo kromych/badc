@@ -5977,15 +5977,10 @@ fn thread_local_address_initializer_survives_the_object_round_trip() {
 }
 
 #[test]
-fn thread_local_in_elf_shared_library_is_a_link_error() {
-    // The emitted `_Thread_local` sequences use the local-exec TLS
-    // model, whose TP-relative offsets are valid only in the
-    // executable's static TLS block; baked into ET_DYN they address
-    // another module's TLS. The writer must reject the combination
-    // until the general-dynamic model is implemented.
-    use crate::c5::linker::{
-        emit_x86_64_plt, link_native_objects, parse_native_elf, write_native_image_from_merged,
-    };
+fn a_local_exec_thread_local_access_is_refused_in_a_shared_object() {
+    // An offset from the thread pointer holds only in the executable's
+    // static block; GNU ld refuses it in a shared object and advises -fPIC.
+    use crate::c5::linker::{LinkOptions, link_native_objects_with, parse_native_elf};
     use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
     let program = Compiler::with_options(
         "_Thread_local int counter = 7;\n\
@@ -6002,27 +5997,108 @@ fn thread_local_in_elf_shared_library_is_a_link_error() {
     };
     let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
-    let mut merged = link_native_objects(&[obj]).expect("link");
-    assert!(
-        !merged.tls_data.is_empty(),
-        "the merged unit must carry TLS data"
-    );
-    let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
-    let err = write_native_image_from_merged(
-        &merged,
-        &plt,
-        "",
-        None,
-        OutputKind::SharedLibrary,
-        Target::LinuxX64,
-        None,
-    )
-    .expect_err("a _Thread_local shared library must be rejected");
+    let link = LinkOptions {
+        shared: true,
+        allow_undefined: true,
+        ..Default::default()
+    };
+    let err = link_native_objects_with(&[obj], &[], &link).expect_err("a shared object");
     assert!(
         err.to_string()
-            .contains("_Thread_local data is not supported in ELF shared-library output"),
+            .contains("cannot be used when making a shared object; recompile with -fPIC"),
         "unexpected diagnostic: {err}"
     );
+}
+
+/// `-fPIC` code reaches its own thread-locals through the module's TLS
+/// descriptor and another unit's through the variable's, as gcc's descriptor
+/// dialect does; a shared link gives each descriptor a GOT entry.
+#[test]
+fn pic_thread_locals_take_descriptors_and_a_shared_link_their_got_entries() {
+    use crate::c5::codegen::{TlsGotEntry, TlsGotKind, TlsGotTarget};
+    use crate::c5::linker::{LinkOptions, link_native_objects_with, parse_native_elf};
+    use crate::c5::object::elf_reloc_types as rt;
+    use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
+    let cases = [
+        (
+            Target::LinuxX64,
+            &[rt::R_X86_64_GOTPC32_TLSDESC, rt::R_X86_64_TLSDESC_CALL][..],
+            &[rt::R_X86_64_DTPOFF32][..],
+        ),
+        (
+            Target::LinuxAarch64,
+            &[
+                rt::R_AARCH64_TLSDESC_ADR_PAGE21,
+                rt::R_AARCH64_TLSDESC_LD64_LO12,
+                rt::R_AARCH64_TLSDESC_ADD_LO12,
+                rt::R_AARCH64_TLSDESC_CALL,
+            ][..],
+            &[
+                rt::R_AARCH64_TLSLD_ADD_DTPREL_HI12,
+                rt::R_AARCH64_TLSLD_ADD_DTPREL_LO12_NC,
+            ][..],
+        ),
+    ];
+    for (target, desc, dtp) in cases {
+        let program = Compiler::with_options(
+            "_Thread_local int own = 7;\nextern _Thread_local int other;\n\
+             int sum(void) { return own + other; }\n"
+                .to_string(),
+            target,
+            CompileOptions::default().with_no_entry_point(true),
+        )
+        .compile()
+        .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            pic: true,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_native_elf(&bytes).expect("parse ET_REL");
+        let named = |rtype: u32| -> Vec<&str> {
+            (obj.text_relocs.iter())
+                .filter(|r| r.rtype == rtype)
+                .map(|r| obj.symbols[r.sym_idx].name.as_str())
+                .collect()
+        };
+        for &rtype in desc {
+            let mut names = named(rtype);
+            names.sort_unstable();
+            assert_eq!(names, ["_TLS_MODULE_BASE_", "other"], "{target:?} {rtype}");
+        }
+        for &rtype in dtp {
+            assert_eq!(named(rtype).len(), 1, "{target:?} {rtype}");
+        }
+        assert!(
+            obj.elf_tpoff_fixups.is_empty(),
+            "{target:?}: no local-exec site"
+        );
+        let link = LinkOptions {
+            shared: true,
+            allow_undefined: true,
+            ..Default::default()
+        };
+        let merged = link_native_objects_with(&[obj], &[], &link).expect("link");
+        assert!(merged.tls_defined.contains_key("own"), "{target:?}");
+        let other = merged
+            .imports
+            .iter()
+            .position(|i| i == "other")
+            .expect("an import");
+        let want =
+            [TlsGotTarget::Local(0), TlsGotTarget::Import(other)].map(|target| TlsGotEntry {
+                kind: TlsGotKind::Descriptor,
+                target,
+            });
+        assert_eq!(merged.tls_got.len(), 2, "{target:?}: {:?}", merged.tls_got);
+        assert!(
+            want.iter().all(|e| merged.tls_got.contains(e)),
+            "{target:?}: {:?}",
+            merged.tls_got
+        );
+        assert!(!merged.static_tls, "{target:?}");
+    }
 }
 
 #[test]

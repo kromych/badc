@@ -849,6 +849,12 @@ impl<'a> PeWriter<'a> {
                         }
                         self.data_off_to_rva(d.offset as u32)
                     }
+                    super::DynamicExportSection::Tls => {
+                        return Err(Self::internal(format!(
+                            "PE: thread-local export `{}` has no export form",
+                            d.name
+                        )));
+                    }
                 };
                 entries.push((d.name.clone(), rva));
             }

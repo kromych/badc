@@ -450,7 +450,7 @@ pub(super) fn emit_inst(
             dst,
             frame,
             *offset,
-            target,
+            (target, func.tls_dynamic),
             cx.tls_index_fixups,
             macho_tlv_fixups,
             macho_tlv_descriptors,

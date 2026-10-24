@@ -48,13 +48,18 @@ use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ABS32, R_AARCH64_ABS64, R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE,
     R_AARCH64_ADR_PREL_LO21, R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_CALL26, R_AARCH64_JUMP26,
     R_AARCH64_LD_PREL_LO19, R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_PREL32, R_AARCH64_PREL64,
-    R_AARCH64_TLS_DTPREL64, R_X86_64_32, R_X86_64_32S, R_X86_64_64, R_X86_64_DTPOFF32,
-    R_X86_64_DTPOFF64, R_X86_64_GOT64, R_X86_64_GOTOFF64, R_X86_64_GOTPC32, R_X86_64_GOTPC64,
-    R_X86_64_GOTPCREL, R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_PLTOFF64,
-    R_X86_64_REX_GOTPCRELX, TprelField, aarch64_abs_field, aarch64_is_tls, aarch64_ldst_lo12_scale,
-    aarch64_movw_field, aarch64_pcrel_data_field, aarch64_pcrel_imm_field, aarch64_reloc_desc,
-    aarch64_tprel_field, x86_64_abs_field, x86_64_is_tls, x86_64_pcrel_data_field,
-    x86_64_reloc_desc, x86_64_tpoff_field,
+    R_AARCH64_TLS_DTPREL64, R_AARCH64_TLSDESC_ADD_LO12, R_AARCH64_TLSDESC_ADR_PAGE21,
+    R_AARCH64_TLSDESC_CALL, R_AARCH64_TLSDESC_LD64_LO12, R_AARCH64_TLSGD_ADD_LO12_NC,
+    R_AARCH64_TLSGD_ADR_PAGE21, R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21,
+    R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, R_X86_64_32, R_X86_64_32S, R_X86_64_64,
+    R_X86_64_DTPOFF32, R_X86_64_DTPOFF64, R_X86_64_GOT64, R_X86_64_GOTOFF64, R_X86_64_GOTPC32,
+    R_X86_64_GOTPC32_TLSDESC, R_X86_64_GOTPC64, R_X86_64_GOTPCREL, R_X86_64_GOTTPOFF,
+    R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_PLTOFF64, R_X86_64_REX_GOTPCRELX,
+    R_X86_64_TLSDESC_CALL, R_X86_64_TLSGD, R_X86_64_TLSLD, TprelField, aarch64_abs_field,
+    aarch64_dtprel_field, aarch64_is_tls, aarch64_ldst_lo12_scale, aarch64_movw_field,
+    aarch64_pcrel_data_field, aarch64_pcrel_imm_field, aarch64_reloc_desc, aarch64_tprel_field,
+    x86_64_abs_field, x86_64_is_tls, x86_64_pcrel_data_field, x86_64_reloc_desc,
+    x86_64_tpoff_field,
 };
 
 /// The tag this module's diagnostics carry.
@@ -99,7 +104,9 @@ pub(crate) fn exports_definition(
         super::object::STV_DEFAULT | super::object::STV_PROTECTED
     ) && match sym.section {
         NativeSymSection::Text => named || export_all,
-        NativeSymSection::Data | NativeSymSection::Bss => named || export_data,
+        NativeSymSection::Data | NativeSymSection::Bss | NativeSymSection::Tls => {
+            named || export_data
+        }
         _ => false,
     }
 }
@@ -151,6 +158,8 @@ pub struct MergedNative {
     /// Maps the symbol's name to its absolute byte offset
     /// within the merged section's range.
     pub defined: BTreeMap<String, MergedSymbol>,
+    /// The global thread-locals the link defines, at their template offsets.
+    pub tls_defined: BTreeMap<String, MergedSymbol>,
     /// Imports the units reach for that weren't defined by any
     /// unit. Each appears once even if multiple units / call
     /// sites reach for it. The final-image writer turns each
@@ -227,6 +236,10 @@ pub struct MergedNative {
     /// The names a linked shared library defines or references, which an
     /// ELF executable defining one exports so the library binds to it.
     pub shared_names: BTreeSet<String>,
+    /// See [`crate::c5::codegen::Build::tls_got`].
+    pub(crate) tls_got: Vec<crate::c5::codegen::TlsGotEntry>,
+    pub(crate) tls_got_fields: Vec<crate::c5::codegen::TlsGotField>,
+    pub(crate) static_tls: bool,
     /// Win64 `_tls_index` fixup offsets, rebased into the merged
     /// `.text`. The PE writer patches each with the `_tls_index` slot
     /// address. Empty on non-Windows links and Windows links without
@@ -962,6 +975,8 @@ pub enum Preemption {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct LinkOptions {
     pub allow_undefined: bool,
+    /// The image is a shared library.
+    pub shared: bool,
     pub preemption: Preemption,
     pub export_all: bool,
     pub export_data: bool,
@@ -1121,6 +1136,7 @@ struct Link<'a> {
     /// Each defined `_Thread_local` at its unit base plus its offset
     /// within that unit's block.
     tls_symbol_offsets: HashMap<&'a str, u64>,
+    tls_defined: BTreeMap<String, MergedSymbol>,
 
     text: Vec<u8>,
     text_bases: Vec<usize>,
@@ -1199,6 +1215,10 @@ struct Link<'a> {
     branch_imports: BTreeSet<usize>,
     /// Import indices of shared-library thread-locals.
     tls_imports: BTreeSet<usize>,
+    shared: bool,
+    tls_got: Vec<crate::c5::codegen::TlsGotEntry>,
+    tls_got_fields: Vec<crate::c5::codegen::TlsGotField>,
+    static_tls: bool,
 
     pending_imports: Vec<PendingImportReloc>,
     applied_text_relocs: Vec<AppliedTextReloc>,
@@ -1258,6 +1278,7 @@ impl<'a> Link<'a> {
             tls_init_size: 0,
             tls_align: crate::c5::layout::TLS_ALIGN_MIN,
             tls_symbol_offsets: HashMap::new(),
+            tls_defined: BTreeMap::new(),
             text: Vec::new(),
             text_bases: Vec::with_capacity(objs.len()),
             text_align: 16,
@@ -1297,6 +1318,10 @@ impl<'a> Link<'a> {
             object_imports: BTreeSet::new(),
             branch_imports: BTreeSet::new(),
             tls_imports: BTreeSet::new(),
+            shared: opts.shared,
+            tls_got: Vec::new(),
+            tls_got_fields: Vec::new(),
+            static_tls: false,
             pending_imports: Vec::new(),
             applied_text_relocs: Vec::new(),
             data_abs_relocs: Vec::new(),
@@ -1560,17 +1585,28 @@ impl<'a> Link<'a> {
                 };
                 let table = (obj.symbols.iter())
                     .filter(|s| global(s) && s.binding == if strong { 1 } else { 2 })
-                    .map(|s| (s.name.as_str(), s.value));
+                    .map(|s| (s.name.as_str(), s.value, s.size, s.visibility));
                 let note_only = (obj.tls_symbols.iter())
                     .filter(|(n, _, _)| {
                         strong && !obj.symbols.iter().any(|s| global(s) && s.name == *n)
                     })
-                    .map(|(n, off, _)| (n.as_str(), *off));
-                for (name, value) in table.chain(note_only) {
+                    .map(|(n, off, size)| (n.as_str(), *off, *size, super::object::STV_DEFAULT));
+                for (name, value, size, visibility) in table.chain(note_only) {
                     let at = self.unit_tls_offset(i, value);
                     match self.tls_symbol_offsets.entry(name) {
                         hashbrown::hash_map::Entry::Vacant(v) => {
                             v.insert(at);
+                            self.tls_defined.insert(
+                                name.to_string(),
+                                MergedSymbol {
+                                    section: NativeSymSection::Tls,
+                                    value: at,
+                                    size,
+                                    kind: super::object::STT_TLS,
+                                    visibility,
+                                    weak: !strong,
+                                },
+                            );
                         }
                         hashbrown::hash_map::Entry::Occupied(_) if strong => {
                             return Err(link_err(
@@ -1628,6 +1664,9 @@ impl<'a> Link<'a> {
         site: &RelocSite<'_>,
         resolver: &ResolverCalls,
     ) -> Result<(), C5Error> {
+        if self.shared {
+            return self.apply_shared_tls_reloc(unit, sym, reloc, patch_offset, site);
+        }
         let machine = self.machine;
         let local_exec = match machine {
             NativeMachine::X86_64 => x86_64_tpoff_field(reloc.rtype).is_some(),
@@ -1653,10 +1692,14 @@ impl<'a> Link<'a> {
             }
             TlsBinding::Library(_) => Model::InitialExec,
         };
+        // An offset into the block reads from the thread pointer once the
+        // module-base sequence before it is rewritten.
+        let block_offset = match machine {
+            NativeMachine::X86_64 => tls_relax::x86_64_dtpoff_field(reloc.rtype).is_some(),
+            NativeMachine::Aarch64 => aarch64_dtprel_field(reloc.rtype).is_some(),
+        };
         if let Model::LocalExec(value) = to
-            && (local_exec
-                || (machine == NativeMachine::X86_64
-                    && tls_relax::x86_64_dtpoff_field(reloc.rtype).is_some()))
+            && (local_exec || block_offset)
         {
             return apply_tprel_reloc(&mut self.text, patch_offset, value, site);
         }
@@ -1700,6 +1743,122 @@ impl<'a> Link<'a> {
             self.import_thread_local(sym, base + field, rtype, addend);
         }
         Ok(())
+    }
+
+    /// A shared library's thread-local access keeps its dynamic model, as
+    /// GNU ld keeps it: the loader places the library's block, so each model
+    /// reads a GOT entry the TLS dynamic relocations fill, and only an
+    /// offset into the module's block is known at link time.
+    fn apply_shared_tls_reloc(
+        &mut self,
+        unit: usize,
+        sym: &'a NativeSymbol,
+        reloc: &NativeReloc,
+        patch_offset: usize,
+        site: &RelocSite<'_>,
+    ) -> Result<(), C5Error> {
+        use crate::c5::codegen::{TlsGotForm as F, TlsGotKind as K};
+        let x86 = self.machine == NativeMachine::X86_64;
+        let use_of = match (self.machine, reloc.rtype) {
+            (NativeMachine::X86_64, R_X86_64_TLSDESC_CALL)
+            | (NativeMachine::Aarch64, R_AARCH64_TLSDESC_CALL) => return Ok(()),
+            (NativeMachine::X86_64, R_X86_64_GOTPC32_TLSDESC) => Some((K::Descriptor, F::Pc32)),
+            (NativeMachine::X86_64, R_X86_64_TLSGD) => Some((K::ModuleOffset, F::Pc32)),
+            (NativeMachine::X86_64, R_X86_64_TLSLD) => Some((K::Module, F::Pc32)),
+            (NativeMachine::X86_64, R_X86_64_GOTTPOFF) => Some((K::TpOffset, F::Pc32)),
+            (NativeMachine::Aarch64, R_AARCH64_TLSDESC_ADR_PAGE21) => {
+                Some((K::Descriptor, F::A64Page))
+            }
+            (NativeMachine::Aarch64, R_AARCH64_TLSDESC_LD64_LO12) => {
+                Some((K::Descriptor, F::A64Lo12))
+            }
+            (NativeMachine::Aarch64, R_AARCH64_TLSDESC_ADD_LO12) => {
+                Some((K::Descriptor, F::A64Lo12))
+            }
+            (NativeMachine::Aarch64, R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21) => {
+                Some((K::TpOffset, F::A64Page))
+            }
+            (NativeMachine::Aarch64, R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC) => {
+                Some((K::TpOffset, F::A64Lo12))
+            }
+            (NativeMachine::Aarch64, R_AARCH64_TLSGD_ADR_PAGE21) => {
+                Some((K::ModuleOffset, F::A64Page))
+            }
+            (NativeMachine::Aarch64, R_AARCH64_TLSGD_ADD_LO12_NC) => {
+                Some((K::ModuleOffset, F::A64Lo12))
+            }
+            _ => None,
+        };
+        let Some((kind, form)) = use_of else {
+            // An offset into the module's block.
+            let dtp_field = match self.machine {
+                NativeMachine::X86_64 => tls_relax::x86_64_dtpoff_field(reloc.rtype).is_some(),
+                NativeMachine::Aarch64 => aarch64_dtprel_field(reloc.rtype).is_some(),
+            };
+            if !dtp_field {
+                return Err(site.tls_in_shared_object());
+            }
+            let crate::c5::codegen::TlsGotTarget::Local(off) = self.shared_tls_target(unit, sym)?
+            else {
+                return Err(site.tls_in_shared_object());
+            };
+            return apply_tprel_reloc(
+                &mut self.text,
+                patch_offset,
+                off as i64 + reloc.addend,
+                site,
+            );
+        };
+        // An AArch64 relocation's addend offsets the variable; an x86-64
+        // one is the RIP bias of its field.
+        let target = match (kind, self.shared_tls_target(unit, sym)?) {
+            (K::Module, _) => crate::c5::codegen::TlsGotTarget::Local(0),
+            (_, crate::c5::codegen::TlsGotTarget::Local(off)) if !x86 => {
+                crate::c5::codegen::TlsGotTarget::Local(off.wrapping_add_signed(reloc.addend))
+            }
+            (_, t) => t,
+        };
+        self.static_tls |= kind == K::TpOffset;
+        let entry = crate::c5::codegen::TlsGotEntry { kind, target };
+        let index = match self.tls_got.iter().position(|e| *e == entry) {
+            Some(i) => i,
+            None => {
+                self.tls_got.push(entry);
+                self.tls_got.len() - 1
+            }
+        };
+        self.tls_got_fields.push(crate::c5::codegen::TlsGotField {
+            site_text_offset: patch_offset as u64,
+            entry: index,
+            form,
+            addend: if x86 { reloc.addend } else { 0 },
+        });
+        Ok(())
+    }
+
+    /// The module's own block (offset 0 for the module base), or an import
+    /// of the thread-local kind the loader binds.
+    fn shared_tls_target(
+        &mut self,
+        unit: usize,
+        sym: &'a NativeSymbol,
+    ) -> Result<crate::c5::codegen::TlsGotTarget, C5Error> {
+        use crate::c5::codegen::TlsGotTarget;
+        if sym.section == NativeSymSection::Undef && sym.name == TLS_MODULE_BASE {
+            return Ok(TlsGotTarget::Local(0));
+        }
+        if sym.section == NativeSymSection::Tls && sym.binding != 2 {
+            return Ok(TlsGotTarget::Local(self.unit_tls_offset(unit, sym.value)));
+        }
+        if let Some(&at) = self.tls_symbol_offsets.get(sym.name.as_str()) {
+            return Ok(TlsGotTarget::Local(at));
+        }
+        if !self.allow_undefined {
+            self.library_thread_local(&sym.name)?;
+        }
+        let idx = self.bind_import(sym, false, true);
+        self.tls_imports.insert(idx);
+        Ok(TlsGotTarget::Import(idx))
     }
 
     /// An initial-exec reference at `text_offset` to a shared library's
@@ -1797,7 +1956,7 @@ impl<'a> Link<'a> {
             .filter(|(_, s)| s.section == NativeSymSection::Undef && s.name == TLS_GET_ADDR)
             .map(|(i, _)| i)
             .collect();
-        if self.allow_undefined || resolver.is_empty() {
+        if self.shared || self.allow_undefined || resolver.is_empty() {
             return out;
         }
         let calls: BTreeSet<u64> = (obj.text_relocs.iter())
@@ -3301,6 +3460,20 @@ impl<'a> Link<'a> {
         let objs = self.objs;
         for (i, obj) in objs.iter().enumerate() {
             let win_teb = !obj.tls_index_fixups.is_empty();
+            if self.shared
+                && !win_teb
+                && let Some((text_off, _)) = obj.elf_tpoff_fixups.first()
+            {
+                let at = super::object::locate_reloc(&obj.source, ".text", *text_off);
+                return Err(link_err(
+                    Code::RELOCATION,
+                    MODULE,
+                    &format!(
+                        "{at}: a local-exec thread-local access cannot be used when making a \
+                         shared object; recompile with -fPIC"
+                    ),
+                ));
+            }
             for (text_off, target) in &obj.elf_tpoff_fixups {
                 let merged_offset = match target {
                     ElfTpoffTarget::Local(off) => self.unit_tls_offset(i, *off),
@@ -4468,6 +4641,7 @@ impl<'a> Link<'a> {
             bss_size: self.bss_size,
             named_sections: self.named_sections,
             defined,
+            tls_defined: self.tls_defined,
             imports: self.imports,
             pending_imports: self.pending_imports,
             applied_text_relocs: self.applied_text_relocs,
@@ -4494,6 +4668,9 @@ impl<'a> Link<'a> {
             stub_address_imports: BTreeSet::new(),
             preemptible_imports,
             tls_imports: self.tls_imports,
+            tls_got: self.tls_got,
+            tls_got_fields: self.tls_got_fields,
+            static_tls: self.static_tls,
             debug_info: dbg.info.bytes,
             debug_abbrev: dbg.abbrev,
             debug_line: dbg.line.bytes,
@@ -5352,8 +5529,9 @@ fn apply_tprel_reloc(
         text[patch_offset..patch_offset + n].copy_from_slice(&value.to_le_bytes()[..n]);
         return Ok(());
     }
-    let Some(field) =
-        aarch64_tprel_field(site.rtype).filter(|_| site.machine == NativeMachine::Aarch64)
+    let Some(field) = aarch64_tprel_field(site.rtype)
+        .or_else(|| aarch64_dtprel_field(site.rtype))
+        .filter(|_| site.machine == NativeMachine::Aarch64)
     else {
         return Err(site.unsupported());
     };

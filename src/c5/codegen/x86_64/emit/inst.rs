@@ -488,7 +488,7 @@ pub(super) fn emit_inst(
             dst,
             *offset,
             v,
-            target,
+            (target, func.tls_dynamic),
             tls_index_fixups,
             elf_tpoff_fixups,
             extern_tls_names,

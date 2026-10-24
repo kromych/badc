@@ -380,7 +380,7 @@ pub(crate) fn split_across_calls(func: &mut FunctionSsa, target: Target) {
     if n == 0 || func.blocks.is_empty() {
         return;
     }
-    let tls_call = tls_addr_is_call(target);
+    let tls_call = tls_addr_is_call(target, func);
     let mut use_counts = compute_use_counts(func);
     drop_unread_incomes(func, &mut use_counts);
     let cand: Vec<bool> = (0..n)

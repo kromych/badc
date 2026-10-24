@@ -1901,6 +1901,9 @@ pub(crate) enum DynamicExportSection {
     /// space [`DataFixup`] addresses, so an offset at or past
     /// `Build::data.len()` names a `.bss` byte.
     Data,
+    /// Byte offset within the TLS template, `.tdata` then `.tbss`: an ELF
+    /// `STT_TLS` symbol's value.
+    Tls,
 }
 
 /// `.init_array` / `.fini_array` placement in the merged data segment.
@@ -2235,6 +2238,11 @@ pub(crate) struct Build {
     /// take (variant II rounds the block size up to it, variant I the
     /// TCB reserve).
     pub tls_align: usize,
+    /// A shared library's thread-local GOT entries, the text fields reading
+    /// them, and whether an initial-exec one needs the static TLS block.
+    pub tls_got: Vec<TlsGotEntry>,
+    pub tls_got_fields: Vec<TlsGotField>,
+    pub static_tls: bool,
     /// Win64 TLS-index fixups -- one entry per `Inst::TlsAddr`
     /// lowering site on a Win64 target. The writer reserves a
     /// 4-byte `_tls_index` slot in `.data`, builds the
@@ -2632,6 +2640,60 @@ pub(crate) struct GotFixup {
     /// data import emits no `jmp [IAT]` trampoline. On aarch64 the
     /// adrp + ldr form already loads the slot, so the flag is unused.
     pub is_data_load: bool,
+}
+
+/// A shared library's thread-local GOT entry: the dynamic TLS model it
+/// serves (psABI TLS supplement, AAELF64) and the variable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct TlsGotEntry {
+    pub kind: TlsGotKind,
+    pub target: TlsGotTarget,
+}
+
+/// A descriptor pair, a general-dynamic module index and offset, a
+/// local-dynamic module index, or an initial-exec offset from the thread
+/// pointer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum TlsGotKind {
+    Descriptor,
+    ModuleOffset,
+    Module,
+    TpOffset,
+}
+
+impl TlsGotKind {
+    pub(crate) fn words(self) -> usize {
+        match self {
+            TlsGotKind::TpOffset => 1,
+            _ => 2,
+        }
+    }
+}
+
+/// An offset into this module's block, or a thread-local import by index.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum TlsGotTarget {
+    Local(u64),
+    Import(usize),
+}
+
+/// A text field addressing a TLS GOT entry: the x86-64 field or the
+/// AArch64 instruction at `site_text_offset`, `addend` an x86-64 RIP bias.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TlsGotField {
+    pub site_text_offset: u64,
+    pub entry: usize,
+    pub form: TlsGotForm,
+    pub addend: i64,
+}
+
+/// A RIP-relative disp32 (`entry + addend - field`), an `adrp` to the
+/// entry's page, or the `ldr` / `add` taking its offset in the page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TlsGotForm {
+    Pc32,
+    A64Page,
+    A64Lo12,
 }
 
 /// A site holding the GOT base plus `got_offset`, the value
@@ -3123,6 +3185,11 @@ pub(crate) enum ElfTpoffTarget {
     /// thread pointer (R_X86_64_GOTTPOFF, R_AARCH64_TLSIE_*); an executable
     /// link rewrites it to local-exec where it defines the variable.
     InitialExec(String),
+    /// Linux `-fPIC`: the TLS descriptor sequence starting at the fixup,
+    /// of the named variable, or of the module's block followed by this
+    /// unit offset into it.
+    Descriptor(String),
+    ModuleDescriptor(u64),
 }
 
 /// Relocatable-object call site: the byte offset of the BL / B

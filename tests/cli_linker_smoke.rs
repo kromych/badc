@@ -14894,3 +14894,115 @@ fn a_named_library_without_versions_stamps_none() {
         "an import the named library does not supply keeps the manifest's version"
     );
 }
+
+// A shared library's thread-locals take the dynamic TLS models (psABI TLS
+// supplement, AAELF64): `-fPIC` code reaches its own through the module's
+// TLS descriptor and another library's through the variable's, the GOT
+// entries carry the loader's TLS relocations, and the variables are
+// exported `STT_TLS`. Each thread sees its own copies, in the library, in
+// a library reading another one's variable, and in a `-fPIC` executable,
+// whose link rewrites the descriptors.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_shared_librarys_thread_locals_take_the_dynamic_models() {
+    let dir = tempdir("shared-tls");
+    let lib_src = write_source(
+        &dir,
+        "tl.c",
+        "_Thread_local int tv = 3;\nstatic _Thread_local int sv = 10;\n\
+         _Thread_local long big[4] = {1, 2, 3, 4};\n\
+         int get(void) { return tv + sv++ + (int)big[2]; }\n\
+         void set(int v) { tv = v; big[2] = v; }\nint *addr(void) { return &tv; }\n",
+    );
+    let use_src = write_source(
+        &dir,
+        "use.c",
+        "extern _Thread_local int tv;\nint peek(void) { return tv * 2; }\n",
+    );
+    let main_src = write_source(
+        &dir,
+        "main.c",
+        "#include <pthread.h>\n#include <stdio.h>\n\
+         int get(void); void set(int); int *addr(void); int peek(void);\n\
+         static void *run(void *arg) {\n\
+           set((int)(long)arg);\n\
+           int a = get(), b = get();\n\
+           return (void *)(long)(a * 1000 + b + (addr() != 0) + (peek() == 2 * (int)(long)arg));\n\
+         }\n\
+         int main(void) {\n\
+           pthread_t t[2]; void *r[2];\n\
+           for (int i = 0; i < 2; i++) pthread_create(&t[i], 0, run, (void *)(long)(i * 100));\n\
+           for (int i = 0; i < 2; i++) pthread_join(t[i], &r[i]);\n\
+           printf(\"%ld %ld %d\\n\", (long)r[0], (long)r[1], get());\n\
+           return 0;\n\
+         }\n",
+    );
+    for level in ["-O0", "-O"] {
+        run(
+            Command::new(badc())
+                .args([
+                    "-q",
+                    level,
+                    "-shared",
+                    "-fPIC",
+                    "--export-all",
+                    "--export-data",
+                ])
+                .arg(&lib_src)
+                .arg("-o")
+                .arg(dir.join("libtl.so")),
+            "build the thread-local library",
+        );
+        run(
+            Command::new(badc())
+                .args(["-q", level, "-shared", "-fPIC", "--export-all"])
+                .arg(&use_src)
+                .arg(format!("-L{}", dir.display()))
+                .args(["-ltl", "-o"])
+                .arg(dir.join("libuse.so")),
+            "build the library reading another's thread-local",
+        );
+        let lib = std::fs::read(dir.join("libtl.so")).expect("read the library");
+        let lib = badc::parse_shared_library(&lib).expect("parse");
+        for name in ["tv", "big"] {
+            assert!(
+                lib.tls_exports.contains(name),
+                "{level}: {name} is exported STT_TLS"
+            );
+        }
+        let exe = dir.join("prog");
+        run(
+            Command::new(badc())
+                .args(["-q", level])
+                .arg(&main_src)
+                .arg(format!("-L{}", dir.display()))
+                .args(["-luse", "-ltl", "-o"])
+                .arg(&exe),
+            "link the executable",
+        );
+        let out = run(Command::new(&exe).env("LD_LIBRARY_PATH", &dir), "run");
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout).trim(),
+            "10013 210213 16",
+            "{level}"
+        );
+        // The same units in one `-fPIC` executable.
+        let pic = dir.join("prog-pic");
+        run(
+            Command::new(badc())
+                .args(["-q", level, "-fPIC"])
+                .arg(&lib_src)
+                .arg(&use_src)
+                .arg(&main_src)
+                .arg("-o")
+                .arg(&pic),
+            "link the -fPIC executable",
+        );
+        let out = run(&mut Command::new(&pic), "run the -fPIC executable");
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout).trim(),
+            "10013 210213 16",
+            "{level}"
+        );
+    }
+}

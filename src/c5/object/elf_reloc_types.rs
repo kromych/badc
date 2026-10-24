@@ -30,6 +30,11 @@ pub(crate) const R_X86_64_16: u32 = 12;
 pub(crate) const R_X86_64_8: u32 = 14;
 pub(crate) const R_X86_64_PC16: u32 = 13;
 pub(crate) const R_X86_64_PC8: u32 = 15;
+/// The module's thread-local block, named by a local-dynamic descriptor
+/// sequence; 0 from the thread pointer once the sequence is rewritten.
+pub(crate) const TLS_MODULE_BASE: &str = "_TLS_MODULE_BASE_";
+
+pub(crate) const R_X86_64_DTPMOD64: u32 = 16;
 pub(crate) const R_X86_64_DTPOFF64: u32 = 17;
 pub(crate) const R_X86_64_TPOFF64: u32 = 18;
 pub(crate) const R_X86_64_TLSGD: u32 = 19;
@@ -50,6 +55,7 @@ pub(crate) const R_X86_64_GOTPC64: u32 = 29;
 pub(crate) const R_X86_64_PLTOFF64: u32 = 31;
 pub(crate) const R_X86_64_GOTPC32_TLSDESC: u32 = 34;
 pub(crate) const R_X86_64_TLSDESC_CALL: u32 = 35;
+pub(crate) const R_X86_64_TLSDESC: u32 = 36;
 pub(crate) const R_X86_64_GOTPCRELX: u32 = 41;
 pub(crate) const R_X86_64_REX_GOTPCRELX: u32 = 42;
 
@@ -103,6 +109,14 @@ pub(crate) const R_AARCH64_ADR_GOT_PAGE: u32 = 311;
 pub(crate) const R_AARCH64_LD64_GOT_LO12_NC: u32 = 312;
 pub(crate) const R_AARCH64_TLSGD_ADR_PAGE21: u32 = 513;
 pub(crate) const R_AARCH64_TLSGD_ADD_LO12_NC: u32 = 514;
+pub(crate) const R_AARCH64_TLSLD_MOVW_DTPREL_G2: u32 = 523;
+pub(crate) const R_AARCH64_TLSLD_MOVW_DTPREL_G1: u32 = 524;
+pub(crate) const R_AARCH64_TLSLD_MOVW_DTPREL_G1_NC: u32 = 525;
+pub(crate) const R_AARCH64_TLSLD_MOVW_DTPREL_G0: u32 = 526;
+pub(crate) const R_AARCH64_TLSLD_MOVW_DTPREL_G0_NC: u32 = 527;
+pub(crate) const R_AARCH64_TLSLD_ADD_DTPREL_HI12: u32 = 528;
+pub(crate) const R_AARCH64_TLSLD_ADD_DTPREL_LO12: u32 = 529;
+pub(crate) const R_AARCH64_TLSLD_ADD_DTPREL_LO12_NC: u32 = 530;
 pub(crate) const R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21: u32 = 541;
 pub(crate) const R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC: u32 = 542;
 pub(crate) const R_AARCH64_TLSLE_MOVW_TPREL_G2: u32 = 544;
@@ -121,8 +135,10 @@ pub(crate) const R_AARCH64_COPY: u32 = 1024;
 pub(crate) const R_AARCH64_GLOB_DAT: u32 = 1025;
 pub(crate) const R_AARCH64_JUMP_SLOT: u32 = 1026;
 pub(crate) const R_AARCH64_RELATIVE: u32 = 1027;
+pub(crate) const R_AARCH64_TLS_DTPMOD64: u32 = 1028;
 pub(crate) const R_AARCH64_TLS_DTPREL64: u32 = 1029;
 pub(crate) const R_AARCH64_TLS_TPREL64: u32 = 1030;
+pub(crate) const R_AARCH64_TLSDESC: u32 = 1031;
 
 /// Access size in bytes that an `R_AARCH64_LDST<n>_ABS_LO12_NC`
 /// relocation scales its immediate by, or `None` for any other type.
@@ -232,6 +248,32 @@ pub(crate) fn aarch64_tprel_field(rtype: u32) -> Option<TprelField> {
         R_AARCH64_TLSLE_MOVW_TPREL_G0 => signed(0),
         R_AARCH64_TLSLE_MOVW_TPREL_G1_NC => TprelField::Movw(1, false, None),
         R_AARCH64_TLSLE_MOVW_TPREL_G0_NC => TprelField::Movw(0, false, None),
+        _ => return None,
+    })
+}
+
+/// [`TprelField`] of an aarch64 local-dynamic relocation type, whose
+/// value is the offset into the module's block (`DTPREL(S + A)`).
+pub(crate) fn aarch64_dtprel_field(rtype: u32) -> Option<TprelField> {
+    let signed = |n: u8| TprelField::Movw(n, true, Some(16 * (n as u32 + 1) + 1));
+    Some(match rtype {
+        R_AARCH64_TLSLD_ADD_DTPREL_HI12 => TprelField::Add {
+            hi: true,
+            check: true,
+        },
+        R_AARCH64_TLSLD_ADD_DTPREL_LO12 => TprelField::Add {
+            hi: false,
+            check: true,
+        },
+        R_AARCH64_TLSLD_ADD_DTPREL_LO12_NC => TprelField::Add {
+            hi: false,
+            check: false,
+        },
+        R_AARCH64_TLSLD_MOVW_DTPREL_G2 => signed(2),
+        R_AARCH64_TLSLD_MOVW_DTPREL_G1 => signed(1),
+        R_AARCH64_TLSLD_MOVW_DTPREL_G0 => signed(0),
+        R_AARCH64_TLSLD_MOVW_DTPREL_G1_NC => TprelField::Movw(1, false, None),
+        R_AARCH64_TLSLD_MOVW_DTPREL_G0_NC => TprelField::Movw(0, false, None),
         _ => return None,
     })
 }

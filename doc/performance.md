@@ -18,8 +18,8 @@ charts.
 
 A record lists the compilers that ran on its machine, so the set differs by
 platform: gcc where gcc exists, a `-march` baseline leg where the compiler
-takes one, `cl` on a Windows runner. The page draws what a record carries,
-badc first.
+takes one, `ccc` on a Linux runner, `cl` on a Windows runner. The page draws
+what a record carries, badc first.
 
 The runs live in [badc-perf-data](https://github.com/kromych/badc-perf-data),
 keyed by the commit they measured, and this page reads them where they are, so
@@ -111,7 +111,7 @@ serves the runs as files.
 
   // Draw order for the compilers of a record, whichever ones it lists: badc
   // first, then the reference compilers, then what a runner adds of its own.
-  var FAMILIES = ["badc", "tcc", "clang", "gcc", "cl"];
+  var FAMILIES = ["badc", "tcc", "ccc", "clang", "gcc", "cl"];
 
   function el(tag, cls, text) {
     var n = document.createElement(tag);

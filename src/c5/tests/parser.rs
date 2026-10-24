@@ -3911,6 +3911,7 @@ fn a_named_section_holds_one_kind_of_definition() {
     for (a, b) in [
         (writable, zero),
         ("int fd_a(void);", writable),
+        ("extern const int ec_a;", writable),
         (read_only, relocated),
         (relocated, writable),
         (code, "int fn_b(void) { return 2; }"),

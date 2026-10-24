@@ -882,6 +882,15 @@ impl Symbol {
     /// Whether the slot's name has a symbol of this unit's symbol table: a
     /// function entity, a file-scope object, or an object a block-scope
     /// `extern` declared, whatever binds the name now.
+    /// C99 6.9.2: an object with external linkage declared only `extern`,
+    /// with no initializer, is defined by another unit.
+    pub fn declares_no_storage(&self) -> bool {
+        self.class == crate::c5::token::Token::Glo as i64
+            && self.linkage == Linkage::External
+            && self.is_extern_decl
+            && !self.has_initializer
+    }
+
     pub fn is_link_entity(&self) -> bool {
         self.is_fun_entity()
             || self.class == crate::c5::token::Token::Glo as i64

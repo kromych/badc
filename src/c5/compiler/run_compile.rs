@@ -432,7 +432,11 @@ impl Compiler {
                 let section = s.section_name.as_deref()?;
                 let kind = if s.class == Token::Fun as i64 && s.defined_here {
                     CODE
-                } else if s.class == Token::Glo as i64 && s.defined_here && !s.is_alias {
+                } else if s.class == Token::Glo as i64
+                    && s.defined_here
+                    && !s.is_alias
+                    && !s.declares_no_storage()
+                {
                     match (s.storage_is_const, s.is_thread_local || relocated(s)) {
                         (true, false) => READ_ONLY,
                         (true, true) => RELRO,

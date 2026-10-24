@@ -3386,11 +3386,7 @@ impl Compiler {
             // its references route through the GOT / loader import
             // instead of an uninitialized local slot.
             for sym in self.symbols.iter_mut() {
-                if sym.class == Token::Glo as i64
-                    && sym.linkage == Linkage::External
-                    && sym.is_extern_decl
-                    && !sym.has_initializer
-                {
+                if sym.declares_no_storage() {
                     sym.defined_here = false;
                     sym.val = 0;
                 }

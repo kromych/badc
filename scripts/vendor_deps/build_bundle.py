@@ -149,10 +149,10 @@ SOURCES = [
         # itself (github does not expose a stable commit sha for
         # the tag download).
         name="monocypher",
-        version="4.0.2",
-        url="https://github.com/LoupVaillant/Monocypher/archive/refs/tags/4.0.2.tar.gz",
+        version="4.0.3",
+        url="https://github.com/LoupVaillant/Monocypher/archive/refs/tags/4.0.3.tar.gz",
         ext=".tar.gz",
-        upstream_sha="bc1ca30b1b2654e4e7daf2492c0d204200e55137f23fda6b7142fd7d523bd6b4",
+        upstream_sha="a7cbae546fbdc489bca632c3747e1ceb8ca3d4bd39e2706a0916f28ccd280e50",
         sha_kind="tarball-sha256",
     ),
     Source(

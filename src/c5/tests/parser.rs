@@ -27,6 +27,22 @@ fn empty_source_has_no_main() {
     expect_compile_error("", "main() not defined");
 }
 
+/// C99 6.10.3.4p3: a `#` in program text, one an expansion puts first on
+/// a line included, is no directive; it is named, not skipped with the
+/// rest of its line.
+#[test]
+fn a_hash_in_program_text_is_diagnosed() {
+    for (src, spelling) in [
+        ("int z = 1 # 2\n;\n", "`#`"),
+        ("int z = 1 ## 2\n;\n", "`##`"),
+        ("int w = 1 %: 2\n;\n", "`%:`"),
+        ("#define H #\nH pragma pack(1)\n", "`#`"),
+    ] {
+        let src = alloc::format!("{src}int main(void) {{ return 0; }}\n");
+        expect_compile_error(&src, &alloc::format!("stray {spelling} in program"));
+    }
+}
+
 /// GNU C's cast to a union takes a member of the operand's own type,
 /// signedness included, and yields a value: the union, a member of it and
 /// a structure a call returns are no lvalue (C99 6.3.2.1p1, 6.5.2.3p3).

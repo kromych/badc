@@ -1265,6 +1265,23 @@ fn digraphs_open_directives_and_operate_in_replacement_lists() {
     assert!(e.contains("`##` cannot appear at either end"), "{e}");
 }
 
+// C99 6.10.3.4p3: an expansion that starts a line with `#` is text; the
+// output indents it so, as GNU cpp writes it, except for assembler input.
+#[test]
+fn a_hash_an_expansion_puts_first_stays_text() {
+    let src = "#define H #\nH pragma pack(1)\n";
+    assert!(
+        process(src).contains("\n # pragma pack(1)\n"),
+        "{}",
+        process(src)
+    );
+    assert!(
+        process_asm(src).contains("\n# pragma pack(1)\n"),
+        "{}",
+        process_asm(src)
+    );
+}
+
 // GNU cpp reads assembler input without digraphs: a `%:` line is text.
 #[test]
 fn asm_source_has_no_digraphs() {

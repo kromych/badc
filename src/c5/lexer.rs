@@ -792,6 +792,23 @@ impl Lexer {
         }
     }
 
+    /// C99 6.10.3.2, 6.10.3.3: `#` and `##`, or `%:` and `%:%:`, at
+    /// `tok_start` in program text, where no rule takes them.
+    fn stray_hash(&self) -> C5Error {
+        let rest = &self.src[self.tok_start..];
+        let len = [&b"%:%:"[..], b"##", b"%:", b"#"]
+            .iter()
+            .find(|p| rest.starts_with(p))
+            .map_or(1, |p| p.len());
+        let spelling = String::from_utf8_lossy(&rest[..len]);
+        C5Error::at(
+            Code::INVALID_TOKEN,
+            &self.file,
+            self.line,
+            format!("stray `{spelling}` in program: it operates only in a directive"),
+        )
+    }
+
     /// Whether the visibility in effect at the current source position is
     /// non-preemptible, i.e. inside a `#pragma GCC visibility
     /// push(hidden)` (or `internal`) extent. Default visibility outside
@@ -1855,6 +1872,12 @@ impl Lexer {
             if c == '\n' {
                 self.line += 1;
             } else if c == '#' {
+                // The preprocessor writes the lines below at column 0 and
+                // indents program text that would start there; any other
+                // `#` is an operator outside a directive.
+                if self.pos > 1 && self.src[self.pos - 2] != b'\n' {
+                    return Err(self.stray_hash());
+                }
                 // Three `#`-line shapes survive into the lexer:
                 //   * GNU line markers `# N "file" [flags]` --
                 //     emitted by the preprocessor at every
@@ -2370,6 +2393,9 @@ impl Lexer {
                         }
                     }
                     '%' => {
+                        if next_char == ':' {
+                            return Err(self.stray_hash());
+                        }
                         if next_char == '=' {
                             self.pos += 1;
                             self.tk = Tok(Token::AssignOp as i64);
@@ -2947,6 +2973,17 @@ mod tests {
             if lex.tk == Tok::EOF {
                 return Ok(());
             }
+        }
+    }
+
+    // The preprocessor's own `#` lines open their line; a `#` anywhere
+    // else is program text.
+    #[test]
+    fn a_hash_line_opens_its_line() {
+        lex_all("#pragma pack(1)\nint x;\n# 7 \"f.c\"\nint y;\n").expect("column 0");
+        for src in ["int x; #pragma pack(1)\n", "  # 7 \"f.c\"\n"] {
+            let err = lex_all(src).expect_err(src);
+            assert!(format!("{err}").contains("stray `#`"), "{src}: {err}");
         }
     }
 

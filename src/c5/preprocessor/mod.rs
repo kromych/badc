@@ -2432,6 +2432,11 @@ impl<'p, 's> LinePass<'p, 's> {
             let processed =
                 self.pp
                     .apply_pragma_operators(&substituted, site, &self.current_file)?;
+            // A `#` an expansion puts first is text, not a directive; the
+            // space keeps it so in the output, as GNU cpp writes it.
+            if processed.starts_with('#') && !self.pp.asm_source {
+                self.out.push(' ');
+            }
             self.out.push_str(&processed);
             break;
         }

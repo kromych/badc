@@ -15,6 +15,34 @@ static void empty_grid(GameState *g) {
     g->player.alive = 1;
 }
 
+/* Extend `seen` with every cell the player reaches from a seen one, one
+ * step of the real logic at a time, with the guards removed. */
+static void reach(const GameState *base, int exit_open, unsigned char seen[MAP_H][MAP_W]) {
+    static int qx[MAP_W * MAP_H], qy[MAP_W * MAP_H];
+    int n = 0;
+    for (int y = 0; y < MAP_H; y++)
+        for (int x = 0; x < MAP_W; x++)
+            if (seen[y][x]) qx[n] = x, qy[n++] = y;
+    for (int head = 0; head < n; head++) {
+        for (int k = 0; k < 5; k++) {
+            static GameState s;
+            Input in = {0};
+            in.left = k == 0, in.right = k == 1, in.up = k == 2, in.down = k == 3;
+            s = *base;
+            s.guard_count = 0;
+            s.exit_open = exit_open;
+            s.gold_total = MAP_W * MAP_H;
+            s.player.x = qx[head];
+            s.player.y = qy[head];
+            level_step(&s, in);
+            if (!seen[s.player.y][s.player.x]) {
+                seen[s.player.y][s.player.x] = 1;
+                qx[n] = s.player.x, qy[n++] = s.player.y;
+            }
+        }
+    }
+}
+
 static int fail(int code, const char *what) {
     fprintf(stderr, "test_loderunner: check %d failed (%s)\n", code, what);
     return code;
@@ -120,6 +148,52 @@ int main(void) {
     g.tick = 1;
     level_step(&g, right);
     if (g.state != ST_DEAD) return fail(8, "no death on guard contact");
+
+    /* 9. The built-in level is winnable without digging: every gold is
+     * reachable from the start, and then the top row through the open
+     * exit. */
+    static GameState level;
+    static unsigned char seen[MAP_H][MAP_W];
+    level_load(&level);
+    memset(seen, 0, sizeof seen);
+    seen[level.player.y][level.player.x] = 1;
+    reach(&level, 0, seen);
+    for (int y = 0; y < MAP_H; y++)
+        for (int x = 0; x < MAP_W; x++)
+            if (level.tile[y][x] == TILE_GOLD && !seen[y][x])
+                return fail(9, "a gold the player cannot reach");
+    reach(&level, 1, seen);
+    int top = 0;
+    for (int x = 0; x < MAP_W; x++) top |= seen[0][x];
+    if (!top) return fail(9, "the exit cannot be reached");
+
+    /* 10. Two guards that stop under a player they cannot climb to do not
+     * share a cell. */
+    empty_grid(&g);
+    for (int x = 0; x < MAP_W; x++) g.tile[6][x] = TILE_SOLID;
+    g.tile[4][10] = TILE_SOLID;
+    g.player.x = 10;
+    g.player.y = 3;
+    g.guard_count = 2;
+    g.guard[0] = (Entity){20, 5, 20, 5, 1, 0};
+    g.guard[1] = (Entity){21, 5, 21, 5, 1, 0};
+    for (int i = 0; i < 30 && g.state == ST_PLAY; i++) {
+        level_step(&g, none);
+        if (g.guard[0].x == g.guard[1].x && g.guard[0].y == g.guard[1].y)
+            return fail(10, "two guards in one cell");
+    }
+
+    /* 11. A dead guard does not return onto the player standing at its
+     * start. */
+    empty_grid(&g);
+    for (int x = 0; x < MAP_W; x++) g.tile[6][x] = TILE_SOLID;
+    g.player.x = 8;
+    g.player.y = 5;
+    g.guard_count = 1;
+    g.guard[0] = (Entity){0, 0, 8, 5, 0, 1};
+    for (int i = 0; i < 6; i++) level_step(&g, none);
+    if (g.guard[0].alive || g.state != ST_PLAY)
+        return fail(11, "guard returned onto the player");
 
     printf("test_loderunner: all checks passed (gold_total=%d, guards=%d)\n",
            g.gold_total, g.guard_count);

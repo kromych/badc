@@ -67,6 +67,7 @@ regenerates.
 | B2014 | `strict-prototypes` | ignore | controllable | - | a function declarator whose empty or identifier list declares no prototype, outside a cast and a definition an earlier prototype covers |
 | B2015 | `missing-prototypes` | ignore | controllable | - | an external function definition, neither `inline` nor `main`, that no file-scope declaration with a prototype precedes |
 | B2016 | `missing-declarations` | ignore | controllable | - | an external function definition, neither `inline` nor `main`, that no file-scope declaration precedes |
+| B2017 | `implicit-fallthrough=5` | ignore | controllable | - | a statement completing normally into the `case` or `default` label after it, which no `fallthrough` attribute statement annotates |
 | B2020 | `syntax` | error | hard | - | a token the grammar does not admit at its position; the parser has no resynchronisation point |
 | B2021 | `invalid-declaration` | error | hard | - | a declaration a C99 constraint rejects: a redefinition, conflicting types, an incomplete object, a bit-field width or an alignment out of range |
 | B2022 | `undeclared-identifier` | error | hard | - | a name no declaration in scope introduces |

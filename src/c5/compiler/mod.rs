@@ -23,6 +23,7 @@ mod diag;
 mod emit;
 mod enum_decl;
 mod expr;
+mod fallthrough;
 mod fn_types;
 mod function;
 mod global_init;
@@ -1896,6 +1897,8 @@ pub struct Compiler {
     /// The integer literals that stand for a folded `__builtin_object_size`,
     /// which C does not count as integer constant expressions.
     folded_builtin_lits: Vec<super::ast::ExprId>,
+    /// The `fallthrough` attribute statements of the function being parsed.
+    fallthrough_marks: hashbrown::HashSet<super::ast::StmtId>,
     /// The parameter lists declaring no prototype that `-Wstrict-prototypes`
     /// reports: `(id, file, line)`.
     unprototyped_lists: Vec<(u32, String, usize)>,
@@ -2907,6 +2910,7 @@ impl Compiler {
             const_unevaluated: 0,
             unevaluated: 0,
             folded_builtin_lits: Vec::new(),
+            fallthrough_marks: hashbrown::HashSet::new(),
             unprototyped_lists: Vec::new(),
             file_scope_fn_decls: hashbrown::HashMap::new(),
             const_object_fold: 0,

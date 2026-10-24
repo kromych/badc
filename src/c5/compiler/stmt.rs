@@ -603,6 +603,7 @@ impl Compiler {
 
         // Same conservative drop at the body-exit boundary.
         self.flush_pending_stores();
+        self.check_fallthrough(body_s);
         let labels = self.switch_cases.pop();
         let has_default = self.switch_defaults.pop().unwrap_or(false);
         // gcc's -Wswitch-bool: a label the boolean value never takes, or a
@@ -757,8 +758,15 @@ impl Compiler {
     /// these alone: none an earlier item or the enclosing definition named.
     pub(super) fn parse_block_item_attributes(&mut self) -> Result<(), C5Error> {
         self.pending.attrs = super::DeclAttrs::default();
-        self.skip_attribute_specifiers()?;
+        if !self.at_fallthrough_statement() {
+            self.skip_attribute_specifiers()?;
+        }
         Ok(())
+    }
+
+    /// `__attribute__((fallthrough));`, which is a null statement.
+    fn at_fallthrough_statement(&self) -> bool {
+        self.lex.tk == Token::Attribute && self.lex.peek_fallthrough_statement()
     }
 
     /// Parse a `typedef` declaration at function/block scope (C99
@@ -1178,7 +1186,7 @@ impl Compiler {
                 // C11 6.7.10 allows `static_assert` anywhere a
                 // declaration may appear -- including block scope.
                 self.parse_static_assert()?;
-            } else if self.lex_is_block_decl_start() {
+            } else if self.lex_is_block_decl_start() && !self.at_fallthrough_statement() {
                 let item_before = self.ast_stmts_snapshot();
                 let vla_before = self.func_vla_decls;
                 self.parse_local_decl()?;
@@ -3232,11 +3240,22 @@ impl Compiler {
         self.pending.fn_ptr_depth_is_array_elem = false;
         // GNU statement attributes: an attribute specifier at statement
         // position appertains to the statement that follows, and
-        // `__attribute__((fallthrough));` -- what `<linux/compiler_attributes.h>`
-        // expands `fallthrough` to -- is a null statement. c5 acts on no
-        // statement attribute, so discard the tokens by paren balance
-        // (`skip_attribute_specifiers` writes `pending` state that belongs to
-        // a declaration) and continue with what follows.
+        // `__attribute__((fallthrough));` is a null statement, which
+        // -Wimplicit-fallthrough takes as the annotation. The others are
+        // discarded by paren balance (`skip_attribute_specifiers` writes
+        // `pending` state that belongs to a declaration).
+        if self.at_fallthrough_statement() {
+            while self.lex.tk != ';' {
+                self.next()?;
+            }
+            self.next()?;
+            let pos = self.ast_src_pos();
+            let mark = self
+                .ast
+                .push_stmt(super::super::ast::Stmt::Compound(Vec::new()), pos);
+            self.fallthrough_marks.insert(mark);
+            return Ok(());
+        }
         while self.lex.tk == Token::Attribute {
             self.next()?; // the attribute keyword
             if self.lex.tk != '(' {

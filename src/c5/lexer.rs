@@ -1506,6 +1506,27 @@ impl Lexer {
         ident::ident_len(&self.src, p) > 0
     }
 
+    /// Whether the bytes after the current `__attribute__` token spell
+    /// `((fallthrough));` (or `__fallthrough__`): the GNU attribute
+    /// statement, a null statement rather than a declaration.
+    pub fn peek_fallthrough_statement(&self) -> bool {
+        let mut p = self.pos;
+        let mut eat = |want: &[u8]| {
+            while p < self.src.len() && self.src[p].is_ascii_whitespace() {
+                p += 1;
+            }
+            let hit = self.src[p..].starts_with(want);
+            p += if hit { want.len() } else { 0 };
+            hit
+        };
+        eat(b"(")
+            && eat(b"(")
+            && (eat(b"fallthrough") || eat(b"__fallthrough__"))
+            && eat(b")")
+            && eat(b")")
+            && eat(b";")
+    }
+
     /// Whether a `?` appears at the current grouping depth before the
     /// end of the expression region the cursor is in: a depth-0 `,`,
     /// `;`, `:`, or closing bracket ends the region. `depth` accounts

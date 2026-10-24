@@ -5984,3 +5984,175 @@ fn designated_init_reports_a_positional_member() {
         "`designated_init` applies to a struct type only",
     );
 }
+
+/// gcc's `-Wimplicit-fallthrough=5`: a statement completing into the label
+/// after it, unless a `fallthrough` attribute statement ends it. The lines
+/// are gcc 16.2.1's for the same units: an endless loop does not complete,
+/// whatever `break` it holds, a `do` loop completes when its body does, a
+/// nested switch when it breaks or its last statement completes, and a
+/// label landing on `break`, `goto`, a bare `return` or the switch's end is
+/// passed over, as gcc's lowering gives them.
+#[test]
+fn implicit_fallthrough_reports_where_gcc_does() {
+    let units = [
+        (
+            "void g(void);\n\
+               __attribute__((noreturn)) void die(void);\n\
+               int f(int x, int y) {\n\
+               switch (x) {\n\
+               case 0:\n\
+               g();\n\
+               case 1:\n\
+               g();\n\
+               break;\n\
+               case 2:\n\
+               g();\n\
+               __attribute__((fallthrough));\n\
+               case 3:\n\
+               case 4:\n\
+               if (y) return 1;\n\
+               case 5:\n\
+               if (y) return 1; else return 2;\n\
+               case 6:\n\
+               if (y) { g(); break; } else { return 2; }\n\
+               case 7:\n\
+               while (1) { if (y) return 3; }\n\
+               case 8:\n\
+               while (1) { if (y) break; }\n\
+               case 9:\n\
+               for (;;) { g(); }\n\
+               case 10:\n\
+               do { return 4; } while (0);\n\
+               case 11:\n\
+               do { if (y) continue; return 5; } while (0);\n\
+               case 12:\n\
+               die();\n\
+               case 13:\n\
+               __builtin_unreachable();\n\
+               case 14:\n\
+               { g(); }\n\
+               case 15:\n\
+               { g(); return 7; }\n\
+               case 16:\n\
+               switch (y) { case 1: return 1; default: return 2; }\n\
+               case 17:\n\
+               switch (y) { case 1: return 1; }\n\
+               case 18:\n\
+               goto out;\n\
+               case 19:\n\
+               ;\n\
+               case 20:\n\
+               g();\n\
+               lab:\n\
+               case 21:\n\
+               return 9;\n\
+               default:\n\
+               g();\n\
+               }\n\
+               out:\n\
+               return 0;\n\
+               }\n",
+            &[6, 15, 35, 47][..],
+        ),
+        (
+            "#include <stdlib.h>\n\
+               #include <setjmp.h>\n\
+               void g(void);\n\
+               jmp_buf jb;\n\
+               int f(int x, int y) {\n\
+               switch (x) {\n\
+               case 0:\n\
+               exit(1);\n\
+               case 1:\n\
+               abort();\n\
+               case 2:\n\
+               longjmp(jb, 1);\n\
+               case 3:\n\
+               do { g(); __builtin_unreachable(); } while (0);\n\
+               case 4:\n\
+               if (y) { g(); __attribute__((fallthrough)); } else { return 1; }\n\
+               case 5:\n\
+               { int z = 1; (void)z; }\n\
+               case 6:\n\
+               while (1) { switch (y) { case 0: break; } }\n\
+               case 7:\n\
+               for (int i = 0; ; i++) { if (i > y) return i; }\n\
+               case 8:\n\
+               do { g(); } while (y);\n\
+               case 9:\n\
+               __builtin_trap();\n\
+               case 10:\n\
+               if (y) return 1; else if (x) return 2; else return 3;\n\
+               case 11:\n\
+               g(); { case 12: g(); }\n\
+               case 13:\n\
+               return 0;\n\
+               }\n\
+               return -1;\n\
+               }\n",
+            &[18, 24, 30, 30],
+        ),
+        (
+            "void g(void);\n\
+               int f(int x, int y, int n) {\n\
+               int i;\n\
+               switch (x) {\n\
+               case 0:\n\
+               while (y) { g(); }\n\
+               case 1:\n\
+               for (i = 0; i < n; i++) g();\n\
+               case 2:\n\
+               while (1) { if (y) break; g(); }\n\
+               case 3:\n\
+               for (;;) { if (y) break; }\n\
+               case 4:\n\
+               do { g(); } while (0);\n\
+               case 5:\n\
+               do { if (y) break; g(); } while (1);\n\
+               case 6:\n\
+               switch (y) { case 1: g(); }\n\
+               case 7:\n\
+               switch (y) { case 1: return 1; default: g(); }\n\
+               case 8:\n\
+               g();\n\
+               case 9:\n\
+               break;\n\
+               case 10:\n\
+               g();\n\
+               case 11:\n\
+               return 3;\n\
+               case 12:\n\
+               g();\n\
+               case 13:\n\
+               goto out;\n\
+               case 14:\n\
+               if (y) g();\n\
+               case 15:\n\
+               g();\n\
+               default:\n\
+               g();\n\
+               case 16:\n\
+               { g(); }\n\
+               case 17:\n\
+               g();\n\
+               }\n\
+               out:\n\
+               return 0;\n\
+               }\n",
+            &[6, 8, 14, 18, 20, 26, 34, 36, 38, 40],
+        ),
+    ];
+    for (src, want) in units {
+        let lines = |selectors: &[&str]| -> Vec<u32> {
+            let src = format!("{src}int main(void) {{ return 0; }}\n");
+            super::compile_str_bare_with_diags(&src, selectors)
+                .warnings
+                .iter()
+                .filter(|w| w.code == crate::c5::diag::Code::IMPLICIT_FALLTHROUGH)
+                .filter_map(|w| w.loc.as_ref().map(|l| l.line))
+                .collect()
+        };
+        assert_eq!(lines(&["implicit-fallthrough=5"]), want);
+        assert_eq!(lines(&["all", "extra"]), Vec::<u32>::new());
+    }
+}

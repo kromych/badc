@@ -143,6 +143,9 @@ catalog! {
     2016, "missing-declarations", [], Ignore, Controllable,
         [], Live,
         "an external function definition, neither `inline` nor `main`, that no file-scope declaration precedes";
+    2017, "implicit-fallthrough=5", [], Ignore, Controllable,
+        [], Live,
+        "a statement completing normally into the `case` or `default` label after it, which no `fallthrough` attribute statement annotates";
     2020, "syntax", [], Error, Hard,
         [], Live,
         "a token the grammar does not admit at its position; the parser has no resynchronisation point";
@@ -462,6 +465,7 @@ impl Code {
     pub const STRICT_PROTOTYPES: Code = Code::new(2014);
     pub const MISSING_PROTOTYPES: Code = Code::new(2015);
     pub const MISSING_DECLARATIONS: Code = Code::new(2016);
+    pub const IMPLICIT_FALLTHROUGH: Code = Code::new(2017);
     pub const INT_CONVERSION: Code = Code::new(3001);
     pub const INCOMPATIBLE_STRUCT_TYPES: Code = Code::new(3002);
     pub const RETURN_TYPE: Code = Code::new(3003);

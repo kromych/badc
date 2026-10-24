@@ -1056,6 +1056,7 @@ impl Compiler {
     pub(super) fn ast_reset(&mut self) {
         self.ast = super::super::ast::Ast::new();
         self.folded_builtin_lits.clear();
+        self.fallthrough_marks.clear();
         self.expr_fns.clear();
         self.ast_acc = None;
         self.ast_vstack.clear();

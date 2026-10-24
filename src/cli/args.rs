@@ -803,6 +803,12 @@ impl Parser {
                     badc::diag::Level::Warning,
                 );
             }
+            s if s == "-Wimplicit-fallthrough"
+                || s == "-Wno-implicit-fallthrough"
+                || s.starts_with("-Wimplicit-fallthrough=") =>
+            {
+                self.fallthrough_level(s)?
+            }
             "-Wframe-larger-than" => {
                 return Err(ParseError::diag(
                     "badc: error: `-Wframe-larger-than` takes a byte size: \
@@ -854,6 +860,37 @@ impl Parser {
                     self.front.diag.set_level(code, level);
                 }
             }
+        }
+        Ok(())
+    }
+
+    /// gcc's `-Wimplicit-fallthrough[=N]` is one setting, the last level
+    /// winning. badc implements level 5, where only the `fallthrough`
+    /// attribute annotates; levels 1 to 4 also read comments, which the
+    /// preprocessor drops.
+    fn fallthrough_level(&mut self, arg: &str) -> Result<(), ParseError> {
+        let level = match arg {
+            "-Wno-implicit-fallthrough" => 0,
+            "-Wimplicit-fallthrough" => 3,
+            s => match s["-Wimplicit-fallthrough=".len()..].parse::<u8>() {
+                Ok(n) if n <= 5 => n,
+                _ => {
+                    return Err(ParseError::diag(format!(
+                        "badc: error: `{s}`: the level is not between 0 and 5"
+                    )));
+                }
+            },
+        };
+        let on = if level == 5 {
+            badc::diag::Level::Warning
+        } else {
+            badc::diag::Level::Ignore
+        };
+        self.front
+            .diag
+            .set_level(badc::diag::Code::IMPLICIT_FALLTHROUGH, on);
+        if (1..=4).contains(&level) {
+            self.unimplemented_warnings.push(arg.to_string());
         }
         Ok(())
     }
@@ -2980,7 +3017,7 @@ mod tests {
     #[test]
     fn a_warning_badc_does_not_implement_is_taken_and_reported() {
         let reported = |args: &[&str]| parse(args).diagnostics;
-        for arg in ["-Wshadow", "-Werror=cast-align", "-Wimplicit-fallthrough=5"] {
+        for arg in ["-Wshadow", "-Werror=cast-align", "-Wimplicit-fallthrough=3"] {
             let lines = reported(&[arg, "a.c"]);
             assert_eq!(lines.len(), 1, "{arg}: {lines:?}");
             assert!(
@@ -3004,8 +3041,48 @@ mod tests {
         assert_eq!(status, 1);
     }
 
-    /// gcc's `-Wunused` names the `-Wunused-*` rows; `-Wunused-parameter`
-    /// takes `-Wextra` beside it, as gcc documents.
+    /// gcc's `-Wimplicit-fallthrough[=N]` is one setting, the last level
+    /// winning; badc implements level 5 and reports levels 1 to 4, which
+    /// also read comments, as not implemented. gcc refuses a level past 5.
+    #[test]
+    fn implicit_fallthrough_takes_its_level() {
+        use badc::diag::Level;
+        let row = "implicit-fallthrough=5";
+        assert_eq!(
+            level(&["-Wimplicit-fallthrough=5", "a.c"], row),
+            Level::Warning
+        );
+        for args in [
+            &[
+                "-Wimplicit-fallthrough=5",
+                "-Wno-implicit-fallthrough",
+                "a.c",
+            ][..],
+            &[
+                "-Wimplicit-fallthrough=5",
+                "-Wimplicit-fallthrough=0",
+                "a.c",
+            ],
+            &["-Wimplicit-fallthrough=5", "-Wimplicit-fallthrough", "a.c"],
+        ] {
+            assert_eq!(level(args, row), Level::Ignore, "{args:?}");
+        }
+        assert!(
+            parse(&["-Wimplicit-fallthrough=5", "a.c"])
+                .diagnostics
+                .is_empty()
+        );
+        let lines = parse(&["-Wimplicit-fallthrough=3", "a.c"]).diagnostics;
+        assert!(
+            lines.len() == 1 && lines[0].contains("[B7012]"),
+            "{lines:?}"
+        );
+        let (text, _) = reject(&["-Wimplicit-fallthrough=6", "a.c"]);
+        assert!(text.contains("not between 0 and 5"), "{text}");
+    }
+
+    /// gcc's `-Wunused` names the `-Wunused-*` rows other than
+    /// `-Wunused-parameter`, which it turns on only beside `-Wextra`.
     #[test]
     fn wunused_selects_the_unused_rows() {
         use badc::diag::Level;

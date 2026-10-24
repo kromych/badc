@@ -98,6 +98,27 @@ pub(super) struct LinkedEntity {
     thread_local: bool,
 }
 
+impl LinkedEntity {
+    /// C99 6.7.2.2p4: the definition of an enum completes the function
+    /// types the declarations named it in while it was incomplete.
+    pub(super) fn complete_enum(&mut self, c: &super::enum_decl::EnumCompletion) {
+        let sig = |s: &mut FnSig| {
+            if let Some((f, _)) = s {
+                c.fn_type(f);
+            }
+        };
+        match &mut self.ty {
+            DeclaredType::Object(_, _, s) => sig(s),
+            DeclaredType::Function(_, params, _, s) => {
+                sig(s);
+                if let Params::Prototype(_, _, fns) = params {
+                    fns.iter_mut().for_each(|(_, f, _)| c.fn_type(f));
+                }
+            }
+        }
+    }
+}
+
 /// `Extension`: incompatible under C99, accepted by existing practice.
 #[derive(Clone, Copy, PartialEq)]
 enum Verdict {

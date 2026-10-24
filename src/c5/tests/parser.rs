@@ -4043,6 +4043,8 @@ fn redeclarations_compare_the_function_types_pointers_lead_to() {
         "extern int (*k[2])(int); extern int (*k[2])(long);",
         "typedef int (*fp)(long); extern fp n; extern int (*n)(int);",
         "int f(void) { extern int (*bx)(int); return 0; } extern int (*bx)(long);",
+        "enum E2; typedef int cb2(enum E2); void r2(cb2 *p); enum E2 { B }; \
+         void r2(int (*p)(long)) {}",
     ] {
         let err = compile(src).expect_err(src).to_string();
         assert!(err.contains("conflicting types"), "{src}: {err}");
@@ -4053,6 +4055,9 @@ fn redeclarations_compare_the_function_types_pointers_lead_to() {
         "extern int (*f)(int); extern int (*f)();",
         "typedef int (*fp)(int); extern fp m; extern int (*m)(int);",
         "void q(int (*)(int)); void q(int (*p)(int));",
+        // C99 6.7.2.3p1: an enum declared ahead of its definition is one type
+        // with it, inside a function type too.
+        "enum E; typedef int cb(enum E); void r(cb *p); enum E { A }; void r(cb *p) {}",
     ] {
         compile(src).unwrap_or_else(|e| panic!("{src}: {e}"));
     }

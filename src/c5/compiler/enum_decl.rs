@@ -233,7 +233,8 @@ impl Compiler {
     /// C99 6.7.2.2p4: the definition of enum tag `tag` completes the type
     /// its earlier uses named through the tag's entry. Rewrites the
     /// objects, functions, parameters and members declared through it,
-    /// and the outer bindings an open scope shadows. A tentative definition
+    /// the outer bindings an open scope shadows, and the function types the
+    /// declarations of an identifier with linkage keep. A tentative definition
     /// declared through it is sized when the unit ends.
     fn complete_enum_placeholders(&mut self, tag: u32, underlying: i64) {
         let Some(at) = self.enum_placeholder_tags.iter().position(|&t| t == tag) else {
@@ -253,6 +254,9 @@ impl Compiler {
         for f in self.structs.iter_mut().flat_map(|s| s.fields.iter_mut()) {
             c.ty(&mut f.ty, &mut f.enum_tag);
             c.fn_type(&mut f.fn_type);
+        }
+        for e in self.linked_entities.values_mut() {
+            e.complete_enum(&c);
         }
     }
 

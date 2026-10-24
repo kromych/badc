@@ -1290,6 +1290,9 @@ impl Compiler {
         if self.lex.tk != '{' {
             return Err(self.compile_err(Code::SYNTAX, "bad function definition"));
         }
+        // C99 7.12.2: the body is a compound statement, the scope of an
+        // `FP_CONTRACT` pragma within it.
+        let fp_contract = self.lex.fp_contract;
         self.next()?;
 
         let ent_pc = self.open_function_body(id_idx, &params);
@@ -1303,6 +1306,7 @@ impl Compiler {
         }
         self.copy_by_value_parameters(&params)?;
         self.parse_function_body_items(&params)?;
+        self.lex.fp_contract = fp_contract;
         self.tag_scopes.pop();
         self.finish_function_body(ent_pc, &params, arrival)?;
         // The capture runs before the scope unwind restores the outer bindings.

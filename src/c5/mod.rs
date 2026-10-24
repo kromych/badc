@@ -51,7 +51,8 @@ pub use {
         StackProtector, Target, fixed_register, jit_run, jit_run_with_options, stack_guard_sysreg,
     },
     compiler::{
-        AUTO_VAR_INIT_PATTERN_BYTE, AutoVarInit, CompileOptions, Compiler, StructDef, StructField,
+        AUTO_VAR_INIT_PATTERN_BYTE, AutoVarInit, CompileOptions, Compiler, FpContract, StructDef,
+        StructField,
     },
     depfile::{escape as dep_escape, prerequisites as dep_prerequisites, render as dep_render},
     error::C5Error,

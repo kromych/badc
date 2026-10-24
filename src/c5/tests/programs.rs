@@ -4184,6 +4184,13 @@ fn member_qualifiers_stay_with_their_members() {
 }
 
 #[test]
+fn fp_contract_stays_within_an_expression() {
+    // C99 6.5p8, 7.12.2: no contraction across an assignment, a call or an
+    // `FP_CONTRACT OFF` region.
+    assert_eq!(run_fixture("fp_contract_stays_within_an_expression.c"), 0);
+}
+
+#[test]
 fn packed_anon_union_layout() {
     // A trailing `__attribute__((packed))` repacks the fields; the promoted
     // members of an anonymous union must keep overlapping (and a nested

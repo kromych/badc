@@ -107,7 +107,9 @@ impl Preprocessor {
                 self.pragma_once_files.insert(site.file.to_string());
             }
             PragmaDirective::Other => {
-                let lexer_reads = pragma_is_pack(args) || pragma_is_visibility(args);
+                let lexer_reads = pragma_is_pack(args)
+                    || pragma_is_visibility(args)
+                    || pragma_is_fp_contract(args);
                 if !lexer_reads {
                     self.parse_pragma(args, site)?;
                 }
@@ -1131,6 +1133,18 @@ pub(super) fn pragma_is_pack(args: &str) -> bool {
     // Anything else (`packfoo`, `pack_extra`) is a different
     // pragma the preprocessor still wants to silently swallow.
     rest.trim_start().starts_with('(')
+}
+
+/// True when `args` is `STDC FP_CONTRACT ...` (C99 7.12.2), whose state
+/// holds from its position, so like `pack` the line goes through to the
+/// lexer.
+pub(super) fn pragma_is_fp_contract(args: &str) -> bool {
+    let Some(rest) = args.trim_start().strip_prefix("STDC") else {
+        return false;
+    };
+    let rest = rest.trim_start();
+    rest.strip_prefix("FP_CONTRACT")
+        .is_some_and(|r| ident::char_len(r.as_bytes(), 0) == 0)
 }
 
 /// True when `args` is the head of a `GCC visibility` pragma. Its extent

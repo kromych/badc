@@ -332,6 +332,9 @@ pub struct Program {
     pub(crate) bind_trampoline_slots: bool,
     /// References name a weak definition by its symbol (relocatable output).
     pub(crate) weak_refs_by_name: bool,
+    /// `-ffp-contract=fast`: `-O` contracts any product the add or subtract
+    /// using it is the only use of, not only a contractible one.
+    pub(crate) fp_contract_fast: bool,
     /// Address-constant initializers of `_Thread_local` objects (C99
     /// 6.7.8p4). `data_offset` is a byte offset into [`Self::tls_data`],
     /// the initialization template the runtime copies per thread; the
@@ -727,6 +730,7 @@ impl DataOffsets for Program {
             sys_trampolines: _,       // code address space
             bind_trampoline_slots: _, // a mode
             weak_refs_by_name: _,     // a mode
+            fp_contract_fast: _,      // a mode
             tls_data_relocs,
             tls_extern_data_relocs: _, // slot in `tls_data`, target by name
             tls_code_relocs: _,        // slot in `tls_data`, target in code
@@ -866,6 +870,7 @@ mod data_offset_tests {
             sys_trampolines: Vec::new(),
             bind_trampoline_slots: false,
             weak_refs_by_name: false,
+            fp_contract_fast: false,
             tls_data_relocs: Vec::new(),
             tls_extern_data_relocs: Vec::new(),
             tls_code_relocs: Vec::new(),

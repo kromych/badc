@@ -2995,7 +2995,7 @@ void step4(unsigned char *p, const unsigned char *d) {\n\
 #[test]
 fn constant_read_past_a_call_is_set_again_after_it() {
     const SRC: &str = "long f(long);\n\
-double fm(double a, double b) { double k0 = a * 2.0; double s = f((long)b); return s + k0; }\n\
+double fm(double a, double b) { double s = f((long)b); return s + a * 2.0; }\n\
 long ret(long x) { long r = 7; f(x); return r; }\n\
 int flag(long x) { int ok = 1; if (f(x)) ok = 0; return ok; }\n";
     let mut m = Misses::default();

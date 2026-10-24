@@ -43,7 +43,7 @@ fn ent_pc=2 n_params=3 variadic=false locals=1
     v11  LoadLocal { off=-1, kind=F64 }                   -> d0
     v12  Imm(0)                                           -> x0
     v13  Imm(0)                                           -> x0
-    v14  Binop { op=fmul, lhs=v1, rhs=v13 }               -> d1
+    v14  Binop { op=fmul.c, lhs=v1, rhs=v13 }             -> d1
     v15  Fma { a=v1, b=v13, c=v11, neg_product=false, neg_addend=false } -> d0
     terminator Return(v15)   (exit_acc=v15)
 ; --- SSA dump (ok=true) ent_pc=3 ---

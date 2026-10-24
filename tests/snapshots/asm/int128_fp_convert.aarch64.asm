@@ -1499,8 +1499,9 @@ Disassembly of section .text:
                	lsl	x0, x0, #52
                	stur	x0, [x29, #-0x8]
                	ldur	d1, [x29, #-0x8]
-               	ldr	d2, [x3]
-               	fmadd	d0, d0, d1, d2
+               	fmul	d0, d0, d1
+               	ldr	d1, [x3]
+               	fadd	d0, d0, d1
                	stur	d0, [x29, #-0x8]
                	ldur	x0, [x29, #-0x8]
                	mov	x17, #0x4012000000000000 // =4616752568008179712

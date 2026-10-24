@@ -297,7 +297,8 @@ Disassembly of section .text:
                	mov	x1, #0x3ff0000000000000 // =4607182418800017408
                	stur	x1, [x29, #-0x8]
                	ldur	d4, [x29, #-0x8]
-               	fnmsub	d1, d1, d4, d2
+               	fmul	d1, d1, d4
+               	fsub	d1, d1, d2
                	stur	d1, [x29, #-0x8]
                	ldur	x2, [x29, #-0x8]
                	asr	x1, x2, #63

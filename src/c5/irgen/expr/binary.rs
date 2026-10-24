@@ -3,10 +3,11 @@
 
 use super::super::access::{seg_copy_bytes, store_kind_for, store_kind_width, store_place};
 use super::super::atomic::{RmwOpen, RmwPlace};
-use super::super::types::{is_floating_scalar, is_fp_arith_op};
+use super::super::types::is_floating_scalar;
 use super::super::*;
 use super::postfix::MemberRef;
 use crate::c5::ast::expr_ty;
+use crate::c5::ir::is_fp_arith_op;
 use crate::c5::ir::{imm_safe_binop, is_comparison_op, is_fp_comparison_op};
 impl<'a> Walker<'a> {
     /// Lower `&&` / `||` (C99 6.5.13 / 6.5.14): evaluate lhs, skip rhs

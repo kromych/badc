@@ -1265,6 +1265,16 @@ fn digraphs_open_directives_and_operate_in_replacement_lists() {
     assert!(e.contains("`##` cannot appear at either end"), "{e}");
 }
 
+// C99 7.12.2: `FP_CONTRACT` holds from its position, so the directive and
+// the `_Pragma` form reach the lexer as a line of their own.
+#[test]
+fn fp_contract_pragma_passes_through() {
+    let out =
+        process("#pragma STDC FP_CONTRACT OFF\nint x; _Pragma(\"STDC FP_CONTRACT ON\") int y;\n");
+    assert!(out.contains("#pragma STDC FP_CONTRACT OFF\n"), "{out}");
+    assert!(out.contains("\n#pragma STDC FP_CONTRACT ON\n"), "{out}");
+}
+
 // C99 6.10.3.4p3: an expansion that starts a line with `#` is text; the
 // output indents it so, as GNU cpp writes it, except for assembler input.
 #[test]

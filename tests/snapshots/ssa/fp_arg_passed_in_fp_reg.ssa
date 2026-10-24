@@ -6,7 +6,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   Imm(4611686018427387904)                         -> x0
     v2   Imm(4613937818241073152)                         -> x1
-    v3   Binop { op=fmul, lhs=v1, rhs=v2 }                -> d0
+    v3   Binop { op=fmul.c, lhs=v1, rhs=v2 }              -> d0
     v4   Fma { a=v1, b=v2, c=v1, neg_product=false, neg_addend=false } -> d0
     v5   Imm(0)                                           -> x0
     v6   Imm(0)                                           -> x0
@@ -24,9 +24,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v14  Imm(3)                                           -> x0
     v15  Imm(4)                                           -> x6
     v16  FpCast { kind=IntToFp, value=v14 }               -> d0
-    v17  Binop { op=fmul, lhs=v11, rhs=v16 }              -> d1
+    v17  Binop { op=fmul.c, lhs=v11, rhs=v16 }            -> d1
     v18  FpCast { kind=IntToFp, value=v15 }               -> d1
-    v19  Binop { op=fmul, lhs=v13, rhs=v18 }              -> d1
+    v19  Binop { op=fmul.c, lhs=v13, rhs=v18 }            -> d1
     v20  Fma { a=v11, b=v16, c=v19, neg_product=false, neg_addend=false } -> d0
     v21  Imm(0)                                           -> x1
     v22  Imm(0)                                           -> x1
@@ -41,7 +41,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v27  Imm(0)                                           -> x2
     v28  Imm(0)                                           -> x2
     v29  Imm(4616189618054758400)                         -> x2
-    v30  Binop { op=fmul, lhs=v26, rhs=v29 }              -> d0
+    v30  Binop { op=fmul.c, lhs=v26, rhs=v29 }            -> d0
     v31  Fma { a=v26, b=v29, c=v26, neg_product=false, neg_addend=false } -> d0
     v32  Imm(0)                                           -> x1
     v33  Imm(0)                                           -> x1

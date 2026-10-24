@@ -133,13 +133,13 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
   spill_count=1 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
-    v1   ParamRef(0, kind=F64)                            -> d6
+    v1   ParamRef(0, kind=F64)                            -> d0
     v2   Imm(0)                                           -> x0
     v3   ParamRef(1, kind=F64)                            -> d1
     v4   Imm(0)                                           -> x0
     v5   Imm(0)                                           -> x0
-    v6   Imm(4609434218613702656)                         -> x1
-    v7   Binop { op=fmul, lhs=v1, rhs=v6 }                -> d0
+    v6   Imm(4609434218613702656)                         -> x0
+    v7   Binop { op=fmul, lhs=v1, rhs=v6 }                -> d6
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
     v10  Imm(4612811918334230528)                         -> x0
@@ -158,43 +158,43 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v23  Imm(0)                                           -> x0
     v24  Imm(4619567317775286272)                         -> x0
     v25  Binop { op=fmul, lhs=v3, rhs=v24 }               -> [spill 0]
-    v26  Imm(0)                                           -> x2
+    v26  Imm(0)                                           -> x1
     v27  InlineAsm { template="xorps %%xmm0, %%xmm0\n\txorps %%xmm1, %%xmm1\n\txorps %%xmm2, %%xmm2\n\txorps %%xmm3, %%xmm3", ops=0, args=[] } -> -
     v28  InlineAsm { template="xorps %%xmm4, %%xmm4\n\txorps %%xmm5, %%xmm5", ops=0, args=[] } -> -
-    v29  Imm(0)                                           -> x2
-    v30  Imm(2)                                           -> x2
-    v31  Imm(4611686018427387904)                         -> x2
-    v32  Imm(0)                                           -> x6
-    v33  Binop { op=fmul, lhs=v31, rhs=v11 }              -> d0
-    v34  Fma { a=v1, b=v6, c=v33, neg_product=false, neg_addend=false } -> d0
+    v29  Imm(0)                                           -> x1
+    v30  Imm(2)                                           -> x1
+    v31  Imm(4611686018427387904)                         -> x1
+    v32  Imm(0)                                           -> x2
+    v33  Binop { op=fmul.c, lhs=v31, rhs=v11 }            -> d0
+    v34  Fma { a=v31, b=v11, c=v7, neg_product=false, neg_addend=false } -> d0
     v35  Imm(3)                                           -> x1
     v36  Imm(4613937818241073152)                         -> x1
     v37  Imm(0)                                           -> x2
-    v38  Binop { op=fmul, lhs=v36, rhs=v13 }              -> d1
+    v38  Binop { op=fmul.c, lhs=v36, rhs=v13 }            -> d1
     v39  Fma { a=v36, b=v13, c=v34, neg_product=false, neg_addend=false } -> d0
     v40  Imm(4)                                           -> x1
     v41  Imm(4616189618054758400)                         -> x1
     v42  Imm(0)                                           -> x2
-    v43  Binop { op=fmul, lhs=v41, rhs=v15 }              -> d1
+    v43  Binop { op=fmul.c, lhs=v41, rhs=v15 }            -> d1
     v44  Fma { a=v41, b=v15, c=v39, neg_product=false, neg_addend=false } -> d0
     v45  Imm(5)                                           -> x1
     v46  Imm(4617315517961601024)                         -> x1
     v47  Imm(0)                                           -> x2
-    v48  Binop { op=fmul, lhs=v46, rhs=v17 }              -> d1
+    v48  Binop { op=fmul.c, lhs=v46, rhs=v17 }            -> d1
     v49  Fma { a=v46, b=v17, c=v44, neg_product=false, neg_addend=false } -> d0
     v50  Imm(6)                                           -> x1
     v51  Imm(4618441417868443648)                         -> x1
     v52  Imm(0)                                           -> x2
-    v53  Binop { op=fmul, lhs=v51, rhs=v19 }              -> d1
+    v53  Binop { op=fmul.c, lhs=v51, rhs=v19 }            -> d1
     v54  Fma { a=v51, b=v19, c=v49, neg_product=false, neg_addend=false } -> d0
     v55  Imm(7)                                           -> x1
     v56  Imm(0)                                           -> x1
-    v57  Binop { op=fmul, lhs=v24, rhs=v22 }              -> d1
+    v57  Binop { op=fmul.c, lhs=v24, rhs=v22 }            -> d1
     v58  Fma { a=v24, b=v22, c=v54, neg_product=false, neg_addend=false } -> d0
     v59  Imm(8)                                           -> x0
     v60  Imm(4620693217682128896)                         -> x0
     v61  Imm(0)                                           -> x1
-    v62  Binop { op=fmul, lhs=v60, rhs=v25 }              -> d1
+    v62  Binop { op=fmul.c, lhs=v60, rhs=v25 }            -> d1
     v63  Fma { a=v60, b=v25, c=v58, neg_product=false, neg_addend=false } -> d0
     terminator Return(v63)   (exit_acc=v63)
 ; --- SSA dump (ok=true) ent_pc=5 ---

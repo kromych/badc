@@ -87,9 +87,9 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v65  Imm(1066192077)                                  -> x0 [f32]
     v66  Binop { op=fmul, lhs=v65, rhs=v65 }              -> d0 [f32]
     v67  Binop { op=fmul, lhs=v66, rhs=v65 }              -> d0 [f32]
-    v68  Binop { op=fmul, lhs=v67, rhs=v65 }              -> d1 [f32]
-    v69  Imm(1069246370)                                  -> x2 [f32]
-    v70  Fma { a=v67, b=v65, c=v69, neg_product=false, neg_addend=true } -> d0 [f32]
+    v68  Binop { op=fmul, lhs=v67, rhs=v65 }              -> d0 [f32]
+    v69  Imm(1069246370)                                  -> x0 [f32]
+    v70  Binop { op=fsub, lhs=v68, rhs=v69 }              -> d0 [f32]
     v71  Imm(0)                                           -> x0 [f32]
     v72  Binop { op=flt, lhs=v70, rhs=v50 }               -> x0
     terminator Bz { cond=v72, target=b20, fall=b13 }   (exit_acc=v72)

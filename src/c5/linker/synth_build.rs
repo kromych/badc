@@ -430,6 +430,7 @@ fn synth_program(
         sys_trampolines: Vec::new(),
         bind_trampoline_slots: false,
         weak_refs_by_name: false,
+        fp_contract_fast: false,
         tls_data_relocs: Vec::new(),
         tls_extern_data_relocs: Vec::new(),
         tls_code_relocs: Vec::new(),

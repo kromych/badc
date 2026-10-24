@@ -467,6 +467,7 @@ fn is_pure_int(op: BinOp) -> bool {
         BinOp::Fadd
             | BinOp::Fsub
             | BinOp::Fmul
+            | BinOp::FmulContractible
             | BinOp::Fdiv
             | BinOp::Feq
             | BinOp::Fne

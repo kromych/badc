@@ -58,11 +58,6 @@ impl<'a> Walker<'a> {
     }
 }
 
-/// Floating-point arithmetic operators (C99 6.5.5 / 6.5.6).
-pub(crate) fn is_fp_arith_op(op: BinOp) -> bool {
-    matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
-}
-
 /// Test for floating-point scalar types.
 pub(super) fn is_floating_scalar(ty: i64) -> bool {
     let stripped = strip_unsigned(ty);

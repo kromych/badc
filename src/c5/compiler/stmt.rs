@@ -1135,6 +1135,9 @@ impl Compiler {
         &mut self,
         stmt_expr: bool,
     ) -> Result<(super::super::ast::StmtId, Option<usize>), C5Error> {
+        // C99 7.12.2: an `FP_CONTRACT` pragma inside the block holds to its
+        // end, where the state before the block is restored.
+        let fp_contract = self.lex.fp_contract;
         self.next()?;
         self.open_cleanup_scope(stmt_expr);
         // C99 6.2.1: a block introduces a new scope for struct,
@@ -1269,6 +1272,7 @@ impl Compiler {
         // Compound's items, which point at the canonical top-
         // level ids).
         let block_id = self.ast_wrap_block_items(&top_level_ids);
+        self.lex.fp_contract = fp_contract;
         self.next()?;
 
         // Emit the unused-variable / unused-value diagnostics for

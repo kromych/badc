@@ -406,8 +406,8 @@ fn operand_files(func: &FunctionSsa, inst: &Inst, f: &mut impl FnMut(ValueId, bo
     }
     match inst {
         Inst::Binop { op, lhs, rhs } => {
-            let fp = super::super::ir::is_fp_comparison_op(*op)
-                || matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv);
+            let fp =
+                super::super::ir::is_fp_comparison_op(*op) || crate::c5::ir::is_fp_arith_op(*op);
             f(*lhs, fp);
             f(*rhs, fp);
         }
@@ -1739,7 +1739,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             | Inst::BitField { .. } => !is_x86,
             Inst::Binop { op, .. } | Inst::BinopI { op, .. } => {
                 if is_x86 {
-                    matches!(op, BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv)
+                    crate::c5::ir::is_fp_arith_op(*op)
                 } else {
                     !is_compare_op(*op)
                 }
@@ -3364,7 +3364,9 @@ fn result_kind(inst: &Inst) -> ResultKind {
             _ => ResultKind::Int,
         },
         Binop { op, .. } | BinopI { op, .. } => match op {
-            BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::Fdiv => ResultKind::Fp,
+            BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::FmulContractible | BinOp::Fdiv => {
+                ResultKind::Fp
+            }
             // FP comparisons return an integer 0/1.
             _ => ResultKind::Int,
         },
@@ -4770,7 +4772,7 @@ int main(void) { return 0; }
             true,
         )
         .expect("ssa");
-        crate::c5::codegen::passes::fma::run(&mut funcs);
+        crate::c5::codegen::passes::fma::run(&mut funcs, false);
         let f = funcs.iter().find(|f| f.name == "f").expect("f");
         assert!(f.insts.iter().any(|i| matches!(i, Inst::Fma { .. })));
         let spills_an_fma = |alloc: &Allocation| {

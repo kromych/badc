@@ -366,6 +366,20 @@ fn parse_pragma_visibility_line(body: &[u8]) -> Option<VisibilityDirective> {
     ))
 }
 
+/// `pragma STDC FP_CONTRACT ON|OFF|DEFAULT` (C99 7.12.2) as the state it
+/// sets, `None` for `DEFAULT`; `None` from the outer option for another line.
+fn parse_pragma_fp_contract_line(body: &[u8]) -> Option<Option<bool>> {
+    let s = core::str::from_utf8(body).ok()?.trim();
+    let rest = s.strip_prefix("pragma")?.trim_start();
+    let rest = rest.strip_prefix("STDC")?.trim_start();
+    match rest.strip_prefix("FP_CONTRACT")?.trim() {
+        "ON" => Some(Some(true)),
+        "OFF" => Some(Some(false)),
+        "DEFAULT" => Some(None),
+        _ => None,
+    }
+}
+
 /// Snapshot of the lexer's positional state plus every attribute
 /// `next()` produces for the current token. See [`Lexer::snapshot`] /
 /// [`Lexer::restore`].
@@ -598,6 +612,12 @@ pub(crate) struct Lexer {
     /// paths as the default for a declaration that carries no explicit
     /// `visibility` attribute.
     visibility_stack: Vec<bool>,
+    /// Whether `#pragma STDC FP_CONTRACT` is on at the current position
+    /// (C99 7.12.2): a product may be contracted with the add or subtract
+    /// of the same expression that uses it. Scanned inline like `pack`.
+    pub(crate) fp_contract: bool,
+    /// The state `FP_CONTRACT DEFAULT` sets, from `-ffp-contract`.
+    pub(crate) fp_contract_default: bool,
 }
 
 /// Side index for `Vec<Symbol>` so identifier lookup stops being O(N).
@@ -789,6 +809,8 @@ impl Lexer {
             pack: DEFAULT_PACK,
             pack_saved: Vec::new(),
             visibility_stack: vec![false],
+            fp_contract: true,
+            fp_contract_default: true,
         }
     }
 
@@ -1912,6 +1934,8 @@ impl Lexer {
                     self.apply_pack_directive(dir);
                 } else if let Some(dir) = parse_pragma_visibility_line(body) {
                     self.apply_visibility_directive(dir);
+                } else if let Some(state) = parse_pragma_fp_contract_line(body) {
+                    self.fp_contract = state.unwrap_or(self.fp_contract_default);
                 }
                 self.pos = line_end;
             } else if c.is_ascii_alphabetic()

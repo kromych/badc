@@ -469,7 +469,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=519
     v294 Imm(0)                                           -> x0
     v295 FpCast { kind=IntToFp, value=v1 }                -> d1 [f32]
     v296 Imm(1056964608)                                  -> x0 [f32]
-    v297 Binop { op=fmul, lhs=v295, rhs=v296 }            -> d2 [f32]
+    v297 Binop { op=fmul.c, lhs=v295, rhs=v296 }          -> d2 [f32]
     v298 Imm(1065353216)                                  -> x1 [f32]
     v299 Fma { a=v295, b=v296, c=v298, neg_product=false, neg_addend=false } -> d1 [f32]
     v300 Binop { op=fne, lhs=v293, rhs=v299 }             -> x0
@@ -509,7 +509,7 @@ fn ent_pc=5 n_params=1 variadic=false locals=519
     v322 Imm(0)                                           -> x0
     v323 FpCast { kind=IntToFp, value=v1 }                -> d2
     v324 Imm(4609434218613702656)                         -> x0
-    v325 Binop { op=fmul, lhs=v306, rhs=v324 }            -> d2
+    v325 Binop { op=fmul.c, lhs=v306, rhs=v324 }          -> d2
     v326 Imm(4602678819172646912)                         -> x1
     v327 Fma { a=v306, b=v324, c=v326, neg_product=false, neg_addend=true } -> d0
     v328 Binop { op=fne, lhs=v321, rhs=v327 }             -> x0

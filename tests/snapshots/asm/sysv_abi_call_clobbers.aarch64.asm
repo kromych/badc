@@ -17,16 +17,19 @@ Disassembly of section .text:
                	ret
 
 <keep_fp>:
-               	stp	d8, d9, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
+               	stp	d8, d9, [sp, #-0x30]!
+               	str	d10, [sp, #0x10]
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	fmov	d8, d0
                	fmov	d9, d1
+               	fmul	d10, d8, d9
                	bl	<addr>
-               	fmadd	d0, d8, d9, d8
+               	fadd	d0, d10, d8
                	fadd	d0, d0, d9
-               	ldp	x29, x30, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x20
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	d10, [sp, #0x10]
+               	ldp	d8, d9, [sp], #0x30
                	ret
 
 <keep_gpr>:
@@ -70,11 +73,13 @@ Disassembly of section .text:
                	ret
 
 <keep_across_sv8>:
-               	stp	d8, d9, [sp, #-0x20]!
-               	stp	x29, x30, [sp, #0x10]
-               	add	x29, sp, #0x10
+               	stp	d8, d9, [sp, #-0x30]!
+               	str	d10, [sp, #0x10]
+               	stp	x29, x30, [sp, #0x20]
+               	add	x29, sp, #0x20
                	fmov	d8, d0
                	fmov	d9, d1
+               	fmul	d10, d8, d9
                	fmov	d0, #1.00000000
                	fmov	d1, #2.00000000
                	fmov	d2, #3.00000000
@@ -84,11 +89,12 @@ Disassembly of section .text:
                	fmov	d6, #7.00000000
                	fmov	d7, #8.00000000
                	bl	<addr>
-               	fmadd	d0, d8, d9, d0
+               	fadd	d0, d10, d0
                	fadd	d0, d0, d8
                	fadd	d0, d0, d9
-               	ldp	x29, x30, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x20
+               	ldp	x29, x30, [sp, #0x20]
+               	ldr	d10, [sp, #0x10]
+               	ldp	d8, d9, [sp], #0x30
                	ret
 
 <twice>:

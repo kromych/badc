@@ -81,10 +81,10 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v43  Imm(1077936128)                                  -> x1 [f32]
     v44  Imm(0)                                           -> x2 [f32]
     v45  Binop { op=fmul, lhs=v43, rhs=v40 }              -> d0 [f32]
-    v46  Binop { op=fmul, lhs=v45, rhs=v40 }              -> d1 [f32]
+    v46  Binop { op=fmul.c, lhs=v45, rhs=v40 }            -> d1 [f32]
     v47  Imm(5)                                           -> x1
     v48  Imm(1084227584)                                  -> x1 [f32]
-    v49  Binop { op=fmul, lhs=v48, rhs=v40 }              -> d1 [f32]
+    v49  Binop { op=fmul.c, lhs=v48, rhs=v40 }            -> d1 [f32]
     v50  Fma { a=v45, b=v40, c=v49, neg_product=false, neg_addend=false } -> d0 [f32]
     v51  Imm(7)                                           -> x0
     v52  Imm(1088421888)                                  -> x0 [f32]

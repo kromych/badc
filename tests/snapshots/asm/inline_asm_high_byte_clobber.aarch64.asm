@@ -86,21 +86,22 @@ Disassembly of section .text:
                	stp	d14, d15, [sp, #0x30]
                	stp	x29, x30, [sp, #0x80]
                	add	x29, sp, #0x80
-               	str	d0, [sp, #0x78]
-               	fmov	d0, #2.50000000
-               	fmul	d16, d1, d0
+               	fmov	d2, #1.50000000
+               	fmul	d16, d0, d2
+               	str	d16, [sp, #0x78]
+               	fmov	d2, #2.50000000
+               	fmul	d16, d1, d2
                	str	d16, [sp, #0x70]
-               	ldr	d2, [sp, #0x78]
-               	fadd	d16, d2, d1
+               	fadd	d16, d0, d1
                	str	d16, [sp, #0x68]
-               	fsub	d16, d2, d1
+               	fsub	d16, d0, d1
                	str	d16, [sp, #0x60]
-               	fmul	d16, d2, d1
+               	fmul	d16, d0, d1
                	str	d16, [sp, #0x58]
-               	fdiv	d16, d2, d1
+               	fdiv	d16, d0, d1
                	str	d16, [sp, #0x50]
-               	fmov	d0, #3.25000000
-               	fmul	d16, d2, d0
+               	fmov	d2, #3.25000000
+               	fmul	d16, d0, d2
                	str	d16, [sp, #0x48]
                	fmov	d0, #7.00000000
                	fmul	d16, d1, d0
@@ -117,10 +118,8 @@ Disassembly of section .text:
                	bl	<addr>
                	fmov	d0, #2.00000000
                	ldr	d17, [sp, #0x70]
-               	fmul	d0, d0, d17
-               	fmov	d1, #1.50000000
-               	ldr	d16, [sp, #0x78]
-               	fmadd	d0, d16, d1, d0
+               	ldr	d18, [sp, #0x78]
+               	fmadd	d0, d0, d17, d18
                	fmov	d1, #3.00000000
                	ldr	d17, [sp, #0x68]
                	fmadd	d0, d1, d17, d0

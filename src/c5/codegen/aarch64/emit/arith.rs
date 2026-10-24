@@ -444,7 +444,7 @@ pub(super) fn emit_binop(
             match op {
                 BinOp::Fadd => super::encode::enc_fadd_s(dd, dn, dm),
                 BinOp::Fsub => super::encode::enc_fsub_s(dd, dn, dm),
-                BinOp::Fmul => super::encode::enc_fmul_s(dd, dn, dm),
+                BinOp::Fmul | BinOp::FmulContractible => super::encode::enc_fmul_s(dd, dn, dm),
                 BinOp::Fdiv => super::encode::enc_fdiv_s(dd, dn, dm),
                 _ => return fail("Fbinop: op has no f32 encoding"),
             }
@@ -452,7 +452,7 @@ pub(super) fn emit_binop(
             match op {
                 BinOp::Fadd => enc_fadd_d(dd, dn, dm),
                 BinOp::Fsub => enc_fsub_d(dd, dn, dm),
-                BinOp::Fmul => enc_fmul_d(dd, dn, dm),
+                BinOp::Fmul | BinOp::FmulContractible => enc_fmul_d(dd, dn, dm),
                 BinOp::Fdiv => enc_fdiv_d(dd, dn, dm),
                 _ => return fail("Fbinop: op has no f64 encoding"),
             }
@@ -645,7 +645,7 @@ fn fp_arith_enc(op: BinOp) -> Option<fn(u8, u8, u8) -> u32> {
     Some(match op {
         BinOp::Fadd => enc_fadd_d,
         BinOp::Fsub => enc_fsub_d,
-        BinOp::Fmul => enc_fmul_d,
+        BinOp::Fmul | BinOp::FmulContractible => enc_fmul_d,
         BinOp::Fdiv => enc_fdiv_d,
         _ => return None,
     })

@@ -1414,6 +1414,7 @@ impl Compiler {
         op_ty: i64,
         nsw: bool,
     ) {
+        self.mark_contractible(op, rhs);
         let pos = self.ast_src_pos();
         let id = self.ast.push_expr(
             Expr::CompoundAssign {
@@ -1960,10 +1961,45 @@ impl Compiler {
         } else {
             self.ty
         };
+        self.mark_contractible(op, lhs);
+        self.mark_contractible(op, rhs);
         let id = self
             .ast
             .push_expr(super::super::ast::Expr::Binary { op, lhs, rhs, ty }, pos);
         self.ast_acc = Some(id);
+    }
+
+    /// C99 6.5p8, 7.12.2: while `FP_CONTRACT` is on, a product that is an
+    /// operand of an add or subtract `op` may be contracted with it; the
+    /// pass does so where nothing else reads the product and it has the
+    /// add's precision. A GCC vector node keeps its nominal opcode, and
+    /// the lanes of a floating one contract as scalars do.
+    fn mark_contractible(&mut self, op: super::super::ir::BinOp, operand: ExprId) {
+        use super::super::ir::BinOp;
+        use super::types::{is_floating_scalar, is_vector_ty, struct_id_of};
+        if !self.lex.fp_contract {
+            return;
+        }
+        let Expr::Binary {
+            op: product,
+            ty: product_ty,
+            ..
+        } = *self.ast.expr(operand)
+        else {
+            return;
+        };
+        let fp_lanes = is_vector_ty(&self.structs, product_ty)
+            && is_floating_scalar(self.structs[struct_id_of(product_ty)].fields[0].ty);
+        let contracts = match (op, product) {
+            (BinOp::Fadd | BinOp::Fsub, BinOp::Fmul) => true,
+            (BinOp::Add | BinOp::Sub | BinOp::Fadd | BinOp::Fsub, BinOp::Mul | BinOp::Fmul) => {
+                fp_lanes
+            }
+            _ => false,
+        };
+        if contracts && let Expr::Binary { op, .. } = self.ast.expr_mut(operand) {
+            *op = BinOp::FmulContractible;
+        }
     }
 
     /// Helper for the unary arms: wraps the accumulator with the

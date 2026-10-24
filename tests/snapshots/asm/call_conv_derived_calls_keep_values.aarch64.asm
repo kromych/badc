@@ -57,7 +57,8 @@ Disassembly of section .text:
                	scvtf	d1, x0
                	fadd	d0, d0, d1
                	fadd	d2, d11, d0
-               	fmadd	d0, d8, d9, d1
+               	fmul	d0, d8, d9
+               	fadd	d0, d0, d1
                	fadd	d1, d2, d0
                	fadd	d11, d1, d0
                	fmov	d0, d8

@@ -50,7 +50,10 @@ Disassembly of section .text:
                	subq	$0x20, %rsp
                	movsd	%xmm0, 0x18(%rsp)
                	movsd	%xmm1, 0x10(%rsp)
-               	movsd	0x18(%rsp), %xmm0
+               	movabsq	$0x4000000000000000, %rax # imm = 0x4000000000000000
+               	movsd	0x18(%rsp), %xmm14
+               	movq	%rax, %xmm15
+               	vmulsd	%xmm15, %xmm14, %xmm0
                	callq	<addr>
                	movsd	%xmm0, 0x8(%rsp)
                	movsd	0x10(%rsp), %xmm0
@@ -221,7 +224,7 @@ Disassembly of section .text:
                	xorps	%xmm1, %xmm1
                	cvtsi2sd	%rax, %xmm1
                	callq	<addr>
-               	cmpq	$0xa, %rax
+               	cmpq	$0xb, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbp
@@ -311,7 +314,7 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rax      # <addr>
                	movq	(%rax), %rax
-               	cmpq	$0x74, %rax
+               	cmpq	$0x77, %rax
                	je	<addr>
                	movl	$0xb, %eax
                	popq	%rbp

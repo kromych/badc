@@ -2175,9 +2175,10 @@ Disassembly of section .text:
                	shlq	$0x34, %rax
                	movq	%rax, -0x8(%rbp)
                	movsd	-0x8(%rbp), %xmm1
+               	mulsd	%xmm1, %xmm0
                	leaq	<rip>, %rax      # <addr>
-               	movsd	(%rax), %xmm2
-               	vfmadd213sd	%xmm2, %xmm1, %xmm0 # xmm0 = (xmm1 * xmm0) + xmm2
+               	movsd	(%rax), %xmm1
+               	addsd	%xmm1, %xmm0
                	movsd	%xmm0, -0x8(%rbp)
                	movq	-0x8(%rbp), %rax
                	movabsq	$0x4012000000000000, %r11 # imm = 0x4012000000000000

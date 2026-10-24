@@ -58,11 +58,13 @@ Disassembly of section .text:
                	retq
 
 <fsub_rev>:
-               	vfnmadd213sd	%xmm1, %xmm0, %xmm0 # xmm0 = -(xmm0 * xmm0) + xmm1
+               	vmulsd	%xmm0, %xmm0, %xmm2
+               	vsubsd	%xmm2, %xmm1, %xmm0
                	retq
 
 <fsub_rev_f>:
-               	vfnmadd213ss	%xmm1, %xmm0, %xmm0 # xmm0 = -(xmm0 * xmm0) + xmm1
+               	vmulss	%xmm0, %xmm0, %xmm2
+               	vsubss	%xmm2, %xmm1, %xmm0
                	retq
 
 <ones>:

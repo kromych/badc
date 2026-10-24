@@ -485,6 +485,12 @@ Compile knobs:
                            overflow (C99 6.5p5).
   -fno-wrapv               Undo -fwrapv / -fno-strict-overflow; the last
   -fstrict-overflow        of the four given wins.
+  -ffp-contract=<mode>     Where -O fuses a floating multiply with the add
+                           or subtract using it into one rounding (C99
+                           6.5p8): `on` (default) within one expression
+                           while #pragma STDC FP_CONTRACT is on, `off`
+                           nowhere, `fast` wherever the product has no
+                           other use.
 
 VM-only knobs (require --interp):
   --track-pointers         Allocation tracking + use-after-free guard.

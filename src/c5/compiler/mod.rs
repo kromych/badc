@@ -643,6 +643,23 @@ pub struct CompileOptions {
     /// without an initializer holds on entry to its scope; see
     /// [`AutoVarInit`].
     pub auto_var_init: AutoVarInit,
+    /// `-ffp-contract=`; see [`FpContract`].
+    pub fp_contract: FpContract,
+}
+
+/// `-ffp-contract=`: where a floating product may be contracted with the
+/// add or subtract that uses it into one rounding (C99 6.5p8), at `-O`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum FpContract {
+    /// Nowhere.
+    Off,
+    /// Within one expression while `#pragma STDC FP_CONTRACT` is on (C99
+    /// 7.12.2), clang's default.
+    #[default]
+    On,
+    /// Wherever the product has no other use, across statements and the
+    /// pragma aside, gcc's GNU-mode default.
+    Fast,
 }
 
 /// `-ftrivial-auto-var-init=`: the initialization the compiler supplies
@@ -747,6 +764,12 @@ impl CompileOptions {
     /// Define signed overflow to wrap (`-fwrapv`). See [`Self::wrapv`].
     pub fn with_wrapv(mut self, on: bool) -> Self {
         self.wrapv = on;
+        self
+    }
+
+    /// Select where products contract (`-ffp-contract=`).
+    pub fn with_fp_contract(mut self, mode: FpContract) -> Self {
+        self.fp_contract = mode;
         self
     }
 
@@ -2303,6 +2326,8 @@ pub struct Compiler {
     nostdinc: bool,
     /// Mirror of [`CompileOptions::wrapv`].
     wrapv: bool,
+    /// Mirror of [`CompileOptions::fp_contract`].
+    fp_contract: FpContract,
     /// Mirror of [`CompileOptions::auto_var_init`]. Read where an
     /// automatic object without an initializer is bound.
     auto_var_init: AutoVarInit,
@@ -2846,6 +2871,8 @@ impl Compiler {
             l.wchar_bytes = wchar.bytes;
             l.wchar_signed = wchar.signed;
             l.char_signed = opts.plain_char_signed(target);
+            l.fp_contract_default = opts.fp_contract == FpContract::On;
+            l.fp_contract = l.fp_contract_default;
             l
         };
         Self {
@@ -2962,6 +2989,7 @@ impl Compiler {
             nostdinc: opts.nostdinc,
             auto_var_init: opts.auto_var_init,
             wrapv: opts.wrapv,
+            fp_contract: opts.fp_contract,
             no_builtin_fns: opts.no_builtin_fns.clone(),
             optimize: opts.optimize,
             elf_class: opts.elf_class,
@@ -3561,6 +3589,7 @@ impl Compiler {
             sys_trampolines: self.sys_trampolines,
             bind_trampoline_slots: false,
             weak_refs_by_name: false,
+            fp_contract_fast: self.fp_contract == FpContract::Fast,
             tls_data_relocs: self.tls_data_relocs,
             tls_extern_data_relocs: self.tls_extern_data_relocs,
             tls_code_relocs: self.tls_code_relocs,

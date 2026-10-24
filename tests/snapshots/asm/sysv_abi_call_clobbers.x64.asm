@@ -43,14 +43,16 @@ Disassembly of section .text:
 <keep_fp>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movsd	%xmm0, 0x8(%rsp)
-               	movsd	%xmm1, (%rsp)
+               	subq	$0x20, %rsp
+               	movsd	%xmm0, 0x18(%rsp)
+               	movsd	%xmm1, 0x10(%rsp)
+               	movsd	0x18(%rsp), %xmm14
+               	vmulsd	0x10(%rsp), %xmm14, %xmm14
+               	movsd	%xmm14, 0x8(%rsp)
                	callq	<addr>
-               	movsd	0x8(%rsp), %xmm0
                	movsd	0x8(%rsp), %xmm14
-               	vfmadd132sd	(%rsp), %xmm14, %xmm0 # xmm0 = (xmm0 * mem) + xmm14
-               	vaddsd	(%rsp), %xmm0, %xmm0
+               	vaddsd	0x18(%rsp), %xmm14, %xmm0
+               	vaddsd	0x10(%rsp), %xmm0, %xmm0
                	leave
                	retq
 
@@ -112,10 +114,13 @@ Disassembly of section .text:
 <keep_across_sv8>:
                	pushq	%rbp
                	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x28, %rsp
                	pushq	%rbx
-               	movsd	%xmm0, 0x18(%rsp)
-               	movsd	%xmm1, 0x10(%rsp)
+               	movsd	%xmm0, 0x28(%rsp)
+               	movsd	%xmm1, 0x20(%rsp)
+               	movsd	0x28(%rsp), %xmm14
+               	vmulsd	0x20(%rsp), %xmm14, %xmm14
+               	movsd	%xmm14, 0x18(%rsp)
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movabsq	$0x4000000000000000, %rcx # imm = 0x4000000000000000
                	movabsq	$0x4008000000000000, %rdx # imm = 0x4008000000000000
@@ -134,9 +139,9 @@ Disassembly of section .text:
                	movq	%rbx, %xmm7
                	callq	<addr>
                	movsd	0x18(%rsp), %xmm14
-               	vfmadd231sd	0x10(%rsp), %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
-               	vaddsd	0x18(%rsp), %xmm0, %xmm0
-               	vaddsd	0x10(%rsp), %xmm0, %xmm0
+               	vaddsd	%xmm0, %xmm14, %xmm0
+               	vaddsd	0x28(%rsp), %xmm0, %xmm0
+               	vaddsd	0x20(%rsp), %xmm0, %xmm0
                	popq	%rbx
                	leave
                	retq

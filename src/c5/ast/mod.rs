@@ -1048,6 +1048,10 @@ impl Ast {
         &self.exprs[id as usize]
     }
 
+    pub(crate) fn expr_mut(&mut self, id: ExprId) -> &mut Expr {
+        &mut self.exprs[id as usize]
+    }
+
     /// Value type of an expression node, falling back to `Ty::Int`
     /// for a node the type helper does not classify. Used by the
     /// statement-expression parser to type `({ ...; expr; })` from

@@ -2431,11 +2431,13 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pipeline.run("passes::rotate::run", &mut ssa_funcs, |funcs| {
             super::super::passes::rotate::run(funcs);
         });
-        // Fused multiply-add contraction (C99 6.5p8 / FP_CONTRACT ON at
-        // -O). Runs after the inliner so products exposed by parameter
-        // substitution into an add/sub become contractible.
+        // Fused multiply-add contraction (C99 6.5p8). Runs after the
+        // inliner: an inlined body keeps the products its expressions
+        // contract, and under `-ffp-contract=fast` a product reaching an
+        // add through a parameter contracts too.
+        let fast = program.fp_contract_fast;
         pipeline.run("passes::fma::run", &mut ssa_funcs, |funcs| {
-            super::super::passes::fma::run(funcs);
+            super::super::passes::fma::run(funcs, fast);
         });
         // Prove a null comparison of a const array's relocated pointer
         // member false. Runs after constfold has folded the constant

@@ -1136,6 +1136,10 @@ pub(crate) enum BinOp {
     Fadd,
     Fsub,
     Fmul,
+    /// An `Fmul` whose product is an operand of an add or subtract of its
+    /// type in the same expression while `FP_CONTRACT` is on (C99 6.5p8,
+    /// 7.12.2), which `passes::fma` may contract with it; otherwise `Fmul`.
+    FmulContractible,
     Fdiv,
     Feq,
     Fne,
@@ -1263,6 +1267,7 @@ pub(crate) fn eval_int_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, DivBy
         | BinOp::Fadd
         | BinOp::Fsub
         | BinOp::Fmul
+        | BinOp::FmulContractible
         | BinOp::Fdiv
         | BinOp::Feq
         | BinOp::Fne
@@ -1272,6 +1277,14 @@ pub(crate) fn eval_int_binop(op: BinOp, lhs: i64, rhs: i64) -> Result<i64, DivBy
         | BinOp::Fge => unreachable!("eval_int_binop reached on {op:?}"),
     };
     Ok(v)
+}
+
+/// Floating-point arithmetic operators (C99 6.5.5 / 6.5.6).
+pub(crate) fn is_fp_arith_op(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Fadd | BinOp::Fsub | BinOp::Fmul | BinOp::FmulContractible | BinOp::Fdiv
+    )
 }
 
 /// Integer division and remainder, signed and unsigned (C99 6.5.5).

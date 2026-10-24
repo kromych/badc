@@ -2230,13 +2230,17 @@ impl<'p, 's> LinePass<'p, 's> {
                 let filename = self.filename.to_string();
                 self.pp.pragma_once_files.insert(filename);
             }
-            // `#pragma pack(...)` and `#pragma GCC visibility ...` bind
-            // to their source position: a struct after `pack(1)` packs
-            // at 1, one after the next `pack()` does not. Batching them
-            // through the preprocessor's accumulators would lose that
-            // order, so the line passes through and the lexer folds it
-            // into its `pack_stack` / `visibility_stack` in place.
-            PragmaDirective::Other if pragma_is_pack(args) || pragma_is_visibility(args) => {
+            // `#pragma pack(...)`, `#pragma GCC visibility ...` and
+            // `#pragma STDC FP_CONTRACT` bind to their source position: a
+            // struct after `pack(1)` packs at 1, one after the next
+            // `pack()` does not. Batching them through the preprocessor's
+            // accumulators would lose that order, so the line passes
+            // through and the lexer folds it into its state in place.
+            PragmaDirective::Other
+                if pragma_is_pack(args)
+                    || pragma_is_visibility(args)
+                    || pragma_is_fp_contract(args) =>
+            {
                 self.pass_through(spelling);
                 return Ok(Emitted::Yes);
             }
@@ -2558,5 +2562,8 @@ use directive::{
 };
 use expand::{JoinScan, Tail};
 pub use include::{IncludeOrigin, IncludeRecord, IncludeStatus};
-use pragma::{PragmaDirective, parse_pragma_directive, pragma_is_pack, pragma_is_visibility};
+use pragma::{
+    PragmaDirective, parse_pragma_directive, pragma_is_fp_contract, pragma_is_pack,
+    pragma_is_visibility,
+};
 use text::unfold_and_strip;

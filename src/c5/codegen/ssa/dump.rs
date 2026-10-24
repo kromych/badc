@@ -542,6 +542,7 @@ fn fmt_binop(op: BinOp) -> &'static str {
         BinOp::Fadd => "fadd",
         BinOp::Fsub => "fsub",
         BinOp::Fmul => "fmul",
+        BinOp::FmulContractible => "fmul.c",
         BinOp::Fdiv => "fdiv",
         BinOp::Feq => "feq",
         BinOp::Fne => "fne",

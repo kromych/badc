@@ -74,7 +74,7 @@ fn ent_pc=4 n_params=2 variadic=false locals=0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0
     v9   Imm(0)                                           -> x0
-    v10  Fma { a=v1, b=v1, c=v3, neg_product=true, neg_addend=false } -> d0
+    v10  Binop { op=fsub, lhs=v3, rhs=v6 }                -> d0
     terminator Return(v10)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=5 ---
 ; name=fsub_rev_f
@@ -91,7 +91,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v7   Imm(0)                                           -> x0
     v8   Imm(0)                                           -> x0 [f32]
     v9   Imm(0)                                           -> x0 [f32]
-    v10  Fma { a=v1, b=v1, c=v3, neg_product=true, neg_addend=false } -> d0 [f32]
+    v10  Binop { op=fsub, lhs=v3, rhs=v6 }                -> d0 [f32]
     terminator Return(v10)   (exit_acc=v10)
 ; --- SSA dump (ok=true) ent_pc=6 ---
 ; name=ones

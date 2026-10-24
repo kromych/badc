@@ -45,7 +45,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v5   ImmData(16)                                      -> x0
     v6   Load { addr=v5, disp=0, kind=F80 }               -> d0
     v7   Imm(4611686018427387904)                         -> x0
-    v8   Binop { op=fmul, lhs=v6, rhs=v7 }                -> d1
+    v8   Binop { op=fmul.c, lhs=v6, rhs=v7 }              -> d1
     v9   ImmData(32)                                      -> x1
     v10  Load { addr=v9, disp=0, kind=F64 }               -> d1
     v11  Fma { a=v6, b=v7, c=v10, neg_product=false, neg_addend=false } -> d0
@@ -283,7 +283,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v194 Imm(0)                                           -> x6
     v195 FpCast { kind=IntToFp, value=v188 }              -> d1
     v196 Imm(4602678819172646912)                         -> x1
-    v197 Binop { op=fmul, lhs=v195, rhs=v163 }            -> d2
+    v197 Binop { op=fmul.c, lhs=v195, rhs=v163 }          -> d2
     v198 Fma { a=v195, b=v163, c=v193, neg_product=false, neg_addend=false } -> d0
     v199 StoreLocal { off=-62, value=v198, kind=F80 }     -> -
     v200 LoadLocal { off=-62, kind=F80 }                  -> d0
@@ -296,7 +296,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v207 Imm(1)                                           -> x1
     v208 FpCast { kind=IntToFp, value=v207 }              -> d1
     v209 Imm(4602678819172646912)                         -> x1
-    v210 Binop { op=fmul, lhs=v208, rhs=v163 }            -> d2
+    v210 Binop { op=fmul.c, lhs=v208, rhs=v163 }          -> d2
     v211 Fma { a=v208, b=v163, c=v200, neg_product=false, neg_addend=false } -> d0
     v212 StoreLocal { off=-62, value=v211, kind=F80 }     -> -
     v213 LoadLocal { off=-62, kind=F80 }                  -> d0
@@ -309,7 +309,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v220 Imm(2)                                           -> x1
     v221 FpCast { kind=IntToFp, value=v220 }              -> d1
     v222 Imm(4602678819172646912)                         -> x1
-    v223 Binop { op=fmul, lhs=v221, rhs=v163 }            -> d2
+    v223 Binop { op=fmul.c, lhs=v221, rhs=v163 }          -> d2
     v224 Fma { a=v221, b=v163, c=v213, neg_product=false, neg_addend=false } -> d0
     v225 StoreLocal { off=-62, value=v224, kind=F80 }     -> -
     v226 LoadLocal { off=-62, kind=F80 }                  -> d0
@@ -322,7 +322,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v233 Imm(3)                                           -> x1
     v234 FpCast { kind=IntToFp, value=v233 }              -> d1
     v235 Imm(4602678819172646912)                         -> x1
-    v236 Binop { op=fmul, lhs=v234, rhs=v163 }            -> d2
+    v236 Binop { op=fmul.c, lhs=v234, rhs=v163 }          -> d2
     v237 Fma { a=v234, b=v163, c=v226, neg_product=false, neg_addend=false } -> d0
     v238 StoreLocal { off=-62, value=v237, kind=F80 }     -> -
     v239 LoadLocal { off=-62, kind=F80 }                  -> d0

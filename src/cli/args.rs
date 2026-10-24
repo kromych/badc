@@ -94,6 +94,7 @@ pub(crate) struct FrontEnd {
     /// `-fstrict-overflow`, the last one given winning.
     pub(crate) wrapv: bool,
     pub(crate) auto_var_init: badc::AutoVarInit,
+    pub(crate) fp_contract: badc::FpContract,
     pub(crate) nostdinc: bool,
     /// gcc `-P`: `-E` output without its line markers.
     pub(crate) no_line_markers: bool,
@@ -1174,6 +1175,21 @@ impl Parser {
             // badc derives nothing from pointer overflow (C99 6.5p5).
             "-fwrapv" | "-fno-strict-overflow" => front.wrapv = true,
             "-fno-wrapv" | "-fstrict-overflow" => front.wrapv = false,
+            // gcc / clang `-ffp-contract=`: where `-O` contracts a product
+            // with the add or subtract using it (C99 6.5p8).
+            s if s.starts_with("-ffp-contract=") => {
+                front.fp_contract = match &s["-ffp-contract=".len()..] {
+                    "off" => badc::FpContract::Off,
+                    "on" => badc::FpContract::On,
+                    "fast" => badc::FpContract::Fast,
+                    spec => {
+                        return Err(ParseError::diag(format!(
+                            "badc: error: unsupported argument `{spec}` to `-ffp-contract=` \
+                             (supported: off, on, fast)"
+                        )));
+                    }
+                };
+            }
             // gcc / clang `-fno-builtin` and `-ffreestanding`: a call
             // spelled with a library function's own name is an ordinary
             // call the compiler may not fold. `-ffreestanding` also drops
@@ -2330,6 +2346,7 @@ impl FrontEnd {
             .with_short_wchar(self.short_wchar)
             .with_char_signed(self.char_signed)
             .with_wrapv(self.wrapv)
+            .with_fp_contract(self.fp_contract)
             .with_auto_var_init(self.auto_var_init)
             .with_nostdinc(self.nostdinc)
             .with_no_builtin(self.no_builtin)

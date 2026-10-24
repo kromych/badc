@@ -764,7 +764,7 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
     terminator Bz { cond=v748, target=b53, fall=b51 }   (exit_acc=v748)
   block 53  start_pc=0
     v756 Imm(4616189618054758400)                         -> x0
-    v757 Binop { op=fmul, lhs=v745, rhs=v756 }            -> d2
+    v757 Binop { op=fmul.c, lhs=v745, rhs=v756 }          -> d2
     v758 Fma { a=v745, b=v756, c=v746, neg_product=false, neg_addend=false } -> d0
     v759 Imm(4618441417868443648)                         -> x0
     v760 Binop { op=fne, lhs=v758, rhs=v759 }             -> x0
@@ -803,7 +803,7 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
     terminator Bz { cond=v765, target=b61, fall=b56 }   (exit_acc=v765)
   block 61  start_pc=0
     v768 Imm(4616189618054758400)                         -> x0
-    v769 Binop { op=fmul, lhs=v762, rhs=v768 }            -> d2
+    v769 Binop { op=fmul.c, lhs=v762, rhs=v768 }          -> d2
     v770 Fma { a=v762, b=v768, c=v763, neg_product=false, neg_addend=false } -> d0
     v771 Imm(4621256167635550208)                         -> x0
     v772 Binop { op=fne, lhs=v770, rhs=v771 }             -> x0
@@ -842,7 +842,7 @@ fn ent_pc=21 n_params=0 variadic=false locals=0
     terminator Bz { cond=v782, target=b69, fall=b64 }   (exit_acc=v782)
   block 69  start_pc=0
     v785 Imm(4616189618054758400)                         -> x0
-    v786 Binop { op=fmul, lhs=v779, rhs=v785 }            -> d2
+    v786 Binop { op=fmul.c, lhs=v779, rhs=v785 }          -> d2
     v787 Fma { a=v779, b=v785, c=v780, neg_product=false, neg_addend=false } -> d0
     v788 Imm(4618441417868443648)                         -> x0
     v789 Binop { op=fne, lhs=v787, rhs=v788 }             -> x0

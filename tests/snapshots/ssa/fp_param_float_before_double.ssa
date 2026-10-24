@@ -43,7 +43,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v25  Imm(4617315517961601024)                         -> x1
     v26  Imm(1086324736)                                  -> x2 [f32]
     v27  Imm(4621819117588971520)                         -> x6
-    v28  Binop { op=fmul, lhs=v25, rhs=v22 }              -> d0
+    v28  Binop { op=fmul.c, lhs=v25, rhs=v22 }            -> d0
     v29  FpCast { kind=F32ToF64, value=v26 }              -> d0
     v30  Fma { a=v25, b=v22, c=v29, neg_product=false, neg_addend=false } -> d0
     v31  Imm(4633078116657397760)                         -> x0

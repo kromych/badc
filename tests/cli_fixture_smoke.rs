@@ -710,6 +710,61 @@ fn dead_branch_calls_are_eliminated_under_optimize() {
     }
 }
 
+// `-ffp-contract=` selects where `-O` contracts a product with the add or
+// subtract using it (C99 6.5p8): `on`, the default, within one
+// expression; `fast` across statements too; `off` nowhere. With a = 1 +
+// 2^-30 and c = 1 + 2^-29, a*a - c is 2^-60 contracted and 0 otherwise;
+// the exit status has bit 0 for the one-expression form contracted and
+// bit 1 for the form across a declaration.
+#[test]
+fn fp_contract_selects_where_products_contract() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-fp-contract");
+    let src = dir.join("c.c");
+    std::fs::write(
+        &src,
+        "volatile double va = 1.0 + 0x1p-30, vc = 1.0 + 0x1p-29;\n\
+         double within(double a, double c) { return a * a - c; }\n\
+         double across(double a, double c) { double p = a * a; return p - c; }\n\
+         int main(void) { return (within(va, vc) != 0) | (across(va, vc) != 0) << 1; }\n",
+    )
+    .expect("write c.c");
+    let exe = dir.join(format!("c{}", std::env::consts::EXE_SUFFIX));
+    for (args, want) in [
+        (&["-O0"][..], 0),
+        (&["-O"][..], 1),
+        (&["-O", "-ffp-contract=on"][..], 1),
+        (&["-O", "-ffp-contract=fast"][..], 3),
+        (&["-O", "-ffp-contract=off"][..], 0),
+    ] {
+        let out = Command::new(badc)
+            .args(args)
+            .arg(&src)
+            .arg("-o")
+            .arg(&exe)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let run = Command::new(&exe).output().expect("run program");
+        assert_eq!(run.status.code(), Some(want), "{args:?}");
+    }
+    let out = Command::new(badc)
+        .args(["-ffp-contract=always", "-c"])
+        .arg(&src)
+        .output()
+        .expect("run badc");
+    assert!(
+        !out.status.success()
+            && String::from_utf8_lossy(&out.stderr).contains("unsupported argument `always`"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
 // A callee marked `always_inline` / `__forceinline` that the inliner
 // cannot substitute (here: a variadic body) draws a diagnostic naming
 // the function and the reason, so a silently-unhonored mandatory inline

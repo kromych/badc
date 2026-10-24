@@ -50,78 +50,80 @@ Disassembly of section .text:
                	ret
 
 <across>:
-               	stp	d8, d9, [sp, #-0x80]!
+               	stp	d8, d9, [sp, #-0x90]!
                	stp	d10, d11, [sp, #0x10]
                	stp	d12, d13, [sp, #0x20]
                	stp	d14, d15, [sp, #0x30]
-               	stp	x29, x30, [sp, #0x70]
-               	add	x29, sp, #0x70
+               	stp	x29, x30, [sp, #0x80]
+               	add	x29, sp, #0x80
                	fmov	d8, d0
                	fmov	d9, d1
-               	fmov	d3, #2.00000000
-               	fmov	d0, #3.00000000
+               	fmov	d0, #2.00000000
                	fmul	d10, d8, d0
-               	fmov	d1, #5.00000000
+               	fmov	d1, #3.00000000
                	fmul	d11, d8, d1
-               	fmov	d2, #7.00000000
+               	fmov	d2, #5.00000000
                	fmul	d12, d8, d2
-               	fmul	d13, d9, d3
+               	fmov	d3, #7.00000000
+               	fmul	d13, d8, d3
                	fmul	d14, d9, d0
                	fmul	d15, d9, d1
                	fmul	d16, d9, d2
-               	str	d16, [sp, #0x68]
+               	str	d16, [sp, #0x78]
+               	fmul	d16, d9, d3
+               	str	d16, [sp, #0x70]
                	fadd	d16, d8, d9
-               	str	d16, [sp, #0x60]
+               	str	d16, [sp, #0x68]
                	fsub	d16, d8, d9
-               	str	d16, [sp, #0x58]
+               	str	d16, [sp, #0x60]
                	fmul	d16, d8, d9
-               	str	d16, [sp, #0x50]
+               	str	d16, [sp, #0x58]
                	fmov	d0, #11.00000000
                	fadd	d16, d8, d0
-               	str	d16, [sp, #0x48]
+               	str	d16, [sp, #0x50]
                	fmov	d0, d8
                	fmov	d1, d9
                	bl	<addr>
-               	str	d0, [sp, #0x40]
+               	str	d0, [sp, #0x48]
                	fmov	d0, d9
                	fmov	d1, d8
                	bl	<addr>
-               	ldr	d16, [sp, #0x40]
+               	ldr	d16, [sp, #0x48]
                	fadd	d0, d16, d0
+               	fadd	d0, d0, d10
                	fmov	d1, #2.00000000
-               	fmadd	d0, d8, d1, d0
-               	fmov	d1, #2.00000000
-               	fmadd	d0, d10, d1, d0
-               	fmov	d1, #3.00000000
                	fmadd	d0, d11, d1, d0
-               	fmov	d1, #4.00000000
+               	fmov	d1, #3.00000000
                	fmadd	d0, d12, d1, d0
-               	fmov	d1, #5.00000000
+               	fmov	d1, #4.00000000
                	fmadd	d0, d13, d1, d0
-               	fmov	d1, #6.00000000
+               	fmov	d1, #5.00000000
                	fmadd	d0, d14, d1, d0
-               	fmov	d1, #7.00000000
+               	fmov	d1, #6.00000000
                	fmadd	d0, d15, d1, d0
+               	fmov	d1, #7.00000000
+               	ldr	d16, [sp, #0x78]
+               	fmadd	d0, d16, d1, d0
                	fmov	d1, #8.00000000
-               	ldr	d16, [sp, #0x68]
+               	ldr	d16, [sp, #0x70]
                	fmadd	d0, d16, d1, d0
                	fmov	d1, #9.00000000
-               	ldr	d16, [sp, #0x60]
+               	ldr	d16, [sp, #0x68]
                	fmadd	d0, d16, d1, d0
                	fmov	d1, #10.00000000
-               	ldr	d16, [sp, #0x58]
+               	ldr	d16, [sp, #0x60]
                	fmadd	d0, d16, d1, d0
                	fmov	d1, #11.00000000
-               	ldr	d16, [sp, #0x50]
+               	ldr	d16, [sp, #0x58]
                	fmadd	d0, d16, d1, d0
                	fmov	d1, #12.00000000
-               	ldr	d16, [sp, #0x48]
+               	ldr	d16, [sp, #0x50]
                	fmadd	d0, d16, d1, d0
-               	ldp	x29, x30, [sp, #0x70]
+               	ldp	x29, x30, [sp, #0x80]
                	ldp	d14, d15, [sp, #0x30]
                	ldp	d12, d13, [sp, #0x20]
                	ldp	d10, d11, [sp, #0x10]
-               	ldp	d8, d9, [sp], #0x80
+               	ldp	d8, d9, [sp], #0x90
                	ret
 
 <across_ref>:

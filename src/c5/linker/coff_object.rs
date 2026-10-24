@@ -11,8 +11,9 @@ use alloc::vec::Vec;
 
 use super::link_err;
 use super::object::{
-    InputSection, NativeInitFunc, NativeMachine, NativeObject, NativeReloc, NativeSymSection,
-    NativeSymbol, STT_FUNC, STT_NOTYPE, STT_OBJECT, SectionFamily, grouped_by_name,
+    Comdat, InputSection, NativeInitFunc, NativeMachine, NativeObject, NativeReloc,
+    NativeSymSection, NativeSymbol, STT_FUNC, STT_NOTYPE, STT_OBJECT, SectionFamily,
+    grouped_by_name,
 };
 use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
@@ -598,6 +599,85 @@ fn read_directives(bytes: &[u8], sects: &[Sect]) -> Result<Directives, C5Error> 
     Ok(d)
 }
 
+/// A COMDAT section's selection, checksum, leader and associative parent.
+struct SectComdat {
+    selection: u8,
+    checksum: u32,
+    leader: Option<String>,
+    parent: Option<usize>,
+}
+
+/// Each section's COMDAT facts, from its section-definition symbol and the first
+/// symbol it defines after that: the leader, a key when external.
+fn read_comdats(raw: &[Option<RawSym>], sects: &[Sect], wide: bool) -> Vec<Option<SectComdat>> {
+    let mut out: Vec<Option<SectComdat>> = (0..sects.len()).map(|_| None).collect();
+    for (i, r) in raw.iter().enumerate() {
+        let Some(r) = r.as_ref().filter(|r| defines_section(r, sects)) else {
+            continue;
+        };
+        let k = r.section as usize - 1;
+        if sects[k].flags & IMAGE_SCN_LNK_COMDAT == 0 || out[k].is_some() {
+            continue;
+        }
+        let aux = r.aux.unwrap();
+        let low = u16::from_le_bytes(aux[12..14].try_into().unwrap()) as usize;
+        let high = if wide {
+            u16::from_le_bytes(aux[16..18].try_into().unwrap()) as usize
+        } else {
+            0
+        };
+        let selection = aux[14];
+        let leader = raw[i + 1..]
+            .iter()
+            .flatten()
+            .find(|l| l.section == r.section && !defines_section(l, sects))
+            .filter(|l| l.class == IMAGE_SYM_CLASS_EXTERNAL)
+            .map(|l| l.name.clone());
+        out[k] = Some(SectComdat {
+            selection,
+            checksum: u32::from_le_bytes(aux[8..12].try_into().unwrap()),
+            leader,
+            parent: (selection == IMAGE_COMDAT_SELECT_ASSOCIATIVE)
+                .then(|| (low | high << 16).wrapping_sub(1)),
+        });
+    }
+    out
+}
+
+/// The groups external leaders key, associative sections included.
+fn comdat_groups(comdat: &[Option<SectComdat>], sects: &[Sect]) -> Vec<Comdat> {
+    let root = |mut k: usize| {
+        for _ in 0..comdat.len() {
+            match comdat.get(k).and_then(|c| c.as_ref()?.parent) {
+                Some(p) => k = p,
+                None => break,
+            }
+        }
+        k
+    };
+    let mut groups = Vec::new();
+    for (k, c) in comdat.iter().enumerate() {
+        let Some(c) = c.as_ref().filter(|c| c.parent.is_none()) else {
+            continue;
+        };
+        let Some(key) = c.leader.clone() else {
+            continue;
+        };
+        let sections = (0..sects.len())
+            .filter(|&m| m == k || (comdat[m].is_some() && root(m) == k))
+            .filter_map(|m| sects[m].record)
+            .collect();
+        groups.push(Comdat {
+            key,
+            selection: c.selection,
+            size: sects[k].size as u64,
+            checksum: c.checksum,
+            sections,
+        });
+    }
+    groups
+}
+
 /// The native section of a symbol defined in section `n` (1-based), its
 /// merged offset and its input-section record; a symbol in a discarded
 /// section names no address.
@@ -1101,22 +1181,11 @@ pub fn parse_native_coff(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     };
     let mut sects = read_sections(bytes, &h)?;
     let raw = read_symbols(bytes, &h)?;
+    let comdat = read_comdats(&raw, &sects, h.sym_size == 20);
     // An associative COMDAT section goes where the section it follows goes.
-    let mut assoc: BTreeMap<usize, usize> = BTreeMap::new();
-    for r in raw.iter().flatten().filter(|r| defines_section(r, &sects)) {
-        let aux = r.aux.unwrap();
-        let n = u16::from_le_bytes(aux[12..14].try_into().unwrap()) as usize
-            | if h.sym_size == 20 {
-                (u16::from_le_bytes(aux[16..18].try_into().unwrap()) as usize) << 16
-            } else {
-                0
-            };
-        let k = r.section as usize - 1;
-        if sects[k].flags & IMAGE_SCN_LNK_COMDAT != 0 && aux[14] == IMAGE_COMDAT_SELECT_ASSOCIATIVE
-        {
-            assoc.insert(k, n.wrapping_sub(1));
-        }
-    }
+    let assoc: BTreeMap<usize, usize> = (comdat.iter().enumerate())
+        .filter_map(|(k, c)| Some((k, c.as_ref()?.parent?)))
+        .collect();
     // A constructor table is consumed as init / fini entries, whose array
     // the link materializes, rather than merged as bytes.
     for s in sects.iter_mut() {
@@ -1135,6 +1204,7 @@ pub fn parse_native_coff(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     }
     let directives = read_directives(bytes, &sects)?;
     let blobs = concat_families(bytes, &mut sects)?;
+    let comdats = comdat_groups(&comdat, &sects);
     let mut alternate_names = directives.alternate_names.clone();
     let symbols = decode_symbols(&raw, &sects, &directives, &mut alternate_names)?;
     let relocs = translate_relocs(bytes, h.machine, &sects, &raw, &symbols)?;
@@ -1182,6 +1252,7 @@ pub fn parse_native_coff(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         early_returns: Vec::new(),
         extern_data_names: Vec::new(),
         alternate_names,
+        comdats,
         debug_info: Vec::new(),
         debug_abbrev: Vec::new(),
         debug_line: Vec::new(),
@@ -1684,6 +1755,51 @@ mod tests {
                 (R_AARCH64_TLSLE_ADD_TPREL_HI12, 0),
                 (R_AARCH64_TLSLE_LDST32_TPREL_LO12_NC, 0),
                 (R_AARCH64_PREL32, -4),
+            ]
+        );
+    }
+
+    /// A COMDAT section and its associative ones form a group keyed by its first
+    /// external symbol; a static leader forms none.
+    #[test]
+    fn comdat_sections_group_under_their_leader() {
+        let comdat = IMAGE_SCN_LNK_COMDAT;
+        let def = |name, n: i16, aux| {
+            let mut s = sym(name, 0, n, IMAGE_SYM_CLASS_STATIC);
+            s.aux.push(aux);
+            s
+        };
+        let o = parse(
+            &[
+                sec(".text$mn", TEXT | comdat, &[0xC3; 4]),
+                sec(".rdata", RDATA | comdat, &[1; 8]),
+                sec(".rdata", RDATA | comdat, &[2; 8]),
+                sec(".rdata$a", RDATA | comdat, &[3; 4]),
+            ],
+            &[
+                def(".text$mn", 1, section_aux(4, 0, 1)),
+                def(".rdata", 2, section_aux(8, 0, 2)),
+                def(".rdata", 3, section_aux(8, 0, 2)),
+                def(
+                    ".rdata$a",
+                    4,
+                    section_aux(4, 2, IMAGE_COMDAT_SELECT_ASSOCIATIVE),
+                ),
+                sym("f", 0, 1, IMAGE_SYM_CLASS_EXTERNAL),
+                sym("__real@1", 0, 2, IMAGE_SYM_CLASS_EXTERNAL),
+                sym("local", 0, 3, IMAGE_SYM_CLASS_STATIC),
+            ],
+        )
+        .unwrap();
+        let groups: Vec<_> = (o.comdats.iter())
+            .map(|g| (g.key.as_str(), g.selection, g.size, g.sections.clone()))
+            .collect();
+        // `.rdata$a` joins `.rdata` #2's group; `.rdata` #3's static leader forms none.
+        assert_eq!(
+            groups,
+            [
+                ("f", 1, 4, alloc::vec![0]),
+                ("__real@1", 2, 8, alloc::vec![1, 3])
             ]
         );
     }

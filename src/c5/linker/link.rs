@@ -1140,6 +1140,8 @@ struct Link<'a> {
     export_data: bool,
     no_copy_relocs: bool,
     pe_image: bool,
+    /// COFF COMDAT groups' sections, and those selection displaced.
+    comdats: super::comdat::CoffSelection,
     preemptible: hashbrown::HashSet<&'a str>,
     shared_libs: &'a [SharedLibrary],
     /// Union of every shared library's exports: an undefined global
@@ -1291,6 +1293,7 @@ impl<'a> Link<'a> {
             export_data: opts.export_data,
             no_copy_relocs: opts.no_copy_relocs,
             pe_image: opts.pe_image,
+            comdats: super::comdat::select_coff(objs)?,
             preemptible: hashbrown::HashSet::new(),
             shared_libs,
             shlib_exports: shared_libs
@@ -1938,6 +1941,17 @@ impl<'a> Link<'a> {
         Ok(TlsBinding::Static(self.tp_offset(offset)))
     }
 
+    /// The section a reference to `sym` resolves through: a COMDAT member's
+    /// definition through the merged table, which holds the kept group's.
+    fn reference_section(&self, unit: usize, sym: &NativeSymbol) -> NativeSymSection {
+        match sym.input_section {
+            Some(k) if sym.binding != 0 && self.comdats.members.contains(&(unit, k)) => {
+                NativeSymSection::Undef
+            }
+            _ => sym.reference_section(),
+        }
+    }
+
     /// The unit reaches its thread-locals in the TEB block `_tls_index`
     /// selects: every PE image, and badc's own Windows objects.
     fn teb_tls(&self, unit: usize) -> bool {
@@ -2334,6 +2348,12 @@ impl<'a> Link<'a> {
                     continue;
                 }
                 if sym.name.is_empty() {
+                    continue;
+                }
+                if sym
+                    .input_section
+                    .is_some_and(|k| self.comdats.dropped.contains(&(i, k)))
+                {
                     continue;
                 }
                 // A `_Thread_local` definition reaches the merged image
@@ -3141,7 +3161,7 @@ impl<'a> Link<'a> {
                     self.admit_preempted(sym, reloc, patch_offset);
                     continue;
                 }
-                let sym_section = sym.reference_section();
+                let sym_section = self.reference_section(i, sym);
                 if let Some(&slot) = self.got_slot_sites.get(&(i, reloc.offset)) {
                     let site = origin.at(
                         self.machine,
@@ -3773,6 +3793,7 @@ impl<'a> Link<'a> {
             ));
         }
         let sym = &obj.symbols[reloc.sym_idx];
+        let section = self.reference_section(unit, sym);
         // A pc-relative slot in the data stream (a switch dispatch
         // table in folded `.rodata`, an assembler `label - .` record in
         // a folded named section): the value is `S + A - P`, deferred
@@ -3812,7 +3833,6 @@ impl<'a> Link<'a> {
         // A slot naming an `SHN_ABS` symbol takes `S + A` directly: the
         // value is a link-time constant, so no load-time relocation
         // carries it.
-        let section = sym.reference_section();
         let abs_value = match section {
             NativeSymSection::Abs => Some(sym.value as i64),
             NativeSymSection::Undef if !self.defined.contains_key(sym.name.as_str()) => {
@@ -4030,7 +4050,7 @@ impl<'a> Link<'a> {
         } else {
             "pc-relative data slot"
         };
-        let (section, value) = match sym.reference_section() {
+        let (section, value) = match self.reference_section(unit, sym) {
             NativeSymSection::Undef | NativeSymSection::Common => {
                 let d = self.defined.get(sym.name.as_str()).ok_or_else(|| {
                     link_err(
@@ -6032,6 +6052,7 @@ mod tests {
             early_returns: Vec::new(),
             extern_data_names: Vec::new(),
             alternate_names: Vec::new(),
+            comdats: Vec::new(),
             debug_info: Vec::new(),
             debug_abbrev: Vec::new(),
             debug_line: Vec::new(),
@@ -7394,6 +7415,7 @@ mod tests {
                 early_returns: alloc::vec::Vec::new(),
                 extern_data_names: alloc::vec::Vec::new(),
                 alternate_names: alloc::vec::Vec::new(),
+                comdats: alloc::vec::Vec::new(),
                 debug_info: alloc::vec::Vec::new(),
                 debug_abbrev: alloc::vec::Vec::new(),
                 debug_line: alloc::vec::Vec::new(),

@@ -311,7 +311,7 @@ fn ingest_linker_input(
     Ok(())
 }
 
-/// The `STB_GLOBAL` names an ELF64 ET_REL blob defines in a section.
+/// The `STB_GLOBAL` names a relocatable object defines in a section.
 /// They populate the SysV `ar` symbol index when `--ar` bundles native
 /// objects: a name listed there resolves -- via the archive's `/`
 /// member -- to the containing member's file offset, which is how the
@@ -319,7 +319,7 @@ fn ingest_linker_input(
 /// section-resident definition is visible at pull-in time, so undefined
 /// and absolute symbols are dropped. `Err` is the parse diagnostic.
 pub(crate) fn native_defined_globals(bytes: &[u8], path: &str) -> Result<Vec<String>, String> {
-    let obj = badc::parse_native_elf(bytes).map_err(|e| format!("badc: {path}: {e}"))?;
+    let obj = badc::parse_native_object(bytes).map_err(|e| format!("badc: {path}: {e}"))?;
     Ok(obj
         .symbols
         .into_iter()

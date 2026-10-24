@@ -7272,6 +7272,7 @@ fn minimal_native_object(
         early_returns: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         alternate_names: alloc::vec::Vec::new(),
+        comdats: alloc::vec::Vec::new(),
         debug_info: alloc::vec::Vec::new(),
         debug_abbrev: alloc::vec::Vec::new(),
         debug_line: alloc::vec::Vec::new(),
@@ -7583,6 +7584,7 @@ fn aarch64_data_ref_object_ex(
         early_returns: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         alternate_names: alloc::vec::Vec::new(),
+        comdats: alloc::vec::Vec::new(),
         symbols: alloc::vec![NativeSymbol {
             name: String::new(),
             section: NativeSymSection::Undef,
@@ -7845,6 +7847,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         early_returns: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
         alternate_names: alloc::vec::Vec::new(),
+        comdats: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),
         text_relocs: alloc::vec::Vec::new(),
         data_relocs: alloc::vec::Vec::new(),
@@ -12064,6 +12067,44 @@ fn text_absolute_field_self_links_into_a_pe_image() {
             );
         }
     }
+}
+
+/// Two units each defining a COMDAT (`SELECT_ANY`) object: the link keeps the
+/// first's, and both units' references, to the discarded copy too, reach it.
+#[test]
+fn every_reference_reaches_the_comdat_copy_the_link_keeps() {
+    use crate::c5::linker::coff_object::build::{object, sec, section_aux, sym};
+    use crate::c5::linker::link::MergedTarget;
+    use crate::c5::linker::{LinkOptions, link_native_objects_with, parse_native_coff};
+    let (addr64, external, stat) = (1u16, 2u8, 3u8);
+    let unit = |value: u8| {
+        let mut def = sym(".data", 0, 1, stat);
+        def.aux.push(section_aux(4, 0, 2));
+        let mut slot = sec(".data", 0xC040_0040, &[0; 8]);
+        slot.relocs = alloc::vec![(0, 2, addr64)];
+        let bytes = object(
+            0x8664,
+            &[sec(".data", 0xC040_1040, &[value, 0, 0, 0]), slot],
+            &[def, sym("shared", 0, 1, external)],
+        );
+        parse_native_coff(&bytes).expect("parse the COFF object")
+    };
+    let opts = LinkOptions {
+        allow_undefined: true,
+        shared: true,
+        pe_image: true,
+        ..Default::default()
+    };
+    let merged = link_native_objects_with(&[unit(1), unit(2)], &[], &opts).expect("link");
+    let shared = merged.defined.get("shared").expect("shared").value as i64;
+    assert_eq!(merged.data[shared as usize], 1, "the first unit's copy");
+    let targets: alloc::vec::Vec<i64> = (merged.data_abs_relocs.iter())
+        .map(|r| match r.target {
+            MergedTarget::Data(o) => o,
+            MergedTarget::Text(_) => panic!("a data target"),
+        })
+        .collect();
+    assert_eq!(targets, [shared, shared]);
 }
 
 /// An x86-64 COFF object's image-relative addresses (`ADDR32NB`) in code,

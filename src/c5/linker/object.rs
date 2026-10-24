@@ -1069,6 +1069,8 @@ pub struct NativeObject {
     /// `(name, alternate)`: an undefined `name` resolves to `alternate`, from
     /// a COFF weak external or a `/alternatename:` directive.
     pub alternate_names: Vec<(String, String)>,
+    /// COFF COMDAT groups; one group per key keeps its definitions.
+    pub comdats: Vec<Comdat>,
     /// Standard DWARF 4 sections the `-c` writer emits.
     /// Address-bearing slots inside are placeholders paired with
     /// entries in `debug_info_relocs` / `debug_line_relocs`; the
@@ -1096,6 +1098,20 @@ pub struct NativeObject {
     /// A Mach-O object's `__LD,__compact_unwind` and `__TEXT,__eh_frame`.
     pub compact_unwind: Vec<CompactUnwindEntry>,
     pub eh_frame: Option<EhFrameInput>,
+}
+
+/// A COFF COMDAT group (PE/COFF specification 5.5.6).
+#[derive(Debug, Clone)]
+pub struct Comdat {
+    /// The leader: the external symbol the COMDAT section defines first.
+    pub key: String,
+    /// `IMAGE_COMDAT_SELECT_*`.
+    pub selection: u8,
+    /// The leader section's size and its checksum.
+    pub size: u64,
+    pub checksum: u32,
+    /// Indices in [`NativeObject::sections`], associative ones included.
+    pub sections: Vec<u32>,
 }
 
 /// A symbol of the unit, by index, and an addend.
@@ -1260,6 +1276,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         early_returns: note.early_returns,
         extern_data_names: note.extern_data_names,
         alternate_names: Vec::new(),
+        comdats: Vec::new(),
         debug_info: debug.info,
         debug_abbrev: debug.abbrev,
         debug_line: debug.line,

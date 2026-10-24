@@ -9511,6 +9511,21 @@ __attribute__((weak)) int peer_overridden(void) { return 1; }
 int peer_overridden(void);
 #endif
 int peer_call_overridden(void) { return peer_overridden(); }
+__declspec(selectany) int peer_shared = 5;
+int *peer_shared_a(void) { return &peer_shared; }
+"#;
+
+// A second unit sharing COMDAT copies with the first: a `selectany` object
+// both define, the string literal and `double` constants MSVC and clang
+// pool, and gcc's `.refptr` slot of an extern object both read.
+#[cfg(windows)]
+const COFF_PEER2_SRC: &str = r#"
+extern int badc_counter;
+__declspec(selectany) int peer_shared = 5;
+int *peer_shared_b(void) { return &peer_shared; }
+const char *peer2_string(void) { return "literal"; }
+double peer2_scale(double x) { return x * 1.5 + 0.25; }
+int peer2_counter(void) { return badc_counter; }
 "#;
 
 #[cfg(windows)]
@@ -9540,6 +9555,10 @@ extern int peer_tls_bump(void);
 extern int peer_big_frame(int);
 extern int peer_ctor_ran(void);
 extern int peer_call_overridden(void);
+extern int *peer_shared_a(void), *peer_shared_b(void);
+extern const char *peer2_string(void);
+extern double peer2_scale(double);
+extern int peer2_counter(void);
 int main(void)
 {
     if (peer_data != 7 || peer_bss != 0) return 1;
@@ -9560,86 +9579,153 @@ int main(void)
     if (peer_big_frame(100) != 100) return 15;
     if (peer_ctor_ran() != 1) return 16;
     if (peer_call_overridden() != 2) return 17;
+    if (peer_shared_a() != peer_shared_b() || *peer_shared_b() != 5) return 18;
+    if (strcmp(peer2_string(), "literal") || peer2_scale(4.0) != 6.25) return 19;
+    if (peer2_counter() != badc_counter) return 20;
     return 0;
 }
 "#;
 
-/// A badc `main` links with a COFF object from each Windows compiler the
-/// host has -- clang for the msvc and gnu triples, MSVC's `cl`, mingw-w64 gcc
-/// -- at their unoptimized and optimized levels, and the program runs.
+/// A badc `main` links with the COFF objects of two units from each Windows
+/// compiler the host has -- clang for the msvc and gnu triples, MSVC's `cl`,
+/// mingw-w64 gcc -- at their unoptimized and optimized levels, given as
+/// objects and as a static library of them in the compiler's own archive
+/// format (lib.exe, llvm-lib, llvm-ar, GNU ar), and the program runs.
 #[cfg(windows)]
 #[test]
 fn coff_objects_from_the_windows_compilers_link_with_a_badc_main() {
     let dir = tempdir("coff-interop");
-    let peer = write_source(&dir, "peer.c", COFF_PEER_SRC);
+    let units = [
+        write_source(&dir, "peer.c", COFF_PEER_SRC),
+        write_source(&dir, "peer2.c", COFF_PEER2_SRC),
+    ];
     let main = write_source(&dir, "main.c", COFF_MAIN_SRC);
     let arch = if cfg!(target_arch = "aarch64") {
         "aarch64"
     } else {
         "x86_64"
     };
-    let mut objects: Vec<(String, PathBuf)> = Vec::new();
-    let mut compile = |label: String, mut cmd: Command, out_flag: &str| {
-        let obj = dir.join(format!("{label}.obj"));
-        if out_flag.is_empty() {
-            cmd.arg("-o").arg(&obj);
-        } else {
-            cmd.arg(format!("{out_flag}{}", obj.display()));
-        }
+    // Each build: its label, its two objects and the archive of them.
+    let mut builds: Vec<(String, Vec<PathBuf>, PathBuf)> = Vec::new();
+    let mut build = |label: String,
+                     compile: &dyn Fn(&PathBuf, &PathBuf) -> Command,
+                     archive: &dyn Fn(&PathBuf, &[PathBuf]) -> Command,
+                     lib: &str| {
+        let objs: Vec<PathBuf> = (units.iter().enumerate())
+            .map(|(k, src)| {
+                let obj = dir.join(format!("{label}-{k}.obj"));
+                run(
+                    compile(src, &obj).current_dir(&dir),
+                    &format!("compile {} with {label}", src.display()),
+                );
+                obj
+            })
+            .collect();
+        let lib = dir.join(format!("{label}.{lib}"));
         run(
-            cmd.arg(&peer).current_dir(&dir),
-            &format!("compile the peer with {label}"),
+            archive(&lib, &objs).current_dir(&dir),
+            &format!("archive the {label} objects"),
         );
-        objects.push((label, obj));
+        builds.push((label, objs, lib));
     };
     let mut found = Vec::new();
     if let Some(clang) = windows_clang() {
-        for triple in ["pc-windows-msvc", "w64-windows-gnu"] {
+        let bin = Path::new(&clang)
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        for (triple, archiver) in [
+            ("pc-windows-msvc", "llvm-lib"),
+            ("w64-windows-gnu", "llvm-ar"),
+        ] {
             for opt in ["-O0", "-O2"] {
-                let mut c = Command::new(&clang);
-                c.args([&format!("--target={arch}-{triple}"), opt, "-c"]);
-                compile(format!("clang-{triple}{opt}"), c, "");
+                let compile = |src: &PathBuf, obj: &PathBuf| {
+                    let mut c = Command::new(&clang);
+                    c.args([&format!("--target={arch}-{triple}"), opt, "-c", "-o"])
+                        .arg(obj)
+                        .arg(src);
+                    c
+                };
+                let archive = |lib: &PathBuf, objs: &[PathBuf]| {
+                    let mut c = Command::new(bin.join(archiver));
+                    if archiver == "llvm-lib" {
+                        c.arg("/nologo").arg(format!("/out:{}", lib.display()));
+                    } else {
+                        c.arg("rcs").arg(lib);
+                    }
+                    c.args(objs);
+                    c
+                };
+                build(format!("clang-{triple}{opt}"), &compile, &archive, "lib");
             }
         }
         found.push("clang");
     }
     if let Some(WindowsCc::Msvc { cl, env }) = msvc_cl() {
         for opt in ["/Od", "/O2"] {
-            let mut c = Command::new(&cl);
-            c.envs(env.iter().map(|(k, v)| (k, v)))
-                .args(["/nologo", "/c", opt]);
-            compile(format!("cl{}", &opt[1..]), c, "/Fo");
+            let compile = |src: &PathBuf, obj: &PathBuf| {
+                let mut c = Command::new(&cl);
+                c.envs(env.iter().map(|(k, v)| (k, v)))
+                    .args(["/nologo", "/c", opt])
+                    .arg(format!("/Fo{}", obj.display()))
+                    .arg(src);
+                c
+            };
+            let archive = |lib: &PathBuf, objs: &[PathBuf]| {
+                let mut c = Command::new(cl.with_file_name("lib.exe"));
+                c.envs(env.iter().map(|(k, v)| (k, v)))
+                    .arg("/nologo")
+                    .arg(format!("/OUT:{}", lib.display()))
+                    .args(objs);
+                c
+            };
+            build(format!("cl{}", &opt[1..]), &compile, &archive, "lib");
         }
         found.push("cl");
     }
     if let Some((gcc, path)) = mingw_gcc() {
         for opt in ["-O0", "-O2"] {
-            let mut c = Command::new(&gcc);
-            c.env("PATH", &path).args([opt, "-c"]);
-            compile(format!("gcc{opt}"), c, "");
+            let compile = |src: &PathBuf, obj: &PathBuf| {
+                let mut c = Command::new(&gcc);
+                c.env("PATH", &path)
+                    .args([opt, "-c", "-o"])
+                    .arg(obj)
+                    .arg(src);
+                c
+            };
+            let archive = |lib: &PathBuf, objs: &[PathBuf]| {
+                let mut c = Command::new(gcc.with_file_name("ar.exe"));
+                c.env("PATH", &path).arg("rcs").arg(lib).args(objs);
+                c
+            };
+            build(format!("gcc{opt}"), &compile, &archive, "a");
         }
         found.push("gcc");
     }
     eprintln!("coff interop: compilers {found:?}");
-    for (label, obj) in &objects {
-        for opt in ["-O0", "-O"] {
-            let exe = dir.join(format!("{label}-badc{opt}.exe"));
-            run(
-                Command::new(badc())
-                    .arg(opt)
-                    .arg("-o")
-                    .arg(&exe)
-                    .arg(&main)
-                    .arg(obj)
-                    .current_dir(&dir),
-                &format!("link the badc main with the {label} object"),
-            );
-            let out = Command::new(&exe).output().expect("run the program");
-            assert_eq!(
-                out.status.code(),
-                Some(0),
-                "{label} object, badc {opt}: a check failed"
-            );
+    for (label, objs, lib) in &builds {
+        let inputs: [(&str, Vec<&PathBuf>); 2] =
+            [("objects", objs.iter().collect()), ("archive", vec![lib])];
+        for (form, inputs) in &inputs {
+            for opt in ["-O0", "-O"] {
+                let exe = dir.join(format!("{label}-{form}-badc{opt}.exe"));
+                run(
+                    Command::new(badc())
+                        .arg(opt)
+                        .arg("-o")
+                        .arg(&exe)
+                        .arg(&main)
+                        .args(inputs)
+                        .current_dir(&dir),
+                    &format!("link the badc main with the {label} {form}"),
+                );
+                let out = Command::new(&exe).output().expect("run the program");
+                assert_eq!(
+                    out.status.code(),
+                    Some(0),
+                    "{label} {form}, badc {opt}: a check failed"
+                );
+            }
         }
     }
 }

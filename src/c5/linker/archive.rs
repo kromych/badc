@@ -166,7 +166,8 @@ fn parse_archive_members(blob: &[u8]) -> Result<Vec<(String, MemberSource)>, C5E
         //   "#1/<digits>"  -- BSD name inline at the head of the body.
         //   "name/"        -- SysV short name (trailing `/` is the terminator).
         //   "name"         -- BSD short name.
-        if raw_name == "/" || raw_name == "/SYM64/" {
+        // MSVC repeats `/` (a little-endian index) and adds ARM64EC's `/<ECSYMBOLS>/`.
+        if raw_name == "/" || raw_name == "/SYM64/" || raw_name == "/<ECSYMBOLS>/" {
             continue;
         }
         if raw_name == "//" {
@@ -488,10 +489,10 @@ fn extract_long_name(table: &[u8], off: usize) -> Result<String, C5Error> {
             "GNU long-name offset out of range",
         ));
     }
-    // GNU names end with `\n` or `/\n`. We tolerate both.
+    // GNU names end with `\n` or `/\n`, MSVC's with NUL.
     let end = table[off..]
         .iter()
-        .position(|&b| b == b'\n')
+        .position(|&b| b == b'\n' || b == 0)
         .ok_or_else(|| {
             link_err(
                 Code::MALFORMED_INPUT,
@@ -625,6 +626,28 @@ mod tests {
 
     /// A GNU archive spills names over 15 bytes into a `//` table and
     /// references them as `/<offset>`, with the bodies stored inline.
+    #[test]
+    fn msvc_archive_long_names_resolve() {
+        // lib.exe: two `/` indexes, a `//` table of NUL-terminated names.
+        let mut blob = b"!<arch>\n".to_vec();
+        write_ar_header(&mut blob, "/", 4);
+        blob.extend_from_slice(&[0; 4]);
+        write_ar_header(&mut blob, "/", 4);
+        blob.extend_from_slice(&[0; 4]);
+        let names = b"C:\\build\\long_object_name.obj\0";
+        write_ar_header(&mut blob, "//", names.len());
+        blob.extend_from_slice(names);
+        if blob.len() % 2 == 1 {
+            blob.push(b'\n');
+        }
+        write_ar_header(&mut blob, "/0", 2);
+        blob.extend_from_slice(b"ok");
+        let members = read_archive(&blob).expect("read");
+        assert_eq!(members.len(), 1);
+        assert_eq!(members[0].name, "C:\\build\\long_object_name.obj");
+        assert_eq!(members[0].bytes, b"ok");
+    }
+
     #[test]
     fn gnu_archive_long_names_resolve() {
         let long = "a_very_long_member_name_over_sixteen.o";

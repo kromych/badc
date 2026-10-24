@@ -181,7 +181,7 @@ pub(crate) fn build_archive(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) {
                 std::process::exit(1);
             }
         };
-        if !badc::is_elf_object(&bytes) {
+        if !badc::is_native_object(&bytes) {
             eprint_diagnostic(format!(
                 "badc: error: `{obj_path}`: {}",
                 unreadable_object_reason(&bytes, cli.target)

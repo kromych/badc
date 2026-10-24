@@ -646,6 +646,7 @@ impl Selection {
                 // `X`'s, so it also asks for `X`, as under lld.
                 if let Some(target) = s.name.strip_prefix("__imp_")
                     && !self.defined.contains(target)
+                    && !self.shared.contains(target)
                 {
                     self.undefined
                         .entry(target.to_string())
@@ -760,9 +761,11 @@ fn select_archive_members(
     // exports resolves as a load-time import, so it does not call for
     // them -- matching a system linker, where the implicit C library
     // sits after the archives on the line.
+    // An import-address slot asks for its name, which the check covers.
     if !embedded.pool_loaded
         && !sel.undefined.keys().all(|n| {
-            badc::link_resolves_symbol(n)
+            n.starts_with("__imp_")
+                || badc::link_resolves_symbol(n)
                 || shared_libs.iter().any(|l| l.exports.contains(n))
                 || target_libc.as_mut().is_some_and(|l| l.admit(n))
         })
@@ -790,11 +793,14 @@ fn select_archive_members(
     if let Some(lib) = target_libc.as_mut() {
         for o in native_objs.iter() {
             for s in &o.symbols {
+                // An import-address slot `__imp_X` reads `X`'s.
+                let name = s.name.strip_prefix("__imp_").unwrap_or(&s.name);
                 if s.binding != 0
                     && s.section == badc::NativeSymSection::Undef
                     && !sel.defined.contains(&s.name)
+                    && !sel.defined.contains(name)
                 {
-                    lib.admit(&s.name);
+                    lib.admit(name);
                 }
             }
         }

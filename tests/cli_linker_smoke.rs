@@ -9277,6 +9277,32 @@ fn an_import_slot_reference_pulls_the_archive_member_defining_its_name() {
     }
 }
 
+// An import-address slot whose name a header binds is resolved by the
+// binding, so it does not call for the on-demand runtime sources: a link
+// whose `-I` path shadows a header those sources include still succeeds.
+#[test]
+fn an_import_slot_of_a_bound_name_does_not_load_the_runtime_sources() {
+    let dir = tempdir("pe-imp-bound");
+    let shadow = dir.join("shadow");
+    std::fs::create_dir_all(&shadow).unwrap();
+    write_source(&shadow, "dirent.h", "#error shadowed\n");
+    write_source(
+        &dir,
+        "user.c",
+        "#include <windows.h>\n\
+         __declspec(dllimport) DWORD WINAPI GetCurrentProcessId(void);\n\
+         int main(void) { return GetCurrentProcessId() == 0; }\n",
+    );
+    for target in ["--target=windows-x64", "--target=windows-arm64"] {
+        run(
+            Command::new(badc())
+                .args(["-q", target, "-I", "shadow", "user.c", "-o", "user.exe"])
+                .current_dir(&dir),
+            "link without the runtime sources",
+        );
+    }
+}
+
 // A dllimport function's address is the one its DLL exports and a dllimport
 // object is the DLL's own, both read from the import-address slot, while a
 // static initializer takes the image's thunk (MSVC, mingw-w64 gcc, clang). A

@@ -6192,6 +6192,48 @@ fn int128_division_helpers_resolve_on_demand() {
     );
 }
 
+/// A program defining `gettimeofday` and calling `clock_gettime`, which one
+/// on-demand source defines both of, keeps its own definition.
+#[test]
+fn a_programs_definition_takes_the_place_of_the_on_demand_sources() {
+    let dir = tempdir("own-gettimeofday");
+    let src = write_source(
+        &dir,
+        "own.c",
+        "#include <stdio.h>\n#include <sys/time.h>\n#include <time.h>\n\
+         int gettimeofday(struct timeval *restrict tv, void *restrict tz)\n\
+         { (void)tz; tv->tv_sec = 1; tv->tv_usec = 0; return 0; }\n\
+         int main(void) {\n\
+         struct timespec ts; struct timeval tv;\n\
+         if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 2;\n\
+         gettimeofday(&tv, 0);\n\
+         printf(\"own gettimeofday: %ld\\n\", (long)tv.tv_sec);\n\
+         return 0; }\n",
+    );
+    for target in ["windows-x64", "windows-arm64"] {
+        let exe = dir.join(format!("own-{target}.exe"));
+        run(
+            Command::new(badc())
+                .arg(format!("--target={target}"))
+                .arg("-o")
+                .arg(&exe)
+                .arg(&src)
+                .current_dir(&dir),
+            "link the program",
+        );
+        let host = cfg!(windows) && (target == "windows-x64") == cfg!(target_arch = "x86_64");
+        if host {
+            let out = Command::new(&exe).output().expect("run the program");
+            assert_eq!(out.status.code(), Some(0), "{target}");
+            // A text stream ends a line with CR LF on Windows.
+            assert_eq!(
+                String::from_utf8_lossy(&out.stdout),
+                "own gettimeofday: 1\r\n"
+            );
+        }
+    }
+}
+
 // A program using the glibc entry points that live only in the static
 // libc_nonshared.a: atexit, at_quick_exit, pthread_atfork. The atexit handler
 // prints a marker so a run confirms it was registered and invoked.

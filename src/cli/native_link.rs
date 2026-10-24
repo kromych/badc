@@ -73,7 +73,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     let mut embedded = EmbeddedSources {
         cli,
         reloc_opts,
-        pool_loaded: false,
+        pool_slot: None,
     };
     // `#pragma entrypoint(<name>)` names the entry function (C99 5.1.2.2.1), the
     // first unit's winning; without one `program_entry` chooses.
@@ -230,8 +230,8 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
 struct EmbeddedSources<'a> {
     cli: &'a Cli,
     reloc_opts: badc::NativeOptions,
-    /// The pool is compiled at most once per link.
-    pool_loaded: bool,
+    /// The slot the pool joined; it is compiled at most once per link.
+    pool_slot: Option<usize>,
 }
 
 impl EmbeddedSources<'_> {
@@ -393,8 +393,9 @@ impl EmbeddedSources<'_> {
     /// that references none of them, so it is never pulled. Whether the
     /// selection stalls turns on the link's inputs, the host's C library
     /// among them, so this compile stays out of the `--dump-ssa` output.
-    fn load_pool(&mut self, stats: &mut LinkStats) -> Slot {
-        self.pool_loaded = true;
+    /// The pool joins `slots` as its last archive.
+    fn push_pool(&mut self, slots: &mut Vec<Slot>, stats: &mut LinkStats) {
+        self.pool_slot = Some(slots.len());
         let mut members = Vec::new();
         let on_demand = badc::embedded_compiler_rt()
             .iter()
@@ -420,7 +421,7 @@ impl EmbeddedSources<'_> {
             }
         }
         stats.mark("rtlib");
-        Slot::lazy(members)
+        slots.push(Slot::lazy(members));
     }
 }
 
@@ -606,9 +607,8 @@ fn rebind_auto_includes(
     }
     // The scan folds unpulled pool members into `defined_fns`, so the
     // on-demand sources join the link here, as its last archive.
-    if !embedded.pool_loaded {
-        let pool = embedded.load_pool(stats);
-        slots.push(pool);
+    if embedded.pool_slot.is_none() {
+        embedded.push_pool(slots, stats);
     }
     let mut defined_fns = std::collections::HashSet::<String>::new();
     for slot in slots.iter() {
@@ -840,7 +840,7 @@ fn select_archive_members(
     // them -- matching a system linker, where the implicit C library
     // sits after the archives on the line.
     // An import-address slot asks for its name, which the check covers.
-    if !embedded.pool_loaded
+    if embedded.pool_slot.is_none()
         && !sel.undefined.keys().all(|n| {
             n.starts_with("__imp_")
                 || badc::link_resolves_symbol(n)
@@ -848,7 +848,7 @@ fn select_archive_members(
                 || target_libc.as_mut().is_some_and(|l| l.admit(n))
         })
     {
-        slots.push(embedded.load_pool(stats));
+        embedded.push_pool(&mut slots, stats);
         let span = if in_order {
             vec![slots.len() - 1]
         } else {
@@ -857,13 +857,19 @@ fn select_archive_members(
         sel.pull(&mut slots, &span);
     }
     let mut native_objs: Vec<badc::NativeObject> = Vec::new();
-    for slot in slots {
+    let mut pool = 0..0;
+    for (k, slot) in slots.into_iter().enumerate() {
+        let start = native_objs.len();
         match slot {
             Slot::Fixed(objs) => native_objs.extend(objs),
             Slot::Lazy { pulled, .. } => native_objs.extend(pulled),
             Slot::Shared(_) | Slot::Group(_) => {}
         }
+        if embedded.pool_slot == Some(k) {
+            pool = start..native_objs.len();
+        }
     }
+    yield_pool_definitions(&mut native_objs, pool);
     // Whatever the selection left undefined is what the target's C
     // library has to cover for the link to resolve it as an import.
     // Weak references count: a system linker binds one the implicit
@@ -910,6 +916,27 @@ fn select_archive_members(
         }
     }
     (native_objs, sel.inclusions)
+}
+
+/// A pulled on-demand source's definition of a name the program defines is
+/// weak, as a C library archive's one-function member would stay unpulled.
+fn yield_pool_definitions(objs: &mut [badc::NativeObject], pool: core::ops::Range<usize>) {
+    let defines =
+        |s: &badc::NativeSymbol| s.binding != 0 && s.section != badc::NativeSymSection::Undef;
+    let program: std::collections::HashSet<String> = (objs[..pool.start].iter())
+        .chain(&objs[pool.end..])
+        .flat_map(|o| {
+            o.symbols
+                .iter()
+                .filter(|s| defines(s))
+                .map(|s| s.name.clone())
+        })
+        .collect();
+    for s in objs[pool].iter_mut().flat_map(|o| o.symbols.iter_mut()) {
+        if s.binding == 1 && defines(s) && program.contains(&s.name) {
+            s.binding = 2;
+        }
+    }
 }
 
 /// A COFF object's `/DEFAULTLIB:` libraries join the link after its inputs, as

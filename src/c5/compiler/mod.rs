@@ -3600,6 +3600,7 @@ impl Compiler {
             sys_trampolines: self.sys_trampolines,
             bind_trampoline_slots: false,
             weak_refs_by_name: false,
+            interposable_refs: false,
             fp_contract_fast: self.fp_contract == FpContract::Fast,
             tls_data_relocs: self.tls_data_relocs,
             tls_extern_data_relocs: self.tls_extern_data_relocs,

@@ -557,6 +557,9 @@ fn compact_and_lower(
     program.bind_trampoline_slots =
         target.binds_data_imports() || options.output_kind == OutputKind::Relocatable;
     program.weak_refs_by_name = options.output_kind == OutputKind::Relocatable;
+    program.interposable_refs = options.output_kind == OutputKind::Relocatable
+        && options.pic
+        && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
     let segregate = options.bss_segregate && !bss_segregation_disabled();
     if program.data.is_empty() {
         let mut build = crate::c5::codegen::lower_for_with_prebuilt(
@@ -770,6 +773,7 @@ pub(crate) mod test_support {
             sys_trampolines: Vec::new(),
             bind_trampoline_slots: false,
             weak_refs_by_name: false,
+            interposable_refs: false,
             fp_contract_fast: false,
             tls_data_relocs: Vec::new(),
             tls_extern_data_relocs: Vec::new(),

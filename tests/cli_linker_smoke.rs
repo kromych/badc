@@ -10048,6 +10048,64 @@ fn an_executables_definitions_preempt_a_shared_librarys_own() {
     }
 }
 
+// One unit's references to its own exported definitions are preemptible
+// too: a shared library's sources compile as `-fPIC` ones, so the link,
+// not the compiler, decides -- the answers GNU ld gives gcc's library
+// under each mode. The `static` function stays direct.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_shared_librarys_references_within_one_unit_are_preemptible() {
+    let dir = tempdir("preempt-one-unit");
+    let lib = write_source(
+        &dir,
+        "lib.c",
+        "int g = 1;\nint *pg = &g;\nint get_g(void) { return g; }\nint f(void) { return 1; }\n\
+         int (*pf)(void) = f;\n\
+         int call_f(void) { return f() * 10 + pf() + (pf == f) * 100 + (*pg) * 1000; }\n\
+         static int s(void) { return 3; }\nint call_s(void) { return s(); }\n",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "#include <stdio.h>\nint g = 5;\nint f(void) { return 7; }\n\
+         int get_g(void);\nint call_f(void);\nint call_s(void);\n\
+         int main(void) { printf(\"%d %d %d\\n\", get_g(), call_f(), call_s()); return 0; }\n",
+    );
+    for (flag, want) in [
+        (None, "5 5177 3"),
+        (Some("-Bsymbolic"), "1 1111 3"),
+        (Some("-Bsymbolic-functions"), "5 5111 3"),
+    ] {
+        let sub = dir.join(flag.unwrap_or("default").trim_start_matches('-'));
+        std::fs::create_dir_all(&sub).expect("mkdir");
+        run(
+            Command::new(badc())
+                .args(["-q", "-shared", "--export-all", "--export-data"])
+                .args(flag)
+                .arg(&lib)
+                .arg("-o")
+                .arg(sub.join("libone.so")),
+            "build the shared library",
+        );
+        let exe = sub.join("prog");
+        run(
+            Command::new(badc())
+                .arg("-q")
+                .arg(&main)
+                .arg(format!("-L{}", sub.display()))
+                .args(["-lone", "-o"])
+                .arg(&exe),
+            "link the executable",
+        );
+        let out = run(Command::new(&exe).env("LD_LIBRARY_PATH", &sub), "run");
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout).trim(),
+            want,
+            "{flag:?}"
+        );
+    }
+}
+
 // An object the system compiler built references its thread-locals by
 // local-exec relocations alone, with no note of badc's: a static, a global
 // a badc unit reads, and a zero-filled one past a shorter `.tdata` at its own

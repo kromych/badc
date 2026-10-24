@@ -868,6 +868,19 @@ impl Symbol {
         self.is_weak && self.defined_here && self.linkage == Linkage::External
     }
 
+    /// A definition another component's may preempt (System V gABI, symbol
+    /// visibility): a function or an object of external linkage and default
+    /// visibility this unit defines, other than an alias or a thread-local.
+    pub fn is_interposable_definition(&self) -> bool {
+        self.defined_here
+            && self.linkage == Linkage::External
+            && self.visibility.is_none()
+            && !self.is_alias
+            && !self.is_thread_local
+            && !self.name.is_empty()
+            && (self.is_fun_entity() || self.class == crate::c5::token::Token::Glo as i64)
+    }
+
     /// Whether the slot denotes a function entity: a live `Token::Fun`
     /// binding, or a scoped function declaration whose name binding was
     /// unwound at scope exit (`class` back to 0) while `val`, the

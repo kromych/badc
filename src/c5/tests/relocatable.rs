@@ -497,6 +497,52 @@ fn a_unit_without_functions_places_its_objects_as_any_unit_does() {
 }
 
 #[test]
+fn a_pic_unit_names_its_interposable_definitions() {
+    // System V gABI, symbol visibility: `-fPIC` code reaches the functions
+    // and objects of default visibility it defines through their symbols,
+    // as clang -fPIC does, so the link decides whether another component
+    // preempts them -- a call by PLT relocation, an address and a read
+    // through the GOT, an initializer against the symbol. A `static` and a
+    // hidden definition stay direct.
+    let src = "int g = 1;\nint *pg = &g;\nint f(void) { return 1; }\nint (*pf)(void) = f;\n\
+               static int s(void) { return 3; }\n\
+               __attribute__((visibility(\"hidden\"))) int h(void) { return 4; }\n\
+               int use(void) { return f() + s() + h() + g + (pf == f); }\n";
+    let copts = CompileOptions {
+        no_entry_point: true,
+        ..Default::default()
+    };
+    let program = Compiler::with_options(src.to_string(), Target::LinuxX64, copts)
+        .compile()
+        .expect("compile");
+    let opts = NativeOptions {
+        output_kind: OutputKind::Relocatable,
+        pic: true,
+        ..Default::default()
+    };
+    let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+    let obj = parse_et_rel(&bytes, "p.o").expect("parse");
+    let name_of = |r: &EtReloc| obj.symbols[r.sym as usize].name.clone();
+    let section = |n: &str| obj.sections.iter().find(|s| s.name == n).expect(n);
+    let text: Vec<(String, u32)> = (section(".text").relocs.iter())
+        .map(|r| (name_of(r), r.rtype))
+        .collect();
+    // R_X86_64_PLT32 (4) and R_X86_64_REX_GOTPCRELX (42).
+    for want in [("f", 4), ("f", 42), ("g", 42)] {
+        assert!(
+            text.iter().any(|(n, t)| (n.as_str(), *t) == want),
+            "{want:?}: {text:?}"
+        );
+    }
+    assert!(!text.iter().any(|(n, _)| n == "s" || n == "h"), "{text:?}");
+    let data: Vec<String> = section(".data").relocs.iter().map(name_of).collect();
+    assert!(
+        data.contains(&"g".to_string()) && data.contains(&"f".to_string()),
+        "{data:?}"
+    );
+}
+
+#[test]
 fn a_block_scope_extern_thread_local_is_referenced_as_one() {
     // C11 6.7.1p3: `_Thread_local` belongs to the object a block-scope
     // `extern` declaration names, which another unit defines. Its access

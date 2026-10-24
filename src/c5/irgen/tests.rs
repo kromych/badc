@@ -28,7 +28,7 @@ fn walk(
         Target::LinuxAarch64,
         false,
         true,
-        false,
+        Default::default(),
     )
 }
 

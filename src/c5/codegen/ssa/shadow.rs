@@ -155,7 +155,10 @@ pub(crate) fn walk_program(
             target,
             optimize,
             jump_tables,
-            program.weak_refs_by_name,
+            crate::c5::irgen::NamedRefs {
+                weak: program.weak_refs_by_name,
+                interposable: program.interposable_refs,
+            },
         )
         .map_err(|e| {
             // A deliberate rejection is an ordinary diagnostic; the

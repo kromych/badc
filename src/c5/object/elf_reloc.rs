@@ -980,7 +980,9 @@ struct Names<'a> {
     undef_alias_end: BTreeMap<&'a str, (&'a str, i64)>,
     user_extern_names: Vec<&'a str>,
     extern_fn_by_pc: BTreeMap<usize, &'a str>,
-    weak_fn_by_pc: BTreeMap<usize, &'a str>,
+    /// The functions a reference names by symbol: weak ones, and the
+    /// interposable ones under `Program::interposable_refs`.
+    named_fn_by_pc: BTreeMap<usize, &'a str>,
     defined_data_globals: Vec<(&'a str, i64, u64)>,
     defined_data_locals: Vec<(&'a str, i64, u64)>,
     defined_tls_globals: Vec<(&'a str, i64, u64)>,
@@ -1762,9 +1764,13 @@ impl<'a> RelocWriter<'a> {
             .filter_map(|s| Some((s.link_name(), s.visibility?)))
             .chain(program.asm_visibility.iter().map(|(n, v)| (n.as_str(), *v)))
             .collect();
+        let interposable: BTreeSet<&str> = (program.symbols.iter())
+            .filter(|s| program.interposable_refs && s.is_interposable_definition())
+            .map(|s| s.def_link_name())
+            .collect();
         for (&ent_pc, name) in build.func_ent_pcs.iter().zip(&build.func_names) {
-            if names.weak_names.contains(name.as_str()) {
-                names.weak_fn_by_pc.insert(ent_pc, name.as_str());
+            if names.weak_names.contains(name.as_str()) || interposable.contains(name.as_str()) {
+                names.named_fn_by_pc.insert(ent_pc, name.as_str());
             }
         }
         names.func_strs.reserve(build.func_ent_pcs.len());
@@ -3621,10 +3627,15 @@ impl<'a> RelocWriter<'a> {
         Ok(())
     }
 
-    /// A pointer-to-data initializer's target: a weak definition by its symbol.
+    /// A pointer-to-data initializer's target: a weak definition, and an
+    /// interposable one under `Program::interposable_refs`, by its symbol.
     fn data_target_ref(&self, r: &crate::c5::program::DataReloc) -> (u64, i64) {
-        let target = r.target_sym.map(|i| &self.program.symbols[i as usize]);
-        if let Some(s) = target.filter(|s| s.is_weak_definition())
+        let program = self.program;
+        let target = r.target_sym.map(|i| &program.symbols[i as usize]);
+        let named = |s: &&crate::c5::symbol::Symbol| {
+            s.is_weak_definition() || program.interposable_refs && s.is_interposable_definition()
+        };
+        if let Some(s) = target.filter(named)
             && let Some(&idx) = self.syms.defined_data_symidx.get(s.link_name())
         {
             return (idx, r.target_offset.wrapping_sub(r.target_anchor) as i64);
@@ -3651,12 +3662,13 @@ impl<'a> RelocWriter<'a> {
     }
 
     /// A function-pointer initializer's target: a cross-TU function
-    /// (placeholder `ent_pc` past `text.len()`) or a weak definition resolves
-    /// by name with a zero addend, a function of the unit by its native offset.
+    /// (placeholder `ent_pc` past `text.len()`) or one `named_fn_by_pc` holds
+    /// resolves by name with a zero addend, a function of the unit by its
+    /// native offset.
     fn code_reloc_ref(&self, ent_pc: usize) -> Result<(u64, i64), C5Error> {
         let names = &self.names;
         let by_name =
-            (names.extern_fn_by_pc.get(&ent_pc)).or_else(|| names.weak_fn_by_pc.get(&ent_pc));
+            (names.extern_fn_by_pc.get(&ent_pc)).or_else(|| names.named_fn_by_pc.get(&ent_pc));
         if let Some(&name) = by_name {
             return Ok(self.extern_fn_ref(name));
         }
@@ -3900,6 +3912,15 @@ impl<'a> RelocWriter<'a> {
             .map(|e| e.name.as_str())
             .chain(program.exported_objects.iter().map(String::as_str))
             .collect();
+        // The note also names the interposable definitions code addresses,
+        // so a link preempting one rewrites an aarch64 page pair to a slot load.
+        let mut noted_names = self.names.user_extern_data_names.clone();
+        for r in &build.user_extern_data_refs {
+            let s = r.symbol_name.as_str();
+            if r.direct_pcrel.is_none() && self.unit_defines(s) && !noted_names.contains(&s) {
+                noted_names.push(s);
+            }
+        }
         let note = build_badc_note(
             &build.imports,
             &export_names,
@@ -3910,7 +3931,7 @@ impl<'a> RelocWriter<'a> {
             &build.elf_tpoff_fixups,
             &self.syms.prologue_end_pairs,
             &self.syms.early_returns,
-            &self.names.user_extern_data_names,
+            &noted_names,
         );
         let (layout, relocs) = (&self.layout, &self.relocs);
         let mut shndx = ShndxMap {

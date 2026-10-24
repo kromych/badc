@@ -4670,7 +4670,7 @@ pub(crate) fn encode_file_asm_section_code(
 
 /// Decides which direct-branch fixups must become by-name call
 /// relocations because the callee is resolved at link time rather than
-/// at emit time. Two reasons:
+/// at emit time. Three reasons:
 ///
 /// * The call site and the callee live in different object sections
 ///   (`__attribute__((section("name")))`). Sections are placed
@@ -4679,6 +4679,8 @@ pub(crate) fn encode_file_asm_section_code(
 /// * The callee is `__attribute__((weak))`. A strong definition in a
 ///   sibling unit overrides it (ELF STB_WEAK), so the call must name
 ///   the symbol and let the linker pick the winner.
+/// * The callee is interposable under [`Program::interposable_refs`]:
+///   whether another component preempts it is the link's to decide.
 ///
 /// Empty (never matches) for non-relocatable output, which has no link
 /// step to defer to.
@@ -4691,6 +4693,10 @@ pub(crate) struct RelocCalleeCtx {
     names: alloc::vec::Vec<String>,
     /// `ent_pc` of every function defined here with weak linkage.
     weak: alloc::collections::BTreeSet<usize>,
+    /// `ent_pc` of every interposable function defined here, under
+    /// [`Program::interposable_refs`]: the link decides whether another
+    /// component preempts it.
+    interposable: alloc::collections::BTreeSet<usize>,
 }
 
 impl RelocCalleeCtx {
@@ -4699,7 +4705,7 @@ impl RelocCalleeCtx {
     /// the branch resolves in place.
     pub(crate) fn reloc_callee(&self, site_off: usize, target_pc: usize) -> Option<&str> {
         let &(callee_sec, name_idx) = self.by_pc.get(&target_pc)?;
-        if !self.weak.contains(&target_pc) {
+        if !self.weak.contains(&target_pc) && !self.interposable.contains(&target_pc) {
             let i = self.starts.partition_point(|&(s, _)| s <= site_off);
             let site_sec = if i == 0 { 0 } else { self.starts[i - 1].1 };
             if site_sec == callee_sec {
@@ -4713,6 +4719,15 @@ impl RelocCalleeCtx {
     pub(crate) fn weak_target(&self, target_pc: usize) -> Option<&str> {
         let &(_, name_idx) = self.by_pc.get(&target_pc)?;
         self.weak
+            .contains(&target_pc)
+            .then(|| self.names[name_idx].as_str())
+    }
+
+    /// The interposable definition at `target_pc`, whose address a reference
+    /// takes as it takes an undefined function's.
+    pub(crate) fn interposable_target(&self, target_pc: usize) -> Option<&str> {
+        let &(_, name_idx) = self.by_pc.get(&target_pc)?;
+        self.interposable
             .contains(&target_pc)
             .then(|| self.names[name_idx].as_str())
     }
@@ -4733,6 +4748,7 @@ pub(crate) fn reloc_callee_ctx(
         by_pc: alloc::collections::BTreeMap::new(),
         names: alloc::vec::Vec::new(),
         weak: alloc::collections::BTreeSet::new(),
+        interposable: alloc::collections::BTreeSet::new(),
     };
     if output_kind != OutputKind::Relocatable {
         return empty;
@@ -4751,7 +4767,11 @@ pub(crate) fn reloc_callee_ctx(
         .filter(|s| s.is_weak)
         .map(|s| s.def_link_name())
         .collect();
-    if section_of.is_empty() && weak_names.is_empty() {
+    let interposable_names: alloc::collections::BTreeSet<&str> = defined_funcs()
+        .filter(|s| program.interposable_refs && !s.is_weak && s.is_interposable_definition())
+        .map(|s| s.def_link_name())
+        .collect();
+    if section_of.is_empty() && weak_names.is_empty() && interposable_names.is_empty() {
         return empty;
     }
     // Intern the section names; id 0 is the default section.
@@ -4771,6 +4791,9 @@ pub(crate) fn reloc_callee_ctx(
         let name_idx = ctx.names.len();
         if weak_names.contains(f.name.as_str()) {
             ctx.weak.insert(f.ent_pc);
+        }
+        if interposable_names.contains(f.name.as_str()) {
+            ctx.interposable.insert(f.ent_pc);
         }
         ctx.names.push(f.name.clone());
         ctx.by_pc.insert(f.ent_pc, (sec, name_idx));

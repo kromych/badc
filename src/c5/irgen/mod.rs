@@ -319,7 +319,23 @@ struct Walker<'a> {
     /// `-fno-jump-tables`, which leaves every switch on the compare
     /// tree so the dispatch takes no indirect branch.
     jump_tables: bool,
-    weak_refs_by_name: bool,
+    named_refs: NamedRefs,
+}
+
+/// Which of the unit's definitions a reference names by its symbol, so the
+/// link binds it: a weak one, and an interposable one
+/// ([`Symbol::is_interposable_definition`]).
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct NamedRefs {
+    pub weak: bool,
+    pub interposable: bool,
+}
+
+impl NamedRefs {
+    fn names(self, s: &Symbol) -> bool {
+        (self.weak && s.is_weak_definition())
+            || (self.interposable && s.is_interposable_definition())
+    }
 }
 
 impl<'a> Walker<'a> {
@@ -360,13 +376,10 @@ impl<'a> Walker<'a> {
             .map_or(crate::c5::codegen::CallConv::Target, |f| f.conv)
     }
 
-    /// [`glo_ident_addr`], a weak definition by name under `weak_refs_by_name`.
+    /// [`glo_ident_addr`], a definition [`NamedRefs`] names by name.
     fn glo_addr(&self, id: ExprId, sym: u32, val: i64) -> GloAddr {
-        let weak = self
-            .symbols
-            .get(sym as usize)
-            .is_some_and(Symbol::is_weak_definition);
-        if self.weak_refs_by_name && weak {
+        let named = (self.symbols.get(sym as usize)).is_some_and(|s| self.named_refs.names(s));
+        if named {
             return GloAddr::Extern;
         }
         glo_ident_addr(self.symbols, self.ast, id, sym, val)
@@ -375,7 +388,7 @@ impl<'a> Walker<'a> {
     /// Address class for the `_Thread_local` access `id`: a pure extern
     /// reference resolves by symbol against the merged TLS block at link
     /// time, and a unit-local definition by its offset within this
-    /// unit's TLS block; a weak one, under `weak_refs_by_name`, by symbol.
+    /// unit's TLS block; a weak one, under [`NamedRefs::weak`], by symbol.
     /// A block-scope `extern` resolves as [`glo_ident_addr`] resolves it.
     fn live_tls_addr(&self, id: ExprId, sym: u32, fallback_val: i64) -> GloAddr {
         let idx = sym as usize;
@@ -383,13 +396,13 @@ impl<'a> Walker<'a> {
             .symbols
             .get(idx)
             .is_some_and(Symbol::is_weak_definition);
-        if self.ast.block_extern_refs.contains(&id) && !(self.weak_refs_by_name && weak) {
+        if self.ast.block_extern_refs.contains(&id) && !(self.named_refs.weak && weak) {
             return block_extern_glo_addr(self.symbols, sym);
         }
         if idx < self.symbols.len() {
             let s = &self.symbols[idx];
             if (s.is_extern_decl && !s.defined_here)
-                || (self.weak_refs_by_name && s.is_weak_definition())
+                || (self.named_refs.weak && s.is_weak_definition())
             {
                 return GloAddr::Extern;
             }

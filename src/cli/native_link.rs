@@ -56,9 +56,12 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     let placed = cli.mode == Mode::NativeExecutable
         && cli.exec_form().placed()
         && cli.target.binary_format() == badc::BinaryFormat::Elf;
-    let reloc_opts = cli
-        .codegen
-        .relocatable_options(cli.front.optimize, !placed, &cli.front.diag);
+    let mut reloc_opts =
+        cli.codegen
+            .relocatable_options(cli.front.optimize, !placed, &cli.front.diag);
+    // A shared library's sources compile as `-fPIC` ones, so the link
+    // decides which of their own definitions another component preempts.
+    reloc_opts.pic |= cli.mode == Mode::SharedLibrary;
     // `.c` -> in-memory native ELF64 ET_REL: each source compiles
     // straight to ET_REL bytes that `parse_native_elf` reads back, so no
     // intermediate `.o` is written to disk.

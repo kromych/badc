@@ -2922,6 +2922,14 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             });
             continue;
         }
+        if let Some(name) = reloc_ctx.interposable_target(target_ent_pc) {
+            st.user_extern_data_refs.push(super::UserExternDataRef {
+                instr_offset,
+                symbol_name: name.into(),
+                direct_pcrel: None,
+            });
+            continue;
+        }
         if target_ent_pc > pc_extent {
             return Err(C5Error::internal(alloc::format!(
                 "native codegen{tag}: function pointer target {target_ent_pc} past end of PC space",

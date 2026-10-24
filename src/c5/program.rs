@@ -344,6 +344,10 @@ pub struct Program {
     pub(crate) bind_trampoline_slots: bool,
     /// References name a weak definition by its symbol (relocatable output).
     pub(crate) weak_refs_by_name: bool,
+    /// References name an interposable definition by its symbol, so the link
+    /// decides its preemption (position-independent ELF relocatable output);
+    /// see [`crate::c5::symbol::Symbol::is_interposable_definition`].
+    pub(crate) interposable_refs: bool,
     /// `-ffp-contract=fast`: `-O` contracts any product the add or subtract
     /// using it is the only use of, not only a contractible one.
     pub(crate) fp_contract_fast: bool,
@@ -745,6 +749,7 @@ impl DataOffsets for Program {
             sys_trampolines: _,       // code address space
             bind_trampoline_slots: _, // a mode
             weak_refs_by_name: _,     // a mode
+            interposable_refs: _,     // a mode
             fp_contract_fast: _,      // a mode
             tls_data_relocs,
             tls_extern_data_relocs: _, // slot in `tls_data`, target by name
@@ -886,6 +891,7 @@ mod data_offset_tests {
             sys_trampolines: Vec::new(),
             bind_trampoline_slots: false,
             weak_refs_by_name: false,
+            interposable_refs: false,
             fp_contract_fast: false,
             tls_data_relocs: Vec::new(),
             tls_extern_data_relocs: Vec::new(),

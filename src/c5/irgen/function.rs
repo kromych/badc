@@ -19,7 +19,7 @@ pub(crate) fn walk_function(
     target: Target,
     optimize: bool,
     jump_tables: bool,
-    weak_refs_by_name: bool,
+    named_refs: super::NamedRefs,
 ) -> Result<FunctionSsa, WalkError> {
     let ast = &fun.ast;
     let mut b = SsaBuilder::new(fun.ent_pc, fun.n_params, fun.is_variadic);
@@ -73,7 +73,7 @@ pub(crate) fn walk_function(
         returns_no_value: is_void_ty(fun.return_ty) && fun.name != "main",
         optimize,
         jump_tables,
-        weak_refs_by_name,
+        named_refs,
     };
     let terminated = match ast.body {
         Some(root) => {

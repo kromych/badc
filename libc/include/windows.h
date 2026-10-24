@@ -1244,11 +1244,13 @@ typedef enum _FILE_INFO_BY_HANDLE_CLASS {
 #define C3_ALPHA         0x8000
 #define C3_NOTAPPLICABLE 0x0000
 #define MAKELANGID(p, s) ((((WORD)(s)) << 10) | (WORD)(p))
+#ifndef NOMINMAX
 #ifndef min
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #endif
 #ifndef max
 #define max(a, b) (((a) > (b)) ? (a) : (b))
+#endif
 #endif
 #define ERROR_INVALID_FUNCTION         1
 #define ERROR_TOO_MANY_OPEN_FILES      4

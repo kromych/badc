@@ -101,6 +101,18 @@ typedef struct { unsigned char __opaque[128]; } mbstate_t;
 #pragma binding(msvcrt::_wcsicmp, "_wcsicmp")
 #pragma binding(msvcrt::_wcsnicmp, "_wcsnicmp")
 #pragma binding(msvcrt::_wopen, "_wopen")
+#pragma binding(msvcrt::_itow,    "_itow")
+#pragma binding(msvcrt::_ltow,    "_ltow")
+#pragma binding(msvcrt::_ultow,   "_ultow")
+#pragma binding(msvcrt::_i64tow,  "_i64tow")
+#pragma binding(msvcrt::_ui64tow, "_ui64tow")
+#pragma binding(msvcrt::_vscwprintf, "_vscwprintf")
+wchar_t *_itow(int value, wchar_t *dst, int radix);
+wchar_t *_ltow(long value, wchar_t *dst, int radix);
+wchar_t *_ultow(unsigned long value, wchar_t *dst, int radix);
+wchar_t *_i64tow(long long value, wchar_t *dst, int radix);
+wchar_t *_ui64tow(unsigned long long value, wchar_t *dst, int radix);
+int _vscwprintf(const wchar_t *format, __builtin_va_list ap);
 int _wcsicmp(const wchar_t *a, const wchar_t *b);
 int _wcsnicmp(const wchar_t *a, const wchar_t *b, size_t n);
 int _wopen(const wchar_t *path, int oflag, ...);

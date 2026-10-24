@@ -429,7 +429,8 @@ typedef struct __c5_fpos_t fpos_t;
 #pragma binding(msvcrt::__getmainargs,  "__getmainargs")
 #pragma binding(msvcrt::_getch,         "_getch")
 #pragma binding(msvcrt::_kbhit,         "_kbhit")
-#pragma binding(msvcrt::_msize,         "_msize")
+#pragma binding(msvcrt::_vscprintf,     "_vscprintf")
+#pragma binding(msvcrt::_vscwprintf,    "_vscwprintf")
 #pragma binding(msvcrt::_locking,       "_locking")
 #pragma binding(msvcrt::_get_osfhandle, "_get_osfhandle")
 #pragma binding(msvcrt::_open_osfhandle, "_open_osfhandle")
@@ -736,7 +737,8 @@ extern wchar_t **__wargv;
 int   __getmainargs(int *argc, char ***argv, char ***envp, int do_wildcard, void *startup_info);
 int   _getch(void);
 int   _kbhit(void);
-long long _msize(void *p);
+int   _vscprintf(const char *format, __builtin_va_list ap);
+int   _vscwprintf(const wchar_t *format, __builtin_va_list ap);
 int   _locking(int fd, int mode, long nbytes);
 long long _get_osfhandle(int fd);
 int _open_osfhandle(long long osfhandle, int flags);

@@ -132,6 +132,13 @@ struct lconv {
 #pragma dylib(msvcrt, "msvcrt.dll")
 #pragma binding(msvcrt::setlocale,  "setlocale")
 #pragma binding(msvcrt::localeconv, "localeconv")
+#pragma binding(msvcrt::_create_locale,      "_create_locale")
+#pragma binding(msvcrt::_free_locale,        "_free_locale")
+#pragma binding(msvcrt::_get_current_locale, "_get_current_locale")
+#include <corecrt.h>
+_locale_t _create_locale(int category, const char *locale);
+void _free_locale(_locale_t locale);
+_locale_t _get_current_locale(void);
 #endif
 
 char *setlocale(int category, const char *locale);

@@ -58,6 +58,21 @@
 #pragma binding(msvcrt::isupper,  "isupper")
 #pragma binding(msvcrt::tolower,  "tolower")
 #pragma binding(msvcrt::toupper,  "toupper")
+#pragma binding(msvcrt::_isctype,   "_isctype")
+#pragma binding(msvcrt::_isctype_l, "_isctype_l")
+#include <corecrt.h>
+#define _UPPER    0x1
+#define _LOWER    0x2
+#define _DIGIT    0x4
+#define _SPACE    0x8
+#define _PUNCT    0x10
+#define _CONTROL  0x20
+#define _BLANK    0x40
+#define _HEX      0x80
+#define _LEADBYTE 0x8000
+#define _ALPHA    (0x0100 | _UPPER | _LOWER)
+int _isctype(int c, int type);
+int _isctype_l(int c, int type, _locale_t locale);
 #endif
 
 // isascii: the C macro form; no libc symbol.

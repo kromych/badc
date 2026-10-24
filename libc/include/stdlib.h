@@ -220,6 +220,44 @@ int mergesort(char *base, int n, int size, int *cmp);
 #pragma binding(msvcrt::wctomb,    "wctomb")
 #pragma binding(msvcrt::mbstowcs,  "mbstowcs")
 #pragma binding(msvcrt::wcstombs,  "wcstombs")
+#pragma binding(msvcrt::_itoa,     "_itoa")
+#pragma binding(msvcrt::_ltoa,     "_ltoa")
+#pragma binding(msvcrt::_ultoa,    "_ultoa")
+#pragma binding(msvcrt::_i64toa,   "_i64toa")
+#pragma binding(msvcrt::_ui64toa,  "_ui64toa")
+#pragma binding(msvcrt::itoa,      "_itoa")
+#pragma binding(msvcrt::ltoa,      "_ltoa")
+#pragma binding(msvcrt::ultoa,     "_ultoa")
+#pragma binding(msvcrt::_itow,     "_itow")
+#pragma binding(msvcrt::_ltow,     "_ltow")
+#pragma binding(msvcrt::_ultow,    "_ultow")
+#pragma binding(msvcrt::_i64tow,   "_i64tow")
+#pragma binding(msvcrt::_ui64tow,  "_ui64tow")
+#pragma binding(msvcrt::_ecvt,     "_ecvt")
+#pragma binding(msvcrt::_fcvt,     "_fcvt")
+#pragma binding(msvcrt::_gcvt,     "_gcvt")
+char *_itoa(int value, char *dst, int radix);
+char *_ltoa(long value, char *dst, int radix);
+char *_ultoa(unsigned long value, char *dst, int radix);
+char *_i64toa(long long value, char *dst, int radix);
+char *_ui64toa(unsigned long long value, char *dst, int radix);
+char *itoa(int value, char *dst, int radix);
+char *ltoa(long value, char *dst, int radix);
+char *ultoa(unsigned long value, char *dst, int radix);
+wchar_t *_itow(int value, wchar_t *dst, int radix);
+wchar_t *_ltow(long value, wchar_t *dst, int radix);
+wchar_t *_ultow(unsigned long value, wchar_t *dst, int radix);
+wchar_t *_i64tow(long long value, wchar_t *dst, int radix);
+wchar_t *_ui64tow(unsigned long long value, wchar_t *dst, int radix);
+char *_ecvt(double value, int ndigits, int *decpt, int *sign);
+char *_fcvt(double value, int ndigits, int *decpt, int *sign);
+char *_gcvt(double value, int ndigits, char *dst);
+#define _CVTBUFSIZE (309 + 40)
+#define __max(a, b) (((a) > (b)) ? (a) : (b))
+#define __min(a, b) (((a) < (b)) ? (a) : (b))
+#ifndef _countof
+#define _countof(_Array) (sizeof(_Array) / sizeof(_Array[0]))
+#endif
 #pragma binding(msvcrt::mbstowcs_s, "mbstowcs_s")
 #pragma binding(msvcrt::wcstombs_s, "wcstombs_s")
 int mbstowcs_s(size_t *pconverted, wchar_t *dst, size_t dstsz, const char *src,

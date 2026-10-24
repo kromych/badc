@@ -459,6 +459,7 @@ fn synth_program(
         enums: Vec::new(),
         entry_name: Some(entry_name.to_string()),
         entry_pragma: None,
+        default_libs: Vec::new(),
         auto_includes: Vec::new(),
         subsystem,
         finished_functions: Vec::new(),

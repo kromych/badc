@@ -2124,6 +2124,8 @@ pub struct Compiler {
     /// preprocessor. Default `None` means "PE writer
     /// picks `Console`". Read only by the PE writers.
     pp_subsystem: Option<crate::c5::preprocessor::Subsystem>,
+    /// `#pragma comment(lib, ...)` names drained from the preprocessor.
+    pp_default_libs: Vec<String>,
 
     /// `#pragma intrinsic("name")` map drained from the
     /// preprocessor. Used at declaration time to stamp
@@ -2835,6 +2837,7 @@ impl Compiler {
         let pp_system_headers = pp.system_headers;
         let pp_entrypoint = pp.entrypoint;
         let pp_subsystem = pp.subsystem;
+        let pp_default_libs = pp.default_libs;
         let pp_intrinsics = pp.intrinsics;
 
         let mut symbols = Vec::new();
@@ -2970,6 +2973,7 @@ impl Compiler {
             system_headers: pp_system_headers,
             pp_entrypoint,
             pp_subsystem,
+            pp_default_libs,
             pp_intrinsics,
             tls_data: Vec::new(),
             tls_init_size: 0,
@@ -3647,6 +3651,7 @@ impl Compiler {
             // `wWinMain`) chosen when `main` is absent.
             entry_name: resolved_entry_name,
             entry_pragma: self.pp_entrypoint.clone(),
+            default_libs: core::mem::take(&mut self.pp_default_libs),
             auto_includes: Vec::new(),
             subsystem: self.pp_subsystem,
             // Compile output is pre-optimizer; only the explicit

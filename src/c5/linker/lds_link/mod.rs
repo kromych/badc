@@ -104,6 +104,8 @@ const SHT_SYMTAB_SHNDX: u32 = 18;
 const SHT_RELR: u32 = 19;
 
 const SHT_LLVM_ADDRSIG: u32 = 0x6fff4c03;
+/// `.deplibs`, which only a link that searches default libraries reads.
+const SHT_LLVM_DEPENDENT_LIBRARIES: u32 = 0x6fff4c04;
 
 const SHT_X86_64_UNWIND: u32 = 0x7000_0001;
 

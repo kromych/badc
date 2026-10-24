@@ -501,8 +501,9 @@ fn read_archive_members(
         let member_bytes = fat_slice_for_target(m.bytes, target);
         if badc::is_coff_import_member(&member_bytes) {
             match badc::parse_import_member(&member_bytes) {
-                Ok(i) if i.machine == target_machine(target) => imports.push(i),
-                Ok(i) => {
+                Ok(None) => {}
+                Ok(Some(i)) if i.machine == target_machine(target) => imports.push(i),
+                Ok(Some(i)) => {
                     eprint_diagnostic(format!(
                         "badc: error: archive `{a_path}` member `{}` imports `{}` for {}; the \
                          link targets {}",
@@ -939,19 +940,23 @@ fn yield_pool_definitions(objs: &mut [badc::NativeObject], pool: core::ops::Rang
     }
 }
 
-/// A COFF object's `/DEFAULTLIB:` libraries join the link after its inputs, as
-/// link.exe adds them: `<name>[.lib]` or `lib<name>.a` on the `-L` paths, searched
-/// with every archive until nothing changes. One not found is skipped: badc's
-/// runtime stands in for the C runtime libraries compilers name.
+/// The units' default libraries (`/DEFAULTLIB:`, `#pragma comment(lib)`) as
+/// link.exe adds them: `<name>[.lib]` or `lib<name>.a` in the working directory,
+/// on `-L` and on PE's `LIB`, if found; the C runtime's are left to badc's.
 fn pull_default_libraries(
     cli: &Cli,
     sel: &mut Selection,
     slots: &mut Vec<Slot>,
     shared_libs: &mut Vec<badc::SharedLibrary>,
 ) {
-    let mut dirs: Vec<String> = cli.link.library_paths.clone();
+    let mut dirs: Vec<String> = vec![String::new()];
+    dirs.extend(cli.link.library_paths.iter().cloned());
     if let Some(root) = &cli.sysroot {
         dirs.extend(super::paths::sysroot_library_paths(cli.target, root));
+    }
+    if cli.target.binary_format() == badc::BinaryFormat::Pe {
+        let lib = std::env::var("LIB").unwrap_or_default();
+        dirs.extend(lib.split(';').filter(|d| !d.is_empty()).map(str::to_string));
     }
     let mut searched = std::collections::HashSet::<String>::new();
     loop {
@@ -962,7 +967,7 @@ fn pull_default_libraries(
                 Slot::Shared(_) | Slot::Group(_) => Vec::new(),
             })
             .flat_map(|o| o.default_libs.iter().cloned())
-            .filter(|n| searched.insert(n.to_ascii_lowercase()))
+            .filter(|n| searched.insert(n.to_ascii_lowercase()) && !is_c_runtime_library(n))
             .collect();
         let mut added = false;
         for name in named {
@@ -993,6 +998,25 @@ fn pull_default_libraries(
             .collect();
         sel.pull(slots, &span);
     }
+}
+
+/// The MSVC C runtime's libraries, static and DLL, release and debug.
+fn is_c_runtime_library(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    let stem = name.strip_suffix(".lib").unwrap_or(&name);
+    let stem = stem.strip_suffix('d').unwrap_or(stem);
+    matches!(
+        stem,
+        "libcmt"
+            | "msvcrt"
+            | "msvcmrt"
+            | "msvcurt"
+            | "libvcruntime"
+            | "vcruntime"
+            | "libucrt"
+            | "ucrt"
+            | "oldnames"
+    )
 }
 
 /// What the image writer needs once member selection is done.

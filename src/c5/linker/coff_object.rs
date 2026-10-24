@@ -29,6 +29,7 @@ const MODULE: &str = "linker::coff_object";
 
 const IMAGE_FILE_MACHINE_AMD64: u16 = 0x8664;
 const IMAGE_FILE_MACHINE_ARM64: u16 = 0xAA64;
+const IMAGE_FILE_MACHINE_ARM64EC: u16 = 0xA641;
 const FILE_HEADER_SIZE: usize = 20;
 const BIGOBJ_HEADER_SIZE: usize = 56;
 /// `ANON_OBJECT_HEADER_BIGOBJ::ClassID`, the GUID MSVC and GNU as write.
@@ -1280,13 +1281,15 @@ pub fn is_coff_import_member(bytes: &[u8]) -> bool {
     u16le(bytes, 0) == Some(0) && u16le(bytes, 2) == Some(0xFFFF) && u16le(bytes, 4) == Some(0)
 }
 
-/// Read a short-format import member. The name type decides the name the DLL
-/// is asked for: the symbol's, without a leading `?`, `@` or `_`, that without
-/// its `@` decoration, or a stated one; an import by ordinal is refused.
-pub fn parse_import_member(bytes: &[u8]) -> Result<ImportMember, C5Error> {
+/// Read a short-format import member. The name type decides what the DLL is
+/// asked for: the symbol's name, that without a leading `?`, `@` or `_`, that
+/// without its `@` decoration, or a stated one; an import by ordinal is refused.
+/// `None` for an ARM64EC member (the SDK's arm64 libraries are ARM64X).
+pub fn parse_import_member(bytes: &[u8]) -> Result<Option<ImportMember>, C5Error> {
     let machine = match need_u16(bytes, 6, "import header")? {
         IMAGE_FILE_MACHINE_AMD64 => NativeMachine::X86_64,
         IMAGE_FILE_MACHINE_ARM64 => NativeMachine::Aarch64,
+        IMAGE_FILE_MACHINE_ARM64EC => return Ok(None),
         other => {
             return Err(unsupported(&format!(
                 "import member for COFF machine {other:#06x}, which the linker does not read"
@@ -1321,13 +1324,13 @@ pub fn parse_import_member(bytes: &[u8]) -> Result<ImportMember, C5Error> {
             )));
         }
     };
-    Ok(ImportMember {
+    Ok(Some(ImportMember {
         machine,
         symbol: symbol.to_string(),
         dll: dll.to_string(),
         import_name,
         data: kinds & 3 != 0,
-    })
+    }))
 }
 
 /// The DLLs an import library's members name, as shared libraries exporting each
@@ -1361,6 +1364,104 @@ pub fn import_libraries(members: &[ImportMember]) -> Vec<super::object::SharedLi
         }
     }
     libs.into_values().collect()
+}
+
+/// The PE header's offset of a PE image with `IMAGE_FILE_DLL` set.
+fn pe_dll_header(bytes: &[u8]) -> Option<usize> {
+    let pe = u32le(bytes, 0x3c)? as usize;
+    let dll = bytes.starts_with(b"MZ")
+        && bytes.get(pe..pe + 4) == Some(b"PE\0\0")
+        && u16le(bytes, pe + 22)? & 0x2000 != 0;
+    dll.then_some(pe)
+}
+
+pub fn is_pe_dll(bytes: &[u8]) -> bool {
+    pe_dll_header(bytes).is_some()
+}
+
+/// A DLL's exports as GNU ld reads a DLL input: each name and its `__imp_`
+/// slot, as data where the address lies in a section that is not executable.
+pub fn parse_pe_dll(bytes: &[u8]) -> Result<super::object::SharedLibrary, C5Error> {
+    let pe = pe_dll_header(bytes).ok_or_else(|| bad("not a PE DLL"))?;
+    let machine = match need_u16(bytes, pe + 4, "PE header")? {
+        IMAGE_FILE_MACHINE_AMD64 => NativeMachine::X86_64,
+        IMAGE_FILE_MACHINE_ARM64 => NativeMachine::Aarch64,
+        other => {
+            return Err(unsupported(&format!(
+                "DLL machine {other:#06x} is not IMAGE_FILE_MACHINE_AMD64 or \
+                 IMAGE_FILE_MACHINE_ARM64"
+            )));
+        }
+    };
+    let opt = pe + 24;
+    if need_u16(bytes, opt, "optional header")? != 0x20b {
+        return Err(unsupported("a DLL whose optional header is not PE32+"));
+    }
+    let sect_table = opt + need_u16(bytes, pe + 20, "PE header")? as usize;
+    // (rva, virtual size, file offset, executable) per section.
+    let sections: Vec<(u32, u32, u32, bool)> = (0..need_u16(bytes, pe + 6, "PE header")?)
+        .map(|i| sect_table + i as usize * 40)
+        .map(|s| {
+            Ok((
+                need_u32(bytes, s + 12, "section header")?,
+                need_u32(bytes, s + 8, "section header")?,
+                need_u32(bytes, s + 20, "section header")?,
+                need_u32(bytes, s + 36, "section header")? & 0x2000_0000 != 0,
+            ))
+        })
+        .collect::<Result<_, C5Error>>()?;
+    let section_of = |rva: u32| {
+        (sections.iter()).find(|&&(start, size, _, _)| rva >= start && rva - start < size)
+    };
+    let at = |rva: u32| section_of(rva).map(|&(start, _, file, _)| (file + rva - start) as usize);
+    let cstr = |rva: u32| -> Result<String, C5Error> {
+        let off = at(rva).ok_or_else(|| bad("DLL export name outside every section"))?;
+        let tail = bytes.get(off..).unwrap_or_default();
+        let end = tail.iter().position(|&b| b == 0).unwrap_or(tail.len());
+        Ok(String::from_utf8_lossy(&tail[..end]).into_owned())
+    };
+    let mut lib = super::object::SharedLibrary {
+        soname: String::new(),
+        machine,
+        exports: Default::default(),
+        data_exports: Default::default(),
+        tls_exports: Default::default(),
+        object_sizes: Default::default(),
+        export_symbols: Default::default(),
+        export_versions: Default::default(),
+        references: Default::default(),
+        protected_exports: Default::default(),
+        from_image: true,
+    };
+    let dir_rva = need_u32(bytes, opt + 112, "export directory")?;
+    let dir_size = need_u32(bytes, opt + 116, "export directory")?;
+    if dir_rva == 0 {
+        return Ok(lib);
+    }
+    // An address inside the directory is a forwarder's `DLL.name` string.
+    let forwarder = |rva: u32| rva >= dir_rva && rva - dir_rva < dir_size;
+    let dir = at(dir_rva).ok_or_else(|| bad("DLL export directory outside every section"))?;
+    lib.soname = cstr(need_u32(bytes, dir + 12, "export directory")?)?;
+    let count = need_u32(bytes, dir + 24, "export directory")? as usize;
+    let field = |k: usize| -> Result<usize, C5Error> {
+        let rva = need_u32(bytes, dir + k, "export directory")?;
+        at(rva).ok_or_else(|| bad("DLL export table outside every section"))
+    };
+    if count == 0 {
+        return Ok(lib);
+    }
+    let (functions, names, ordinals) = (field(28)?, field(32)?, field(36)?);
+    for i in 0..count {
+        let name = cstr(need_u32(bytes, names + i * 4, "export name table")?)?;
+        let ordinal = need_u16(bytes, ordinals + i * 2, "export ordinal table")? as usize;
+        let rva = need_u32(bytes, functions + ordinal * 4, "export address table")?;
+        if section_of(rva).is_some_and(|&(_, _, _, exec)| !exec) && !forwarder(rva) {
+            lib.data_exports.insert(name.clone());
+        }
+        lib.exports.insert(format!("__imp_{name}"));
+        lib.exports.insert(name);
+    }
+    Ok(lib)
 }
 
 /// Parse a COFF relocatable into the linker's native object model.
@@ -1807,8 +1908,8 @@ mod tests {
         let data = member(1 | (3 << 2), b"_obj@4\0lib.dll\0");
         assert!(is_coff_import_member(&code) && !is_coff_object(&code));
         let (c, d) = (
-            parse_import_member(&code).unwrap(),
-            parse_import_member(&data).unwrap(),
+            parse_import_member(&code).unwrap().unwrap(),
+            parse_import_member(&data).unwrap().unwrap(),
         );
         assert_eq!(
             (c.dll.as_str(), c.import_name.as_str(), c.data),

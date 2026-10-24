@@ -4443,6 +4443,220 @@ fn pe_imports(pe: &[u8]) -> Vec<(String, String)> {
         .collect()
 }
 
+/// An import library of short import members (PE/COFF specification,
+/// "Import Library Format"), each `(machine, name)` importing a function by
+/// name from `dll`.
+fn short_import_library(dll: &str, members: &[(u16, &str)]) -> Vec<u8> {
+    let mut out = b"!<arch>\n".to_vec();
+    for &(machine, name) in members {
+        let payload = [name.as_bytes(), b"\0", dll.as_bytes(), b"\0"].concat();
+        let mut member = [0u16.to_le_bytes(), 0xffffu16.to_le_bytes(), [0, 0]].concat();
+        member.extend(machine.to_le_bytes());
+        member.extend(0u32.to_le_bytes());
+        member.extend((payload.len() as u32).to_le_bytes());
+        // Ordinal hint 0; IMPORT_OBJECT_CODE, IMPORT_OBJECT_NAME.
+        member.extend([0, 0, 1 << 2, 0]);
+        member.extend(&payload);
+        let header = format!(
+            "{:<16}{:<12}{:<6}{:<6}{:<8}{:<10}`\n",
+            format!("{dll}/"),
+            0,
+            0,
+            0,
+            644,
+            member.len()
+        );
+        out.extend(header.as_bytes());
+        out.extend(&member);
+        if member.len() % 2 == 1 {
+            out.push(b'\n');
+        }
+    }
+    out
+}
+
+/// A PE link imports through what Windows toolchains name a library by:
+/// `#pragma comment(lib, ...)` in a badc unit, compiled in the link or
+/// from `-c`, searched on `-L` and on the `;`-separated `LIB` directories
+/// (link.exe, lld-link); `-l<name>` probing GNU ld's Windows spellings,
+/// `<name>.lib` among them; and a DLL itself, positional or by `-l`, whose
+/// export table gives the names, data in a non-executable section. The
+/// import library also holds an ARM64EC member, as the Windows SDK's arm64
+/// ones do, which the link passes over.
+#[test]
+fn a_pe_link_imports_through_default_libraries_import_libraries_and_dlls() {
+    let dir = tempdir("pe-import-inputs");
+    let libs = dir.join("libs");
+    std::fs::create_dir_all(&libs).unwrap();
+    write_source(
+        &dir,
+        "imp.c",
+        "__declspec(dllimport) long __stdcall NtClose(void *Handle);\n\
+         #pragma comment(lib, \"nt\" \"dll.lib\")\n\
+         int main(void) { return NtClose((void *)0) == 0; }\n",
+    );
+    write_source(
+        &dir,
+        "plain.c",
+        "long NtClose(void *);\nint main(void) { return NtClose((void *)0) == 0; }\n",
+    );
+    write_source(
+        &dir,
+        "lib.c",
+        "__declspec(dllexport) int lib_add(int x) { return x + 1; }\n\
+         __declspec(dllexport) int lib_obj = 41;\n",
+    );
+    write_source(
+        &dir,
+        "uselib.c",
+        "int lib_add(int);\n__declspec(dllimport) extern int lib_obj;\n\
+         int main(void) { return lib_add(lib_obj) - 42; }\n",
+    );
+    let nt_close = [("ntdll.dll".to_string(), "NtClose".to_string())];
+    let lib_imports = [
+        ("libsq.dll".to_string(), "lib_add".to_string()),
+        ("libsq.dll".to_string(), "lib_obj".to_string()),
+    ];
+    for (target, machine) in [("windows-x64", 0x8664), ("windows-arm64", 0xaa64)] {
+        let t = format!("--target={target}");
+        std::fs::write(
+            libs.join("ntdll.lib"),
+            short_import_library("ntdll.dll", &[(0xa641, "NtClose"), (machine, "NtClose")]),
+        )
+        .unwrap();
+        run(
+            Command::new(badc())
+                .args([&t, "-c", "imp.c", "-o", "imp.o"])
+                .current_dir(&dir),
+            "compile -c",
+        );
+        run(
+            Command::new(badc())
+                .args([&t, "-shared", "lib.c", "-o", "libs/libsq.dll"])
+                .current_dir(&dir),
+            "build the DLL",
+        );
+        // The inputs, the `LIB` value, and whether the image imports from ntdll.
+        let links: [(&[&str], &str, bool); 7] = [
+            (&["imp.c", "-Llibs"], "", true),
+            (&["imp.o", "-Llibs"], "", true),
+            (&["imp.o"], "absent;libs", true),
+            (&["plain.c", "-Llibs", "-lntdll"], "", true),
+            (&["uselib.c", "libs/libsq.dll"], "", false),
+            (&["uselib.c", "-Llibs", "-lsq"], "", false),
+            (&["uselib.c", "-Llibs", "-llibsq"], "", false),
+        ];
+        for (args, lib, ntdll) in links {
+            let want = if ntdll {
+                &nt_close[..]
+            } else {
+                &lib_imports[..]
+            };
+            let exe = dir.join("out.exe");
+            run(
+                Command::new(badc())
+                    .arg(&t)
+                    .args(args)
+                    .arg("-o")
+                    .arg(&exe)
+                    .env("LIB", lib)
+                    .current_dir(&dir),
+                "link",
+            );
+            let imports = pe_imports(&std::fs::read(&exe).unwrap());
+            for w in want {
+                assert!(
+                    imports.contains(w),
+                    "{target} {args:?}: {w:?} not in {imports:?}"
+                );
+            }
+        }
+    }
+    // On a Windows host the images run, one against the system's own DLL.
+    #[cfg(windows)]
+    {
+        let machine: u16 = if cfg!(target_arch = "x86_64") {
+            0x8664
+        } else {
+            0xaa64
+        };
+        std::fs::write(
+            libs.join("ntdll.lib"),
+            short_import_library("ntdll.dll", &[(machine, "NtClose")]),
+        )
+        .unwrap();
+        run(
+            Command::new(badc())
+                .args(["-shared", "lib.c", "-o", "libs/libsq.dll"])
+                .current_dir(&dir),
+            "build the DLL",
+        );
+        let system = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
+        let ntdll = format!(r"{system}\System32\ntdll.dll");
+        let links: [&[&str]; 3] = [
+            &["imp.c", "-Llibs"],
+            &["plain.c", &ntdll],
+            &["uselib.c", "libs/libsq.dll"],
+        ];
+        for (k, args) in links.into_iter().enumerate() {
+            let exe = libs.join(format!("run{k}.exe"));
+            run(
+                Command::new(badc())
+                    .args(args)
+                    .arg("-o")
+                    .arg(&exe)
+                    .env_remove("LIB")
+                    .current_dir(&dir),
+                "link for the host",
+            );
+            let status = Command::new(&exe).status().expect("run the image");
+            assert_eq!(status.code(), Some(0), "{args:?}");
+        }
+    }
+}
+
+/// The C runtime libraries cl and clang-cl name are left to badc's runtime in
+/// each spelling and on each search path: one under their names is never read.
+#[test]
+fn a_pe_link_leaves_the_c_runtime_default_libraries_to_its_runtime() {
+    let dir = tempdir("pe-crt-default-libs");
+    let libs = dir.join("libs");
+    std::fs::create_dir_all(&libs).unwrap();
+    let names = ["LIBCMT", "msvcrtd.lib", "ucrtd", "libvcruntime", "OLDNAMES"];
+    let mut src: String = (names.iter())
+        .map(|n| format!("#pragma comment(lib, \"{n}\")\n"))
+        .collect();
+    src.push_str("int main(void) { return 0; }\n");
+    write_source(&dir, "crt.c", &src);
+    let unreadable = [
+        b"!<arch>\n".as_slice(),
+        b"x.obj/          0           0     0     644     4         `\n",
+        b"junk",
+    ]
+    .concat();
+    for n in names {
+        let file = if n.ends_with(".lib") {
+            n.to_string()
+        } else {
+            format!("{n}.lib")
+        };
+        std::fs::write(libs.join(file), &unreadable).unwrap();
+    }
+    for target in ["--target=windows-x64", "--target=windows-arm64"] {
+        for (args, lib) in [(&["crt.c", "-Llibs"][..], ""), (&["crt.c"][..], "libs")] {
+            run(
+                Command::new(badc())
+                    .arg(target)
+                    .args(args)
+                    .args(["-o", "crt.exe"])
+                    .env("LIB", lib)
+                    .current_dir(&dir),
+                &format!("{target} {args:?} LIB={lib}"),
+            );
+        }
+    }
+}
+
 // Build-only (cross-compiles a Windows PE from any host). A
 // NATIVE-subsystem driver runs no `_start` CRT stub, so the
 // libc-`exit` runtime wrapper is not linked and the image
@@ -10256,7 +10470,7 @@ int peer_extra(void) { return extra_fn(); }
 /// a badc DLL through an import library, exports a function from the
 /// executable, and names a library and a member through `.drectve`; the
 /// program runs. The member `/INCLUDE:` names runs a constructor, so it is
-/// pulled exactly when the directive is there.
+/// pulled exactly when the directive is there; the MSVC `LIB` is set.
 #[cfg(windows)]
 #[test]
 fn coff_directives_and_import_libraries_reach_their_targets() {
@@ -10326,6 +10540,7 @@ fn coff_directives_and_import_libraries_reach_their_targets() {
     // object with whether it names the extra library itself.
     let mut implib: Option<Command> = None;
     let mut objects: Vec<(String, PathBuf, bool)> = Vec::new();
+    let mut lib_env = None;
     let target = format!("--target={}", arch.0);
     let clang = windows_clang();
     if let Some(clang) = &clang {
@@ -10357,6 +10572,10 @@ fn coff_directives_and_import_libraries_reach_their_targets() {
             "compile the peer with cl",
         );
         objects.push(("cl".to_string(), obj, true));
+        lib_env = env
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("LIB"))
+            .cloned();
         let mut c = Command::new(cl.with_file_name("lib.exe"));
         c.envs(env.iter().map(|(k, v)| (k, v))).arg("/nologo");
         implib = Some(c);
@@ -10399,6 +10618,7 @@ fn coff_directives_and_import_libraries_reach_their_targets() {
                 .arg(dir.join("implib.lib"));
             if *msc {
                 link.arg(format!("-L{}", libs.display()));
+                link.envs(lib_env.iter().map(|(k, v)| (k, v)));
             } else {
                 link.arg(libs.join("extra.lib"));
             }

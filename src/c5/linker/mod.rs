@@ -109,8 +109,8 @@ pub use archive::{ArchiveMember, read_archive, write_archive};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use coff_object::{
-    ImportMember, import_libraries, is_coff_import_member, is_coff_object, parse_import_member,
-    parse_native_coff,
+    ImportMember, import_libraries, is_coff_import_member, is_coff_object, is_pe_dll,
+    parse_import_member, parse_native_coff, parse_pe_dll,
 };
 #[cfg(feature = "std")]
 #[allow(unused_imports)]

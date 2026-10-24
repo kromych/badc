@@ -66,6 +66,7 @@ const SHT_NOBITS: u32 = 8;
 const SHT_INIT_ARRAY: u32 = 14;
 const SHT_FINI_ARRAY: u32 = 15;
 const SHT_PREINIT_ARRAY: u32 = 16;
+const SHT_LLVM_DEPENDENT_LIBRARIES: u32 = 0x6fff_4c04;
 
 // `.note.badc` record types and the `desc` each one carries. The linker
 // parses them back; a record with an empty payload is not emitted.
@@ -932,7 +933,8 @@ struct Layout {
     sizes: Vec<u64>,
     attr_sizes: Vec<u64>,
     asm_placements: Vec<(usize, u64)>,
-    gnu_property_note: Option<(usize, u64, Vec<u8>)>,
+    /// Bodies the writer builds: `.note.gnu.property`, `.deplibs`.
+    writer_bodies: Vec<(usize, u64, Vec<u8>)>,
     jt_placement: Option<(usize, u64)>,
     /// The entry and base of the 8-byte, then the 4-byte literal run.
     literal_placements: [Option<(usize, u64)>; 2],
@@ -1581,7 +1583,25 @@ impl<'a> RelocWriter<'a> {
                 )
                 .map_err(Self::internal)?;
             let base = self.place_in_entry(e, gnu_property_align, body.len() as u64);
-            self.layout.gnu_property_note = Some((e, base, body));
+            self.layout.writer_bodies.push((e, base, body));
+        }
+        // `#pragma comment(lib, ...)`'s names, NUL-terminated, as clang writes them.
+        if !self.program.default_libs.is_empty() {
+            let body: Vec<u8> = (self.program.default_libs.iter())
+                .flat_map(|n| n.bytes().chain([0]))
+                .collect();
+            let table = &mut self.layout.carve.table;
+            let e = table
+                .get_or_insert(
+                    ".deplibs",
+                    SHT_LLVM_DEPENDENT_LIBRARIES,
+                    SHF_MERGE | SHF_STRINGS,
+                    1,
+                )
+                .map_err(Self::internal)?;
+            table.entries[e].entsize = 1;
+            let base = self.place_in_entry(e, 1, body.len() as u64);
+            self.layout.writer_bodies.push((e, base, body));
         }
         let tables_len = build.rodata.tables_len();
         if tables_len > 0 {
@@ -4267,7 +4287,7 @@ impl<'a> RelocWriter<'a> {
         for (&(e, base), s) in layout.asm_placements.iter().zip(build.asm_sections.iter()) {
             append_at(&mut carve.table.entries[e], base, &s.bytes);
         }
-        if let Some((e, base, body)) = &layout.gnu_property_note {
+        for (e, base, body) in &layout.writer_bodies {
             append_at(&mut carve.table.entries[*e], *base, body);
         }
         // The table slots stay zero; the entry's relocations carry the

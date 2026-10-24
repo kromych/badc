@@ -111,6 +111,20 @@ pub(crate) fn library_spellings(name: &str, target: Target) -> [String; 2] {
     [format!("lib{name}.{ext}"), format!("lib{name}.a")]
 }
 
+/// What `-l<name>` looks for in each directory on PE, in GNU ld's order for
+/// Windows (the Cygwin `cyg` spelling aside).
+fn pe_library_spellings(name: &str) -> [String; 7] {
+    [
+        format!("lib{name}.dll.a"),
+        format!("{name}.dll.a"),
+        format!("lib{name}.a"),
+        format!("{name}.lib"),
+        format!("lib{name}.lib"),
+        format!("lib{name}.dll"),
+        format!("{name}.dll"),
+    ]
+}
+
 /// Locate a `-l<name>` library on the search path. Prefers the
 /// unversioned shared library, then a versioned one (shortest match --
 /// the bare SONAME version), then the static archive. ELF spells the
@@ -118,9 +132,16 @@ pub(crate) fn library_spellings(name: &str, target: Target) -> [String; 2] {
 /// it (`libfoo.3.dylib`). On Mach-O a `.tbd` text stub stands in for
 /// the dylib and is preferred over one, as ld64 prefers it: the SDK
 /// ships only the stub, and where both exist they describe the same
-/// library.
+/// library. PE takes [`pe_library_spellings`].
 pub(crate) fn find_library(name: &str, search_paths: &[String], target: Target) -> Option<String> {
     let fmt = target.binary_format();
+    if fmt == badc::BinaryFormat::Pe {
+        let names = pe_library_spellings(name);
+        return (search_paths.iter())
+            .flat_map(|d| names.iter().map(move |n| std::path::Path::new(d).join(n)))
+            .find(|p| p.is_file())
+            .map(|p| p.to_string_lossy().into_owned());
+    }
     let [shared, archive] = library_spellings(name, target);
     for dir in search_paths {
         if fmt == badc::BinaryFormat::MachO {
@@ -200,8 +221,8 @@ pub(crate) fn parse_ld_script_inputs(bytes: &[u8]) -> Vec<String> {
 
 /// Ingest one resolved `-l` / positional linker input, following GNU
 /// ld scripts. A static archive (`!<arch>` / `!<thin>`) is recorded
-/// positionally; an ELF shared object, a Mach-O dylib, and a `.tbd`
-/// text stub are parsed for their canonical name + exports; a binary
+/// positionally; an ELF shared object, a Mach-O dylib, a `.tbd` text stub
+/// and a PE DLL are parsed for their canonical name + exports; a binary
 /// in another container is rejected by name, since the fallthrough
 /// would read it as a linker script and resolve to no inputs at all;
 /// anything else is treated as a linker script whose GROUP / INPUT /
@@ -274,6 +295,10 @@ fn ingest_linker_input(
         let lib = badc::parse_mach_o_dylib(bytes)
             .map_err(|e| format!("reading `{path}` as a dylib: {e}"))?;
         compatible(lib, badc::BinaryFormat::MachO)?
+    } else if badc::is_pe_dll(bytes) {
+        let lib =
+            badc::parse_pe_dll(bytes).map_err(|e| format!("reading `{path}` as a DLL: {e}"))?;
+        compatible(lib, badc::BinaryFormat::Pe)?
     } else if badc::is_tbd(bytes) {
         let text =
             core::str::from_utf8(bytes).map_err(|_| format!("`{path}` is not UTF-8 text"))?;
@@ -287,7 +312,7 @@ fn ingest_linker_input(
     } else if let Some(f) = badc::detect_binary_format(bytes) {
         return Err(format!(
             "`{path}` is a {} binary badc cannot link against; the shared-library inputs \
-             badc reads are ELF shared objects, Mach-O dylibs and .tbd text stubs, \
+             badc reads are ELF shared objects, Mach-O dylibs, .tbd text stubs and PE DLLs, \
              plus static archives",
             f.name()
         ));
@@ -379,7 +404,12 @@ pub(crate) enum LinkInput {
 /// A link input as the command line names it, before `-l` is resolved.
 enum Named {
     Input(LinkInput),
-    Lib { name: String, whole: bool },
+    Lib {
+        name: String,
+        whole: bool,
+    },
+    /// A shared library given by its path, read as `-l` reads one.
+    SharedPath(String),
 }
 
 /// The positional inputs classified by extension, the libraries `-l`
@@ -405,7 +435,8 @@ impl Inputs {
     /// Classify every positional input by extension: `.c`, and a name
     /// with no extension, is a C source; `.s` / `.S` / `.sx` an
     /// assembler source; `.o` / `.obj` a relocatable object; `.a` /
-    /// `.lib` a static archive; `-` the stdin source. Under `--jit` / `--interp` the
+    /// `.lib` a static archive; `.so` / `.dylib` / `.tbd` / `.dll` a shared
+    /// library; `-` the stdin source. Under `--jit` / `--interp` the
     /// first unrecognised entry starts the program's own argv; every
     /// other mode reports it.
     pub(crate) fn classify(cli: &Cli) -> Self {
@@ -453,6 +484,9 @@ impl Inputs {
                     link_inputs.push(LinkInputCli::Object(a.clone()));
                     named.push(Named::Input(LinkInput::Object(a.clone())));
                 }
+                "so" | "dylib" | "tbd" | "dll" if !takes_prog_args => {
+                    named.push(Named::SharedPath(a.clone()));
+                }
                 "a" | "lib" => {
                     archives.push(a.clone());
                     link_inputs.push(LinkInputCli::Archive {
@@ -479,7 +513,8 @@ impl Inputs {
                     eprint_diagnostic(format!(
                         "badc: error: unrecognized input file extension: `{a}` \
                          (expected a `.c` / `.i` / `.s` / `.S` source, `.o` / `.obj` \
-                         object, or `.a` / `.lib` archive)"
+                         object, `.a` / `.lib` archive, or `.so` / `.dylib` / `.tbd` / `.dll` \
+                         shared library)"
                     ));
                     std::process::exit(1);
                 }
@@ -521,6 +556,15 @@ impl Inputs {
                     continue;
                 }
                 Named::Lib { name, whole } => (name, whole),
+                Named::SharedPath(path) => {
+                    if let Err(e) =
+                        ingest_linker_input(self, &path, &search_paths, cli.target, false, 0)
+                    {
+                        eprintln!("badc: error: {e}");
+                        std::process::exit(1);
+                    }
+                    continue;
+                }
             };
             match find_library(&name, &search_paths, cli.target) {
                 Some(p) => {
@@ -532,11 +576,19 @@ impl Inputs {
                     }
                 }
                 None => {
-                    let [shared, archive] = library_spellings(&name, cli.target);
+                    let spellings: Vec<String> =
+                        if cli.target.binary_format() == badc::BinaryFormat::Pe {
+                            pe_library_spellings(&name).into()
+                        } else {
+                            library_spellings(&name, cli.target).into()
+                        };
+                    let (last, rest) = spellings.split_last().expect("spellings");
+                    let rest: Vec<String> = rest.iter().map(|s| format!("`{s}`")).collect();
                     eprintln!(
-                        "badc: cannot find `{shared}` or `{archive}` on any search path \
+                        "badc: cannot find {} or `{last}` on any search path \
                          ({} probed; -L<dir> names a directory, --sysroot=<dir> the \
                          root of the target's standard ones)",
+                        rest.join(", "),
                         search_paths.len()
                     );
                     std::process::exit(1);

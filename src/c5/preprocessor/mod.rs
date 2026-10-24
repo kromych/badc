@@ -283,6 +283,8 @@ pub(crate) struct Preprocessor {
     /// optional header's Subsystem field. `None` keeps `console`;
     /// non-PE targets ignore it.
     pub subsystem: Option<Subsystem>,
+    /// `#pragma comment(lib, "<name>")`: the unit's default libraries.
+    pub default_libs: Vec<String>,
     /// The `__COUNTER__` predefine's per-unit counter: each expansion
     /// yields the current value and post-increments. A `Cell` because
     /// the substitution path takes `&self`.
@@ -1248,6 +1250,7 @@ impl Preprocessor {
             asm_source: false,
             entrypoint: None,
             subsystem: None,
+            default_libs: Vec::new(),
             counter: Cell::new(0),
             pending_error: RefCell::new(None),
             pending_warnings: RefCell::new(Vec::new()),

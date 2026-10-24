@@ -153,6 +153,7 @@ impl Preprocessor {
             "intrinsic(",
             "entrypoint(",
             "subsystem(",
+            "comment(",
         ]
         .iter()
         .any(|p| args.starts_with(p));
@@ -202,6 +203,16 @@ impl Preprocessor {
             .and_then(|s| s.strip_suffix(')'))
         {
             return self.parse_pragma_warning(inner.trim(), site);
+        }
+        if let Some(lib) = args
+            .strip_prefix("comment(")
+            .and_then(|s| s.strip_suffix(')'))
+            .and_then(|s| s.split_once(','))
+            .filter(|(kind, _)| kind.trim() == "lib")
+            .map(|(_, operand)| operand.trim())
+        {
+            self.parse_pragma_comment_lib(lib, site);
+            return Ok(());
         }
         if let Some(operand) = pragma_weak_operand(args) {
             self.parse_pragma_weak(operand, site);
@@ -812,6 +823,33 @@ impl Preprocessor {
         let target = target.map(|t| ident::key(t).into_owned());
         self.weak_pragmas
             .push((ident::key(name).into_owned(), target));
+    }
+
+    /// `#pragma comment(lib, "name")`, MSVC's default library (clang's
+    /// `/DEFAULTLIB:` on COFF, `.deplibs` on ELF); adjacent literals concatenate.
+    fn parse_pragma_comment_lib(&mut self, operand: &str, site: Site<'_>) {
+        let mut name = String::new();
+        let mut rest = operand;
+        while let Some(body) = rest.strip_prefix('"') {
+            let Some(end) = body.find('"') else {
+                break;
+            };
+            name.push_str(&body[..end]);
+            rest = body[end + 1..].trim_start();
+        }
+        if !rest.is_empty() || name.is_empty() {
+            self.warn(
+                PRAGMA_SYNTAX,
+                site,
+                format!(
+                    "`#pragma comment(lib, ...)` expects a library name in quotes, got `{operand}`"
+                ),
+            );
+            return;
+        }
+        if !self.default_libs.contains(&name) {
+            self.default_libs.push(name);
+        }
     }
 
     /// `#pragma dylib(name, "path")` -- introduce a logical dylib

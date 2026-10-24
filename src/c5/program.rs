@@ -478,6 +478,8 @@ pub struct Program {
     /// to warn when a relocatable emit drops the pragma (an object
     /// file does not carry it).
     pub entry_pragma: Option<String>,
+    /// `#pragma comment(lib, ...)` names, carried in an object's `.deplibs`.
+    pub default_libs: Vec<String>,
     /// Function names the auto-include retry bound to a bundled
     /// header during [`crate::c5::Compiler::compile`]. The driver
     /// consults this in a multi-TU build: a name another input
@@ -765,6 +767,7 @@ impl DataOffsets for Program {
             enums: _,
             entry_name: _,
             entry_pragma: _,
+            default_libs: _,
             auto_includes: _,
             subsystem: _,
             finished_functions,
@@ -907,6 +910,7 @@ mod data_offset_tests {
             enums: Vec::new(),
             entry_name: None,
             entry_pragma: None,
+            default_libs: Vec::new(),
             auto_includes: Vec::new(),
             data_align: 8,
             image_align_error: None,

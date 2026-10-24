@@ -786,6 +786,7 @@ pub(crate) mod test_support {
             enums: Vec::new(),
             entry_name: None,
             entry_pragma: None,
+            default_libs: Vec::new(),
             auto_includes: Vec::new(),
             data_align: 8,
             image_align_error: None,

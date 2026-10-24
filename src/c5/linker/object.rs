@@ -52,6 +52,7 @@ const SHT_RELA: u32 = 4;
 const SHT_NOBITS: u32 = 8;
 const SHT_NOTE: u32 = 7;
 const SHT_X86_64_UNWIND: u32 = 0x7000_0001;
+const SHT_LLVM_DEPENDENT_LIBRARIES: u32 = 0x6fff_4c04;
 const SHF_EXECINSTR: u64 = 0x4;
 const SHN_UNDEF: u16 = 0;
 const SHN_ABS: u16 = 0xfff1;
@@ -1308,6 +1309,10 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         Some(i) => BadcNote::parse(section_slice(bytes, &shdrs[i])?)?,
         None => BadcNote::default(),
     };
+    let mut default_libs = Vec::new();
+    for &i in &roles.deplibs {
+        default_libs.extend(nul_separated(section_slice(bytes, &shdrs[i])?));
+    }
     let debug = debug_sections(bytes, &shdrs, shstrtab_bytes, &roles)?;
 
     Ok(NativeObject {
@@ -1350,7 +1355,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         extern_data_names: note.extern_data_names,
         alternate_names: Vec::new(),
         comdats: Vec::new(),
-        default_libs: Vec::new(),
+        default_libs,
         debug_info: debug.info,
         debug_abbrev: debug.abbrev,
         debug_line: debug.line,
@@ -1484,6 +1489,8 @@ struct SectionRoles {
     /// `.rela.<section>` sections whose target joined a merged family.
     rela_sections: Vec<usize>,
     badc_note: Option<usize>,
+    /// `.deplibs` sections: the libraries `#pragma comment(lib, ...)` names.
+    deplibs: Vec<usize>,
     debug_info: Option<usize>,
     debug_abbrev: Option<usize>,
     debug_line: Option<usize>,
@@ -1513,6 +1520,7 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
         symtab: None,
         rela_sections: Vec::new(),
         badc_note: None,
+        deplibs: Vec::new(),
         debug_info: None,
         debug_abbrev: None,
         debug_line: None,
@@ -1554,6 +1562,10 @@ fn classify_sections(shdrs: &[Elf64Shdr], shstrtab_bytes: &[u8]) -> Result<Secti
         };
         if let Some(slot) = channel {
             *slot = Some(i);
+            continue;
+        }
+        if sh.sh_type == SHT_LLVM_DEPENDENT_LIBRARIES {
+            roles.deplibs.push(i);
             continue;
         }
         if name.starts_with(".debug_") && !matches!(sh.sh_type, SHT_RELA | SHT_NOBITS) {

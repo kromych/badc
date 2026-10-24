@@ -125,10 +125,13 @@ impl Compiler {
         packed: bool,
     ) -> Result<usize, C5Error> {
         // The attributes preceding the tag (`__declspec(align(16)) struct S
-        // { ... } s;`) belong to the enclosing declaration; each member
-        // declaration starts from its own.
+        // { ... } s;`) and the type carriers belong to the enclosing
+        // declaration; each member declaration starts from its own, so a
+        // `const` in a member's parameter list leaves `s` unqualified.
         let decl_attrs = core::mem::take(&mut self.pending.attrs);
+        let carriers = self.pending.take_decl_type_carriers();
         let r = self.parse_aggregate_body_inner(name, is_union, packed);
+        self.pending.restore_decl_type_carriers(carriers);
         self.pending.attrs = decl_attrs;
         r
     }
@@ -168,10 +171,6 @@ impl Compiler {
         let struct_id = self.register_aggregate_tag(name, is_union)?;
         self.next()?; // consume `{`
 
-        // Save the outer typedef-array carrier so a `typedef struct { fe X;
-        // ... } ge;` body ending in an array-typedef field does not leak that
-        // dimension into the outer declarator binding of `ge`.
-        let (saved_size, saved_dims, saved_zero_len) = self.pending.take_base_array();
         let mut layout = AggregateLayout::default();
 
         while self.lex.tk != '}' {
@@ -207,8 +206,6 @@ impl Compiler {
             self.next()?;
         }
         self.next()?; // consume `}`
-        self.pending
-            .set_base_array(saved_size, saved_dims, saved_zero_len);
         self.finish_aggregate_layout(struct_id, &layout, packed);
         Ok(struct_id)
     }

@@ -1454,17 +1454,6 @@ impl Pending {
         self.set_base_array(0, alloc::vec::Vec::new(), false);
     }
 
-    /// Detach the base-array carriers, leaving none recorded.
-    pub(super) fn take_base_array(&mut self) -> (i64, alloc::vec::Vec<i64>, bool) {
-        let taken = (
-            self.typedef_base_array_size,
-            core::mem::take(&mut self.typedef_base_array_dims),
-            self.typedef_base_zero_len,
-        );
-        self.clear_base_array();
-        taken
-    }
-
     /// Detach the specifier carriers; the nested block starts clean, as
     /// any declaration does.
     pub(super) fn take_decl_specifiers(&mut self) -> DeclSpecifiers {

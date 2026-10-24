@@ -4174,6 +4174,16 @@ fn designator_completes_a_union() {
 }
 
 #[test]
+fn member_qualifiers_stay_with_their_members() {
+    // C99 6.7.3: a `const` in a member's parameter list leaves the object
+    // declared with the structure type writable.
+    assert_eq!(
+        run_fixture("member_qualifiers_stay_with_their_members.c"),
+        0
+    );
+}
+
+#[test]
 fn packed_anon_union_layout() {
     // A trailing `__attribute__((packed))` repacks the fields; the promoted
     // members of an anonymous union must keep overlapping (and a nested

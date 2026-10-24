@@ -546,6 +546,24 @@ fn pragma_weak_binds_a_declared_reference_weak() {
 }
 
 #[test]
+fn an_always_inline_call_is_inlined_without_optimization() {
+    // gcc and clang inline an `always_inline` function at -O0: no call to
+    // it and no body of it remain.
+    let src = "static inline __attribute__((always_inline)) int h(int x) { return x + 1; }\n\
+               int k(int x) { return h(x); }\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let a = parse_et_rel(&compile_bytes(src, target), "k.o").expect("parse");
+        assert!(a.symbols.iter().all(|s| s.name != "h"), "{target:?}");
+        let text = a
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text");
+        assert!(text.relocs.is_empty(), "{target:?}: {:?}", text.relocs);
+    }
+}
+
+#[test]
 fn duplicate_strong_definitions_are_rejected() {
     let a = compile_obj("int dup_val = 1;\n", "a.o");
     let b = compile_obj("int dup_val = 2;\n", "b.o");

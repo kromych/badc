@@ -2208,6 +2208,22 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // info so the emitted code is identical with and without -g. A probe
     // skips it: the stop discards the records it feeds the emitters, and
     // the retry runs it on the reported bodies.
+    // gcc and clang inline an `always_inline` function at every level; at -O0
+    // the inliner takes those calls alone.
+    if !native.optimize && walked && ssa_funcs.iter().any(|f| f.is_always_inline) {
+        let code_syms = defined_fn_syms(program);
+        let extern_fns = extern_fn_targets(program);
+        pipeline.run("passes::inline::run mandatory", &mut ssa_funcs, |funcs| {
+            super::super::passes::inline::run(
+                funcs,
+                0,
+                target.abi(),
+                &code_syms,
+                &extern_fns,
+                &mut sink,
+            );
+        });
+    }
     if !native.optimize && mode != super::LowerMode::DataLivenessProbe {
         let coalesce_dwarf = pipeline.run("ssa::slot_coalesce::run", &mut ssa_funcs, |funcs| {
             super::slot_coalesce::run(funcs, false, native.stack_protect)

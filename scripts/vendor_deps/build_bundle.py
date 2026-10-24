@@ -213,6 +213,17 @@ SOURCES = [
         sha_kind="tarball-sha256",
     ),
     Source(
+        # raylib 6.0 -- the asset is the upstream GitHub archive of the
+        # 6.0 tag (commit dbc56a87da87d973a9c5baa4e7438a9d20121d28),
+        # pinned by its own sha256.
+        name="raylib",
+        version="6.0",
+        url="https://github.com/raysan5/raylib/archive/refs/tags/6.0.tar.gz",
+        ext=".tar.gz",
+        upstream_sha="2b3ee1e2120c7a0796b33062c7e9a694dd8a8caa56a96319ac8c8ecf54a90d0b",
+        sha_kind="tarball-sha256",
+    ),
+    Source(
         # Lua 5.5.0 official test suite -- published as a separate
         # tarball at www.lua.org/tests/. Same pin model as the
         # interpreter source: sha256 of the tarball.

@@ -228,7 +228,7 @@ since runners have no display server. See
 
 ## raylib/
 
-badc compiles raylib 5.5 (RGFW desktop backend) from source and
+badc compiles raylib 6.0 (RGFW desktop backend) from source and
 links a small game (Lode Runner) into a standalone binary. The
 pure game-logic self-test runs through badc on any host; the full
 standalone build + headless run is wired for macOS today (the X11

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke test for the raylib demo: badc compiles raylib 5.5 (RGFW
+"""Smoke test for the raylib demo: badc compiles raylib 6.0 (RGFW
 desktop backend) from source and links the Lode Runner game into a
 standalone binary.
 

@@ -7,8 +7,8 @@
 *.o
 .DS_Store
 # raylib source -- not committed; `demos/raylib/setup.py` fetches the
-# upstream 5.5 tarball into src/ (RGFW backend). The game sources,
-# headers, runner scripts and README ARE committed.
+# 6.0 tag archive from the vendor-deps mirror into src/ (RGFW backend).
+# The game sources, headers, runner scripts and README ARE committed.
 demos/raylib/*
 !demos/raylib/setup.py
 !demos/raylib/smoke.py

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch the raylib 6.0 source distribution and adapt its build config
-for the badc demo.
+"""Fetch the raylib 6.0 source distribution for the badc demo.
 
 After this runs, ``demos/raylib/src/`` holds the raylib C sources
 (modules, the bundled RGFW + glad single-headers, raylib.h) ready for
@@ -8,56 +7,33 @@ the smoke harness to compile through badc. The demo builds the desktop
 RGFW backend so every translation unit is C -- raylib's default GLFW
 backend is Objective-C on macOS, which badc does not compile.
 
-``config.h`` is patched to the asset-free profile the game needs:
-rectangles + text only, no audio, no 3D models, no image/font file
-loaders (so the stb single-headers and their SIMD intrinsics drop out).
-The embedded default font and programmatic image generation stay on
-because text rendering builds its glyph atlas from them.
-
-Idempotent: re-running re-applies the patch from a clean extraction.
-Pulls the pinned tarball and verifies its sha256 before use.
-
-TODO: move the asset to the badc vendor-deps mirror once published; the
-GitHub release tarball is fetched directly for now.
+Pulls the GitHub archive of the release tag from the ``kromych/badc``
+vendor-deps mirror; ``_fetch`` verifies its sha256 before extraction.
+Idempotent: re-running replaces ``src/`` with a clean extraction.
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import shutil
 import sys
 import tarfile
-import urllib.request
 from pathlib import Path
-
-VERSION = "6.0"
-TARBALL_SHA256 = "2b3ee1e2120c7a0796b33062c7e9a694dd8a8caa56a96319ac8c8ecf54a90d0b"
-URL = f"https://github.com/raysan5/raylib/archive/refs/tags/{VERSION}.tar.gz"
 
 RAYLIB_DIR = Path(__file__).resolve().parent
 SRC_DIR = RAYLIB_DIR / "src"
 CACHE_DIR = RAYLIB_DIR / ".cache"
 
+REPO_ROOT = RAYLIB_DIR.parents[1]
+sys.path.insert(0, str(REPO_ROOT / "scripts" / "vendor_deps"))
+import _fetch  # noqa: E402
 
-
-def _download(url: str, dst: Path, log) -> None:
-    log(f"downloading {url}")
-    req = urllib.request.Request(url, headers={"User-Agent": "badc-demo"})
-    with urllib.request.urlopen(req) as resp, dst.open("wb") as out:
-        shutil.copyfileobj(resp, out)
-
-
-def _verify(path: Path, sha256: str) -> None:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    got = h.hexdigest()
-    if got != sha256:
-        raise SystemExit(
-            f"setup: sha256 mismatch for {path.name}\n  expected {sha256}\n  got      {got}"
-        )
+VERSION = "6.0"
+# sha256 of the GitHub archive of refs/tags/6.0 (tag commit dbc56a87).
+UPSTREAM_SHA = "2b3ee1e2120c7a0796b33062c7e9a694dd8a8caa56a96319ac8c8ecf54a90d0b"
+ASSET = f"raylib-{VERSION}-{UPSTREAM_SHA[:8]}.tar.gz"
+SHA256 = UPSTREAM_SHA
+RELEASE_TAG = "vendor-deps-v1"
 
 
 def _extract_src(tar_path: Path, log) -> None:
@@ -95,10 +71,8 @@ def main(argv: list[str] | None = None) -> int:
             print(msg, file=sys.stderr)
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    tarball = CACHE_DIR / f"raylib-{VERSION}.tar.gz"
-    if not tarball.exists():
-        _download(URL, tarball, log)
-    _verify(tarball, TARBALL_SHA256)
+    tarball = CACHE_DIR / ASSET
+    _fetch.fetch_and_verify(RELEASE_TAG, ASSET, tarball, SHA256, log)
     _extract_src(tarball, log)
     return 0
 

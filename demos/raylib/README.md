@@ -1,6 +1,6 @@
 # raylib
 
-badc compiles [raylib](https://github.com/raysan5/raylib) 5.5 from
+badc compiles [raylib](https://github.com/raysan5/raylib) 6.0 from
 source and links a small game (Lode Runner) into a standalone binary.
 Unlike `gui_hello`, which binds the platform window APIs directly, this
 demo builds the whole graphics library through badc: the only external
@@ -25,7 +25,7 @@ font), so no image or audio file loaders are compiled.
 
 | File | Role |
 |------|------|
-| `setup.py` | Fetch + sha-verify raylib 5.5; patch `config.h` to the asset-free profile. |
+| `setup.py` | Fetch + sha-verify raylib 6.0 from the vendor-deps mirror and extract `src/`. |
 | `loderunner.h` / `loderunner_logic.c` | Game state + the pure `level_step` logic (references no raylib symbol). |
 | `loderunner.c` | The renderer (`level_draw`) and frame loop; the only raylib caller. |
 | `test_loderunner.c` | Headless logic self-test; links the pure logic, runs on any host. |

@@ -63,10 +63,10 @@ class Source:
 SOURCES = [
     Source(
         name="miniz",
-        version="3.1.1",
-        url="https://github.com/richgel999/miniz/releases/download/3.1.1/miniz-3.1.1.zip",
+        version="3.1.2",
+        url="https://github.com/richgel999/miniz/releases/download/3.1.2/miniz-3.1.2.zip",
         ext=".zip",
-        upstream_sha="d10b03cc73475af673df40f06e5cefd1d5f940d9",
+        upstream_sha="77d0dce8627735138c51770d1799a1ef48f2117d",
         sha_kind="git",
     ),
     Source(

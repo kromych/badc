@@ -209,6 +209,9 @@ catalog! {
     3016, "designated-init", [], Warning, Controllable,
         [DEFAULT], Live,
         "an initializer element with no designator for a member of a struct declared `designated_init`";
+    3017, "enum-conversion", [], Ignore, Controllable,
+        [EXTRA], Live,
+        "a value of one enumerated type, or a constant of one, assigned, initialized, passed or returned as another enumerated type";
     3014, "builtin-argument-range", [], Warning, Controllable,
         [DEFAULT], Live,
         "an integer constant operand of a builtin outside the values the builtin takes; 0 is used in its place";
@@ -489,6 +492,7 @@ impl Code {
     pub const EXCESS_INITIALIZERS: Code = Code::new(3013);
     pub const CAST_FUNCTION_TYPE: Code = Code::new(3015);
     pub const DESIGNATED_INIT: Code = Code::new(3016);
+    pub const ENUM_CONVERSION: Code = Code::new(3017);
     pub const BUILTIN_ARGUMENT_RANGE: Code = Code::new(3014);
     pub const LINK_PRAGMA_IGNORED: Code = Code::new(7008);
     pub const FREESTANDING_IMPORT: Code = Code::new(7010);

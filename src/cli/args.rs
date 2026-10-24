@@ -3143,6 +3143,18 @@ mod tests {
         );
     }
 
+    /// gcc's `-Wenum-conversion` names a row badc implements: taken with no
+    /// B7012, and turned on by `-Wextra`, not by `-Wall`.
+    #[test]
+    fn enum_conversion_names_its_row() {
+        use badc::diag::Level;
+        let row = "enum-conversion";
+        assert!(parse(&["-Wenum-conversion", "a.c"]).diagnostics.is_empty());
+        assert_eq!(level(&["-Wenum-conversion", "a.c"], row), Level::Warning);
+        assert_eq!(level(&["-Wextra", "a.c"], row), Level::Warning);
+        assert_eq!(level(&["-Wall", "a.c"], row), Level::Ignore);
+    }
+
     #[test]
     fn dead_store_warning_is_opt_in() {
         use badc::diag::Level;

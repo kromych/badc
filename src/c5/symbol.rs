@@ -418,6 +418,9 @@ pub(crate) struct Symbol {
     pub incomplete_enum_tag: Option<u32>,
     /// Scope-restore shadow for `incomplete_enum_tag`.
     pub h_incomplete_enum_tag: Option<u32>,
+    /// An enumeration constant's complete enumeration, a tag-registry id.
+    pub enumeration: Option<u32>,
+    pub h_enumeration: Option<u32>,
 
     /// Explicit alignment (bytes) a typedef's type carries from a GNU
     /// `__attribute__((aligned(N)))` type attribute, or 0 for the
@@ -997,6 +1000,8 @@ impl crate::c5::layout::DataOffsets for Symbol {
             is_void_typedef: _,
             incomplete_enum_tag: _,
             h_incomplete_enum_tag: _,
+            enumeration: _,
+            h_enumeration: _,
             type_align: _,
             h_type_align: _,
             linkage: _,

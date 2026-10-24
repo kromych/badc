@@ -146,7 +146,7 @@ impl Compiler {
                     self.structs.len() - 1
                 }
             };
-            let (min, max, captured) = self.parse_enum_body()?;
+            let (min, max, captured) = self.parse_enum_body(id)?;
             // An attribute after the closing brace binds to the enum type
             // (`enum E { ... } __attribute__((packed))`), the position GCC
             // and Clang accept most often.
@@ -300,8 +300,9 @@ impl Compiler {
     /// been consumed. Each constant is registered as a
     /// `Token::Num`-class symbol with `val` set to its enumerated
     /// value, so subsequent uses (including in array dimensions
-    /// via `parse_constant_int`) resolve correctly.
-    pub(super) fn parse_enum_body(&mut self) -> Result<EnumBody, C5Error> {
+    /// via `parse_constant_int`) resolve correctly; once the list ends,
+    /// each records its enumeration `id`.
+    pub(super) fn parse_enum_body(&mut self, id: usize) -> Result<EnumBody, C5Error> {
         self.next()?; // consume `{`
         let mut i: i64 = 0;
         let mut captured: alloc::vec::Vec<(String, i64)> = alloc::vec::Vec::new();
@@ -331,6 +332,7 @@ impl Compiler {
             self.rebind_scoped(idx)?;
             self.symbols[idx].class = Token::Num as i64;
             self.symbols[idx].incomplete_enum_tag = None;
+            self.symbols[idx].enumeration = None;
             // During the body the constant carries its value's own type
             // so a reference from a later enumerator converts correctly;
             // the whole list is restamped below once the range is known.
@@ -354,6 +356,7 @@ impl Compiler {
         let compatible = enum_compatible_ty(min, max, self.enum_wide_ty());
         for (&idx, &(_, v)) in sym_indexes.iter().zip(&captured) {
             self.symbols[idx].type_ = enumerator_constant_ty(v, compatible);
+            self.symbols[idx].enumeration = Some(id as u32);
         }
         Ok((min, max, captured))
     }

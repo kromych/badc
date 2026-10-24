@@ -352,7 +352,7 @@ impl Compiler {
             }
             self.report_mismatch(&m, line, text)?;
         }
-        self.check_constant_conversion_of(self.ast_acc, want, 0, line);
+        self.check_value_conversion_of(self.ast_acc, want, 0, line);
         self.convert_assign_rhs(want);
         let Some(value) = self.ast_acc.take() else {
             let text = format!("argument {} of `{name}` has no value", pos + 1);
@@ -418,6 +418,7 @@ impl Compiler {
             Ok(ConstVal::Int {
                 val: i128::from(f(v)),
                 ty: Ty::Int as i64,
+                enumeration: None,
             })
         };
         Ok(Some(match kind {
@@ -446,6 +447,7 @@ impl Compiler {
         let int = |v: i64| ConstVal::Int {
             val: i128::from(v),
             ty: Ty::Int as i64,
+            enumeration: None,
         };
         match param {
             Param::Value(ty) => {

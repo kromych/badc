@@ -778,6 +778,7 @@ impl Compiler {
         s.h_fn_type = s.fn_type.clone();
         // The inner binding's type records its own enum tag.
         s.h_incomplete_enum_tag = s.incomplete_enum_tag.take();
+        s.h_enumeration = s.enumeration.take();
         s.h_array_size = s.array_size;
         s.h_type_align = s.type_align;
         // Clone rather than `mem::take`: the inner-scope binding
@@ -852,6 +853,7 @@ impl Compiler {
         sym.fn_ptr_ret_indirection = sym.h_fn_ptr_ret_indirection;
         sym.fn_type = core::mem::take(&mut sym.h_fn_type);
         sym.incomplete_enum_tag = sym.h_incomplete_enum_tag.take();
+        sym.enumeration = sym.h_enumeration.take();
         sym.array_size = sym.h_array_size;
         sym.type_align = sym.h_type_align;
         sym.inner_array_size = sym.h_inner_array_size;
@@ -909,6 +911,7 @@ impl Compiler {
             && sym.fn_ptr_ret_indirection == sym.h_fn_ptr_ret_indirection
             && sym.fn_type == sym.h_fn_type
             && sym.incomplete_enum_tag == sym.h_incomplete_enum_tag
+            && sym.enumeration == sym.h_enumeration
             && sym.array_size == sym.h_array_size
             && sym.type_align == sym.h_type_align
             && sym.inner_array_size == sym.h_inner_array_size
@@ -1058,6 +1061,7 @@ impl Compiler {
         self.folded_builtin_lits.clear();
         self.fallthrough_marks.clear();
         self.expr_fns.clear();
+        self.expr_enums.clear();
         self.ast_acc = None;
         self.ast_vstack.clear();
         self.pending_label_relocs.clear();
@@ -1100,6 +1104,7 @@ impl Compiler {
         self.next_ent_pc += 1;
         self.rewrite_loop_idioms();
         self.expr_fns.clear();
+        self.expr_enums.clear();
         let finished = super::super::ast::FinishedFunction {
             ast: core::mem::take(&mut self.ast),
             ent_pc,

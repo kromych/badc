@@ -138,11 +138,17 @@ pub(super) struct InitLeaf {
     pub(super) value: i128,
     pub(super) reloc: InitElemReloc,
     pub(super) ty: i64,
+    pub(super) enumeration: Option<i64>,
 }
 
 impl InitLeaf {
     fn of(value: i128, reloc: InitElemReloc, ty: i64) -> Self {
-        InitLeaf { value, reloc, ty }
+        InitLeaf {
+            value,
+            reloc,
+            ty,
+            enumeration: None,
+        }
     }
 
     /// The arithmetic constant a leaf without a relocation holds.
@@ -151,6 +157,7 @@ impl InitLeaf {
             InitElemReloc::None => Some(ConstVal::Int {
                 val: self.value,
                 ty: self.ty,
+                enumeration: self.enumeration,
             }),
             InitElemReloc::Float64Bits => Some(ConstVal::Float {
                 val: f64::from_bits(self.value as u64),
@@ -2056,6 +2063,9 @@ impl Compiler {
         }
         if matches!(leaf.reloc, InitElemReloc::None) {
             self.check_constant_conversion(leaf.value, leaf.ty, ty, bits, line);
+            if !self.initializes_as_is(leaf.ty, ty) {
+                self.check_enum_conversion(leaf.enumeration.or(Some(leaf.ty)), ty, bits, line);
+            }
         }
         Ok(leaf)
     }
@@ -2446,6 +2456,7 @@ impl Compiler {
                 };
                 return Ok(InitLeaf {
                     ty: cast_ty,
+                    enumeration: None,
                     ..leaf
                 });
             }
@@ -2473,7 +2484,7 @@ impl Compiler {
                     return self.init_scalar_of(v);
                 }
                 Ok(v @ ConstVal::Int { .. }) if done => {
-                    return Ok(InitLeaf::of(v.as_i128(), InitElemReloc::None, v.expr_ty()));
+                    return self.init_scalar_of(v);
                 }
                 Ok(v @ ConstVal::Addr(a)) if ends && a.root.is_symbolic() => {
                     return self.init_scalar_of(v);
@@ -2501,6 +2512,7 @@ impl Compiler {
         let leaf = self.parse_constant_init_value()?;
         Ok(InitLeaf {
             ty: cast_ty,
+            enumeration: None,
             ..leaf
         })
     }
@@ -2719,7 +2731,10 @@ impl Compiler {
             )),
             v => {
                 let v = self.require_integer_const(v)?;
-                Ok(InitLeaf::of(v.as_i128(), InitElemReloc::None, v.expr_ty()))
+                Ok(InitLeaf {
+                    enumeration: v.enumeration(),
+                    ..InitLeaf::of(v.as_i128(), InitElemReloc::None, v.expr_ty())
+                })
             }
         }
     }

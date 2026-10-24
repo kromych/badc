@@ -35,6 +35,7 @@ use super::super::error::C5Error;
 use super::super::token::{Token, Ty};
 use super::Compiler;
 use super::diag::Category;
+use super::enum_conversion::{common_enum, original_enum};
 use super::types::{
     LONG_DOUBLE_BIT, UNSIGNED_BIT, add_ptr_level, integer_promote, is_floating_scalar,
     is_floating_ty, is_long_double_ty, is_pointer_ty, is_struct_ty, is_struct_value_ty,
@@ -63,12 +64,11 @@ pub(super) enum ConstVal {
     Int {
         val: i128,
         ty: i64,
+        /// An enumeration constant's enumeration (gcc's original type).
+        enumeration: Option<i64>,
     },
     /// A value of `float`, `double` or `long double`, held rounded to it.
-    Float {
-        val: f64,
-        ty: i64,
-    },
+    Float { val: f64, ty: i64 },
     /// A symbol-relative address constant (C99 6.6p9): a function or
     /// object designator that has not been reduced to an integer. It
     /// participates in pointer equality / relational folding and in the
@@ -220,6 +220,7 @@ impl ConstVal {
         ConstVal::Int {
             val: v as i128,
             ty: Ty::Int as i64,
+            enumeration: None,
         }
     }
 
@@ -247,6 +248,24 @@ impl ConstVal {
             ConstVal::Int { ty, .. } => ty,
             ConstVal::Float { .. } => Ty::Int as i64,
             ConstVal::Addr(_) => Ty::Ptr as i64,
+        }
+    }
+
+    pub(super) fn enumeration(self) -> Option<i64> {
+        match self {
+            ConstVal::Int { enumeration, .. } => enumeration,
+            _ => None,
+        }
+    }
+
+    fn with_enumeration(self, enumeration: Option<i64>) -> Self {
+        match self {
+            ConstVal::Int { val, ty, .. } => ConstVal::Int {
+                val,
+                ty,
+                enumeration,
+            },
+            v => v,
         }
     }
 
@@ -280,10 +299,10 @@ impl ConstVal {
     fn to_floating(self, ty: i64) -> Self {
         let single = strip_unsigned(ty) == Ty::Float as i64;
         let val = match self {
-            ConstVal::Int { val, ty: from } if is_unsigned_ty(from) && single => {
+            ConstVal::Int { val, ty: from, .. } if is_unsigned_ty(from) && single => {
                 val as u128 as f32 as f64
             }
-            ConstVal::Int { val, ty: from } if is_unsigned_ty(from) => val as u128 as f64,
+            ConstVal::Int { val, ty: from, .. } if is_unsigned_ty(from) => val as u128 as f64,
             ConstVal::Int { val, .. } if single => val as f32 as f64,
             ConstVal::Int { val, .. } => val as f64,
             ConstVal::Float { val, .. } => val,
@@ -445,6 +464,7 @@ impl Compiler {
             return Ok(ConstVal::Int {
                 val: narrow_const_int(bytes, uns, false, v),
                 ty: pty,
+                enumeration: None,
             });
         }
         let common = if ptr {
@@ -521,6 +541,7 @@ impl Compiler {
         Ok(ConstVal::Int {
             val: narrow_const_int(bytes, uns, false, val),
             ty: common,
+            enumeration: None,
         })
     }
 
@@ -585,6 +606,7 @@ impl Compiler {
                 (Some(a), Some(b)) if same_sym(&a, &b) => Some(ConstVal::Int {
                     val: ((a.value - b.value) / a.elem_size.max(1)) as i128,
                     ty: Ty::LongLong as i64,
+                    enumeration: None,
                 }),
                 // A byte pointer less one with no symbol: the difference
                 // is the relocated address less that integer, as gcc folds
@@ -1009,14 +1031,17 @@ impl Compiler {
             Intrinsic::Bswap16 => ConstVal::Int {
                 val: (arg as u16).swap_bytes() as i128,
                 ty: Ty::Short as i64 | UNSIGNED_BIT,
+                enumeration: None,
             },
             Intrinsic::Bswap32 => ConstVal::Int {
                 val: (arg as u32).swap_bytes() as i128,
                 ty: Ty::Int as i64 | UNSIGNED_BIT,
+                enumeration: None,
             },
             Intrinsic::Bswap64 => ConstVal::Int {
                 val: (arg as u64).swap_bytes() as i128,
                 ty: Ty::LongLong as i64 | UNSIGNED_BIT,
+                enumeration: None,
             },
             _ => unreachable!("filtered to is_int_bit_unary / is_bswap above"),
         };
@@ -1132,9 +1157,9 @@ impl Compiler {
             self.next()?;
             let taken = cond.is_truthy();
             // GNU `a ?: b`: the middle operand may be omitted, and the
-            // condition's own value is the result when truthy.
+            // condition's own value, promoted, is the result when truthy.
             let then_val = if self.lex.tk == ':' {
-                cond
+                cond.with_enumeration(None)
             } else {
                 self.parse_const_unevaluated(!taken, Self::parse_const_expr_cond_val)?
             };
@@ -1161,10 +1186,12 @@ impl Compiler {
         other: ConstVal,
     ) -> ConstVal {
         let selected = if taken { then } else { other };
-        match self.arith_result_ty(then, other) {
+        let result = match self.arith_result_ty(then, other) {
             Some(ty) => self.const_convert(selected, ty),
             None => selected,
-        }
+        };
+        let arm = |v: ConstVal| original_enum(v.enumeration(), v.expr_ty());
+        result.with_enumeration(common_enum(arm(then), arm(other)))
     }
 
     /// C99 6.3.1.8: the type the usual arithmetic conversions give two
@@ -1195,7 +1222,11 @@ impl Compiler {
             v => v.as_i128(),
         };
         let val = narrow_const_int(self.size_of_type(ty), is_unsigned_ty(ty), is_bool, val);
-        ConstVal::Int { val, ty }
+        ConstVal::Int {
+            val,
+            ty,
+            enumeration: None,
+        }
     }
 
     /// A parenthesized constant expression, which may hold a comma operator
@@ -1492,12 +1523,14 @@ impl Compiler {
             return ConstVal::Int {
                 val: v,
                 ty: operand_ty,
+                enumeration: None,
             };
         }
         let pty = integer_promote(operand_ty);
         ConstVal::Int {
             val: narrow_const_int(self.size_of_type(pty), is_unsigned_ty(pty), false, v),
             ty: pty,
+            enumeration: None,
         }
     }
 
@@ -1533,7 +1566,11 @@ impl Compiler {
         }
         if self.lex.tk == Token::AddOp {
             self.next()?;
-            return self.parse_const_expr_unary_val();
+            // C99 6.5.3.3p2: the promoted operand.
+            return Ok(match self.parse_const_expr_unary_val()? {
+                v @ ConstVal::Int { .. } => self.const_unary_promoted(v.as_i128(), v.int_ty()),
+                v => v,
+            });
         }
         if self.lex.tk == '!' {
             self.next()?;
@@ -1590,6 +1627,7 @@ impl Compiler {
             return Ok(ConstVal::Int {
                 val: v as i128,
                 ty: self.size_t_ty(),
+                enumeration: None,
             });
         }
         if self.lex.tk == Token::Alignof {
@@ -1600,6 +1638,7 @@ impl Compiler {
             return Ok(ConstVal::Int {
                 val: v as i128,
                 ty: self.size_t_ty(),
+                enumeration: None,
             });
         }
         if self.lex.tk == Token::Generic {
@@ -1739,7 +1778,11 @@ impl Compiler {
             } else {
                 (arg as i64).wrapping_abs() as i128
             };
-            return Ok(ConstVal::Int { val, ty });
+            return Ok(ConstVal::Int {
+                val,
+                ty,
+                enumeration: None,
+            });
         }
         if let Some(v) = self.try_fold_value_builtin()? {
             return Ok(v);
@@ -1760,6 +1803,7 @@ impl Compiler {
             return Ok(ConstVal::Int {
                 val: v as i128,
                 ty: Ty::Int as i64,
+                enumeration: None,
             });
         }
         if self.lex.tk == Token::BuiltinOffsetof {
@@ -1774,6 +1818,7 @@ impl Compiler {
             return Ok(ConstVal::Int {
                 val: v as i128,
                 ty: self.size_t_ty(),
+                enumeration: None,
             });
         }
         let mut v = self.parse_const_expr_primary_val()?;
@@ -1923,6 +1968,7 @@ impl Compiler {
         Ok(Some(ConstVal::Int {
             val: n,
             ty: self.size_t_ty(),
+            enumeration: None,
         }))
     }
 
@@ -2742,6 +2788,7 @@ impl Compiler {
         ConstVal::Int {
             val: narrow_const_int(bytes, is_unsigned_ty(ty), is_bool, v),
             ty,
+            enumeration: None,
         }
     }
 
@@ -3096,6 +3143,7 @@ impl Compiler {
                         return Ok(ConstVal::Int {
                             val: 1,
                             ty: target_ty,
+                            enumeration: None,
                         });
                     }
                     if is_floating_ty(target_ty) {
@@ -3171,10 +3219,13 @@ impl Compiler {
             // wider for values past `int`'s range (GCC extension). The
             // type drives the fold's signedness, e.g. shifts and
             // divides.
-            let v = self.symbols[self.lex.curr_id_idx].val;
-            let ty = self.symbols[self.lex.curr_id_idx].type_;
+            let idx = self.lex.curr_id_idx;
+            let (v, ty) = (self.symbols[idx].val, self.symbols[idx].type_);
             self.next()?;
-            return Ok(self.const_int_of(v as i128, ty));
+            let enumeration = self.enumeration_of_constant(idx);
+            return Ok(self
+                .const_int_of(v as i128, ty)
+                .with_enumeration(enumeration));
         }
         // A block-scope `const` scalar arithmetic object with a recorded
         // constant initializer folds to that value in the contexts GCC

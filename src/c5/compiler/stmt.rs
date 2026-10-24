@@ -71,6 +71,7 @@ pub(super) struct BlockShadow {
     class: i64,
     type_: i64,
     incomplete_enum_tag: Option<u32>,
+    enumeration: Option<u32>,
     val: i64,
     fn_ptr_indirection: i64,
     fn_ptr_ret_indirection: i64,
@@ -162,6 +163,7 @@ impl Compiler {
             class: s.class,
             type_: s.type_,
             incomplete_enum_tag: s.incomplete_enum_tag,
+            enumeration: s.enumeration,
             val: s.val,
             fn_ptr_indirection: s.fn_ptr_indirection,
             fn_ptr_ret_indirection: s.fn_ptr_ret_indirection,
@@ -192,6 +194,7 @@ impl Compiler {
         // its own. Its type records its own enum tag.
         self.symbols[idx].entity_record = None;
         self.symbols[idx].incomplete_enum_tag = None;
+        self.symbols[idx].enumeration = None;
         shadow
     }
 
@@ -214,6 +217,7 @@ impl Compiler {
         s.class = b.class;
         s.type_ = b.type_;
         s.incomplete_enum_tag = b.incomplete_enum_tag;
+        s.enumeration = b.enumeration;
         s.val = b.val;
         s.fn_ptr_indirection = b.fn_ptr_indirection;
         s.fn_ptr_ret_indirection = b.fn_ptr_ret_indirection;
@@ -3659,7 +3663,7 @@ impl Compiler {
                         }
                         self.report_mismatch(&m, line, text)?;
                     }
-                    self.check_constant_conversion_of(self.ast_acc, ret_ty, 0, line);
+                    self.check_value_conversion_of(self.ast_acc, ret_ty, 0, line);
                     // Reuse `convert_assign_rhs` so an `int`-typed
                     // `return` from a `double`-returning function lifts
                     // through the int-to-float cast rather than landing

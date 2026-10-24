@@ -2293,6 +2293,7 @@ impl Compiler {
             returns_struct: s.class == Token::Fun as i64 && is_struct_value_ty(s.type_),
             count_known: s.prototyped() || old_style_def,
             count_is_constraint: s.prototyped() && !is_sys_call,
+            prototyped: s.prototyped(),
         };
         // A callee left at the implicit `int` (a `#pragma binding` with no
         // prototype, or a C89 implicit declaration) truncates a wider return
@@ -2536,8 +2537,8 @@ impl Compiler {
             }
             self.report_mismatch(&m, arg_line, text)?;
         }
-        if tu_member.is_none() && !callee.is_sys_call {
-            self.check_constant_conversion_of(self.ast_acc, want, 0, arg_line);
+        if tu_member.is_none() && !callee.is_sys_call && callee.prototyped {
+            self.check_value_conversion_of(self.ast_acc, want, 0, arg_line);
         }
         if let Some(member_ty) = tu_member {
             // The member is materialized in an anonymous union object, so every
@@ -2629,6 +2630,9 @@ impl Compiler {
         // an enumerator outside `int`'s range (GCC extension).
         let ty = self.symbols[id_idx].type_;
         self.emit_int_constant(val, ty);
+        if let Some(e) = self.enumeration_of_constant(id_idx) {
+            self.set_expr_enum(self.ast_acc, Some(e));
+        }
         Ok(())
     }
 
@@ -3349,6 +3353,9 @@ impl Compiler {
         self.require_unary_operand("+", Category::Arithmetic)?;
         if !is_floating_scalar(self.ty) {
             self.ty = integer_promote(self.ty);
+            if self.ast_acc.and_then(|id| self.expr_enum(id)).is_some() {
+                self.set_expr_enum(self.ast_acc, None);
+            }
         }
         Ok(())
     }
@@ -3628,6 +3635,7 @@ impl Compiler {
             returns_struct: false,
             count_known: f.params.prototyped,
             count_is_constraint: f.params.prototyped,
+            prototyped: f.params.prototyped,
         });
         let callee_ret_fn_ptr = core::mem::take(&mut self.pending.indirect_callee_ret_fn_ptr);
         let mut arg_idx: usize = 0;
@@ -3756,7 +3764,7 @@ impl Compiler {
             let line = self.lex.line;
             self.expr(Token::Assign as i64)?;
             let bits = u32::from(desc.bit_width);
-            self.check_constant_conversion_of(self.ast_acc, desc.ty, bits, line);
+            self.check_value_conversion_of(self.ast_acc, desc.ty, bits, line);
             if let Some(rhs) = self.ast_acc {
                 self.ty = Ty::Int as i64;
                 let res_ty = self.ty;
@@ -3796,7 +3804,7 @@ impl Compiler {
                 }
                 self.report_mismatch(&m, line, text)?;
             }
-            self.check_constant_conversion_of(self.ast_acc, lhs_ty, 0, line);
+            self.check_value_conversion_of(self.ast_acc, lhs_ty, 0, line);
             self.convert_assign_rhs(lhs_ty);
             self.ty = lhs_ty;
             self.ast_assign();
@@ -4102,6 +4110,11 @@ impl Compiler {
         let mut else_ast = self.ast_acc;
         let else_ty = self.ty;
         let result_ty = self.conditional_result_ty(then_ty, else_ty, then_ast, else_ast);
+        // The GNU form's first arm is the promoted condition.
+        let arm_enum = |a: Option<super::super::ast::ExprId>| a.and_then(|a| self.expr_enum(a));
+        let result_enum =
+            super::enum_conversion::common_enum(arm_enum(then_ast), arm_enum(else_ast))
+                .filter(|_| !elvis);
         // C99 6.5.15p6: pointers to compatible function types compose; a
         // prototype, where either arm has one, is the result's (6.2.7p3).
         let arm_fns = [then_ast, else_ast].map(|a| a.and_then(|a| self.expr_fn(a)));
@@ -4146,6 +4159,9 @@ impl Compiler {
                 pos,
             );
             self.ast_acc = Some(id);
+            if result_enum.is_some() {
+                self.set_expr_enum(Some(id), result_enum);
+            }
             // A designator arm decays (C99 6.3.2.1p4).
             if let Some((f, depth)) = result_fn {
                 self.set_expr_fn(id, f, depth.max(1));
@@ -5215,7 +5231,7 @@ impl Compiler {
                 // The stored value was parsed inside `emit_bitfield_access` and
                 // kept in `pending.bf_assign_rhs`.
                 if let Some(rhs) = self.pending.bf_assign_rhs.take() {
-                    self.check_constant_conversion_of(Some(rhs), field.ty, field.bit_width, line);
+                    self.check_value_conversion_of(Some(rhs), field.ty, field.bit_width, line);
                     let res_ty = self.ty;
                     self.ast_emit_bitfield_assign(obj, bf_field_off, bf_desc, rhs, res_ty);
                 }
@@ -6464,6 +6480,8 @@ struct DirectCallee {
     /// the unit declared. An old-style definition binds no constraint, and a
     /// libc binding's prototype approximates the platform's; those warn.
     count_is_constraint: bool,
+    /// Arguments convert as if by assignment (C99 6.5.2.2p7).
+    prototyped: bool,
 }
 
 impl DirectCallee {

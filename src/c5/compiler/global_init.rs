@@ -385,9 +385,10 @@ impl Compiler {
         {
             let cp = self.init_checkpoint();
             match self.parse_constant_init_value() {
-                Ok(InitLeaf { value, reloc, ty })
-                    if !matches!(reloc, InitElemReloc::None | InitElemReloc::Float64Bits)
-                        && self.at_initializer_end() =>
+                Ok(InitLeaf {
+                    value, reloc, ty, ..
+                }) if !matches!(reloc, InitElemReloc::None | InitElemReloc::Float64Bits)
+                    && self.at_initializer_end() =>
                 {
                     if !fn_checked {
                         self.check_constant_init_conversion(
@@ -555,7 +556,9 @@ impl Compiler {
             let cp = self.init_checkpoint();
             match self.parse_constant_init_value() {
                 Ok(leaf) if self.at_initializer_end() => {
-                    let InitLeaf { value, reloc, ty } = leaf;
+                    let InitLeaf {
+                        value, reloc, ty, ..
+                    } = leaf;
                     let flags = (leaf.is_zero_int(), false);
                     self.check_constant_init_conversion(var_ty, target_fn, ty, flags, line)?;
                     if is_thread_local {
@@ -674,8 +677,11 @@ impl Compiler {
         let cv = self.parse_const_expr_cond_val()?;
         let zero = matches!(cv, ConstVal::Int { val: 0, .. });
         self.check_constant_init_conversion(var_ty, target_fn, cv.expr_ty(), (zero, false), line)?;
-        if let ConstVal::Int { val, ty } = cv {
+        if let ConstVal::Int { val, ty, .. } = cv {
             self.check_constant_conversion(val, ty, var_ty, 0, line);
+            if !self.initializes_as_is(ty, var_ty) {
+                self.check_enum_conversion(cv.enumeration().or(Some(ty)), var_ty, 0, line);
+            }
         }
         // C99 6.6 / 6.3.2.3: an address constant in a pointer-width
         // integer slot is a link-time relocation, and takes the one a

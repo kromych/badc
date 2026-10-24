@@ -22,6 +22,7 @@ mod declarator;
 mod diag;
 mod dllimport;
 mod emit;
+mod enum_conversion;
 mod enum_decl;
 mod expr;
 mod fallthrough;
@@ -1956,6 +1957,10 @@ pub struct Compiler {
     pub(super) expr_fns:
         alloc::collections::BTreeMap<super::ast::ExprId, (super::symbol::FnType, i64)>,
 
+    /// The enumerated type of an expression whose node type does not give
+    /// it: a constant, a conditional, a unary `+` (none) sharing its node.
+    pub(super) expr_enums: alloc::collections::BTreeMap<super::ast::ExprId, Option<i64>>,
+
     /// ExprIds matching values on the c5 stack-machine stack --
     /// the stack push records the current `ast_acc` here;
     /// arithmetic / store ops pop the top entry. `Option`
@@ -2930,6 +2935,7 @@ impl Compiler {
             ast: super::ast::Ast::new(),
             ast_acc: None,
             expr_fns: alloc::collections::BTreeMap::new(),
+            expr_enums: alloc::collections::BTreeMap::new(),
             ast_vstack: Vec::new(),
             finished_functions: Vec::new(),
             synthetic_ssa_funcs: Vec::new(),

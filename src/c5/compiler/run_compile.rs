@@ -1342,11 +1342,12 @@ impl Compiler {
         let ent_pc = self.open_function_body(id_idx, &params);
         // The function's block continues the scope of the enumeration
         // constants its parameter list declared (C99 6.2.1p4).
-        for &(idx, ty, val) in &params.enumerators {
+        for &(idx, ty, val, enumeration) in &params.enumerators {
             self.rebind_scoped(idx)?;
             let s = &mut self.symbols[idx];
             (s.class, s.type_, s.val) = (Token::Num as i64, ty, val);
             s.incomplete_enum_tag = None;
+            s.enumeration = enumeration;
         }
         self.copy_by_value_parameters(&params)?;
         self.parse_function_body_items(&params)?;

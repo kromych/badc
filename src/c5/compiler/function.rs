@@ -47,8 +47,8 @@ pub(super) struct ParsedParams {
     /// The tags the list declared; a definition's block continues their scope.
     pub(super) tags: Vec<(alloc::string::String, usize)>,
     /// The enumeration constants the list declared, `(symbol, type,
-    /// value)`; a definition's block continues their scope too.
-    pub(super) enumerators: Vec<(usize, i64, i64)>,
+    /// value, enumeration)`; a definition's block continues their scope too.
+    pub(super) enumerators: Vec<(usize, i64, i64, Option<u32>)>,
     /// The `-Wstrict-prototypes` record of a list that declares no
     /// prototype.
     pub(super) unprototyped: Option<u32>,
@@ -183,8 +183,9 @@ impl Compiler {
     }
 
     /// Close [`Self::open_param_list_scope`]'s scope, returning the
-    /// enumeration constants it declared as `(symbol, type, value)`.
-    pub(super) fn close_param_list_scope(&mut self) -> Vec<(usize, i64, i64)> {
+    /// enumeration constants it declared as `(symbol, type, value,
+    /// enumeration)`.
+    pub(super) fn close_param_list_scope(&mut self) -> Vec<(usize, i64, i64, Option<u32>)> {
         self.param_list_scopes -= 1;
         let mut enumerators = Vec::new();
         for b in self
@@ -196,7 +197,7 @@ impl Compiler {
         {
             let s = &self.symbols[b.idx];
             if s.class == Token::Num as i64 {
-                enumerators.push((b.idx, s.type_, s.val));
+                enumerators.push((b.idx, s.type_, s.val, s.enumeration));
             }
             self.restore_block_shadow(b);
         }

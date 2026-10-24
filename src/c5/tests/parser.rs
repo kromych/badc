@@ -6230,3 +6230,145 @@ fn vla_larger_than_reports_the_arrays_gcc_does() {
     }
     assert!(lines(Some(1), false).is_empty() && lines(None, true).is_empty());
 }
+
+/// gcc's `-Wenum-conversion` (in `-Wextra`): an assignment, initializer,
+/// prototyped argument or return converting a value of one enumerated type
+/// to another, the type compared being gcc's original one: an enumeration
+/// constant's enumeration (C99 6.7.2.2p3 types the constant `int`), a
+/// bit-field's declared type, two conditional arms' common enumeration.
+/// A bit-field narrower than its type has an integer type of its own as
+/// the target of a conversion or the value of a store, and an initializer
+/// of a type compatible with the object's, as the promoted `i ? a : a`
+/// is, initializes it as it is. The lines are gcc 16.2.1's for the same
+/// unit on x86-64 and AArch64 Linux; gcc reports 22 and 23 twice.
+#[test]
+fn enum_conversion_reports_where_gcc_does() {
+    use crate::c5::Target;
+    let src = "enum A { A0, A1 };\n\
+               enum B { B0, B1 };\n\
+               typedef enum B tb;\n\
+               typedef tb tb2;\n\
+               typedef enum A ta;\n\
+               enum { K0, K1 };\n\
+               enum __attribute__((packed)) P { P0, P1 };\n\
+               void takeb(enum B);\n\
+               void takevar(enum B, ...);\n\
+               void kd(b) enum B b; { (void)b; }\n\
+               struct s { enum B f; };\n\
+               struct bf { enum B f : 2; enum A g : 3; enum B h : 32; enum A k : 32; };\n\
+               struct pk { enum P f : 8; enum P g : 4; };\n\
+               enum A ra(void);\n\
+               enum A (*fpa)(void);\n\
+               enum B gb = A1;\n\
+               enum B gc = (enum A)0;\n\
+               enum B gd = 0 ? A1 : B1;\n\
+               enum B ge = 1 ? (enum A)0 : A1;\n\
+               enum B gf = +A1;\n\
+               enum B gg = 1 ? A1 : A1;\n\
+               struct bf gs = { A1, A0, A1, B1 };\n\
+               enum B ga[] = { A1, [2] = A0 };\n\
+               enum B rb(enum A a) { return a; }\n\
+               enum B rc(void) { return A1; }\n\
+               void f(enum A a, enum B b, int i, enum A *p, struct bf *pbf, struct s *ps, ta t, struct pk *pp) {\n\
+               enum B c = a;\n\
+               tb2 d = A1;\n\
+               enum B e = i ? a : a;\n\
+               enum B g = i ? A1 : A1;\n\
+               enum B h = i ? (enum A)0 : A1;\n\
+               struct s x = { a };\n\
+               enum B l = { a };\n\
+               static enum B sb = (A1);\n\
+               b = a;\n\
+               b = A0;\n\
+               b = (a);\n\
+               b = *p;\n\
+               b = p[0];\n\
+               b = ra();\n\
+               b = fpa();\n\
+               b = pbf->g;\n\
+               pbf->f = a;\n\
+               pbf->h = a;\n\
+               b = i ? a : A1;\n\
+               b = i ? A1 : K1;\n\
+               b = a ?: a;\n\
+               b = (i, A1);\n\
+               b = a++;\n\
+               b = (a = A0);\n\
+               b = ({ a; });\n\
+               b = ({ A1; });\n\
+               b = _Generic(0, int: a);\n\
+               b = __builtin_choose_expr(1, a, b);\n\
+               b = t;\n\
+               b = (ta)i;\n\
+               b = (enum B)a;\n\
+               b = i;\n\
+               i = a;\n\
+               b = +a;\n\
+               b += a;\n\
+               b = -a;\n\
+               b = K1;\n\
+               takeb(a);\n\
+               takeb(A1);\n\
+               takevar(B0, a);\n\
+               kd(a);\n\
+               (void)sizeof(b = a);\n\
+               i = 0 ? (b = a) : 0;\n\
+               ps->f = a;\n\
+               pp->f = a;\n\
+               pp->g = a;\n\
+               enum P q = a;\n\
+               {\n\
+               enum Z { A1 = 5 };\n\
+               a = A1;\n\
+               }\n\
+               a = A1;\n\
+               b = pbf->k++;\n\
+               b = (pbf->k = A0);\n\
+               b = (pbf->g = A0);\n\
+               b = pbf->g++;\n\
+               enum B m = 1 ? pbf->g : pbf->g;\n\
+               (void)c; (void)d; (void)e; (void)g; (void)h; (void)x; (void)l; (void)sb; (void)q; (void)m;\n\
+               }\n\
+               int main(void) { return 0; }\n";
+    let rows = |target: Target, selectors: &[&str]| -> Vec<(u32, String)> {
+        let opts = crate::CompileOptions::default().with_diag(super::diag_config(selectors));
+        Compiler::with_options(src.to_string(), target, opts)
+            .compile()
+            .unwrap_or_else(|e| panic!("{target:?}: {e}"))
+            .warnings
+            .iter()
+            .filter(|w| w.code == crate::c5::diag::Code::ENUM_CONVERSION)
+            .filter_map(|w| w.loc.as_ref().map(|l| (l.line, w.text.clone())))
+            .collect()
+    };
+    let gcc = [
+        16, 17, 21, 22, 22, 23, 23, 24, 25, 27, 28, 30, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42,
+        44, 45, 48, 49, 50, 51, 53, 54, 55, 56, 63, 64, 65, 68, 69, 70, 71, 73, 76, 79, 80, 83,
+    ];
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+    ] {
+        let found = rows(target, &["enum-conversion"]);
+        let lines: Vec<u32> = found.iter().map(|r| r.0).collect();
+        assert_eq!(lines, gcc, "{target:?}");
+        assert_eq!(rows(target, &["extra"]).len(), gcc.len(), "{target:?}");
+        assert!(rows(target, &["all"]).is_empty(), "{target:?}");
+        let text = |line: u32| found.iter().find(|r| r.0 == line).map(|r| r.1.as_str());
+        assert_eq!(
+            text(16),
+            Some("implicit conversion from `enum A` to `enum B`")
+        );
+        assert_eq!(
+            text(63),
+            Some("implicit conversion from `enum <anonymous>` to `enum B`")
+        );
+        assert_eq!(
+            text(76),
+            Some("implicit conversion from `enum Z` to `enum A`")
+        );
+    }
+}

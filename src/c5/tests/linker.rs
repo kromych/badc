@@ -4545,6 +4545,7 @@ fn an_extern_thread_local_is_read_from_a_got_slot_unless_the_link_defines_it() {
             export_versions: Default::default(),
             from_image: true,
             references: Default::default(),
+            protected_exports: Default::default(),
         };
         let merged =
             link_native_objects_with_shared_libs(core::slice::from_ref(&reader), false, &[lib])
@@ -5318,8 +5319,9 @@ fn a_shared_librarys_exported_definitions_bind_through_its_dynamic_symbols() {
 /// The bounds a link defines take GNU ld's visibility: the init and fini
 /// array bounds hidden, as its default script provides them, a section's
 /// `__start_` and `__stop_` protected, `-z start-stop-visibility`'s default.
-/// An image exporting every definition publishes none of them, and a shared
-/// library's references to them bind to its own.
+/// An image exporting every definition publishes the protected ones, as
+/// GNU ld under `-rdynamic` does, and a shared library's references to them
+/// bind to its own.
 #[cfg(feature = "native-emit")]
 #[test]
 fn link_defined_bounds_are_hidden_or_protected() {
@@ -5393,7 +5395,8 @@ fn link_defined_bounds_are_hidden_or_protected() {
                 ("__start_mytab", (1, 3)),
                 ("__stop_mytab", (1, 3)),
             ] {
-                assert!(!names.iter().any(|n| n == bound), "{what}: {names:?}");
+                let exported = names.iter().any(|n| n == bound);
+                assert_eq!(exported, row.1 == 3, "{what}: {bound} {names:?}");
                 let sym = (merged.symbols.iter()).find(|s| s.name == bound);
                 let sym = sym.expect(bound);
                 assert_eq!((sym.info >> 4, sym.other & 3), row, "{what}: {bound}");
@@ -5534,6 +5537,7 @@ fn an_import_only_addressed_keeps_its_function_type() {
             export_versions: Default::default(),
             from_image: true,
             references: Default::default(),
+            protected_exports: Default::default(),
         };
         let merged = link_native_objects_with_shared_libs(&[obj], false, &[lib]).expect("link");
         for exec_form in [ExecForm::Pie, ExecForm::Placed] {
@@ -7286,6 +7290,7 @@ fn weak_undef_binds_against_a_shared_library_export() {
         export_versions: Default::default(),
         from_image: true,
         references: Default::default(),
+        protected_exports: Default::default(),
     };
     let merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
         .expect("weak ref against a shared library links");
@@ -14076,6 +14081,7 @@ fn imported_function_called_and_address_taken_links_through_own_linker() {
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
             references: Default::default(),
+            protected_exports: Default::default(),
         };
         let mut merged = link_native_objects_with_shared_libs(&objs, false, &[lib])
             .expect("link resolves the function against the shared library");

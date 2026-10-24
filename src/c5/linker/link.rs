@@ -85,21 +85,23 @@ pub(crate) const fn is_branch_reloc(machine: NativeMachine, rtype: u32) -> bool 
     }
 }
 
-/// Whether an image exports `sym`: at default visibility, a function or an
-/// object a `#pragma export` names, any function under `--export-all`, any
-/// object under `--export-data`.
+/// Whether an image exports `sym`: at default or protected visibility, a
+/// function or an object a `#pragma export` names, any function under
+/// `--export-all`, any object under `--export-data`.
 pub(crate) fn exports_definition(
     sym: &MergedSymbol,
     named: bool,
     export_all: bool,
     export_data: bool,
 ) -> bool {
-    sym.visibility == super::object::STV_DEFAULT
-        && match sym.section {
-            NativeSymSection::Text => named || export_all,
-            NativeSymSection::Data | NativeSymSection::Bss => named || export_data,
-            _ => false,
-        }
+    matches!(
+        sym.visibility,
+        super::object::STV_DEFAULT | super::object::STV_PROTECTED
+    ) && match sym.section {
+        NativeSymSection::Text => named || export_all,
+        NativeSymSection::Data | NativeSymSection::Bss => named || export_data,
+        _ => false,
+    }
 }
 
 /// Result of merging N [`NativeObject`]s. Carries enough state
@@ -2293,6 +2295,18 @@ impl<'a> Link<'a> {
                 .iter()
                 .find(|l| l.data_exports.contains(&name))
                 .expect("a candidate is a shared-library data object");
+            // The library binds its own references to a protected object,
+            // which a copy would leave behind, as GNU ld refuses it.
+            if lib.protected_exports.contains(&name) {
+                return Err(link_err(
+                    Code::RELOCATION,
+                    MODULE,
+                    &format!(
+                        "copy relocation against non-copyable protected symbol `{name}` in {}",
+                        lib.soname
+                    ),
+                ));
+            }
             let Some(&(size, align)) = lib.object_sizes.get(&name) else {
                 return Err(link_err(
                     Code::RELOCATION,
@@ -2431,7 +2445,9 @@ impl<'a> Link<'a> {
             let Some(def) = self.defined.get(name).filter(|_| sym.binding != 0) else {
                 continue;
             };
-            let left = self.preemption == Preemption::All || def.section != NativeSymSection::Text;
+            // A protected definition binds its own component's references.
+            let left = def.visibility == super::object::STV_DEFAULT
+                && (self.preemption == Preemption::All || def.section != NativeSymSection::Text);
             let exported =
                 exports_definition(def, named.contains(name), self.export_all, self.export_data);
             if left && exported {
@@ -6248,6 +6264,7 @@ mod tests {
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
             references: Default::default(),
+            protected_exports: Default::default(),
         };
         let merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
             .expect("link resolves the data object against the shared library");
@@ -6360,6 +6377,7 @@ mod tests {
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
             references: Default::default(),
+            protected_exports: Default::default(),
         };
         let merged = link_native_objects_with_shared_libs(&[caller], false, &[lib])
             .expect("link resolves ext_fn against the shared library");
@@ -6400,6 +6418,7 @@ mod tests {
             export_versions: alloc::collections::BTreeMap::new(),
             from_image: true,
             references: Default::default(),
+            protected_exports: Default::default(),
         };
         let mut merged = link_native_objects_with_shared_libs(&[obj], false, &[lib])
             .expect("a data reference to a shared-library import must link");
@@ -7945,6 +7964,7 @@ mod tests {
             export_versions: Default::default(),
             from_image: true,
             references: Default::default(),
+            protected_exports: Default::default(),
         }
     }
 
@@ -8337,6 +8357,7 @@ mod tests {
             export_versions: Default::default(),
             from_image: true,
             references: Default::default(),
+            protected_exports: Default::default(),
         };
         // `movl counter(%rip), %eax`, or `leaq counter(%rip), %rax`.
         let reader = |routed: bool, text: &[u8]| {
@@ -8437,6 +8458,7 @@ mod tests {
             export_versions: Default::default(),
             from_image: true,
             references: Default::default(),
+            protected_exports: Default::default(),
         };
         let mut o = blank_object(NativeMachine::X86_64);
         // `int *const counter_addr = &counter;`

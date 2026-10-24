@@ -1316,15 +1316,21 @@ impl Compiler {
                             self.next()?;
                         } else if is_visibility && self.lex.tk == '(' {
                             // GCC `visibility("hidden"|"internal"|"protected"
-                            // |"default")`: `hidden` and `internal` make the
-                            // symbol non-preemptible (STV_HIDDEN); the other
-                            // two keep the default preemptible addressing.
-                            // Stated either way, the attribute overrides an
-                            // enclosing `#pragma GCC visibility` extent.
+                            // |"default")`, overriding an enclosing
+                            // `#pragma GCC visibility` extent.
                             self.next()?; // `(`
                             let vis = self.parse_attribute_string_operand("visibility")?;
-                            self.pending.attrs.visibility =
-                                Some(vis == "hidden" || vis == "internal");
+                            let Some(vis) = crate::c5::program::SymVisibility::from_gcc_name(&vis)
+                            else {
+                                return Err(self.compile_err(
+                                    Code::INVALID_DECLARATION,
+                                    format!(
+                                        "`visibility` operand `{vis}` is not one of \
+                                         default, hidden, protected or internal"
+                                    ),
+                                ));
+                            };
+                            self.pending.attrs.visibility = Some(vis);
                             if self.lex.tk != ')' {
                                 return Err(self.compile_err(
                                     Code::SYNTAX,

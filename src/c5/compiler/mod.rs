@@ -1422,10 +1422,10 @@ pub(super) struct DeclAttrs {
     pub call_conv: Option<crate::c5::codegen::CallConv>,
     /// `used`: the definition stays in the object unreferenced.
     pub used: bool,
-    /// `visibility(...)`: `Some(true)` for `"hidden"` / `"internal"`,
-    /// `Some(false)` for the preemptible spellings, `None` for the
-    /// `#pragma GCC visibility` extent's choice.
-    pub visibility: Option<bool>,
+    /// `visibility(...)`: `Some` of the visibility it names (`Some(None)`
+    /// for `"default"`), `None` for the `#pragma GCC visibility` extent's
+    /// choice.
+    pub visibility: Option<Option<crate::c5::program::SymVisibility>>,
     pub section: Option<alloc::string::String>,
     pub patchable_entry: Option<(u32, u32)>,
     pub no_instrument: bool,

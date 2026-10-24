@@ -9726,6 +9726,108 @@ fn a_shared_library_exports_the_objects_pragma_export_names() {
     assert_eq!(out.status.code(), Some(0));
 }
 
+// A protected definition is exported and binds its own component's
+// references (System V gABI, symbol visibility): an executable defining
+// the same function and object leaves the library on its own, while it
+// takes the library's references to the default-visibility pair. `.dynsym`
+// states the visibility.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_protected_definition_is_exported_and_binds_its_library() {
+    let dir = tempdir("protected");
+    let defs = write_source(
+        &dir,
+        "defs.c",
+        "#define P __attribute__((visibility(\"protected\")))\n\
+         P int prot_fn(void) { return 1; }\nP int prot_obj = 1;\n\
+         int dflt_fn(void) { return 1; }\nint dflt_obj = 1;\n\
+         #pragma export(prot_fn)\n#pragma export(prot_obj)\n\
+         #pragma export(dflt_fn)\n#pragma export(dflt_obj)\n",
+    );
+    let uses = write_source(
+        &dir,
+        "uses.c",
+        "int prot_fn(void);\nextern int prot_obj;\nint dflt_fn(void);\nextern int dflt_obj;\n\
+         int lib_reads(void) { return prot_fn() * 1000 + prot_obj * 100 + dflt_fn() * 10 + dflt_obj; }\n\
+         #pragma export(lib_reads)\n",
+    );
+    let lib = dir.join("libprot.so");
+    run(
+        Command::new(badc())
+            .args(["-q", "-shared"])
+            .arg(&defs)
+            .arg(&uses)
+            .arg("-o")
+            .arg(&lib),
+        "build the shared library",
+    );
+    let main = write_source(
+        &dir,
+        "main.c",
+        "int prot_fn(void) { return 2; }\nint prot_obj = 2;\n\
+         int dflt_fn(void) { return 2; }\nint dflt_obj = 2;\n\
+         #include <stdio.h>\nint lib_reads(void);\n\
+         int main(void) { printf(\"%d\\n\", lib_reads()); return 0; }\n",
+    );
+    let exe = dir.join("prog");
+    run(
+        Command::new(badc())
+            .arg("-q")
+            .arg(&main)
+            .arg(format!("-L{}", dir.display()))
+            .args(["-lprot", "-o"])
+            .arg(&exe),
+        "link the executable",
+    );
+    let out = run(Command::new(&exe).env("LD_LIBRARY_PATH", &dir), "run");
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "1122");
+    let bytes = std::fs::read(&lib).expect("read the library");
+    let lib = badc::parse_shared_library(&bytes).expect("parse");
+    for name in ["prot_fn", "prot_obj", "dflt_fn", "dflt_obj"] {
+        assert!(lib.exports.contains(name), "{name} is exported");
+    }
+    assert_eq!(
+        lib.protected_exports,
+        ["prot_fn", "prot_obj"]
+            .map(String::from)
+            .into_iter()
+            .collect()
+    );
+    // An object the system compiler built for a placed image reads the
+    // object directly, which would take a copy of it; GNU ld and lld refuse.
+    let Some(cc) = host_cc() else {
+        return;
+    };
+    let reader = write_source(
+        &dir,
+        "reader.c",
+        "extern int prot_obj;\nint main(void) { return prot_obj; }\n",
+    );
+    let obj = dir.join("reader.o");
+    run(
+        Command::new(&cc)
+            .args(["-fno-pie", "-O0", "-c"])
+            .arg(&reader)
+            .arg("-o")
+            .arg(&obj),
+        "build the placed-image object",
+    );
+    let out = Command::new(badc())
+        .args(["-q", "-no-pie"])
+        .arg(&obj)
+        .arg(format!("-L{}", dir.display()))
+        .args(["-lprot", "-o"])
+        .arg(dir.join("reader"))
+        .output()
+        .expect("run badc");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success()
+            && err.contains("copy relocation against non-copyable protected symbol `prot_obj`"),
+        "{err}"
+    );
+}
+
 // An object a library's `#pragma export` names is interposable (System V
 // gABI): with the library built from a unit defining it and one reading
 // it, an executable defining the same object takes the library's read,

@@ -2308,6 +2308,9 @@ pub(crate) struct Build {
     /// Mach-O output; empty for shared libraries (which use
     /// `exports`) and on other targets, whose writers ignore it.
     pub dynamic_exports: Vec<DynamicExport>,
+    /// The exports of protected visibility, which an ELF image states as
+    /// `STV_PROTECTED` in `.dynsym`.
+    pub protected_exports: alloc::collections::BTreeSet<String>,
     /// A linked image's static symbol table past its import trampolines,
     /// locals first. Empty where no link produced the build.
     pub image_symbols: Vec<ImageSymbol>,

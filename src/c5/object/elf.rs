@@ -87,6 +87,7 @@ const STB_GLOBAL: u8 = 1;
 const STB_WEAK: u8 = 2;
 const STT_FUNC: u8 = 2;
 const STT_OBJECT: u8 = 1;
+const STV_PROTECTED: u8 = 3;
 const STT_SECTION: u8 = 3;
 const STT_TLS: u8 = 6;
 const SHF_INFO_LINK: u64 = 0x40;
@@ -899,7 +900,7 @@ fn build_dynsym(
             &Elf64Sym {
                 st_name: e.name_off,
                 st_info: e.st_info,
-                st_other: 0, // STV_DEFAULT -- restricted visibility never exports
+                st_other: e.st_other,
                 st_shndx: e.shndx,
                 st_value: e.addr,
                 st_size: e.size,
@@ -1137,6 +1138,7 @@ struct DynsymExport {
     addr: u64,
     size: u64,
     st_info: u8,
+    st_other: u8,
     shndx: u16,
 }
 
@@ -1784,6 +1786,7 @@ impl<'a> ElfImageWriter<'a> {
                 addr: 0,
                 size: 0,
                 st_info: 0,
+                st_other: 0,
                 shndx: 0,
             })
             .collect();
@@ -3060,11 +3063,13 @@ impl<'a> ElfImageWriter<'a> {
         };
         let binding = if e.weak { STB_WEAK } else { STB_GLOBAL };
         let st_type = if e.is_object { STT_OBJECT } else { STT_FUNC };
+        let protected = self.build.protected_exports.contains(&e.name);
         DynsymExport {
             name_off,
             addr,
             size: e.size,
             st_info: (binding << 4) | st_type,
+            st_other: if protected { STV_PROTECTED } else { 0 },
             shndx,
         }
     }

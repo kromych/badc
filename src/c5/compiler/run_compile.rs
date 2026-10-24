@@ -3228,13 +3228,13 @@ impl Compiler {
         }
         // An explicit `visibility` attribute states the answer; without one
         // the enclosing `#pragma GCC visibility` extent supplies it.
-        let hidden = self
+        let visibility = self
             .pending
             .attrs
             .visibility
-            .unwrap_or_else(|| self.lex.visibility_hidden());
-        if hidden {
-            self.symbols[id_idx].is_hidden = true;
+            .unwrap_or_else(|| self.lex.visibility());
+        if visibility.is_some() {
+            self.symbols[id_idx].visibility = visibility;
         }
         if let Some(sec) = self.pending.attrs.section.take() {
             self.symbols[id_idx].section_name = Some(sec);

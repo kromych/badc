@@ -882,6 +882,7 @@ pub(crate) mod test_support {
             label_relocs: Vec::new(),
             exports: Vec::new(),
             dynamic_exports: Vec::new(),
+            protected_exports: Default::default(),
             image_symbols: Vec::new(),
             output_kind: OutputKind::Relocatable,
             shared_lib_name: None,

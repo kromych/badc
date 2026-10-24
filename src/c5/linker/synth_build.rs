@@ -268,6 +268,10 @@ fn synth_program_and_build(
         text_data_ranges: Vec::new(),
         copy_relocs,
         dynamic_exports,
+        protected_exports: (merged.defined.iter())
+            .filter(|(_, sym)| sym.visibility == super::object::STV_PROTECTED)
+            .map(|(name, _)| name.clone())
+            .collect(),
         image_symbols: (merged.symbols.iter())
             .filter(|s| {
                 !(opts.discard_temporaries

@@ -52,9 +52,8 @@ enum PackDirective {
 /// [`Lexer::visibility_stack`] by [`Lexer::apply_visibility_directive`].
 #[derive(Debug, Clone, Copy)]
 enum VisibilityDirective {
-    /// `push(<vis>)` -- the payload is whether `<vis>` is non-preemptible
-    /// (`hidden` / `internal`).
-    Push(bool),
+    /// `push(<vis>)`, `None` for `default`.
+    Push(Option<crate::c5::program::SymVisibility>),
     /// `pop` -- drop one frame (no-op at the bottom).
     Pop,
 }
@@ -361,9 +360,7 @@ fn parse_pragma_visibility_line(body: &[u8]) -> Option<VisibilityDirective> {
     let after_open = rest.strip_prefix('(')?;
     let close = after_open.find(')')?;
     let vis = after_open[..close].trim();
-    Some(VisibilityDirective::Push(
-        vis == "hidden" || vis == "internal",
-    ))
+    crate::c5::program::SymVisibility::from_gcc_name(vis).map(VisibilityDirective::Push)
 }
 
 /// `pragma STDC FP_CONTRACT ON|OFF|DEFAULT` (C99 7.12.2) as the state it
@@ -611,7 +608,7 @@ pub(crate) struct Lexer {
     /// Scanned inline like `pack`, and read by the declaration
     /// paths as the default for a declaration that carries no explicit
     /// `visibility` attribute.
-    visibility_stack: Vec<bool>,
+    visibility_stack: Vec<Option<crate::c5::program::SymVisibility>>,
     /// Whether `#pragma STDC FP_CONTRACT` is on at the current position
     /// (C99 7.12.2): a product may be contracted with the add or subtract
     /// of the same expression that uses it. Scanned inline like `pack`.
@@ -808,7 +805,7 @@ impl Lexer {
             // happen via `apply_pack_directive`.
             pack: DEFAULT_PACK,
             pack_saved: Vec::new(),
-            visibility_stack: vec![false],
+            visibility_stack: vec![None],
             fp_contract: true,
             fp_contract_default: true,
         }
@@ -831,12 +828,10 @@ impl Lexer {
         )
     }
 
-    /// Whether the visibility in effect at the current source position is
-    /// non-preemptible, i.e. inside a `#pragma GCC visibility
-    /// push(hidden)` (or `internal`) extent. Default visibility outside
-    /// any such extent.
-    pub fn visibility_hidden(&self) -> bool {
-        *self.visibility_stack.last().unwrap_or(&false)
+    /// The visibility the `#pragma GCC visibility` extent at the current
+    /// source position states; `None`, default visibility, outside any.
+    pub fn visibility(&self) -> Option<crate::c5::program::SymVisibility> {
+        self.visibility_stack.last().copied().flatten()
     }
 
     /// Active `#pragma pack(N)` value at the current source
@@ -1464,9 +1459,9 @@ impl Lexer {
 
     fn apply_visibility_directive(&mut self, dir: VisibilityDirective) {
         match dir {
-            VisibilityDirective::Push(hidden) => self.visibility_stack.push(hidden),
+            VisibilityDirective::Push(vis) => self.visibility_stack.push(vis),
             VisibilityDirective::Pop => {
-                // Keep the bottom frame so `visibility_hidden()` always
+                // Keep the bottom frame so `visibility()` always
                 // has an answer; popping past it is a user error.
                 if self.visibility_stack.len() > 1 {
                     self.visibility_stack.pop();

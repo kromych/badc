@@ -1758,8 +1758,8 @@ impl<'a> RelocWriter<'a> {
         names.visibility = program
             .symbols
             .iter()
-            .filter(|s| s.is_hidden && s.is_link_entity() && !s.name.is_empty())
-            .map(|s| (s.link_name(), SymVisibility::Hidden))
+            .filter(|s| s.is_link_entity() && !s.name.is_empty())
+            .filter_map(|s| Some((s.link_name(), s.visibility?)))
             .chain(program.asm_visibility.iter().map(|(n, v)| (n.as_str(), *v)))
             .collect();
         for (&ent_pc, name) in build.func_ent_pcs.iter().zip(&build.func_names) {

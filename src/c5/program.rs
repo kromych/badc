@@ -89,6 +89,18 @@ pub enum SymVisibility {
 }
 
 impl SymVisibility {
+    /// GCC's `visibility` operand: `None` for an unknown one, `Some(None)`
+    /// for `default`.
+    pub fn from_gcc_name(name: &str) -> Option<Option<Self>> {
+        Some(match name {
+            "default" => None,
+            "hidden" => Some(SymVisibility::Hidden),
+            "internal" => Some(SymVisibility::Internal),
+            "protected" => Some(SymVisibility::Protected),
+            _ => return None,
+        })
+    }
+
     /// The `st_other` visibility value.
     pub fn stv(self) -> u8 {
         self as u8

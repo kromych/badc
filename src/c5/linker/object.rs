@@ -242,6 +242,10 @@ pub struct SharedLibrary {
     /// The names the library's dynamic symbols reference and do not define,
     /// which an executable defining one exports (GNU ld's `ref_dynamic`).
     pub references: alloc::collections::BTreeSet<String>,
+    /// The subset of `exports` of protected visibility (`STV_PROTECTED`):
+    /// the library binds its own references to them, so an image may not
+    /// take a copy of one.
+    pub protected_exports: alloc::collections::BTreeSet<String>,
     /// Whether this record was read from a library image. A description
     /// the target supplies instead -- the C library its headers describe
     /// -- carries no version data of its own, so the link must not read
@@ -274,6 +278,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
     let mut tls_exports = alloc::collections::BTreeSet::new();
     let mut object_sizes = alloc::collections::BTreeMap::new();
     let mut references = alloc::collections::BTreeSet::new();
+    let mut protected_exports = alloc::collections::BTreeSet::new();
     for i in 0..ehdr.e_shnum as usize {
         let sh = shdr(i)?;
         if sh.sh_type == SHT_DYNSYM {
@@ -298,6 +303,9 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
                 if sym.st_shndx == 0 {
                     references.insert(name);
                     continue;
+                }
+                if sym.st_other & 3 == STV_PROTECTED {
+                    protected_exports.insert(name.clone());
                 }
                 // STT_OBJECT (1) is a data object; a reference to it must
                 // reach the object's address, not a PLT stub.
@@ -345,6 +353,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         export_versions: crate::c5::object::so_versions::parse_export_versions(bytes),
         from_image: true,
         references,
+        protected_exports,
     })
 }
 

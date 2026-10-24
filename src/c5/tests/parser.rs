@@ -3862,6 +3862,45 @@ fn address_of_a_thread_local_is_not_a_constant_expression() {
 }
 
 #[test]
+fn visibility_takes_gccs_four_operands() {
+    // GCC `visibility` and `#pragma GCC visibility push`: default, hidden,
+    // internal or protected, kept as stated; another operand is refused.
+    use crate::c5::program::SymVisibility as V;
+    let program = Compiler::new(
+        "__attribute__((visibility(\"protected\"))) int p = 1;\n\
+         __attribute__((visibility(\"internal\"))) int i = 1;\n\
+         #pragma GCC visibility push(protected)\nint q = 1;\n\
+         __attribute__((visibility(\"default\"))) int d = 1;\n\
+         #pragma GCC visibility pop\nint main(void) { return 0; }\n"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let vis = |n: &str| {
+        program
+            .symbols
+            .iter()
+            .find(|s| s.name == n)
+            .expect(n)
+            .visibility
+    };
+    assert_eq!(
+        ["p", "i", "q", "d", "main"].map(vis),
+        [
+            Some(V::Protected),
+            Some(V::Internal),
+            Some(V::Protected),
+            None,
+            None
+        ]
+    );
+    expect_compile_error(
+        "__attribute__((visibility(\"bogus\"))) int b;\nint main(void) { return 0; }\n",
+        "`visibility` operand `bogus` is not one of default, hidden, protected or internal",
+    );
+}
+
+#[test]
 fn pragma_export_names_a_function_or_an_object_this_unit_defines() {
     // An object with external linkage the unit defines is exported by its
     // link name; a `static` one, an `extern` declaration and a thread-local

@@ -347,6 +347,13 @@ fn patch_data_pcrel_relocs(
     relocs: &[super::link::DataPcRel],
 ) -> Result<(), C5Error> {
     for r in relocs {
+        if r.image_relative {
+            return Err(link_err(
+                Code::OBJECT_FORMAT,
+                MODULE,
+                "an image-relative data slot names a PE construct; an ELF image has no image base",
+            ));
+        }
         let slot = r.slot_offset as usize;
         let width = r.width as usize;
         if slot + width > data.len() {
@@ -1026,6 +1033,7 @@ fn patch_data_refs(
             | NativeSymSection::Abs
             | NativeSymSection::Common
             | NativeSymSection::Got
+            | NativeSymSection::ImageBase
             | NativeSymSection::Tls
             | NativeSymSection::DebugAbbrev
             | NativeSymSection::DebugLine

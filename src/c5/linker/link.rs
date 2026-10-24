@@ -51,7 +51,7 @@ use crate::c5::object::elf_reloc_types::{
     R_AARCH64_TLS_DTPREL64, R_AARCH64_TLSDESC_ADD_LO12, R_AARCH64_TLSDESC_ADR_PAGE21,
     R_AARCH64_TLSDESC_CALL, R_AARCH64_TLSDESC_LD64_LO12, R_AARCH64_TLSGD_ADD_LO12_NC,
     R_AARCH64_TLSGD_ADR_PAGE21, R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21,
-    R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, R_X86_64_32, R_X86_64_32S, R_X86_64_64,
+    R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, R_PE_ADDR32NB, R_X86_64_32, R_X86_64_32S, R_X86_64_64,
     R_X86_64_DTPOFF32, R_X86_64_DTPOFF64, R_X86_64_GOT64, R_X86_64_GOTOFF64, R_X86_64_GOTPC32,
     R_X86_64_GOTPC32_TLSDESC, R_X86_64_GOTPC64, R_X86_64_GOTPCREL, R_X86_64_GOTTPOFF,
     R_X86_64_PC32, R_X86_64_PC64, R_X86_64_PLT32, R_X86_64_PLTOFF64, R_X86_64_REX_GOTPCRELX,
@@ -65,7 +65,10 @@ use crate::c5::object::elf_reloc_types::{
 /// The tag this module's diagnostics carry.
 const MODULE: &str = "";
 
-pub(crate) use crate::c5::object::elf_reloc_types::GOT_BASE_SYMBOL;
+pub(crate) use crate::c5::object::elf_reloc_types::{GOT_BASE_SYMBOL, IMAGE_BASE_SYMBOL};
+
+/// The slot the loader writes a PE image's TLS index to.
+pub(crate) const TLS_INDEX: &str = "_tls_index";
 
 /// A relocation whose site reads a GOT slot: the value it wants is the
 /// symbol's address, taken from storage the loader fills, not a
@@ -507,9 +510,9 @@ fn merged_target(
             Ok(MergedTarget::Data(value + addend))
         }
         NativeSymSection::Bss => Ok(MergedTarget::Data(data_len as i64 + value + addend)),
-        // The GOT is not part of either merged stream; a reference to
-        // it parks on its own section rather than an offset.
+        // The GOT and the image base are in neither merged stream.
         NativeSymSection::Got
+        | NativeSymSection::ImageBase
         | NativeSymSection::Undef
         | NativeSymSection::Abs
         | NativeSymSection::Common
@@ -548,6 +551,8 @@ pub struct DataPcRel {
     pub anchor: MergedTarget,
     /// Slot width in bytes: 4 or 8.
     pub width: u8,
+    /// The slot holds `S + A - ImageBase`, PE's image-relative address.
+    pub image_relative: bool,
 }
 
 /// Where a defined symbol lives in the merged image, and the
@@ -901,14 +906,17 @@ fn group_named_zerofill(
 
 /// Whether a reference to `name` needs no archive member: the link defines
 /// the init/fini array bounds, a named section's `__start_` / `__stop_`,
-/// the GOT base and the thread-local module base once layout is known, and
-/// an executable's thread-local transitions remove the `__tls_get_addr`
-/// calls. Archive selection runs before layout.
+/// the GOT base, a PE image's base and TLS index slot and the thread-local
+/// module base once layout is known, and an executable's thread-local
+/// transitions remove the `__tls_get_addr` calls. Archive selection runs
+/// before layout.
 pub fn link_resolves_symbol(name: &str) -> bool {
     matches!(
         name,
         "__init_array_start" | "__init_array_end" | "__fini_array_start" | "__fini_array_end"
     ) || name == GOT_BASE_SYMBOL
+        || name == IMAGE_BASE_SYMBOL
+        || name == TLS_INDEX
         || name == TLS_MODULE_BASE
         || name == TLS_GET_ADDR
         || name.starts_with("__start_")
@@ -988,6 +996,8 @@ pub struct LinkOptions {
     pub export_data: bool,
     /// The format has no copy relocation (Mach-O, PE).
     pub no_copy_relocs: bool,
+    /// The image is PE: the link defines `__ImageBase`.
+    pub pe_image: bool,
 }
 
 /// [`link_native_objects_with_shared_libs`] under `opts`.
@@ -1129,6 +1139,7 @@ struct Link<'a> {
     export_all: bool,
     export_data: bool,
     no_copy_relocs: bool,
+    pe_image: bool,
     preemptible: hashbrown::HashSet<&'a str>,
     shared_libs: &'a [SharedLibrary],
     /// Union of every shared library's exports: an undefined global
@@ -1279,6 +1290,7 @@ impl<'a> Link<'a> {
             export_all: opts.export_all,
             export_data: opts.export_data,
             no_copy_relocs: opts.no_copy_relocs,
+            pe_image: opts.pe_image,
             preemptible: hashbrown::HashSet::new(),
             shared_libs,
             shlib_exports: shared_libs
@@ -1682,7 +1694,7 @@ impl<'a> Link<'a> {
         site: &RelocSite<'_>,
         resolver: &ResolverCalls,
     ) -> Result<(), C5Error> {
-        if self.shared {
+        if self.shared && !self.teb_tls(unit) {
             return self.apply_shared_tls_reloc(unit, sym, reloc, patch_offset, site);
         }
         let machine = self.machine;
@@ -1920,7 +1932,16 @@ impl<'a> Link<'a> {
                 .library_thread_local(&sym.name)
                 .map(TlsBinding::Library);
         };
+        if self.teb_tls(unit) {
+            return Ok(TlsBinding::Static(offset as i64));
+        }
         Ok(TlsBinding::Static(self.tp_offset(offset)))
+    }
+
+    /// The unit reaches its thread-locals in the TEB block `_tls_index`
+    /// selects: every PE image, and badc's own Windows objects.
+    fn teb_tls(&self, unit: usize) -> bool {
+        self.pe_image || !self.objs[unit].tls_index_fixups.is_empty()
     }
 
     /// A reference other than a thread-local access to a name the binding
@@ -2363,6 +2384,26 @@ impl<'a> Link<'a> {
         for (name, value) in weak_absolute {
             self.absolute_defined.entry(name).or_insert(value);
         }
+        // A name nothing defines takes its alternate's definition, transitively.
+        let objs = self.objs;
+        let mut progress = true;
+        while progress {
+            progress = false;
+            for (name, alt) in objs.iter().flat_map(|o| &o.alternate_names) {
+                let (name, alt) = (name.as_str(), alt.as_str());
+                if self.defined.contains_key(name) || self.absolute_defined.contains_key(name) {
+                    continue;
+                }
+                if let Some(&d) = self.defined.get(alt) {
+                    self.defined.insert(Cow::Borrowed(name), d);
+                } else if let Some(&v) = self.absolute_defined.get(alt) {
+                    self.absolute_defined.insert(name, v);
+                } else {
+                    continue;
+                }
+                progress = true;
+            }
+        }
         Ok(())
     }
 
@@ -2562,6 +2603,44 @@ impl<'a> Link<'a> {
                     size: 0,
                     kind: super::object::STT_OBJECT,
                     visibility: super::object::STV_DEFAULT,
+                    weak: false,
+                },
+            );
+        }
+        let objs = self.objs;
+        let reads_tls_index = (objs.iter().flat_map(|o| &o.symbols))
+            .any(|s| s.name == TLS_INDEX && s.section == NativeSymSection::Undef && s.binding != 0);
+        if self.pe_image && reads_tls_index && !self.defined.contains_key(TLS_INDEX) {
+            self.bss_size = align_usize(self.bss_size, 4);
+            let offset = self.bss_size as u64;
+            self.bss_size += 4;
+            self.defined.insert(
+                Cow::Borrowed(TLS_INDEX),
+                MergedSymbol {
+                    section: NativeSymSection::Bss,
+                    value: offset,
+                    size: 4,
+                    kind: super::object::STT_OBJECT,
+                    visibility: super::object::STV_HIDDEN,
+                    weak: false,
+                },
+            );
+            self.section_map.bss.push(SectionContribution {
+                input: None,
+                name: TLS_INDEX.to_string(),
+                offset,
+                size: 4,
+            });
+        }
+        if self.pe_image && !self.defined.contains_key(IMAGE_BASE_SYMBOL) {
+            self.defined.insert(
+                Cow::Borrowed(IMAGE_BASE_SYMBOL),
+                MergedSymbol {
+                    section: NativeSymSection::ImageBase,
+                    value: 0,
+                    size: 0,
+                    kind: super::object::STT_NOTYPE,
+                    visibility: super::object::STV_HIDDEN,
                     weak: false,
                 },
             );
@@ -2954,7 +3033,10 @@ impl<'a> Link<'a> {
             | NativeSymSection::Bss
             | NativeSymSection::Common => true,
             NativeSymSection::Undef => self.defined.get(name).is_some_and(|d| {
-                !matches!(d.section, NativeSymSection::Got | NativeSymSection::Tls)
+                !matches!(
+                    d.section,
+                    NativeSymSection::Got | NativeSymSection::ImageBase | NativeSymSection::Tls
+                )
             }),
             _ => false,
         };
@@ -3222,13 +3304,14 @@ impl<'a> Link<'a> {
             // `.rela.text` shouldn't target a DWARF section symbol; the
             // producer routes those through `.rela.debug_info` /
             // `.rela.debug_line` instead. No input symbol carries the
-            // GOT section.
+            // GOT section or the image base.
             NativeSymSection::DebugAbbrev
             | NativeSymSection::DebugLine
             | NativeSymSection::DebugStr
             | NativeSymSection::DebugInfo
             | NativeSymSection::DebugOther(_)
             | NativeSymSection::Got
+            | NativeSymSection::ImageBase
             | NativeSymSection::Text
             | NativeSymSection::RoData
             | NativeSymSection::RelRo
@@ -3254,15 +3337,16 @@ impl<'a> Link<'a> {
         site: &RelocSite<'_>,
     ) -> Result<(), C5Error> {
         let def = self.defined.get(sym.name.as_str()).copied();
-        if def.map(|d| d.section) == Some(NativeSymSection::Got) {
-            // The GOT's address is the image writer's to decide, so the
-            // site waits for it like any other cross-section reference.
+        if let Some(section @ (NativeSymSection::Got | NativeSymSection::ImageBase)) =
+            def.map(|d| d.section)
+        {
+            // The image writer places the GOT and the image base.
             return park_section_ref(
                 &mut self.pending_imports,
                 patch_offset,
                 reloc,
                 (reloc.addend, reloc.addend),
-                NativeSymSection::Got,
+                section,
                 site,
             );
         }
@@ -3477,7 +3561,7 @@ impl<'a> Link<'a> {
     fn resolve_tls_fixups(&mut self) -> Result<(), C5Error> {
         let objs = self.objs;
         for (i, obj) in objs.iter().enumerate() {
-            let win_teb = !obj.tls_index_fixups.is_empty();
+            let win_teb = self.teb_tls(i);
             if self.shared
                 && !win_teb
                 && let Some((text_off, _)) = obj.elf_tpoff_fixups.first()
@@ -3703,7 +3787,10 @@ impl<'a> Link<'a> {
                 _ => None,
             };
         if let Some(width) = pcrel_width {
-            return self.resolve_data_pcrel(unit, sym, reloc, slot_offset, in_tls, width);
+            return self.resolve_data_pcrel(unit, sym, reloc, slot_offset, in_tls, width, false);
+        }
+        if reloc.rtype == R_PE_ADDR32NB {
+            return self.resolve_data_pcrel(unit, sym, reloc, slot_offset, in_tls, 4, true);
         }
         // The remaining kinds are the 8-byte absolute pointer
         // initializers.
@@ -3846,6 +3933,18 @@ impl<'a> Link<'a> {
                     ),
                 ));
             }
+            NativeSymSection::ImageBase => {
+                return Err(link_err(
+                    Code::UNSUPPORTED,
+                    MODULE,
+                    &format!(
+                        "a data initializer holds the absolute address of `{}`, the image \
+                         base; the merge places it only as an image-relative or \
+                         PC-relative distance",
+                        sym.name,
+                    ),
+                ));
+            }
             NativeSymSection::Got => {
                 return Err(internal_err(
                     MODULE,
@@ -3914,7 +4013,8 @@ impl<'a> Link<'a> {
         Ok(())
     }
 
-    /// A pc-relative data slot. Only defined `.text` targets occur.
+    /// A pc-relative data slot, or with `image_relative` `S + A - ImageBase`.
+    #[allow(clippy::too_many_arguments)]
     fn resolve_data_pcrel(
         &mut self,
         unit: usize,
@@ -3923,20 +4023,30 @@ impl<'a> Link<'a> {
         slot_offset: u64,
         in_tls: bool,
         width: u8,
+        image_relative: bool,
     ) -> Result<(), C5Error> {
+        let what = if image_relative {
+            "image-relative data slot"
+        } else {
+            "pc-relative data slot"
+        };
         let (section, value) = match sym.reference_section() {
             NativeSymSection::Undef | NativeSymSection::Common => {
                 let d = self.defined.get(sym.name.as_str()).ok_or_else(|| {
                     link_err(
                         Code::UNDEFINED_SYMBOL,
                         MODULE,
-                        &format!(
-                            "undefined reference to `{}` (pc-relative data slot)",
-                            sym.name,
-                        ),
+                        &format!("undefined reference to `{}` ({what})", sym.name),
                     )
                 })?;
                 (d.section, d.value as i64)
+            }
+            NativeSymSection::Abs => {
+                return Err(link_err(
+                    Code::UNSUPPORTED,
+                    MODULE,
+                    &format!("a {what} names `{}`, an absolute symbol", sym.name),
+                ));
             }
             other => match self.symbol_offset(unit, sym) {
                 Some(v) => (other, v as i64),
@@ -3951,7 +4061,7 @@ impl<'a> Link<'a> {
                 }
             },
         };
-        if in_tls {
+        if in_tls && !image_relative {
             return Err(link_err(
                 Code::RELOCATION,
                 MODULE,
@@ -3963,11 +4073,39 @@ impl<'a> Link<'a> {
                 ),
             ));
         }
+        if in_tls || section == NativeSymSection::ImageBase {
+            // The image base's RVA is the addend; no RVA slot is in the TLS template.
+            let value = match section {
+                NativeSymSection::ImageBase if image_relative => reloc.addend,
+                _ => {
+                    return Err(link_err(
+                        Code::UNSUPPORTED,
+                        MODULE,
+                        &format!(
+                            "a {what} against `{}` in this stream is not one the merge places",
+                            sym.name
+                        ),
+                    ));
+                }
+            };
+            let seg = if in_tls {
+                &mut self.tls_data
+            } else {
+                &mut self.data
+            };
+            let slot = slot_offset as usize;
+            let field = seg.get_mut(slot..slot + 4).ok_or_else(|| {
+                internal_err(MODULE, &format!("{what} 0x{slot:x} past end of segment"))
+            })?;
+            field.copy_from_slice(&(value as u32).to_le_bytes());
+            return Ok(());
+        }
         self.data_pcrel_relocs.push(DataPcRel {
             slot_offset,
             target: merged_target(section, value, reloc.addend, self.data.len())?,
             anchor: merged_target(section, value, 0, self.data.len())?,
             width,
+            image_relative,
         });
         Ok(())
     }
@@ -5694,6 +5832,9 @@ fn is_aarch64_text_pageref(machine: NativeMachine, rtype: u32) -> bool {
 /// in the writer. The merge pass parks these instead of patching, even
 /// for a `.text` target whose merged offset it already knows.
 fn needs_image_base(machine: NativeMachine, rtype: u32) -> bool {
+    if rtype == R_PE_ADDR32NB {
+        return true;
+    }
     match machine {
         NativeMachine::Aarch64 => {
             is_aarch64_text_pageref(machine, rtype)
@@ -5883,6 +6024,7 @@ mod tests {
             prologue_ends: Vec::new(),
             early_returns: Vec::new(),
             extern_data_names: Vec::new(),
+            alternate_names: Vec::new(),
             debug_info: Vec::new(),
             debug_abbrev: Vec::new(),
             debug_line: Vec::new(),
@@ -7225,6 +7367,7 @@ mod tests {
                 prologue_ends: alloc::vec::Vec::new(),
                 early_returns: alloc::vec::Vec::new(),
                 extern_data_names: alloc::vec::Vec::new(),
+                alternate_names: alloc::vec::Vec::new(),
                 debug_info: alloc::vec::Vec::new(),
                 debug_abbrev: alloc::vec::Vec::new(),
                 debug_line: alloc::vec::Vec::new(),

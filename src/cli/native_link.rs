@@ -7,8 +7,8 @@ use super::compile::{CompileCfg, compile_native_tu, compile_units, worker_count}
 use super::diag::{eprint_diagnostic, eprint_error, rendered};
 
 use super::inputs::{
-    Inputs, LinkInput, StdinSource, fat_slice_for_target, machine_label, target_machine,
-    unreadable_object_reason,
+    Inputs, LinkInput, StdinSource, fat_slice_for_target, foreign_object_reason, machine_label,
+    target_machine, unreadable_object_reason,
 };
 use super::options::Mode;
 use super::output::{post_write_native, write_output};
@@ -419,6 +419,20 @@ impl EmbeddedSources<'_> {
     }
 }
 
+/// Parse the object `label` names, refusing one foreign to `target`.
+fn parse_input_object(bytes: &[u8], label: String, target: badc::Target) -> badc::NativeObject {
+    let mut o = badc::parse_native_object(bytes).unwrap_or_else(|e| {
+        eprint_diagnostic(format!("badc: {label}: {e}"));
+        std::process::exit(1);
+    });
+    if let Some(why) = foreign_object_reason(bytes, &o, target) {
+        eprint_diagnostic(format!("badc: error: `{label}` {why}"));
+        std::process::exit(1);
+    }
+    o.source = label;
+    o
+}
+
 /// Read and parse a `.o` input.
 fn read_object_input(obj_path: &str, target: badc::Target) -> badc::NativeObject {
     let bytes = match std::fs::read(obj_path) {
@@ -436,16 +450,7 @@ fn read_object_input(obj_path: &str, target: badc::Target) -> badc::NativeObject
         ));
         std::process::exit(1);
     }
-    match badc::parse_native_object(&bytes) {
-        Ok(mut o) => {
-            o.source = obj_path.to_string();
-            o
-        }
-        Err(e) => {
-            eprint_diagnostic(format!("badc: {obj_path}: {e}"));
-            std::process::exit(1);
-        }
-    }
+    parse_input_object(&bytes, obj_path.to_string(), target)
 }
 
 /// Read and parse an `.a` input's members.
@@ -492,16 +497,8 @@ fn read_archive_members(a_path: &str, target: badc::Target) -> Vec<badc::NativeO
             ));
             std::process::exit(1);
         }
-        match badc::parse_native_object(&member_bytes) {
-            Ok(mut o) => {
-                o.source = format!("{a_path}({})", m.name);
-                out.push(o);
-            }
-            Err(e) => {
-                eprint_diagnostic(format!("badc: {a_path}({}): {e}", m.name));
-                std::process::exit(1);
-            }
-        }
+        let label = format!("{a_path}({})", m.name);
+        out.push(parse_input_object(&member_bytes, label, target));
     }
     out
 }
@@ -616,6 +613,8 @@ struct Selection {
     defined: hashbrown::HashSet<String>,
     undefined: hashbrown::HashMap<String, String>,
     shared: hashbrown::HashSet<String>,
+    /// A COFF alternate name: what a name no member defines stands for.
+    alternates: hashbrown::HashMap<String, String>,
     inclusions: Vec<badc::ArchiveInclusion>,
 }
 
@@ -627,6 +626,9 @@ impl Selection {
     fn account(&mut self, o: &badc::NativeObject) {
         for (name, _) in &o.import_dylib_map {
             self.shared.insert(name.clone());
+        }
+        for (name, alt) in &o.alternate_names {
+            self.alternates.insert(name.clone(), alt.clone());
         }
         for s in &o.symbols {
             if s.binding == 0 {
@@ -692,10 +694,26 @@ impl Selection {
                     }
                 }
             }
-            if !progress {
+            if !progress && !self.take_alternates() {
                 return;
             }
         }
+    }
+
+    /// Undefined names with an alternate ask for it once the archives stall.
+    fn take_alternates(&mut self) -> bool {
+        let stalled: Vec<(String, String)> = (self.alternates.iter())
+            .filter(|(name, _)| self.undefined.contains_key(*name))
+            .map(|(n, a)| (n.clone(), a.clone()))
+            .collect();
+        let mut progress = false;
+        for (name, alt) in stalled {
+            let by = self.undefined.remove(&name).unwrap_or_default();
+            if !self.defined.contains(&alt) && !self.shared.contains(&alt) {
+                progress |= self.undefined.insert(alt, by).is_none();
+            }
+        }
+        progress
     }
 }
 
@@ -915,6 +933,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         export_all: cli.link.export_all,
         export_data: cli.link.export_data,
         no_copy_relocs: cli.target.binary_format() != badc::BinaryFormat::Elf,
+        pe_image: cli.target.binary_format() == badc::BinaryFormat::Pe,
     };
     let mut merged = match badc::link_native_objects_with(image.objs, image.shared_libs, &opts) {
         Ok(m) => m,

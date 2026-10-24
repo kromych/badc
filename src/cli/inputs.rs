@@ -51,7 +51,8 @@ pub(crate) fn fat_slice_for_target(bytes: Vec<u8>, target: Target) -> Vec<u8> {
 /// image -- so a foreign object is named by what it is.
 pub(crate) fn unreadable_object_reason(bytes: &[u8], target: Target) -> String {
     let reads = "badc links ELF relocatable objects on every target, \
-                 and arm64 Mach-O relocatable objects";
+                 arm64 Mach-O relocatable objects, and x86-64 and arm64 COFF objects \
+                 into a PE image";
     // The call sites substitute a fat container by its slice first, so
     // a fat container reaching this point has no slice for the target.
     if badc::is_mach_o_fat(bytes) {
@@ -77,6 +78,28 @@ pub(crate) fn unreadable_object_reason(bytes: &[u8], target: Target) -> String {
         }
         None => format!("is not an object file in any format badc recognises; {reads}"),
     }
+}
+
+/// Why an object cannot join a link for `target`: COFF outside PE, or another machine.
+pub(crate) fn foreign_object_reason(
+    bytes: &[u8],
+    obj: &badc::NativeObject,
+    target: Target,
+) -> Option<String> {
+    if badc::is_coff_object(bytes) && target.binary_format() != badc::BinaryFormat::Pe {
+        return Some(format!(
+            "is a COFF object, which links into a PE image only; --target={} writes a {} image",
+            target.id_str(),
+            target.binary_format().name()
+        ));
+    }
+    (obj.machine != target_machine(target)).then(|| {
+        format!(
+            "is an {} object; the link targets {}",
+            machine_label(obj.machine),
+            machine_label(target_machine(target))
+        )
+    })
 }
 
 /// The file names `-l<name>` looks for on `target`, in `ld`'s order:
@@ -381,8 +404,8 @@ pub(crate) struct Inputs {
 impl Inputs {
     /// Classify every positional input by extension: `.c`, and a name
     /// with no extension, is a C source; `.s` / `.S` / `.sx` an
-    /// assembler source; `.o` a relocatable object; `.a` a static
-    /// archive; `-` the stdin source. Under `--jit` / `--interp` the
+    /// assembler source; `.o` / `.obj` a relocatable object; `.a` /
+    /// `.lib` a static archive; `-` the stdin source. Under `--jit` / `--interp` the
     /// first unrecognised entry starts the program's own argv; every
     /// other mode reports it.
     pub(crate) fn classify(cli: &Cli) -> Self {
@@ -425,12 +448,12 @@ impl Inputs {
                     named.push(Named::Input(LinkInput::Source(sources.len())));
                     sources.push(a.clone());
                 }
-                "o" => {
+                "o" | "obj" => {
                     objects.push(a.clone());
                     link_inputs.push(LinkInputCli::Object(a.clone()));
                     named.push(Named::Input(LinkInput::Object(a.clone())));
                 }
-                "a" => {
+                "a" | "lib" => {
                     archives.push(a.clone());
                     link_inputs.push(LinkInputCli::Archive {
                         path: a.clone(),
@@ -455,8 +478,8 @@ impl Inputs {
                     }
                     eprint_diagnostic(format!(
                         "badc: error: unrecognized input file extension: `{a}` \
-                         (expected a `.c` / `.i` / `.s` / `.S` source, `.o` object, \
-                         or `.a` archive)"
+                         (expected a `.c` / `.i` / `.s` / `.S` source, `.o` / `.obj` \
+                         object, or `.a` / `.lib` archive)"
                     ));
                     std::process::exit(1);
                 }

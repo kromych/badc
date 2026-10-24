@@ -43,4 +43,22 @@ void __stack_chk_fail(void) {
     __c5_stack_chk_fail();
 }
 
-#endif // __linux__ / __APPLE__
+#elif defined(_WIN32) && defined(__x86_64__)
+
+// MSVC's `/GS`: a frame passes `__security_cookie` xor rsp in rcx to
+// `__security_check_cookie` with its return value live, so the check touches
+// rcx and the flags only; a mismatch is `__fastfail(2)`
+// (FAST_FAIL_STACK_COOKIE_CHECK_FAILURE). The value is the C runtime's default.
+unsigned long long __security_cookie = 0x00002B992DDFA232ULL;
+
+__asm__(".text\n"
+        ".globl __security_check_cookie\n"
+        "__security_check_cookie:\n"
+        "  cmpq __security_cookie(%rip), %rcx\n"
+        "  jne 1f\n"
+        "  ret\n"
+        "1:\n"
+        "  movl $2, %ecx\n"
+        "  int $0x29\n");
+
+#endif // __linux__ / __APPLE__ / _WIN32

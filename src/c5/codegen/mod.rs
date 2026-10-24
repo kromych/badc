@@ -2119,9 +2119,8 @@ pub(crate) struct Build {
     /// ELF writer resolves them against the `.got` it lays out and the
     /// other container writers reject them.
     pub got_base_fixups: Vec<GotBaseFixup>,
-    /// GOT-relative fields, populated and resolved like
-    /// `got_base_fixups`; see [`GotRelField`].
-    pub got_rel_fields: Vec<GotRelField>,
+    /// Fields holding the distance between two image addresses; see [`ImageRelField`].
+    pub image_rel_fields: Vec<ImageRelField>,
     /// Object-linked PC-relative fields that read an import's slot.
     /// Populated only by the multi-object synthesizer; see
     /// [`GotPcRelFixup`].
@@ -2256,6 +2255,8 @@ pub(crate) struct Build {
     /// displacement to the slot. Empty for non-Win64 targets and
     /// for Win64 programs with no `_Thread_local` globals.
     pub tls_index_fixups: Vec<TlsIndexFixup>,
+    /// The data-byte offset of a link-defined `_tls_index` the TLS directory names.
+    pub tls_index_slot: Option<u64>,
     /// macOS arm64 Thread-Local Variable fixups -- one entry per
     /// `Inst::TlsAddr` site on macOS. Each records an
     /// `adrp + add` pair to be patched with the address of the
@@ -2727,13 +2728,11 @@ pub(crate) struct GotPcRelFixup {
     pub addend: i64,
 }
 
-/// A field of an object-linked x86-64 instruction holding the distance
-/// between two image addresses, one of them the GOT base: the forms the
-/// medium and large PIC code models address through
-/// `_GLOBAL_OFFSET_TABLE_` (psABI 4.4.1). The field takes
-/// `to + addend - from`.
+/// A field of an object-linked instruction holding `to + addend - from`: the
+/// x86-64 medium and large PIC forms relative to `_GLOBAL_OFFSET_TABLE_`
+/// (psABI 4.4.1), and PE's image-relative ones, from `__ImageBase`.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct GotRelField {
+pub(crate) struct ImageRelField {
     /// Byte offset of the field within `Build::text`.
     pub site_text_offset: u64,
     pub to: ImageAddr,
@@ -2750,6 +2749,8 @@ pub(crate) enum ImageAddr {
     Site,
     /// The GOT base `_GLOBAL_OFFSET_TABLE_` names.
     GotBase,
+    /// The image's base address, PE `__ImageBase`.
+    ImageBase,
     /// A `Build::text` byte offset.
     Text(u64),
     /// A byte offset in the data-byte space, zero-fill tail included.
@@ -3016,6 +3017,8 @@ pub(crate) struct DataPcRelReloc {
     pub target_in_data: bool,
     /// Slot width in bytes: 4 or 8.
     pub width: u8,
+    /// The slot holds the RVA `target_vaddr - image base`, not a distance.
+    pub image_relative: bool,
 }
 
 /// Text-sited counterpart of [`DataPcRelReloc`]: a plain 4- or 8-byte

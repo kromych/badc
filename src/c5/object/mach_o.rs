@@ -2668,7 +2668,7 @@ impl<'a> MachOWriter<'a> {
             l.data_vmaddr(),
             &build.got_fixups,
         )?;
-        if !build.got_base_fixups.is_empty() || !build.got_rel_fields.is_empty() {
+        if !build.got_base_fixups.is_empty() || !build.image_rel_fields.is_empty() {
             return Err(C5Error::hard(
                 Code::OBJECT_FORMAT,
                 "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a Mach-O image has none",
@@ -2773,6 +2773,7 @@ impl<'a> MachOWriter<'a> {
             build,
             ro_len,
             code_vmaddr_base,
+            None,
             &|off| self.data_off_to_vaddr(off),
         )?;
         let tls_sites = if self.tls_present && l.thread_storage_initialised {

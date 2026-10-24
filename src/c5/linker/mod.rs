@@ -15,7 +15,8 @@
 //!                                                  |
 //!                  archive::write_archive ---> libbaz.a
 //!   foo.o, bar.o, libbaz.a, plus -l/-L paths
-//!      |  parse_native_elf -> link_native_objects -> emit_*_plt
+//!      |  parse_native_object (ELF / Mach-O / COFF)
+//!      |    -> link_native_objects -> emit_*_plt
 //!      v
 //!   MergedNative  ->  write_native_image_from_merged
 //!      v
@@ -34,6 +35,8 @@
 mod archive;
 #[cfg(feature = "std")]
 pub(crate) mod attributes;
+#[cfg(feature = "std")]
+pub(crate) mod coff_object;
 #[cfg(feature = "std")]
 pub(crate) mod comdat;
 #[cfg(feature = "std")]
@@ -103,6 +106,9 @@ fn tagged(module: &str, msg: &str) -> alloc::string::String {
 #[cfg(feature = "std")]
 pub use archive::read_archive_at;
 pub use archive::{ArchiveMember, read_archive, write_archive};
+#[cfg(feature = "std")]
+#[allow(unused_imports)]
+pub use coff_object::{is_coff_object, parse_native_coff};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use image::write_executable_elf64;

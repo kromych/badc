@@ -59,6 +59,13 @@ pub(crate) const R_X86_64_TLSDESC: u32 = 36;
 pub(crate) const R_X86_64_GOTPCRELX: u32 = 41;
 pub(crate) const R_X86_64_REX_GOTPCRELX: u32 = 42;
 
+// ---- PE/COFF forms no ELF psABI numbers ----
+/// `S + A - ImageBase` in 32 bits, the RVA of COFF's `ADDR32NB` on both
+/// machines; numbered past every psABI range.
+pub(crate) const R_PE_ADDR32NB: u32 = 0x1_0003;
+/// The image base, PE `__ImageBase`: the address of the DOS header.
+pub(crate) const IMAGE_BASE_SYMBOL: &str = "__ImageBase";
+
 // ---- i386 ----
 pub(crate) const R_386_32: u32 = 1;
 pub(crate) const R_386_PC32: u32 = 2;
@@ -362,11 +369,17 @@ pub(crate) fn aarch64_abs_field(rtype: u32) -> Option<(u32, AbsCheck)> {
 /// type <n>` otherwise. Diagnostics name a relocation the way
 /// `readelf -r` prints it.
 pub(crate) fn x86_64_reloc_desc(rtype: u32) -> String {
+    if rtype == R_PE_ADDR32NB {
+        return "IMAGE_REL_AMD64_ADDR32NB".into();
+    }
     desc(X86_64_RELOC_NAMES, rtype)
 }
 
 /// aarch64 counterpart of [`x86_64_reloc_desc`].
 pub(crate) fn aarch64_reloc_desc(rtype: u32) -> String {
+    if rtype == R_PE_ADDR32NB {
+        return "IMAGE_REL_ARM64_ADDR32NB".into();
+    }
     desc(AARCH64_RELOC_NAMES, rtype)
 }
 

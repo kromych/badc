@@ -263,6 +263,7 @@ pub(crate) fn fold_asm_sections(
                         target_anchor: target_offset,
                         target_in_data,
                         width: r.width,
+                        image_relative: false,
                     });
                     continue;
                 }

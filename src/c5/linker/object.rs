@@ -752,6 +752,8 @@ pub enum NativeSymSection {
     /// address the image writer decides, and a reference to it parks
     /// until the writer commits the GOT's placement.
     Got,
+    /// PE `__ImageBase`, which the writer places.
+    ImageBase,
     /// `SHN_COMMON` -- C99 6.9.2 tentative definition. The
     /// symbol carries a size (`NativeSymbol::size`) and a
     /// requested byte alignment (`NativeSymbol::value`); the
@@ -1064,6 +1066,9 @@ pub struct NativeObject {
     /// classify binds a slot rather than a call stub. A branch is
     /// classified by its kind and never consults this.
     pub extern_data_names: Vec<String>,
+    /// `(name, alternate)`: an undefined `name` resolves to `alternate`, from
+    /// a COFF weak external or a `/alternatename:` directive.
+    pub alternate_names: Vec<(String, String)>,
     /// Standard DWARF 4 sections the `-c` writer emits.
     /// Address-bearing slots inside are placeholders paired with
     /// entries in `debug_info_relocs` / `debug_line_relocs`; the
@@ -1142,16 +1147,20 @@ pub fn is_elf_object(bytes: &[u8]) -> bool {
 }
 
 /// True when `bytes` is a relocatable object in a format the linker
-/// reads: ELF `ET_REL` or Mach-O `MH_OBJECT`.
+/// reads: ELF `ET_REL`, Mach-O `MH_OBJECT` or a COFF object.
 pub fn is_native_object(bytes: &[u8]) -> bool {
-    is_elf_object(bytes) || super::mach_o_object::is_mach_o_object(bytes)
+    is_elf_object(bytes)
+        || super::mach_o_object::is_mach_o_object(bytes)
+        || super::coff_object::is_coff_object(bytes)
 }
 
-/// Parse a relocatable object of either format the linker reads,
+/// Parse a relocatable object of any format the linker reads,
 /// dispatching on the leading magic.
 pub fn parse_native_object(bytes: &[u8]) -> Result<NativeObject, C5Error> {
     if super::mach_o_object::is_mach_o_object(bytes) {
         super::mach_o_object::parse_native_mach_o(bytes)
+    } else if super::coff_object::is_coff_object(bytes) {
+        super::coff_object::parse_native_coff(bytes)
     } else {
         parse_native_elf(bytes)
     }
@@ -1250,6 +1259,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         prologue_ends: note.prologue_ends,
         early_returns: note.early_returns,
         extern_data_names: note.extern_data_names,
+        alternate_names: Vec::new(),
         debug_info: debug.info,
         debug_abbrev: debug.abbrev,
         debug_line: debug.line,

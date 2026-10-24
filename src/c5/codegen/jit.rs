@@ -792,6 +792,11 @@ mod jit_impl {
         {
             let bytes = region.as_mut_slice(build.data.len());
             for r in &build.data_pcrel_relocs {
+                if r.image_relative {
+                    return Err(C5Error::internal(
+                        "JIT: an image-relative data slot has no image base",
+                    ));
+                }
                 let base = if r.target_in_data {
                     data_vmaddr
                 } else {

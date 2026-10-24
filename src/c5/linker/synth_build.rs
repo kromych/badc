@@ -45,9 +45,9 @@ use crate::c5::error::C5Error;
 use crate::c5::object::elf_reloc_types::{
     R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE, R_AARCH64_ADR_PREL_PG_HI21,
     R_AARCH64_CALL26, R_AARCH64_JUMP26, R_AARCH64_LD64_GOT_LO12_NC,
-    R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21, R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, R_X86_64_GOT64,
-    R_X86_64_GOTOFF64, R_X86_64_GOTPC32, R_X86_64_GOTPC64, R_X86_64_GOTPCREL, R_X86_64_GOTTPOFF,
-    R_X86_64_PC32, R_X86_64_PLT32, R_X86_64_PLTOFF64, R_X86_64_REX_GOTPCRELX,
+    R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21, R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC, R_PE_ADDR32NB,
+    R_X86_64_GOT64, R_X86_64_GOTOFF64, R_X86_64_GOTPC32, R_X86_64_GOTPC64, R_X86_64_GOTPCREL,
+    R_X86_64_GOTTPOFF, R_X86_64_PC32, R_X86_64_PLT32, R_X86_64_PLTOFF64, R_X86_64_REX_GOTPCRELX,
     aarch64_ldst_lo12_scale, aarch64_movw_field,
 };
 use crate::c5::object::write_native_image;
@@ -189,7 +189,7 @@ fn synth_program_and_build(
     let SynthFixups {
         got: got_fixups,
         got_base: got_base_fixups,
-        got_rel: got_rel_fields,
+        got_rel: image_rel_fields,
         got_pcrel: got_pcrel_fixups,
         data: data_fixups,
         func: func_fixups,
@@ -298,7 +298,7 @@ fn synth_program_and_build(
         entry_offset,
         got_fixups,
         got_base_fixups,
-        got_rel_fields,
+        image_rel_fields,
         got_pcrel_fixups,
         data_fixups,
         // Object-linked jump tables ride in the merged data stream
@@ -338,6 +338,9 @@ fn synth_program_and_build(
         tls_got: merged.tls_got.clone(),
         tls_got_fields: merged.tls_got_fields.clone(),
         static_tls: merged.static_tls,
+        tls_index_slot: (merged.defined.get(super::link::TLS_INDEX))
+            .filter(|d| d.section == NativeSymSection::Bss)
+            .map(|d| merged.data.len() as u64 + d.value),
         tls_index_fixups: merged
             .tls_index_fixups
             .iter()
@@ -758,7 +761,11 @@ fn synth_emitted_relocs(merged: &MergedNative) -> Vec<EmittedFinalReloc> {
         v.push(EmittedFinalReloc {
             site: EmitStream::Data,
             site_offset: d.slot_offset,
-            rtype: prel32,
+            rtype: if d.image_relative {
+                R_PE_ADDR32NB
+            } else {
+                prel32
+            },
             target,
             addend,
         });
@@ -782,6 +789,7 @@ fn synth_data_pcrel(merged: &MergedNative) -> Vec<crate::c5::codegen::DataPcRelR
                 target_anchor: anchor as u64,
                 target_in_data,
                 width: r.width,
+                image_relative: r.image_relative,
             }
         })
         .collect()
@@ -1015,7 +1023,7 @@ fn dylib_name_from_path(path: &str) -> String {
 struct SynthFixups {
     got: Vec<GotFixup>,
     got_base: Vec<crate::c5::codegen::GotBaseFixup>,
-    got_rel: Vec<crate::c5::codegen::GotRelField>,
+    got_rel: Vec<crate::c5::codegen::ImageRelField>,
     got_pcrel: Vec<crate::c5::codegen::GotPcRelFixup>,
     data: Vec<DataFixup>,
     func: Vec<FuncFixup>,
@@ -1030,7 +1038,7 @@ fn synth_fixups(
 ) -> Result<SynthFixups, C5Error> {
     let mut got_fixups: Vec<GotFixup> = Vec::new();
     let mut got_base_fixups: Vec<crate::c5::codegen::GotBaseFixup> = Vec::new();
-    let mut got_rel: Vec<crate::c5::codegen::GotRelField> = Vec::new();
+    let mut got_rel: Vec<crate::c5::codegen::ImageRelField> = Vec::new();
     let mut got_pcrel: Vec<crate::c5::codegen::GotPcRelFixup> = Vec::new();
     let mut data_fixups: Vec<DataFixup> = Vec::new();
     let mut func_fixups: Vec<FuncFixup> = Vec::new();
@@ -1049,6 +1057,10 @@ fn synth_fixups(
     }
 
     for reloc in &merged.pending_imports {
+        if let Some(field) = image_base_field(merged, reloc)? {
+            got_rel.push(field);
+            continue;
+        }
         // A parked pc-relative data word (`.long x - .` / `.quad x - .`
         // in an executable section, target in the data-byte space) is a
         // plain field, not one of the per-arch instruction shapes below.
@@ -1312,6 +1324,58 @@ fn declined_reloc(
     }
 }
 
+/// The field a parked reference holds when it is measured from or to the
+/// PE image base: an image-relative address (`IMAGE_REL_*_ADDR32NB`), or
+/// the x86-64 RIP-relative distance to `__ImageBase`. `None` for any
+/// other form.
+fn image_base_field(
+    merged: &MergedNative,
+    reloc: &super::link::PendingImportReloc,
+) -> Result<Option<crate::c5::codegen::ImageRelField>, C5Error> {
+    use crate::c5::codegen::{ImageAddr, ImageRelField};
+    let x86 = merged.machine == NativeMachine::X86_64;
+    let (to, from, addend) = match (reloc.rtype, reloc.target_section) {
+        (R_X86_64_PC32 | R_X86_64_PLT32, NativeSymSection::ImageBase) if x86 => {
+            (ImageAddr::ImageBase, ImageAddr::Site, reloc.addend)
+        }
+        (R_PE_ADDR32NB, NativeSymSection::ImageBase) => {
+            (ImageAddr::ImageBase, ImageAddr::ImageBase, reloc.addend)
+        }
+        (R_PE_ADDR32NB, NativeSymSection::Text) => (
+            ImageAddr::Text(reloc.anchor as u64),
+            ImageAddr::ImageBase,
+            reloc.addend - reloc.anchor,
+        ),
+        (
+            R_PE_ADDR32NB,
+            NativeSymSection::RoData
+            | NativeSymSection::RelRo
+            | NativeSymSection::Data
+            | NativeSymSection::Bss,
+        ) => (
+            ImageAddr::Data(reloc.anchor as u64),
+            ImageAddr::ImageBase,
+            reloc.addend - reloc.anchor,
+        ),
+        (R_PE_ADDR32NB, _) | (_, NativeSymSection::ImageBase) => {
+            return Err(declined_reloc(
+                merged,
+                reloc,
+                reloc.rtype,
+                TextAbsolute::Representable,
+            ));
+        }
+        _ => return Ok(None),
+    };
+    Ok(Some(ImageRelField {
+        site_text_offset: reloc.text_offset,
+        to,
+        from,
+        addend,
+        width: 4,
+    }))
+}
+
 /// The field of an x86-64 relocation measured from or to the GOT base,
 /// or `None` for any other form. The merge resolved the symbol: a
 /// section target's offset rides in `addend`, a GOT64 against a symbol
@@ -1322,8 +1386,8 @@ fn x86_64_got_rel_field(
     merged: &MergedNative,
     reloc: &super::link::PendingImportReloc,
     text_abs: TextAbsolute,
-) -> Result<Option<crate::c5::codegen::GotRelField>, C5Error> {
-    use crate::c5::codegen::{GotRelField, ImageAddr};
+) -> Result<Option<crate::c5::codegen::ImageRelField>, C5Error> {
+    use crate::c5::codegen::{ImageAddr, ImageRelField};
     let (to, from, addend, width) = match (reloc.rtype, reloc.target_section) {
         (R_X86_64_GOTPC32, NativeSymSection::Got) => {
             (ImageAddr::GotBase, ImageAddr::Site, reloc.addend, 4)
@@ -1368,7 +1432,7 @@ fn x86_64_got_rel_field(
         ) => return Err(declined_reloc(merged, reloc, reloc.rtype, text_abs)),
         _ => return Ok(None),
     };
-    Ok(Some(GotRelField {
+    Ok(Some(ImageRelField {
         site_text_offset: reloc.text_offset,
         to,
         from,

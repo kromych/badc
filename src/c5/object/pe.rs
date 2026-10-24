@@ -421,6 +421,15 @@ impl<'a> PeWriter<'a> {
         self.layout.text_rva + self.text_prologue_len
     }
 
+    /// The `_tls_index` the TLS directory names: the link's definition, else
+    /// the writer's slot ahead of the directory.
+    fn tls_index_rva(&self) -> u32 {
+        match self.build.tls_index_slot {
+            Some(off) => self.data_off_to_rva(off as u32),
+            None => self.layout.data_rva + self.layout.tls.tls_index_offset_in_data,
+        }
+    }
+
     /// The data families and which sections the image carries, the DWARF
     /// payloads (built first so the section-header count is known before
     /// the layout; empty blobs are dropped, since the loader rejects two
@@ -1071,11 +1080,42 @@ impl<'a> PeWriter<'a> {
             };
             field.copy_from_slice(&disp.to_le_bytes());
         }
-        if !build.got_base_fixups.is_empty() || !build.got_rel_fields.is_empty() {
+        use crate::c5::codegen::ImageAddr;
+        let names_got = |f: &crate::c5::codegen::ImageRelField| {
+            f.to == ImageAddr::GotBase || f.from == ImageAddr::GotBase
+        };
+        if !build.got_base_fixups.is_empty() || build.image_rel_fields.iter().any(names_got) {
             return Err(C5Error::hard(
                 Code::OBJECT_FORMAT,
                 "`_GLOBAL_OFFSET_TABLE_` names an ELF construct; a PE image has no GOT",
             ));
+        }
+        for f in &build.image_rel_fields {
+            let site = f.site_text_offset as usize + prologue as usize;
+            let rva = |a: ImageAddr| match a {
+                ImageAddr::Site => Some(text_rva as i64 + site as i64),
+                ImageAddr::ImageBase => Some(0),
+                ImageAddr::Text(off) => Some(i64::from(text_rva + prologue) + off as i64),
+                ImageAddr::Data(off) => Some(i64::from(self.data_off_to_rva(off as u32))),
+                ImageAddr::ImportSlot(i) => Some(i64::from(l.idata.iat_rva_for_import[i])),
+                ImageAddr::GotBase | ImageAddr::Absolute(_) => None,
+            };
+            let (Some(to), Some(from)) = (rva(f.to), rva(f.from)) else {
+                return Err(Self::internal(format!(
+                    "PE: the field at .text+{site:#x} measures {:?} from {:?}, which have no \
+                     image-relative address",
+                    f.to, f.from
+                )));
+            };
+            let value = to + f.addend - from;
+            let width = f.width as usize;
+            let fits = width == 8 || i32::try_from(value).is_ok() || u32::try_from(value).is_ok();
+            let Some(field) = text.get_mut(site..site + width).filter(|_| fits) else {
+                return Err(Self::internal(format!(
+                    "PE: the image-relative field at .text+{site:#x} cannot take {value:#x}"
+                )));
+            };
+            field.copy_from_slice(&value.to_le_bytes()[..width]);
         }
         for f in &build.data_fixups {
             let instr_off = (f.instr_offset as u32) + prologue;
@@ -1155,7 +1195,7 @@ impl<'a> PeWriter<'a> {
             &build.rodata.rel32,
         )?;
         if !build.tls_index_fixups.is_empty() {
-            let tls_index_rva = l.data_rva + l.tls.tls_index_offset_in_data;
+            let tls_index_rva = self.tls_index_rva();
             for f in &build.tls_index_fixups {
                 let instr_off = (f.instr_offset as u32) + prologue;
                 patch_tls_index_lookup(
@@ -1383,6 +1423,7 @@ impl<'a> PeWriter<'a> {
             self.build,
             self.layout.ro_len as u64,
             IMAGE_BASE + self.text_body_rva() as u64,
+            Some(IMAGE_BASE),
             &|off| IMAGE_BASE + self.data_off_to_rva(off as u32) as u64,
         )
     }
@@ -1442,8 +1483,7 @@ impl<'a> PeWriter<'a> {
                 let tls_init_start_va =
                     IMAGE_BASE + (l.data_rva + l.tls.tls_init_offset_in_data) as u64;
                 let tls_init_end_va = tls_init_start_va + build.tls_data.len() as u64;
-                let tls_index_va =
-                    IMAGE_BASE + (l.data_rva + l.tls.tls_index_offset_in_data) as u64;
+                let tls_index_va = IMAGE_BASE + self.tls_index_rva() as u64;
                 out.extend_from_slice(&tls_init_start_va.to_le_bytes());
                 out.extend_from_slice(&tls_init_end_va.to_le_bytes());
                 out.extend_from_slice(&tls_index_va.to_le_bytes());

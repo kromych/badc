@@ -8564,20 +8564,59 @@ fn pack_padded_typedef_bitfields_cross_the_msvc_boundary() {
 /// Visual Studio vswhere reports, for the host architecture.
 #[cfg(windows)]
 fn windows_cc() -> Option<WindowsCc> {
-    let clang = [
-        std::env::var_os("CC"),
-        Some("clang".into()),
-        Some(r"C:\Program Files\LLVM\bin\clang.exe".into()),
-    ]
-    .into_iter()
-    .flatten()
-    .find(|cc| {
-        Command::new(cc)
-            .arg("--version")
-            .output()
-            .is_ok_and(|o| o.status.success())
-    });
+    let clang = [std::env::var_os("CC")]
+        .into_iter()
+        .flatten()
+        .find(|cc| runs(cc.as_ref()))
+        .or_else(windows_clang);
     clang.map(WindowsCc::Clang).or_else(msvc_cl)
+}
+
+#[cfg(windows)]
+fn runs(cc: &std::ffi::OsStr) -> bool {
+    Command::new(cc)
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+}
+
+/// clang on the path or in LLVM's default install, provided it runs.
+#[cfg(windows)]
+fn windows_clang() -> Option<std::ffi::OsString> {
+    ["clang", r"C:\Program Files\LLVM\bin\clang.exe"]
+        .into_iter()
+        .map(std::ffi::OsString::from)
+        .find(|cc| runs(cc))
+}
+
+/// mingw-w64 gcc for x86-64: on the path, else in an msys2 installation's
+/// `mingw64` / `ucrt64` environment at a drive's root. Its `bin` directory
+/// joins the path its tools run with, as msys2's shell sets.
+#[cfg(all(windows, target_arch = "x86_64"))]
+fn mingw_gcc() -> Option<(PathBuf, std::ffi::OsString)> {
+    let installed = ('C'..='Z').flat_map(|d| {
+        ["mingw64", "ucrt64"].map(|env| PathBuf::from(format!(r"{d}:\msys64\{env}\bin\gcc.exe")))
+    });
+    let on_path = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .map(|d| d.join("gcc.exe"))
+        .collect::<Vec<_>>();
+    on_path
+        .into_iter()
+        .chain(installed)
+        .filter(|gcc| gcc.is_file())
+        .find_map(|gcc| {
+            let mut path = std::ffi::OsString::from(gcc.parent()?);
+            path.push(";");
+            path.push(std::env::var_os("PATH").unwrap_or_default());
+            let out = Command::new(&gcc)
+                .arg("-dumpmachine")
+                .env("PATH", &path)
+                .output()
+                .ok()?;
+            String::from_utf8_lossy(&out.stdout)
+                .starts_with("x86_64-w64-mingw32")
+                .then_some((gcc, path))
+        })
 }
 
 /// MSVC's `cl` for the host architecture and the environment `vcvarsall.bat`
@@ -9394,6 +9433,253 @@ fn dllimport_references_read_the_import_address_slot() {
         );
         let out = Command::new(&exe).output().expect("run");
         assert_eq!(out.status.code(), Some(6), "local{opt}");
+    }
+}
+
+// What a COFF object from another Windows compiler holds when a badc `main`
+// reaches into it and it calls back: functions, initialized and zero-filled
+// data, a static, string literals, a function-pointer table in read-only data
+// and one in data, a jump table, `double` constants, an address with an
+// addend, a thread-local, a frame past a page (a stack probe; MSVC's `/GS`
+// cookie), and, from GNU compilers, a constructor and a weak definition
+// badc's strong one overrides. `main` exits with the number of the first
+// check that fails.
+#[cfg(all(windows, target_arch = "x86_64"))]
+const COFF_PEER_SRC: &str = r#"
+extern int badc_counter;
+extern int badc_twice(int);
+int peer_data = 7;
+int peer_bss;
+static int peer_static = 100;
+const char *peer_greeting = "hello from peer";
+static int peer_add(int a, int b) { return a + b; }
+int peer_mul(int a, int b) { return a * b; }
+int peer_sub(int a, int b) { return a - b; }
+int (*const peer_ops[])(int, int) = { peer_add, peer_mul, peer_sub };
+int (*peer_ops_rw[])(int, int) = { peer_sub, peer_add };
+int peer_switch(int k)
+{
+    switch (k) {
+    case 0: return 11; case 1: return 22; case 2: return 33; case 3: return 44;
+    case 4: return 55; case 5: return 66; case 6: return 77; case 7: return 88;
+    default: return -1;
+    }
+}
+double peer_scale(double x) { return x * 1.5 + 0.25; }
+const char *peer_string(void) { return "literal"; }
+int *peer_static_addr(void) { return &peer_static; }
+int peer_call_back(int x) { badc_counter += x; return badc_twice(x) + peer_static; }
+struct peer_pair { int a; long long b; };
+struct peer_pair peer_pairs[2] = { { 1, 2 }, { 3, 4 } };
+int *peer_into = &peer_pairs[1].a;
+long long peer_sum(int n)
+{
+    long long s = 0;
+    for (int i = 0; i < n; i++)
+        s += peer_pairs[i & 1].a + peer_pairs[i & 1].b;
+    return s;
+}
+int *badc_ptr_from_peer(void) { return &badc_counter; }
+int (*peer_badc_fn)(int) = badc_twice;
+#ifdef _MSC_VER
+__declspec(thread) int peer_tls = 3;
+#else
+_Thread_local int peer_tls = 3;
+#endif
+int peer_tls_bump(void) { return ++peer_tls; }
+int peer_big_frame(int k)
+{
+    volatile char buf[8192];
+    for (int i = 0; i < k; i++)
+        buf[i * 64] = (char)i;
+    return buf[(k - 1) * 64] + buf[64];
+}
+#if defined(__MINGW32__) || defined(__clang__)
+static int ctor_ran;
+__attribute__((constructor)) static void peer_ctor(void) { ctor_ran = 1; }
+int peer_ctor_ran(void) { return ctor_ran; }
+#else
+int peer_ctor_ran(void) { return 1; }
+#endif
+#ifdef __MINGW32__
+__attribute__((weak)) int peer_overridden(void) { return 1; }
+#else
+int peer_overridden(void);
+#endif
+int peer_call_overridden(void) { return peer_overridden(); }
+"#;
+
+#[cfg(all(windows, target_arch = "x86_64"))]
+const COFF_MAIN_SRC: &str = r#"
+#include <string.h>
+int badc_counter = 1;
+int badc_twice(int x) { return 2 * x; }
+int peer_overridden(void) { return 2; }
+extern int peer_data, peer_bss;
+extern const char *peer_greeting;
+extern int peer_mul(int, int), peer_sub(int, int);
+extern int (*const peer_ops[])(int, int);
+extern int (*peer_ops_rw[])(int, int);
+extern int peer_switch(int);
+extern double peer_scale(double);
+extern const char *peer_string(void);
+extern int *peer_static_addr(void);
+extern int peer_call_back(int);
+struct peer_pair { int a; long long b; };
+extern struct peer_pair peer_pairs[2];
+extern int *peer_into;
+extern long long peer_sum(int);
+extern int *badc_ptr_from_peer(void);
+extern int (*peer_badc_fn)(int);
+extern _Thread_local int peer_tls;
+extern int peer_tls_bump(void);
+extern int peer_big_frame(int);
+extern int peer_ctor_ran(void);
+extern int peer_call_overridden(void);
+int main(void)
+{
+    if (peer_data != 7 || peer_bss != 0) return 1;
+    if (strcmp(peer_greeting, "hello from peer")) return 2;
+    if (peer_ops[0](2, 3) != 5 || peer_ops[1](2, 3) != 6 || peer_ops[2] != peer_sub) return 3;
+    if (peer_ops_rw[0](5, 3) != 2 || peer_ops_rw[1](5, 3) != 8) return 4;
+    for (int k = 0; k < 8; k++)
+        if (peer_switch(k) != 11 * (k + 1)) return 5;
+    if (peer_switch(9) != -1) return 6;
+    if (peer_scale(2.0) != 3.25) return 7;
+    if (strcmp(peer_string(), "literal")) return 8;
+    if (*peer_static_addr() != 100) return 9;
+    if (peer_call_back(5) != 110 || badc_counter != 6) return 10;
+    if (peer_into != &peer_pairs[1].a || peer_sum(2) != 10 || peer_sum(64) != 320) return 11;
+    if (badc_ptr_from_peer() != &badc_counter || peer_badc_fn != badc_twice) return 12;
+    if (peer_badc_fn(4) != 8 || peer_mul(6, 7) != 42) return 13;
+    if (peer_tls != 3 || peer_tls_bump() != 4 || peer_tls != 4) return 14;
+    if (peer_big_frame(100) != 100) return 15;
+    if (peer_ctor_ran() != 1) return 16;
+    if (peer_call_overridden() != 2) return 17;
+    return 0;
+}
+"#;
+
+/// A badc `main` links with a COFF object from each Windows compiler the
+/// host has -- clang for the msvc and gnu triples, MSVC's `cl`, mingw-w64 gcc
+/// -- at their unoptimized and optimized levels, and the program runs.
+#[cfg(all(windows, target_arch = "x86_64"))]
+#[test]
+fn coff_objects_from_the_windows_compilers_link_with_a_badc_main() {
+    let dir = tempdir("coff-interop");
+    let peer = write_source(&dir, "peer.c", COFF_PEER_SRC);
+    let main = write_source(&dir, "main.c", COFF_MAIN_SRC);
+    let arch = if cfg!(target_arch = "aarch64") {
+        "aarch64"
+    } else {
+        "x86_64"
+    };
+    let mut objects: Vec<(String, PathBuf)> = Vec::new();
+    let mut compile = |label: String, mut cmd: Command, out_flag: &str| {
+        let obj = dir.join(format!("{label}.obj"));
+        if out_flag.is_empty() {
+            cmd.arg("-o").arg(&obj);
+        } else {
+            cmd.arg(format!("{out_flag}{}", obj.display()));
+        }
+        run(
+            cmd.arg(&peer).current_dir(&dir),
+            &format!("compile the peer with {label}"),
+        );
+        objects.push((label, obj));
+    };
+    let mut found = Vec::new();
+    if let Some(clang) = windows_clang() {
+        for triple in ["pc-windows-msvc", "w64-windows-gnu"] {
+            for opt in ["-O0", "-O2"] {
+                let mut c = Command::new(&clang);
+                c.args([&format!("--target={arch}-{triple}"), opt, "-c"]);
+                compile(format!("clang-{triple}{opt}"), c, "");
+            }
+        }
+        found.push("clang");
+    }
+    if let Some(WindowsCc::Msvc { cl, env }) = msvc_cl() {
+        for opt in ["/Od", "/O2"] {
+            let mut c = Command::new(&cl);
+            c.envs(env.iter().map(|(k, v)| (k, v)))
+                .args(["/nologo", "/c", opt]);
+            compile(format!("cl{}", &opt[1..]), c, "/Fo");
+        }
+        found.push("cl");
+    }
+    if let Some((gcc, path)) = mingw_gcc() {
+        for opt in ["-O0", "-O2"] {
+            let mut c = Command::new(&gcc);
+            c.env("PATH", &path).args([opt, "-c"]);
+            compile(format!("gcc{opt}"), c, "");
+        }
+        found.push("gcc");
+    }
+    eprintln!("coff interop: compilers {found:?}");
+    for (label, obj) in &objects {
+        for opt in ["-O0", "-O"] {
+            let exe = dir.join(format!("{label}-badc{opt}.exe"));
+            run(
+                Command::new(badc())
+                    .arg(opt)
+                    .arg("-o")
+                    .arg(&exe)
+                    .arg(&main)
+                    .arg(obj)
+                    .current_dir(&dir),
+                &format!("link the badc main with the {label} object"),
+            );
+            let out = Command::new(&exe).output().expect("run the program");
+            assert_eq!(
+                out.status.code(),
+                Some(0),
+                "{label} object, badc {opt}: a check failed"
+            );
+        }
+    }
+}
+
+/// An object the linker reads but the link cannot take is refused by name:
+/// another architecture's, and a COFF object outside a PE image.
+#[test]
+fn a_foreign_object_is_refused_by_what_it_is() {
+    let dir = tempdir("foreign-object");
+    let unit = write_source(&dir, "unit.c", "int f(void) { return 1; }\n");
+    let main = write_source(
+        &dir,
+        "main.c",
+        "int f(void);\nint main(void) { return f(); }\n",
+    );
+    run(
+        Command::new(badc())
+            .args(["-c", "--target=linux-aarch64"])
+            .arg(&unit)
+            .current_dir(&dir),
+        "compile the arm64 unit",
+    );
+    // An x86-64 COFF header: no sections, no symbols.
+    let coff = dir.join("empty.obj");
+    let mut header = vec![0x64, 0x86];
+    header.resize(20, 0);
+    std::fs::write(&coff, header).expect("write the COFF object");
+    for (obj, why) in [
+        (
+            dir.join("unit.o"),
+            "is an arm64 object; the link targets x86_64",
+        ),
+        (coff, "is a COFF object, which links into a PE image only"),
+    ] {
+        let out = Command::new(badc())
+            .args(["--target=linux-x64", "-o"])
+            .arg(dir.join("prog"))
+            .arg(&main)
+            .arg(&obj)
+            .current_dir(&dir)
+            .output()
+            .expect("run badc");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(!out.status.success() && stderr.contains(why), "{stderr}");
     }
 }
 

@@ -3468,10 +3468,15 @@ impl<'a> ElfImageWriter<'a> {
         };
         debug_assert_eq!(dynamic.len() as u64, seg.dynamic_size);
         let ro_len = seg.ro_len;
-        let mut data =
-            image::bake_data_relocs("ELF", ".data", build, ro_len, self.text_vmaddr(), &|off| {
-                self.data_off_to_vaddr(off)
-            })?;
+        let mut data = image::bake_data_relocs(
+            "ELF",
+            ".data",
+            build,
+            ro_len,
+            self.text_vmaddr(),
+            None,
+            &|off| self.data_off_to_vaddr(off),
+        )?;
         let mut tdata = image::bake_tls_template(
             "ELF",
             ".tdata",
@@ -4227,12 +4232,19 @@ impl<'a> ElfImageWriter<'a> {
                 "func fixup",
             )?;
         }
-        for f in &build.got_rel_fields {
+        for f in &build.image_rel_fields {
             use crate::c5::codegen::ImageAddr;
+            if f.to == ImageAddr::ImageBase || f.from == ImageAddr::ImageBase {
+                return Err(C5Error::hard(
+                    Code::OBJECT_FORMAT,
+                    "`__ImageBase` names a PE construct; an ELF image has none",
+                ));
+            }
             let site = stub_len + f.site_text_offset;
             let addr = |a: ImageAddr| match a {
                 ImageAddr::Site => code.vmaddr_at(site),
                 ImageAddr::GotBase => got_vmaddr,
+                ImageAddr::ImageBase => 0,
                 ImageAddr::Text(off) => text_vmaddr + off,
                 ImageAddr::Data(off) => self.data_off_to_vaddr(off),
                 ImageAddr::ImportSlot(i) => got_vmaddr + (i as u64) * 8,

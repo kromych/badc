@@ -7271,6 +7271,7 @@ fn minimal_native_object(
         prologue_ends: alloc::vec::Vec::new(),
         early_returns: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
+        alternate_names: alloc::vec::Vec::new(),
         debug_info: alloc::vec::Vec::new(),
         debug_abbrev: alloc::vec::Vec::new(),
         debug_line: alloc::vec::Vec::new(),
@@ -7581,6 +7582,7 @@ fn aarch64_data_ref_object_ex(
         prologue_ends: alloc::vec::Vec::new(),
         early_returns: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
+        alternate_names: alloc::vec::Vec::new(),
         symbols: alloc::vec![NativeSymbol {
             name: String::new(),
             section: NativeSymSection::Undef,
@@ -7842,6 +7844,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         prologue_ends: alloc::vec::Vec::new(),
         early_returns: alloc::vec::Vec::new(),
         extern_data_names: alloc::vec::Vec::new(),
+        alternate_names: alloc::vec::Vec::new(),
         symbols: alloc::vec::Vec::new(),
         text_relocs: alloc::vec::Vec::new(),
         data_relocs: alloc::vec::Vec::new(),
@@ -12061,6 +12064,118 @@ fn text_absolute_field_self_links_into_a_pe_image() {
             );
         }
     }
+}
+
+/// An x86-64 COFF object's image-relative addresses (`ADDR32NB`) in code,
+/// in a jump table inside its code and in read-only data, and its
+/// RIP-relative reference to `__ImageBase`, take their RVAs in the PE
+/// image the link writes, the way MSVC's jump tables read them; none takes
+/// a base relocation, since a distance from the image base survives a
+/// slide.
+#[test]
+fn coff_image_relative_addresses_take_their_rvas() {
+    use crate::c5::linker::coff_object::build::{object, sec, section_aux, sym};
+    use crate::c5::linker::{
+        LinkOptions, link_native_objects_with, parse_native_coff, write_native_image_from_merged,
+    };
+    use crate::c5::{OutputKind, Target};
+    const TEXT: u32 = 0x6050_0020;
+    const RDATA: u32 = 0x4040_0040;
+    const DATA: u32 = 0xC040_0040;
+    let (addr32nb, rel32, external, stat) = (3u16, 4u16, 2u8, 3u8);
+    // marker, `lea rdx, [rip + __ImageBase]`, `mov ecx, [rdx + rax*4 + table]`,
+    // `ret`, then the two-entry table.
+    let mut code = b"CoFfMaRk".to_vec();
+    code.extend_from_slice(&[0x48, 0x8D, 0x15, 0, 0, 0, 0]);
+    code.extend_from_slice(&[0x8B, 0x8C, 0x82, 0, 0, 0, 0, 0xC3]);
+    code.extend_from_slice(&[0; 8]);
+    let mut rdata = b"RoMaRkXx".to_vec();
+    rdata.extend_from_slice(&[0; 8]);
+    rdata.extend_from_slice(&0x10u32.to_le_bytes());
+    let mut text_def = sym(".text", 0, 1, stat);
+    text_def.aux.push(section_aux(code.len() as u32, 0, 0));
+    let mut text = sec(".text", TEXT, &code);
+    // Symbols: 0 `.text` (+aux), 2 `f`, 3 `__ImageBase`, 4 `obj`.
+    text.relocs = alloc::vec![
+        (11, 3, rel32),
+        (18, 0, addr32nb),
+        (23, 0, addr32nb),
+        (27, 0, addr32nb)
+    ];
+    text.content[18..22].copy_from_slice(&23u32.to_le_bytes());
+    text.content[23..27].copy_from_slice(&8u32.to_le_bytes());
+    text.content[27..31].copy_from_slice(&15u32.to_le_bytes());
+    let mut ro = sec(".rdata", RDATA, &rdata);
+    ro.relocs = alloc::vec![(8, 2, addr32nb), (12, 4, addr32nb), (16, 3, addr32nb)];
+    let coff = object(
+        0x8664,
+        &[text, ro, sec(".data", DATA, &[7, 0, 0, 0])],
+        &[
+            text_def,
+            sym("f", 15, 1, external),
+            sym("__ImageBase", 0, 0, external),
+            sym("obj", 0, 3, external),
+        ],
+    );
+    let obj = parse_native_coff(&coff).expect("parse the COFF object");
+    let opts = LinkOptions {
+        allow_undefined: true,
+        shared: true,
+        pe_image: true,
+        ..Default::default()
+    };
+    let mut merged = link_native_objects_with(&[obj], &[], &opts).expect("link");
+    let plt = crate::emit_plt_for(&mut merged, Target::WindowsX64, false).expect("plt");
+    let image = write_native_image_from_merged(
+        &merged,
+        &plt,
+        "main",
+        None,
+        OutputKind::SharedLibrary,
+        Target::WindowsX64,
+        Some("coff.dll"),
+    )
+    .expect("write the PE image");
+    let pe = PeImage::parse(&image);
+    let (text_rva, text) = pe.section(".text");
+    let at = text
+        .windows(8)
+        .position(|w| w == b"CoFfMaRk")
+        .expect("code");
+    let rva_of = |off: usize| text_rva + (at + off) as u32;
+    let word = |i: usize| u32::from_le_bytes(text[at + i..at + i + 4].try_into().unwrap());
+    assert_eq!(
+        rva_of(15) as i64 + word(11) as i32 as i64,
+        0,
+        "`lea` reaches the image base"
+    );
+    assert_eq!(word(18), rva_of(23), "the table's RVA in the `mov`");
+    assert_eq!(
+        [word(23), word(27)],
+        [rva_of(8), rva_of(15)],
+        "each entry's RVA"
+    );
+    let (rdata_rva, rdata) = pe.section(".rdata");
+    let (data_rva, _) = pe.section(".data");
+    let obj_off = merged.defined.get("obj").expect("obj").value - merged.data_relro_len as u64;
+    let r = rdata
+        .windows(8)
+        .position(|w| w == b"RoMaRkXx")
+        .expect("table")
+        + 8;
+    let entries: alloc::vec::Vec<u32> = (0..3)
+        .map(|k| u32::from_le_bytes(rdata[r + 4 * k..r + 4 * k + 4].try_into().unwrap()))
+        .collect();
+    assert_eq!(entries, [rva_of(15), data_rva + obj_off as u32, 0x10]);
+    let in_text = |rva: u32| (text_rva..text_rva + text.len() as u32).contains(&rva);
+    let in_rdata = |rva: u32| (rdata_rva..rdata_rva + rdata.len() as u32).contains(&rva);
+    assert!(
+        !pe.base_relocs
+            .iter()
+            .any(|&(rva, _)| (in_text(rva) && rva >= rva_of(0)) || in_rdata(rva)),
+        "an image-relative field takes no base relocation: {:?}",
+        pe.base_relocs
+    );
 }
 
 #[test]

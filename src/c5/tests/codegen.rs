@@ -1388,6 +1388,45 @@ fn windows_h_imports_its_win32_functions_from_their_dlls() {
     }
 }
 
+/// `<tchar.h>` maps the generic-text names to the wide C runtime functions
+/// under `_UNICODE` and to the single-byte ones otherwise, as mingw-w64's
+/// does, and `_T` / `_TEXT` build a literal of the matching width. `TCHAR`
+/// follows `UNICODE`, which `<windows.h>` reads first.
+#[test]
+fn windows_tchar_maps_generic_text_names_by_unicode() {
+    const M: &str = "msvcrt.dll";
+    let narrow = "#include <windows.h>\n#include <tchar.h>\n\
+        _Static_assert(sizeof(_TEXT(\"ab\")) == 3 && sizeof(_T('a')) == sizeof(int), \"\");\n\
+        _Static_assert(sizeof(_TCHAR) == 1 && sizeof(TCHAR) == 1, \"\");\n";
+    let wide = "#define _UNICODE\n#include <windows.h>\n#include <tchar.h>\n\
+        _Static_assert(sizeof(_TEXT(\"ab\")) == 6 && sizeof(_T('a')) == sizeof(wchar_t), \"\");\n\
+        _Static_assert(sizeof(_TCHAR) == 2 && sizeof(TCHAR) == 1, \"\");\n";
+    for target in [crate::Target::WindowsX64, crate::Target::WindowsAarch64] {
+        assert_windows_imports(
+            target,
+            narrow,
+            &[
+                ("_tcsncmp", "strncmp", M),
+                ("_tcsnccmp", "strncmp", M),
+                ("_tcsncpy", "strncpy", M),
+                ("_tcslen", "strlen", M),
+                ("__strncnt", "__strncnt", M),
+            ],
+        );
+        assert_windows_imports(
+            target,
+            wide,
+            &[
+                ("_tcsncmp", "wcsncmp", M),
+                ("_tcsnccmp", "wcsncmp", M),
+                ("_tcsncpy", "wcsncpy", M),
+                ("_tcslen", "wcslen", M),
+                ("__wcsncnt", "__wcsncnt", M),
+            ],
+        );
+    }
+}
+
 /// The C runtime functions mingw-w64's `<io.h>`, `<process.h>`, `<wchar.h>`
 /// and `<wctype.h>` declare under their POSIX and C99 names import an entry
 /// point the DLL exports: msvcrt.dll's, or ucrtbase.dll's for what the

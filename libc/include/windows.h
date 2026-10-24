@@ -38,8 +38,7 @@
 // `L"..."` under `UNICODE`; we treat them as no-ops because c5's
 // runtime always reaches for the ANSI-flavoured calls. The
 // matching `LoadLibrary` / `GetModuleHandle` / etc. macros pick
-// the `A` suffix variant.
-#define _T(x) x
+// the `A` suffix variant. `_T` and `_TEXT` are <tchar.h>'s.
 #define __TEXT(x) x
 #define TEXT(x) x
 // Generic-text character type. c5 reaches for the ANSI-flavoured calls, so
@@ -103,12 +102,22 @@ typedef CHAR              *PCHAR, *LPCH, *PCH;
 typedef const CHAR        *LPCCH, *PCCH;
 typedef CHAR              *NPSTR, *LPSTR, *PSTR;
 typedef const CHAR        *LPCSTR, *PCSTR;
+// TCHAR follows UNICODE here and _UNICODE in <tchar.h>; whichever header
+// comes first defines it, as in mingw-w64's winnt.h.
 #ifdef UNICODE
+#ifndef _TCHAR_DEFINED
+#define _TCHAR_DEFINED
 typedef WCHAR              TCHAR, *PTCHAR;
+typedef WCHAR              TBYTE, *PTBYTE;
+#endif
 typedef LPWSTR             PTSTR, LPTSTR;
 typedef LPCWSTR            PCTSTR, LPCTSTR;
 #else
+#ifndef _TCHAR_DEFINED
+#define _TCHAR_DEFINED
 typedef char               TCHAR, *PTCHAR;
+typedef unsigned char      TBYTE, *PTBYTE;
+#endif
 typedef LPSTR              PTSTR, LPTSTR;
 typedef LPCSTR             PCTSTR, LPCTSTR;
 #endif

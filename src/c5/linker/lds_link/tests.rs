@@ -4138,6 +4138,43 @@ fn i386_emit_relocs_writes_rel_tables() {
     assert_eq!(info & 0xff, rt::R_386_32);
 }
 
+/// An i386 shared object's dynamic relocations go in `.rel.dyn`, typed
+/// `SHT_REL` as GNU ld types it, so section-based tools read them.
+#[test]
+fn i386_shared_object_types_its_dynamic_relocations_rel() {
+    let script = parse_linker_script(
+        r#"
+SECTIONS {
+  . = SIZEOF_HEADERS;
+  .dynsym : { *(.dynsym) }
+  .dynstr : { *(.dynstr) }
+  .rel.dyn : { *(.rel.dyn) }
+  .text : { *(.text) }
+  .dynamic : { *(.dynamic) }
+  .data : { *(.data) }
+}
+"#,
+    )
+    .expect("script parses");
+    let a = TestObj::new()
+        .sec(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 4, &[0xc3])
+        .sec(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 4, &[0u8; 4])
+        .sym("own", STB_GLOBAL, STT_FUNC, 0, 0, 1)
+        // Symtab: null(0), sections(1, 2), own(3).
+        .reloc(1, 0, 3, rt::R_386_32, 0)
+        .build_class(EM_386, ElfClass::Elf32, false);
+    let objs = alloc::vec![parse_lds_object("own.o", a).expect("parses")];
+    let opts = LdsOptions {
+        emit: LdsEmit::Dyn,
+        shared: true,
+        ..Default::default()
+    };
+    let res = link_with_script(&script, objs, &opts).expect("links");
+    let rel = elf32_section(&res.image, ".rel.dyn");
+    assert_eq!((rel.1, rel.6), (SHT_REL, 8), "{rel:?}");
+    assert!(rel.4 >= 8, "{rel:?}");
+}
+
 #[test]
 fn i386_narrow_relocation_overflow_is_reported() {
     let script = parse_linker_script(I386_SCRIPT).expect("script parses");

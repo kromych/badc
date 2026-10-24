@@ -13,8 +13,8 @@ use hashbrown::HashSet;
 use super::{
     Att, ChunkSrc, EM_386, EM_AARCH64, EM_X86_64, LdsLinker, Piece, Placement, SHF_ALLOC,
     SHF_EXCLUDE, SHF_EXECINSTR, SHF_GROUP, SHF_INFO_LINK, SHF_LINK_ORDER, SHF_MERGE, SHF_STRINGS,
-    SHT_NOBITS, SHT_NOTE, SHT_PROGBITS, SHT_RELA, SHT_RELR, SHT_STRTAB, STT_NOTYPE, STV_PROTECTED,
-    ScriptSym, Stmt, Val, align_up,
+    SHT_NOBITS, SHT_NOTE, SHT_PROGBITS, SHT_REL, SHT_RELA, SHT_RELR, SHT_STRTAB, STT_NOTYPE,
+    STV_PROTECTED, ScriptSym, Stmt, Val, align_up,
 };
 
 /// The fill pattern for a numeric fill value: the value's big-endian
@@ -591,7 +591,8 @@ impl<'a> LdsLinker<'a> {
                         let t = self.objects[id.obj].sections[id.sec].shtype;
                         if matches!(
                             t,
-                            SHT_RELA
+                            SHT_REL
+                                | SHT_RELA
                                 | SHT_RELR
                                 | SHT_STRTAB
                                 | dynamic::SHT_HASH

@@ -1033,9 +1033,12 @@ pub fn link_native_objects_with<'a>(
     link.allocate_got_slots();
     link.place_unwind_tables()?;
     link.place_pe_unwind()?;
-    link.resolve_text_relocs()?;
-    link.resolve_tls_fixups()?;
-    link.resolve_data_relocs()?;
+    let resolved = (link.resolve_text_relocs())
+        .and_then(|()| link.resolve_tls_fixups())
+        .and_then(|()| link.resolve_data_relocs());
+    if let Some(err) = link.undefined_error(resolved.err()) {
+        return Err(err);
+    }
     link.finish()
 }
 
@@ -1251,6 +1254,8 @@ struct Link<'a> {
     /// See [`MergedNative::slot_reads`].
     slot_reads: BTreeSet<u64>,
     warnings: Vec<(Code, String)>,
+    /// Names referenced and defined nowhere: (first-reference order, site).
+    undefined: BTreeMap<String, (usize, String)>,
     shared: bool,
     tls_got: Vec<crate::c5::codegen::TlsGotEntry>,
     tls_got_fields: Vec<crate::c5::codegen::TlsGotField>,
@@ -1361,6 +1366,7 @@ impl<'a> Link<'a> {
             tls_imports: BTreeSet::new(),
             slot_reads: BTreeSet::new(),
             warnings: Vec::new(),
+            undefined: BTreeMap::new(),
             shared: opts.shared,
             tls_got: Vec::new(),
             tls_got_fields: Vec::new(),
@@ -3192,6 +3198,31 @@ impl<'a> Link<'a> {
         i
     }
 
+    /// Record a reference to the undefined `name`, left unpatched.
+    fn note_undefined_at(&mut self, name: &str, site: &str) {
+        let order = self.undefined.len();
+        (self.undefined)
+            .entry(name.to_string())
+            .or_insert_with(|| (order, site.to_string()));
+    }
+
+    /// One diagnostic per undefined name, as GNU ld reports them all, then `err`.
+    fn undefined_error(&mut self, err: Option<C5Error>) -> Option<C5Error> {
+        let mut names: Vec<_> = core::mem::take(&mut self.undefined).into_iter().collect();
+        names.sort_by_key(|(_, (order, _))| *order);
+        let mut diags: Vec<_> = (names.into_iter())
+            .flat_map(|(name, (_, site))| {
+                let msg = format!("undefined reference to `{name}`{site}");
+                link_err(Code::UNDEFINED_SYMBOL, MODULE, &msg).into_diagnostics()
+            })
+            .collect();
+        if diags.is_empty() {
+            return err;
+        }
+        diags.extend(err.into_iter().flat_map(C5Error::into_diagnostics));
+        Some(C5Error::Compile(diags))
+    }
+
     /// Walk each unit's `text_relocs`, resolve each against the merged
     /// symbol table, and apply the patch in `text` at the unit's base
     /// plus the site offset, or park it for the writer.
@@ -3580,11 +3611,8 @@ impl<'a> Link<'a> {
             && !shlib_exported
             && !routed
         {
-            return Err(link_err(
-                Code::UNDEFINED_SYMBOL,
-                MODULE,
-                &format!("undefined reference to `{}`", sym.name,),
-            ));
+            self.note_undefined_at(&sym.name, "");
+            return Ok(());
         }
         let idx = self.bind_import(sym, routed, shlib_exported);
         if is_branch_reloc(self.machine, reloc.rtype) {
@@ -3976,15 +4004,12 @@ impl<'a> Link<'a> {
                     }
                     None => {
                         let site = if in_tls {
-                            "`_Thread_local` initializer"
+                            " (`_Thread_local` initializer)"
                         } else {
-                            "data initializer"
+                            " (data initializer)"
                         };
-                        return Err(link_err(
-                            Code::UNDEFINED_SYMBOL,
-                            MODULE,
-                            &format!("undefined reference to `{}` ({site})", sym.name,),
-                        ));
+                        self.note_undefined_at(&sym.name, site);
+                        return Ok(());
                     }
                 }
             }
@@ -4135,13 +4160,10 @@ impl<'a> Link<'a> {
         };
         let (section, value) = match self.reference_section(unit, sym) {
             NativeSymSection::Undef | NativeSymSection::Common => {
-                let d = self.defined.get(sym.name.as_str()).ok_or_else(|| {
-                    link_err(
-                        Code::UNDEFINED_SYMBOL,
-                        MODULE,
-                        &format!("undefined reference to `{}` ({what})", sym.name),
-                    )
-                })?;
+                let Some(d) = self.defined.get(sym.name.as_str()) else {
+                    self.note_undefined_at(&sym.name, &format!(" ({what})"));
+                    return Ok(());
+                };
                 (d.section, d.value as i64)
             }
             NativeSymSection::Abs => {

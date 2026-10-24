@@ -1444,6 +1444,53 @@ fn unresolved_extern_function_fails_link() {
     );
 }
 
+/// A link reports every name it finds undefined, once each and in the
+/// order of their first references, before it fails, as GNU ld does,
+/// whether the units are compiled in the link or given as objects.
+#[test]
+fn a_link_reports_every_undefined_name_once() {
+    let dir = tempdir("undefined-every-name");
+    write_source(
+        &dir,
+        "two.c",
+        "long A1(void);\nlong A2(void);\nextern long A3(void);\n\
+         long (*hook)(void) = A3;\n\
+         int main(void) { return (int)(A1() + A2() + A1() + hook()); }\n",
+    );
+    let want = [
+        "badc: error: undefined reference to `A1` [B6010] [undefined-symbol]",
+        "badc: error: undefined reference to `A2` [B6010] [undefined-symbol]",
+        "badc: error: undefined reference to `A3` (data initializer) [B6010] [undefined-symbol]",
+    ];
+    let targets = [
+        "linux-x64",
+        "linux-aarch64",
+        "macos-aarch64",
+        "windows-x64",
+        "windows-arm64",
+    ];
+    for target in targets {
+        let t = format!("--target={target}");
+        run(
+            Command::new(badc())
+                .args([&t, "-c", "two.c", "-o", "two.o"])
+                .current_dir(&dir),
+            "compile -c",
+        );
+        for input in ["two.c", "two.o"] {
+            let out = Command::new(badc())
+                .args([&t, input, "-o", "two.exe"])
+                .current_dir(&dir)
+                .output()
+                .expect("run badc");
+            let err = String::from_utf8_lossy(&out.stderr);
+            let lines: Vec<&str> = err.lines().collect();
+            assert!(!out.status.success(), "{target} {input}");
+            assert_eq!(lines, want, "{target} {input}");
+        }
+    }
+}
+
 /// A hard link error carries its catalogue code and no `-W` tail: the
 /// row is not controllable, so no option moves it. `-Wno-dead-store`
 /// stands for an accepted `-W` spelling here; the selector grammar

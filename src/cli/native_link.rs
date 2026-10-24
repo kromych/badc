@@ -1054,7 +1054,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
     let mut merged = match badc::link_native_objects_with(image.objs, image.shared_libs, &opts) {
         Ok(m) => m,
         Err(e) => {
-            eprint_diagnostic(format!("badc: {e}"));
+            eprint_error("badc: ", &e);
             std::process::exit(1);
         }
     };
